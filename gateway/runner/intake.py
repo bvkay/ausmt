@@ -135,7 +135,7 @@ def _license_md_body(y: dict, now_utc: datetime) -> str | None:
     year = _citation_year_of(y)
     # Attribution mirrors the bundle default (custodian + year) when the survey states no explicit
     # citation author; license_instrument_text builds "who (year)" itself when attribution is None.
-    rights = license_instrument_text(lic, org, year)
+    rights = license_instrument_text(lic, org, year, filename="LICENSE.md")
     return f"{_stamp(now_utc)}\n\n{rights}"
 
 

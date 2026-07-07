@@ -70,7 +70,7 @@ def recognised(license_str) -> bool:
     return canon_license(license_str) in _LIC_RECOGNISED
 
 
-def license_instrument_text(lic, licensor, year, attribution=None) -> str:
+def license_instrument_text(lic, licensor, year, attribution=None, filename="LICENSE.txt") -> str:
     """C6: the LICENSE.txt that travels INSIDE every distributed survey zip so the rights don't get
     stripped from the bytes. Records the canonical licence id, the licensor (survey custodian org), the
     year (from the survey's date range), an attribution line, and the licence deed URL for CC/ODC ids.
@@ -98,7 +98,7 @@ def license_instrument_text(lic, licensor, year, attribution=None) -> str:
         "Attribution (cite as):",
         f"  {attn}",
         "",
-        "This LICENSE.txt travels with the data files in this archive. The transfer functions were",
+        f"This {filename} travels with the data files in this archive. The transfer functions were",
         "distributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric",
         "releases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the",
         "terms of that licence" + (f" ({url})." if url else "."),

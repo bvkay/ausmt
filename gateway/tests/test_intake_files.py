@@ -90,7 +90,7 @@ def test_license_md_text_equals_engine_bundle_text(tmp_path):
     intake.generate_intake_files(pkg, now_utc=_NOW)
     lic = (pkg / "LICENSE.md").read_text(encoding="utf-8")
     # The engine's rights text for this survey (org name + citation year), the same call intake makes.
-    expected_rights = lt.license_instrument_text("CC-BY-4.0", "University of Example", "2021")
+    expected_rights = lt.license_instrument_text("CC-BY-4.0", "University of Example", "2021", filename="LICENSE.md")
     assert expected_rights in lic, lic
     assert "CC-BY-4.0" in lic and "creativecommons.org/licenses/by/4.0" in lic
 
