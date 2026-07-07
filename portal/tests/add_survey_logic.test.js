@@ -41,6 +41,66 @@ ok(/region: "South Australia"/.test(y), "survey.yaml emits region");
 ok(!/coordinate_resolution:/.test(M.buildSurveyYaml({ ...base, data_types: ["BBMT"] })),
    "no coordinate_resolution when nothing was resolved");
 
+// ---- DATAID-based packaging (task #16) ----
+// ediDataId must read the DATAID from the >HEAD block across the real dialect shapes: Geotools/LEMI
+// (no indent, quoted), EDL (leading-indented + trailing whitespace, quoted), Phoenix (indented,
+// quoted), and an unquoted variant. A realistic olympic-dam header (DATAID="ROX000") is the trigger.
+const OLYMPIC = '>HEAD\nDATAID="ROX000"\nACQBY=""\nLAT=-30:37:57.1\nLONG=+136:45:12.9\nELEV=10.0\nUNITS=M\n\n>INFO\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n';
+ok(M.ediDataId(OLYMPIC) === "ROX000", "ediDataId reads DATAID from a realistic >HEAD (olympic-dam ROX000)");
+ok(M.ediDataId('>HEAD\nDATAID="WG-1"\nLAT=-30\n') === "WG-1", "ediDataId: Geotools/LEMI quoted DATAID with a hyphen");
+ok(M.ediDataId(' >HEAD\n\n   DATAID="ST01"                 \n   ACQBY="X"\n') === "ST01", "ediDataId: EDL indented + trailing-whitespace DATAID");
+ok(M.ediDataId('>HEAD\n    DATAID="A01"\n') === "A01", "ediDataId: Phoenix indented DATAID");
+ok(M.ediDataId('>HEAD\nDATAID=ROX000\n') === "ROX000", "ediDataId: unquoted DATAID tolerated");
+ok(M.ediDataId('>HEAD\nLAT=-30\n') === null, "ediDataId: absent DATAID -> null (blocks)");
+ok(M.ediDataId('>HEAD\nDATAID=""\n') === null, "ediDataId: empty-quoted DATAID -> null (blocks)");
+ok(M.ediDataId("") === null, "ediDataId: empty text -> null");
+// Bounded prefix: only the first 64 KB is scanned (the DATAID always lives in the header). A DATAID
+// appearing only AFTER 64 KB of padding must NOT be found (proves the read is bounded, not whole-file).
+const farId = "x".repeat(70000) + '\nDATAID="LATE"\n';
+ok(M.ediDataId(farId) === null, "ediDataId: DATAID beyond the 64 KB prefix is not read (bounded)");
+
+// safeEdiComponent MIRRORS engine build_portal.safe_component: charset [A-Za-z0-9._-], neutralise '..',
+// strip leading dots/dashes, never empty. This is the pipeline's own rule for a DATAID -> path, reused.
+ok(M.safeEdiComponent("ROX000") === "ROX000", "safeEdiComponent: clean id unchanged");
+ok(M.safeEdiComponent("WG-1") === "WG-1", "safeEdiComponent: dash preserved");
+ok(M.safeEdiComponent("C6_BxByReplaced") === "C6_BxByReplaced", "safeEdiComponent: underscore preserved");
+ok(M.safeEdiComponent("A B") === "A-B", "safeEdiComponent: space -> dash (not in charset)");
+ok(M.safeEdiComponent("../../etc/x") === "etc-x", "safeEdiComponent: path traversal neutralised");
+ok(M.safeEdiComponent("<img onerror=1>") === "img-onerror-1-", "safeEdiComponent: XSS chars replaced");
+ok(M.safeEdiComponent("...ROX") === "ROX", "safeEdiComponent: leading dots stripped");
+ok(M.safeEdiComponent("") === "station" && M.safeEdiComponent("///") === "station", "safeEdiComponent: never empty (fallback)");
+ok(M.packagedEdiName("ROX000") === "ROX000.edi", "packagedEdiName: <sanitized-DATAID>.edi");
+
+// ediNameGate (submission-time collision guard): clean list -> no errors; duplicate + missing each
+// produce a blocking error naming the offending SOURCE filename(s). No silent auto-suffixing.
+ok(M.ediNameGate([{ name: "a.edi", dataid: "ROX000" }, { name: "b.edi", dataid: "ROX001" }]).length === 0,
+   "ediNameGate: distinct DATAIDs -> no error");
+const dup = M.ediNameGate([{ name: "line1__1.edi", dataid: "ROX000" }, { name: "line2__1.edi", dataid: "ROX000" }]);
+ok(dup.length === 1 && /line1__1\.edi/.test(dup[0]) && /line2__1\.edi/.test(dup[0]),
+   "ediNameGate: duplicate DATAID -> one error naming BOTH source filenames");
+const miss = M.ediNameGate([{ name: "noid.edi", dataid: null }]);
+ok(miss.length === 1 && /noid\.edi/.test(miss[0]) && /DATAID/.test(miss[0]),
+   "ediNameGate: missing DATAID -> error naming the source file");
+// two DATAIDs that DIFFER but sanitise to the SAME packaged name still collide (real on-disk clash).
+const sdup = M.ediNameGate([{ name: "a.edi", dataid: "ROX 0" }, { name: "b.edi", dataid: "ROX-0" }]);
+ok(sdup.length === 1 && /a\.edi/.test(sdup[0]) && /b\.edi/.test(sdup[0]),
+   "ediNameGate: DATAIDs that sanitise to the same name collide (both filenames named)");
+
+// The gate is WIRED into validateSurvey as a blocking FAIL (not just a standalone helper). Two EDIs
+// with the same DATAID -> a FAIL item under the 'dataid' check whose message names both files.
+const dupEdis = [
+  { name: "s1.edi", parsed: M.parseEdi('>HEAD\nDATAID="DUP"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') },
+  { name: "s2.edi", parsed: M.parseEdi('>HEAD\nDATAID="DUP"\nLAT=-31\nLONG=137\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') },
+];
+const dupRes = M.validateSurvey({ ...base, locations_confirmed: true }, dupEdis, []);
+ok(dupRes.items.some((i) => i.check === "dataid" && i.level === "FAIL" && /s1\.edi/.test(i.message) && /s2\.edi/.test(i.message)),
+   "validateSurvey: duplicate DATAID surfaces a blocking FAIL naming both files");
+ok(dupRes.counts.FAIL > 0, "validateSurvey: the duplicate-DATAID FAIL blocks submission (counts.FAIL>0)");
+// a single, well-named EDI produces NO dataid FAIL (the gate is silent on clean input).
+const cleanEdis = [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }];
+ok(!M.validateSurvey({ ...base, locations_confirmed: true }, cleanEdis, []).items.some((i) => i.check === "dataid"),
+   "validateSurvey: a clean unique DATAID raises no dataid item");
+
 // ---- ROR organisation lookup ----
 // The live endpoint MUST be the name-search `query`, NOT the `affiliation` matcher. The affiliation
 // matcher is built for parsing full publication affiliation strings and mis-ranks bare names — verified
