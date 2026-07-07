@@ -248,7 +248,7 @@ def _run_validator(cfg: RunnerConfig, package_dir: Path, out_json: Path, deadlin
     validator_file = _validator_file(cfg.validator_path)
     target = _single_package_root(package_dir)
     proc = _run_subprocess(
-        [sys.executable, str(validator_file), str(target), "--json", str(out_json)],
+        validator_argv(validator_file, target, out_json),  # M7: the one canonical argv
         cwd=None, deadline=deadline,
     )
     try:
@@ -406,6 +406,22 @@ def _generate_intake_files(package_dir: Path) -> list[str]:
 def _validator_file(validator_path: str) -> Path:
     p = Path(validator_path)
     return p if p.name == "validate_survey.py" else (p / "validate_survey.py")
+
+
+def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) -> list[str]:
+    """The ONE canonical argv for invoking the surveys validator as a subprocess (M7, code-health
+    review §6). Both the C10 submission runner (_run_validator above) and the C31 metadata-edit
+    runner (edit._run_validator) go through this, so the invocation contract lives in exactly one
+    place — no second, independently-assembled argv can drift and re-open the 2026-07-06 ship-blocker
+    (the folder had been passed as the --json VALUE with no positional, argparse exited 2, every real
+    submission quarantined).
+
+    Canonical shape (the runner's positional-first form): the package folder is the REQUIRED
+    positional and `--json` names the OUTPUT report file. edit.py previously assembled the flags
+    --json-first (`--json <file> <folder>`); argparse accepts both, but a single form is the point of
+    M7 — the positional-first order is the one the real-vendored-validator oracles pin. All args are
+    stringified here so callers pass Paths and the whole subprocess contract is described in one line."""
+    return [sys.executable, str(validator_file), str(target_dir), "--json", str(report_path)]
 
 
 def _write_summary(path: Path, summary: dict) -> None:
