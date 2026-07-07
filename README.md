@@ -1,5 +1,10 @@
 # AusMT
 
+[![engine](https://github.com/bvkay/ausmt/actions/workflows/build-products.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/build-products.yml)
+[![portal](https://github.com/bvkay/ausmt/actions/workflows/portal-ci.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/portal-ci.yml)
+[![gateway](https://github.com/bvkay/ausmt/actions/workflows/gateway-ci.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/gateway-ci.yml)
+[![images](https://github.com/bvkay/ausmt/actions/workflows/deploy-images.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/deploy-images.yml)
+
 Australian magnetotelluric (MT) data infrastructure — the **framework monorepo** (see
 `maintainer/ADR-001-repo-structure.md`). An offline build engine, a static portal, and a
 curated submission gateway: survey packages (EDI + `survey.yaml`) are validated, parsed with
