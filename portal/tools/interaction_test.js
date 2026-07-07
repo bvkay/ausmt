@@ -702,6 +702,49 @@ async function bootFreshWindow(dataMap) {
   ok(sum.indexOf("tipper availability") >= 0 && sum.indexOf("remote reference") >= 0,
     "survey-story table lost sibling rows that must be KEPT (tipper/remote reference)");
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + radiusForZoom/weightForZoom pins+monotone + A1 colour-identical-all-modes + tooltip type-label SWAP, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept)");
+  // T. C20 TF COMPLETENESS — induction-arrow panel (D3) + error bars (D4), in the station drawer.
+  //   A1: tzx_re>0 (only), rho+phase errors present  -> arrow panel with the Parkinson label, a REAL
+  //       arrow pointing SOUTH (Parkinson north = -tzx_re < 0), and error-bar whiskers on ρ/φ.
+  //   A2: no tipper, no errors                        -> "no tipper" state (no arrow panel) + no bars.
+  const drwC = doc.getElementById("drawer");
+  drwC.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  ok(drwC.classList.contains("open"), "C20: #/station/au.alpha.A1 did not open the drawer");
+  // (a) arrow panel EXISTS with the verbatim Parkinson label (the |T|-magnitude plot is gone).
+  ok(drwC.innerHTML.indexOf("Induction arrows - Parkinson convention (real arrows point toward conductors); imaginary unreversed.") >= 0,
+    "C20 D3: the induction-arrow panel + verbatim Parkinson label is missing from the drawer");
+  ok(drwC.innerHTML.indexOf("tipper magnitude |T|") < 0,
+    "C20 D3: the old |T|-magnitude plot title is still present (panel was not replaced)");
+  ok(drwC.innerHTML.indexOf("|T|=0.5") >= 0, "C20 D3: the |T|=0.5 unit-scale reference is missing");
+  // (b) SIGN MAPPING: parse the REAL arrow <line>s (solid copper #E0782F) inside the drawer. tzx_re>0
+  // means real north = -tzx_re < 0, so every real arrow must point DOWN (screen y2 > y1 = SOUTH) with
+  // no east deflection (x2 == x1, since tzy_re == 0). This is the D3 falsifiability check.
+  // Match ONLY the arrow-panel REAL arrows: solid copper at the arrow stroke-width "1.2" (error bars use
+  // "0.8"+opacity and the imaginary arrows use "1.0", so this excludes both).
+  const realArrows = [...drwC.innerHTML.matchAll(/<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" stroke="#E0782F" stroke-width="1\.2"/g)];
+  ok(realArrows.length >= 1, "C20 D3: no REAL (copper) induction arrows rendered for a tippered station");
+  ok(realArrows.every(m => parseFloat(m[4]) > parseFloat(m[2])),
+    "C20 D3 SIGN: a REAL arrow for tzx_re>0 must point SOUTH (y2>y1); got " +
+    JSON.stringify(realArrows.map(m => [m[2], m[4]])));
+  ok(realArrows.every(m => Math.abs(parseFloat(m[3]) - parseFloat(m[1])) < 0.1),
+    "C20 D3 SIGN: a REAL arrow with tzy_re=0 must have no east deflection (x2==x1); got " +
+    JSON.stringify(realArrows.map(m => [m[1], m[3]])));
+  // (c) ERROR BARS present for A1 (rho copper #E0782F + teal #2E8FA3 whiskers with the .55 opacity).
+  ok(/<line [^>]*stroke="#E0782F" stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML) ||
+     /<line [^>]*stroke="#2E8FA3" stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML),
+    "C20 D4: error bars did not render for a station WITH errors");
+  // (d) A2: no tipper => NO arrow panel; no errors => NO error bars.
+  drwC.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A2"; A.routeFromHash();
+  ok(drwC.classList.contains("open"), "C20: #/station/au.alpha.A2 did not open the drawer");
+  ok(drwC.innerHTML.indexOf("Induction arrows - Parkinson convention") < 0,
+    "C20 D3: a tipperless station must show the no-tipper state (no arrow panel)");
+  ok(!/stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML),
+    "C20 D4: a station WITHOUT errors must render NO error bars");
+  // A2 still plots ρ/φ/phase-tensor (the curves themselves), proving (c)/(d) are about bars/arrows only.
+  ok(drwC.querySelectorAll("svg path").length > 0, "C20: a no-tipper/no-error open station must still plot ρ/φ curves");
+  drwC.classList.remove("open");
+
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + radiusForZoom/weightForZoom pins+monotone + A1 colour-identical-all-modes + tooltip type-label SWAP, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

@@ -90,10 +90,13 @@ lives in each station's `station.json` `processing` block, outside the positiona
 | `sc[10]` | `mre` | number\|null | median relative impedance error |
 | `sc[11]` | `decades` | number | period coverage, log10 decades |
 
-## `tf.json` — one entry per station (aligned to `catalogue.json`), each a list of 10 column-arrays
+## `tf.json` — one entry per station (aligned to `catalogue.json`), each a list of 18 column-arrays
 
-Source of truth: `TF_COLUMNS` in `extract/_edi_tf.py`. Each entry is `[col0, col1, …, col9]`, where each
-`colN` is an array thinned to ≤ 32 periods (nulls where data are absent/invalid).
+Source of truth: `TF_COLUMNS` in `contract/columns.json` (imported into `extract/_edi_tf.py`). Each entry
+is `[col0, col1, …, col17]`, where each `colN` is an array thinned to the SAME ≤ 32-period axis (nulls
+where data are absent/invalid/masked). **C20** appended columns `t[10]…t[17]` — APPEND-only; `t[0]…t[9]`
+keep their positions and values byte-for-byte (including `t[5] tip_mag`, retained for compatibility even
+though the portal no longer plots it).
 
 | Index | Name | Meaning |
 |---|---|---|
@@ -102,11 +105,55 @@ Source of truth: `TF_COLUMNS` in `extract/_edi_tf.py`. Each entry is `[col0, col
 | `t[2]` | `rho_yx` | apparent resistivity, yx |
 | `t[3]` | `phs_xy` | phase, xy (degrees) |
 | `t[4]` | `phs_yx_adj` | phase, yx (+180° adjusted into the first quadrant) |
-| `t[5]` | `tip_mag` | tipper magnitude |
+| `t[5]` | `tip_mag` | tipper magnitude (kept for compatibility; the portal renders the induction-arrow panel instead) |
 | `t[6]` | `pt_min` | phase-tensor Φmin (degrees) |
 | `t[7]` | `pt_max` | phase-tensor Φmax (degrees) |
 | `t[8]` | `pt_az` | phase-tensor azimuth α−β (degrees, measurement frame) |
 | `t[9]` | `pt_beta` | phase-tensor skew β (degrees) |
+| `t[10]` | `rho_xy_err` | apparent-resistivity error, xy (Ω·m) |
+| `t[11]` | `rho_yx_err` | apparent-resistivity error, yx (Ω·m) |
+| `t[12]` | `phs_xy_err` | phase error, xy (degrees) |
+| `t[13]` | `phs_yx_err` | phase error, yx (degrees) |
+| `t[14]` | `tzx_re` | tipper Tx real (Hz/Hx) |
+| `t[15]` | `tzx_im` | tipper Tx imaginary (Hz/Hx) |
+| `t[16]` | `tzy_re` | tipper Ty real (Hz/Hy) |
+| `t[17]` | `tzy_im` | tipper Ty imaginary (Hz/Hy) |
+
+### C20 error propagation (columns `t[10]…t[13]`)
+
+Both the apparent-resistivity and phase errors are the standard small-error **linear propagation** from
+the single per-component impedance-error magnitude `|dZ|` (mt_metadata's `impedance_error`, a real std;
+for an EDI this is `√VAR`). With `ρ = 0.2·T·|Z|²` and `φ = atan2(Im Z, Re Z)`:
+
+- `rho_*_err = 0.4·T·|Z|·|dZ|`
+- `phs_*_err = degrees(|dZ| / |Z|)`
+
+Because both come from the one `|dZ|`, the ρ- and φ-error columns cannot diverge. Errors are `null` where
+the source carried no impedance error, and (for ρ) only attach where the ρ value itself renders.
+
+### C20 tipper frame + placeholder rule (columns `t[14]…t[17]`)
+
+The tipper components are the transfer-function elements `Tx = Hz/Hx` and `Ty = Hz/Hy` **as read** — no
+sign changes at the data layer (any convention reversal is a presentation concern; see the arrow panel
+below). The source-data frame is **x = north, y = east**, so `Tx` couples the vertical field to the
+NORTH horizontal field and `Ty` to the EAST field.
+
+**Placeholder-tipper honesty.** Some EDIs carry an unphysical placeholder tipper — observed as `|T|`
+identically 1.0 at every period, one component ≈ 1e-17 (a filler, not an estimate). At extraction, a
+tipper with ≥ 4 present periods whose `|T|` is FLAT (`max|T|−min|T| < 1e-6`) AND AT UNITY
+(`||T|−1| < 1e-3` at every period) is masked WHOLESALE — all four `tzx/tzy` series and `tip_mag` become
+`null` — and a build NOTICE names the station. Real (varying, or off-unity) tippers are untouched. This
+composes with the C19b fill/exact-zero masking.
+
+### C20 induction-arrow panel + error bars (portal)
+
+The station drawer replaces the `|T|`-magnitude plot with an **induction-arrow panel** rendered below the
+phase-tensor plot. Per thinned period, from the log-period axis: a REAL arrow in the **Parkinson
+convention** — screen `(east, north) = (−tzy_re, −tzx_re)` (real arrows point toward conductors) — and an
+IMAGINARY arrow **unreversed** — `(tzy_im, tzx_im)`, drawn lighter — at a fixed scale with a `|T| = 0.5`
+corner reference. Stations with an absent/masked tipper show the no-tipper state (no panel). The ρ and φ
+curves gain error bars from `t[10]…t[13]` (ρ in the log domain clipped at a small positive floor; φ in
+degrees), drawn only where the error is present.
 
 ## `surveys.json` — object keyed by survey label
 
