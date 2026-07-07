@@ -196,6 +196,14 @@ def _do_work(cfg: RunnerConfig, zip_path: Path, package_dir: Path, reports_dir: 
         # crash. (UnsafeMember, the belt-and-braces re-check failure, is included.)
         return jobs.OUTCOME_QUARANTINED, f"unpack failed: {type(exc).__name__}: {exc}", {}
 
+    # C34/D1: generate LICENSE.md + README.md into the extracted package BEFORE the validator runs, so
+    # a package that arrived without them carries them by the time the validator checks structure (the
+    # two 'missing' WARNINGs flip to PASS in the SAME run) and the curator reviews/approves the COMPLETE
+    # package. Best-effort: any failure here must NEVER quarantine an otherwise-valid package — the
+    # validator remains the authority, and a package that stays without a generated file just keeps the
+    # (correct) WARNING. So this is deliberately outside the quarantine-on-failure contract above.
+    _generate_intake_files(package_dir)
+
     validate_json = reports_dir / "validate.json"
     try:
         vresult = _run_validator(cfg, package_dir, validate_json, deadline)
@@ -380,6 +388,19 @@ def _single_package_root(package_dir: Path) -> Path:
     top-level dir, that is <package_dir>/<slug>; fall back to package_dir itself."""
     dirs = [p for p in package_dir.iterdir() if p.is_dir()] if package_dir.exists() else []
     return dirs[0] if len(dirs) == 1 else package_dir
+
+
+def _generate_intake_files(package_dir: Path) -> list[str]:
+    """C34/D1: generate LICENSE.md + README.md into the single extracted package root, best-effort.
+    Returns the filenames actually written (for logging); NEVER raises — a generation failure must not
+    quarantine an otherwise-valid package (the validator remains the authority, and the worst case is
+    a package that keeps its correct 'file missing' WARNING). `intake` is imported lazily (it reaches
+    the engine's _license_text leaf) so this module stays importable without the engine installed."""
+    try:
+        from . import intake  # lazy: keeps the runner importable in the stack-less gateway lane
+        return intake.generate_intake_files(_single_package_root(package_dir))
+    except Exception:  # noqa: BLE001 -- best-effort generation; a failure must not fail the job
+        return []
 
 
 def _validator_file(validator_path: str) -> Path:
