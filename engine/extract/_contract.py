@@ -5,7 +5,7 @@
 
 CATALOGUE_COLUMNS = ['id', 'survey', 'lat', 'lon', 'period_min_s', 'period_max_s', 'n_periods', 'comps', 'type', 'region', 'file', 'coord_flag', 'ausmt_id', 'edi_available', 'sha256']
 SCI_COLUMNS = ['q', 'qb', 'rr', 'sw', 'alg', 'dim', 'p3d', 'gd', 'ellip', 'skew', 'mre', 'decades']
-TF_COLUMNS = ['periods', 'rho_xy', 'rho_yx', 'phs_xy', 'phs_yx_adj', 'tip_mag', 'pt_min', 'pt_max', 'pt_az', 'pt_beta']
+TF_COLUMNS = ['periods', 'rho_xy', 'rho_yx', 'phs_xy', 'phs_yx_adj', 'tip_mag', 'pt_min', 'pt_max', 'pt_az', 'pt_beta', 'rho_xy_err', 'rho_yx_err', 'phs_xy_err', 'phs_yx_err', 'tzx_re', 'tzx_im', 'tzy_re', 'tzy_im']
 
 # C6 licence instrument (single-sourced in contract/licenses.json): the redistribution allow-list
 # read by build_portal.redistributable(), plus recognised metadata-only ids, legacy aliases and

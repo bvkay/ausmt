@@ -24,10 +24,14 @@ from pathlib import Path
 NUM = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
 _EMPTY = 1e30  # EDI 'no data' sentinel magnitude
 
-# One canonical empty transfer-function row: 10 component arrays. Module-level so the many
-# placeholder sites share a single definition. TF rows are only serialised, never mutated,
-# so sharing the object is safe; do NOT mutate it in place.
-EMPTY_TF = [[] for _ in range(10)]
+# One canonical empty transfer-function row: 18 component arrays (C20 grew tf.json 10 -> 18 with the
+# error columns + full complex tipper). Module-level so the many placeholder sites share a single
+# definition; kept literal here because _ediparse imports NO project module (it must be safe to import
+# from anywhere on the extract/ path) so it can't read TF_COLUMNS from the generated contract. The
+# build's width guard (build_portal, driven BY TF_COLUMNS) is the check that this literal stays in
+# lockstep with the contract. TF rows are only serialised, never mutated, so sharing the object is
+# safe; do NOT mutate it in place.
+EMPTY_TF = [[] for _ in range(18)]
 
 # The component blocks both consumers may need, as one superset. `tf_from_components`
 # reads RHO/PHS/Z/T; `science_from_components` reads RHO/PHS/<.ERR>/Z. Parsing the union
