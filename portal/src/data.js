@@ -11,7 +11,8 @@
 //                   10 file,11 coord_flag,12 ausmt_id,13 edi_available,14 sha256]
 //   SCI[i]  sc[] = [0 q,1 qb,2 rr,3 sw,4 alg,5 dim,6 p3d,7 gd,8 ellip,9 skew,10 mre,11 decades]
 //   TFD[i]  t[]  = [0 periods,1 rho_xy,2 rho_yx,3 phs_xy,4 phs_yx_adj,5 tip_mag,6 pt_min,7 pt_max,
-//                   8 pt_az,9 pt_beta]
+//                   8 pt_az,9 pt_beta,10 rho_xy_err,11 rho_yx_err,12 phs_xy_err,13 phs_yx_err,
+//                   14 tzx_re,15 tzx_im,16 tzy_re,17 tzy_im]   (C20: 10 -> 18; tip_mag kept for compat)
 // To change a column: edit contract/columns.json, run `python contract/generate.py`, then data-files.md. APPEND, never reorder.
 // Data files are produced by the AusMT engine. By default they are served from the portal's own
 // ./data/ directory; a deployment may instead point at a remote base (AUSMT_CONFIG.data_base_url,
