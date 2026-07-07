@@ -17,6 +17,12 @@ from pathlib import Path
 # Minimum submit-key length (design §3). Shorter keys are refused at startup, not accepted-then-weak.
 _MIN_KEY_LEN = 16
 
+# Default max upload size, MB (design §7). The SINGLE SOURCE for this default (M2, code-health review
+# §6): the runner imports it for its extraction byte cap rather than carrying its own 250 literal, so
+# the two can never silently drift (they must agree — the runner's cap derives from the gateway's
+# upload-time 4x-total rule). Overridable per-deployment via AUSMT_MAX_UPLOAD_MB.
+DEFAULT_MAX_UPLOAD_MB = 250
+
 
 @dataclass(frozen=True)
 class Config:
@@ -106,7 +112,7 @@ def load_config(environ: dict[str, str] | None = None) -> Config:
     return Config(
         submit_key=env.get("AUSMT_SUBMIT_KEY", ""),
         data_dir=Path(env.get("AUSMT_GW_DATA", "/gw")),
-        max_upload_mb=_i("AUSMT_MAX_UPLOAD_MB", 250),
+        max_upload_mb=_i("AUSMT_MAX_UPLOAD_MB", DEFAULT_MAX_UPLOAD_MB),
         max_inflight=_i("AUSMT_MAX_INFLIGHT", 8),
         max_per_day=_i("AUSMT_MAX_PER_DAY", 25),
         job_timeout_s=_i("AUSMT_JOB_TIMEOUT_S", 900),
