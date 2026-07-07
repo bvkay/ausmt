@@ -104,6 +104,25 @@ def test_about_footer_carries_exactly_one_ver_chip():
     assert len(chips) == 1, f"about.html must carry exactly one data-ver-chip element; found {len(chips)}"
 
 
+def test_about_references_no_nonexistent_federation_doc():
+    """C22 citation honesty (2026-07-07). FAILS if about.html references FEDERATION.md — no such file
+    exists anywhere in the repository (verified repo-wide before this test was written), so the pre-C22
+    line 236 ("see the MTCAT v1.0 specification and FEDERATION.md in the project repositories") pointed
+    readers at a fabricated document. Chief-architect ruling: REMOVE the claim, do not repoint (federation
+    is documented as a property of MTCAT itself — docs/docs/developer/data-files.md calls mtcat.json "the
+    MTCAT v1.0 discovery/federation document" — and about.html links no docs-site pages to match).
+
+    Raw-text check ON PURPOSE (unlike this module's parsed-DOM tests): even a commented-out reference is
+    a stale claim waiting to be resurrected, and the parser drops comments. The companion assertion pins
+    the HONEST half of the sentence — the MTCAT v1.0 spec reference must SURVIVE the removal, so an
+    over-deletion also fails here."""
+    raw = ABOUT.read_text(encoding="utf-8")
+    assert "FEDERATION.md" not in raw, (
+        "about.html must not reference FEDERATION.md — that file does not exist in the repository")
+    assert "MTCAT v1.0" in raw, (
+        "the honest MTCAT v1.0 spec reference must survive the FEDERATION.md removal (over-deletion)")
+
+
 def test_index_still_has_the_count_ids_the_about_guard_forbids():
     # Guards the guard: proves test_about_has_no_live_counts_elements is non-vacuous by confirming the
     # very ids it forbids DO exist on index.html. If index ever drops them this reminds us to re-check
