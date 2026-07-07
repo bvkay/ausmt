@@ -98,6 +98,14 @@ def test_portal_interactions(tmp_path):
         # each renders as a real <a href> (or, for the hostile value, a NON-executable href).
         "Alpha Survey": {"slug": "alpha", "org": "OrgX", "country": "Australia",
                          "year_start": 2010, "year_end": 2012,
+                         # C22: Alpha is the WITH-DOI citation fixture — driver section T asserts its
+                         # real DOI survives in both .bib and .ris, and that its CITATIONS.txt line
+                         # carries the DOI URL with NO "[no DOI assigned]" note. Beta stays the
+                         # no-cite/no-DOI survey (section T's no-DOI leg pins that absence).
+                         "doi": "10.99999/alpha-tf-doi",
+                         "cite": {"au": "OrgX Custodians", "yr": "2012",
+                                  "ti": "Alpha Survey magnetotelluric transfer functions",
+                                  "pb": "OrgX Data Repository"},
                          "pid": "https://hdl.handle.net/survey/alpha-pid",
                          "ts": "ok",   # so provGraph renders the collection_pid as a link (goal 2)
                          "ts_pid": "10.25914/alpha-timeseries",

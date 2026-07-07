@@ -103,6 +103,12 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // dimensionality displays (while skew/strike stay). cardDesc exposed for a direct pure-function check.
   "cardDesc,setBlurb:(sv,b)=>{SMETA[sv]=SMETA[sv]||{};if(b===null)delete SMETA[sv].blurb;else SMETA[sv].blurb=b;}," +
   "cardHtml:(sv)=>surveyCard(sv),summaryHtml:(sv)=>surveySummary(ST.filter(s=>s.survey===sv),SMETA[sv]||{})," +
+  // C22 citation-honesty hooks: the citation ASSEMBLY helpers (drawer.js apa/bibtex/ris + exports.js
+  // citeLine) and the constants the #dlCite pack feeds them — exposed so section T can assert on the
+  // exact strings the pack is built from. citeLine is a LAZY arrow (not a bare reference) so a boot on
+  // pre-C22 code still reaches section T and fails THERE with a precise message, instead of dying at
+  // this api hook with an unrelated-looking ReferenceError.
+  "apa,bibtex,ris,AUSMT_SELF,NCI_CITE,TS_COLLECTION,citeLine:(c,d)=>citeLine(c,d),smeta:(sv)=>SMETA[sv]," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -745,6 +751,68 @@ async function bootFreshWindow(dataMap) {
   ok(drwC.querySelectorAll("svg path").length > 0, "C20: a no-tipper/no-error open station must still plot ρ/φ curves");
   drwC.classList.remove("open");
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + radiusForZoom/weightForZoom pins+monotone + A1 colour-identical-all-modes + tooltip type-label SWAP, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state)");
+  // U. C22 CITATION HONESTY (chief-architect ruling 2026-07-07; pre-release hostile-review finding
+  // 2026-07-06 — state.js publisher placeholder). A NO-DOI survey's
+  // generated .bib/.ris must carry NO placeholder text a reference manager would ingest as real: the
+  // pre-C22 AUSMT_SELF.pb publisher read "AusMT (DOI to be minted per release via Zenodo)" and leaked
+  // into EVERY no-DOI citation's publisher/PB field (the doi=/DO/UR FIELDS were already guarded by
+  // d2bc616's `${doi?...:""}` — the leak was the publisher STRING, not the DOI field). A WITH-DOI
+  // survey keeps its real DOI in both formats; the NCI/TS-collection entries are BYTE-pinned to their
+  // pre-C22 output; and the human-readable CITATIONS.txt line for a no-DOI entry SAYS
+  // "[no DOI assigned]" explicitly (exports.js citeLine — net-new in C22, sanctioned by the ruling).
+  //
+  // NOTE (Invariant 10): section U asserts the ASSEMBLY HELPERS (apa/bibtex/ris/citeLine) directly —
+  // the exact functions the #dlCite click handler feeds into the pack — NOT the zipped file itself:
+  // win.JSZip is a STUB in this harness (it swallows z.file() contents), so any "the shipped zip is
+  // clean" claim routed through a #dlCite click here would be a vacuous test of the stub.
+  const PLACEHOLDER = "DOI to be minted";
+  // (a) NO-DOI survey — Beta has neither cite nor doi in the fixture; this is the EXACT call shape of
+  //     the per-survey loop in exports.js dlCite (m.cite||AUSMT_SELF, m.doi).
+  const mBeta = A.smeta("Beta Survey") || {};
+  ok(mBeta.doi === undefined && mBeta.cite === undefined,
+    "U: fixture drift — Beta Survey must stay a no-cite/no-DOI survey for the no-DOI leg");
+  const bibNo = A.bibtex("beta_survey", mBeta.cite || A.AUSMT_SELF, mBeta.doi);
+  const risNo = A.ris(mBeta.cite || A.AUSMT_SELF, mBeta.doi);
+  ok(bibNo.indexOf(PLACEHOLDER) < 0, "U: a no-DOI survey's .bib carries the placeholder string ('" + PLACEHOLDER + "'):\n" + bibNo);
+  ok(risNo.indexOf(PLACEHOLDER) < 0, "U: a no-DOI survey's .ris carries the placeholder string ('" + PLACEHOLDER + "'):\n" + risNo);
+  ok(!/\bdoi\s*=/.test(bibNo), "U: a no-DOI survey's .bib must have NO doi= line:\n" + bibNo);
+  ok(!/^DO  - /m.test(risNo) && !/^UR  - /m.test(risNo), "U: a no-DOI survey's .ris must have NO DO/UR lines:\n" + risNo);
+  // (b) catalogue-level self-citation (exports.js passes AUSMT_SELF with doi=null).
+  const bibSelf = A.bibtex("ausmt_catalogue", A.AUSMT_SELF, null);
+  const risSelf = A.ris(A.AUSMT_SELF, null);
+  ok(bibSelf.indexOf(PLACEHOLDER) < 0, "U: the catalogue self-citation .bib carries the placeholder:\n" + bibSelf);
+  ok(risSelf.indexOf(PLACEHOLDER) < 0, "U: the catalogue self-citation .ris carries the placeholder:\n" + risSelf);
+  ok(!/\bdoi\s*=/.test(bibSelf) && !/^DO  - /m.test(risSelf),
+    "U: the catalogue self-citation must fabricate no DOI field");
+  // (c) WITH-DOI survey keeps its real DOI in BOTH formats (Alpha carries doi+cite in the fixture).
+  const mAlpha = A.smeta("Alpha Survey") || {};
+  ok(mAlpha.doi === "10.99999/alpha-tf-doi",
+    "U: fixture drift — Alpha Survey must carry the with-DOI fixture doi, got " + JSON.stringify(mAlpha.doi));
+  const bibW = A.bibtex("alpha_survey", mAlpha.cite || A.AUSMT_SELF, mAlpha.doi);
+  const risW = A.ris(mAlpha.cite || A.AUSMT_SELF, mAlpha.doi);
+  ok(bibW.indexOf("doi       = {10.99999/alpha-tf-doi},") >= 0, "U: the with-DOI .bib lost its real doi= line:\n" + bibW);
+  ok(risW.indexOf("DO  - 10.99999/alpha-tf-doi") >= 0 && risW.indexOf("UR  - https://doi.org/10.99999/alpha-tf-doi") >= 0,
+    "U: the with-DOI .ris lost its real DO/UR lines:\n" + risW);
+  // (d) NCI/TS-collection entries BYTE-untouched — pinned to the output of the pre-C22 helpers at
+  //     cbb7a88 (generated, not hand-typed). A single changed byte in either entry fails here.
+  ok(A.TS_COLLECTION.doi === "10.25914/mtjg-jp22", "U: TS_COLLECTION.doi drifted from 10.25914/mtjg-jp22");
+  const NCI_BIB_PIN = "@misc{nci_auscope_mt,\n  author    = {AuScope and NCI Australia},\n  title     = {NCI-AuScope Magnetotelluric Collection — packed raw, Level 1 and Level 2 time series},\n  year      = {n.d.},\n  publisher = {NCI Australia},\n  doi       = {10.25914/mtjg-jp22},\n  note      = {Accessed via the AusMT portal}\n}";
+  const NCI_RIS_PIN = "TY  - DATA\nAU  - AuScope\nAU  - NCI Australia\nTI  - NCI-AuScope Magnetotelluric Collection — packed raw, Level 1 and Level 2 time series\nPY  - \nPB  - NCI Australia\nDO  - 10.25914/mtjg-jp22\nUR  - https://doi.org/10.25914/mtjg-jp22\nER  -";
+  ok(A.bibtex("nci_auscope_mt", A.NCI_CITE, A.TS_COLLECTION.doi) === NCI_BIB_PIN,
+    "U: the NCI .bib entry changed byte(s) vs the pre-C22 pin:\n" + A.bibtex("nci_auscope_mt", A.NCI_CITE, A.TS_COLLECTION.doi));
+  ok(A.ris(A.NCI_CITE, A.TS_COLLECTION.doi) === NCI_RIS_PIN,
+    "U: the NCI .ris entry changed byte(s) vs the pre-C22 pin:\n" + A.ris(A.NCI_CITE, A.TS_COLLECTION.doi));
+  // (e) CITATIONS.txt honesty: the no-DOI line SAYS SO explicitly; the with-DOI line carries the real
+  //     DOI URL and NO note. On pre-C22 code citeLine does not exist — the lazy api hook throws
+  //     ReferenceError right here, which is this leg's RED.
+  const lineNo = A.citeLine(A.AUSMT_SELF, null);
+  ok(lineNo.indexOf("[no DOI assigned]") >= 0,
+    "U: the no-DOI CITATIONS.txt line must say [no DOI assigned], got: " + lineNo);
+  ok(lineNo.indexOf(PLACEHOLDER) < 0, "U: the no-DOI CITATIONS.txt line still carries the placeholder: " + lineNo);
+  const lineW = A.citeLine(mAlpha.cite, mAlpha.doi);
+  ok(lineW.indexOf("https://doi.org/10.99999/alpha-tf-doi") >= 0 && lineW.indexOf("no DOI assigned") < 0,
+    "U: the with-DOI CITATIONS.txt line must carry the DOI URL and no note, got: " + lineW);
+
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + radiusForZoom/weightForZoom pins+monotone + A1 colour-identical-all-modes + tooltip type-label SWAP, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

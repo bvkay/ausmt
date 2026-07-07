@@ -393,18 +393,120 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
     const z = await JSZipNode.loadAsync(zip);
     const ediPaths = Object.keys(z.files).filter((p) => /transfer_functions\/edi\/.+\.edi$/.test(p));
-    ok(ediPaths.length === 1 && /keep\.edi$/.test(ediPaths[0]),
-      "the zip carries exactly one EDI, the kept one; entries: " + JSON.stringify(ediPaths));
-    ok(!ediPaths.some((p) => /gone\.edi$/.test(p)), "the removed EDI's path is absent from the zip");
-    // Scan the raw bytes too: neither the removed file's name nor its unique DATAID may appear anywhere.
+    // task #16: entries are named by DATAID (KEEP -> KEEP.edi), NOT by the on-disk filename (keep.edi).
+    // The remove feature must compose with the rename: only the KEPT station's DATAID-named entry ships.
+    ok(ediPaths.length === 1 && /\/KEEP\.edi$/.test(ediPaths[0]),
+      "the zip carries exactly one EDI, the kept one named by its DATAID (KEEP.edi); entries: " + JSON.stringify(ediPaths));
+    ok(!ediPaths.some((p) => /\/GONE\.edi$/.test(p)), "the removed EDI's DATAID-named path is absent from the zip");
+    // The DATAID-named entry present; the ORIGINAL on-disk filename must NOT survive as an entry PATH
+    // (it may still appear inside MANIFEST.json as source_filename provenance — that's an entry VALUE,
+    // asserted below — so we check the entry-name list, not the raw bytes, for the kept file).
+    ok(!Object.keys(z.files).some((p) => /transfer_functions\/edi\/keep\.edi$/.test(p)),
+      "the kept EDI is NOT a zip entry under its original lowercase filename (renamed to KEEP.edi)");
+    // Scan the raw bytes for the REMOVED file: neither its name nor its unique DATAID may appear anywhere
+    // (it was removed before packaging, so it must be wholly absent — no entry, no provenance, no bytes).
     ok(zip.indexOf(Buffer.from("gone.edi")) < 0, "the removed filename is absent from the zip bytes");
     ok(zip.indexOf(Buffer.from('DATAID="GONE"')) < 0, "the removed EDI's content is absent from the zip bytes");
     ok(zip.indexOf(Buffer.from('DATAID="KEEP"')) >= 0, "sanity: the kept EDI's content IS in the zip bytes");
+    // MANIFEST.json records the ORIGINAL filename as additive provenance while `file` uses the DATAID name.
+    const manEntry = z.file(/MANIFEST\.json$/);
+    ok(manEntry.length === 1, "the zip contains exactly one MANIFEST.json");
+    const man = JSON.parse(await manEntry[0].async("string"));
+    ok(Array.isArray(man.transfer_functions) && man.transfer_functions.length === 1, "MANIFEST lists the one kept tf");
+    ok(man.transfer_functions[0].file === "transfer_functions/edi/KEEP.edi",
+      "MANIFEST `file` is the DATAID-based path; got: " + man.transfer_functions[0].file);
+    ok(man.transfer_functions[0].source_filename === "keep.edi",
+      "MANIFEST `source_filename` records the original selected name; got: " + man.transfer_functions[0].source_filename);
+  }
+
+  // --------------------------------------------------------------------------------------------------
+  // 7. DATAID-BASED PACKAGING (task #16): files package under <sanitized-DATAID>.edi (matching the
+  //    station identity the engine keys off), the file list shows the rename BEFORE upload, and a
+  //    duplicate/unreadable DATAID BLOCKS submission naming both source filenames (fail loud, no silent
+  //    auto-suffixing). The motivating case: olympic-dam-2004 ships LineNo__StationNo_1.edi whose
+  //    DATAIDs are ROX000 etc — the packaged names must be ROX000.edi, not the line/station filename.
+  {
+    // Realistic olympic-dam shape: on-disk name LineNo__StationNo_1.edi, DATAID="ROX000" in >HEAD.
+    const ROX0 = '\x3eHEAD\nDATAID="ROX000"\nLAT=-30.10\nLONG=136.60\n\n\x3eFREQ\n1 10 100\n\x3eZXYR\n1 2 3\n';
+    const ROX1 = '\x3eHEAD\nDATAID="ROX001"\nLAT=-30.20\nLONG=136.70\n\n\x3eFREQ\n1 10 100\n\x3eZXYR\n1 2 3\n';
+
+    // (7a) rename PREVIEW in the file list: "1__1_1.edi → ROX000.edi" is shown before any upload.
+    {
+      const e = await boot({ probe: probeAbsent });
+      fillValidMeta(e.win);
+      await addEdi(e.win, "1__1_1.edi", ROX0);
+      const fl = e.doc.getElementById("filelist");
+      ok(/1__1_1\.edi/.test(fl.textContent), "the file list shows the original selected filename");
+      ok(/→\s*ROX000\.edi/.test(fl.textContent),
+        "the file list shows the DATAID rename preview (→ ROX000.edi); got: " + fl.textContent.replace(/\s+/g, " ").trim());
+    }
+
+    // (7b) the packaged zip names the EDI by DATAID (ROX000.edi), not by the LineNo__StationNo filename.
+    {
+      const e = await boot({ probe: probeAbsent });
+      fillValidMeta(e.win);
+      await addEdi(e.win, "1__1_1.edi", ROX0);
+      await e.doc.getElementById("btnPackage").onclick();
+      await new Promise((res) => setTimeout(res, 0));
+      ok(e.record.blobs.length === 1, "packaging the DATAID case produced one zip blob");
+      const zip = Buffer.from(await e.record.blobs[0].arrayBuffer());
+      const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
+      const z = await JSZipNode.loadAsync(zip);
+      const ediPaths = Object.keys(z.files).filter((p) => /transfer_functions\/edi\/.+\.edi$/.test(p));
+      ok(ediPaths.length === 1 && /\/ROX000\.edi$/.test(ediPaths[0]),
+        "the zip entry is named by DATAID (ROX000.edi), not the on-disk filename; entries: " + JSON.stringify(ediPaths));
+      ok(!Object.keys(z.files).some((p) => /1__1_1\.edi$/.test(p)),
+        "the on-disk filename is NOT a zip entry PATH (renamed); the original name survives only as MANIFEST source_filename");
+      // and it IS preserved as additive provenance inside MANIFEST.json.
+      const man2 = JSON.parse(await z.file(/MANIFEST\.json$/)[0].async("string"));
+      ok(man2.transfer_functions[0].file === "transfer_functions/edi/ROX000.edi"
+        && man2.transfer_functions[0].source_filename === "1__1_1.edi",
+        "MANIFEST: file=ROX000.edi (DATAID) + source_filename=1__1_1.edi (original)");
+    }
+
+    // (7c) DUPLICATE DATAID blocks submission, and the message names BOTH source filenames. Two files
+    //      with the same DATAID (copy-paste mistake) is a FAIL — no silent auto-suffix.
+    {
+      const e = await boot({ probe: probeAbsent });
+      fillValidMeta(e.win);
+      await addEdi(e.win, "line1__station1_1.edi", ROX0);
+      await addEdi(e.win, "line2__station7_1.edi", ROX0);          // SAME DATAID="ROX000"
+      e.doc.getElementById("btnValidate").onclick();
+      const vtext = e.doc.getElementById("vList").textContent;
+      ok(/FAIL/.test(e.doc.getElementById("vSummary").textContent), "a duplicate DATAID makes validation FAIL");
+      ok(/line1__station1_1\.edi/.test(vtext) && /line2__station7_1\.edi/.test(vtext),
+        "the duplicate-DATAID error names BOTH source filenames; got: " + vtext.replace(/\s+/g, " ").trim());
+      // and it BLOCKS packaging (buildPackage returns blocked on any FAIL).
+      await e.doc.getElementById("btnPackage").onclick();
+      await new Promise((res) => setTimeout(res, 0));
+      ok(e.record.blobs.length === 0, "a duplicate DATAID blocks packaging (no zip produced)");
+      ok(/validation FAIL/i.test(e.doc.getElementById("pkBody").textContent), "packaging is blocked with a FAIL message");
+    }
+
+    // (7d) UNREADABLE / ABSENT DATAID blocks submission: an EDI with no DATAID line cannot be named.
+    {
+      const NOID = '\x3eHEAD\nLAT=-30.10\nLONG=136.60\n\n\x3eFREQ\n1 10 100\n\x3eZXYR\n1 2 3\n';
+      const e = await boot({ probe: probeAbsent });
+      fillValidMeta(e.win);
+      await addEdi(e.win, "no-dataid.edi", NOID);
+      // the file list flags it (red "no DATAID") before any submit attempt.
+      ok(/no DATAID/i.test(e.doc.getElementById("filelist").textContent),
+        "the file list flags a missing DATAID before submission");
+      e.doc.getElementById("btnValidate").onclick();
+      const vtext = e.doc.getElementById("vList").textContent;
+      ok(/FAIL/.test(e.doc.getElementById("vSummary").textContent), "a missing DATAID makes validation FAIL");
+      ok(/no-dataid\.edi/.test(vtext) && /DATAID/.test(vtext),
+        "the missing-DATAID error names the source file; got: " + vtext.replace(/\s+/g, " ").trim());
+      await e.doc.getElementById("btnPackage").onclick();
+      await new Promise((res) => setTimeout(res, 0));
+      ok(e.record.blobs.length === 0, "a missing DATAID blocks packaging (no zip produced)");
+    }
   }
 
   console.log("SUBMIT-TEST PASSED (probe gating, double-submit guard, key-hygiene: header-only, " +
     "escaped 201 link, XSS-inert hostile detail/status_url, fail-fast empty-key + bad-ORCID gates, " +
     "SUBMISSION.md sequential numbering both branches, per-row file remove: list + DMS conflict count + " +
-    "removed file absent from packaged zip bytes)");
+    "removed file absent from packaged zip bytes, DATAID packaging: rename preview + DATAID-named zip entry + " +
+    "MANIFEST source_filename + duplicate/missing DATAID blocks naming both filenames)");
   process.exit(0);
 })().catch((e) => die((e && e.stack) || String(e)));
