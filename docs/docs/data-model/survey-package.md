@@ -32,37 +32,36 @@ Raw time-series data are not required to be stored within the package.
 
 ## Package Structure
 
-Typical layout:
+The layout is deliberately small:
 
 ```text
 survey-slug/
-├── survey.yaml
-├── stations.csv
-├── transfer_functions/
-├── provenance/
-├── releases/
-└── README.md
+├── survey.yaml            (survey and station metadata, provenance, citation, access)
+├── README.md              (generated at intake when absent)
+├── LICENSE.md             (generated at intake when absent)
+└── transfer_functions/
+    └── edi/               (one EDI per station occupation)
 ```
 
-Derived products may be included, but transfer functions remain the authoritative scientific products.
+Transfer functions are the authoritative scientific products. Derived products are not
+stored in the package — the engine generates them at build time, so they can be regenerated
+and improved without touching the published record.
 
 ## Releases
 
-Survey packages are published through immutable releases.
+Each package carries a semantic `version` in `survey.yaml`, with per-version
+`release_notes` that the portal displays. The authoritative history of a package is the
+survey repository's git history.
 
-Each release corresponds to a specific survey-package version.
-
-```text
-vulcan-2022_v1.0.0_survey-package.zip
-```
-
-The release archive is the object cited, downloaded and preserved.
+Immutable per-version release archives (a frozen zip per published version, e.g.
+`vulcan-2022_v1.0.0_survey-package.zip`) are a **planned** mechanism — see
+[Versioning](versioning.md) for the current implementation status.
 
 ## Relationship to Other Components
 
 - Collections organise survey packages.
 - MTCAT advertises survey packages.
-- The API exposes survey-package metadata.
+- The portal's machine-readable JSON products expose survey-package metadata.
 - The portal visualises survey-package contents.
 
 The survey package is therefore the centre of the AusMT architecture.
