@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import jobs
+from ..config import DEFAULT_MAX_UPLOAD_MB  # M2: single source of the 250 MB upload default
 from .safeextract import ExtractionTimeout, cap_for, safe_extract
 
 # Env pins (design §5). AUSMT_VALIDATOR_PATH is the same env the engine's _load_validator() reads;
@@ -52,8 +53,9 @@ class RunnerConfig:
     # so a live job's running-file mtime stays fresh between sweep passes.
     heartbeat_s: float = 30.0
     # Max upload size (bytes) — used only to derive the extraction byte cap (fix #10), which must
-    # match the gateway's upload-time 4x-total rule. Default mirrors the gateway's 250 MB default.
-    max_upload_bytes: int = 250 * 1024 * 1024
+    # match the gateway's upload-time 4x-total rule. The MB default is IMPORTED from the gateway
+    # config (M2, code-health review §6) so it cannot drift from the gateway's own default.
+    max_upload_bytes: int = DEFAULT_MAX_UPLOAD_MB * 1024 * 1024
     # C31 metadata-edit jobs: where THIS container sees the surveys-live checkout (compose mounts it
     # READ-ONLY at /srv/surveys — the same mount the validator ships in). Edit jobs carry a SLUG,
     # never a path (the gateway's mount path /srv/surveys-live differs from this container's), and
@@ -73,7 +75,7 @@ class RunnerConfig:
             engine_dir=Path(env.get("AUSMT_ENGINE_DIR", "/app/engine")),
             timeout_s=int(env.get("AUSMT_JOB_TIMEOUT_S", str(_DEFAULT_TIMEOUT_S))),
             heartbeat_s=float(env.get("AUSMT_HEARTBEAT_S", "30")),
-            max_upload_bytes=int(env.get("AUSMT_MAX_UPLOAD_MB", "250")) * 1024 * 1024,
+            max_upload_bytes=int(env.get("AUSMT_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB))) * 1024 * 1024,
             surveys_root=Path(env.get("AUSMT_SURVEYS_ROOT", "/srv/surveys")),
         )
 
@@ -248,7 +250,7 @@ def _run_validator(cfg: RunnerConfig, package_dir: Path, out_json: Path, deadlin
     validator_file = _validator_file(cfg.validator_path)
     target = _single_package_root(package_dir)
     proc = _run_subprocess(
-        [sys.executable, str(validator_file), str(target), "--json", str(out_json)],
+        validator_argv(validator_file, target, out_json),  # M7: the one canonical argv
         cwd=None, deadline=deadline,
     )
     try:
@@ -406,6 +408,22 @@ def _generate_intake_files(package_dir: Path) -> list[str]:
 def _validator_file(validator_path: str) -> Path:
     p = Path(validator_path)
     return p if p.name == "validate_survey.py" else (p / "validate_survey.py")
+
+
+def validator_argv(validator_file: Path, target_dir: Path, report_path: Path) -> list[str]:
+    """The ONE canonical argv for invoking the surveys validator as a subprocess (M7, code-health
+    review §6). Both the C10 submission runner (_run_validator above) and the C31 metadata-edit
+    runner (edit._run_validator) go through this, so the invocation contract lives in exactly one
+    place — no second, independently-assembled argv can drift and re-open the 2026-07-06 ship-blocker
+    (the folder had been passed as the --json VALUE with no positional, argparse exited 2, every real
+    submission quarantined).
+
+    Canonical shape (the runner's positional-first form): the package folder is the REQUIRED
+    positional and `--json` names the OUTPUT report file. edit.py previously assembled the flags
+    --json-first (`--json <file> <folder>`); argparse accepts both, but a single form is the point of
+    M7 — the positional-first order is the one the real-vendored-validator oracles pin. All args are
+    stringified here so callers pass Paths and the whole subprocess contract is described in one line."""
+    return [sys.executable, str(validator_file), str(target_dir), "--json", str(report_path)]
 
 
 def _write_summary(path: Path, summary: dict) -> None:

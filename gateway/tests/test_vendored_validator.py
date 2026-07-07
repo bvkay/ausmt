@@ -10,15 +10,27 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _SYNC = _FIXTURES / "sync_vendored_validator.py"
+_VENDORED_VALIDATOR = _FIXTURES / "vendored_validation" / "validate_survey.py"
+_ORCID_VECTORS = _FIXTURES / "orcid_vectors.json"
 
 
 def _load_sync():
     """Import the sync script as a module (it lives outside any package)."""
     spec = importlib.util.spec_from_file_location("sync_vendored_validator", _SYNC)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _load_vendored_validator():
+    """Import the committed vendored validate_survey.py so its orcid_checksum_ok can be exercised
+    against the shared ORCID vectors (M2). Stdlib+optional-yaml only — imports in the gateway env."""
+    spec = importlib.util.spec_from_file_location("vendored_validate_survey", _VENDORED_VALIDATOR)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -47,3 +59,21 @@ def test_sync_check_mode_agrees():
     # disagree (a check that cannot fail when the file is corrupt would be vacuous).
     sync = _load_sync()
     assert sync.do_check() == 0
+
+
+def test_validator_orcid_checksum_matches_shared_vectors():
+    # M2 (code-health review §6): the validator's orcid_checksum_ok is the THIRD copy of the ISO 7064
+    # MOD 11-2 checksum. Drive it over every validator-scoped vector in the SHARED oracle file — the
+    # same file gateway/tests/test_orcid.py and the portal jsdom test consume. FAILS IF the validator's
+    # copy diverges from the shared verdicts (the exact drift M2 closes). The validator's FORMAT
+    # contract differs (URL accepted, bare form rejected), so we only assert the vectors whose
+    # `applies_to` includes "validator" — the canonical-hyphenated set all three impls share.
+    vv = _load_vendored_validator()
+    vectors = [v for v in json.loads(_ORCID_VECTORS.read_text(encoding="utf-8"))["vectors"]
+               if "validator" in v["applies_to"]]
+    assert vectors, "no validator-scoped ORCID vectors — the shared file is empty or mis-scoped"
+    mismatches = [(v["input"], v["valid"], vv.orcid_checksum_ok(v["input"]))
+                  for v in vectors if vv.orcid_checksum_ok(v["input"]) != v["valid"]]
+    assert not mismatches, (
+        "vendored validator orcid_checksum_ok disagrees with orcid_vectors.json "
+        f"(input, expected, got): {mismatches}")

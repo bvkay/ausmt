@@ -87,17 +87,20 @@ ok(!/uploader_orcid/.test(pkgBlock) || /ORCID/.test(pkgBlock) === false,
 ok(/m_up_email/.test(html), "the uploader email form field itself is still present (feeds Stage-2 gateway)");
 
 // ============================ C13 direct-upload pure logic (design §4/§5) ============================
-// -- isOrcidChecksum: ISO 7064 MOD 11-2, must mirror gateway/orcid.py EXACTLY. Values below are the
-//    reference outputs from gateway/orcid.py::is_valid_orcid (verified cross-language during C13).
-ok(M.isOrcidChecksum("0000-0002-1825-0097") === true, "isOrcidChecksum: the ORCID-doc example is valid");
-ok(M.isOrcidChecksum("0000-0002-1825-0098") === false, "isOrcidChecksum: same digits, wrong check digit -> invalid");
-ok(M.isOrcidChecksum("0000000218250097") === true, "isOrcidChecksum: bare 16-char form accepted");
-ok(M.isOrcidChecksum("0000-0002-1694-233X") === true, "isOrcidChecksum: X check digit (value 10) accepted");
-ok(M.isOrcidChecksum("0000-0002-1694-233x") === false, "isOrcidChecksum: lowercase x rejected (server accepts only uppercase X)");
-ok(M.isOrcidChecksum("0000-0002-1694-2331") === false, "isOrcidChecksum: wrong check where the real one is X -> invalid");
-ok(M.isOrcidChecksum("not-an-orcid") === false, "isOrcidChecksum: format-invalid string -> invalid");
-ok(M.isOrcidChecksum("") === false, "isOrcidChecksum: empty -> invalid (caller gates emptiness separately; ORCID is optional)");
-ok(M.isOrcidChecksum("0000-X002-1825-0097") === false, "isOrcidChecksum: X anywhere but the final position -> invalid");
+// -- isOrcidChecksum: ISO 7064 MOD 11-2, must mirror gateway/orcid.py EXACTLY. M2 (code-health review
+//    §6): the reference verdicts now come from the SHARED vector file gateway/tests/fixtures/
+//    orcid_vectors.json — the SAME file gateway/tests/test_orcid.py and the vendored-validator test
+//    consume. A divergence between this portal isOrcidChecksum and the shared oracle reds exactly the
+//    offending vector, so the three ISO-7064 copies cannot drift apart silently. We drive every vector
+//    whose `applies_to` lists "portal" (the portal's FORMAT contract: bare 16-char form accepted).
+const ORCID_VECTORS = JSON.parse(fs.readFileSync(
+  path.join(__dirname, "..", "..", "gateway", "tests", "fixtures", "orcid_vectors.json"), "utf8"));
+const portalOrcidVectors = ORCID_VECTORS.vectors.filter(v => v.applies_to.includes("portal"));
+ok(portalOrcidVectors.length > 0, "shared orcid_vectors.json has portal-scoped vectors");
+for (const v of portalOrcidVectors) {
+  ok(M.isOrcidChecksum(v.input) === v.valid,
+     `isOrcidChecksum(${JSON.stringify(v.input)}) === ${v.valid} [shared vector: ${v.note}]`);
+}
 
 // -- gatewayPresent (§1 strict shape check): PRESENT iff 200 AND JSON AND ok===true.
 ok(M.gatewayPresent(200, '{"ok":true}') === true, "gatewayPresent: 200 + {ok:true} -> present");
