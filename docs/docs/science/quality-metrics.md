@@ -6,7 +6,9 @@ AusMT publishes a range of quality metrics intended to assist users in assessing
 
 These products are designed to support discovery, quality assessment and interpretation.
 
-The objective is not to assign a single quality score to a survey or station. Magnetotelluric data quality depends on many factors, including acquisition conditions, recording duration, processing methodology and the scientific objectives of a study.
+Magnetotelluric data quality depends on many factors, including acquisition conditions, recording duration, processing methodology and the scientific objectives of a study. No single number can capture that, and AusMT does not rank stations or surveys.
+
+AusMT *does* compute one per-station screening scalar (`q`, described below), but it is explicitly labelled in the portal as a completeness/smoothness diagnostic, **not** a data-quality or geological-value judgement.
 
 Quality metrics should therefore be regarded as diagnostic information rather than pass–fail criteria.
 
@@ -29,20 +31,41 @@ Quality metrics provide a summary of these characteristics and help users unders
 
 ---
 
-## No Single Quality Score
+## The `q` screening scalar
 
-AusMT does not assign a single numerical quality score to transfer functions or surveys.
+Each station carries a 0–5 scalar, `q`, computed by the build (`_edi_science.py`). It exists so
+a user screening hundreds of stations can spot incomplete or rough transfer functions quickly.
+It is **not** a data-quality ranking, and the portal says so wherever it is displayed.
 
-A single metric cannot adequately represent:
+The definition is deliberately simple and fully disclosed:
 
-- Period-dependent behaviour
-- Survey objectives
-- Acquisition environments
-- Processing strategies
+- **completeness** — fraction of periods with usable apparent resistivity *and* phase
+- **coverage** — decades of period coverage, scaled against four decades
+- **smoothness** — 1 − (median second-difference roughness of the xy phase curve)/25°
+- **errscore** — where per-period resistivity errors exist: the median relative error (`mre`)
+  mapped log-linearly from ≥30% → 0 to ≤2% → 1
 
-Instead, multiple complementary metrics are provided.
+When error information exists (`quality_basis = "error"`):
 
-Users should interpret these metrics together rather than relying on a single indicator.
+```text
+q = 5 × (0.45·errscore + 0.18·coverage + 0.15·completeness + 0.22·smooth)
+```
+
+When the EDI carries no usable error blocks (`quality_basis = "shape"`):
+
+```text
+q = 5 × (0.40·coverage + 0.30·completeness + 0.30·smooth)
+```
+
+Known limitations, stated plainly: smoothness uses the xy phase mode only; the error basis
+uses off-diagonal resistivity errors only; there is no normalisation across instrument
+classes (a long-period and a broadband station are scored on the same scale). Whether the
+scalar should be replaced by the underlying vector of diagnostics (`mre`, decades,
+completeness, smoothness) is an open design question to be settled with the community.
+
+A single metric cannot adequately represent period-dependent behaviour, survey objectives,
+acquisition environments or processing strategies — so interpret `q` together with the
+complementary metrics below, never as a standalone indicator.
 
 ---
 
@@ -67,13 +90,11 @@ These metrics help users determine whether a survey contains the information req
 
 Period coverage is one of the most important characteristics of an MT dataset.
 
-AusMT may report:
+AusMT reports:
 
-- Minimum period
-- Maximum period
+- Minimum and maximum period (catalogue and station pages)
 - Number of estimated periods
-- Period spacing
-- Period distribution
+- Decades of period coverage (a `q` input)
 
 Period coverage provides insight into the depth range that may be investigated using a dataset.
 
@@ -90,25 +111,27 @@ These may include:
 - Confidence intervals
 - Variance estimates
 
-> **Implementation status (current).** AusMT's derived products do not carry these per-period
-> values through: the build pipeline collapses per-station uncertainty to a single scalar,
-> `median_relative_error` (`mre`), reported in the portal diagnostics. The full per-period VAR
-> blocks survive only inside the original served EDI file, not in any derived product. Restoring
-> per-period uncertainty to derived products is a possible future enhancement, not current behaviour.
+> **Implementation status (current).** Per-period uncertainties for the off-diagonal modes are
+> carried through to the portal's transfer-function data product: the `tf` contract includes
+> `rho_xy_err`, `rho_yx_err`, `phs_xy_err` and `phs_yx_err` columns alongside the values. The
+> per-station summary scalar `median_relative_error` (`mre`) is reported in the portal
+> diagnostics. The complete VAR blocks for **all** components remain available in the original
+> served EDI file.
 
 Uncertainty estimates provide information regarding the statistical reliability of transfer-function estimates.
 
-Users who need per-period uncertainty should consult the original EDI's VAR blocks directly.
+Users who need the full per-component uncertainty record should consult the original EDI's VAR blocks.
 
 ---
 
 ## Error Bars
 
-Apparent resistivity and phase products in the original EDI commonly include per-period uncertainty estimates, conventionally displayed as error bars on quicklook plots produced by external MT software.
+Apparent resistivity and phase products in the original EDI commonly include per-period uncertainty estimates, conventionally displayed as error bars.
 
-> **Implementation status (current).** AusMT does not currently render error bars anywhere in its
-> own derived products or portal quicklooks — the portal shows only the single-scalar `mre`
-> diagnostic described above. Error-bar display in AusMT-generated plots is planned, not shipped.
+> **Implementation status (current).** The portal's station drawer renders error bars on the
+> apparent-resistivity and phase plots wherever the EDI supplies per-period errors: resistivity
+> whiskers are drawn in the log domain, phase whiskers as symmetric ± degrees. Stations whose
+> EDIs carry no error blocks show no bars (and their `q` falls back to the shape basis).
 
 Error bars provide a visual indication of the variability associated with a transfer-function estimate.
 
@@ -118,15 +141,12 @@ Large uncertainties do not necessarily imply poor data quality, but they may ind
 
 ## Transfer Function Consistency
 
-Several products can provide insight into the internal consistency of a transfer function.
+Several shipped diagnostics provide insight into the internal consistency of a transfer function:
 
-Examples include:
-
-- Apparent resistivity behaviour
-- Phase behaviour
-- Tipper behaviour
-- Tensor symmetry indicators
-- Period-to-period stability
+- Phase smoothness (median second-difference roughness, a `q` input)
+- A galvanic/static-shift signature heuristic — resistivity modes offset by a near-constant
+  factor in log space while phases coincide; flagged with a warning in the station drawer
+- Phase-tensor dimensionality diagnostics (see [Dimensionality](dimensionality.md))
 
 These diagnostics help users identify unusual features that may warrant further investigation.
 
@@ -136,13 +156,13 @@ These diagnostics help users identify unusual features that may warrant further 
 
 Survey-level metrics describe the spatial characteristics of a dataset.
 
-Examples include:
+Reported today:
 
 - Number of stations
-- Survey extent
-- Station spacing
-- Profile length
-- Survey area
+- Geographic extent (the map itself, and per-survey pages)
+
+Derived spatial metrics (station spacing, profile length, survey area) are not currently
+computed.
 
 These metrics help users assess whether a survey is appropriate for a particular regional or local-scale application.
 
@@ -152,7 +172,8 @@ These metrics help users assess whether a survey is appropriate for a particular
 
 Metadata quality influences the long-term usability of a dataset.
 
-AusMT may report the availability of:
+The portal surfaces this per station as availability badges (EDI, time series, MTH5, DOI,
+licence) and a maturity bar covering:
 
 - Survey metadata
 - Station metadata

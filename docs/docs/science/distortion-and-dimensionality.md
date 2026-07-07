@@ -10,7 +10,9 @@ These local effects can alter the apparent resistivity response and complicate t
 
 A variety of decomposition and diagnostic methods have been developed to investigate these effects and to separate regional behaviour from local influences.
 
-AusMT publishes distortion and decomposition products as advanced diagnostic tools intended to support interpretation and quality assessment.
+AusMT intends to publish distortion and decomposition products as advanced diagnostic tools
+supporting interpretation and quality assessment — these are **in development, not yet
+generated** (see the status note under Products Published by AusMT below).
 
 These products should be regarded as complementary to the original transfer functions rather than replacements for them.
 

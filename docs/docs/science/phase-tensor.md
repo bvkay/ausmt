@@ -47,7 +47,9 @@ where:
 
 then the phase tensor is defined as:
 
-\Phi=X^{-1}Y
+```text
+Φ = X⁻¹ Y
+```
 
 (Caldwell et al., 2004)
 
@@ -80,18 +82,14 @@ Phase tensor ellipses are widely used in survey maps and profile displays.
 
 ## Phase Tensor Maps
 
-AusMT may publish phase tensor maps for individual periods or period bands.
+Phase tensor ellipse maps for individual periods or period bands are a **planned** product —
+they are not generated today.
 
-These products allow users to visualise regional variations in conductivity structure across an entire survey.
-
-Typical applications include:
-
-- Regional geological interpretation
-- Lithospheric studies
-- Exploration targeting
-- Survey-scale quality assessment
-
-Phase tensor maps are often one of the most effective ways to obtain an overview of a large MT dataset.
+Such maps allow users to visualise regional variations in conductivity structure across an
+entire survey, supporting regional geological interpretation, lithospheric studies,
+exploration targeting and survey-scale quality assessment. They are often one of the most
+effective ways to obtain an overview of a large MT dataset, which is why they are on the
+roadmap.
 
 ---
 
@@ -120,7 +118,9 @@ In a perfectly one-dimensional or two-dimensional Earth, the skew is expected to
 
 Increasing skew values generally indicate increasing departures from two-dimensional behaviour (Caldwell et al., 2004).
 
-Within AusMT, skew may be used as one component of dimensionality assessment products.
+Within AusMT, the per-period skew β is served in the transfer-function data product, and the
+median |β| is the primary input to the shipped dimensionality classification (see
+[Dimensionality](dimensionality.md) for the thresholds).
 
 ---
 
@@ -142,15 +142,17 @@ The phase tensor is most powerful when used in conjunction with transfer functio
 
 ## Products Published by AusMT
 
-Depending on the survey, AusMT may publish:
+Shipped today, for every station:
 
-- Phase tensor ellipses
-- Phase tensor maps
-- Principal phase summaries
-- Phase tensor skew products
+- Per-period phase tensor parameters in the transfer-function data product — Φmin, Φmax,
+  azimuth and skew β
+- A phase-tensor plot in the portal's station drawer
+- The azimuths feed the dimensionality classification and the selection-level strike rose
+
+Planned:
+
+- Phase tensor ellipse maps (per period or period band)
 - Survey-level phase tensor summaries
-
-The precise product set may evolve as AusMT develops.
 
 ---
 
