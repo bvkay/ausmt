@@ -42,6 +42,21 @@ Review provides a level of oversight that cannot be achieved through automated v
 
 ---
 
+## How Review Happens Today
+
+Review runs in the gateway's curator interface. A curator signs in to a private queue of
+validated submissions and, for each one, sees the validation report, a per-item checklist, the
+submission's report bundle, and a rendered preview of the actual portal built from the
+submitted package (sandboxed, reachable only by submission id). Submitter contact details are
+visible to curators only and never enter the published record.
+
+Every decision requires a written curator note and is recorded in the audit log. Approval
+publishes the package as a git commit to the survey repository; the live portal serves it
+after the operator's next data rebuild (published and served are deliberately distinct
+states).
+
+---
+
 ## Validation and Review
 
 Validation and review serve different purposes.
@@ -155,7 +170,6 @@ Survey packages should be associated with an appropriate collection.
 Examples include:
 
 - AusLAMP
-- WAMT
 - Institutional holdings
 - State-based releases
 
@@ -165,28 +179,16 @@ Correct collection assignment improves discovery and navigation.
 
 ## Review Outcomes
 
-Review typically produces one of three outcomes:
+Review produces one of three outcomes, each requiring a curator note:
 
-### Accept
+### Publish
 
-The package is suitable for publication.
+The package is suitable for publication. It is committed to the survey repository and appears
+on the portal at the next data rebuild.
 
-Minor improvements may still be recommended.
-
----
-
-### Accept with Recommendations
-
-The package is suitable for publication but additional improvements have been identified.
-
-Examples include:
-
-- Additional provenance
-- Improved descriptions
-- Additional identifiers
-- Additional publication references
-
-These recommendations may be addressed in a future version.
+Minor improvements may still be recommended in the curator note — they can be addressed in a
+future version (curators can also apply metadata corrections through the gateway's metadata
+editor, which follows the same validated, versioned, audited path).
 
 ---
 
@@ -202,6 +204,13 @@ Examples include:
 - Significant metadata issues
 
 The package may be resubmitted following revision.
+
+---
+
+### Reject
+
+The package is not suitable for AusMT (for example, material outside the repository's scope,
+or a submission that cannot establish publication authority).
 
 ---
 

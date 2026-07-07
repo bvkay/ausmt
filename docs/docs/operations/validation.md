@@ -94,26 +94,25 @@ Examples:
 
 Examples:
 
-- EDI readable
-- EMTFXML readable
-- MTH5 readable
-- Station identifiers consistent
+- EDI parseable
+- MTH5 structurally valid (HDF5 signature, supported version, transfer-function groups)
+- Station identifiers valid (character set, collisions)
+- Opt-in formats (EMTF XML, `.zmm`/`.zrr`/`.j`) pass a file-type gate only — they are stored,
+  not parsed
 
 ### Provenance
 
-Examples:
-
-- Provenance records present
-- Required relationships valid
-- Referenced products exist
+There is no separate provenance validation: submitter-side provenance lives in
+`survey.yaml`'s `processing.*` and free-text fields, which are checked structurally with the
+rest of the metadata.
 
 ### Versioning
 
 Examples:
 
-- Version identifier present
-- Version format valid
-- Version history consistent
+- Version identifier present (warning when missing)
+- Version format valid (`MAJOR.MINOR.PATCH`, warning otherwise)
+- `release_notes` entries shaped as `{version, date, note}` records
 
 ---
 

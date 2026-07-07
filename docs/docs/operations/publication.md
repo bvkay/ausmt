@@ -96,28 +96,26 @@ Before publication, a survey package should satisfy:
 
 ### Provenance
 
-- Provenance records present where available
-- Product relationships recorded
-- Version history updated
+- `survey.yaml` processing fields recorded where available
+- Version and `release_notes` updated
 
 ---
 
 ## Derived Products
 
-Publication may trigger generation of derived products.
+After publication, the next data rebuild generates the derived products:
 
-Examples include:
-
-- Apparent resistivity and phase plots
-- Tipper products
+- Apparent resistivity and phase (with per-period errors)
+- Tipper products and induction arrows
 - Phase tensor products
-- Strike summaries
 - Dimensionality diagnostics
-- Decomposition products
+- Canonical EMTF XML and download bundles
 
-These products are generated from published transfer functions and become part of the published survey package.
+(Strike summaries and decomposition products are planned.)
 
-The precise set of products may evolve as AusMT develops.
+These products are generated from the published transfer functions into the portal's data
+products — they are **not** written back into the survey package, so they can be regenerated
+and improved without touching the published record.
 
 ---
 
@@ -128,7 +126,6 @@ Published surveys are registered within one or more collections.
 Examples include:
 
 - AusLAMP
-- WAMT
 - Institutional holdings
 - State-based releases
 
