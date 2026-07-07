@@ -60,11 +60,18 @@ document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"
   };
   save("ausmt-archive-pointers-"+tsUTC()+".json",JSON.stringify(doc,null,2),"application/json");
   toast("Wrote pointers to where the raw time series live — AusMT does not host or fetch them itself.");};
+// C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
+// pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
+// ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
+// fields (drawer.js apa/bibtex/ris already guard on a falsy doi, d2bc616); emitting placeholder text there
+// would be ingested by reference managers as real bibliographic data — the pre-C22 defect, where
+// AUSMT_SELF.pb carried "(DOI to be minted per release via Zenodo)" into every no-DOI publisher field.
+function citeLine(c,doi){return "  "+apa(c,doi)+(doi?"":"  [no DOI assigned]");}
 document.getElementById("dlCite").onclick=async()=>{track("DownloadGenerated",{format:"ris",n:sel().length});const svs=[...new Set(sel().map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
   let txt=["AusMT citation pack — generated "+today,"Stations: "+sel().length+" across "+svs.length+" survey release(s).","","== Survey source releases =="];let bib="",risT="";
-  svs.forEach(sv=>{const m=SMETA[sv]||{};txt.push("  "+apa(m.cite||AUSMT_SELF,m.doi));bib+=bibtex(sv.toLowerCase().replace(/[^a-z0-9]+/g,"_"),m.cite||AUSMT_SELF,m.doi)+"\n\n";risT+=ris(m.cite||AUSMT_SELF,m.doi)+"\n\n";});
-  txt.push("","== Time-series collection ==","  "+apa(NCI_CITE,TS_COLLECTION.doi));bib+=bibtex("nci_auscope_mt",NCI_CITE,TS_COLLECTION.doi)+"\n\n";risT+=ris(NCI_CITE,TS_COLLECTION.doi)+"\n\n";
-  txt.push("","== Curated catalogue metadata (suggested) ==","  "+apa(AUSMT_SELF,null));bib+=bibtex("ausmt_catalogue",AUSMT_SELF,null)+"\n";risT+=ris(AUSMT_SELF,null)+"\n";
+  svs.forEach(sv=>{const m=SMETA[sv]||{};txt.push(citeLine(m.cite||AUSMT_SELF,m.doi));bib+=bibtex(sv.toLowerCase().replace(/[^a-z0-9]+/g,"_"),m.cite||AUSMT_SELF,m.doi)+"\n\n";risT+=ris(m.cite||AUSMT_SELF,m.doi)+"\n\n";});
+  txt.push("","== Time-series collection ==",citeLine(NCI_CITE,TS_COLLECTION.doi));bib+=bibtex("nci_auscope_mt",NCI_CITE,TS_COLLECTION.doi)+"\n\n";risT+=ris(NCI_CITE,TS_COLLECTION.doi)+"\n\n";
+  txt.push("","== Curated catalogue metadata (suggested) ==",citeLine(AUSMT_SELF,null));bib+=bibtex("ausmt_catalogue",AUSMT_SELF,null)+"\n";risT+=ris(AUSMT_SELF,null)+"\n";
   // C7: organisation ROR(s) — one line per custodian org that declared one, so the acknowledgement can
   // cite the organisation by its persistent identifier, not just its free-text name.
   const rors=[...new Set(svs.map(sv=>{const m=SMETA[sv]||{};return m.org_ror?`${m.org} (ROR: ${m.org_ror})`:null;}).filter(Boolean))];
