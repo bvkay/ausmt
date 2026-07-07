@@ -1,0 +1,78 @@
+{
+  "_comment": [
+    "M2 (code-health review §6): ONE committed ORCID test-vector file, three consumers.",
+    "The ISO 7064 MOD 11-2 checksum is reimplemented THREE times (gateway/orcid.py::is_valid_orcid,",
+    "portal/add-survey.html::isOrcidChecksum, and the surveys validator's orcid_checksum_ok). This",
+    "file is the shared oracle so divergence in any copy goes red. Consumers:",
+    "  - gateway/tests/test_orcid.py  (drives is_valid_orcid over EVERY vector)",
+    "  - portal/tests/add_survey_logic.test.js  (drives isOrcidChecksum over every 'gateway_portal' vector)",
+    "  - gateway/tests/test_vendored_validator.py  (drives orcid_checksum_ok over every 'validator' vector)",
+    "The three impls AGREE on the canonical hyphenated form but DELIBERATELY differ on FORMAT: the",
+    "gateway+portal accept a bare 16-char id (no hyphens); the validator additionally accepts a full",
+    "https://orcid.org/ URL and rejects the bare form. Each vector therefore carries the set of",
+    "consumers whose FORMAT contract covers it in `applies_to`; every listed consumer must return",
+    "`valid` for `input`. Checksum-canonical vectors list all three."
+  ],
+  "vectors": [
+    {
+      "input": "0000-0002-1825-0097",
+      "valid": true,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "canonical valid — the ORCID-documentation example (verified cross-language in C13)"
+    },
+    {
+      "input": "0000-0002-1694-233X",
+      "valid": true,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "valid with an X check digit (value 10)"
+    },
+    {
+      "input": "0000-0002-1825-0098",
+      "valid": false,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "same digits, wrong check digit -> invalid (checksum, not format)"
+    },
+    {
+      "input": "0000-0002-1694-2331",
+      "valid": false,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "wrong check digit where the correct one is X -> invalid"
+    },
+    {
+      "input": "0000-0002-1694-233x",
+      "valid": false,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "lowercase x rejected (only uppercase X encodes value 10)"
+    },
+    {
+      "input": "0000-X002-1825-0097",
+      "valid": false,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "X anywhere but the final position -> invalid"
+    },
+    {
+      "input": "not-an-orcid",
+      "valid": false,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "malformed, no digit structure -> invalid"
+    },
+    {
+      "input": "",
+      "valid": false,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "empty -> invalid (callers gate emptiness separately; ORCID is optional)"
+    },
+    {
+      "input": "0000-0002-1825-009",
+      "valid": false,
+      "applies_to": ["gateway", "portal", "validator"],
+      "note": "too short (15 chars) -> invalid"
+    },
+    {
+      "input": "0000000218250097",
+      "valid": true,
+      "applies_to": ["gateway", "portal"],
+      "note": "bare 16-char form accepted by gateway+portal; the validator's stricter regex rejects it (format divergence, by design)"
+    }
+  ]
+}
