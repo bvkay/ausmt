@@ -52,14 +52,45 @@ def test_portal_interactions(tmp_path):
     ]
     cat = [_row(COLS["catalogue"], {**base_cat, **s}) for s in stations]
     sci = [_row(COLS["sci"], base_sci) for _ in stations]
-    # 10 arrays in TF order (periods first) for the OPEN stations; the embargoed Delta station D1 gets the
-    # WITHHELD shape the engine now emits for a non-open survey — every series column an EMPTY ARRAY.
+    # C20: 18 arrays in TF_COLUMNS order for the OPEN stations (rows are built BY NAME then projected
+    # through COLS["tf"], so they self-follow the contract). The embargoed Delta station D1 gets the
+    # WITHHELD shape the engine emits for a non-open survey — every series column an EMPTY ARRAY.
+    #
+    # Two thinned periods. A1 carries a distinctive C20 payload the driver asserts on:
+    #   * tzx_re > 0 (with everything else 0) => REAL Parkinson north = -tzx_re < 0 => arrow points
+    #     SOUTH (down) — the D3 sign-mapping check;
+    #   * rho + phase errors present => the D4 error bars must render.
+    # A2 has NO tipper and NO errors => the "no tipper" state (empty arrow panel) + no error bars.
+    per2 = [0.01, 1000.0]
+    zero2 = [None, None]
+
+    def open_tf(with_tipper, with_errors):
+        v = {"periods": per2, "rho_xy": [10.0, 20.0], "rho_yx": [12.0, 22.0],
+             "phs_xy": [45.0, 50.0], "phs_yx_adj": [46.0, 51.0], "tip_mag": list(zero2),
+             "pt_min": [30.0, 32.0], "pt_max": [35.0, 37.0], "pt_az": [40.0, 42.0], "pt_beta": [1.0, 2.0],
+             "rho_xy_err": list(zero2), "rho_yx_err": list(zero2),
+             "phs_xy_err": list(zero2), "phs_yx_err": list(zero2),
+             "tzx_re": list(zero2), "tzx_im": list(zero2), "tzy_re": list(zero2), "tzy_im": list(zero2)}
+        if with_tipper:
+            v["tzx_re"] = [0.30, 0.28]   # >0 => real arrow points SOUTH (Parkinson: north = -tzx_re)
+            v["tzx_im"] = [0.02, 0.03]
+            v["tzy_re"] = [0.00, 0.00]
+            v["tzy_im"] = [0.01, 0.02]
+        if with_errors:
+            v["rho_xy_err"] = [1.0, 2.0]
+            v["rho_yx_err"] = [1.2, 2.2]
+            v["phs_xy_err"] = [1.5, 1.8]
+            v["phs_yx_err"] = [1.6, 1.9]
+        return [v[c] for c in COLS["tf"]]
+
     tf = []
     for s in stations:
         if s["survey"] == "Delta Survey":
             tf.append([[] for _ in COLS["tf"]])          # C1b: withheld display curves (all series empty)
+        elif s["id"] == "A1":
+            tf.append(open_tf(with_tipper=True, with_errors=True))    # arrow panel + error bars
         else:
-            tf.append([[0.01, 1000.0]] + [[1.0, 2.0]] * 9)
+            tf.append(open_tf(with_tipper=False, with_errors=False))  # no-tipper + no-error state
     surveys = {
         # Alpha carries the PID chain fields the drawer renders as links: survey_pid (m.pid),
         # collection_pid (m.ts_pid), and the additive instruments[] list with a per-instrument pid —

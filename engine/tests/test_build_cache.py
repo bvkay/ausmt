@@ -494,31 +494,32 @@ def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_
 
 
 def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
-    """FAILS IF: a cache populated under the PRE-C18b entry-format tag (ausmt-c18-cache-v2) is read
-    (hit) by the current v3 build instead of MISSING cleanly. The v3 tag re-keys every blob, so a v2
-    entry's key never resolves — a clean miss counted as a miss, never a misread of a meta blob that
-    lacks survey_digest. Construct a v2-tagged cache by monkeypatching the fixed-salt tag back to v2,
-    populate, then build normally (v3) and assert zero hits + a full re-derive."""
+    """FAILS IF: a cache populated under a PRE-BUMP entry-format tag is read (hit) by the current
+    build instead of MISSING cleanly. Each tag bump re-keys every blob, so a pre-bump entry's key
+    never resolves — a clean miss counted as a miss, never a replay of a stale-shape parse. C20 bumped
+    the tag v3 -> v4 (parse product grew 10 -> 18 columns + placeholder-tipper mask); this simulates a
+    PRE-C20 (v3) cache by monkeypatching the fixed-salt tag back to v3, populates, then builds normally
+    (v4) and asserts zero hits + a full re-derive. (Kept under its historical name.)"""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
 
-    # Populate the cache under the OLD v2 tag by patching BuildCache to build a v2 fixed-salt.
+    # Populate the cache under the OLD v3 tag by patching BuildCache to build a v3 fixed-salt.
     real_init = cache_mod.BuildCache.__init__
 
-    def _v2_init(self, *args, **kwargs):
+    def _v3_init(self, *args, **kwargs):
         real_init(self, *args, **kwargs)
-        self._fixed_salt = self._fixed_salt.replace("ausmt-c18-cache-v3", "ausmt-c18-cache-v2", 1)
+        self._fixed_salt = self._fixed_salt.replace("ausmt-c20-cache-v4", "ausmt-c18-cache-v3", 1)
 
     import unittest.mock as _mock
-    with _mock.patch.object(cache_mod.BuildCache, "__init__", _v2_init):
-        assert _build(surveys, tmp_path / "v2pop", cache) == 0
-    assert any(cache.rglob("*.xml")), "v2 population wrote no entries (test set-up wrong)"
+    with _mock.patch.object(cache_mod.BuildCache, "__init__", _v3_init):
+        assert _build(surveys, tmp_path / "v3pop", cache) == 0
+    assert any(cache.rglob("*.xml")), "v3 population wrote no entries (test set-up wrong)"
 
-    # Now build normally (current v3 tag). Every v2 key is unreachable => all miss, full re-derive.
-    out = tmp_path / "v3"
+    # Now build normally (current v4 tag). Every v3 key is unreachable => all miss, full re-derive.
+    out = tmp_path / "v4"
     assert _build(surveys, out, cache) == 0
     c = _cache_counters(out)
-    assert c["hits"] == 0, f"a v3 build hit v2-format entries (misread across the schema bump): {c}"
+    assert c["hits"] == 0, f"a v4 build hit v3-format entries (misread across the schema bump): {c}"
     assert c["misses"] == EXPECTED_COLD_MISSES, c
     assert c["corrupt"] == 0, f"a clean tag miss must NOT be counted as corrupt: {c}"
 

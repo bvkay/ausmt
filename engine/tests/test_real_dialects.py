@@ -27,7 +27,7 @@ def _read(p):
     tf = mtm.read(p)
     r = mtm.record_from_tf(tf, p.name)
     per, comp = mtm.components_from_tf(tf)
-    cols = tfmod.tf_from_components(per, comp) if per else [None] * 10
+    cols = tfmod.tf_from_components(per, comp) if per else [None] * len(tfmod.TF_COLUMNS)
     return r, per, comp, cols
 
 

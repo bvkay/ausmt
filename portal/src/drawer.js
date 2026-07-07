@@ -142,7 +142,7 @@ function openStation(i){
    // access panel here INSTEAD of the four (now-empty) plots — the response curves ARE the withheld data.
    // The #pt_anchor is kept (empty) so the "Phase tensor" related-product scroll target never dangles.
    (isOpenAccess(m)
-     ? rhoPlot(t)+phasePlot(t)+tipPlot(t)+`<div id="pt_anchor"></div>`+ptPlot(t)
+     ? rhoPlot(t)+phasePlot(t)+`<div id="pt_anchor"></div>`+ptPlot(t)+arrowPlot(t)   // C20: arrow panel BELOW the phase tensor, replacing the |T| plot
      : accessPanel(m)+`<div id="pt_anchor"></div>`)+
    `<div class="sechead">Screening diagnostics <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+diag+
    `<div class="dim">Geoelectric strike: <b>${strikeTxt}</b>${skew!=null?` · mean |β| <b>${skew}°</b> · 3-D periods <b>${p3d}%</b>`:""}.<br>`+

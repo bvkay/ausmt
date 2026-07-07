@@ -33,9 +33,15 @@ def test_populated_portal_value_binding(tmp_path):
                 "p3d": 10, "gd": 0, "ellip": 0.15, "skew": 3.1, "mre": 0.02, "decades": 5.0}
     cat_row = [cat_vals[c] for c in COLS["catalogue"]]
     sci_row = [sci_vals[c] for c in COLS["sci"]]
-    # tf entry: 10 arrays in TF_COLUMNS order (periods first)
-    tf_row = [[0.01, 1000.0], [1.0, 2.0], [3.0, 4.0], [10.0, 20.0], [30.0, 40.0],
-              [0.1, 0.2], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0], [1.0, 2.0]]
+    # tf entry: 18 arrays in TF_COLUMNS order (C20). Built by NAME and projected through COLS["tf"] so
+    # it self-follows the contract; the smoke test asserts on catalogue/sci/build values, not tf columns.
+    tf_vals = {"periods": [0.01, 1000.0], "rho_xy": [1.0, 2.0], "rho_yx": [3.0, 4.0],
+               "phs_xy": [10.0, 20.0], "phs_yx_adj": [30.0, 40.0], "tip_mag": [0.1, 0.2],
+               "pt_min": [5.0, 6.0], "pt_max": [7.0, 8.0], "pt_az": [9.0, 10.0], "pt_beta": [1.0, 2.0],
+               "rho_xy_err": [0.1, 0.2], "rho_yx_err": [0.3, 0.4], "phs_xy_err": [1.0, 1.1],
+               "phs_yx_err": [1.2, 1.3], "tzx_re": [0.2, 0.25], "tzx_im": [0.01, 0.02],
+               "tzy_re": [0.3, 0.35], "tzy_im": [0.02, 0.03]}
+    tf_row = [tf_vals[c] for c in COLS["tf"]]
 
     data = tmp_path / "data"
     data.mkdir()
