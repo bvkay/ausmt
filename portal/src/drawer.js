@@ -145,12 +145,12 @@ function openStation(i){
      ? rhoPlot(t)+phasePlot(t)+`<div id="pt_anchor"></div>`+ptPlot(t)+arrowPlot(t)   // C20: arrow panel BELOW the phase tensor, replacing the |T| plot
      : accessPanel(m)+`<div id="pt_anchor"></div>`)+
    `<div class="sechead">Screening diagnostics <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+diag+
-   `<div class="dim">Geoelectric strike: <b>${strikeTxt}</b>${skew!=null?` · mean |β| <b>${skew}°</b> · 3-D periods <b>${p3d}%</b>`:""}.<br>`+
+   `<div class="dim">Geoelectric strike: <b>${strikeTxt}</b>${skew!=null?` · median |β| <b>${skew}°</b> · 3-D periods <b>${p3d}%</b>`:""}.<br>`+
    `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
    `<span style="color:var(--muted)">TF completeness/smoothness diagnostic: ${sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
    `<div class="sechead">Related products</div>`+relatedProducts(s)+
    `<div class="sechead">Advanced analysis <span style="text-transform:none;letter-spacing:0">· Tier 3, generated offline</span></div>`+
-   `<div class="dim">McNeice–Jones / Groom–Bailey decomposition, distortion parameters and Lilley Mohr circles are produced by the <i>AusMT</i> pipeline and surfaced here when available. <span style="color:var(--muted)">Not computed in the browser.</span></div>`+
+   `<div class="dim">McNeice–Jones / Groom–Bailey decomposition, distortion parameters and Lilley Mohr circles are planned <i>AusMT</i> pipeline products; they will appear here once produced. <span style="color:var(--muted)">Not computed in the browser.</span></div>`+
    `<div class="sechead">Provenance &amp; lineage</div>`+provGraph(s)+provenanceBox(s)+
    identifiersHtml(m)+
    `<div class="sechead">Maturity</div>`+maturityBar(s)+
