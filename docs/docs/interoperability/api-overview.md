@@ -135,7 +135,6 @@ Collection resources describe groups of related surveys.
 Examples include:
 
 - AusLAMP
-- WAMT
 - Institutional holdings
 - State-based releases
 

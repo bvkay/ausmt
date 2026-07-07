@@ -228,7 +228,7 @@ CARE emphasises:
 - Responsibility
 - Ethics
 
-Interoperability must therefore consider not only technical compatibility but also governance, stewardship and community expectations.
+Interoperability must therefore consider not only technical compatibility but also governance, stewardship and community expectations. (For what CARE support currently means in practice — recorded fields reviewed manually by a curator, no automated enforcement — see the implementation status in [Scientific Philosophy](../introduction/scientific-philosophy.md).)
 
 ---
 

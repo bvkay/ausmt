@@ -229,6 +229,11 @@ in a consistent manner.
 
 MTCAT therefore acts as a discovery layer rather than a scientific data format.
 
+AusMT ships this today: every build generates a `mtcat.json` document validating against
+`mtcat.schema.json` (see the [MTCAT schema reference](../reference/mtcat-schema.md)). It is
+currently produced by one implementation — its usefulness as an *exchange* format grows as
+other repositories adopt or harvest it.
+
 ---
 
 ## Versioning
