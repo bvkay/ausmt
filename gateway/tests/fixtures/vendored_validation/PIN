@@ -1,0 +1,25 @@
+# C35b/D3 (code-health review F7) — vendored validator PIN.
+#
+# validate_survey.py in this directory is a PINNED COPY of the survey-package validator that lives in
+# the SIBLING ausmt-surveys repo (_validation/validate_survey.py). The gw-runner invokes that script
+# as a subprocess in production; the F7 oracles exercise the cross-repo contract. On CI and fresh
+# clones the sibling checkout is absent, so those oracles resolve to THIS vendored copy instead of
+# skipping — the contract stays unconditionally executable.
+#
+# This PIN records the exact bytes vendored and where they came from. gateway/tests/
+# test_vendored_validator.py asserts the vendored file's sha256 == the sha256 below, so any drift
+# INSIDE this monorepo (an accidental edit to the vendored copy) fails loudly. To REFRESH from a newer
+# sibling, run gateway/tests/fixtures/sync_vendored_validator.py (it rewrites this PIN).
+#
+# The sha256 is of the LF-normalized bytes: the monorepo's `.gitattributes` (`* text=auto eol=lf`)
+# stores + checks out this file as LF on EVERY platform, and production runs the sibling's LF blob, so
+# the pin must record the LF form a fresh checkout actually sees (the source checks out CRLF on a
+# Windows dev box; sync_vendored_validator.py --write normalizes to LF before pinning).
+#
+# Fields are `key: value`, one per line, '#' comments ignored.
+
+source_repo: ausmt-surveys
+source_path: _validation/validate_survey.py
+source_commit: 930ce6f2fa8d31a1248d0ebd6f41e027a82b0484
+line_endings: lf
+sha256: 841d1219ce8f0be8834db87a751fca8f6fc013dba750ceb9ad3796cc9a746320

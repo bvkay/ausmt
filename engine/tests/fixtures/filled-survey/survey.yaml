@@ -1,0 +1,39 @@
+# Minimal vendored test fixture (self-contained; no sibling-repo dependency). Structured Prototype-20+
+# schema with two real broadband EDIs, used by science unit tests for EDI/MTH5/collection builds.
+schema_version: "0.2"
+slug: example-survey
+project_name: "Example MT Survey 2026"
+name: "Example MT Survey 2026"
+version: "1.0.0"
+country: Australia
+organisation:
+  name: "Example Organisation"
+  ror: null
+lead_investigator:
+  name: "Example Researcher"
+  orcid: null
+abstract: >
+  Two real broadband stations used as a test fixture.
+geographic_extent: { west: 136.97, east: 137.07, south: -30.22, north: -30.10, datum: WGS84 }
+data_types:
+  - BBMT
+data_type: BBMT
+identifiers:
+  dataset_doi: null
+  project_raid: null
+funding: []
+license: "CC-BY-4.0"
+access:
+  level: open
+time_series:
+  collection_pid: null
+  levels_available: []
+publications: []
+processing:
+  software: "BIRRP"
+  version: null
+  remote_reference: "unknown"
+  notes: null
+instruments:
+  - manufacturer: "Phoenix"
+    model: "MTU-5C"

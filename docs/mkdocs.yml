@@ -1,0 +1,56 @@
+
+site_name: AusMT Documentation
+copyright: "Copyright © 2026 AuScope and the AusMT contributors. Framework software (engine, portal, docs) is licensed under Apache-2.0; the magnetotelluric survey data AusMT serves is licensed separately by its custodians (typically CC-BY-4.0)."
+nav:
+  - Home: index.md
+  - Introduction:
+      - What is AusMT?: introduction/what-is-ausmt.md
+      - Scientific Philosophy: introduction/scientific-philosophy.md
+      - Data Lifecycle: introduction/data-lifecycle.md
+      - Governance & Operation: introduction/governance.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Repositories: architecture/repositories.md
+  - Data Model:
+      - Survey Package: data-model/survey-package.md
+      - Metadata Model: data-model/metadata-model.md
+      - Provenance Model: data-model/provenance.md
+      - Versioning: data-model/versioning.md
+      - MTH5 Integration: data-model/mth5.md
+      - MTCAT: data-model/mtcat.md
+  - Science:
+      - Transfer Functions: science/transfer-functions.md
+      - Phase Tensor: science/phase-tensor.md
+      - Strike Analysis: science/strike-analysis.md
+      - Dimensionality: science/dimensionality.md
+      - Quality Metrics: science/quality-metrics.md
+      - Distortion & Decomposition: science/distortion-and-dimensionality.md
+      - Science Products: science/science-products.md
+  - Operations:
+      - Submission: operations/submission.md
+      - Validation: operations/validation.md
+      - Review: operations/review.md
+      - Publication: operations/publication.md
+      - Releases: operations/releases.md
+  - Interoperability:
+      - Overview: interoperability/overview.md
+      - Metadata Exchange: interoperability/metadata-exchange.md
+      - API Overview: interoperability/api-overview.md
+      - API Reference: interoperability/api-reference.md
+      - External Archives: interoperability/external-archives.md
+  - Reference:
+      - MTCAT Schema: reference/mtcat-schema.md
+      - Download Manifest Schema: reference/manifest-schema.md
+      - Survey Package Specification: reference/survey-yaml.md
+      - Glossary: reference/glossary.md
+      - License: reference/license.md
+  - Developer:
+      - Architecture (start here): developer/architecture.md
+      - Build lifecycle: developer/build-lifecycle.md
+      - Conventions: developer/conventions.md
+      - How to Extend: developer/extending.md
+      - Portal Data Files (contract): developer/data-files.md
+      - Product Schema: developer/product-schema.md
+      - Loading Real Surveys: developer/real-survey-loading.md
+      - Collection IDs: developer/collection-ids.md
+      - Curator Checklist: developer/curator-checklist.md

@@ -1,0 +1,50 @@
+# EXACT all-pip lock of the mt_metadata / mth5 ingest stack — the FULL transitive closure of
+# `mt_metadata==1.0.9` + `mth5==0.6.8`, captured 2026-06-16 from a clean-room venv install and
+# VERIFIED: the ingest round-trip (ausmt_science.ingest.normalize) passes green in this exact env
+# (Phoenix spectra fixture, impedance maxdiff 6.3e-5).
+#
+# This pins the transitive deps that `requirements-mtmetadata.txt` leaves floating — important
+# because normalize.py's metadata conditioning is sensitive to pydantic / mt_metadata behaviour.
+# CI (Linux, all-pip) installs THIS file. Regenerate deliberately:
+#   python -m venv .venv && .venv/bin/pip install mt_metadata==1.0.9 mth5==0.6.8 && .venv/bin/pip freeze
+#
+# Tested interpreter: CPython 3.12 (wheels also exist for 3.11). See environments/README.md.
+
+annotated-types==0.7.0
+certifi==2026.5.20
+colorama==0.4.6
+contourpy==1.3.3
+cycler==0.12.1
+dnspython==2.8.0
+email-validator==2.3.0
+fonttools==4.63.0
+h5py==3.16.0
+idna==3.18
+kiwisolver==1.5.0
+loguru==0.7.3
+matplotlib==3.11.0
+mt-io==0.0.4
+mt-timeseries==0.0.2
+mt_metadata==1.0.9
+mth5==0.6.8
+numpy==2.4.6
+packaging==26.2
+pandas==3.0.3
+pillow==12.2.0
+pydantic==2.13.4
+pydantic_core==2.46.4
+pyparsing==3.3.2
+pyproj==3.7.2
+python-dateutil==2.9.0.post0
+PyYAML==6.0.3
+# C31 curator metadata editor: round-trip survey.yaml merge in the gw-runner (this engine image).
+# Added by hand 2026-07-06 (not part of the mt_metadata/mth5 freeze above) — pure-python wheel, no
+# transitive deps on CPython 3.12, verified by the C31 edit test lane. Keep it when regenerating.
+ruamel.yaml==0.19.1
+scipy==1.17.1
+six==1.17.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+tzdata==2026.2
+win32_setctime==1.2.0
+xarray==2026.4.0

@@ -1,0 +1,112 @@
+# AusMT portal — static file server (Caddy 2). No templating/reverse-proxy features used: this is
+# a plain static-file vhost plus a second file_server block for the generated data volume.
+#
+# Listens on :8080 (container-internal). compose.yaml publishes 127.0.0.1:8443->8080 LOOPBACK ONLY
+# (tailscale serve fronts it with TLS) -- this file has no `tls` directive because Caddy never
+# terminates a public port directly here; see deploy/README.md.
+#
+# CSP is PAGE-SCOPED, not one blanket policy, because the three shipped pages differ in what they
+# legitimately load (verified by grep against the committed portal/ tree -- see contract note in
+# deploy/docker/portal.Dockerfile for the grep this depends on staying true):
+#   - index.html      has an inline <script> (the Plausible-disabled no-op shim, lines ~12-18) AND
+#                      loads map tiles from basemaps.cartocdn.com (portal/src/map.js).
+#   - about.html       has NO inline script (only external config.js/version.js) -- strict CSP.
+#   - add-survey.html  has an inline <script> (same Plausible shim) AND loads OpenStreetMap tiles
+#                      (tile.openstreetmap.org -- a DIFFERENT tile host than index.html's CartoDB,
+#                      confirmed by grep, not assumed) AND does a live fetch() to api.ror.org (the
+#                      ROR organisation-search autocomplete), which needs connect-src, not img-src.
+# All three pages get style-src 'unsafe-inline' (every page uses inline <style> blocks / style
+# attributes; none of the three ships an external stylesheet besides vendor/leaflet*.css).
+#
+# object-src 'none' + base-uri 'self' + frame-ancestors 'none' on every page (defence-in-depth;
+# nothing here embeds objects/frames or needs a non-self <base>).
+#
+# FORWARD-LOOKING CAVEAT: index.html's data fetches (portal/src/data.js etc) go through dataUrl(),
+# which honours window.AUSMT_CONFIG.data_base_url (portal/config.js) — currently "" (same-origin)
+# in the shipped config, so 'self' alone covers every fetch() call today (verified: every fetch()
+# site in portal/src/*.js is either same-origin via dataUrl()/a relative path, or the one
+# api.ror.org call on add-survey.html, already allow-listed below). If an operator later points
+# data_base_url at a remote host (e.g. an NCI/THREDDS tier, per the comment in data.js), index.html's
+# connect-src will ALSO need that host added here -- this file has no way to introspect
+# portal.config.yaml at Caddy-config time, so that edit stays a manual step tied to any future
+# data_base_url change.
+
+{
+	# Disable the admin API — not needed for a static file vhost, avoids an extra listening port.
+	admin off
+}
+
+:8080 {
+	encode gzip
+
+	# Baseline security headers for every response. NOTE the CSP is deliberately NOT in this bare
+	# block: Caddy sorts multiple instances of the same directive by matcher specificity and runs
+	# the matcher-LESS instance LAST, so a default CSP here silently OVERWRITES every per-page
+	# override (verified live on the first deployment: add-survey.html received the strict policy
+	# and its application script was blocked; index.html had shown the same symptom earlier). The
+	# two CSPs below use mutually exclusive matchers so exactly ONE applies to any request and
+	# ordering can never matter.
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+
+	# Strict CSP for EVERY page except add-survey.html. index.html qualifies since 2026-07-05: its
+	# only inline script (the Plausible no-op shim) was extracted to src/analytics-shim.js — do not
+	# re-add an inline block to index.html without revisiting this.
+	@strictPages not path /add-survey.html
+	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
+
+	# add-survey.html only: its APPLICATION code is one intentional inline <script> (the shim was
+	# extracted like index's) + OpenStreetMap tiles (NOT CartoDB — its own two Leaflet maps call
+	# tile.openstreetmap.org directly) + a live fetch() to the ROR API (connect-src, since
+	# fetch/XHR destinations are not covered by img-src). Since C13 the page ALSO fetch()es
+	# /gateway/healthz and XHR-POSTs /gateway/submit — both SAME-ORIGIN relative paths already covered
+	# by the connect-src 'self' below, so no directive change is needed for the direct-upload flow.
+	@addSurveyPage path /add-survey.html
+	header @addSurveyPage Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://api.ror.org; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+
+	# Generated data volume. compose.yaml mounts the WHOLE site-data tree at /srv/data (mounting
+	# the `current` symlink itself would freeze it at container start — bind mounts resolve
+	# symlinks once); the root below goes through the symlink so the per-request resolution
+	# inside the container picks up an atomic host-side swap immediately, no restart needed.
+	handle_path /data/* {
+		root * /srv/data/current
+		# Force download (not inline-render) for the byte-payload families: original EDI files,
+		# derived EMTF-XML (browsers would inline-render XML), and the packaged bundles —
+		# everything else under /data (catalogue.json etc) is fetched by the portal's own JS and
+		# must stay inline-servable.
+		@download path /edi/* /xml/* /bundles/* /h5/*
+		header @download Content-Disposition "attachment"
+		file_server
+	}
+
+	# Gateway (Stage 2, contract C10) — reverse-proxy the submission gateway under the SAME origin.
+	# Placed ABOVE the static-portal `root`/`file_server` below on purpose: `handle` is an ordered
+	# path router, and putting the more specific /gateway/* matcher first means portal static serving
+	# never shadows it.
+	#
+	# `handle` (NOT `handle_path`): the prefix is PRESERVED, so the app receives the full
+	# /gateway/submit, /gateway/status/<token>, /gateway/healthz — which is exactly what its FastAPI
+	# routes are registered as, and what the upload response's status_url is emitted as. A
+	# handle_path here would STRIP /gateway and the app (whose routes all start /gateway) would 404
+	# every request routed through this ingress; only the :8444 debug publish (which hits the app
+	# directly, unstripped) would work. Keep this as `handle`.
+	#
+	# SAME-ORIGIN / NO-CSP-CHANGE rationale (why this needs no edit to the CSP blocks above): the
+	# gateway is reached from the portal's own origin, so its fetch()/form POSTs are covered by the
+	# existing `default-src 'self'` / `connect-src 'self'` already in force on every page — there is
+	# no new host to allow-list. And because it is same-origin, no CORS is involved at all: the
+	# gateway sets no CORS headers and needs none (design §1). The status page it serves is a
+	# standalone server-rendered HTML document (its own inline style, no external assets), so it does
+	# not depend on either per-page CSP above. DO NOT add a CSP override for /gateway/* here — the
+	# strictPages default already applies to it and is correct.
+	handle /gateway/* {
+		reverse_proxy gateway:8000
+	}
+
+	# Static portal (index/about/add-survey + vendor/src/config/version) copied in at image build.
+	root * /srv/portal
+	file_server
+}

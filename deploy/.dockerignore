@@ -1,0 +1,20 @@
+# Applies to BOTH image builds (docker build context is always the ausmt repo root — see the
+# CAVEAT comments in engine.Dockerfile / portal.Dockerfile). Keeps images lean and reproducible:
+# dev-only tooling, caches, and VCS metadata never need to enter a build context.
+
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+*.egg-info
+
+# Portal dev-only test tooling (jsdom interaction tests, node_modules) — not part of the shipped
+# static site; portal.Dockerfile COPYs portal/ wholesale, so exclude these explicitly rather than
+# hand-listing every file that IS shipped.
+portal/node_modules
+portal/tests
+
+# NOTE: deploy/docker/** is intentionally NOT ignored here — portal.Dockerfile's
+# `COPY deploy/docker/caddy/Caddyfile ...` needs it present in the build context (the context is
+# the repo root, per both Dockerfiles' header comments). Only the dev-noise paths above are excluded.

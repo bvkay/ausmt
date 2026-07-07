@@ -1,0 +1,25 @@
+# Human-readable SOURCE spec for the mt_metadata/mth5 env. The EXACT, reproducible locks are:
+#   environments/environment-lock.yml             (conda, win-64 — `conda env create -f ...`)
+#   environments/requirements-mtmetadata-lock.txt (all-pip, Linux/CI — `pip install -r ...`)
+# Loose major pins here track the TESTED versions (see environments/README.md); bump deliberately.
+# (Previously pinned an older stack py3.11/numpy1.26 and referenced a non-existent conda-lock.yml —
+#  corrected 2026-06-16 to the tested py3.12/numpy2.4 stack that the ingest round-trip passes on.)
+name: ausmt
+channels: [conda-forge]
+dependencies:
+  - python=3.12.*
+  - numpy=2.4.*          # conda-forge/MKL in the tested env, pip/OpenBLAS in CI — both work
+  - pip
+  - pip:
+    # MT stack + the scientific deps it pulls, pinned to the TESTED set (keep in step with the locks).
+    - mt_metadata==1.0.9
+    - mth5==0.6.8
+    - scipy==1.17.1
+    - pandas==3.0.3
+    - xarray==2026.4.0
+    - h5py==3.16.0
+    - pydantic==2.13.4
+    - pyproj==3.7.2
+    # Tier-3 decomposition fork is NOT in the default env (optional + heavy). Install it separately,
+    # pinned to a COMMIT (never a branch), only when Tier-3 is needed:
+    #   pip install "mtpy-v2 @ git+https://github.com/bvkay/mtpy-v2.git@<COMMIT_SHA>"

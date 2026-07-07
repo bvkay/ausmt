@@ -1,0 +1,13 @@
+{
+  "name": "ausmt-portal-tests",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Dev-only test tooling for the AusMT static portal. The SHIPPED portal has zero runtime dependencies and no build step (classic <script> tags) — these devDependencies (jsdom) exist solely to drive the headless interaction tests in tools/interaction_test.js. node_modules is gitignored; CI restores it with `npm ci`.",
+  "scripts": {
+    "test:interactions": "node tools/interaction_test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0"
+  }
+}

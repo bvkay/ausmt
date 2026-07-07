@@ -1,0 +1,21 @@
+AusMT — Australian Magnetotelluric Data Infrastructure
+Copyright 2026 AuScope and the AusMT contributors
+
+Developed as an initiative of the Australian magnetotelluric community and
+funded by AuScope (https://www.auscope.org.au/).
+
+This product includes software developed for the AusMT project, licensed under
+the Apache License, Version 2.0; see the LICENSE file in this repository or
+http://www.apache.org/licenses/LICENSE-2.0.
+
+Scope of this license
+---------------------
+Apache-2.0 covers the AusMT FRAMEWORK in this repository — the offline build
+engine (engine/), the static portal (portal/), documentation (docs/), the
+maintainer knowledge base (maintainer/), and tooling.
+
+It does NOT cover the magnetotelluric survey DATA that AusMT processes, indexes,
+and serves — transfer functions and survey metadata. That data is licensed
+individually by its custodians (typically CC-BY-4.0) and is maintained in the
+separate `ausmt-surveys` repository. The sample survey bundled under
+`engine/data/` for testing carries its own LICENSE.md (CC-BY-4.0).

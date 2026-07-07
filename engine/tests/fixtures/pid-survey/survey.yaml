@@ -1,0 +1,44 @@
+# Vendored fixture for C7 (PID chain completion): exercises lead_investigator.orcid,
+# organisation.ror, identifiers.project_raid, time_series.collection_pid, version + dates —
+# the SMETA fields that were previously solicited by the schema but discarded/unread by the build.
+schema_version: "0.2"
+slug: pid-survey
+project_name: "PID Chain Survey 2026"
+name: "PID Chain Survey 2026"
+version: "2.1.0"
+country: Australia
+organisation:
+  name: "Example Organisation"
+  ror: "https://ror.org/00892tw58"
+lead_investigator:
+  name: "A. Researcher"
+  orcid: "0000-0002-1825-0097"
+abstract: >
+  Two real broadband stations used as a PID-chain test fixture.
+geographic_extent: { west: 136.97, east: 137.07, south: -30.22, north: -30.10, datum: WGS84 }
+data_types:
+  - BBMT
+data_type: BBMT
+dates: { start: 2020, end: 2021 }
+release_notes:
+  - { version: "2.1.0", date: "2022-03-15", note: "Reprocessed with updated remote reference." }
+  - { version: "2.0.0", date: "2021-06-01", note: "Initial AusMT publication." }
+identifiers:
+  dataset_doi: null
+  project_raid: "https://raid.org/10.12345/AB1234"
+funding: []
+license: "CC-BY-4.0"
+access:
+  level: open
+time_series:
+  collection_pid: "10.25914/pid-survey-ts"
+  levels_available: [raw_packed]
+publications: []
+processing:
+  software: "BIRRP"
+  version: null
+  remote_reference: "unknown"
+  notes: null
+instruments:
+  - manufacturer: "Phoenix"
+    model: "MTU-5C"

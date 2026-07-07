@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ausmt"
+# Single source of truth for the repo version; extract.build_portal reads this (via
+# importlib.metadata) for provenance "pipeline_version".
+version = "0.2.1"
+description = "Offline scientific engine producing AusMT derived products"
+license = { text = "Apache-2.0" }
+authors = [{ name = "AuScope and the AusMT contributors" }]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.12",
+]
+# mt_metadata 1.0.9 / mth5 0.6.8 are tested on Python 3.12 (the pinned lock); the conditioning is
+# sensitive to the transitive scientific stack, so >=3.12 is the supported floor.
+requires-python = ">=3.12"
+# mt_metadata/mth5 (the USGS community library) is the SOLE EDI/MTH5 parser since the regex
+# retirement (maintainer/RegexRetirement-MigrationPlan.md), so it is a core dependency, not an
+# optional extra. numpy backs the importable ausmt_science.* science modules. PyYAML parses the
+# scientific survey.yaml / portal.config.yaml — it had arrived only transitively via mt_metadata, so it
+# is now declared explicitly (the stdlib _mini_yaml stays as a fallback). These floors match the tested
+# majors; the exact, reproducible pins live in environments/requirements-mtmetadata-lock.txt (CI installs that).
+# ruamel.yaml backs the C31 curator metadata editor's round-trip survey.yaml merge (runs in the
+# gw-runner, which IS this engine image; the gateway process never imports it — C10/C31 house rule).
+dependencies = ["numpy>=1.24", "mt_metadata>=1.0", "mth5>=0.6", "PyYAML>=6", "ruamel.yaml>=0.18"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "jsonschema>=4"]
+
+[tool.setuptools.packages.find]
+# Both sibling trees under engine/ are real installed packages: ausmt_science* (the importable
+# science library) AND extract* (the app-layer build package, `python -m extract.build_portal`).
+# Including extract* is what makes that module-run resolve by INSTALLED PACKAGE rather than by the
+# cwd/WORKDIR-on-sys.path contract it previously depended on (C37 / F8). The generic top-level name
+# `extract` is accepted because this package ships only inside the dedicated engine image+env and is
+# never published to PyPI (chief-architect ruling); see engine/extract/__init__.py.
+include = ["ausmt_science*", "extract*"]
+
+[tool.ruff]
+line-length = 120
+# C35b/D3: the vendored validator is a byte-for-byte PINNED copy of the sibling ausmt-surveys
+# validate_survey.py (gateway/tests/fixtures/vendored_validation/). It is third-party pinned content —
+# NOT our code — and MUST NOT be edited (an edit would break its PIN sha and defeat the point of
+# vendoring the exact production bytes), so it is excluded from lint. Its own repo lints it under its
+# own config. force-exclude so an explicit `ruff check gateway/` still skips it.
+extend-exclude = ["gateway/tests/fixtures/vendored_validation"]
+force-exclude = true
+
+[tool.ruff.lint]
+# AusMT is a deliberately dense, one-line-heavy SCIENTIFIC codebase with a no-install sibling-import
+# design. Ruff runs a BROAD select (E/F/PL/BLE) to catch real defects -- unused imports, undefined
+# names, blind excepts, comparison bugs -- while the ignores below are the project's DOCUMENTED,
+# deliberate deviations (each with its reason), not blanket silencing.
+select = ["E", "F", "PL", "BLE"]
+ignore = [
+  "E501",     # line-too-long: deliberate dense one-liners; line length is a reviewer call, not gated
+  "E702",     # multiple-statements-on-one-line (semicolons): deliberate compact style
+  "E402",     # module-import-not-at-top: the sys.path-insert-then-import sibling pattern (no-install design)
+  "PLC0415",  # import-outside-top-level: deliberate lazy/optional imports (yaml, numpy, build_portal-in-test)
+  "PLC3002",  # direct-lambda-call: one known site (the inline date-range map; deferred survey_meta split)
+  "PLR2004",  # magic-value-comparison: scientific threshold literals; the load-bearing ones are named
+  "PLR0911",  # too-many-return-statements -- complexity of build_portal.main()/row-builders is tracked
+  "PLR0912",  # too-many-branches          -- as a DEFERRED refactor (maintainer/KnownRisks + defer list),
+  "PLR0913",  # too-many-arguments         -- not gated here
+  "PLR0915",  # too-many-statements        --
+  "PLW1510",  # subprocess-run-without-check: the call sites inspect returncode explicitly
+]

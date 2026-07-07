@@ -1,0 +1,64 @@
+name: portal-ci
+
+# Lightweight checks for the static portal (the portal/ subtree; it has no build step):
+#   1. config.js is in sync with portal.config.yaml (the generated reflection must not drift)
+#   2. headless tests: smoke (boots against the committed data/) + jsdom INTERACTION tests
+#      (tree toggles, #/collection routing, Find) — the interaction layer's only automated coverage
+# The shipped portal has no runtime deps; the interaction tests' jsdom dev-dep is restored via npm ci.
+#
+# PATH-SCOPED (ADR-001 monorepo): only runs when the portal/ subtree (or this workflow) changes.
+
+on:
+  pull_request:
+    paths:
+      - "portal/**"
+      - "contract/**"
+      - ".github/workflows/portal-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "portal/**"
+      - "contract/**"
+      - ".github/workflows/portal-ci.yml"
+
+# C39 (CI minutes economy): cancel a superseded run of the SAME ref. Keyed on github.ref (not a
+# fixed group) so a PR run and a push-to-main run — which have different refs — never cancel each
+# other; only a newer commit on the same branch/PR supersedes the older, still-queued/running one.
+# Matches the per-ref pattern the other three workflows already use (gateway-ci / build-products /
+# deploy-images). Safe: this lane only lints/tests the static portal — a cancelled superseded run
+# published nothing and had no side effects, so nothing is lost.
+concurrency:
+  group: portal-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal   # the static portal lives in portal/ since the ADR-001 merge
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Tooling
+        run: pip install "PyYAML==6.0.3" "pytest==8.2.0"   # pinned to the engine lock's values so a float can't turn the gate red
+
+      # The portal reads the column contract via contract.js (generated from contract/columns.json).
+      # Fail if it has drifted from the source (stdlib-only).
+      - name: Contract in sync (columns.json -> generated constants)
+        run: python ../contract/generate.py --check
+
+      - name: config.js in sync with portal.config.yaml
+        run: python tools/gen_config.py --check
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install portal dev deps (jsdom, for the interaction tests)
+        run: npm ci
+
+      - name: Headless portal smoke + interaction tests
+        run: pytest -q tests

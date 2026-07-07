@@ -1,0 +1,15 @@
+# Gateway TEST deps (on top of requirements.txt). httpx drives the in-process app via
+# httpx.ASGITransport; pytest is the runner. NO pytest-asyncio — the suite drives async bodies via
+# asyncio.run() so it needs no async-pytest plugin and passes on Windows (the C10 dev box).
+# Versions match what was installed into the ausmt conda env on 2026-07-05.
+-r requirements.txt
+httpx>=0.28
+pytest>=8
+# The two YAML libs below are TEST-env-only here: at runtime gateway/runner/edit.py executes on the
+# ENGINE image, where ruamel.yaml arrives as an mt_metadata dependency, and the gateway app itself
+# imports no yaml at all (pinned by C31's source-assertion test). The test env needs them to IMPORT
+# the runner-edit module (ruamel) and to run its PyYAML-as-oracle quoting tests. Their absence was
+# invisible for a day because the dev box's conda env had both — the first real gateway-ci run
+# (2026-07-07) failed collection on exactly this drift. Keep versions tracking the ausmt conda env.
+ruamel.yaml>=0.19
+PyYAML>=6.0

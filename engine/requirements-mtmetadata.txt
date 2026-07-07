@@ -1,0 +1,20 @@
+# Direct pins for the mt_metadata/mth5 engine.
+#
+# NOTE: since the regex retirement (maintainer/RegexRetirement-MigrationPlan.md) this stack is the
+# SOLE parser, so it is a CORE dependency (requirements.txt / pyproject [project].dependencies), not
+# an optional extra. This file remains as the direct-pin view and a back-compat install target.
+#
+# It pins only the DIRECT deps; the transitive scientific stack (numpy/scipy/pandas/xarray/pydantic/
+# h5py/...) floats against latest PyPI. For a PINNED, verified, reproducible install use the lock —
+# what CI installs, on Python 3.12:
+#   environments/requirements-mtmetadata-lock.txt   (the full transitive closure)
+#
+# ABI NOTE (2026-06-16) — the tested dev env is a HYBRID (conda-forge python+numpy/MKL + pip
+# scipy/pandas/xarray/h5py/mt_metadata/mth5) and it WORKS; CI is all-pip on Linux and also works
+# (the ingest round-trip passes in both). The old "0xC06D007F crash if you mix conda numpy with pip
+# scipy" was version-specific and is no longer the default. If you DO hit 0xC06D007F, realign the
+# BLAS-linked packages to one source: pip install --force-reinstall --no-deps numpy scipy pandas xarray
+# See environments/README.md.
+
+mt_metadata==1.0.9
+mth5==0.6.8

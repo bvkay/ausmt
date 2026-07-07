@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+node_modules/
+# Served download artifacts + manifest are BUILD OUTPUT (produced by the engine build into
+# data/). They are regenerable and the h5/xml carry embedded timestamps (binary churn), so they are
+# not committed — the portal degrades gracefully when the manifest is absent.
+data/edi/
+data/xml/
+data/bundles/
+data/h5/
+data/manifest.json
+*-submission*.zip

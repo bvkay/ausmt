@@ -1,0 +1,12 @@
+{
+ "portal": {
+  "portal_id": "ausmt",
+  "portal_name": "AusMT \u2014 Australia's Magnetotelluric Data Portal",
+  "schema": "mtcat",
+  "version": "1.0",
+  "generated_at": "2026-06-17T00:38:51Z"
+ },
+ "surveys": [],
+ "stations": [],
+ "collections": []
+}

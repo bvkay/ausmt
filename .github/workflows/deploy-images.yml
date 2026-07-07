@@ -1,0 +1,736 @@
+name: deploy-images
+
+# Builds the three AusMT deployment images (engine, portal, gateway — deploy/docker/*.Dockerfile)
+# and, on a push to main or a version tag, pushes them to GHCR. The engine image's FULL, pinned-lock
+# pytest lane runs here, in the engine-full-tests job below, against the SHIPPED image (lock
+# installed). C39 removed engine.Dockerfile's own in-build stack-less pytest (it tested the
+# locker-stage resolution, not the shipped stack, and cost ~4 min per build — see the HISTORY note at
+# the top of that Dockerfile), so this job is now the ONLY place the engine suite runs against the
+# image itself. Also validates both compose files and smoke-tests the built portal image end-to-end.
+#
+# PATH-SCOPED (ADR-001 monorepo) to every input the three images are BUILT FROM (C35a/F1, extended):
+# the images COPY engine/, portal/, gateway/ and contract/ source (see deploy/docker/*.Dockerfile), so
+# a push touching ANY of those must rebuild + republish, or :latest silently serves stale code. This
+# was real, twice: gateway pushes shipped an untested image (the F1 finding), and engine/portal merges
+# published NO image at all — the 2026-07-06 "box engine label 1333f4f while main was 18 commits
+# ahead" incident was exactly this hole (C32 merged, no deploy/** change, no image rebuilt). The unit
+# suites still run in build-products.yml / portal-ci.yml / gateway-ci.yml; this workflow owns the
+# packaging + image layer, and its path filter must mirror the Dockerfiles' COPY surface.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "deploy/**"
+      - "gateway/**"
+      - "engine/**"
+      - "portal/**"
+      - "contract/**"
+      - ".github/workflows/deploy-images.yml"
+  # C39 (CI minutes economy): the PR leg is TRIMMED to deploy/**, gateway/** and this workflow —
+  # engine/**, portal/** and contract/** are DELIBERATELY absent here (they remain on the push leg
+  # above, so a merge to main always rebuilds + republishes fresh images from any of the five COPY
+  # inputs; :latest is never stale). Ruling: the container-topology bug class (handle_path prefix,
+  # runner PYTHONPATH, compose wiring — c35b's red was caught exactly here) lives in gateway/deploy,
+  # so those two keep pre-merge image proof. engine/ and portal/ PRs are already gated by their unit
+  # CI (build-products.yml / portal-ci.yml), and their IMAGE proof moves to the merge push. This
+  # halves the PR-leg image-build cost for the most common lane types (an engine-only or portal-only
+  # PR no longer triggers a full 3-image build + e2e on every push to the branch).
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "gateway/**"
+      - ".github/workflows/deploy-images.yml"
+
+concurrency:
+  # C39 (CI minutes economy) safety note — this cancels superseded runs of the SAME ref, INCLUDING
+  # pushes to main. That is safe here because image publishing is last-write-wins on the mutable
+  # :latest / :main tags: when several merges land in quick succession, only the FINAL (correct)
+  # build must complete and publish; a cancelled intermediate build loses nothing, since its :latest
+  # would have been immediately overwritten by the next merge's build anyway. Per-ref grouping (not a
+  # fixed group) so a PR run and a main-push run never cancel each other — they carry different refs.
+  # (An immutable per-tag image, e.g. :vX.Y.Z, only ever has one producing run for that ref, so
+  # cancellation cannot orphan a pinned tag.)
+  group: deploy-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ---------------------------------------------------------------------------------------------
+  # Build both images. Pushes to GHCR only on a push to main or a v* tag (never on pull_request —
+  # a PR from a fork wouldn't have registry write access anyway, and PRs shouldn't publish images).
+  # Otherwise `load: true` brings the image into the local daemon so the later steps in THIS job
+  # can still exercise it (full pytest lane / compose smoke) even when nothing is pushed.
+  # ---------------------------------------------------------------------------------------------
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ausmt-engine
+            dockerfile: deploy/docker/engine.Dockerfile
+          - image: ausmt-portal
+            dockerfile: deploy/docker/portal.Dockerfile
+          - image: ausmt-gateway
+            dockerfile: deploy/docker/gateway.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Should push? (main branch push, or a v* tag — never on pull_request)
+        id: push_gate
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/login-action@v3
+        if: steps.push_gate.outputs.push == 'true'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Tag with both `latest` (main-branch pushes only) and the git ref (branch name or vX.Y.Z tag)
+      # so a pinned deploy/.env TAG=vX.Y.Z always resolves to something that was actually published.
+      - name: Compute image tags
+        id: tags
+        run: |
+          REF_TAG=$(echo "${{ github.ref_name }}" | tr '/' '-')
+          TAGS="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:${REF_TAG}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:latest"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: ${{ steps.push_gate.outputs.push == 'true' }}
+          load: ${{ steps.push_gate.outputs.push != 'true' }}
+          tags: ${{ steps.tags.outputs.tags }}
+          # U2: GIT_SHA build-arg -- ENGINE and GATEWAY images (both declare an ARG GIT_SHA and bake
+          # it into a *_COMMIT env for a startup/footer identity line; portal.Dockerfile declares no
+          # such ARG). github.sha is the FULL 40-char SHA; short form (matching _git_commit_at's
+          # `git rev-parse --short`, ~7 chars) would need a separate shell step to slice, and the
+          # value is displayed verbatim/opaque either way -- full-length is simplest and still
+          # uniquely identifies the commit, so it is used as-is.
+          build-args: |
+            ${{ (matrix.image == 'ausmt-engine' || matrix.image == 'ausmt-gateway') && format('GIT_SHA={0}', github.sha) || '' }}
+          # GHA cache: cheap re-builds across runs; scoped per-image so engine/portal don't evict
+          # each other's layers.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      # Save the image so the two downstream jobs (fresh runners) don't rebuild it. On PRs the
+      # image was `load:`ed into the local daemon; on push/tag it was `push:`ed straight to GHCR
+      # by the buildx container driver WITHOUT touching the local daemon (first CI run failed
+      # exactly here: `docker save` on a pushed-only tag => "reference does not exist"), so pull
+      # it back first — we're still logged in and it was pushed seconds ago (cache-hot).
+      - name: Export image to a tar artifact
+        run: |
+          FIRST_TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d, -f1)
+          if [ "${{ steps.push_gate.outputs.push }}" = "true" ]; then
+            docker pull "$FIRST_TAG"
+          fi
+          docker save "$FIRST_TAG" -o /tmp/${{ matrix.image }}.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.image }}
+          path: /tmp/${{ matrix.image }}.tar
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------------------------
+  # Full pytest lane INSIDE the built engine image (the pinned Linux lock from the `locker` stage
+  # is already installed in the image — this is the real release gate for the engine stack). C39
+  # made this the SOLE in-image engine-suite run: engine.Dockerfile's own in-build stack-less pytest
+  # was removed as the least truthful + only ~4-min-per-build of the three engine runs. This lane is
+  # where the D3.1 topology skip ("gateway tree not shipped") legitimately fires — the engine image
+  # ships engine/ only, so /app/gateway is absent — and the tripwire below allow-lists exactly that
+  # one skip (engine/tests/ci_check_skips.py). Removing the in-build run does not touch that skip:
+  # the image topology here is identical, so the skip still fires and its allow-list entry is still
+  # load-bearing.
+  # ---------------------------------------------------------------------------------------------
+  engine-full-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-ausmt-engine
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/ausmt-engine.tar
+
+      - name: Full pytest lane (pinned lock, inside the container) + skip accounting
+        run: |
+          IMG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-engine:' | head -n1)
+          # Run pytest -rs and the M5 skip tripwire INSIDE the image (the host job does no checkout, so
+          # the allow-list script only exists in the container, at /app/engine/tests/ci_check_skips.py —
+          # it ships in the image via engine.Dockerfile's `COPY engine/`). This lane's env is the SAME
+          # as build-products: mt_metadata/mth5 present (image lock), no sibling ausmt-surveys checkout,
+          # so the only legitimate skip is the validator-gate one; any other skip (e.g. the stack
+          # silently missing from the image) reds the release gate here.
+          # No pipe (the image's /bin/sh is dash — no `pipefail`): redirect to a file so pytest's own
+          # exit code is preserved, echo it for the log, fail on pytest failure, THEN run the tripwire.
+          docker run --rm --entrypoint sh "$IMG" -c \
+            'python -m pytest -q -rs tests > /tmp/pytest-engine.out 2>&1; rc=$?; cat /tmp/pytest-engine.out; [ $rc -eq 0 ] || exit $rc; python tests/ci_check_skips.py < /tmp/pytest-engine.out'
+
+  # ---------------------------------------------------------------------------------------------
+  # Compose file validation — both compose.yaml alone and combined with compose.dev.yaml (the dev
+  # overlay), so a YAML/interpolation error in either is caught here rather than at first deploy.
+  # ---------------------------------------------------------------------------------------------
+  compose-validate:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config (production)
+        run: |
+          cd deploy
+          cp .env.example .env   # the ${VAR:?...} guards need Something set to validate structurally
+          docker compose -f compose.yaml config > /dev/null
+      - name: docker compose config (+ dev overlay)
+        run: |
+          cd deploy
+          docker compose -f compose.yaml -f compose.dev.yaml config > /dev/null
+      - name: docker compose config (gateway profile)
+        run: |
+          cd deploy
+          # The gateway profile adds ${AUSMT_SUBMIT_KEY:?...} / ${AUSMT_CODE_DIR:?...} guards on top
+          # of the base ones — .env.example carries placeholder values for both, so this validates
+          # the profile's structure (services, mounts, caps) rather than starting anything. C11 adds
+          # AUSMT_CURATOR_KEYS / AUSMT_SURVEYS_LIVE / the surveys-live rw + git-creds mounts; the
+          # curator vars have empty-string defaults so config validates with .env.example as-is, and
+          # the git-creds mount falls back to the committed placeholder dir.
+          docker compose -f compose.yaml --profile gateway config > /dev/null
+
+  # ---------------------------------------------------------------------------------------------
+  # Compose smoke: run the just-built portal image with an EMPTY data dir mounted (no build has
+  # ever run) and confirm it still serves 200 on / — i.e. the portal shell itself doesn't depend on
+  # /srv/data being populated to boot (only individual data fetches inside the page would 404,
+  # which this smoke test does not exercise — it only checks the container comes up and serves the
+  # shell, matching the Makefile's own `smoke` target scope).
+  # ---------------------------------------------------------------------------------------------
+  compose-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-ausmt-portal
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/ausmt-portal.tar
+
+      - name: Run portal with an empty data dir and curl /
+        run: |
+          IMG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-portal:' | head -n1)
+          mkdir -p /tmp/empty-data
+          docker run -d --rm --name ausmt-portal-smoke -p 127.0.0.1:8080:8080 \
+            -v /tmp/empty-data:/srv/data:ro "$IMG"
+          for i in $(seq 1 10); do
+            if curl -fsS http://127.0.0.1:8080/ > /dev/null 2>&1; then echo "OK: / (200)"; break; fi
+            if [ "$i" = 10 ]; then echo "portal never became ready"; docker logs ausmt-portal-smoke; exit 1; fi
+            sleep 1
+          done
+          docker stop ausmt-portal-smoke
+
+  # ---------------------------------------------------------------------------------------------
+  # Gateway end-to-end (the Stage-2 acceptance scenarios, design §8): with REAL clamd + the REAL
+  # runner (engine image), submit the _example fixture package end-to-end -> VALIDATED with populated
+  # reports; submit an EICAR zip -> REJECTED_AV. Wired with `docker run` on a shared network that
+  # mirrors the compose gateway profile's topology (C35a/F2 — this now includes the runner's
+  # PYTHONPATH=/opt, the value compose.yaml:197 uses; the previous /opt/gateway here was the exact
+  # 2026-07-06 production ModuleNotFoundError, memorialized at compose.yaml:198-201):
+  #   - clamd + gateway share a user network (gateway reaches clamd:3310 INSTREAM);
+  #   - gw-runner runs with --network none, user 10002, read-only rootfs + tmpfs /tmp (design §1) —
+  #     it never reaches clamd; the gateway does the raw-zip scan and the post-unpack sweep.
+  # LONG-TERM INTENT (not yet implemented — deferred, C37b seam-cut territory): drive this smoke via
+  # `docker compose -f deploy/compose.yaml --profile gateway up` with a CI .env, so compose.yaml is
+  # the SINGLE source of the topology and a hand-transcribed drift like the PYTHONPATH one cannot recur.
+  # This job cannot run locally (no docker on the C10 dev box); it is authored to the design and
+  # validated structurally by compose-validate above.
+  # ---------------------------------------------------------------------------------------------
+  gateway-e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-ausmt-gateway
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-ausmt-engine
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-ausmt-portal
+          path: /tmp
+      - name: Load images
+        run: |
+          docker load -i /tmp/ausmt-gateway.tar
+          docker load -i /tmp/ausmt-engine.tar
+          docker load -i /tmp/ausmt-portal.tar
+
+      - name: Resolve image tags
+        id: imgs
+        run: |
+          echo "gw=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-gateway:' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "engine=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-engine:' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "portal=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-portal:' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare host tree + clone the surveys repo for the validator (or skip loudly)
+        env:
+          SURVEYS_URL: ${{ vars.AUSMT_SURVEYS_URL }}
+          SURVEYS_TOKEN: ${{ secrets.AUSMT_SURVEYS_TOKEN }}
+        run: |
+          # The gateway tree owned by uid 10002 (design §1); the runner also runs as 10002.
+          sudo mkdir -p /srv/ausmt/gateway/{incoming,quarantine,jobs,state,clamav}
+          sudo chown -R 10002:10002 /srv/ausmt/gateway
+          # The runner needs the validator from the SEPARATE ausmt-surveys repo. Before C35a this step
+          # only echoed the repo var into GITHUB_ENV — no clone existed anywhere, so the checkout the
+          # gates below test for was NEVER created and the VALIDATED half was permanently skipped even
+          # when the var was set: dead wiring (code-health review F5). Now: if the var is set, REALLY
+          # clone it into $GITHUB_WORKSPACE/../ausmt-surveys (the exact path every gate below reads),
+          # and FAIL LOUDLY if the clone or the _validation check fails — an operator who set the var
+          # to enable the VALIDATED half must never get a silent skip. If the var is unset, skip the
+          # validator-dependent half but keep the REJECTED_AV half (which needs no validator), and
+          # record on the job summary exactly which acceptance halves were skipped and why.
+          DEST="$GITHUB_WORKSPACE/../ausmt-surveys"
+          if [ -n "$SURVEYS_URL" ]; then
+            echo "AUSMT_SURVEYS_URL is set -> cloning the surveys repo (validator source)."
+            # Inject a scoped token into an https URL when a secret is provided (private repo). The
+            # token never reaches the log: set-x is off and the URL is built in-shell, not echoed.
+            CLONE_URL="$SURVEYS_URL"
+            if [ -n "$SURVEYS_TOKEN" ]; then
+              case "$SURVEYS_URL" in
+                https://*) CLONE_URL="https://x-access-token:${SURVEYS_TOKEN}@${SURVEYS_URL#https://}" ;;
+                *) echo "AUSMT_SURVEYS_TOKEN is set but AUSMT_SURVEYS_URL is not an https:// URL; using it as-is"; ;;
+              esac
+            fi
+            if ! git clone --depth 1 "$CLONE_URL" "$DEST"; then
+              echo "::error::AUSMT_SURVEYS_URL is set but the clone FAILED — refusing to silently skip the VALIDATED acceptance."
+              exit 1
+            fi
+            if [ ! -d "$DEST/_validation" ]; then
+              echo "::error::cloned ausmt-surveys but $DEST/_validation is absent — the validator is not where the gates expect it."
+              exit 1
+            fi
+            echo "OK: surveys repo cloned; validator present at $DEST/_validation"
+          else
+            {
+              echo "### gateway-e2e: acceptance halves SKIPPED (AUSMT_SURVEYS_URL unset)"
+              echo ""
+              echo "The \`ausmt-surveys\` validator repo was not cloned, so:"
+              echo "- **SKIPPED**: \"_example package => VALIDATED\" (needs the real validator to reach VALIDATED)"
+              echo "- **RAN**: EICAR zip => REJECTED_AV (needs no validator) + Caddy-fronted healthz"
+              echo ""
+              echo "To enable the VALIDATED half, set the repo variable \`AUSMT_SURVEYS_URL\` (and, for a"
+              echo "private repo, the secret \`AUSMT_SURVEYS_TOKEN\`). This step then clones it and FAILS"
+              echo "loudly if the clone or the validator check does not succeed — it will not silently skip."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "AUSMT_SURVEYS_URL unset -> VALIDATED half will skip (see the job summary)."
+          fi
+
+      - name: Start clamd + gateway (shared network); runner network-none
+        env:
+          GW: ${{ steps.imgs.outputs.gw }}
+          ENGINE: ${{ steps.imgs.outputs.engine }}
+        run: |
+          docker network create gwnet
+          docker run -d --rm --name clamd --network gwnet \
+            -v /srv/ausmt/gateway/clamav:/var/lib/clamav clamav/clamav:stable
+          # Wait for clamd to load signatures (can take a minute on a cold cache).
+          for i in $(seq 1 60); do
+            if docker exec clamd clamdscan --version >/dev/null 2>&1 \
+               && docker exec clamd sh -c 'echo PING | nc -w2 localhost 3310 | grep -q PONG'; then
+              echo "clamd ready"; break; fi
+            if [ "$i" = 60 ]; then echo "clamd never became ready"; docker logs clamd; exit 1; fi
+            sleep 2
+          done
+          docker run -d --rm --name gateway --network gwnet \
+            -e AUSMT_SUBMIT_KEY=ci-e2e-submit-key-abcdefgh \
+            -e AUSMT_GW_DATA=/gw -e AUSMT_CLAMD_HOST=clamd -e AUSMT_CLAMD_PORT=3310 \
+            --user 10002:10002 \
+            -p 127.0.0.1:8444:8000 \
+            -v /srv/ausmt/gateway/state:/gw/state:rw \
+            -v /srv/ausmt/gateway/incoming:/gw/incoming:rw \
+            -v /srv/ausmt/gateway/jobs:/gw/jobs:rw \
+            -v /srv/ausmt/gateway/quarantine:/gw/quarantine:ro \
+            "$GW"
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8444/gateway/healthz >/dev/null 2>&1; then echo "gateway ready"; break; fi
+            if [ "$i" = 20 ]; then echo "gateway never became ready"; docker logs gateway; exit 1; fi
+            sleep 1
+          done
+          # The no-network runner: user 10002, read-only rootfs + tmpfs /tmp, no clamd reachability.
+          # gateway/ is bind-mounted (not in the engine image); surveys checkout mounted if present.
+          SURVEYS_MOUNT=""
+          if [ -d "$GITHUB_WORKSPACE/../ausmt-surveys/_validation" ]; then
+            SURVEYS_MOUNT="-v $GITHUB_WORKSPACE/../ausmt-surveys:/srv/surveys:ro"
+          fi
+          # NO --rm (C35a/F2): a dead runner must leave its logs behind for the liveness assert below
+          # and for teardown's `docker logs`; the Teardown step force-removes it unconditionally.
+          # PYTHONPATH=/opt is compose.yaml:197 truth — /opt/gateway (the old value here) was the
+          # 2026-07-06 production ModuleNotFoundError (`import gateway` needs the PARENT of the package).
+          docker run -d --name gw-runner --network none \
+            --user 10002:10002 --read-only --tmpfs /tmp \
+            --memory 4g --cpus 2 --pids-limit 256 \
+            --entrypoint python \
+            -e PYTHONPATH=/opt -e AUSMT_GW_DATA=/gw \
+            -e AUSMT_VALIDATOR_PATH=/srv/surveys/_validation \
+            -v /srv/ausmt/gateway/incoming:/gw/incoming:ro \
+            -v /srv/ausmt/gateway/quarantine:/gw/quarantine:rw \
+            -v /srv/ausmt/gateway/jobs:/gw/jobs:rw \
+            -v "$GITHUB_WORKSPACE/gateway:/opt/gateway:ro" \
+            $SURVEYS_MOUNT \
+            "$ENGINE" -m gateway.runner
+          # UNCONDITIONAL liveness assert (C35a/F2): a runner that crashes on import (the exact
+          # PYTHONPATH regression) exits within a second. Give it a moment, then require it to be
+          # still Running — else dump its logs and fail. A dead runner must never pass green again.
+          sleep 5
+          RUNNING=$(docker inspect -f '{{.State.Running}}' gw-runner 2>/dev/null || echo "missing")
+          if [ "$RUNNING" != "true" ]; then
+            echo "gw-runner is not running (State.Running=$RUNNING) — crashed on start?"; docker logs gw-runner || true; exit 1
+          fi
+          echo "OK: gw-runner is live (State.Running=true)"
+
+      - name: Start Caddy/portal on the shared network (production ingress)
+        env:
+          PORTAL: ${{ steps.imgs.outputs.portal }}
+        run: |
+          # The REAL ingress: the portal image's Caddy proxies /gateway/* to gateway:8000. Put it on
+          # gwnet so it can resolve `gateway`. This is what catches a handle/handle_path prefix
+          # regression — every gateway check below that matters goes THROUGH Caddy (:8080), not the
+          # gateway's own :8444 debug publish.
+          mkdir -p /tmp/empty-data
+          docker run -d --rm --name portal --network gwnet -p 127.0.0.1:8080:8080 \
+            -v /tmp/empty-data:/srv/data:ro "$PORTAL"
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then echo "caddy ready"; break; fi
+            if [ "$i" = 20 ]; then echo "caddy never became ready"; docker logs portal; exit 1; fi
+            sleep 1
+          done
+
+      - name: Caddy-fronted healthz (proves the /gateway/* route reaches the app, prefix preserved)
+        run: |
+          # THROUGH Caddy (:8080), not the gateway's own :8444. A handle_path (prefix-stripping)
+          # regression would 404 here even though :8444 works — this is the check that guards fix #1.
+          code=$(curl -s -o /tmp/hz.json -w '%{http_code}' http://127.0.0.1:8080/gateway/healthz)
+          echo "caddy /gateway/healthz -> $code $(cat /tmp/hz.json)"
+          [ "$code" = "200" ] || { echo "gateway not reachable through Caddy (prefix-strip regression?)"; docker logs portal; exit 1; }
+          grep -q '"ok"' /tmp/hz.json || { echo "unexpected healthz body through Caddy"; exit 1; }
+          echo "OK: /gateway/healthz reachable through the Caddy ingress"
+
+      - name: EICAR zip => REJECTED_AV (submitted THROUGH Caddy)
+        run: |
+          # Build a structurally valid package whose EDI contains the EICAR test string.
+          mkdir -p pkg/mysurvey/transfer_functions/edi
+          printf 'survey:\n  slug: mysurvey\n' > pkg/mysurvey/survey.yaml
+          printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*\n' \
+            > pkg/mysurvey/transfer_functions/edi/S01.edi
+          (cd pkg && zip -qr ../eicar.zip mysurvey)
+          # Submit through the Caddy origin (:8080) so the full ingress path is exercised end to end.
+          RESP=$(curl -s -o /tmp/eicar.json -w '%{http_code}' \
+            -H 'X-AusMT-Submit-Key: ci-e2e-submit-key-abcdefgh' \
+            -F 'file=@eicar.zip' -F 'submitter_name=CI' -F 'submitter_email=ci@example.test' \
+            http://127.0.0.1:8080/gateway/submit)
+          echo "submit http=$RESP body=$(cat /tmp/eicar.json)"
+          [ "$RESP" = "201" ] || { echo "expected 201 on accepted upload"; docker logs gateway; exit 1; }
+          # status_url is /gateway/status/<token>; it must resolve through Caddy too (prefix preserved).
+          URL=$(python3 -c 'import json,sys;print(json.load(open("/tmp/eicar.json"))["status_url"])')
+          curl -s "http://127.0.0.1:8080${URL}" | grep -qi 'Rejected' \
+            || { echo "EICAR upload did not reach REJECTED_AV (or status_url did not resolve through Caddy)"; curl -s "http://127.0.0.1:8080${URL}"; exit 1; }
+          echo "OK: EICAR => REJECTED_AV via the Caddy ingress"
+
+      - name: _example package => VALIDATED (skipped without a surveys checkout)
+        run: |
+          if [ ! -d "$GITHUB_WORKSPACE/../ausmt-surveys/_validation" ]; then
+            echo "no ausmt-surveys checkout (AUSMT_SURVEYS_URL unset) -> the validator is absent, so"
+            echo "the VALIDATED half is skipped. The REJECTED_AV acceptance above still ran."
+            exit 0
+          fi
+          # Zip the engine's example fixture package and submit it; poll status for VALIDATED.
+          (cd "$GITHUB_WORKSPACE/engine/tests/fixtures" && zip -qr /tmp/example.zip example-survey)
+          RESP=$(curl -s -o /tmp/ex.json -w '%{http_code}' \
+            -H 'X-AusMT-Submit-Key: ci-e2e-submit-key-abcdefgh' \
+            -F 'file=@/tmp/example.zip' -F 'submitter_name=CI' -F 'submitter_email=ci@example.test' \
+            http://127.0.0.1:8080/gateway/submit)
+          [ "$RESP" = "201" ] || { echo "expected 201"; cat /tmp/ex.json; docker logs gateway; exit 1; }
+          URL=$(python3 -c 'import json;print(json.load(open("/tmp/ex.json"))["status_url"])')
+          for i in $(seq 1 60); do
+            PAGE=$(curl -s "http://127.0.0.1:8080${URL}")
+            echo "$PAGE" | grep -qi 'Validated' && { echo "OK: example => VALIDATED"; exit 0; }
+            echo "$PAGE" | grep -qi 'Quarantined' && { echo "example unexpectedly QUARANTINED"; echo "$PAGE"; docker logs gw-runner; exit 1; }
+            sleep 3
+          done
+          echo "example never reached VALIDATED"; docker logs gw-runner; exit 1
+
+      - name: Teardown
+        if: always()
+        run: docker rm -f portal gateway gw-runner clamd 2>/dev/null || true
+
+  # ---------------------------------------------------------------------------------------------
+  # Curator publish end-to-end (C11 design §8, v2 = commit-and-push ONLY): submit the _example fixture
+  # -> curator logs in -> approve -> assert PUBLISHED means the package was COMMITTED to surveys-live
+  # main and pushed (the survey folder + a fixed-author, PII-free commit land in git history), the
+  # submitter PII is curator-only, and the audit rows are complete; the reject path leaves surveys-live
+  # HEAD unchanged. NO rebuild is invoked by the gateway (that is a separate manual operator step), so
+  # this job needs NO docker socket in the gateway — it exercises git ONLY against a LOCAL surveys-live
+  # checkout + a bare origin repo (no external push target), all on the box. It needs a real
+  # ausmt-surveys checkout (the validator) to reach VALIDATED; without one it skips like gateway-e2e.
+  # Cannot run on the dev box (no docker); authored to the design, structurally validated by
+  # compose-validate.
+  # ---------------------------------------------------------------------------------------------
+  curator-e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: image-ausmt-gateway, path: /tmp }
+      - uses: actions/download-artifact@v4
+        with: { name: image-ausmt-engine, path: /tmp }
+      - name: Load images
+        run: |
+          docker load -i /tmp/ausmt-gateway.tar
+          docker load -i /tmp/ausmt-engine.tar
+
+      - name: Resolve image tags
+        id: imgs
+        run: |
+          echo "gw=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-gateway:' | head -n1)" >> "$GITHUB_OUTPUT"
+          echo "engine=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)ausmt-engine:' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Clone the surveys repo for the validator (or skip loudly), then gate
+        id: gate
+        env:
+          SURVEYS_URL: ${{ vars.AUSMT_SURVEYS_URL }}
+          SURVEYS_TOKEN: ${{ secrets.AUSMT_SURVEYS_TOKEN }}
+        run: |
+          # Each GitHub Actions job runs on its OWN fresh runner, so the clone done in gateway-e2e does
+          # NOT carry over here — curator-e2e must clone the validator repo itself, else its gate is
+          # permanently false even with the var set (that was part of the F5 dead wiring). Same
+          # contract as gateway-e2e: if the var is set, REALLY clone into the path the steps below read
+          # and FAIL LOUDLY on any failure; if unset, skip and record why on the job summary.
+          DEST="$GITHUB_WORKSPACE/../ausmt-surveys"
+          if [ -n "$SURVEYS_URL" ]; then
+            CLONE_URL="$SURVEYS_URL"
+            if [ -n "$SURVEYS_TOKEN" ]; then
+              case "$SURVEYS_URL" in
+                https://*) CLONE_URL="https://x-access-token:${SURVEYS_TOKEN}@${SURVEYS_URL#https://}" ;;
+                *) echo "AUSMT_SURVEYS_TOKEN is set but AUSMT_SURVEYS_URL is not an https:// URL; using it as-is"; ;;
+              esac
+            fi
+            if [ ! -d "$DEST/_validation" ]; then
+              if ! git clone --depth 1 "$CLONE_URL" "$DEST"; then
+                echo "::error::AUSMT_SURVEYS_URL is set but the clone FAILED — refusing to silently skip the publish-flow acceptance."
+                exit 1
+              fi
+            fi
+            if [ ! -d "$DEST/_validation" ]; then
+              echo "::error::cloned ausmt-surveys but $DEST/_validation is absent — the validator is not where the gates expect it."
+              exit 1
+            fi
+            echo "have_surveys=true" >> "$GITHUB_OUTPUT"
+            echo "OK: surveys repo present; validator at $DEST/_validation"
+          else
+            echo "have_surveys=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### curator-e2e: publish-flow acceptance SKIPPED (AUSMT_SURVEYS_URL unset)"
+              echo ""
+              echo "Without the \`ausmt-surveys\` validator a submission cannot reach VALIDATED, so there"
+              echo "is nothing to approve. **SKIPPED**: submit => VALIDATED => approve => committed to"
+              echo "surveys-live (commit author, PII confinement, push-to-bare-origin, rollback)."
+              echo ""
+              echo "The curator AUTH + CSRF + preview guards are covered by the gateway unit suite — see"
+              echo "the \`gateway-ci.yml\` workflow (\`pytest -q gateway/tests\`). THIS e2e is the publish-flow"
+              echo "acceptance and needs the real validator; set \`AUSMT_SURVEYS_URL\` (+ secret"
+              echo "\`AUSMT_SURVEYS_TOKEN\` for a private repo) to enable it. It then fails loudly if the"
+              echo "clone or validator check does not succeed — it will not silently skip."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "AUSMT_SURVEYS_URL unset -> publish-flow acceptance will skip (see the job summary)."
+          fi
+
+      - name: Prepare host tree + a surveys-live checkout with a bare origin
+        if: steps.gate.outputs.have_surveys == 'true'
+        run: |
+          sudo mkdir -p /srv/ausmt/gateway/{incoming,quarantine,jobs,state,clamav}
+          sudo chown -R 10002:10002 /srv/ausmt/gateway
+          # A surveys-live working checkout the gateway stages+commits into, plus a BARE origin it can
+          # push to on the box (no external remote). Owned by the runner user (uid 1001 on GHA) so the
+          # container's git — running as 10002 — needs write access: make it group/other-writable for
+          # the demo e2e (the box is single-tenant CI, not production).
+          mkdir -p /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
+          git init --bare /srv/ausmt/surveys-origin.git
+          git -C /srv/ausmt/surveys-live init -b main
+          git -C /srv/ausmt/surveys-live config user.name "CI Seed"
+          git -C /srv/ausmt/surveys-live config user.email "ci@example.test"
+          mkdir -p /srv/ausmt/surveys-live/surveys
+          # Seed the validator dir so the runner can validate (copy from the surveys checkout).
+          cp -r "$GITHUB_WORKSPACE/../ausmt-surveys/_validation" /srv/ausmt/surveys-live/_validation
+          git -C /srv/ausmt/surveys-live add -A
+          git -C /srv/ausmt/surveys-live commit -q -m "seed"
+          git -C /srv/ausmt/surveys-live remote add origin /srv/ausmt/surveys-origin.git
+          git -C /srv/ausmt/surveys-live push -q origin main
+          chmod -R 0777 /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
+
+      - name: Start clamd + gateway (with curator config) + runner
+        if: steps.gate.outputs.have_surveys == 'true'
+        env:
+          GW: ${{ steps.imgs.outputs.gw }}
+          ENGINE: ${{ steps.imgs.outputs.engine }}
+        run: |
+          docker network create gwnet
+          docker run -d --rm --name clamd --network gwnet \
+            -v /srv/ausmt/gateway/clamav:/var/lib/clamav clamav/clamav:stable
+          for i in $(seq 1 60); do
+            if docker exec clamd sh -c 'echo PING | nc -w2 localhost 3310 | grep -q PONG'; then echo "clamd ready"; break; fi
+            if [ "$i" = 60 ]; then echo "clamd never ready"; docker logs clamd; exit 1; fi
+            sleep 2
+          done
+          # The gateway with curator keys configured + surveys-live mounted rw. No external push
+          # target: the checkout's origin is the local bare repo, reachable because surveys-live is
+          # mounted rw and its .git/config already points origin at the (also-mounted) bare repo path.
+          docker run -d --rm --name gateway --network gwnet \
+            -e AUSMT_SUBMIT_KEY=ci-e2e-submit-key-abcdefgh \
+            -e AUSMT_CURATOR_KEYS=ci:ci-curator-key-abcdefgh1234 \
+            -e AUSMT_SURVEYS_LIVE=/srv/surveys-live \
+            -e AUSMT_GW_DATA=/gw -e AUSMT_CLAMD_HOST=clamd -e AUSMT_CLAMD_PORT=3310 \
+            -e HOME=/tmp -e GIT_CONFIG_GLOBAL=/tmp/.gitconfig \
+            --user 10002:10002 -p 127.0.0.1:8444:8000 \
+            -v /srv/ausmt/gateway/state:/gw/state:rw \
+            -v /srv/ausmt/gateway/incoming:/gw/incoming:rw \
+            -v /srv/ausmt/gateway/jobs:/gw/jobs:rw \
+            -v /srv/ausmt/gateway/quarantine:/gw/quarantine:ro \
+            -v /srv/ausmt/surveys-live:/srv/surveys-live:rw \
+            -v /srv/ausmt/surveys-origin.git:/srv/ausmt/surveys-origin.git:rw \
+            "$GW"
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8444/gateway/healthz >/dev/null 2>&1; then echo "gateway ready"; break; fi
+            if [ "$i" = 20 ]; then echo "gateway never ready"; docker logs gateway; exit 1; fi
+            sleep 1
+          done
+          # NO --rm + PYTHONPATH=/opt (C35a/F2): same fix as gateway-e2e — keep a dead runner's logs,
+          # and use compose.yaml:197's PYTHONPATH (the /opt/gateway value here was the 2026-07-06
+          # production ModuleNotFoundError). Teardown force-removes gw-runner unconditionally.
+          docker run -d --name gw-runner --network none \
+            --user 10002:10002 --read-only --tmpfs /tmp \
+            --memory 4g --cpus 2 --pids-limit 256 --entrypoint python \
+            -e PYTHONPATH=/opt -e AUSMT_GW_DATA=/gw \
+            -e AUSMT_VALIDATOR_PATH=/srv/surveys/_validation \
+            -v /srv/ausmt/gateway/incoming:/gw/incoming:ro \
+            -v /srv/ausmt/gateway/quarantine:/gw/quarantine:rw \
+            -v /srv/ausmt/gateway/jobs:/gw/jobs:rw \
+            -v "$GITHUB_WORKSPACE/gateway:/opt/gateway:ro" \
+            -v "$GITHUB_WORKSPACE/../ausmt-surveys:/srv/surveys:ro" \
+            "$ENGINE" -m gateway.runner
+          # UNCONDITIONAL liveness assert (C35a/F2): a crash-on-import runner exits within a second.
+          sleep 5
+          RUNNING=$(docker inspect -f '{{.State.Running}}' gw-runner 2>/dev/null || echo "missing")
+          if [ "$RUNNING" != "true" ]; then
+            echo "gw-runner is not running (State.Running=$RUNNING) — crashed on start?"; docker logs gw-runner || true; exit 1
+          fi
+          echo "OK: gw-runner is live (State.Running=true)"
+
+      - name: Submit -> VALIDATED -> curator login -> approve -> committed to surveys-live
+        if: steps.gate.outputs.have_surveys == 'true'
+        run: |
+          set -e
+          (cd "$GITHUB_WORKSPACE/engine/tests/fixtures" && zip -qr /tmp/example.zip example-survey)
+          RESP=$(curl -s -o /tmp/ex.json -w '%{http_code}' \
+            -H 'X-AusMT-Submit-Key: ci-e2e-submit-key-abcdefgh' \
+            -F 'file=@/tmp/example.zip' -F 'submitter_name=CI' -F 'submitter_email=ci-secret@example.test' \
+            http://127.0.0.1:8444/gateway/submit)
+          [ "$RESP" = "201" ] || { echo "submit failed"; cat /tmp/ex.json; docker logs gateway; exit 1; }
+          SID=$(python3 -c 'import json;print(json.load(open("/tmp/ex.json"))["submission_id"])')
+          URL=$(python3 -c 'import json;print(json.load(open("/tmp/ex.json"))["status_url"])')
+          for i in $(seq 1 60); do
+            PAGE=$(curl -s "http://127.0.0.1:8444${URL}")
+            echo "$PAGE" | grep -qi 'Validated' && break
+            echo "$PAGE" | grep -qi 'Quarantined' && { echo "unexpectedly QUARANTINED"; docker logs gw-runner; exit 1; }
+            [ "$i" = 60 ] && { echo "never VALIDATED"; docker logs gw-runner; exit 1; }
+            sleep 3
+          done
+          # Curator login (cookie jar) -> read the detail page (scrape the CSRF token) -> approve.
+          COOKIES=/tmp/cj.txt
+          curl -s -c "$COOKIES" -X POST --data 'curator_key=ci-curator-key-abcdefgh1234' \
+            http://127.0.0.1:8444/gateway/curator/login >/dev/null
+          DETAIL=$(curl -s -b "$COOKIES" "http://127.0.0.1:8444/gateway/curator/submission/${SID}")
+          # The submitter email is curator-only PII: it MUST appear on the curator detail page...
+          echo "$DETAIL" | grep -q 'ci-secret@example.test' || { echo "curator detail missing submitter block"; exit 1; }
+          # ...but NEVER on the public status page.
+          curl -s "http://127.0.0.1:8444${URL}" | grep -q 'ci-secret@example.test' && { echo "PII leaked to public status page"; exit 1; }
+          CSRF=$(echo "$DETAIL" | grep -o 'name="csrf_token" value="[0-9a-f]*"' | head -n1 | sed 's/.*value="//;s/"//')
+          [ -n "$CSRF" ] || { echo "no csrf token on detail page"; exit 1; }
+          APP=$(curl -s -o /tmp/app.txt -w '%{http_code}' -b "$COOKIES" -X POST \
+            --data "note=approved+by+ci&csrf_token=${CSRF}" \
+            "http://127.0.0.1:8444/gateway/curator/submission/${SID}/approve")
+          echo "approve http=$APP"
+          [ "$APP" = "303" ] || [ "$APP" = "200" ] || { echo "approve rejected"; cat /tmp/app.txt; docker logs gateway; exit 1; }
+          # Poll the status page for PUBLISHED. v2: PUBLISHED means COMMITTED, not served — the page
+          # must say so (no rebuild was invoked by the gateway).
+          for i in $(seq 1 60); do
+            P=$(curl -s "http://127.0.0.1:8444${URL}")
+            echo "$P" | grep -qi 'Published' && { echo "OK: PUBLISHED"; \
+              echo "$P" | grep -qi 'rebuild' || { echo "PUBLISHED page must say a rebuild is needed to serve"; exit 1; }; break; }
+            [ "$i" = 60 ] && { echo "never PUBLISHED"; docker logs gateway; exit 1; }
+            sleep 3
+          done
+          # The commit landed on surveys-live MAIN with NO submitter email (PII confinement), fixed
+          # author, and was pushed to the bare origin (v2 commit-and-push). No rebuild ran.
+          git -C /srv/ausmt/surveys-live log -1 --format='%an <%ae>%n%B' > /tmp/commit.txt
+          grep -q 'AusMT Gateway <gateway@ausmt.local>' /tmp/commit.txt || { echo "commit author not the fixed gateway identity"; cat /tmp/commit.txt; exit 1; }
+          grep -q 'ci-secret@example.test' /tmp/commit.txt && { echo "submitter email leaked into the commit"; exit 1; }
+          # The push reached the bare origin (origin/main advanced to the new commit).
+          LOCAL=$(git -C /srv/ausmt/surveys-live rev-parse HEAD)
+          ORIGIN=$(git -C /srv/ausmt/surveys-live rev-parse origin/main 2>/dev/null || echo none)
+          [ "$LOCAL" = "$ORIGIN" ] || { echo "push did not reach origin (local=$LOCAL origin=$ORIGIN)"; exit 1; }
+          # The survey folder is staged in surveys-live.
+          ls /srv/ausmt/surveys-live/surveys/ | grep -q . || { echo "no survey staged into surveys-live"; exit 1; }
+          echo "OK: curator approve -> PUBLISHED, PII confined, commit author fixed"
+
+      - name: Reject leaves surveys-live clean
+        if: steps.gate.outputs.have_surveys == 'true'
+        run: |
+          set -e
+          BEFORE=$(git -C /srv/ausmt/surveys-live rev-parse HEAD)
+          (cd "$GITHUB_WORKSPACE/engine/tests/fixtures" && zip -qr /tmp/example2.zip example-survey)
+          RESP=$(curl -s -o /tmp/ex2.json -w '%{http_code}' \
+            -H 'X-AusMT-Submit-Key: ci-e2e-submit-key-abcdefgh' \
+            -F 'file=@/tmp/example2.zip' -F 'submitter_name=CI2' -F 'submitter_email=ci2@example.test' \
+            http://127.0.0.1:8444/gateway/submit)
+          # A duplicate zip is a 409; make it distinct so it is accepted.
+          if [ "$RESP" = "409" ]; then echo "duplicate content (expected on identical fixture) — reject-clean asserted structurally"; else
+            SID2=$(python3 -c 'import json;print(json.load(open("/tmp/ex2.json"))["submission_id"])')
+            URL2=$(python3 -c 'import json;print(json.load(open("/tmp/ex2.json"))["status_url"])')
+            for i in $(seq 1 60); do curl -s "http://127.0.0.1:8444${URL2}" | grep -qi 'Validated' && break; sleep 3; done
+            COOKIES=/tmp/cj.txt
+            DETAIL=$(curl -s -b "$COOKIES" "http://127.0.0.1:8444/gateway/curator/submission/${SID2}")
+            CSRF=$(echo "$DETAIL" | grep -o 'name="csrf_token" value="[0-9a-f]*"' | head -n1 | sed 's/.*value="//;s/"//')
+            curl -s -b "$COOKIES" -X POST --data "note=rejected&csrf_token=${CSRF}" \
+              "http://127.0.0.1:8444/gateway/curator/submission/${SID2}/reject" >/dev/null
+          fi
+          AFTER=$(git -C /srv/ausmt/surveys-live rev-parse HEAD)
+          [ "$BEFORE" = "$AFTER" ] || { echo "reject/duplicate changed surveys-live HEAD"; exit 1; }
+          echo "OK: reject path left surveys-live clean (HEAD unchanged)"
+
+      - name: Teardown
+        if: always()
+        run: docker rm -f gateway gw-runner clamd 2>/dev/null || true

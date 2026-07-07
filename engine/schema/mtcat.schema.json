@@ -1,0 +1,248 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ausmt.org/schema/mtcat-1.0.schema.json",
+  "title": "MTCAT v1.0: Magnetotelluric Catalogue interchange document",
+  "description": "MTCAT is an open JSON schema for magnetotelluric catalogue discovery. An MTCAT document provides a machine-readable description of the surveys, stations, collections, and metadata exposed by a portal, enabling interoperable discovery across independent MT catalogue systems.",
+  "type": "object",
+  "required": [
+    "portal",
+    "surveys",
+    "stations"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "portal": {
+      "type": "object",
+      "required": [
+        "portal_id",
+        "portal_name",
+        "schema",
+        "version",
+        "generated_at"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "portal_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "portal_name": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string",
+          "const": "mtcat"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "generated_at": {
+          "type": "string"
+        }
+      }
+    },
+    "surveys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "survey_id",
+          "title",
+          "organisation",
+          "country"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "survey_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "organisation": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "doi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "access": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bbox": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "west",
+              "south",
+              "east",
+              "north"
+            ],
+            "properties": {
+              "west": {
+                "type": "number"
+              },
+              "south": {
+                "type": "number"
+              },
+              "east": {
+                "type": "number"
+              },
+              "north": {
+                "type": "number"
+              }
+            }
+          },
+          "centroid": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "latitude",
+              "longitude"
+            ],
+            "properties": {
+              "latitude": {
+                "type": "number"
+              },
+              "longitude": {
+                "type": "number"
+              }
+            }
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "survey semantic version, e.g. 1.0.0"
+          },
+          "collection_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "id of the collection/programme this survey belongs to, if any"
+          },
+          "organisation_ror": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ROR (Research Organization Registry) identifier of the custodian organisation, if declared"
+          },
+          "raid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RAiD (Research Activity Identifier) of the project, if declared, e.g. https://raid.org/10.12345/AB1234"
+          }
+        }
+      }
+    },
+    "stations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "station_id",
+          "survey_id",
+          "latitude",
+          "longitude",
+          "data_type"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "station_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "survey_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "latitude": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "longitude": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "data_type": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "collections": {
+      "type": "array",
+      "description": "optional collections/programmes grouping multiple surveys (e.g. AusLAMP); rollup only",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "collection_id",
+          "title"
+        ],
+        "properties": {
+          "collection_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "e.g. programme"
+          },
+          "n_surveys": {
+            "type": "integer"
+          },
+          "n_stations": {
+            "type": "integer"
+          },
+          "bbox": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "centroid": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

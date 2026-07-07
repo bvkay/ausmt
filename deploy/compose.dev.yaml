@@ -1,0 +1,29 @@
+# Dev overlay for compose.yaml — local iteration on the EliteDesk or a dev machine with a repo
+# checkout on disk (as opposed to compose.yaml's pull-only production posture).
+#
+# Usage: docker compose -f compose.yaml -f compose.dev.yaml up --build
+#   (--build forces a local rebuild from the `build:` contexts below instead of pulling GHCR images)
+#
+# Adds:
+#   - `build:` contexts on both services, so `docker compose build` works straight from a repo
+#     checkout without needing a GHCR push first (contexts are the ausmt repo root, i.e. the
+#     parent of this deploy/ dir — matches both Dockerfiles' documented build-context assumption).
+#   - a live bind mount of ../portal into the portal container, so an edit to portal/*.html or
+#     portal/src/*.js is visible on next browser refresh with no image rebuild (Caddy's file_server
+#     re-reads from disk per request; no restart needed either).
+
+services:
+  portal:
+    build:
+      context: ..
+      dockerfile: deploy/docker/portal.Dockerfile
+    volumes:
+      # Live overlay for editing — mounted AFTER compose.yaml's own /srv/data mount is inherited
+      # (compose merges volume lists by appending), so /srv/data:ro from the base file still
+      # applies; this just adds the portal source on top of the baked-in image copy.
+      - ../portal:/srv/portal:ro
+
+  build-runner:
+    build:
+      context: ..
+      dockerfile: deploy/docker/engine.Dockerfile

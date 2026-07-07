@@ -1,0 +1,30 @@
+# AusMT portal configuration — the primary home for branding, version and deployment settings.
+# Edit this file and regenerate config.js with tools/gen_config.py for anything it covers. A full
+# re-brand or re-deploy also touches hardcoded constants elsewhere in the portal: page titles,
+# wordmarks and footers in index.html / about.html / add-survey.html, citation strings in
+# src/state.js, src/exports.js and src/drawer.js, and fallback defaults in version.js and
+# tools/gen_config.py. The science build also reads this file for the MTCAT portal block.
+portal:
+  id: ausmt                 # MTCAT portal_id, stable, lowercase, unique per portal (federation key)
+  name: Australian Magnetotelluric Data Portal
+  short_name: AusMT         # shown in the wordmark / header chip
+  region: Australia
+  schema: MTCAT             # discovery-document schema name (do not change)
+  schema_version: "1.0"     # MTCAT schema version (changes only when the schema changes)
+  version: "0.2.1"          # AusMT release version — keep in step with engine/pyproject.toml; shown as "AusMT v0.2.1"
+
+deployment:
+  pages_base_url: ""        # e.g. https://<user>.github.io/ausmt  (blank = relative paths)
+  mtcat_url: ""             # public URL of mtcat.json once deployed (blank = data/mtcat.json)
+  data_base_url: ""         # where the engine publishes data/*.json, e.g.
+                            # https://<user>.github.io/ausmt/data (blank = portal's own ./data)
+
+analytics:
+  enabled: false            # privacy-respecting, cookieless; OFF by default
+  plausible_domain: ""      # e.g. ausmt.org.au - only used when enabled: true
+
+# Distribution feature flags (the download backbone). The science build reads these too; the
+# manifest is authoritative for what actually exists, so these are the publish-time switches.
+flags:
+  survey_h5_enabled: false        # publish a per-survey aggregated MTH5 bundle (decision D4: OFF pending storage/management sign-off)
+  collection_download_enabled: false  # reserved: collection-level bundle download (no producer yet)

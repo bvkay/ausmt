@@ -1,0 +1,11 @@
+# AusMT development and test requirements.
+#
+# Pulls in the core runtime (mt_metadata/mth5/numpy — the build engine) plus the test tooling.
+# For the PINNED, reproducible engine (what CI runs), also install the lock on Python 3.12:
+#   pip install -r environments/requirements-mtmetadata-lock.txt
+
+-r requirements.txt
+
+pytest==8.2.0
+jsonschema>=4    # mtcat.schema.json validation in tests
+ruff==0.15.17    # lint gate (broad E/F/PL/BLE; config + documented ignores in pyproject.toml [tool.ruff])

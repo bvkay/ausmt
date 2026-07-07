@@ -1,0 +1,169 @@
+name: build-products
+
+# Generates AusMT derived products offline from the engine/ subtree, then publishes them for the
+# portal. The portal never runs this stack itself.
+#
+# mt_metadata/mth5 is the SOLE parsing engine (the dependency-free regex extractor was retired
+# in 2026-06), so it is a core dependency, installed here from
+# the pinned lock on the tested Python (3.12). Tier-3 decomposition (the MTpy-v2 fork) is OPTIONAL
+# and installed separately; the build does NOT depend on it, so CI stays green without the fork.
+#
+# PATH-SCOPED (ADR-001 monorepo): only runs when the engine/ subtree (or this workflow) changes.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "engine/**"
+      - "contract/**"
+      - ".github/workflows/build-products.yml"
+  # M8: also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
+  # engine lane (build + tests + skip accounting) BEFORE merge — previously this workflow triggered
+  # only on push, so a PR that broke the engine showed zero checks here (portal-ci.yml and
+  # deploy-images.yml already run on pull_request; this brings build-products.yml into line).
+  pull_request:
+    paths:
+      - "engine/**"
+      - "contract/**"
+      - ".github/workflows/build-products.yml"
+
+concurrency:
+  # Keyed on the ref (M8): now that this runs on pull_request as well as push, a fixed group would
+  # make a PR run and a push-to-main run cancel each other. Per-ref grouping cancels only superseded
+  # runs of the SAME branch/PR (matching gateway-ci.yml's pattern).
+  group: build-products-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine   # the engine lives in engine/ since the ADR-001 monorepo merge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # matches the tested/locked mt_metadata/mth5 env
+
+      # The positional column order is single-sourced in contract/columns.json and generated into
+      # engine/extract/_contract.py (which this engine imports). Fail the build if the generated file
+      # is out of sync with the source (stdlib-only; runs before the heavy installs).
+      - name: Contract in sync (columns.json -> generated constants)
+        run: python ../contract/generate.py --check
+
+      # Lint: broad ruff (E/F/PL/BLE) with the project's documented ignores in pyproject.toml [tool.ruff].
+      # Fast + dependency-light, so it runs before the heavy engine install. --config forces the engine's
+      # ruff config onto the sibling contract/ and portal/tools/ Python too.
+      - name: Lint (ruff)
+        run: |
+          python -m pip install ruff==0.15.17
+          python -m ruff check --config pyproject.toml . ../contract ../portal/tools
+
+      # Core runtime = the pinned mt_metadata/mth5 stack (the sole extractor) + the test deps + the
+      # package. The LOCK (verified transitive closure) installs the exact numpy/scipy/pandas/xarray/
+      # pydantic pins so nothing floats against latest PyPI — normalize()'s metadata-conditioning is
+      # sensitive to it. Production hardening: swap for a prebuilt container image of this same lock.
+      - name: Install pinned engine + test deps + package
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+          pip install -r environments/requirements-mtmetadata-lock.txt
+          pip install --no-deps -e .
+
+      # Tier-3 ONLY: decomposition fork pinned to a COMMIT (never a branch).
+      # Set repo variable DECOMP_COMMIT to enable; if unset, this step is skipped
+      # and the build still produces Tier 0-2 products.
+      - name: Install decomposition engine (optional, Tier 3)
+        if: ${{ vars.DECOMP_COMMIT != '' }}
+        run: pip install "mtpy-v2 @ git+https://github.com/bvkay/mtpy-v2.git@${{ vars.DECOMP_COMMIT }}"
+
+      # Full suite. With mt_metadata present the canonical-ingest / parity / canonical-store /
+      # mth5-roundtrip gates RUN (they importorskip only when the stack is absent), so this single
+      # job now covers what the old separate extractor-parity job did. C18: this suite also carries
+      # the build-cache tests (tests/test_build_cache.py), INCLUDING the §4.5 warm-vs-refresh
+      # byte-equivalence guard and the ★ stale-cache refusal — so a cache change that altered output
+      # bytes fails CI here.
+      # -rs surfaces every skip reason (M5): ~20 files importorskip mt_metadata/mth5, so if the pinned
+      # lock ever silently stopped installing that stack the release gate would go green over a
+      # hollowed-out suite. The tripwire below fails on any skip not on tests/ci_check_skips.py's
+      # allow-list. In THIS lane the mt_metadata/mth5 stack IS installed (the lock above) and there is
+      # no sibling ausmt-surveys checkout, so the ONLY legitimate skip is the validator-gate one.
+      - name: Tests (with skip accounting)
+        run: |
+          set -o pipefail
+          pytest -q -rs tests | tee /tmp/pytest-engine.out
+          python tests/ci_check_skips.py < /tmp/pytest-engine.out
+
+      # C18: exercise the incremental cache end-to-end in CI while the checkout is still CLEAN (this
+      # step runs BEFORE the product build below, which writes site-data/ into the tree and would make
+      # git status non-empty -> a degenerate salt that self-disables the cache). A full --cache-mode
+      # refresh build POPULATES a scratch cache; a warm rw build must then HIT it with zero misses.
+      # The build succeeds either way; the byte-EQUIVALENCE between refresh and warm is asserted by
+      # the §4.5 equivalence test inside `pytest tests` above. This scratch cache is throwaway and is
+      # NOT the published products (those come from the non-incremental build step below).
+      - name: Build-cache smoke (refresh populate -> warm hit; clean-checkout salt)
+        run: |
+          python -m extract.build_portal --surveys data --out /tmp/c18-pop \
+            --bundle-edi --no-validate --incremental --cache-dir /tmp/c18-cache --cache-mode refresh
+          python -m extract.build_portal --surveys data --out /tmp/c18-warm \
+            --bundle-edi --no-validate --incremental --cache-dir /tmp/c18-cache --cache-mode rw
+          python - <<'PY'
+          import json
+          c = json.load(open("/tmp/c18-warm/build_provenance.json"))["cache"]
+          assert c["enabled"] and c["hits"] > 0 and c["misses"] == 0 and c["writes"] == 0, c
+          print("C18 warm-build cache counters:", c)
+          PY
+
+      # --no-validate: this checkout has no ausmt-surveys sibling (private repo, no token for a
+      # cross-repo checkout here), so the validator can never resolve -- and since C8 that is now a
+      # hard error, not a warning. This is fine: `data/` is the trusted in-repo sample, not real
+      # submissions. The real gate runs in ausmt-surveys CI (validate.yml + tests.yml) and again at
+      # ingest; this build step only proves the pipeline itself still runs end-to-end.
+      #
+      # C18: the CI-PUBLISHED products are built NON-incremental (no --incremental flag) — CI products
+      # are never cache-derived (design §5). The build cache only ever accelerates the production
+      # deploy/Makefile rebuild-data; here we prove the full cold pipeline still runs end-to-end.
+      - name: Build products (single canonical pipeline; fails on empty output)
+        run: |
+          python -m extract.build_portal \
+            --surveys data --out site-data --products products --bundle-edi --no-validate
+
+      # CI guard (C3, PII scrub): derived JSON/XML must never carry an email address (station.json
+      # processing.note is the known vector -- proc_note() redacts it, this is the belt-and-braces
+      # net for anything else that scrapes free text). Excludes site-data/edi/** -- those are the
+      # served ORIGINAL .edi bytes, the custodian's published record, never mutated (D1) and out of
+      # scope here. Fails loudly and prints offenders rather than silently passing a dirty build.
+      - name: PII guard — no email addresses in derived products
+        run: |
+          set -e
+          HITS=$(grep -RlE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' site-data \
+                 --exclude-dir=edi || true)
+          if [ -n "$HITS" ]; then
+            echo "ERROR: email address(es) found in derived site-data (must be redacted before publish):"
+            echo "$HITS"
+            exit 1
+          fi
+          echo "OK: no email addresses in derived site-data (excluding served original edi/**)"
+
+      # MTH5 ingestion round-trip evidence (EDI-mt_metadata vs MTH5-mth5), uploaded with the products.
+      - name: MTH5 ingestion round-trip (evidence)
+        run: python -m extract.compare_mth5 --edis data --out mth5_roundtrip.json
+
+      # Artifact paths are repo-root-relative (working-directory does NOT apply to `uses:` steps).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ausmt-products
+          path: |
+            engine/products/
+            engine/site-data/
+            engine/mth5_roundtrip.json
+
+      # NOTE (2026-07-06): the gh-pages "Deploy portal data to Pages" step that lived here was
+      # REMOVED. It was vestigial first-CI wiring (predates the EliteDesk deployment), had NEVER
+      # succeeded (no gh-pages branch was ever created; the read-only GITHUB_TOKEN 403'd the push,
+      # reddening every engine-touching push to main), and publishing even sample data publicly
+      # should be a deliberate owner decision (hostile-review item O-4: public read mirror), not a
+      # CI side effect. If a Pages data mirror is ever wanted, design it against the REAL corpus
+      # (surveys-live) with explicit `permissions: contents: write` scoped to that job — do not
+      # resurrect this step as-was.

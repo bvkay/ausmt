@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About - AusMT</title>
+<link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
+    --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
+    --ok:#5BAE6A; --part:#D9A23B; --no:#A85454;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{font-family:var(--sans);background:var(--ink);color:var(--text);margin:0;line-height:1.6}
+  /* Uniform chrome (fix/about-uniform-chrome): the three-zone header below is copied verbatim from
+     index.html's post-UX3 header so About carries the same chrome as the portal. Left = brand, centre =
+     nav + page links (genuinely centred via the flex:1 side zones), right = the mtcat.json link. About
+     is a STATIC page: the centre items are links (not app buttons) and the right zone shows only the
+     mtcat.json link — the live counts are app-state and meaningless here, so the zone is kept for
+     alignment but carries no counts. The sticky positioning is About-specific (kept from the old header)
+     because this page scrolls; index's header doesn't need it. */
+  header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
+  .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+  .hleft{flex:1 1 auto}
+  .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
+  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
+  .logolink{display:flex;align-items:center;flex:none}
+  .auscope-logo{height:30px;width:auto;display:block}
+  .tagline{color:var(--muted);font-size:12.5px}
+  nav{display:flex;gap:4px}
+  /* Centre-zone nav items are links on this static page (index uses <button>s that switch app views).
+     They match index's nav button look, incl. the .active state that marks the current page. */
+  nav a{background:none;border:0;color:var(--muted);font-size:13.5px;padding:7px 12px;border-radius:4px;text-decoration:none;cursor:pointer}
+  nav a.active{color:var(--text);background:var(--panel-2)}
+  nav a:hover{color:var(--text)}
+  .contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
+  .contribute:hover{border-color:var(--copper)}
+  .about{color:var(--muted);font-size:13px;text-decoration:none;padding:6px 11px;border-radius:4px}
+  .about:hover{color:var(--text)}
+  .about.active{color:var(--text);background:var(--panel-2)}
+  .ver{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
+  .apilink{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
+  .apilink:hover{color:var(--copper)}
+  /* Matches index.html: at narrow widths the three header zones stack full-width and left-align, so the
+     centred nav / right-aligned mtcat link don't read as stranded fragments once they wrap. */
+  @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
+  main{max-width:820px;margin:0 auto;padding:30px 20px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--muted);font-size:15px;margin:0 0 26px}
+  section{margin:0 0 30px;scroll-margin-top:64px}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.1em;color:var(--copper);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  h3{font-size:14px;color:var(--text);margin:16px 0 6px}
+  p{margin:0 0 12px;color:#D4DCE2}
+  a.link{color:var(--copper)}
+  ul{margin:6px 0 12px;padding-left:20px}
+  li{margin:3px 0;color:#D4DCE2}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .card.in{border-left:3px solid var(--ok)}
+  .card.out{border-left:3px solid var(--no)}
+  .card h3{margin-top:0}
+  code{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);padding:1px 5px;border-radius:3px}
+  .toc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:0 0 26px;font-size:13.5px}
+  .toc a{color:var(--muted);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
+  .toc a:hover{color:var(--text)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
+  .cta{display:inline-block;background:var(--copper);color:#12202b;font-weight:700;text-decoration:none;padding:9px 16px;border-radius:5px;margin-top:4px}
+  footer{color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:16px;margin-top:30px}
+</style>
+</head>
+<body>
+<header>
+  <div class="hzone hleft">
+    <a class="logolink" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope — Australia's Earth science research infrastructure"><img class="auscope-logo" src="vendor/auscope-icon-white.png" alt="AuScope"></a>
+    <div class="wordmark">AusMT</div>
+    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+  </div>
+  <div class="hzone hcenter">
+    <nav>
+      <!-- No #/surveys or #/collections deep-link route exists in main.js routeFromHash (only
+           #/station, #/survey/<slug>, #/collection/<id>); Surveys/Collections are view-switch buttons,
+           not hash routes. Per lane scope (don't invent routes), all three link to the portal home. -->
+      <a href="index.html">Map</a>
+      <a href="index.html">Surveys</a>
+      <a href="index.html">Collections</a>
+    </nav>
+    <a class="about active" href="about.html">About</a>
+    <!-- On THIS page the how-to content lives in the in-body #howto section, so the header item jumps
+         there (owner-adjudicated). On index the same item opens the intro panel via its click handler. -->
+    <a class="about" href="#howto">How to use AusMT</a>
+    <a class="contribute" href="add-survey.html">Contribute a survey →</a>
+  </div>
+  <div class="hzone hright">
+    <!-- Live counts (shown/selected/total) are app-state and meaningless on a static page, so this zone
+         carries only the mtcat.json link; the zone container is kept for symmetric alignment. -->
+    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">mtcat.json ↗</a>
+  </div>
+</header>
+<main>
+  <h1>About AusMT</h1>
+  <p class="sub">A national discovery, provenance, and citation layer for Australian magnetotelluric transfer
+  functions; so processed MT results can be found, trusted, reused, and credited.</p>
+
+  <div class="toc">
+    <a href="#howto">How to use</a>
+    <a href="#what">What is AusMT</a><a href="#principles">Principles</a><a href="#why">Why</a><a href="#scope">Scope</a>
+    <a href="#provenance">Provenance</a><a href="#policy">Data policy</a><a href="#contributing">Contributing</a>
+    <a href="#standards">Standards</a><a href="#governance">Governance</a><a href="#future">Future</a>
+  </div>
+
+  <section id="howto">
+    <h2>How to use AusMT</h2>
+    <p>Australia's magnetotelluric transfer functions — discover, screen, download, cite.</p>
+    <div class="two" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card">
+        <h3>Browse &amp; download</h3>
+        <p>Explore surveys on the map, screen station quality, and export data with citations.</p>
+      </div>
+      <div class="card">
+        <h3>Contribute a survey</h3>
+        <p>Package and submit your EDIs with guided validation.</p>
+      </div>
+      <div class="card">
+        <h3>Integrate</h3>
+        <p>Machine-readable catalogue — MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="what">
+    <h2>What is AusMT?</h2>
+    <p>AusMT is a portal for Australian magnetotelluric (MT) <b>transfer functions</b>, the processed,
+    instrument-independent response of the Earth at each site. It is a discovery and provenance layer, not a
+    raw-data archive. In one place it provides:</p>
+    <ul>
+      <li><b>Discovery</b> - find MT stations and surveys across the country on a map and by metadata.</li>
+      <li><b>Preservation</b> - keep processed EDI/MTH5 products and their metadata together and citable.</li>
+      <li><b>Provenance</b> - record exactly how each transfer function was produced and from which file.</li>
+      <li><b>Citation</b> - generate ready-to-use citations and acknowledgements crediting the custodians.</li>
+      <li><b>Contribution</b> - let researchers add their own surveys through a guided, reviewed workflow.</li>
+    </ul>
+  </section>
+
+  <section id="principles">
+    <h2>Principles</h2>
+    <p>Five principles guide what AusMT builds and the decisions its curators make:</p>
+    <ul>
+      <li><b>Discoverable</b> - every survey and station is findable in one place, on a map and by metadata,
+      regardless of which institution produced it.</li>
+      <li><b>Reusable</b> - products are described with consistent, standards-aligned metadata and explicit
+      licences so others can confidently reuse them.</li>
+      <li><b>Transparent</b> - how each transfer function was produced is recorded and shown; unknown values
+      are marked "not recorded" rather than guessed.</li>
+      <li><b>Attributable</b> - custodians, investigators, and funders are credited, with DOIs, ORCIDs, RORs,
+      and RAiDs carried through to discovery.</li>
+      <li><b>Reproducible</b> - products come from a single, versioned build pipeline whose provenance travels
+      with the data, so results can be regenerated and checked.</li>
+    </ul>
+  </section>
+
+  <section id="why">
+    <h2>Why was AusMT created?</h2>
+    <p>Australian MT data is scattered. The same scientific results are spread across university groups,
+    government agencies, industry collaborations, supplementary files attached to papers, and ageing legacy
+    archives, all in a mix of formats and conventions. That makes good data hard to find and easy to lose.</p>
+    <p>AusMT improves <b>discoverability</b> (one searchable map and catalogue), <b>reproducibility</b>
+    (provenance travels with every product), <b>reuse</b> (consistent, standards-aligned metadata), and
+    <b>attribution</b> (custodians and funders are credited, with DOIs where they exist).</p>
+  </section>
+
+  <section id="scope">
+    <h2>Scope</h2>
+    <div class="two">
+      <div class="card in"><h3>Included</h3><ul>
+        <li>Transfer functions</li><li>EDI products</li><li>MTH5 products</li>
+        <li>Survey metadata</li><li>Station metadata</li><li>Publications &amp; DOIs</li>
+      </ul></div>
+      <div class="card out"><h3>Not included</h3><ul>
+        <li>Raw time-series</li><li>Geological interpretation</li>
+        <li>Commercially restricted datasets</li>
+      </ul></div>
+    </div>
+    <p>Where raw time-series exist, AusMT <b>links</b> to the archive that holds them (for example the
+    NCI-AuScope MT collection) rather than hosting them itself.</p>
+  </section>
+
+  <section id="provenance">
+    <h2>Provenance</h2>
+    <p>Every station record carries a processing-provenance panel so a result can be traced and trusted. For
+    each transfer function AusMT records the <b>source file</b>, its <b>SHA-256</b> checksum, the
+    <b>extractor</b> used (mt_metadata — the community-canonical engine), the <b>pipeline software version</b>, the <b>build
+    version</b>, and the <b>git commit</b> of the build. When a value genuinely isn't known it is shown as
+    "not recorded" rather than guessed.</p>
+  </section>
+
+  <section id="policy">
+    <h2>Data policy</h2>
+    <ul>
+      <li><b>Custodians retain ownership.</b> Contributing to AusMT does not transfer any rights.</li>
+      <li><b>AusMT does not claim ownership</b> of any dataset it indexes or redistributes.</li>
+      <li><b>Redistribution depends on the licence.</b> Openly licensed transfer functions may be served
+      directly; otherwise AusMT lists the record and links out to the custodian's archive.</li>
+      <li><b>Some products are linked, not hosted</b>, discovery is universal even where hosting isn't.</li>
+    </ul>
+  </section>
+
+  <section id="contributing">
+    <h2>Contributing data</h2>
+    <p>You can prepare a submission entirely in your browser, your files never leave your machine, and the
+    workflow mirrors the curator's command-line tools:</p>
+    <p><span class="pill">Validate</span><span class="pill">Preview</span><span class="pill">Package</span>
+    <span class="pill">Review</span><span class="pill">Publish</span></p>
+    <p>You validate locally, preview what the portal will show, and package a submission archive. A curator
+    then reviews it and decides on publication — local checks are advisory, repository review is authoritative.</p>
+    <p><a class="cta" href="add-survey.html">Contribute a survey →</a></p>
+  </section>
+
+  <section id="standards">
+    <h2>Standards</h2>
+    <p>AusMT is built to align with established research-data and MT-domain standards:</p>
+    <p>
+      <span class="pill">DOI — dataset &amp; publication identifiers</span>
+      <span class="pill">ORCID — researcher identifiers</span>
+      <span class="pill">ROR — organisation identifiers</span>
+      <span class="pill">RAiD — project identifiers</span>
+      <span class="pill">FAIR — Findable, Accessible, Interoperable, Reusable</span>
+      <span class="pill">CARE — Indigenous data governance principles</span>
+      <span class="pill">mt_metadata — community MT metadata</span>
+      <span class="pill">MTH5 — community MT data container</span>
+    </p>
+    <p>For interoperability between portals, AusMT emits an <b>MTCAT</b> discovery document (see the
+    <code>MTCAT v1.0</code> specification and <code>FEDERATION.md</code> in the project repositories).</p>
+  </section>
+
+  <section id="governance">
+    <h2>Governance</h2>
+    <p>AusMT is maintained as research infrastructure, not a commercial service. Surveys are published through
+    a <b>curator review</b> process: a contributor prepares a submission, automated repository checks run, and a
+    maintainer reviews metadata and licensing before anything is published. Publication decisions rest with the
+    curators. AusMT is designed to sit alongside national infrastructure such as <b>AuScope</b> and the MT
+    community (e.g. AuScope/ANSIR instrument programs), and to migrate to a long-term institutional home as it
+    matures.</p>
+
+    <h3 id="operator">Who runs AusMT</h3>
+    <p>AusMT is operated by <b>Ben Kay, National Geophysics Program Manager, AuScope</b>, as a
+    pre-institutional deployment of the AusMT framework, on a path to hosting within AuScope/NCI
+    infrastructure.</p>
+    <p><b>Contact, corrections and takedown</b> — questions, correction requests, or takedown requests:
+    <a class="link" href="mailto:ben@auscope.org.au">ben@auscope.org.au</a>. Requests are acknowledged
+    within five business days. Takedown requests for contested data are actioned as a priority: the data
+    is withheld from distribution while the matter is resolved with the originating custodian.</p>
+    <p><b>Data responsibility</b> — survey data remains the property and responsibility of its originating
+    custodians under their stated licence. AusMT redistributes transfer-function files only where the
+    licence and access level permit; otherwise it lists metadata with a pointer to the source archive.
+    Responsibility for the scientific accuracy of contributed data rests with the originating custodian;
+    AusMT records and preserves provenance but does not alter scientific content.</p>
+    <p><b>Succession</b> — the AusMT framework is open source (Apache-2.0) and fully documented; the
+    catalogue and all served packages are rebuildable from the survey source repository by any operator,
+    so no data or capability is locked to the current operator.</p>
+  </section>
+
+  <section id="future">
+    <h2>Future directions</h2>
+    <ul>
+      <li>Validation of AusMT against a broader range of real-world surveys, metadata records, and externally authored MTH5 datasets.</li>
+      <li>Expansion of the Australian MT catalogue through the addition of historical, legacy, and newly acquired surveys.</li>
+      <li>Evolution of the MTCAT JSON schema and discovery API as an open standard for interoperable MT catalogue discovery and federation.</li>
+      <li>Support for federation between independent MT portals while preserving local stewardship, provenance, and ownership of data holdings.</li>
+    </ul>
+  </section>
+
+  <!-- Footer matches index.html's structure: the copyright line + the data-ver-chip version chip
+       (populated by version.js from config.js, which this page loads). Index's footer also has a
+       #buildId span, but that is filled only by src/main.js's renderBuildId() from data/build.json —
+       neither the app bundle nor that data build is loaded on this static page, so a #buildId span would
+       stay permanently empty here; it is intentionally omitted. The mtcat.json link moved to the header
+       (hright zone) to match index, so it is no longer duplicated here. -->
+  <footer>
+    AusMT is a national MT research infrastructure. It indexes processed transfer functions and
+    their provenance; it does not host raw time-series or make geological interpretations.
+    The portal software is licensed under Apache-2.0; survey data remains licensed by its custodians
+    (see <a class="link" href="#policy">Data policy</a>). Copyright © 2026 AuScope and the AusMT contributors.
+    <div style="margin-top:10px">
+      <span class="ver" data-ver-chip></span>
+    </div>
+  </footer>
+</main>
+<script src="config.js"></script>
+<script src="version.js"></script>
+</body>
+</html>

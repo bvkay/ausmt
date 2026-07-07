@@ -1,0 +1,23 @@
+# AusMT core build/runtime requirements (loose floors).
+#
+# The single canonical pipeline:
+#
+#   extract/build_portal.py
+#
+# parses EDIs/MTH5 with mt_metadata/mth5 (the USGS community library) — the SOLE engine since the
+# regex retirement (maintainer/RegexRetirement-MigrationPlan.md). The build hard-exits without it.
+#
+# These are loose floors (the tested majors). For a PINNED, reproducible install — what CI uses —
+# install the full transitive closure on Python 3.12:
+#
+#   pip install -r environments/requirements-mtmetadata-lock.txt
+#
+# Optional layers:
+#   Development / tests:   pip install -r requirements-dev.txt
+#   Tier-3 decomposition:  the MTpy-v2 fork, pinned to a commit (see the build-products workflow)
+
+numpy>=1.24
+mt_metadata>=1.0
+mth5>=0.6
+PyYAML>=6   # survey.yaml / portal.config.yaml parsing; previously only transitive via mt_metadata. The stdlib _mini_yaml stays as a fallback.
+ruamel.yaml>=0.18   # C31 curator metadata-editor: round-trip survey.yaml edits (comments + unknown keys preserved byte-for-byte). Runs in the gw-runner (this engine image) ONLY — NEVER the gateway (C10/C31 house rule: the gateway never parses survey content).

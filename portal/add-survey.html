@@ -1,0 +1,1159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribute a survey - AusMT</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="src/security.js"></script>   <!-- canonical esc/escAttr/escUrl, shared with the portal (single source) -->
+
+<!-- Privacy-respecting analytics OFF by default (see ANALYTICS.md). To enable, uncomment + set your domain:
+<script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script> -->
+<script src="src/analytics-shim.js"></script><!-- external (not inline); the app script element below stays this page's single intentional inline block (CSP allows inline here only). NOTE: never write a literal script OPEN TAG inside a comment on this page — tests/add_survey_logic.test.js extracts inline blocks by regex and would treat it as real. -->
+<link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
+    --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
+    --ok:#5BAE6A; --part:#D9A23B; --no:#A85454; --unk:#5A6E7D;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{font-family:var(--sans);background:var(--ink);color:var(--text);margin:0}
+  header{display:flex;align-items:center;gap:16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .wordmark{font-weight:800;letter-spacing:.5px}
+  .logolink{display:flex;align-items:center;flex:none}
+  .auscope-logo{height:30px;width:auto;display:block}
+  .tagline{color:var(--muted);font-size:12.5px}
+  header a.back{margin-left:auto;color:var(--muted);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
+  header a.back:hover{color:var(--text)}
+  .ver{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
+  main{max-width:980px;margin:0 auto;padding:22px 18px 60px}
+  h1{font-size:20px;margin:8px 0 4px}
+  .lede{color:var(--muted);font-size:13.5px;margin:0 0 16px;line-height:1.5}
+  .advisory{border:1px solid var(--line);border-left:3px solid var(--copper);background:var(--panel);
+    border-radius:6px;padding:11px 14px;font-size:13px;color:var(--text);margin:0 0 20px;line-height:1.5}
+  .advisory b{color:var(--copper)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+  .grid .full{grid-column:1 / -1}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 4px}
+  input,select,textarea{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    border-radius:4px;padding:8px 9px;font-size:13.5px;font-family:var(--sans)}
+  textarea{resize:vertical;min-height:54px}
+  .req label::after{content:" *";color:var(--copper)}
+  .hint{font-size:11px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:0;line-height:1.45}
+  fieldset{border:1px solid var(--line);border-radius:8px;padding:16px;margin:0 0 18px;background:var(--panel)}
+  legend{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:0 8px}
+  .pidnote{font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;margin:-4px 0 12px}
+  .check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--text);margin:10px 0;text-transform:none;letter-spacing:0;line-height:1.45}
+  .check input{width:auto;margin-top:2px;flex:none}
+  .checkrow{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px}
+  .checkrow label{display:flex;gap:7px;align-items:center;font-size:13px;color:var(--text);text-transform:none;letter-spacing:0;margin:0}
+  .checkrow input{width:auto;flex:none}
+  .drop{border:1.5px dashed var(--line);border-radius:8px;padding:26px;text-align:center;color:var(--muted);
+    cursor:pointer;background:var(--panel-2);transition:border-color .12s,color .12s}
+  .drop.hover{border-color:var(--copper);color:var(--text)}
+  .filelist{margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--muted);max-height:160px;overflow:auto}
+  .filelist .f{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;border-bottom:1px solid var(--line)}
+  .filelist .f .meta{display:flex;justify-content:space-between;gap:8px;flex:1;min-width:0}
+  .filelist .f button.rm{flex:none;background:none;border:none;color:var(--muted);font-family:var(--mono);
+    font-size:13px;line-height:1;padding:0 2px;cursor:pointer;transition:color .12s}
+  .filelist .f button.rm:hover{color:var(--copper)}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
+  button.act{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:5px;
+    padding:9px 16px;font-size:13.5px;cursor:pointer}
+  button.act.primary{background:var(--copper);border-color:var(--copper);color:#12202b;font-weight:700}
+  .panel{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:14px 0;background:var(--panel);display:none}
+  .panel.show{display:block}
+  .panel h3{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 10px}
+  .v{display:flex;gap:9px;align-items:flex-start;font-size:13px;padding:3px 0}
+  .badge{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:3px;flex:none;margin-top:1px}
+  .PASS{background:rgba(91,174,106,.18);color:var(--ok)}
+  .WARNING{background:rgba(217,162,59,.18);color:var(--part)}
+  .FAIL{background:rgba(168,84,84,.22);color:var(--no)}
+  .summary{font-family:var(--mono);font-size:13px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+  .vdetails{max-height:420px;overflow-y:auto;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+  .vgroup{margin-bottom:6px}
+  details.vgroup summary{font-size:12px;color:var(--muted);cursor:pointer;padding:4px 0}
+  details.vgroup summary:hover{color:var(--text)}
+  .rormatches{margin-top:6px;display:flex;flex-direction:column;gap:5px}
+  .rorhint{font-size:11px;color:var(--muted)}
+  .rorcard{border:1px solid var(--line);border-radius:5px;padding:7px 10px;font-size:13px;cursor:pointer;background:var(--panel-2)}
+  .rorcard:hover{border-color:var(--copper)}
+  .rorcard .rn{font-weight:700;font-size:13.5px}
+  .rorcard .rm{color:var(--muted);font-family:var(--mono);font-size:11px;margin-top:2px}
+  .orcidok{font-size:11px;margin-top:3px;display:block;font-family:var(--mono)}
+  .orcidok.good{color:var(--ok)}
+  .orcidok.bad{color:var(--part)}
+  .kv{font-family:var(--mono);font-size:13px;line-height:1.7}
+  .kv b{color:var(--text);font-weight:700}
+  .note{color:var(--muted);font-size:12px;margin-top:8px;line-height:1.5}
+  code{font-family:var(--mono);color:var(--text)}
+  .loc{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .loc .readout{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  details.manual{margin-top:10px}
+  details.manual summary{font-size:12px;color:var(--muted);cursor:pointer}
+  .fundrow{border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--panel-2)}
+  .modal{position:fixed;inset:0;background:rgba(8,14,19,.72);display:none;align-items:center;justify-content:center;z-index:1000}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:min(820px,94vw);padding:14px}
+  .modal .box h3{font-size:13px;margin:2px 4px 10px}
+  #pickmap,#confirmmap{height:440px;border-radius:6px;border:1px solid var(--line)}
+  .modal .bar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .modal .bar .spacer{margin-left:auto}
+  .leaflet-container{background:#0e1822}
+  footer{padding:7px 18px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.5;text-align:center}
+  /* C13 direct-upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes. */
+  #gatewayBlock{display:none}
+  #gatewayBlock.show{display:block}
+  .keyrow{max-width:420px}
+  #m_submit_key{font-family:var(--mono)}
+  .progwrap{margin-top:12px;display:none}
+  .progwrap.show{display:block}
+  .progbar{height:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+  .progbar>span{display:block;height:100%;width:0;background:var(--copper);transition:width .15s}
+  .submitok{color:var(--ok)} .submitbad{color:var(--no)}
+</style>
+</head>
+<body>
+<header>
+  <a class="logolink" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope — Australia's Earth science research infrastructure"><img class="auscope-logo" src="vendor/auscope-icon-white.png" alt="AuScope"></a>
+  <div class="wordmark">AusMT</div>
+  <div class="tagline">Contribute a survey</div>
+  <a class="back" href="index.html">← Back to portal</a>
+</header>
+<main>
+  <h1>Contribute a survey</h1>
+  <p class="lede">Describe the survey, add your EDI files, then <b>validate</b>, <b>preview</b>, and
+  <b>package</b> a submission archive. Submit it either <b>directly to AusMT</b> (where a gateway is
+  available — no GitHub account needed) or by <b>opening a pull request</b> with the archive. Everything
+  runs in your browser; your files and details never leave this page until you submit. New here? Copy
+  <code>_example/example-survey/</code> from the surveys repo as a starting point.</p>
+
+  <div class="advisory">This page performs <b>local pre-submission checks</b> to help you prepare a clean
+  submission. <b>Final validation is authoritative in the AusMT repository workflow</b> (CI) during curator
+  review, if the two ever differ, the repository result wins.</div>
+
+  <!-- 1. SURVEY METADATA AND IDENTIFIERS -->
+  <fieldset>
+    <legend>Survey metadata &amp; identifiers</legend>
+    <div class="pidnote">Each row pairs an entity with its persistent identifier: project/DOI, organisation/ROR,
+    person/ORCID, project/RAiD. Identifiers are optional but strongly encouraged.</div>
+    <div class="grid">
+      <div class="req"><label>Project name</label><input id="m_name" placeholder="Example MT Survey 2026"></div>
+      <div><label>Dataset / project DOI</label><input id="m_doi" placeholder="10.5281/zenodo.…"></div>
+
+      <div class="req"><label>Slug (folder name)</label><input id="m_slug" placeholder="example-survey-2026"></div>
+      <div class="req"><label>Country</label><input id="m_country" value="Australia"></div>
+      <div><label>Region <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional, finer facet)</span></label><input id="m_region" placeholder="e.g. South Australia"></div>
+
+      <div><label>Version</label><input id="m_version" value="1.0.0" placeholder="1.0.0"></div>
+      <div style="display:flex;align-items:flex-end"><div class="hint" style="margin:0">Semantic version: <b>1.0.1</b> metadata fix · <b>1.1.0</b> added metadata/stations · <b>2.0.0</b> reprocessed transfer functions.</div></div>
+
+      <div class="req"><label>Organisation</label><input id="m_org" placeholder="University / Organisation" autocomplete="off">
+        <div id="rorMatches" class="rormatches"></div></div>
+      <div><label>Organisation ROR</label><input id="m_ror" placeholder="https://ror.org/…"></div>
+
+      <div><label>Lead investigator (name)</label><input id="m_pi" placeholder="Full name"></div>
+      <div><label>Lead investigator ORCID</label><input id="m_pi_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="piOrcidOk"></span></div>
+
+      <div><label>Related publication</label><input id="m_pub" placeholder="short citation or title"></div>
+      <div><label>Publication DOI</label><input id="m_pubdoi" placeholder="10.1093/gji/…"></div>
+
+      <div><label>Project / campaign</label><input id="m_project" placeholder="campaign name"></div>
+      <div><label>Project RAiD</label><input id="m_raid" placeholder="https://raid.org/…"></div>
+
+      <div class="req"><label>Licence</label>
+        <select id="m_license"><option>CC-BY-4.0</option><option>CC0-1.0</option><option>CC-BY-SA-4.0</option><option value="TBD">TBD (set before publishing)</option></select></div>
+      <div class="req"><label>Access level</label>
+        <select id="m_access"><option>open</option><option>metadata_only</option><option>embargoed</option></select></div>
+
+      <div class="full"><label>Abstract</label><textarea id="m_abstract" placeholder="One paragraph: location, target, band."></textarea></div>
+
+      <div class="full"><label>Data types <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(select all that apply)</span></label>
+        <div class="checkrow" id="dtypeRow">
+          <label><input type="checkbox" class="dtype" value="BBMT">BBMT</label>
+          <label><input type="checkbox" class="dtype" value="LPMT">LPMT</label>
+          <label><input type="checkbox" class="dtype" value="AMT">AMT</label>
+          <label><input type="checkbox" class="dtype" value="UWB MT">UWB MT</label>
+          <label><input type="checkbox" class="dtype" value="Marine MT">Marine MT</label>
+          <label><input type="checkbox" class="dtype" value="Other">Other</label>
+        </div></div>
+
+      <div class="full"><label>Funding sources <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional: organisation / ROR / grant / DOI)</span></label>
+        <div id="fundRows"></div>
+        <button type="button" class="act" id="addFund" style="margin-top:2px">+ Add funding source</button></div>
+
+      <div class="full"><label>Collection / program <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional: links this survey to a national program such as AusLAMP)</span></label>
+        <div class="grid">
+          <div><label>Collection id</label><input id="m_coll_id" placeholder="auslamp" list="collDatalist" autocomplete="off"><datalist id="collDatalist"></datalist></div>
+          <div><label>Collection type</label><input id="m_coll_type" placeholder="programme"></div>
+          <div class="full"><label>Collection title</label><input id="m_coll_title" placeholder="Australian Lithospheric Architecture Magnetotelluric Project"></div>
+          <div><label>Collection status</label><select id="m_coll_status"><option value="">—</option><option>active</option><option>completed</option><option>archived</option></select></div>
+          <div><label>Collection start year</label><input id="m_coll_year" placeholder="2003"></div>
+          <div class="full"><label>Collection description</label><textarea id="m_coll_desc" placeholder="One-line description of the programme."></textarea></div>
+        </div>
+        <div id="collHint" class="hint" style="margin-top:6px"></div>
+        <div class="hint">Surveys sharing a collection are grouped in the portal and MTCAT. Collections describe programmes or
+          campaigns (for example, AusLAMP) and hold no transfer functions themselves, all data, metadata, and provenance remain
+           with the individual surveys. Use the same collection identifier and title across all member surveys.</div></div>
+    </div>
+  </fieldset>
+
+  <!-- 2. TRANSFER FUNCTION UPLOAD -->
+  <fieldset>
+    <legend>Transfer functions</legend>
+    <div class="drop" id="drop">Drop <b>.edi</b> or <b>.mth5 / .h5</b> files here, or click to choose. Files stay in your browser.</div>
+    <input id="filein" type="file" accept=".edi,.h5,.mth5" multiple style="display:none">
+    <div class="hint"><b>MTH5 files containing transfer-function products are supported.</b> AusMT catalogues transfer functions
+       and their metadata, not raw MT time-series data. Files are checked locally before submission, with final validation
+        performed during curator review and automated repository checks.</div>
+    <div class="filelist" id="filelist"></div>
+  </fieldset>
+
+  <!-- 3. SURVEY LOCATION -->
+  <fieldset>
+    <legend>Survey location</legend>
+    <div class="loc">
+      <button type="button" class="act primary" id="btnAutofit">Auto-fit from stations</button>
+      <button type="button" class="act" id="btnPick">Adjust on map</button>
+      <span class="readout" id="locReadout">No footprint set, add EDI files then auto-fit, or draw on the map.</span>
+    </div>
+    <div class="note">This is the <b>approximate survey footprint</b> (metadata only). Station coordinates come
+    from your EDI files and are never overwritten by what you draw here.</div>
+    <details class="manual">
+      <summary>Edit extent values manually</summary>
+      <div class="grid" style="margin-top:10px">
+        <div><label>West</label><input id="m_w" type="number" step="any" placeholder="136.97"></div>
+        <div><label>East</label><input id="m_e" type="number" step="any" placeholder="137.07"></div>
+        <div><label>South</label><input id="m_s" type="number" step="any" placeholder="-30.22"></div>
+        <div><label>North</label><input id="m_n" type="number" step="any" placeholder="-30.10"></div>
+      </div>
+    </details>
+  </fieldset>
+
+  <!-- 3b. CONFIRM STATION LOCATIONS -->
+  <fieldset>
+    <legend>Confirm station locations</legend>
+    <div class="loc">
+      <button type="button" class="act primary" id="btnConfirmMap">Review station locations on map</button>
+      <span class="readout" id="confReadout">Add EDI files, then review their plotted locations.</span>
+    </div>
+    <div class="note">Plots every station from your EDI <b>HEAD</b> coordinates. Some instruments write a
+      corrupted HEAD coordinate (a DMS sign/floor bug) while the correct decimal survives in the EDI
+      <b>INFO</b> block — those stations are shown with <b>both</b> candidates so you can choose the
+      right one. Your choice is recorded in <code>survey.yaml</code> and applied at build time.</div>
+    <div id="dmsChoice" style="display:none;margin-top:10px">
+      <label style="text-transform:none;letter-spacing:0">For <b id="dmsCount">0</b> station(s) with a HEAD/INFO coordinate conflict, trust:</label>
+      <label class="check"><input type="radio" name="dmschoice" value="head" checked><span>the <b>HEAD</b> coordinate (EDI-standard field — default)</span></label>
+      <label class="check"><input type="radio" name="dmschoice" value="info"><span>the <b>INFO</b> decimal coordinate (correct when HEAD is a floored-DMS artefact)</span></label>
+    </div>
+    <label class="check"><input type="checkbox" id="m_locconf"><span>I have reviewed the station locations on the map and confirm they are correct.</span></label>
+  </fieldset>
+
+  <!-- 4. INSTRUMENTATION -->
+  <fieldset>
+    <legend>Instrumentation <span style="text-transform:none;letter-spacing:0">(optional)</span></legend>
+    <label>Instrument systems used <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(add a row per system; surveys often mix instruments)</span></label>
+    <div id="instrRows" style="margin-top:6px"></div>
+    <button type="button" class="act" id="addInstr" style="margin-top:8px">+ Add instrument</button>
+  </fieldset>
+
+  <!-- 5. PROCESSING -->
+  <fieldset>
+    <legend>Processing <span style="text-transform:none;letter-spacing:0">(technical provenance, optional)</span></legend>
+    <div class="grid">
+      <div><label>Processing software</label>
+        <select id="m_soft"><option value="">—</option><option>BIRRP</option><option>Aurora</option><option>EMTF</option><option>LEMI MT</option><option>Phoenix EMPower</option><option>Zonge software</option><option>Other</option><option>Unknown</option></select></div>
+      <div><label>Custom software (if Other)</label><input id="m_softother" placeholder="name"></div>
+      <div><label>Processing software version</label><input id="m_softver" placeholder="e.g. 0.4.0"></div>
+      <div><label>Remote reference used</label>
+        <select id="m_remote"><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+      <div class="full"><label>Processing notes</label><textarea id="m_procnotes" placeholder="Anything a re-user should know about how these transfer functions were produced."></textarea></div>
+    </div>
+  </fieldset>
+
+  <!-- 6. SUBMITTER & DECLARATIONS -->
+  <fieldset>
+    <legend>Submitter &amp; declarations</legend>
+    <div class="grid">
+      <div class="req"><label>Your name</label><input id="m_up_name" placeholder="Full name"></div>
+      <div class="req"><label>Your email</label><input id="m_up_email" type="email" placeholder="you@institution.edu">
+        <div class="hint">Private, for curator contact only. <b>Not written into the submission package</b>
+        (that zip is attached to a public GitHub PR) — provide it in the PR description or message instead.</div></div>
+      <div><label>Your ORCID (optional)</label><input id="m_up_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="upOrcidOk"></span></div>
+    </div>
+    <label class="check"><input type="checkbox" id="m_auth"><span>I have the authority to submit this survey for
+      publication, and to release the included transfer functions.</span></label>
+    <label class="check"><input type="checkbox" id="m_licdecl"><span>I confirm the selected licence and access
+      level are correct for this data.</span></label>
+  </fieldset>
+
+  <!-- 7. VALIDATE / PREVIEW / PACKAGE -->
+  <div class="actions">
+    <button class="act" id="btnValidate">Validate</button>
+    <button class="act" id="btnPreview">Preview</button>
+    <button class="act primary" id="btnPackage">Package submission .zip</button>
+  </div>
+
+  <div class="panel" id="pValidate"><h3>Validation</h3>
+    <div class="summary" id="vSummary" style="margin-top:0;border-top:none;padding-top:0"></div>
+    <div class="vdetails" id="vList"></div></div>
+  <div class="panel" id="pPreview"><h3>What the portal will show</h3><div class="kv" id="pvBody"></div>
+    <div class="note">Dimensionality and the screening diagnostic are computed by the offline science engine at
+    build time; this in-browser preview shows the metadata and station extent it can read directly.</div></div>
+  <div class="panel" id="pPackage"><h3>Submission package</h3><div class="kv" id="pkBody"></div></div>
+
+  <!-- 8. SUBMIT TO AUSMT (direct upload; shown only when a same-origin gateway is detected, design §2) -->
+  <fieldset id="gatewayBlock">
+    <legend>Submit to AusMT</legend>
+    <div class="pidnote">A submission gateway is available on this site. You can upload the validated
+      package directly — no GitHub account needed. Your email is sent privately to the curators and is
+      never written into the package.</div>
+    <div class="keyrow">
+      <label for="m_submit_key">Submit key</label>
+      <input type="password" id="m_submit_key" autocomplete="off" placeholder="operator-issued key">
+      <div class="hint">Issued by the AusMT operator out-of-band; contact details are on the
+        <a href="about.html">About page</a>. It is sent only as a request header — never stored, never
+        written into the package.</div>
+    </div>
+    <div class="actions">
+      <button class="act primary" id="btnSubmitGateway">Submit to AusMT</button>
+      <button class="act" id="btnCancelSubmit" style="display:none">Cancel</button>
+    </div>
+    <div class="progwrap" id="submitProg"><div class="progbar"><span id="submitBar"></span></div>
+      <div class="hint" id="submitProgText">Uploading…</div></div>
+    <div class="panel" id="pSubmit"><h3>Submission result</h3><div class="kv" id="submitBody"></div></div>
+  </fieldset>
+</main>
+<footer>
+  Copyright © 2026 AuScope and the AusMT contributors. Portal software is licensed under Apache-2.0; survey data remains licensed by its custodians.
+  <span class="ver" data-ver-chip title="build &middot; MTCAT schema"></span>
+</footer>
+
+<div class="modal" id="modal"><div class="box">
+  <h3>Draw the approximate survey footprint</h3>
+  <div id="pickmap"></div>
+  <div class="bar">
+    <span class="readout" id="pickHint">Click two corners to set a bounding box. Your loaded stations are shown as dots.</span>
+    <span class="spacer"></span>
+    <button type="button" class="act" id="pickClear">Clear</button>
+    <button type="button" class="act" id="pickCancel">Cancel</button>
+    <button type="button" class="act primary" id="pickUse">Use this footprint</button>
+  </div>
+</div></div>
+
+<div class="modal" id="cmodal"><div class="box">
+  <h3>Confirm station locations</h3>
+  <div id="confirmmap"></div>
+  <div class="bar">
+    <span class="readout" id="confHint"><b style="color:#5BAE6A">●</b> station (HEAD coordinate) &nbsp;
+      <b style="color:#E0782F">●</b> HEAD &nbsp; <b style="color:#4F9BE0">●</b> INFO — a HEAD/INFO conflict;
+      choose which to trust under the map.</span>
+    <span class="spacer"></span>
+    <button type="button" class="act primary" id="confClose">Done</button>
+  </div>
+</div></div>
+
+<script>
+"use strict";
+// MAINTAINER NOTE: this page is the largest single file in the portal. It
+// is intentionally one file while it stays manageable. 
+
+// ---------- pure logic (mirrors validate_survey.py + contribute.py) ----------
+// esc/escAttr/escUrl come from src/security.js (loaded in <head>) — single source, shared with the portal.
+function normEdi(t){ return t.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").map(l=>l.replace(/^\s+/,"")).join("\n"); }
+function parseAngle(tok){
+  if(tok==null) return null; tok=String(tok).trim().replace(/^"|"$/g,""); if(!tok) return null;
+  if(tok.indexOf(":")>=0){ const p=tok.split(":"); const sign=tok.trim()[0]==="-"?-1:1;
+    const d=Math.abs(parseFloat(p[0]))||0, m=p[1]?Math.abs(parseFloat(p[1]))/60:0, s=p[2]?Math.abs(parseFloat(p[2]))/3600:0;
+    const v=d+m+s; return isNaN(v)?null:sign*v; }
+  const v=parseFloat(tok); return isNaN(v)?null:v;
+}
+function band(pmin,hasZ,hasT){ if(hasT&&!hasZ) return "GDS"; if(pmin==null) return "unknown";
+  if(pmin<1e-3) return "AMT"; if(pmin<1.0) return "BBMT"; return "LPMT"; }
+function parseEdi(text){
+  const raw=normEdi(text);
+  const grab=k=>{const m=raw.match(new RegExp("^"+k+"\\s*=\\s*(.+)$","m")); return m?m[1].trim():null;};
+  const lat=parseAngle(grab("LAT")), lon=parseAngle(grab("LONG"));
+  const hasFreq=/^>FREQ/m.test(raw), hasSpectra=/SPECTRA/.test(raw);
+  const hasZ=/^>ZXYR/m.test(raw), hasT=/^>TXR/m.test(raw);
+  let pmin=null,pmax=null,nper=0;
+  const fb=raw.match(/^>FREQ[^\n]*\n([\s\S]*?)(?=^>)/m);
+  if(fb){ const nums=(fb[1].match(/[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g)||[]).map(parseFloat).filter(f=>f&&f<1e30);
+    const per=nums.map(f=>f?1/f:null).filter(p=>p&&p>0); nper=per.length;
+    if(per.length){pmin=Math.min.apply(null,per);pmax=Math.max.apply(null,per);} }
+  const dataid=grab("DATAID");
+  // INFO-block decimal coords (Geotools style) + DMS sign-bug detection. Mirrors the backend
+  // _edi_catalog.detect_coord_issue: head == 2*floor(info) - info is the floored-DMS signature, so
+  // the HEAD coordinate may be ~tens-to-hundreds of km wrong while the INFO decimal is correct.
+  const im=raw.match(/LATITUDE\s*:\s*([-+]?\d+(?:\.\d+)?)/), io=raw.match(/LONGITUDE\s*:\s*([-+]?\d+(?:\.\d+)?)/);
+  const info_lat=im?parseFloat(im[1]):null, info_lon=io?parseFloat(io[1]):null;
+  let coord_flag=null;
+  if(lat!=null&&info_lat!=null&&info_lat<0&&Math.abs(lat-info_lat)>0.01){
+    const sd=Math.abs(lat-(2*Math.floor(info_lat)-info_lat));
+    if(sd<2e-3) coord_flag="dms_sign_ambiguous";
+    else if(sd<0.05) coord_flag="info_anomalous";
+  }
+  return {dataid:dataid?dataid.replace(/^"|"$/g,""):null, lat, lon, info_lat, info_lon, coord_flag,
+          hasFreq, hasSpectra, hasZ, hasT,
+          nper, pmin, pmax, type:hasFreq?band(pmin,hasZ,hasT):(hasSpectra?band(pmin,true,hasT):"unknown")};
+}
+// Required (browser/full submission): small set; everything else is a warning at most.
+const REQUIRED=["name","slug","organisation","country","license","access"];
+function isEmail(s){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s||"")); }
+function isOrcid(s){ return !s || /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/.test(String(s).trim()); }
+// ISO 7064 MOD 11-2 checksum over the 16 chars — mirrors gateway/orcid.py::is_valid_orcid EXACTLY
+// (design §4). This is the STRICT check: a well-formed pattern with a WRONG check digit is rejected,
+// so we fail fast client-side before an upload the gateway would 400. isOrcid() above (format only)
+// is left untouched for the non-blocking format WARNING. `X` is allowed only in the final position.
+function isOrcidChecksum(s){
+  const m=/^(\d{4})-?(\d{4})-?(\d{4})-?(\d{3})([\dX])$/.exec(String(s==null?"":s).trim());
+  if(!m) return false;
+  const digits=m[1]+m[2]+m[3]+m[4]+m[5];   // 16 chars: 15 digits + final check char
+  let total=0;
+  for(let i=0;i<digits.length-1;i++){ total=(total+parseInt(digits[i],10))*2; }
+  const remainder=total%11, result=(12-remainder)%11;
+  const check=result===10?"X":String(result);
+  return check===digits[digits.length-1];
+}
+// §1 gateway detection: PRESENT only if HTTP 200 AND the body parses as JSON AND json.ok === true.
+// Anything else (network error/timeout -> status 0 by convention here, non-200, HTML body that a
+// 200-ing SPA-fallback/404 page could return) is ABSENT. Strict by design — the anti-false-positive
+// guard. Pure so §1's strictness is unit-tested without a DOM.
+function gatewayPresent(status, bodyText){
+  if(status!==200) return false;
+  let j; try{ j=JSON.parse(bodyText); }catch(e){ return false; }
+  return !!(j && j.ok===true);
+}
+// §2 anchor guard: a 201 status_url is used verbatim as an href ONLY if it is a same-origin relative
+// /gateway/status/<urlsafe-token> path. Rejects absolute URLs (http://…), protocol-relative (//…),
+// javascript:, path traversal, and any tampered prefix. Token chars are the urlsafe base64 alphabet
+// (A-Za-z0-9_-), matching secrets.token_urlsafe on the server.
+function statusUrlSafe(url){ return /^\/gateway\/status\/[A-Za-z0-9_-]+$/.test(String(url==null?"":url)); }
+// §2 message mapping: HTTP status (+ parsed JSON body or null) -> plain human text (NO HTML; the page
+// escapes it through esc() at render time). Server `detail` for a 400 is passed through verbatim as
+// text. Pure + exported so every code path is unit-tested.
+function submitResultMessage(status, body){
+  const detail=(body && typeof body.detail==="string") ? body.detail : "";
+  const sid=(body && (body.submission_id!=null)) ? String(body.submission_id) : "";
+  switch(status){
+    case 201: return "Submission received.";
+    case 401: return "Submit key not accepted.";
+    case 409: return "An identical package is already in the pipeline"+(sid?" (submission "+sid+")":"")+". No status link exists for it by design.";
+    case 413: return "The package is over the gateway's size limit.";
+    case 429: return "The gateway is at capacity right now — please try again later.";
+    case 503: return "The gateway is starting up or paused — please try again shortly.";
+    case 400: return detail || "The gateway rejected the submission.";
+    case 0:   return "Could not reach the gateway (network error). Your submission was not sent.";
+    default:  return "Unexpected gateway response"+(status?" (HTTP "+status+")":"")+(detail?": "+detail:".");
+  }
+}
+// §3 wire contract form fields: submitter_name + submitter_email always; submitter_orcid ONLY when
+// non-empty (the field is OMITTED entirely when blank, per the gateway's ≤8-field parser + §4 PII
+// note). Email/ORCID ride as multipart fields into sqlite only — never into the package (C3).
+function submitFormFields(meta){
+  const f={submitter_name:(meta&&meta.uploader_name)||"", submitter_email:(meta&&meta.uploader_email)||""};
+  const orcid=(meta&&meta.uploader_orcid||"").trim();
+  if(orcid) f.submitter_orcid=orcid;
+  return f;
+}
+function isSemver(s){ return /^\d+\.\d+\.\d+$/.test(String(s||"").trim()); }
+function validateSurvey(meta, edis, mth5s){
+  mth5s = mth5s || [];
+  const items=[]; const add=(level,check,message)=>items.push({level,check,message});
+  const labels={name:"project name",slug:"slug",organisation:"organisation",country:"country",license:"licence",access:"access"};
+  REQUIRED.forEach(f=>{
+    const val=meta[f]; const present=val!=null&&val!==""&&val!=="TBD"&&val!=="TODO";
+    if(f==="license"&&String(meta.license||"").startsWith("TBD")) add("WARNING","metadata","licence is 'TBD' — set a real licence before publication");
+    else add(present?"PASS":"FAIL","metadata","required field '"+labels[f]+"' "+(present?"set":"missing"));
+  });
+  // submitter + declarations (submission envelope; email stays private, never published)
+  add(meta.uploader_name?"PASS":"FAIL","submitter","uploader name "+(meta.uploader_name?"provided":"missing"));
+  add(isEmail(meta.uploader_email)?"PASS":"FAIL","submitter","uploader email "+(isEmail(meta.uploader_email)?"provided (kept private)":"missing or invalid"));
+  add(meta.authority_to_submit?"PASS":"FAIL","declaration","authority-to-submit "+(meta.authority_to_submit?"declared":"NOT declared"));
+  add(meta.license_declaration?"PASS":"FAIL","declaration","licence/access "+(meta.license_declaration?"confirmed":"NOT confirmed"));
+  // recommended (warnings only)
+  if(!meta.data_types||!meta.data_types.length) add("WARNING","metadata","no data type selected (recommended)");
+  if(!isSemver(meta.version)) add("WARNING","metadata","version should be semantic (e.g. 1.0.0), see release policy");
+  if(!isOrcid(meta.uploader_orcid)) add("WARNING","submitter","uploader ORCID not in 0000-0000-0000-0000 format");
+  if(!isOrcid(meta.pi_orcid)) add("WARNING","attribution","lead-investigator ORCID not in 0000-0000-0000-0000 format");
+  if(!meta.ror) add("WARNING","attribution","no organisation ROR (recommended)");
+  if(!meta.dataset_doi) add("WARNING","provenance","no dataset DOI — record will be badged 'provenance incomplete'");
+  if(meta.processing_software==="Unknown") add("WARNING","provenance","processing software is 'Unknown', recommended to identify it");
+  if(!edis.length && !mth5s.length) add("FAIL","structure","no transfer-function files added (EDI or MTH5)");
+  mth5s.forEach(f=>{
+    if(f.hdf5===false) add("FAIL","mth5",f.name+": not a valid HDF5/MTH5 file (signature check failed)");
+    else add("WARNING","mth5",f.name+": MTH5 structure, supported version & transfer-function groups are validated in CI (not in this browser)");
+  });
+  add("WARNING","security","antivirus (ClamAV) scan runs in CI, not in this browser preview");
+  const seen={};
+  edis.forEach(({name,parsed})=>{
+    if(parsed.lat==null||parsed.lon==null){ add("FAIL","edi_parse",name+": missing coordinates (LAT/LONG in HEAD)"); return; }
+    if(!parsed.hasFreq){
+      if(parsed.hasSpectra) add("PASS","edi_parse",name+": spectra-section EDI — impedance recovered from the cross-power SPECTRA at build time");
+      else { add("FAIL","edi_parse",name+": missing FREQ block (no impedance found)"); return; }
+    }
+    if(parsed.coord_flag==="dms_sign_ambiguous")
+      add("WARNING","coordinates",name+": HEAD/INFO coordinate conflict (possible DMS sign bug) — confirm on the map which is correct");
+    const w=meta.west,e=meta.east,s=meta.south,n=meta.north;
+    if([w,e,s,n].every(v=>v!=null&&v!=="")){
+      if(!(parsed.lat>=+s&&parsed.lat<=+n&&parsed.lon>=+w&&parsed.lon<=+e))
+        add("WARNING","coordinates",name+": station "+parsed.lat.toFixed(3)+","+parsed.lon.toFixed(3)+" outside drawn footprint");
+    }
+    const key=parsed.lat.toFixed(4)+","+parsed.lon.toFixed(4);
+    if(seen[key]) add("WARNING","duplicate",name+": same coordinates as "+seen[key]); else seen[key]=name;
+  });
+  const anyCoords=edis.some(e=>e.parsed.lat!=null);
+  if(anyCoords) add(meta.locations_confirmed?"PASS":"FAIL","locations",
+    "station locations "+(meta.locations_confirmed?"confirmed on the map":"NOT confirmed — review them on the map and tick the confirmation"));
+  const counts={PASS:0,WARNING:0,FAIL:0}; items.forEach(i=>counts[i.level]++);
+  return {items,counts};
+}
+function recommendedExtractor(edis){ return "mt_metadata"; }  // mt_metadata is the SOLE engine (reads standard + Phoenix spectra EDIs); the regex extractor was retired
+function footprintFromStations(edis, padFrac){
+  const lats=edis.map(e=>e.parsed.lat).filter(v=>v!=null), lons=edis.map(e=>e.parsed.lon).filter(v=>v!=null);
+  if(!lats.length) return null;
+  let s=Math.min.apply(null,lats), n=Math.max.apply(null,lats), w=Math.min.apply(null,lons), e=Math.max.apply(null,lons);
+  const p=padFrac==null?0.05:padFrac;
+  const dy=(n-s)*p||0.01, dx=(e-w)*p||0.01;
+  return {west:+(w-dx).toFixed(5), east:+(e+dx).toFixed(5), south:+(s-dy).toFixed(5), north:+(n+dy).toFixed(5)};
+}
+function previewSurvey(meta, edis){
+  const withCoords=edis.filter(e=>e.parsed.lat!=null).length;
+  const spectra=edis.filter(e=>e.parsed.hasSpectra&&!e.parsed.hasFreq).length;
+  const impedance=edis.filter(e=>e.parsed.hasZ).length;
+  const lats=edis.map(e=>e.parsed.lat).filter(v=>v!=null), lons=edis.map(e=>e.parsed.lon).filter(v=>v!=null);
+  const types={}; edis.forEach(e=>{types[e.parsed.type]=(types[e.parsed.type]||0)+1;});
+  return {n:edis.length, withCoords, spectra, impedance,
+    latRange:lats.length?[Math.min.apply(null,lats),Math.max.apply(null,lats)]:null,
+    lonRange:lons.length?[Math.min.apply(null,lons),Math.max.apply(null,lons)]:null,
+    types, extractor:recommendedExtractor(edis)};
+}
+// Structured survey.yaml (nested organisation / lead_investigator / data_types / funding / processing /
+// instruments). `name` and a primary `data_type` are also emitted for backward compatibility.
+function buildSurveyYaml(m){
+  const q=s=>'"'+String(s==null?"":s).replace(/"/g,'\\"')+'"';
+  const ext=[m.west,m.east,m.south,m.north].every(v=>v!=null&&v!=="")
+    ? `{ west: ${+m.west}, east: ${+m.east}, south: ${+m.south}, north: ${+m.north}, datum: WGS84 }` : "{}";
+  const dts=(m.data_types||[]);
+  const L=[];
+  L.push("# AusMT survey package — generated by the Add Survey page. Review every value before submitting.");
+  L.push('schema_version: "0.2"');
+  L.push("slug: "+(m.slug||"REPLACE-ME"));
+  L.push("project_name: "+q(m.name));
+  L.push("name: "+q(m.name));                       // backward-compatible alias
+  L.push("version: "+q(m.version||"1.0.0"));         // semver; see release policy
+  L.push("country: "+(m.country||"Australia"));
+  if(m.region) L.push("region: "+q(m.region));   // optional finer geographic facet
+  L.push("organisation:");
+  L.push("  name: "+q(m.organisation));
+  L.push("  ror: "+(m.ror?q(m.ror):"null"));
+  L.push("lead_investigator:");
+  L.push("  name: "+(m.pi?q(m.pi):"null"));
+  L.push("  orcid: "+(m.pi_orcid?q(m.pi_orcid):"null"));
+  L.push(m.abstract?("abstract: >\n  "+String(m.abstract).replace(/\n/g," ")):"abstract: >\n  REPLACE with a short survey description.");
+  L.push("geographic_extent: "+ext);
+  if(m.coord_resolution){   // submitter resolved a HEAD/INFO DMS conflict on the confirmation map
+    L.push("coordinate_resolution:");
+    L.push("  dms_sign: "+m.coord_resolution.dms_sign);
+    L.push("  basis: "+q(m.coord_resolution.basis));
+  }
+  L.push("data_types: ["+dts.map(q).join(", ")+"]");
+  L.push("data_type: "+(dts.length?q(dts[0]):"null"));  // primary, backward-compatible
+  L.push("identifiers:");
+  L.push("  dataset_doi: "+(m.dataset_doi?q(m.dataset_doi):"null"));
+  L.push("  related_publication: "+(m.pub?q(m.pub):"null"));
+  L.push("  related_publication_doi: "+(m.pub_doi?q(m.pub_doi):"null"));
+  L.push("  project: "+(m.project?q(m.project):"null"));
+  L.push("  project_raid: "+(m.raid?q(m.raid):"null"));
+  if(m.collection_id){
+    L.push("collection:");
+    L.push("  id: "+q(m.collection_id));
+    L.push("  title: "+(m.collection_title?q(m.collection_title):"null"));
+    L.push("  type: "+(m.collection_type?q(m.collection_type):"null"));
+    if(m.collection_status) L.push("  status: "+q(m.collection_status));
+    if(m.collection_year) L.push("  start_year: "+m.collection_year);
+    if(m.collection_desc) L.push("  description: "+q(m.collection_desc));
+  }
+  if(m.funding&&m.funding.length){
+    L.push("funding:");
+    m.funding.forEach(f=>{
+      L.push("  - organisation: "+q(f.organisation));
+      L.push("    organisation_ror: "+(f.organisation_ror?q(f.organisation_ror):"null"));
+      L.push("    grant_id: "+(f.grant_id?q(f.grant_id):"null"));
+      L.push("    grant_title: "+(f.grant_title?q(f.grant_title):"null"));
+      L.push("    funding_doi: "+(f.funding_doi?q(f.funding_doi):"null"));
+    });
+  } else { L.push("funding: []"); }
+  L.push("license: "+q(m.license||"TBD"));
+  L.push("access:");
+  L.push("  level: "+(m.access||"open"));
+  L.push("  embargo_until: null");
+  L.push("  contact: null");
+  L.push("time_series:");
+  L.push("  collection_pid: null");
+  L.push("  levels_available: []");
+  L.push("publications: []");
+  L.push("processing:");
+  L.push("  software: "+(m.processing_software?q(m.processing_software):"null"));
+  L.push("  version: "+(m.processing_software_version?q(m.processing_software_version):"null"));
+  L.push("  remote_reference: "+(m.remote_reference?q(m.remote_reference):"null"));
+  L.push("  notes: "+(m.processing_notes?q(m.processing_notes):"null"));
+  if(m.instruments&&m.instruments.length){
+    L.push("instruments:");
+    m.instruments.forEach(i=>L.push("  - { manufacturer: "+q(i.manufacturer)+", model: "+(i.model?q(i.model):"null")+" }"));
+  } else { L.push("instruments: []"); }
+  L.push("");
+  return L.join("\n");
+}
+async function sha256Hex(buf){ const h=await crypto.subtle.digest("SHA-256",buf);
+  return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,"0")).join(""); }
+function tsUTC(){ return new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z"); } // YYYYMMDDTHHMMSSZ
+
+// ROR response parsing — robust across API v1 ({name, country.country_name, acronyms}) and v2
+// ({names:[{value,types}], locations:[{geonames_details.country_name}]}). Returns clean rows only;
+// any item we cannot name AND identify is dropped, so the UI never shows or stores "undefined".
+function rorOrgName(o){
+  if(o && typeof o.name==="string" && o.name) return o.name;                          // v1
+  if(o && Array.isArray(o.names)){                                                     // v2
+    const pick=o.names.find(n=>(n.types||[]).includes("ror_display"))
+            || o.names.find(n=>(n.types||[]).includes("label"))
+            || o.names.find(n=>!(n.types||[]).includes("acronym"))
+            || o.names[0];
+    if(pick && pick.value) return pick.value;
+  }
+  return null;
+}
+function rorOrgCountry(o){
+  if(o && o.country && o.country.country_name) return o.country.country_name;          // v1
+  if(o && Array.isArray(o.locations) && o.locations[0]){                               // v2
+    const g=o.locations[0].geonames_details||{}; return g.country_name||g.name||"";
+  }
+  return "";
+}
+function rorOrgAcronym(o){
+  if(o){
+    if(Array.isArray(o.acronyms) && o.acronyms[0]) return o.acronyms[0];               // v1
+    if(Array.isArray(o.aliases) && o.aliases[0]) return o.aliases[0];                  // v1
+    if(Array.isArray(o.names)){ const a=o.names.find(n=>(n.types||[]).includes("acronym")); if(a && a.value) return a.value; } // v2
+  }
+  return "";
+}
+function rorMatchesFromResponse(data){
+  return (((data && data.items) || [])).map(it=>{
+    const o=(it && it.organization) || it || {};       // query items are bare orgs; affiliation items wrap in .organization — handle both
+    const name=rorOrgName(o), id=o.id || null;
+    if(!name || !id) return null;                       // drop anything un-nameable / un-identifiable
+    return {name, id, country:rorOrgCountry(o), acronym:rorOrgAcronym(o)};
+  }).filter(Boolean).slice(0,3);
+}
+
+if(typeof module!=="undefined"&&module.exports){
+  module.exports={normEdi,parseAngle,band,parseEdi,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,rorMatchesFromResponse};
+}
+
+// ---------- UI wiring (browser only) ----------
+if(typeof document!=="undefined"&&document.getElementById){
+  const files=[]; const $=id=>document.getElementById(id);
+  // C13 gateway state: set true ONLY by a passing same-origin healthz probe (design §1). Read by the
+  // shared package builder so SUBMISSION.md lists the direct-upload path first when a gateway is live.
+  let gatewayReady=false;
+
+  // ----- instrument systems: manufacturer + model rows (models depend on manufacturer) -----
+  const INSTR_MODELS={
+    "Phoenix":["MTU-5A","MTU-5C","MTU-8A","Other"],
+    "LEMI":["LEMI-120","LEMI-423","LEMI-424","Other"],
+    "Metronix":["ADU-06","ADU-07e","ADU-08e","MFS-06","MFS-07e","Other"],
+    "EMI":["MT24","Other"], "Zonge":["GDP","Other"], "Other":[]};
+  function instrRow(){
+    const wrap=document.createElement("div"); wrap.className="instr-row";
+    wrap.style.cssText="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:6px;align-items:center";
+    const man=document.createElement("select"); man.className="instr-man";
+    man.innerHTML='<option value="">Manufacturer…</option>'+Object.keys(INSTR_MODELS).map(m=>`<option>${m}</option>`).join("");
+    const modelCell=document.createElement("div");
+    const rm=document.createElement("button"); rm.type="button"; rm.className="act"; rm.textContent="✕";
+    rm.style.padding="6px 11px"; rm.onclick=()=>wrap.remove();
+    function renderModel(){
+      const mv=man.value, models=INSTR_MODELS[mv]||[];
+      if(mv && models.length){
+        modelCell.innerHTML=`<select class="instr-model"><option value="">Model…</option>${models.map(x=>`<option>${x}</option>`).join("")}</select>`;
+        const sel=modelCell.querySelector("select");
+        sel.onchange=()=>{ if(sel.value==="Other") modelCell.innerHTML='<input class="instr-model" placeholder="model">'; };
+      } else if(mv==="Other"){ modelCell.innerHTML='<input class="instr-model" placeholder="model (optional)">'; }
+      else { modelCell.innerHTML='<select class="instr-model" disabled><option>Model…</option></select>'; }
+    }
+    man.onchange=renderModel; renderModel();
+    wrap.append(man,modelCell,rm); return wrap;
+  }
+  function readInstruments(){
+    return Array.from(document.querySelectorAll("#instrRows .instr-row")).map(r=>{
+      const man=r.querySelector(".instr-man").value;
+      const el=r.querySelector(".instr-model"); const model=el&&!el.disabled?(el.value||"").trim():"";
+      return {manufacturer:man, model:model};
+    }).filter(x=>x.manufacturer);
+  }
+  $("addInstr").onclick=()=>$("instrRows").appendChild(instrRow());
+  $("instrRows").appendChild(instrRow());
+
+  // ----- funding rows (organisation + ROR + grant id/title + DOI); ROR reuses the lookup helper.
+  function fundRow(){
+    const wrap=document.createElement("div"); wrap.className="fundrow";
+    wrap.innerHTML=
+      '<div class="grid">'+
+      '<div><label>Funding organisation</label><input class="f-org" placeholder="e.g. AuScope" autocomplete="off"><div class="rormatches f-rormatches"></div></div>'+
+      '<div><label>Funding organisation ROR</label><input class="f-ror" placeholder="https://ror.org/…"></div>'+
+      '<div><label>Grant / award ID</label><input class="f-grant" placeholder="e.g. ARC ..."></div>'+
+      '<div><label>Grant title</label><input class="f-grant-title" placeholder="e.g. ARC ..."></div>'+
+      '<div><label>Funding DOI</label><input class="f-doi" placeholder="10.xxxx/…"></div>'+
+      '<div style="display:flex;align-items:flex-end"><button type="button" class="act f-rm">Remove</button></div>'+
+      '</div>';
+    wrap.querySelector(".f-rm").onclick=()=>wrap.remove();
+    // reuse ROR lookup for the funding organisation field
+    wireRor(wrap.querySelector(".f-org"), wrap.querySelector(".f-rormatches"), wrap.querySelector(".f-ror"));
+    return wrap;
+  }
+  function readFunding(){
+    return Array.from(document.querySelectorAll("#fundRows .fundrow")).map(r=>({
+      organisation:(r.querySelector(".f-org").value||"").trim(),
+      organisation_ror:(r.querySelector(".f-ror").value||"").trim(),
+      grant_id:(r.querySelector(".f-grant").value||"").trim(),
+      grant_title:(r.querySelector(".f-grant-title").value||"").trim(),
+      funding_doi:(r.querySelector(".f-doi").value||"").trim()
+    })).filter(f=>f.organisation);
+  }
+  $("addFund").onclick=()=>$("fundRows").appendChild(fundRow());
+
+  // ----- ORCID format check (format only; no API/auth) -----
+  function wireOrcid(inputId, okId){
+    const inp=$(inputId), ok=$(okId);
+    inp.addEventListener("input",()=>{ const v=inp.value.trim();
+      if(!v){ ok.textContent=""; ok.className="orcidok"; }
+      else if(isOrcid(v)){ ok.textContent="✓ valid format"; ok.className="orcidok good"; }
+      else { ok.textContent="✗ expected 0000-0000-0000-0000"; ok.className="orcidok bad"; }});
+    inp.addEventListener("change",()=>{ if(inp.value.trim()) track("ORCIDFormatChecked",{result:isOrcid(inp.value.trim())?"valid":"invalid"}); }); // PII-free
+  }
+  wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_pi_orcid","piOrcidOk");
+
+  // ----- ROR organisation lookup (live, debounced; suggestions only; name shown first) -----
+  async function rorLookup(name, abortHolder){
+    if(abortHolder.a) abortHolder.a.abort();
+    abortHolder.a=new AbortController();
+    // Use the name-search `query` endpoint, NOT `affiliation`: the affiliation matcher is built for parsing
+    // full publication affiliation strings (NER-style) and mis-ranks bare names — e.g. "University of Adelaide"
+    // returns "University of Aden" (score 0.97, chosen) and omits Adelaide entirely. `query` relevance-ranks
+    // by name and returns the right org (verified live against api.ror.org).
+    const r=await fetch("https://api.ror.org/v2/organizations?query="+encodeURIComponent(name),{signal:abortHolder.a.signal});
+    if(!r.ok) throw 0;
+    return rorMatchesFromResponse(await r.json());
+  }
+  function renderRorCards(box, matches, onPick){
+    if(!matches||!matches.length){ box.innerHTML=""; return; }
+    box.innerHTML='<div class="rorhint">Suggested ROR matches — click to use one:</div>'+
+      matches.map((m,i)=>`<div class="rorcard" data-i="${i}"><div class="rn">${esc(m.name)}</div>`+
+        `<div class="rm">${esc(m.country||"—")}${m.acronym?" · aka "+esc(m.acronym):""}<br>ROR: ${esc(m.id)}</div></div>`).join("");
+    box.querySelectorAll(".rorcard").forEach(c=>c.onclick=()=>{ onPick(matches[+c.dataset.i]); track("RORMatchSelected"); box.innerHTML=""; });
+  }
+  // wires an organisation text input -> ROR suggestion box -> fills a ROR field; on pick, also
+  // normalises the (user-confirmed) organisation name. Never overwrites typed text before selection,
+  // and never writes an empty/undefined value (guards below).
+  function wireRor(orgInput, box, rorInput){
+    let timer=null; const holder={a:null};
+    orgInput.addEventListener("input",()=>{ const v=orgInput.value.trim(); clearTimeout(timer);
+      if(v.length<3){ box.innerHTML=""; return; }
+      timer=setTimeout(async()=>{ try{ track("RORLookupUsed"); // PII-free: no org name/ID sent
+        renderRorCards(box, await rorLookup(v, holder), m=>{ if(m && m.id) rorInput.value=m.id; if(m && m.name) orgInput.value=m.name; });
+      }catch(e){ /* offline/aborted — silent; manual entry still works */ } },450); });
+  }
+  wireRor($("m_org"), $("rorMatches"), $("m_ror"));
+
+  function readMeta(){return {
+    name:$("m_name").value.trim(), slug:$("m_slug").value.trim(), organisation:$("m_org").value.trim(),
+    country:$("m_country").value.trim(), region:$("m_region").value.trim(), version:$("m_version").value.trim(),
+    license:$("m_license").value, access:$("m_access").value,
+    abstract:$("m_abstract").value.trim(),
+    data_types:Array.from(document.querySelectorAll(".dtype:checked")).map(c=>c.value),
+    west:$("m_w").value, east:$("m_e").value, south:$("m_s").value, north:$("m_n").value,
+    pi:$("m_pi").value.trim(), pi_orcid:$("m_pi_orcid").value.trim(), ror:$("m_ror").value.trim(),
+    dataset_doi:$("m_doi").value.trim(), pub:$("m_pub").value.trim(), pub_doi:$("m_pubdoi").value.trim(),
+    project:$("m_project").value.trim(), raid:$("m_raid").value.trim(),
+    funding:readFunding(),
+    collection_id:$("m_coll_id").value.trim(), collection_title:$("m_coll_title").value.trim(), collection_type:$("m_coll_type").value.trim(),
+    collection_status:$("m_coll_status").value, collection_year:$("m_coll_year").value.trim(), collection_desc:$("m_coll_desc").value.trim(),
+    processing_software:($("m_soft").value==="Other"?$("m_softother").value.trim():$("m_soft").value),
+    processing_software_version:$("m_softver").value.trim(), remote_reference:$("m_remote").value,
+    instruments:readInstruments(), processing_notes:$("m_procnotes").value.trim(),
+    uploader_name:$("m_up_name").value.trim(), uploader_email:$("m_up_email").value.trim(),
+    uploader_orcid:$("m_up_orcid").value.trim(),
+    authority_to_submit:$("m_auth").checked, license_declaration:$("m_licdecl").checked,
+    locations_confirmed:$("m_locconf").checked,
+    dms_choice:(document.querySelector('input[name="dmschoice"]:checked')||{}).value||"head"};}
+
+  function renderFiles(){ $("filelist").innerHTML=files.map((f,i)=>
+    `<div class="f"><span class="meta"><span>${esc(f.name)} <span style="color:var(--muted)">${f.kind==="mth5"?"MTH5":"EDI"}</span></span><span>${(f.bytes/1024).toFixed(1)} KB</span></span><button type="button" class="rm" data-i="${i}" title="Remove ${escAttr(f.name)}" aria-label="Remove ${escAttr(f.name)}">✕</button></div>`).join("")
+    || '<span style="color:var(--muted)">No files yet.</span>'; updateConf(); }
+  // Per-row remove: one delegated listener (data-i indexes the `files` array). Splice + re-render, which
+  // ends in updateConf() (keeps the DMS/confirm state consistent) and feeds every downstream flow
+  // (Validate/Preview/Package/Submit all read live from `files` via ediFiles()/mth5Files()/parsed()).
+  $("filelist").addEventListener("click",e=>{ const b=e.target.closest("button.rm"); if(!b) return;
+    const i=+b.getAttribute("data-i"); if(i>=0&&i<files.length){ files.splice(i,1); renderFiles(); } });
+  function ediFiles(){ return files.filter(f=>f.kind==="edi"); }
+  function mth5Files(){ return files.filter(f=>f.kind==="mth5"); }
+  function parsed(){ return ediFiles().map(f=>({name:f.name, parsed:parseEdi(f.text)})); }
+  function isHdf5(buf){ const b=new Uint8Array(buf.slice(0,8));
+    return b.length>=8 && b[0]===0x89&&b[1]===0x48&&b[2]===0x44&&b[3]===0x46&&b[4]===0x0d&&b[5]===0x0a&&b[6]===0x1a&&b[7]===0x0a; }
+  function addFiles(list){ Array.from(list).forEach(file=>{
+    const isMth5=/\.(h5|mth5)$/i.test(file.name); const r=new FileReader();
+    if(isMth5){ r.onload=e=>{ const buf=e.target.result;
+        files.push({name:file.name,kind:"mth5",buf,bytes:buf.byteLength,hdf5:isHdf5(buf)}); renderFiles(); };
+      r.readAsArrayBuffer(file);
+    } else { r.onload=e=>{ const text=e.target.result; const buf=new TextEncoder().encode(text).buffer;
+        files.push({name:file.name,kind:"edi",text,buf,bytes:text.length}); renderFiles(); };
+      r.readAsText(file); } }); }
+  const drop=$("drop"), filein=$("filein");
+  drop.onclick=()=>filein.click();
+  filein.onchange=e=>addFiles(e.target.files);
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("hover");}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("hover");}));
+  drop.addEventListener("drop",e=>{ if(e.dataTransfer&&e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+
+  // ----- map picker -----
+  let pmap=null, corners=[], rect=null, markers=[];
+  function setExtentFields(b){ $("m_w").value=b.getWest().toFixed(5); $("m_e").value=b.getEast().toFixed(5);
+    $("m_s").value=b.getSouth().toFixed(5); $("m_n").value=b.getNorth().toFixed(5); }
+  function updateReadout(){
+    const w=$("m_w").value,e=$("m_e").value,s=$("m_s").value,n=$("m_n").value;
+    if([w,e,s,n].every(v=>v!=="")){
+      const cla=((+s+ +n)/2).toFixed(4), clo=((+w+ +e)/2).toFixed(4);
+      $("locReadout").textContent=`centre ${cla}, ${clo} · bbox [${(+w).toFixed(3)}, ${(+s).toFixed(3)}] → [${(+e).toFixed(3)}, ${(+n).toFixed(3)}]`;
+    } else $("locReadout").textContent="No footprint set — add EDI files then auto-fit, or draw on the map.";
+  }
+  ["m_w","m_e","m_s","m_n"].forEach(id=>$(id).addEventListener("input",updateReadout));
+  function clearPick(){ corners=[]; if(rect&&pmap){pmap.removeLayer(rect);} rect=null; $("pickHint").textContent="Click two corners to set a bounding box. Your loaded stations are shown as dots."; }
+  function openPicker(){
+    if(typeof L==="undefined"){ $("locReadout").textContent="Map unavailable — use 'Edit extent values manually'."; return; }
+    $("modal").classList.add("show");
+    if(!pmap){
+      pmap=L.map("pickmap",{worldCopyJump:true}).setView([-25.6,134.4],4);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {maxZoom:18, attribution:"© OpenStreetMap contributors"}).addTo(pmap);
+      pmap.on("click",ev=>{
+        if(corners.length>=2) clearPick();
+        corners.push(ev.latlng);
+        if(corners.length===2){ const b=L.latLngBounds(corners[0],corners[1]);
+          rect=L.rectangle(b,{color:"#E0782F",weight:2,fillOpacity:.08}).addTo(pmap);
+          setExtentFields(b); updateReadout(); $("pickHint").textContent="Footprint set. 'Use this footprint' to apply, or 'Clear' to redo."; }
+        else $("pickHint").textContent="Now click the opposite corner.";
+      });
+    }
+    setTimeout(()=>pmap.invalidateSize(),60);
+    markers.forEach(m=>pmap.removeLayer(m)); markers=[];
+    const pts=parsed().filter(e=>e.parsed.lat!=null).map(e=>[e.parsed.lat,e.parsed.lon]);
+    pts.forEach(p=>markers.push(L.circleMarker(p,{radius:4,color:"#5BAE6A",weight:1,fillOpacity:.9}).addTo(pmap)));
+    if(pts.length){ pmap.fitBounds(L.latLngBounds(pts).pad(0.4)); }
+  }
+  $("btnPick").onclick=()=>{ track("MapPickerOpened"); openPicker(); };
+  $("btnAutofit").onclick=()=>{
+    const fp=footprintFromStations(parsed());
+    if(!fp){ $("locReadout").textContent="Add EDI files with coordinates first, then auto-fit."; return; }
+    $("m_w").value=fp.west; $("m_e").value=fp.east; $("m_s").value=fp.south; $("m_n").value=fp.north;
+    updateReadout(); track("MapFootprintGenerated",{source:"autofit"});
+  };
+  $("pickClear").onclick=clearPick;
+  $("pickCancel").onclick=()=>$("modal").classList.remove("show");
+  $("pickUse").onclick=()=>{ if(rect) track("MapFootprintGenerated",{source:"map"}); $("modal").classList.remove("show"); updateReadout(); };
+
+  // ----- confirm station locations (catch wrong coords + resolve HEAD/INFO DMS conflicts) -----
+  let cmap=null, cmarkers=[];
+  function updateConf(){
+    const pf=parsed(); const withCoords=pf.filter(e=>e.parsed.lat!=null);
+    const flagged=pf.filter(e=>e.parsed.coord_flag==="dms_sign_ambiguous");
+    $("dmsChoice").style.display=flagged.length?"block":"none";
+    $("dmsCount").textContent=flagged.length;
+    $("confReadout").textContent = withCoords.length
+      ? withCoords.length+" station(s) to review"+(flagged.length?" — "+flagged.length+" with a HEAD/INFO conflict":"")
+      : "Add EDI files, then review their plotted locations.";
+  }
+  function openConfirm(){
+    if(typeof L==="undefined"){ $("confReadout").textContent="Map unavailable in this browser."; return; }
+    const pf=parsed().filter(e=>e.parsed.lat!=null);
+    if(!pf.length){ $("confReadout").textContent="Add EDI files with coordinates first."; return; }
+    $("cmodal").classList.add("show");
+    if(!cmap){
+      cmap=L.map("confirmmap",{worldCopyJump:true}).setView([-25.6,134.4],4);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap contributors"}).addTo(cmap);
+    }
+    setTimeout(()=>cmap.invalidateSize(),60);
+    cmarkers.forEach(m=>cmap.removeLayer(m)); cmarkers=[];
+    const all=[];
+    pf.forEach(e=>{ const p=e.parsed, head=[p.lat,p.lon];
+      if(p.coord_flag==="dms_sign_ambiguous"&&p.info_lat!=null){ const info=[p.info_lat,p.info_lon];
+        cmarkers.push(L.polyline([head,info],{color:"#8a8a8a",weight:1,dashArray:"4 4"}).addTo(cmap));
+        cmarkers.push(L.circleMarker(head,{radius:6,color:"#E0782F",weight:2,fillOpacity:.85}).bindTooltip(esc(e.name)+" — HEAD "+p.lat.toFixed(3)+", "+p.lon.toFixed(3)).addTo(cmap));
+        cmarkers.push(L.circleMarker(info,{radius:6,color:"#4F9BE0",weight:2,fillOpacity:.85}).bindTooltip(esc(e.name)+" — INFO "+p.info_lat.toFixed(3)+", "+p.info_lon.toFixed(3)).addTo(cmap));
+        all.push(head,info);
+      } else {
+        cmarkers.push(L.circleMarker(head,{radius:4,color:"#5BAE6A",weight:1,fillOpacity:.9}).bindTooltip(esc(e.name)+" "+p.lat.toFixed(3)+", "+p.lon.toFixed(3)).addTo(cmap));
+        all.push(head);
+      }});
+    if(all.length) cmap.fitBounds(L.latLngBounds(all).pad(0.3));
+  }
+  $("btnConfirmMap").onclick=()=>{ track("ConfirmMapOpened"); openConfirm(); };
+  $("confClose").onclick=()=>$("cmodal").classList.remove("show");
+
+  $("btnValidate").onclick=()=>{
+    const mh=mth5Files().map(f=>({name:f.name,hdf5:f.hdf5}));
+    const {items,counts}=validateSurvey(readMeta(), parsed(), mh);
+    track("ValidationRun",{result:counts.FAIL>0?"blocked":"ok",edis:parsed().length,mth5:mh.length}); // PII-free
+    const row=i=>`<div class="v"><span class="badge ${i.level}">${i.level}</span><span>${esc(i.check)}: ${esc(i.message)}</span></div>`;
+    const g=lvl=>items.filter(i=>i.level===lvl);
+    const fails=g("FAIL"), warns=g("WARNING"), infos=g("INFO"), passes=g("PASS");
+    let html="";
+    if(fails.length) html+=`<div class="vgroup">${fails.map(row).join("")}</div>`;
+    if(warns.length) html+=`<div class="vgroup">${warns.map(row).join("")}</div>`;
+    if(infos.length) html+=`<div class="vgroup">${infos.map(row).join("")}</div>`;
+    if(passes.length) html+=`<details class="vgroup"><summary>${passes.length} passed check${passes.length>1?"s":""} (click to expand)</summary>${passes.map(row).join("")}</details>`;
+    $("vList").innerHTML=html;
+    const blocked=counts.FAIL>0;
+    $("vSummary").innerHTML=`PASS ${counts.PASS} · WARNING ${counts.WARNING} · FAIL ${counts.FAIL} — `
+      +(blocked?'<b style="color:var(--no)">fix FAILs before submitting</b>':'<b style="color:var(--ok)">OK to submit</b>');
+    $("pValidate").classList.add("show");
+  };
+  $("btnPreview").onclick=()=>{
+    const p=previewSurvey(readMeta(), parsed());
+    const types=Object.keys(p.types).sort().map(k=>k+" "+p.types[k]).join(", ")||"—";
+    const nMh=mth5Files().length;
+    $("pvBody").innerHTML=
+      `<div>stations (from EDIs): <b>${p.n}</b>  (coords on ${p.withCoords}; impedance ${p.impedance}; spectra-section ${p.spectra})</div>`+
+      (nMh?`<div>MTH5 files: <b>${nMh}</b>  <span style="color:var(--muted)">(transfer functions read + validated in CI)</span></div>`:"")+
+      (p.latRange?`<div>station extent: lat <b>[${p.latRange[0].toFixed(4)}, ${p.latRange[1].toFixed(4)}]</b>  lon <b>[${p.lonRange[0].toFixed(4)}, ${p.lonRange[1].toFixed(4)}]</b></div>`:"")+
+      `<div>data types (from EDIs): <b>${esc(types)}</b></div>`+
+      (p.n?`<div>recommended EDI extractor: <b>${p.extractor}</b>${p.spectra?`  (incl. ${p.spectra} spectra-section EDI(s), read directly)`:""}</div>`:"");
+    $("pPreview").classList.add("show");
+  };
+  // ----- shared package builder (design §0.5: ONE builder feeds BOTH the download and the direct-
+  // upload paths, so the bytes are identical either way). Reads the submitter's DMS choice, gates on
+  // validation FAILs (returns null when blocked), and produces the byte-payload + metadata both
+  // callers need. It performs NO DOM writes and NO download/upload side effect — the caller decides
+  // what to do with the blob. Email/ORCID are NEVER written here (C3 / §4): the package is PII-clean
+  // whether it goes out as a public-PR attachment OR as a same-origin gateway upload.
+  async function buildPackage(meta, pf, ediF, mh, gatewayAvailable){
+    if(pf.some(e=>e.parsed.coord_flag==="dms_sign_ambiguous"))
+      meta.coord_resolution={dms_sign:meta.dms_choice||"head", basis:"reviewed and confirmed on the AusMT submission map"};
+    const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})));
+    if(v.counts.FAIL>0) return {blocked:true, counts:v.counts};
+    const slug=meta.slug||"survey";
+    const zip=new JSZip(), root=zip.folder(slug);
+    root.file("survey.yaml", buildSurveyYaml(meta));
+    const tf=[];
+    if(ediF.length){ const edidir=root.folder("transfer_functions").folder("edi");
+      for(const f of ediF){ edidir.file(f.name, f.text); tf.push({file:"transfer_functions/edi/"+f.name, format:"edi", bytes:f.bytes, sha256:await sha256Hex(f.buf)}); } }
+    if(mh.length){ const mhdir=root.folder("transfer_functions").folder("mth5");
+      for(const f of mh){ mhdir.file(f.name, f.buf); tf.push({file:"transfer_functions/mth5/"+f.name, format:"mth5", bytes:f.bytes, sha256:await sha256Hex(f.buf)}); } }
+    const inputFormat = ediF.length && mh.length ? "edi+mth5" : (mh.length ? "mth5" : "edi");
+    // C3 (PII scrub): MANIFEST.json/SUBMISSION.md may be published (PR attachment) -- email/ORCID must
+    // NOT be written into the package. Name is fine (a submission needs an attributable submitter).
+    const manifest={slug, survey:meta.name, organisation:meta.organisation, licence:meta.license,
+      input_format:inputFormat,
+      validation:v.counts, recommended_extractor:recommendedExtractor(pf),
+      submitter:{name:meta.uploader_name,
+                 authority_to_submit:!!meta.authority_to_submit, license_declaration:!!meta.license_declaration},
+      transfer_functions:tf, n_transfer_functions:tf.length, generated_by:"AusMT Add Survey page"};
+    root.file("MANIFEST.json", JSON.stringify(manifest,null,1));
+    root.file("SUBMISSION.md", buildSubmissionMd(meta, slug, tf, inputFormat, v.counts, manifest.recommended_extractor, gatewayAvailable));
+    const blob=await zip.generateAsync({type:"blob"});
+    const fname="ausmt-survey-"+slug+"-"+tsUTC()+".zip";
+    return {blocked:false, blob, fname, tf, manifest, inputFormat, counts:v.counts, slug};
+  }
+  // SUBMISSION.md travels INSIDE the zip on BOTH transport paths (design §2), so it must stay accurate
+  // for both: the direct-upload path is listed as option 1 where a gateway is available, PR as the
+  // always-available fallback. It NEVER references email/ORCID (C3). `gatewayAvailable` only reorders
+  // the guidance — the two paths are both documented regardless, since the file may be read after the
+  // fact by someone on a different deploy.
+  function buildSubmissionMd(meta, slug, tf, inputFormat, counts, extractor, gatewayAvailable){
+    const head=
+      `# AusMT submission: ${meta.name}\n\n- slug: \`${slug}\`\n- organisation: ${meta.organisation||"—"}\n`+
+      `- licence: ${meta.license}\n- transfer functions: ${tf.length} file(s) (${inputFormat})\n`+
+      `- recommended extractor: \`${extractor}\`\n`+
+      `- validation: PASS ${counts.PASS} · WARNING ${counts.WARNING} · FAIL ${counts.FAIL}\n\n`+
+      `## Submitter\n- name: ${meta.uploader_name}\n`+
+      `- authority to submit: ${meta.authority_to_submit?"yes":"NO"}\n- licence/access confirmed: ${meta.license_declaration?"yes":"NO"}\n\n`;
+    const direct=
+      `## How to submit\n`+
+      (gatewayAvailable
+        ? `1. **Direct upload (recommended where available).** The AusMT Add Survey page detected a submission gateway and can\n`+
+          `   upload this package directly with your operator-issued submit key — no GitHub account needed. Your contact\n`+
+          `   email is sent to the curators privately (never written into this package).\n`+
+          `2. **Pull request (always available).** Open a PR against the ausmt-surveys repository, add this folder under\n`
+        : `1. **Pull request.** Open a pull request against the ausmt-surveys repository, add this folder under\n`)+
+      `   \`surveys/${slug}/\` (keep MANIFEST.json/SUBMISSION.md with the PR). Include your contact email in the PR\n`+
+      `   description or message to the curator -- NOT in a file in this package, since the PR (and everything attached\n`+
+      `   to it) is public.\n`+
+      // The trailing step's number depends on the branch (2 items precede it with a gateway, 1 without)
+      // so the ordered list stays strictly sequential either way.
+      `${gatewayAvailable?3:2}. CI runs the authoritative validator; a curator reviews.\n`;
+    return head+direct;
+  }
+  $("btnPackage").onclick=async()=>{
+    const meta=readMeta(), pf=parsed(), ediF=ediFiles(), mh=mth5Files();
+    const pkg=await buildPackage(meta, pf, ediF, mh, gatewayReady);
+    if(pkg.blocked){ $("pkBody").innerHTML=`<b style="color:var(--no)">Cannot package: ${pkg.counts.FAIL} validation FAIL(s).</b> Run Validate and fix them first.`; $("pPackage").classList.add("show"); return; }
+    const url=URL.createObjectURL(pkg.blob), a=document.createElement("a");
+    a.href=url; a.download=pkg.fname; a.click(); URL.revokeObjectURL(url);
+    track("PackageGenerated",{edis:pkg.tf.length,extractor:pkg.manifest.recommended_extractor}); // PII-free
+    track("DownloadGenerated",{format:"zip"});
+    $("pkBody").innerHTML=`<div>Built <b>${esc(pkg.fname)}</b> — ${pkg.tf.length} EDIs, checksummed.</div>`+
+      `<div>recommended extractor: <b>${pkg.manifest.recommended_extractor}</b></div>`+
+      `<div class="note">Your email is NOT included in this package (the PR you attach it to is public).
+      Attach the archive to a pull request adding <code>surveys/${esc(pkg.slug)}/</code> and put your contact
+      email in the PR description or message instead.</div>`;
+    $("pPackage").classList.add("show");
+  };
+  // ----- collection autofill: prefill from EXISTING collections so a contributor JOINS an existing
+  // collection (exact id) instead of re-typing it and risking a typo that silently spawns a duplicate
+  // (collection grouping is an EXACT id match in the engine). Degrades to a plain text field when
+  // data/collections.json isn't reachable (opened as file://, or no collections published yet).
+  (function(){
+    const idIn=$("m_coll_id"), dl=$("collDatalist"), hint=$("collHint"); let COLLS={};
+    if(!idIn||!dl||!hint) return;
+    fetch("data/collections.json").then(r=>r.ok?r.json():null).then(d=>{
+      if(!d||typeof d!=="object"||Array.isArray(d)) return;
+      COLLS=d;
+      Object.keys(COLLS).sort().forEach(cid=>{ const o=document.createElement("option");   // DOM build = injection-safe
+        o.value=cid; o.textContent=(COLLS[cid]||{}).title||cid; dl.appendChild(o); });
+    }).catch(()=>{});   // offline / file:// / none yet -> silent; manual entry still works
+    function apply(){
+      const v=idIn.value.trim(); hint.textContent=""; hint.style.color="";
+      if(!v||!Object.keys(COLLS).length) return;
+      const c=COLLS[v];
+      if(c){   // exact id match -> prefill the EMPTY fields only, never clobber what the contributor typed
+        const set=(id,val)=>{ const el=$(id); if(el&&!el.value&&val!=null&&val!=="") el.value=String(val); };
+        set("m_coll_title",c.title); set("m_coll_type",c.type); set("m_coll_year",c.start_year); set("m_coll_desc",c.description);
+        const st=$("m_coll_status"); if(st&&!st.value&&c.status) st.value=c.status;
+        const n=c.n_surveys||0;
+        hint.textContent="↳ Joining existing collection “"+(c.title||v)+"” ("+n+" survey"+(n===1?"":"s")+"). Fields prefilled — edit only to correct.";
+        hint.style.color="#5BAE6A";
+      } else {   // a case/space-only variant of an existing id is almost certainly a typo -> warn
+        const near=Object.keys(COLLS).find(cid=>cid.toLowerCase()===v.toLowerCase());
+        if(near){ hint.textContent="Did you mean “"+near+"”? A different id creates a SEPARATE collection — ids are matched exactly."; hint.style.color="var(--copper)"; }
+      }
+    }
+    idIn.addEventListener("input",apply); idIn.addEventListener("change",apply);
+  })();
+
+  // ----- C13: direct upload to the same-origin submission gateway -------------------------------
+  // Detection (design §1): one healthz probe per page load, 5 s AbortController timeout, no polling.
+  // The submit UI stays hidden unless gatewayPresent(status, body) is strictly true (200 + JSON +
+  // ok===true). A failed/absent probe leaves the page byte-identical to the pre-C13 page — the
+  // manual-PR path (Package submission .zip) remains primary. Same-origin literal /gateway/... only
+  // (no config knob, no new origin — CORS-free and covered by the existing connect-src 'self').
+  function showGatewayUI(){
+    gatewayReady=true;
+    $("gatewayBlock").classList.add("show");
+    // Reword the manual-PR button as the explicit fallback now that direct upload is the primary path.
+    const bp=$("btnPackage"); if(bp) bp.textContent="Package .zip for a pull request (manual path)";
+    track("GatewayDetected");   // PII-free, no ids
+  }
+  (function probeGateway(){
+    if(typeof fetch!=="function") return;   // ancient/file:// — degrade silently
+    const ctl=(typeof AbortController!=="undefined")?new AbortController():null;
+    const timer=ctl?setTimeout(()=>ctl.abort(),5000):null;
+    fetch("/gateway/healthz", ctl?{signal:ctl.signal}:undefined)
+      .then(r=>r.text().then(t=>({status:r.status,body:t})))
+      .then(({status,body})=>{ if(timer) clearTimeout(timer); if(gatewayPresent(status,body)) showGatewayUI(); })
+      .catch(()=>{ if(timer) clearTimeout(timer); /* network error/timeout/HTML -> ABSENT; stay hidden */ });
+  })();
+
+  // Submit flow (design §2). The submit key is RADIOACTIVE (§0.3): it lives only in the password
+  // input and, transiently, in the X-AusMT-Submit-Key request header. It is NEVER stored, never put
+  // in a URL, never in a track() payload, never echoed to the DOM, never written into the zip.
+  let submitInFlight=null;   // the live XMLHttpRequest, so Cancel can abort it
+  let submitBusy=false;      // engaged SYNCHRONOUSLY on click (before the async build) so a fast
+                             // double-click cannot start a second build/upload (double-submit guard)
+  function submitPanel(html, cls){ $("submitBody").innerHTML=html; $("submitBody").className="kv "+(cls||""); $("pSubmit").classList.add("show"); }
+  function submitBlocked(msg){ submitPanel('<b class="submitbad">'+esc(msg)+"</b>"); }
+  function setSubmitting(on){
+    submitBusy=on;
+    $("btnSubmitGateway").disabled=on;                 // double-submit guard (§2.5)
+    $("btnCancelSubmit").style.display=on?"":"none";    // Cancel only meaningful while the XHR is live
+    $("submitProg").classList.toggle("show",on);
+    if(!on){ $("submitBar").style.width="0"; }
+  }
+  $("btnCancelSubmit").onclick=()=>{ if(submitInFlight) submitInFlight.abort(); };
+  $("btnSubmitGateway").onclick=async()=>{
+    if(submitBusy) return;                              // already building or in flight
+    const meta=readMeta(), pf=parsed(), ediF=ediFiles(), mh=mth5Files();
+    // 1. Validation gate — same gate as packaging; any FAIL blocks.
+    const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})));
+    if(v.counts.FAIL>0){ submitBlocked("Cannot submit: "+v.counts.FAIL+" validation FAIL(s). Run Validate and fix them first."); return; }
+    // 2. Submitter-ORCID CHECKSUM (fail fast — the server enforces ISO 7064 MOD 11-2 and would 400
+    //    after a full upload). Blank ORCID is fine (optional); a present one must pass the checksum.
+    const orcid=(meta.uploader_orcid||"").trim();
+    if(orcid && !isOrcidChecksum(orcid)){ submitBlocked("Your ORCID failed its checksum. Correct it (or clear it — ORCID is optional) before submitting."); return; }
+    // 3. Empty submit key blocks.
+    const key=$("m_submit_key").value;
+    if(!key){ submitBlocked("Enter your submit key."); return; }
+    // Engage the double-submit guard NOW — synchronously, before the async package build — and clear
+    // the previous result panel. Any failure below re-enables via setSubmitting(false).
+    setSubmitting(true);
+    $("pSubmit").classList.remove("show");
+    // 4. Build the package via the SHARED builder (byte-identical to the download path).
+    const pkg=await buildPackage(meta, pf, ediF, mh, gatewayReady);
+    if(pkg.blocked){ setSubmitting(false); submitBlocked("Cannot submit: "+pkg.counts.FAIL+" validation FAIL(s). Run Validate and fix them first."); return; }
+    // 5. POST via XMLHttpRequest (upload progress + Cancel). No client timeout (250 MB on slow links
+    //    is legitimate); Cancel is the escape hatch. multipart per §3: one file part + submitter
+    //    fields; submitter_orcid is OMITTED entirely when empty (submitFormFields).
+    const fd=new FormData();
+    fd.append("file", pkg.blob, pkg.fname);
+    const fields=submitFormFields(meta);
+    Object.keys(fields).forEach(k=>fd.append(k, fields[k]));
+    track("GatewaySubmitAttempted");   // count only — no ids, no key, no email
+    const xhr=new XMLHttpRequest(); submitInFlight=xhr;
+    xhr.open("POST", "/gateway/submit");                 // literal same-origin relative path (§0.2)
+    xhr.setRequestHeader("X-AusMT-Submit-Key", key);     // the ONLY place the key goes on the wire
+    if(xhr.upload){ xhr.upload.onprogress=e=>{ if(e.lengthComputable){ const pct=Math.round(100*e.loaded/e.total);
+      $("submitBar").style.width=pct+"%"; $("submitProgText").textContent="Uploading… "+pct+"%"; } }; }
+    xhr.onload=()=>{ submitInFlight=null; setSubmitting(false);
+      let body=null; try{ body=JSON.parse(xhr.responseText); }catch(e){}
+      track("GatewaySubmitResult",{code:xhr.status});    // code only — no id, no key, no email
+      renderSubmitResult(xhr.status, body); };
+    xhr.onerror=()=>{ submitInFlight=null; setSubmitting(false);
+      track("GatewaySubmitResult",{code:0});
+      renderSubmitResult(0, null); };
+    xhr.onabort=()=>{ submitInFlight=null; setSubmitting(false);
+      submitPanel('<b>Upload cancelled.</b> Nothing was submitted. You can edit and try again.'); };
+    xhr.send(fd);
+  };
+  // §2 response rendering — EVERY server-derived string goes through esc(). The status link is an
+  // anchor ONLY when statusUrlSafe() accepts the server's status_url (else the id is shown, no link).
+  function renderSubmitResult(status, body){
+    const msg=submitResultMessage(status, body);        // plain text (no HTML) from the pure mapper
+    if(status===201){
+      const sid=(body && body.submission_id!=null)?String(body.submission_id):"";
+      const su=(body && typeof body.status_url==="string")?body.status_url:"";
+      const link=statusUrlSafe(su)
+        ? '<a href="'+escAttr(su)+'">'+esc(su)+"</a>"
+        : '<span class="note">(no status link was provided)</span>';
+      submitPanel(
+        '<div><b class="submitok">Submission received.</b></div>'+
+        (sid?'<div>submission id: <b>'+esc(sid)+"</b></div>":"")+
+        '<div>status link: '+link+"</div>"+
+        '<div class="note"><b>Save this link — it is the only way to check your submission’s status.</b></div>'+
+        '<div class="note">Your email stays private to the curators; it is not written into the package.</div>',
+        "");
+      return;
+    }
+    submitPanel('<b class="submitbad">'+esc(msg)+"</b>");
+  }
+
+  $("fundRows").appendChild(fundRow());   // start with one funding row
+  renderFiles(); updateReadout();
+}
+</script>
+<script src="config.js"></script>
+<script src="version.js"></script>
+</body>
+</html>

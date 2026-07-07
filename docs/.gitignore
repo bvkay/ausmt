@@ -1,0 +1,13 @@
+# mkdocs build output
+/site/
+
+# Python
+__pycache__/
+*.py[cod]
+.cache/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,11 @@
+schema_version: "0.1"
+slug: sample-survey
+name: "CI Sample Survey"
+country: Australia
+organisation: "AusMT CI"
+abstract: "Two real broadband EDIs used only to exercise the pipeline in CI."
+license: "CC-BY-4.0"
+data_type: BBMT
+access: { level: open }
+identifiers: { survey_pid: null, dataset_doi: null }
+time_series: { collection_pid: "10.25914/mtjg-jp22", levels_available: [raw_packed] }

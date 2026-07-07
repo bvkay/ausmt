@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ausmt.org/schema/manifest-1.0.schema.json",
+  "title": "AusMT download manifest v1.0",
+  "description": "Key-based index of every downloadable AusMT artifact (per-station EDI/EMTF-XML and per-survey EDI-zip / EMTF-XML-zip / transfer-function MTH5 bundles), each with size + sha256 integrity and a tier-resolved URL. Rides beside the positional catalogue; the portal's download resolver consumes it.",
+  "type": "object",
+  "required": ["generated_count", "files", "bundles"],
+  "additionalProperties": true,
+  "properties": {
+    "generated_count": {"type": "integer", "minimum": 0, "description": "total artifacts = len(files)+len(bundles)"},
+    "base_url": {"type": "string", "description": "URL prefix applied to artifact urls; '' = portal-relative"},
+    "files": {"type": "array", "items": {"$ref": "#/definitions/file"}},
+    "bundles": {"type": "array", "items": {"$ref": "#/definitions/bundle"}}
+  },
+  "definitions": {
+    "file": {
+      "type": "object",
+      "required": ["ausmt_id", "survey", "station", "format", "url", "size", "sha256", "tier", "license"],
+      "additionalProperties": false,
+      "properties": {
+        "ausmt_id": {"type": "string"},
+        "survey": {"type": "string"},
+        "station": {"type": "string"},
+        "format": {"enum": ["edi", "emtfxml"]},
+        "url": {"type": ["string", "null"], "description": "tier=repo: a portal-relative path joined onto base_url. tier=nci: an absolute NCI THREDDS fileServer URL (<survey nci_base>/<filename>). null only if a tier=nci survey has no resolvable base."},
+        "size": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "tier": {"enum": ["repo", "nci"]},
+        "license": {"type": "string"}
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "required": ["survey", "slug", "format", "url", "size", "sha256", "tier", "n_stations", "license"],
+      "additionalProperties": false,
+      "properties": {
+        "survey": {"type": "string"},
+        "slug": {"type": "string"},
+        "format": {"enum": ["edi-zip", "xml-zip", "mth5"]},
+        "url": {"type": ["string", "null"], "description": "tier=repo: portal-relative path joined onto base_url. tier=nci: absolute NCI fileServer URL (<survey nci_base>/<filename>)."},
+        "size": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "tier": {"enum": ["repo", "nci"]},
+        "license": {"type": "string"},
+        "n_stations": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

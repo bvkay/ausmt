@@ -1,0 +1,18 @@
+# Gateway RUNTIME deps (design: stdlib + fastapi + uvicorn + python-multipart only — no ORM, no
+# pydantic-settings, no extra deps). These floors match the versions installed + tested into the
+# ausmt conda env on 2026-07-05 (recorded per the C10 contract's dep-provenance rule). The
+# gateway.Dockerfile locker stage pip-freezes the exact linux transitive closure, mirroring
+# engine.Dockerfile; these are the DIRECT pins that feed that resolve.
+#
+# python-multipart is required by starlette to parse multipart/form-data uploads; without it the
+# form parser raises at import. uvicorn is the ASGI server the container entrypoint runs. httpx is
+# NOT here — it is test-only (see requirements-dev.txt).
+#
+# starlette is FastAPI's ASGI toolkit (always installed with it); pinned explicitly because
+# gateway/upload.py imports starlette.formparsers.MultiPartParser DIRECTLY to run the parser over a
+# byte-capped stream (bounded multipart intake, fix #5 — see that module's header). It is therefore
+# a first-class dependency here, not merely transitive.
+fastapi>=0.139
+uvicorn>=0.50
+python-multipart>=0.0.32
+starlette>=1.3

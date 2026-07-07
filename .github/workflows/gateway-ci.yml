@@ -1,0 +1,65 @@
+name: gateway-ci
+
+# The gateway (submission intake + antivirus + curator publish flow) is a first-class subsystem
+# that took real community submissions this week, yet before C35a NO workflow ran its 179-test
+# suite and ruff excluded it entirely (code-health review F1). This job closes that hole: it runs
+# the gateway unit suite and lints gateway/ on every gateway-touching push/PR, so a gateway source
+# change is TESTED before it can ship inside an unrelated deploy-triggered image rebuild.
+#
+# The command below is byte-identical to the one proven green locally under the ausmt env
+# (179 passed, ~10s, 0 skips) — the suite drives async bodies via asyncio.run(), so no
+# pytest-asyncio plugin is needed (see gateway/requirements-dev.txt).
+#
+# PATH-SCOPED (ADR-001 monorepo): only runs when the gateway/ subtree (or this workflow) changes.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-ci.yml"
+  pull_request:
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-ci.yml"
+
+concurrency:
+  group: gateway-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # matches the gateway image + the tested ausmt env
+
+      - name: Install gateway test deps
+        run: pip install -r gateway/requirements-dev.txt
+
+      # Lint gateway/ with the SAME ruff pin + config the engine lane uses (build-products.yml:48-49):
+      # ruff==0.15.17 with engine/pyproject.toml's [tool.ruff] select/ignore set. The gateway ships no
+      # own ruff config, so the engine's project-wide config is the single source of the lint policy.
+      - name: Lint (ruff)
+        run: |
+          python -m pip install ruff==0.15.17
+          python -m ruff check --config engine/pyproject.toml gateway/
+
+      # From the REPO ROOT (not gateway/) so `import gateway...` resolves as a package, exactly as
+      # the command that passed locally. -rs surfaces every skip reason in the log.
+      #
+      # C35b/D5: pipe the report through the skip tripwire with the gateway lane's OWN allow-list
+      # (--allow REPLACES the engine built-in). After C35b/D3 the validator oracles run via the vendored
+      # copy (no longer sibling-gated skips), so the ONLY legitimate skip in this stack-less gateway env
+      # is the mt_metadata-needing engine-preview oracle (test_runner.py's real-engine e2e). tee keeps the
+      # full pytest output in the human log AND feeds the tripwire; `set -o pipefail` so a pytest FAILURE
+      # (not just a skip regression) still reds the lane through the pipe. Any OTHER skip — e.g. a
+      # validator oracle regressing to skip, the exact F7 hole — fails the lane loudly.
+      - name: Gateway unit tests (+ loud skip accounting)
+        run: |
+          set -o pipefail
+          python -m pytest -q -rs gateway/tests | tee gateway-pytest.out
+          python engine/tests/ci_check_skips.py \
+            --allow "real engine stack / sample survey / validator not present" < gateway-pytest.out

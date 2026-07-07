@@ -1,0 +1,52 @@
+{
+  "_comment": "SINGLE SOURCE OF TRUTH for the AusMT licence instrument (mirrors columns.json). Edit ONLY here, then run `python contract/generate.py` to regenerate the LICENSES dict/object in engine/extract/_contract.py and portal/src/contract.js. redistributable = the EXACT, case-insensitive-after-trim-and-whitespace-collapse ids AusMT will byte-copy/serve (redistributable()); everything in recognised_only is a recognised licence but metadata-only (station listed, download -> archive). NC/ND stay redistributable-verbatim: legally permitted for unmodified non-commercial hosting AND it preserves the pre-C6 corpus behaviour, but now ONLY via exact ids -- the old prefix test `startswith(\"CC\")` redistributed a typo'd 'CC-BY-4.O' or any 'CC-nonsense', which this exact-match list kills. `aliases` maps legacy bare survey.yaml values to their canonical id so old packages keep working WITHOUT hardcoding the mapping in code. `urls` is the human-readable licence deed URL per id (empty string = no single canonical URL, e.g. PUBLIC DOMAIN); used in the LICENSE.txt instrument that travels with the distributed bytes.",
+  "redistributable": [
+    "CC0-1.0",
+    "CC-BY-3.0",
+    "CC-BY-3.0-AU",
+    "CC-BY-4.0",
+    "CC-BY-SA-3.0",
+    "CC-BY-SA-4.0",
+    "CC-BY-NC-4.0",
+    "CC-BY-NC-SA-4.0",
+    "CC-BY-ND-4.0",
+    "CC-BY-NC-ND-4.0",
+    "PUBLIC DOMAIN",
+    "ODBL-1.0",
+    "ODC-BY-1.0"
+  ],
+  "recognised_only": [
+    "CC-BY-NC-3.0",
+    "CC-BY-NC-SA-3.0",
+    "CC-BY-ND-3.0",
+    "CC-BY-NC-ND-3.0",
+    "ALL RIGHTS RESERVED",
+    "COPYRIGHT"
+  ],
+  "aliases": {
+    "CC0": "CC0-1.0",
+    "CC-BY": "CC-BY-4.0",
+    "CC-BY-SA": "CC-BY-SA-4.0",
+    "CC-BY-NC": "CC-BY-NC-4.0",
+    "CC-BY-ND": "CC-BY-ND-4.0",
+    "CC-BY-NC-SA": "CC-BY-NC-SA-4.0",
+    "CC-BY-NC-ND": "CC-BY-NC-ND-4.0",
+    "ODBL": "ODBL-1.0",
+    "ODC-BY": "ODC-BY-1.0"
+  },
+  "urls": {
+    "CC0-1.0": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "CC-BY-3.0": "https://creativecommons.org/licenses/by/3.0/",
+    "CC-BY-3.0-AU": "https://creativecommons.org/licenses/by/3.0/au/",
+    "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
+    "CC-BY-SA-3.0": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "CC-BY-SA-4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "CC-BY-NC-4.0": "https://creativecommons.org/licenses/by-nc/4.0/",
+    "CC-BY-NC-SA-4.0": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+    "CC-BY-ND-4.0": "https://creativecommons.org/licenses/by-nd/4.0/",
+    "CC-BY-NC-ND-4.0": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+    "PUBLIC DOMAIN": "",
+    "ODBL-1.0": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "ODC-BY-1.0": "https://opendatacommons.org/licenses/by/1-0/"
+  }
+}

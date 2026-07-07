@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- AusMT favicon: a stylised MT sounding curve over a station dot. Local asset (no external
+       fetch); referenced by index/about/add-survey <link rel="icon"> to stop the /favicon.ico 404. -->
+  <rect width="32" height="32" rx="6" fill="#10161C"/>
+  <polyline points="5,22 10,14 15,18 21,9 27,13" fill="none" stroke="#59B0F6" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="26" r="2.6" fill="#F6A94B"/>
+</svg>

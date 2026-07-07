@@ -1,0 +1,1 @@
+# Placeholder. Point AUSMT_GIT_CREDS_DIR at a dir with real git push credentials (deploy key / credential file) to enable the C11 curator publish push. See README 'Curator publish credentials'. This placeholder makes docker compose config validate; with it, git push fails => PUBLISH_FAILED (fail closed).

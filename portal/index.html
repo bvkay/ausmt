@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AusMT - Australia's Magnetotelluric Data Portal</title>
+<!-- Privacy-respecting analytics (Plausible: cookieless, no IPs stored, no cross-site tracking).
+     OFF by default. To enable, self-host or use plausible.io, then uncomment the next line and set
+     your domain. AusMT deliberately collects NO personal data.
+<script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script>
+-->
+<script src="src/analytics-shim.js"></script><!-- external (not inline) so CSP stays script-src 'self' -->
+<link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="vendor/MarkerCluster.min.css">
+<link rel="stylesheet" href="vendor/leaflet.draw.css">
+<style>
+  :root{
+    --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
+    --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
+    --lpmt:#2E8FA3; --bbmt:#E0782F; --amt:#A85CC4; --gds:#5BAE6A;
+    --ok:#5BAE6A; --part:#D9A23B; --no:#A85454; --unk:#5A6E7D;
+    --q0:#A85454; --q3:#D9A23B; --q5:#5BAE6A;
+    --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:var(--ink);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
+  /* UX3 item 4: three-zone header. Left = brand, centre = nav + page links (genuinely centred via the
+     flex:1 side zones), right = counts + mtcat link, right-aligned. Each zone is its own flex row so it
+     wraps sanely; the whole header still flex-wraps at narrow widths (see the 760px block). */
+  header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+  .hleft{flex:1 1 auto}
+  .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
+  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
+  /* AuScope icon (white variant, vendored) replaces the old copper-square ::before as the header mark */
+  .logolink{display:flex;align-items:center;flex:none}
+  .auscope-logo{height:30px;width:auto;display:block}
+  .tagline{color:var(--muted);font-size:12.5px}
+  nav{display:flex;gap:4px}
+  nav button{background:none;border:0;color:var(--muted);font-size:13.5px;padding:7px 12px;border-radius:4px;cursor:pointer}
+  nav button.active{color:var(--text);background:var(--panel-2)}
+  nav button:hover{color:var(--text)}
+  .contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
+  .contribute:hover{border-color:var(--copper)}
+  .about{color:var(--muted);font-size:13px;text-decoration:none;padding:6px 11px;border-radius:4px}
+  .about:hover{color:var(--text)}
+  .ver{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
+  .apilink{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-decoration:none;margin-left:14px;white-space:nowrap}
+  .apilink:hover{color:var(--copper)}
+  .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .counts b{color:var(--text)}
+  main{flex:1;display:flex;min-height:0;position:relative}
+  aside.filters{width:330px;min-width:0;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;overflow-x:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:none}
+  .resizer{width:6px;flex:none;cursor:col-resize;background:var(--line);transition:background .12s}
+  .resizer:hover,.resizer.drag{background:var(--copper)}
+  .content{flex:1;min-width:0;position:relative;display:flex}
+  #map{flex:1;background:#dfe6e9}
+  .hidden{display:none!important}
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:8px}
+  fieldset{border:0}
+  .typegrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .typegrid label{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 8px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;cursor:pointer}
+  .typegrid input{accent-color:var(--copper)}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .seg button{flex:1;background:var(--panel-2);border:0;color:var(--muted);font-size:12px;padding:6px;cursor:pointer}
+  .seg button.on{background:var(--copper);color:#16110b;font-weight:600}
+  .pslider{position:relative;height:30px;margin:18px 2px 2px}
+  .pslider .track{position:absolute;top:13px;left:0;right:0;height:4px;background:var(--line);border-radius:2px}
+  .pslider .fill{position:absolute;top:13px;height:4px;background:var(--copper);border-radius:2px}
+  .pslider input[type=range]{position:absolute;top:0;left:0;width:100%;height:30px;appearance:none;-webkit-appearance:none;background:none;pointer-events:none;margin:0}
+  .pslider input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--text);border:3px solid var(--copper);pointer-events:auto;cursor:grab}
+  .pslider input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--text);border:3px solid var(--copper);pointer-events:auto;cursor:grab}
+  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
+  .pread{font-family:var(--mono);font-size:13px;margin-top:9px}
+  .pread span{color:var(--copper)}
+  .tree{display:flex;flex-direction:column;gap:2px;min-height:120px;max-height:60vh;height:300px;overflow-y:auto;resize:vertical;padding-right:12px;border:1px solid transparent;border-bottom:1px dashed var(--line)}
+  .tree:hover{border-bottom-color:var(--copper)}
+  .tree .country{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:3px 0;cursor:pointer}
+  .tree .country input{accent-color:var(--copper)}
+  .tree .country .flag{font-size:10px;color:var(--muted);font-weight:400;margin-left:auto;font-family:var(--mono);padding-right:2px}
+  .tree .org{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);padding:3px 0 1px 9px;text-transform:uppercase;letter-spacing:.05em;cursor:pointer}
+  .tree .org input{accent-color:var(--copper);width:12px;height:12px}
+  .tree .survey{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;padding:1px 0 1px 18px}
+  .tree .survey input{accent-color:var(--copper)}
+  .tree .survey .n{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted);padding-right:4px}
+  /* UX5 (D7): disclosure carets — a separate click target inside each label row (its handler
+     preventDefaults so the label never activates its checkbox). UX5 (D6): the Collections toggle
+     group renders FIRST in the tree; .coll styled like .country (both are bulk toggles), passive
+     .collmember rows indented + muted with the survey-style count chip. */
+  .tree .caret{flex:none;width:14px;text-align:center;font-size:9px;color:var(--muted);cursor:pointer;user-select:none}
+  .tree .caret:hover{color:var(--copper)}
+  .tree .treegroup{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:4px 0 1px}
+  .tree .coll{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:3px 0;cursor:pointer}
+  .tree .coll input{accent-color:var(--copper)}
+  .tree .collmember{display:flex;align-items:center;font-size:12px;color:var(--muted);padding:1px 0 1px 39px}
+  .tree .collmember .n{margin-left:auto;font-family:var(--mono);font-size:11px;padding-right:4px}
+  #find{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;color:var(--text);font-size:13px;padding:7px 9px}
+  #find:focus{outline:none;border-color:var(--copper)}
+  .findresults{display:none;margin-top:6px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2);max-height:300px;overflow-y:auto}
+  .findresults .fgroup{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 9px 3px;background:var(--panel);position:sticky;top:0}
+  .findresults .fitem{padding:6px 9px;font-size:12.5px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .findresults .fitem:hover{background:var(--copper);color:#16110b}
+  .findresults .fitem .fmeta{font-size:10.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap}
+  .findresults .fitem:hover .fmeta{color:#16110b}
+  .findresults .fnone{color:var(--muted);cursor:default}.findresults .fnone:hover{background:none;color:var(--muted)}
+  select,input[type=text]{width:100%;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
+  select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
+  .selbox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:12px}
+  .selbox .big{font-family:var(--mono);font-size:26px;font-weight:700}
+  .selbox .hint{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}
+  .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+  button{font-family:var(--sans);font-size:12.5px;padding:8px 6px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
+  button:hover{border-color:var(--copper)}
+  button.primary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  .wide{grid-column:1/-1}
+
+  /* drawer */
+  #drawer{position:absolute;top:0;right:0;bottom:0;width:420px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);transform:translateX(102%);transition:transform .16s ease;z-index:1100;overflow-y:auto;padding:16px 18px}
+  #drawer.open{transform:none}
+  .dhead{display:flex;align-items:baseline;gap:10px}
+  .dhead .sid{font-family:var(--mono);font-weight:800;font-size:22px}
+  .dhead .close{margin-left:auto;font-size:16px;padding:4px 10px}
+  .dsub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .chip{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:9px;color:#16110b;vertical-align:2px}
+  /* science summary strip — the first thing after the name */
+  .sci{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}
+  .sci .cell{background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:7px 8px;text-align:center}
+  .sci .lab{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .sci .val{font-family:var(--mono);font-size:13px;margin-top:3px;font-weight:600}
+  .qbar{height:5px;border-radius:3px;background:var(--line);margin-top:5px;overflow:hidden}
+  .qbar > div{height:5px;border-radius:3px}
+  .maturity{display:flex;gap:0;margin:10px 0 2px;align-items:stretch}
+  .step{flex:1;text-align:center;font-size:9.5px;padding:5px 2px;border:1px solid var(--line);color:var(--muted);position:relative}
+  .step:first-child{border-radius:4px 0 0 4px}.step:last-child{border-radius:0 4px 4px 0}
+  .step.on{background:var(--ok);color:#0f1a12;font-weight:700;border-color:var(--ok)}
+  .step.cur{outline:2px solid var(--copper);outline-offset:-2px}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .badge{font-size:10.5px;font-family:var(--mono);padding:2px 8px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+  .badge.ok{border-color:var(--ok);color:var(--ok)}.badge.part{border-color:var(--part);color:var(--part)}.badge.no{border-color:var(--no);color:var(--no)}
+  .sechead{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:16px 0 6px;border-top:1px solid var(--line);padding-top:12px}
+  details.prov-d{margin:8px 0;border:1px solid var(--line);border-radius:6px;background:#16242f}
+  details.prov-d>summary{cursor:pointer;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);user-select:none}
+  details.prov-d[open]>summary{border-bottom:1px solid var(--line)}
+  details.prov-d table.meta{margin:8px 10px}
+  details.prov-d code{font-family:monospace;font-size:11px;color:#E8EDF1;word-break:break-all}
+  .plot{margin:8px 0 2px}
+  .plot .ptitle{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:3px}
+  .dim{font-size:12px;color:var(--muted);margin:4px 0;line-height:1.5}.dim b{color:var(--text)}
+  .prodgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .prod{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:8px;font-size:12px;cursor:pointer}
+  .prod:hover{border-color:var(--copper)}
+  .prod.dis{opacity:.45;cursor:default}.prod.dis:hover{border-color:var(--line)}
+  .prod .pdot{width:8px;height:8px;border-radius:50%;flex:none}
+  .prod small{display:block;color:var(--muted);font-size:10px}
+  .lineage{display:flex;flex-direction:column;gap:0;margin:6px 0}
+  .lrow{display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:8px 10px}
+  .lrow .ldot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--copper)}
+  .lrow .lt{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .lrow .lv{font-family:var(--mono);font-size:11.5px;margin-top:2px}
+  .lrow .lv a{color:var(--copper);text-decoration:none}
+  .lconn{width:2px;height:9px;background:var(--line);margin-left:13px}
+  .citebox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px;margin:6px 0;font-size:12px;line-height:1.5}
+  .citebox .cb-row{display:flex;gap:6px;margin-top:8px}
+  .meta td{font-size:12px;padding:2px 0;vertical-align:top}.meta td:first-child{color:var(--muted);padding-right:12px;white-space:nowrap}.meta td:last-child{font-family:var(--mono)}
+  .api{font-family:var(--mono);font-size:10.5px;color:var(--muted);background:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 8px;margin-top:6px;word-break:break-all}
+  .api b{color:var(--copper)}
+
+  #surveysview,#collectionsview{flex:1;overflow-y:auto;padding:20px;display:none}
+  #collectionview{flex:1;overflow-y:auto;padding:24px 30px;display:none}
+  .collback{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 11px;cursor:pointer;font-size:12px}
+  .collback:hover{border-color:var(--copper)}
+  .colltitle{font-size:24px;margin:12px 0 2px;letter-spacing:-.3px}
+  .collsub{color:var(--muted);font-size:13px;font-family:var(--mono)}
+  .colldesc{font-size:14px;line-height:1.55;margin:12px 0;max-width:920px}
+  .collnote{font-size:12.5px;color:var(--muted);line-height:1.5;margin:8px 0 16px;max-width:920px}
+  .cstats{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 8px}
+  .cstat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 18px;min-width:118px}
+  .cstat .cnum{font-size:21px;font-weight:600;color:var(--copper);font-family:var(--mono)}
+  .cstat .clab{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px}
+  .csechead{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:20px 0 9px;border-bottom:1px solid var(--line);padding-bottom:5px}
+  .cmixrow{font-size:13px;line-height:1.95;margin:10px 0 4px}
+  .colltable{width:100%;border-collapse:collapse;font-size:13px;max-width:1100px}
+  .colltable th{text-align:left;color:var(--muted);font-weight:500;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);padding:7px 9px}
+  .colltable td{border-bottom:1px solid var(--line);padding:8px 9px;vertical-align:top}
+  .colltable tbody tr:hover{background:var(--panel)}
+  .colltable td a{color:var(--copper);text-decoration:none;font-weight:500}.colltable td a:hover{text-decoration:underline}
+  .colltable .csub{font-size:11px;color:var(--muted);margin-top:1px}
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;max-width:1500px}
+  .surveymeta{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .surveymeta a{color:var(--copper);text-decoration:none}
+  .surveymeta .pidline{font-family:var(--mono);word-break:break-all}
+  .emptynote{color:var(--muted);font-size:13px;padding:30px 4px}
+  .scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+  .scard h3{font-size:16px;margin-bottom:2px}.scard .cust{font-size:12px;color:var(--muted)}
+  .scard .stats{font-family:var(--mono);font-size:12px;margin:10px 0;line-height:1.7}.scard .stats b{color:var(--copper)}
+  .mixbar{display:flex;height:7px;border-radius:3px;overflow:hidden;margin:8px 0}
+  .scard .desc{font-size:12px;color:var(--muted);line-height:1.5;margin:8px 0;font-style:italic}
+  .scard .cite{font-size:11.5px;line-height:1.5;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}.scard .cite a{color:var(--copper)}
+  .prov{font-size:10px;color:var(--part)}
+  .scard .cardbtns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  footer{padding:7px 18px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.5;text-align:center}footer a{color:var(--copper);text-decoration:none}
+  .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:11px}
+  .leaflet-tooltip.qtip::before{display:none}
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
+  .marker-cluster div{background:rgba(232,237,241,.92)!important;color:#13202B!important;font-family:var(--mono);font-weight:700}.marker-cluster{background:rgba(224,120,47,.45)!important}
+  @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}
+    /* UX3 item 4: at narrow widths the three header zones stack full-width and left-align, so the
+       centred nav / right-aligned counts don't read as stranded fragments once they wrap. */
+    .hzone{flex:1 1 100%;justify-content:flex-start}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+  /* Custom marker-cluster icons (AusMT visual language; replaces missing Default plugin CSS) */
+  .ausmt-cluster{background:transparent;border:none}
+  .ausmt-cluster div{display:flex;align-items:center;justify-content:center;width:100%;height:100%;
+    border-radius:50%;font-family:var(--mono);font-weight:700;color:#12202b;
+    border:2px solid rgba(232,237,241,.4);box-shadow:0 2px 7px rgba(0,0,0,.45)}
+  .ausmt-cluster span{line-height:1}
+  .ausmt-cluster.cluster-small div{background:#5BAE6A;font-size:12px}
+  .ausmt-cluster.cluster-medium div{background:#D9A23B;font-size:13px}
+  .ausmt-cluster.cluster-large div{background:#E0782F;font-size:14px}
+.emptyoverlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
+  background:rgba(11,15,18,.55);backdrop-filter:blur(1px);pointer-events:none;padding:24px}
+.emptyoverlay .emptystate{pointer-events:auto}
+.emptystate{max-width:440px;margin:48px auto;background:var(--panel,#11171c);border:1px solid var(--line,#22303a);
+  border-radius:12px;padding:22px 24px;text-align:center;color:var(--text,#E8EDF1)}
+.emptystate h2{margin:0 0 8px;font-size:18px}
+.emptystate p{margin:0;color:var(--muted,#9fb0bd);line-height:1.5}
+.emptystate a{color:var(--accent,#5BC0BE);text-decoration:none}
+.emptystate a:hover{text-decoration:underline}
+  /* --- cosmetic pass: left-panel + selection + drawer/collection polish --- */
+  aside.filters{width:363px}                                   /* +10% from 330 */
+  .filters h2{text-align:center}                               /* centre the section titles */
+  .tree .org{padding-left:18px}                                /* deeper indent so nesting reads clearly */
+  .tree .survey{padding-left:52px}                             /* UX5: caret width shifted org text right — surveys follow (was 34px) */
+  .tree .org .osv{text-transform:none;font-weight:400}         /* "(N surveys)" not upper-cased */
+  .tree-tall .tree{height:600px;max-height:78vh}               /* taller tree on the Surveys view */
+  .selbox .selnum{text-align:center;margin-bottom:2px}
+  .selbox .biglab{font-size:12px;color:var(--muted)}
+  .dsub a{color:var(--copper);text-decoration:none}            /* readable "Part of:" link */
+  .chip.collchip{background:var(--panel-2);color:var(--text);border:1px solid var(--copper);font-weight:600;cursor:pointer}
+  .scard .scardhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .scard .scardhead h3{margin:0}
+
+  /* header "How to use" — a <button> styled like the .about link (keyboard/AT gets a real button, not a div) */
+  button.about{font-family:var(--sans);background:none;border:0}
+  button.about:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
+
+  /* --- intro panel: "three ways in" (S2 UX-A) --- */
+  .introoverlay{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;
+    background:rgba(11,15,18,.55);backdrop-filter:blur(1px);padding:24px}
+  .introoverlay.hidden{display:none!important}
+  .intropanel{position:relative;max-width:640px;width:100%;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:28px 30px 24px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+  .introclose{position:absolute;top:10px;right:10px;background:none;border:0;color:var(--muted);font-size:20px;
+    line-height:1;padding:6px 10px;cursor:pointer;border-radius:4px}
+  .introclose:hover{color:var(--text)}
+  .introhero{font-size:17px;font-weight:600;line-height:1.4;margin:4px 34px 20px 0;color:var(--text)}
+  .introtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .introtile{text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+    padding:14px 14px;cursor:pointer;color:var(--text);font-family:var(--sans)}
+  .introtile:hover{border-color:var(--copper)}
+  .introtile h3{font-size:13.5px;margin:0 0 6px;color:var(--copper)}
+  .introtile p{font-size:12px;color:var(--muted);line-height:1.5;margin:0}
+  .introtour{margin-top:18px;background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600;
+    padding:9px 16px;border-radius:5px}
+  @media (max-width:760px){.introtiles{grid-template-columns:1fr}}
+
+  /* --- guided tour spotlight (tour.js) --- */
+  .tourbackdrop{position:fixed;inset:0;z-index:3000;background:rgba(11,15,18,.65)}
+  .tourbackdrop.centered{display:flex;align-items:center;justify-content:center}
+  .tourspot{position:fixed;z-index:3001;border:2px solid var(--copper);border-radius:8px;
+    box-shadow:0 0 0 4000px rgba(11,15,18,.65);pointer-events:none;transition:all .12s ease}
+  .tourcard{position:fixed;z-index:3002;max-width:340px;background:var(--panel);border:1px solid var(--copper);
+    border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+  .tourcard.static{position:static;margin:0 auto}
+  .tourstep{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:8px}
+  .tourtext{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:14px}
+  .tourbtns{display:flex;justify-content:flex-end;gap:8px}
+  .tourbtns button{font-size:12px;padding:7px 12px}
+
+  /* --- S3: year range / downloadable-only / go-to-place / recently-added --- */
+  .yearrange{display:flex;align-items:center;gap:8px}
+  .yearrange input{width:0;flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
+  .yearrange span{color:var(--muted)}
+  .fieldnote{font-size:11px;color:var(--muted);line-height:1.4;margin-top:6px}
+  .dlonly{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+  .dlonly input{accent-color:var(--copper)}
+  .recentlist{list-style:none;display:flex;flex-direction:column;gap:6px}
+  .recentlist li{font-size:12.5px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .recentlist a{color:var(--text);text-decoration:none}
+  .recentlist a:hover{color:var(--copper);text-decoration:underline}
+  .recentlist .ra-date{font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .recentlist.compact{gap:4px}
+  .recentlist.compact li{font-size:12px}
+  #recentStrip{margin-bottom:16px}
+  #recentStrip h2{margin-bottom:8px}
+  /* Screening (advanced) — collapsed-by-default details wrapping the Min-TF-diagnostic slider +
+     colour-by segmented control (relocated per operator feedback; see index.html comment above it) */
+  details.advanced{border:1px solid var(--line);border-radius:6px;padding:2px 10px 10px}
+  details.advanced>summary{cursor:pointer;padding:9px 0;font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);user-select:none}
+  details.advanced[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
+  details.advanced .advgroup{margin-top:14px}
+  details.advanced .advgroup:first-of-type{margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <div class="hzone hleft">
+    <a class="logolink" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope — Australia's Earth science research infrastructure"><img class="auscope-logo" src="vendor/auscope-icon-white.png" alt="AuScope"></a>
+    <div class="wordmark">AusMT</div>
+    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+  </div>
+  <div class="hzone hcenter">
+    <nav>
+      <button id="navMap" class="active">Map</button>
+      <button id="navSurveys">Surveys</button>
+      <button id="navCollections">Collections</button>
+    </nav>
+    <a class="about" href="about.html">About</a>
+    <button type="button" class="about" id="howToUse">How to use AusMT</button>
+    <a class="contribute" href="add-survey.html">Contribute a survey →</a>
+  </div>
+  <div class="hzone hright">
+    <div class="counts" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</div>
+    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">mtcat.json ↗</a>
+  </div>
+</header>
+
+<main>
+<aside class="filters" id="filterPane">
+  <section data-views="both">
+    <h2>Find</h2>
+    <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
+    <div id="findResults" class="findresults" role="listbox"></div>
+  </section>
+  <section data-views="both">
+    <h2>Data type</h2>
+    <fieldset class="typegrid" id="typeBoxes">
+      <label title="Long-period MT — longer periods, deeper structure (e.g. AusLAMP-style fluxgate deployments)"><input type="checkbox" value="LPMT" checked><span class="dot" style="background:var(--lpmt)"></span>Long period</label>
+      <label title="Broadband MT — induction-coil recordings, crustal-scale targets"><input type="checkbox" value="BBMT" checked><span class="dot" style="background:var(--bbmt)"></span>Broadband</label>
+      <label title="Audio-frequency MT — high frequencies, shallow/near-surface targets"><input type="checkbox" value="AMT" checked><span class="dot" style="background:var(--amt)"></span>AMT</label>
+      <label title="Geomagnetic depth sounding — vertical-field (tipper) transfer functions only"><input type="checkbox" value="GDS" checked><span class="dot" style="background:var(--gds)"></span>GDS (tipper)</label>
+    </fieldset>
+  </section>
+  <section data-views="map" id="recentSideSection" class="hidden">
+    <h2>Recently added</h2>
+    <div id="recentSide"></div>
+  </section>
+  <section data-views="both">
+    <h2>Country → organisation → survey</h2>
+    <div class="tree" id="tree"></div>
+  </section>
+  <section data-views="map">
+    <h2>Selection</h2>
+    <div class="selbox">
+      <div class="selnum"><b class="big" id="selBig">0</b><span class="biglab"> sites selected</span></div>
+      <div class="hint" id="selHint">Draw a polygon or rectangle on the map (toolbar, top-left), or take everything that passes the filters.</div>
+      <div class="btnrow">
+        <button class="wide" id="selAll">Select all filtered</button>
+        <button id="dlCsv" disabled>Station CSV</button>
+        <button id="dlGeo" disabled>GeoJSON</button>
+        <button id="dlSh" disabled>Archive pointers</button>
+        <button id="dlCite" disabled>Citation pack (.zip)</button>
+        <button id="strike" disabled>Strike rose (selection)</button>
+        <button class="primary" id="dlZip" disabled>EDIs (zip)</button>
+        <button class="wide" id="clearSel">Clear selection &amp; shapes</button>
+      </div>
+    </div>
+  </section>
+  <!-- Screening (advanced): all specialist screening controls, collapsed by default, per operator
+       feedback rounds 1-2 (round 1 relocated Min-TF-diagnostic + colour-by; round 2 moved Year range,
+       Downloadable here and Period range in with them). The primary rail stays: find, data type,
+       recently added, tree, selection. Every element id inside is UNCHANGED so existing wiring
+       (filters.js/main.js/map.js) and tests keep working untouched; main.js's data-views toggle
+       matches nested elements, so the map-only colour-by group hides correctly on other views. -->
+  <section data-views="both">
+    <details class="advanced">
+      <summary>Screening (advanced)</summary>
+      <div class="advgroup">
+        <h2 id="yearRangeHead" title="Filters on each survey's declared acquisition year(s)">Year range</h2>
+        <div class="yearrange">
+          <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
+          <span>–</span>
+          <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
+        </div>
+        <div class="fieldnote">Filters on each survey's declared year(s); surveys with no declared date are hidden once a year is set.</div>
+      </div>
+      <div class="advgroup">
+        <label class="dlonly" title="Show only stations whose transfer-function files this portal is licensed to serve directly. Other stations are listed metadata-only with a pointer to their source archive."><input type="checkbox" id="dlOnly"> Downloadable here</label>
+      </div>
+      <div class="advgroup">
+        <h2 title="Keep stations whose transfer-function estimates cover this period window">Period range (s)</h2>
+        <div class="pslider"><div class="track"></div><div class="fill" id="pfill"></div>
+          <input type="range" id="pLo" min="-3" max="5" step="0.05" value="-3" aria-label="Min period log10 s">
+          <input type="range" id="pHi" min="-3" max="5" step="0.05" value="5" aria-label="Max period log10 s"></div>
+        <div class="ticks"><span>10⁻³</span><span>10⁻¹</span><span>10¹</span><span>10³</span><span>10⁵</span></div>
+        <div class="pread">window <span id="pLoTxt">0.001</span> – <span id="pHiTxt">100 000</span> s</div>
+      </div>
+      <div class="advgroup" data-views="map">
+        <h2>Colour stations by</h2>
+        <div class="seg" id="colorSeg"><button data-c="type" class="on">Data type</button><button data-c="quality">TF diagnostic</button><button data-c="dim">Dimensionality</button></div>
+      </div>
+      <div class="advgroup">
+        <h2>Min. TF diagnostic <span style="text-transform:none;letter-spacing:0">(not a quality verdict)</span></h2>
+        <div class="seg" id="qSeg"><button data-q="0" class="on">Any</button><button data-q="3">≥3</button><button data-q="4">≥4</button><button data-q="4.5">≥4.5</button></div>
+      </div>
+    </details>
+  </section>
+</aside>
+<div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
+<div class="content" id="content">
+  <div id="map"></div>
+  <div id="surveysview"><div id="recentStrip" class="hidden"></div><div class="cardgrid" id="cardGrid"></div></div>
+  <div id="collectionsview"><div class="cardgrid" id="collectionsGrid"></div></div>
+  <div id="collectionview"></div>
+  <div id="drawer" aria-label="Station details"></div>
+  <div id="introOverlay" class="introoverlay hidden">
+    <div class="intropanel" id="introPanel" role="region" aria-label="Welcome to AusMT">
+      <button type="button" class="introclose" id="introClose" aria-label="Dismiss introduction">&times;</button>
+      <p class="introhero">Australia's magnetotelluric transfer functions — discover, screen, download, cite.</p>
+      <div class="introtiles">
+        <button type="button" class="introtile" id="tileBrowse">
+          <h3>Browse &amp; download</h3>
+          <p>Explore surveys on the map, screen station quality, and export data with citations.</p>
+        </button>
+        <button type="button" class="introtile" id="tileContribute">
+          <h3>Contribute a survey</h3>
+          <p>Package and submit your EDIs with guided validation.</p>
+        </button>
+        <button type="button" class="introtile" id="tileIntegrate">
+          <h3>Integrate</h3>
+          <p>Machine-readable catalogue — MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
+        </button>
+      </div>
+      <button type="button" class="introtour" id="introTakeTour">Take the tour</button>
+    </div>
+  </div>
+</div>
+</main>
+
+<footer>
+  Copyright © 2026 AuScope and the AusMT contributors. Portal software is licensed under Apache-2.0; survey data remains licensed by its custodians.<span id="buildId"></span>
+  <span class="ver" data-ver-chip title="build &middot; MTCAT schema" style="margin-left:12px"></span>
+</footer>
+<div id="toast" role="status"></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/leaflet.markercluster.min.js"></script>
+<script src="vendor/leaflet.draw.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="config.js"></script>
+<script src="version.js"></script>
+<script src="src/contract.js"></script>
+<script src="src/security.js"></script>
+<script src="src/state.js"></script>
+<script src="src/data.js"></script>
+<script src="src/plots.js"></script>
+<script src="src/map.js"></script>
+<script src="src/filters.js"></script>
+<script src="src/drawer.js"></script>
+<script src="src/exports.js"></script>
+<script src="src/main.js"></script>
+<script src="src/tour.js"></script>
+</body>
+</html>
