@@ -43,7 +43,7 @@ import _edi_science as sci          # noqa: E402  (science_from_components, proc
 import _mth5 as m5                   # noqa: E402  (MTH5 reader; optional, needs mth5+mt_metadata)
 import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_params/drho/dphase/EMPTY_TF)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
-from _contract import CATALOGUE_COLUMNS, LICENSES  # noqa: E402  (single-source positional + licence contract)
+from _contract import CATALOGUE_COLUMNS  # noqa: E402  (single-source positional column contract)
 
 # Named sci-column access for the consumer side (mirrors the portal's contract.js SC map) so the product
 # writers below read sci fields BY NAME, not raw integer index. Built from the same generated SCI_COLUMNS,
@@ -145,30 +145,15 @@ def sha256(p: Path) -> str:
     return h
 
 
-# C6: normalise a raw survey.yaml licence string to a canonical id for allow-list matching. trim ->
-# collapse internal whitespace -> upper, then resolve a legacy bare alias (CC0, CC-BY, ODBL, ...) to
-# its canonical id. Allow-list keys and aliases are compared in this same UPPER space, so the match is
-# case-insensitive by construction. This is the ONLY place a licence string is canonicalised — the old
-# `startswith("CC")` prefix test (which redistributed a typo'd 'CC-BY-4.O' or any 'CC-nonsense') is gone.
-_LIC_REDIST = {s.upper() for s in LICENSES["redistributable"]}          # canonical ids, upper
-_LIC_RECOGNISED = {s.upper() for s in LICENSES["recognised_only"]} | _LIC_REDIST
-_LIC_ALIASES = {k.upper(): v.upper() for k, v in LICENSES["aliases"].items()}  # legacy bare -> canonical, upper
-_LIC_URLS = {k.upper(): v for k, v in LICENSES["urls"].items()}         # canonical id (upper) -> deed URL
-
-
-def _canon_license(license_str) -> str:
-    """Canonical UPPER id for a raw licence string (trim, collapse internal whitespace, upper, de-alias)."""
-    s = " ".join((license_str or "").strip().split()).upper()
-    return _LIC_ALIASES.get(s, s)
-
-
-def redistributable(license_str) -> bool:
-    """Only serve TF files whose licence EXACTLY (case-insensitive after trim/whitespace-collapse/de-alias)
-    matches the contract/licenses.json redistributable allow-list. Ties the distribution model to licensing
-    (the honest gate). 'TBD'/None/unknown/metadata-only -> NOT served (catalogue still lists the station;
-    download -> archive). See the DECISION note in contract/licenses.json (NC/ND stay redistributable-verbatim,
-    but ONLY via exact ids — killing the pre-C6 typo hole)."""
-    return _canon_license(license_str) in _LIC_REDIST
+# C6/C34-D2: the licence primitives (canonicalisation, the redistribution allow-list gate, and the
+# deterministic LICENSE.txt/LICENSE.md rights text) live in the STDLIB-ONLY leaf `_license_text`, so
+# the gw-runner can share the EXACT same rights text (LICENSE.md at intake) without importing this
+# heavy build module. redistributable() (the served-EDI gate) and license_instrument_text() (the
+# bundle LICENSE.txt) are re-imported here under their historical names so build_portal's own call
+# sites and the tests that reference bp.redistributable / bp.license_instrument_text keep resolving
+# unchanged, and the LICENSE.txt output stays byte-identical (pinned by test_license_gate /
+# test_manifest).
+from _license_text import license_instrument_text, redistributable  # noqa: E402
 
 
 # --- C1 access gate: access.level (open|metadata_only|embargoed) + embargo_until gate BYTE DISTRIBUTION,
@@ -269,41 +254,10 @@ def withhold_sci_row(sci_row):
             for c in sci.SCI_COLUMNS]
 
 
-def license_instrument_text(lic, licensor, year, attribution=None) -> str:
-    """C6: the LICENSE.txt that travels INSIDE every distributed survey zip so the rights don't get
-    stripped from the bytes. Records the canonical licence id, the licensor (survey custodian org), the
-    year (from the survey's date range), an attribution line, and the licence deed URL for CC/ODC ids.
-    Deterministic pure text (no timestamps) so the caller can keep the zip byte-reproducible.
-    `lic` is passed through _canon_license so a bare alias/typo prints its canonical id (or the raw
-    normalised value if unrecognised — this file ships only for redistributable surveys, so in practice
-    it is always a known id, but it never fabricates a URL for an unknown one)."""
-    cid = _canon_license(lic)
-    url = _LIC_URLS.get(cid, "")
-    who = (licensor or "the survey custodian").strip()
-    yr = str(year or "").strip()
-    attn = (attribution or f"{who}{(' (' + yr + ')') if yr else ''}").strip()
-    lines = [
-        "AusMT survey data — licence and attribution",
-        "=" * 44,
-        "",
-        f"Licence:     {cid}",
-    ]
-    if url:
-        lines.append(f"Licence URL: {url}")
-    lines += [
-        f"Licensor:    {who}",
-        f"Year:        {yr or 'not stated'}",
-        "",
-        "Attribution (cite as):",
-        f"  {attn}",
-        "",
-        "This LICENSE.txt travels with the data files in this archive. The transfer functions were",
-        "distributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric",
-        "releases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the",
-        "terms of that licence" + (f" ({url})." if url else "."),
-        "",
-    ]
-    return "\n".join(lines)
+# C6/C34-D2: license_instrument_text now lives in the stdlib-only leaf `_license_text` (imported near
+# the top of this module) so the bundle LICENSE.txt and the gw-runner's intake LICENSE.md share ONE
+# implementation and can never drift. The output is unchanged (byte-identical, pinned by the license
+# gate + manifest tests). The bundle call site below (build of the served-EDI zip) is untouched.
 
 
 # ---- download manifest helpers (slice #4: the distribution backbone) --------------------------
