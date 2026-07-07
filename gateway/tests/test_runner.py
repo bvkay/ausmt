@@ -49,6 +49,22 @@ def _has_real_engine() -> bool:
             and resolve_validator_dir() is not None)
 
 
+def test_runner_upload_cap_default_tracks_gateway_config():
+    # M2 (code-health review §6): the runner's extraction byte cap default is derived from the SAME
+    # 250 MB default the gateway config carries — they must not silently drift (the runner's cap must
+    # match the gateway's upload-time 4x-total rule). Assert the RunnerConfig default (both the
+    # dataclass default and the from_env default) equals the config constant in bytes.
+    from gateway.config import DEFAULT_MAX_UPLOAD_MB
+    expected = DEFAULT_MAX_UPLOAD_MB * 1024 * 1024
+    dflt = RunnerConfig(
+        incoming_dir=Path("/x/incoming"), quarantine_dir=Path("/x/quarantine"),
+        jobs_dir=Path("/x/jobs"), validator_path="/x/validator")
+    assert dflt.max_upload_bytes == expected, (
+        "RunnerConfig's default upload cap drifted from gateway.config.DEFAULT_MAX_UPLOAD_MB")
+    # from_env with the var unset must land on the same imported default (not a re-typed literal).
+    assert RunnerConfig.from_env({}).max_upload_bytes == expected
+
+
 # --------------------------------------------------------------------------------------------------
 # Preview diagnostics (Olympic Dam 2004 incident, 2026-07-06): the first real submission quarantined
 # with the bare string 'preview build failed' while the build's OWN stderr said exactly why

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from gateway.config import fail_closed_startup, load_config
+from gateway.config import DEFAULT_MAX_UPLOAD_MB, fail_closed_startup, load_config
 from gateway.tests.conftest import make_config
 
 
@@ -38,9 +38,16 @@ def test_redacted_items_omit_key(tmp_path):
 
 def test_env_defaults():
     cfg = load_config({"AUSMT_SUBMIT_KEY": "x" * 20})
-    assert cfg.max_upload_mb == 250
+    assert cfg.max_upload_mb == DEFAULT_MAX_UPLOAD_MB  # M2: the ONE default, not a re-typed 250
     assert cfg.max_inflight == 8
     assert cfg.max_per_day == 25
     assert cfg.job_timeout_s == 900
     assert cfg.clamd_host == "clamd"
     assert cfg.clamd_port == 3310
+
+
+def test_default_upload_cap_is_250_mb():
+    # The one place the CONCRETE 250 value is asserted, so a deliberate change to the operator-facing
+    # default is a visible one-line test edit here (not silently spread across config + runner).
+    # FAILS IF the shared default is changed without updating this pin.
+    assert DEFAULT_MAX_UPLOAD_MB == 250
