@@ -28,7 +28,8 @@ metadata preservation, provenance tracking and long-term stewardship of these da
 
 AusMT curates and serves:
 
-- Magnetotelluric transfer functions (EDI, EMTF XML, and MTH5 transfer-function products)
+- Magnetotelluric transfer functions (EDI and EMTF XML; per-survey MTH5 bundles are built
+  only where a deployment enables them)
 - Survey and station metadata
 - Provenance records
 - Citation information

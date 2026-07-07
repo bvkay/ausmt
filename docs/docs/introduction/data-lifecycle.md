@@ -183,11 +183,11 @@ Additional products may be generated from published transfer functions.
 Examples include:
 
 - Apparent resistivity and phase plots
-- Tipper products
+- Tipper products and induction arrows
 - Phase tensor products
-- Strike analyses
 - Dimensionality diagnostics
-- Distortion and decomposition products
+- Strike screening (selection-level rose diagrams)
+- Distortion and decomposition products (planned)
 
 These products assist users in understanding and evaluating datasets before downloading the underlying transfer functions.
 
@@ -206,7 +206,7 @@ Publication makes the package available through:
 - Collection pages
 - Survey pages
 - Search interfaces
-- APIs
+- Machine-readable JSON products (catalogue, MTCAT, download manifest)
 - Download services
 
 Published packages become part of the curated AusMT record.

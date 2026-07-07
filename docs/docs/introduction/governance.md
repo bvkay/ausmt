@@ -55,6 +55,7 @@ AusMT is built so that no data or capability is locked to the current operator:
 ## Status of this arrangement
 
 This is a **pre-institutional** operating arrangement, appropriate to the current
-private/demonstration phase. Before full public operation, AusMT is intended to move to an
+demonstration phase: the framework code is public, while the portal deployment and the
+survey-data repository are not. Before full public operation, AusMT is intended to move to an
 organisational repository home with at least two maintainers, a tagged and DOI'd release,
 and formal data-contribution agreements with custodian agencies.
