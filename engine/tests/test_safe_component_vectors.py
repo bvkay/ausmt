@@ -2,11 +2,10 @@
 
 safe_component is the untrusted-DATAID/slug sanitiser guarding on-disk product paths, ausmt_ids and
 portal markup against traversal / stored XSS. Its behaviour is pinned here by a COMMITTED vector file
-(engine/tests/fixtures/safe_component_vectors.json) — the same file a jsdom mirror of add-survey.html's
-sanitiser is intended to consume, so the two copies of the rule cannot drift once the JS mirror exists
-(see the C38 report: the JS half is not landed because add-survey.html has no client-side sanitiser
-yet). Sharing the vectors is the point — a change to the sanitiser that this file does not also update
-reds here.
+(engine/tests/fixtures/safe_component_vectors.json) — the same file the jsdom mirror consumes
+(portal/tests/add_survey_logic.test.js -> add-survey.html's safeEdiComponent, landed with the DATAID
+packaging lane), so the two copies of the rule cannot drift. Sharing the vectors is the point — a
+change to the sanitiser that this file does not also update reds here or on the JS side.
 """
 import json
 import sys

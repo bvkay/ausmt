@@ -71,6 +71,20 @@ ok(M.safeEdiComponent("...ROX") === "ROX", "safeEdiComponent: leading dots strip
 ok(M.safeEdiComponent("") === "station" && M.safeEdiComponent("///") === "station", "safeEdiComponent: never empty (fallback)");
 ok(M.packagedEdiName("ROX000") === "ROX000.edi", "packagedEdiName: <sanitized-DATAID>.edi");
 
+// ---- C38 item 4: safeEdiComponent pinned to the SHARED engine vectors ----
+// safeEdiComponent and the engine's build_portal.safe_component are two copies of ONE sanitisation
+// rule. Both consume the SAME committed vector file (engine/tests/fixtures/safe_component_vectors.json)
+// so they cannot drift apart silently: test_safe_component_vectors.py reds if the engine side diverges;
+// this block reds if the JS side does. FAILS IF safeEdiComponent(input, fallback) differs from any
+// committed vector — the ad-hoc checks above stay as readable examples; the vectors are the contract.
+const VEC = JSON.parse(fs.readFileSync(
+  path.join(__dirname, "..", "..", "engine", "tests", "fixtures", "safe_component_vectors.json"), "utf8"));
+ok(Array.isArray(VEC.vectors) && VEC.vectors.length >= 20 && typeof VEC.fallback === "string",
+   "shared safe_component vectors file loads (" + VEC.vectors.length + " vectors)");
+for (const v of VEC.vectors)
+  ok(M.safeEdiComponent(v.input, VEC.fallback) === v.expected,
+     "safeEdiComponent shared-vector [" + v.kind + "]: " + JSON.stringify(v.input) + " -> " + JSON.stringify(v.expected));
+
 // ediNameGate (submission-time collision guard): clean list -> no errors; duplicate + missing each
 // produce a blocking error naming the offending SOURCE filename(s). No silent auto-suffixing.
 ok(M.ediNameGate([{ name: "a.edi", dataid: "ROX000" }, { name: "b.edi", dataid: "ROX001" }]).length === 0,
