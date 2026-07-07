@@ -11,6 +11,7 @@ store (see docs developer/architecture.md).
 """
 from __future__ import annotations
 import math
+import sys
 import warnings
 from pathlib import Path
 
@@ -106,6 +107,36 @@ def parse_edi(path: Path) -> dict:
 # triggers on EMTF-XML-sourced TFs; an EDI read straight to components carries no values this large.)
 _FILL_MAX = 1e8
 
+# C20 placeholder-tipper detection. Some EDIs carry an UNPHYSICAL placeholder tipper — observed as
+# |T| identically 1.0 at every period, with one component ~1e-17 (a filler, not an estimate). These
+# named constants (siblings of _FILL_MAX; in the spirit of the _edi_science science constants) define
+# the detector: a tipper is a placeholder when it has at least PLACEHOLDER_TIPPER_MIN_PERIODS present
+# periods AND is FLAT (max|T|-min|T| < PLACEHOLDER_TIPPER_FLAT_TOL) AND sits AT UNITY
+# (||T|-1| < PLACEHOLDER_TIPPER_UNITY_TOL) at every present period. A real tipper (|T| varies, or is
+# far from 1) never satisfies all three, so it is untouched.
+PLACEHOLDER_TIPPER_MIN_PERIODS = 4
+PLACEHOLDER_TIPPER_FLAT_TOL = 1e-6      # max|T| - min|T| below this => FLAT
+PLACEHOLDER_TIPPER_UNITY_TOL = 1e-3     # ||T| - 1.0| below this at every period => AT UNITY
+
+
+def _is_placeholder_tipper(txr, txi, tyr, tyi) -> bool:
+    """True iff the four masked tipper component series describe an unphysical placeholder tipper
+    (C20): |T| flat AND pinned at 1.0 across at least PLACEHOLDER_TIPPER_MIN_PERIODS present periods.
+    Present = all four components non-None at that period (the same joint-presence the tip magnitude
+    needs). Returns False for any real (varying, or off-unity) tipper, and for a tipper with too few
+    present periods to judge."""
+    mags = []
+    n = max((len(s) for s in (txr, txi, tyr, tyi) if s), default=0)
+    for i in range(n):
+        vals = [s[i] if s and i < len(s) else None for s in (txr, txi, tyr, tyi)]
+        if all(v is not None for v in vals):
+            mags.append(math.sqrt(sum(v * v for v in vals)))
+    if len(mags) < PLACEHOLDER_TIPPER_MIN_PERIODS:
+        return False
+    if (max(mags) - min(mags)) >= PLACEHOLDER_TIPPER_FLAT_TOL:
+        return False
+    return all(abs(m - 1.0) < PLACEHOLDER_TIPPER_UNITY_TOL for m in mags)
+
 
 def _is_missing(zi) -> bool:
     """True if a complex Z/T element is absent, NaN, a non-physical missing-data fill (~1e32), or
@@ -200,6 +231,17 @@ def components_from_tf(tf):
                     continue
                 comp[k + "R"][i] = float(zi.real)
                 comp[k + "I"][i] = float(zi.imag)
+
+        # C20 placeholder-tipper honesty: an unphysical filler tipper (|T| flat at 1.0) is masked
+        # WHOLESALE — all four component series to null — so neither the tip magnitude nor the C20
+        # tzx/tzy columns paint it as data. Composes with the per-element fill/zero masking above
+        # (the detector reads the already-masked series). A build NOTICE names the station.
+        if _is_placeholder_tipper(comp["TXR"], comp["TXI"], comp["TYR"], comp["TYI"]):
+            for k in ("TXR", "TXI", "TYR", "TYI"):
+                comp[k] = [None] * n
+            _station = getattr(tf, "station", None) or "?"
+            print(f"  NOTICE {_station}: placeholder tipper (|T| flat at 1.0) masked — tipper withheld",
+                  file=sys.stderr)
 
     comp = {k: (v if any(x is not None for x in v) else None) for k, v in comp.items()}
     return periods, comp
