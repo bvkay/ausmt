@@ -11,7 +11,9 @@ Either copy the template and edit it, or use the browser tool:
   `transfer_functions/mth5/`). The `slug` MUST equal the folder name.
 - **Add Survey page** (`portal/add-survey.html`): drop your EDIs in the browser, fill the form,
   **confirm station locations on the map** (this resolves the DMS HEAD/INFO conflict and writes
-  `coordinate_resolution`), then download the package zip and unzip it under `surveys/<your-slug>/`.
+  `coordinate_resolution`), then either **Upload** directly to the submission gateway (the normal
+  contributor path — the package enters the scan → validate → curator-review pipeline) or
+  download the package zip and unzip it under `surveys/<your-slug>/` for the manual path below.
 
 A package is:
 
@@ -48,9 +50,13 @@ python -m extract.build_portal --surveys ../../ausmt-surveys/surveys --out ../po
 
 ## 4. Review & publish
 
-Open a pull request adding `surveys/<your-slug>/`. CI runs the authoritative validator; a curator
-reviews against the [Curator checklist](curator-checklist.md) and removes the private submitter block
-before publication.
+Gateway submissions land in the curator queue automatically — a curator reviews the validation
+report, checklist and rendered preview, and approval publishes the package as a git commit
+(served after the operator's next data rebuild).
+
+For the manual/developer path: open a pull request adding `surveys/<your-slug>/`. CI runs the
+authoritative validator; a curator reviews against the
+[Curator checklist](curator-checklist.md) before merging.
 
 ## Bulk / seed mode
 

@@ -8,8 +8,10 @@ rationale is in [Review and Curation](../operations/review.md); this is the prac
 
 **Automated gate**
 
-- [ ] CI validation is green (no `FAIL`). WARNINGs are reviewed, not auto-blocking.
-- [ ] Antivirus (ClamAV) ran in CI.
+- [ ] Validation passed with no `FAIL` (gateway submissions: the validator report in the curator
+      queue; direct-PR contributions: CI). WARNINGs are reviewed, not auto-blocking.
+- [ ] Antivirus (ClamAV) ran (per submission in the gateway; in CI for direct PRs).
+- [ ] For gateway submissions: the engine preview built, and the rendered preview looks right.
 
 **Identity & metadata**
 
@@ -34,7 +36,9 @@ rationale is in [Review and Curation](../operations/review.md); this is the prac
 - [ ] A dataset DOI or survey PID is present, or the absence is acknowledged.
 - [ ] Processing software/method are recorded where known.
 
-**Submission envelope** (removed before publication)
+**Submission envelope**
 
-- [ ] The private submitter block (email in `SUBMISSION.md`/`MANIFEST.json`) is removed from the
-      published record.
+- [ ] Gateway submissions carry no submitter contact details in the package by design (they are
+      form fields held in the gateway database, curator-visible only) — nothing to strip.
+- [ ] For a legacy or manually-prepared package: confirm no private submitter block
+      (`SUBMISSION.md`/`MANIFEST.json` email) remains in the published record.
