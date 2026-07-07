@@ -38,7 +38,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 from ruamel.yaml import YAML
@@ -353,12 +352,16 @@ def _run_validator(validator_path: str, package_root: Path) -> dict:
     is read from that file — the authoritative artefact. The report file lives beside the SCRATCH
     copy (never the live tree). Fail-closed: a non-JSON / crashing validator yields a synthetic FAIL
     item so the merge is treated as validator-FAIL (C31 §0.4)."""
-    from .runner import _validator_file  # reuse the same locator the C10 runner uses
+    # M7 (code-health review §6): reuse the C10 runner's locator AND the ONE canonical argv builder,
+    # so this edit-runner and the submission runner invoke the validator identically. This call site
+    # previously assembled the flags --json-first (`--json <file> <folder>`); it now goes through
+    # validator_argv (positional-first) — the single form the real-vendored-validator oracles pin.
+    from .runner import _validator_file, validator_argv
 
     vfile = _validator_file(validator_path)
     report_file = package_root.parent / "_edit_validate.json"
     subprocess.run(  # noqa: PLW1510 -- the report file is the authoritative signal, not returncode
-        [sys.executable, str(vfile), "--json", str(report_file), str(package_root)],
+        validator_argv(vfile, package_root, report_file),
         capture_output=True, text=True, timeout=300,
     )
     try:

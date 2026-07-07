@@ -226,13 +226,23 @@ def _emulate_real_validator(cmd, report: dict) -> None:
     the argv shape first — [python, .../validate_survey.py, <existing folder positional>, --json,
     <report file>] — so no mocked test can ever again mask an argv regression (the 2026-07-06
     ship-blocker: the folder was passed as the --json VALUE with no positional, argparse exited 2,
-    and every real submission quarantined while the stdout-JSON fakes kept the suite green)."""
+    and every real submission quarantined while the stdout-JSON fakes kept the suite green).
+
+    M7 (code-health review §6): the EXPECTED shape is single-sourced from runner.validator_argv rather
+    than re-encoded by hand here — the observed cmd must be exactly what the shared helper would build
+    for the same (validator_file, folder, report_file). So a change to the canonical argv moves the
+    helper AND this expectation together, and a call site that DRIFTED from the helper reds this
+    assertion (it would no longer match the helper's output)."""
     assert cmd[1].endswith("validate_survey.py"), f"unexpected validator argv: {cmd}"
     folder = Path(cmd[2])
     assert folder.is_dir(), f"folder positional missing or not a dir: {cmd}"
     assert cmd[3] == "--json", f"--json flag missing/misplaced: {cmd}"
     report_file = Path(cmd[4])
     assert report_file.suffix == ".json", f"--json value is not a report file: {cmd}"
+    # Re-derive from the shared helper: the observed cmd must equal validator_argv(...) for the same
+    # inputs. Pins the mocked call site to the ONE argv builder (M7).
+    assert cmd == runner.validator_argv(Path(cmd[1]), folder, report_file), (
+        f"validator argv drifted from runner.validator_argv: {cmd}")
     report_file.write_text(json.dumps(report), encoding="utf-8")
 
 # A survey.yaml complete enough for the real validator to reach a no-FAIL verdict (all required
