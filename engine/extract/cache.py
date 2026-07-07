@@ -167,11 +167,15 @@ class BuildCache:
             # Cache-format version tag. v2 = self-verifying entries (digest-line + payload, A1b);
             # v3 (C18b, Amendment A3) = the served-XML meta blob carries `survey_digest` (the digest
             # the entry was KEYED under), consumed by the digest-stamp sidecar + the verify.py
-            # consistency gate. Bumping the tag re-keys EVERY blob, so pre-A3 entries (whose meta
-            # lacks survey_digest) never resolve — a clean MISS, counted as a miss, never a misread of
-            # a missing field. One full re-derive on the first build after A3 lands; then warm again.
-            # Old-format entries age out via the prune.
-            "ausmt-c18-cache-v3",
+            # consistency gate; v4 (C20) = the parse product changed SHAPE — tf.json rows grew 10 -> 18
+            # (rho/phase error columns + full complex tipper) and the placeholder-tipper mask now
+            # withholds filler tippers, so a pre-C20 cached parse would replay 10-wide/unmasked rows.
+            # Bumping the tag re-keys EVERY blob, so pre-C20 entries never resolve — a clean MISS,
+            # counted as a miss, never a replay of a stale-shape parse. One full re-derive on the first
+            # build after C20 lands; then warm again. (The contract_digest below ALSO shifts on the
+            # column append; the tag bump is the explicit, self-documenting belt-and-suspenders — same
+            # discipline as C18b.) Old-format entries age out via the prune.
+            "ausmt-c20-cache-v4",
             str(engine_commit),                                      # coarse engine-commit salt (§2.2)
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions (§2.3)
             self.contract_digest,                                    # columns + schema digest (§2.4)
