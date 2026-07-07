@@ -38,6 +38,7 @@ EMPTY_TF = [[] for _ in range(18)]
 # once lets a single parse feed both, with `None` for any block the EDI omits.
 COMPONENT_KEYS = (
     "RHOXY", "RHOYX", "PHSXY", "PHSYX", "RHOXY.ERR", "RHOYX.ERR",
+    "PHSXY.ERR", "PHSYX.ERR",
     "ZXXR", "ZXXI", "ZXYR", "ZXYI", "ZYXR", "ZYXI", "ZYYR", "ZYYI",
     "TXR", "TXI", "TYR", "TYI",
 )

@@ -133,8 +133,8 @@ def _z(Z, out, inp):
 
 def components_from_tf(tf):
     """(periods, canonical component dict) from a parsed TF object — same layout the regex path
-    emits, reusable whether the TF came from an EDI or an MTH5 file. ρ/φ from Z, errors
-    propagated from impedance_error, tipper from Tx/Ty."""
+    emits, reusable whether the TF came from an EDI or an MTH5 file. ρ/φ from Z, ρ- AND φ-errors
+    propagated from impedance_error (linear |dZ| propagation), tipper from Tx/Ty."""
     per = tf.period
     if per is None or not per.size:
         return None, None
@@ -142,6 +142,7 @@ def components_from_tf(tf):
     n = len(periods)
     comp = {k: [None] * n for k in (
         "RHOXY", "RHOYX", "PHSXY", "PHSYX", "RHOXY.ERR", "RHOYX.ERR",
+        "PHSXY.ERR", "PHSYX.ERR",
         "ZXXR", "ZXXI", "ZXYR", "ZXYI", "ZYXR", "ZYXI", "ZYYR", "ZYYI",
         "TXR", "TXI", "TYR", "TYI")}
 
@@ -173,7 +174,17 @@ def components_from_tf(tf):
                 comp["PHS" + mode][i] = math.degrees(math.atan2(zi.imag, zi.real))
                 e = earr[k]
                 if e is not None and e[i] is not None and not (isinstance(e[i], float) and math.isnan(e[i])):
-                    comp["RHO" + mode + ".ERR"][i] = 0.4 * T * math.sqrt(mag2) * float(abs(e[i]))
+                    # Standard small-error LINEAR propagation from the impedance error |dZ| (C20):
+                    #   rho = 0.2*T*|Z|^2   -> drho  = 0.4*T*|Z|*|dZ|
+                    #   phi = atan2(Im,Re)  -> dphi  = degrees(|dZ|/|Z|)
+                    # |dZ| is the (real, non-negative) impedance-error magnitude mt_metadata carries
+                    # per component. Both errors come from the ONE |dZ| here so rho- and phase-error
+                    # cannot diverge; documented in data-files.md.
+                    dz = float(abs(e[i]))
+                    mag = math.sqrt(mag2)
+                    comp["RHO" + mode + ".ERR"][i] = 0.4 * T * mag * dz
+                    if mag > 0:
+                        comp["PHS" + mode + ".ERR"][i] = math.degrees(dz / mag)
 
     if tf.has_tipper():
         Tp = tf.tipper
