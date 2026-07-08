@@ -127,7 +127,7 @@ function openStation(i){
   const diag=`<div class="sci">`+
     `<div class="cell"><div class="lab">Period band</div><div class="val">${fmtP(s.pmin)}–${fmtP(s.pmax)}s</div></div>`+
     `<div class="cell"><div class="lab">Coverage</div><div class="val">${dec!=null?dec+" dec":"–"}</div></div>`+
-    `<div class="cell" title="median relative impedance error"><div class="lab">TF error</div><div class="val">${mre!=null?Math.round(mre*100)+"%":"n/a"}</div></div>`+
+    `<div class="cell" title="median relative apparent-resistivity error (= 2× the relative impedance error); errors are one standard error (√VAR)"><div class="lab">TF ρ error</div><div class="val">${mre!=null?Math.round(mre*100)+"%":"n/a"}</div></div>`+
     `<div class="cell"><div class="lab">Tipper</div><div class="val">${s.comps.includes("T")?"yes":"no"}</div></div>`+
     `<div class="cell"><div class="lab">Remote ref</div><div class="val">${sc[SC.rr]?"yes":"unk"}</div></div>`+
   `</div>`;
