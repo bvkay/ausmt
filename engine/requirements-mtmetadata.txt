@@ -1,8 +1,9 @@
 # Direct pins for the mt_metadata/mth5 engine.
 #
-# NOTE: since the regex retirement (maintainer/RegexRetirement-MigrationPlan.md) this stack is the
-# SOLE parser, so it is a CORE dependency (requirements.txt / pyproject [project].dependencies), not
-# an optional extra. This file remains as the direct-pin view and a back-compat install target.
+# NOTE: since the regex retirement (recorded in the maintainer knowledge base, a private archive)
+# this stack is the SOLE parser, so it is a CORE dependency (requirements.txt / pyproject
+# [project].dependencies), not an optional extra. This file remains as the direct-pin view and a
+# back-compat install target.
 #
 # It pins only the DIRECT deps; the transitive scientific stack (numpy/scipy/pandas/xarray/pydantic/
 # h5py/...) floats against latest PyPI. For a PINNED, verified, reproducible install use the lock —

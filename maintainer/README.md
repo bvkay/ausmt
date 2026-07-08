@@ -17,9 +17,11 @@ frozen text. A change that contradicts a frozen decision starts with an amendmen
 | [C11b-PiiAcknowledge.md](C11b-PiiAcknowledge.md) | Curator acknowledgement path for personal-data findings in submitted packages |
 | [C13-UploadDesign.md](C13-UploadDesign.md) | The add-survey page's direct upload |
 | [C18-BuildCacheDesign.md](C18-BuildCacheDesign.md) | The incremental build cache and its integrity rules (see Amendments) |
+| [C20-TfCompletenessDesign.md](C20-TfCompletenessDesign.md) | Transfer-function completeness diagnostic and its screening (not quality) semantics |
 | [C31-MetadataEditorDesign.md](C31-MetadataEditorDesign.md) | Curator metadata editor: survey.yaml round-trip, versioning, release notes |
 | [C32-BundlesVersionsDesign.md](C32-BundlesVersionsDesign.md) | Per-survey download bundles and served tool versions |
 | [C33-OperatorDocsDesign.md](C33-OperatorDocsDesign.md) | Operator documentation and deployment portability |
+| [C34-IntakeFilesDesign.md](C34-IntakeFilesDesign.md) | Intake generation of LICENSE.md/README.md into submitted packages before publication |
 | [C35b-GitTruthDesign.md](C35b-GitTruthDesign.md) | Test-reality for the publication path: real-git tests, vendored validator contract |
 | [UX4-MapAuslampScaling.md](UX4-MapAuslampScaling.md) | Map presentation: programme-based clustering, zoom-scaled markers |
 | [UX5-TreeCollections.md](UX5-TreeCollections.md) | Survey tree: collections group and disclosure controls |
