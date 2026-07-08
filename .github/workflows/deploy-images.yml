@@ -389,11 +389,16 @@ jobs:
           # and for teardown's `docker logs`; the Teardown step force-removes it unconditionally.
           # PYTHONPATH=/opt is compose.yaml:197 truth — /opt/gateway (the old value here) was the
           # 2026-07-06 production ModuleNotFoundError (`import gateway` needs the PARENT of the package).
+          # HOME/MPLCONFIGDIR are compose truth too (its runner env): uid 10002 has no home on a
+          # read-only rootfs, so HOME defaults to / and mt_metadata's ~/.cache writes fail EVERY EDI
+          # parse with Errno 30 (the 2026-07-06 Olympic Dam incident class — reproduced here the first
+          # time this leg actually ran). Point both at the tmpfs, exactly as production compose does.
           docker run -d --name gw-runner --network none \
             --user 10002:10002 --read-only --tmpfs /tmp \
             --memory 4g --cpus 2 --pids-limit 256 \
             --entrypoint python \
             -e PYTHONPATH=/opt -e AUSMT_GW_DATA=/gw \
+            -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
             -e AUSMT_VALIDATOR_PATH=/srv/surveys/_validation \
             -v /srv/ausmt/gateway/incoming:/gw/incoming:ro \
             -v /srv/ausmt/gateway/quarantine:/gw/quarantine:rw \
@@ -601,7 +606,12 @@ jobs:
           # push to on the box (no external remote). Owned by the runner user (uid 1001 on GHA) so the
           # container's git — running as 10002 — needs write access: make it group/other-writable for
           # the demo e2e (the box is single-tenant CI, not production).
-          mkdir -p /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
+          # /srv/ausmt itself is ROOT-OWNED (created by the sudo gateway-tree mkdir above), so a plain
+          # mkdir under it is Permission denied — surfaced the first time this leg actually ran on the
+          # public repo (it was previously always skipped). Create as root, hand to the runner user;
+          # the git init/seed below then runs unprivileged as intended.
+          sudo mkdir -p /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
+          sudo chown "$(id -u):$(id -g)" /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
           git init --bare /srv/ausmt/surveys-origin.git
           git -C /srv/ausmt/surveys-live init -b main
           git -C /srv/ausmt/surveys-live config user.name "CI Seed"
@@ -654,10 +664,13 @@ jobs:
           # NO --rm + PYTHONPATH=/opt (C35a/F2): same fix as gateway-e2e — keep a dead runner's logs,
           # and use compose.yaml:197's PYTHONPATH (the /opt/gateway value here was the 2026-07-06
           # production ModuleNotFoundError). Teardown force-removes gw-runner unconditionally.
+          # HOME/MPLCONFIGDIR mirror compose's runner env: a no-home uid 10002 on a read-only rootfs
+          # otherwise fails every EDI parse with Errno 30 (~/.cache) — the Olympic Dam incident class.
           docker run -d --name gw-runner --network none \
             --user 10002:10002 --read-only --tmpfs /tmp \
             --memory 4g --cpus 2 --pids-limit 256 --entrypoint python \
             -e PYTHONPATH=/opt -e AUSMT_GW_DATA=/gw \
+            -e HOME=/tmp -e MPLCONFIGDIR=/tmp/matplotlib \
             -e AUSMT_VALIDATOR_PATH=/srv/surveys/_validation \
             -v /srv/ausmt/gateway/incoming:/gw/incoming:ro \
             -v /srv/ausmt/gateway/quarantine:/gw/quarantine:rw \
