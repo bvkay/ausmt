@@ -279,14 +279,23 @@ confirm commit+push through the **same fail-closed publish machinery** as an app
 
 - **No/short submit key ⇒ no gateway.** The app refuses to start (`gateway/config.py`), before the
   port binds.
-- **clamd unreachable / signatures stale ⇒ nothing advances.** Submissions hold at `RECEIVED`; a
-  scan that cannot complete is never treated as clean.
+- **clamd unreachable ⇒ nothing advances.** Submissions hold at `RECEIVED`; a scan that cannot
+  complete is never treated as clean (`gateway/clamd.py`: a connect error, a truncated reply, or any
+  reply that is not a definite `OK`/`FOUND` raises `ScanError`, and the caller holds at `RECEIVED`).
+  **Caveat — signature *staleness* is NOT enforced in code (verified):** `clamd.py` fails closed on an
+  unreachable/unparseable daemon, but there is **no VERSION/DB-age check** anywhere in the gateway, so
+  a clamd that is *reachable but serving stale signatures* WOULD scan and advance. In practice
+  `freshclam` runs continuously inside the clamav image and the curator is a second human gate, so the
+  exposure is thin — but the fail-closed guarantee is "unreachable ⇒ hold", not "stale ⇒ hold". (An
+  age check on the signature DB surfaced in `/gateway/healthz` or `preflight` would close this; it is
+  flagged for the maintainer, not a change in this deploy contract.)
 - **Any parse/validation failure ⇒ `QUARANTINED`**, not published (a virus hit on the raw upload ⇒
   `REJECTED_AV`, zip deleted).
 - **Directories are ground truth, the DB is the index.** Lose the sqlite state and the pipeline
   recovers by rescanning; the runner never writes the DB.
 - **PII lives only in the sqlite DB** (`state/gateway.sqlite`) — never in packages, jobs, reports,
-  the status page, or git. Back it up with `restic` alongside `site-data/`.
+  the status page, or git. Back it up with **`deploy/backup.sh`** (a WAL-safe snapshot — see
+  "Backups & restore"; do NOT raw-copy a live WAL DB).
 
 ### PII handling (curator UI + source EDIs)
 
@@ -356,21 +365,117 @@ build that was current at boot and defeat the atomic swap. Mounting the parent a
 `/srv/data/current` means the symlink is followed per-request, so a host-side swap takes effect with
 no restart.
 
-### Backups
+### Monitoring (compose healthchecks + the operator loop)
 
-`restic` (assumed configured outside this contract) should cover:
-- `${AUSMT_DATA_DIR}/site-data/` — the generated product tree (`current` + all `builds/<ts>/`; keep
-  more than the latest — it's the rollback path). Includes the C18 `cache/` (safe to lose: a restore
-  that drops it costs one slow rebuild).
-- `${AUSMT_DATA_DIR}/surveys-live/` — reproducible via `git clone`, but a local backup avoids
-  depending on the remote during a restore.
-- `${AUSMT_DATA_DIR}/gateway/state/gateway.sqlite` — the ONLY PII home; back it up alongside
-  `site-data/` if you run the gateway.
-- `deploy/.env` — not secret if portal-only, but holds the submit/curator secrets once the gateway
-  is configured; keep it safe and out of git.
+`compose.yaml` ships a `healthcheck:` per long-running service. Each probes an **independent
+observable**, uses only a binary that actually exists in that image, and can genuinely fail:
 
-Nothing here is a database needing a migration step: restoring `site-data/` + `docker compose up -d`
-is sufficient.
+| Service | Check | Fails (=> `unhealthy`) when |
+|---|---|---|
+| `portal` | BusyBox `wget --spider http://127.0.0.1:8080/` | Caddy is down, the Caddyfile stopped adapting, or the process wedged. Probes `/` (not `/data/catalogue.json`) so a fresh box with no build yet is still healthy — an empty portal is a data state, not a portal fault. |
+| `gateway` | stdlib `urllib` GET `/gateway/healthz` (no curl/wget in `python:3.12-slim`) | uvicorn died, the app crashed on bad config, or the event loop wedged. **Liveness only** — it does NOT check clamd, the runner, or the queue. |
+| `clamd` | INSTREAM `PING`→`PONG` on `:3310` | clamd is not listening, or is up but still loading its signature DB (the daemon PONGs only once it can actually scan). Generous `start_period` covers the slow first `freshclam` + DB load. |
+
+The gateway's `depends_on: clamd` uses **`condition: service_healthy`**, so on `up` the gateway waits
+until clamd can scan rather than fail-closing every submission to `RECEIVED` while clamd loads.
+
+**`gw-runner` has NO healthcheck — deliberately, not an oversight.** When idle the runner writes
+nothing observable (its only liveness signal is touching a per-job running-file mtime *while a job
+runs*), and a `python -c "import gateway.runner"` probe would spawn a fresh interpreter and prove only
+that the module imports — a check that passes even when the long-lived loop has silently died. That is
+exactly the vacuous "healthcheck that cannot fail" this repo forbids. A dead/crash-looping runner is
+instead caught by (a) `restart: unless-stopped` making it visibly restart-loop in `docker compose ps`,
+and (b) the operator-facing symptom **"submissions stuck at `SCANNED`"** (the Troubleshooting row in
+§4). A meaningful in-container check needs a **global runner-heartbeat file** — a small change in
+`gateway/runner/` — which is flagged for the maintainer rather than faked here.
+
+**What healthchecks do NOT give you:** compose healthchecks flag a *container* as unhealthy but do not
+alert anyone or restart a merely-`unhealthy` (vs exited) container. There is still **no external
+alerting** on this box. The documented minimum operator loop is a periodic `make smoke` +
+`docker compose -f compose.yaml --profile gateway ps` (look for `unhealthy`/restarting) + a disk check
+(`df -h /srv`); wiring those into an external cron ping (e.g. healthchecks.io) is the tracked next step.
+
+### Backups & restore
+
+An implemented backup ships at **`deploy/backup.sh`** (POSIX sh; runs on the Ubuntu box). It captures
+only the genuinely irreplaceable state and produces a date-stamped tarball (or, if `restic` is
+configured, a restic snapshot). Run it, then **run one restore drill** — a backup that has never been
+restored is a hypothesis, not a backup.
+
+**What it backs up (and what it deliberately does not):**
+- `gateway/state/gateway.sqlite` — the ONLY PII home and the audit trail; the single irreplaceable
+  file. **Snapshotted CONSISTENTLY, not raw-copied** (see the WAL warning below).
+- `deploy/.env` — the submit/curator secrets once the gateway is configured.
+- `surveys-live/` — the survey packages the gateway commits. Reproducible from its git remote, but a
+  local copy means a restore does not depend on the remote.
+- `site-data/current/{build.json,build_provenance.json}` — build **metadata only**. The built products
+  (portal JSON, bundled EDIs, zips) and the C18 `cache/` are **regenerable** with `make rebuild-data`,
+  so they are NOT archived — only the provenance that records which source commit + engine built the
+  currently-served corpus, so a restore knows what to rebuild.
+
+> **WAL WARNING (corrects the earlier "back it up with `restic` alongside `site-data/`" advice).**
+> `gateway/db.py` opens the DB in **WAL mode** (`PRAGMA journal_mode=WAL`). A raw file copy of a *live*
+> WAL database — `cp gateway.sqlite`, or `restic backup` pointed straight at the file while the gateway
+> is running — can miss committed transactions still sitting in the `-wal` sidecar, silently producing
+> a torn snapshot. `backup.sh` therefore copies the DB **through SQLite's online backup API**
+> (`sqlite3 <db> ".backup <dest>"`, or the Python `sqlite3` `.backup()` fallback via the gateway image
+> when the host has no `sqlite3`), which is transactionally consistent even against a live writer. Hand
+> the *snapshot* to restic, never the live file.
+
+**Run it (tar mode):**
+```sh
+AUSMT_DATA_DIR=/srv/ausmt ./deploy/backup.sh /srv/ausmt-backups
+```
+Retention is 7 daily / 4 weekly, pruned automatically. Set `RESTIC_REPOSITORY` (+ restic's own env) to
+back up to a restic repo instead of tar; restic then owns retention (`forget --keep-daily 7
+--keep-weekly 4`). Pick an **offsite** target — a backup on the same disk as the DB survives nothing.
+
+**Schedule it** — a systemd timer (preferred) or cron. Example timer:
+```ini
+# /etc/systemd/system/ausmt-backup.service
+[Service]
+Type=oneshot
+Environment=AUSMT_DATA_DIR=/srv/ausmt
+# For restic, also set RESTIC_REPOSITORY / RESTIC_PASSWORD_FILE here.
+ExecStart=/srv/ausmt-code/deploy/backup.sh /srv/ausmt-backups
+
+# /etc/systemd/system/ausmt-backup.timer
+[Timer]
+OnCalendar=daily
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+```sh
+systemctl enable --now ausmt-backup.timer   # then: systemctl start ausmt-backup.service to test now
+```
+Cron equivalent: `15 3 * * *  AUSMT_DATA_DIR=/srv/ausmt /srv/ausmt-code/deploy/backup.sh /srv/ausmt-backups`
+
+**RESTORE procedure (step by step):**
+1. **Stop the gateway** so nothing writes the DB mid-restore:
+   `docker compose -f compose.yaml --profile gateway down`.
+2. **Unpack the backup** (tar mode): `tar -xzf ausmt-backup-<STAMP>.tar.gz -C /tmp/restore`
+   (restic mode: `restic restore latest --target /tmp/restore`). The files land under
+   `/tmp/restore/payload/`.
+3. **Restore the DB.** Replace the live DB with the snapshot and **delete any stale WAL sidecars** so
+   SQLite does not replay an old `-wal` over your restored file:
+   ```sh
+   rm -f /srv/ausmt/gateway/state/gateway.sqlite-wal /srv/ausmt/gateway/state/gateway.sqlite-shm
+   cp /tmp/restore/payload/gateway/state/gateway.sqlite /srv/ausmt/gateway/state/gateway.sqlite
+   chown 10002:10002 /srv/ausmt/gateway/state/gateway.sqlite
+   ```
+4. **Restore `surveys-live/`** if lost: `cp -a /tmp/restore/payload/surveys-live /srv/ausmt/surveys-live`
+   (or re-`git clone` it — the checkout is git). Restore `deploy/.env` if lost.
+5. **Rebuild the served products** — they were not in the backup by design:
+   `export AUSMT_DATA_DIR=/srv/ausmt; make rebuild-data`. `build.json` from the backup tells you the
+   source commit the old build used, if you need to reproduce it exactly.
+6. **Bring it back up** (`docker compose ... up -d`) and `make smoke`. For the gateway, confirm the
+   status of a known prior submission resolves — that proves the DB restore, not just the file copy.
+
+Note the gateway's own recovery property still holds: **directories are ground truth, the DB is the
+index** — if you lose only the sqlite state, the pipeline recovers by rescanning the on-disk trees
+(README §3), so the DB backup mainly protects the **PII + audit history**, which rescanning cannot
+reconstruct.
 
 ---
 
