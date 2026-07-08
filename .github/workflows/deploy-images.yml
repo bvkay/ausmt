@@ -616,6 +616,12 @@ jobs:
           git -C /srv/ausmt/surveys-live init -b main
           git -C /srv/ausmt/surveys-live config user.name "CI Seed"
           git -C /srv/ausmt/surveys-live config user.email "ci@example.test"
+          # The chmod -R 0777 below (cross-uid write access for the container) flips the exec bit on
+          # every tracked file AFTER the seed commit — git counts mode-only changes as modifications,
+          # so the gateway's publish preflight refused with "surveys-live checkout is dirty" (the
+          # fourth harness bug surfaced by this leg's first real runs). Ignore mode-only diffs in
+          # this single-tenant CI seed; content changes still count.
+          git -C /srv/ausmt/surveys-live config core.fileMode false
           mkdir -p /srv/ausmt/surveys-live/surveys
           # Seed the validator dir so the runner can validate (copy from the surveys checkout).
           cp -r "$GITHUB_WORKSPACE/../ausmt-surveys/_validation" /srv/ausmt/surveys-live/_validation
