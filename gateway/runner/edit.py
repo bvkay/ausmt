@@ -66,6 +66,19 @@ EDIT_SUBDIR = "edit"
 # an edit job and it becomes a path component below).
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
+# An EDI filename the curator may select for removal must be a bare basename (no path parts, no
+# traversal) ending in .edi (case-insensitive). The runner re-validates every selected name against
+# this before it becomes a path component — the gateway checked it too, but the runner never trusts
+# a field handed to it in a job file (mirrors the slug rule). Deliberately strict: an .edi file with
+# an exotic name outside this charset is not removable via the UI (a rename-then-PR is the escape).
+_EDI_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.edi$", re.IGNORECASE)
+
+# Where the stations (EDI files) live inside a survey package — the single layout the whole pipeline
+# assumes (gateway/runner/intake._station_count globs exactly this; the validator derives its station
+# count the same way). There is NO station-list field in survey.yaml: the EDI files ARE the station
+# list, so a removal is a git rm of files + a version bump, not a yaml manifest edit.
+_EDI_SUBPATH = ("transfer_functions", "edi")
+
 # The editable field set (C31 §2). Scalars, nested maps, and lists the form models; everything else
 # in the survey.yaml (slug, coordinate_resolution, geographic_extent, EDI-derived fields, unknown
 # keys, comments) is NOT touched by a patch and round-trips byte-for-byte (C31 §0.2/§0.7). `version`
@@ -157,6 +170,18 @@ def _dispatch_edit(cfg, job: dict, scratch_dir: Path) -> dict:
         return run_merge_job(
             package_root,
             patch=job.get("patch") or {},
+            bump=str(job.get("bump") or ""),
+            note=str(job.get("note") or ""),
+            today=str(job.get("today") or ""),
+            validator_path=str(cfg.validator_path or ""),
+            scratch_dir=scratch_dir,
+        )
+    if kind == "list_stations":
+        return run_list_stations_job(package_root)
+    if kind == "remove_stations":
+        return run_remove_stations_job(
+            package_root,
+            filenames=list(job.get("filenames") or []),
             bump=str(job.get("bump") or ""),
             note=str(job.get("note") or ""),
             today=str(job.get("today") or ""),
@@ -496,6 +521,169 @@ def _validate_patched(package_root: Path, new_bytes: bytes, validator_path: str,
         shutil.rmtree(scratch_dir)
     dest = scratch_dir / package_root.name
     shutil.copytree(package_root, dest)
+    (dest / "survey.yaml").write_bytes(new_bytes)
+    try:
+        return _run_validator(validator_path, dest)
+    finally:
+        shutil.rmtree(scratch_dir, ignore_errors=True)
+
+
+# ---- station (EDI) listing + removal --------------------------------------------------------------
+
+def list_edi_files(package_root: Path) -> list[Path]:
+    """Every .edi file directly under <package>/transfer_functions/edi/, sorted by name for a
+    deterministic order across platforms (the same CI OS-portability concern as list_published_slugs).
+    A glob, not a parse — the station list is the files themselves. A missing edi/ dir yields []."""
+    edi_dir = package_root
+    for part in _EDI_SUBPATH:
+        edi_dir = edi_dir / part
+    if not edi_dir.is_dir():
+        return []
+    return sorted((p for p in edi_dir.iterdir()
+                   if p.is_file() and p.suffix.lower() == ".edi"),
+                  key=lambda p: p.name)
+
+
+def _station_id(filename: str) -> str:
+    """The station id derived from an EDI filename: the stem (name without the .edi suffix). This is
+    a DISPLAY convenience (intake/build_portal derive the authoritative catalogue id from the file
+    contents); the filename stem is the cheap, honest label the curator recognises."""
+    return Path(filename).stem
+
+
+def run_list_stations_job(package_root: Path) -> dict:
+    """Handle a `list_stations` edit-job: enumerate the survey's EDI files with their derived station
+    ids + the current version. A directory listing, never a content parse (mirrors the read job's
+    discipline)."""
+    survey_yaml = package_root / "survey.yaml"
+    if not survey_yaml.is_file():
+        raise EditError(f"survey.yaml not found under {package_root.name}")
+    stations = [{"filename": p.name, "station_id": _station_id(p.name)}
+                for p in list_edi_files(package_root)]
+    data = _load_bytes(survey_yaml.read_bytes())
+    version = data.get("version") if hasattr(data, "get") else None
+    return {
+        "ok": True,
+        "stations": stations,
+        "version": version if isinstance(version, str) else None,
+    }
+
+
+def run_remove_stations_job(package_root: Path, *, filenames: list[str], bump: str, note: str,
+                            today: str, validator_path: str, scratch_dir: Path) -> dict:
+    """Handle a `remove_stations` edit-job: refuse the unsafe removals (empty selection, all-stations,
+    a vanished/invalid file), bump the version (a content change requires a semver-greater bump), append
+    the release note, emit the new survey.yaml bytes + diff, and run the REAL validator over a SCRATCH
+    copy of the package MINUS the removed EDIs (so a station-set-sensitive check sees the post-removal
+    reality — this reuses the merge scratch machinery, it is NOT a second validation path). Returns
+    {ok, removed, station_count_before, station_count_after, diff, new_yaml(+_b64), new_sha256,
+    validator, has_fail, new_version} or raises EditError.
+
+    survey.yaml carries NO station-list field, so the yaml diff is only version + release_notes; the
+    EDI deletions are a git op the gateway performs at commit time (reported to the curator separately
+    via `removed`)."""
+    survey_yaml = package_root / "survey.yaml"
+    if not survey_yaml.is_file():
+        raise EditError(f"survey.yaml not found under {package_root.name}")
+
+    present = [p.name for p in list_edi_files(package_root)]
+    present_set = set(present)
+    before = len(present)
+
+    # Normalise + validate the selection. Dedupe while preserving the on-disk order so the reported
+    # `removed` list is stable and the count is honest.
+    requested = []
+    for raw in filenames:
+        name = str(raw).strip()
+        if not name:
+            continue
+        if not _EDI_NAME_RE.match(name):
+            raise EditError(f"not a valid EDI filename: {name!r}")
+        if name not in requested:
+            requested.append(name)
+    if not requested:
+        raise EditError("no stations selected for removal")
+
+    # Stale-form guard: a selected file that vanished since the form rendered => refuse the WHOLE
+    # removal (never a half-removal). Report every missing name so the curator can re-open once.
+    missing = [n for n in requested if n not in present_set]
+    if missing:
+        raise EditError(
+            "these selected files no longer exist in the survey (re-open the stations page): "
+            + ", ".join(sorted(missing)))
+
+    # Safety rail: at least one station must remain. Removing every EDI is deleting the survey — a
+    # different operation with a different (deliberately separate) blast radius.
+    remaining = before - len(requested)
+    if remaining < 1:
+        raise EditError(
+            "refusing to remove ALL stations — at least one EDI must remain "
+            "(deleting an entire survey is a separate operation)")
+
+    note = note.strip()
+    if not note:
+        raise EditError("a release note is required for a station removal")
+
+    # Version bump (a removal is a content change; the caller defaults to at least minor). The runner
+    # alone owns version logic (C31 §0.3) — resolve the kind against the current version, enforce
+    # semver-greater. Order removals deterministically for the release note / diff.
+    removed = sorted(requested)
+    data = _load_bytes(survey_yaml.read_bytes())
+    if not hasattr(data, "get"):
+        raise EditError("survey.yaml is not a mapping")
+    original_bytes = survey_yaml.read_bytes()
+    old_version = data.get("version")
+    old_v_str = old_version if isinstance(old_version, str) else "0.0.0"
+    if bump not in ("patch", "minor", "major"):
+        raise EditError("no version bump selected")
+    new_version = suggest_bump(old_v_str, bump)
+    if not semver_greater(new_version, old_v_str):
+        raise EditError(
+            f"cannot bump: current version {old_v_str!r} is not MAJOR.MINOR.PATCH semver — "
+            f"fix it via a PR first (a content edit requires a semver-greater bump, C31 §0.3)")
+    append_release_note(data, new_version, today, note)
+
+    new_bytes = _dump_bytes(data)
+    diff = "".join(difflib.unified_diff(
+        original_bytes.decode("utf-8", "replace").splitlines(keepends=True),
+        new_bytes.decode("utf-8", "replace").splitlines(keepends=True),
+        fromfile=f"a/{survey_yaml.name}", tofile=f"b/{survey_yaml.name}"))
+
+    report = _validate_removed(package_root, new_bytes, removed, validator_path, scratch_dir)
+
+    return {
+        "ok": True,
+        "removed": removed,
+        "station_count_before": before,
+        "station_count_after": remaining,
+        "diff": diff,
+        "new_yaml": new_bytes.decode("utf-8", "replace"),
+        "new_yaml_b64": base64.b64encode(new_bytes).decode("ascii"),
+        "new_sha256": hashlib.sha256(new_bytes).hexdigest(),
+        "validator": report,
+        "has_fail": report_has_fail(report),
+        "new_version": new_version,
+    }
+
+
+def _validate_removed(package_root: Path, new_bytes: bytes, removed: list[str], validator_path: str,
+                      scratch_dir: Path) -> dict:
+    """Copy the package into the per-job scratch dir, DELETE the removed EDIs from the copy, drop in
+    the patched survey.yaml, and run the real validator on the result — so the validator sees exactly
+    the post-removal package (review FIX 2: scratch NEVER under the surveys tree, per-job dir for no
+    collision). Mirrors _validate_patched; an unconfigured validator path yields an empty (non-failing)
+    report so unit tests without a real validator still exercise the removal path."""
+    if not validator_path:
+        return {"items": []}
+    if scratch_dir.exists():
+        shutil.rmtree(scratch_dir)
+    dest = scratch_dir / package_root.name
+    shutil.copytree(package_root, dest)
+    edi_dir = dest
+    for part in _EDI_SUBPATH:
+        edi_dir = edi_dir / part
+    for name in removed:
+        (edi_dir / name).unlink(missing_ok=True)
     (dest / "survey.yaml").write_bytes(new_bytes)
     try:
         return _run_validator(validator_path, dest)
