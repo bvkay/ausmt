@@ -138,6 +138,7 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str) -> str:
         f'<h1>Review queue</h1>'
         f'<p class="sub">Signed in as curator:{_esc(curator_name)} '
         '· <a href="/gateway/curator/edit">Edit published metadata</a> '
+        '· <a href="/gateway/curator/uploaders">Uploader keys</a> '
         f'{logout}</p>'
         f'<div class="panel">{table}</div>'
     )
@@ -454,6 +455,88 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str) -> str:
         f'<div class="panel">{listing}</div>'
     )
     return _page("AusMT edit metadata", body)
+
+
+# ---- uploader keys (schema v2 — curator-managed submit keys) ---------------------------------
+
+def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: str = "") -> str:
+    """The uploader-key management page (feat/uploader-key-management): a create form + the list of
+    issued keys. The list shows name, email (curator-only PII, never on a public page), created
+    (by/when), last used, and status (active/revoked with when/by). A revoked row STAYS listed for the
+    audit trail — there is no delete. The plaintext key is NEVER shown here (it is displayed exactly
+    once at creation); only the name/status is rendered. Every interpolated value is html.escaped."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    create = (
+        '<div class="panel"><h2>Issue a new uploader key</h2>'
+        '<p class="sub">The key is shown ONCE on the next page — it cannot be retrieved again '
+        '(revoke and create a new one if lost). The email is a curator-only contact for the uploader '
+        'and never appears on any public page.</p>'
+        f'{err}'
+        '<form method="post" action="/gateway/curator/uploaders/create">'
+        f'{csrf}'
+        '<p><label class="k">Name (required, unique)</label>'
+        '<input type="text" name="name" placeholder="e.g. field-team-1" required autocomplete="off"></p>'
+        '<p><label class="k">Email (optional, curator-only)</label>'
+        '<input type="text" name="email" placeholder="contact@example.org" autocomplete="off"></p>'
+        '<p><button class="b-accent" type="submit">Create key</button></p>'
+        '</form></div>'
+    )
+    if keys:
+        trs = []
+        for k in keys:
+            if k.revoked_utc:
+                status = (f'<span class="badge" style="background:{_PALETTE["bad"]}">revoked</span> '
+                          f'<span class="k">{_esc(k.revoked_utc)} by curator:{_esc(k.revoked_by or "")}</span>')
+                action = ""
+            else:
+                status = f'<span class="badge" style="background:{_PALETTE["ok"]}">active</span>'
+                action = (
+                    f'<form class="act" method="post" '
+                    f'action="/gateway/curator/uploaders/{_esc(k.id)}/revoke">{csrf}'
+                    '<button class="b-bad" type="submit" '
+                    'onclick="return confirm(\'Revoke this uploader key? This cannot be undone.\')">'
+                    'Revoke</button></form>')
+            trs.append(
+                "<tr>"
+                f'<td>{_esc(k.name)}</td>'
+                f'<td>{_esc(k.email or "-")}</td>'
+                f'<td class="k">{_esc(k.created_utc)}<br>by curator:{_esc(k.created_by)}</td>'
+                f'<td class="k">{_esc(k.last_used_utc or "never")}</td>'
+                f'<td>{status}</td>'
+                f'<td>{action}</td>'
+                "</tr>"
+            )
+        table = ("<table><tr><th>Name</th><th>Email</th><th>Created</th><th>Last used</th>"
+                 "<th>Status</th><th></th></tr>" + "".join(trs) + "</table>")
+    else:
+        table = '<p class="sub">No uploader keys issued yet.</p>'
+    body = (
+        '<h1>Uploader keys</h1>'
+        f'<p class="sub">Signed in as curator:{_esc(curator_name)} · '
+        '<a href="/gateway/curator/queue">back to queue</a></p>'
+        f'{create}'
+        f'<div class="panel"><h2>Issued keys</h2>{table}</div>'
+    )
+    return _page("AusMT uploader keys", body)
+
+
+def render_uploader_created(*, curator_name: str, name: str, key: str) -> str:
+    """The show-ONCE page after a create: the plaintext key with copy-me wording and an explicit
+    reminder that it cannot be retrieved again. This is the ONLY place the plaintext is ever rendered;
+    the list page shows only its name/status. The key is escaped (defence in depth — the charset is
+    urlsafe-base64 so it cannot contain markup, but the page still escapes it)."""
+    body = (
+        f'<h1>Uploader key created — {_esc(name)}</h1>'
+        '<p class="sub">Copy this key now and give it to the uploader out-of-band (they send it as '
+        'the <code>X-AusMT-Submit-Key</code> header). It is shown ONCE and cannot be retrieved again '
+        '— if it is lost, revoke it and create a new one.</p>'
+        f'<div class="panel"><h2>The key (copy me)</h2>'
+        f'<pre style="user-select:all">{_esc(key)}</pre></div>'
+        '<p><a href="/gateway/curator/uploaders">back to uploader keys</a> · '
+        '<a href="/gateway/curator/queue">queue</a></p>'
+    )
+    return _page("AusMT uploader key created", body)
 
 
 def render_detail(*, submission_id: str, state: str, updated_utc: str,

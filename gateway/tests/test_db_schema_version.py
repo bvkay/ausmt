@@ -71,3 +71,56 @@ def test_db_from_newer_build_is_refused(tmp_path):
 
     with pytest.raises(db.SchemaTooNew):
         db.Database(path)
+
+
+def _table_columns(path, table: str) -> set[str]:
+    conn = sqlite3.connect(str(path))
+    try:
+        return {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    finally:
+        conn.close()
+
+
+def test_fresh_db_lands_at_v2_with_uploader_keys(tmp_path):
+    """A fresh DB is stamped at the current SCHEMA_VERSION (>= 2) and carries the uploader_keys table
+    (the feat/uploader-key-management migration). Fails if the migration never ran on a fresh DB."""
+    path = tmp_path / "gateway.sqlite"
+    db.Database(path).close()
+    assert db.SCHEMA_VERSION >= 2
+    assert _user_version(path) == db.SCHEMA_VERSION
+    cols = _table_columns(path, "uploader_keys")
+    assert cols == {"id", "name", "email", "key_sha256", "created_utc", "created_by",
+                    "revoked_utc", "revoked_by", "last_used_utc"}
+
+
+def test_v1_db_with_data_upgrades_to_v2(tmp_path):
+    """A v1 DB (current tables, stamped 1) with an existing submission row upgrades to v2 cleanly:
+    the migration adds uploader_keys and the existing row survives. Fails if the migration drops data
+    or does not create uploader_keys. Simulates the FIRST real migration on an already-deployed DB."""
+    path = tmp_path / "gateway.sqlite"
+    seeded = db.Database(path)
+    sid = db.new_id()
+    seeded.insert_submission(
+        submission_id=sid, zip_sha256="a" * 64, zip_bytes=1,
+        submitter_name="Tester", submitter_email="t@example.org", submitter_orcid=None,
+        token_hash="b" * 64,
+    )
+    seeded.close()
+    # Force the on-disk stamp back to 1 (a real v1 deployment) and drop uploader_keys so the migration
+    # has genuine work to do — not a no-op that would pass vacuously.
+    raw = sqlite3.connect(str(path))
+    raw.execute("DROP TABLE IF EXISTS uploader_keys")
+    raw.execute("PRAGMA user_version=1")
+    raw.commit()
+    raw.close()
+    assert _user_version(path) == 1
+
+    reopened = db.Database(path)
+    try:
+        assert _user_version(path) == db.SCHEMA_VERSION
+        assert reopened.get(sid) is not None, "existing rows must survive the v1->v2 upgrade"
+        assert "uploader_keys" in {
+            r[0] for r in reopened._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    finally:
+        reopened.close()
