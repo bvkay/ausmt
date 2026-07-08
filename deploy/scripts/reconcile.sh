@@ -8,7 +8,7 @@
 # WHAT IT DOES (design §3, in order):
 #   1. sync   — git -C surveys-live pull --ff-only. On failure: write status action=sync_failed and
 #               exit 0 WITHOUT rebuilding (never build from a state we cannot fast-forward to, §4).
-#   2. compare — built = source_commit from site-data/current/data/build.json; head = short HEAD of
+#   2. compare — built = source_commit from site-data/current/build.json; head = short HEAD of
 #               surveys-live (matched to the STORED short-hash length by prefix). Missing/unreadable
 #               build.json => treat as drift (rebuild), because we cannot prove what is served.
 #   3. decide — if head != built OR a rebuild.request file exists: consume rebuild.request FIRST
@@ -57,7 +57,12 @@ done
 
 SURVEYS_LIVE="$AUSMT_DATA_DIR/surveys-live"
 SITE_DATA="$AUSMT_DATA_DIR/site-data"
-BUILD_JSON="$SITE_DATA/current/data/build.json"
+# build.json lives at the BUILD ROOT (the engine writes `out/build.json`; see build_portal.py C12).
+# The /data/build.json URL the panel fetches maps to the SAME file because Caddy's handle_path
+# STRIPS the /data prefix (deploy/docker/caddy/Caddyfile) — do NOT re-add a data/ segment here.
+# The 2026-07-08 first install had a phantom data/ segment in this path: build.json was never found,
+# every tick read as drift, and only missing dir permissions stopped a rebuild-every-15-min loop.
+BUILD_JSON="$SITE_DATA/current/build.json"
 LOG_DIR="$SITE_DATA/logs"
 STATE_DIR="$AUSMT_DATA_DIR/gateway/state"
 REQUEST_FILE="$STATE_DIR/rebuild.request"
@@ -79,6 +84,21 @@ for _cand in python3 python; do
   fi
 done
 [ -n "$PY" ] || { printf 'reconcile: no working python3/python on PATH (needed to parse build.json)\n' >&2; exit 1; }
+
+# Fail LOUD AND EARLY if the status file cannot be written: every non-dry pass ends by reporting its
+# outcome, so a pass that cannot report must not half-run. (The 2026-07-08 first install failed
+# exactly here — site-data/ is uid-10001-owned and gateway/state/ is 10002-owned, and the runbook
+# was missing the one-time ownership prep — but the symptom was three scattered errors mid-pass
+# instead of one actionable line.) Probe with the same tmp name pattern the status writer uses.
+if [ "$DRY_RUN" -eq 0 ]; then
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  if ! ( : > "$STATUS_FILE.tmp.$$" ) 2>/dev/null; then
+    printf 'reconcile: state dir not writable by %s: %s\n' "$(id -un 2>/dev/null || echo '?')" "$STATE_DIR" >&2
+    printf 'reconcile: one-time ownership prep missing — see deploy/README.md "Serve reconcile" step 0\n' >&2
+    exit 1
+  fi
+  rm -f "$STATUS_FILE.tmp.$$"
+fi
 
 # read_source_commit: echo the served build's source_commit, or empty if build.json is missing or
 # unreadable/malformed (=> the caller treats it as drift). Never fails the script.
@@ -183,6 +203,39 @@ run_pass() {
   request_present=0
   [ -f "$REQUEST_FILE" ] && request_present=1
 
+  # LOOP GUARD (the 2026-07-08 class): an unreadable built-identity reads as drift, and a rebuild
+  # SHOULD make build.json readable — so if the LAST pass already rebuilt (or already tripped this
+  # guard) at this SAME head and the identity was STILL unreadable afterwards, something structural
+  # (a layout or permission mismatch) is eating every rebuild. Do not burn one build per tick
+  # forever: fail loudly and hold. Re-armed by any HEAD change or an explicit curator
+  # rebuild.request (deliberate human intent always gets a fresh attempt). Side effect, accepted +
+  # documented: a FAILED first build on a fresh box (no build.json yet) also holds instead of
+  # retrying every 15 min — a deterministic build failure needs an operator, not a retry storm.
+  if [ -z "$built" ] && [ "$request_present" -eq 0 ]; then
+    prev_guard=$(AUSMT_RG_STATUS="$STATUS_FILE" AUSMT_RG_HEAD="$head" "$PY" - <<'PYEOF' 2>/dev/null || true
+import json, os
+try:
+    with open(os.environ["AUSMT_RG_STATUS"], encoding="utf-8") as fh:
+        doc = json.load(fh)
+    head = os.environ.get("AUSMT_RG_HEAD") or ""
+    if (head and doc.get("action") in ("rebuilt", "failed")
+            and not doc.get("built") and doc.get("head") == head):
+        print("hold")
+except Exception:
+    pass
+PYEOF
+)
+    if [ "$prev_guard" = "hold" ]; then
+      printf 'reconcile: build identity STILL unreadable after a rebuild at head=%s — structural mismatch (layout/permissions); holding, NOT rebuilding every tick. Re-arm: fix + request a rebuild, or push a new commit. See README troubleshooting.\n' "$head" >&2
+      if [ "$DRY_RUN" -eq 1 ]; then
+        printf 'reconcile: [dry-run] loop guard would hold (status action=failed, no rebuild)\n'
+        return 0
+      fi
+      write_status "failed" "$head" "" "" ""
+      return 1
+    fi
+  fi
+
   drift=0
   # Empty built (no/unreadable build.json) => drift. Else compare by prefix in BOTH directions so a
   # stored 7-char vs a rev-parsed 8-char short of the SAME commit is not a false drift.
@@ -220,7 +273,13 @@ run_pass() {
   # is picked up on the NEXT tick, never queued into a storm. Content is audit-only and never parsed.
   [ "$request_present" -eq 1 ] && rm -f "$REQUEST_FILE"
 
-  mkdir -p "$LOG_DIR"
+  # A rebuild we cannot log is a rebuild we cannot debug from the panel — fail loud BEFORE building
+  # (site-data/ is uid-10001-owned; logs/ needs the one-time operator-owned prep, README step 0).
+  if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+    printf 'reconcile: cannot create log dir %s — one-time ownership prep missing (deploy/README.md "Serve reconcile" step 0)\n' "$LOG_DIR" >&2
+    write_status "failed" "$head" "$built" "$(read_build_id)" ""
+    return 1
+  fi
   log_file="$LOG_DIR/$(date -u +%Y%m%dT%H%M%SZ).build.log"
   printf 'reconcile: %s => rebuilding, log: %s\n' "$reason" "$log_file"
 

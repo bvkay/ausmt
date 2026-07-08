@@ -301,8 +301,9 @@ to run `make` by hand. A systemd timer runs `deploy/scripts/reconcile.sh` every 
 
 1. `git -C surveys-live pull --ff-only` (a diverged checkout ⇒ status `sync_failed`, **no** rebuild —
    never build from a state you cannot fast-forward to);
-2. compares the served build's `source_commit` (from `site-data/current/data/build.json`) against the
-   `surveys-live` short HEAD;
+2. compares the served build's `source_commit` (from `site-data/current/build.json` — the build ROOT;
+   the portal's `/data/build.json` URL maps to this same file because Caddy strips the `/data` prefix)
+   against the `surveys-live` short HEAD;
 3. on drift **or** a curator **Request rebuild** (a `rebuild.request` file), runs `make rebuild-data`
    (the already-atomic build → verify → swap), logging to `site-data/logs/<ts>.build.log`;
 4. writes `gateway/state/reconcile-status.json` — the curator queue page's **serve-state panel**
@@ -314,6 +315,20 @@ The script itself never assumes systemd (on Gadi/NCI it becomes a cron/PBS job o
 **Install (one-time):**
 
 ```sh
+# 0. ONE-TIME OWNERSHIP PREP (the reconcile agent runs as the OPERATOR, but two of the dirs it
+#    writes are container-owned — without this step the first pass fails with "Permission denied"
+#    (the 2026-07-08 first install). The script also fails EARLY and loudly if this is missing.)
+#    a) the build-log dir (inside uid-10001-owned site-data; never served — outside current/):
+sudo install -d -o "$USER" -g "$USER" "$AUSMT_DATA_DIR/site-data/logs"
+#    b) group-write on the 10002-owned gateway state dir, so the operator can write
+#       reconcile-status.json and consume rebuild.request while the gateway keeps ownership
+#       (the same shared-group pattern the surveys-live publish setup uses, in the other direction):
+getent group 10002 >/dev/null || sudo groupadd -g 10002 ausmtgw
+sudo usermod -aG "$(getent group 10002 | cut -d: -f1)" "$USER"
+sudo chmod g+rwX,g+s "$AUSMT_DATA_DIR/gateway/state"
+#    then RE-LOGIN (or `newgrp`) so your interactive shell picks up the group; the systemd unit
+#    picks it up automatically at its next start.
+
 # 1. Make sure deploy/.env has AUSMT_DATA_DIR and AUSMT_CODE_DIR set (the timer reads them via
 #    EnvironmentFile — they are NOT taken from your shell profile). `make preflight PROFILE=gateway`
 #    confirms both.
@@ -407,6 +422,8 @@ JS in the curator origin). preview-data is already embargo-safe + PII-scrubbed b
 | **Curator pressed "Request rebuild" but nothing happens** | The **C40 reconcile timer is not installed** (the button only writes `gateway/state/rebuild.request`; the host timer is what consumes it). | `systemctl list-timers ausmt-reconcile.timer` — if it is not listed, install it (§3 "Serve reconcile"). Confirm `gateway/state/rebuild.request` exists (the button wrote it) and will be picked up on the next tick, or run `sudo systemctl start ausmt-reconcile.service` to consume it now. |
 | **Serve-state panel shows `sync_failed`** | `git pull --ff-only` on `surveys-live` **diverged** — the local checkout has commits/edits not on origin, so it cannot fast-forward. The reconcile agent refuses to build from an un-syncable state (by design) and does **not** rebuild. | Inspect: `git -C "$AUSMT_DATA_DIR/surveys-live" status` and `git -C … log --oneline origin/main..HEAD`. Reconcile the divergence (usually a stray local edit — review, then `git -C … reset --hard origin/main` if the local commits are unwanted, or push them). The next tick then syncs + rebuilds. |
 | **Serve-state panel shows `failed`** (old data still serving) | The rebuild `build`/`verify` step failed; the atomic swap left the **previous** build serving (correct fail-closed behaviour). | Read the `log_tail` in the panel (or the full `site-data/logs/<ts>.build.log`, path in `reconcile-status.json`). Same causes as a manual `rebuild-data` failure (see the rows above — stale/dirty image, a bad survey package). Fix the cause; the next drift/button press/tick retries. The request file is already consumed, so it does **not** crash-loop. |
+| **Reconcile exits 1 with `state dir not writable` / `cannot create log dir`** | The **one-time ownership prep (install step 0) is missing**: `site-data/` is uid-10001-owned and `gateway/state/` is 10002-owned, so the operator's reconcile pass cannot write its log dir or status file. The script fails early and loudly rather than half-running (the 2026-07-08 first-install symptom). | Run install step 0 (the `install -d` + shared-group commands), re-login (group membership), then `sudo systemctl start ausmt-reconcile.service` to re-run the pass. |
+| **Reconcile holds with `structural mismatch` (status `failed`, `built` null)** | The **loop guard** latched: a rebuild completed but `site-data/current/build.json` was *still* unreadable afterwards — a layout or permission mismatch is eating every rebuild, so the agent refuses to burn one build per tick forever. (Also latches after a failed *first* build on a fresh box — deliberate: a deterministic failure needs an operator, not a retry storm.) | Check `ls "$AUSMT_DATA_DIR/site-data/current/build.json"` exists and is readable, and read the last build log. After fixing, re-arm with the curator **Request rebuild** button (an explicit request always gets a fresh attempt) or the next real publish (HEAD change). |
 
 ---
 
