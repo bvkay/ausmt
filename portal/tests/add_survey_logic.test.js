@@ -41,6 +41,66 @@ ok(/region: "South Australia"/.test(y), "survey.yaml emits region");
 ok(!/coordinate_resolution:/.test(M.buildSurveyYaml({ ...base, data_types: ["BBMT"] })),
    "no coordinate_resolution when nothing was resolved");
 
+// ---- access block: embargo_until + contact (audit 5.2) ----
+// buildSurveyYaml must emit the submitter's embargo date and access contact into the access block
+// when supplied (non-open levels), and leave BOTH null when the fields are blank / level is open.
+const yEmb = M.buildSurveyYaml({ ...base, access: "embargoed",
+                                 embargo_until: "2027-02-01", access_contact: "custodian@agency.gov.au" });
+ok(/access:\s*\n\s*level: embargoed\s*\n\s*embargo_until: 2027-02-01/.test(yEmb),
+   "survey.yaml emits access.embargo_until when the date is filled");
+ok(/contact: "custodian@agency\.gov\.au"/.test(yEmb),
+   "survey.yaml emits access.contact when provided");
+const yOpen = M.buildSurveyYaml({ ...base, access: "open" });
+ok(/access:\s*\n\s*level: open\s*\n\s*embargo_until: null\s*\n\s*contact: null/.test(yOpen),
+   "survey.yaml keeps embargo_until and contact null for an open survey");
+const yEmbNoDate = M.buildSurveyYaml({ ...base, access: "metadata_only", access_contact: "" });
+ok(/embargo_until: null/.test(yEmbNoDate),
+   "survey.yaml emits embargo_until: null when the date is left blank");
+// Injection hardening: embargo_until is emitted UNQUOTED (a bare ISO scalar), so anything that is not
+// strictly YYYY-MM-DD must collapse to null — a crafted value with an embedded newline would otherwise
+// smuggle an injected YAML key into the generated survey.yaml. buildSurveyYaml is a pure export driven
+// by arbitrary meta objects, so it cannot rely on the browser's <input type=date> constraining values.
+const yInject = M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: "2027-02-01\ninjected: true" });
+ok(/embargo_until: null/.test(yInject) && !/injected:/.test(yInject),
+   "a newline-injection embargo_until emits null and no injected key");
+const yNonDate = M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: "next year" });
+ok(/embargo_until: null/.test(yNonDate) && !/next year/.test(yNonDate),
+   "a non-ISO embargo_until ('next year') emits null");
+ok(/embargo_until: 2027-02-01/.test(M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: " 2027-02-01 " })),
+   "a well-formed date still emits (whitespace trimmed)");
+
+// ---- client-side slug mirror (audit minor: validator parity) ----
+// slugValid MIRRORS the authoritative rule in gateway/tests/fixtures/vendored_validation/
+// validate_survey.py:331  re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", slug). Uppercase, spaces, underscores,
+// dots, slashes and leading/trailing hyphens are all rejected; lowercase-hyphenated is accepted.
+ok(M.slugValid("example-survey-2026") === true, "slugValid: lowercase-hyphenated slug accepted");
+ok(M.slugValid("example") === true, "slugValid: single lowercase token accepted");
+ok(M.slugValid("Example-Survey") === false, "slugValid: uppercase rejected");
+ok(M.slugValid("example survey") === false, "slugValid: spaces rejected");
+ok(M.slugValid("example_survey") === false, "slugValid: underscore rejected");
+ok(M.slugValid("example.survey") === false, "slugValid: dot rejected");
+ok(M.slugValid("-example") === false && M.slugValid("example-") === false, "slugValid: leading/trailing hyphen rejected");
+ok(M.slugValid("") === false, "slugValid: empty rejected");
+// wired into validateSurvey as a blocking FAIL under the 'slug' check.
+const badSlug = M.validateSurvey({ ...base, slug: "Bad_Slug", locations_confirmed: true },
+  [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }], []);
+ok(badSlug.items.some(i => i.check === "slug" && i.level === "FAIL"),
+   "validateSurvey: a malformed slug is a blocking FAIL");
+const goodSlug = M.validateSurvey({ ...base, slug: "good-slug", locations_confirmed: true },
+  [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }], []);
+ok(!goodSlug.items.some(i => i.check === "slug" && i.level === "FAIL"),
+   "validateSurvey: a valid slug raises no slug FAIL");
+
+// ---- copy honesty: authoritative validation is the gateway/curator review, not "CI" ----
+// Source assertion (same style as the ROR endpoint checks below): the page's advisory box must not
+// tell contributors that authoritative validation happens in "the AusMT repository workflow (CI)" —
+// on the only followable paths (gateway upload / email to operator) the AusMT validator runs in the
+// gateway pipeline and a curator reviews. Fails if the stale CI framing reappears in page copy.
+ok(!/repository workflow<\/b> \(CI\)|authoritative in the AusMT repository/i.test(html),
+   "the advisory box no longer claims authoritative validation lives in the repository CI workflow");
+ok(/authoritative/i.test(html.slice(html.indexOf('class="advisory"'), html.indexOf('class="advisory"') + 600)),
+   "the advisory box still names an authoritative validation stage");
+
 // ---- DATAID-based packaging (task #16) ----
 // ediDataId must read the DATAID from the >HEAD block across the real dialect shapes: Geotools/LEMI
 // (no indent, quoted), EDL (leading-indented + trailing whitespace, quoted), Phoenix (indented,

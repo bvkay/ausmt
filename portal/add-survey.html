@@ -130,14 +130,16 @@
 <main>
   <h1>Contribute a survey</h1>
   <p class="lede">Describe the survey, add your EDI files, then <b>validate</b>, <b>preview</b>, and
-  <b>package</b> a submission archive. Submit it either <b>directly to AusMT</b> (where a gateway is
-  available — no GitHub account needed) or by <b>opening a pull request</b> with the archive. Everything
-  runs in your browser; your files and details never leave this page until you submit. New here? Copy
-  <code>_example/example-survey/</code> from the surveys repo as a starting point.</p>
+  <b>package</b> a submission archive. Submit it <b>directly to AusMT</b> where a gateway is available
+  (no account needed); otherwise <b>email the packaged archive to the operator</b> — the contact
+  address is on the <a href="about.html">About page</a>. Everything runs in your browser; your files
+  and details never leave this page until you submit. New here? A worked example survey package lives at
+  <code>engine/data/sample-survey/</code> in the AusMT framework repository.</p>
 
   <div class="advisory">This page performs <b>local pre-submission checks</b> to help you prepare a clean
-  submission. <b>Final validation is authoritative in the AusMT repository workflow</b> (CI) during curator
-  review, if the two ever differ, the repository result wins.</div>
+  submission. <b>Final validation is authoritative in the AusMT submission pipeline</b> — the gateway runs
+  the AusMT validator on your package and a curator reviews it before publication; if the two ever differ,
+  the pipeline result wins.</div>
 
   <!-- 1. SURVEY METADATA AND IDENTIFIERS -->
   <fieldset>
@@ -148,7 +150,8 @@
       <div class="req"><label>Project name</label><input id="m_name" placeholder="Example MT Survey 2026"></div>
       <div><label>Dataset / project DOI</label><input id="m_doi" placeholder="10.5281/zenodo.…"></div>
 
-      <div class="req"><label>Slug (folder name)</label><input id="m_slug" placeholder="example-survey-2026"></div>
+      <div class="req"><label>Slug (folder name)</label><input id="m_slug" placeholder="example-survey-2026">
+        <span class="orcidok" id="slugOk"></span></div>
       <div class="req"><label>Country</label><input id="m_country" value="Australia"></div>
       <div><label>Region <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional, finer facet)</span></label><input id="m_region" placeholder="e.g. South Australia"></div>
 
@@ -172,6 +175,32 @@
         <select id="m_license"><option>CC-BY-4.0</option><option>CC0-1.0</option><option>CC-BY-SA-4.0</option><option value="TBD">TBD (set before publishing)</option></select></div>
       <div class="req"><label>Access level</label>
         <select id="m_access"><option>open</option><option>metadata_only</option><option>embargoed</option></select></div>
+
+      <!-- Always-visible disclosure of what each access level actually exposes (audit 5.3). Truthful to
+           current behaviour: every level lists the survey publicly (build_portal.py:161-165 "discovery is
+           universal"; stations emitted with lat/lon at :558-560); only 'open' serves data bytes. -->
+      <div class="full"><div class="hint" id="accessDisclosure">Every access level <b>lists this survey
+        publicly</b> — its map presence, exact station coordinates and screening diagnostics are visible to
+        anyone regardless of level. <b>open</b> also serves the data files for download. <b>metadata_only</b>
+        and <b>embargoed</b> withhold <b>all data bytes</b> (downloads route to the source archive) until a
+        curator releases them; an embargo never lifts automatically, even after its date passes.</div></div>
+
+      <!-- embargo_until + access contact (audit 5.2): revealed only for a non-open level, mirroring the
+           page's other show/hide blocks (#gatewayBlock, #dmsChoice). Emitted into survey.yaml's access
+           block by buildSurveyYaml (empty -> null, date as YYYY-MM-DD). -->
+      <div class="full" id="embargoBlock" style="display:none">
+        <div class="grid">
+          <div><label>Embargo until <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(release date)</span></label>
+            <input id="m_embargo_until" type="date">
+            <div class="hint">The intended release date. Recommended for an embargoed survey. Even after this
+              date the data stays withheld until a curator sets the level to <code>open</code> — it is a
+              record of intent, not an automatic switch.</div></div>
+          <div><label>Access contact <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(for release requests)</span></label>
+            <input id="m_access_contact" placeholder="email or role address">
+            <div class="hint">An email or role address a curator can reach to arrange release. Written into
+              <code>survey.yaml</code> — do not use a private personal address you would not want published.</div></div>
+        </div>
+      </div>
 
       <div class="full"><label>Abstract</label><textarea id="m_abstract" placeholder="One paragraph: location, target, band."></textarea></div>
 
@@ -212,7 +241,7 @@
     <input id="filein" type="file" accept=".edi,.h5,.mth5" multiple style="display:none">
     <div class="hint"><b>MTH5 files containing transfer-function products are supported.</b> AusMT catalogues transfer functions
        and their metadata, not raw MT time-series data. Files are checked locally before submission, with final validation
-        performed during curator review and automated repository checks.</div>
+        performed by the AusMT validator in the submission pipeline during curator review.</div>
     <div class="filelist" id="filelist"></div>
   </fieldset>
 
@@ -285,7 +314,7 @@
       <div class="req"><label>Your name</label><input id="m_up_name" placeholder="Full name"></div>
       <div class="req"><label>Your email</label><input id="m_up_email" type="email" placeholder="you@institution.edu">
         <div class="hint">Private, for curator contact only. <b>Not written into the submission package</b>
-        (that zip is attached to a public GitHub PR) — provide it in the PR description or message instead.</div></div>
+        — the gateway sends it to the curators privately, or include it in your email to the operator.</div></div>
       <div><label>Your ORCID (optional)</label><input id="m_up_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="upOrcidOk"></span></div>
     </div>
     <label class="check"><input type="checkbox" id="m_auth"><span>I have the authority to submit this survey for
@@ -313,7 +342,7 @@
   <fieldset id="gatewayBlock">
     <legend>Submit to AusMT</legend>
     <div class="pidnote">A submission gateway is available on this site. You can upload the validated
-      package directly — no GitHub account needed. Your email is sent privately to the curators and is
+      package directly — no account needed. Your email is sent privately to the curators and is
       never written into the package.</div>
     <div class="keyrow">
       <label for="m_submit_key">Submit key</label>
@@ -520,6 +549,14 @@ function submitFormFields(meta){
   return f;
 }
 function isSemver(s){ return /^\d+\.\d+\.\d+$/.test(String(s||"").trim()); }
+// slugValid MIRRORS the AUTHORITATIVE slug rule in the vendored validator —
+// gateway/tests/fixtures/vendored_validation/validate_survey.py:331
+//   re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", str(slug_val))
+// The slug becomes au.<slug>.<station> in every id/URL, so anything outside [a-z0-9-] (uppercase,
+// spaces, underscores, dots, slashes, leading/trailing hyphens) is silently rewritten by the pipeline's
+// safe_component() and forks the survey identity — a server-side hard FAIL. Mirroring it here catches
+// the most common first-timer mistake before a wasted quarantine cycle. Keep in sync with that line.
+function slugValid(s){ return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(String(s==null?"":s).trim()); }
 function validateSurvey(meta, edis, mth5s){
   mth5s = mth5s || [];
   const items=[]; const add=(level,check,message)=>items.push({level,check,message});
@@ -529,6 +566,12 @@ function validateSurvey(meta, edis, mth5s){
     if(f==="license"&&String(meta.license||"").startsWith("TBD")) add("WARNING","metadata","licence is 'TBD' — set a real licence before publication");
     else add(present?"PASS":"FAIL","metadata","required field '"+labels[f]+"' "+(present?"set":"missing"));
   });
+  // Slug charset gate — mirrors the authoritative server-side FAIL (validate_survey.py:331), so a
+  // malformed slug is caught HERE instead of after a full quarantine cycle. Only when a slug is present
+  // (the REQUIRED loop above already FAILs an empty slug; we do not double-report it).
+  if(meta.slug&&!slugValid(meta.slug))
+    add("FAIL","slug","slug '"+meta.slug+"' must be lowercase-hyphenated [a-z0-9-] (no spaces, dots, "
+      +"slashes, underscores, uppercase, or leading/trailing hyphens) — other characters fork the survey identity downstream");
   // submitter + declarations (submission envelope; email stays private, never published)
   add(meta.uploader_name?"PASS":"FAIL","submitter","uploader name "+(meta.uploader_name?"provided":"missing"));
   add(isEmail(meta.uploader_email)?"PASS":"FAIL","submitter","uploader email "+(isEmail(meta.uploader_email)?"provided (kept private)":"missing or invalid"));
@@ -545,9 +588,9 @@ function validateSurvey(meta, edis, mth5s){
   if(!edis.length && !mth5s.length) add("FAIL","structure","no transfer-function files added (EDI or MTH5)");
   mth5s.forEach(f=>{
     if(f.hdf5===false) add("FAIL","mth5",f.name+": not a valid HDF5/MTH5 file (signature check failed)");
-    else add("WARNING","mth5",f.name+": MTH5 structure, supported version & transfer-function groups are validated in CI (not in this browser)");
+    else add("WARNING","mth5",f.name+": MTH5 structure, supported version & transfer-function groups are validated in the AusMT submission pipeline (not in this browser)");
   });
-  add("WARNING","security","antivirus (ClamAV) scan runs in CI, not in this browser preview");
+  add("WARNING","security","antivirus (ClamAV) scan runs in the AusMT submission pipeline, not in this browser preview");
   const seen={};
   edis.forEach(({name,parsed})=>{
     if(parsed.lat==null||parsed.lon==null){ add("FAIL","edi_parse",name+": missing coordinates (LAT/LONG in HEAD)"); return; }
@@ -653,8 +696,20 @@ function buildSurveyYaml(m){
   L.push("license: "+q(m.license||"TBD"));
   L.push("access:");
   L.push("  level: "+(m.access||"open"));
-  L.push("  embargo_until: null");
-  L.push("  contact: null");
+  // embargo_until / contact are only meaningful for a non-open survey; blank -> null. The date is
+  // emitted as a bare ISO YYYY-MM-DD scalar (the <input type=date> value format the validator parses),
+  // the contact as a quoted string. For an open survey both stay null (nothing to withhold, no release
+  // contact needed) even if the fields carry stale text from a level the submitter changed away from.
+  // INJECTION GUARD: the date line is UNQUOTED, and this is a pure export callable with arbitrary meta
+  // (a browser's <input type=date> constrains values; a scripted DOM does not). Anything that is not
+  // strictly \d{4}-\d{2}-\d{2} collapses to null — a value with an embedded newline would otherwise
+  // smuggle an injected YAML key into the generated file. Mirrors the validator's ISO-date rule
+  // (validate_survey.py:303-308, date.fromisoformat) the same way slugValid mirrors the slug rule.
+  const embargoRaw=(m.access&&m.access!=="open"&&m.embargo_until)?String(m.embargo_until).trim():"";
+  const embargoDate=/^\d{4}-\d{2}-\d{2}$/.test(embargoRaw)?embargoRaw:"";
+  const accessContact=(m.access&&m.access!=="open"&&m.access_contact)?String(m.access_contact).trim():"";
+  L.push("  embargo_until: "+(embargoDate||"null"));
+  L.push("  contact: "+(accessContact?q(accessContact):"null"));
   L.push("time_series:");
   L.push("  collection_pid: null");
   L.push("  levels_available: []");
@@ -714,7 +769,7 @@ function rorMatchesFromResponse(data){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,ediNameGate,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,rorMatchesFromResponse};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,ediNameGate,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,rorMatchesFromResponse};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -799,6 +854,20 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_pi_orcid","piOrcidOk");
 
+  // ----- slug inline validation (audit minor): live mirror of the authoritative validator FAIL so the
+  // most common first-timer mistake is caught at the field, not after a wasted quarantine cycle. Empty
+  // is left silent (the required-field FAIL covers it); a malformed non-empty slug shows a red inline
+  // hint. The blocking gate itself lives in validateSurvey (slugValid) — this is just the field-level cue.
+  (function(){
+    const inp=$("m_slug"), ok=$("slugOk");
+    if(!inp||!ok) return;
+    const render=()=>{ const v=inp.value.trim();
+      if(!v){ ok.textContent=""; ok.className="orcidok"; }
+      else if(slugValid(v)){ ok.textContent="✓ valid slug"; ok.className="orcidok good"; }
+      else { ok.textContent="✗ lowercase letters, digits and single hyphens only (no spaces, _ or uppercase)"; ok.className="orcidok bad"; } };
+    inp.addEventListener("input",render);
+  })();
+
   // ----- ROR organisation lookup (live, debounced; suggestions only; name shown first) -----
   async function rorLookup(name, abortHolder){
     if(abortHolder.a) abortHolder.a.abort();
@@ -831,10 +900,21 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   wireRor($("m_org"), $("rorMatches"), $("m_ror"));
 
+  // ----- access level: reveal the embargo date + access contact only for a non-open level (audit 5.2).
+  // Same show/hide idiom as #gatewayBlock / #dmsChoice. The disclosure hint (#accessDisclosure) is always
+  // visible; this only toggles the input block, so a submitter who never touches a non-open level sees no
+  // extra fields, and buildSurveyYaml already null-guards on level==open regardless of any stale value.
+  function updateEmbargoFields(){
+    $("embargoBlock").style.display = ($("m_access").value!=="open") ? "block" : "none";
+  }
+  $("m_access").addEventListener("change",updateEmbargoFields);
+  updateEmbargoFields();
+
   function readMeta(){return {
     name:$("m_name").value.trim(), slug:$("m_slug").value.trim(), organisation:$("m_org").value.trim(),
     country:$("m_country").value.trim(), region:$("m_region").value.trim(), version:$("m_version").value.trim(),
     license:$("m_license").value, access:$("m_access").value,
+    embargo_until:$("m_embargo_until").value.trim(), access_contact:$("m_access_contact").value.trim(),
     abstract:$("m_abstract").value.trim(),
     data_types:Array.from(document.querySelectorAll(".dtype:checked")).map(c=>c.value),
     west:$("m_w").value, east:$("m_e").value, south:$("m_s").value, north:$("m_n").value,
@@ -1000,7 +1080,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     const nMh=mth5Files().length;
     $("pvBody").innerHTML=
       `<div>stations (from EDIs): <b>${p.n}</b>  (coords on ${p.withCoords}; impedance ${p.impedance}; spectra-section ${p.spectra})</div>`+
-      (nMh?`<div>MTH5 files: <b>${nMh}</b>  <span style="color:var(--muted)">(transfer functions read + validated in CI)</span></div>`:"")+
+      (nMh?`<div>MTH5 files: <b>${nMh}</b>  <span style="color:var(--muted)">(transfer functions read + validated in the submission pipeline)</span></div>`:"")+
       (p.latRange?`<div>station extent: lat <b>[${p.latRange[0].toFixed(4)}, ${p.latRange[1].toFixed(4)}]</b>  lon <b>[${p.lonRange[0].toFixed(4)}, ${p.lonRange[1].toFixed(4)}]</b></div>`:"")+
       `<div>data types (from EDIs): <b>${esc(types)}</b></div>`+
       (p.n?`<div>recommended EDI extractor: <b>${p.extractor}</b>${p.spectra?`  (incl. ${p.spectra} spectra-section EDI(s), read directly)`:""}</div>`:"");
@@ -1050,32 +1130,52 @@ if(typeof document!=="undefined"&&document.getElementById){
     return {blocked:false, blob, fname, tf, manifest, inputFormat, counts:v.counts, slug};
   }
   // SUBMISSION.md travels INSIDE the zip on BOTH transport paths (design §2), so it must stay accurate
-  // for both: the direct-upload path is listed as option 1 where a gateway is available, PR as the
-  // always-available fallback. It NEVER references email/ORCID (C3). `gatewayAvailable` only reorders
-  // the guidance — the two paths are both documented regardless, since the file may be read after the
+  // for both: the direct-upload path is listed as option 1 where a gateway is available, emailing the
+  // packaged zip to the operator as the fallback. It NEVER references email/ORCID as file CONTENT (C3);
+  // the operator-email path is a submission INSTRUCTION, not a stored address. `gatewayAvailable` only
+  // reorders the guidance — the fallback is documented regardless, since the file may be read after the
   // fact by someone on a different deploy.
+  // Plain-language meaning of each access level, restated in the package (audit 5.3) so the choice's
+  // consequence travels with the data. Truthful to build_portal.py: every level is publicly discoverable
+  // with exact coordinates; only 'open' serves data bytes; an embargo never auto-lifts.
+  function accessMeaning(level){
+    switch(String(level||"open")){
+      case "embargoed": return "embargoed — the survey is listed publicly (map, exact coordinates, screening "+
+        "diagnostics) but its data bytes are WITHHELD until a curator releases it; the embargo does not lift "+
+        "automatically on its date.";
+      case "metadata_only": return "metadata_only — the survey is listed publicly (map, exact coordinates, "+
+        "screening diagnostics) but NO data bytes are served (downloads route to the source archive).";
+      default: return "open — the survey is listed publicly AND its data files are served for download.";
+    }
+  }
   function buildSubmissionMd(meta, slug, tf, inputFormat, counts, extractor, gatewayAvailable){
+    const embargoLine = (meta.access && meta.access!=="open" && meta.embargo_until)
+      ? `\n- embargo until: ${meta.embargo_until} (data stays withheld until a curator sets level=open)` : "";
     const head=
       `# AusMT submission: ${meta.name}\n\n- slug: \`${slug}\`\n- organisation: ${meta.organisation||"—"}\n`+
-      `- licence: ${meta.license}\n- transfer functions: ${tf.length} file(s) (${inputFormat})\n`+
+      `- licence: ${meta.license}\n- access level: ${accessMeaning(meta.access)}${embargoLine}\n`+
+      `- transfer functions: ${tf.length} file(s) (${inputFormat})\n`+
       `- recommended extractor: \`${extractor}\`\n`+
       `- validation: PASS ${counts.PASS} · WARNING ${counts.WARNING} · FAIL ${counts.FAIL}\n\n`+
       `## Submitter\n- name: ${meta.uploader_name}\n`+
       `- authority to submit: ${meta.authority_to_submit?"yes":"NO"}\n- licence/access confirmed: ${meta.license_declaration?"yes":"NO"}\n\n`;
+    // Submission paths, honest to the current infrastructure (audit 5.1): the gateway upload is the
+    // primary path where detected; the fallback is emailing the packaged zip to the operator (the
+    // ausmt-surveys repo is private, so there is no public PR path). Numbering stays sequential in both
+    // branches. Contact email rides OUTSIDE this package (email body / gateway field), never in a file.
     const direct=
       `## How to submit\n`+
       (gatewayAvailable
-        ? `1. **Direct upload (recommended where available).** The AusMT Add Survey page detected a submission gateway and can\n`+
-          `   upload this package directly with your operator-issued submit key — no GitHub account needed. Your contact\n`+
+        ? `1. **Direct upload (recommended).** The AusMT Add Survey page detected a submission gateway and can\n`+
+          `   upload this package directly with your operator-issued submit key — no account needed. Your contact\n`+
           `   email is sent to the curators privately (never written into this package).\n`+
-          `2. **Pull request (always available).** Open a PR against the ausmt-surveys repository, add this folder under\n`
-        : `1. **Pull request.** Open a pull request against the ausmt-surveys repository, add this folder under\n`)+
-      `   \`surveys/${slug}/\` (keep MANIFEST.json/SUBMISSION.md with the PR). Include your contact email in the PR\n`+
-      `   description or message to the curator -- NOT in a file in this package, since the PR (and everything attached\n`+
-      `   to it) is public.\n`+
+          `2. **Fallback — email the operator.** If the upload service is unavailable, email this packaged \`.zip\`\n`+
+          `   to the AusMT operator (contact address on the About page), with your contact email in the message.\n`
+        : `1. **Email the operator.** Email this packaged \`.zip\` to the AusMT operator (contact address on the\n`+
+          `   About page). Put your contact email in the message — NOT in a file in this package.\n`)+
       // The trailing step's number depends on the branch (2 items precede it with a gateway, 1 without)
       // so the ordered list stays strictly sequential either way.
-      `${gatewayAvailable?3:2}. CI runs the authoritative validator; a curator reviews.\n`;
+      `${gatewayAvailable?3:2}. The AusMT validator runs on your package; a curator reviews before publication.\n`;
     return head+direct;
   }
   $("btnPackage").onclick=async()=>{
@@ -1088,9 +1188,9 @@ if(typeof document!=="undefined"&&document.getElementById){
     track("DownloadGenerated",{format:"zip"});
     $("pkBody").innerHTML=`<div>Built <b>${esc(pkg.fname)}</b> — ${pkg.tf.length} EDIs, checksummed.</div>`+
       `<div>recommended extractor: <b>${pkg.manifest.recommended_extractor}</b></div>`+
-      `<div class="note">Your email is NOT included in this package (the PR you attach it to is public).
-      Attach the archive to a pull request adding <code>surveys/${esc(pkg.slug)}/</code> and put your contact
-      email in the PR description or message instead.</div>`;
+      `<div class="note">Your email is NOT included in this package. Email the archive to the AusMT operator
+      (contact address on the <a href="about.html">About page</a>) and put your contact email in the message.
+      See <code>SUBMISSION.md</code> inside the archive for the full steps.</div>`;
     $("pPackage").classList.add("show");
   };
   // ----- collection autofill: prefill from EXISTING collections so a contributor JOINS an existing
@@ -1129,13 +1229,13 @@ if(typeof document!=="undefined"&&document.getElementById){
   // Detection (design §1): one healthz probe per page load, 5 s AbortController timeout, no polling.
   // The submit UI stays hidden unless gatewayPresent(status, body) is strictly true (200 + JSON +
   // ok===true). A failed/absent probe leaves the page byte-identical to the pre-C13 page — the
-  // manual-PR path (Package submission .zip) remains primary. Same-origin literal /gateway/... only
-  // (no config knob, no new origin — CORS-free and covered by the existing connect-src 'self').
+  // download-and-email path (Package submission .zip) remains primary. Same-origin literal /gateway/...
+  // only (no config knob, no new origin — CORS-free and covered by the existing connect-src 'self').
   function showGatewayUI(){
     gatewayReady=true;
     $("gatewayBlock").classList.add("show");
-    // Reword the manual-PR button as the explicit fallback now that direct upload is the primary path.
-    const bp=$("btnPackage"); if(bp) bp.textContent="Package .zip for a pull request (manual path)";
+    // Reword the download button as the explicit fallback now that direct upload is the primary path.
+    const bp=$("btnPackage"); if(bp) bp.textContent="Package .zip to email (fallback path)";
     track("GatewayDetected");   // PII-free, no ids
   }
   (function probeGateway(){

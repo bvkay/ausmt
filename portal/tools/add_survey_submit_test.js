@@ -305,6 +305,93 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
+  // 4b. EMBARGO DATE + ACCESS CONTACT REVEAL AND EMIT (audit 5.2). The embargo/contact inputs are hidden
+  //     for an 'open' level and revealed for any non-open level; a filled date reaches survey.yaml as a
+  //     bare ISO scalar. Reads the REAL packaged survey.yaml via the download path (createObjectURL).
+  async function packagedSurveyYaml(win, record) {
+    ok(record.blobs.length === 1, "packaging produced exactly one zip blob");
+    const buf = Buffer.from(await record.blobs[record.blobs.length - 1].arrayBuffer());
+    const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
+    const z = await JSZipNode.loadAsync(buf);
+    const entries = z.file(/survey\.yaml$/);
+    ok(entries.length === 1, "the zip contains exactly one survey.yaml");
+    return entries[0].async("string");
+  }
+  {
+    // (4b-i) default level 'open' -> the embargo block is hidden and both fields serialise as null.
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    ok(e.doc.getElementById("embargoBlock").style.display === "none",
+      "the embargo/contact block is hidden while access level is 'open'");
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const yOpen = await packagedSurveyYaml(e.win, e.record);
+    ok(/access:\s*\n\s*level: open\s*\n\s*embargo_until: null\s*\n\s*contact: null/.test(yOpen),
+      "open survey.yaml keeps embargo_until and contact null");
+  }
+  {
+    // (4b-ii) level 'embargoed' -> the block reveals; a filled date + contact reach survey.yaml.
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    const acc = e.doc.getElementById("m_access");
+    acc.value = "embargoed";
+    acc.dispatchEvent(new e.win.Event("change", { bubbles: true }));
+    ok(e.doc.getElementById("embargoBlock").style.display === "block",
+      "selecting a non-open access level reveals the embargo/contact block");
+    e.doc.getElementById("m_embargo_until").value = "2027-02-01";
+    e.doc.getElementById("m_access_contact").value = "custodian@agency.gov.au";
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const yEmb = await packagedSurveyYaml(e.win, e.record);
+    ok(/access:\s*\n\s*level: embargoed\s*\n\s*embargo_until: 2027-02-01/.test(yEmb),
+      "embargoed survey.yaml emits the filled embargo_until date; got: " +
+      (yEmb.match(/access:[\s\S]*?contact:.*$/m) || [""])[0]);
+    ok(/contact: "custodian@agency\.gov\.au"/.test(yEmb),
+      "embargoed survey.yaml emits the access contact");
+  }
+  {
+    // (4b-iii) always-visible disclosure hint states, truthfully, that every level publishes coordinates.
+    const e = await boot({ probe: probeAbsent });
+    const disc = e.doc.getElementById("accessDisclosure");
+    ok(disc && disc.textContent.trim().length > 0, "the access disclosure hint is present");
+    const discText = disc.textContent.replace(/\s+/g, " ");   // collapse source-wrap whitespace
+    ok(/lists this survey publicly/i.test(discText) && /coordinates/i.test(discText)
+      && /withhold/i.test(discText),
+      "the disclosure states public listing, coordinate visibility, and byte withholding");
+  }
+
+  // --------------------------------------------------------------------------------------------------
+  // 4c. CLIENT-SIDE SLUG MIRROR (audit minor). A malformed slug shows a red inline cue at the field AND
+  //     blocks packaging via validateSurvey (mirroring the authoritative server-side FAIL) — so a
+  //     first-timer's most common mistake costs no quarantine cycle.
+  {
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    const slug = e.doc.getElementById("m_slug");
+    // (i) an uppercase/underscore slug shows the inline error and blocks packaging.
+    slug.value = "Bad_Slug";
+    slug.dispatchEvent(new e.win.Event("input", { bubbles: true }));
+    const cue = e.doc.getElementById("slugOk");
+    ok(cue.className.indexOf("bad") >= 0 && /lowercase/i.test(cue.textContent),
+      "a malformed slug shows the red inline slug cue; got: " + JSON.stringify(cue.textContent));
+    e.doc.getElementById("btnValidate").onclick();
+    ok(/FAIL/.test(e.doc.getElementById("vSummary").textContent), "a malformed slug makes validation FAIL");
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    ok(e.record.blobs.length === 0, "a malformed slug blocks packaging (no zip produced)");
+    // (ii) a valid hyphenated slug clears the cue and packages.
+    slug.value = "good-slug-2026";
+    slug.dispatchEvent(new e.win.Event("input", { bubbles: true }));
+    ok(e.doc.getElementById("slugOk").className.indexOf("good") >= 0, "a valid slug shows the green inline cue");
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    ok(e.record.blobs.length === 1, "a valid slug allows packaging (one zip produced)");
+  }
+
+  // --------------------------------------------------------------------------------------------------
   // 5. SUBMISSION.md "How to submit" LIST NUMBERING (adversarial-review finding, LOW): the packaged
   //    instructions are an ordered list and must number strictly sequentially (1., 2., ...) in BOTH
   //    branches. The gateway-ABSENT branch (the PRIMARY path on static-only/file:// deploys) regressed
@@ -339,6 +426,42 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     const nums = await howToSubmitNumbers(buf);
     ok(sequential(nums),
       "gateway-ABSENT SUBMISSION.md list numbering must be strictly sequential; got: " + JSON.stringify(nums));
+  }
+
+  // --------------------------------------------------------------------------------------------------
+  // 5c. NO PR FICTION IN SUBMISSION.md (audit 5.1). The ausmt-surveys repo is private forever, so a
+  //     "pull request (always available)" instruction is impossible to follow. The packaged SUBMISSION.md
+  //     must NOT instruct opening a PR against that repo, and MUST carry the honest email-the-operator
+  //     fallback. Checked on BOTH transports (the file travels inside the zip either way).
+  async function packagedSubmissionMd(zipBytes) {
+    const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
+    const z = await JSZipNode.loadAsync(zipBytes);
+    const entries = z.file(/SUBMISSION\.md$/);
+    ok(entries.length === 1, "the zip contains exactly one SUBMISSION.md");
+    return entries[0].async("string");
+  }
+  for (const branch of ["present", "absent"]) {
+    const e = await boot({ probe: branch === "present" ? probePresent : probeAbsent });
+    await fillValidForm(e.win, { key: branch === "present" ? SECRET_KEY : null });
+    // Package via download (gives us a blob on both branches without needing an XHR script).
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    ok(e.record.blobs.length >= 1, "packaging produced a zip blob (" + branch + ")");
+    const md = await packagedSubmissionMd(Buffer.from(await e.record.blobs[e.record.blobs.length - 1].arrayBuffer()));
+    ok(!/always available/i.test(md),
+      "SUBMISSION.md must not claim a PR path is 'always available' (" + branch + ")");
+    ok(!/pull request|open a pr|ausmt-surveys/i.test(md),
+      "SUBMISSION.md must not instruct a PR against the private ausmt-surveys repo (" + branch + ")");
+    ok(/email[\s\S]*zip[\s\S]*operator|email[\s\S]*operator[\s\S]*zip/i.test(md),
+      "SUBMISSION.md must carry the honest email-the-operator fallback (" + branch + ")");
+    ok(/About page/i.test(md),
+      "SUBMISSION.md points to the operator contact on the About page (" + branch + ")");
+    // Same copy-honesty class: on the gateway path the GATEWAY runs the authoritative validator, not
+    // CI — the final step must not claim "CI runs" anything, and must still name validator + curator.
+    ok(!/CI runs/i.test(md),
+      "SUBMISSION.md must not claim CI runs the validator (" + branch + ")");
+    ok(/validator[\s\S]*curator/i.test(md),
+      "SUBMISSION.md final step still names the validator and curator review (" + branch + ")");
   }
 
   // --------------------------------------------------------------------------------------------------
