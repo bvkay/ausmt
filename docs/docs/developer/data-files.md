@@ -87,7 +87,7 @@ lives in each station's `station.json` `processing` block, outside the positiona
 | `sc[7]` | `gd` | 0\|1 | galvanic/static-shift heuristic |
 | `sc[8]` | `ellip` | number\|null | median phase-tensor ellipticity |
 | `sc[9]` | `skew` | number\|null | median \|β\| (degrees) |
-| `sc[10]` | `mre` | number\|null | median relative impedance error |
+| `sc[10]` | `mre` | number\|null | median relative apparent-resistivity error (= 2× the relative impedance error — from `drho/rho = 2·|dZ|/|Z|`) |
 | `sc[11]` | `decades` | number | period coverage, log10 decades |
 
 ## `tf.json` — one entry per station (aligned to `catalogue.json`), each a list of 18 column-arrays
@@ -130,6 +130,11 @@ for an EDI this is `√VAR`). With `ρ = 0.2·T·|Z|²` and `φ = atan2(Im Z, Re
 
 Because both come from the one `|dZ|`, the ρ- and φ-error columns cannot diverge. Errors are `null` where
 the source carried no impedance error, and (for ρ) only attach where the ρ value itself renders.
+
+These are **one-standard-error** bars (σ, from the EDI's variance blocks via `√VAR`), not confidence
+intervals — an inversion error-floor policy should read them as 1σ. Note the relative ρ error is
+algebraically **twice** the relative impedance error (`drho/rho = 2·|dZ|/|Z|`); the `mre` diagnostic in
+`sci.json` is the median of the *resistivity*-relative quantity.
 
 ### C20 tipper frame + placeholder rule (columns `t[14]…t[17]`)
 
