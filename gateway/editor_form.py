@@ -1,0 +1,336 @@
+"""Structured metadata-editor form assembly (C31 §2, the 2026-07-08 "hostile JSON" fix).
+
+The curator edit form (gateway/curatorpage.py::render_edit_form) used to render every structured
+survey.yaml section as a raw JSON textarea. A geophysicist is not a JSON author, so the sections are
+now per-section widgets. This module is the SERVER-SIDE half that turns the widget inputs back into
+the same patch the JSON textareas produced — so the preview/confirm/commit pipeline underneath is
+byte-identical (the round-trip test pins that: render the form from a real survey.yaml, submit it
+unchanged, and the preview shows NO diff).
+
+It is pure stdlib (json only — NOT yaml; the gateway never parses survey content, C31 §0.1). It does
+NO git and NO version logic; it only maps form fields <-> section dicts and validates the formats it
+knows (ORCID via gateway.orcid, DOI "10." prefix, ISO date, access.level enum).
+
+Field-naming scheme (all rendered by curatorpage; all consumed here):
+  f_<scalar>                       top-level scalars (project_name/name/region/license/abstract) —
+                                   unchanged from the pre-widget form, still handled in app._build_patch.
+  s_<section>_<subkey>             a map section's scalar sub-field (organisation.name, access.contact…)
+  l_<section>_<i>_<subkey>         row i of a repeatable list section (principal_investigators…)
+  c_<section>_<value>             a checkbox in a set (time_series.levels_available)
+  o_<section>                      HIDDEN snapshot of the ORIGINAL section value as canonical JSON —
+                                   the round-trip anchor: an unchanged submit reassembles to exactly
+                                   this and the section is dropped from the patch (a true no-op, same
+                                   as the old "blank JSON textarea = leave unchanged").
+  j_<section>                      the ADVANCED raw-JSON <details> textarea. Same name the old form
+                                   used, so a non-empty value takes the EXACT legacy JSON path and
+                                   OVERRIDES the widgets for that section (documented precedence).
+
+Precedence, enforced in ONE place (assemble_section):
+  1. j_<section> non-empty  -> parse as JSON (legacy path); malformed => per-field error.
+  2. else assemble from the s_/l_/c_ widgets.
+  3. if the assembled value == the original snapshot (o_<section>) => omit the key (no-op, round-trip).
+"""
+from __future__ import annotations
+
+import json
+from datetime import date
+
+from . import orcid
+
+# ---- section specifications ---------------------------------------------------------------------
+# Each MAP section: the ordered scalar sub-keys the widget renders. Each LIST section: the per-row
+# scalar sub-keys. These mirror docs/reference/survey-yaml.md exactly — no invented fields.
+
+# Map sections rendered as labelled inputs. (key, label, placeholder, kind) per sub-field;
+# kind drives the input type / validation: "text" | "doi" | "orcid" | "ror" | "date" | "email".
+MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
+    "organisation": [
+        ("name", "Name", "University of Example", "text"),
+        ("ror", "ROR id", "https://ror.org/03yghzc09", "ror"),
+    ],
+    "lead_investigator": [
+        ("name", "Name", "Given Family", "text"),
+        ("orcid", "ORCID", "0000-0002-1825-0097", "orcid"),
+    ],
+    "identifiers": [
+        ("dataset_doi", "Dataset DOI", "10.xxxx/xxxxx", "doi"),
+        ("related_publication", "Related publication", "short citation or title", "text"),
+        ("related_publication_doi", "Related publication DOI", "10.xxxx/xxxxx", "doi"),
+        ("project", "Project / campaign", "campaign name", "text"),
+        ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
+    ],
+    "access": [
+        # level is a <select> and embargo_until a date — rendered specially by curatorpage, but the
+        # sub-keys and order live here so assembly and rendering agree.
+        ("level", "Access level", "", "select"),
+        ("embargo_until", "Embargo until", "", "date"),
+        ("contact", "Access contact", "email or role address", "email"),
+    ],
+    "time_series": [
+        ("collection_pid", "Collection PID", "10.25914/… or a handle", "text"),
+        # levels_available is a checkbox set — rendered specially; listed here for order only.
+        ("levels_available", "Levels available", "", "levels"),
+    ],
+    "processing": [
+        ("software", "Software", "BIRRP / Aurora / EMTF / Phoenix EMpower", "text"),
+        ("version", "Version", "e.g. 5.2", "text"),
+        ("remote_reference", "Remote reference", "yes | no | unknown", "text"),
+        ("notes", "Notes", "free text", "text"),
+    ],
+    "collection": [
+        ("id", "Collection id", "auslamp", "text"),
+        ("title", "Collection title", "AusLAMP", "text"),
+        ("type", "Collection type", "programme", "text"),
+        ("status", "Collection status", "active | completed | archived", "text"),
+    ],
+}
+
+# List (repeatable-row) sections: per-row scalar sub-fields.
+LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
+    "principal_investigators": [
+        ("name", "Name", "Given Family", "text"),
+        ("orcid", "ORCID", "0000-0002-1825-0097", "orcid"),
+    ],
+    "publications": [
+        ("author", "Author", "Family, G.", "text"),
+        ("year", "Year", "2026", "text"),
+        ("title", "Title", "Article title", "text"),
+        ("journal", "Journal", "Journal name", "text"),
+        ("doi", "DOI", "10.xxxx/xxxxx", "doi"),
+    ],
+    "funding": [
+        ("organisation", "Funding organisation", "e.g. AuScope", "text"),
+        ("organisation_ror", "Organisation ROR", "https://ror.org/03yghzc09", "ror"),
+        ("grant_id", "Grant / award id", "e.g. ARC LP…", "text"),
+        ("grant_title", "Grant title", "grant title", "text"),
+        ("funding_doi", "Funding DOI", "10.xxxx/xxxxx", "doi"),
+    ],
+    "instruments": [
+        ("manufacturer", "Manufacturer", "Phoenix", "text"),
+        ("model", "Model", "MTU-5C", "text"),
+        ("pid", "Instrument PID", "https://instruments.auscope.org.au/… or 10.xxxx/…", "text"),
+    ],
+}
+
+# access.level enum (validator/normalize; mirrors add-survey.html's <select>).
+ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
+
+# time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
+# — the checkboxes plus the advanced JSON fallback cover the rest.
+TIME_SERIES_LEVELS = ("raw_packed", "level0", "level1")
+
+# All sections this module models with widgets (map + list). Anything else stays JSON-only.
+WIDGET_SECTIONS = tuple(MAP_SECTIONS) + tuple(LIST_SECTIONS)
+
+
+class SectionError(Exception):
+    """A per-field/section validation or parse failure, surfaced back on the form (not a blanket
+    failure). `message` is curator-facing (escaped by the renderer)."""
+
+    def __init__(self, section: str, message: str):
+        super().__init__(message)
+        self.section = section
+        self.message = message
+
+
+# ---- format validators (only where the format is known) -----------------------------------------
+
+def _valid_doi(value: str) -> bool:
+    """A DOI (or DOI-bearing string) must contain a '10.' prefix somewhere (accepts a bare
+    '10.xxxx/…' or a full https://doi.org/10.… URL). Deliberately loose — a WARNING-grade curator
+    hint, not a resolver check (matches the validator's own DOI leniency)."""
+    return "10." in value
+
+
+def _valid_date(value: str) -> bool:
+    try:
+        date.fromisoformat(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
+    """Raise SectionError if a KNOWN-format field is non-empty and malformed. Unknown-format fields
+    (plain text) never raise."""
+    if not value:
+        return
+    if kind == "orcid" and not orcid.is_valid_orcid(value):
+        raise SectionError(section, f"{subkey}: '{value}' is not a valid ORCID "
+                                    "(expected 0000-0002-1825-0097 with a correct checksum)")
+    if kind == "doi" and not _valid_doi(value):
+        raise SectionError(section, f"{subkey}: '{value}' does not look like a DOI "
+                                    "(expected a '10.' prefix, e.g. 10.5281/zenodo.123)")
+    if kind == "date" and not _valid_date(value):
+        raise SectionError(section, f"{subkey}: '{value}' is not an ISO date (YYYY-MM-DD)")
+    if kind == "select" and section == "access" and value not in ACCESS_LEVELS:
+        raise SectionError(section, f"access level '{value}' is not one of "
+                                    f"{', '.join(ACCESS_LEVELS)}")
+
+
+# ---- assembly -----------------------------------------------------------------------------------
+
+def _form_get(form: dict, key: str) -> str:
+    v = form.get(key)
+    if v is None:
+        return ""
+    # Textarea/CRLF hygiene, matching app._build_patch: never embed a bare \r into the yaml.
+    return str(v).replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def _original_snapshot(form: dict, section: str):
+    """Parse the hidden o_<section> snapshot of the ORIGINAL value (canonical JSON). Absent/blank =>
+    the section was not present in the original (sentinel: the module returns a distinct marker)."""
+    raw = form.get(f"o_{section}")
+    if raw is None or raw == "":
+        return _ABSENT
+    try:
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        return _ABSENT
+
+
+_ABSENT = object()  # the section had no original value (distinct from a real null)
+
+
+def _assemble_map(form: dict, section: str):
+    """Build a MAP section dict from its s_<section>_<subkey> inputs. A sub-field left empty becomes
+    None IF that sub-key was present in the original section (clearing it), and is OMITTED if the
+    original section did not carry it (never introduce an empty key the source lacked — mirrors
+    apply_patch's own rule one level down, so an unchanged submit round-trips exactly).
+
+    organisation may have been a BARE STRING in the original (0.1 flat form): when the original was a
+    string and only the name is filled (ror empty), re-emit the bare string so an unchanged submit is
+    a true no-op; a filled ror upgrades it to a map."""
+    subfields = MAP_SECTIONS[section]
+    original = _original_snapshot(form, section)
+    original_keys: set[str] = set()
+    original_is_str = isinstance(original, str)
+    if isinstance(original, dict):
+        original_keys = set(original.keys())
+
+    out: dict = {}
+    for subkey, _label, _ph, kind in subfields:
+        if kind == "levels":
+            levels = _collect_levels(form, section, subkey, original)
+            # Include only when non-empty or the original carried the key (mirrors the scalar rule:
+            # never introduce an empty list the source lacked, so an all-empty map assembles to {}).
+            if levels or subkey in original_keys:
+                out[subkey] = levels
+            continue
+        value = _form_get(form, f"s_{section}_{subkey}")
+        _validate_scalar(section, subkey, kind, value)
+        if value == "":
+            # Preserve a previously-present key as null; do not introduce an absent one.
+            if original_is_str and subkey == "name":
+                # organisation-as-string: the name carried the string; empty name + no ror => the
+                # section becomes empty (handled by the snapshot compare in assemble_section).
+                continue
+            if subkey in original_keys:
+                out[subkey] = None
+            continue
+        out[subkey] = value
+
+    # organisation bare-string round-trip: original was a string, curator left ror empty, name set.
+    if section == "organisation" and original_is_str:
+        ror = out.get("ror")
+        name = out.get("name")
+        if not ror and isinstance(name, str):
+            return name  # re-emit the bare string exactly
+    return out
+
+
+def _collect_levels(form: dict, section: str, subkey: str, original) -> list[str]:
+    """time_series.levels_available: gather the checked c_<section>_<value> boxes, preserving the
+    canonical order. An original value that carried levels outside the known set is preserved via the
+    advanced-JSON fallback, not here (a curator who needs an exotic level uses the raw box)."""
+    checked = []
+    for level in TIME_SERIES_LEVELS:
+        if form.get(f"c_{section}_{subkey}_{level}") is not None:
+            checked.append(level)
+    return checked
+
+
+def _assemble_list(form: dict, section: str) -> list:
+    """Build a LIST section from its l_<section>_<i>_<subkey> rows. A row whose every sub-field is
+    empty is DROPPED (the spare-blank-row degradation: extra empty rows never pollute the yaml). A
+    partially-filled row is kept and its known-format fields validated."""
+    subfields = LIST_SECTIONS[section]
+    rows: list[dict] = []
+    for i in _row_indices(form, section):
+        row: dict = {}
+        any_value = False
+        for subkey, _label, _ph, kind in subfields:
+            value = _form_get(form, f"l_{section}_{i}_{subkey}")
+            if value:
+                _validate_scalar(section, subkey, kind, value)
+                any_value = True
+            row[subkey] = value if value else None
+        if any_value:
+            rows.append(row)
+    return rows
+
+
+def _row_indices(form: dict, section: str) -> list[int]:
+    """The row indices present in the form for a list section, sorted. Rows are discovered from the
+    l_<section>_<i>_<subkey> field names so the count is not fixed server-side (JS can add rows; the
+    no-JS fallback renders a fixed set)."""
+    prefix = f"l_{section}_"
+    idx: set[int] = set()
+    for key in form:
+        if not key.startswith(prefix):
+            continue
+        rest = key[len(prefix):]
+        num, _, _sub = rest.partition("_")
+        if num.isdigit():
+            idx.add(int(num))
+    return sorted(idx)
+
+
+def assemble_section(form: dict, section: str):
+    """Assemble ONE section's value, applying the precedence:
+      1. j_<section> non-empty  -> legacy JSON path (overrides the widgets).
+      2. else s_/l_/c_ widgets.
+      3. if the result == the original snapshot -> return _OMIT (no-op; drop from the patch).
+
+    Returns either the assembled value or the _OMIT sentinel. Raises SectionError on a malformed
+    advanced-JSON blob or a bad known-format field."""
+    advanced = _form_get(form, f"j_{section}")
+    if advanced:
+        try:
+            value = json.loads(advanced)
+        except ValueError:
+            raise SectionError(section, f"the advanced JSON for {section} is not valid JSON")
+    elif section in MAP_SECTIONS:
+        value = _assemble_map(form, section)
+    elif section in LIST_SECTIONS:
+        value = _assemble_list(form, section)
+    else:  # pragma: no cover -- callers only pass WIDGET_SECTIONS
+        return _OMIT
+
+    original = _original_snapshot(form, section)
+    if original is not _ABSENT and value == original:
+        return _OMIT  # unchanged -> leave the key exactly as it was (round-trip)
+    if original is _ABSENT and value in (None, "", [], {}):
+        return _OMIT  # never introduce an empty section the source did not carry
+    return value
+
+
+_OMIT = object()  # assemble_section: this section contributes nothing to the patch
+
+
+def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
+    """Assemble every widget section into a patch fragment, collecting per-section errors instead of
+    failing on the first. Returns (patch_fragment, errors). The caller (app._build_patch) merges this
+    with the scalar fields and, if errors is non-empty, re-renders the form with them."""
+    patch: dict = {}
+    errors: list[SectionError] = []
+    for section in WIDGET_SECTIONS:
+        try:
+            value = assemble_section(form, section)
+        except SectionError as exc:
+            errors.append(exc)
+            continue
+        if value is not _OMIT:
+            patch[section] = value
+    return patch, errors
