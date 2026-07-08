@@ -30,11 +30,6 @@ screening_diagnostic, note }`.
 Every product MUST carry a `provenance` block (input file + sha256 + pipeline/params) so it is
 traceable to its source — this is non-negotiable for reproducibility.
 
-> **Known naming defect:** the `skew_beta_mean_deg` key (both files above) actually carries the
-> **median** of |β| — the engine deliberately uses the median (`_edi_science.py`) because the mean
-> turned noisy broadband sites into false 3-D calls. The key predates that change and is queued
-> for rename; until then, read it as the median.
-
 ## Planned products
 
 The `ausmt_science/` submodules (`strike`, `distortion`, `decomposition`, `quicklooks`, …) are
