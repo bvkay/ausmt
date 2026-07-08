@@ -512,6 +512,33 @@ class Gateway:
                                 headers={"Cache-Control": "no-store"})
         return RedirectResponse("/gateway/curator/queue#serve-state", status_code=303)
 
+    def handle_curator_ui_js(self, request: Request) -> Response:
+        """GET /gateway/curator/ui.js — the shared curator-page behaviours (delegated data-confirm /
+        data-toggle-big handlers) as an external same-origin script. The strictPages CSP blocks
+        BOTH inline <script> blocks and inline on*-attribute handlers on every /gateway/* page —
+        three shipped inline and silently never ran (found 2026-07-08: the Reject and Revoke
+        confirms and the preview size toggle). Session-gated like the pages that load it."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.CURATOR_UI_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+    def handle_serve_state_js(self, request: Request) -> Response:
+        """GET /gateway/curator/serve-state.js — the serve-state panel's JS as a same-origin EXTERNAL
+        script. Exists because the Caddyfile's strictPages CSP (script-src 'self', applied to every
+        /gateway/* page) BLOCKS inline <script> blocks — the first install shipped the panel JS
+        inline and the browser never executed it. 'self' permits this URL. Session-gated for
+        consistency with the page that references it (the code is public-repo — the gate is
+        consistency, not secrecy)."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.SERVE_PANEL_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
     def handle_curator_detail(self, request: Request, submission_id: str) -> Response:
         name = self._require_session(request)
         if isinstance(name, Response):
@@ -1215,6 +1242,19 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.post("/gateway/curator/rebuild")
     def curator_rebuild(request: Request, csrf_token: str = Form(default="")):
         return gw.handle_rebuild_request(request, csrf_token)
+
+    # The serve-state panel's JS as an EXTERNAL same-origin script — the strictPages CSP
+    # (script-src 'self') blocks inline scripts on every /gateway/* page, so the queue page loads
+    # this URL instead (see curatorpage.SERVE_PANEL_JS).
+    @app.get("/gateway/curator/serve-state.js")
+    def curator_serve_state_js(request: Request):
+        return gw.handle_serve_state_js(request)
+
+    # The shared curator-page UI behaviours (data-confirm / data-toggle-big delegation) — loaded by
+    # every curator page via _TAIL; external for the same CSP reason as serve-state.js.
+    @app.get("/gateway/curator/ui.js")
+    def curator_ui_js(request: Request):
+        return gw.handle_curator_ui_js(request)
 
     # ---- C31 metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the C10/C11

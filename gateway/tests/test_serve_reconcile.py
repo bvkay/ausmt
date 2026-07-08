@@ -189,7 +189,10 @@ def test_queue_panel_renders_without_status(tmp_path):
             assert r.status_code == 200
             assert 'id="serve-state"' in r.text
             assert "reconcile agent is not installed" in r.text or "not installed" in r.text
-            assert "/data/build.json" in r.text and "/data/build_report.json" in r.text
+            # The /data/build*.json fetches live in the EXTERNAL panel script now (CSP: inline JS is
+            # dead under script-src 'self'); the page must reference that script, and the script
+            # route itself is covered by test_serve_state_js_route_serves_the_panel_script.
+            assert 'src="/gateway/curator/serve-state.js"' in r.text
             assert "Request rebuild" in r.text
     run(_body())
 
@@ -258,4 +261,89 @@ def test_queue_panel_published_head_via_git_seam(tmp_path):
             r = await client.get("/gateway/curator/queue")
             assert r.status_code == 200  # never 500
             assert "unavailable" in r.text
+    run(_body())
+
+
+# ---- CSP delivery: the panel JS must be an EXTERNAL script (strictPages blocks inline) ----------
+
+def test_queue_page_has_no_inline_scripts_or_handlers(tmp_path):
+    """CSP PIN (the 2026-07-08 panel incident): Caddy serves every /gateway/* page under
+    script-src 'self' — inline <script> blocks and inline event-handler attributes are silently
+    BLOCKED by the browser, so any inline JS on a curator page is dead code that only fails in
+    production. The rendered queue page must reference the panel + shared-UI JS as external
+    same-origin scripts and carry ZERO inline scripts or inline event handlers. FAILS IF: anyone
+    re-inlines a script or adds an onclick-style attribute (either would ship a page whose JS
+    never runs behind Caddy)."""
+    import re
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get("/gateway/curator/queue")
+            assert r.status_code == 200
+            html = r.text
+            for m in re.finditer(r"<script\b[^>]*>", html):
+                assert "src=" in m.group(0), f"inline <script> is dead under the CSP: {m.group(0)}"
+            assert 'src="/gateway/curator/serve-state.js"' in html
+            assert 'src="/gateway/curator/ui.js"' in html
+            handlers = re.findall(r"<[^>]*\son\w+\s*=", html)
+            assert handlers == [], f"inline event handlers are dead under the CSP: {handlers}"
+    run(_body())
+
+
+def test_no_page_renderer_emits_inline_handlers():
+    """SOURCE-LEVEL CSP SWEEP: no gateway page-renderer module may contain an inline event-handler
+    attribute in its HTML (onclick=/onchange=/onsubmit=/onload=/oninput=) — all are dead under the
+    strictPages CSP. Three shipped that way and silently never ran until 2026-07-08 (the Reject and
+    Revoke confirms, the preview size toggle); behaviours belong in CURATOR_UI_JS's data-attribute
+    delegation instead. FAILS IF: a new inline handler lands in any renderer source."""
+    import re
+    from pathlib import Path
+    pkg = Path(__file__).resolve().parents[1]
+    offenders = []
+    for name in ("curatorpage.py", "metaedit.py", "statuspage.py", "uploader_keys.py"):
+        p = pkg / name
+        if not p.exists():
+            continue
+        for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"""on(click|change|submit|load|input|mouseover|focus|blur)\s*=\s*['"\\]""", line):
+                offenders.append(f"{name}:{i}: {line.strip()[:90]}")
+    assert offenders == [], "inline event handlers are dead under the CSP:\n" + "\n".join(offenders)
+
+
+def test_serve_state_js_route_serves_the_panel_script(tmp_path):
+    """GET /gateway/curator/serve-state.js with a session returns the panel JS (javascript content
+    type; contains the panel hooks); without a session it redirects to login (same gate as the
+    page). FAILS IF: the route 404s (the page would load with no JS — 'Loading…' forever), serves
+    the wrong content type, or is reachable without the session gate the rest of /gateway/curator
+    has."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, _cfg):
+            r_anon = await client.get("/gateway/curator/serve-state.js", follow_redirects=False)
+            assert r_anon.status_code == 303, "unauthenticated must redirect to login like the page"
+            await curator_login(client)
+            r = await client.get("/gateway/curator/serve-state.js")
+            assert r.status_code == 200
+            assert "javascript" in r.headers["content-type"]
+            assert "serve-state" in r.text and "build_report.json" in r.text
+            assert "<script" not in r.text, "the route serves RAW JS, not an HTML-wrapped block"
+    run(_body())
+
+
+def test_ui_js_route_serves_shared_behaviours(tmp_path):
+    """GET /gateway/curator/ui.js (loaded by EVERY curator page via the shell) returns the shared
+    delegation JS: the data-confirm submit guard (Rebuild/Reject/Revoke confirms ride it) and the
+    data-toggle-big click handler (the preview size toggle). Session-gated like everything else
+    under /gateway/curator. FAILS IF: the route 404s (every confirm/toggle silently dies again, the
+    pre-2026-07-08 state), lacks either delegated behaviour, or skips the session gate."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, _cfg):
+            r_anon = await client.get("/gateway/curator/ui.js", follow_redirects=False)
+            assert r_anon.status_code == 303
+            await curator_login(client)
+            r = await client.get("/gateway/curator/ui.js")
+            assert r.status_code == 200
+            assert "javascript" in r.headers["content-type"]
+            assert "data-confirm" in r.text and "confirm(" in r.text
+            assert "data-toggle-big" in r.text
+            assert "<script" not in r.text
     run(_body())

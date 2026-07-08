@@ -74,7 +74,34 @@ _HEAD = """<!doctype html>
 <body><div class="wrap">
 """
 
-_TAIL = "</div></body></html>"
+# Every curator page loads the shared UI script (delegated data-confirm / data-toggle-big handlers)
+# as an EXTERNAL same-origin script — the strictPages CSP (script-src 'self') silently blocks inline
+# <script> blocks AND on*= attributes on every /gateway/* page, so inline handlers are dead code
+# that only fails in production (three shipped that way and never ran; found 2026-07-08).
+_TAIL = '<script src="/gateway/curator/ui.js" defer></script></div></body></html>'
+
+
+# Shared curator-page behaviours, DELEGATED so per-element handlers never need inlining again:
+#   * a <form data-confirm="message"> gets an accidental-click confirm on submit;
+#   * a <button data-toggle-big="elementId"> toggles the .big class on that element.
+# Served by the session-gated GET /gateway/curator/ui.js (see app.handle_curator_ui_js).
+CURATOR_UI_JS = """
+(function () {
+  document.addEventListener('submit', function (ev) {
+    var f = ev.target;
+    if (f && f.getAttribute && f.getAttribute('data-confirm')) {
+      if (!window.confirm(f.getAttribute('data-confirm'))) ev.preventDefault();
+    }
+  });
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t && t.getAttribute && t.getAttribute('data-toggle-big')) {
+      var el = document.getElementById(t.getAttribute('data-toggle-big'));
+      if (el) el.classList.toggle('big');
+    }
+  });
+})();
+"""
 
 
 def _esc(value) -> str:
@@ -169,6 +196,8 @@ def _reconcile_status_block(status: dict | None) -> str:
     curator sees WHY without console access (design §2 — the NCI no-console requirement)."""
     if status is None:
         return ('<p class="sub">No reconcile status yet — the host reconcile agent is not installed, '
+                'its status file is unreadable by the gateway (permissions on gateway/state — see the '
+                'deploy README ownership prep), '
                 'or has not run a pass. See the deploy README "Serve reconcile".</p>')
     action = str(status.get("action") or "unknown")
     colour = _ACTION_COLOUR.get(action, _PALETTE["muted"])
@@ -206,12 +235,16 @@ def render_serve_panel(*, published_head, published_available: bool, status: dic
         pending_html = (f'<p class="sub" style="color:{_PALETTE["warn"]};font-weight:600">'
                         'Rebuild requested — pending the next reconcile tick.</p>')
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
-    # The button posts to the zero-argument rebuild route. A confirm() keeps an accidental click from
-    # queueing a rebuild; the server is idempotent regardless.
+    # The button posts to the zero-argument rebuild route. The accidental-click confirm rides the
+    # shared data-confirm delegation in CURATOR_UI_JS — never an inline handler: the Caddyfile's
+    # strictPages CSP (script-src 'self') blocks inline handlers, so one here silently never runs
+    # (the 2026-07-08 first-install symptom — the form submitted with no confirm). The server is
+    # idempotent regardless, so a blocked confirm was never a safety hole, only a missing courtesy.
     button = (
-        f'<form class="act" method="post" action="/gateway/curator/rebuild">{csrf}'
-        '<button class="b-accent" type="submit" '
-        'onclick="return confirm(\'Request a rebuild on the next reconcile tick?\')">'
+        f'<form class="act" method="post" action="/gateway/curator/rebuild" '
+        'data-confirm="Request a rebuild on the next reconcile tick?">'
+        f'{csrf}'
+        '<button class="b-accent" type="submit">'
         'Request rebuild</button></form>'
     )
     # data-published-head lets the JS compare the served source_commit against the published HEAD and
@@ -233,7 +266,12 @@ def render_serve_panel(*, published_head, published_available: bool, status: dic
         f'{_reconcile_status_block(status)}'
         f'<p style="margin-top:1rem">{button}</p>'
         '</div>'
-        f'{_SERVE_PANEL_JS}'
+        # EXTERNAL script, same-origin — NOT an inline <script> block. The Caddyfile serves every
+        # /gateway/* page under the strictPages CSP (script-src 'self', no 'unsafe-inline'), which
+        # BLOCKS inline scripts entirely: the first install (2026-07-08) shipped this panel's JS
+        # inline and the browser never ran it ("Loading…" forever). 'self' allows a same-origin
+        # script URL, so the JS is served by the session-gated /gateway/curator/serve-state.js route.
+        '<script src="/gateway/curator/serve-state.js" defer></script>'
     )
     return body
 
@@ -242,12 +280,18 @@ def render_serve_panel(*, published_head, published_available: bool, status: dic
 # current/) and render it. Graceful on a 404 (no build yet) and on a fetch/parse error. Dependency-
 # free; every value is inserted via textContent (never innerHTML) so submitter-derived report strings
 # cannot inject markup into the curator page.
-_SERVE_PANEL_JS = """
-<script>
+#
+# DELIVERY (CSP): this constant is RAW JS (no <script> wrapper), served as its own same-origin
+# document by GET /gateway/curator/serve-state.js — inline delivery is dead under the strictPages
+# script-src 'self' policy (see render note above). Keep ALL panel behaviour in here (including the
+# button confirm): no inline scripts, no on*= attributes anywhere on the curator pages — a rendered-
+# page test pins that invariant.
+SERVE_PANEL_JS = """
 (function () {
   var panel = document.getElementById('serve-state');
   if (!panel) return;
   var publishedHead = panel.getAttribute('data-published-head') || '';
+  // (The rebuild button's confirm rides the shared data-confirm delegation in ui.js.)
 
   function el(tag, text, cls) {
     var e = document.createElement(tag);
@@ -383,7 +427,6 @@ _SERVE_PANEL_JS = """
     box.appendChild(el('p', 'Could not load /data/build_report.json: ' + e.message, 'sub'));
   });
 })();
-</script>
 """
 
 
@@ -500,9 +543,10 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
         # Reject now REQUIRES a real note too (design §3 — no exemption). Its own note field.
         forms.append(
             f'<div class="panel"><h2>Reject</h2>'
-            f'<form method="post" action="/gateway/curator/submission/{sid}/reject">{csrf}{note}'
-            '<p><button class="b-bad" type="submit" '
-            'onclick="return confirm(\'Reject this submission?\')">Reject</button></p>'
+            f'<form method="post" action="/gateway/curator/submission/{sid}/reject" '
+            'data-confirm="Reject this submission?">'
+            f'{csrf}{note}'
+            '<p><button class="b-bad" type="submit">Reject</button></p>'
             '</form></div>'
         )
     elif state == states.PUBLISHED:
@@ -735,10 +779,10 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
                 status = f'<span class="badge" style="background:{_PALETTE["ok"]}">active</span>'
                 action = (
                     f'<form class="act" method="post" '
-                    f'action="/gateway/curator/uploaders/{_esc(k.id)}/revoke">{csrf}'
-                    '<button class="b-bad" type="submit" '
-                    'onclick="return confirm(\'Revoke this uploader key? This cannot be undone.\')">'
-                    'Revoke</button></form>')
+                    f'action="/gateway/curator/uploaders/{_esc(k.id)}/revoke" '
+                    'data-confirm="Revoke this uploader key? This cannot be undone.">'
+                    f'{csrf}'
+                    '<button class="b-bad" type="submit">Revoke</button></form>')
             trs.append(
                 "<tr>"
                 f'<td>{_esc(k.name)}</td>'
@@ -803,8 +847,7 @@ def render_detail(*, submission_id: str, state: str, updated_utc: str,
             f'<iframe id="prev" src="/gateway/curator/preview/{sid}/index.html" '
             'sandbox="allow-scripts" referrerpolicy="no-referrer" '
             'title="submission preview"></iframe>'
-            '<p><button type="button" class="b-accent" '
-            'onclick="document.getElementById(\'prev\').classList.toggle(\'big\')">'
+            '<p><button type="button" class="b-accent" data-toggle-big="prev">'
             'Toggle full size</button></p></div>'
         )
     note_panel = f'<div class="panel"><h2>Last note</h2><pre>{_esc(note)}</pre></div>' if note else ""
