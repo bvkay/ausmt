@@ -68,6 +68,31 @@ def test_verify_data_dir_fails_on_doctored_manifest(tmp_path):
     assert "VERIFY: FAIL" in r.stdout, r.stdout + r.stderr
 
 
+def test_verify_data_dir_fails_when_build_report_absent(tmp_path):
+    """The build_report presence check is NON-VACUOUS: remove build_report.json from an otherwise-good
+    build dir and --data-dir must FAIL (a build that predates / dropped the report is not blessed)."""
+    out = _build(tmp_path)
+    (out / "build_report.json").unlink()
+    r = _run_verify_data_dir(out)
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "VERIFY: FAIL" in r.stdout, r.stdout + r.stderr
+    assert "build_report" in r.stdout, "the failing check should name build_report"
+
+
+def test_verify_data_dir_fails_on_build_report_count_mismatch(tmp_path):
+    """NON-VACUOUS cross-count: doctor totals.stations_built so it disagrees with the manifest's served
+    station count, and --data-dir must FAIL — the report and the manifest are produced from independent
+    accumulators, so a mismatch is a real inconsistency the gate must catch."""
+    out = _build(tmp_path)
+    rep_path = out / "build_report.json"
+    rep = json.loads(rep_path.read_text(encoding="utf-8"))
+    rep["totals"]["stations_built"] += 99   # a count that cannot match the manifest
+    rep_path.write_text(json.dumps(rep))
+    r = _run_verify_data_dir(out)
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "VERIFY: FAIL" in r.stdout, r.stdout + r.stderr
+
+
 def test_verify_data_dir_requires_existing_dir():
     r = _run_verify_data_dir(Path("/no/such/build/dir/at/all"))
     assert r.returncode != 0

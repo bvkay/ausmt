@@ -41,6 +41,7 @@ declared in the survey package and recorded in provenance.
 | `surveys.json` | `build_portal.survey_meta_from_yaml` | `main.js` (`SMETA`), `drawer.js`, `exports.js` |
 | `collections.json` | `build_portal.collections_document` | `main.js` (`COLL`) |
 | `build_provenance.json` | `build_portal.py` (`PROV`) | `data.js` (`PROV`), `drawer.js` provenance panel |
+| `build_report.json` | `build_portal.py` (per-survey report accumulator) | curator serve-state UI (planned); validated against `schema/build_report.schema.json`; re-checked by `engine/scripts/verify.py` |
 | `mtcat.json` | `build_portal.mtcat_document` | external harvesters; validated against `schema/mtcat.schema.json` |
 | `qc_report.json` | `build_portal.qc_pass` | curator-facing; not read by the portal runtime |
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
@@ -276,7 +277,7 @@ replaced only when the survey package explicitly declares a resolution
 recorded, and `r[11]` marks the row. An undeclared conflict stays flagged rather than being
 silently auto-picked.
 
-## `mtcat.json`, `collections.json`, `build_provenance.json`, `qc_report.json`
+## `mtcat.json`, `collections.json`, `build_provenance.json`, `build_report.json`, `qc_report.json`
 
 - **`mtcat.json`** — the MTCAT v1.0 discovery/federation document; its shape is fixed by
   [`schema/mtcat.schema.json`](../reference/mtcat-schema.md) and validated in tests. This is the
@@ -290,5 +291,25 @@ silently auto-picked.
   without it. The dimensionality thresholds it records are read from the named constants in
   `_edi_science`, never re-typed, so the recorded parameters cannot drift from the code that ran;
   provenance describes what actually executed.
+- **`build_report.json`** — structured per-survey build metadata, written alongside
+  `build_provenance.json`. Top level carries `generated` (UTC), the same `engine_commit` /
+  `source_commit` / `build_id` identity fields `build.json` records (reused from the same helpers, so
+  they cannot drift), `pipeline_version`, a `surveys` object keyed by slug, and `totals`
+  (`surveys`, `stations_built`, `warnings`). Each survey entry has `stations_built`,
+  `stations_dropped`, structured `warnings` (the survey-scoped warnings the build already produces —
+  access-gate warnings, a dropped non-http `nci_base`), `conditioning`, the C18 `cache` counters, and
+  `duration_seconds`. `conditioning` is the canonical-conditioning notes aggregated **by distinct note
+  string** — one `{note, count, stations, except}` entry per distinct note (ordered by first
+  appearance), where `count` is the number of note-carrying stations, and at most one of `stations`
+  (the small carrier set) / `except` (the small absentee complement, ≤ 5) is listed — the rest is the
+  count alone. This is the SAME aggregation the build's survey-level `[xml] NOTICE <slug>: <note> — …`
+  log lines print (one shared function), so the human log and the machine report never disagree, and
+  it replaces the old one-NOTICE-per-station logging (a ~1100-station rebuild emitted ~792
+  near-identical boilerplate lines). The per-station notes themselves are unchanged — they still live
+  in each `station.json`'s `canonical_conditioning` and the canonical store's `provenance.json`; this
+  report is a survey-level view over them. Shape fixed by `engine/schema/build_report.schema.json`;
+  validated in the build self-check and re-checked (presence + schema + a station-count cross-check
+  against the manifest) by `engine/scripts/verify.py`. Public build metadata for the (planned) curator
+  serve-state UI; the portal runtime does not consume it.
 - **`qc_report.json`** — curator-facing QC findings (duplicate ids, coord flags, near-duplicates,
   out-of-extent); not consumed by the portal runtime.

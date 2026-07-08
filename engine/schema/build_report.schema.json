@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ausmt.org/schema/build-report-1.0.schema.json",
+  "title": "AusMT build report v1.0",
+  "description": "Structured per-survey build metadata emitted alongside build_provenance.json: what each survey built, its structured survey-scoped warnings, the canonical-conditioning notes aggregated BY DISTINCT NOTE with station counts (the same aggregation the survey-level build log prints), the C18 cache counters, and per-survey wall time. Public build metadata for the (planned) curator serve-state UI.",
+  "type": "object",
+  "required": ["generated", "engine_commit", "surveys", "totals"],
+  "additionalProperties": true,
+  "properties": {
+    "generated": {"type": "string", "description": "ISO8601 UTC build timestamp (…Z)"},
+    "engine_commit": {"type": "string", "description": "short HEAD of the engine repo (mirrors build.json)"},
+    "source_commit": {"type": ["string", "null"], "description": "short HEAD of the ausmt-surveys checkout, or null for --raw / non-git --surveys (mirrors build.json)"},
+    "build_id": {"type": "string", "description": "the opaque C12 build id (mirrors build.json)"},
+    "pipeline_version": {"type": "string", "description": "the engine distribution version (mirrors build_provenance.json's pipeline_version)"},
+    "surveys": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/definitions/survey"},
+      "description": "keyed by survey slug"
+    },
+    "totals": {
+      "type": "object",
+      "required": ["surveys", "stations_built", "warnings"],
+      "additionalProperties": false,
+      "properties": {
+        "surveys": {"type": "integer", "minimum": 0},
+        "stations_built": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "definitions": {
+    "survey": {
+      "type": "object",
+      "required": ["stations_built", "stations_dropped", "warnings", "conditioning", "cache", "duration_seconds"],
+      "additionalProperties": false,
+      "properties": {
+        "stations_built": {"type": "integer", "minimum": 0},
+        "stations_dropped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["station", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "station": {"type": "string"},
+              "reason": {"type": "string"}
+            }
+          }
+        },
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "conditioning": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/conditioning_entry"},
+          "description": "one entry per DISTINCT canonical-conditioning note, ordered by first appearance"
+        },
+        "cache": {
+          "type": "object",
+          "required": ["digest", "hits", "misses", "writes"],
+          "additionalProperties": false,
+          "properties": {
+            "digest": {"type": "string", "description": "first 12 hex of the survey.yaml digest, or '' for --raw"},
+            "hits": {"type": "integer", "minimum": 0},
+            "misses": {"type": "integer", "minimum": 0},
+            "writes": {"type": "integer", "minimum": 0}
+          }
+        },
+        "duration_seconds": {"type": "number", "minimum": 0}
+      }
+    },
+    "conditioning_entry": {
+      "type": "object",
+      "required": ["note", "count", "stations", "except"],
+      "additionalProperties": false,
+      "description": "a distinct conditioning note carried by `count` of the survey's note-carrying stations. At most one of `stations` (the small carrier set) / `except` (the small absentee complement) is non-null; both null => neither side is short enough to enumerate and the count alone tells the story.",
+      "properties": {
+        "note": {"type": "string"},
+        "count": {"type": "integer", "minimum": 1},
+        "stations": {"type": ["array", "null"], "items": {"type": "string"}},
+        "except": {"type": ["array", "null"], "items": {"type": "string"}}
+      }
+    }
+  }
+}

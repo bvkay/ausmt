@@ -46,20 +46,24 @@ def _build(bp, surveys, extractor):
     cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8")) if (out / "catalogue.json").exists() else []
     mtc = json.loads((out / "mtcat.json").read_text(encoding="utf-8")) if (out / "mtcat.json").exists() else {}
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8")) if (out / "manifest.json").exists() else {}
-    return rc, cat, mtc, man, out
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8")) if (out / "build_report.json").exists() else None
+    return rc, cat, mtc, man, rep, out
 
 
 def _load_existing(data_dir: Path):
     """Load an ALREADY-BUILT output dir's own JSON (no rebuild) for --data-dir mode. Missing files
     degrade to the same empty defaults _build's post-build read uses, so a partial/pre-C-whatever
-    build dir still gets a (failing, informative) validation pass rather than crashing on FileNotFound."""
+    build dir still gets a (failing, informative) validation pass rather than crashing on FileNotFound.
+    build_report.json defaults to None (absent) so its presence check can FAIL loudly for a build that
+    predates it, rather than silently pass an empty default."""
     def _read(name, default):
         p = data_dir / name
         return json.loads(p.read_text(encoding="utf-8")) if p.exists() else default
     cat = _read("catalogue.json", [])
     mtc = _read("mtcat.json", {})
     man = _read("manifest.json", {})
-    return cat, mtc, man
+    rep = _read("build_report.json", None)
+    return cat, mtc, man, rep
 
 
 def _live_survey_digests(surveys_root: Path) -> dict:
@@ -210,6 +214,48 @@ def _check_mtcat_and_manifest(cat, mtc, man, base_dir: Path, jsonschema, schema,
     return ok, lines
 
 
+def _check_build_report(rep, man, jsonschema, rep_schema):
+    """build_report.json presence + schema-validity + a CHEAP cross-count against the manifest.
+
+    The correct cross-count is a SUBSET relation, not equality: the manifest lists only the SERVED
+    stations (bytes gated by the licence + C1 access gates), while build_report.stations_built counts
+    every station BUILT into the discovery surfaces. An embargoed / non-redistributable survey builds
+    stations that are never served, so served <= built (never ==) in general. We assert exactly that —
+    every DISTINCT served EDI station must also be counted in totals.stations_built — plus the report's
+    internal totals self-consistency (totals == sum over surveys). Both are independent observables: the
+    manifest and the report are produced from different build accumulators, so a violation means one is
+    wrong. Returns (ok, lines). A build predating build_report.json (rep is None) FAILS loudly."""
+    ok = True
+    lines = []
+    if rep is None:
+        lines.append("   build_report: FAIL — build_report.json is absent (build predates it, or was "
+                     "not emitted)")
+        return False, lines
+    schema_ok = "unchecked"
+    if jsonschema and rep_schema:
+        try:
+            jsonschema.validate(rep, rep_schema)
+            schema_ok = "PASS"
+        except Exception as e:  # noqa: BLE001
+            schema_ok = f"FAIL ({str(e)[:80]})"
+            ok = False
+    # cross-count: DISTINCT served EDI stations in the manifest are a SUBSET of the built count.
+    served = {r.get("station") for r in man.get("files", []) if r.get("format") == "edi"}
+    built = (rep.get("totals") or {}).get("stations_built")
+    count_ok = "PASS"
+    if not isinstance(built, int) or len(served) > built:
+        count_ok = f"FAIL (manifest-served={len(served)} > report-built={built}; served must be a subset)"
+        ok = False
+    # internal totals self-consistency (cheap): totals == sum over surveys
+    _sum_built = sum(s.get("stations_built", 0) for s in (rep.get("surveys") or {}).values())
+    if built != _sum_built:
+        count_ok = f"FAIL (totals.stations_built={built} != sum-of-surveys={_sum_built})"
+        ok = False
+    lines.append(f"   build_report: schema={schema_ok} stations_built={built} "
+                 f"(manifest-served={len(served)}) -> {count_ok}")
+    return ok, lines
+
+
 def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool:
     """The --data-dir check: mtcat.json schema-conformance + manifest.json integrity/schema, against an
     EXISTING build dir's own files — the same two checks the self-building path runs post-build (via
@@ -231,13 +277,18 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool
         print("note: jsonschema not installed — schema conformance will be unchecked")
     schema = json.loads((ROOT / "schema" / "mtcat.schema.json").read_text(encoding="utf-8"))
     man_schema = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
+    rep_schema = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
 
-    cat, mtc, man = _load_existing(data_dir)
+    cat, mtc, man, rep = _load_existing(data_dir)
     print(f"== data-dir check ({data_dir}) ==")
     ok, lines = _check_mtcat_and_manifest(cat, mtc, man, data_dir, jsonschema, schema, man_schema,
                                           station_label="stations")
     for ln in lines:
         print(ln)
+    rep_ok, rep_lines = _check_build_report(rep, man, jsonschema, rep_schema)
+    for ln in rep_lines:
+        print(ln)
+    ok &= rep_ok
 
     # C18b consistency gate — armed only with --surveys.
     if surveys_root is not None:
@@ -305,9 +356,10 @@ def main(argv=None):
         return 1
 
     man_schema = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
+    rep_schema = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
 
     print("== build (mt_metadata) ==")
-    rc, cat, mtc, man, out = _build(bp, self_surveys, "mt_metadata")
+    rc, cat, mtc, man, rep, out = _build(bp, self_surveys, "mt_metadata")
     # station_label includes "exit=" here (the self-build path has a build return code to report;
     # --data-dir mode has no build step, so _validate_data_dir's call omits it) -- otherwise this is
     # the SAME mtcat-schema + manifest-integrity/schema check --data-dir mode runs post-build.
@@ -316,6 +368,10 @@ def main(argv=None):
     ok &= check_ok and rc == 0
     for ln in lines:
         print(ln)
+    rep_ok, rep_lines = _check_build_report(rep, man, jsonschema, rep_schema)
+    for ln in rep_lines:
+        print(ln)
+    ok &= rep_ok
 
     print("VERIFY:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
