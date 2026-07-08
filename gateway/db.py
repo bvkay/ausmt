@@ -14,6 +14,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,6 +72,18 @@ class IllegalTransition(Exception):
     so a programming error is loud; the row and audit log are left untouched."""
 
 
+class SchemaTooNew(Exception):
+    """Raised when a DB was written by a NEWER build than this one (user_version > SCHEMA_VERSION).
+    Fail-closed: an old binary must not silently open a forward-migrated DB and corrupt it."""
+
+
+# Schema version, stamped in the DB header (PRAGMA user_version). v1 == the CREATE TABLE baseline in
+# _init_schema. _MIGRATIONS holds (target_version, apply(conn)) steps for v2+; applied in order in one
+# transaction. Empty today: the first schema change appends a (2, fn) row here and nothing else moves.
+SCHEMA_VERSION = 1
+_MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = []
+
+
 class Database:
     def __init__(self, path: Path):
         self.path = path
@@ -88,6 +101,7 @@ class Database:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._init_schema()
+        self._migrate()
 
     def _init_schema(self) -> None:
         self._conn.executescript(
@@ -127,6 +141,25 @@ class Database:
             """
         )
         self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Bring the DB header to SCHEMA_VERSION. A fresh or legacy-unstamped DB reads user_version 0
+        (the _init_schema baseline == v1); we run every migration with target > current, in order, in
+        one transaction, then stamp. A DB from a NEWER build (user_version > SCHEMA_VERSION) is refused
+        (SchemaTooNew) rather than opened blind — forward-compat fail-closed."""
+        with self._lock:
+            current = int(self._conn.execute("PRAGMA user_version").fetchone()[0])
+            if current > SCHEMA_VERSION:
+                raise SchemaTooNew(
+                    f"DB {self.path} is at schema {current}; this build knows only {SCHEMA_VERSION}")
+            if current >= SCHEMA_VERSION:
+                return
+            with self._conn:
+                for target, apply in _MIGRATIONS:
+                    if current < target <= SCHEMA_VERSION:
+                        apply(self._conn)
+                # PRAGMA user_version does not accept a bound parameter; SCHEMA_VERSION is a trusted int.
+                self._conn.execute(f"PRAGMA user_version={int(SCHEMA_VERSION)}")
 
     def close(self) -> None:
         with self._lock:
