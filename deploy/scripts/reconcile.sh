@@ -153,6 +153,12 @@ write_status() {
   # container uid can also write — never a predictable `.tmp.$$` a symlink could be planted at.
   _tmp=$(mktemp "$STATUS_FILE.tmp.XXXXXX" 2>/dev/null) || {
     printf 'reconcile: cannot create status tmp under %s\n' "$STATE_DIR" >&2; return 1; }
+  # mktemp creates 0600 — but the status CONSUMER is the gateway CONTAINER (uid 10002) reading via
+  # the shared state dir, so open it up before the rename. Without this the panel shows "no status
+  # yet" while the file sits there operator-only (the 2026-07-08 panel regression: the symlink-safe
+  # mktemp change silently revoked the group read the old umask-created tmp had). Status content is
+  # non-secret operational metadata (actions, commits, log tail).
+  chmod 0644 "$_tmp" || { printf 'reconcile: cannot chmod status tmp %s\n' "$_tmp" >&2; rm -f "$_tmp"; return 1; }
   AUSMT_RS_ACTION="$_action" AUSMT_RS_HEAD="$_head" AUSMT_RS_BUILT="$_built" \
   AUSMT_RS_BUILD_ID="$_build_id" AUSMT_RS_LOG_FILE="$_log_file" AUSMT_RS_LAST_RUN="$(now_utc)" \
   "$PY" - > "$_tmp" <<'PYEOF'

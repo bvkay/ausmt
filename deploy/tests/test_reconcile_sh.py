@@ -485,3 +485,22 @@ def test_lock_held_second_run_is_silent_noop(tmp_path):
     finally:
         holder.terminate()
         holder.wait()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits not meaningful on this filesystem")
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_status_file_readable_by_gateway_uid(tmp_path):
+    """The status file must be group/other-readable: its CONSUMER is the gateway container (uid
+    10002) reading through the shared state dir, not the operator who wrote it. FAILS IF: the
+    symlink-safe mktemp write ships its 0600 default again (the 2026-07-08 panel regression — the
+    file existed but the panel said 'no reconcile status yet')."""
+    tree = _make_tree(tmp_path, source_commit="placeholder")
+    head = _git(tree["surveys"], "rev-parse", "--short=7", "HEAD")
+    (tree["site"] / "build.json").write_text(json.dumps(
+        {"build_id": "bid-mode", "engine_commit": "eng0000", "source_commit": head}),
+        encoding="utf-8")
+    r = _run(tree)
+    assert r.returncode == 0, r.stderr
+    mode = (tree["state"] / "reconcile-status.json").stat().st_mode
+    assert mode & 0o044 == 0o044, (
+        f"status file must be group+other readable for the gateway uid; mode is {oct(mode)}")
