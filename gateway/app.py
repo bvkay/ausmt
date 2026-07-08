@@ -1007,11 +1007,13 @@ class Gateway:
     def _resolve_submit_auth(self, submit_key: str | None) -> "_SubmitAuth | None":
         """Resolve a presented X-AusMT-Submit-Key to an authenticated identity, else None (=> 401).
         Accepts EITHER the env AUSMT_SUBMIT_KEY (bootstrap + CI e2e path, unchanged — the env check
-        needs no DB, so it survives a DB outage) OR an ACTIVE DB uploader key (schema v2). Both are
-        constant-time: the env key via hmac.compare_digest on the raw key; the DB key via a sha256
-        lookup whose stored hash is compared with hmac.compare_digest inside get_active_uploader_key_
-        by_hash's indexed WHERE (a hash lookup, not a per-key scan). A revoked/unknown key resolves to
-        None — the SAME 401 as a wrong env key, no oracle for which case it was.
+        needs no DB, so it survives a DB outage) OR an ACTIVE DB uploader key (schema v2). Timing:
+        the env key compares raw bytes with hmac.compare_digest; the DB key is HASHED FIRST and looked
+        up by an indexed SQL equality on the sha256 digest — that comparison is not constant-time, and
+        does not need to be: it operates on a one-way digest of a ~256-bit random secret, so equality
+        timing leaks nothing usable about the plaintext (and it is a hash lookup, not a per-key scan).
+        A revoked/unknown key resolves to None — the SAME 401 as a wrong env key, no oracle for which
+        case it was.
 
         FAIL-CLOSED: if the DB lookup raises (DB unavailable mid-auth), we REJECT rather than fall back
         to env-only or accept — an auth error is never an auth bypass. The env path is tried FIRST and
