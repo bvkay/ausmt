@@ -6,3 +6,9 @@
 .env
 *.env
 !.env.example
+
+# Python bytecode + test caches (deploy/tests/ is a pytest dir; mirror gateway/.gitignore so a
+# `git add -A` on the box never stages compiled artifacts).
+__pycache__/
+*.pyc
+.pytest_cache/

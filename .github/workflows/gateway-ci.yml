@@ -57,9 +57,12 @@ jobs:
       # full pytest output in the human log AND feeds the tripwire; `set -o pipefail` so a pytest FAILURE
       # (not just a skip regression) still reds the lane through the pipe. Any OTHER skip — e.g. a
       # validator oracle regressing to skip, the exact F7 hole — fails the lane loudly.
+      # deploy/tests rides this lane too (C40): the reconcile.sh decision-logic tests are plain
+      # pytest + sh + git, all present on the runner — including flock(1), so the lock-held case that
+      # skips on a Windows dev box RUNS here (no new allow-list entry; a skip would trip the wire).
       - name: Gateway unit tests (+ loud skip accounting)
         run: |
           set -o pipefail
-          python -m pytest -q -rs gateway/tests | tee gateway-pytest.out
+          python -m pytest -q -rs gateway/tests deploy/tests | tee gateway-pytest.out
           python engine/tests/ci_check_skips.py \
             --allow "real engine stack / sample survey / validator not present" < gateway-pytest.out

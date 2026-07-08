@@ -222,11 +222,20 @@ an active DB uploader key; a revoked or unknown key gets the same 401 as a wrong
 SQLite index now carries **schema v2** (the `uploader_keys` table); an existing v1 DB is migrated in
 place on the next start (the migration is guarded — a DB from a newer build is refused, not opened).
 
-### Curator publish = commit + push only; the rebuild is a separate manual step
+### Curator publish = commit + push only; the rebuild is automatic (C40) — or manual
 
 `Approve` (and the C31 metadata editor) writes the package into `surveys-live` git history and
 pushes — **that is all**. `PUBLISHED` means *committed to surveys-live main and pushed, NOT yet on
-the live map*. To serve it, run the rebuild by hand:
+the live map*. The gateway never invokes the build, so it never needs a Docker socket (the C10 §0
+no-socket invariant holds).
+
+**The rebuild is now closed automatically by the C40 serve-reconcile timer** (see "Serve reconcile
+(automatic rebuild)" below): once installed, it syncs `surveys-live` and rebuilds within ~15 min of a
+publish, and a curator can pull it forward with the **Request rebuild** button on the queue page. The
+serve-state panel on that page shows published HEAD vs served build, the last reconcile outcome, and
+the per-survey build report — so a shell-less curator can see the whole state.
+
+The manual path **remains valid** (for a box without the timer, or to force a rebuild now):
 
 ```sh
 export AUSMT_DATA_DIR=/srv/ausmt
@@ -234,9 +243,7 @@ export AUSMT_DATA_DIR=/srv/ausmt
 make rebuild-data
 ```
 
-This is deliberate: the gateway never invokes the build, so it never needs a Docker socket (the C10
-§0 no-socket invariant holds). The approved survey is already in git history and the rebuild picks it
-up like any merged PR.
+The approved survey is already in git history and the rebuild picks it up like any merged PR.
 
 ### surveys-live must be writable by uid 10002
 
@@ -274,8 +281,9 @@ metadata subset of a published survey's `survey.yaml` (name/region/abstract/… 
 coordinates, or EDI-derived fields), preview the exact diff + a real validator verdict, and on
 confirm commit+push through the **same fail-closed publish machinery** as an approve. Notes:
 
-- **Committed ≠ served** — the edit lands in git history; run `make rebuild-data` to serve it (cheap
-  for a metadata-only change).
+- **Committed ≠ served** — the edit lands in git history; the C40 reconcile timer serves it within a
+  tick (or press **Request rebuild** / run `make rebuild-data` to serve it now — cheap for a
+  metadata-only change).
 - **The gw-runner does the parsing, not the gateway.** The gateway enqueues an edit job (a slug +
   form fields, never a path or PII); the gw-runner (engine image) claims it, round-trips the YAML
   with `ruamel.yaml` (preserving comments/unmodeled keys byte-for-byte), runs the validator, and
@@ -285,6 +293,58 @@ confirm commit+push through the **same fail-closed publish machinery** as an app
   no-op or non-greater version is refused.
 - **No TOCTOU:** the confirm carries the sha256 of the previewed bytes; the gateway re-generates +
   re-hashes runner-side at commit, 409-ing on any mismatch.
+
+### Serve reconcile (automatic rebuild) — C40
+
+The **serve-reconcile agent** closes the "published ≠ served" gap so the shell-less curator never has
+to run `make` by hand. A systemd timer runs `deploy/scripts/reconcile.sh` every ~15 min; each pass:
+
+1. `git -C surveys-live pull --ff-only` (a diverged checkout ⇒ status `sync_failed`, **no** rebuild —
+   never build from a state you cannot fast-forward to);
+2. compares the served build's `source_commit` (from `site-data/current/data/build.json`) against the
+   `surveys-live` short HEAD;
+3. on drift **or** a curator **Request rebuild** (a `rebuild.request` file), runs `make rebuild-data`
+   (the already-atomic build → verify → swap), logging to `site-data/logs/<ts>.build.log`;
+4. writes `gateway/state/reconcile-status.json` — the curator queue page's **serve-state panel**
+   reads it (published HEAD vs served build, last outcome, the per-survey build report, a pending
+   indicator, and the **Request rebuild** button).
+
+The script itself never assumes systemd (on Gadi/NCI it becomes a cron/PBS job of the same script).
+
+**Install (one-time):**
+
+```sh
+# 1. Make sure deploy/.env has AUSMT_DATA_DIR and AUSMT_CODE_DIR set (the timer reads them via
+#    EnvironmentFile — they are NOT taken from your shell profile). `make preflight PROFILE=gateway`
+#    confirms both.
+# 2. Copy the units and edit the placeholders:
+sudo cp deploy/systemd/ausmt-reconcile.service /etc/systemd/system/
+sudo cp deploy/systemd/ausmt-reconcile.timer   /etc/systemd/system/
+sudo sed -i \
+  -e 's#__DEPLOY_DIR__#/srv/ausmt/code/deploy#g' \
+  -e 's#__ENV_FILE__#/srv/ausmt/code/deploy/.env#g' \
+  /etc/systemd/system/ausmt-reconcile.service
+sudo sed -i 's#^User=ausmt#User=YOUR_OPERATOR_USER#' /etc/systemd/system/ausmt-reconcile.service
+#    (the operator uid that owns the checkout and runs `docker compose` — the same user you run
+#     `make rebuild-data` as by hand; NOT root)
+# 3. Enable + start:
+sudo systemctl daemon-reload
+sudo systemctl enable --now ausmt-reconcile.timer
+
+# 4. Verify:
+systemctl list-timers ausmt-reconcile.timer            # shows the next scheduled run
+sudo systemctl start ausmt-reconcile.service           # run one pass now (test)
+cat "$AUSMT_DATA_DIR/gateway/state/reconcile-status.json"   # should show action=noop|rebuilt|…
+```
+
+To preview what a pass **would** do without acting: `make reconcile ARGS=--dry-run` (or
+`deploy/scripts/reconcile.sh --dry-run`). Exit codes: `0` on `noop`/`rebuilt`/`sync_failed` (the
+timer must not flap), `1` only on a genuine build `failed`.
+
+> **Note on the lock:** the script serialises overlapping ticks with `flock -n` on
+> `$AUSMT_DATA_DIR/reconcile.lock` (a second concurrent run exits 0 silently). On a host without
+> `flock(1)` it runs the pass without the lock (a stderr WARN) — the 15-min cadence + the atomic swap
+> bound the worst case to a redundant build, never a corrupt one.
 
 ### Gateway fail-closed behaviour (by design)
 
@@ -344,6 +404,9 @@ JS in the curator origin). preview-data is already embargo-safe + PII-scrubbed b
 | **Host-side `ln`/`mv` on `current` gives `Permission denied`** | `site-data` is owned by uid 10001; you are not that user. | Don't swap by hand — `make rebuild-data` does the swap in-container as 10001. |
 | **The C13 "Submit to AusMT" button never appears on Add Survey** | The gateway is not up/reachable, so the `/gateway/healthz` probe fails and the UI stays in manual-PR mode. | Bring the gateway up (section 3); `curl 127.0.0.1:8444/gateway/healthz` on the box; check Caddy is proxying `/gateway/*`. |
 | **Two checkouts / edits not taking effect** | You are running compose/`make` from a *different* checkout than the one you edited. | `git -C "$AUSMT_CODE_DIR" log -1` and compare to where you ran the command; standardise on the single `$AUSMT_CODE_DIR`. `make preflight` reports the live checkout + its origin freshness. |
+| **Curator pressed "Request rebuild" but nothing happens** | The **C40 reconcile timer is not installed** (the button only writes `gateway/state/rebuild.request`; the host timer is what consumes it). | `systemctl list-timers ausmt-reconcile.timer` — if it is not listed, install it (§3 "Serve reconcile"). Confirm `gateway/state/rebuild.request` exists (the button wrote it) and will be picked up on the next tick, or run `sudo systemctl start ausmt-reconcile.service` to consume it now. |
+| **Serve-state panel shows `sync_failed`** | `git pull --ff-only` on `surveys-live` **diverged** — the local checkout has commits/edits not on origin, so it cannot fast-forward. The reconcile agent refuses to build from an un-syncable state (by design) and does **not** rebuild. | Inspect: `git -C "$AUSMT_DATA_DIR/surveys-live" status` and `git -C … log --oneline origin/main..HEAD`. Reconcile the divergence (usually a stray local edit — review, then `git -C … reset --hard origin/main` if the local commits are unwanted, or push them). The next tick then syncs + rebuilds. |
+| **Serve-state panel shows `failed`** (old data still serving) | The rebuild `build`/`verify` step failed; the atomic swap left the **previous** build serving (correct fail-closed behaviour). | Read the `log_tail` in the panel (or the full `site-data/logs/<ts>.build.log`, path in `reconcile-status.json`). Same causes as a manual `rebuild-data` failure (see the rows above — stale/dirty image, a bad survey package). Fix the cause; the next drift/button press/tick retries. The request file is already consumed, so it does **not** crash-loop. |
 
 ---
 
@@ -389,6 +452,16 @@ observable**, uses only a binary that actually exists in that image, and can gen
 
 The gateway's `depends_on: clamd` uses **`condition: service_healthy`**, so on `up` the gateway waits
 until clamd can scan rather than fail-closing every submission to `RECEIVED` while clamd loads.
+
+**Serve-reconcile timer (C40).** The reconcile agent is a host **systemd timer/service**, not a
+compose service, so it is monitored with systemd, not a compose healthcheck:
+
+| What | Check |
+|---|---|
+| Timer is scheduled | `systemctl list-timers ausmt-reconcile.timer` (shows the next/last run) |
+| Last pass result | `systemctl status ausmt-reconcile.service` — a non-zero exit (a `failed` build) shows here; `sync_failed`/`noop`/`rebuilt` all exit 0 |
+| The state the curator sees | `cat "$AUSMT_DATA_DIR/gateway/state/reconcile-status.json"` — `action`, `head`, `built`, `build_id`, `log_file`, and (on a failure) `log_tail`; the curator queue page's serve-state panel renders the same file |
+| Build forensics | `site-data/logs/<ts>.build.log` (newest 20 kept), the full captured build output for the pass |
 
 **`gw-runner` has NO healthcheck — deliberately, not an oversight.** When idle the runner writes
 nothing observable (its only liveness signal is touching a per-job running-file mtime *while a job

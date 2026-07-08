@@ -26,8 +26,8 @@ from fastapi import FastAPI, Form, Header, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import checklist as checklist_mod
-from . import (clamd, curator_auth, curatorpage, db, jobs, metaedit, publish, states, statuspage,
-               uploader_keys as uploader_keys_mod, zipsafety)
+from . import (clamd, curator_auth, curatorpage, db, jobs, metaedit, publish, serve_state,
+               states, statuspage, uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
 from .orcid import is_valid_orcid
@@ -474,7 +474,43 @@ class Gateway:
             rows.append({"id": sub.id, "slug": sub.slug, "submitter_name": sub.submitter_name,
                          "state": sub.state, "updated_utc": sub.updated_utc, "warn_count": warn_count})
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
-        return self._html(curatorpage.render_queue(curator_name=name, rows=rows, csrf_token=csrf))
+        panel = self._serve_panel_html(csrf)
+        return self._html(curatorpage.render_queue(curator_name=name, rows=rows, csrf_token=csrf,
+                                                   serve_panel=panel))
+
+    def _serve_panel_html(self, csrf: str) -> str:
+        """Build the C40 serve-state panel (design §3). All server-side reads are best-effort — the
+        panel must NEVER 500 the queue page: the published HEAD degrades to "unavailable" and the
+        status/pending reads swallow their own errors. The served build.json/build_report.json are
+        fetched BROWSER-side (the gateway has no site-data mount), so nothing here touches site-data."""
+        published = serve_state.read_published_head(self._git_runner, self.cfg.surveys_live_dir)
+        status = serve_state.read_reconcile_status(self.cfg.state_dir)
+        pending = serve_state.rebuild_request_pending(self.cfg.state_dir)
+        return curatorpage.render_serve_panel(
+            published_head=published.short, published_available=published.available,
+            status=status, pending=pending, csrf_token=csrf)
+
+    def handle_rebuild_request(self, request: Request, csrf: str | None) -> Response:
+        """POST /gateway/curator/rebuild (design §3, brief note 4): session + CSRF gated exactly like
+        the uploader-key POSTs. Writes /gw/state/rebuild.request ATOMICALLY with {requested_at,
+        requested_by} — AUDIT ONLY; the host reconcile agent keys on the file's EXISTENCE and never
+        parses its content (zero-argument by design). Idempotent (a second press overwrites the same
+        file). Fails CLOSED with a 503 if the state dir is missing/unwritable (mirrors the house
+        curator-503 style) rather than pretending the request was queued. On success, redirects back
+        to the queue's serve-state section (303, matching how the other curator form posts respond)."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        try:
+            serve_state.write_rebuild_request(self.cfg.state_dir, requested_by=curator)
+        except serve_state.StateDirUnwritable as exc:
+            logger.warning("rebuild request could not be recorded (fail closed): %s", exc)
+            return JSONResponse({"detail": "rebuild request could not be recorded"}, status_code=503,
+                                headers={"Cache-Control": "no-store"})
+        return RedirectResponse("/gateway/curator/queue#serve-state", status_code=303)
 
     def handle_curator_detail(self, request: Request, submission_id: str) -> Response:
         name = self._require_session(request)
@@ -1172,6 +1208,13 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.post("/gateway/curator/uploaders/{key_id}/revoke")
     def curator_uploader_revoke(request: Request, key_id: int, csrf_token: str = Form(default="")):
         return gw.handle_uploader_revoke(request, key_id, csrf_token)
+
+    # ---- C40 serve-reconcile: the curator "request rebuild" button. Session + CSRF (checked in the
+    # handler); writes the zero-argument rebuild.request the host reconcile agent consumes. `def`
+    # (not async) — a tiny atomic file write, no await, consistent with the other simple POSTs.
+    @app.post("/gateway/curator/rebuild")
+    def curator_rebuild(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_rebuild_request(request, csrf_token)
 
     # ---- C31 metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the C10/C11

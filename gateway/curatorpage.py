@@ -110,7 +110,8 @@ def _state_badge(state: str) -> str:
     return f'<span class="badge" style="background:{colour}">{_esc(state)}</span>'
 
 
-def render_queue(*, curator_name: str, rows: list, csrf_token: str) -> str:
+def render_queue(*, curator_name: str, rows: list, csrf_token: str,
+                 serve_panel: str = "") -> str:
     if rows:
         trs = []
         for r in rows:
@@ -141,8 +142,249 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str) -> str:
         '· <a href="/gateway/curator/uploaders">Uploader keys</a> '
         f'{logout}</p>'
         f'<div class="panel">{table}</div>'
+        f'{serve_panel}'
     )
     return _page("AusMT curator queue", body)
+
+
+# ---- C40 serve-state panel -------------------------------------------------------------------
+# The published-vs-served view + the zero-argument "request rebuild" button. Two data sources:
+#   SERVER-SIDE (passed in): surveys-live HEAD (via the publish git seam), the reconcile-status.json
+#     contents, and whether a rebuild.request is pending — all from mounts the gateway already has.
+#   BROWSER-SIDE (fetched by the inline JS below): /data/build.json + /data/build_report.json,
+#     same-origin from Caddy (the gateway server has NO site-data mount — design §3). The JS renders
+#     the served build id + source_commit (highlighted when it differs from the published HEAD the
+#     server passed in) and the per-survey build_report table with an expandable detail row.
+# Dependency-free vanilla JS, matching the rest of the curator UI (no framework, no CDN).
+
+_ACTION_COLOUR = {
+    "rebuilt": _PALETTE["ok"], "noop": _PALETTE["muted"], "failed": _PALETTE["bad"],
+    "sync_failed": _PALETTE["bad"],
+}
+
+
+def _reconcile_status_block(status: dict | None) -> str:
+    """Render the last reconcile outcome from reconcile-status.json. None => the agent is not
+    installed yet (a hint, not an error). A `failed`/`sync_failed` shows the log tail so a shell-less
+    curator sees WHY without console access (design §2 — the NCI no-console requirement)."""
+    if status is None:
+        return ('<p class="sub">No reconcile status yet — the host reconcile agent is not installed, '
+                'or has not run a pass. See the deploy README "Serve reconcile".</p>')
+    action = str(status.get("action") or "unknown")
+    colour = _ACTION_COLOUR.get(action, _PALETTE["muted"])
+    rows = [
+        f'<tr><td class="k">Last reconcile</td><td>{_esc(status.get("last_run") or "-")}</td></tr>',
+        f'<tr><td class="k">Outcome</td>'
+        f'<td><span class="badge" style="background:{colour}">{_esc(action)}</span></td></tr>',
+        f'<tr><td class="k">surveys-live HEAD (at that run)</td><td>{_esc(status.get("head") or "-")}</td></tr>',
+        f'<tr><td class="k">Built source_commit</td><td>{_esc(status.get("built") or "-")}</td></tr>',
+        f'<tr><td class="k">Build id</td><td>{_esc(status.get("build_id") or "-")}</td></tr>',
+    ]
+    if status.get("log_file"):
+        rows.append(f'<tr><td class="k">Log file</td><td>{_esc(status.get("log_file"))}</td></tr>')
+    table = "<table>" + "".join(rows) + "</table>"
+    tail = ""
+    if action in ("failed", "sync_failed") and status.get("log_tail"):
+        tail = (f'<p class="sub" style="color:{_PALETTE["bad"]};font-weight:600">'
+                f'Last build did not serve — old data still live. Log tail:</p>'
+                f'<pre>{_esc(status.get("log_tail"))}</pre>')
+    return table + tail
+
+
+def render_serve_panel(*, published_head, published_available: bool, status: dict | None,
+                       pending: bool, csrf_token: str) -> str:
+    """The full serve-state panel for the queue page. `published_head` is the surveys-live short HEAD
+    the server read (or None); `published_available` is False when git could not be run (show
+    "unavailable", never error). `status` is the parsed reconcile-status.json (or None). `pending`
+    is True when a rebuild.request is waiting. The served-build half is filled in by the browser JS."""
+    if published_available and published_head:
+        head_html = f'<code id="published-head">{_esc(published_head)}</code>'
+    else:
+        head_html = '<code id="published-head" data-unavailable="1">unavailable</code>'
+    pending_html = ""
+    if pending:
+        pending_html = (f'<p class="sub" style="color:{_PALETTE["warn"]};font-weight:600">'
+                        'Rebuild requested — pending the next reconcile tick.</p>')
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    # The button posts to the zero-argument rebuild route. A confirm() keeps an accidental click from
+    # queueing a rebuild; the server is idempotent regardless.
+    button = (
+        f'<form class="act" method="post" action="/gateway/curator/rebuild">{csrf}'
+        '<button class="b-accent" type="submit" '
+        'onclick="return confirm(\'Request a rebuild on the next reconcile tick?\')">'
+        'Request rebuild</button></form>'
+    )
+    # data-published-head lets the JS compare the served source_commit against the published HEAD and
+    # highlight a mismatch (published but not yet served).
+    published_attr = _esc(published_head) if (published_available and published_head) else ""
+    body = (
+        '<div class="panel" id="serve-state" '
+        f'data-published-head="{published_attr}">'
+        '<h2>Serve state</h2>'
+        f'<p class="sub">Published (surveys-live HEAD): {head_html}. The served build below is fetched '
+        'from the live site; if its source commit differs from the published HEAD, a publish has not '
+        'yet been rebuilt into the served corpus.</p>'
+        f'{pending_html}'
+        '<h2>Served build</h2>'
+        '<div id="served-build"><p class="sub">Loading served build…</p></div>'
+        '<h2>Per-survey build report</h2>'
+        '<div id="build-report"><p class="sub">Loading build report…</p></div>'
+        '<h2>Last reconcile</h2>'
+        f'{_reconcile_status_block(status)}'
+        f'<p style="margin-top:1rem">{button}</p>'
+        '</div>'
+        f'{_SERVE_PANEL_JS}'
+    )
+    return body
+
+
+# Vanilla JS: fetch the served build metadata SAME-ORIGIN (Caddy serves /data/* from the built
+# current/) and render it. Graceful on a 404 (no build yet) and on a fetch/parse error. Dependency-
+# free; every value is inserted via textContent (never innerHTML) so submitter-derived report strings
+# cannot inject markup into the curator page.
+_SERVE_PANEL_JS = """
+<script>
+(function () {
+  var panel = document.getElementById('serve-state');
+  if (!panel) return;
+  var publishedHead = panel.getAttribute('data-published-head') || '';
+
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function fetchJson(url) {
+    return fetch(url, {credentials: 'omit', cache: 'no-store'}).then(function (r) {
+      if (r.status === 404) return {__missing: true};
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  // ---- served build.json ----
+  fetchJson('/data/build.json').then(function (b) {
+    var box = document.getElementById('served-build');
+    box.textContent = '';
+    if (b.__missing) {
+      box.appendChild(el('p', 'No build has been served yet (/data/build.json is 404).', 'sub'));
+      return;
+    }
+    var tbl = el('table');
+    function row(k, v, highlight) {
+      var tr = el('tr');
+      var tdk = el('td', k, 'k');
+      var tdv = el('td');
+      var code = el('code', v == null ? '-' : String(v));
+      if (highlight) { code.style.background = 'rgba(217,162,59,.25)'; code.style.padding = '0 .3rem'; }
+      tdv.appendChild(code);
+      tr.appendChild(tdk); tr.appendChild(tdv); return tr;
+    }
+    var served = b.source_commit;
+    // Highlight when the served source_commit differs from the published HEAD (prefix-tolerant: a
+    // 7-char stored short vs an 8-char HEAD of the same commit is NOT a mismatch).
+    var mismatch = false;
+    if (publishedHead && served) {
+      mismatch = !(publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
+    }
+    tbl.appendChild(row('Build id', b.build_id));
+    tbl.appendChild(row('Engine commit', b.engine_commit));
+    tbl.appendChild(row('Served source_commit', served, mismatch));
+    box.appendChild(tbl);
+    if (mismatch) {
+      box.appendChild(el('p',
+        'The served corpus was built from ' + served + ' but the published HEAD is ' + publishedHead +
+        ' — a publish is committed but not yet rebuilt into the live site.', 'sub'));
+    }
+  }).catch(function (e) {
+    var box = document.getElementById('served-build');
+    box.textContent = '';
+    box.appendChild(el('p', 'Could not load /data/build.json: ' + e.message, 'sub'));
+  });
+
+  // ---- per-survey build_report.json ----
+  fetchJson('/data/build_report.json').then(function (rep) {
+    var box = document.getElementById('build-report');
+    box.textContent = '';
+    if (rep.__missing) {
+      box.appendChild(el('p', 'No build report yet (/data/build_report.json is 404).', 'sub'));
+      return;
+    }
+    var surveys = rep.surveys || {};
+    var slugs = Object.keys(surveys).sort();
+    if (!slugs.length) {
+      box.appendChild(el('p', 'The build report lists no surveys.', 'sub'));
+      return;
+    }
+    var tbl = el('table');
+    var head = el('tr');
+    ['Survey', 'Stations', 'Warnings', 'Conditioning', 'Cache hit/miss', 'Duration (s)', ''].forEach(
+      function (h) { head.appendChild(el('th', h)); });
+    tbl.appendChild(head);
+    slugs.forEach(function (slug, i) {
+      var s = surveys[slug] || {};
+      var cache = s.cache || {};
+      var warnCount = (s.warnings || []).length;
+      var condCount = (s.conditioning || []).length;
+      var tr = el('tr');
+      tr.appendChild(el('td', slug));
+      tr.appendChild(el('td', String(s.stations_built != null ? s.stations_built : '-')));
+      tr.appendChild(el('td', String(warnCount)));
+      tr.appendChild(el('td', String(condCount)));
+      tr.appendChild(el('td', (cache.hits != null ? cache.hits : '-') + ' / ' +
+        (cache.misses != null ? cache.misses : '-')));
+      tr.appendChild(el('td', String(s.duration_seconds != null ? s.duration_seconds : '-')));
+      var tdBtn = el('td');
+      var hasDetail = warnCount || condCount || (s.stations_dropped || []).length;
+      if (hasDetail) {
+        var btn = el('button', 'details');
+        btn.type = 'button';
+        btn.className = 'b-accent';
+        btn.style.padding = '.15rem .55rem';
+        btn.style.fontSize = '.75rem';
+        var detailId = 'detail-' + i;
+        btn.setAttribute('data-target', detailId);
+        btn.addEventListener('click', function () {
+          var d = document.getElementById(detailId);
+          if (d) d.style.display = (d.style.display === 'none' ? '' : 'none');
+        });
+        tdBtn.appendChild(btn);
+      }
+      tr.appendChild(tdBtn);
+      tbl.appendChild(tr);
+
+      if (hasDetail) {
+        var dtr = el('tr');
+        dtr.id = 'detail-' + i;
+        dtr.style.display = 'none';
+        var dtd = el('td');
+        dtd.colSpan = 7;
+        (s.stations_dropped || []).forEach(function (sd) {
+          dtd.appendChild(el('p', 'dropped: ' + sd.station + ' — ' + sd.reason, 'sub'));
+        });
+        (s.warnings || []).forEach(function (w) {
+          dtd.appendChild(el('p', 'warning: ' + w, 'sub'));
+        });
+        (s.conditioning || []).forEach(function (c) {
+          var line = 'conditioning (' + c.count + '): ' + c.note;
+          if (c.stations) line += '  [stations: ' + c.stations.join(', ') + ']';
+          else if (c.except) line += '  [all except: ' + c.except.join(', ') + ']';
+          dtd.appendChild(el('p', line, 'sub'));
+        });
+        dtr.appendChild(dtd);
+        tbl.appendChild(dtr);
+      }
+    });
+    box.appendChild(tbl);
+  }).catch(function (e) {
+    var box = document.getElementById('build-report');
+    box.textContent = '';
+    box.appendChild(el('p', 'Could not load /data/build_report.json: ' + e.message, 'sub'));
+  });
+})();
+</script>
+"""
 
 
 def _checklist_panel(cl: "checklist_mod.Checklist") -> str:
