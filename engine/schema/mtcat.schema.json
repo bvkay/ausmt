@@ -37,6 +37,17 @@
           "type": "string",
           "pattern": "^[0-9]+\\.[0-9]+$"
         },
+        "schema_url": {
+          "type": "string",
+          "description": "location of the MTCAT schema served beside this document, so a harvester can validate mtcat.json without resolving the canonical $id. Relative (e.g. 'mtcat.schema.json') or absolute."
+        },
+        "metadata_license": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "licence of the catalogue metadata itself (distinct from per-survey data licences), e.g. an SPDX identifier such as CC0-1.0"
+        },
         "generated_at": {
           "type": "string"
         }

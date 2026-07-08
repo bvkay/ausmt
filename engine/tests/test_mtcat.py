@@ -70,6 +70,30 @@ def test_mtcat_emitted_and_valid(tmp_path):
     assert doc["stations"], "at least one station"
 
 
+def test_mtcat_schema_served_beside_data(tmp_path):
+    """FAIR-I: the build copies the MTCAT schema into the data dir and the portal block's schema_url
+    points at it (relative), so mtcat.json can be validated without resolving the canonical $id host.
+    FAILS against the pre-fix build (no schema file emitted, no schema_url key)."""
+    out = tmp_path / "data"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(SURVEYS),
+                        "--out", str(out), "--no-validate"], cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    doc = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
+    url = doc["portal"]["schema_url"]
+    assert url == "mtcat.schema.json", url
+    served = out / url
+    assert served.exists(), "schema must be served beside the data"
+    # the served copy is the in-tree schema, byte-for-byte
+    assert served.read_bytes() == (ROOT / "schema" / "mtcat.schema.json").read_bytes()
+
+
+def test_mtcat_carries_metadata_license(tmp_path):
+    """FAIR-R: the portal block declares the catalogue-metadata licence (CC0-1.0 by default). Distinct
+    from per-survey data licences. FAILS against the pre-fix build (no metadata_license key)."""
+    doc = _build_mtcat(tmp_path)
+    assert doc["portal"]["metadata_license"] == "CC0-1.0"
+
+
 def test_mtcat_carries_served_tool_versions(tmp_path):
     """C32 §2: the MTCAT document gains additive document-level mt_metadata_version / mth5_version keys
     (mtcat.schema.json is additionalProperties:true at the top level, so no schema-version bump). This
