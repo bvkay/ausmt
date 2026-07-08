@@ -148,6 +148,33 @@ def test_latest_symlink_points_at_newest_snapshot(tmp_path):
     assert latest.resolve() == snap.resolve(), "`latest` must resolve to the newest snapshot"
 
 
+def test_latest_txt_fallback_when_symlink_unavailable(tmp_path):
+    """On a filesystem where `ln -s` is unavailable OR silently degrades to a non-symlink, backup.sh
+    must fall back to a `latest.txt` file naming the newest snapshot (and leave no bogus `latest`
+    directory that would break the pull/restore resolution). Forced here by shadowing `ln` with a shim
+    that always fails. FAILS IF: no latest.txt is written, it names the wrong snapshot, or a non-symlink
+    `latest` dir is left behind (the exact MSYS bug that broke restore-drill's default resolution)."""
+    tree = _make_tree(tmp_path)
+    # A bin dir whose `ln` always fails, prepended to PATH so backup.sh's ln call takes the fallback.
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    (bindir / "ln").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    (bindir / "ln").chmod(0o755)
+    env = dict(tree["env"])
+    env["PATH"] = str(bindir) + os.pathsep + env["PATH"]
+    r = subprocess.run([_SH, str(_SCRIPT)], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    snap = _snapshots(tree)[0]
+    latest_txt = tree["backups"] / "latest.txt"
+    assert latest_txt.is_file(), "must write latest.txt when a real symlink cannot be made"
+    assert latest_txt.read_text(encoding="utf-8").strip() == snap.name, \
+        "latest.txt must name the newest snapshot"
+    # No bogus non-symlink `latest` directory may survive.
+    bogus = tree["backups"] / "latest"
+    assert not (bogus.exists() and not bogus.is_symlink()), \
+        "a non-symlink `latest` must not be left behind (it would break pull/restore resolution)"
+
+
 def test_prune_keeps_newest_14(tmp_path):
     """With 20 pre-existing snapshot dirs, a run prunes to the newest 14 (13 old + this run's = 14).
     FAILS IF: pruning does not run (>14 remain) or over-prunes (<14). Snapshot dirs are named by UTC

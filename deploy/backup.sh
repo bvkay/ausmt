@@ -184,11 +184,16 @@ mv "$SNAP" "$DEST"
 log "wrote snapshot $DEST"
 
 # `latest` symlink -> newest snapshot. Relative target so the link survives a move of BACKUPS_DIR.
-# ln -sfn atomically replaces an existing link. Symlinks may be unavailable on some filesystems; if
-# ln fails, fall back to a plain `latest` file recording the name (the pull script reads either).
-if ln -sfn "$STAMP" "$BACKUPS_DIR/latest" 2>/dev/null; then
+# ln -sfn atomically replaces an existing link. Symlinks may be unavailable on some filesystems; and
+# on some (MSYS/Windows, certain SMB mounts) `ln -s` silently DEGRADES to a directory copy that is not
+# a real symlink — so VERIFY [ -L latest ] afterwards rather than trusting ln's exit code. If we did
+# not end up with a genuine symlink, remove whatever ln left and fall back to a plain latest.txt file
+# recording the name. pull-backup.sh and restore-drill.sh both read either the symlink or latest.txt.
+rm -f "$BACKUPS_DIR/latest.txt"
+if ln -sfn "$STAMP" "$BACKUPS_DIR/latest" 2>/dev/null && [ -L "$BACKUPS_DIR/latest" ]; then
   log "latest -> $STAMP"
 else
+  rm -rf "$BACKUPS_DIR/latest"        # clean up a bogus non-symlink `latest` ln may have created
   printf '%s\n' "$STAMP" > "$BACKUPS_DIR/latest.txt"
   log "symlink unsupported here — wrote latest.txt -> $STAMP"
 fi
