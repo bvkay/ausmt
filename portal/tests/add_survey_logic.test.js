@@ -41,6 +41,22 @@ ok(/region: "South Australia"/.test(y), "survey.yaml emits region");
 ok(!/coordinate_resolution:/.test(M.buildSurveyYaml({ ...base, data_types: ["BBMT"] })),
    "no coordinate_resolution when nothing was resolved");
 
+// ---- access block: embargo_until + contact (audit 5.2) ----
+// buildSurveyYaml must emit the submitter's embargo date and access contact into the access block
+// when supplied (non-open levels), and leave BOTH null when the fields are blank / level is open.
+const yEmb = M.buildSurveyYaml({ ...base, access: "embargoed",
+                                 embargo_until: "2027-02-01", access_contact: "custodian@agency.gov.au" });
+ok(/access:\s*\n\s*level: embargoed\s*\n\s*embargo_until: 2027-02-01/.test(yEmb),
+   "survey.yaml emits access.embargo_until when the date is filled");
+ok(/contact: "custodian@agency\.gov\.au"/.test(yEmb),
+   "survey.yaml emits access.contact when provided");
+const yOpen = M.buildSurveyYaml({ ...base, access: "open" });
+ok(/access:\s*\n\s*level: open\s*\n\s*embargo_until: null\s*\n\s*contact: null/.test(yOpen),
+   "survey.yaml keeps embargo_until and contact null for an open survey");
+const yEmbNoDate = M.buildSurveyYaml({ ...base, access: "metadata_only", access_contact: "" });
+ok(/embargo_until: null/.test(yEmbNoDate),
+   "survey.yaml emits embargo_until: null when the date is left blank");
+
 // ---- DATAID-based packaging (task #16) ----
 // ediDataId must read the DATAID from the >HEAD block across the real dialect shapes: Geotools/LEMI
 // (no indent, quoted), EDL (leading-indented + trailing whitespace, quoted), Phoenix (indented,

@@ -173,6 +173,32 @@
       <div class="req"><label>Access level</label>
         <select id="m_access"><option>open</option><option>metadata_only</option><option>embargoed</option></select></div>
 
+      <!-- Always-visible disclosure of what each access level actually exposes (audit 5.3). Truthful to
+           current behaviour: every level lists the survey publicly (build_portal.py:161-165 "discovery is
+           universal"; stations emitted with lat/lon at :558-560); only 'open' serves data bytes. -->
+      <div class="full"><div class="hint" id="accessDisclosure">Every access level <b>lists this survey
+        publicly</b> — its map presence, exact station coordinates and screening diagnostics are visible to
+        anyone regardless of level. <b>open</b> also serves the data files for download. <b>metadata_only</b>
+        and <b>embargoed</b> withhold <b>all data bytes</b> (downloads route to the source archive) until a
+        curator releases them; an embargo never lifts automatically, even after its date passes.</div></div>
+
+      <!-- embargo_until + access contact (audit 5.2): revealed only for a non-open level, mirroring the
+           page's other show/hide blocks (#gatewayBlock, #dmsChoice). Emitted into survey.yaml's access
+           block by buildSurveyYaml (empty -> null, date as YYYY-MM-DD). -->
+      <div class="full" id="embargoBlock" style="display:none">
+        <div class="grid">
+          <div><label>Embargo until <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(release date)</span></label>
+            <input id="m_embargo_until" type="date">
+            <div class="hint">The intended release date. Recommended for an embargoed survey. Even after this
+              date the data stays withheld until a curator sets the level to <code>open</code> — it is a
+              record of intent, not an automatic switch.</div></div>
+          <div><label>Access contact <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(for release requests)</span></label>
+            <input id="m_access_contact" placeholder="email or role address">
+            <div class="hint">An email or role address a curator can reach to arrange release. Written into
+              <code>survey.yaml</code> — do not use a private personal address you would not want published.</div></div>
+        </div>
+      </div>
+
       <div class="full"><label>Abstract</label><textarea id="m_abstract" placeholder="One paragraph: location, target, band."></textarea></div>
 
       <div class="full"><label>Data types <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(select all that apply)</span></label>
@@ -653,8 +679,14 @@ function buildSurveyYaml(m){
   L.push("license: "+q(m.license||"TBD"));
   L.push("access:");
   L.push("  level: "+(m.access||"open"));
-  L.push("  embargo_until: null");
-  L.push("  contact: null");
+  // embargo_until / contact are only meaningful for a non-open survey; blank -> null. The date is
+  // emitted as a bare ISO YYYY-MM-DD scalar (the <input type=date> value format the validator parses),
+  // the contact as a quoted string. For an open survey both stay null (nothing to withhold, no release
+  // contact needed) even if the fields carry stale text from a level the submitter changed away from.
+  const embargoDate=(m.access&&m.access!=="open"&&m.embargo_until)?String(m.embargo_until).trim():"";
+  const accessContact=(m.access&&m.access!=="open"&&m.access_contact)?String(m.access_contact).trim():"";
+  L.push("  embargo_until: "+(embargoDate||"null"));
+  L.push("  contact: "+(accessContact?q(accessContact):"null"));
   L.push("time_series:");
   L.push("  collection_pid: null");
   L.push("  levels_available: []");
@@ -831,10 +863,21 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   wireRor($("m_org"), $("rorMatches"), $("m_ror"));
 
+  // ----- access level: reveal the embargo date + access contact only for a non-open level (audit 5.2).
+  // Same show/hide idiom as #gatewayBlock / #dmsChoice. The disclosure hint (#accessDisclosure) is always
+  // visible; this only toggles the input block, so a submitter who never touches a non-open level sees no
+  // extra fields, and buildSurveyYaml already null-guards on level==open regardless of any stale value.
+  function updateEmbargoFields(){
+    $("embargoBlock").style.display = ($("m_access").value!=="open") ? "block" : "none";
+  }
+  $("m_access").addEventListener("change",updateEmbargoFields);
+  updateEmbargoFields();
+
   function readMeta(){return {
     name:$("m_name").value.trim(), slug:$("m_slug").value.trim(), organisation:$("m_org").value.trim(),
     country:$("m_country").value.trim(), region:$("m_region").value.trim(), version:$("m_version").value.trim(),
     license:$("m_license").value, access:$("m_access").value,
+    embargo_until:$("m_embargo_until").value.trim(), access_contact:$("m_access_contact").value.trim(),
     abstract:$("m_abstract").value.trim(),
     data_types:Array.from(document.querySelectorAll(".dtype:checked")).map(c=>c.value),
     west:$("m_w").value, east:$("m_e").value, south:$("m_s").value, north:$("m_n").value,

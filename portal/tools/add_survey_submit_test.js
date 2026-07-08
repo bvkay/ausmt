@@ -305,6 +305,64 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
+  // 4b. EMBARGO DATE + ACCESS CONTACT REVEAL AND EMIT (audit 5.2). The embargo/contact inputs are hidden
+  //     for an 'open' level and revealed for any non-open level; a filled date reaches survey.yaml as a
+  //     bare ISO scalar. Reads the REAL packaged survey.yaml via the download path (createObjectURL).
+  async function packagedSurveyYaml(win, record) {
+    ok(record.blobs.length === 1, "packaging produced exactly one zip blob");
+    const buf = Buffer.from(await record.blobs[record.blobs.length - 1].arrayBuffer());
+    const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
+    const z = await JSZipNode.loadAsync(buf);
+    const entries = z.file(/survey\.yaml$/);
+    ok(entries.length === 1, "the zip contains exactly one survey.yaml");
+    return entries[0].async("string");
+  }
+  {
+    // (4b-i) default level 'open' -> the embargo block is hidden and both fields serialise as null.
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    ok(e.doc.getElementById("embargoBlock").style.display === "none",
+      "the embargo/contact block is hidden while access level is 'open'");
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const yOpen = await packagedSurveyYaml(e.win, e.record);
+    ok(/access:\s*\n\s*level: open\s*\n\s*embargo_until: null\s*\n\s*contact: null/.test(yOpen),
+      "open survey.yaml keeps embargo_until and contact null");
+  }
+  {
+    // (4b-ii) level 'embargoed' -> the block reveals; a filled date + contact reach survey.yaml.
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    const acc = e.doc.getElementById("m_access");
+    acc.value = "embargoed";
+    acc.dispatchEvent(new e.win.Event("change", { bubbles: true }));
+    ok(e.doc.getElementById("embargoBlock").style.display === "block",
+      "selecting a non-open access level reveals the embargo/contact block");
+    e.doc.getElementById("m_embargo_until").value = "2027-02-01";
+    e.doc.getElementById("m_access_contact").value = "custodian@agency.gov.au";
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const yEmb = await packagedSurveyYaml(e.win, e.record);
+    ok(/access:\s*\n\s*level: embargoed\s*\n\s*embargo_until: 2027-02-01/.test(yEmb),
+      "embargoed survey.yaml emits the filled embargo_until date; got: " +
+      (yEmb.match(/access:[\s\S]*?contact:.*$/m) || [""])[0]);
+    ok(/contact: "custodian@agency\.gov\.au"/.test(yEmb),
+      "embargoed survey.yaml emits the access contact");
+  }
+  {
+    // (4b-iii) always-visible disclosure hint states, truthfully, that every level publishes coordinates.
+    const e = await boot({ probe: probeAbsent });
+    const disc = e.doc.getElementById("accessDisclosure");
+    ok(disc && disc.textContent.trim().length > 0, "the access disclosure hint is present");
+    const discText = disc.textContent.replace(/\s+/g, " ");   // collapse source-wrap whitespace
+    ok(/lists this survey publicly/i.test(discText) && /coordinates/i.test(discText)
+      && /withhold/i.test(discText),
+      "the disclosure states public listing, coordinate visibility, and byte withholding");
+  }
+
+  // --------------------------------------------------------------------------------------------------
   // 5. SUBMISSION.md "How to submit" LIST NUMBERING (adversarial-review finding, LOW): the packaged
   //    instructions are an ordered list and must number strictly sequentially (1., 2., ...) in BOTH
   //    branches. The gateway-ABSENT branch (the PRIMARY path on static-only/file:// deploys) regressed
