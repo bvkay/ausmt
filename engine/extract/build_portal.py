@@ -1287,6 +1287,105 @@ def _build_prov(extractor):
             "generated": _dt.datetime.now(_dt.timezone.utc).isoformat()}
 
 
+# Small enough to enumerate in a log line / report entry. A distinct note carried by <= this many
+# stations lists those stations; a note MISSING from <= this many (the outlier/CC07 case) lists the
+# absentee complement instead. Above it on both sides, the count alone tells the story.
+CONDITIONING_ENUM_LIMIT = 5
+
+
+def aggregate_conditioning(notes_by_station: dict) -> list:
+    """The SINGLE source of truth for both the survey-level conditioning NOTICE log (Deliverable 1) and
+    build_report.json's `conditioning` field (Deliverable 2) — so the log an operator reads and the
+    machine-readable report can never disagree.
+
+    Input: {station_id: [ordered conditioning-note string, ...]} for the survey's CONDITIONED stations
+    (a station absent from the map, or present with an empty list, carries no notes and is not counted).
+    Output: one entry per DISTINCT note string, ordered by the note's FIRST appearance across stations
+    (stations iterated in insertion order — the build inserts them in station order), each:
+
+        {"note": <str>, "count": <int carriers>, "stations": [ids]|None, "except": [absentees]|None}
+
+    where N = the number of note-carrying stations (the denominator). At most one of stations/except is
+    non-null, and only when that side is small (<= CONDITIONING_ENUM_LIMIT):
+      * carriers <= limit  -> stations = sorted carrier ids (the "few" case);
+      * else absentees <= limit AND < carriers -> except = sorted absentee ids (the "all except X" case);
+      * else both None -> the count alone (neither side is short enough to enumerate honestly).
+    This is the design the ccmt-2017 outlier drove: a note on 27 of 28 stations records except=['CC07'],
+    NOT a 27-id list, so the one meaningful curatorial signal is surfaced without the 27-line noise."""
+    # carriers per distinct note, in first-appearance order; the full carrier universe = every station
+    # that carried >= 1 note (the denominator N — a zero-note station never enters here).
+    order: list = []
+    carriers: dict = {}
+    universe: list = []  # note-carrying station ids, in insertion order (for stable complements)
+    for sid, notes in notes_by_station.items():
+        if not notes:
+            continue
+        universe.append(sid)
+        for n in notes:
+            if n not in carriers:
+                carriers[n] = []
+                order.append(n)
+            # a station may repeat a note within its own list; count it once per station
+            if sid not in carriers[n]:
+                carriers[n].append(sid)
+    n_total = len(universe)
+    entries = []
+    for note in order:
+        carrier_ids = carriers[note]
+        count = len(carrier_ids)
+        absentees = [s for s in universe if s not in set(carrier_ids)]
+        stations = ex = None
+        if count <= CONDITIONING_ENUM_LIMIT:
+            stations = sorted(carrier_ids)
+        elif len(absentees) <= CONDITIONING_ENUM_LIMIT and len(absentees) < count:
+            ex = sorted(absentees)
+        entries.append({"note": note, "count": count,
+                        "stations": stations, "except": ex,
+                        # carried privately for the log renderer (dropped from the report), so the
+                        # renderer never re-derives N: keep the two views bit-for-bit consistent.
+                        "_n_total": n_total, "_n_absent": len(absentees)})
+    return entries
+
+
+def conditioning_log_lines(slug: str, notes_by_station: dict) -> list:
+    """Render the per-survey conditioning NOTICE lines from the SHARED aggregation. One line per
+    distinct note (never per station — that was the ~792-line noise), ordered by first appearance:
+
+        all N     -> `  [xml] NOTICE <slug>: <note> — all <N> stations`
+        most,      few absentees -> `... — <k>/<N> stations (all except <ids>)`
+        most,      many absentees -> `... — <k>/<N> stations (<N-k> stations without it)`
+        few/half  -> `... — <note> — stations: <ids>`  (the enumerated-carriers case)
+
+    Returns the lines (the caller prints them to stderr, where the old per-station NOTICEs went), so a
+    test can assert the exact text. Empty input -> no lines."""
+    lines = []
+    for e in aggregate_conditioning(notes_by_station):
+        n = e["_n_total"]
+        count = e["count"]
+        head = f"  [xml] NOTICE {slug}: {e['note']}"
+        if count == n:
+            lines.append(f"{head} — all {n} stations")
+        elif e["except"] is not None:  # small absentee complement enumerated by the shared fn
+            lines.append(f"{head} — {count}/{n} stations (all except {', '.join(e['except'])})")
+        elif e["stations"] is not None:  # small carrier set enumerated by the shared fn
+            lines.append(f"{head} — stations: {', '.join(e['stations'])}")
+        else:  # neither side short enough to list — report the majority/minority by count
+            n_absent = e["_n_absent"]
+            if count * 2 > n:  # a clear majority: frame it as "k/N (M without it)"
+                lines.append(f"{head} — {count}/{n} stations ({n_absent} stations without it)")
+            else:
+                lines.append(f"{head} — {count}/{n} stations")
+    return lines
+
+
+def conditioning_report(notes_by_station: dict) -> list:
+    """build_report.json's `conditioning` field: the SHARED aggregation with the private renderer hints
+    (`_n_total` / `_n_absent`) dropped, so the report carries exactly {note, count, stations, except}."""
+    return [{"note": e["note"], "count": e["count"],
+             "stations": e["stations"], "except": e["except"]}
+            for e in aggregate_conditioning(notes_by_station)]
+
+
 def build_identity(surveys_root) -> dict:
     """C12: build.json — the build<->data handshake a served portal needs to trace itself back to the
     exact engine + surveys commits that produced it (flagged missing in the review). Deterministic
@@ -1347,9 +1446,10 @@ def emit_canonical_store(stations, slug, cdir, survey_meta=None):
             versions = res.versions or versions
             if res.conditioned:
                 notes[r["id"]] = res.conditioned
-                # Surface non-empty conditioning as a build NOTICE (the notes are otherwise silent).
-                print(f"  [canonical] NOTICE {r['id']}: conditioned — {'; '.join(res.conditioned)}",
-                      file=sys.stderr)
+                # NOTE: the per-station NOTICE print was retired — the survey-level aggregation in
+                # main() (aggregate_conditioning) now emits ONE line per distinct note instead of one
+                # near-identical line per station (the ~792-line survey-boilerplate noise). The notes
+                # are still returned here and persisted per-station (provenance.json + station.json).
             n_ok += 1
         except Exception as ex:  # noqa: BLE001
             n_fail += 1
@@ -1417,8 +1517,9 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                     _cnotes = _cached_meta.get("conditioned") or []
                     if _cnotes:
                         notes[r["id"]] = _cnotes
-                        print(f"  [xml] NOTICE {r['id']}: conditioned — {'; '.join(_cnotes)}",
-                              file=sys.stderr)
+                        # per-station NOTICE retired: the survey-level aggregation in main() emits one
+                        # line per distinct note (see aggregate_conditioning). Notes still returned +
+                        # persisted per-station; a warm (cache-hit) build reports identically to a cold one.
                     continue
         try:
             res = normalize(p, xmldir, survey_id=slug, station_id=r["id"], survey_meta=survey_meta)
@@ -1427,8 +1528,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
             stamped[r["id"]] = survey_digest
             if res.conditioned:
                 notes[r["id"]] = res.conditioned
-                print(f"  [xml] NOTICE {r['id']}: conditioned — {'; '.join(res.conditioned)}",
-                      file=sys.stderr)
+                # per-station NOTICE retired -> survey-level aggregation in main() (aggregate_conditioning).
             # normalize() also writes a round-trip derived .edi beside the .xml; we only serve the
             # canonical XML here, so drop the derived EDI to keep out/xml/ to manifested artifacts.
             try:
@@ -1590,17 +1690,21 @@ def load_flags(path) -> dict:
     return flags
 
 
-def _validate_products(mtcat_doc, manifest_doc):
-    """Validate the emitted MTCAT + download-manifest docs against schema/{mtcat,manifest}.schema.json.
-    Returns a list of human-readable violations (empty = OK). jsonschema is optional: absent => [] + a
-    note. A missing/broken schema file is noted, not fatal — only an actual schema VIOLATION fails."""
+def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
+    """Validate the emitted MTCAT + download-manifest (+ optional build_report) docs against
+    schema/{mtcat,manifest,build_report}.schema.json. Returns a list of human-readable violations
+    (empty = OK). jsonschema is optional: absent => [] + a note. A missing/broken schema file is
+    noted, not fatal — only an actual schema VIOLATION fails."""
     try:
         import jsonschema  # noqa: PLC0415
     except ImportError:
         print("note: jsonschema not installed — product schema self-check skipped", file=sys.stderr)
         return []
     errs = []
-    for name, doc in (("mtcat", mtcat_doc), ("manifest", manifest_doc)):
+    _docs = [("mtcat", mtcat_doc), ("manifest", manifest_doc)]
+    if build_report_doc is not None:
+        _docs.append(("build_report", build_report_doc))
+    for name, doc in _docs:
         schema_path = HERE.parent / "schema" / f"{name}.schema.json"
         try:
             jsonschema.validate(doc, json.loads(schema_path.read_text()))
@@ -1792,6 +1896,10 @@ def main(argv=None):
     # manifest: per-station artifacts (files) + per-survey bundles (bundles). Key-based, NOT positional.
     surveys_meta, manifest = {}, {"files": [], "bundles": []}
     dropped_surveys = []   # surveys that validated but yielded 0 stations (never silently vanish)
+    # build_report.json accumulator: {slug: {stations_built, stations_dropped, warnings, conditioning,
+    # cache, duration_seconds}}. Populated per survey in the loop; assembled + written alongside
+    # build_provenance.json below. Public build metadata for the (planned) curator serve-state UI.
+    build_report_surveys: dict = {}
     work, survey_extent = discover_work(a, ap, validator)
 
     # === provenance block (traceability: input -> software/params -> output) ===
@@ -1858,7 +1966,10 @@ def main(argv=None):
     # under a stale (pre-edit) digest — the 2026-07-07 incident shape. Cache-INDEPENDENT: this is built
     # from the served products + the source yaml, never from cache state.
     survey_digests_sidecar: dict = {}
+    import time as _time  # noqa: PLC0415 (house style: local import where used — per-survey wall time)
     for label, org, inputs, kind, meta, pkgdir, slug in work:
+        _survey_t0 = _time.perf_counter()   # build_report.json duration_seconds (wall time for this survey)
+        _survey_warnings: list = []         # structured survey-scoped warnings for build_report.json
         # C18 cache key component: this survey's WHOLE survey.yaml digest (§2.5, provably
         # over-invalidating — any yaml edit re-derives just this survey). None for --raw builds
         # (no survey.yaml) -> a stable empty digest; those still key off the EDI sha + salt.
@@ -1921,6 +2032,8 @@ def main(argv=None):
             # repo tier, loudly, rather than emitting e.g. a file:/javascript: download link.
             print(f"WARNING: survey '{label}' nci_base is not an http(s) URL ({nci_base!r}); ignoring it "
                   f"-- this survey's downloads stay on the repo tier.", file=sys.stderr)
+            _survey_warnings.append(f"nci_base is not an http(s) URL ({nci_base!r}); downloads stay on "
+                                    f"the repo tier")
             nci_base = None
         # C1 access gate (ORTHOGONAL to the licence gate): a survey must be access.level=open AND not under
         # an active embargo to have its bytes distributed. metadata_only/embargoed surveys stay fully in the
@@ -1930,6 +2043,7 @@ def main(argv=None):
         _acc = access_serve_state((meta or {}).get("access", "open"), (meta or {}).get("embargo_until"))
         for _w in _acc["warnings"]:
             print(f"WARNING: survey '{label}': {_w}", file=sys.stderr)
+            _survey_warnings.append(_w)   # structured access-gate warnings -> build_report.json
         # C1b: the DISPLAY-product gate keys on the ACCESS state ALONE (not can_serve). A survey may be
         # access=open yet non-redistributably licensed (or built with --no-bundle-edi): that survey's bytes
         # are withheld by the licence/flag gate but its curves SHOULD still plot (open-access preview). Only
@@ -2068,6 +2182,28 @@ def main(argv=None):
                     manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
                                                            lic, _hn, nci_base=nci_base, base_url=base_url))
 
+        # ---- survey-level conditioning NOTICE (Deliverable 1) + build_report entry (Deliverable 2) ----
+        # ONE line per DISTINCT conditioning note (not one near-identical line per station — the
+        # ~792-line survey-boilerplate noise a ~1100-station rebuild exposed), from the SHARED
+        # aggregation that also drives the report below, so the log and the report can never disagree.
+        for _cline in conditioning_log_lines(slug, conditioning_notes):
+            print(_cline, file=sys.stderr)
+        build_report_surveys[slug] = {
+            "stations_built": len(stations),
+            # The build drops stations only inside process_edis (a bare print+continue on an
+            # unusable EDI), which returns no structured drop record; per the brief we do NOT rebuild
+            # that logging path just to capture it, so this is [] for a survey that built (survey-LEVEL
+            # 0-station drops are recorded corpus-side in dropped_surveys and the totals below).
+            "stations_dropped": [],
+            "warnings": list(_survey_warnings),
+            # Same shared aggregation as the log lines above: [{note,count,stations|null,except|null}].
+            "conditioning": conditioning_report(conditioning_notes),
+            "cache": ({"digest": (_survey_digest or "")[:12], "hits": _dh, "misses": _dm, "writes": _dw}
+                      if _c0 is not None else {"digest": (_survey_digest or "")[:12],
+                                              "hits": 0, "misses": 0, "writes": 0}),
+            "duration_seconds": round(_time.perf_counter() - _survey_t0, 3),
+        }
+
     # ---- build-time QC over the assembled catalogue (curator-facing) ----
     # Duplicate ausmt_ids are a HARD failure (they break the URL/export/r[12] contract and make
     # station.json files overwrite each other). Everything else is advisory and never blocks —
@@ -2170,6 +2306,28 @@ def main(argv=None):
         {**BUILD_ID, "mt_metadata_version": LIB_VERSIONS.get("mt_metadata"),
          "mth5_version": LIB_VERSIONS.get("mth5")}, indent=1), encoding="utf-8")
 
+    # ---- build_report.json: structured per-survey build metadata (validated against
+    # schema/build_report.schema.json in the self-check below; verify.py re-checks its presence +
+    # schema + a cheap manifest cross-count). Public build metadata consumed by the (planned) curator
+    # serve-state UI. Reuses the SAME identity helpers build_provenance.json / build.json do
+    # (BUILD_ID: engine_commit/source_commit/build_id; PROV: pipeline_version) so the recorded commits
+    # cannot drift from the other build docs. `generated` is a fresh UTC stamp (like the other docs). ----
+    import datetime as _dt_report  # noqa: PLC0415 (house style: local import where used)
+    _report_stations_built = sum(s["stations_built"] for s in build_report_surveys.values())
+    _report_warnings = sum(len(s["warnings"]) for s in build_report_surveys.values())
+    build_report = {
+        "generated": _dt_report.datetime.now(_dt_report.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "engine_commit": BUILD_ID["engine_commit"],
+        "source_commit": BUILD_ID["source_commit"],
+        "build_id": BUILD_ID["build_id"],
+        "pipeline_version": PROV["pipeline_version"],
+        "surveys": build_report_surveys,
+        "totals": {"surveys": len(build_report_surveys),
+                   "stations_built": _report_stations_built,
+                   "warnings": _report_warnings},
+    }
+    (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
+
     # C18b (A3): the digest-stamp sidecar. out/products/survey_digests.json maps each served survey's
     # slug -> {yaml_digest_current, xml_digest_stamped:{station_id:digest}}. This is the independent
     # observable the verify.py --surveys consistency gate needs to catch a product served under a stale
@@ -2217,12 +2375,13 @@ def main(argv=None):
     except OSError as _e:
         print(f"note: mtcat schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
 
-    # ---- contract self-check: validate the emitted MTCAT + download manifest against their OWN schemas
-    # (schema/*.schema.json), so a shape drift or a config typo (e.g. a non-MAJOR.MINOR portal.version,
-    # a missing required field) FAILS the build loudly instead of shipping a silently non-conforming
-    # product. This is the only place the build validates its JSON output against its schemas. jsonschema
-    # is an optional (dev) dep — skipped with a note if absent; CI installs it so the check runs there. ----
-    _serrs = _validate_products(mtcat, manifest_doc)
+    # ---- contract self-check: validate the emitted MTCAT + download manifest + build_report against
+    # their OWN schemas (schema/*.schema.json), so a shape drift or a config typo (e.g. a non-MAJOR.MINOR
+    # portal.version, a missing required field) FAILS the build loudly instead of shipping a silently
+    # non-conforming product. This is the only place the build validates its JSON output against its
+    # schemas. jsonschema is an optional (dev) dep — skipped with a note if absent; CI installs it so
+    # the check runs there. ----
+    _serrs = _validate_products(mtcat, manifest_doc, build_report)
     if _serrs:
         for _e in _serrs:
             print(f"ERROR: product schema self-check failed — {_e}", file=sys.stderr)
