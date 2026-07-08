@@ -1092,39 +1092,29 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str) -> str:
 
 
 def render_stations_list(*, slug: str, version: str | None, stations: list, csrf_token: str,
-                         error: str = "", submitted: dict | None = None) -> str:
+                         error: str = "") -> str:
     """The stations page (removal deliverable 1): one row per EDI — filename, derived station id, and a
     remove checkbox — plus the version-bump picker (a removal is a content change: minor by default)
-    and the required release note. Submitting selects one or more files for a removal PREVIEW. The
-    checked state survives a re-render (a refused preview) via `submitted`."""
+    and the required release note. Submitting selects one or more files for a removal PREVIEW. A
+    refused preview re-renders this page freshly (with an error banner) rather than trying to restore
+    checkbox state — the curator re-ticks, which is a two-click cost on the rare refusal path and keeps
+    the renderer stateless (no submitted-form threading)."""
     err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
     cur = version or "0.0.0"
     # A removal is at least a MINOR change by default (content changed); patch/major still offered.
     minor_v = _suggest_bump(cur, "minor")
     patch_v = _suggest_bump(cur, "patch")
     major_v = _suggest_bump(cur, "major")
-    checked_names = set()
-    note_val = ""
-    bump_val = "minor"
-    if submitted is not None:
-        checked_names = {v for k, v in submitted.items()
-                         if k == "remove" or k.startswith("remove")}
-        # httpx sends repeated `remove` as a single last value in a plain dict; the app passes the raw
-        # list-aware selection instead (see handle_stations_preview) — this is only a best-effort
-        # re-check for the single-value case, the app re-prefills reliably from its parsed selection.
-        note_val = submitted.get("note", "") or ""
-        bump_val = submitted.get("bump", "minor") or "minor"
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
     if stations:
         rows = []
         for s in stations:
             filename = s.get("filename", "") if isinstance(s, dict) else ""
             station_id = s.get("station_id", "") if isinstance(s, dict) else ""
-            checked = " checked" if filename in checked_names else ""
             rows.append(
                 "<tr>"
                 f'<td><input type="checkbox" name="remove" value="{_esc(filename)}" '
-                f'style="width:auto"{checked}></td>'
+                f'style="width:auto"></td>'
                 f"<td>{_esc(filename)}</td><td>{_esc(station_id)}</td></tr>")
         table = ('<table><tr><th>Remove</th><th>File</th><th>Station id</th></tr>'
                  + "".join(rows) + "</table>")
@@ -1133,17 +1123,15 @@ def render_stations_list(*, slug: str, version: str | None, stations: list, csrf
         table = '<p class="sub">This survey has no EDI files.</p>'
         count_line = ""
 
-    def _bump_radio(kind, target, checked):
-        c = " checked" if bump_val == kind else (" checked" if (checked and bump_val not in
-                                                                ("patch", "minor", "major")) else "")
-        return (f'<label><input type="radio" name="bump" value="{kind}"{c} style="width:auto"> '
-                f'{kind} &rarr; {_esc(target)}</label>')
-
+    # A removal defaults to a MINOR bump (content changed); patch/major still offered.
     bump = (
         '<p><label class="k">Version bump (removing a station is a content change)</label>'
-        f'{_bump_radio("patch", patch_v, False)}<br>'
-        f'{_bump_radio("minor", minor_v, True)}<br>'
-        f'{_bump_radio("major", major_v, False)}</p>'
+        f'<label><input type="radio" name="bump" value="patch" style="width:auto"> patch '
+        f'&rarr; {_esc(patch_v)}</label><br>'
+        f'<label><input type="radio" name="bump" value="minor" checked style="width:auto"> minor '
+        f'&rarr; {_esc(minor_v)}</label><br>'
+        f'<label><input type="radio" name="bump" value="major" style="width:auto"> major '
+        f'&rarr; {_esc(major_v)}</label></p>'
     )
     body = (
         f'<h1>Manage stations — {_esc(slug)}</h1>'
@@ -1157,8 +1145,7 @@ def render_stations_list(*, slug: str, version: str | None, stations: list, csrf
         f'<div class="panel">{count_line}{table}</div>'
         f'<div class="panel">{bump}'
         '<p><label class="k">Release note (required — records why the station(s) were removed)</label>'
-        f'<textarea name="note" placeholder="e.g. withdrawn consent for SA226" required>'
-        f'{_esc(note_val)}</textarea></p>'
+        '<textarea name="note" placeholder="e.g. withdrawn consent for SA226" required></textarea></p>'
         f'{csrf}'
         '<p><button class="b-accent" type="submit">Preview removal</button></p>'
         '</div></form>'
