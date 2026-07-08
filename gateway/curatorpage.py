@@ -109,6 +109,53 @@ CURATOR_UI_JS = """
 """
 
 
+# The metadata-editor's repeatable-row behaviour, DELEGATED (no inline handlers — the strictPages
+# CSP kills them). Served external at GET /gateway/curator/editor.js. Add-row clones the section's
+# <template> (its field names carry a ___N___ index placeholder) with a fresh unique index and
+# appends it; remove-row drops the nearest row. DEGRADES: without this script the server already
+# renders existing rows + spare blank rows, so a curator can still add entries. Every value the JS
+# touches is set via name/textContent, never innerHTML from user data.
+EDITOR_UI_JS = """
+(function () {
+  var counters = {};
+  function nextIndex(section, rowsHost) {
+    // Start above the highest server-rendered index so a new row never collides with an existing one.
+    if (counters[section] == null) {
+      var max = -1;
+      var pfx = 'l_' + section + '_';
+      rowsHost.querySelectorAll('[name^="' + pfx + '"]').forEach(function (el) {
+        var n = parseInt(el.getAttribute('name').slice(pfx.length).split('_')[0], 10);
+        if (!isNaN(n) && n > max) max = n;
+      });
+      counters[section] = max + 1;
+    }
+    return counters[section]++;
+  }
+  document.addEventListener('click', function (ev) {
+    var add = ev.target && ev.target.closest && ev.target.closest('[data-editor-add-row]');
+    if (add) {
+      var section = add.getAttribute('data-editor-add-row');
+      var tpl = document.querySelector('[data-editor-template="' + section + '"]');
+      var rowsHost = document.querySelector('[data-editor-rows="' + section + '"]');
+      if (!tpl || !rowsHost) return;
+      var idx = nextIndex(section, rowsHost);
+      var frag = tpl.innerHTML.split('ROWIDX').join(String(idx));
+      var wrap = document.createElement('div');
+      wrap.innerHTML = frag;
+      var row = wrap.firstElementChild;
+      if (row) rowsHost.appendChild(row);
+      return;
+    }
+    var rem = ev.target && ev.target.closest && ev.target.closest('[data-editor-remove-row]');
+    if (rem) {
+      var r = rem.closest('[data-editor-row]');
+      if (r) r.parentNode.removeChild(r);
+    }
+  });
+})();
+"""
+
+
 def _esc(value) -> str:
     return html.escape(str(value), quote=True)
 
@@ -586,11 +633,14 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
 
 # ---- C31 metadata editor ---------------------------------------------------------------------
 
-# The editable fields, grouped like the add-survey page (C31 §2). Scalars render as an input/
-# textarea; structured fields (maps + lists) render as a JSON textarea — the curator edits the
-# structure directly, escaped, and the gateway parses it back to a patch WITHOUT importing yaml
-# (json is stdlib, not survey content — the §0.1 rule is about YAML/EDI parsing). ORCID/ROR hints
-# are text-only (C31 §2 — no live API calls from the curator page).
+# The editable fields, grouped like the add-survey page (C31 §2). Top-level scalars render as an
+# input/textarea; the STRUCTURED sections (maps + lists) now render as per-section WIDGETS
+# (labelled inputs, selects, checkboxes, repeatable rows) instead of the raw-JSON textareas a 2026-
+# 07-08 production use judged hostile for a geophysicist. Every section still keeps an "advanced"
+# collapsed raw-JSON <details> fallback that OVERRIDES its widgets when non-empty (deliberate escape
+# hatch, documented in the copy). The section shapes/labels live in gateway.editor_form (the server-
+# side assembly half) so rendering and assembly cannot drift. ORCID/ROR hints are text + a plain
+# link only (C31 §2 / the strictPages CSP has no api.ror.org connect-src — a fetch would be blocked).
 _EDIT_SCALARS = (
     ("project_name", "Project name"),
     ("name", "Name (backward-compatible alias)"),
@@ -600,25 +650,28 @@ _EDIT_SCALARS = (
 _EDIT_TEXTAREAS = (
     ("abstract", "Abstract"),
 )
-_EDIT_JSON = (
-    ("organisation", "Organisation {name, ror}"),
-    ("lead_investigator", "Lead investigator {name, orcid}"),
-    ("principal_investigators", "Principal investigators [ {name, orcid}, … ]"),
-    ("identifiers", "Identifiers {dataset_doi, survey_pid, …}"),
-    ("publications", "Publications [ … ]"),
-    ("funding", "Funding [ … ]"),
-    ("instruments", "Instruments [ {manufacturer, model, pid}, … ]"),
-    ("time_series", "Time series {collection_pid, levels_available}"),
-    ("access", "Access {level, embargo_until, contact}"),
-    ("collection", "Collection {id, title, type, status}"),
-    ("processing", "Processing {software, version, remote_reference, notes}"),
-    ("care", "CARE governance {…}"),
+
+# Sections with NO structured widget (schema too open-ended / nested to model as flat labelled
+# inputs) — rendered as advanced-JSON ONLY, and the form says so honestly. `care` carries a nested
+# land_access map + a boolean, which flat inputs cannot round-trip cleanly.
+_EDIT_JSON_ONLY = (
+    ("care", "CARE governance",
+     "traditional_owner_acknowledgement, land_access {permission_obtained, agreement_type}, "
+     "restrictions_requested"),
 )
 
 
 def _json_text(value) -> str:
     import json as _json
     return _json.dumps(value, indent=2, ensure_ascii=False)
+
+
+def _canon_json(value) -> str:
+    """Canonical (compact, key-sorted) JSON for the hidden o_<section> snapshot — the round-trip
+    anchor editor_form.assemble_section compares an unchanged submit against. sort_keys makes the
+    snapshot stable regardless of the read-job's key order."""
+    import json as _json
+    return _json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
 def _suggest_bump(current: str, kind: str) -> str:
@@ -638,33 +691,307 @@ def _suggest_bump(current: str, kind: str) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
+# ---- editor widget helpers (deliverable of the 2026-07-08 form rework) --------------------------
+# Every value is _esc'd. NO inline JS / on*= handlers anywhere (the strictPages CSP kills them, and
+# two pin tests enforce it) — the repeatable-row add/remove behaviour rides EDITOR_UI_JS's delegated
+# data-attribute handlers, served external at /gateway/curator/editor.js, and DEGRADES without JS
+# (the server renders existing rows + spare blank rows so adding a row needs no script).
+
+# ROR/DOI/date hint copy — a plain link only (no api.ror.org fetch: the curator CSP has no
+# connect-src for it, unlike add-survey.html).
+_ROR_HINT = ('<span class="sub">ROR id — <a href="https://ror.org" target="_blank" '
+             'rel="noopener">find your organisation\'s ROR</a></span>')
+
+
+def _field_error_map(field_errors) -> dict:
+    """Group SectionError objects by section so a widget block can show its own error line(s)."""
+    out: dict[str, list[str]] = {}
+    for e in field_errors or []:
+        out.setdefault(getattr(e, "section", ""), []).append(getattr(e, "message", str(e)))
+    return out
+
+
+def _section_error_html(errors_for_section) -> str:
+    if not errors_for_section:
+        return ""
+    items = "".join(f"<li>{_esc(m)}</li>" for m in errors_for_section)
+    return (f'<ul class="sub" style="color:{_PALETTE["bad"]};margin:.25rem 0 .5rem;'
+            f'padding-left:1.2rem">{items}</ul>')
+
+
+def _text_input(name: str, value, placeholder: str = "", input_type: str = "text",
+                extra_hint: str = "") -> str:
+    val = "" if value is None else value
+    ph = f' placeholder="{_esc(placeholder)}"' if placeholder else ""
+    hint = f' {extra_hint}' if extra_hint else ""
+    return (f'<input type="{_esc(input_type)}" name="{_esc(name)}" '
+            f'value="{_esc(val)}"{ph}>{hint}')
+
+
+def _snapshot_hidden(section: str, fields: dict) -> str:
+    """The hidden o_<section> round-trip anchor: canonical JSON of the ORIGINAL section value, or
+    absent when the survey did not carry the section (so a left-empty section stays absent)."""
+    if section not in fields:
+        return ""
+    return (f'<input type="hidden" name="o_{section}" '
+            f'value="{_esc(_canon_json(fields[section]))}">')
+
+
+def _sub_value(section: str, subkey: str, fields: dict, submitted: dict | None):
+    """The value to prefill a map sub-field: the resubmitted form value (after a validation error) if
+    present, else the original from the read-job fields, else empty."""
+    if submitted is not None and f"s_{section}_{subkey}" in submitted:
+        return submitted.get(f"s_{section}_{subkey}")
+    section_val = fields.get(section)
+    if isinstance(section_val, dict):
+        return section_val.get(subkey)
+    if isinstance(section_val, str) and subkey == "name":
+        return section_val  # organisation-as-bare-string: the string prefills the Name field
+    return None
+
+
+def _map_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
+                       err_map: dict) -> str:
+    from . import editor_form
+    subfields = editor_form.MAP_SECTIONS[section]
+    rows = [f'<h2>{_esc(title)}</h2>', _section_error_html(err_map.get(section))]
+    for subkey, label, placeholder, kind in subfields:
+        name = f"s_{section}_{subkey}"
+        val = _sub_value(section, subkey, fields, submitted)
+        if kind == "select" and section == "access":
+            rows.append(_access_level_widget(name, val))
+        elif kind == "date":
+            rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                        f'{_text_input(name, val, placeholder, input_type="date")}</p>')
+        elif kind == "email":
+            rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                        f'{_text_input(name, val, placeholder, input_type="email")}</p>')
+        elif kind == "levels" and section == "time_series":
+            rows.append(_levels_widget(section, subkey, fields, submitted))
+        elif kind == "ror":
+            rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                        f'{_text_input(name, val, placeholder, extra_hint=_ROR_HINT)}</p>')
+        else:
+            rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                        f'{_text_input(name, val, placeholder)}</p>')
+    rows.append(_snapshot_hidden(section, fields))
+    rows.append(_advanced_json_details(section, fields))
+    return f'<div class="panel">{"".join(rows)}</div>'
+
+
+def _access_level_widget(name: str, value) -> str:
+    from . import editor_form
+    current = value if value in editor_form.ACCESS_LEVELS else "open"
+    opts = "".join(
+        f'<option value="{_esc(lv)}"{" selected" if lv == current else ""}>{_esc(lv)}</option>'
+        for lv in editor_form.ACCESS_LEVELS)
+    return (f'<p><label class="k">Access level</label>'
+            f'<select name="{_esc(name)}">{opts}</select></p>')
+
+
+def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | None) -> str:
+    from . import editor_form
+    # Determine which levels are checked: resubmitted checkboxes win, else the original list.
+    checked: set[str] = set()
+    if submitted is not None and any(
+            k.startswith(f"c_{section}_{subkey}_") for k in submitted):
+        for lv in editor_form.TIME_SERIES_LEVELS:
+            if f"c_{section}_{subkey}_{lv}" in submitted:
+                checked.add(lv)
+    else:
+        sec = fields.get(section)
+        cur = sec.get(subkey) if isinstance(sec, dict) else None
+        if isinstance(cur, list):
+            checked = {str(x) for x in cur}
+    boxes = []
+    for lv in editor_form.TIME_SERIES_LEVELS:
+        mark = " checked" if lv in checked else ""
+        boxes.append(
+            f'<label style="display:inline-block;margin-right:1rem"><input type="checkbox" '
+            f'name="c_{section}_{subkey}_{_esc(lv)}" value="1" style="width:auto"{mark}> '
+            f'{_esc(lv)}</label>')
+    return ('<p><label class="k">Levels available</label><br>' + "".join(boxes) +
+            '<br><span class="sub">Tick each processing level the collection provides. For a level '
+            'outside this list, use the advanced JSON below.</span></p>')
+
+
+def _list_row_html(section: str, index: int, subfields, values: dict | None) -> str:
+    """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
+    submit just leaves an empty row, which the server drops). `values` prefills an existing row."""
+    cells = []
+    for subkey, label, placeholder, kind in subfields:
+        name = f"l_{section}_{index}_{subkey}"
+        val = (values or {}).get(subkey)
+        itype = "email" if kind == "email" else "text"
+        extra = _ROR_HINT if kind == "ror" else ""
+        cells.append(f'<p style="margin:.15rem 0"><label class="k">{_esc(label)}</label>'
+                     f'{_text_input(name, val, placeholder, input_type=itype, extra_hint=extra)}</p>')
+    remove = ('<p style="margin:.15rem 0"><button type="button" class="b-bad" '
+              'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
+              'Remove row</button></p>')
+    return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
+            f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{remove}</div>')
+
+
+# Spare blank rows rendered when JS is unavailable so a curator can still add entries (deliverable 3).
+_SPARE_BLANK_ROWS = 2
+
+# The literal index placeholder inside a section's <template> row. editor.js substitutes a fresh
+# unique index for it. It sits BETWEEN underscores in the field name (l_<section>_<TOKEN>_<subkey>)
+# so no real index or field text can collide with it, and the surrounding underscores survive.
+ROW_INDEX_TOKEN = "ROWIDX"
+
+
+def _list_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
+                        err_map: dict) -> str:
+    from . import editor_form
+    subfields = editor_form.LIST_SECTIONS[section]
+    # Prefill existing rows: resubmitted rows win (preserve typed values on a validation error),
+    # else the original list from the read-job.
+    existing: list[dict] = []
+    if submitted is not None and any(k.startswith(f"l_{section}_") for k in submitted):
+        for i in _submitted_row_indices(submitted, section):
+            existing.append({sk: submitted.get(f"l_{section}_{i}_{sk}") for sk, *_ in subfields})
+    else:
+        orig = fields.get(section)
+        if isinstance(orig, list):
+            for item in orig:
+                if isinstance(item, dict):
+                    existing.append({sk: item.get(sk) for sk, *_ in subfields})
+                else:
+                    # A non-dict list item (e.g. a bare-DOI publication string) can't map to the row
+                    # widgets — leave it to the advanced JSON, and note it. Render no widget row for it.
+                    existing.append(None)  # placeholder marker; skipped below
+    rendered = []
+    idx = 0
+    for row in existing:
+        if row is None:
+            continue  # non-dict item handled via advanced JSON
+        rendered.append(_list_row_html(section, idx, subfields, row))
+        idx += 1
+    # Spare blank rows so add-without-JS works.
+    for _ in range(_SPARE_BLANK_ROWS):
+        rendered.append(_list_row_html(section, idx, subfields, None))
+        idx += 1
+    add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
+               f'data-editor-add-row="{_esc(section)}">+ Add row</button></p>')
+    # A template row whose index is the literal placeholder ROW_INDEX_TOKEN (with its underscores
+    # preserved: the field name becomes l_<section>_<TOKEN>_<subkey>). editor.js clones this and
+    # substitutes a fresh unique index for the token. Hidden from no-JS users (the spare rows cover
+    # them). Rendering with the token as the index — NOT string-replacing a rendered "_0_" — keeps
+    # the surrounding underscores intact (a "_0_"->placeholder replace ate them, giving malformed
+    # names like l_instruments3manufacturer; caught by the jsdom harness).
+    template = (f'<template data-editor-template="{_esc(section)}">'
+                f'{_list_row_html(section, ROW_INDEX_TOKEN, subfields, None)}'
+                '</template>')
+    heading = [f'<h2>{_esc(title)}</h2>', _section_error_html(err_map.get(section))]
+    return (f'<div class="panel" data-editor-section="{_esc(section)}">'
+            + "".join(heading)
+            + f'<div data-editor-rows="{_esc(section)}">{"".join(rendered)}</div>'
+            + add_btn + template
+            + _snapshot_hidden(section, fields)
+            + _advanced_json_details(section, fields)
+            + '</div>')
+
+
+def _submitted_row_indices(submitted: dict, section: str) -> list[int]:
+    prefix = f"l_{section}_"
+    idx: set[int] = set()
+    for key in submitted:
+        if key.startswith(prefix):
+            num, _, _sub = key[len(prefix):].partition("_")
+            if num.isdigit():
+                idx.add(int(num))
+    return sorted(idx)
+
+
+def _advanced_json_details(section: str, fields: dict) -> str:
+    """The per-section collapsed-by-default advanced raw-JSON escape hatch (a <details> — no JS
+    needed). When NON-EMPTY it OVERRIDES this section's widgets server-side (editor_form precedence).
+    Prefilled empty by default so an unchanged submit uses the widgets, not a pre-baked JSON skeleton
+    (deliverable 11): the read-job value is shown only as a collapsed reference, never as the input."""
+    ref = _json_text(fields[section]) if section in fields else ""
+    ref_block = (f'<p class="sub">current value (reference): '
+                 f'<code>{_esc(ref)}</code></p>' if ref else "")
+    return (
+        '<details style="margin-top:.5rem"><summary class="sub">Advanced: edit this section as raw '
+        'JSON (overrides the fields above when filled)</summary>'
+        f'{ref_block}'
+        f'<textarea name="j_{_esc(section)}" rows="4" placeholder="leave blank to use the fields '
+        'above"></textarea></details>')
+
+
+def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map: dict) -> str:
+    """A section with no structured widget (schema too nested/open-ended): advanced-JSON only, stated
+    honestly. Prefilled with the current value so the curator edits from it (there is no widget to
+    fall back to)."""
+    present = section in fields
+    val = _json_text(fields[section]) if present else ""
+    return (
+        f'<div class="panel"><h2>{_esc(title)}</h2>'
+        f'{_section_error_html(err_map.get(section))}'
+        f'<p class="sub">This section has no structured form yet ({_esc(hint)}). Edit it as raw JSON '
+        '(leave blank to leave unchanged).</p>'
+        f'<textarea name="j_{_esc(section)}" rows="4">{_esc(val)}</textarea></div>')
+
+
 def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token: str,
-                     error: str = "") -> str:
+                     error: str = "", field_errors=None, submitted: dict | None = None) -> str:
     """The seed form (C31 §1.2): server-rendered, escaped, prefilled from the runner's editable
-    subset. Scalars are inputs, abstract a textarea, structured fields JSON textareas. A version-bump
-    radio group (patch default) + a required release-note box carry the C31 §0.3 discipline."""
+    subset. Top-level scalars are inputs/textarea; the structured sections are per-section WIDGETS
+    (labelled inputs, an access-level <select>, levels checkboxes, repeatable rows) with a collapsed
+    advanced-JSON <details> override each; `care` is advanced-JSON only (nested shape). A version-bump
+    radio group (patch default) + a required release-note box carry the C31 §0.3 discipline.
+    `field_errors` annotates the section(s) that failed validation; `submitted` re-prefills the
+    widgets with the curator's typed values after such a failure so nothing is discarded."""
+    from . import editor_form
     err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    err_map = _field_error_map(field_errors)
+    if err_map and not err:
+        err = (f'<p class="sub" style="color:{_PALETTE["bad"]}">Some fields need attention — see the '
+               'highlighted sections below.</p>')
     cur = version or "0.0.0"
     patch_v = _suggest_bump(cur, "patch")
     minor_v = _suggest_bump(cur, "minor")
     major_v = _suggest_bump(cur, "major")
-    rows = []
+
+    def _scalar_val(key):
+        if submitted is not None and f"f_{key}" in submitted:
+            return submitted.get(f"f_{key}")
+        v = fields.get(key, "")
+        return "" if v is None else v
+
+    scalar_rows = []
     for key, label in _EDIT_SCALARS:
-        val = fields.get(key, "")
-        val = "" if val is None else val
-        rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                    f'<input type="text" name="f_{key}" value="{_esc(val)}"></p>')
+        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                           f'{_text_input(f"f_{key}", _scalar_val(key))}</p>')
     for key, label in _EDIT_TEXTAREAS:
-        val = fields.get(key, "")
-        val = "" if val is None else val
-        rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                    f'<textarea name="f_{key}">{_esc(val)}</textarea></p>')
-    for key, label in _EDIT_JSON:
-        present = key in fields
-        val = _json_text(fields[key]) if present else ""
-        rows.append(f'<p><label class="k">{_esc(label)} <span class="sub">(JSON; leave blank to '
-                    f'leave unchanged)</span></label>'
-                    f'<textarea name="j_{key}" rows="4">{_esc(val)}</textarea></p>')
+        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                           f'<textarea name="f_{key}">{_esc(_scalar_val(key))}</textarea></p>')
+    scalar_panel = f'<div class="panel">{"".join(scalar_rows)}</div>'
+
+    # Map + list section panels, in the schema's document order (matches survey-yaml.md).
+    map_titles = {
+        "organisation": "Organisation", "lead_investigator": "Lead investigator",
+        "identifiers": "Identifiers", "access": "Access", "time_series": "Time series",
+        "processing": "Processing", "collection": "Collection",
+    }
+    list_titles = {
+        "principal_investigators": "Principal investigators", "publications": "Publications",
+        "funding": "Funding", "instruments": "Instruments",
+    }
+    order = ("organisation", "lead_investigator", "principal_investigators", "identifiers",
+             "publications", "funding", "instruments", "time_series", "access", "processing",
+             "collection")
+    panels = []
+    for section in order:
+        if section in editor_form.MAP_SECTIONS:
+            panels.append(_map_section_panel(section, map_titles[section], fields, submitted, err_map))
+        elif section in editor_form.LIST_SECTIONS:
+            panels.append(_list_section_panel(section, list_titles[section], fields, submitted, err_map))
+    for section, title, hint in _EDIT_JSON_ONLY:
+        panels.append(_json_only_panel(section, title, hint, fields, err_map))
+
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
     bump = (
         '<p><label class="k">Version bump (a content edit requires a semver-greater version)</label>'
@@ -679,15 +1006,21 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
         f'<h1>Edit metadata — {_esc(slug)}</h1>'
         f'<p class="sub">current version {_esc(cur)} · '
         f'<a href="/gateway/curator/queue">back to queue</a></p>'
+        '<p class="sub">Fill the fields for each section. An empty field is left unchanged; each '
+        'section also has an <em>Advanced</em> raw-JSON box that overrides its fields when filled.</p>'
         f'{err}'
         f'<form method="post" action="/gateway/curator/edit/{_esc(slug)}/preview">'
-        f'<div class="panel">{"".join(rows)}</div>'
+        f'{scalar_panel}'
+        f'{"".join(panels)}'
         f'<div class="panel">{bump}'
         '<p><label class="k">Release note (required)</label>'
         '<textarea name="note" placeholder="What changed and why" required></textarea></p>'
         f'{csrf}'
         '<p><button class="b-accent" type="submit">Preview change</button></p>'
         '</div></form>'
+        # EXTERNAL same-origin script for the repeatable-row add/remove (strictPages CSP blocks
+        # inline JS; the behaviour degrades to the server-rendered spare rows without it).
+        '<script src="/gateway/curator/editor.js" defer></script>'
     )
     return _page(f"AusMT edit {slug}", body)
 

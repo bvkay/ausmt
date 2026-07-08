@@ -26,8 +26,8 @@ from fastapi import FastAPI, Form, Header, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import checklist as checklist_mod
-from . import (clamd, curator_auth, curatorpage, db, jobs, metaedit, publish, serve_state,
-               states, statuspage, uploader_keys as uploader_keys_mod, zipsafety)
+from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, metaedit, publish,
+               serve_state, states, statuspage, uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
 from .orcid import is_valid_orcid
@@ -539,6 +539,20 @@ class Gateway:
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
+    def handle_editor_ui_js(self, request: Request) -> Response:
+        """GET /gateway/curator/editor.js — the metadata-editor's repeatable-row add/remove behaviour
+        as a same-origin EXTERNAL script. Same CSP reason as serve-state.js/ui.js: the strictPages
+        script-src 'self' blocks inline scripts, so the row JS lives behind this route. Session-gated
+        for consistency with the edit page that references it (the code is a public-repo constant; the
+        gate is consistency, not secrecy). The behaviour DEGRADES without JS — the form renders spare
+        blank rows server-side — so a 404 here would not break adding entries, only the +/- buttons."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.EDITOR_UI_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
     def handle_curator_detail(self, request: Request, submission_id: str) -> Response:
         name = self._require_session(request)
         if isinstance(name, Response):
@@ -640,11 +654,15 @@ class Gateway:
         return self._html(curatorpage.render_edit_list(
             curator_name=name, slugs=slugs, csrf_token=csrf))
 
-    def handle_edit_form(self, request: Request, slug: str, error: str = "") -> Response:
+    def handle_edit_form(self, request: Request, slug: str, error: str = "",
+                         field_errors: list | None = None, submitted: dict | None = None) -> Response:
         """Open the edit form for a published survey (C31 §1.2): the gateway enqueues a `read`
         edit-job on the jobs/edit/ queue, the gw-runner returns the editable subset as JSON, the
         gateway renders the seeded form. This handler is a sync `def` route, so the seam's bounded
-        blocking poll runs in Starlette's threadpool — never on the event loop (review FIX 4)."""
+        blocking poll runs in Starlette's threadpool — never on the event loop (review FIX 4).
+        `field_errors` (a list of editor_form.SectionError) re-renders the per-section widget
+        annotations after a failed preview; `submitted` (the raw form dict) re-prefills the widgets
+        with the curator's typed values so a validation error never discards their work."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
@@ -663,7 +681,7 @@ class Gateway:
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
         return self._html(curatorpage.render_edit_form(
             slug=slug, version=result.get("version"), fields=result.get("fields") or {},
-            csrf_token=csrf, error=error))
+            csrf_token=csrf, error=error, field_errors=field_errors, submitted=submitted))
 
     async def handle_edit_preview(self, request: Request, slug: str, form: dict) -> Response:
         """Submit the edit (C31 §1.3/§1.4): build the patch from the form, enqueue a `merge`
@@ -683,9 +701,15 @@ class Gateway:
         bump = (form.get("bump") or "patch").strip()
         if bump not in ("patch", "minor", "major"):
             bump = "patch"
-        patch, patch_err = self._build_patch(form)
-        if patch_err is not None:
-            return self.handle_edit_form(request, slug, error=patch_err)
+        patch, patch_errors = self._build_patch(form)
+        if patch_errors:
+            # Per-field validation failures (bad ORCID/DOI/date/level, malformed advanced JSON):
+            # re-render the form with each error rather than a blanket failure (C31 §2, deliverable
+            # 12). The errors carry the section so the renderer can annotate the right widget block,
+            # and the submitted form is passed back so the curator's typed values survive the round
+            # (never silently discarded — the old blanket path lost them).
+            return self.handle_edit_form(request, slug, field_errors=patch_errors,
+                                         submitted=form)
         # The runner alone loads the current version; it resolves the bump KIND to a concrete semver
         # and enforces semver-greater (all version logic stays runner-side, C31 §0.3). The gateway
         # passes only the bump kind, so preview and confirm reproduce identical bytes deterministically.
@@ -813,31 +837,26 @@ class Gateway:
         return pkg
 
     def _build_patch(self, form: dict):
-        """Turn the edit form fields into the merge patch (C31 §2). Scalar/textarea fields become
-        their string values (browser CRLF normalised to LF so a textarea edit never embeds \\r into
-        the yaml); JSON fields are json.loads'd (stdlib — NOT yaml; the gateway never parses survey
-        content). A blank JSON field means 'leave unchanged' and is dropped. Returns (patch, error):
-        a malformed JSON field yields a curator-facing error, no patch. The validator location is
-        NOT the gateway's business — the gw-runner resolves it from its own AUSMT_VALIDATOR_PATH."""
-        import json as _json
-
+        """Turn the edit form fields into the merge patch (C31 §2). Top-level SCALAR fields (f_*)
+        become their string values (browser CRLF normalised to LF so a textarea edit never embeds
+        \\r into the yaml). The STRUCTURED sections are assembled by editor_form.build_section_patch
+        from the per-section widget inputs (s_/l_/c_) — or, when a section's advanced <details>
+        raw-JSON box (j_<section>) is non-empty, from that JSON, which OVERRIDES the widgets for that
+        section (the single documented precedence point, enforced in editor_form.assemble_section).
+        json is stdlib, not survey content — the §0.1 no-yaml rule is unbroken. Returns
+        (patch, errors): errors is a list of editor_form.SectionError (empty on success); a non-empty
+        list yields a curator-facing per-field message and NO patch. The validator location is NOT the
+        gateway's business — the gw-runner resolves it from its own AUSMT_VALIDATOR_PATH."""
         patch: dict = {}
         for key in ("project_name", "name", "region", "license", "abstract"):
             raw = form.get(f"f_{key}")
             if raw is not None:
                 patch[key] = raw.replace("\r\n", "\n").replace("\r", "\n")
-        for key, val in form.items():
-            if not key.startswith("j_"):
-                continue
-            field = key[2:]
-            text = (val or "").strip()
-            if not text:
-                continue
-            try:
-                patch[field] = _json.loads(text)
-            except ValueError:
-                return None, f"the {field} field is not valid JSON"
-        return patch, None
+        section_patch, errors = editor_form.build_section_patch(form)
+        if errors:
+            return None, errors
+        patch.update(section_patch)
+        return patch, []
 
     # ---- preview sandbox (design §7) ---------------------------------------------------------
 
@@ -1257,6 +1276,13 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/ui.js")
     def curator_ui_js(request: Request):
         return gw.handle_curator_ui_js(request)
+
+    # The metadata-editor's repeatable-row add/remove JS — EXTERNAL for the same CSP reason; the edit
+    # form loads it via a same-origin external script URL. Degrades to server-rendered spare rows
+    # when JS is unavailable.
+    @app.get("/gateway/curator/editor.js")
+    def curator_editor_js(request: Request):
+        return gw.handle_editor_ui_js(request)
 
     # ---- C31 metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the C10/C11
