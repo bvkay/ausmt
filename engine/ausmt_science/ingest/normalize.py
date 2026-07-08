@@ -30,6 +30,10 @@ emits metadata its own reader then rejects. Four distinct issues occur, all hand
   6. Site.project pattern is ^[a-zA-Z0-9-_]*$ (no spaces) — survey project names like "Stuart Shelf
      2009" fail the write; sanitized (the readable name stays in survey.yaml). Found by the
      remote-reference data inspection across real dialects (EDL/BIRRP).
+  7. Library-default metadata the XML asserts as fact (final hostile audit 4.2): for EDI sources the
+     sign convention, declination epoch/model, and degenerate-geometry channel orientations are
+     mt_metadata defaults the source never stated. The values stay (the writer requires them) but
+     each gets a machine-readable NOT-asserted conditioning note, like the rotation zero-fill.
 
 The round-trip is then VERIFIED (impedance allclose) and a failure RAISES — a hard QC gate, so a
 silently-broken canonical artifact can never be published. The original upload remains the citable
@@ -112,12 +116,18 @@ def _survey_meta_get(survey_meta: Optional[dict]):
 
 
 def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
-                 survey_meta: Optional[dict] = None) -> list[str]:
+                 survey_meta: Optional[dict] = None,
+                 source_format: Optional[str] = None) -> list[str]:
     """Make an mt_metadata TF schema-valid for EMTF-XML write+read. Returns notes of what changed.
 
     `survey_meta` (a survey SMETA dict: org, investigators, cite.ti/title, doi) sources the citation
     honestly — see the citation block below. When absent (bare API use), the citation is left unset or
     filled with an explicit-unknown, NEVER the portal brand "AusMT" (the historical fabrication defect).
+
+    `source_format` (the source file suffix, e.g. ".edi") gates the Issue-#7 library-default notes:
+    an EDI cannot state those fields machine-readably, so for EDI sources they are always library
+    defaults and get flagged; an EMTF-XML source CAN state them, so no note is emitted there (or when
+    the caller does not say — backward compatible).
 
     Mutates the in-memory TF object only (never the source file)."""
     import numpy as np  # noqa: PLC0415
@@ -181,6 +191,61 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
     if getattr(tf, "_rotation_angle", None) is None:
         tf._rotation_angle = np.zeros(n_periods)
         notes.append("rotation: unknown — writer requires array; zeros written, frame NOT asserted")
+
+    # Issue #7 (final hostile audit 4.2): fields mt_metadata fills with LIBRARY DEFAULTS that an EDI
+    # cannot state machine-readably, yet the written XML asserts as station facts — the sign
+    # convention (<SignConvention>+), the declination epoch/model, and channel orientations
+    # synthesised from degenerate EMEAS geometry (zero-length, azimuth-less dipoles => Ey "north").
+    # Same honesty contract as the Issue-#4 rotation zero-fill: the values STAY (the writer requires
+    # them; nulling breaks the write), but a machine-readable note records that each is NOT asserted
+    # by the source. Gated on EDI sources only — an EMTF-XML source can state all three, so there
+    # they are source-authored and a note would itself be false.
+    if source_format == ".edi":
+        try:
+            sc_val = getattr(getattr(tf.station_metadata, "transfer_function", None),
+                             "sign_convention", None)
+            if sc_val:
+                notes.append(f"sign_convention: '{sc_val}' is a library default — EDI carries no "
+                             "machine-readable sign convention; NOT asserted by source")
+        except Exception:  # noqa: BLE001  (model shape varies across mt_metadata versions; non-fatal)
+            pass
+        try:
+            dec = getattr(getattr(tf.station_metadata, "location", None), "declination", None)
+            epoch = getattr(dec, "epoch", None) if dec is not None else None
+            model = getattr(dec, "model", None) if dec is not None else None
+            if epoch or model:
+                notes.append(f"declination.epoch/model: library defaults (epoch={epoch}, "
+                             f"model={model}) — an EDI states only the declination value; "
+                             "epoch/model NOT asserted by source")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            for run in (getattr(tf.station_metadata, "runs", None) or []):
+                # Run has no .ex/.ey attributes — channels are reached via get_channel() (pydantic
+                # ListDict model, verified on mt_metadata 1.0.9's Run).
+                try:
+                    ex, ey = run.get_channel("ex"), run.get_channel("ey")
+                except Exception:  # noqa: BLE001
+                    continue
+                if ex is None or ey is None:
+                    continue
+                ax = getattr(ex, "measurement_azimuth", None)
+                ay = getattr(ey, "measurement_azimuth", None)
+                # Two degenerate shapes, both meaning "the XML's orientations are not measurements":
+                # (a) azimuths UNSTATED (None/None) — the EMTF-XML writer then defaults both to 0,
+                #     printing Ey as pointing north (the audit's reproduced Vulcan_A1 case); or
+                # (b) azimuths stated but IDENTICAL — parallel electric dipoles are non-physical.
+                both_none = ax is None and ay is None
+                both_equal = ax is not None and ay is not None and abs(float(ax) - float(ay)) < 1e-6
+                if both_none or both_equal:
+                    detail = ("ex and ey azimuths unstated; the writer defaults both to 0"
+                              if both_none else
+                              f"ex and ey azimuths both {float(ax):g} deg — parallel dipoles are non-physical")
+                    notes.append(f"channel orientations: degenerate/defaulted ({detail}); "
+                                 "orientations NOT asserted by source EMEAS geometry")
+                    break
+        except Exception:  # noqa: BLE001
+            pass
 
     # Issue #2: a None Copyright.citation is written but rejected on read. Populate it HONESTLY from the
     # survey SMETA (authors = named investigators, else the custodian organisation; title = survey
@@ -303,7 +368,8 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
 
     tf = TF()
     tf.read(str(src))
-    notes = condition_tf(tf, survey_id=survey_id, station_id=station_id, survey_meta=survey_meta)
+    notes = condition_tf(tf, survey_id=survey_id, station_id=station_id, survey_meta=survey_meta,
+                         source_format=src.suffix.lower())
 
     canonical_xml = out_dir / f"{stem}.xml"
     # The canonical XML is mt_metadata's FAITHFUL standard EMTF-XML output. For missing components

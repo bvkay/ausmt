@@ -19,7 +19,7 @@ REPO = HERE.parent
 sys.path.insert(0, str(REPO))  # make the ausmt_science package importable from a source checkout
 
 from ausmt_science.ingest.normalize import (  # noqa: E402
-    normalize, source_station_id_from_geographic_name)
+    condition_tf, normalize, source_station_id_from_geographic_name)
 
 STANDARD = REPO / "data" / "sample-survey" / "transfer_functions" / "edi" / "Vulcan_A1.edi"
 SPECTRA = HERE / "real_dialects" / "phoenix_empower_A01.edi"
@@ -277,3 +277,37 @@ def test_clean_station_id_does_not_pollute_site_name(tmp_path):
     assert "ausmt_src_id" not in (rt.station_metadata.geographic_name or ""), \
         rt.station_metadata.geographic_name
     assert not any("source_id_preserved" in n for n in res.conditioned), res.conditioned
+
+
+# --- Final-audit 4.2: library-default metadata the XML asserts must carry conditioning notes. ------
+def test_edi_library_defaults_are_noted_not_silently_asserted(tmp_path):
+    """FAILS IF: normalize() writes a canonical XML that asserts a sign convention, a declination
+    epoch/model, or channel orientations for an EDI source WITHOUT a conditioning note saying the
+    source never stated them. This is the LG-2 fabrication class the C2 fix did not cover (final
+    hostile audit 4.2, reproduced on this very fixture: Vulcan_A1's XML asserts <SignConvention>+,
+    Declination epoch="1995", and Ey orientation 0.0 = NORTH — from zero-length, azimuth-less EMEAS
+    lines — none of it source-stated). The values may stay (the writer requires them, exactly like
+    the Issue-#4 rotation zero-fill), but each must be flagged NOT-asserted in the conditioned list."""
+    res = normalize(STANDARD, tmp_path, survey_id="vulcan", station_id="A1")
+    joined = "\n".join(res.conditioned)
+    assert "sign_convention" in joined, res.conditioned
+    assert "declination" in joined, res.conditioned
+    assert "orientation" in joined, res.conditioned
+    # each of the new notes must carry the not-asserted marker, same honesty contract as rotation
+    for key in ("sign_convention", "declination", "orientation"):
+        note = next(n for n in res.conditioned if key in n)
+        assert "asserted" in note.lower(), note
+
+
+def test_default_notes_are_edi_gated(tmp_path):
+    """FAILS IF: the library-default notes fire for a non-EDI source. An EMTF-XML source CAN state
+    sign convention / declination epoch / orientations, so there they are source-authored and the
+    notes would be false. condition_tf without source_format (bare API use) must stay note-free for
+    these fields too (backward compatible)."""
+    from mt_metadata.transfer_functions.core import TF as _TF
+    tf = _TF()
+    tf.read(str(STANDARD))
+    notes = condition_tf(tf, survey_id="vulcan", station_id="A1")   # no source_format
+    joined = "\n".join(notes)
+    assert "sign_convention" not in joined, notes
+    assert "declination" not in joined, notes
