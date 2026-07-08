@@ -6,18 +6,27 @@ scratch temp, opens it with sqlite3(1) and verifies: PRAGMA integrity_check == o
 table EXISTS (schema v2), and prints the table list + uploader_keys row count + newest submission
 created_utc for the operator to eyeball. It EXITS NON-ZERO with a loud message if any check fails.
 
-These tests need a REAL sqlite3 (the drill's whole point is integrity_check + a schema probe — a cp
-shim cannot do that), so they build genuine DBs with python's stdlib sqlite3 (schema mirrored from
-gateway/db.py: a submissions table with created_utc, and the v2 uploader_keys table) and run the drill
-against them. The drill is skipped where no sqlite3 binary is on PATH. Every assertion is an
-INDEPENDENT OBSERVABLE — the process exit code and the printed report — never the script's self-report.
-Each test names its failure criterion (Invariant 10)."""
+The drill's whole point is a real integrity_check + a schema probe, so a plain `cp` shim cannot stand
+in for sqlite3 — but requiring the sqlite3(1) BINARY would make these tests skip on a runner without
+it, and the gateway-ci skip tripwire (engine/tests/ci_check_skips.py) fails the lane on ANY skip not on
+its one-entry allow-list. So instead of gating on the binary, the tests drive restore-drill.sh through
+a tiny PYTHON-BACKED sqlite3-CLI shim (AUSMT_BACKUP_SQLITE): it implements exactly the CLI surface the
+script uses — `sqlite3 <db> "<sql>"` (rows printed one per line, `|`-joined, the CLI default) and
+`sqlite3 <db> ".tables"` — using python's stdlib sqlite3, and it exits NON-ZERO on a DatabaseError just
+as the real CLI does on a corrupt DB. python is guaranteed present (it is running these tests), so the
+module NEVER skips on the CI runner. This tests the script's ORCHESTRATION + decision logic (does it
+run integrity_check, does it reject a corrupt DB / a missing uploader_keys table, does it print the
+eyeball figures) against a real sqlite engine — just not the packaged CLI binary.
+
+Every assertion is an INDEPENDENT OBSERVABLE — the process exit code and the printed report — never the
+script's self-report. Each test names its failure criterion (Invariant 10)."""
 from __future__ import annotations
 
 import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -26,11 +35,41 @@ _REPO = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO / "deploy" / "scripts" / "restore-drill.sh"
 
 _SH = shutil.which("sh") or shutil.which("bash")
-_SQLITE3 = shutil.which("sqlite3")
-pytestmark = [
-    pytest.mark.skipif(_SH is None, reason="no POSIX sh/bash to run restore-drill.sh"),
-    pytest.mark.skipif(_SQLITE3 is None, reason="restore-drill needs a real sqlite3(1) on PATH"),
-]
+pytestmark = pytest.mark.skipif(_SH is None, reason="no POSIX sh/bash to run restore-drill.sh")
+
+
+# A python-backed sqlite3-CLI shim. restore-drill.sh calls it as `<cmd> <db> <arg>` where <arg> is
+# either a SQL statement or the dot-command `.tables`. It mirrors the real sqlite3 CLI's observable
+# behaviour for those: SQL rows one-per-line with `|` between columns; `.tables` prints the table names;
+# a DatabaseError (corrupt DB) exits non-zero. Written to a .py file the sh shim invokes so the script
+# sees a normal `sqlite3`-style command.
+_SHIM_PY = r'''
+import sqlite3, sys
+db, arg = sys.argv[1], sys.argv[2]
+try:
+    con = sqlite3.connect(db)
+    if arg.strip() == ".tables":
+        rows = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
+        print(" ".join(r[0] for r in rows))
+    else:
+        for row in con.execute(arg).fetchall():
+            print("|".join("" if c is None else str(c) for c in row))
+    con.close()
+except sqlite3.DatabaseError as e:
+    sys.stderr.write("Error: %s\n" % e)
+    sys.exit(1)
+'''
+
+
+def _sqlite_shim(tmp_path: Path) -> str:
+    py = tmp_path / "sqlite_shim.py"
+    py.write_text(_SHIM_PY, encoding="utf-8")
+    sh = tmp_path / "sqlite_shim.sh"
+    sh.write_text(f'#!/bin/sh\nexec "{Path(sys.executable).as_posix()}" "{py.as_posix()}" "$@"\n',
+                  encoding="utf-8")
+    sh.chmod(0o755)
+    return f"sh {sh.as_posix()}"
 
 
 def _good_db(path: Path, *, uploader_rows=4, submissions=None) -> None:
@@ -99,8 +138,10 @@ def _snapshot(tmp_path: Path, maker) -> Path:
     return snap
 
 
-def _run(snapshot: Path | None, *, env_extra=None, args=()) -> subprocess.CompletedProcess:
+def _run(tmp_path: Path, snapshot: Path | None, *, env_extra=None, args=()
+         ) -> subprocess.CompletedProcess:
     env = dict(os.environ)
+    env["AUSMT_BACKUP_SQLITE"] = _sqlite_shim(tmp_path)
     if env_extra:
         env.update(env_extra)
     argv = [_SH, str(_SCRIPT), *args]
@@ -116,7 +157,7 @@ def test_passes_on_a_good_snapshot(tmp_path):
     row count, and the NEWEST submission created_utc. FAILS IF: the drill errors on a valid DB, or the
     exit code is non-zero, or the eyeball figures are absent."""
     snap = _snapshot(tmp_path, lambda p: _good_db(p, uploader_rows=4))
-    r = _run(snap)
+    r = _run(tmp_path, snap)
     assert r.returncode == 0, f"a good snapshot must pass; stderr={r.stderr}"
     out = r.stdout + r.stderr
     assert "uploader_keys" in out, "must list/mention the uploader_keys table"
@@ -129,7 +170,7 @@ def test_fails_loud_on_corrupt_db(tmp_path):
     """A corrupted DB => integrity_check fails => rc!=0 with a loud message. FAILS IF: the drill passes
     a corrupt DB (the exact false-confidence an untested backup gives)."""
     snap = _snapshot(tmp_path, _corrupt_db)
-    r = _run(snap)
+    r = _run(tmp_path, snap)
     assert r.returncode != 0, "a corrupt DB must fail the drill"
     out = (r.stdout + r.stderr).lower()
     assert "integrity" in out or "corrupt" in out or "malformed" in out, \
@@ -140,7 +181,7 @@ def test_fails_when_uploader_keys_table_missing(tmp_path):
     """A v1 DB (integrity-clean but no uploader_keys table) => rc!=0 with a schema message. FAILS IF: a
     pre-v2 DB is accepted (a restore would silently lose curator-managed keys)."""
     snap = _snapshot(tmp_path, _v1_db_no_uploader_keys)
-    r = _run(snap)
+    r = _run(tmp_path, snap)
     assert r.returncode != 0, "a DB missing uploader_keys must fail the drill"
     assert "uploader_keys" in (r.stdout + r.stderr), "must name the missing table"
 
@@ -150,7 +191,7 @@ def test_missing_snapshot_db_fails_loud(tmp_path):
     success against an empty snapshot."""
     snap = tmp_path / "backups" / "20260708T032000Z"
     snap.mkdir(parents=True, exist_ok=True)  # no DB inside
-    r = _run(snap)
+    r = _run(tmp_path, snap)
     assert r.returncode != 0
     assert "gateway.sqlite" in (r.stdout + r.stderr) or "not found" in (r.stdout + r.stderr).lower()
 
@@ -162,6 +203,6 @@ def test_defaults_to_latest_symlink(tmp_path):
     backups = tmp_path / "backups"
     snap = _snapshot(tmp_path, lambda p: _good_db(p, uploader_rows=2))
     (backups / "latest").symlink_to(snap.name)
-    r = _run(None, env_extra={"AUSMT_BACKUP_DIR": str(backups)})
+    r = _run(tmp_path, None, env_extra={"AUSMT_BACKUP_DIR": str(backups)})
     assert r.returncode == 0, f"default-to-latest must drill the healthy snapshot; stderr={r.stderr}"
     assert "2" in (r.stdout + r.stderr), "must print the uploader_keys row count from latest"
