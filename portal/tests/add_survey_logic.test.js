@@ -56,6 +56,18 @@ ok(/access:\s*\n\s*level: open\s*\n\s*embargo_until: null\s*\n\s*contact: null/.
 const yEmbNoDate = M.buildSurveyYaml({ ...base, access: "metadata_only", access_contact: "" });
 ok(/embargo_until: null/.test(yEmbNoDate),
    "survey.yaml emits embargo_until: null when the date is left blank");
+// Injection hardening: embargo_until is emitted UNQUOTED (a bare ISO scalar), so anything that is not
+// strictly YYYY-MM-DD must collapse to null — a crafted value with an embedded newline would otherwise
+// smuggle an injected YAML key into the generated survey.yaml. buildSurveyYaml is a pure export driven
+// by arbitrary meta objects, so it cannot rely on the browser's <input type=date> constraining values.
+const yInject = M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: "2027-02-01\ninjected: true" });
+ok(/embargo_until: null/.test(yInject) && !/injected:/.test(yInject),
+   "a newline-injection embargo_until emits null and no injected key");
+const yNonDate = M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: "next year" });
+ok(/embargo_until: null/.test(yNonDate) && !/next year/.test(yNonDate),
+   "a non-ISO embargo_until ('next year') emits null");
+ok(/embargo_until: 2027-02-01/.test(M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: " 2027-02-01 " })),
+   "a well-formed date still emits (whitespace trimmed)");
 
 // ---- client-side slug mirror (audit minor: validator parity) ----
 // slugValid MIRRORS the authoritative rule in gateway/tests/fixtures/vendored_validation/

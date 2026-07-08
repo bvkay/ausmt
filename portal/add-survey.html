@@ -699,7 +699,13 @@ function buildSurveyYaml(m){
   // emitted as a bare ISO YYYY-MM-DD scalar (the <input type=date> value format the validator parses),
   // the contact as a quoted string. For an open survey both stay null (nothing to withhold, no release
   // contact needed) even if the fields carry stale text from a level the submitter changed away from.
-  const embargoDate=(m.access&&m.access!=="open"&&m.embargo_until)?String(m.embargo_until).trim():"";
+  // INJECTION GUARD: the date line is UNQUOTED, and this is a pure export callable with arbitrary meta
+  // (a browser's <input type=date> constrains values; a scripted DOM does not). Anything that is not
+  // strictly \d{4}-\d{2}-\d{2} collapses to null — a value with an embedded newline would otherwise
+  // smuggle an injected YAML key into the generated file. Mirrors the validator's ISO-date rule
+  // (validate_survey.py:303-308, date.fromisoformat) the same way slugValid mirrors the slug rule.
+  const embargoRaw=(m.access&&m.access!=="open"&&m.embargo_until)?String(m.embargo_until).trim():"";
+  const embargoDate=/^\d{4}-\d{2}-\d{2}$/.test(embargoRaw)?embargoRaw:"";
   const accessContact=(m.access&&m.access!=="open"&&m.access_contact)?String(m.access_contact).trim():"";
   L.push("  embargo_until: "+(embargoDate||"null"));
   L.push("  contact: "+(accessContact?q(accessContact):"null"));
