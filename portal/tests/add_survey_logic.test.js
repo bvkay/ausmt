@@ -57,6 +57,28 @@ const yEmbNoDate = M.buildSurveyYaml({ ...base, access: "metadata_only", access_
 ok(/embargo_until: null/.test(yEmbNoDate),
    "survey.yaml emits embargo_until: null when the date is left blank");
 
+// ---- client-side slug mirror (audit minor: validator parity) ----
+// slugValid MIRRORS the authoritative rule in gateway/tests/fixtures/vendored_validation/
+// validate_survey.py:331  re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", slug). Uppercase, spaces, underscores,
+// dots, slashes and leading/trailing hyphens are all rejected; lowercase-hyphenated is accepted.
+ok(M.slugValid("example-survey-2026") === true, "slugValid: lowercase-hyphenated slug accepted");
+ok(M.slugValid("example") === true, "slugValid: single lowercase token accepted");
+ok(M.slugValid("Example-Survey") === false, "slugValid: uppercase rejected");
+ok(M.slugValid("example survey") === false, "slugValid: spaces rejected");
+ok(M.slugValid("example_survey") === false, "slugValid: underscore rejected");
+ok(M.slugValid("example.survey") === false, "slugValid: dot rejected");
+ok(M.slugValid("-example") === false && M.slugValid("example-") === false, "slugValid: leading/trailing hyphen rejected");
+ok(M.slugValid("") === false, "slugValid: empty rejected");
+// wired into validateSurvey as a blocking FAIL under the 'slug' check.
+const badSlug = M.validateSurvey({ ...base, slug: "Bad_Slug", locations_confirmed: true },
+  [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }], []);
+ok(badSlug.items.some(i => i.check === "slug" && i.level === "FAIL"),
+   "validateSurvey: a malformed slug is a blocking FAIL");
+const goodSlug = M.validateSurvey({ ...base, slug: "good-slug", locations_confirmed: true },
+  [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }], []);
+ok(!goodSlug.items.some(i => i.check === "slug" && i.level === "FAIL"),
+   "validateSurvey: a valid slug raises no slug FAIL");
+
 // ---- DATAID-based packaging (task #16) ----
 // ediDataId must read the DATAID from the >HEAD block across the real dialect shapes: Geotools/LEMI
 // (no indent, quoted), EDL (leading-indented + trailing whitespace, quoted), Phoenix (indented,

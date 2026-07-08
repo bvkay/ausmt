@@ -363,6 +363,35 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
+  // 4c. CLIENT-SIDE SLUG MIRROR (audit minor). A malformed slug shows a red inline cue at the field AND
+  //     blocks packaging via validateSurvey (mirroring the authoritative server-side FAIL) — so a
+  //     first-timer's most common mistake costs no quarantine cycle.
+  {
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    const slug = e.doc.getElementById("m_slug");
+    // (i) an uppercase/underscore slug shows the inline error and blocks packaging.
+    slug.value = "Bad_Slug";
+    slug.dispatchEvent(new e.win.Event("input", { bubbles: true }));
+    const cue = e.doc.getElementById("slugOk");
+    ok(cue.className.indexOf("bad") >= 0 && /lowercase/i.test(cue.textContent),
+      "a malformed slug shows the red inline slug cue; got: " + JSON.stringify(cue.textContent));
+    e.doc.getElementById("btnValidate").onclick();
+    ok(/FAIL/.test(e.doc.getElementById("vSummary").textContent), "a malformed slug makes validation FAIL");
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    ok(e.record.blobs.length === 0, "a malformed slug blocks packaging (no zip produced)");
+    // (ii) a valid hyphenated slug clears the cue and packages.
+    slug.value = "good-slug-2026";
+    slug.dispatchEvent(new e.win.Event("input", { bubbles: true }));
+    ok(e.doc.getElementById("slugOk").className.indexOf("good") >= 0, "a valid slug shows the green inline cue");
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    ok(e.record.blobs.length === 1, "a valid slug allows packaging (one zip produced)");
+  }
+
+  // --------------------------------------------------------------------------------------------------
   // 5. SUBMISSION.md "How to submit" LIST NUMBERING (adversarial-review finding, LOW): the packaged
   //    instructions are an ordered list and must number strictly sequentially (1., 2., ...) in BOTH
   //    branches. The gateway-ABSENT branch (the PRIMARY path on static-only/file:// deploys) regressed

@@ -149,7 +149,8 @@
       <div class="req"><label>Project name</label><input id="m_name" placeholder="Example MT Survey 2026"></div>
       <div><label>Dataset / project DOI</label><input id="m_doi" placeholder="10.5281/zenodo.…"></div>
 
-      <div class="req"><label>Slug (folder name)</label><input id="m_slug" placeholder="example-survey-2026"></div>
+      <div class="req"><label>Slug (folder name)</label><input id="m_slug" placeholder="example-survey-2026">
+        <span class="orcidok" id="slugOk"></span></div>
       <div class="req"><label>Country</label><input id="m_country" value="Australia"></div>
       <div><label>Region <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional, finer facet)</span></label><input id="m_region" placeholder="e.g. South Australia"></div>
 
@@ -547,6 +548,14 @@ function submitFormFields(meta){
   return f;
 }
 function isSemver(s){ return /^\d+\.\d+\.\d+$/.test(String(s||"").trim()); }
+// slugValid MIRRORS the AUTHORITATIVE slug rule in the vendored validator —
+// gateway/tests/fixtures/vendored_validation/validate_survey.py:331
+//   re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", str(slug_val))
+// The slug becomes au.<slug>.<station> in every id/URL, so anything outside [a-z0-9-] (uppercase,
+// spaces, underscores, dots, slashes, leading/trailing hyphens) is silently rewritten by the pipeline's
+// safe_component() and forks the survey identity — a server-side hard FAIL. Mirroring it here catches
+// the most common first-timer mistake before a wasted quarantine cycle. Keep in sync with that line.
+function slugValid(s){ return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(String(s==null?"":s).trim()); }
 function validateSurvey(meta, edis, mth5s){
   mth5s = mth5s || [];
   const items=[]; const add=(level,check,message)=>items.push({level,check,message});
@@ -556,6 +565,12 @@ function validateSurvey(meta, edis, mth5s){
     if(f==="license"&&String(meta.license||"").startsWith("TBD")) add("WARNING","metadata","licence is 'TBD' — set a real licence before publication");
     else add(present?"PASS":"FAIL","metadata","required field '"+labels[f]+"' "+(present?"set":"missing"));
   });
+  // Slug charset gate — mirrors the authoritative server-side FAIL (validate_survey.py:331), so a
+  // malformed slug is caught HERE instead of after a full quarantine cycle. Only when a slug is present
+  // (the REQUIRED loop above already FAILs an empty slug; we do not double-report it).
+  if(meta.slug&&!slugValid(meta.slug))
+    add("FAIL","slug","slug '"+meta.slug+"' must be lowercase-hyphenated [a-z0-9-] (no spaces, dots, "
+      +"slashes, underscores, uppercase, or leading/trailing hyphens) — other characters fork the survey identity downstream");
   // submitter + declarations (submission envelope; email stays private, never published)
   add(meta.uploader_name?"PASS":"FAIL","submitter","uploader name "+(meta.uploader_name?"provided":"missing"));
   add(isEmail(meta.uploader_email)?"PASS":"FAIL","submitter","uploader email "+(isEmail(meta.uploader_email)?"provided (kept private)":"missing or invalid"));
@@ -747,7 +762,7 @@ function rorMatchesFromResponse(data){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,ediNameGate,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,rorMatchesFromResponse};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,ediNameGate,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,rorMatchesFromResponse};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -831,6 +846,20 @@ if(typeof document!=="undefined"&&document.getElementById){
     inp.addEventListener("change",()=>{ if(inp.value.trim()) track("ORCIDFormatChecked",{result:isOrcid(inp.value.trim())?"valid":"invalid"}); }); // PII-free
   }
   wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_pi_orcid","piOrcidOk");
+
+  // ----- slug inline validation (audit minor): live mirror of the authoritative validator FAIL so the
+  // most common first-timer mistake is caught at the field, not after a wasted quarantine cycle. Empty
+  // is left silent (the required-field FAIL covers it); a malformed non-empty slug shows a red inline
+  // hint. The blocking gate itself lives in validateSurvey (slugValid) — this is just the field-level cue.
+  (function(){
+    const inp=$("m_slug"), ok=$("slugOk");
+    if(!inp||!ok) return;
+    const render=()=>{ const v=inp.value.trim();
+      if(!v){ ok.textContent=""; ok.className="orcidok"; }
+      else if(slugValid(v)){ ok.textContent="✓ valid slug"; ok.className="orcidok good"; }
+      else { ok.textContent="✗ lowercase letters, digits and single hyphens only (no spaces, _ or uppercase)"; ok.className="orcidok bad"; } };
+    inp.addEventListener("input",render);
+  })();
 
   // ----- ROR organisation lookup (live, debounced; suggestions only; name shown first) -----
   async function rorLookup(name, abortHolder){
