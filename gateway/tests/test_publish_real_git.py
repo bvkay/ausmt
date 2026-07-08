@@ -383,3 +383,92 @@ def test_real_git_metadata_edit_rollback_on_push_reject(tmp_path, hermetic_git_e
     assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
     committed = (surveys_live / "surveys" / "edited" / "survey.yaml").read_bytes()
     assert committed == b"slug: edited\nversion: 1.0.0\n", "edited bytes survived a rolled-back edit"
+
+
+# --------------------------------------------------------------------------------------------------
+# D1.g — the station-removal commit path (commit_station_removal) on a REAL repo pair
+# --------------------------------------------------------------------------------------------------
+def _seed_published_survey_with_edis(surveys_live: Path, env: dict[str, str], slug: str,
+                                     yaml_text: str, stations) -> None:
+    """Commit a published survey WITH several EDIs into surveys-live on main, so the station-removal
+    path has real files to git rm. Uses the fixture git (not the code under test)."""
+    pkg = surveys_live / "surveys" / slug
+    edi = pkg / "transfer_functions" / "edi"
+    edi.mkdir(parents=True, exist_ok=True)
+    (pkg / "survey.yaml").write_bytes(yaml_text.encode("utf-8"))
+    for name in stations:
+        (edi / name).write_bytes((">HEAD\n  DATAID=%s\n>END\n" % name).encode("utf-8"))
+    _git(["add", "-A"], surveys_live, env)
+    _git(["commit", "-m", f"seed published {slug} with edis"], surveys_live, env)
+    _git(["push", "origin", "main"], surveys_live, env)
+
+
+def test_real_git_station_removal_deletes_edis_and_pushes(tmp_path, hermetic_git_env):
+    # D1.g(i) — commit_station_removal git-rms the selected EDIs, writes the version-bumped survey.yaml,
+    # commits with the gateway identity, and pushes. FAILS IF the removed EDI is still in the committed
+    # tree, a survivor was removed, the yaml was not updated, or the push did not arrive.
+    env = hermetic_git_env
+    import hashlib
+
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(
+        surveys_live, env, "multi", "slug: multi\nversion: 1.2.0\n",
+        ("SA225.edi", "SA226.edi", "SA227.edi"))
+    new_yaml = b"slug: multi\nversion: 1.3.0\n"
+    sha = hashlib.sha256(new_yaml).hexdigest()
+
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    new_ref = publish.commit_station_removal(
+        publish.real_git_runner, surveys_live, "multi", new_yaml, ["SA226.edi"], sha,
+        curator_name="curator1", note="withdrawn consent", pre=pre)
+
+    assert new_ref, "commit_station_removal returned no ref"
+    # The removed EDI is gone from the COMMITTED tree (not just the working dir), survivors remain.
+    tree = _git(["ls-tree", "-r", "--name-only", "HEAD"], surveys_live, env).stdout
+    assert "surveys/multi/transfer_functions/edi/SA226.edi" not in tree
+    assert "surveys/multi/transfer_functions/edi/SA225.edi" in tree
+    assert "surveys/multi/transfer_functions/edi/SA227.edi" in tree
+    assert (surveys_live / "surveys" / "multi" / "survey.yaml").read_bytes() == new_yaml
+    an = _git(["log", "-1", "--format=%an <%ae>"], surveys_live, env).stdout.strip()
+    assert an == f"{publish.COMMIT_AUTHOR_NAME} <{publish.COMMIT_AUTHOR_EMAIL}>"
+    remote = _git(["rev-parse", "main"], origin, env).stdout.strip()
+    local = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    assert remote == local, "station-removal push did not arrive at origin"
+    assert _git(["rev-parse", "--abbrev-ref", "HEAD"], surveys_live, env).stdout.strip() == "main"
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+
+
+def test_real_git_station_removal_rollback_on_push_reject(tmp_path, hermetic_git_env):
+    # D1.g(ii) — a pre-receive reject rolls surveys-live back byte-for-byte: the git-rm'd EDI is
+    # RESTORED, the yaml reverts, the ref/branch are the pre-state, the tree is clean. FAILS IF the
+    # removal survives a rejected push (a half-removal in the publication ledger).
+    env = hermetic_git_env
+    import hashlib
+
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(
+        surveys_live, env, "multi", "slug: multi\nversion: 1.2.0\n",
+        ("SA225.edi", "SA226.edi", "SA227.edi"))
+    pre_ref = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    _install_reject_hook(origin)
+
+    new_yaml = b"slug: multi\nversion: 9.9.9\n"
+    sha = hashlib.sha256(new_yaml).hexdigest()
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    with pytest.raises(publish.PublishError) as ei:
+        publish.commit_station_removal(
+            publish.real_git_runner, surveys_live, "multi", new_yaml, ["SA226.edi"], sha,
+            curator_name="curator1", note="doomed", pre=pre)
+    assert ei.value.phase == "git-push"
+    # Rolled back byte-for-byte: HEAD/branch restored, tree clean, the removed EDI RESTORED.
+    assert _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip() == pre_ref
+    assert _git(["rev-parse", "--abbrev-ref", "HEAD"], surveys_live, env).stdout.strip() == "main"
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+    assert (surveys_live / "surveys" / "multi" / "transfer_functions" / "edi" / "SA226.edi").is_file(), \
+        "the git-rm'd EDI must be restored on rollback"
+    committed = (surveys_live / "surveys" / "multi" / "survey.yaml").read_bytes()
+    assert committed == b"slug: multi\nversion: 1.2.0\n", "removal yaml survived a rolled-back removal"

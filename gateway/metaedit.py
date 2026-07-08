@@ -141,3 +141,25 @@ def make_merge_job(slug: str, patch: dict, bump: str, note: str, today: str) -> 
         "note": note,
         "today": today,
     }
+
+
+def make_list_stations_job(slug: str) -> dict:
+    """A list_stations edit-job: the runner enumerates the survey's EDI files (station list) + version.
+    A directory listing, never a content parse — job carries only the slug."""
+    return {"kind": "list_stations", "slug": slug}
+
+
+def make_remove_stations_job(slug: str, filenames: list[str], bump: str, note: str,
+                             today: str) -> dict:
+    """A remove_stations edit-job: the runner refuses the unsafe cases, bumps the version, appends the
+    release note, and validates a scratch copy WITHOUT the removed EDIs. `filenames` are bare EDI
+    basenames the curator selected; the runner re-validates each against its own charset before it
+    becomes a path component (it never trusts a field handed to it in a job file)."""
+    return {
+        "kind": "remove_stations",
+        "slug": slug,
+        "filenames": list(filenames),
+        "bump": bump,
+        "note": note,
+        "today": today,
+    }

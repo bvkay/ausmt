@@ -370,6 +370,16 @@ class FakeGit:
                         shutil.rmtree(child)
                     else:
                         child.unlink()
+        elif verb == "rm":
+            # `git rm -- <path>...` removes from the index AND the working tree. Model the working-tree
+            # side so the station-removal rollback test is honest (a rollback must restore a git-rm'd
+            # file). The leading `--` and any flags are skipped; the rest are repo-relative paths.
+            for arg in args[1:]:
+                if arg == "--" or arg.startswith("-"):
+                    continue
+                p = Path(cwd) / arg
+                if p.is_file():
+                    p.unlink()
         elif verb in ("add", "merge", "push", "branch"):
             # No modeled state change, but these ARE verbs the publish/edit sequence legitimately
             # drives, so they get an explicit rc=0 (the fake does not model push ARRIVAL — the real-git

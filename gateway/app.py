@@ -820,6 +820,160 @@ class Gateway:
         publish.commit_metadata_edit(self._git_runner, surveys_live, slug, new_yaml, expected_sha,
                                      curator, note, pre)
 
+    # ---- C31 station (EDI) removal -----------------------------------------------------------
+
+    def handle_stations_list(self, request: Request, slug: str, error: str = "") -> Response:
+        """List the survey's EDI files for removal (removal deliverable 1): the gateway enqueues a
+        `list_stations` edit-job, the gw-runner returns the EDI filenames + derived station ids from
+        the surveys-live checkout, the gateway renders the checkbox list. Sync `def` route so the
+        seam's bounded blocking poll runs in Starlette's threadpool (review FIX 4)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        try:
+            result = self._edit_runner(metaedit.make_list_stations_job(slug))
+        except metaedit.EditRunnerError as exc:
+            logger.warning("list-stations job failed for %s: %s", slug, exc)
+            return self.handle_edit_list(request)
+        if not result.get("ok"):
+            return self.handle_edit_list(request)
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        return self._html(curatorpage.render_stations_list(
+            slug=slug, version=result.get("version"), stations=result.get("stations") or [],
+            csrf_token=csrf, error=error))
+
+    async def handle_stations_preview(self, request: Request, slug: str, form) -> Response:
+        """Preview a station removal (deliverable 2): the selected EDIs, count before→after, the
+        survey.yaml diff, and the validator's verdict on the package WITHOUT the removed files. The
+        `form` is the raw FormData (NOT collapsed to a dict) so repeated `remove` checkboxes are read
+        with getlist. Session + CSRF gated; the blocking poll runs off the loop via to_thread."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        filenames = _selected_removals(form)
+        note = (form.get("note") or "").strip()
+        bump = (form.get("bump") or "minor").strip()
+        if bump not in ("patch", "minor", "major"):
+            bump = "minor"
+        if not filenames:
+            return self.handle_stations_list(request, slug,
+                                             error="Select at least one station to remove.")
+        job = metaedit.make_remove_stations_job(slug, filenames, bump, note,
+                                                time.strftime("%Y-%m-%d", time.gmtime()))
+        try:
+            result = await asyncio.to_thread(self._edit_runner, job)
+        except metaedit.EditRunnerError as exc:
+            logger.warning("remove-stations job failed for %s: %s", slug, exc)
+            return self.handle_stations_list(request, slug,
+                                             error=f"the removal could not be processed: {exc}")
+        if not result.get("ok"):
+            return self.handle_stations_list(request, slug, error=result.get("error") or "refused")
+        csrf = curator_auth.csrf_token_for(raw)
+        import json as _json
+        return self._html(curatorpage.render_removal_preview(
+            slug=slug, version=result.get("new_version") or "",
+            removed=result.get("removed") or [],
+            station_count_before=result.get("station_count_before") or 0,
+            station_count_after=result.get("station_count_after") or 0,
+            diff=result.get("diff") or "", validate_report=result.get("validator"),
+            has_fail=bool(result.get("has_fail")), new_sha256=result.get("new_sha256") or "",
+            note=note, bump=bump, filenames_json=_json.dumps(result.get("removed") or []),
+            csrf_token=csrf))
+
+    async def handle_stations_confirm(self, request: Request, slug: str, form: dict) -> Response:
+        """Confirm + commit a station removal (deliverable 3): re-run the remove job server-side to
+        reproduce the EXACT survey.yaml bytes, re-hash and 409 on any mismatch with the previewed sha,
+        then git-rm the EDIs + write survey.yaml through commit_station_removal under PUBLISH_LOCK with
+        byte-exact rollback on failure. Session + CSRF."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        expected_sha = (form.get("new_sha256") or "").strip()
+        bump = (form.get("bump") or "minor").strip()
+        if bump not in ("patch", "minor", "major"):
+            bump = "minor"
+        note = (form.get("note") or "").strip()
+        import json as _json
+        try:
+            filenames = _json.loads(form.get("filenames_json") or "[]")
+        except ValueError:
+            return self._forbidden("malformed confirm payload")
+        if not isinstance(filenames, list) or not all(isinstance(x, str) for x in filenames):
+            return self._forbidden("malformed confirm payload")
+        job = metaedit.make_remove_stations_job(slug, filenames, bump, note,
+                                                time.strftime("%Y-%m-%d", time.gmtime()))
+        try:
+            result = await asyncio.to_thread(self._edit_runner, job)
+        except metaedit.EditRunnerError as exc:
+            logger.warning("remove-stations confirm job failed for %s: %s", slug, exc)
+            return JSONResponse({"detail": "the removal could not be processed"}, status_code=500)
+        if not result.get("ok"):
+            return JSONResponse({"detail": result.get("error") or "refused"}, status_code=409)
+        if result.get("has_fail"):
+            return JSONResponse({"detail": "validator FAILED on the survey without these stations"},
+                                status_code=409)
+        if not expected_sha or result.get("new_sha256") != expected_sha:
+            return JSONResponse(
+                {"detail": "preview is stale (content hash mismatch) — re-open the stations page"},
+                status_code=409)
+        import base64
+        try:
+            new_yaml = base64.b64decode(result.get("new_yaml_b64") or "")
+        except (ValueError, TypeError):
+            return JSONResponse({"detail": "the removal could not be processed"}, status_code=500)
+        return await self._commit_removal(slug, new_yaml, result.get("removed") or [],
+                                          expected_sha, name, note)
+
+    async def _commit_removal(self, slug: str, new_yaml: bytes, removed: list, expected_sha: str,
+                              curator: str, note: str) -> Response:
+        surveys_live = self.cfg.surveys_live_dir
+        if surveys_live is None:
+            return JSONResponse({"detail": "AUSMT_SURVEYS_LIVE is not configured"}, status_code=503)
+        try:
+            safe_slug = publish.validate_slug(slug)
+        except publish.PublishError as exc:
+            return JSONResponse({"detail": exc.message}, status_code=400)
+        async with publish.PUBLISH_LOCK:
+            try:
+                await asyncio.to_thread(
+                    self._commit_removal_blocking, surveys_live, safe_slug, new_yaml, removed,
+                    expected_sha, curator, note)
+            except publish.PublishError as exc:
+                logger.warning("station removal publish failed for %s at %s: %s",
+                               slug, exc.phase, exc.message)
+                return JSONResponse({"detail": f"publish failed: {exc.message}"}, status_code=409)
+        n = len(removed)
+        return self._html(
+            curatorpage._page(  # noqa: SLF001 -- reuse the page chrome for the terminal confirmation
+                f"AusMT stations removed {slug}",
+                f'<h1>Removed {n} station(s) — {curatorpage._esc(slug)}</h1>'  # noqa: SLF001
+                '<p class="sub">The EDI file(s) were deleted from surveys-live and pushed. The '
+                'serve-reconcile agent rebuilds and serves the result automatically on its next tick '
+                '(typically within 15 minutes) — see the serve-state panel on the queue page, or run '
+                '<code>make rebuild-data</code> by hand.</p>'
+                '<p><a href="/gateway/curator/queue">back to queue</a></p>'))
+
+    def _commit_removal_blocking(self, surveys_live: Path, slug: str, new_yaml: bytes, removed: list,
+                                 expected_sha: str, curator: str, note: str) -> None:
+        pre = publish.preflight(self._git_runner, surveys_live)
+        publish.commit_station_removal(self._git_runner, surveys_live, slug, new_yaml, removed,
+                                       expected_sha, curator, note, pre)
+
     def _edit_package_or_error(self, slug: str):
         """Resolve the surveys-live package dir for `slug` or return a Response (404). Charset-
         validates the slug (publish.validate_slug) BEFORE it touches a path — the same guard the
@@ -1141,6 +1295,26 @@ def _slug_from_refs(refs: dict) -> str | None:
     return slug if isinstance(slug, str) and slug else None
 
 
+def _selected_removals(form) -> list[str]:
+    """The EDI filenames the curator ticked, from repeated `remove` checkboxes. Starlette's FormData
+    is a multidict, so getlist('remove') returns EVERY checked value (a plain dict() would collapse
+    them to the last one, silently dropping all but one selection). Deduped, order-preserving, blanks
+    dropped. The runner + publish re-validate each name's charset before it becomes a path component,
+    so this only needs to gather them."""
+    getlist = getattr(form, "getlist", None)
+    raw = getlist("remove") if callable(getlist) else form.get("remove")
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        raw = [raw]
+    out: list[str] = []
+    for v in raw:
+        name = str(v).strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
 # The ONLY content types the preview route serves (design §7). An allow-list, not a guess: the
 # preview product is generated JSON + the static portal shell, so every legitimate asset is one of
 # these. An extension outside this set 404s rather than being served with a sniffed/guessed type an
@@ -1304,6 +1478,23 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     async def curator_edit_confirm(request: Request, slug: str):
         form = dict(await request.form())
         return await gw.handle_edit_confirm(request, slug, form)
+
+    # ---- station (EDI) removal routes. GET lists the EDIs (blocking runner poll -> threadpool, `def`);
+    # the POSTs are async (they await the runner seam / take the PUBLISH_LOCK for git). The preview POST
+    # passes the RAW FormData (not a collapsed dict) so repeated `remove` checkboxes survive.
+    @app.get("/gateway/curator/edit/{slug}/stations")
+    def curator_stations_list(request: Request, slug: str):
+        return gw.handle_stations_list(request, slug)
+
+    @app.post("/gateway/curator/edit/{slug}/stations/preview")
+    async def curator_stations_preview(request: Request, slug: str):
+        form = await request.form()
+        return await gw.handle_stations_preview(request, slug, form)
+
+    @app.post("/gateway/curator/edit/{slug}/stations/confirm")
+    async def curator_stations_confirm(request: Request, slug: str):
+        form = dict(await request.form())
+        return await gw.handle_stations_confirm(request, slug, form)
 
     @app.post("/gateway/curator/submission/{submission_id}/{action}")
     async def curator_action(request: Request, submission_id: str, action: str,
