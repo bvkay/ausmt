@@ -503,6 +503,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # AUDIT 1.1: on a PUSH TO MAIN the publish-flow acceptance is the ONLY end-to-end proof of the
+      # core flow (submission -> curation -> commit to surveys-live). If AUSMT_SURVEYS_URL is unset it
+      # silently skips (the gate step below), yet the run stays green and :latest images are already
+      # published by the build job — "green" then EXCLUDES the one thing this job exists to prove. Make
+      # an unconfigured MAIN run FAIL here, loudly, so green on main means the publish path actually ran.
+      # PR runs are exempt: they intentionally keep the skip behaviour (a fork PR has no access to the
+      # private surveys repo / its token, and forcing them to fail would block all external contribution).
+      - name: Require curator-e2e to be configured on main (fail if AUSMT_SURVEYS_URL unset)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SURVEYS_URL: ${{ vars.AUSMT_SURVEYS_URL }}
+        run: |
+          if [ -z "$SURVEYS_URL" ]; then
+            echo "::error::curator-e2e unconfigured: set repo variables AUSMT_SURVEYS_URL/AUSMT_SURVEYS_TOKEN — see RUNBOOK-DEV.md"
+            echo "On main, the publish-flow acceptance (submit -> VALIDATED -> approve -> committed to"
+            echo "surveys-live) is the ONLY end-to-end proof of the core flow. With AUSMT_SURVEYS_URL"
+            echo "unset it would skip while the run stays green and :latest is already published — a"
+            echo "hollow green. Set the repo variable AUSMT_SURVEYS_URL (and the secret"
+            echo "AUSMT_SURVEYS_TOKEN for a private repo) so this acceptance actually executes."
+            exit 1
+          fi
+          echo "OK: AUSMT_SURVEYS_URL is set — the publish-flow acceptance will run."
+
       - uses: actions/download-artifact@v4
         with: { name: image-ausmt-gateway, path: /tmp }
       - uses: actions/download-artifact@v4
@@ -734,3 +758,62 @@ jobs:
       - name: Teardown
         if: always()
         run: docker rm -f gateway gw-runner clamd 2>/dev/null || true
+
+  # ---------------------------------------------------------------------------------------------
+  # AUDIT 3.1: verify the three published images are ANONYMOUSLY pullable from GHCR. GHCR packages
+  # default to PRIVATE on first push even when the repo is public, so the documented quickstart's
+  # `docker compose pull` 403s for everyone but the owner and an NCI/apptainer evaluation cannot even
+  # begin. This job requests a PUBLIC (credential-free) bearer token for each image and GETs its
+  # manifest with NO auth beyond that anonymous token — exactly what an unauthenticated `docker pull`
+  # does under the hood — and asserts HTTP 200.
+  #
+  # IT WILL FAIL until the owner flips the three GHCR packages to PUBLIC (Package settings -> Change
+  # visibility -> Public, once per package). That is the POINT: this is the regression guard that
+  # makes the 403 loud instead of a silent first-contact failure. Runs only AFTER a real publish
+  # (push to main / v* tag) — on a PR nothing was pushed, so there is nothing to pull anonymously.
+  # No credentials, no Docker, no image download: three tiny curls. Keeps the C39 CI-economy habit —
+  # it is push-only, adds nothing to the PR leg.
+  # ---------------------------------------------------------------------------------------------
+  anon-pull-check:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Anonymous manifest pull for each GHCR image (asserts public visibility)
+        run: |
+          set -u
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          # Tag to check: on a v* tag build, that tag; otherwise :latest (main pushes publish :latest).
+          case "${{ github.ref }}" in
+            refs/tags/*) TAG="${{ github.ref_name }}" ;;
+            *)           TAG="latest" ;;
+          esac
+          fail=0
+          for img in ausmt-engine ausmt-portal ausmt-gateway; do
+            REPO="${OWNER}/${img}"
+            echo "--- ${REPO}:${TAG} ---"
+            # 1. Request an ANONYMOUS pull token (no Authorization header). A private package returns a
+            #    token scoped to nothing usable; the manifest GET below is the real assertion.
+            TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:${REPO}:pull&service=ghcr.io" \
+                    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))' || echo "")
+            if [ -z "$TOKEN" ]; then
+              echo "::error::could not obtain an anonymous pull token for ${REPO} (package still private?)"
+              fail=1; continue
+            fi
+            # 2. GET the manifest with ONLY that anonymous token. 200 => anonymously pullable (public);
+            #    401/403 => still private. Accept both manifest media types (image + OCI index).
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+              -H "Accept: application/vnd.oci.image.index.v1+json" \
+              -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+              "https://ghcr.io/v2/${REPO}/manifests/${TAG}")
+            if [ "$CODE" = "200" ]; then
+              echo "OK: ${REPO}:${TAG} is anonymously pullable (HTTP 200)"
+            else
+              echo "::error::${REPO}:${TAG} is NOT anonymously pullable (HTTP ${CODE}). Flip the GHCR package to PUBLIC: repo Packages -> ${img} -> Package settings -> Change visibility -> Public."
+              fail=1
+            fi
+          done
+          [ "$fail" = 0 ] || { echo "One or more images are not anonymously pullable — see the errors above."; exit 1; }
+          echo "All three images are anonymously pullable."

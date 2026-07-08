@@ -31,6 +31,30 @@ Quick engine smoke without any data: `python -m extract.build_portal --surveys <
 --allow-empty --no-validate --out /tmp/out` (from `engine/`). The docs site has no CI; run
 `mkdocs build --strict` from `docs/` before changing it.
 
+## CI repo variables (deploy-images.yml)
+
+The `deploy-images` workflow's **curator-e2e** and **gateway-e2e** jobs need the separate
+`ausmt-surveys` repo (for the validator) to reach the `VALIDATED` state and prove the publish flow.
+Two GitHub repo settings supply it:
+
+| Name | Kind | Purpose |
+|------|------|---------|
+| `AUSMT_SURVEYS_URL` | repo **variable** | clone URL of the `ausmt-surveys` repo (the validator source) |
+| `AUSMT_SURVEYS_TOKEN` | repo **secret** | scoped token for cloning it when private (injected into the https URL; never logged) |
+
+**On a push to main these are required.** curator-e2e is the ONLY end-to-end proof of
+submission → curation → commit-to-surveys-live, and the build job publishes `:latest` before it runs;
+if the variable is unset the job **fails** (guard step in `deploy-images.yml`) rather than skipping
+silently and leaving a hollow green. On **pull-request** runs the jobs still skip cleanly when the
+variable is unset (a fork PR has no access to the private surveys repo), recording on the job summary
+exactly which acceptance halves were skipped. Set both under repo **Settings → Secrets and variables →
+Actions** (variable on the *Variables* tab, token on the *Secrets* tab).
+
+Separately, the **anon-pull-check** job (push-only) asserts the three published GHCR images are
+anonymously pullable; it **fails until the owner flips each package to Public** (Package settings →
+Change visibility → Public) — that failure is the intended regression guard against the private-package
+403, not a misconfiguration to suppress.
+
 ## Running the portal locally
 
 ```

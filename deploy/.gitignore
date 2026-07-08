@@ -1,0 +1,8 @@
+# The deploy box runs a live checkout of this PUBLIC repo. `deploy/.env` holds the real
+# AUSMT_SUBMIT_KEY / AUSMT_CURATOR_KEYS once the gateway is configured (.env.example:9 says to
+# gitignore it, but nothing did until this file). One `git add -A` on the box would otherwise stage
+# live secrets for a public push, and a leak into public history is permanent. Ignore every `.env`
+# variant here; keep the tracked template.
+.env
+*.env
+!.env.example

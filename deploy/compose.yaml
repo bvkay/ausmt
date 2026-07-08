@@ -23,6 +23,19 @@ services:
   portal:
     image: ghcr.io/${OWNER:?set OWNER in .env}/ausmt-portal:${TAG:-latest}
     restart: unless-stopped
+    # Health = Caddy is up and serving the portal shell on its internal :8080 (the same definition
+    # `make smoke` uses). caddy:2-alpine ships BusyBox `wget`; `--spider` makes a real HEAD/GET and
+    # exits non-zero on any status but 2xx/3xx, so this FAILS (=> unhealthy) if Caddy dies, the
+    # Caddyfile stops adapting, or the process wedges. It probes `/` (always present) not
+    # /data/catalogue.json, so a fresh box with no build yet still reports healthy — an empty portal
+    # is a data state, not a portal fault. `wget` is at the container's internal port, so this holds
+    # regardless of the loopback host-port bind above.
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     ports:
       # LOOPBACK ONLY. tailscale serve --bg https / http://127.0.0.1:8443 is what actually exposes
       # this beyond the box (see deploy/README.md) -- never widen this to 0.0.0.0 or a bare port.
@@ -73,6 +86,19 @@ services:
     image: ghcr.io/${OWNER:?set OWNER in .env}/ausmt-gateway:${TAG:-latest}
     profiles: ["gateway"]
     restart: unless-stopped
+    # Health = uvicorn is up and the app answers GET /gateway/healthz (200 {"ok": true}) on its
+    # internal :8000. The gateway image is python:3.12-slim with NO curl/wget, so probe via stdlib
+    # urllib (always present). This FAILS (=> unhealthy) if uvicorn died, the app crashed on a bad
+    # config, or the event loop wedged — all of which return non-200 or refuse the connection.
+    # NOTE: /gateway/healthz is liveness only (it deliberately reveals nothing and does NOT check
+    # clamd, the runner, or the queue), so a healthy gateway here does NOT imply the submission
+    # pipeline is flowing — see deploy/README.md "Monitoring" for the pieces this does not cover.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/gateway/healthz', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     # Immutable rootfs + a size-limited tmpfs (review #5). The multipart intake spools onto the
     # MEASURED /gw/incoming volume (see gateway/upload.py) rather than /tmp, so the headroom check
     # actually covers where uploads land; read_only + a bounded tmpfs mean a spool that did reach /tmp
@@ -179,7 +205,14 @@ services:
       # closed) until real creds are mounted. See README "Curator publish credentials".
       - ${AUSMT_GIT_CREDS_DIR:-./git-creds.placeholder}:/srv/git-creds:ro
     depends_on:
-      - clamd
+      # Real ordering dependency: the gateway scans every raw upload via clamd INSTREAM before a job
+      # is queued (gateway/clamd.py). Wait for clamd to be HEALTHY (signatures loaded + answering
+      # PING/PONG), not merely started — a clamd that is up but still loading its database refuses
+      # scans, and the gateway would then fail-close every submission to RECEIVED until it finishes.
+      # (This is start-ordering only: if clamd dies LATER the gateway keeps running and holds
+      # submissions at RECEIVED, exactly the fail-closed behaviour in README §3.)
+      clamd:
+        condition: service_healthy
 
   clamd:
     # Official ClamAV daemon. Compose-internal only (no published port) — reached from `gateway`
@@ -189,6 +222,19 @@ services:
     image: clamav/clamav:stable
     profiles: ["gateway"]
     restart: unless-stopped
+    # Health = clamd is listening on :3310 AND has finished loading its signature database. The
+    # INSTREAM PING is the daemon's own readiness contract: it replies PONG only once the DB is
+    # loaded and it is ready to scan — a clamd that is up but still loading (the cold-start case,
+    # up to a minute) does NOT answer PONG, so this stays unhealthy until scanning actually works.
+    # This is the SAME check the CI gateway-e2e uses to gate readiness (deploy-images.yml). `nc` and
+    # sh are in the clamav/clamav image. start_period is generous because the first freshclam pull +
+    # DB load on a cold cache is slow; retries then catch a later daemon wedge.
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc -w 3 127.0.0.1 3310 | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     volumes:
       # Persist the downloaded signature database across restarts (freshclam updates it in-image).
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/gateway/clamav:/var/lib/clamav
@@ -200,6 +246,18 @@ services:
     image: ghcr.io/${OWNER:?set OWNER in .env}/ausmt-engine:${TAG:-latest}
     profiles: ["gateway"]
     restart: unless-stopped
+    # NO healthcheck DELIBERATELY (not an oversight — see deploy/README.md "Monitoring"). The runner
+    # is a single `python -m gateway.runner` loop that, WHEN IDLE, writes nothing observable: its
+    # only liveness signal is touching a per-job running-file mtime while a job runs
+    # (gateway/runner/runner.py::_Heartbeat), so between jobs there is no fresh file to check. A
+    # `python -c "import gateway.runner"` probe would spawn a NEW interpreter and prove only that the
+    # module imports — NOT that the long-lived loop is alive — i.e. a check that passes even when the
+    # loop has silently died. That is exactly the "healthcheck that cannot fail" this repo forbids.
+    # The real detection for a dead/crash-looping runner is: (a) `restart: unless-stopped` makes a
+    # crash-on-import runner visibly restart-loop in `docker compose ps` / `docker events`; (b) the
+    # operator-facing symptom is "submissions stuck at SCANNED", the exact Troubleshooting row in
+    # README §4. A meaningful in-container check needs a global runner-heartbeat file (a small code
+    # change in gateway/runner) — flagged for the architect, NOT faked here.
     # Override the engine image's baked ENTRYPOINT (the build pipeline) to run the runner loop
     # instead. gateway/ is NOT in the engine image, so it is bind-mounted read-only below and put on
     # PYTHONPATH; the runner invokes the in-image validator/engine as subprocesses.
