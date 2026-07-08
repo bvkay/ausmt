@@ -25,9 +25,11 @@ survey_v1.0.0_emtfxml.zip
 
 ## Portal Downloads
 
-Full survey downloads should be pre-generated.
+The build already pre-generates per-survey EDI and EMTF-XML zips (and a transfer-function-only
+MTH5 bundle behind a deployment flag) — but for the **current** state of the survey, not as
+frozen per-version artefacts.
 
-Custom downloads generated from station selections or polygons may be created on demand by the portal.
+Custom downloads from station selections are created on demand in the browser.
 
 ## Immutability
 

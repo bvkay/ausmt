@@ -28,7 +28,9 @@ H = [Hx, Hy]
 
 through the complex impedance tensor:
 
-\mathbf{E}=\mathbf{Z}\mathbf{H}
+```text
+E = Z H
+```
 
 The impedance tensor forms the basis of most MT analysis and interpretation.
 
@@ -40,13 +42,16 @@ Transfer functions provide a compact representation of this information and are 
 
 For a two-dimensional horizontal coordinate system, the impedance tensor is typically represented as:
 
-\begin{bmatrix}E_x\E_y\end{bmatrix}=\begin{bmatrix}Z_{xx}&Z_{xy}\Z_{yx}&Z_{yy}\end{bmatrix}\begin{bmatrix}H_x\H_y\end{bmatrix}
+```text
+[Ex]   [Zxx  Zxy] [Hx]
+[Ey] = [Zyx  Zyy] [Hy]
+```
 
 where:
 
-- (E_x) and (E_y) are the horizontal electric field components.
-- (H_x) and (H_y) are the horizontal magnetic field components.
-- (Z_{ij}) are the complex impedance tensor elements.
+- Ex and Ey are the horizontal electric field components.
+- Hx and Hy are the horizontal magnetic field components.
+- Zij are the complex impedance tensor elements.
 
 The tensor contains information about the electrical conductivity structure of the subsurface across a range of frequencies or periods. Apparent resistivity and phase are calculated from the complex impedance tensor and have formed the basis of MT interpretation since the early development of the method (Cagniard, 1953; Vozoff, 1972).
 
@@ -58,12 +63,14 @@ Where vertical magnetic field measurements are available, additional transfer fu
 
 These include the magnetic transfer function or tipper:
 
-H_z=T_xH_x+T_yH_y
+```text
+Hz = Tzx·Hx + Tzy·Hy
+```
 
 where:
 
-- (H_z) is the vertical magnetic field component.
-- (T_x) and (T_y) are the complex tipper elements.
+- Hz is the vertical magnetic field component.
+- Tzx and Tzy are the complex tipper elements.
 
 Tipper products are particularly sensitive to lateral conductivity contrasts and three-dimensional structure and are widely used as indicators of departures from one-dimensional behaviour (Vozoff, 1972; Chave & Jones, 2012).
 
@@ -128,7 +135,7 @@ Within AusMT, EMTFXML is generated from the source EDI as the canonical served r
 
 ### MTH5
 
-MTH5 is an HDF5-based format developed to support modern MT data management, including transfer functions, metadata and observational data within a single self-describing framework (Peacock et al., 2021).
+MTH5 is an HDF5-based format developed to support modern MT data management, including transfer functions, metadata and observational data within a single self-describing framework (Peacock et al., 2022).
 
 Unlike traditional transfer-function exchange formats, MTH5 can support:
 
@@ -152,14 +159,14 @@ Transfer functions vary in quality depending on:
 - Processing methodology
 - Signal levels
 
-AusMT does not attempt to assign a single quality score to a dataset.
+AusMT does not rank transfer functions. It computes one per-station screening scalar (`q`),
+explicitly labelled as a completeness/smoothness diagnostic and not a data-quality judgement —
+its full definition is in [Quality Metrics](quality-metrics.md).
 
-Instead, users are provided with diagnostic products that allow them to evaluate the characteristics of the transfer functions directly.
+Users are provided with diagnostic products that allow them to evaluate the characteristics of the transfer functions directly:
 
-Examples include:
-
-- Apparent resistivity and phase plots
-- Tipper products
+- Apparent resistivity and phase plots, with per-period error bars where the EDI supplies them
+- Tipper products and induction arrows
 - Phase tensor products
 - Dimensionality diagnostics
 
@@ -169,18 +176,15 @@ Examples include:
 
 Most scientific products published by AusMT are generated from transfer functions.
 
-Examples include:
+Each is derived directly from the transfer functions:
 
 ```text
 Transfer Functions
-↓
-Apparent Resistivity
-↓
-Phase Tensor
-↓
-Strike Analysis
-↓
-Dimensionality Diagnostics
+├── Apparent resistivity and phase
+├── Tipper / induction arrows
+└── Phase tensor
+    ├── Dimensionality diagnostics
+    └── Strike screening
 ```
 
 The transfer functions remain the authoritative scientific products.
@@ -226,6 +230,6 @@ Cagniard, L. (1953). Basic theory of the magnetotelluric method of geophysical p
 
 Chave, A. D., & Jones, A. G. (2012). The Magnetotelluric Method: Theory and Practice. Cambridge University Press.
 
-Peacock, J. R., et al. (2021). MTH5: An open, community-governed format for magnetotelluric data. [reference details].
+Peacock, J. R., Kappler, K., Heagy, L., Ronan, T., Kelbert, A., & Frassetto, A. (2022). MTH5: An archive and exchangeable data format for magnetotelluric time series data. Computers & Geosciences, 162, 105102.
 
 Vozoff, K. (1972). The magnetotelluric method in the exploration of sedimentary basins. Geophysics, 37(1), 98–141.

@@ -31,9 +31,11 @@ mtcat-1.1.schema.json
 mtcat-2.0.schema.json
 ```
 
-The schema identifier should also include the version:
+The schema identifier should also include the version (the shipped schema does):
 
-json "$id": "https://ausmt.org/schema/mtcat-1.0.schema.json" 
+```json
+"$id": "https://ausmt.org/schema/mtcat-1.0.schema.json"
+```
 
 This makes schema validation explicit and avoids ambiguity when older MTCAT records are encountered.
 
@@ -68,7 +70,15 @@ The portal object describes the catalogue source.
 
 Required fields:
 
-json {   "portal_id": "ausmt",   "portal_name": "AusMT",   "schema": "mtcat",   "version": "1.0",   "generated_at": "2026-06-15T00:00:00Z" } 
+```json
+{
+  "portal_id": "ausmt",
+  "portal_name": "AusMT",
+  "schema": "mtcat",
+  "version": "1.0",
+  "generated_at": "2026-06-15T00:00:00Z"
+}
+```
 
 The portal.version field records the MTCAT schema version used by the document.
 
@@ -81,13 +91,20 @@ Collections are optional roll-up objects used to group related surveys.
 Examples include:
 
 - AusLAMP
-- WAMT
 - Institutional holdings
 - State-based releases
 
 Example:
 
-json {   "collection_id": "auslamp",   "title": "AusLAMP",   "type": "programme",   "n_surveys": 6,   "n_stations": 1200 } 
+```json
+{
+  "collection_id": "auslamp",
+  "title": "AusLAMP",
+  "type": "programme",
+  "n_surveys": 6,
+  "n_stations": 1200
+}
+```
 
 Collections should be lightweight. They are intended for discovery and navigation, not detailed archival description.
 
@@ -99,15 +116,35 @@ Survey records are the main discovery objects.
 
 Required fields:
 
-json {   "survey_id": "vulcan-2022",   "title": "Vulcan MT Survey",   "organisation": "University of Adelaide",   "country": "Australia" } 
+```json
+{
+  "survey_id": "vulcan-2022",
+  "title": "Vulcan MT Survey",
+  "organisation": "University of Adelaide",
+  "country": "Australia"
+}
+```
 
 Recommended fields include:
 
-json {   "doi": null,   "license": "CC-BY-4.0",   "access": "open",   "collection_id": "institutional",   "version": "1.0.0" } 
+```json
+{
+  "doi": null,
+  "license": "CC-BY-4.0",
+  "access": "open",
+  "collection_id": "institutional",
+  "version": "1.0.0"
+}
+```
 
 Spatial fields may include:
 
-json {   "bbox": {     "west": 135.1,     "south": -31.2,     "east": 136.4,     "north": -30.4   },   "centroid": {     "latitude": -30.8,     "longitude": 135.7   } } 
+```json
+{
+  "bbox": {"west": 135.1, "south": -31.2, "east": 136.4, "north": -30.4},
+  "centroid": {"latitude": -30.8, "longitude": 135.7}
+}
+```
 
 The survey version field refers to the AusMT survey package version, not the MTCAT schema version.
 
@@ -119,7 +156,15 @@ Station records describe site-level discovery information.
 
 Required fields:
 
-json {   "station_id": "V001",   "survey_id": "vulcan-2022",   "latitude": -30.123,   "longitude": 135.456,   "data_type": "BBMT" } 
+```json
+{
+  "station_id": "V001",
+  "survey_id": "vulcan-2022",
+  "latitude": -30.123,
+  "longitude": 135.456,
+  "data_type": "BBMT"
+}
+```
 
 Station records should remain lightweight.
 
@@ -173,12 +218,11 @@ Example:
 https://ausmt.org/schema/mtcat-1.0.schema.json
 ```
 
-A copy should also be stored in the documentation or schema repository.
-
-Example:
+A copy should also be stored in the documentation or schema repository. The shipped copy
+lives at:
 
 ```text
-schemas/mtcat-1.0.schema.json
+engine/schema/mtcat.schema.json
 ```
 
 ---

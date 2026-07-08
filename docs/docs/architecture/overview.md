@@ -10,16 +10,12 @@ This separation is deliberate.
 
 It allows scientific processing, data stewardship, publication and documentation to evolve independently while maintaining reproducibility and clear provenance.
 
-At the highest level, AusMT is the `ausmt` monorepo (with `engine/`, `portal/`, `docs/` and `maintainer/` subdirectories) plus the separate `ausmt-surveys` data repository:
+At the highest level, AusMT is the `ausmt` monorepo (with `engine/`, `portal/`, `gateway/`,
+`docs/`, `contract/`, `deploy/` and `maintainer/` subdirectories) plus the separate
+`ausmt-surveys` data repository:
 
 ```text
-ausmt-surveys
-↓
-engine/
-↓
-portal/
-↓
-docs/
+submissions -> gateway/ -> ausmt-surveys -> engine/ -> portal/
 ```
 
 Each component serves a different purpose.
@@ -103,6 +99,19 @@ It is not a time-series archive.
 
 ---
 
+### gateway
+
+The `gateway/` subdirectory is the submission service.
+
+It receives uploaded survey packages and moves them through antivirus scanning, validation,
+an engine preview build and curator review. Curator approval publishes the package as a git
+commit to the survey repository.
+
+Nothing entering the gateway is trusted until validation and review complete; a reviewed
+git commit is its only output.
+
+---
+
 ### engine
 
 The `engine/` subdirectory is the offline processing engine.
@@ -111,12 +120,12 @@ Its role is to generate scientific products from survey packages.
 
 Examples include:
 
-- Apparent resistivity and phase plots
-- Tipper products
+- Apparent resistivity and phase curves
+- Tipper and induction-arrow products
 - Phase tensor products
-- Strike analyses
 - Dimensionality diagnostics
-- Decomposition products
+- Canonical EMTF XML and download bundles
+- Decomposition products (planned)
 
 Scientific processing occurs here rather than within the public portal.
 
@@ -140,7 +149,7 @@ Its responsibilities include:
 - Visualisation
 - Download services
 - Citation support
-- API access
+- Machine-readable JSON products (a fixed, documented contract)
 
 The portal consumes published products.
 
@@ -201,7 +210,8 @@ The architecture contains several trust boundaries.
 
 External users may submit datasets.
 
-Submitted material is not considered trusted until validation and review have been completed.
+Submitted material is not considered trusted until validation and review have been completed;
+the gateway holds it in quarantine until then.
 
 ---
 
@@ -242,7 +252,6 @@ A logical grouping of related surveys.
 Examples:
 
 - AusLAMP
-- WAMT
 - Institutional holdings
 - State-based releases
 

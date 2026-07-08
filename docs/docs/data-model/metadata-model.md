@@ -99,7 +99,6 @@ Examples include:
 Examples of collections include:
 
 - AusLAMP
-- WAMT
 - Institutional holdings
 - State-based releases
 
@@ -187,6 +186,9 @@ Persistent identifiers improve discoverability and reduce ambiguity.
 > **Implementation status (current).** AusMT records DOIs supplied by the submitter (e.g. a
 > Zenodo or institutional DOI minted externally) — it does not mint or register identifiers
 > itself. Integrated DataCite DOI minting via ARDC is planned for a future slice, not implemented.
+> ORCID (investigators), ROR (organisations), instrument PIDs and RAiD (projects) have fields in
+> `survey.yaml`; how much of each propagates into the portal's served products is still partial
+> and being completed field by field.
 
 Examples include:
 

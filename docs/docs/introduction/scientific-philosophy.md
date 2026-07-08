@@ -206,11 +206,11 @@ Many users are interested in products that help them assess or interpret the dat
 Examples include:
 
 - Apparent resistivity and phase plots
-- Tipper products
+- Tipper products and induction arrows
 - Phase tensor products
-- Strike analyses
 - Dimensionality diagnostics
-- Distortion analyses
+- Strike screening (selection-level rose diagrams)
+- Distortion analyses (planned)
 
 These products are intended to complement, rather than replace, the transfer functions themselves.
 

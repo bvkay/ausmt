@@ -2,15 +2,16 @@
 
 ## Overview
 
-AusMT is the `ausmt` monorepo (with `engine/`, `portal/`, `docs/` and `maintainer/` subdirectories), plus the separate `ausmt-surveys` data repository, each with a defined role.
+AusMT is the `ausmt` monorepo (with `engine/`, `portal/`, `gateway/`, `docs/`, `contract/`, `deploy/` and `maintainer/` subdirectories), plus the separate `ausmt-surveys` data repository, each with a defined role. The framework monorepo is public; the survey-data repository is private, because it holds embargoed material.
 
 This separation is deliberate. It keeps the public portal lightweight, keeps scientific processing out of the website, and keeps published survey packages separate from code that generates or displays them.
 
 The main components are:
 
 ```text
-ausmt-surveys     (separate data repo)
+ausmt-surveys     (separate, private data repo)
 ausmt/engine
+ausmt/gateway
 ausmt/portal
 ausmt/docs
 ```
@@ -22,10 +23,13 @@ Together they define the AusMT system.
 ## Component Roles
 
 ```text
-ausmt-surveys     Published survey packages and products (separate repo)
+ausmt-surveys     Published survey packages (separate, private repo)
 ausmt/engine      Offline processing and product generation
-ausmt/portal      Public website and API
+ausmt/gateway     Submission service: upload, scan, validate, curate, publish
+ausmt/portal      Public website and machine-readable products
 ausmt/docs        System documentation
+ausmt/contract    Single-source data contract (columns.json)
+ausmt/deploy      Container images and deployment configuration
 ```
 
 Each component can be maintained and tested independently; the `ausmt` monorepo subdirectories are released together.
@@ -49,44 +53,37 @@ Typical contents include:
 - Citation information
 - Publication links
 
-The repository is organised around survey packages.
+The repository is organised around survey packages under `surveys/`, with the validator and
+package template alongside:
 
 ```text
 ausmt-surveys/
 ├── _template/
 ├── _validation/
-├── vulcan-2022/
-├── curnamona-2017/
-├── kapunda-2019/
-└── ...
+└── surveys/
+    ├── auslamp-sa/
+    ├── auslamp-tas/
+    ├── vulcan-2022/
+    └── ...
 ```
 
-A survey package may include:
+A survey package is deliberately small:
 
 ```text
 survey-slug/
-├── survey.yaml
-├── stations.csv
-├── README.md
-├── LICENSE.md
-│
-├── transfer_functions/
-│   ├── edi/
-│   ├── emtfxml/
-│   └── mth5/
-│
-├── derived/
-│   ├── quicklooks/
-│   ├── phase_tensor/
-│   ├── strike/
-│   ├── dimensionality/
-│   └── decomposition/
-│
-├── provenance/
-│   └── provenance.json
-│
-└── publications/
+├── survey.yaml            (all survey and station metadata, provenance and citation fields)
+├── README.md              (generated at intake when absent)
+├── LICENSE.md             (generated at intake when absent)
+└── transfer_functions/
+    └── edi/               (one EDI per station occupation)
 ```
+
+EDI is the accepted submission format today; EMTF XML and MTH5 as *input* formats are gated
+by the format decision (D4). Derived products are **not** stored in the package — the engine
+generates them at build time from the package contents, so they can be regenerated and
+improved without touching the published record. There is no per-station side sheet
+(`stations.csv` was considered and rejected): station metadata lives in each EDI and in
+`survey.yaml`.
 
 This repository does not contain raw MT time-series data.
 
@@ -102,12 +99,12 @@ It is responsible for generating derived products from published or staged trans
 
 Examples include:
 
-- Apparent resistivity and phase plots
-- Tipper plots
+- Apparent resistivity and phase curves
+- Tipper and induction-arrow products
 - Phase tensor products
-- Strike summaries
 - Dimensionality diagnostics
-- Decomposition products
+- Canonical EMTF XML and download bundles
+- Decomposition products (planned)
 - Validation reports
 - Product manifests
 
@@ -115,17 +112,15 @@ Scientific processing belongs here rather than in the public portal.
 
 This avoids making the website depend on large scientific Python stacks and keeps the published products reproducible.
 
-The engine may depend on packages such as:
+The engine depends on:
 
-- MTpy-v2
 - mt_metadata
 - MTH5
 - numpy
-- scipy
-- pandas
-- matplotlib
+- PyYAML / ruamel.yaml
 
-These dependencies are intentionally kept out of the portal.
+Heavier scientific libraries (for example MTpy-v2) are adopted only when a derived product
+requires them. All of these dependencies are intentionally kept out of the portal.
 
 ---
 
@@ -144,7 +139,7 @@ The portal is responsible for:
 - Product previews
 - Downloads
 - Citation export
-- API access
+- Machine-readable JSON products (a fixed, documented contract)
 
 The portal should not perform scientific processing.
 
@@ -179,34 +174,31 @@ The documentation lives in its own subdirectory because it describes the whole s
 The usual flow is:
 
 ```text
-Survey package
+Submission
 ↓
-Validation
+Gateway (scan, validate, curator review)
 ↓
-Science processing
+Survey package published to ausmt-surveys
 ↓
-Published products
+Engine build (offline)
+↓
+Generated data products
 ↓
 Portal display
-↓
-Documentation and citation
 ```
 
 In component terms:
 
 ```text
-ausmt-surveys
-↓
-ausmt/engine
-↓
-ausmt-surveys
-↓
-ausmt/portal
+submissions -> ausmt/gateway -> ausmt-surveys -> ausmt/engine -> generated products -> ausmt/portal
 ```
 
-The engine reads survey packages, generates products, and writes approved outputs back into the survey repository.
+The engine reads survey packages and writes generated products into the portal's data
+directory (the deployment's site-data volume). It does **not** write back into the survey
+repository — the only component that writes to `ausmt-surveys` is the gateway's publish
+step, as a reviewed git commit.
 
-The portal then consumes those products.
+The portal then consumes the generated products.
 
 ---
 
@@ -269,7 +261,8 @@ The repository structure reflects the trust model.
 
 External submissions are not trusted by default.
 
-They are staged, validated and reviewed before publication.
+The gateway stages them in quarantine, scans and validates them, builds a preview, and a
+curator reviews the result before anything is published.
 
 ### Published survey packages
 

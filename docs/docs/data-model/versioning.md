@@ -14,13 +14,16 @@ Survey packages use semantic versioning:
 MAJOR.MINOR.PATCH
 ```
 
-Examples:
+The documented convention:
 
-```text
-1.0.0
-1.1.0
-1.1.1
-```
+- **PATCH** — metadata-only corrections (`1.0.1`)
+- **MINOR** — additions, such as new stations (`1.1.0`)
+- **MAJOR** — reprocessed transfer functions (`2.0.0`)
+
+What is shipped today: the validator warns when `version` is missing or not
+`MAJOR.MINOR.PATCH`, and warns when `release_notes` entries are not `{version, date, note}`
+records. The portal renders `release_notes` in the survey drawer and uses the latest entry's
+date in the recently-added feed.
 
 ## Releases
 

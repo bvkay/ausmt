@@ -107,13 +107,21 @@ Ordinary URLs may change over time and should be avoided where better identifier
 
 ## What AusMT Records
 
-For each external archive reference, AusMT should record enough information for a user to understand the relationship.
+For each external archive reference, AusMT records enough information for a user to understand the relationship, using the real `survey.yaml` fields:
 
-Examples include:
+```yaml
+time_series:                 # pointers ONLY — AusMT never hosts time series
+  pid: 10.25914/example      # persistent identifier of the time-series collection
 
-yaml related_resources:   - type: time_series_collection     title: Vulcan MT raw time-series collection     pid: ...     repository: NCI    - type: publication     doi: 10.xxxx/example 
+publications:
+  - author: Example, A.
+    year: 2024
+    title: An example interpretation paper
+    journal: Exploration Geophysics
+    doi: 10.xxxx/example
+```
 
-Useful fields include:
+The useful information in each reference:
 
 - resource type
 - title

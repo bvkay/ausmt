@@ -110,7 +110,9 @@ Common examples include:
 
 Different methods make different assumptions and may produce different results.
 
-AusMT records the method used to generate a strike product as part of the product provenance.
+The one strike indicator AusMT ships today has its method fixed and disclosed in the portal
+itself (phase-tensor azimuths at low-skew periods); once dedicated strike products are
+generated, the method used will be recorded in each product's provenance.
 
 ---
 
@@ -135,7 +137,11 @@ These products are particularly useful for identifying:
 - Period-dependent behaviour
 - Survey-wide patterns
 
-AusMT may publish strike roses at station, survey and collection scales.
+What ships today is the portal's **selection-level rose**: for any set of selected stations,
+the browser draws a rose from the served phase-tensor azimuths, using only low-skew periods
+(|β| < 5°), folded to 180°. The portal states its limitations alongside it — the 90°
+ambiguity inherent to strike is not resolved, and combining with tipper induction arrows is
+suggested to break it. Pre-computed station, survey and collection roses are planned.
 
 ---
 

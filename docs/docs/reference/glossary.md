@@ -16,4 +16,5 @@ A lightweight discovery schema for MT catalogue exchange.
 Information describing the origin and processing history of a published product.
 
 ## Release
-An immutable published version of a survey package.
+An immutable published version of a survey package (a planned mechanism — see
+[Versioning](../data-model/versioning.md) for what exists today).

@@ -45,11 +45,12 @@ MTCAT Record
 Discovery
 ```
 
-## Relationship to the API
+## Relationship to the portal data products
 
 MTCAT allows a survey package to be discovered.
 
-The API allows the discovered survey package to be queried.
+The portal's machine-readable JSON products carry the full catalogue detail behind that
+discovery record.
 
 ## Design Principle
 

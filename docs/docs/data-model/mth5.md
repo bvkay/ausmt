@@ -114,7 +114,10 @@ transfer_functions/
 └── mth5/      # submitted input (transfer-function products only)
 ```
 
-A survey package may contain one, two or all three representations, but only `edi/` and `mth5/` are accepted as submitted input today.
+A survey package may contain one, two or all three representations, but only `edi/` and `mth5/` are accepted as submitted input today. The build pipeline derives all portal products from the EDIs.
+
+Separately from submitted files, the build can generate a per-survey transfer-function-only
+MTH5 bundle as a download product; this is gated by a deployment flag and is off by default.
 
 Where multiple formats exist, they should describe the same underlying transfer-function products.
 

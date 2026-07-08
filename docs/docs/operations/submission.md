@@ -128,20 +128,17 @@ survey-slug/
 ├── survey.yaml
 ├── README.md
 ├── LICENSE.md
-│
-├── transfer_functions/
-│   ├── edi/                 # default
-│   ├── mth5/                # default
-│   └── emtfxml/             # optional (curator-enabled)
-│
-├── provenance/
-│   └── provenance.json
-│
-└── derived/
+└── transfer_functions/
+    ├── edi/                 # default
+    ├── mth5/                # default
+    └── emtfxml/             # optional (curator-enabled)
 ```
 
 (`LICENSE.md` is checked by the validator. There is no `stations.csv` — station-level
-information is read from the transfer-function files themselves, not a separate sheet.)
+information is read from the transfer-function files themselves, not a separate sheet.
+Submitter-side provenance lives in `survey.yaml`'s `processing.*` and free-text fields;
+there is no separate provenance file, and derived products are never submitted — the build
+generates them.)
 
 Publication references, external resources and identifiers are recorded within the metadata rather than stored as separate files.
 
@@ -151,15 +148,13 @@ Publication references, external resources and identifiers are recorded within t
 
 Submitted packages undergo automated validation.
 
-Validation checks may include:
+Validation checks include:
 
-- Package structure
-- Metadata completeness
-- Coordinate validation
-- Identifier validation
-- Transfer-function format checks
-- Duplicate detection
-- Provenance structure checks
+- Package structure (survey.yaml present, transfer functions under the expected directories)
+- Required metadata (name, licence, access level; semantic version and release-notes shape)
+- Coordinate sanity checks, including DMS/decimal cross-checks
+- Transfer-function file-type gates, signature checks and EDI parseability
+- File-size caps
 
 Validation produces one of three outcomes:
 

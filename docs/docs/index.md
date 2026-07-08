@@ -1,175 +1,106 @@
 # AusMT
 
-AusMT is a survey-centric magnetotelluric data infrastructure for publishing, discovering, preserving and reusing magnetotelluric transfer functions and associated scientific products.
+AusMT is a survey-centric magnetotelluric (MT) data infrastructure for Australia. It stores
+curated survey packages of transfer functions with their metadata, provenance and citation
+records, and serves them through a public portal.
 
-The project provides a consistent framework for managing MT surveys, transfer functions, metadata, provenance records and derived scientific products while supporting modern interoperability standards and long-term stewardship.
-
-Unlike traditional archives that focus on individual files, AusMT treats the survey as the primary scientific object. Survey packages combine transfer functions, metadata, provenance, citations and derived products into a single, curated and reproducible unit.
+The survey is the primary object: a survey package combines transfer functions, metadata,
+provenance and citation information into one curated, versioned unit, rather than treating
+each file as an independent artifact.
 
 ---
 
-## Why AusMT?
+## Background
 
-Over the past several decades, hundreds of magnetotelluric surveys have been acquired across Australia by universities, government agencies, research infrastructure facilities and industry.
+Hundreds of magnetotelluric surveys have been acquired across Australia by universities,
+government agencies, research infrastructure programs and industry. Many of the resulting
+datasets remain scientifically valuable but sit in personal archives, institutional storage,
+project websites, publication supplements or legacy media. Transfer functions often survive
+while processing details, metadata or provenance are lost; in other cases the reports survive
+while the data become hard to locate.
 
-Many of these datasets remain scientifically valuable, but are often distributed across:
-
-- personal archives
-- institutional storage systems
-- project websites
-- supplementary publication material
-- legacy media
-
-In many cases the transfer functions survive, while processing details, metadata or provenance records are lost. In others, detailed reports remain but the underlying data become difficult to locate or reuse.
-
-AusMT aims to address this challenge by providing a consistent framework for:
-
-- survey discovery
-- transfer-function access
-- metadata preservation
-- provenance tracking
-- scientific reproducibility
-- long-term stewardship
+AusMT provides one consistent framework for survey discovery, transfer-function access,
+metadata preservation, provenance tracking and long-term stewardship of these datasets.
 
 ---
 
 ## Scope
 
-AusMT focuses on:
+AusMT curates and serves:
 
-- Magnetotelluric transfer functions
-- EDI products
-- EMTFXML products
-- MTH5 transfer-function products
-- Survey metadata
-- Station metadata
+- Magnetotelluric transfer functions (EDI and EMTF XML; per-survey MTH5 bundles are built
+  only where a deployment enables them)
+- Survey and station metadata
 - Provenance records
-- Derived scientific products
 - Citation information
+- Derived screening diagnostics (apparent resistivity and phase, tipper, phase-tensor
+  parameters, dimensionality)
 
-Derived products may include:
+Further derived products (strike analysis, distortion and decomposition) are planned and are
+marked as such wherever they appear in this documentation.
 
-- Apparent resistivity and phase quicklooks
-- Tipper products
-- Phase tensor products
-- Strike analyses
-- Dimensionality diagnostics
-- Distortion and decomposition products
+## Out of scope
 
----
-
-## Out of Scope
-
-AusMT is not a national waveform archive.
-
-Raw time-series data remain in their original repositories, such as:
-
-- National Computational Infrastructure (NCI)
-- Institutional repositories
-- University archives
-- Project-specific archives
-
-Where available, AusMT records persistent identifiers linking survey packages to their associated waveform collections.
-
-This approach avoids duplication while allowing AusMT to focus on the long-term stewardship of transfer functions and scientific products.
+AusMT is not a waveform archive. Raw time series remain in their original repositories
+(national facilities such as NCI, institutional and project archives). Where a survey's
+time-series collection has a persistent identifier, the survey package records it, so the
+portal links to the waveforms without duplicating them.
 
 ---
 
-## Design Principles
+## Design principles
 
-AusMT is built around several core principles.
-
-### Survey First
-
-The survey is the primary scientific object.
-
-Stations, transfer functions and derived products exist within the context of a survey package.
-
-### Reproducible
-
-Scientific products should be traceable back to the source data, software and processing workflow used to generate them.
-
-### Interoperable
-
-AusMT adopts existing community standards wherever possible, including MTH5, mt_metadata, EDI and EMTFXML.
-
-### Curated
-
-Publication occurs through validation and review rather than unrestricted upload.
-
-### FAIR and CARE
-
-Metadata, provenance and citation information are treated as first-class products alongside the transfer functions themselves.
+- **Survey first.** Stations, transfer functions and derived products exist within a survey
+  package; identifiers, versions and citations attach to the survey.
+- **Reproducible.** Every published value traces to a source file, a content hash, a unique
+  identifier and a build provenance record.
+- **Interoperable.** Community standards are used throughout: mt_metadata and MTH5 for
+  parsing and storage, EDI and EMTF XML for exchange.
+- **Curated.** Publication happens through validation and human review, not unrestricted
+  upload.
+- **Attributable.** Metadata, provenance and citation information are first-class products,
+  and data licensing is declared per survey by its custodians.
 
 ---
 
-## System Architecture
+## System architecture
 
-AusMT is the `ausmt` monorepo (`engine/`, `portal/`, `docs/`, `maintainer/`) plus the separate `ausmt-surveys` data repo:
+The framework is the `ausmt` repository; survey data lives in the separate `ausmt-surveys`
+repository.
 
 ```text
-ausmt-surveys
-↓
-engine
-↓
-portal
+submissions -> gateway -> ausmt-surveys -> engine -> portal
+               (scan,      (curated        (offline   (static
+               validate,    packages)       build)     site)
+               curate)
 ```
 
-### ausmt-surveys
+- **gateway** — the submission service: upload, antivirus scan, validation, curator review,
+  and publication as a git commit to the data repository.
+- **ausmt-surveys** — the curated collection of published survey packages: metadata,
+  transfer functions and provenance.
+- **engine** — the offline build: parses packages with mt_metadata, computes the screening
+  diagnostics, and writes the portal's data products, canonical EMTF XML and download
+  bundles.
+- **portal** — the public discovery and access interface. It consumes generated products and
+  performs no scientific processing.
 
-The curated collection of published survey packages.
-
-Contains:
-
-- Metadata
-- Transfer functions
-- Derived products
-- Provenance records
-
-### engine
-
-The offline scientific processing engine.
-
-Generates:
-
-- Quicklook products
-- Phase tensor products
-- Strike analyses
-- Dimensionality diagnostics
-- Decomposition products
-
-### portal
-
-The public discovery and access interface.
-
-The portal consumes products generated elsewhere and performs no scientific processing.
+The developer-facing description, including the deployment and the data contract, is in
+[Developer architecture](developer/architecture.md).
 
 ---
 
-## Intended Audience
+## Intended audience
 
-AusMT is intended for:
-
-- Researchers
-- Students
-- Survey custodians
-- Data managers
-- Research infrastructure operators
-- Government agencies
-- Future archive maintainers
-
-The project aims to support both the immediate reuse of MT data and its preservation for future generations of researchers.
+Researchers, students, survey custodians, data managers, research infrastructure operators,
+government agencies, and the archive's future maintainers.
 
 ---
 
-## Next Steps
+## Reading order
 
-If you are new to AusMT, the recommended reading order is:
-
-1. What is AusMT?
-2. Scientific Philosophy
-3. Architecture
-4. Data Lifecycle
-5. Survey Package Specification
-
-These documents provide the conceptual foundations for the remainder of the system.
+1. [What is AusMT?](introduction/what-is-ausmt.md)
+2. [Scientific Philosophy](introduction/scientific-philosophy.md)
+3. [Architecture](architecture/overview.md)
+4. [Data Lifecycle](introduction/data-lifecycle.md)
+5. [Survey Package](data-model/survey-package.md)

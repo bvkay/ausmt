@@ -124,11 +124,11 @@ Many products displayed within AusMT are generated from transfer functions.
 Examples include:
 
 - Apparent resistivity and phase plots
-- Tipper products
+- Tipper products and induction arrows
 - Phase tensor products
-- Strike analyses
 - Dimensionality diagnostics
-- Distortion analyses
+- Strike screening (selection-level rose diagrams)
+- Distortion analyses (planned)
 
 These products should retain explicit links to the transfer functions from which they were generated.
 
@@ -170,11 +170,12 @@ AusMT therefore accommodates multiple levels of provenance completeness.
 > for reasoning about provenance completeness — it is not a field, badge or validated schema
 > anywhere in the codebase today. What is actually shipped: (1) every build-generated product
 > carries a per-product `input_file` name and `input_sha256` alongside the pipeline's parameters
-> and version info (`build_provenance.json`, emitted by `_build_prov()` in `build_portal.py`); and
-> (2) a survey package may include a free-form `provenance/provenance.json` — arbitrary
-> submitter-authored keys (e.g. `processing_software`, `method`, `source`) that are stored and
-> displayed but not validated against any schema or level. Mapping a survey onto Level 0–3 is a
-> manual, human judgement, not a computed classification.
+> and version info (`build_provenance.json`, emitted by `_build_prov()` in `build_portal.py`);
+> (2) submitter-side provenance lives in `survey.yaml` (the `processing.*` fields and free-text
+> notes) and in the EDI headers themselves, which the build scrapes for processing metadata —
+> there is no separate per-package provenance file; and (3) the canonical-XML store records
+> per-station conditioning notes in its own `provenance.json`. Mapping a survey onto Level 0–3
+> is a manual, human judgement, not a computed classification.
 
 ### Level 0 — Product Only
 

@@ -16,9 +16,11 @@ Most other products available through the portal are derived from transfer funct
 
 **Implemented today** (parsed with `mt_metadata`, computed by the engine, and shown in the portal):
 
-- Apparent resistivity and phase
-- Phase tensor (per-period and the dimensionality screening diagnostic)
-- Tipper magnitude
+- Apparent resistivity and phase, with per-period error bars where the EDI supplies them
+- Phase tensor (per-period parameters and the dimensionality screening diagnostic)
+- Tipper (magnitude and full complex components; induction arrows in the station drawer,
+  Parkinson convention)
+- Selection-level strike rose (drawn in the portal from served phase-tensor azimuths)
 
 **Planned** (scaffolding exists in `engine`, intended for the MTpy-v2-backed advanced
 layer; not yet generated — do not assume these are present):

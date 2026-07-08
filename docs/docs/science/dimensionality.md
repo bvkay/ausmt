@@ -165,7 +165,29 @@ Phase tensor ellipticity describes the shape of the phase tensor ellipse.
 
 Ellipticity provides information about directional variations in the MT response and may assist in identifying departures from simple one-dimensional behaviour.
 
-Within AusMT, ellipticity may form part of survey-level dimensionality assessments and summaries.
+Within AusMT, the median phase-tensor ellipticity is the diagnostic that separates 2-D from
+1-D behaviour in the shipped classification below.
+
+---
+
+## The shipped classification
+
+AusMT's build assigns each station a screening classification from its phase tensor
+(`_edi_science.py`), with every threshold disclosed:
+
+1. Per-period phase tensors are computed from the impedance (Caldwell et al., 2004).
+2. Periods with non-physical skew (|β| ≥ 15°, symptomatic of dead channels or near-singular
+   tensors rather than 3-D structure) are excluded as unusable.
+3. If fewer than **50%** of the impedance-bearing periods survive, the station is
+   **indeterminate** — the data do not support a call, and the build says so rather than
+   defaulting to 3-D off saturated skew.
+4. Otherwise: **3-D** if median |β| > **5°** or more than **40%** of usable periods have
+   |β| > **3°**; else **2-D** if median ellipticity > **0.10**; else **1-D**.
+
+Alongside the class, the station's science row carries the median |β|, the percentage of
+3-D periods and the median ellipticity, and the station drawer displays them. This is a
+screening product for survey triage — not a substitute for period-by-period dimensionality
+analysis, which the classification deliberately does not attempt.
 
 ---
 
@@ -187,15 +209,14 @@ For this reason dimensionality products should generally be interpreted together
 
 ## Survey-Level Products
 
-AusMT may publish dimensionality products at several levels.
+Shipped today:
 
-Examples include:
+- Per-station classification (1-D / 2-D / 3-D / indeterminate) with median |β|, %3-D periods
+  and median ellipticity in the station diagnostics
+- Map colouring by dimensionality class
 
-- Station dimensionality summaries
-- Survey-level dimensionality statistics
-- Period-dependent dimensionality products
-- Dimensionality maps
-- Dimensionality classifications
+Period-dependent dimensionality products and survey-level statistics are not currently
+computed.
 
 These products provide a concise summary of the complexity of a dataset.
 
