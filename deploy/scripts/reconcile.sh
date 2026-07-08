@@ -55,6 +55,11 @@ done
 : "${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (host root; see deploy/.env.example)}"
 : "${AUSMT_CODE_DIR:?set AUSMT_CODE_DIR (this checkout; locates deploy/ for make)}"
 
+# The data root must PRE-EXIST (mounts + ownership prep): fabricating any of it here would let an
+# unmounted volume or a mistyped AUSMT_DATA_DIR produce a phantom tree that sits in quiet
+# sync_failed forever, writing status into a directory nobody serves (review L4).
+[ -d "$AUSMT_DATA_DIR" ] || { printf 'reconcile: AUSMT_DATA_DIR does not exist: %s (unmounted volume? typo in .env?)\n' "$AUSMT_DATA_DIR" >&2; exit 1; }
+
 SURVEYS_LIVE="$AUSMT_DATA_DIR/surveys-live"
 SITE_DATA="$AUSMT_DATA_DIR/site-data"
 # build.json lives at the BUILD ROOT (the engine writes `out/build.json`; see build_portal.py C12).
@@ -90,14 +95,18 @@ done
 # exactly here — site-data/ is uid-10001-owned and gateway/state/ is 10002-owned, and the runbook
 # was missing the one-time ownership prep — but the symptom was three scattered errors mid-pass
 # instead of one actionable line.) Probe with the same tmp name pattern the status writer uses.
+# mktemp (not a hand-rolled `> file.tmp.$$`): the state dir is DELIBERATELY group-writable to the
+# gateway's uid (README step 0b), and a predictable tmp name would let a compromised container
+# pre-plant a symlink the redirect follows onto an operator-writable target (review L5). mktemp
+# creates O_EXCL with an unpredictable suffix — it can neither follow nor be raced.
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null || true
-  if ! ( : > "$STATUS_FILE.tmp.$$" ) 2>/dev/null; then
+  if ! _probe=$(mktemp "$STATE_DIR/.reconcile-probe.XXXXXX" 2>/dev/null); then
     printf 'reconcile: state dir not writable by %s: %s\n' "$(id -un 2>/dev/null || echo '?')" "$STATE_DIR" >&2
     printf 'reconcile: one-time ownership prep missing — see deploy/README.md "Serve reconcile" step 0\n' >&2
     exit 1
   fi
-  rm -f "$STATUS_FILE.tmp.$$"
+  rm -f "$_probe"
 fi
 
 # read_source_commit: echo the served build's source_commit, or empty if build.json is missing or
@@ -140,7 +149,10 @@ PYEOF
 write_status() {
   _action="$1"; _head="$2"; _built="$3"; _build_id="$4"; _log_file="$5"
   mkdir -p "$STATE_DIR"
-  _tmp="$STATUS_FILE.tmp.$$"
+  # mktemp, same rationale as the probe above (review L5): O_EXCL + unpredictable name in a dir a
+  # container uid can also write — never a predictable `.tmp.$$` a symlink could be planted at.
+  _tmp=$(mktemp "$STATUS_FILE.tmp.XXXXXX" 2>/dev/null) || {
+    printf 'reconcile: cannot create status tmp under %s\n' "$STATE_DIR" >&2; return 1; }
   AUSMT_RS_ACTION="$_action" AUSMT_RS_HEAD="$_head" AUSMT_RS_BUILT="$_built" \
   AUSMT_RS_BUILD_ID="$_build_id" AUSMT_RS_LOG_FILE="$_log_file" AUSMT_RS_LAST_RUN="$(now_utc)" \
   "$PY" - > "$_tmp" <<'PYEOF'
@@ -174,7 +186,8 @@ PYEOF
 
 # ----- the one pass, under the lock --------------------------------------------------------------
 # All decision logic lives in run_pass so flock can wrap the WHOLE body (sync..status) in a single
-# critical section — never two builds at once. flock re-execs this script with the lock fd held.
+# critical section — never two builds at once. The caller below takes the lock on fd 9 and then
+# calls run_pass IN-PROCESS while the fd is held (no re-exec); the fd closes on exit, releasing it.
 run_pass() {
   # 1. SYNC: fast-forward-only pull. A diverged/blocked checkout must NOT be built from (§4).
   if ! sync_out=$(git -C "$SURVEYS_LIVE" pull --ff-only 2>&1); then
@@ -199,6 +212,18 @@ run_pass() {
   else
     head=$(git -C "$SURVEYS_LIVE" rev-parse --short HEAD 2>/dev/null || true)
   fi
+  # An empty $head must never reach the prefix compare: `"$head"*` with head="" is the pattern `*`,
+  # which matches ANY built value — a false noop with a lying status (review L3). Near-unreachable
+  # (rev-parse failing right after a successful pull), but refuse loudly rather than guess.
+  if [ -z "$head" ]; then
+    printf 'reconcile: cannot resolve surveys-live HEAD in %s — refusing to compare or build\n' "$SURVEYS_LIVE" >&2
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf 'reconcile: [dry-run] would write status action=failed (unresolvable HEAD)\n'
+      return 0
+    fi
+    write_status "failed" "" "$built" "$(read_build_id)" ""
+    return 1
+  fi
 
   request_present=0
   [ -f "$REQUEST_FILE" ] && request_present=1
@@ -211,6 +236,9 @@ run_pass() {
   # rebuild.request (deliberate human intent always gets a fresh attempt). Side effect, accepted +
   # documented: a FAILED first build on a fresh box (no build.json yet) also holds instead of
   # retrying every 15 min — a deterministic build failure needs an operator, not a retry storm.
+  # Known-and-accepted looseness (review L2): a sync_failed tick overwrites the status doc and
+  # thereby the latch, so a flaky origin buys ONE extra rebuild attempt per connectivity blip —
+  # bounded per-blip, and the status never lies about what happened.
   if [ -z "$built" ] && [ "$request_present" -eq 0 ]; then
     prev_guard=$(AUSMT_RG_STATUS="$STATUS_FILE" AUSMT_RG_HEAD="$head" "$PY" - <<'PYEOF' 2>/dev/null || true
 import json, os
@@ -275,11 +303,14 @@ PYEOF
 
   # A rebuild we cannot log is a rebuild we cannot debug from the panel — fail loud BEFORE building
   # (site-data/ is uid-10001-owned; logs/ needs the one-time operator-owned prep, README step 0).
-  if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
-    printf 'reconcile: cannot create log dir %s — one-time ownership prep missing (deploy/README.md "Serve reconcile" step 0)\n' "$LOG_DIR" >&2
+  # Probe WRITABILITY too, not just existence: an existing-but-unwritable logs/ passes `mkdir -p`
+  # and would only surface at the build redirect, with make never launched (review L1).
+  if ! mkdir -p "$LOG_DIR" 2>/dev/null || ! _lprobe=$(mktemp "$LOG_DIR/.probe.XXXXXX" 2>/dev/null); then
+    printf 'reconcile: log dir %s cannot be created or is not writable — one-time ownership prep missing (deploy/README.md "Serve reconcile" step 0)\n' "$LOG_DIR" >&2
     write_status "failed" "$head" "$built" "$(read_build_id)" ""
     return 1
   fi
+  rm -f "$_lprobe"
   log_file="$LOG_DIR/$(date -u +%Y%m%dT%H%M%SZ).build.log"
   printf 'reconcile: %s => rebuilding, log: %s\n' "$reason" "$log_file"
 

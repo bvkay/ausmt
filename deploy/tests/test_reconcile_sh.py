@@ -328,7 +328,6 @@ def test_ff_pull_advances_then_rebuilds(tmp_path):
     assert _status(tree)["action"] == "rebuilt"
 
 
-@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
 def test_build_json_path_matches_engine_layout():
     """CROSS-ARTIFACT PIN (the 2026-07-08 incident): the script's BUILD_JSON path and the engine's
     write site must agree. The engine writes build.json at the BUILD ROOT (`out / "build.json"` in
@@ -391,6 +390,41 @@ def test_loop_guard_rearmed_by_request_and_by_head_change(tmp_path):
     assert tree["marker"].exists(), "a new HEAD must release the guard"
     assert r_head.returncode == 0
     assert _status(tree)["action"] == "rebuilt"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_missing_data_dir_fails_early(tmp_path):
+    """An AUSMT_DATA_DIR that does not exist (unmounted volume / .env typo) => rc=1 with one loud
+    message, BEFORE any tree is fabricated. FAILS IF: the script mkdir-ps a phantom tree and settles
+    into quiet sync_failed forever (review L4)."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    r = _run(tree, env_extra={"AUSMT_DATA_DIR": str(tmp_path / "not-mounted")})
+    assert r.returncode == 1
+    assert "does not exist" in r.stderr
+    assert not (tmp_path / "not-mounted").exists(), "must not fabricate the data tree"
+    assert not tree["marker"].exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
+    """logs/ EXISTS but is not writable (an ownership regression — `mkdir -p` alone would pass) =>
+    fail before invoking the build, action=failed, rc=1, with the ownership-prep hint. FAILS IF: the
+    writability probe is dropped and the failure only surfaces at the build redirect with no hint
+    (review L1)."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    logs_dir = tree["data"] / "site-data" / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.chmod(0o555)
+    try:
+        r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+        assert r.returncode == 1
+        assert not tree["marker"].exists(), "must NOT build when the log dir is unwritable"
+        st = _status(tree)
+        assert st is not None and st["action"] == "failed"
+        assert "ownership prep" in r.stderr
+    finally:
+        logs_dir.chmod(0o755)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")

@@ -318,8 +318,11 @@ The script itself never assumes systemd (on Gadi/NCI it becomes a cron/PBS job o
 # 0. ONE-TIME OWNERSHIP PREP (the reconcile agent runs as the OPERATOR, but two of the dirs it
 #    writes are container-owned — without this step the first pass fails with "Permission denied"
 #    (the 2026-07-08 first install). The script also fails EARLY and loudly if this is missing.)
+#    Guard first: if AUSMT_DATA_DIR is unset in THIS shell (it normally lives only in deploy/.env),
+#    the paths below would silently resolve to the filesystem root and create /site-data there.
+: "${AUSMT_DATA_DIR:?unset — export it first, or: set -a; . ./.env; set +a}"
 #    a) the build-log dir (inside uid-10001-owned site-data; never served — outside current/):
-sudo install -d -o "$USER" -g "$USER" "$AUSMT_DATA_DIR/site-data/logs"
+sudo install -d -o "$USER" -g "$(id -gn)" "$AUSMT_DATA_DIR/site-data/logs"
 #    b) group-write on the 10002-owned gateway state dir, so the operator can write
 #       reconcile-status.json and consume rebuild.request while the gateway keeps ownership
 #       (the same shared-group pattern the surveys-live publish setup uses, in the other direction):
