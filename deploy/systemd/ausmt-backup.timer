@@ -1,0 +1,27 @@
+# AusMT nightly backup timer. Fires ausmt-backup.service once a day at an off-peak time. Install:
+#   sudo cp deploy/systemd/ausmt-backup.{service,timer} /etc/systemd/system/
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ausmt-backup.timer
+#   systemctl list-timers ausmt-backup.timer         # confirm the next run
+#   sudo systemctl start ausmt-backup.service        # take one backup NOW to test
+# Then run the FIRST restore drill: deploy/scripts/restore-drill.sh (a backup never restored is a
+# hypothesis, not a backup). See deploy/README.md "Backups & restore".
+
+[Unit]
+Description=AusMT nightly backup at 03:20 UTC (+ jitter)
+Documentation=file:///srv/ausmt/code/deploy/README.md
+
+[Timer]
+# Once a day at a fixed off-peak time. UTC; the box runs UTC. 03:20 sits clear of the reconcile
+# quarter-hours (:00/:15/:30/:45) so a backup does not start in lockstep with a rebuild.
+OnCalendar=*-*-* 03:20:00
+# Spread the fire up to 30 min so a fleet of boxes (or a co-scheduled reconcile) does not all snapshot
+# on the exact same second, and so a shared backup target is not hit by every box at once.
+RandomizedDelaySec=1800
+# Catch up one missed run after downtime (a box off overnight still snapshots on the next boot) rather
+# than skipping a whole day.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
