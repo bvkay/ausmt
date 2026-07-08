@@ -51,9 +51,10 @@ def test_happy_path_commits_and_stages(tmp_path):
             commit_calls = [c for c in git.calls if "commit" in c]
             assert commit_calls, "no git commit was issued"
             assert any(m in " ".join(commit_calls[0]) for m in COMMIT_AUTHOR_MARKERS)
-            # v2: PUBLISHED reason states it is committed, NOT served.
+            # v2 + C40: PUBLISHED reason states it is committed, and that the reconcile agent (not
+            # a manual make) closes the serve gap.
             reason = gw.db.transitions_for(sid)[-1]["reason"].lower()
-            assert "committed" in reason and "rebuild-data" in reason
+            assert "committed" in reason and "reconcile" in reason
     run(_body())
 
 

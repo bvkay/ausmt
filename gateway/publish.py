@@ -1,9 +1,10 @@
-"""Approve -> commit to surveys-live (design §5, v2). Demo mode is COMMIT-AND-PUSH ONLY: the gateway
+"""Approve -> commit to surveys-live (design §5, v2). Publish is COMMIT-AND-PUSH ONLY: the gateway
 writes the approved package into the surveys-live git history (the publication ledger) and pushes it.
-It does NOT build. The operator runs `make rebuild-data` by hand afterward — which is what makes the
-C10 §0 no-Docker-socket invariant hold cleanly (the gateway never invokes the build, never needs the
-socket). `PUBLISHED` therefore means "committed to surveys-live main and pushed", NOT yet served; the
-UI says so explicitly ("Committed to surveys-live. Run make rebuild-data on the server to serve it").
+It does NOT build — which is what makes the C10 §0 no-Docker-socket invariant hold cleanly (the
+gateway never invokes the build, never needs the socket). `PUBLISHED` therefore means "committed to
+surveys-live main and pushed", NOT yet served. Since C40 the HOST-side serve-reconcile agent closes
+that gap automatically on its next tick (~15 min; deploy/scripts/reconcile.sh — still not the
+gateway, still no socket); manual `make rebuild-data` remains the fallback, and the UI copy says so.
 
 Runs in-process in the gateway as a background task (the approve request returns immediately with
 PUBLISHING; the curator watches the state). Single-flight: ONE module-level asyncio.Lock, because

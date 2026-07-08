@@ -784,9 +784,10 @@ class Gateway:
             curatorpage._page(  # noqa: SLF001 -- reuse the page chrome for the terminal confirmation
                 f"AusMT edit committed {slug}",
                 f'<h1>Metadata edit committed — {curatorpage._esc(slug)}</h1>'  # noqa: SLF001
-                '<p class="sub">Committed to surveys-live and pushed. Run '
-                '<code>make rebuild-data</code> on the server to serve it — the commit is in git '
-                'history but the live map is not rebuilt automatically.</p>'
+                '<p class="sub">Committed to surveys-live and pushed. The serve-reconcile agent '
+                'rebuilds and serves it automatically on its next tick (typically within 15 '
+                'minutes) — see the serve-state panel on the queue page, or run '
+                '<code>make rebuild-data</code> by hand.</p>'
                 '<p><a href="/gateway/curator/queue">back to queue</a></p>'))
 
     def _commit_edit_blocking(self, surveys_live: Path, slug: str, new_yaml: bytes,
@@ -975,7 +976,8 @@ class Gateway:
                 await asyncio.to_thread(
                     self._publish_blocking, submission_id, slug, curator, note, confirm_overwrite)
                 self.db.transition(submission_id, states.PUBLISHED, actor=f"curator:{curator}",
-                                   reason="committed to surveys-live; run make rebuild-data to serve")
+                                   reason="committed to surveys-live; the reconcile agent serves it "
+                                          "on its next tick")
             except publish.PublishError as exc:
                 logger.warning("publish failed for %s at %s: %s", submission_id, exc.phase, exc.message)
                 self._fail_publish(submission_id, curator, exc.message)

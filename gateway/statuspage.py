@@ -42,10 +42,11 @@ _STATE_BLURB = {
     states.QUARANTINED: "Quarantined. Validation or the preview build did not complete cleanly.",
     states.REJECTED_AV: "Rejected. The uploaded archive matched a virus signature and was deleted.",
     # C11: PUBLISHED means committed to the survey repository, NOT yet on the live map — do not
-    # overstate it (design §5). The operator's rebuild step is what makes it appear.
+    # overstate it (design §5). Since C40 the serve-reconcile timer runs that rebuild automatically.
     states.PUBLISHING: "Publishing. The curator approved this submission; it is being committed.",
     states.PUBLISHED: ("Published. Committed to the AusMT survey repository. It will appear on the "
-                       "live map after the next server data rebuild."),
+                       "live map after the next automatic data rebuild (typically within about "
+                       "15 minutes)."),
     states.PUBLISH_FAILED: "Publish failed. The commit did not complete; the curator will retry.",
     states.RETURNED: "Returned. The curator asked for changes — see the note below; resubmit a revised package.",
     states.REJECTED: "Rejected. The curator declined this submission — see the note below.",

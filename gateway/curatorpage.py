@@ -552,9 +552,10 @@ def _action_forms(*, submission_id: str, state: str, csrf_token: str,
     elif state == states.PUBLISHED:
         forms.append(
             '<div class="panel"><h2>Published</h2>'
-            '<p class="sub">Committed to surveys-live. Run <code>make rebuild-data</code> on the '
-            'server to serve it — the commit is in git history but the live map is not rebuilt '
-            'automatically.</p></div>'
+            '<p class="sub">Committed to surveys-live. The serve-reconcile agent rebuilds and '
+            'serves it automatically on its next tick (typically within 15 minutes) — watch the '
+            'serve-state panel on the queue page. Manual <code>make rebuild-data</code> still '
+            'works if the reconcile timer is not installed.</p></div>'
         )
     elif state == states.PUBLISH_FAILED:
         # Retry re-evaluates the checklist and acknowledgement is PER-ACTION (C11b §2), so a
@@ -705,8 +706,8 @@ def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: 
                   'Validator passed (WARNINGs, if any, do not block). Confirm to commit.</p>')
         confirm = (
             f'<div class="panel"><h2>Commit &amp; push</h2>'
-            f'<p class="sub">Committed to surveys-live — run <code>make rebuild-data</code> on the '
-            'server to serve it.</p>'
+            f'<p class="sub">Committed to surveys-live — the serve-reconcile agent serves it on its '
+            'next tick (or run <code>make rebuild-data</code> by hand).</p>'
             f'<form method="post" action="/gateway/curator/edit/{_esc(slug)}/confirm">'
             f'{csrf}'
             f'<input type="hidden" name="new_sha256" value="{_esc(new_sha256)}">'
