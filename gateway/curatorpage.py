@@ -417,8 +417,10 @@ SERVE_PANEL_JS = """
         });
         (s.conditioning || []).forEach(function (c) {
           var line = 'conditioning (' + c.count + '): ' + c.note;
-          if (c.stations) line += '  [stations: ' + c.stations.join(', ') + ']';
-          else if (c.except) line += '  [all except: ' + c.except.join(', ') + ']';
+          // .length guards: an EMPTY array is truthy in JS — a report from an older engine (or a
+          // future regression) shipping stations/except as [] must render nothing, not "[all except: ]".
+          if (c.stations && c.stations.length) line += '  [stations: ' + c.stations.join(', ') + ']';
+          else if (c.except && c.except.length) line += '  [all except: ' + c.except.join(', ') + ']';
           dtd.appendChild(el('p', line, 'sub'));
         });
         dtr.appendChild(dtd);

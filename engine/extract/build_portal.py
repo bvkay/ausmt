@@ -1337,7 +1337,11 @@ def aggregate_conditioning(notes_by_station: dict) -> list:
         stations = ex = None
         if count <= CONDITIONING_ENUM_LIMIT:
             stations = sorted(carrier_ids)
-        elif len(absentees) <= CONDITIONING_ENUM_LIMIT and len(absentees) < count:
+        elif absentees and len(absentees) <= CONDITIONING_ENUM_LIMIT and len(absentees) < count:
+            # `absentees and`: a note carried by ALL stations has an EMPTY absentee list, which
+            # passed the small-complement check and shipped except=[] — truthy in JS, so the first
+            # production panel render (2026-07-08) showed "[all except: ]" on every fleet-wide note.
+            # All-carriers => both sides None; count == the survey total tells the story.
             ex = sorted(absentees)
         entries.append({"note": note, "count": count,
                         "stations": stations, "except": ex,

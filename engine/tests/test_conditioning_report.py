@@ -116,3 +116,19 @@ def test_log_line_large_absentee_complement_uses_count():
     lines = bp.conditioning_log_lines("big", notes)
     maj = next(ln for ln in lines if "maj" in ln and "— 14/20" in ln)
     assert maj == "  [xml] NOTICE big: maj — 14/20 stations (6 stations without it)"
+
+
+def test_aggregate_all_carriers_above_enum_limit_has_null_both_sides():
+    """A note carried by ALL stations of a survey LARGER than CONDITIONING_ENUM_LIMIT must ship
+    stations=None AND except=None — the count equalling the survey total tells the story. FAILS IF:
+    the empty absentee list slips through the small-complement branch as except=[] (empty array,
+    truthy in JS), which rendered '[all except: ]' on every fleet-wide note in the first production
+    panel view (2026-07-08)."""
+    n = bp.CONDITIONING_ENUM_LIMIT + 2
+    notes = {f"S{i}": ["A"] for i in range(n)}
+    entries = bp.aggregate_conditioning(notes)
+    assert len(entries) == 1
+    e = entries[0]
+    assert e["count"] == n
+    assert e["stations"] is None, "carrier list must not be enumerated above the limit"
+    assert e["except"] is None, "an all-carriers note must ship except=None, never []"
