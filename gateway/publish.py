@@ -57,6 +57,11 @@ _SECRET_ENV_VARS = ("AUSMT_SUBMIT_KEY", "AUSMT_CURATOR_KEYS")
 # it so it can never form a path traversal or a branch-name injection before it touches the fs/git.
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
+# EDI filename charset for station removal — a bare basename (no path parts, no traversal) ending in
+# .edi. Re-checked here before a selected name becomes a path component in `git rm` (the runner
+# checked too; this is the last gate before a git/fs op). Mirrors runner.edit._EDI_NAME_RE.
+_EDI_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.edi$", re.IGNORECASE)
+
 
 class PublishError(Exception):
     """A step failed. The message is the operator-facing reason recorded on PUBLISH_FAILED. Carries
@@ -235,6 +240,89 @@ def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: by
     try:
         (dest_dir / "survey.yaml").write_bytes(new_yaml)
         _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
+        _git(git_runner, ["add", "surveys"], surveys_live, "git-add")
+        _git(git_runner,
+             ["-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
+              "commit", "-m", subject, "-m", body],
+             surveys_live, "git-commit")
+        new_ref = _capture_head(git_runner, surveys_live) or ""
+        _git(git_runner, ["checkout", "main"], surveys_live, "git-checkout-main")
+        _git(git_runner, ["merge", "--ff-only", branch], surveys_live, "git-merge")
+        push = git_runner(["push", "origin", "main"], cwd=surveys_live)
+        if push.returncode != 0:
+            raise PublishError("git-push", (push.stderr or push.stdout or "push failed").strip()[:500])
+    except PublishError:
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise
+    return new_ref
+
+
+def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: bytes,
+                           removed: list[str], expected_sha256: str, curator_name: str, note: str,
+                           pre: PreState) -> str:
+    """Station removal (EDI deletion) commit: git rm the selected EDIs from
+    surveys-live/surveys/<slug>/transfer_functions/edi/, write the version-bumped survey.yaml, and run
+    the full git sequence inside ONE rollback guard, mirroring commit_metadata_edit. Fail-closed at
+    every step; a failure anywhere rolls surveys-live back byte-for-byte to `pre` and re-raises.
+    Returns the new commit sha.
+
+    The §0.6 TOCTOU pin holds on the survey.yaml bytes (`expected_sha256` is what the curator saw in
+    the preview) — a re-run or concurrent edit changes the bytes and 409s here. The removed EDIs are
+    re-checked for existence and re-validated for charset before they become path components (the
+    house guard: never trust a name from the request). A removal that would leave ZERO EDIs is refused
+    (at least one station must remain — deleting a whole survey is a separate operation). git rm stages
+    the deletions AND removes them from the working tree; the survey.yaml write + `git add` stages the
+    edit; one commit records both.
+
+    The commit records `station removal by curator:<name>: <slug>` (the git history is the audit
+    record — who removed which stations and why lives in the message + the release note); NEVER a
+    submitter email (there is none — this edits a published survey)."""
+    actual = hashlib.sha256(new_yaml).hexdigest()
+    if actual != expected_sha256:
+        raise PublishError("hash-pin",
+                           "the previewed survey.yaml no longer matches (stale preview or concurrent "
+                           "edit) — re-open the stations page and try again")
+    dest_root = surveys_live / "surveys"
+    dest_dir = dest_root / slug
+    dest_dir_resolved = dest_dir.resolve()
+    root_resolved = dest_root.resolve()
+    if dest_dir_resolved != root_resolved and root_resolved not in dest_dir_resolved.parents:
+        raise PublishError("guard", "edited path escapes surveys-live/surveys")
+    if not dest_dir.is_dir():
+        raise PublishError("guard", f"survey {slug!r} does not exist in surveys-live")
+
+    edi_dir = dest_dir / "transfer_functions" / "edi"
+    # Re-validate + re-check every selected name here (defence in depth: the runner validated too, but
+    # publish is the last gate before a path/git op). A vanished file => refuse the WHOLE removal (no
+    # half-removal). Refuse if the removal would leave no station.
+    present = {p.name for p in edi_dir.iterdir()
+               if p.is_file() and p.suffix.lower() == ".edi"} if edi_dir.is_dir() else set()
+    targets: list[str] = []
+    for name in removed:
+        if not _EDI_NAME_RE.match(name or ""):
+            raise PublishError("guard", f"not a valid EDI filename: {name!r}")
+        if name not in present:
+            raise PublishError("stale",
+                               f"selected file {name!r} no longer exists — re-open the stations page")
+        if name not in targets:
+            targets.append(name)
+    if not targets:
+        raise PublishError("guard", "no stations selected for removal")
+    if len(present - set(targets)) < 1:
+        raise PublishError("guard",
+                           "refusing to remove ALL stations — at least one EDI must remain")
+
+    branch = f"stationrm/{slug}"
+    subject = f"station removal by curator:{curator_name}: {slug}"
+    removed_line = ", ".join(sorted(targets))
+    body = (f"Curated-by: curator:{curator_name}\nSurvey: {slug}\n"
+            f"Removed-stations: {removed_line}\nEdit-note: {note}")
+    rel_edis = [f"surveys/{slug}/transfer_functions/edi/{name}" for name in sorted(targets)]
+    try:
+        _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
+        # git rm removes the EDIs from the index AND the working tree in one step.
+        _git(git_runner, ["rm", "--", *rel_edis], surveys_live, "git-rm")
+        (dest_dir / "survey.yaml").write_bytes(new_yaml)
         _git(git_runner, ["add", "surveys"], surveys_live, "git-add")
         _git(git_runner,
              ["-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
