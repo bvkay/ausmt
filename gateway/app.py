@@ -515,12 +515,12 @@ class Gateway:
     def handle_curator_ui_js(self, request: Request) -> Response:
         """GET /gateway/curator/ui.js — the shared curator-page behaviours (delegated data-confirm /
         data-toggle-big handlers) as an external same-origin script. The strictPages CSP blocks
-        BOTH inline <script> blocks and inline on*-attribute handlers on every /gateway/* page —
+        BOTH inline script blocks and inline on*-attribute handlers on every /gateway/* page —
         three shipped inline and silently never ran (found 2026-07-08: the Reject and Revoke
-        confirms and the preview size toggle). Session-gated like the pages that load it."""
-        name = self._require_session(request)
-        if not isinstance(name, str):
-            return name
+        confirms and the preview size toggle). Deliberately UNGATED (review C2): the LOGIN page
+        loads it via the shared shell before any session exists — a gate here means every login
+        view fetches JS, gets a 303 to HTML, and logs a nosniff console error. The content is a
+        static public-repo constant; there is nothing to protect."""
         return Response(curatorpage.CURATOR_UI_JS,
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
@@ -528,7 +528,7 @@ class Gateway:
     def handle_serve_state_js(self, request: Request) -> Response:
         """GET /gateway/curator/serve-state.js — the serve-state panel's JS as a same-origin EXTERNAL
         script. Exists because the Caddyfile's strictPages CSP (script-src 'self', applied to every
-        /gateway/* page) BLOCKS inline <script> blocks — the first install shipped the panel JS
+        /gateway/* page) BLOCKS inline script blocks — the first install shipped the panel JS
         inline and the browser never executed it. 'self' permits this URL. Session-gated for
         consistency with the page that references it (the code is public-repo — the gate is
         consistency, not secrecy)."""

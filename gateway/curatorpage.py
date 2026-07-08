@@ -1,7 +1,9 @@
 """Server-rendered curator pages (design §3/§4). MIRRORS statuspage.py: stdlib string.Template, no
-framework, portal palette, minimal JS (plain forms; the only inline script is a submit-confirm on the
-destructive actions). Every interpolated value is html.escaped — reports derive from submitted bytes
-and MUST NOT inject markup into the curator's browser.
+framework, portal palette, minimal JS — and ZERO inline JS: the strictPages CSP (script-src 'self')
+blocks inline script blocks and on*-attribute handlers, so all behaviour rides two external
+same-origin scripts (CURATOR_UI_JS delegation for confirms/toggles; SERVE_PANEL_JS for the C40
+panel). Every interpolated value is html.escaped — reports derive from submitted bytes and MUST NOT
+inject markup into the curator's browser.
 
 Two views: the queue (list of actionable submissions) and the detail view (report bundle, live
 checklist, submitter block — curator-only PII, design §2 — the sandboxed preview iframe, and the
@@ -76,7 +78,7 @@ _HEAD = """<!doctype html>
 
 # Every curator page loads the shared UI script (delegated data-confirm / data-toggle-big handlers)
 # as an EXTERNAL same-origin script — the strictPages CSP (script-src 'self') silently blocks inline
-# <script> blocks AND on*= attributes on every /gateway/* page, so inline handlers are dead code
+# script blocks AND on*-attribute handlers on every /gateway/* page, so inline handlers are dead code
 # that only fails in production (three shipped that way and never ran; found 2026-07-08).
 _TAIL = '<script src="/gateway/curator/ui.js" defer></script></div></body></html>'
 
@@ -84,7 +86,8 @@ _TAIL = '<script src="/gateway/curator/ui.js" defer></script></div></body></html
 # Shared curator-page behaviours, DELEGATED so per-element handlers never need inlining again:
 #   * a <form data-confirm="message"> gets an accidental-click confirm on submit;
 #   * a <button data-toggle-big="elementId"> toggles the .big class on that element.
-# Served by the session-gated GET /gateway/curator/ui.js (see app.handle_curator_ui_js).
+# Served by GET /gateway/curator/ui.js — deliberately UNGATED, the login page loads it pre-session
+# (see app.handle_curator_ui_js).
 CURATOR_UI_JS = """
 (function () {
   document.addEventListener('submit', function (ev) {
@@ -94,8 +97,10 @@ CURATOR_UI_JS = """
     }
   });
   document.addEventListener('click', function (ev) {
-    var t = ev.target;
-    if (t && t.getAttribute && t.getAttribute('data-toggle-big')) {
+    // closest(), not ev.target directly: a click on a CHILD of the button (a future <span>/icon)
+    // reports the child as target and would silently miss the attribute (review C1).
+    var t = ev.target && ev.target.closest && ev.target.closest('[data-toggle-big]');
+    if (t) {
       var el = document.getElementById(t.getAttribute('data-toggle-big'));
       if (el) el.classList.toggle('big');
     }
@@ -266,7 +271,7 @@ def render_serve_panel(*, published_head, published_available: bool, status: dic
         f'{_reconcile_status_block(status)}'
         f'<p style="margin-top:1rem">{button}</p>'
         '</div>'
-        # EXTERNAL script, same-origin — NOT an inline <script> block. The Caddyfile serves every
+        # EXTERNAL script, same-origin — NOT an inline script block. The Caddyfile serves every
         # /gateway/* page under the strictPages CSP (script-src 'self', no 'unsafe-inline'), which
         # BLOCKS inline scripts entirely: the first install (2026-07-08) shipped this panel's JS
         # inline and the browser never ran it ("Loading…" forever). 'self' allows a same-origin
@@ -281,7 +286,7 @@ def render_serve_panel(*, published_head, published_available: bool, status: dic
 # free; every value is inserted via textContent (never innerHTML) so submitter-derived report strings
 # cannot inject markup into the curator page.
 #
-# DELIVERY (CSP): this constant is RAW JS (no <script> wrapper), served as its own same-origin
+# DELIVERY (CSP): this constant is RAW JS (no script-tag wrapper), served as its own same-origin
 # document by GET /gateway/curator/serve-state.js — inline delivery is dead under the strictPages
 # script-src 'self' policy (see render note above). Keep ALL panel behaviour in here (including the
 # button confirm): no inline scripts, no on*= attributes anywhere on the curator pages — a rendered-

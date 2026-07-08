@@ -282,7 +282,8 @@ def test_queue_page_has_no_inline_scripts_or_handlers(tmp_path):
             assert r.status_code == 200
             html = r.text
             for m in re.finditer(r"<script\b[^>]*>", html):
-                assert "src=" in m.group(0), f"inline <script> is dead under the CSP: {m.group(0)}"
+                assert re.search(r"\bsrc\s*=", m.group(0)), \
+                    f"inline <script> is dead under the CSP: {m.group(0)}"
             assert 'src="/gateway/curator/serve-state.js"' in html
             assert 'src="/gateway/curator/ui.js"' in html
             handlers = re.findall(r"<[^>]*\son\w+\s*=", html)
@@ -290,24 +291,46 @@ def test_queue_page_has_no_inline_scripts_or_handlers(tmp_path):
     run(_body())
 
 
-def test_no_page_renderer_emits_inline_handlers():
-    """SOURCE-LEVEL CSP SWEEP: no gateway page-renderer module may contain an inline event-handler
-    attribute in its HTML (onclick=/onchange=/onsubmit=/onload=/oninput=) — all are dead under the
-    strictPages CSP. Three shipped that way and silently never ran until 2026-07-08 (the Reject and
-    Revoke confirms, the preview size toggle); behaviours belong in CURATOR_UI_JS's data-attribute
-    delegation instead. FAILS IF: a new inline handler lands in any renderer source."""
+def test_no_page_renderer_emits_inline_handlers_or_scripts():
+    """SOURCE-LEVEL CSP SWEEP: no gateway HTML-emitting module may contain an inline event-handler
+    attribute (ANY on*= — onerror/ontoggle/onkeydown included, review S3) or an inline <script>
+    block without src= (review S2) — all are dead under the strictPages CSP. Three handlers shipped
+    that way and silently never ran until 2026-07-08; behaviours belong in CURATOR_UI_JS's
+    data-attribute delegation and scripts belong behind the external routes. FAILS IF: a new inline
+    handler or inline script block lands in any listed module — or a listed module is renamed away
+    (coverage must fail loudly, not silently narrow)."""
     import re
     from pathlib import Path
     pkg = Path(__file__).resolve().parents[1]
     offenders = []
-    for name in ("curatorpage.py", "metaedit.py", "statuspage.py", "uploader_keys.py"):
+    for name in ("curatorpage.py", "metaedit.py", "statuspage.py", "uploader_keys.py", "app.py"):
         p = pkg / name
-        if not p.exists():
-            continue
+        assert p.exists(), f"CSP sweep target vanished (renamed?): {name} — update this sweep"
         for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
-            if re.search(r"""on(click|change|submit|load|input|mouseover|focus|blur)\s*=\s*['"\\]""", line):
-                offenders.append(f"{name}:{i}: {line.strip()[:90]}")
-    assert offenders == [], "inline event handlers are dead under the CSP:\n" + "\n".join(offenders)
+            if re.search(r"""\bon[a-z]{3,}\s*=\s*['"\\]""", line):
+                offenders.append(f"{name}:{i} (handler): {line.strip()[:90]}")
+            if re.search(r"<script(?![^>]*\bsrc\s*=)[^>]*>", line):
+                offenders.append(f"{name}:{i} (inline <script>): {line.strip()[:90]}")
+    assert offenders == [], "inline JS is dead under the CSP:\n" + "\n".join(offenders)
+
+
+def test_rendered_forms_carry_the_delegated_data_attributes():
+    """S1 PIN: the delegated behaviours only work if the RENDERED markup carries the data
+    attributes — reverting them regresses silently otherwise (ui.js keeps serving handlers nothing
+    triggers). Rendered where cheap (the serve panel), source-literal where the renderer needs a
+    full fixture graph (Reject / Revoke / toggle). FAILS IF: any of the four migrated sites loses
+    its data attribute in a refactor."""
+    from pathlib import Path
+
+    from gateway import curatorpage
+    panel = curatorpage.render_serve_panel(
+        published_head="abc1234", published_available=True, status=None, pending=False,
+        csrf_token="tok")
+    assert 'data-confirm="Request a rebuild on the next reconcile tick?"' in panel
+    src = (Path(curatorpage.__file__)).read_text(encoding="utf-8")
+    assert 'data-confirm="Reject this submission?"' in src
+    assert 'data-confirm="Revoke this uploader key? This cannot be undone."' in src
+    assert 'data-toggle-big="prev"' in src
 
 
 def test_serve_state_js_route_serves_the_panel_script(tmp_path):
@@ -330,20 +353,20 @@ def test_serve_state_js_route_serves_the_panel_script(tmp_path):
 
 
 def test_ui_js_route_serves_shared_behaviours(tmp_path):
-    """GET /gateway/curator/ui.js (loaded by EVERY curator page via the shell) returns the shared
-    delegation JS: the data-confirm submit guard (Rebuild/Reject/Revoke confirms ride it) and the
-    data-toggle-big click handler (the preview size toggle). Session-gated like everything else
-    under /gateway/curator. FAILS IF: the route 404s (every confirm/toggle silently dies again, the
-    pre-2026-07-08 state), lacks either delegated behaviour, or skips the session gate."""
+    """GET /gateway/curator/ui.js (loaded by EVERY curator page via the shell, INCLUDING the
+    pre-session login page) returns the shared delegation JS: the data-confirm submit guard
+    (Rebuild/Reject/Revoke confirms ride it) and the data-toggle-big click handler (the preview
+    size toggle). Deliberately UNGATED (review C2): a session gate here 303s the login page's own
+    script fetch into a nosniff console error on every login view; the content is a static
+    public-repo constant. FAILS IF: the route 404s (every confirm/toggle silently dies again, the
+    pre-2026-07-08 state), lacks either delegated behaviour, or regains a gate that breaks the
+    login page."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
             r_anon = await client.get("/gateway/curator/ui.js", follow_redirects=False)
-            assert r_anon.status_code == 303
-            await curator_login(client)
-            r = await client.get("/gateway/curator/ui.js")
-            assert r.status_code == 200
-            assert "javascript" in r.headers["content-type"]
-            assert "data-confirm" in r.text and "confirm(" in r.text
-            assert "data-toggle-big" in r.text
-            assert "<script" not in r.text
+            assert r_anon.status_code == 200, "ui.js must be reachable pre-session (login page loads it)"
+            assert "javascript" in r_anon.headers["content-type"]
+            assert "data-confirm" in r_anon.text and "confirm(" in r_anon.text
+            assert "data-toggle-big" in r_anon.text
+            assert "<script" not in r_anon.text
     run(_body())
