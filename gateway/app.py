@@ -17,7 +17,9 @@ import logging
 import os
 import secrets
 import shutil
+import sqlite3
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Header, Request, Response
@@ -25,7 +27,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import checklist as checklist_mod
 from . import (clamd, curator_auth, curatorpage, db, jobs, metaedit, publish, states, statuspage,
-               zipsafety)
+               uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
 from .orcid import is_valid_orcid
@@ -105,8 +107,9 @@ class Gateway:
     # ---- upload ------------------------------------------------------------------------------
 
     async def handle_submit(self, request: Request, submit_key: str | None):
-        if not self._auth_ok(submit_key):
-            # Uniform 401; no hint about whether the key was absent vs wrong.
+        auth = self._resolve_submit_auth(submit_key)
+        if auth is None:
+            # Uniform 401; no hint about whether the key was absent, wrong, revoked, or unknown.
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
 
         # Capacity gate (design §4.2), reserved ATOMICALLY before the body read so N concurrent
@@ -126,11 +129,11 @@ class Gateway:
             )
         self._reserved += 1
         try:
-            return await self._handle_submit_reserved(request)
+            return await self._handle_submit_reserved(request, auth)
         finally:
             self._reserved -= 1
 
-    async def _handle_submit_reserved(self, request: Request):
+    async def _handle_submit_reserved(self, request: Request, auth: "_SubmitAuth"):
         # Parse the multipart body under a hard total-byte cap that fires as bytes arrive (chunked-
         # safe, no Content-Length dependency) and spools only onto the measured incoming volume
         # (design §4.1 — see gateway/upload.py for why request.form() alone is unsafe here).
@@ -208,7 +211,12 @@ class Gateway:
             submission_id=submission_id, zip_sha256=digest, zip_bytes=total,
             submitter_name=name, submitter_email=email,
             submitter_orcid=(orcid or None), token_hash=_token_hash(token),
+            uploader_name=auth.uploader_name,
         )
+        # Stamp last_used on the DB key that authorised this submit (best-effort audit; a DB-key
+        # uploader is the only one with a per-key usage signal). The env-bootstrap key has no row.
+        if auth.uploader_key_id is not None:
+            self.db.stamp_uploader_key_used(auth.uploader_key_id)
 
         # clamd scan of the raw zip (design §4.5). Fail closed: on ScanError the row STAYS RECEIVED
         # and the poll loop retries; only a definite clean advances to SCANNED + queues the job.
@@ -497,6 +505,64 @@ class Gateway:
         return checklist_mod.build(
             validate_report=validator, preview_summary=preview, submission_slug=sub.slug,
             submitter_email=sub.submitter_email, package_dir=pkg, preview_dir=preview_dir)
+
+    # ---- uploader keys (schema v2 — curator-managed submit keys) ------------------------------
+
+    def handle_uploaders(self, request: Request, error: str = "", status_code: int = 200) -> Response:
+        """GET the uploader-key page: the create form + the list of issued keys (active and revoked).
+        Session-gated exactly like the other curator GET pages. The list carries curator-only PII
+        (uploader email) but NEVER a plaintext key (only key_sha256 is stored; the plaintext was shown
+        once at creation)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        keys = self.db.list_uploader_keys()
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        return self._html(curatorpage.render_uploaders(
+            curator_name=name, keys=keys, csrf_token=csrf, error=error), status_code=status_code)
+
+    def handle_uploader_create(self, request: Request, name_field: str | None,
+                               email_field: str | None, csrf: str | None) -> Response:
+        """POST create: session + CSRF gated. Mints a key, stores ONLY its sha256, and shows the
+        plaintext ONCE (never persisted, never retrievable). A duplicate name is refused with a clear
+        409 — the DB UNIQUE(name) constraint is the single source of truth (no read-then-insert race).
+        Creation is audit-logged via the row's created_by = the curator's name."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        name = (name_field or "").strip()
+        email = (email_field or "").strip() or None
+        if not name:
+            return self.handle_uploaders(request, error="A name is required.", status_code=400)
+        key = uploader_keys_mod.mint_key()
+        try:
+            self.db.create_uploader_key(
+                name=name, email=email, key_sha256=uploader_keys_mod.key_hash(key),
+                created_by=curator)
+        except sqlite3.IntegrityError:
+            # UNIQUE(name) (or the vanishingly-unlikely UNIQUE(key_sha256)) collision — refuse with a
+            # clear message and create nothing (the plaintext above is discarded, never shown).
+            return self.handle_uploaders(
+                request, error=f"An uploader key named {name!r} already exists — names must be unique.",
+                status_code=409)
+        return self._html(curatorpage.render_uploader_created(
+            curator_name=curator, name=name, key=key))
+
+    def handle_uploader_revoke(self, request: Request, key_id: int, csrf: str | None) -> Response:
+        """POST revoke: session + CSRF gated. Sets revoked_utc/revoked_by (audit); the row STAYS
+        listed (no delete). Idempotent — revoking an unknown/already-revoked id redirects back without
+        error rather than leaking whether the id existed."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        self.db.revoke_uploader_key(key_id, revoked_by=curator)
+        return RedirectResponse("/gateway/curator/uploaders", status_code=303)
 
     # ---- C31 metadata editor -----------------------------------------------------------------
 
@@ -938,10 +1004,39 @@ class Gateway:
 
     # ---- auth --------------------------------------------------------------------------------
 
-    def _auth_ok(self, submit_key: str | None) -> bool:
+    def _resolve_submit_auth(self, submit_key: str | None) -> "_SubmitAuth | None":
+        """Resolve a presented X-AusMT-Submit-Key to an authenticated identity, else None (=> 401).
+        Accepts EITHER the env AUSMT_SUBMIT_KEY (bootstrap + CI e2e path, unchanged — the env check
+        needs no DB, so it survives a DB outage) OR an ACTIVE DB uploader key (schema v2). Both are
+        constant-time: the env key via hmac.compare_digest on the raw key; the DB key via a sha256
+        lookup whose stored hash is compared with hmac.compare_digest inside get_active_uploader_key_
+        by_hash's indexed WHERE (a hash lookup, not a per-key scan). A revoked/unknown key resolves to
+        None — the SAME 401 as a wrong env key, no oracle for which case it was.
+
+        FAIL-CLOSED: if the DB lookup raises (DB unavailable mid-auth), we REJECT rather than fall back
+        to env-only or accept — an auth error is never an auth bypass. The env path is tried FIRST and
+        returns without touching the DB, so a DB outage never blocks the bootstrap key."""
         if not submit_key:
-            return False
-        return hmac.compare_digest(submit_key, self.cfg.submit_key)
+            return None
+        if hmac.compare_digest(submit_key, self.cfg.submit_key):
+            return _SubmitAuth(uploader_name=None, uploader_key_id=None)
+        try:
+            row = self.db.get_active_uploader_key_by_hash(uploader_keys_mod.key_hash(submit_key))
+        except Exception:  # noqa: BLE001 -- a DB error during auth must fail closed, never bypass
+            logger.warning("uploader-key lookup failed during submit auth — rejecting (fail closed)")
+            return None
+        if row is None:
+            return None
+        return _SubmitAuth(uploader_name=row.name, uploader_key_id=row.id)
+
+
+@dataclass(frozen=True)
+class _SubmitAuth:
+    """The authenticated submit identity. uploader_name/uploader_key_id are None for the env key
+    (bootstrap/CI); set for a DB uploader key so the handler can attribute the upload and stamp
+    last_used."""
+    uploader_name: str | None
+    uploader_key_id: int | None
 
 
 class _Oversize(Exception):
@@ -1060,6 +1155,21 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/preview/{submission_id}/{subpath:path}")
     def curator_preview(request: Request, submission_id: str, subpath: str):
         return gw.handle_curator_preview(request, submission_id, subpath)
+
+    # ---- uploader-key routes (schema v2). GET is `def` (blocking sqlite read -> threadpool, matching
+    # the queue/detail rationale); both POSTs are CSRF-checked in the handler.
+    @app.get("/gateway/curator/uploaders")
+    def curator_uploaders(request: Request):
+        return gw.handle_uploaders(request)
+
+    @app.post("/gateway/curator/uploaders/create")
+    def curator_uploader_create(request: Request, name: str = Form(default=""),
+                                email: str = Form(default=""), csrf_token: str = Form(default="")):
+        return gw.handle_uploader_create(request, name, email, csrf_token)
+
+    @app.post("/gateway/curator/uploaders/{key_id}/revoke")
+    def curator_uploader_revoke(request: Request, key_id: int, csrf_token: str = Form(default="")):
+        return gw.handle_uploader_revoke(request, key_id, csrf_token)
 
     # ---- C31 metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the C10/C11
