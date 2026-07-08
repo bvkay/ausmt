@@ -130,10 +130,11 @@
 <main>
   <h1>Contribute a survey</h1>
   <p class="lede">Describe the survey, add your EDI files, then <b>validate</b>, <b>preview</b>, and
-  <b>package</b> a submission archive. Submit it either <b>directly to AusMT</b> (where a gateway is
-  available — no GitHub account needed) or by <b>opening a pull request</b> with the archive. Everything
-  runs in your browser; your files and details never leave this page until you submit. New here? Copy
-  <code>_example/example-survey/</code> from the surveys repo as a starting point.</p>
+  <b>package</b> a submission archive. Submit it <b>directly to AusMT</b> where a gateway is available
+  (no account needed); otherwise <b>email the packaged archive to the operator</b> — the contact
+  address is on the <a href="about.html">About page</a>. Everything runs in your browser; your files
+  and details never leave this page until you submit. New here? A worked example survey package lives at
+  <code>engine/data/sample-survey/</code> in the AusMT framework repository.</p>
 
   <div class="advisory">This page performs <b>local pre-submission checks</b> to help you prepare a clean
   submission. <b>Final validation is authoritative in the AusMT repository workflow</b> (CI) during curator
@@ -311,7 +312,7 @@
       <div class="req"><label>Your name</label><input id="m_up_name" placeholder="Full name"></div>
       <div class="req"><label>Your email</label><input id="m_up_email" type="email" placeholder="you@institution.edu">
         <div class="hint">Private, for curator contact only. <b>Not written into the submission package</b>
-        (that zip is attached to a public GitHub PR) — provide it in the PR description or message instead.</div></div>
+        — the gateway sends it to the curators privately, or include it in your email to the operator.</div></div>
       <div><label>Your ORCID (optional)</label><input id="m_up_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="upOrcidOk"></span></div>
     </div>
     <label class="check"><input type="checkbox" id="m_auth"><span>I have the authority to submit this survey for
@@ -1097,25 +1098,44 @@ if(typeof document!=="undefined"&&document.getElementById){
   // always-available fallback. It NEVER references email/ORCID (C3). `gatewayAvailable` only reorders
   // the guidance — the two paths are both documented regardless, since the file may be read after the
   // fact by someone on a different deploy.
+  // Plain-language meaning of each access level, restated in the package (audit 5.3) so the choice's
+  // consequence travels with the data. Truthful to build_portal.py: every level is publicly discoverable
+  // with exact coordinates; only 'open' serves data bytes; an embargo never auto-lifts.
+  function accessMeaning(level){
+    switch(String(level||"open")){
+      case "embargoed": return "embargoed — the survey is listed publicly (map, exact coordinates, screening "+
+        "diagnostics) but its data bytes are WITHHELD until a curator releases it; the embargo does not lift "+
+        "automatically on its date.";
+      case "metadata_only": return "metadata_only — the survey is listed publicly (map, exact coordinates, "+
+        "screening diagnostics) but NO data bytes are served (downloads route to the source archive).";
+      default: return "open — the survey is listed publicly AND its data files are served for download.";
+    }
+  }
   function buildSubmissionMd(meta, slug, tf, inputFormat, counts, extractor, gatewayAvailable){
+    const embargoLine = (meta.access && meta.access!=="open" && meta.embargo_until)
+      ? `\n- embargo until: ${meta.embargo_until} (data stays withheld until a curator sets level=open)` : "";
     const head=
       `# AusMT submission: ${meta.name}\n\n- slug: \`${slug}\`\n- organisation: ${meta.organisation||"—"}\n`+
-      `- licence: ${meta.license}\n- transfer functions: ${tf.length} file(s) (${inputFormat})\n`+
+      `- licence: ${meta.license}\n- access level: ${accessMeaning(meta.access)}${embargoLine}\n`+
+      `- transfer functions: ${tf.length} file(s) (${inputFormat})\n`+
       `- recommended extractor: \`${extractor}\`\n`+
       `- validation: PASS ${counts.PASS} · WARNING ${counts.WARNING} · FAIL ${counts.FAIL}\n\n`+
       `## Submitter\n- name: ${meta.uploader_name}\n`+
       `- authority to submit: ${meta.authority_to_submit?"yes":"NO"}\n- licence/access confirmed: ${meta.license_declaration?"yes":"NO"}\n\n`;
+    // Submission paths, honest to the current infrastructure (audit 5.1): the gateway upload is the
+    // primary path where detected; the fallback is emailing the packaged zip to the operator (the
+    // ausmt-surveys repo is private, so there is no public PR path). Numbering stays sequential in both
+    // branches. Contact email rides OUTSIDE this package (email body / gateway field), never in a file.
     const direct=
       `## How to submit\n`+
       (gatewayAvailable
-        ? `1. **Direct upload (recommended where available).** The AusMT Add Survey page detected a submission gateway and can\n`+
-          `   upload this package directly with your operator-issued submit key — no GitHub account needed. Your contact\n`+
+        ? `1. **Direct upload (recommended).** The AusMT Add Survey page detected a submission gateway and can\n`+
+          `   upload this package directly with your operator-issued submit key — no account needed. Your contact\n`+
           `   email is sent to the curators privately (never written into this package).\n`+
-          `2. **Pull request (always available).** Open a PR against the ausmt-surveys repository, add this folder under\n`
-        : `1. **Pull request.** Open a pull request against the ausmt-surveys repository, add this folder under\n`)+
-      `   \`surveys/${slug}/\` (keep MANIFEST.json/SUBMISSION.md with the PR). Include your contact email in the PR\n`+
-      `   description or message to the curator -- NOT in a file in this package, since the PR (and everything attached\n`+
-      `   to it) is public.\n`+
+          `2. **Fallback — email the operator.** If the upload service is unavailable, email this packaged \`.zip\`\n`+
+          `   to the AusMT operator (contact address on the About page), with your contact email in the message.\n`
+        : `1. **Email the operator.** Email this packaged \`.zip\` to the AusMT operator (contact address on the\n`+
+          `   About page). Put your contact email in the message — NOT in a file in this package.\n`)+
       // The trailing step's number depends on the branch (2 items precede it with a gateway, 1 without)
       // so the ordered list stays strictly sequential either way.
       `${gatewayAvailable?3:2}. CI runs the authoritative validator; a curator reviews.\n`;
@@ -1131,9 +1151,9 @@ if(typeof document!=="undefined"&&document.getElementById){
     track("DownloadGenerated",{format:"zip"});
     $("pkBody").innerHTML=`<div>Built <b>${esc(pkg.fname)}</b> — ${pkg.tf.length} EDIs, checksummed.</div>`+
       `<div>recommended extractor: <b>${pkg.manifest.recommended_extractor}</b></div>`+
-      `<div class="note">Your email is NOT included in this package (the PR you attach it to is public).
-      Attach the archive to a pull request adding <code>surveys/${esc(pkg.slug)}/</code> and put your contact
-      email in the PR description or message instead.</div>`;
+      `<div class="note">Your email is NOT included in this package. Email the archive to the AusMT operator
+      (contact address on the <a href="about.html">About page</a>) and put your contact email in the message.
+      See <code>SUBMISSION.md</code> inside the archive for the full steps.</div>`;
     $("pPackage").classList.add("show");
   };
   // ----- collection autofill: prefill from EXISTING collections so a contributor JOINS an existing
@@ -1172,13 +1192,13 @@ if(typeof document!=="undefined"&&document.getElementById){
   // Detection (design §1): one healthz probe per page load, 5 s AbortController timeout, no polling.
   // The submit UI stays hidden unless gatewayPresent(status, body) is strictly true (200 + JSON +
   // ok===true). A failed/absent probe leaves the page byte-identical to the pre-C13 page — the
-  // manual-PR path (Package submission .zip) remains primary. Same-origin literal /gateway/... only
-  // (no config knob, no new origin — CORS-free and covered by the existing connect-src 'self').
+  // download-and-email path (Package submission .zip) remains primary. Same-origin literal /gateway/...
+  // only (no config knob, no new origin — CORS-free and covered by the existing connect-src 'self').
   function showGatewayUI(){
     gatewayReady=true;
     $("gatewayBlock").classList.add("show");
-    // Reword the manual-PR button as the explicit fallback now that direct upload is the primary path.
-    const bp=$("btnPackage"); if(bp) bp.textContent="Package .zip for a pull request (manual path)";
+    // Reword the download button as the explicit fallback now that direct upload is the primary path.
+    const bp=$("btnPackage"); if(bp) bp.textContent="Package .zip to email (fallback path)";
     track("GatewayDetected");   // PII-free, no ids
   }
   (function probeGateway(){

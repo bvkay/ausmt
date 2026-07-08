@@ -400,6 +400,36 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   }
 
   // --------------------------------------------------------------------------------------------------
+  // 5c. NO PR FICTION IN SUBMISSION.md (audit 5.1). The ausmt-surveys repo is private forever, so a
+  //     "pull request (always available)" instruction is impossible to follow. The packaged SUBMISSION.md
+  //     must NOT instruct opening a PR against that repo, and MUST carry the honest email-the-operator
+  //     fallback. Checked on BOTH transports (the file travels inside the zip either way).
+  async function packagedSubmissionMd(zipBytes) {
+    const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
+    const z = await JSZipNode.loadAsync(zipBytes);
+    const entries = z.file(/SUBMISSION\.md$/);
+    ok(entries.length === 1, "the zip contains exactly one SUBMISSION.md");
+    return entries[0].async("string");
+  }
+  for (const branch of ["present", "absent"]) {
+    const e = await boot({ probe: branch === "present" ? probePresent : probeAbsent });
+    await fillValidForm(e.win, { key: branch === "present" ? SECRET_KEY : null });
+    // Package via download (gives us a blob on both branches without needing an XHR script).
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    ok(e.record.blobs.length >= 1, "packaging produced a zip blob (" + branch + ")");
+    const md = await packagedSubmissionMd(Buffer.from(await e.record.blobs[e.record.blobs.length - 1].arrayBuffer()));
+    ok(!/always available/i.test(md),
+      "SUBMISSION.md must not claim a PR path is 'always available' (" + branch + ")");
+    ok(!/pull request|open a pr|ausmt-surveys/i.test(md),
+      "SUBMISSION.md must not instruct a PR against the private ausmt-surveys repo (" + branch + ")");
+    ok(/email[\s\S]*zip[\s\S]*operator|email[\s\S]*operator[\s\S]*zip/i.test(md),
+      "SUBMISSION.md must carry the honest email-the-operator fallback (" + branch + ")");
+    ok(/About page/i.test(md),
+      "SUBMISSION.md points to the operator contact on the About page (" + branch + ")");
+  }
+
+  // --------------------------------------------------------------------------------------------------
   // 6. PER-ROW FILE REMOVE (fix/add-survey-file-remove): the ✕ button removes a file from `files`, the
   //    list re-renders, updateConf() re-runs, and — the LOAD-BEARING invariant — a removed file must
   //    NEVER ship in the packaged zip. Two EDIs are added; the FIRST (a dms_sign_ambiguous-flagged
