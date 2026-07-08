@@ -341,7 +341,7 @@
   <fieldset id="gatewayBlock">
     <legend>Submit to AusMT</legend>
     <div class="pidnote">A submission gateway is available on this site. You can upload the validated
-      package directly — no GitHub account needed. Your email is sent privately to the curators and is
+      package directly — no account needed. Your email is sent privately to the curators and is
       never written into the package.</div>
     <div class="keyrow">
       <label for="m_submit_key">Submit key</label>
@@ -1123,9 +1123,10 @@ if(typeof document!=="undefined"&&document.getElementById){
     return {blocked:false, blob, fname, tf, manifest, inputFormat, counts:v.counts, slug};
   }
   // SUBMISSION.md travels INSIDE the zip on BOTH transport paths (design §2), so it must stay accurate
-  // for both: the direct-upload path is listed as option 1 where a gateway is available, PR as the
-  // always-available fallback. It NEVER references email/ORCID (C3). `gatewayAvailable` only reorders
-  // the guidance — the two paths are both documented regardless, since the file may be read after the
+  // for both: the direct-upload path is listed as option 1 where a gateway is available, emailing the
+  // packaged zip to the operator as the fallback. It NEVER references email/ORCID as file CONTENT (C3);
+  // the operator-email path is a submission INSTRUCTION, not a stored address. `gatewayAvailable` only
+  // reorders the guidance — the fallback is documented regardless, since the file may be read after the
   // fact by someone on a different deploy.
   // Plain-language meaning of each access level, restated in the package (audit 5.3) so the choice's
   // consequence travels with the data. Truthful to build_portal.py: every level is publicly discoverable
