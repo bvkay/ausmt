@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import re
 
-from gateway import states
 from gateway.tests.conftest import (
-    EDIT_EXEMPLAR, FakeGit, app_client, csrf_for_session, curator_login, inproc_edit_runner, run,
-    settle_publish, write_survey_live,
+    FakeGit, app_client, csrf_for_session, curator_login, inproc_edit_runner, run,
+    write_survey_live,
 )
 
 # A survey.yaml with a real version so the bump logic works; the station list is the EDI files.

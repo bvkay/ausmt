@@ -1309,9 +1309,9 @@ def _selected_removals(form) -> list[str]:
         raw = [raw]
     out: list[str] = []
     for v in raw:
-        v = str(v).strip()
-        if v and v not in out:
-            out.append(v)
+        name = str(v).strip()
+        if name and name not in out:
+            out.append(name)
     return out
 
 
