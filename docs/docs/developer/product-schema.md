@@ -15,7 +15,7 @@ files are defined separately in [Portal Data Files](data-files.md).
   "location": { "lat": 0.0, "lon": 0.0 },
   "data": { "type": "BBMT", "n_periods": 0, "period_min_s": 0.0, "period_max_s": 0.0 },
   "diagnostics": { "median_relative_error": 0.0, "remote_reference": false,
-                   "tipper_available": false, "dimensionality": "2-D", "skew_beta_mean_deg": 0.0,
+                   "tipper_available": false, "dimensionality": "2-D", "skew_beta_median_deg": 0.0,
                    "completeness_smoothness_diagnostic": { "value": 0.0, "basis": "e",
                      "note": "not a quality or geological-value judgement" } },
   "distribution": { "edi_available": false, "license": "...", "edi_path": null },
@@ -24,7 +24,7 @@ files are defined separately in [Portal Data Files](data-files.md).
 }
 ```
 
-**`dimensionality.json`** — `{ classification, skew_beta_mean_deg, pct_periods_3d, method,
+**`dimensionality.json`** — `{ classification, skew_beta_median_deg, pct_periods_3d, method,
 screening_diagnostic, note }`.
 
 Every product MUST carry a `provenance` block (input file + sha256 + pipeline/params) so it is

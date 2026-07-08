@@ -1996,7 +1996,7 @@ def main(argv=None):
                              "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
                     "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
                                     "tipper_available": "T" in (r.get("comps") or ""),
-                                    "dimensionality": srow[_SC["dim"]], "skew_beta_mean_deg": srow[_SC["skew"]],
+                                    "dimensionality": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
                                     "completeness_smoothness_diagnostic": {
                                         "value": srow[_SC["q"]], "basis": srow[_SC["qb"]],
                                         "note": "not a quality or geological-value judgement"}},
@@ -2025,7 +2025,7 @@ def main(argv=None):
                     "canonical_conditioning": (conditioning_notes.get(r["id"]) or None),
                 }, indent=1), encoding="utf-8")
                 (sdir / "dimensionality.json").write_text(_jdump({
-                    "classification": srow[_SC["dim"]], "skew_beta_mean_deg": srow[_SC["skew"]],
+                    "classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
                     "pct_periods_3d": srow[_SC["p3d"]], "method": "phase-tensor (Caldwell 2004)",
                     "screening_diagnostic": True,
                     "note": "screening diagnostic, not an interpretation product"}, indent=1), encoding="utf-8")
