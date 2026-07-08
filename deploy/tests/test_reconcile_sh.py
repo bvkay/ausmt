@@ -70,10 +70,14 @@ def _make_tree(tmp_path: Path, *, source_commit: str | None, build_id: str = "bi
     _git(surveys, "push", "-q", "origin", f"HEAD:{branch}")
     _git(surveys, "branch", f"--set-upstream-to=origin/{branch}")
 
-    site = data / "site-data" / "current" / "data"
+    # build.json lives at the BUILD ROOT (current/build.json): the engine writes `out/build.json`
+    # and Caddy's handle_path strips the /data URL prefix before the filesystem. The first install
+    # (2026-07-08) failed because BOTH the script and this fixture assumed current/data/build.json —
+    # a self-consistent test that validated the script against its own wrong assumption. The layout
+    # here is now pinned to the ENGINE's write site by test_build_json_path_matches_engine_layout.
+    site = data / "site-data" / "current"
     site.mkdir(parents=True, exist_ok=True)
     if source_commit is not None:
-        (site.parent / "data").mkdir(parents=True, exist_ok=True)
         (site / "build.json").write_text(json.dumps(
             {"build_id": build_id, "engine_commit": "eng0000", "source_commit": source_commit}),
             encoding="utf-8")
@@ -322,6 +326,143 @@ def test_ff_pull_advances_then_rebuilds(tmp_path):
     assert _git(tree["surveys"], "rev-parse", "--short=7", "HEAD") == new_head
     assert tree["marker"].exists(), "the advanced HEAD must trigger a rebuild"
     assert _status(tree)["action"] == "rebuilt"
+
+
+def test_build_json_path_matches_engine_layout():
+    """CROSS-ARTIFACT PIN (the 2026-07-08 incident): the script's BUILD_JSON path and the engine's
+    write site must agree. The engine writes build.json at the BUILD ROOT (`out / "build.json"` in
+    build_portal.py); Caddy's handle_path strips /data before the filesystem, so the /data/build.json
+    URL maps to that same root file. FAILS IF: the script re-grows a data/ segment, or the engine
+    moves its build.json write site without this pin (and therefore the script) being updated."""
+    script = _SCRIPT.read_text(encoding="utf-8")
+    assert 'BUILD_JSON="$SITE_DATA/current/build.json"' in script, \
+        "reconcile.sh must read build.json at the build ROOT (current/build.json)"
+    assert "current/data/build.json" not in script, \
+        "the phantom data/ segment is the exact 2026-07-08 rebuild-loop bug"
+    engine_src = (_REPO / "engine" / "extract" / "build_portal.py").read_text(encoding="utf-8")
+    assert '(out / "build.json")' in engine_src, \
+        "engine no longer writes build.json at the build root — update reconcile.sh AND this pin"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_loop_guard_holds_when_rebuild_never_yields_identity(tmp_path):
+    """LOOP GUARD: no build.json + a 'successful' rebuild that STILL yields no build.json (the
+    layout/permission-mismatch class) => the FIRST run rebuilds (action=rebuilt, built null); the
+    SECOND run must NOT rebuild again — it holds with action=failed and exit 1. FAILS IF: the second
+    run invokes the shim (the 15-minutely rebuild-forever loop this guard exists to prevent)."""
+    tree = _make_tree(tmp_path, source_commit=None)   # no build.json, and the shim never creates one
+    r1 = _run(tree)                                    # shim runs (exit 0) but writes no build.json
+    assert r1.returncode == 0, r1.stderr
+    assert tree["marker"].exists(), "first pass at this head is allowed to try a rebuild"
+    st1 = _status(tree)
+    assert st1 is not None and st1["action"] == "rebuilt" and not st1["built"]
+    tree["marker"].unlink()
+    r2 = _run(tree)
+    assert r2.returncode == 1, "the guard must exit 1 so monitoring flags the structural mismatch"
+    assert not tree["marker"].exists(), "the guard must NOT rebuild again at the same head"
+    st2 = _status(tree)
+    assert st2 is not None and st2["action"] == "failed"
+    assert "structural mismatch" in r2.stderr
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_loop_guard_rearmed_by_request_and_by_head_change(tmp_path):
+    """The guard yields to deliberate intent: an explicit rebuild.request forces a fresh attempt, and
+    a HEAD change re-arms normal behaviour. FAILS IF: a curator's button press is ignored while the
+    guard holds, or a new publish stays un-built because the guard latched forever."""
+    tree = _make_tree(tmp_path, source_commit=None)
+    _run(tree)                        # attempt 1: rebuilt, no identity
+    r_hold = _run(tree)               # guard holds
+    assert r_hold.returncode == 1
+    tree["marker"].unlink(missing_ok=True)
+    # (a) explicit request => fresh attempt despite the hold
+    (tree["state"] / "rebuild.request").write_text("{}", encoding="utf-8")
+    r_req = _run(tree)
+    assert tree["marker"].exists(), "an explicit rebuild.request must override the loop guard"
+    assert r_req.returncode == 0
+    # guard re-latches after that identity-less rebuild...
+    tree["marker"].unlink()
+    assert _run(tree).returncode == 1
+    assert not tree["marker"].exists()
+    # (b) ...and a HEAD change (a new publish) re-arms a normal rebuild attempt
+    _advance_head(tree)
+    r_head = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert tree["marker"].exists(), "a new HEAD must release the guard"
+    assert r_head.returncode == 0
+    assert _status(tree)["action"] == "rebuilt"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_missing_data_dir_fails_early(tmp_path):
+    """An AUSMT_DATA_DIR that does not exist (unmounted volume / .env typo) => rc=1 with one loud
+    message, BEFORE any tree is fabricated. FAILS IF: the script mkdir-ps a phantom tree and settles
+    into quiet sync_failed forever (review L4)."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    r = _run(tree, env_extra={"AUSMT_DATA_DIR": str(tmp_path / "not-mounted")})
+    assert r.returncode == 1
+    assert "does not exist" in r.stderr
+    assert not (tmp_path / "not-mounted").exists(), "must not fabricate the data tree"
+    assert not tree["marker"].exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_log_dir_exists_but_unwritable_fails_before_building(tmp_path):
+    """logs/ EXISTS but is not writable (an ownership regression — `mkdir -p` alone would pass) =>
+    fail before invoking the build, action=failed, rc=1, with the ownership-prep hint. FAILS IF: the
+    writability probe is dropped and the failure only surfaces at the build redirect with no hint
+    (review L1)."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    logs_dir = tree["data"] / "site-data" / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.chmod(0o555)
+    try:
+        r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+        assert r.returncode == 1
+        assert not tree["marker"].exists(), "must NOT build when the log dir is unwritable"
+        st = _status(tree)
+        assert st is not None and st["action"] == "failed"
+        assert "ownership prep" in r.stderr
+    finally:
+        logs_dir.chmod(0o755)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_state_dir_unwritable_fails_early_and_loud(tmp_path):
+    """An unwritable gateway state dir (the missing one-time ownership prep) => the run fails EARLY
+    with one actionable message and rc=1, BEFORE any sync/build. FAILS IF: the pass half-runs (shim
+    invoked) or exits 0, hiding the misconfiguration (the 2026-07-08 scattered-errors symptom)."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    state = tree["state"]
+    state.chmod(0o555)
+    try:
+        r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+        assert r.returncode == 1
+        assert not tree["marker"].exists(), "nothing may run after the failed writability probe"
+        assert "ownership prep" in r.stderr
+    finally:
+        state.chmod(0o755)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory write-deny not enforceable via chmod on Windows")
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_log_dir_uncreatable_fails_before_building(tmp_path):
+    """A logs/ dir that cannot be created (site-data not operator-writable — the other missing prep
+    step) => fail BEFORE invoking the build, action=failed, rc=1. FAILS IF: the script builds a
+    corpus it cannot log (undebuggable from the panel) or reports anything but failed."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    site_data = tree["data"] / "site-data"
+    site_data.chmod(0o555)
+    try:
+        r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+        assert r.returncode == 1
+        assert not tree["marker"].exists(), "must NOT build when the log dir cannot be created"
+        st = _status(tree)
+        assert st is not None and st["action"] == "failed"
+        assert "log dir" in r.stderr
+    finally:
+        site_data.chmod(0o755)
 
 
 @pytest.mark.skipif(not (_HAS_FLOCK and _HAS_GIT), reason="flock(1) not available on this host")
