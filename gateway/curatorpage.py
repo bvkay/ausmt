@@ -1005,6 +1005,7 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     body = (
         f'<h1>Edit metadata — {_esc(slug)}</h1>'
         f'<p class="sub">current version {_esc(cur)} · '
+        f'<a href="/gateway/curator/edit/{_esc(slug)}/stations">manage stations (remove EDIs)</a> · '
         f'<a href="/gateway/curator/queue">back to queue</a></p>'
         '<p class="sub">Fill the fields for each section. An empty field is left unchanged; each '
         'section also has an <em>Advanced</em> raw-JSON box that overrides its fields when filled.</p>'
@@ -1082,6 +1083,143 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str) -> str:
         f'<div class="panel">{listing}</div>'
     )
     return _page("AusMT edit metadata", body)
+
+
+# ---- station (EDI) removal ------------------------------------------------------------------------
+# A station is one .edi file under <slug>/transfer_functions/edi/. survey.yaml carries NO station-list
+# field, so the listing is the EDI files themselves and a removal is a git rm + version bump + release
+# note. NO inline JS: the final confirm form rides the shared CURATOR_UI_JS data-confirm delegation.
+
+
+def render_stations_list(*, slug: str, version: str | None, stations: list, csrf_token: str,
+                         error: str = "", submitted: dict | None = None) -> str:
+    """The stations page (removal deliverable 1): one row per EDI — filename, derived station id, and a
+    remove checkbox — plus the version-bump picker (a removal is a content change: minor by default)
+    and the required release note. Submitting selects one or more files for a removal PREVIEW. The
+    checked state survives a re-render (a refused preview) via `submitted`."""
+    err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    cur = version or "0.0.0"
+    # A removal is at least a MINOR change by default (content changed); patch/major still offered.
+    minor_v = _suggest_bump(cur, "minor")
+    patch_v = _suggest_bump(cur, "patch")
+    major_v = _suggest_bump(cur, "major")
+    checked_names = set()
+    note_val = ""
+    bump_val = "minor"
+    if submitted is not None:
+        checked_names = {v for k, v in submitted.items()
+                         if k == "remove" or k.startswith("remove")}
+        # httpx sends repeated `remove` as a single last value in a plain dict; the app passes the raw
+        # list-aware selection instead (see handle_stations_preview) — this is only a best-effort
+        # re-check for the single-value case, the app re-prefills reliably from its parsed selection.
+        note_val = submitted.get("note", "") or ""
+        bump_val = submitted.get("bump", "minor") or "minor"
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    if stations:
+        rows = []
+        for s in stations:
+            filename = s.get("filename", "") if isinstance(s, dict) else ""
+            station_id = s.get("station_id", "") if isinstance(s, dict) else ""
+            checked = " checked" if filename in checked_names else ""
+            rows.append(
+                "<tr>"
+                f'<td><input type="checkbox" name="remove" value="{_esc(filename)}" '
+                f'style="width:auto"{checked}></td>'
+                f"<td>{_esc(filename)}</td><td>{_esc(station_id)}</td></tr>")
+        table = ('<table><tr><th>Remove</th><th>File</th><th>Station id</th></tr>'
+                 + "".join(rows) + "</table>")
+        count_line = f'<p class="sub">{len(stations)} station(s) in this survey.</p>'
+    else:
+        table = '<p class="sub">This survey has no EDI files.</p>'
+        count_line = ""
+
+    def _bump_radio(kind, target, checked):
+        c = " checked" if bump_val == kind else (" checked" if (checked and bump_val not in
+                                                                ("patch", "minor", "major")) else "")
+        return (f'<label><input type="radio" name="bump" value="{kind}"{c} style="width:auto"> '
+                f'{kind} &rarr; {_esc(target)}</label>')
+
+    bump = (
+        '<p><label class="k">Version bump (removing a station is a content change)</label>'
+        f'{_bump_radio("patch", patch_v, False)}<br>'
+        f'{_bump_radio("minor", minor_v, True)}<br>'
+        f'{_bump_radio("major", major_v, False)}</p>'
+    )
+    body = (
+        f'<h1>Manage stations — {_esc(slug)}</h1>'
+        f'<p class="sub">current version {_esc(cur)} · '
+        f'<a href="/gateway/curator/edit/{_esc(slug)}">back to edit form</a> · '
+        f'<a href="/gateway/curator/queue">queue</a></p>'
+        '<p class="sub">Tick the station(s) to remove, then preview. A removal deletes the EDI '
+        'file(s) from the survey repository — at least one station must remain.</p>'
+        f'{err}'
+        f'<form method="post" action="/gateway/curator/edit/{_esc(slug)}/stations/preview">'
+        f'<div class="panel">{count_line}{table}</div>'
+        f'<div class="panel">{bump}'
+        '<p><label class="k">Release note (required — records why the station(s) were removed)</label>'
+        f'<textarea name="note" placeholder="e.g. withdrawn consent for SA226" required>'
+        f'{_esc(note_val)}</textarea></p>'
+        f'{csrf}'
+        '<p><button class="b-accent" type="submit">Preview removal</button></p>'
+        '</div></form>'
+    )
+    return _page(f"AusMT stations {slug}", body)
+
+
+def render_removal_preview(*, slug: str, version: str, removed: list, station_count_before: int,
+                           station_count_after: int, diff: str, validate_report: dict | None,
+                           has_fail: bool, new_sha256: str, note: str, bump: str,
+                           filenames_json: str, csrf_token: str) -> str:
+    """The removal preview (deliverable 2): exactly which files will be deleted, station count before
+    → after, the survey.yaml diff (version + release_notes), and the validator's verdict on the package
+    WITHOUT the removed files. Only when the validator did NOT FAIL is a confirm form shown — carrying
+    the §0.6 content hash + the filenames/bump/note to reproduce the exact bytes at commit. The confirm
+    form has a data-confirm guard (rides CURATOR_UI_JS; no inline JS)."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    files_items = "".join(f"<li>{_esc(name)}</li>" for name in removed)
+    n = len(removed)
+    files_panel = (
+        '<div class="panel"><h2>Files to delete</h2>'
+        f'<ul>{files_items}</ul>'
+        f'<p class="sub">Stations: {station_count_before} &rarr; {station_count_after}</p></div>')
+    diff_panel = (f'<div class="panel"><h2>Changes to survey.yaml</h2>'
+                  f'<pre>{_esc(diff)}</pre></div>')
+    verdict = _reports_panel(validate_report=validate_report, preview_summary=None)
+    if has_fail:
+        banner = (f'<p style="color:{_PALETTE["bad"]};font-weight:600">'
+                  'The validator FAILED on the survey WITHOUT these stations — this removal cannot be '
+                  'published. Go back and reconsider the selection.</p>')
+        confirm = ""
+    else:
+        banner = (f'<p style="color:{_PALETTE["ok"]};font-weight:600">'
+                  'Validator passed on the survey without the selected station(s) (WARNINGs, if any, '
+                  'do not block). Confirm to delete and commit.</p>')
+        # data-confirm carries the exact house copy the brief mandates (rides the delegated handler).
+        confirm_msg = (f"Remove {n} station(s) from {slug}? This deletes the EDI files from the "
+                       "survey repository.")
+        confirm = (
+            f'<div class="panel"><h2>Delete &amp; commit</h2>'
+            '<p class="sub">The EDI file(s) are git-rm\'d and survey.yaml updated in one commit, then '
+            'pushed — the serve-reconcile agent serves the result on its next tick (or run '
+            '<code>make rebuild-data</code> by hand).</p>'
+            f'<form method="post" action="/gateway/curator/edit/{_esc(slug)}/stations/confirm" '
+            f'data-confirm="{_esc(confirm_msg)}">'
+            f'{csrf}'
+            f'<input type="hidden" name="new_sha256" value="{_esc(new_sha256)}">'
+            f'<input type="hidden" name="bump" value="{_esc(bump)}">'
+            f'<input type="hidden" name="filenames_json" value="{_esc(filenames_json)}">'
+            f'<input type="hidden" name="note" value="{_esc(note)}">'
+            f'<p><button class="b-bad" type="submit">Remove {n} station(s) &amp; commit</button></p>'
+            '</form></div>'
+        )
+    body = (
+        f'<h1>Preview removal — {_esc(slug)}</h1>'
+        f'<p class="sub">new version {_esc(version)} · '
+        f'<a href="/gateway/curator/edit/{_esc(slug)}/stations">back to stations</a> · '
+        f'<a href="/gateway/curator/queue">queue</a></p>'
+        f'{banner}{files_panel}{diff_panel}{verdict}{confirm}'
+    )
+    return _page(f"AusMT remove stations {slug}", body)
 
 
 # ---- uploader keys (schema v2 — curator-managed submit keys) ---------------------------------
