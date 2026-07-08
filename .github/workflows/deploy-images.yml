@@ -642,12 +642,22 @@ jobs:
           # The gateway with curator keys configured + surveys-live mounted rw. No external push
           # target: the checkout's origin is the local bare repo, reachable because surveys-live is
           # mounted rw and its .git/config already points origin at the (also-mounted) bare repo path.
+          # GIT_CONFIG_* mirror compose.yaml's gateway env (its safe.directory block): git >= 2.35.2
+          # refuses a repo owned by a different uid, and the seeded checkout is runner-owned while the
+          # container's git runs as 10002 — the publish preflight fail-closed EXACTLY here the first
+          # time this leg ran ("dubious ownership"), the same failure compose already fixes for the
+          # operator-owned production checkout (and the first live approve hit on 2026-07-06). The
+          # second entry covers the CI-only BARE origin: a file-transport push runs receive-pack as
+          # 10002 against it too. No credential.helper entry — the push target is a local path.
           docker run -d --rm --name gateway --network gwnet \
             -e AUSMT_SUBMIT_KEY=ci-e2e-submit-key-abcdefgh \
             -e AUSMT_CURATOR_KEYS=ci:ci-curator-key-abcdefgh1234 \
             -e AUSMT_SURVEYS_LIVE=/srv/surveys-live \
             -e AUSMT_GW_DATA=/gw -e AUSMT_CLAMD_HOST=clamd -e AUSMT_CLAMD_PORT=3310 \
             -e HOME=/tmp -e GIT_CONFIG_GLOBAL=/tmp/.gitconfig \
+            -e GIT_CONFIG_COUNT=2 \
+            -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/srv/surveys-live \
+            -e GIT_CONFIG_KEY_1=safe.directory -e GIT_CONFIG_VALUE_1=/srv/ausmt/surveys-origin.git \
             --user 10002:10002 -p 127.0.0.1:8444:8000 \
             -v /srv/ausmt/gateway/state:/gw/state:rw \
             -v /srv/ausmt/gateway/incoming:/gw/incoming:rw \
