@@ -91,6 +91,16 @@ const goodSlug = M.validateSurvey({ ...base, slug: "good-slug", locations_confir
 ok(!goodSlug.items.some(i => i.check === "slug" && i.level === "FAIL"),
    "validateSurvey: a valid slug raises no slug FAIL");
 
+// ---- copy honesty: authoritative validation is the gateway/curator review, not "CI" ----
+// Source assertion (same style as the ROR endpoint checks below): the page's advisory box must not
+// tell contributors that authoritative validation happens in "the AusMT repository workflow (CI)" —
+// on the only followable paths (gateway upload / email to operator) the AusMT validator runs in the
+// gateway pipeline and a curator reviews. Fails if the stale CI framing reappears in page copy.
+ok(!/repository workflow<\/b> \(CI\)|authoritative in the AusMT repository/i.test(html),
+   "the advisory box no longer claims authoritative validation lives in the repository CI workflow");
+ok(/authoritative/i.test(html.slice(html.indexOf('class="advisory"'), html.indexOf('class="advisory"') + 600)),
+   "the advisory box still names an authoritative validation stage");
+
 // ---- DATAID-based packaging (task #16) ----
 // ediDataId must read the DATAID from the >HEAD block across the real dialect shapes: Geotools/LEMI
 // (no indent, quoted), EDL (leading-indented + trailing whitespace, quoted), Phoenix (indented,

@@ -456,6 +456,12 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       "SUBMISSION.md must carry the honest email-the-operator fallback (" + branch + ")");
     ok(/About page/i.test(md),
       "SUBMISSION.md points to the operator contact on the About page (" + branch + ")");
+    // Same copy-honesty class: on the gateway path the GATEWAY runs the authoritative validator, not
+    // CI — the final step must not claim "CI runs" anything, and must still name validator + curator.
+    ok(!/CI runs/i.test(md),
+      "SUBMISSION.md must not claim CI runs the validator (" + branch + ")");
+    ok(/validator[\s\S]*curator/i.test(md),
+      "SUBMISSION.md final step still names the validator and curator review (" + branch + ")");
   }
 
   // --------------------------------------------------------------------------------------------------

@@ -137,8 +137,9 @@
   <code>engine/data/sample-survey/</code> in the AusMT framework repository.</p>
 
   <div class="advisory">This page performs <b>local pre-submission checks</b> to help you prepare a clean
-  submission. <b>Final validation is authoritative in the AusMT repository workflow</b> (CI) during curator
-  review, if the two ever differ, the repository result wins.</div>
+  submission. <b>Final validation is authoritative in the AusMT submission pipeline</b> — the gateway runs
+  the AusMT validator on your package and a curator reviews it before publication; if the two ever differ,
+  the pipeline result wins.</div>
 
   <!-- 1. SURVEY METADATA AND IDENTIFIERS -->
   <fieldset>
@@ -240,7 +241,7 @@
     <input id="filein" type="file" accept=".edi,.h5,.mth5" multiple style="display:none">
     <div class="hint"><b>MTH5 files containing transfer-function products are supported.</b> AusMT catalogues transfer functions
        and their metadata, not raw MT time-series data. Files are checked locally before submission, with final validation
-        performed during curator review and automated repository checks.</div>
+        performed by the AusMT validator in the submission pipeline during curator review.</div>
     <div class="filelist" id="filelist"></div>
   </fieldset>
 
@@ -587,9 +588,9 @@ function validateSurvey(meta, edis, mth5s){
   if(!edis.length && !mth5s.length) add("FAIL","structure","no transfer-function files added (EDI or MTH5)");
   mth5s.forEach(f=>{
     if(f.hdf5===false) add("FAIL","mth5",f.name+": not a valid HDF5/MTH5 file (signature check failed)");
-    else add("WARNING","mth5",f.name+": MTH5 structure, supported version & transfer-function groups are validated in CI (not in this browser)");
+    else add("WARNING","mth5",f.name+": MTH5 structure, supported version & transfer-function groups are validated in the AusMT submission pipeline (not in this browser)");
   });
-  add("WARNING","security","antivirus (ClamAV) scan runs in CI, not in this browser preview");
+  add("WARNING","security","antivirus (ClamAV) scan runs in the AusMT submission pipeline, not in this browser preview");
   const seen={};
   edis.forEach(({name,parsed})=>{
     if(parsed.lat==null||parsed.lon==null){ add("FAIL","edi_parse",name+": missing coordinates (LAT/LONG in HEAD)"); return; }
@@ -1079,7 +1080,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     const nMh=mth5Files().length;
     $("pvBody").innerHTML=
       `<div>stations (from EDIs): <b>${p.n}</b>  (coords on ${p.withCoords}; impedance ${p.impedance}; spectra-section ${p.spectra})</div>`+
-      (nMh?`<div>MTH5 files: <b>${nMh}</b>  <span style="color:var(--muted)">(transfer functions read + validated in CI)</span></div>`:"")+
+      (nMh?`<div>MTH5 files: <b>${nMh}</b>  <span style="color:var(--muted)">(transfer functions read + validated in the submission pipeline)</span></div>`:"")+
       (p.latRange?`<div>station extent: lat <b>[${p.latRange[0].toFixed(4)}, ${p.latRange[1].toFixed(4)}]</b>  lon <b>[${p.lonRange[0].toFixed(4)}, ${p.lonRange[1].toFixed(4)}]</b></div>`:"")+
       `<div>data types (from EDIs): <b>${esc(types)}</b></div>`+
       (p.n?`<div>recommended EDI extractor: <b>${p.extractor}</b>${p.spectra?`  (incl. ${p.spectra} spectra-section EDI(s), read directly)`:""}</div>`:"");
@@ -1174,7 +1175,7 @@ if(typeof document!=="undefined"&&document.getElementById){
           `   About page). Put your contact email in the message — NOT in a file in this package.\n`)+
       // The trailing step's number depends on the branch (2 items precede it with a gateway, 1 without)
       // so the ordered list stays strictly sequential either way.
-      `${gatewayAvailable?3:2}. CI runs the authoritative validator; a curator reviews.\n`;
+      `${gatewayAvailable?3:2}. The AusMT validator runs on your package; a curator reviews before publication.\n`;
     return head+direct;
   }
   $("btnPackage").onclick=async()=>{
