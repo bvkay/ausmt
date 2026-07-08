@@ -53,6 +53,26 @@ def _utc_now() -> str:
 
 
 @dataclass(frozen=True)
+class UploaderKey:
+    """One issued uploader key (schema v2). key_sha256 is the ONLY copy of the secret; the plaintext
+    is shown once at creation and never stored. A revoked key keeps its row (audit trail); active ==
+    revoked_utc IS NULL."""
+    id: int
+    name: str
+    email: str | None
+    key_sha256: str
+    created_utc: str
+    created_by: str
+    revoked_utc: str | None
+    revoked_by: str | None
+    last_used_utc: str | None
+
+    @property
+    def active(self) -> bool:
+        return self.revoked_utc is None
+
+
+@dataclass(frozen=True)
 class Submission:
     id: str
     slug: str | None
@@ -79,9 +99,38 @@ class SchemaTooNew(Exception):
 
 # Schema version, stamped in the DB header (PRAGMA user_version). v1 == the CREATE TABLE baseline in
 # _init_schema. _MIGRATIONS holds (target_version, apply(conn)) steps for v2+; applied in order in one
-# transaction. Empty today: the first schema change appends a (2, fn) row here and nothing else moves.
-SCHEMA_VERSION = 1
-_MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = []
+# transaction.
+
+
+def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
+    """v2 (feat/uploader-key-management): curator-managed uploader keys move the single shared
+    AUSMT_SUBMIT_KEY out of env-only into the DB. Each row is ONE issued key: only its sha256 is
+    stored (the plaintext is shown once at creation, never retrievable), plus who/when it was created
+    and — when applicable — who/when it was revoked. A revoked row is NEVER deleted (audit trail; the
+    created_by/revoked_by columns ARE the audit record for this table, mirroring how the git history
+    is the audit record for C31 edits — no submissions-schema change, no separate audit table).
+    IF NOT EXISTS so a re-run on a partially-migrated DB is idempotent."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS uploader_keys (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            email TEXT,
+            key_sha256 TEXT NOT NULL UNIQUE,
+            created_utc TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            revoked_utc TEXT,
+            revoked_by TEXT,
+            last_used_utc TEXT
+        )
+        """
+    )
+
+
+SCHEMA_VERSION = 2
+_MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
+    (2, _migrate_v2_uploader_keys),
+]
 
 
 class Database:
@@ -178,10 +227,19 @@ class Database:
         submitter_orcid: str | None,
         token_hash: str,
         actor: str = "gateway",
+        uploader_name: str | None = None,
     ) -> None:
         """Insert a new RECEIVED row plus its opening audit transition (from_state NULL). Both in
-        one transaction: a submission without an audit trail cannot exist."""
+        one transaction: a submission without an audit trail cannot exist.
+
+        `uploader_name`, when a DB uploader key (schema v2) authenticated the submit, is recorded on
+        the opening transition's reason so the audit trail attributes the upload to the named uploader
+        (mirroring how submitter_name is captured) — no submissions-schema column is added for it. The
+        env-bootstrap key path passes None (unchanged 'upload received')."""
         now = _utc_now()
+        reason = "upload received"
+        if uploader_name:
+            reason = f"upload received (uploader:{uploader_name})"
         with self._lock, self._conn:
             self._conn.execute(
                 "INSERT INTO submissions (id, slug, state, created_utc, updated_utc, zip_sha256, "
@@ -193,7 +251,7 @@ class Database:
             self._conn.execute(
                 "INSERT INTO transitions (submission_id, from_state, to_state, actor, ts_utc, reason) "
                 "VALUES (?,?,?,?,?,?)",
-                (submission_id, None, states.RECEIVED, actor, now, "upload received"),
+                (submission_id, None, states.RECEIVED, actor, now, reason),
             )
 
     def get(self, submission_id: str) -> Submission | None:
@@ -301,6 +359,71 @@ class Database:
         with self._lock, self._conn:
             self._conn.execute(
                 "DELETE FROM curator_sessions WHERE expires_utc <= ?", (now_utc,))
+
+    # ---- uploader keys (schema v2 — curator-managed submit keys) --------------------------------
+
+    def create_uploader_key(self, *, name: str, email: str | None, key_sha256: str,
+                            created_by: str) -> int:
+        """Insert one uploader-key row and return its id. Stores ONLY the sha256 of the key (the
+        plaintext is shown once by the caller and never persisted). The UNIQUE(name) constraint makes
+        a duplicate name raise sqlite3.IntegrityError, which the caller turns into a clear message —
+        the DB is the single source of truth for uniqueness (no read-then-insert race)."""
+        now = _utc_now()
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO uploader_keys (name, email, key_sha256, created_utc, created_by) "
+                "VALUES (?,?,?,?,?)",
+                (name, email, key_sha256, now, created_by),
+            )
+            return int(cur.lastrowid)
+
+    def get_active_uploader_key_by_hash(self, key_sha256: str) -> UploaderKey | None:
+        """Return the ACTIVE (revoked_utc IS NULL) uploader-key row whose key_sha256 matches, else
+        None. The submit-auth lookup: a revoked or unknown key resolves to None so the caller returns
+        the same 401 as a wrong env key (no oracle for which case it was)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM uploader_keys WHERE key_sha256 = ? AND revoked_utc IS NULL",
+                (key_sha256,),
+            ).fetchone()
+        return self._row_to_uploader_key(row) if row else None
+
+    def stamp_uploader_key_used(self, key_id: int) -> None:
+        """Record last_used_utc = now on a successful DB-key submit (best-effort audit; a failure here
+        must never fail the submit — the caller does not raise on it)."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE uploader_keys SET last_used_utc = ? WHERE id = ?", (_utc_now(), key_id))
+
+    def list_uploader_keys(self) -> list[UploaderKey]:
+        """All uploader keys, active and revoked, newest first — the curator list page (revoked rows
+        stay for the audit trail; there is no delete)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM uploader_keys ORDER BY id DESC").fetchall()
+        return [self._row_to_uploader_key(r) for r in rows]
+
+    def revoke_uploader_key(self, key_id: int, *, revoked_by: str) -> bool:
+        """Set revoked_utc/revoked_by on an ACTIVE key. Returns True if a row was revoked, False if
+        the id was unknown or already revoked (the WHERE guard makes a double-revoke a no-op, so the
+        original revoker/time is never overwritten)."""
+        now = _utc_now()
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE uploader_keys SET revoked_utc = ?, revoked_by = ? "
+                "WHERE id = ? AND revoked_utc IS NULL",
+                (now, revoked_by, key_id),
+            )
+            return cur.rowcount > 0
+
+    @staticmethod
+    def _row_to_uploader_key(row: sqlite3.Row) -> UploaderKey:
+        return UploaderKey(
+            id=row["id"], name=row["name"], email=row["email"], key_sha256=row["key_sha256"],
+            created_utc=row["created_utc"], created_by=row["created_by"],
+            revoked_utc=row["revoked_utc"], revoked_by=row["revoked_by"],
+            last_used_utc=row["last_used_utc"],
+        )
 
     # ---- the single state-mutation path --------------------------------------------------------
 
