@@ -6,7 +6,18 @@
 # every compose invocation below is relative to this file's directory, matching the .env lookup
 # `docker compose` does by default (a sibling .env next to the compose file it's given).
 
-.PHONY: build up down rebuild-data smoke sync-surveys preflight
+.PHONY: build up down rebuild-data smoke sync-surveys preflight reconcile
+
+# C40: read deploy/.env so `make` targets see the SAME truth `docker compose` does (compose
+# auto-loads a sibling .env; make does not). `-include` => absent .env is not an error (portal-only /
+# CI `docker compose config` paths never need it). `export` (no args) then forwards every make
+# variable — including the .env ones just read — into each recipe's shell environment, so the
+# reconcile script and the compose calls resolve AUSMT_DATA_DIR/AUSMT_CODE_DIR identically whether
+# invoked from a login shell or the systemd timer (the 2026-07-08 "works interactively, fails from
+# the timer" class). The shell-level `:?` guards in the recipes below still fire on an unset/empty
+# value, so this widens where the vars COME FROM without weakening the fail-closed checks.
+-include .env
+export
 
 # C33: read-only host preflight. Checks docker/compose, required vars for the profile, dir
 # ownership (10001/10002), images, surveys-live-is-a-git-checkout, and code-checkout freshness —
@@ -98,3 +109,11 @@ smoke:
 # or rebasing an unattended host checkout.
 sync-surveys:
 	git -C $${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}/surveys-live pull --ff-only
+
+# C40: run the serve-reconcile agent ONCE in the foreground (what the systemd timer runs every 15
+# min — deploy/systemd/ausmt-reconcile.timer). Handy for a manual reconcile or to watch a rebuild
+# decision live. Reads AUSMT_DATA_DIR + AUSMT_CODE_DIR from the environment (the `-include .env` +
+# export above makes .env values visible here). `make reconcile ARGS=--dry-run` prints the decision
+# without acting. The script itself exits 0 on noop/rebuilt/sync_failed and 1 only on a build failure.
+reconcile:
+	AUSMT_CODE_DIR=$${AUSMT_CODE_DIR:-$$(cd .. && pwd)} scripts/reconcile.sh $(ARGS)

@@ -1,0 +1,37 @@
+# AusMT serve-reconcile agent (C40). A oneshot unit the ausmt-reconcile.timer fires every ~15 min:
+# it syncs surveys-live, and rebuilds the served corpus when the published HEAD has moved ahead of
+# the served build (or a curator pressed "request rebuild"). See deploy/README.md "Serve reconcile
+# (automatic rebuild)" for the install runbook.
+#
+# INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (there is no %-spec
+# for these; systemd does not expand env vars in ExecStart/WorkingDirectory), then copy this file to
+# /etc/systemd/system/ :
+#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /srv/ausmt/code/deploy)
+#   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /srv/ausmt/code/deploy/.env)
+# The script itself reads AUSMT_DATA_DIR + AUSMT_CODE_DIR from the EnvironmentFile (.env), so this
+# unit depends on NO shell profile (the 2026-07-08 "works interactively, fails from the timer" class
+# — the vars live in .env, loaded here, not in ~/.bashrc).
+
+[Unit]
+Description=AusMT serve reconcile (sync surveys-live + rebuild served corpus on drift)
+Documentation=file:///srv/ausmt/code/deploy/README.md
+# Only meaningful once the local clock is set (the git ops + timestamps want a real UTC).
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Run as the operator uid that owns the code checkout and can drive `docker compose` (the same user
+# you run `make rebuild-data` as by hand). NOT root. Set this to that account.
+User=ausmt
+# .env carries AUSMT_DATA_DIR + AUSMT_CODE_DIR (and any TAG/OWNER the make target needs); loaded the
+# same way `docker compose` and preflight.sh load it.
+EnvironmentFile=__ENV_FILE__
+WorkingDirectory=__DEPLOY_DIR__
+# The script is one pass; --dry-run is NOT passed here (that is an operator's manual invocation).
+ExecStart=__DEPLOY_DIR__/scripts/reconcile.sh
+# A rebuild can take minutes on a cold cache; give it room but bound a wedged build.
+TimeoutStartSec=3600
+
+[Install]
+WantedBy=multi-user.target

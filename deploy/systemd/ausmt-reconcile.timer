@@ -1,0 +1,24 @@
+# AusMT serve-reconcile timer (C40). Fires ausmt-reconcile.service every 15 minutes. Install:
+#   sudo cp deploy/systemd/ausmt-reconcile.{service,timer} /etc/systemd/system/
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ausmt-reconcile.timer
+#   systemctl list-timers ausmt-reconcile.timer     # confirm the next run
+# See deploy/README.md "Serve reconcile (automatic rebuild)".
+
+[Unit]
+Description=AusMT serve reconcile every 15 minutes
+Documentation=file:///srv/ausmt/code/deploy/README.md
+
+[Timer]
+# Every 15 minutes on the quarter-hour (:00, :15, :30, :45).
+OnCalendar=*:0/15
+# Catch up one missed run after downtime (a box that was off over a publish still reconciles on boot)
+# rather than waiting for the next quarter-hour.
+Persistent=true
+# Spread the fire up to 60 s so a fleet of boxes (or a co-scheduled backup timer) does not all pull +
+# rebuild on the exact same second. The reconcile is idempotent, so a little jitter is free.
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
