@@ -630,6 +630,14 @@ jobs:
           git -C /srv/ausmt/surveys-live remote add origin /srv/ausmt/surveys-origin.git
           git -C /srv/ausmt/surveys-live push -q origin main
           chmod -R 0777 /srv/ausmt/surveys-live /srv/ausmt/surveys-origin.git
+          # The BARE origin must be OWNED by the container uid (10002), not merely world-writable:
+          # for a local-path push git strips repo-context env (GIT_CONFIG_*) before exec'ing
+          # receive-pack, so the gateway's safe.directory env entries never reach the receive side —
+          # the fifth harness bug this leg surfaced ("dubious ownership at surveys-origin.git" AT
+          # git-push, after the same env fixed the client side). Ownership alignment is the only
+          # deterministic fix. Host-side asserts never run git against the bare origin (they read
+          # surveys-live only), and the seed push above already happened while the runner owned it.
+          sudo chown -R 10002:10002 /srv/ausmt/surveys-origin.git
 
       - name: Start clamd + gateway (with curator config) + runner
         if: steps.gate.outputs.have_surveys == 'true'
@@ -652,18 +660,20 @@ jobs:
           # refuses a repo owned by a different uid, and the seeded checkout is runner-owned while the
           # container's git runs as 10002 — the publish preflight fail-closed EXACTLY here the first
           # time this leg ran ("dubious ownership"), the same failure compose already fixes for the
-          # operator-owned production checkout (and the first live approve hit on 2026-07-06). The
-          # second entry covers the CI-only BARE origin: a file-transport push runs receive-pack as
-          # 10002 against it too. No credential.helper entry — the push target is a local path.
+          # operator-owned production checkout (and the first live approve hit on 2026-07-06).
+          # NOTE the env-config mechanism covers CLIENT-side git only: for a local-path push git
+          # strips GIT_CONFIG_* before exec'ing receive-pack, so a safe.directory entry for the bare
+          # origin can never work — the origin is chown'd to 10002 in the seed step instead.
+          # Production is unaffected (it pushes over https; receive-pack runs on the remote).
+          # No credential.helper entry — the push target is a local path.
           docker run -d --rm --name gateway --network gwnet \
             -e AUSMT_SUBMIT_KEY=ci-e2e-submit-key-abcdefgh \
             -e AUSMT_CURATOR_KEYS=ci:ci-curator-key-abcdefgh1234 \
             -e AUSMT_SURVEYS_LIVE=/srv/surveys-live \
             -e AUSMT_GW_DATA=/gw -e AUSMT_CLAMD_HOST=clamd -e AUSMT_CLAMD_PORT=3310 \
             -e HOME=/tmp -e GIT_CONFIG_GLOBAL=/tmp/.gitconfig \
-            -e GIT_CONFIG_COUNT=2 \
+            -e GIT_CONFIG_COUNT=1 \
             -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/srv/surveys-live \
-            -e GIT_CONFIG_KEY_1=safe.directory -e GIT_CONFIG_VALUE_1=/srv/ausmt/surveys-origin.git \
             --user 10002:10002 -p 127.0.0.1:8444:8000 \
             -v /srv/ausmt/gateway/state:/gw/state:rw \
             -v /srv/ausmt/gateway/incoming:/gw/incoming:rw \
