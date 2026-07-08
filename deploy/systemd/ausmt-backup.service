@@ -1,0 +1,41 @@
+# AusMT nightly backup. A oneshot unit the ausmt-backup.timer fires once a day (off-peak): it takes a
+# WAL-safe snapshot of the gateway state DB + non-secret state files into $AUSMT_DATA_DIR/backups/,
+# repoints `latest`, and prunes to the newest 14 snapshots. It NEVER copies deploy/.env (password
+# manager) or surveys-live (GitHub). See deploy/README.md "Backups & restore" for the install runbook
+# and the mandatory first restore drill.
+#
+# INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (there is no %-spec
+# for these; systemd does not expand env vars in ExecStart/WorkingDirectory), then copy this file to
+# /etc/systemd/system/ :
+#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /srv/ausmt/code/deploy)
+#   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /srv/ausmt/code/deploy/.env)
+# The script reads AUSMT_DATA_DIR from the EnvironmentFile (.env), so this unit depends on NO shell
+# profile (the 2026-07-08 "works interactively, fails from the timer" class — the vars live in .env,
+# loaded here, not in ~/.bashrc).
+
+[Unit]
+Description=AusMT nightly backup (WAL-safe sqlite snapshot of gateway state; prune to newest 14)
+Documentation=file:///srv/ausmt/code/deploy/README.md
+# The timestamps + prune want a real UTC clock; only meaningful once time is synced.
+After=time-sync.target
+Wants=time-sync.target
+
+[Service]
+Type=oneshot
+# Run as the OPERATOR uid — the account in the shared group 10002 that owns the gateway state dir with
+# g+rwX (README ownership prep). Group-read lets it read the DB; group-write lets SQLite create the
+# -wal/-shm sidecars it needs to open a WAL DB. NOT root, NOT the gateway container uid. Set this to
+# that account (the same user you run `make rebuild-data` / backup.sh by hand as).
+User=ausmt
+# .env carries AUSMT_DATA_DIR (and any AUSMT_BACKUP_DIR / AUSMT_BACKUP_RETAIN override); loaded the
+# same way `docker compose`, preflight.sh, and the reconcile unit load it.
+EnvironmentFile=__ENV_FILE__
+WorkingDirectory=__DEPLOY_DIR__
+# One pass: snapshot + repoint latest + prune, then exit. BACKUPS_DIR defaults to
+# $AUSMT_DATA_DIR/backups (override via AUSMT_BACKUP_DIR in .env if you keep backups elsewhere).
+ExecStart=__DEPLOY_DIR__/backup.sh
+# A WAL-safe .backup of a large DB plus the prune should be quick, but bound a wedged run.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

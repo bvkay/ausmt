@@ -501,85 +501,160 @@ alerting** on this box. The documented minimum operator loop is a periodic `make
 
 ### Backups & restore
 
-An implemented backup ships at **`deploy/backup.sh`** (POSIX sh; runs on the Ubuntu box). It captures
-only the genuinely irreplaceable state and produces a date-stamped tarball (or, if `restic` is
-configured, a restic snapshot). Run it, then **run one restore drill** — a backup that has never been
-restored is a hypothesis, not a backup.
+The backup story has three parts: **on-box snapshots** (`deploy/backup.sh` on a nightly timer),
+an **off-box pull** to the operator's Mac (`deploy/scripts/pull-backup.sh` via a launchd agent), and a
+**tested restore** (`deploy/scripts/restore-drill.sh`). Install the first, wire up the second, then run
+the third — **a backup that has never been restored is a hypothesis, not a backup** (Invariant 10).
 
-**What it backs up (and what it deliberately does not):**
-- `gateway/state/gateway.sqlite` — the ONLY PII home and the audit trail; the single irreplaceable
-  file. **Snapshotted CONSISTENTLY, not raw-copied** (see the WAL warning below).
-- `deploy/.env` — the submit/curator secrets once the gateway is configured.
-- `surveys-live/` — the survey packages the gateway commits. Reproducible from its git remote, but a
-  local copy means a restore does not depend on the remote.
-- `site-data/current/{build.json,build_provenance.json}` — build **metadata only**. The built products
-  (portal JSON, bundled EDIs, zips) and the C18 `cache/` are **regenerable** with `make rebuild-data`,
-  so they are NOT archived — only the provenance that records which source commit + engine built the
-  currently-served corpus, so a restore knows what to rebuild.
+#### What is backed up — and what is deliberately NOT
 
-> **WAL WARNING (corrects the earlier "back it up with `restic` alongside `site-data/`" advice).**
-> `gateway/db.py` opens the DB in **WAL mode** (`PRAGMA journal_mode=WAL`). A raw file copy of a *live*
-> WAL database — `cp gateway.sqlite`, or `restic backup` pointed straight at the file while the gateway
-> is running — can miss committed transactions still sitting in the `-wal` sidecar, silently producing
-> a torn snapshot. `backup.sh` therefore copies the DB **through SQLite's online backup API**
+`backup.sh` snapshots **only** the genuinely irreplaceable bytes on the box into
+`$AUSMT_DATA_DIR/backups/<utc-ts>/`:
+
+- `gateway/state/gateway.sqlite` → the **only** PII home and the audit trail (submitter PII,
+  uploader-key **hashes**, the audit history). The single file nothing else can reconstruct.
+  **Snapshotted CONSISTENTLY, not raw-copied** (WAL warning below).
+- `gateway/state/reconcile-status.json` and any **other non-secret** file in the state dir — small
+  operational metadata with no other copy.
+
+What it **never** copies, and why:
+
+- **`deploy/.env` → NEVER.** The submit/curator secrets are held **out of band in the operator's
+  password manager**. A backup that copied `.env` would put live secrets into a snapshot tree the Mac
+  then pulls over the tailnet — exactly the leak this design prevents. A name filter in `backup.sh`
+  refuses `.env`, `*.key`, `*.pem`, `id_*`, `*secret*`, … from the state dir too, belt-and-braces.
+- **`surveys-live/` → NEVER here.** It is a git checkout; **its backup is GitHub**. A local copy adds
+  nothing a `git clone` cannot give back.
+- **`site-data/` and `cache/` → NEVER.** They are **regenerable** with `make rebuild-data`. Not
+  irreplaceable, so not archived.
+
+> **WHY the DB must never go into `ausmt-surveys` (or any git repo).** The sqlite DB is the **PII
+> containment boundary**. **CI clones the surveys repo**, so anything committed there is effectively
+> public, and a PII leak into public git history is permanent. The DB backup therefore lands in a plain
+> directory under the data root and is pulled off-box by `pull-backup.sh` — **never git**. Do not point
+> any backup at a repo destination.
+
+> **WAL WARNING.** `gateway/db.py` opens the DB in **WAL mode** (`PRAGMA journal_mode=WAL`). A raw file
+> copy of a *live* WAL database can miss committed transactions still in the `-wal` sidecar, silently
+> producing a torn snapshot. `backup.sh` copies the DB **through SQLite's online backup API**
 > (`sqlite3 <db> ".backup <dest>"`, or the Python `sqlite3` `.backup()` fallback via the gateway image
-> when the host has no `sqlite3`), which is transactionally consistent even against a live writer. Hand
-> the *snapshot* to restic, never the live file.
+> when the host has no `sqlite3`), which is transactionally consistent even against a live writer.
 
-**Run it (tar mode):**
+Retention: the newest **14** snapshot directories are kept on the box; `backups/latest` is a symlink to
+the newest.
+
+#### Ownership prep (one-time) — read this first
+
+`backup.sh` runs as the **operator**, not as root or the gateway container. The state dir is uid
+**10002**-owned with the shared group **10002** set `g+rwX,g+s` (the same one-time prep the reconcile
+runbook describes — "Serve reconcile" step 0). The operator (`g3-i7`) must be **in group 10002**:
+
+- **group-read** lets the operator read `gateway.sqlite`;
+- **group-write** lets SQLite create the `-shm`/`-wal` sidecars it needs to *open* a WAL DB — opening a
+  WAL DB writes to its directory even for a read, so `g+rwX` is required, not just `g+r`.
+
+If this prep is missing, `backup.sh` fails **loudly and early** ("state dir is not readable … ownership
+prep is missing") instead of producing a broken snapshot. Fix it before enabling the timer.
+
+#### Install the nightly timer
+
+The timer runs `backup.sh` once a day. Edit the `__PLACEHOLDER__` paths + `User=` in the `.service`
+(exactly like the reconcile unit — systemd does not expand env vars in `ExecStart`/`WorkingDirectory`,
+so they are literal sed placeholders), then install:
+
 ```sh
-AUSMT_DATA_DIR=/srv/ausmt ./deploy/backup.sh /srv/ausmt-backups
+# In deploy/systemd/ausmt-backup.service, replace:
+#   __DEPLOY_DIR__ -> /srv/ausmt/code/deploy      __ENV_FILE__ -> /srv/ausmt/code/deploy/.env
+# and set User= to the operator account. .env must define AUSMT_DATA_DIR.
+sudo cp deploy/systemd/ausmt-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ausmt-backup.timer
+systemctl list-timers ausmt-backup.timer     # confirm the next run
+sudo systemctl start ausmt-backup.service     # take one backup NOW to test
+ls -l /srv/ausmt/backups/                      # confirm a <utc-ts>/ dir + latest symlink appeared
 ```
-Retention is 7 daily / 4 weekly, pruned automatically. Set `RESTIC_REPOSITORY` (+ restic's own env) to
-back up to a restic repo instead of tar; restic then owns retention (`forget --keep-daily 7
---keep-weekly 4`). Pick an **offsite** target — a backup on the same disk as the DB survives nothing.
 
-**Schedule it** — a systemd timer (preferred) or cron. Example timer:
-```ini
-# /etc/systemd/system/ausmt-backup.service
-[Service]
-Type=oneshot
-Environment=AUSMT_DATA_DIR=/srv/ausmt
-# For restic, also set RESTIC_REPOSITORY / RESTIC_PASSWORD_FILE here.
-ExecStart=/srv/ausmt-code/deploy/backup.sh /srv/ausmt-backups
+Cron equivalent (if you are not on systemd):
+`20 3 * * *  AUSMT_DATA_DIR=/srv/ausmt /srv/ausmt-code/deploy/backup.sh`
 
-# /etc/systemd/system/ausmt-backup.timer
-[Timer]
-OnCalendar=daily
-Persistent=true
-[Install]
-WantedBy=timers.target
-```
+#### Mac pull setup (off-box copy over the tailnet)
+
+`pull-backup.sh` resolves `backups/latest` on the box over ssh, then rsyncs (scp fallback) that
+snapshot into a local dir, pruning to the newest 30. Nothing Mac-specific lives in the script — the
+macOS side is only the launchd wrapper. Config is env/flags; **no hostname is baked into git**.
+
+Test it by hand first (over the tailnet, with your SSH key already set up):
+
 ```sh
-systemctl enable --now ausmt-backup.timer   # then: systemctl start ausmt-backup.service to test now
+AUSMT_BACKUP_REMOTE=op@ausmt-box:/srv/ausmt/backups \
+AUSMT_BACKUP_DEST=$HOME/ausmt-backups \
+  deploy/scripts/pull-backup.sh
+ls -l $HOME/ausmt-backups/                     # a <utc-ts>/ dir with gateway.sqlite should appear
 ```
-Cron equivalent: `15 3 * * *  AUSMT_DATA_DIR=/srv/ausmt /srv/ausmt-code/deploy/backup.sh /srv/ausmt-backups`
 
-**RESTORE procedure (step by step):**
+Then install the launchd agent so it runs daily:
+
+```sh
+# Edit deploy/launchd/com.ausmt.backup-pull.plist and replace every __PLACEHOLDER__:
+#   __PULL_SCRIPT__ __REMOTE__ __DEST__ __LOG__ __HOUR__ __MINUTE__
+cp deploy/launchd/com.ausmt.backup-pull.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ausmt.backup-pull.plist
+# (older macOS: launchctl load ~/Library/LaunchAgents/com.ausmt.backup-pull.plist)
+launchctl kickstart -k gui/$(id -u)/com.ausmt.backup-pull   # run once now to verify
+launchctl print gui/$(id -u)/com.ausmt.backup-pull | grep -E 'state|last exit'  # confirm it ran clean
+tail ~/Library/Logs/ausmt-backup-pull.log      # (whatever __LOG__ you set)
+```
+
+#### Restore drill (run after the first backup, then periodically)
+
+`restore-drill.sh` proves a snapshot is restorable **without touching production**: it copies the DB to
+a scratch temp, runs `PRAGMA integrity_check`, asserts the schema-v2 `uploader_keys` table exists, and
+prints the table list + uploader_keys count + newest submission timestamp for you to eyeball.
+
+```sh
+AUSMT_BACKUP_DIR=/srv/ausmt/backups deploy/scripts/restore-drill.sh          # drills `latest`
+deploy/scripts/restore-drill.sh /srv/ausmt/backups/20260708T032000Z          # or a specific snapshot
+```
+
+**Failure criterion:** the drill **exits non-zero with a loud message** if the DB is missing, fails
+`integrity_check` (corrupt/torn snapshot), or is missing the `uploader_keys` table (a pre-v2 DB a
+restore would lose curator keys from). A zero exit + a sane eyeball report is the only "PASS". Run it
+once right after the first backup, and quarterly thereafter.
+
+#### Real RESTORE procedure (when you actually need it)
+
 1. **Stop the gateway** so nothing writes the DB mid-restore:
    `docker compose -f compose.yaml --profile gateway down`.
-2. **Unpack the backup** (tar mode): `tar -xzf ausmt-backup-<STAMP>.tar.gz -C /tmp/restore`
-   (restic mode: `restic restore latest --target /tmp/restore`). The files land under
-   `/tmp/restore/payload/`.
-3. **Restore the DB.** Replace the live DB with the snapshot and **delete any stale WAL sidecars** so
-   SQLite does not replay an old `-wal` over your restored file:
+2. **Pick a snapshot** (`/srv/ausmt/backups/latest/` or an older `<utc-ts>/`) and, if you are unsure it
+   is good, **drill it first** (above).
+3. **Restore the DB.** Delete any stale WAL sidecars so SQLite does not replay an old `-wal` over the
+   restored file, then copy the snapshot's DB in:
    ```sh
    rm -f /srv/ausmt/gateway/state/gateway.sqlite-wal /srv/ausmt/gateway/state/gateway.sqlite-shm
-   cp /tmp/restore/payload/gateway/state/gateway.sqlite /srv/ausmt/gateway/state/gateway.sqlite
+   cp /srv/ausmt/backups/latest/gateway.sqlite /srv/ausmt/gateway/state/gateway.sqlite
    chown 10002:10002 /srv/ausmt/gateway/state/gateway.sqlite
    ```
-4. **Restore `surveys-live/`** if lost: `cp -a /tmp/restore/payload/surveys-live /srv/ausmt/surveys-live`
-   (or re-`git clone` it — the checkout is git). Restore `deploy/.env` if lost.
-5. **Rebuild the served products** — they were not in the backup by design:
-   `export AUSMT_DATA_DIR=/srv/ausmt; make rebuild-data`. `build.json` from the backup tells you the
-   source commit the old build used, if you need to reproduce it exactly.
-6. **Bring it back up** (`docker compose ... up -d`) and `make smoke`. For the gateway, confirm the
-   status of a known prior submission resolves — that proves the DB restore, not just the file copy.
+4. **Restore `deploy/.env`** from your **password manager** (it is not, and must never be, in any
+   backup). Restore `surveys-live/` by `git clone` if it was lost (GitHub is its backup).
+5. **Rebuild the served products** — regenerable, not in the backup by design:
+   `export AUSMT_DATA_DIR=/srv/ausmt; make rebuild-data`.
+6. **Bring it back up** (`docker compose ... up -d`) and `make smoke`. Confirm the status of a known
+   prior submission resolves — that proves the DB restore, not just the file copy.
 
 Note the gateway's own recovery property still holds: **directories are ground truth, the DB is the
-index** — if you lose only the sqlite state, the pipeline recovers by rescanning the on-disk trees
+index** — lose only the sqlite state and the pipeline recovers by rescanning the on-disk trees
 (README §3), so the DB backup mainly protects the **PII + audit history**, which rescanning cannot
 reconstruct.
+
+#### Troubleshooting
+
+| Symptom | Cause → fix |
+| --- | --- |
+| `backup.sh`: "state dir is not readable … ownership prep is missing" | The operator is not in group 10002, or the state dir lacks `g+rX`. Run the one-time **ownership prep** above. |
+| `backup.sh`: "neither sqlite3 … nor docker is available … refusing to raw-copy a live WAL DB" | No WAL-safe path. Install `sqlite3` on the host (`apt install sqlite3`), or run where the gateway image is available for the Python fallback. Never work around this by raw-copying the DB. |
+| `pull-backup.sh`: "could not resolve 'latest' … remote unreachable" | The tailnet is down, SSH auth failed, or no backup has run yet (`backups/latest` missing). Check `tailscale status`, your SSH key, and `systemctl list-timers ausmt-backup.timer` on the box. |
+| `restore-drill.sh`: "integrity_check did NOT return ok" | The snapshot is **corrupt** — it would not restore. Check `backup.sh` used the WAL-safe `.backup` (host `sqlite3` present?), then re-take and re-drill. Do not rely on that snapshot. |
+| `restore-drill.sh`: "the uploader_keys table is MISSING (schema < v2)" | The DB predates curator-managed keys. Back up from a v2 gateway, or migrate first. |
 
 ---
 
@@ -603,6 +678,6 @@ local or LAN-internal deploy.
 
 The first production target was an HP EliteDesk on a tailnet, `AUSMT_DATA_DIR=/srv/ausmt`, exposed
 via `tailscale serve`. Nothing above is EliteDesk-specific: the same steps run on any Docker host.
-The EliteDesk-specific facts (its `/srv/ausmt` layout, its tailnet node name, its `restic` config)
-were the origin of the ownership split and loopback rationale documented above, and are otherwise not
-required to run AusMT elsewhere.
+The EliteDesk-specific facts (its `/srv/ausmt` layout, its tailnet node name, its off-box backup
+target) were the origin of the ownership split and loopback rationale documented above, and are
+otherwise not required to run AusMT elsewhere.
