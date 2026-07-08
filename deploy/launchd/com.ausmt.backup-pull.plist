@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  AusMT off-box backup pull — macOS launchd agent (TEMPLATE).
+
+  This runs deploy/scripts/pull-backup.sh once a day on the operator's Mac so the box's only
+  irreplaceable bytes (the gateway PII/audit DB) exist on a second machine.
+
+  INSTALL — replace every __PLACEHOLDER__ below, then load it (see deploy/README.md "Backups &
+  restore" -> "Mac pull setup" for the full runbook):
+    __PULL_SCRIPT__    absolute path to deploy/scripts/pull-backup.sh on this Mac
+                       (e.g. /Users/op/ausmt/code/deploy/scripts/pull-backup.sh)
+    __REMOTE__         user@host:/path to the box's backups dir over the tailnet
+                       (e.g. op@ausmt-box:/srv/ausmt/backups)  — no personal host is baked into git
+    __DEST__           local directory to pull into, on an encrypted disk
+                       (e.g. /Users/op/ausmt-backups)
+    __LOG__            a log path for stdout+stderr (e.g. /Users/op/Library/Logs/ausmt-backup-pull.log)
+    __HOUR__ __MINUTE__  the daily run time in LOCAL time (e.g. 4 and 30 for 04:30)
+
+  Keep it minimal + standard: a StartCalendarInterval agent, config passed to the script via the
+  EnvironmentVariables the script already reads. RunAtLoad is OFF so a `launchctl bootstrap` does not
+  fire a pull immediately (start one by hand to test — README shows how).
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ausmt.backup-pull</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>__PULL_SCRIPT__</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AUSMT_BACKUP_REMOTE</key>
+        <string>__REMOTE__</string>
+        <key>AUSMT_BACKUP_DEST</key>
+        <string>__DEST__</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>__HOUR__</integer>
+        <key>Minute</key>
+        <integer>__MINUTE__</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>__LOG__</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG__</string>
+</dict>
+</plist>
