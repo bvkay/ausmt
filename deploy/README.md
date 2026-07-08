@@ -196,8 +196,9 @@ as the `X-AusMT-Submit-Key` header, never in the package or URL).
 ### Keys (submit + curator)
 
 ```sh
-# submit key (>= 16 chars) — testers send it as X-AusMT-Submit-Key. The app REFUSES TO START if it
-# is unset or < 16 chars (fail closed). Put it in deploy/.env as AUSMT_SUBMIT_KEY:
+# submit key (>= 16 chars) — the BOOTSTRAP + CI upload key. Testers send it as X-AusMT-Submit-Key.
+# The app REFUSES TO START if it is unset or < 16 chars (fail closed). Put it in deploy/.env as
+# AUSMT_SUBMIT_KEY:
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
 # curator keys — comma-separated name:key pairs, each key >= 16 chars, into AUSMT_CURATOR_KEYS.
@@ -210,6 +211,16 @@ Both are real secrets — keep them out of git, never logged. A curator signs in
 `/gateway/curator/` (POST their key); the server sets a `Secure; HttpOnly; SameSite=Strict` session
 cookie (12 h). **Run the gateway single-worker** (the image's `python -m gateway` entrypoint already
 does — do NOT add `--workers N`): the publish lock and crash reconciliation are in-process.
+
+**Uploader keys are curator-managed in the UI.** Beyond the single bootstrap `AUSMT_SUBMIT_KEY`,
+curators issue and revoke per-uploader submit keys from **Uploader keys** on the curator queue
+(`/gateway/curator/uploaders`) — no shell needed, so this is the whole cockpit at a facility home
+where the curator has no backend access. Each issued key (`ausmt_up_…`) is shown to the curator
+**once** at creation and stored only as a sha256 hash; a lost key is revoked and re-created, never
+retrieved. A submit is authorised by EITHER the env `AUSMT_SUBMIT_KEY` (bootstrap/CI, unchanged) OR
+an active DB uploader key; a revoked or unknown key gets the same 401 as a wrong key. The gateway's
+SQLite index now carries **schema v2** (the `uploader_keys` table); an existing v1 DB is migrated in
+place on the next start (the migration is guarded — a DB from a newer build is refused, not opened).
 
 ### Curator publish = commit + push only; the rebuild is a separate manual step
 

@@ -33,6 +33,9 @@ licence, or an unscanned file stops the pipeline with an explicit state rather t
 something ambiguous. Submitter contact details are held separately from the package and never enter
 the published record.
 
+Upload keys are issued by a curator (email the operator to request one); the key is sent to you
+out-of-band and travels only as the upload request header, never inside the package.
+
 The gateway's security design is frozen in the maintainer knowledge base
 (`maintainer/C10-GatewayDesign.md` and successors) for readers who want the full detail.
 
