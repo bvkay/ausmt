@@ -82,6 +82,8 @@ Required fields:
 
 The portal.version field records the MTCAT schema version used by the document.
 
+The portal object also carries two optional fields: `schema_url`, the location of the MTCAT schema served beside the document (AusMT emits `"mtcat.schema.json"`, so a harvester can validate the catalogue without resolving the canonical `$id` host); and `metadata_license`, the licence of the catalogue metadata itself, distinct from the per-survey data licences (AusMT declares `CC0-1.0` so the discovery metadata may be freely harvested and redistributed).
+
 ---
 
 ## Collections

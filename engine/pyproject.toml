@@ -18,8 +18,8 @@ classifiers = [
 # sensitive to the transitive scientific stack, so >=3.12 is the supported floor.
 requires-python = ">=3.12"
 # mt_metadata/mth5 (the USGS community library) is the SOLE EDI/MTH5 parser since the regex
-# retirement (maintainer/RegexRetirement-MigrationPlan.md), so it is a core dependency, not an
-# optional extra. numpy backs the importable ausmt_science.* science modules. PyYAML parses the
+# retirement (recorded in the maintainer knowledge base, a private archive), so it is a core
+# dependency, not an optional extra. numpy backs the importable ausmt_science.* science modules. PyYAML parses the
 # scientific survey.yaml / portal.config.yaml — it had arrived only transitively via mt_metadata, so it
 # is now declared explicitly (the stdlib _mini_yaml stays as a fallback). These floors match the tested
 # majors; the exact, reproducible pins live in environments/requirements-mtmetadata-lock.txt (CI installs that).
@@ -63,7 +63,7 @@ ignore = [
   "PLC3002",  # direct-lambda-call: one known site (the inline date-range map; deferred survey_meta split)
   "PLR2004",  # magic-value-comparison: scientific threshold literals; the load-bearing ones are named
   "PLR0911",  # too-many-return-statements -- complexity of build_portal.main()/row-builders is tracked
-  "PLR0912",  # too-many-branches          -- as a DEFERRED refactor (maintainer/KnownRisks + defer list),
+  "PLR0912",  # too-many-branches          -- as a DEFERRED refactor (tracked in the maintainer knowledge base, private archive),
   "PLR0913",  # too-many-arguments         -- not gated here
   "PLR0915",  # too-many-statements        --
   "PLW1510",  # subprocess-run-without-check: the call sites inspect returncode explicitly

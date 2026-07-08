@@ -571,6 +571,14 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         "portal": {"portal_id": p.get("portal_id", "ausmt"),
                    "portal_name": p.get("portal_name", "AusMT — Australia's Magnetotelluric Data Portal"),
                    "schema": "mtcat", "version": str(p.get("schema_version", "1.0")),
+                   # FAIR-I: point harvesters at the schema served BESIDE this document (relative to the
+                   # data dir — the build copies schema/mtcat.schema.json to out/mtcat.schema.json), so a
+                   # second implementation can validate mtcat.json without resolving the canonical $id.
+                   "schema_url": p.get("schema_url", "mtcat.schema.json"),
+                   # FAIR-R: the licence of the CATALOGUE METADATA itself (distinct from per-survey data
+                   # licences). CC0 by recommendation; overridable via portal.config.yaml pending owner
+                   # sign-off on the catalogue-metadata licence.
+                   "metadata_license": p.get("metadata_license", "CC0-1.0"),
                    "generated_at": generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
         "surveys": surveys, "stations": stations,
         "collections": collections}      # always present (empty list when none) for a stable shape
@@ -1996,7 +2004,7 @@ def main(argv=None):
                              "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
                     "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
                                     "tipper_available": "T" in (r.get("comps") or ""),
-                                    "dimensionality": srow[_SC["dim"]], "skew_beta_mean_deg": srow[_SC["skew"]],
+                                    "dimensionality": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
                                     "completeness_smoothness_diagnostic": {
                                         "value": srow[_SC["q"]], "basis": srow[_SC["qb"]],
                                         "note": "not a quality or geological-value judgement"}},
@@ -2025,7 +2033,7 @@ def main(argv=None):
                     "canonical_conditioning": (conditioning_notes.get(r["id"]) or None),
                 }, indent=1), encoding="utf-8")
                 (sdir / "dimensionality.json").write_text(_jdump({
-                    "classification": srow[_SC["dim"]], "skew_beta_mean_deg": srow[_SC["skew"]],
+                    "classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
                     "pct_periods_3d": srow[_SC["p3d"]], "method": "phase-tensor (Caldwell 2004)",
                     "screening_diagnostic": True,
                     "note": "screening diagnostic, not an interpretation product"}, indent=1), encoding="utf-8")
@@ -2199,6 +2207,15 @@ def main(argv=None):
     mtcat = mtcat_document(surveys_meta, all_stations, portal=load_portal_config(a.portal_config),
                            coll_by_id=coll_by_id, lib_vers=LIB_VERSIONS)
     (out / "mtcat.json").write_text(_jdump(mtcat, indent=1), encoding="utf-8")
+    # FAIR-I: serve the schema beside the data so mtcat.json's schema_url ("mtcat.schema.json")
+    # resolves relative to the catalogue itself — a harvester can validate without reaching the
+    # (custody-pending) canonical $id host. Byte-copy of the in-tree schema; skipped (noted, not
+    # fatal) if it is unreadable so a schema-path glitch never fails an otherwise-good build.
+    _mtcat_schema = HERE.parent / "schema" / "mtcat.schema.json"
+    try:
+        (out / "mtcat.schema.json").write_bytes(_mtcat_schema.read_bytes())
+    except OSError as _e:
+        print(f"note: mtcat schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
 
     # ---- contract self-check: validate the emitted MTCAT + download manifest against their OWN schemas
     # (schema/*.schema.json), so a shape drift or a config typo (e.g. a non-MAJOR.MINOR portal.version,
