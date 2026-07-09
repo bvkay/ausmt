@@ -238,3 +238,83 @@ source is post-edit). The incident-replay test (`test_build_cache.py`) forces a 
 the gate goes RED with the named message; the absent-`--surveys` test proves the skip note and that all
 existing verify behaviour is unchanged. The sidecar is a NEW products file: no golden/manifest
 file-count pin lists directory contents (verified), so no golden re-minting is required.
+
+## Amendment A4 (2026-07-10) — the incident ROOT CAUSE (single-read coherence) + salt/I-O forensics
+
+**Recorded per the freeze rule as the chief-architect-authorised amendment path.** Closes the
+2026-07-07 incident A3 documented as "INTERMITTENT and UNEXPLAINED", and the C18c test-flake
+investigation (task #21). Root-caused by a four-lens investigation (code audit x2, live
+reproduction, incident mechanics) with adversarial refutation of the surviving candidates.
+
+### The incident mechanism (M1: a straddled build poisons the cache)
+
+`survey.yaml` was read TWICE per build: metadata at `discover_work` (feeding `surveys.json` AND the
+citation `normalize()` bakes into served XML), and the cache-key digest at that survey's per-survey
+loop iteration — a window spanning every preceding survey's work, minutes on the full corpus. An
+edit landing in that window (the gateway publish writes into the same surveys-live tree builds
+read, unserialised even post-C40) produced a build whose served XML embedded PRE-edit metadata
+KEYED under the POST-edit digest. The NEXT build then legitimately warm-hit every poisoned entry:
+`hits=3017 misses=0`, stale Olympic Dam citation beside a fresh `surveys.json` — the incident
+build itself did nothing wrong; the damage was done by its predecessor. The A3 gate was BLIND to
+this shape: the poisoned entry's stamp EQUALS the live digest. (A3's replay tests force the
+MISMATCHED-stamp shape — the other staleness class — which is why they pass while this poisoning
+walked through.) Olympic Dam was the first survey through the then-new gateway publish path, the
+day before the incident: consistent, though on-box attribution remains unverified (cache keys were
+deleted in containment; see "residual" below).
+
+### What A4 changes (all landed in the `fix/c18-cache-coherence` lane)
+
+1. **Single-read coherence (the structural fix).** `discover_work` reads each survey.yaml's bytes
+   ONCE and derives BOTH the parsed metadata and the sha256 digest from them; the digest rides the
+   work tuple; the loop-time re-read is DELETED, as is `cache.survey_yaml_digest` itself (a
+   reappearing read-the-yaml-again call site is the incident window reopening). Coherent by
+   construction: no edit can split what a build's products embed from what they are keyed under.
+2. **The A3 gate is thereby ARMED against straddles.** `yaml_digest_current` is now the
+   discovery-time digest, so a straddled build fails verify.py's existing live-compare leg at the
+   `rebuild-data` verify step — in the act, not silently. No verify.py change was needed.
+3. **Salt stability (the C18c test flake).** The engine commit feeding the salt was re-resolved via
+   a live `git rev-parse` inside every in-process build; concurrent git activity (2026-07-07 was
+   the force-push/merge-queue day on the dev machine) or a transient rev-parse failure between a
+   test's two builds flipped the key space — a nondeterministic counter failure, green on rerun.
+   `_git_commit_at` now memoises SUCCESSFUL resolutions per process (failures are retried, never
+   memoised); the `clean_salt` fixture pins the commit and clears `AUSMT_ENGINE_COMMIT` /
+   `AUSMT_CACHE_MAX_MB`. The originally recorded "in-process global state" suspect is EXONERATED
+   (two independent audits; 39/39 targeted reproduction runs).
+4. **I/O attributability (the other flake candidate — Windows AV/indexer locks).** `put_bytes`
+   retries the atomic rename (3 attempts, backoff) and counts exhausted failures in
+   `write_errors`; `get_bytes` separates FileNotFoundError (true cold miss) from other OSErrors
+   (`read_errors`, still tallied as misses — §4.6 arithmetic unchanged). `counters()` additionally
+   exposes `salt_fp` (sha256 of the full fixed salt, first 12). The load-bearing counter asserts
+   dump both builds' counters + the cache listing on failure — any recurrence names its class in
+   one glance: degenerate/salt_fp drift -> salt; write_errors/read_errors -> environment; plain
+   drift -> content.
+5. **Belt-and-braces:** `main()` resets `_ediparse.read_norm`'s lru_cache beside `_SHA_CACHE` (the
+   last cross-build content memo in a reused process; latent, no observed incident).
+
+### New failure criteria (Invariant 10 — each test states how it fails)
+
+* `test_straddled_build_cannot_poison_the_cache` — FAILS IF a mid-build survey.yaml edit lets a
+  warm rebuild serve pre-edit citations from cache, or verify.py blesses the straddled build.
+  Observable: the citation INSIDE served XML bytes vs the on-disk yaml. Proven failing at pre-fix
+  HEAD on both legs.
+* `test_salt_stable_across_in_process_builds` (+ injection companion) — FAILS IF two same-source
+  in-process builds key differently (salt_fp) or degenerate; companion proves the observable fires
+  under a moving commit.
+* `test_git_commit_memoised_per_process_success_only` — FAILS IF the memo is gone (per-build
+  rev-parse back) or a failure is memoised (permanent in-process degeneracy).
+* Lock/read-error pins — FAIL IF a transient rename failure drops an entry, a persistent one goes
+  uncounted, or unreadable-vs-absent entries become indistinguishable.
+
+### Residual (recorded, deliberately NOT in this lane)
+
+* **Publish-vs-build serialisation** (deploy): the gateway publish still mutates surveys-live
+  while a build may be reading it. Single-read closes the poisoning path, and a straddled build now
+  goes verify-RED and self-heals next tick, but an EDI-seam analogue (sha at key time vs
+  normalize's own re-read) remains a theoretical window; the durable close is host-side
+  serialisation (flock the publish/sync against `rebuild-data`) or snapshot-read builds — an
+  operator/deploy design decision (Ben's call, queued in the decisions bundle).
+* **On-box attribution of the 2026-07-07 incident** (optional forensics, Ben-only): hunt the
+  straddler build P in `builds/` retention (pre-edit OD org in its `surveys.json`, ~116 OD misses
+  in its log), gateway sqlite/audit + `git -C surveys-live reflog --date=iso` for the edit instant,
+  `findmnt` on AUSMT_DATA_DIR (a non-local mount would reopen the fs-incoherence alternative).
+  M1 stands as root cause structurally regardless; these would settle the historical attribution.

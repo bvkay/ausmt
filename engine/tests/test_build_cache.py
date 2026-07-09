@@ -105,6 +105,30 @@ def _digest(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def _forensics(cache_dir: Path, *outs: Path) -> str:
+    """Failure-time context for counter asserts (A4): every build's FULL counters block (salt_fp,
+    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. The
+    2026-07-07 C18c failures were undiagnosable afterwards because none of this was captured; with
+    it, one glance discriminates the classes — degenerate/salt_fp drift -> salt instability;
+    write_errors/read_errors -> environmental I/O; plain counter drift -> content. Evaluated only
+    when an assert actually fails (Python's assert-message lazy evaluation)."""
+    lines = ["--- forensics ---"]
+    for o in outs:
+        try:
+            lines.append(f"{o.name}: {_cache_counters(o)}")
+        except OSError as e:
+            lines.append(f"{o.name}: <no build_provenance.json: {type(e).__name__}: {e}>")
+    try:
+        ents = sorted(p for p in cache_dir.rglob("*") if p.is_file())
+        lines.append(f"cache entries ({len(ents)}):")
+        for p in ents:
+            st = p.stat()
+            lines.append(f"  {p.relative_to(cache_dir)}  {st.st_size}B  mtime={st.st_mtime:.0f}")
+    except OSError as e:
+        lines.append(f"cache dir unreadable: {type(e).__name__}: {e}")
+    return "\n".join(lines)
+
+
 def _served_xml(out: Path):
     return sorted((out / "xml").rglob("*.xml"))
 
@@ -228,10 +252,15 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     counters = _cache_counters(out2)
 
     # Exact counter arithmetic (deterministic, §4.6): the edited station misses parse + xml (2) and
-    # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each).
-    assert counters["misses"] == 2, f"the byte-changed EDI did not miss exactly (parse+xml): {counters}"
-    assert counters["hits"] == 3 * (N_STATIONS - 1), f"the unchanged station(s) did not fully hit: {counters}"
-    assert counters["writes"] == 3, f"the edited station did not repopulate its 3 blobs: {counters}"
+    # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each). On failure, dump
+    # both builds' full counters + the cache listing (A4 — the 2026-07-07 C18c failures left nothing
+    # to diagnose from; salt_fp/degenerate/write_errors in the dump now name the class directly).
+    assert counters["misses"] == 2, \
+        f"the byte-changed EDI did not miss exactly (parse+xml): {counters}\n{_forensics(cache, out1, out2)}"
+    assert counters["hits"] == 3 * (N_STATIONS - 1), \
+        f"the unchanged station(s) did not fully hit: {counters}\n{_forensics(cache, out1, out2)}"
+    assert counters["writes"] == 3, \
+        f"the edited station did not repopulate its 3 blobs: {counters}\n{_forensics(cache, out1, out2)}"
 
     xml2 = {p.name: p for p in _served_xml(out2)}
     assert set(xml2) == set(xml1), (sorted(xml1), sorted(xml2))
@@ -1045,10 +1074,12 @@ def test_no_change_rebuild_counters_are_deterministic(tmp_path, clean_salt):
     assert c_cold["misses"] == EXPECTED_COLD_MISSES, c_cold
     assert c_cold["writes"] == EXPECTED_WRITES, c_cold
 
-    # warm rw build: all hit, none miss, none write.
+    # warm rw build: all hit, none miss, none write. Forensics on failure (A4): this pair of
+    # counter asserts is the other load-bearing shape the C18c flake class can fire.
     assert _build(surveys, tmp_path / "warm", cache) == 0
     c_warm = _cache_counters(tmp_path / "warm")
-    assert c_warm["hits"] == EXPECTED_WARM_HITS, c_warm
+    assert c_warm["hits"] == EXPECTED_WARM_HITS, \
+        f"{c_warm}\n{_forensics(cache, tmp_path / 'cold', tmp_path / 'warm')}"
     assert c_warm["misses"] == 0, c_warm
     assert c_warm["writes"] == 0, c_warm
 
