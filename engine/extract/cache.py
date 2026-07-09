@@ -175,6 +175,11 @@ class BuildCache:
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions (§2.3)
             self.contract_digest,                                    # columns + schema digest (§2.4)
         ])
+        # A4 forensics: a short fingerprint of the FULL fixed salt (version tag + engine commit +
+        # lib versions + contract digest). Two builds that should key identically expose identical
+        # fingerprints; a mid-process salt flip (the C18c-flake class: moving HEAD, transient
+        # rev-parse failure, contract-file read failure) is attributable from the build report alone.
+        self.salt_fp = hashlib.sha256(self._fixed_salt.encode("utf-8")).hexdigest()[:12]
         if self.enabled:
             self.root.mkdir(parents=True, exist_ok=True)
 
@@ -281,10 +286,12 @@ class BuildCache:
             pass
 
     def counters(self) -> dict:
-        """The deterministic hit/miss/write/corrupt tally for the build log + report (design §4.6)."""
+        """The deterministic hit/miss/write/corrupt tally for the build log + report (design §4.6).
+        salt_fp (A4) fingerprints the fixed salt so cross-build key-space drift is observable."""
         return {"enabled": self.enabled, "mode": self.mode, "hits": self.hits,
                 "misses": self.misses, "writes": self.writes, "corrupt": self.corrupt,
-                "degenerate": self.degenerate, "reason": self.degenerate_reason}
+                "degenerate": self.degenerate, "reason": self.degenerate_reason,
+                "salt_fp": self.salt_fp}
 
     # ---- lifecycle: prune at the end of a successful build (design §3) --------------------------
 

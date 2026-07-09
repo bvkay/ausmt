@@ -1247,17 +1247,33 @@ def qc_pass(all_stations, survey_extent):
             "stations_without_survey_extent": no_extent}
 
 
+_GIT_COMMIT_MEMO: dict = {}   # str(cwd) -> short sha; SUCCESSES only (A4 salt-stability hardening)
+
+
 def _git_commit_at(cwd):
     """Short git HEAD commit of the repo containing `cwd`, or None when `cwd` doesn't sit inside a git
     work tree (not installed / not a repo / detached bare checkout) -- graceful, never raises. Shared by
     _build_prov (engine_commit, resolved at HERE = engine/extract/) and build.json's source_commit
-    (resolved at the --surveys root, a SEPARATE repo per ADR-001 -- ausmt-surveys, not ausmt)."""
+    (resolved at the --surveys root, a SEPARATE repo per ADR-001 -- ausmt-surveys, not ausmt).
+
+    Memoised PER PROCESS on success (A4, the C18c-flake hardening): the resolved commit feeds the C18
+    cache salt, so two builds in one interpreter (tests; any future in-process rebuild loop) must key
+    identically even if HEAD moves or a transient rev-parse failure lands between them — a mid-suite
+    salt flip is exactly the nondeterministic full-miss the 2026-07-07 verification runs hit. A FAILED
+    resolution is never memoised (a later build in this process may still resolve); tests that need a
+    different commit monkeypatch this NAME, which bypasses the memo entirely."""
+    key = str(cwd)
+    if key in _GIT_COMMIT_MEMO:
+        return _GIT_COMMIT_MEMO[key]
     import subprocess as _sp
     try:
-        return _sp.check_output(["git", "rev-parse", "--short", "HEAD"],
-                                cwd=str(cwd), stderr=_sp.DEVNULL).decode().strip() or None
+        got = _sp.check_output(["git", "rev-parse", "--short", "HEAD"],
+                               cwd=key, stderr=_sp.DEVNULL).decode().strip() or None
     except Exception:  # noqa: BLE001
         return None
+    if got is not None:
+        _GIT_COMMIT_MEMO[key] = got
+    return got
 
 
 def _build_prov(extractor):

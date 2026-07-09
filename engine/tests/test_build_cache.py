@@ -58,8 +58,19 @@ EXPECTED_WRITES = 3 * N_STATIONS
 def clean_salt(monkeypatch):
     """Force the cache's dirty-checkout gate to see a CLEAN tree so the cache fires (the dev worktree
     is dirty during development; CI is clean). Patches the gate INPUT, not the gate — is_salt_degenerate
-    still runs its real logic over engine_commit + this (clean) result."""
+    still runs its real logic over engine_commit + this (clean) result.
+
+    A4 (the C18c flake): ALSO pin the engine commit and clear the cache-relevant env vars. The commit
+    used to be re-resolved via a live `git rev-parse` inside every in-process build, so concurrent git
+    activity on the machine (2026-07-07: the force-push/merge-queue day) between a test's two builds
+    flipped the salt and full-missed the 'warm' build — a nondeterministic counter failure that passed
+    on rerun. Pinned here so no cache test's counters can ever depend on ambient git or shell state;
+    the salt tests below patch this NAME themselves when they need a moving commit."""
     monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "testpin" if Path(cwd) == build_portal.HERE else None)
+    monkeypatch.delenv("AUSMT_ENGINE_COMMIT", raising=False)
+    monkeypatch.delenv("AUSMT_CACHE_MAX_MB", raising=False)
 
 
 def _make_survey(tmp_path, edis, *, name="Cache Survey", slug="cache-survey",
@@ -845,6 +856,75 @@ def test_degenerate_salt_dirty_checkout_no_reads_or_writes(tmp_path, monkeypatch
     assert c["degenerate"] is True and c["enabled"] is False, c
     assert c["hits"] == 0 and c["misses"] == 0 and c["writes"] == 0, \
         f"a dirty-checkout salt read or wrote the cache: {c}"
+
+
+# --------------------------------------------------------------------------------------------------
+# A4: salt stability across in-process builds (the C18c flake class) + its injection companions
+# --------------------------------------------------------------------------------------------------
+
+def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
+    """FAILS IF: two back-to-back builds in ONE interpreter, over unchanged sources, construct caches
+    whose salt fingerprints differ or whose salt is degenerate — the C18c flake class (the engine
+    commit was re-resolved via a live per-build `git rev-parse`, so git activity or a transient
+    rev-parse failure between a test's two builds flipped the key space and full-missed the warm
+    build). Independent observable: salt_fp digests the ACTUAL key-derivation input of each
+    separately-constructed BuildCache — not a counter derived from itself; the warm-hit assertion
+    ties fingerprint equality to real key resolution."""
+    surveys = _make_survey(tmp_path, SAMPLE_EDIS)
+    cache = tmp_path / "cache"
+    assert _build(surveys, tmp_path / "b1", cache) == 0
+    assert _build(surveys, tmp_path / "b2", cache) == 0
+    c1, c2 = _cache_counters(tmp_path / "b1"), _cache_counters(tmp_path / "b2")
+    assert c1["degenerate"] is False and c2["degenerate"] is False, (c1, c2)
+    assert c1["salt_fp"] == c2["salt_fp"], \
+        f"salt flipped between two in-process builds over unchanged sources: {c1['salt_fp']} != {c2['salt_fp']}"
+    assert c2["hits"] == EXPECTED_WARM_HITS, c2   # fingerprint equality reflects real key resolution
+
+
+def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkeypatch):
+    """Injection companion (Invariant 10: proves the stability observable CAN fail). FAILS IF: an
+    engine commit that CHANGES between two in-process builds does not surface as differing salt_fp
+    values plus a full-miss 'warm' build — the exact 2026-07-07 C18c mechanism, deterministic here."""
+    surveys = _make_survey(tmp_path, SAMPLE_EDIS)
+    cache = tmp_path / "cache"
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "commitA" if Path(cwd) == build_portal.HERE else None)
+    assert _build(surveys, tmp_path / "b1", cache) == 0
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "commitB" if Path(cwd) == build_portal.HERE else None)
+    assert _build(surveys, tmp_path / "b2", cache) == 0
+    c1, c2 = _cache_counters(tmp_path / "b1"), _cache_counters(tmp_path / "b2")
+    assert c1["salt_fp"] != c2["salt_fp"], "a changed engine commit must change the salt fingerprint"
+    assert c2["hits"] == 0 and c2["misses"] == EXPECTED_COLD_MISSES, \
+        f"a flipped salt must full-miss the warm build (the C18c flake shape): {c2}"
+
+
+def test_git_commit_memoised_per_process_success_only(tmp_path, monkeypatch):
+    """FAILS IF: (a) a successful engine-commit resolution is re-resolved by a later call in the same
+    process (the memo is gone — reopening the live per-build rev-parse the C18c flake rode), or (b) a
+    FAILED resolution is memoised (a later build in the process would be permanently degenerate).
+    Independent observable: real subprocess invocation count under the unpatched resolver."""
+    import subprocess as sp
+    calls = {"n": 0}
+
+    def _counting(cmd, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return b"abc1234\n"
+        raise RuntimeError("transient rev-parse failure")
+
+    monkeypatch.setattr(sp, "check_output", _counting)
+    repo_a, repo_b = str(tmp_path / "repoA"), str(tmp_path / "repoB")
+    try:
+        assert build_portal._git_commit_at(repo_a) == "abc1234"     # resolves, memoised
+        assert build_portal._git_commit_at(repo_a) == "abc1234"     # memo hit ...
+        assert calls["n"] == 1, "a memoised success was re-resolved (per-build rev-parse is back)"
+        assert build_portal._git_commit_at(repo_b) is None          # failure -> None ...
+        assert build_portal._git_commit_at(repo_b) is None          # ... and RETRIED (not memoised)
+        assert calls["n"] == 3, "a FAILED resolution was memoised — later builds stay degenerate"
+    finally:
+        build_portal._GIT_COMMIT_MEMO.pop(repo_a, None)
+        build_portal._GIT_COMMIT_MEMO.pop(repo_b, None)
 
 
 # --------------------------------------------------------------------------------------------------
