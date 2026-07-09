@@ -1901,6 +1901,11 @@ def main(argv=None):
     # to prevent). Production runs one build per subprocess, where this is already empty; this makes
     # the "per build" contract hold in-process too.
     _SHA_CACHE.clear()
+    # Same contract for the raw-EDI-text memo (_ediparse.read_norm, @lru_cache): it feeds coord-QC +
+    # processing-metadata scrapes, so a rebuild in a reused process must re-read an edited EDI's
+    # CURRENT text there too — a latent sibling of the _SHA_CACHE hazard above (A4 hardening; no
+    # observed incident, closed on principle: one reset point per per-build memo).
+    ep.read_norm.cache_clear()
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     edidir = out / "edi"
     prod = Path(a.products) if a.products else None

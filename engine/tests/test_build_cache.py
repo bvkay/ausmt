@@ -711,6 +711,69 @@ def test_torn_entry_xml_without_meta_is_a_miss_not_a_phantom_hit(tmp_path, clean
 
 
 # --------------------------------------------------------------------------------------------------
+# A4: environment-induced I/O failures are survived AND attributable (the Windows AV/indexer class)
+# --------------------------------------------------------------------------------------------------
+
+def test_transient_write_lock_is_retried_persistent_failure_is_counted(tmp_path, monkeypatch):
+    """FAILS IF: (a) a TRANSIENT PermissionError from the atomic rename (a Windows AV/on-access
+    scanner briefly holding the fresh tmp — the other surviving C18c-flake candidate) permanently
+    drops the cache entry, i.e. the retry is gone and the silent spurious-future-miss returns; or
+    (b) a PERSISTENT rename failure goes uncounted (write_errors) or raises into the build.
+    Independent observable: the entry's readability through a FRESH BuildCache instance (on-disk
+    truth, not the writing instance's own tallies), plus the write_errors counter."""
+    import os
+    cache_root = tmp_path / "cache"
+    bc = _bc(root=cache_root)
+    assert bc.enabled, bc.counters()
+
+    real_replace = os.replace
+    state = {"fail": 1}   # fail the next N renames under cache_root, then delegate
+
+    def _flaky_replace(src, dst, *args, **kw):
+        if state["fail"] > 0 and str(dst).startswith(str(cache_root)):
+            state["fail"] -= 1
+            raise PermissionError(13, "held by on-access scanner", str(dst))
+        return real_replace(src, dst, *args, **kw)
+
+    monkeypatch.setattr(cache_mod.os, "replace", _flaky_replace)
+
+    k1 = bc.key(edi_sha="s1", survey_digest="y", kind="xml")
+    bc.put_bytes(k1, "xml", b"payload-1")
+    assert bc.writes == 1 and bc.write_errors == 0, \
+        f"a single transient lock was not absorbed by the retry: {bc.counters()}"
+    fresh = _bc(root=cache_root)
+    assert fresh.get_bytes(k1, "xml") == b"payload-1", \
+        "transient lock dropped the entry (no retry) — the silent spurious-miss class is back"
+
+    state["fail"] = 10 ** 9                        # persistent: every attempt fails
+    k2 = bc.key(edi_sha="s2", survey_digest="y", kind="xml")
+    bc.put_bytes(k2, "xml", b"payload-2")          # must swallow, never raise into the build
+    assert bc.write_errors == 1, f"a persistently dropped write went uncounted: {bc.counters()}"
+    state["fail"] = 0
+    fresh2 = _bc(root=cache_root)
+    assert fresh2.get_bytes(k2, "xml") is None and fresh2.misses == 1, \
+        "a dropped write left a partial entry behind"
+
+
+def test_unreadable_entry_counts_read_error_absent_stays_plain_miss(tmp_path):
+    """FAILS IF: a PRESENT-but-unreadable entry (lock/permissions — simulated with a directory at
+    the entry path: an OSError that is NOT FileNotFoundError, on Windows and POSIX alike) is not
+    distinguished from a cold miss via read_errors — or an ABSENT entry starts counting read_errors,
+    which would smear the deterministic §4.6 miss arithmetic on every clean run."""
+    bc = _bc(root=tmp_path / "cache")
+    k = bc.key(edi_sha="s1", survey_digest="y", kind="xml")
+    assert bc.get_bytes(k, "xml") is None          # absent -> plain miss
+    assert bc.misses == 1 and bc.read_errors == 0, bc.counters()
+    p = bc._path(k, "xml")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.mkdir()                                      # present but unreadable as a file
+    assert bc.get_bytes(k, "xml") is None
+    assert bc.misses == 2 and bc.read_errors == 1, \
+        f"an unreadable entry was indistinguishable from a cold miss: {bc.counters()}"
+    assert bc.corrupt == 0 and bc.hits == 0, bc.counters()
+
+
+# --------------------------------------------------------------------------------------------------
 # C18b (A3): per-survey instrumentation — one stderr line per served survey; deltas sum to the total
 # --------------------------------------------------------------------------------------------------
 

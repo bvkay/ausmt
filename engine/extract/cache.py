@@ -150,6 +150,12 @@ class BuildCache:
         self.misses = 0
         self.writes = 0
         self.corrupt = 0   # A1b: entries whose embedded payload checksum failed on read (deleted+recomputed)
+        # A4 forensics: environment-induced I/O failures, distinct from content-addressed misses.
+        # write_errors = puts dropped after the rename retries were exhausted (AV/indexer lock class);
+        # read_errors  = present-but-unreadable entries (counted as misses for the §4.6 arithmetic,
+        # but attributable — a lock-induced spurious miss is not a cold miss).
+        self.write_errors = 0
+        self.read_errors = 0
         # `disabled_reason` is a POLICY exclusion (e.g. Amendment A1a: --raw builds, whose seed-meta
         # citations feed served XML but are not a key component) — behaviourally identical to a
         # degenerate salt: the cache is inert, no reads, no writes.
@@ -214,7 +220,15 @@ class BuildCache:
         p = self._path(key, ext)
         try:
             raw = p.read_bytes()
+        except FileNotFoundError:
+            self.misses += 1
+            return None
         except OSError:
+            # A4: a PRESENT-but-unreadable entry (Windows AV/indexer lock, permissions) is not a
+            # normal cold miss. Still tallied as a miss (the §4.6 arithmetic and the recompute path
+            # are unchanged) but counted in read_errors so a lock-induced spurious miss is
+            # attributable from the build report instead of masquerading as content drift.
+            self.read_errors += 1
             self.misses += 1
             return None
         head, sep, payload = raw.partition(b"\n")
@@ -260,16 +274,32 @@ class BuildCache:
         if not self.enabled or self.mode == "ro":
             return
         p = self._path(key, ext)
+        tmp = None   # assigned inside the try: a mkdir failure must not leave the cleanup referencing it
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.parent / f".{key}.{ext}.{os.getpid()}.{time.time_ns()}.tmp"
             tmp.write_bytes(hashlib.sha256(data).hexdigest().encode("ascii") + b"\n" + data)
-            os.replace(tmp, p)          # atomic rename (POSIX + Windows)
-            self.writes += 1
+            # A4: retry the rename — on Windows an AV/on-access scanner briefly holding the fresh tmp
+            # (or the destination) raises a transient PermissionError, and a silently dropped entry
+            # is a spurious miss on the next build (one C18c-flake candidate). Three attempts with a
+            # short backoff clears a scanner hold; a still-failing write counts in write_errors.
+            last_err = None
+            for attempt in range(3):
+                try:
+                    os.replace(tmp, p)          # atomic rename (POSIX + Windows)
+                    self.writes += 1
+                    return
+                except OSError as e:
+                    last_err = e
+                    if attempt < 2:
+                        time.sleep(0.05 * (attempt + 1))
+            raise last_err
         except OSError as e:  # noqa: BLE001  (a cache write must never break the build)
+            self.write_errors += 1
             print(f"  [cache] WARN could not write {p.name}: {type(e).__name__}: {e}", file=sys.stderr)
             try:
-                tmp.unlink(missing_ok=True)
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
             except OSError:
                 pass
 
@@ -290,6 +320,7 @@ class BuildCache:
         salt_fp (A4) fingerprints the fixed salt so cross-build key-space drift is observable."""
         return {"enabled": self.enabled, "mode": self.mode, "hits": self.hits,
                 "misses": self.misses, "writes": self.writes, "corrupt": self.corrupt,
+                "write_errors": self.write_errors, "read_errors": self.read_errors,
                 "degenerate": self.degenerate, "reason": self.degenerate_reason,
                 "salt_fp": self.salt_fp}
 
