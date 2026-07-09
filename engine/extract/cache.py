@@ -118,17 +118,12 @@ def contract_schema_digest(engine_root: Path) -> str:
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
 
-def survey_yaml_digest(survey_yaml: Path | None) -> str:
-    """sha256 of the ENTIRE survey.yaml bytes (design §2.5, v1). Provably over-invalidating: ANY
-    yaml edit re-derives that one survey's stations, never the corpus. Narrowing to the
-    condition_tf-consumed field subset is a later contract. None / unreadable -> a stable empty
-    marker (raw --raw builds have no survey.yaml; they still key off the EDI sha + salt)."""
-    if survey_yaml is None:
-        return ""
-    try:
-        return hashlib.sha256(Path(survey_yaml).read_bytes()).hexdigest()
-    except OSError:
-        return ""
+# NOTE (Amendment A4): the per-survey yaml digest (design §2.5) is no longer derived here. It is
+# computed in build_portal.discover_work from the SAME bytes the survey metadata is parsed from —
+# one read feeds both, so a mid-build survey.yaml edit can never key products under a digest their
+# metadata does not match (the 2026-07-07 poisoned-cache incident). The path-taking helper that
+# lived here was deliberately DELETED, not deprecated: any reappearance of a read-the-yaml-again
+# digest call site is the incident's window reopening.
 
 
 class BuildCache:

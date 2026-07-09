@@ -792,13 +792,21 @@ def survey_meta_from_yaml(y: dict) -> dict:
     return sm
 
 
-def _read_yaml(path: Path):
+def _read_yaml(path: Path, raw: bytes | None = None):
+    """Parse a survey.yaml. `raw`, when given, is the file's ALREADY-READ bytes and is parsed instead
+    of re-reading the path — so a caller that also derives a content digest from those same bytes gets
+    parse+digest coherence from ONE read (C18 Amendment A4: the 2026-07-07 incident was a build whose
+    metadata and cache-key digest came from two reads of the same file, minutes apart, straddling an
+    edit). YAML mandates a UTF family, so the bytes decode as UTF-8 (replace-on-error: a bad byte
+    degrades one field's text, never the parse+digest pairing)."""
+    text = raw.decode("utf-8", errors="replace") if raw is not None else None
     try:
         import yaml  # noqa: PLC0415
     except ModuleNotFoundError:
-        return _mini_yaml(path.read_text())  # tolerant stdlib fallback (top-level scalars + simple nested maps)
+        # tolerant stdlib fallback (top-level scalars + simple nested maps)
+        return _mini_yaml(text if text is not None else path.read_text())
     try:
-        return yaml.safe_load(path.read_text()) or {}
+        return yaml.safe_load(text if text is not None else path.read_text()) or {}
     except yaml.YAMLError as e:
         # one malformed contributor survey.yaml must NOT crash the whole build with a raw traceback and deny
         # publication to every other survey -- warn loudly and drop just this package (the caller skips a non-dict).
@@ -1721,10 +1729,12 @@ def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
 
 def discover_work(a, ap, validator):
     """One work entry per survey, from --surveys packages or --raw EDI folders. Returns
-    (work, survey_extent): work = [(label, org, inputs, kind, meta-or-None, pkgdir-or-None, slug)];
-    survey_extent maps a survey label to its declared geographic_extent (for the out-of-extent QC).
-    A pure discovery phase -- it reads the filesystem + validator and produces the work list; the
-    per-survey extract/science/products happen in main()'s loop over what this returns."""
+    (work, survey_extent): work = [(label, org, inputs, kind, meta-or-None, pkgdir-or-None, slug,
+    yaml_digest)]; survey_extent maps a survey label to its declared geographic_extent (for the
+    out-of-extent QC). A pure discovery phase -- it reads the filesystem + validator and produces the
+    work list; the per-survey extract/science/products happen in main()'s loop over what this returns.
+    yaml_digest is the sha256 of the SAME survey.yaml bytes the meta was parsed from (Amendment A4:
+    one read feeds both, so an edit landing mid-build can never split them; "" for --raw entries)."""
     work, survey_extent = [], {}
     if a.surveys:
         for d in sorted(Path(a.surveys).iterdir()):
@@ -1738,11 +1748,25 @@ def discover_work(a, ap, validator):
                 if rep.worst() == 2:
                     print(f"SKIP {d.name}: validation FAILED ({rep.counts()['FAIL']} fails)", file=sys.stderr)
                     continue
-            y = _read_yaml(sy)
+            # C18 Amendment A4 (single-read coherence): read survey.yaml's bytes ONCE and derive BOTH
+            # the parsed metadata and the cache-key digest from them. The 2026-07-07 incident was a
+            # build that read this file twice (meta here, digest at its per-survey loop iteration,
+            # minutes later on a full corpus): an edit landing between the reads wrote served XML
+            # embedding the PRE-edit metadata KEYED under the POST-edit digest — poisoning the cache
+            # so the NEXT build warm-served stale citations at hits=N/misses=0, invisible to the C18b
+            # gate (the poisoned stamp equals the live digest). One read = nothing to straddle.
+            try:
+                sy_raw = sy.read_bytes()
+            except OSError as e:
+                print(f"SKIP {d.name}: could not read survey.yaml ({type(e).__name__}: {e}) "
+                      f"-- survey dropped", file=sys.stderr)
+                continue
+            y = _read_yaml(sy, raw=sy_raw)
             if not isinstance(y, dict):
                 if y is not None:  # valid YAML but not a mapping (list/scalar); None was already warned in _read_yaml
                     print(f"SKIP {d.name}: survey.yaml is not a YAML mapping -- survey dropped", file=sys.stderr)
                 continue
+            sy_digest = hashlib.sha256(sy_raw).hexdigest()   # the ONE digest this survey builds under
             label = y.get("name", d.name)
             slug = safe_component(y.get("slug", d.name))   # untrusted slug -> safe paths/ids
             edis = sorted((d / "transfer_functions" / "edi").glob("*.edi"))
@@ -1759,7 +1783,7 @@ def discover_work(a, ap, validator):
             # structured schema that mapping would otherwise land in station.json as a dict.
             smeta = survey_meta_from_yaml(y)
             survey_extent[label] = _extent_of(y)  # for the build-time out-of-extent QC FYI
-            work.append((label, smeta["org"], inputs, kind, smeta, d, slug))
+            work.append((label, smeta["org"], inputs, kind, smeta, d, slug, sy_digest))
     elif a.raw:
         coll = json.loads(Path(a.collections).read_text()) if a.collections else \
             {p.name: [p.name, "unknown"] for p in sorted(Path(a.raw).iterdir()) if p.is_dir()}
@@ -1777,9 +1801,11 @@ def discover_work(a, ap, validator):
                     lab = f"AusLAMP {st}" if st != "?" else "AusLAMP"
                     buckets.setdefault(lab, []).append(p)
                 for lab, ps in buckets.items():
-                    work.append((lab, seed.get(lab, {}).get("org", org), ps, "edi", seed.get(lab), None, slugify(lab)))
+                    # raw mode: no survey.yaml -> the stable empty digest marker (matches Amendment A1a:
+                    # raw builds are cache-excluded anyway; the field just keeps the tuple shape uniform)
+                    work.append((lab, seed.get(lab, {}).get("org", org), ps, "edi", seed.get(lab), None, slugify(lab), ""))
             else:
-                work.append((label, seed.get(label, {}).get("org", org), edis, "edi", seed.get(label), None, slugify(label)))
+                work.append((label, seed.get(label, {}).get("org", org), edis, "edi", seed.get(label), None, slugify(label), ""))
     else:
         ap.error("pass --surveys or --raw")
     return work, survey_extent
@@ -1963,21 +1989,26 @@ def main(argv=None):
     # public while its tf series go empty and its science sci fields are nulled.
     withheld_ids = set()
     input_formats = set()
-    # C18b (A3): the digest-stamp sidecar (out/products/survey_digests.json). Per served survey it
-    # records the survey.yaml digest read AT EMISSION TIME (yaml_digest_current) and, per served
-    # station, the digest its served XML was KEYED/PRODUCED under (xml_digest_stamped). verify.py's
-    # --surveys consistency gate compares these against the LIVE survey.yaml, catching a product served
-    # under a stale (pre-edit) digest — the 2026-07-07 incident shape. Cache-INDEPENDENT: this is built
-    # from the served products + the source yaml, never from cache state.
+    # C18b (A3, as amended by A4): the digest-stamp sidecar (out/products/survey_digests.json). Per
+    # served survey it records the digest of the survey.yaml bytes THIS BUILD'S METADATA CAME FROM
+    # (yaml_digest_current — the discovery-time single read, A4) and, per served station, the digest
+    # its served XML was KEYED/PRODUCED under (xml_digest_stamped). verify.py's --surveys consistency
+    # gate compares BOTH against the LIVE survey.yaml, catching (a) a product served under a stale
+    # (pre-edit) digest and (b) a STRADDLED build whose yaml changed underneath it mid-build — the
+    # 2026-07-07 incident's two faces. Cache-INDEPENDENT: built from the served products + the source
+    # yaml, never from cache state.
     survey_digests_sidecar: dict = {}
     import time as _time  # noqa: PLC0415 (house style: local import where used — per-survey wall time)
-    for label, org, inputs, kind, meta, pkgdir, slug in work:
+    for label, org, inputs, kind, meta, pkgdir, slug, _survey_digest in work:
         _survey_t0 = _time.perf_counter()   # build_report.json duration_seconds (wall time for this survey)
         _survey_warnings: list = []         # structured survey-scoped warnings for build_report.json
         # C18 cache key component: this survey's WHOLE survey.yaml digest (§2.5, provably
-        # over-invalidating — any yaml edit re-derives just this survey). None for --raw builds
-        # (no survey.yaml) -> a stable empty digest; those still key off the EDI sha + salt.
-        _survey_digest = cache_mod.survey_yaml_digest((pkgdir / "survey.yaml") if pkgdir else None)
+        # over-invalidating — any yaml edit re-derives just this survey; "" for --raw entries, which
+        # are cache-excluded anyway). Amendment A4: the digest is CARRIED from discover_work, computed
+        # there from the SAME bytes the survey meta was parsed from — never re-read here. A loop-time
+        # re-read is exactly the 2026-07-07 incident window: an edit landing between discovery and
+        # this iteration used to key PRE-edit products under the POST-edit digest, poisoning the
+        # cache invisibly to the C18b gate (test_straddled_build_cannot_poison_the_cache pins this).
         # C18b (A3): snapshot the cumulative cache counters so this survey's PER-SURVEY delta can be
         # logged after its products are emitted (all of a survey's cache reads/writes happen within
         # this one iteration — the parse gets in process_edis and the xml gets in _emit_served_xml).
@@ -2071,11 +2102,12 @@ def main(argv=None):
             # (both passes agree, so update is idempotent) so station.json carries conditioning either way.
             for _sid, _nl in _xnotes.items():
                 conditioning_notes.setdefault(_sid, _nl)
-            # C18b (A3): record this served survey's digest stamps. yaml_digest_current is the digest of
-            # the survey.yaml AS READ THIS BUILD (== _survey_digest, computed from pkgdir above);
+            # C18b (A3/A4): record this served survey's digest stamps. yaml_digest_current is the
+            # digest of the bytes this build's metadata was parsed from (the discovery single read);
             # xml_digest_stamped is per-station the digest each served XML was keyed/produced under
             # (fresh => this build's digest; cache hit => the entry's stored digest). A survey served
-            # under a stale cache entry surfaces the stale digest here, where verify.py catches it.
+            # under a stale cache entry surfaces the stale digest here — and a STRADDLED build (yaml
+            # edited mid-build) surfaces as yaml_digest_current != live — where verify.py catches both.
             survey_digests_sidecar[slug] = {
                 "yaml_digest_current": _survey_digest,
                 "xml_digest_stamped": _xstamped,

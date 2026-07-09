@@ -493,6 +493,58 @@ def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_
     assert f"consistency: FAIL {slug}" in txt, txt
 
 
+def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypatch):
+    """★ THE INCIDENT ROOT CAUSE (M1, Amendment A4). FAILS IF: a survey.yaml edit landing AFTER
+    discovery but BEFORE that survey's per-survey processing lets the straddled build write cache
+    entries whose XML embeds the PRE-edit metadata KEYED under the POST-edit digest — so a
+    subsequent clean warm build serves the pre-edit citation from cache. Independent observable:
+    the citation INSIDE the served XML bytes vs the organisation in the on-disk survey.yaml —
+    never counters, never stamp self-consistency (which is exactly what this poisoning defeats:
+    the poisoned entry's stamp EQUALS the live digest, so the C18b gate stayed green over it).
+
+    Proven failing on pre-fix HEAD: survey.yaml was read TWICE per build — metadata at
+    discover_work, the cache-key digest at the per-survey loop top, a window spanning every
+    preceding survey's work (minutes on the production corpus, where the 2026-07-07 build
+    20260707T002709Z warm-served a stale Olympic Dam citation at hits=3017/misses=0). The fix
+    derives meta AND digest from ONE read in discovery — coherent by construction. The seam here
+    (edit fired right after discover_work returns) is fix-agnostic, so this test still fails if a
+    loop-time re-read is ever reintroduced."""
+    surveys = _make_survey(tmp_path, SAMPLE_EDIS)          # organisation: Test Org
+    sy = surveys / "cache-survey" / "survey.yaml"
+    cache = tmp_path / "cache"
+
+    real_discover = build_portal.discover_work
+
+    def _straddling_discover(a, ap, validator):
+        res = real_discover(a, ap, validator)
+        # The "editor save / gateway publish" lands inside the running build, after discovery.
+        sy.write_text(sy.read_text(encoding="utf-8").replace(
+            "organisation: Test Org", "organisation: Edited Org"), encoding="utf-8")
+        return res
+
+    monkeypatch.setattr(build_portal, "discover_work", _straddling_discover)
+    out1 = tmp_path / "out1"
+    assert _build(surveys, out1, cache) == 0               # the STRADDLED build
+    monkeypatch.setattr(build_portal, "discover_work", real_discover)
+
+    # The straddled build itself must not verify clean under the armed gate: its products derive
+    # from PRE-edit bytes while the live yaml is post-edit (pre-fix HEAD was blind here — the
+    # loop-time digest matched the post-edit yaml, blessing the poisoned products).
+    rc, txt = _verify_data_dir_surveys(out1, surveys)
+    assert rc != 0, f"verify.py blessed a STRADDLED build (C18b blindness, incident shape):\n{txt}"
+
+    # A clean rebuild on the now-stable post-edit tree must serve the POST-edit citation. On
+    # pre-fix HEAD every station HIT the poisoned entries and served 'Test Org' from cache.
+    out2 = tmp_path / "out2"
+    assert _build(surveys, out2, cache) == 0
+    served = _served_xml(out2)
+    assert served, "no XML served (test set-up wrong)"
+    for xp in served:
+        a = _xml_authors(xp)
+        assert a == "Edited Org", \
+            f"POISONED CACHE SERVED: {xp.name} cites {a!r} but the live survey.yaml says 'Edited Org'"
+
+
 def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
     """FAILS IF: a cache populated under a PRE-BUMP entry-format tag is read (hit) by the current
     build instead of MISSING cleanly. Each tag bump re-keys every blob, so a pre-bump entry's key
