@@ -401,6 +401,14 @@ def _merge_map_into(node, new_map: dict) -> bool:
         else:
             node[subkey] = quote_ambiguous(new_val)
             changed = True
+    # ACCEPTED RESIDUAL (review F4): `del node[subkey]` removes the key's line and its INLINE trailing
+    # comment cleanly, but a STANDALONE leading comment line above the deleted key is ORPHANED onto the
+    # following key — ruamel attaches a leading comment to the node that FOLLOWS it, so deleting the
+    # node leaves that comment bound to its successor. Deleting a sub-key via the advanced-JSON path is
+    # rare, and the orphaned comment is a cosmetic drift in the surrounding lines, not a data change,
+    # so it is left as-is. If it ever matters, the fix is a node.ca.items sweep: before deleting
+    # `subkey`, move (or drop) any pre-key comment tokens off the deleted node rather than letting
+    # ruamel re-home them on the next key.
     for subkey in [k for k in node if k not in new_map]:
         del node[subkey]
         changed = True

@@ -152,8 +152,14 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 # --------------------------------------------------------------------------------------------------
 
 # A survey whose sections carry INTRA-section comments — the exact fidelity the wholesale replace
-# destroyed. section_b (lead_investigator) is here purely to prove editing section_a does not rewrite
-# section_b's bytes (the per-section patch pin).
+# destroyed. It deliberately carries every shape the FC-4 diff pins need to exercise:
+#   * organisation — a map with a standalone leading comment (before `ror`), an inline trailing
+#     comment (on `name`), and a DELETABLE sub-key (`legacy_code`, removed via the advanced-JSON path);
+#   * processing — a map that carries BOTH a nested map-in-map (`software.name`/`software.version`,
+#     each with its own comment) AND a list-valued member (`steps`), so a scalar/nested edit can be
+#     proven not to disturb the untouched nested leaf's comment or the list block's bytes;
+#   * lead_investigator (section B) — present purely to prove editing another section never rewrites
+#     its bytes (the per-section patch pin).
 _COMMENTED_SECTIONS_YAML = """\
 schema_version: "0.2"
 slug: demo-survey-2026
@@ -162,7 +168,18 @@ region: South Australia
 
 organisation:
   name: University of Example        # the lead org
+  # a standalone comment before ror
   ror: null                          # ROR URL when known
+  legacy_code: OLD-123               # removed via the advanced-JSON path
+
+processing:
+  software:
+    name: Aurora                     # the processing software
+    version: "1.2"                   # untouched nested leaf
+  steps:
+    - despike                        # first-pass despiking
+    - rotate
+    - decimate
 
 lead_investigator:
   name: Ada Lovelace                 # PI of record
@@ -180,9 +197,13 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
     and never its comment. FAILS IF editing one sub-field re-emits a sibling line or strips an
     intra-section comment (the pre-C43 wholesale-replace behaviour, proven RED 2026-07-10)."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
+    # A pure single-field edit: submit the WHOLE organisation section back with only `ror` changed
+    # (name + legacy_code carried through unchanged, so nothing is deleted — the add/delete case is
+    # test_editing_section_a_never_rewrites_section_b_bytes / the F3 pins below).
     result = _merge(_cfg(tmp_path),
                     patch={"organisation": {"name": "University of Example",
-                                            "ror": "https://ror.org/03yghzc09"}},
+                                            "ror": "https://ror.org/03yghzc09",
+                                            "legacy_code": "OLD-123"}},
                     note="add ROR")
     assert result["ok"] is True
     assert result["changed"] == ["organisation"]
@@ -206,18 +227,37 @@ def test_single_field_edit_diff_touches_only_that_field(tmp_path):
 
 def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
     """[FC-4] PER-SECTION PATCH PIN (record D13). Submitting a change to section A (organisation)
-    must leave section B (lead_investigator) byte-for-byte identical — every one of its lines,
-    comment included, survives with no +/- diff line. FAILS IF a section edit disturbs a sibling
-    section's bytes."""
+    that BOTH adds a sub-key AND deletes a sub-key (via the advanced-JSON path — the section is
+    submitted without `legacy_code`, so _merge_map_into's deletion loop drops it) must leave section
+    B (lead_investigator) byte-for-byte identical — every one of its lines, comment included, survives
+    with no +/- diff line.
+
+    Review F2: the PREVIOUS form of this test submitted only a scalar change and asserted section B
+    was untouched — but the pre-C43 wholesale emitter ALSO never touched a sibling SECTION (it
+    rebuilt only the edited section's node), so that assertion passed against every implementation
+    that ever existed and could not fail (Invariant 10). The add+delete here goes through the exact
+    deletion loop whose failability was PROVEN by mutation (evidence in the C43 fix-round report):
+    pointing that loop at the ROOT document instead of the section node makes it delete top-level
+    keys, which rewrites section B and reds this test. That mutation is evidence only, reverted, never
+    committed. FAILS IF an add+delete in one section disturbs a sibling section's bytes."""
     _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
     result = _merge(_cfg(tmp_path),
+                    # ADD `contact` (new sub-key) + DELETE `legacy_code` (omitted from the submitted
+                    # section) while keeping name/ror. This is the advanced-JSON override shape.
                     patch={"organisation": {"name": "University of Example",
-                                            "ror": "https://ror.org/03yghzc09"}},
-                    note="add ROR")
+                                            "ror": "https://ror.org/03yghzc09",
+                                            "contact": "ops@example.edu"}},
+                    note="add ROR + contact, drop legacy_code")
     assert result["ok"] is True
+    assert result["changed"] == ["organisation"]
     diff = result["diff"]
     body = [ln for ln in diff.splitlines()
             if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+    # The add and the delete both landed in the diff (this is a REAL add+delete, not a no-op).
+    assert any("contact: ops@example.edu" in ln and ln.startswith("+") for ln in body), \
+        f"the added sub-key did not appear in the diff:\n{diff}"
+    assert any("legacy_code: OLD-123" in ln and ln.startswith("-") for ln in body), \
+        f"the deleted sub-key did not appear in the diff:\n{diff}"
     # No lead_investigator line (name, orcid, or its comment) appears among the changed lines.
     for needle in ("Ada Lovelace", "# PI of record", "0000-0002-1825-0097", "lead_investigator:"):
         assert not any(needle in ln for ln in body), \
@@ -226,6 +266,137 @@ def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
     new = result["new_yaml"]
     assert "name: Ada Lovelace                 # PI of record" in new
     assert 'orcid: "0000-0002-1825-0097"' in new
+
+
+def _body_diff_lines(diff: str) -> list[str]:
+    """The +/- body lines of a unified diff (the file-header ---/+++ lines excluded)."""
+    return [ln for ln in diff.splitlines()
+            if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+
+
+# --------------------------------------------------------------------------------------------------
+# [FC-4] F3 diff pins on the REAL emitted diff. Each pins one guarantee of the surgical map merge AND
+# is failable by a NAMED mutation (temporary, evidence captured in the C43 fix-round report, reverted
+# — never committed): a pin nothing can fail is not a pin (Invariant 10). The mutation for each is
+# stated in its docstring so a future reader can reproduce the red.
+# --------------------------------------------------------------------------------------------------
+def test_added_subkey_with_ambiguous_value_is_quoted_no_sibling_moves(tmp_path):
+    """F3(a). Adding a sub-key whose value is FIX-3-ambiguous ('NO', a YAML-1.1 bool) must emit it
+    DOUBLE-QUOTED (so the PyYAML readers downstream read the string 'NO', not False) AND move no
+    sibling line. Failable by bypassing quote_ambiguous on the added-key branch of _merge_map_into
+    (`node[subkey] = new_val` instead of `= quote_ambiguous(new_val)`): the added value then emits
+    bare `contact: NO` and PyYAML retypes it to False — proven RED in the fix-round report."""
+    _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
+    result = _merge(_cfg(tmp_path),
+                    patch={"organisation": {"name": "University of Example", "ror": None,
+                                            "legacy_code": "OLD-123", "contact": "NO"}},
+                    note="add ambiguous contact")
+    assert result["ok"] is True
+    body = _body_diff_lines(result["diff"])
+    added = [ln for ln in body if ln.startswith("+")]
+    # The added key is emitted double-quoted.
+    assert any('contact: "NO"' in ln for ln in added), \
+        f"the added ambiguous value was not double-quoted:\n{result['diff']}"
+    assert not any("contact: NO" in ln and '"NO"' not in ln for ln in added), \
+        f"the added ambiguous value emitted BARE (PyYAML would read False):\n{result['diff']}"
+    # No sibling line moved: name/ror/legacy_code never appear as +/- lines.
+    for sib in ("name: University of Example", "ror: null", "legacy_code: OLD-123"):
+        assert not any(sib in ln for ln in body), \
+            f"adding a sub-key moved an untouched sibling {sib!r}:\n{result['diff']}"
+    # And PyYAML really reads the added value back as the string 'NO'.
+    import base64
+
+    import yaml as pyyaml
+    reread = pyyaml.safe_load(base64.b64decode(result["new_yaml_b64"]))
+    assert reread["organisation"]["contact"] == "NO"
+    assert isinstance(reread["organisation"]["contact"], str)
+
+
+def test_deleting_subkey_removes_only_that_line_neighbours_byte_stable(tmp_path):
+    """F3(b). Deleting a sub-key (advanced-JSON: the section is submitted without `legacy_code`)
+    removes ONLY that key's line; its neighbours' comments stay byte-stable. Failable via the F2
+    mutation (deletion loop iterating the root document rather than the section node) — which deletes
+    the wrong nodes and rewrites neighbouring lines; proven RED in the fix-round report."""
+    _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
+    result = _merge(_cfg(tmp_path),
+                    # legacy_code omitted => deleted; name/ror carried unchanged.
+                    patch={"organisation": {"name": "University of Example", "ror": None}},
+                    note="remove the retired identifier")  # note text avoids the key name substring
+    assert result["ok"] is True
+    assert result["changed"] == ["organisation"]
+    body = _body_diff_lines(result["diff"])
+    removed = [ln for ln in body if ln.startswith("-")]
+    added = [ln for ln in body if ln.startswith("+")]
+    # The deleted key's line is removed...
+    assert any("legacy_code: OLD-123" in ln for ln in removed), \
+        f"the deleted key's line was not removed:\n{result['diff']}"
+    # ...and it is a pure DELETION: the key is never re-emitted as a `+` line (a wholesale rewrite
+    # would delete-then-re-add it).
+    assert not any("legacy_code" in ln for ln in added), \
+        f"the deleted key was re-emitted as an added line (wholesale rewrite):\n{result['diff']}"
+    # name + ror (the neighbours) are untouched — not in the diff body at all.
+    for sib in ("name: University of Example", "ror: null"):
+        assert not any(sib in ln for ln in body), \
+            f"a neighbour of the deleted key moved:\n{result['diff']}"
+    # The neighbours' comments survive byte-for-byte in the emitted bytes.
+    new = result["new_yaml"]
+    assert "name: University of Example        # the lead org" in new
+    assert "# ROR URL when known" in new
+
+
+def test_editing_nested_map_leaf_leaves_untouched_nested_leaf_comment(tmp_path):
+    """F3(c). Editing ONE leaf of a nested map-in-map (processing.software.name) must leave the
+    UNTOUCHED nested leaf (processing.software.version) and its comment byte-stable. Failable by
+    making the recursion replace the nested map wholesale (e.g. `node[subkey] = quote_ambiguous(
+    new_val)` for a dict new_val instead of recursing) — which re-emits the whole software block and
+    drops the version comment; proven RED in the fix-round report."""
+    _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
+    result = _merge(_cfg(tmp_path),
+                    patch={"processing": {"software": {"name": "Aurora 2", "version": "1.2"},
+                                          "steps": ["despike", "rotate", "decimate"]}},
+                    note="bump software name")
+    assert result["ok"] is True
+    assert result["changed"] == ["processing"]
+    body = _body_diff_lines(result["diff"])
+    # Only the software.name leaf moved.
+    assert any("name: Aurora" in ln and ln.startswith("-") for ln in body)
+    assert any("name: Aurora 2" in ln and ln.startswith("+") for ln in body)
+    # The untouched nested leaf (software.version) never appears as a +/- line. (Scope the needle to
+    # the leaf's exact value so it does not collide with the managed top-level `version:` line or the
+    # release-notes `version:` entries, which legitimately change.)
+    assert not any('version: "1.2"' in ln for ln in body), \
+        f"the untouched nested leaf moved:\n{result['diff']}"
+    # And its comment survives byte-for-byte.
+    assert 'version: "1.2"                   # untouched nested leaf' in result["new_yaml"], \
+        "the untouched nested leaf's comment was dropped"
+
+
+def test_scalar_edit_in_section_with_list_member_leaves_list_block_stable(tmp_path):
+    """F3(d). A scalar edit in a map section that ALSO carries a list-valued member (processing.steps)
+    must leave the list block byte-stable — the list is not reassigned just because a sibling scalar
+    changed. Failable by forcing list reassignment on an unchanged list (e.g. dropping the
+    `_plain(old_val) == new_val` short-circuit so an equal list is reassigned via quote_ambiguous and
+    re-emits its own block); proven RED in the fix-round report."""
+    _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
+    result = _merge(_cfg(tmp_path),
+                    # Change software.name (a scalar leaf) but carry `steps` back UNCHANGED.
+                    patch={"processing": {"software": {"name": "Aurora 2", "version": "1.2"},
+                                          "steps": ["despike", "rotate", "decimate"]}},
+                    note="scalar edit, list unchanged")
+    assert result["ok"] is True
+    body = _body_diff_lines(result["diff"])
+    # No element of the unchanged list block appears as a +/- line.
+    for elem in ("- despike", "- rotate", "- decimate", "steps:"):
+        assert not any(elem in ln for ln in body), \
+            f"an unchanged list block line moved on a sibling scalar edit ({elem!r}):\n{result['diff']}"
+    # The list block survives verbatim in the emitted bytes — including the inline comment on its
+    # first element, which a reassignment of the (comment-free-data) list would silently drop even
+    # though the element data round-trips byte-identically. This comment is the observable that makes
+    # the pin FAILABLE: the mutation "force list reassignment on unchanged lists" strips it.
+    new = result["new_yaml"]
+    assert ("  steps:\n    - despike                        # first-pass despiking\n"
+            "    - rotate\n    - decimate\n") in new, \
+        "the unchanged list block (or its element comment) was re-emitted / disturbed"
 
 
 # --------------------------------------------------------------------------------------------------

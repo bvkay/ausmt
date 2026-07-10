@@ -197,11 +197,13 @@ def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
             assert r.status_code == 409
             # No MUTATING git — the FAIL guard is upstream of any commit. (The preview render now
             # reads surveys-live HEAD via `rev-parse --short HEAD` for the C43 drift chip, a benign
-            # read the queue page already does; only commit/push/add/reset would be a violation.)
-            mutating = [c for c in git.calls
-                        if c and c[0] in ("commit", "push", "add", "reset", "rm", "merge",
-                                          "checkout", "clean", "branch")]
-            assert mutating == [], f"a mutating git op leaked past the FAIL guard: {mutating}"
+            # read the queue page already does.) ALLOWLIST, not denylist (review F1): the FAIL path
+            # may make ONLY the two benign READS `status` and `rev-parse`; assert every recorded verb
+            # is one of those two. A denylist would silently pass a NEW mutating verb (worktree add,
+            # stash, tag, mv, apply) the moment FakeGit models it and nobody extends the list — the
+            # allowlist fails closed instead, catching any op the FAIL path was never meant to reach.
+            assert all(c and c[0] in ("status", "rev-parse") for c in git.calls), \
+                f"non-read git op on the FAIL path: {git.calls}"
     run(_body())
 
 
