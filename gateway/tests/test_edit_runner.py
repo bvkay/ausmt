@@ -143,6 +143,92 @@ def test_unknown_key_and_comments_survive_a_map_edit(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
+# [FC-4] C43 Stage-1 diff-minimality pins (record D13). The editor submits WHOLE sections as plain
+# JSON dicts; the pre-C43 apply_patch replaced the section's CommentedMap wholesale, so editing ONE
+# sub-field re-emitted every sibling line and dropped intra-section comments. These pin the surgical
+# in-place map merge (edit._merge_map_into). Proven RED against the pre-fix emitter 2026-07-10 (a
+# single organisation.ror edit rewrote organisation.name and lost its trailing comment); see the C43
+# report's red-then-green evidence.
+# --------------------------------------------------------------------------------------------------
+
+# A survey whose sections carry INTRA-section comments — the exact fidelity the wholesale replace
+# destroyed. section_b (lead_investigator) is here purely to prove editing section_a does not rewrite
+# section_b's bytes (the per-section patch pin).
+_COMMENTED_SECTIONS_YAML = """\
+schema_version: "0.2"
+slug: demo-survey-2026
+version: 1.0.0
+region: South Australia
+
+organisation:
+  name: University of Example        # the lead org
+  ror: null                          # ROR URL when known
+
+lead_investigator:
+  name: Ada Lovelace                 # PI of record
+  orcid: "0000-0002-1825-0097"
+
+# an unknown custom key the editor form does not model — must survive verbatim
+custom_local_note: "keep me byte-for-byte"
+"""
+
+
+def test_single_field_edit_diff_touches_only_that_field(tmp_path):
+    """[FC-4] DIFF-MINIMALITY PIN (record D13). Change ONE sub-field of a map section
+    (organisation.ror null -> a URL) and the emitted survey.yaml diff must touch ONLY that field's
+    line(s) plus the managed version/release_notes — never the untouched sibling (organisation.name)
+    and never its comment. FAILS IF editing one sub-field re-emits a sibling line or strips an
+    intra-section comment (the pre-C43 wholesale-replace behaviour, proven RED 2026-07-10)."""
+    _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
+    result = _merge(_cfg(tmp_path),
+                    patch={"organisation": {"name": "University of Example",
+                                            "ror": "https://ror.org/03yghzc09"}},
+                    note="add ROR")
+    assert result["ok"] is True
+    assert result["changed"] == ["organisation"]
+    diff = result["diff"]
+    # The ONLY changed body lines (excluding managed version/release_notes) are the ror line pair.
+    added = [ln for ln in diff.splitlines()
+             if ln.startswith("+") and not ln.startswith("+++")]
+    removed = [ln for ln in diff.splitlines()
+               if ln.startswith("-") and not ln.startswith("---")]
+    # organisation.name (unchanged) must NOT appear as a +/- line — it kept its bytes AND comment.
+    assert not any("name: University of Example" in ln for ln in added + removed), \
+        f"an untouched sibling field moved in the diff:\n{diff}"
+    # The ror line changed; its neighbours (name + the section comment) are byte-stable.
+    assert any("ror: null" in ln for ln in removed)
+    assert any("ror: https://ror.org/03yghzc09" in ln for ln in added)
+    new = result["new_yaml"]
+    assert "name: University of Example        # the lead org" in new, \
+        "the untouched sibling lost its trailing comment"
+    assert "# ROR URL when known" in new, "the edited field's own comment was dropped"
+
+
+def test_editing_section_a_never_rewrites_section_b_bytes(tmp_path):
+    """[FC-4] PER-SECTION PATCH PIN (record D13). Submitting a change to section A (organisation)
+    must leave section B (lead_investigator) byte-for-byte identical — every one of its lines,
+    comment included, survives with no +/- diff line. FAILS IF a section edit disturbs a sibling
+    section's bytes."""
+    _write_package(tmp_path / "surveys-live", yaml_text=_COMMENTED_SECTIONS_YAML)
+    result = _merge(_cfg(tmp_path),
+                    patch={"organisation": {"name": "University of Example",
+                                            "ror": "https://ror.org/03yghzc09"}},
+                    note="add ROR")
+    assert result["ok"] is True
+    diff = result["diff"]
+    body = [ln for ln in diff.splitlines()
+            if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+    # No lead_investigator line (name, orcid, or its comment) appears among the changed lines.
+    for needle in ("Ada Lovelace", "# PI of record", "0000-0002-1825-0097", "lead_investigator:"):
+        assert not any(needle in ln for ln in body), \
+            f"editing organisation disturbed section B ({needle!r}):\n{diff}"
+    # And section B survives verbatim in the emitted bytes.
+    new = result["new_yaml"]
+    assert "name: Ada Lovelace                 # PI of record" in new
+    assert 'orcid: "0000-0002-1825-0097"' in new
+
+
+# --------------------------------------------------------------------------------------------------
 # review FIX 3: the parser differential (ruamel emits, PyYAML reads)
 # --------------------------------------------------------------------------------------------------
 def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):
