@@ -1,0 +1,27 @@
+# AusMT external alerting timer. Fires ausmt-alert.service every 15 minutes. Install:
+#   sudo cp deploy/systemd/ausmt-alert.{service,timer} /etc/systemd/system/
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ausmt-alert.timer
+#   systemctl list-timers ausmt-alert.timer          # confirm the next run
+#   sudo systemctl start ausmt-alert.service          # send one beat NOW to test (expect a success ping)
+# See deploy/README.md "Alerting" for the external-check setup + the fail-ping test.
+
+[Unit]
+Description=AusMT external alerting every 15 minutes
+
+[Timer]
+# Every 15 minutes. This cadence must be <= the external check's period so a beat always arrives inside
+# the monitor's window; the runbook sets the service check to period 15 min / grace 10 min to match.
+# OnUnitActiveSec (not OnCalendar) so the interval is measured from the last run — a slow pass cannot
+# make two fire back-to-back. OnBootSec gives an early first beat after a reboot.
+OnBootSec=2min
+OnUnitActiveSec=15min
+# Catch up a missed run after downtime rather than skipping the whole interval.
+Persistent=true
+# Spread the fire a little so a fleet of boxes (or the co-scheduled reconcile/backup timers) do not all
+# ping on the exact same second.
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
