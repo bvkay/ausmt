@@ -209,11 +209,28 @@ CONTEXT_BAR_JS = """
   var publishedHead = chip.getAttribute('data-published-head') || '';
   var buildEl = document.getElementById('drift-build');
   var servingEl = document.getElementById('drift-serving');
+  // S2a-5 DISPLAY shortener (mirrors gateway/builddisplay.py — the authoritative, pinned spec):
+  // "<engine>-<source>-<iso>" -> "<source short> · HH:MM UTC"; a shape this does not recognise falls
+  // back to the id VERBATIM (never hide information). The FULL id rides the title attribute (hover).
+  function shortBuildId(id) {
+    if (!id) return '';
+    var s = String(id);
+    var m = s.match(/^([0-9a-fA-F]+|unknown)-([0-9a-fA-F]+|unknown)-(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[0-9.]*(?:Z|[+-]\\d{2}:?\\d{2})?)$/);
+    if (!m) return s;
+    var source = m[2];
+    var short = (source === 'unknown') ? 'unknown' : source.slice(0, 7);
+    var hhmm = m[3].slice(11, 16);
+    return short + ' \\u00b7 ' + hhmm + ' UTC';
+  }
   fetch('/data/build.json', {credentials: 'omit', cache: 'no-store'}).then(function (r) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   }).then(function (b) {
-    if (buildEl) buildEl.textContent = b.build_id || '(unknown)';
+    if (buildEl) {
+      var full = b.build_id || '';
+      buildEl.textContent = full ? shortBuildId(full) : '(unknown)';
+      if (full) buildEl.setAttribute('title', full);   // full id on hover (DOM property, not markup)
+    }
     var served = b.source_commit || '';
     if (!publishedHead || !served) return;  // can't judge currency without both sides
     var current = (publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
@@ -382,8 +399,452 @@ SURVEY_HUB_JS = """
 """
 
 
+# The C43 Stage-2a Stations tab browser-side script. ALL data is fetched SAME-ORIGIN from the served
+# /data corpus (catalogue.json / sci.json / tf.json / surveys.json + build.json) — the serve-panel
+# pattern, ZERO new gateway privileges (the gateway has no site-data mount). The catalogue/sci/tf
+# arrays are INDEX-ALIGNED (station i is catalogue[i]/sci[i]/tf[i] — the engine appends them in one
+# pass); we filter to this survey's rows by the catalogue `survey` column.
+#
+# CSP + XSS discipline (the same rules SURVEY_HUB_JS follows, extended to SVG): served external under
+# script-src 'self'; EVERY value goes in via textContent or a DOM property, NEVER innerHTML with data;
+# every SVG node is built with createElementNS (never an innerHTML string), so a build-report/catalogue
+# string can never inject markup — coordinates are computed numbers, but the discipline is uniform so a
+# source sweep can assert no innerHTML-with-data path exists.
+#
+# THE PHASE FACT (mirrors gateway/phaseqc.py — the authoritative, pinned server-side spec):
+#   tf.json t[4] = phs_yx_adj is stored with a +180 presentation shift (engine _edi_tf.norm_phase). The
+#   workbench SUBTRACTS 180 and re-wraps to recover TRUE φyx, plots it on a FULL ±180 axis with the Q3
+#   (−180…−90) band shaded, and classifies against Q3. φxy (t[3]) is stored true, plotted 0…90 with the
+#   Q1 band shaded, classified against Q1. Out-of-quadrant points are drawn RED; each phase plot carries
+#   a verdict footer strip BENEATH it (never overlapping the caption).
+STATIONS_JS = r"""
+(function () {
+  var host = document.getElementById('survey-stations');
+  if (!host) return;
+  var slug = host.getAttribute('data-survey-slug') || '';
+  var publishedHead = host.getAttribute('data-published-head') || '';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  // ---- column maps (single-sourced positional contract; mirror portal/src/contract.js) ----
+  var C = { id: 0, survey: 1, lat: 2, lon: 3, pmin: 4, pmax: 5, nper: 6, comps: 7, type: 8,
+            region: 9, file: 10, coord_flag: 11, ausmt_id: 12, edi_available: 13, sha256: 14 };
+  var SC = { q: 0, qb: 1, rr: 2, sw: 3, alg: 4, dim: 5, p3d: 6, gd: 7, ellip: 8, skew: 9, mre: 10 };
+  var T = { periods: 0, rho_xy: 1, rho_yx: 2, phs_xy: 3, phs_yx_adj: 4, tip_mag: 5, pt_min: 6,
+            pt_max: 7, pt_az: 8, pt_beta: 9, rho_xy_err: 10, rho_yx_err: 11, phs_xy_err: 12,
+            phs_yx_err: 13, tzx_re: 14, tzx_im: 15, tzy_re: 16, tzy_im: 17 };
+
+  // ---- phase-quadrant classification (mirrors gateway/phaseqc.py EXACTLY) ----
+  var YX_SHIFT = 180.0, Q1_LO = 0.0, Q1_HI = 90.0, Q3_LO = -180.0, Q3_HI = -90.0;
+  function wrap180(p) { return ((p + 180.0) % 360.0) - 180.0; }
+  function trueYx(stored) { return stored == null ? null : Math.round(wrap180(stored - YX_SHIFT) * 10) / 10; }
+  function inQ1(pxy) { return pxy == null ? null : (pxy >= Q1_LO && pxy <= Q1_HI); }
+  function inQ3(stored) { var v = trueYx(stored); return v == null ? null : (v >= Q3_LO && v <= Q3_HI); }
+
+  // ---- tiny DOM helpers (no innerHTML with data) ----
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function svg(tag, attrs) {
+    var e = document.createElementNS(SVGNS, tag);
+    if (attrs) { for (var k in attrs) { if (attrs.hasOwnProperty(k)) e.setAttribute(k, attrs[k]); } }
+    return e;
+  }
+  function svgText(x, y, str, opts) {
+    var t = svg('text', { x: x, y: y, 'font-size': (opts && opts.size) || 8.5,
+      'text-anchor': (opts && opts.anchor) || 'start', fill: (opts && opts.fill) || '#8FA3B0',
+      'font-family': 'monospace' });
+    t.textContent = str;   // textContent, never innerHTML
+    return t;
+  }
+  function fetchJson(url) {
+    return fetch(url, { credentials: 'omit', cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) return { __missing: true };
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  function num(v, dp) { return (v == null) ? '-' : (dp != null ? Number(v).toFixed(dp) : String(v)); }
+
+  var W = 372, PADL = 40, PADR = 10;
+
+  // A log-x scale over the period axis (periods are ascending, thinned to <=32).
+  function xScale(per) {
+    var lo = Math.log10(per[0]), hi = Math.log10(per[per.length - 1]);
+    var span = (hi - lo) || 1;
+    return function (v) { return PADL + (Math.log10(v) - lo) / span * (W - PADL - PADR); };
+  }
+  function supTen(d) {
+    var m = {'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴',
+             '5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+    return '10' + String(d).split('').map(function (c) { return m[c] || c; }).join('');
+  }
+  // The x-axis decade gridlines + labels, appended to an <svg> group.
+  function xFrame(g, per, x, H) {
+    g.appendChild(svg('rect', { x: PADL, y: 4, width: (W - PADL - PADR), height: (H - 22),
+      fill: 'none', stroke: '#2E4254' }));
+    var lo = Math.ceil(Math.log10(per[0])), hi = Math.floor(Math.log10(per[per.length - 1]));
+    for (var d = lo; d <= hi; d++) {
+      var xx = x(Math.pow(10, d));
+      g.appendChild(svg('line', { x1: xx, y1: 4, x2: xx, y2: (H - 18), stroke: '#2E4254',
+        'stroke-dasharray': '2,3' }));
+      g.appendChild(svgText(xx, H - 6, supTen(d), { anchor: 'middle' }));
+    }
+  }
+  // A polyline path over (period, value) pairs, skipping null/non-finite y — built as an SVG <path>
+  // with a computed `d` string (numbers only, no data). Colour c.
+  function linePath(g, per, vals, x, y, c) {
+    var d = '', pen = false;
+    for (var i = 0; i < per.length; i++) {
+      var v = vals[i];
+      if (v == null || !isFinite(y(v))) { pen = false; continue; }
+      d += (pen ? 'L' : 'M') + x(per[i]).toFixed(1) + ',' + y(v).toFixed(1);
+      pen = true;
+    }
+    if (d) g.appendChild(svg('path', { d: d, fill: 'none', stroke: c, 'stroke-width': 1.1 }));
+  }
+  // Per-point dots; when `flags` is supplied, an out-of-quadrant point (flag === false) is drawn RED.
+  function dots(g, per, vals, x, y, c, flags) {
+    for (var i = 0; i < per.length; i++) {
+      var v = vals[i];
+      if (v == null || !isFinite(y(v))) continue;
+      var col = c;
+      if (flags && flags[i] === false) col = '#D9534F';   // out-of-quadrant => red
+      g.appendChild(svg('circle', { cx: x(per[i]).toFixed(1), cy: y(v).toFixed(1), r: 2.1, fill: col }));
+    }
+  }
+
+  // ---- ρa plot (log-log) ----
+  function rhoPlot(t) {
+    var per = t[T.periods];
+    if (!per || !per.length) return null;
+    var all = t[T.rho_xy].concat(t[T.rho_yx]).filter(function (v) { return v != null && v > 0; });
+    if (!all.length) return null;
+    var H = 120, x = xScale(per);
+    var lo = Math.floor(Math.log10(Math.min.apply(null, all)));
+    var hi = Math.ceil(Math.log10(Math.max.apply(null, all)));
+    if (hi <= lo) hi = lo + 1;
+    var y = function (v) { return 4 + (hi - Math.log10(v)) / (hi - lo) * (H - 26); };
+    var s = svg('svg', { width: W, height: H, role: 'img' });
+    xFrame(s, per, x, H);
+    for (var d = lo; d <= hi; d++) s.appendChild(svgText(PADL - 4, y(Math.pow(10, d)) + 3, supTen(d), { anchor: 'end' }));
+    linePath(s, per, t[T.rho_xy], x, y, '#E0782F'); dots(s, per, t[T.rho_xy], x, y, '#E0782F');
+    linePath(s, per, t[T.rho_yx], x, y, '#2E8FA3'); dots(s, per, t[T.rho_yx], x, y, '#2E8FA3');
+    s.appendChild(svgText(W - 10, 14, 'xy', { anchor: 'end', size: 9, fill: '#E0782F' }));
+    s.appendChild(svgText(W - 10, 25, 'yx', { anchor: 'end', size: 9, fill: '#2E8FA3' }));
+    return wrapPlot('apparent resistivity ρ (Ω·m), log–log', s);
+  }
+
+  // ---- φxy plot: 0..90 axis with the Q1 band shaded ----
+  function phiXyPlot(t) {
+    var per = t[T.periods], vals = t[T.phs_xy];
+    if (!per || !per.length || !vals.some(function (v) { return v != null; })) return null;
+    var H = 100, x = xScale(per);
+    var lo = -20, hi = 110;                    // a little headroom around 0..90
+    var y = function (v) { return 4 + (hi - v) / (hi - lo) * (H - 26); };
+    var s = svg('svg', { width: W, height: H, role: 'img' });
+    // Q1 expected band (0..90) shaded FIRST (under the frame + curve).
+    s.appendChild(svg('rect', { x: PADL, y: y(Q1_HI), width: (W - PADL - PADR),
+      height: (y(Q1_LO) - y(Q1_HI)), fill: '#5BAE6A', 'fill-opacity': 0.10 }));
+    xFrame(s, per, x, H);
+    [0, 45, 90].forEach(function (v) { s.appendChild(svgText(PADL - 4, y(v) + 3, String(v), { anchor: 'end' })); });
+    var cls = classify(vals, 'xy');
+    linePath(s, per, vals, x, y, '#E0782F');
+    dots(s, per, vals, x, y, '#E0782F', cls.points);
+    return { node: wrapPlot('phase φxy (°) — expect Q1 (0…90°)', s), verdict: cls };
+  }
+
+  // ---- φyx plot: FULL +180..-180 axis with the Q3 band shaded; TRUE φyx (stored - 180, re-wrapped) ----
+  function phiYxPlot(t) {
+    var per = t[T.periods], stored = t[T.phs_yx_adj];
+    if (!per || !per.length || !stored.some(function (v) { return v != null; })) return null;
+    var trueVals = stored.map(trueYx);
+    var H = 132, x = xScale(per);
+    var lo = -180, hi = 180;                   // FULL axis (owner ruling)
+    var y = function (v) { return 4 + (hi - v) / (hi - lo) * (H - 26); };
+    var s = svg('svg', { width: W, height: H, role: 'img' });
+    // Q3 expected band (-180..-90) shaded.
+    s.appendChild(svg('rect', { x: PADL, y: y(Q3_HI), width: (W - PADL - PADR),
+      height: (y(Q3_LO) - y(Q3_HI)), fill: '#5BAE6A', 'fill-opacity': 0.10 }));
+    xFrame(s, per, x, H);
+    [-180, -90, 0, 90, 180].forEach(function (v) { s.appendChild(svgText(PADL - 4, y(v) + 3, String(v), { anchor: 'end' })); });
+    var cls = classify(stored, 'yx');          // classify on STORED (the fn unwraps internally)
+    linePath(s, per, trueVals, x, y, '#2E8FA3');
+    dots(s, per, trueVals, x, y, '#2E8FA3', cls.points);
+    return { node: wrapPlot('phase φyx (°, TRUE) — expect Q3 (−180…−90°)', s), verdict: cls };
+  }
+
+  // ---- tipper: |T| (t[5]) plus Re Tzx (t[14]) and Re Tzy (t[16]) as read (no sign games) ----
+  function tipperPlot(t) {
+    var per = t[T.periods];
+    if (!per || !per.length) return null;
+    var mag = t[T.tip_mag], rzx = t[T.tzx_re], rzy = t[T.tzy_re];
+    var present = mag.some(function (v) { return v != null; }) ||
+                  rzx.some(function (v) { return v != null; }) ||
+                  rzy.some(function (v) { return v != null; });
+    if (!present) return null;
+    var H = 108, x = xScale(per);
+    var comps = mag.concat(rzx).concat(rzy).filter(function (v) { return v != null && isFinite(v); });
+    var mx = Math.max(1, Math.ceil(Math.max.apply(null, comps.map(Math.abs)) * 10) / 10);
+    var lo = -mx, hi = mx;
+    var y = function (v) { return 4 + (hi - v) / (hi - lo) * (H - 26); };
+    var s = svg('svg', { width: W, height: H, role: 'img' });
+    xFrame(s, per, x, H);
+    [-mx, 0, mx].forEach(function (v) { s.appendChild(svgText(PADL - 4, y(v) + 3, v.toFixed(1), { anchor: 'end' })); });
+    s.appendChild(svg('line', { x1: PADL, y1: y(0), x2: (W - PADR), y2: y(0), stroke: '#2E4254', 'stroke-dasharray': '2,3' }));
+    linePath(s, per, mag, x, y, '#E8EDF1'); dots(s, per, mag, x, y, '#E8EDF1');
+    linePath(s, per, rzx, x, y, '#E0782F'); dots(s, per, rzx, x, y, '#E0782F');
+    linePath(s, per, rzy, x, y, '#2E8FA3'); dots(s, per, rzy, x, y, '#2E8FA3');
+    s.appendChild(svgText(W - 10, 14, '|T|', { anchor: 'end', size: 9, fill: '#E8EDF1' }));
+    s.appendChild(svgText(W - 10, 25, 'Re Tzx', { anchor: 'end', size: 9, fill: '#E0782F' }));
+    s.appendChild(svgText(W - 10, 36, 'Re Tzy', { anchor: 'end', size: 9, fill: '#2E8FA3' }));
+    return wrapPlot('tipper |T| and Re Tzx / Re Tzy (as read)', s);
+  }
+
+  function classify(vals, mode) {
+    var fn = (mode === 'xy') ? inQ1 : inQ3;
+    var points = (vals || []).map(fn);
+    var classified = points.filter(function (p) { return p !== null; });
+    var anyOut = classified.some(function (p) { return p === false; });
+    var allIn = classified.length > 0 && classified.every(function (p) { return p === true; });
+    return { points: points, any_out: anyOut, all_in: allIn, n: classified.length };
+  }
+
+  // A plot card: a caption div + the svg. The verdict strip is appended SEPARATELY, beneath.
+  function wrapPlot(caption, svgNode) {
+    var box = el('div', null, 'plot');
+    box.style.margin = '.5rem 0';
+    box.appendChild(el('div', caption, 'k'));
+    box.appendChild(svgNode);
+    return box;
+  }
+  // The verdict footer strip beneath a phase plot (never overlapping the caption). ✓ in-quadrant /
+  // ⚠ out-of-quadrant, with the expected-quadrant text spelled out.
+  function verdictStrip(cls, expectText) {
+    var strip = el('div', null, 'sub');
+    strip.style.margin = '.15rem 0 .5rem';
+    if (cls.n === 0) { strip.textContent = expectText + ' — no phase data'; return strip; }
+    if (cls.any_out) {
+      strip.textContent = expectText + ' — out of quadrant ⚠';
+      strip.style.color = '#D9534F';
+    } else {
+      strip.textContent = expectText + ' — in quadrant ✓';
+      strip.style.color = '#5BAE6A';
+    }
+    return strip;
+  }
+
+  // ---- facts panel ----
+  function factsPanel(cat, sc, station, buildId, lagPending) {
+    var panel = el('div', null, 'panel');
+    // [FC-2] lag label ON THE PANEL when served != published (not only the drift chip).
+    if (lagPending) {
+      var lag = el('p', 'facts from build ' + (buildId || '(unknown)') + ' — publish pending', 'sub');
+      lag.style.color = '#D9A23B'; lag.style.fontWeight = '600';
+      panel.appendChild(lag);
+    }
+    panel.appendChild(el('h2', 'Station ' + cat[C.id]));
+    var tbl = el('table');
+    function row(k, v) {
+      var tr = el('tr');
+      tr.appendChild(el('td', k, 'k'));
+      tr.appendChild(el('td', v));
+      tbl.appendChild(tr);
+    }
+    row('Position (lat, lon)', num(cat[C.lat], 4) + ', ' + num(cat[C.lon], 4)
+        + (cat[C.coord_flag] ? '  (coordinate flag set)' : ''));
+    row('Period band (s)', num(cat[C.pmin]) + ' – ' + num(cat[C.pmax]) + '  (' + num(cat[C.nper]) + ' periods)');
+    row('Components', cat[C.comps] || '-');
+    row('Type', cat[C.type] || '-');
+    if (sc) {
+      row('Dimensionality', sc[SC.dim] || '-');
+      row('Median relative error', num(sc[SC.mre]));
+      row('Remote reference', sc[SC.rr] ? 'yes' : 'no');
+    }
+    row('Tipper present', (cat[C.comps] || '').indexOf('T') >= 0 ? 'yes' : 'no');
+    row('Source file', cat[C.file] || '-');
+    row('sha256', cat[C.sha256] || '-');
+    // Per-station station.json (frame + conditioning + QA) is a richer, OPTIONAL source; fetched
+    // lazily below and appended when present. The catalogue/sci facts above always render.
+    panel.appendChild(tbl);
+    if (station && !station.__missing) {
+      if (station.frame) {
+        panel.appendChild(el('h2', 'Frame declaration'));
+        var fp = el('pre'); fp.textContent = JSON.stringify(station.frame, null, 1); panel.appendChild(fp);
+      }
+      var cc = station.canonical_conditioning;
+      if (cc) {
+        panel.appendChild(el('h2', 'Conditioning / QA notes'));
+        var cp = el('pre'); cp.textContent = JSON.stringify(cc, null, 1); panel.appendChild(cp);
+      }
+      if (station.coordinate_qc) {
+        panel.appendChild(el('h2', 'Coordinate QC'));
+        var qp = el('pre'); qp.textContent = JSON.stringify(station.coordinate_qc, null, 1); panel.appendChild(qp);
+      }
+    }
+    return panel;
+  }
+
+  // ---- drill-down: facts + plots + remove link ----
+  function openStation(idx, rows, buildId, lagPending) {
+    var detail = document.getElementById('station-detail');
+    detail.textContent = '';
+    var r = rows[idx];
+    var cat = r.cat, sc = r.sc, t = r.tf;
+    // The facts panel renders immediately from catalogue/sci; station.json enriches it when it loads.
+    var panel = factsPanel(cat, sc, null, buildId, lagPending);
+    detail.appendChild(panel);
+    // Enrich with the per-station station.json (frame/conditioning/QA) if the products tree is served.
+    var stStr = encodeURIComponent(slug) + '/' + encodeURIComponent(cat[C.id]) + '/station.json';
+    fetchJson('data/products/' + stStr).then(function (station) {
+      if (station && !station.__missing) {
+        var enriched = factsPanel(cat, sc, station, buildId, lagPending);
+        detail.replaceChild(enriched, panel);
+        appendPlots(detail, t);
+        appendRemove(detail, cat);
+      }
+    }).catch(function () { /* products not served for this build; facts panel already shown */ });
+
+    appendPlots(detail, t);
+    appendRemove(detail, cat);
+  }
+  function appendPlots(detail, t) {
+    if (document.getElementById('station-plots')) return;   // guard: appended once
+    var plots = el('div'); plots.id = 'station-plots';
+    if (!t) { plots.appendChild(el('p', 'No response-curve data served for this station.', 'sub')); detail.appendChild(plots); return; }
+    var rp = rhoPlot(t); if (rp) plots.appendChild(rp);
+    var pxy = phiXyPlot(t);
+    if (pxy) { plots.appendChild(pxy.node); plots.appendChild(verdictStrip(pxy.verdict, 'expect Q1 (0…90°)')); }
+    var pyx = phiYxPlot(t);
+    if (pyx) { plots.appendChild(pyx.node); plots.appendChild(verdictStrip(pyx.verdict, 'expect Q3 (−180…−90°)')); }
+    var tp = tipperPlot(t); if (tp) plots.appendChild(tp);
+    detail.appendChild(plots);
+  }
+  function appendRemove(detail, cat) {
+    if (document.getElementById('station-remove')) return;
+    var p = el('p'); p.id = 'station-remove';
+    var a = el('a', 'Remove this station (opens the removal flow)');
+    a.href = 'edit/' + encodeURIComponent(slug) + '/stations';   // the EXISTING removal flow; no new route
+    p.appendChild(a);
+    detail.appendChild(p);
+  }
+
+  // ---- table + filter ----
+  function render(rows, buildId, lagPending) {
+    host.textContent = '';
+    if (lagPending) {
+      var lag = el('p', 'Facts from build ' + (buildId || '(unknown)') + ' — publish pending', 'sub');
+      lag.style.color = '#D9A23B'; lag.style.fontWeight = '600';
+      host.appendChild(lag);
+    }
+    if (!rows.length) {
+      host.appendChild(el('p', 'No stations for this survey in the served corpus (' + slug + ').', 'sub'));
+      return;
+    }
+    var filterWrap = el('p');
+    var filter = document.createElement('input');
+    filter.type = 'search'; filter.placeholder = 'filter stations by id…';
+    filter.style.maxWidth = '18rem';
+    filterWrap.appendChild(filter);
+    host.appendChild(filterWrap);
+
+    var tbl = el('table');
+    var head = el('tr');
+    ['Station', 'Lat', 'Lon', 'Periods', 'Quality'].forEach(function (h) { head.appendChild(el('th', h)); });
+    tbl.appendChild(head);
+    rows.forEach(function (r, i) {
+      var cat = r.cat, sc = r.sc;
+      var tr = el('tr');
+      tr.setAttribute('data-station-id', String(cat[C.id]).toLowerCase());
+      var idCell = el('td');
+      var link = el('a', String(cat[C.id]));
+      link.href = '#';
+      link.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        // Clear any prior plots/remove so a re-open rebuilds cleanly.
+        var d = document.getElementById('station-detail'); if (d) d.textContent = '';
+        openStation(i, rows, buildId, lagPending);
+      });
+      idCell.appendChild(link);
+      tr.appendChild(idCell);
+      tr.appendChild(el('td', num(cat[C.lat], 3)));
+      tr.appendChild(el('td', num(cat[C.lon], 3)));
+      tr.appendChild(el('td', num(cat[C.nper])));
+      // Quality chip: the dimensionality class + a completeness/smoothness diagnostic value (NOT a
+      // value judgement — the engine is explicit about that).
+      var chip = el('td');
+      var q = sc ? (sc[SC.dim] || '?') : '?';
+      var badge = el('span', q, 'badge');
+      badge.style.background = '#2E4254'; badge.style.color = '#E8EDF1';
+      chip.appendChild(badge);
+      tr.appendChild(chip);
+      tbl.appendChild(tr);
+    });
+    host.appendChild(tbl);
+    host.appendChild(el('div', null)).id = 'station-detail';
+
+    filter.addEventListener('input', function () {
+      var q = filter.value.trim().toLowerCase();
+      tbl.querySelectorAll('tr[data-station-id]').forEach(function (tr) {
+        var hit = !q || tr.getAttribute('data-station-id').indexOf(q) >= 0;
+        tr.style.display = hit ? '' : 'none';
+      });
+    });
+  }
+
+  // ---- load + join ----
+  Promise.all([
+    fetchJson('data/catalogue.json').catch(function () { return { __err: true }; }),
+    fetchJson('data/sci.json').catch(function () { return { __err: true }; }),
+    fetchJson('data/tf.json').catch(function () { return { __err: true }; }),
+    fetchJson('data/build.json').catch(function () { return { __err: true }; })
+  ]).then(function (res) {
+    var cat = res[0], sci = res[1], tf = res[2], build = res[3];
+    if (!cat || cat.__err || cat.__missing || !Array.isArray(cat)) {
+      host.textContent = '';
+      host.appendChild(el('p', 'No served catalogue yet (data/catalogue.json). Stations appear once '
+        + 'this survey is built into the served corpus.', 'sub'));
+      return;
+    }
+    var buildId = (build && !build.__err && !build.__missing) ? (build.build_id || null) : null;
+    var served = (build && !build.__err && !build.__missing) ? (build.source_commit || '') : '';
+    // [FC-2]: lag is pending when the served source_commit differs from the published HEAD (prefix-
+    // tolerant, matching the drift chip). Only judgeable with both sides present.
+    var lagPending = false;
+    if (publishedHead && served) {
+      lagPending = !(publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
+    }
+    // Join catalogue/sci/tf BY INDEX, filtered to this survey's rows.
+    var rows = [];
+    for (var i = 0; i < cat.length; i++) {
+      if (String(cat[i][C.survey]) !== slug) continue;
+      rows.push({
+        cat: cat[i],
+        sc: (Array.isArray(sci) && sci[i]) ? sci[i] : null,
+        tf: (Array.isArray(tf) && tf[i]) ? tf[i] : null
+      });
+    }
+    render(rows, buildId, lagPending);
+  }).catch(function (e) {
+    host.textContent = '';
+    host.appendChild(el('p', 'Could not load the served corpus: ' + e.message, 'sub'));
+  });
+})();
+"""
+
+
 def _esc(value) -> str:
     return html.escape(str(value), quote=True)
+
+
+def _url_quote(value) -> str:
+    """URL-encode a single path SEGMENT for an href (safe='' so `/` is encoded too — the caller joins
+    already-split segments). Used for the quarantine file links, whose relative paths are
+    server-enumerated (never curator-typed) but may carry spaces/odd chars a bare href would break."""
+    from urllib.parse import quote
+    return quote(str(value), safe="")
 
 
 def _head(title: str) -> str:
@@ -551,7 +1012,9 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
     )
     body = (
         f'<h1>Review queue</h1>'
-        f'<p class="sub">Signed in as curator:{_esc(curator_name)} {logout}</p>'
+        f'<p class="sub">Signed in as curator:{_esc(curator_name)} · '
+        '<a href="/gateway/curator/quarantine">quarantined submissions</a> '
+        f'{logout}</p>'
         f'<div class="panel">{table}</div>'
         f'{serve_panel}'
     )
@@ -679,6 +1142,20 @@ SERVE_PANEL_JS = """
   var publishedHead = panel.getAttribute('data-published-head') || '';
   // (The rebuild button's confirm rides the shared data-confirm delegation in ui.js.)
 
+  // S2a-5 DISPLAY shortener (mirrors gateway/builddisplay.py — the authoritative, pinned spec):
+  // "<engine>-<source>-<iso>" -> "<source short> · HH:MM UTC"; an unrecognised shape falls back to
+  // the id VERBATIM (never hide information). The full id rides the <code> title attribute (hover).
+  function shortBuildId(id) {
+    if (!id) return '';
+    var s = String(id);
+    var m = s.match(/^([0-9a-fA-F]+|unknown)-([0-9a-fA-F]+|unknown)-(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[0-9.]*(?:Z|[+-]\\d{2}:?\\d{2})?)$/);
+    if (!m) return s;
+    var source = m[2];
+    var short = (source === 'unknown') ? 'unknown' : source.slice(0, 7);
+    var hhmm = m[3].slice(11, 16);
+    return short + ' \\u00b7 ' + hhmm + ' UTC';
+  }
+
   function el(tag, text, cls) {
     var e = document.createElement(tag);
     if (text != null) e.textContent = text;
@@ -702,12 +1179,13 @@ SERVE_PANEL_JS = """
       return;
     }
     var tbl = el('table');
-    function row(k, v, highlight) {
+    function row(k, v, highlight, title) {
       var tr = el('tr');
       var tdk = el('td', k, 'k');
       var tdv = el('td');
       var code = el('code', v == null ? '-' : String(v));
       if (highlight) { code.style.background = 'rgba(217,162,59,.25)'; code.style.padding = '0 .3rem'; }
+      if (title) code.setAttribute('title', title);   // full value on hover (DOM property, not markup)
       tdv.appendChild(code);
       tr.appendChild(tdk); tr.appendChild(tdv); return tr;
     }
@@ -718,7 +1196,8 @@ SERVE_PANEL_JS = """
     if (publishedHead && served) {
       mismatch = !(publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
     }
-    tbl.appendChild(row('Build id', b.build_id));
+    // S2a-5: the Served-build card shows the SHORT display id with the full id on hover (title).
+    tbl.appendChild(row('Build id', b.build_id ? shortBuildId(b.build_id) : null, false, b.build_id));
     tbl.appendChild(row('Engine commit', b.engine_commit));
     tbl.appendChild(row('Served source_commit', served, mismatch));
     box.appendChild(tbl);
@@ -1374,22 +1853,23 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 # — verified: a form carrying one section's s_/l_/c_ inputs + its o_<section> snapshot assembles to a
 # single-section patch, so no runner-side section-scoped mode is needed).
 
-_HUB_TABS = (("overview", "Overview & QA"), ("metadata", "Metadata"))
+# C43 Stage 2a: Stations and History are now REAL in-hub tabs (Stage 1 shipped them as a link-out and
+# nothing). The tab ORDER matches record D4: Overview & QA (landing) / Stations / Metadata / History.
+_HUB_TABS = (("overview", "Overview & QA"), ("stations", "Stations"),
+             ("metadata", "Metadata"), ("history", "History"))
+_HUB_TAB_KEYS = frozenset(k for k, _ in _HUB_TABS)
 
 
 def _hub_tab_strip(slug: str, active: str) -> str:
-    """The hub tab strip: Overview & QA / Metadata as in-hub tabs, plus a Stations entry LINKING OUT
-    to the existing removal page (labelled as such — Stage 1 rehomes it, does not rebuild it). No
-    History tab (Stage 2)."""
+    """The hub tab strip (C43 Stage 2a): Overview & QA / Stations / Metadata / History, all in-hub
+    tabs. Stations gained a real drill-down panel (S2a-1) and History a real read-only git log
+    (S2a-2), so both are now tabs rather than the Stage-1 link-out/absence."""
     parts = ['<div class="tabs">']
     for key, label in _HUB_TABS:
         on = " on" if key == active else ""
         parts.append(
             f'<a class="hubtab{on}" href="/gateway/curator/survey/{_esc(slug)}?tab={key}">'
             f'{_esc(label)}</a>')
-    # Stations links to the existing removal flow (not a hub tab — Stage 1 has no station drill-down).
-    parts.append(
-        f'<a class="hubtab" href="/gateway/curator/edit/{_esc(slug)}/stations">Stations (remove EDIs)</a>')
     parts.append("</div>")
     return "".join(parts)
 
@@ -1413,6 +1893,57 @@ def _hub_overview_body(slug: str) -> str:
         # placeholders remain, the page never breaks.
         '<script src="/gateway/curator/survey-hub.js" defer></script>'
     )
+
+
+def _hub_stations_body(slug: str, *, build_lag: dict | None = None) -> str:
+    """The Stations tab body (C43 S2a-1). Server renders ONLY the scaffold + loading placeholder; the
+    filterable station table, drill-down facts panel, hand-built SVG plots, and quadrant verdicts are
+    all populated BROWSER-side by stations.js from the served /data corpus (catalogue/sci/tf/build) —
+    the serve-panel pattern, zero new gateway privileges. `build_lag` carries the server-rendered
+    published HEAD for the [FC-2] lag label (data-published-head): the JS compares it against the
+    served build's source_commit and, on drift, renders 'facts from build <id> — publish pending' on
+    the panel itself. Degrades: without JS the placeholder stays, the page never breaks."""
+    published = (build_lag or {}).get("published_head") or ""
+    return (
+        f'<div id="survey-stations" data-survey-slug="{_esc(slug)}" '
+        f'data-published-head="{_esc(published)}">'
+        '<p class="sub">Loading stations from the served corpus…</p>'
+        '</div>'
+        # EXTERNAL same-origin script (strictPages CSP blocks inline JS). Degrades gracefully.
+        '<script src="/gateway/curator/stations.js" defer></script>'
+    )
+
+
+def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
+    """The History tab body (C43 S2a-2): a READ-ONLY table of the survey package's git log — version
+    tag/subject, release-note body, when, author. Fully SERVER-RENDERED (the runner already returned
+    the parsed commits via the history read-job; no browser JS, so nothing to fetch and nothing to
+    inline under the CSP). NO rename/retire actions — those are Stage 4. Every value is _esc'd (a
+    commit subject/body is git content rendered into the curator's browser)."""
+    if error:
+        return (f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>'
+                '<p class="sub">The read-only audit trail could not be read for this survey.</p>')
+    if not commits:
+        return ('<p class="sub">No git history for this survey package yet (it may not be under '
+                'version control in this checkout).</p>')
+    rows = []
+    for c in commits:
+        body = c.get("body") or ""
+        note_html = f'<div class="k" style="white-space:pre-wrap">{_esc(body)}</div>' if body else ""
+        rows.append(
+            "<tr>"
+            f'<td><code>{_esc(c.get("short") or "")}</code></td>'
+            f'<td>{_esc(c.get("subject") or "")}{note_html}</td>'
+            f'<td class="k">{_esc(c.get("date") or "")}</td>'
+            f'<td class="k">{_esc(c.get("author") or "")}</td>'
+            "</tr>")
+    table = ('<table><tr><th>Commit</th><th>Change / release note</th><th>When</th><th>Author</th></tr>'
+             + "".join(rows) + "</table>")
+    return (
+        '<p class="sub">Read-only audit trail — every published change to this survey package '
+        '(version bumps, release notes, station removals), newest first. Rename and retirement '
+        'actions are not offered here.</p>'
+        f'<div class="panel">{table}</div>')
 
 
 def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_token: str,
@@ -1511,12 +2042,16 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
 
 def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict, csrf_token: str,
                       nav: "NavContext", field_errors=None, submitted: dict | None = None,
-                      active_section: str | None = None) -> str:
-    """The per-survey hub (C43 Stage 1 S1-2). `tab` selects Overview & QA (default) or Metadata.
-    Rendered inside the nav shell (rail + context bar). The Overview tab is browser-populated; the
-    Metadata tab is the per-section editor. `fields`/`version` come from the runner read-job (only
-    needed for the Metadata tab; the Overview tab needs no server-side survey content)."""
-    tab = tab if tab in ("overview", "metadata") else "overview"
+                      active_section: str | None = None, commits: list | None = None,
+                      history_error: str = "", build_lag: dict | None = None) -> str:
+    """The per-survey hub (C43 Stage 1 S1-2 + Stage 2a). `tab` selects Overview & QA (default) /
+    Stations / Metadata / History. Rendered inside the nav shell. The Overview + Stations tabs are
+    browser-populated from the served /data corpus (the serve-panel pattern, zero new gateway
+    privileges); the Metadata tab is the per-section editor; the History tab is server-rendered from
+    the runner history read-job (`commits`). `fields`/`version` come from the runner read-job (needed
+    for the Metadata tab). `build_lag` (S2a-1 [FC-2]) carries the served-vs-published label state the
+    Stations JS renders when served ≠ published."""
+    tab = tab if tab in _HUB_TAB_KEYS else "overview"
     strip = _hub_tab_strip(slug, tab)
     if tab == "metadata":
         cur = version or "0.0.0"
@@ -1525,6 +2060,15 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
         inner = _hub_metadata_body(slug=slug, version=version, fields=fields, csrf_token=csrf_token,
                                    field_errors=field_errors, submitted=submitted,
                                    active_section=active_section)
+    elif tab == "stations":
+        head = (f'<h1>{_esc(slug)} — stations</h1>'
+                '<p class="sub">Filter the station table, then open a station for its facts, response '
+                'curves, and quadrant verdicts. All data is read from the served corpus.</p>')
+        inner = _hub_stations_body(slug, build_lag=build_lag)
+    elif tab == "history":
+        head = (f'<h1>{_esc(slug)} — history</h1>'
+                '<p class="sub">The read-only publication audit trail.</p>')
+        inner = _hub_history_body(slug=slug, commits=commits or [], error=history_error)
     else:
         head = (f'<h1>{_esc(slug)}</h1>'
                 '<p class="sub">Survey health at a glance — served vs published counts, QA flags, '
@@ -1730,15 +2274,32 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
 
 # ---- uploader keys (schema v2 — curator-managed submit keys) ---------------------------------
 
+# The rotation runbook the keys page links to (D7). A repo-relative doc path, not an external URL —
+# the strictPages CSP would not block a link, but a same-repo runbook is the honest target (there is
+# no external rotation service). Rendered as plain text + the path so it is useful even where the doc
+# is browsed on the git host rather than fetched.
+_KEY_ROTATION_RUNBOOK = "docs/docs/operator/uploader-key-rotation.md"
+
+
 def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: str = "",
+                     submission_counts: dict | None = None,
                      nav: "NavContext | None" = None) -> str:
-    """The uploader-key management page (feat/uploader-key-management): a create form + the list of
-    issued keys. The list shows name, email (curator-only PII, never on a public page), created
-    (by/when), last used, and status (active/revoked with when/by). A revoked row STAYS listed for the
-    audit trail — there is no delete. The plaintext key is NEVER shown here (it is displayed exactly
-    once at creation); only the name/status is rendered. Every interpolated value is html.escaped."""
+    """The uploader-key management page (feat/uploader-key-management + C43 D7 deltas): a create form +
+    the list of issued keys. The list shows name, email (curator-only PII, never on a public page),
+    created (by/when), last used, submission count, a free-text NOTE (D7 — sqlite only, never git), and
+    status (active/revoked with when/by). A revoked row STAYS listed for the audit trail — there is no
+    delete — and its note becomes read-only (audit context, not an editable field). The plaintext key
+    is NEVER shown here (displayed exactly once at creation). D7 deltas over the v2 page:
+      * per-key free-text note (who it's for / expiry intent), edited inline via a tiny POST form;
+      * submission count per key from the audit trail (`submission_counts` name->count);
+      * an explicit UNUSED-KEY NUDGE — an active key that has never been used is badged 'never used'
+        so a stale key stands out at a glance;
+      * revoked keys retained as read-only audit rows (unchanged from v2, restated for D7);
+      * a rotation-runbook link on the page.
+    Every interpolated value is html.escaped (a note is curator free text — it MUST NOT inject markup)."""
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
     err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    counts = submission_counts or {}
     create = (
         '<div class="panel"><h2>Issue a new uploader key</h2>'
         '<p class="sub">The key is shown ONCE on the next page — it cannot be retrieved again '
@@ -1754,44 +2315,148 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
         '<p><button class="b-accent" type="submit">Create key</button></p>'
         '</form></div>'
     )
+    runbook = (
+        '<p class="sub">Key rotation is mint &rarr; use &rarr; revoke, then re-mint (key material is '
+        'hashes-only and deliberately uneditable). Runbook: '
+        f'<code>{_esc(_KEY_ROTATION_RUNBOOK)}</code></p>'
+    )
     if keys:
         trs = []
         for k in keys:
+            n_sub = counts.get(k.name, 0)
             if k.revoked_utc:
                 status = (f'<span class="badge" style="background:{_PALETTE["bad"]}">revoked</span> '
                           f'<span class="k">{_esc(k.revoked_utc)} by curator:{_esc(k.revoked_by or "")}</span>')
                 action = ""
+                # A revoked key's note is read-only audit context — rendered, never an editable form.
+                note_cell = (f'<span class="k">{_esc(k.note)}</span>' if k.note
+                             else '<span class="k">—</span>')
             else:
-                status = f'<span class="badge" style="background:{_PALETTE["ok"]}">active</span>'
+                # The unused-key nudge (D7): an active key that has NEVER been used stands out.
+                if k.last_used_utc:
+                    status = f'<span class="badge" style="background:{_PALETTE["ok"]}">active</span>'
+                else:
+                    status = (f'<span class="badge" style="background:{_PALETTE["ok"]}">active</span> '
+                              f'<span class="badge" style="background:{_PALETTE["warn"]}">'
+                              'never used</span>')
                 action = (
                     f'<form class="act" method="post" '
                     f'action="/gateway/curator/uploaders/{_esc(k.id)}/revoke" '
                     'data-confirm="Revoke this uploader key? This cannot be undone.">'
                     f'{csrf}'
                     '<button class="b-bad" type="submit">Revoke</button></form>')
+                # An inline note editor: a tiny same-row POST form (no inline JS — a plain submit).
+                note_cell = (
+                    f'<form method="post" action="/gateway/curator/uploaders/{_esc(k.id)}/note" '
+                    'style="margin:0;display:flex;gap:.3rem;align-items:flex-start">'
+                    f'{csrf}'
+                    f'<textarea name="note" rows="2" placeholder="who it\'s for / expiry intent" '
+                    f'style="min-height:2.4rem">{_esc(k.note or "")}</textarea>'
+                    '<button class="b-accent" type="submit" '
+                    'style="padding:.3rem .6rem;font-size:.75rem">Save</button></form>')
             trs.append(
                 "<tr>"
                 f'<td>{_esc(k.name)}</td>'
                 f'<td>{_esc(k.email or "-")}</td>'
                 f'<td class="k">{_esc(k.created_utc)}<br>by curator:{_esc(k.created_by)}</td>'
                 f'<td class="k">{_esc(k.last_used_utc or "never")}</td>'
+                f'<td class="k">{_esc(n_sub)}</td>'
+                f'<td>{note_cell}</td>'
                 f'<td>{status}</td>'
                 f'<td>{action}</td>'
                 "</tr>"
             )
         table = ("<table><tr><th>Name</th><th>Email</th><th>Created</th><th>Last used</th>"
-                 "<th>Status</th><th></th></tr>" + "".join(trs) + "</table>")
+                 "<th>Submissions</th><th>Note</th><th>Status</th><th></th></tr>"
+                 + "".join(trs) + "</table>")
     else:
         table = '<p class="sub">No uploader keys issued yet.</p>'
     body = (
         '<h1>Uploader keys</h1>'
         f'<p class="sub">Signed in as curator:{_esc(curator_name)}</p>'
         f'{create}'
-        f'<div class="panel"><h2>Issued keys</h2>{table}</div>'
+        f'<div class="panel"><h2>Issued keys</h2>{runbook}{table}</div>'
     )
     if nav is not None:
         return _shell("AusMT uploader keys", body, nav=nav)
     return _page("AusMT uploader keys", body)
+
+
+# ---- C43 D6 quarantine view (read-only) ----------------------------------------------------------
+# A read-only inspection surface for a QUARANTINED submission: the file listing under its extracted
+# package + the refusal reason (the terminal-transition reason). NO action forms — the review flow
+# (approve/return/reject) is deliberately untouched (D6); a quarantined submission is terminal and the
+# only affordance here is looking at what arrived and why it was refused. The per-file view rides a
+# path-contained route (app.py handle_quarantine_file) mirroring the preview-sandbox containment.
+
+
+def render_quarantine_list(*, curator_name: str, rows: list, nav: "NavContext") -> str:
+    """The quarantine list: every QUARANTINED submission with its slug, when, and refusal reason, each
+    linking to its read-only inspection view. Quarantined submissions are terminal and NOT in the
+    actionable queue (states.QUEUE_STATES) — this surface is the only place they are visible, so a
+    curator can see WHAT was refused and WHY without console access (the NCI sole-entry framing)."""
+    if rows:
+        trs = []
+        for r in rows:
+            sid = _esc(r["id"])
+            trs.append(
+                "<tr>"
+                f'<td><a href="/gateway/curator/quarantine/{sid}">{_esc(r["id"][:12])}</a></td>'
+                f'<td>{_esc(r.get("slug") or "-")}</td>'
+                f'<td class="k">{_esc(r.get("updated_utc") or "")}</td>'
+                f'<td>{_esc(r.get("reason") or "-")}</td>'
+                "</tr>")
+        table = ('<table><tr><th>ID</th><th>Slug</th><th>Quarantined</th><th>Refusal reason</th></tr>'
+                 + "".join(trs) + "</table>")
+    else:
+        table = '<p class="sub">No quarantined submissions.</p>'
+    body = (
+        '<h1>Quarantined submissions</h1>'
+        '<p class="sub">Read-only inspection of submissions the pipeline refused (unsafe archive, '
+        'validator FAIL, or a failed preview build). The review flow is not offered here — a '
+        'quarantined submission is terminal; a corrected package is a fresh upload.</p>'
+        f'<div class="panel">{table}</div>'
+    )
+    return _shell("AusMT quarantine", body, nav=nav)
+
+
+def render_quarantine_detail(*, submission_id: str, slug: str | None, reason: str,
+                             files: list, nav: "NavContext") -> str:
+    """A single quarantined submission's read-only view: the refusal reason + the file listing of the
+    extracted package, each file linking to its path-contained inspection route. `files` is a list of
+    {rel, size} for every file under quarantine/<id>/package (relative POSIX paths, server-enumerated —
+    the curator never supplies a path that reaches the filesystem un-contained). NO action forms."""
+    sid = _esc(submission_id)
+    reason_block = (
+        '<div class="panel"><h2>Refusal reason</h2>'
+        f'<pre>{_esc(reason or "(no recorded reason)")}</pre></div>')
+    if files:
+        rows = []
+        for f in files:
+            rel = f.get("rel", "")
+            size = f.get("size")
+            size_txt = f"{size:,} B" if isinstance(size, int) else "-"
+            # The link is to the containment route; the curator NEVER types a path — this is a
+            # server-enumerated relative path, url-encoded per segment so a legitimate odd filename
+            # (spaces etc) still resolves, and the route re-contains regardless.
+            enc = "/".join(_url_quote(part) for part in rel.split("/"))
+            rows.append(
+                "<tr>"
+                f'<td><a href="/gateway/curator/quarantine/{sid}/file/{enc}">{_esc(rel)}</a></td>'
+                f'<td class="k">{_esc(size_txt)}</td>'
+                "</tr>")
+        listing = ('<table><tr><th>File</th><th>Size</th></tr>' + "".join(rows) + "</table>")
+    else:
+        listing = ('<p class="sub">No extracted package files present — the submission was refused '
+                   'before or during unpacking (see the reason above).</p>')
+    body = (
+        f'<h1>Quarantined submission {_esc(submission_id[:12])}</h1>'
+        f'<p class="sub">slug: {_esc(slug or "-")} · '
+        '<a href="/gateway/curator/quarantine">back to quarantine</a></p>'
+        f'{reason_block}'
+        f'<div class="panel"><h2>Package contents (read-only)</h2>{listing}</div>'
+    )
+    return _shell(f"AusMT quarantine {submission_id[:12]}", body, nav=nav)
 
 
 def render_uploader_created(*, curator_name: str, name: str, key: str) -> str:

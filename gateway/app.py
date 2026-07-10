@@ -579,6 +579,19 @@ class Gateway:
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
+    def handle_stations_js(self, request: Request) -> Response:
+        """GET /gateway/curator/stations.js — the C43 Stage-2a Stations tab's browser-side script (the
+        filterable table, drill-down facts panel, hand-built SVG response-curve plots + quadrant
+        verdicts, [FC-2] lag label). Same CSP reason as the other external scripts (script-src 'self'
+        blocks inline). Session-gated for consistency; the content is a public-repo constant. DEGRADES:
+        without it the Stations tab shows only its loading placeholder, the page never breaks."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.STATIONS_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
     def handle_editor_ui_js(self, request: Request) -> Response:
         """GET /gateway/curator/editor.js — the metadata-editor's repeatable-row add/remove behaviour
         as a same-origin EXTERNAL script. Same CSP reason as serve-state.js/ui.js: the strictPages
@@ -634,10 +647,18 @@ class Gateway:
         if isinstance(name, Response):
             return name
         keys = self.db.list_uploader_keys()
+        # D7 submission counts from the audit trail (best-effort; a DB hiccup must not 500 the page —
+        # the counts are an operator aid, and an empty map renders 0 for every key).
+        try:
+            counts = self.db.submission_counts_by_uploader()
+        except Exception:  # noqa: BLE001 -- a count read must never break the key-management page
+            logger.warning("uploader submission-count read failed — rendering zeros")
+            counts = {}
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
         nav = self._nav_context(request, active="uploaders", crumb="<b>Uploader keys</b>")
         return self._html(curatorpage.render_uploaders(
-            curator_name=name, keys=keys, csrf_token=csrf, error=error, nav=nav),
+            curator_name=name, keys=keys, csrf_token=csrf, error=error,
+            submission_counts=counts, nav=nav),
             status_code=status_code)
 
     def handle_uploader_create(self, request: Request, name_field: str | None,
@@ -683,6 +704,24 @@ class Gateway:
         self.db.revoke_uploader_key(key_id, revoked_by=curator)
         return RedirectResponse("/gateway/curator/uploaders", status_code=303)
 
+    def handle_uploader_note(self, request: Request, key_id: int, note: str | None,
+                             csrf: str | None) -> Response:
+        """POST set-note (C43 D7): session + CSRF gated. Stores a free-text curator annotation on the
+        key — SQLITE ONLY, never a git-bound path (the PII-containment invariant, D2.5). Idempotent —
+        setting a note on an unknown id updates nothing and still redirects back (no oracle for whether
+        the id existed). An empty note clears it (stored NULL). Does NOT touch key material or the
+        active/revoked lifecycle — the note is documentation, not a lifecycle control."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        # CRLF-normalise like the editor scalars so a textarea edit never embeds a lone \r.
+        clean = (note or "").replace("\r\n", "\n").replace("\r", "\n")
+        self.db.set_uploader_key_note(key_id, note=clean)
+        return RedirectResponse("/gateway/curator/uploaders", status_code=303)
+
     # ---- C31 metadata editor -----------------------------------------------------------------
 
     def handle_edit_list(self, request: Request) -> Response:
@@ -708,13 +747,15 @@ class Gateway:
         pkg = self._edit_package_or_error(slug)
         if isinstance(pkg, Response):
             return pkg
-        tab = tab if tab in ("overview", "metadata") else "overview"
+        tab = tab if tab in ("overview", "stations", "metadata", "history") else "overview"
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
         nav = self._nav_context(request, active="surveys",
                                 crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
                                       f'<b>{curatorpage._esc(slug)}</b>')  # noqa: SLF001
         version = None
         fields: dict = {}
+        commits: list = []
+        history_error = ""
         if tab == "metadata":
             try:
                 result = self._edit_runner(metaedit.make_read_job(slug))
@@ -725,8 +766,35 @@ class Gateway:
                 return self.handle_edit_list(request)
             version = result.get("version")
             fields = result.get("fields") or {}
+        elif tab == "history":
+            # The runner OWNS the git read (record D4 / S2a-2): enqueue a `history` read-job and render
+            # the returned commit list. A runner error/refusal degrades to a curator-facing message on
+            # the tab (never a 500, never a blank page) — the audit trail is informational, not gating.
+            try:
+                result = self._edit_runner(metaedit.make_history_job(slug))
+            except metaedit.EditRunnerError as exc:
+                logger.warning("survey-hub history-job failed for %s: %s", slug, exc)
+                history_error = f"the history could not be read: {exc}"
+            else:
+                if result.get("ok"):
+                    commits = result.get("commits") or []
+                else:
+                    history_error = result.get("error") or "the history could not be read"
+        # [FC-2] served-vs-published lag label for the Stations panel: computed server-side from the
+        # published HEAD (the served build id is browser-filled by the stations JS, which compares).
+        build_lag = self._build_lag_hint() if tab == "stations" else None
         return self._html(curatorpage.render_survey_hub(
-            slug=slug, tab=tab, version=version, fields=fields, csrf_token=csrf, nav=nav))
+            slug=slug, tab=tab, version=version, fields=fields, csrf_token=csrf, nav=nav,
+            commits=commits, history_error=history_error, build_lag=build_lag))
+
+    def _build_lag_hint(self) -> dict:
+        """The server-side half of the Stations [FC-2] lag label: the published surveys-live HEAD (or
+        None). The stations JS fetches /data/build.json browser-side, reads its build_id + source_commit,
+        and — when the served source_commit differs from this published HEAD — renders the
+        'facts from build <build_id> — publish pending' label ON THE PANEL (not only the drift chip).
+        Best-effort: an unavailable HEAD just means the JS cannot judge lag and shows no label."""
+        published = serve_state.read_published_head(self._git_runner, self.cfg.surveys_live_dir)
+        return {"published_head": published.short if published.available else None}
 
     def handle_edit_form(self, request: Request, slug: str, error: str = "",
                          field_errors: list | None = None, submitted: dict | None = None) -> Response:
@@ -1147,6 +1215,121 @@ class Gateway:
         }
         return Response(content=data, media_type=media_type, headers=headers)
 
+    # ---- C43 D6 quarantine view (read-only) --------------------------------------------------
+
+    def handle_quarantine_list(self, request: Request) -> Response:
+        """GET the quarantine list: every QUARANTINED submission with its refusal reason. Session-gated
+        like the other curator GET pages. Read-only — no action forms (the review flow is untouched,
+        D6). The reason is the last transition's reason (the quarantine outcome cause), read from the
+        DB the gateway already owns; no new mount, no file read for the LIST view."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        rows = []
+        for sid in self.db.ids_in_state(states.QUARANTINED):
+            sub = self.db.get(sid)
+            if sub is None:
+                continue
+            trans = self.db.transitions_for(sid)
+            reason = trans[-1]["reason"] if trans else ""
+            rows.append({"id": sub.id, "slug": sub.slug, "updated_utc": sub.updated_utc,
+                         "reason": reason})
+        # Newest first (id is time-prefixed, like the queue's ORDER BY id DESC).
+        rows.sort(key=lambda r: r["id"], reverse=True)
+        nav = self._nav_context(request, active="queue",
+                                crumb='<a href="/gateway/curator/queue">Submission queue</a> › '
+                                      '<b>Quarantine</b>')
+        return self._html(curatorpage.render_quarantine_list(
+            curator_name=name, rows=rows, nav=nav))
+
+    def handle_quarantine_detail(self, request: Request, submission_id: str) -> Response:
+        """GET a single quarantined submission's read-only view: refusal reason + package file listing.
+        Session-gated. The file listing is a server-side os.walk of quarantine/<id>/package, bounded by
+        a file cap so a hostile deeply-nested package cannot make the page enumeration unbounded. Only a
+        submission genuinely in QUARANTINE is shown (a valid-but-non-quarantined id 404s — no oracle for
+        other states through this surface)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        if not db.is_valid_id(submission_id):
+            return self._not_found()
+        sub = self.db.get(submission_id)
+        if sub is None or sub.state != states.QUARANTINED:
+            return self._not_found()
+        trans = self.db.transitions_for(submission_id)
+        reason = trans[-1]["reason"] if trans else ""
+        files = self._quarantine_package_files(submission_id)
+        nav = self._nav_context(
+            request, active="queue",
+            crumb='<a href="/gateway/curator/queue">Submission queue</a> › '
+                  '<a href="/gateway/curator/quarantine">Quarantine</a> › '
+                  f'<b>{curatorpage._esc(submission_id[:12])}</b>')  # noqa: SLF001
+        return self._html(curatorpage.render_quarantine_detail(
+            submission_id=submission_id, slug=sub.slug, reason=reason, files=files, nav=nav))
+
+    def _quarantine_package_files(self, submission_id: str, *, cap: int = 2000) -> list:
+        """Enumerate files under quarantine/<id>/package as {rel, size} relative POSIX paths, sorted,
+        bounded by `cap` (a hostile package with a huge file count cannot make this listing unbounded —
+        the extraction member cap already bounds a real package; this is belt-and-braces for the page).
+        Returns [] if the package dir is absent (quarantined before/at unpack). Symlinks are skipped
+        (is_file follows them; a symlinked file is not part of the extracted content we enumerate)."""
+        root = (self.cfg.quarantine_dir / submission_id / "package").resolve()
+        if not root.is_dir():
+            return []
+        out: list = []
+        for path in sorted(root.rglob("*")):
+            if len(out) >= cap:
+                break
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                rel = path.resolve().relative_to(root).as_posix()
+                out.append({"rel": rel, "size": path.stat().st_size})
+            except (OSError, ValueError):
+                continue
+        return out
+
+    def handle_quarantine_file(self, request: Request, submission_id: str, subpath: str) -> Response:
+        """GET one file from a quarantined submission's package, READ-ONLY, with PATH CONTAINMENT
+        mirroring the preview sandbox (app.py handle_curator_preview): resolve the requested sub-path
+        and confirm it stays UNDER quarantine/<id>/package — a `..`/absolute/symlink escape resolves
+        outside root and 404s. Session-gated (unlike the id-authorized preview: this serves UN-curated,
+        potentially hostile submitter content, so it stays behind the curator session AND a strict CSP).
+
+        CONTENT DISCIPLINE: served with Content-Disposition: attachment and a nosniff + sandboxing CSP
+        so the browser NEVER inline-renders or executes submitter bytes (an uploaded .html/.svg is a
+        script vector). Unlike the preview route there is NO media-type allow-list gating WHICH files
+        are viewable — a quarantined package is arbitrary submitter content and the curator may need to
+        inspect any of it — so instead EVERY file is forced to download as an opaque octet-stream-ish
+        payload under default-src 'none', which is the safe way to expose arbitrary bytes."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        if not db.is_valid_id(submission_id):
+            return self._not_found()
+        sub = self.db.get(submission_id)
+        if sub is None or sub.state != states.QUARANTINED:
+            return self._not_found()
+        root = (self.cfg.quarantine_dir / submission_id / "package").resolve()
+        target = (root / subpath).resolve()
+        # Containment: the resolved target must be root itself's descendant (never root, which is a dir).
+        if root not in target.parents:
+            return self._not_found()
+        if target.is_symlink() or not target.is_file():
+            return self._not_found()
+        try:
+            data = target.read_bytes()
+        except OSError:
+            return self._not_found()
+        # Force download of opaque bytes; never inline-render/execute untrusted submitter content.
+        headers = {
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "attachment",
+            "Cache-Control": "no-store",
+        }
+        return Response(content=data, media_type="application/octet-stream", headers=headers)
+
     # ---- curator actions (design §3/§5) ------------------------------------------------------
 
     async def handle_curator_action(self, request: Request, submission_id: str, action: str,
@@ -1510,6 +1693,20 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_preview(request: Request, submission_id: str, subpath: str):
         return gw.handle_curator_preview(request, submission_id, subpath)
 
+    # ---- C43 D6 quarantine view (read-only). GET pages: blocking sqlite/file reads -> threadpool,
+    # `def` (matching the queue/detail rationale). No POSTs — the surface is inspection only.
+    @app.get("/gateway/curator/quarantine")
+    def curator_quarantine_list(request: Request):
+        return gw.handle_quarantine_list(request)
+
+    @app.get("/gateway/curator/quarantine/{submission_id}")
+    def curator_quarantine_detail(request: Request, submission_id: str):
+        return gw.handle_quarantine_detail(request, submission_id)
+
+    @app.get("/gateway/curator/quarantine/{submission_id}/file/{subpath:path}")
+    def curator_quarantine_file(request: Request, submission_id: str, subpath: str):
+        return gw.handle_quarantine_file(request, submission_id, subpath)
+
     # ---- uploader-key routes (schema v2). GET is `def` (blocking sqlite read -> threadpool, matching
     # the queue/detail rationale); both POSTs are CSRF-checked in the handler.
     @app.get("/gateway/curator/uploaders")
@@ -1524,6 +1721,13 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.post("/gateway/curator/uploaders/{key_id}/revoke")
     def curator_uploader_revoke(request: Request, key_id: int, csrf_token: str = Form(default="")):
         return gw.handle_uploader_revoke(request, key_id, csrf_token)
+
+    # C43 D7: set a free-text note on an uploader key (sqlite only, never git). CSRF-checked in the
+    # handler, matching the create/revoke POSTs.
+    @app.post("/gateway/curator/uploaders/{key_id}/note")
+    def curator_uploader_note(request: Request, key_id: int, note: str = Form(default=""),
+                              csrf_token: str = Form(default="")):
+        return gw.handle_uploader_note(request, key_id, note, csrf_token)
 
     # ---- C40 serve-reconcile: the curator "request rebuild" button. Session + CSRF (checked in the
     # handler); writes the zero-argument rebuild.request the host reconcile agent consumes. `def`
@@ -1563,6 +1767,12 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/survey-hub.js")
     def curator_survey_hub_js(request: Request):
         return gw.handle_survey_hub_js(request)
+
+    # The C43 Stage-2a Stations tab script — EXTERNAL for the same CSP reason; the hub's Stations tab
+    # loads it via a same-origin external script URL. Degrades to the loading placeholder without JS.
+    @app.get("/gateway/curator/stations.js")
+    def curator_stations_js(request: Request):
+        return gw.handle_stations_js(request)
 
     # ---- C31 metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the C10/C11
