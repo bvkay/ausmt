@@ -494,10 +494,103 @@ and (b) the operator-facing symptom **"submissions stuck at `SCANNED`"** (the Tr
 `gateway/runner/` — which is flagged for the maintainer rather than faked here.
 
 **What healthchecks do NOT give you:** compose healthchecks flag a *container* as unhealthy but do not
-alert anyone or restart a merely-`unhealthy` (vs exited) container. There is still **no external
-alerting** on this box. The documented minimum operator loop is a periodic `make smoke` +
-`docker compose -f compose.yaml --profile gateway ps` (look for `unhealthy`/restarting) + a disk check
-(`df -h /srv`); wiring those into an external cron ping (e.g. healthchecks.io) is the tracked next step.
+alert anyone or restart a merely-`unhealthy` (vs exited) container. That gap is closed by the
+**Alerting** section below — an `ausmt-alert.timer` that runs the checks the "minimum operator loop"
+describes (`docker compose ps` for `unhealthy`/restarting, a disk check, plus reconcile + backup
+freshness) and pings an external dead-man monitor that emails the curator. Install it; then the manual
+loop is a backstop, not the only line of defence.
+
+### Alerting
+
+Compose healthchecks and the reconcile/backup timers all *detect* problems, but nothing on the box
+**tells anyone** when one occurs — a `gw-runner` crash-loop ("submissions stuck at `SCANNED`", the
+2026-07-06 incident), a full disk, a stalled reconcile, or a failed nightly backup can sit silent for
+days. `deploy/scripts/alert.sh` (on `ausmt-alert.timer`, every 15 min) runs those checks and reports to
+an **external dead-man monitor** (healthchecks.io or any equivalent), which routes the alert **email**.
+
+**Why an external ping and not a box-sent email:** the box holds **no SMTP credentials and no recipient
+config**, so changing *who* is alerted is a **dashboard change at the service** — no repo edit, no box
+change, nothing to redeploy. And a fully **dead** box (power/network/kernel) can never send its own "I
+am dead" email; the monitor detects that as an **absent ping** (the one failure a box-sent email can
+never report). `alert.sh` covers "the box is up but a subsystem stalled"; the monitor's absent-ping
+timeout covers "the box is gone".
+
+**What it checks** (each threshold is an `AUSMT_ALERT_*` env var in `.env`; defaults shown):
+
+| Check | Fails (=> fail ping) when |
+|---|---|
+| Service health | any of `portal`, `gateway`, `clamd`, `gw-runner` is not `running`, restart-looping, or (for the three with a healthcheck) `unhealthy`. `gw-runner` has **no** healthcheck by design, so it is caught by **state** — a `restarting` `gw-runner` is the "stuck at `SCANNED`" crash-loop. `build-runner` is **not** checked (it is a one-shot job, absent by design between builds). |
+| Disk | the `$AUSMT_DATA_DIR` filesystem is over `AUSMT_ALERT_DISK_PCT`% used (**85**). |
+| Serve reconcile | `gateway/state/reconcile-status.json` `last_run` is older than `AUSMT_ALERT_RECONCILE_MAX_MIN` min (**45** — three missed ticks), or `action=failed`. (`sync_failed`/`noop`/`rebuilt` are healthy outcomes and do **not** alert — they are panel states, see §4.) |
+| Backup freshness | the newest `backups/<ts>/` snapshot is older than `AUSMT_ALERT_BACKUP_MAX_H` h (**26**), or `systemctl is-failed ausmt-backup.service` reports the unit failed. |
+
+All OK => one success beat to the ping URL. Any failure => a ping to `<url>/fail` with the failure
+lines as the body, **and** a non-zero exit so `journalctl -u ausmt-alert.service` shows it too.
+
+#### Set up the external check (one-time)
+
+1. At [healthchecks.io](https://healthchecks.io) (or an equivalent), create a **check** with **period
+   15 min** and **grace 10 min** (matches the timer cadence — a beat always lands inside the window).
+2. Set the check's **alert email** to the curator: **`ben@auscope.org.au`** today. **Changing who is
+   alerted later is a dashboard-only edit** — never a repo or box change.
+3. Copy the check's **ping URL** and paste it into `deploy/.env` as `AUSMT_ALERT_URL`:
+   ```sh
+   # deploy/.env  (gitignored — this URL is confidential-ish but grants NO box/data access;
+   #               keep it in your password manager alongside the other .env secrets)
+   AUSMT_ALERT_URL=https://hc-ping.com/your-check-uuid
+   ```
+   If you install the units **before** doing this, `alert.sh` just prints a loud "alerting NOT
+   configured" note and exits 0 — the timer will not flap.
+
+#### Install the timer
+
+Edit the `__PLACEHOLDER__` paths + `User=` in the `.service` (exactly like the backup/reconcile units —
+systemd does not expand env vars in `ExecStart`/`WorkingDirectory`, so they are literal sed
+placeholders), then install:
+
+```sh
+# In deploy/systemd/ausmt-alert.service, replace with YOUR absolute paths (the production box keeps the
+# checkout under the operator's home, NOT /srv/ausmt/code — that path does not exist there):
+#   __DEPLOY_DIR__ -> /home/<operator>/ausmt-code/deploy   __ENV_FILE__ -> /home/<operator>/ausmt-code/deploy/.env
+# and set User= to the operator account (the same one that runs docker compose / backup.sh).
+sudo cp deploy/systemd/ausmt-alert.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ausmt-alert.timer
+systemctl list-timers ausmt-alert.timer          # confirm the next run
+```
+
+Cron equivalent (if you are not on systemd):
+`*/15 * * * *  AUSMT_ALERT_URL=… AUSMT_DATA_DIR=/srv/ausmt AUSMT_CODE_DIR=/home/<operator>/ausmt-code /home/<operator>/ausmt-code/deploy/scripts/alert.sh`
+
+#### Test it (both directions — do this, do not assume)
+
+```sh
+# 1. Success beat: run the pass now; the check should flip GREEN in the dashboard within a minute.
+sudo systemctl start ausmt-alert.service
+systemctl status ausmt-alert.service --no-pager     # expect exit 0, "all checks OK -- sending success ping"
+
+# 2. Fail ping + EMAIL: stop a service, run the pass, confirm the dashboard goes RED and the curator
+#    gets the email; then restore and re-beat green.
+docker compose -f compose.yaml ps                    # note portal is up
+docker compose -f compose.yaml stop portal
+sudo systemctl start ausmt-alert.service             # expect a non-zero exit + a ping to <url>/fail
+#    -> the dashboard shows the failure body ("service portal: ...") and emails ben@auscope.org.au
+docker compose -f compose.yaml start portal
+sudo systemctl start ausmt-alert.service             # back to green
+```
+
+A backup that has never been *tested* is a hypothesis — so is an alert path that has never *fired*.
+Do step 2.
+
+#### Troubleshooting
+
+| Symptom | Cause → fix |
+| --- | --- |
+| `alert.sh`: "ALERTING NOT CONFIGURED … no ping sent" (exit 0) | `AUSMT_ALERT_URL` is unset/empty in the unit's `EnvironmentFile`. Create the external check and paste its ping URL into `deploy/.env` (above). Deliberate: the timer runs harmlessly until you do. |
+| Dashboard shows the check **red / late** but the box is fine | The box could not reach the monitor (tailnet/DNS/outbound HTTPS blocked), or the timer is not running. Check `systemctl list-timers ausmt-alert.timer`, run `sudo systemctl start ausmt-alert.service` and read `journalctl -u ausmt-alert.service` — a "success ping … FAILED (curl error)" line means outbound HTTPS to the monitor is blocked. |
+| Fail ping fires but names `services: … python … cannot parse` | `AUSMT_CODE_DIR` is unset/wrong (so `deploy/compose.yaml` is not found) or no `python3`/`python` is on the operator's PATH. Set `AUSMT_CODE_DIR` in `.env`; install python3. |
+| Constant fail pings for `gw-runner` | The runner really is crash-looping (`docker compose --profile gateway ps` shows it `restarting`) — this is the alert working. Fix the runner (§4 "stuck at `SCANNED`" row: usually `PYTHONPATH`/`AUSMT_CODE_DIR`). |
+| Fail pings for a **stale backup/reconcile** right after install | Expected until the first backup + reconcile pass has run. The backup line is `WARN`-class while `backups/` does not exist yet; it becomes a hard fail once the timer should have produced a snapshot. |
 
 ### Backups & restore
 
@@ -603,6 +696,12 @@ ls -l "$AUSMT_DATA_DIR/backups/"               # confirm a <utc-ts>/ dir + lates
 
 Cron equivalent (if you are not on systemd):
 `20 3 * * *  AUSMT_DATA_DIR=/srv/ausmt /home/<operator>/ausmt-code/deploy/backup.sh`
+
+> **Watch item — a silently-failing nightly backup is exactly the kind of stall nobody notices.** The
+> **Alerting** section's `ausmt-alert.timer` watches this for you: it fail-pings the curator if the
+> newest snapshot is older than `AUSMT_ALERT_BACKUP_MAX_H` (26 h) **or** `systemctl is-failed
+> ausmt-backup.service` reports the unit failed. Install alerting too, so a backup that quietly stops
+> running does not go unnoticed until you need a restore.
 
 #### Mac pull setup (off-box copy over the tailnet)
 
