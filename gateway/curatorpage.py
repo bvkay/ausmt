@@ -1435,7 +1435,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         v = fields.get(key, "")
         return "" if v is None else v
 
-    scalar_rows = [f'<h2>Core fields</h2>']
+    scalar_rows = ['<h2>Core fields</h2>']
     for key, label in _EDIT_SCALARS:
         scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
                            f'{_text_input(f"f_{key}", _scalar_val(key))}</p>')
@@ -1517,7 +1517,6 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     Metadata tab is the per-section editor. `fields`/`version` come from the runner read-job (only
     needed for the Metadata tab; the Overview tab needs no server-side survey content)."""
     tab = tab if tab in ("overview", "metadata") else "overview"
-    crumb = (f'<a href="/gateway/curator/edit">Surveys</a> › <b>{_esc(slug)}</b>')
     strip = _hub_tab_strip(slug, tab)
     if tab == "metadata":
         cur = version or "0.0.0"
