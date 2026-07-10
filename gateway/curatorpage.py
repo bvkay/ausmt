@@ -72,15 +72,54 @@ _HEAD = """<!doctype html>
  .b-ok{background:$ok}.b-warn{background:$warn}.b-bad{background:$bad}.b-accent{background:$accent}
  form.act{display:inline-block;margin:.25rem .5rem .25rem 0}
  .k{color:$muted}
+ /* C43 Stage 1 nav shell: a persistent left rail + a context bar on every curator page. Pure CSS
+    (style-src allows 'unsafe-inline'); no JS needed for the layout — the drift chip's served-build
+    half is filled by the external context-bar script, everything else is server-rendered. */
+ .shell{display:flex;min-height:100vh;align-items:stretch}
+ .rail{flex:0 0 13rem;background:#152430;border-right:1px solid #2E4254;padding:1.25rem 0}
+ .rail .brand{font-weight:600;padding:0 1.25rem 1rem;font-size:.95rem}
+ .rail .grp{color:$muted;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;
+   padding:.75rem 1.25rem .25rem}
+ .rail a{display:block;padding:.35rem 1.25rem;color:$ink;text-decoration:none;font-size:.9rem;
+   border-left:3px solid transparent}
+ .rail a:hover{background:#1B2C3A}
+ .rail a.on{border-left-color:$accent;background:#1B2C3A;font-weight:600}
+ .main{flex:1 1 auto;min-width:0}
+ .ctxbar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;
+   background:#152430;border-bottom:1px solid #2E4254;padding:.6rem 1.25rem}
+ .crumb{font-size:.85rem;color:$muted}
+ .crumb a{color:$accent}
+ .crumb b{color:$ink;font-weight:600}
+ .chip{display:inline-flex;align-items:center;gap:.4rem;background:$bg;border:1px solid #2E4254;
+   border-radius:999px;padding:.2rem .7rem;font-size:.75rem;color:$muted}
+ .chip code{color:$ink}
+ .chip .dot{width:.55rem;height:.55rem;border-radius:50%;background:$muted}
+ .chip.current .dot{background:$ok}.chip.behind .dot{background:$warn}
+ .ctxbar .spacer{flex:1 1 auto}
+ /* one-section-at-a-time metadata TOC (S1-2 Metadata tab) */
+ .toc{position:sticky;top:.5rem}
+ .toc a{display:block;padding:.25rem .5rem;color:$muted;text-decoration:none;font-size:.85rem;
+   border-radius:6px}
+ .toc a.on{background:#1B2C3A;color:$ink;font-weight:600}
+ .tabs{display:flex;gap:.25rem;border-bottom:1px solid #2E4254;margin:0 0 1rem}
+ .tabs a{padding:.5rem .9rem;color:$muted;text-decoration:none;font-size:.9rem;
+   border-bottom:2px solid transparent}
+ .tabs a.on{color:$ink;border-bottom-color:$accent;font-weight:600}
+ .cards{display:flex;flex-wrap:wrap;gap:.75rem;margin:1rem 0}
+ .card{flex:1 1 8rem;background:$panel;border-radius:8px;padding:.75rem 1rem}
+ .card .n{font-size:1.4rem;font-weight:700}
+ .card .l{color:$muted;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+ @media (max-width:720px){.shell{display:block}.rail{flex-basis:auto;border-right:0;
+   border-bottom:1px solid #2E4254}}
 </style></head>
-<body><div class="wrap">
+<body>
 """
 
 # Every curator page loads the shared UI script (delegated data-confirm / data-toggle-big handlers)
 # as an EXTERNAL same-origin script — the strictPages CSP (script-src 'self') silently blocks inline
 # script blocks AND on*-attribute handlers on every /gateway/* page, so inline handlers are dead code
 # that only fails in production (three shipped that way and never ran; found 2026-07-08).
-_TAIL = '<script src="/gateway/curator/ui.js" defer></script></div></body></html>'
+_TAIL = '<script src="/gateway/curator/ui.js" defer></script></body></html>'
 
 
 # Shared curator-page behaviours, DELEGATED so per-element handlers never need inlining again:
@@ -156,17 +195,313 @@ EDITOR_UI_JS = """
 """
 
 
+# The context-bar drift chip's served-build half: fetch /data/build.json SAME-ORIGIN (Caddy serves
+# /data/* from the built current/) and fill the served build id, then compare its source_commit
+# against the server-rendered published HEAD to flip the chip current|behind. RAW JS served by
+# GET /gateway/curator/context-bar.js — inline delivery is dead under the strictPages script-src
+# 'self' policy (same reason as serve-state.js/ui.js). Every value goes in via textContent (never
+# innerHTML), so a build-report-derived string cannot inject markup. Prefix-tolerant commit compare
+# (7-char short vs 8-char HEAD of the same commit is NOT a mismatch), matching SERVE_PANEL_JS.
+CONTEXT_BAR_JS = """
+(function () {
+  var chip = document.getElementById('drift-chip');
+  if (!chip) return;
+  var publishedHead = chip.getAttribute('data-published-head') || '';
+  var buildEl = document.getElementById('drift-build');
+  var servingEl = document.getElementById('drift-serving');
+  fetch('/data/build.json', {credentials: 'omit', cache: 'no-store'}).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function (b) {
+    if (buildEl) buildEl.textContent = b.build_id || '(unknown)';
+    var served = b.source_commit || '';
+    if (!publishedHead || !served) return;  // can't judge currency without both sides
+    var current = (publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
+    chip.classList.add(current ? 'current' : 'behind');
+    var verdict = document.createElement('span');
+    verdict.textContent = current ? '· current' : '· behind';
+    verdict.className = 'k';
+    if (servingEl) servingEl.appendChild(verdict);
+  }).catch(function () {
+    if (buildEl) buildEl.textContent = '(no served build)';
+  });
+})();
+"""
+
+
+# The survey hub's browser-side script (C43 Stage 1 S1-2). TWO jobs, both degradable:
+#   1. OVERVIEW & QA tab — fetch /data/build_report.json + /data/build.json SAME-ORIGIN, filter to
+#      this survey (#survey-qa[data-survey-slug]), and render the health cards, the "Needs attention"
+#      rows (each build-report warning/refusal as an actionable row with its inline diagnosis), and
+#      the conditioning summary. Refused stations link ONLY to the existing station-removal list (the
+#      drill-down is Stage 2 — no dangling links); metadata-class issues link to the Metadata tab's
+#      owning section. The gateway has NO site-data mount, so this MUST be browser-side (the serve-
+#      panel precedent).
+#   2. METADATA tab — enhance the sticky TOC to show ONE section at a time (#hub-toc / .hub-section).
+#      Without this script the server renders every section stacked and fully functional (graceful).
+# RAW JS served by GET /gateway/curator/survey-hub.js — inline is dead under script-src 'self'. Every
+# value goes in via textContent (never innerHTML) so a build-report string cannot inject markup.
+SURVEY_HUB_JS = """
+(function () {
+  // ---- Metadata TOC: one section visible at a time (progressive enhancement) ----
+  var toc = document.getElementById('hub-toc');
+  var host = document.getElementById('hub-sections');
+  if (toc && host) {
+    var forms = host.querySelectorAll('.hub-section');
+    var links = toc.querySelectorAll('[data-hub-section]');
+    function show(key) {
+      forms.forEach(function (f) {
+        f.style.display = (f.getAttribute('data-hub-section-form') === key) ? '' : 'none';
+      });
+      links.forEach(function (a) {
+        if (a.getAttribute('data-hub-section') === key) a.classList.add('on');
+        else a.classList.remove('on');
+      });
+    }
+    links.forEach(function (a) {
+      a.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        show(a.getAttribute('data-hub-section'));
+      });
+    });
+    var first = links[0] && links[0].getAttribute('data-hub-section');
+    var onlink = toc.querySelector('[data-hub-section].on');
+    show(onlink ? onlink.getAttribute('data-hub-section') : first);
+  }
+
+  // ---- Overview & QA: browser-side from the served /data corpus ----
+  var qa = document.getElementById('survey-qa');
+  if (!qa) return;
+  var slug = qa.getAttribute('data-survey-slug') || '';
+
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function fetchJson(url) {
+    return fetch(url, {credentials: 'omit', cache: 'no-store'}).then(function (r) {
+      if (r.status === 404) return {__missing: true};
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  function card(host, n, label) {
+    var c = el('div', null, 'card');
+    c.appendChild(el('div', String(n), 'n'));
+    c.appendChild(el('div', label, 'l'));
+    host.appendChild(c);
+  }
+
+  Promise.all([
+    fetchJson('/data/build_report.json').catch(function () { return {__err: true}; }),
+    fetchJson('/data/build.json').catch(function () { return {__err: true}; })
+  ]).then(function (res) {
+    var rep = res[0], build = res[1];
+    var cards = document.getElementById('qa-cards');
+    var attention = document.getElementById('qa-attention');
+    var cond = document.getElementById('qa-conditioning');
+    cards.textContent = ''; attention.textContent = ''; cond.textContent = '';
+
+    if (!rep || rep.__missing || rep.__err) {
+      cards.appendChild(el('p', 'No build report available yet (/data/build_report.json).', 'sub'));
+      return;
+    }
+    var survey = (rep.surveys || {})[slug];
+    if (!survey) {
+      cards.appendChild(el('p', 'This survey is not in the current build report — it may not have '
+        + 'been built into the served corpus yet.', 'sub'));
+      return;
+    }
+    var dropped = survey.stations_dropped || [];
+    var warnings = survey.warnings || [];
+    var conditioning = survey.conditioning || [];
+
+    // Health cards.
+    card(cards, survey.stations_built != null ? survey.stations_built : '-', 'Stations built');
+    card(cards, dropped.length, 'Refused stations');
+    card(cards, warnings.length, 'QA warnings');
+    var buildId = (build && !build.__missing && !build.__err) ? (build.build_id || '-') : '-';
+    card(cards, buildId, 'Served build');
+
+    // Needs attention: refusals then warnings, each an actionable row with inline diagnosis.
+    if (!dropped.length && !warnings.length) {
+      attention.appendChild(el('p', 'Nothing needs attention — no refused stations or QA warnings '
+        + 'in the current build.', 'sub'));
+    } else {
+      dropped.forEach(function (d) {
+        var row = el('div', null, 'panel');
+        row.style.margin = '.5rem 0';
+        row.appendChild(el('div', 'Refused: ' + d.station));
+        row.appendChild(el('div', d.reason, 'sub'));
+        var note = el('p', 'Refused stations stay in the published package but are withheld from '
+          + 'serving — the fix is a custodian-side re-export. To remove it here instead:', 'sub');
+        row.appendChild(note);
+        var a = el('a', 'manage stations (remove EDIs)');
+        a.href = '/gateway/curator/edit/' + encodeURIComponent(slug) + '/stations';
+        row.appendChild(a);
+        attention.appendChild(row);
+      });
+      warnings.forEach(function (w) {
+        var row = el('div', null, 'panel');
+        row.style.margin = '.5rem 0';
+        row.appendChild(el('div', 'Warning', 'k'));
+        row.appendChild(el('div', String(w)));
+        // Metadata-class warnings (e.g. an email as citation author) link to the Metadata tab.
+        if (/citation|author|email|doi|orcid|license|licence|metadata/i.test(String(w))) {
+          var a = el('a', 'open the Metadata tab');
+          a.href = '/gateway/curator/survey/' + encodeURIComponent(slug) + '?tab=metadata';
+          row.appendChild(a);
+        }
+        attention.appendChild(row);
+      });
+    }
+
+    // Conditioning summary.
+    if (!conditioning.length) {
+      cond.appendChild(el('p', 'No conditioning notes recorded for this survey.', 'sub'));
+    } else {
+      var tbl = el('table');
+      var head = el('tr');
+      ['Note', 'Stations'].forEach(function (h) { head.appendChild(el('th', h)); });
+      tbl.appendChild(head);
+      conditioning.forEach(function (c) {
+        var tr = el('tr');
+        tr.appendChild(el('td', c.note));
+        var scope = String(c.count);
+        if (c.stations && c.stations.length) scope += ' (' + c.stations.join(', ') + ')';
+        else if (c.except && c.except.length) scope += ' (all except ' + c.except.join(', ') + ')';
+        tr.appendChild(el('td', scope));
+        tbl.appendChild(tr);
+      });
+      cond.appendChild(tbl);
+    }
+  });
+})();
+"""
+
+
 def _esc(value) -> str:
     return html.escape(str(value), quote=True)
 
 
-def _page(title: str, body: str) -> str:
-    head = Template(_HEAD).substitute(
+def _head(title: str) -> str:
+    return Template(_HEAD).substitute(
         title=_esc(title), bg=_PALETTE["bg"], ink=_PALETTE["ink"], muted=_PALETTE["muted"],
         accent=_PALETTE["accent"], panel=_PALETTE["panel"], ok=_PALETTE["ok"],
         warn=_PALETTE["warn"], bad=_PALETTE["bad"],
     )
-    return head + body + _TAIL
+
+
+def _page(title: str, body: str) -> str:
+    """A CHROME-LESS page: no left rail, no context bar. Used only where there is no curator session
+    to hang chrome on (the login page) or where a bare terminal confirmation reads cleanest (the
+    edit/removal "committed" pages). Every session-gated working page goes through _shell instead."""
+    return _head(title) + '<div class="wrap">' + body + "</div>" + _TAIL
+
+
+# ---- C43 Stage 1 nav shell (S1-1) ----------------------------------------------------------------
+# The persistent left rail + context bar every curator working page renders. Server-rendered chrome
+# (string.Template, no framework, no templates dir — the house architecture); the ONLY browser-side
+# piece is the drift chip's served-build half, filled by an external context-bar script (the
+# precedented serve-state pattern) — ALL JS stays in external route constants (the strictPages CSP is
+# script-src 'self'). Published HEAD is server-rendered here from serve_state.read_published_head.
+
+# The rail sections and their entries, as (group, [(key, label, href)]). Stage-1 ONLY surfaces that
+# EXIST ship — Collections is Stage 3 and is DELIBERATELY absent (not a disabled placeholder, per the
+# contract). "Serve state" links to the queue page's serve panel anchor (the panel lives there today).
+_RAIL = (
+    ("Surveys", (("surveys", "Surveys", "/gateway/curator/edit"),)),
+    ("Intake", (("queue", "Submission queue", "/gateway/curator/queue"),
+                ("uploaders", "Uploader keys", "/gateway/curator/uploaders"))),
+    ("Operations", (("serve", "Serve state", "/gateway/curator/queue#serve-state"),)),
+)
+
+
+class NavContext:
+    """The server-side chrome inputs a curator page passes to _shell. `active` is the rail key to
+    highlight; `crumb` is the ready-made breadcrumb HTML (already escaped by the caller);
+    `published_head`/`published_available` feed the drift chip's server-rendered half (the served
+    build id half is browser-populated); `csrf` arms the ever-present Request-rebuild button.
+    `show_rebuild` False drops the button on pages where it would be noise (none in Stage 1 — kept as
+    a seam)."""
+
+    def __init__(self, *, active: str, crumb: str, published_head: str | None,
+                 published_available: bool, csrf: str, show_rebuild: bool = True):
+        self.active = active
+        self.crumb = crumb
+        self.published_head = published_head
+        self.published_available = published_available
+        self.csrf = csrf
+        self.show_rebuild = show_rebuild
+
+
+def _rail_html(active: str) -> str:
+    parts = ['<nav class="rail"><div class="brand">AusMT curator</div>']
+    for group, entries in _RAIL:
+        parts.append(f'<div class="grp">{_esc(group)}</div>')
+        for key, label, href in entries:
+            on = " on" if key == active else ""
+            parts.append(f'<a class="railitem{on}" href="{_esc(href)}">{_esc(label)}</a>')
+    parts.append("</nav>")
+    return "".join(parts)
+
+
+def _context_bar(nav: "NavContext") -> str:
+    """Breadcrumb + drift chip + Request-rebuild button. The chip carries the SERVER-rendered published
+    HEAD; its served-build id + current|behind verdict are filled browser-side by the context-bar
+    script (same-origin /data/build.json fetch — the serve-panel pattern, zero new gateway privileges).
+    data-published-head lets that script compare and flip the chip current/behind."""
+    if nav.published_available and nav.published_head:
+        head_code = f'<code>{_esc(nav.published_head)}</code>'
+        pub_attr = _esc(nav.published_head)
+    else:
+        head_code = '<code>unavailable</code>'
+        pub_attr = ""
+    # The chip starts neutral; the external script adds .current/.behind + the served build id once
+    # /data/build.json loads. It DEGRADES to "serving …" (server can't read site-data — no mount).
+    chip = (
+        f'<span class="chip" id="drift-chip" data-published-head="{pub_attr}">'
+        '<span class="dot"></span>'
+        '<span id="drift-serving">serving <code id="drift-build">…</code></span>'
+        '<span class="k">·</span>'
+        f'<span>published HEAD {head_code}</span>'
+        '</span>'
+    )
+    rebuild = ""
+    if nav.show_rebuild:
+        rebuild = (
+            '<form class="act" method="post" action="/gateway/curator/rebuild" '
+            'data-confirm="Request a rebuild on the next reconcile tick?" style="margin:0">'
+            f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(nav.csrf)}">'
+            '<button class="b-accent" type="submit" style="padding:.3rem .8rem;font-size:.8rem">'
+            'Request rebuild</button></form>'
+        )
+    return (
+        '<div class="ctxbar">'
+        f'<div class="crumb">{nav.crumb}</div>'
+        '<div class="spacer"></div>'
+        f'{chip}{rebuild}'
+        '</div>'
+    )
+
+
+def _shell(title: str, body: str, *, nav: "NavContext") -> str:
+    """Wrap a page body in the Stage-1 nav shell: left rail + context bar + main content. The external
+    context-bar script (drift chip served-build half) loads at the tail, joining ui.js. Chrome-less
+    pages (login, terminal confirms) use _page instead."""
+    return (
+        _head(title)
+        + '<div class="shell">'
+        + _rail_html(nav.active)
+        + '<div class="main">'
+        + _context_bar(nav)
+        + '<div class="wrap">' + body + '</div>'
+        + '</div></div>'
+        + '<script src="/gateway/curator/context-bar.js" defer></script>'
+        + _TAIL
+    )
 
 
 def render_login(*, error: str = "") -> str:
@@ -190,7 +525,7 @@ def _state_badge(state: str) -> str:
 
 
 def render_queue(*, curator_name: str, rows: list, csrf_token: str,
-                 serve_panel: str = "") -> str:
+                 serve_panel: str = "", nav: "NavContext | None" = None) -> str:
     if rows:
         trs = []
         for r in rows:
@@ -216,13 +551,12 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
     )
     body = (
         f'<h1>Review queue</h1>'
-        f'<p class="sub">Signed in as curator:{_esc(curator_name)} '
-        '· <a href="/gateway/curator/edit">Edit published metadata</a> '
-        '· <a href="/gateway/curator/uploaders">Uploader keys</a> '
-        f'{logout}</p>'
+        f'<p class="sub">Signed in as curator:{_esc(curator_name)} {logout}</p>'
         f'<div class="panel">{table}</div>'
         f'{serve_panel}'
     )
+    if nav is not None:
+        return _shell("AusMT curator queue", body, nav=nav)
     return _page("AusMT curator queue", body)
 
 
@@ -660,6 +994,20 @@ _EDIT_JSON_ONLY = (
      "restrictions_requested"),
 )
 
+# The structured-section titles + document order (matches survey-yaml.md), shared by the single-form
+# edit page and the C43 survey-hub Metadata tab (which splits each into its own per-section form) so
+# rendering order never drifts between them.
+_SECTION_TITLES = {
+    "organisation": "Organisation", "lead_investigator": "Lead investigator",
+    "principal_investigators": "Principal investigators", "identifiers": "Identifiers",
+    "publications": "Publications", "funding": "Funding", "instruments": "Instruments",
+    "time_series": "Time series", "access": "Access", "processing": "Processing",
+    "collection": "Collection",
+}
+_SECTION_ORDER = ("organisation", "lead_investigator", "principal_investigators", "identifiers",
+                  "publications", "funding", "instruments", "time_series", "access", "processing",
+                  "collection")
+
 
 def _json_text(value) -> str:
     import json as _json
@@ -936,7 +1284,8 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
 
 
 def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token: str,
-                     error: str = "", field_errors=None, submitted: dict | None = None) -> str:
+                     error: str = "", field_errors=None, submitted: dict | None = None,
+                     nav: "NavContext | None" = None) -> str:
     """The seed form (C31 §1.2): server-rendered, escaped, prefilled from the runner's editable
     subset. Top-level scalars are inputs/textarea; the structured sections are per-section WIDGETS
     (labelled inputs, an access-level <select>, levels checkboxes, repeatable rows) with a collapsed
@@ -970,25 +1319,12 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
                            f'<textarea name="f_{key}">{_esc(_scalar_val(key))}</textarea></p>')
     scalar_panel = f'<div class="panel">{"".join(scalar_rows)}</div>'
 
-    # Map + list section panels, in the schema's document order (matches survey-yaml.md).
-    map_titles = {
-        "organisation": "Organisation", "lead_investigator": "Lead investigator",
-        "identifiers": "Identifiers", "access": "Access", "time_series": "Time series",
-        "processing": "Processing", "collection": "Collection",
-    }
-    list_titles = {
-        "principal_investigators": "Principal investigators", "publications": "Publications",
-        "funding": "Funding", "instruments": "Instruments",
-    }
-    order = ("organisation", "lead_investigator", "principal_investigators", "identifiers",
-             "publications", "funding", "instruments", "time_series", "access", "processing",
-             "collection")
     panels = []
-    for section in order:
+    for section in _SECTION_ORDER:
         if section in editor_form.MAP_SECTIONS:
-            panels.append(_map_section_panel(section, map_titles[section], fields, submitted, err_map))
+            panels.append(_map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
         elif section in editor_form.LIST_SECTIONS:
-            panels.append(_list_section_panel(section, list_titles[section], fields, submitted, err_map))
+            panels.append(_list_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
     for section, title, hint in _EDIT_JSON_ONLY:
         panels.append(_json_only_panel(section, title, hint, fields, err_map))
 
@@ -1023,12 +1359,185 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
         # inline JS; the behaviour degrades to the server-rendered spare rows without it).
         '<script src="/gateway/curator/editor.js" defer></script>'
     )
+    if nav is not None:
+        return _shell(f"AusMT edit {slug}", body, nav=nav)
     return _page(f"AusMT edit {slug}", body)
+
+
+# ---- C43 Stage 1: survey hub (S1-2) --------------------------------------------------------------
+# One hub per survey, two tabs: Overview & QA (landing) and Metadata. A Stations entry in the tab
+# strip LINKS to the existing removal page (labelled). NO History tab (Stage 2). The Overview tab is
+# populated BROWSER-side from same-origin /data/build_report.json + /data/build.json filtered to this
+# survey (the serve-panel pattern — zero new gateway privileges). The Metadata tab splits the editor
+# into a sticky section TOC + per-section forms, each POSTing ONLY its own section's widgets to the
+# unchanged /edit/{slug}/preview route (the merge seam already scopes the patch to the widgets present
+# — verified: a form carrying one section's s_/l_/c_ inputs + its o_<section> snapshot assembles to a
+# single-section patch, so no runner-side section-scoped mode is needed).
+
+_HUB_TABS = (("overview", "Overview & QA"), ("metadata", "Metadata"))
+
+
+def _hub_tab_strip(slug: str, active: str) -> str:
+    """The hub tab strip: Overview & QA / Metadata as in-hub tabs, plus a Stations entry LINKING OUT
+    to the existing removal page (labelled as such — Stage 1 rehomes it, does not rebuild it). No
+    History tab (Stage 2)."""
+    parts = ['<div class="tabs">']
+    for key, label in _HUB_TABS:
+        on = " on" if key == active else ""
+        parts.append(
+            f'<a class="hubtab{on}" href="/gateway/curator/survey/{_esc(slug)}?tab={key}">'
+            f'{_esc(label)}</a>')
+    # Stations links to the existing removal flow (not a hub tab — Stage 1 has no station drill-down).
+    parts.append(
+        f'<a class="hubtab" href="/gateway/curator/edit/{_esc(slug)}/stations">Stations (remove EDIs)</a>')
+    parts.append("</div>")
+    return "".join(parts)
+
+
+def _hub_overview_body(slug: str) -> str:
+    """The Overview & QA tab body. Every value is populated BROWSER-side by survey-hub.js from
+    /data/build_report.json + /data/build.json filtered to THIS survey (data-survey-slug). The server
+    renders only the scaffold + loading placeholders — it has no site-data mount, so it cannot read
+    the served corpus (the same constraint the serve panel lives under). Refused/warning rows render
+    their gate diagnosis inline; the only links out are to the existing station-removal list (the
+    drill-down is Stage 2 — no dangling links). Metadata-class issues link to the Metadata tab."""
+    return (
+        f'<div id="survey-qa" data-survey-slug="{_esc(slug)}">'
+        '<div class="cards" id="qa-cards"><p class="sub">Loading survey health…</p></div>'
+        '<div class="panel"><h2>Needs attention</h2>'
+        '<div id="qa-attention"><p class="sub">Loading build report…</p></div></div>'
+        '<div class="panel"><h2>Conditioning summary</h2>'
+        '<div id="qa-conditioning"><p class="sub">Loading conditioning notes…</p></div></div>'
+        '</div>'
+        # EXTERNAL same-origin script (strictPages CSP blocks inline JS). Degrades: without it the
+        # placeholders remain, the page never breaks.
+        '<script src="/gateway/curator/survey-hub.js" defer></script>'
+    )
+
+
+def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_token: str,
+                       field_errors=None, submitted: dict | None = None,
+                       active_section: str | None = None) -> str:
+    """The Metadata tab body: a sticky section TOC + one per-section form per section, each with its
+    OWN commit tray (bump + required note + Preview) so "only this section is submitted" is literally
+    true — the form carries only that section's widgets, and the merge seam scopes the patch to them.
+    Every section keeps its advanced-JSON override (inside its panel). Server renders ALL sections
+    (fully functional without JS); survey-hub.js enhances the TOC to show one section at a time."""
+    from . import editor_form
+    err_map = _field_error_map(field_errors)
+    cur = version or "0.0.0"
+
+    # The scalar panel is its own "section" (id: _scalars) so editing a top-level scalar submits only
+    # the f_* fields — the per-section discipline extends to the scalars.
+    def _scalar_val(key):
+        if submitted is not None and f"f_{key}" in submitted:
+            return submitted.get(f"f_{key}")
+        v = fields.get(key, "")
+        return "" if v is None else v
+
+    scalar_rows = [f'<h2>Core fields</h2>']
+    for key, label in _EDIT_SCALARS:
+        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                           f'{_text_input(f"f_{key}", _scalar_val(key))}</p>')
+    for key, label in _EDIT_TEXTAREAS:
+        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
+                           f'<textarea name="f_{key}">{_esc(_scalar_val(key))}</textarea></p>')
+    scalar_panel_inner = "".join(scalar_rows)
+
+    # (toc key, title, panel-inner-html)
+    sections: list[tuple[str, str, str]] = [("_scalars", "Core fields", scalar_panel_inner)]
+    for section in _SECTION_ORDER:
+        if section in editor_form.MAP_SECTIONS:
+            inner = _map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map)
+        elif section in editor_form.LIST_SECTIONS:
+            inner = _list_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map)
+        else:
+            continue
+        sections.append((section, _SECTION_TITLES[section], inner))
+    for section, title, hint in _EDIT_JSON_ONLY:
+        sections.append((section, title, _json_only_panel(section, title, hint, fields, err_map)))
+
+    # The commit tray reused inside EVERY section form (bump + required note + Preview). Its own note
+    # + bump per section keeps the submit self-contained ("only this section is submitted").
+    patch_v, minor_v, major_v = (_suggest_bump(cur, k) for k in ("patch", "minor", "major"))
+
+    def _tray() -> str:
+        return (
+            '<div style="border-top:1px solid #2E4254;margin-top:.75rem;padding-top:.75rem">'
+            '<p><label class="k">Version bump (a content edit requires a semver-greater version)</label>'
+            f'<label><input type="radio" name="bump" value="patch" checked style="width:auto"> patch '
+            f'&rarr; {_esc(patch_v)}</label> '
+            f'<label><input type="radio" name="bump" value="minor" style="width:auto"> minor '
+            f'&rarr; {_esc(minor_v)}</label> '
+            f'<label><input type="radio" name="bump" value="major" style="width:auto"> major '
+            f'&rarr; {_esc(major_v)}</label></p>'
+            '<p><label class="k">Release note (required)</label>'
+            '<textarea name="note" placeholder="What changed and why" required></textarea></p>'
+            '<p class="sub">Only this section is submitted — Preview shows the exact YAML diff and the '
+            'validator verdict before anything commits.</p>'
+            '<p><button class="b-accent" type="submit">Preview diff &amp; validate</button></p>'
+            '</div>')
+
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    default_key = active_section or sections[0][0]
+
+    toc_links = []
+    forms = []
+    for key, title, inner in sections:
+        sec_id = f"sec-{_esc(key)}"
+        on = " on" if key == default_key else ""
+        toc_links.append(f'<a class="tocitem{on}" href="#{sec_id}" data-hub-section="{_esc(key)}">'
+                         f'{_esc(title)}</a>')
+        forms.append(
+            f'<form class="hub-section" id="{sec_id}" data-hub-section-form="{_esc(key)}" '
+            f'method="post" action="/gateway/curator/edit/{_esc(slug)}/preview">'
+            f'<div class="panel">{inner}{_tray()}{csrf}</div>'
+            '</form>')
+
+    err = ""
+    if err_map:
+        err = (f'<p class="sub" style="color:{_PALETTE["bad"]}">Some fields need attention — see the '
+               'highlighted section(s).</p>')
+    return (
+        f'{err}'
+        '<div style="display:flex;gap:1.25rem;align-items:flex-start">'
+        f'<nav class="toc" id="hub-toc" style="flex:0 0 12rem">{"".join(toc_links)}</nav>'
+        f'<div style="flex:1 1 auto;min-width:0" id="hub-sections">{"".join(forms)}</div>'
+        '</div>'
+        '<script src="/gateway/curator/editor.js" defer></script>'
+        '<script src="/gateway/curator/survey-hub.js" defer></script>'
+    )
+
+
+def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict, csrf_token: str,
+                      nav: "NavContext", field_errors=None, submitted: dict | None = None,
+                      active_section: str | None = None) -> str:
+    """The per-survey hub (C43 Stage 1 S1-2). `tab` selects Overview & QA (default) or Metadata.
+    Rendered inside the nav shell (rail + context bar). The Overview tab is browser-populated; the
+    Metadata tab is the per-section editor. `fields`/`version` come from the runner read-job (only
+    needed for the Metadata tab; the Overview tab needs no server-side survey content)."""
+    tab = tab if tab in ("overview", "metadata") else "overview"
+    crumb = (f'<a href="/gateway/curator/edit">Surveys</a> › <b>{_esc(slug)}</b>')
+    strip = _hub_tab_strip(slug, tab)
+    if tab == "metadata":
+        cur = version or "0.0.0"
+        head = (f'<h1>{_esc(slug)} — metadata</h1>'
+                f'<p class="sub">current version {_esc(cur)}</p>')
+        inner = _hub_metadata_body(slug=slug, version=version, fields=fields, csrf_token=csrf_token,
+                                   field_errors=field_errors, submitted=submitted,
+                                   active_section=active_section)
+    else:
+        head = (f'<h1>{_esc(slug)}</h1>'
+                '<p class="sub">Survey health at a glance — served vs published counts, QA flags, '
+                'and every build-report warning as an actionable row.</p>')
+        inner = _hub_overview_body(slug)
+    body = f'{head}{strip}{inner}'
+    return _shell(f"AusMT survey {slug}", body, nav=nav)
 
 
 def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: dict | None,
                         has_fail: bool, new_sha256: str, note: str, patch_json: str,
-                        bump: str, csrf_token: str) -> str:
+                        bump: str, csrf_token: str, nav: "NavContext | None" = None) -> str:
     """The preview (C31 §1.4): the unified diff (escaped, no truncation), the validator verdict, and
     — only when the validator did NOT FAIL — a confirm form carrying the §0.6 content hash + the
     patch/bump/note needed to reproduce the exact bytes at commit. A FAIL shows the report and NO
@@ -1065,24 +1574,30 @@ def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: 
         f'<a href="/gateway/curator/queue">queue</a></p>'
         f'{banner}{diff_panel}{verdict}{confirm}'
     )
+    if nav is not None:
+        return _shell(f"AusMT preview {slug}", body, nav=nav)
     return _page(f"AusMT preview {slug}", body)
 
 
-def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str) -> str:
-    """A small index of PUBLISHED surveys that can be edited (C31 §1.1)."""
+def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
+                     nav: "NavContext | None" = None) -> str:
+    """The Surveys list (C43 Stage 1 S1-1: the former edit-list page, now the rail's Surveys surface).
+    Each row links to the per-survey HUB (Overview & QA landing tab), NOT straight to the edit form —
+    the hub is the task home. A directory listing of surveys-live, never content parsing."""
     if slugs:
         items = "".join(
-            f'<li><a href="/gateway/curator/edit/{_esc(s)}">{_esc(s)}</a></li>' for s in slugs)
+            f'<li><a href="/gateway/curator/survey/{_esc(s)}">{_esc(s)}</a></li>' for s in slugs)
         listing = f"<ul>{items}</ul>"
     else:
         listing = '<p class="sub">No published surveys in surveys-live.</p>'
     body = (
-        '<h1>Edit published metadata</h1>'
-        f'<p class="sub">Signed in as curator:{_esc(curator_name)} · '
-        '<a href="/gateway/curator/queue">back to queue</a></p>'
+        '<h1>Surveys</h1>'
+        f'<p class="sub">Signed in as curator:{_esc(curator_name)}</p>'
         f'<div class="panel">{listing}</div>'
     )
-    return _page("AusMT edit metadata", body)
+    if nav is not None:
+        return _shell("AusMT surveys", body, nav=nav)
+    return _page("AusMT surveys", body)
 
 
 # ---- station (EDI) removal ------------------------------------------------------------------------
@@ -1092,7 +1607,7 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str) -> str:
 
 
 def render_stations_list(*, slug: str, version: str | None, stations: list, csrf_token: str,
-                         error: str = "") -> str:
+                         error: str = "", nav: "NavContext | None" = None) -> str:
     """The stations page (removal deliverable 1): one row per EDI — filename, derived station id, and a
     remove checkbox — plus the version-bump picker (a removal is a content change: minor by default)
     and the required release note. Submitting selects one or more files for a removal PREVIEW. A
@@ -1150,13 +1665,16 @@ def render_stations_list(*, slug: str, version: str | None, stations: list, csrf
         '<p><button class="b-accent" type="submit">Preview removal</button></p>'
         '</div></form>'
     )
+    if nav is not None:
+        return _shell(f"AusMT stations {slug}", body, nav=nav)
     return _page(f"AusMT stations {slug}", body)
 
 
 def render_removal_preview(*, slug: str, version: str, removed: list, station_count_before: int,
                            station_count_after: int, diff: str, validate_report: dict | None,
                            has_fail: bool, new_sha256: str, note: str, bump: str,
-                           filenames_json: str, csrf_token: str) -> str:
+                           filenames_json: str, csrf_token: str,
+                           nav: "NavContext | None" = None) -> str:
     """The removal preview (deliverable 2): exactly which files will be deleted, station count before
     → after, the survey.yaml diff (version + release_notes), and the validator's verdict on the package
     WITHOUT the removed files. Only when the validator did NOT FAIL is a confirm form shown — carrying
@@ -1206,12 +1724,15 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
         f'<a href="/gateway/curator/queue">queue</a></p>'
         f'{banner}{files_panel}{diff_panel}{verdict}{confirm}'
     )
+    if nav is not None:
+        return _shell(f"AusMT remove stations {slug}", body, nav=nav)
     return _page(f"AusMT remove stations {slug}", body)
 
 
 # ---- uploader keys (schema v2 — curator-managed submit keys) ---------------------------------
 
-def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: str = "") -> str:
+def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: str = "",
+                     nav: "NavContext | None" = None) -> str:
     """The uploader-key management page (feat/uploader-key-management): a create form + the list of
     issued keys. The list shows name, email (curator-only PII, never on a public page), created
     (by/when), last used, and status (active/revoked with when/by). A revoked row STAYS listed for the
@@ -1265,11 +1786,12 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
         table = '<p class="sub">No uploader keys issued yet.</p>'
     body = (
         '<h1>Uploader keys</h1>'
-        f'<p class="sub">Signed in as curator:{_esc(curator_name)} · '
-        '<a href="/gateway/curator/queue">back to queue</a></p>'
+        f'<p class="sub">Signed in as curator:{_esc(curator_name)}</p>'
         f'{create}'
         f'<div class="panel"><h2>Issued keys</h2>{table}</div>'
     )
+    if nav is not None:
+        return _shell("AusMT uploader keys", body, nav=nav)
     return _page("AusMT uploader keys", body)
 
 

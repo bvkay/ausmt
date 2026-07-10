@@ -195,7 +195,13 @@ def test_validator_fail_shows_fail_and_confirm_409(tmp_path):
                                         "patch_json": '{"region": "Queensland"}', "bump": "patch",
                                         "note": "x"}, follow_redirects=False)
             assert r.status_code == 409
-            assert git.calls == []  # no git — the FAIL guard is upstream of any commit
+            # No MUTATING git — the FAIL guard is upstream of any commit. (The preview render now
+            # reads surveys-live HEAD via `rev-parse --short HEAD` for the C43 drift chip, a benign
+            # read the queue page already does; only commit/push/add/reset would be a violation.)
+            mutating = [c for c in git.calls
+                        if c and c[0] in ("commit", "push", "add", "reset", "rm", "merge",
+                                          "checkout", "clean", "branch")]
+            assert mutating == [], f"a mutating git op leaked past the FAIL guard: {mutating}"
     run(_body())
 
 
