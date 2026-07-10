@@ -475,8 +475,20 @@ class Gateway:
                          "state": sub.state, "updated_utc": sub.updated_utc, "warn_count": warn_count})
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
         panel = self._serve_panel_html(csrf)
+        nav = self._nav_context(request, active="queue", crumb="<b>Submission queue</b>")
         return self._html(curatorpage.render_queue(curator_name=name, rows=rows, csrf_token=csrf,
-                                                   serve_panel=panel))
+                                                   serve_panel=panel, nav=nav))
+
+    def _nav_context(self, request: Request, *, active: str, crumb: str) -> "curatorpage.NavContext":
+        """Build the C43 nav-shell chrome inputs (S1-1) for a curator page. Reads the published
+        surveys-live HEAD server-side (best-effort — degrades to 'unavailable', never 500s the page,
+        exactly like the serve panel) and the session CSRF for the ever-present Request-rebuild button.
+        The served-build id + currency verdict are filled BROWSER-side by context-bar.js."""
+        published = serve_state.read_published_head(self._git_runner, self.cfg.surveys_live_dir)
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        return curatorpage.NavContext(
+            active=active, crumb=crumb, published_head=published.short,
+            published_available=published.available, csrf=csrf)
 
     def _serve_panel_html(self, csrf: str) -> str:
         """Build the C40 serve-state panel (design §3). All server-side reads are best-effort — the
@@ -539,6 +551,34 @@ class Gateway:
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
+    def handle_context_bar_js(self, request: Request) -> Response:
+        """GET /gateway/curator/context-bar.js — the nav-shell drift chip's served-build half as a
+        same-origin EXTERNAL script (C43 Stage 1). Same CSP reason as serve-state.js/ui.js: the
+        strictPages script-src 'self' blocks inline scripts, so the chip's /data/build.json fetch lives
+        behind this route. Session-gated for consistency with the pages that reference it (the code is
+        a public-repo constant; the gate is consistency, not secrecy). DEGRADES without it — the chip
+        shows the server-rendered published HEAD and a '…' served build, never breaking the page."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.CONTEXT_BAR_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+    def handle_survey_hub_js(self, request: Request) -> Response:
+        """GET /gateway/curator/survey-hub.js — the survey hub's browser-side script (C43 Stage 1):
+        the Overview & QA tab's /data/build_report.json + /data/build.json render AND the Metadata
+        tab's one-section-at-a-time TOC enhancement. Same CSP reason as the other external scripts
+        (script-src 'self' blocks inline). Session-gated for consistency; the content is a public-repo
+        constant. DEGRADES: the Overview placeholders stay, and the Metadata sections render stacked
+        and fully functional without it."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.SURVEY_HUB_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
     def handle_editor_ui_js(self, request: Request) -> Response:
         """GET /gateway/curator/editor.js — the metadata-editor's repeatable-row add/remove behaviour
         as a same-origin EXTERNAL script. Same CSP reason as serve-state.js/ui.js: the strictPages
@@ -595,8 +635,10 @@ class Gateway:
             return name
         keys = self.db.list_uploader_keys()
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="uploaders", crumb="<b>Uploader keys</b>")
         return self._html(curatorpage.render_uploaders(
-            curator_name=name, keys=keys, csrf_token=csrf, error=error), status_code=status_code)
+            curator_name=name, keys=keys, csrf_token=csrf, error=error, nav=nav),
+            status_code=status_code)
 
     def handle_uploader_create(self, request: Request, name_field: str | None,
                                email_field: str | None, csrf: str | None) -> Response:
@@ -651,8 +693,40 @@ class Gateway:
             return name
         slugs = metaedit.list_published_slugs(self.cfg.surveys_live_dir)
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="surveys", crumb="<b>Surveys</b>")
         return self._html(curatorpage.render_edit_list(
-            curator_name=name, slugs=slugs, csrf_token=csrf))
+            curator_name=name, slugs=slugs, csrf_token=csrf, nav=nav))
+
+    def handle_survey_hub(self, request: Request, slug: str, tab: str = "overview") -> Response:
+        """The per-survey hub (C43 Stage 1 S1-2). Overview & QA (default) or Metadata tab, inside the
+        nav shell. Overview needs no server-side survey content (browser-populated from /data). The
+        Metadata tab enqueues the same `read` edit-job the edit form uses to seed its per-section
+        widgets. Sync `def` route -> the seam's bounded blocking poll runs in Starlette's threadpool."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        tab = tab if tab in ("overview", "metadata") else "overview"
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="surveys",
+                                crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
+                                      f'<b>{curatorpage._esc(slug)}</b>')  # noqa: SLF001
+        version = None
+        fields: dict = {}
+        if tab == "metadata":
+            try:
+                result = self._edit_runner(metaedit.make_read_job(slug))
+            except metaedit.EditRunnerError as exc:
+                logger.warning("survey-hub read-job failed for %s: %s", slug, exc)
+                return self.handle_edit_list(request)
+            if not result.get("ok"):
+                return self.handle_edit_list(request)
+            version = result.get("version")
+            fields = result.get("fields") or {}
+        return self._html(curatorpage.render_survey_hub(
+            slug=slug, tab=tab, version=version, fields=fields, csrf_token=csrf, nav=nav))
 
     def handle_edit_form(self, request: Request, slug: str, error: str = "",
                          field_errors: list | None = None, submitted: dict | None = None) -> Response:
@@ -679,9 +753,14 @@ class Gateway:
         if not result.get("ok"):
             return self.handle_edit_list(request)
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(
+            request, active="surveys",
+            crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
+                  f'<a href="/gateway/curator/survey/{curatorpage._esc(slug)}">'  # noqa: SLF001
+                  f'{curatorpage._esc(slug)}</a> › <b>edit metadata</b>')  # noqa: SLF001
         return self._html(curatorpage.render_edit_form(
             slug=slug, version=result.get("version"), fields=result.get("fields") or {},
-            csrf_token=csrf, error=error, field_errors=field_errors, submitted=submitted))
+            csrf_token=csrf, error=error, field_errors=field_errors, submitted=submitted, nav=nav))
 
     async def handle_edit_preview(self, request: Request, slug: str, form: dict) -> Response:
         """Submit the edit (C31 §1.3/§1.4): build the patch from the form, enqueue a `merge`
@@ -724,12 +803,17 @@ class Gateway:
         if not result.get("ok"):
             return self.handle_edit_form(request, slug, error=result.get("error") or "edit refused")
         csrf = curator_auth.csrf_token_for(raw)
+        nav = self._nav_context(
+            request, active="surveys",
+            crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
+                  f'<a href="/gateway/curator/survey/{curatorpage._esc(slug)}">'  # noqa: SLF001
+                  f'{curatorpage._esc(slug)}</a> › <b>preview edit</b>')  # noqa: SLF001
         import json as _json
         return self._html(curatorpage.render_edit_preview(
             slug=slug, version=result.get("new_version") or "", diff=result.get("diff") or "",
             validate_report=result.get("validator"), has_fail=bool(result.get("has_fail")),
             new_sha256=result.get("new_sha256") or "", note=note,
-            patch_json=_json.dumps(patch), bump=bump, csrf_token=csrf))
+            patch_json=_json.dumps(patch), bump=bump, csrf_token=csrf, nav=nav))
 
     async def handle_edit_confirm(self, request: Request, slug: str, form: dict) -> Response:
         """Confirm + commit (C31 §1.5): re-run the merge server-side to reproduce the EXACT bytes,
@@ -841,9 +925,14 @@ class Gateway:
         if not result.get("ok"):
             return self.handle_edit_list(request)
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(
+            request, active="surveys",
+            crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
+                  f'<a href="/gateway/curator/survey/{curatorpage._esc(slug)}">'  # noqa: SLF001
+                  f'{curatorpage._esc(slug)}</a> › <b>stations</b>')  # noqa: SLF001
         return self._html(curatorpage.render_stations_list(
             slug=slug, version=result.get("version"), stations=result.get("stations") or [],
-            csrf_token=csrf, error=error))
+            csrf_token=csrf, error=error, nav=nav))
 
     async def handle_stations_preview(self, request: Request, slug: str, form) -> Response:
         """Preview a station removal (deliverable 2): the selected EDIs, count before→after, the
@@ -878,6 +967,11 @@ class Gateway:
         if not result.get("ok"):
             return self.handle_stations_list(request, slug, error=result.get("error") or "refused")
         csrf = curator_auth.csrf_token_for(raw)
+        nav = self._nav_context(
+            request, active="surveys",
+            crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
+                  f'<a href="/gateway/curator/survey/{curatorpage._esc(slug)}">'  # noqa: SLF001
+                  f'{curatorpage._esc(slug)}</a> › <b>preview removal</b>')  # noqa: SLF001
         import json as _json
         return self._html(curatorpage.render_removal_preview(
             slug=slug, version=result.get("new_version") or "",
@@ -887,7 +981,7 @@ class Gateway:
             diff=result.get("diff") or "", validate_report=result.get("validator"),
             has_fail=bool(result.get("has_fail")), new_sha256=result.get("new_sha256") or "",
             note=note, bump=bump, filenames_json=_json.dumps(result.get("removed") or []),
-            csrf_token=csrf))
+            csrf_token=csrf, nav=nav))
 
     async def handle_stations_confirm(self, request: Request, slug: str, form: dict) -> Response:
         """Confirm + commit a station removal (deliverable 3): re-run the remove job server-side to
@@ -1458,12 +1552,30 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_editor_js(request: Request):
         return gw.handle_editor_ui_js(request)
 
+    # The C43 nav-shell context bar's drift chip served-build half — EXTERNAL for the same CSP reason;
+    # every shelled curator page loads it via a same-origin external script URL. Degrades gracefully.
+    @app.get("/gateway/curator/context-bar.js")
+    def curator_context_bar_js(request: Request):
+        return gw.handle_context_bar_js(request)
+
+    # The C43 survey-hub script (Overview & QA render + Metadata one-section-at-a-time TOC) — EXTERNAL
+    # for the same CSP reason; the hub page loads it via a same-origin external script URL.
+    @app.get("/gateway/curator/survey-hub.js")
+    def curator_survey_hub_js(request: Request):
+        return gw.handle_survey_hub_js(request)
+
     # ---- C31 metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the C10/C11
     # rationale; the POSTs are async (they take the PUBLISH_LOCK / await to_thread for git).
     @app.get("/gateway/curator/edit")
     def curator_edit_list(request: Request):
         return gw.handle_edit_list(request)
+
+    # C43 survey hub (Overview & QA / Metadata). GET `def` (blocking read-job -> threadpool). The tab
+    # is a query param so both tabs share one route + one crumb; unknown tabs fall back to overview.
+    @app.get("/gateway/curator/survey/{slug}")
+    def curator_survey_hub(request: Request, slug: str, tab: str = "overview"):
+        return gw.handle_survey_hub(request, slug, tab)
 
     @app.get("/gateway/curator/edit/{slug}")
     def curator_edit_form(request: Request, slug: str):

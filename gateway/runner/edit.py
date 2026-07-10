@@ -339,7 +339,19 @@ def apply_patch(data, patch: dict) -> list[str]:
     of top-level keys whose value actually changed. Setting a key to None/"" that was absent is a
     no-op (we do not introduce empty keys the source never had); clearing an existing key sets it to
     None (which re-emits as `null`). Assigned strings pass through quote_ambiguous (FIX 3) so a
-    YAML-1.1-retypeable token is emitted quoted."""
+    YAML-1.1-retypeable token is emitted quoted.
+
+    [FC-4] DIFF-MINIMAL MAP MERGE (C43 Stage 1): when the OLD value is a round-trip mapping and the
+    NEW value is a dict, the two are merged SURGICALLY into the existing node (_merge_map_into) —
+    only the sub-keys whose leaf value actually changed are reassigned, so every UNCHANGED sub-key
+    keeps its original comment, quoting, and position and produces NO diff line. The previous
+    behaviour replaced the whole CommentedMap with a plain dict rebuilt from JSON, which stripped
+    intra-section comments and re-emitted every sibling line (proven failing 2026-07-10 — a single
+    organisation.ror edit rewrote the untouched organisation.name line and dropped its comment). This
+    makes the editor emit like the station-removal path already does: the removal only ever appends a
+    release note, touching nothing it did not change. Scalars and LISTS still replace wholesale (a
+    list has no stable per-element identity to merge against; a list edit re-emitting its own block is
+    acceptable and matches the pre-C43 contract)."""
     changed = []
     for key, new_val in patch.items():
         had = key in data
@@ -349,8 +361,57 @@ def apply_patch(data, patch: dict) -> list[str]:
             continue
         if not had and new_val in (None, "", [], {}):
             continue  # never introduce an empty key the source did not carry
+        if had and hasattr(old_val, "items") and isinstance(new_val, dict):
+            # Surgical in-place map merge: mutate the existing round-trip node, preserving the
+            # comments/quoting/order of every sub-key the curator left alone.
+            if _merge_map_into(old_val, new_val):
+                changed.append(key)
+            continue
         data[key] = quote_ambiguous(new_val)
         changed.append(key)
+    return changed
+
+
+def _merge_map_into(node, new_map: dict) -> bool:
+    """Merge `new_map` (a plain dict from the JSON patch) INTO the ruamel round-trip mapping `node`
+    IN PLACE, touching only what actually differs. Returns True iff any sub-key changed.
+
+      * a sub-key present in both: recurse if both sides are maps (preserve nested comments); else
+        reassign only when the plain values differ (an unchanged leaf is left untouched, so its
+        comment/quoting/position survive and it emits no diff line);
+      * a sub-key only in new_map: added (quoted per FIX 3);
+      * a sub-key only in node: DELETED (the curator's assembled section no longer carries it — the
+        editor's _assemble_map already models "cleared" as an explicit None rather than a drop, so a
+        real deletion here is an intentional removal, e.g. via the advanced-JSON override).
+
+    Only VALUES flow through quote_ambiguous on (re)assignment; existing untouched values are never
+    re-wrapped, so a bare token the source already carried keeps its exact on-disk form."""
+    changed = False
+    for subkey, new_val in new_map.items():
+        if subkey in node:
+            old_val = node[subkey]
+            if hasattr(old_val, "items") and isinstance(new_val, dict):
+                if _merge_map_into(old_val, new_val):
+                    changed = True
+                continue
+            if _plain(old_val) == new_val:
+                continue  # unchanged leaf — leave the node (and its comment) exactly as-is
+            node[subkey] = quote_ambiguous(new_val)
+            changed = True
+        else:
+            node[subkey] = quote_ambiguous(new_val)
+            changed = True
+    # ACCEPTED RESIDUAL (review F4): `del node[subkey]` removes the key's line and its INLINE trailing
+    # comment cleanly, but a STANDALONE leading comment line above the deleted key is ORPHANED onto the
+    # following key — ruamel attaches a leading comment to the node that FOLLOWS it, so deleting the
+    # node leaves that comment bound to its successor. Deleting a sub-key via the advanced-JSON path is
+    # rare, and the orphaned comment is a cosmetic drift in the surrounding lines, not a data change,
+    # so it is left as-is. If it ever matters, the fix is a node.ca.items sweep: before deleting
+    # `subkey`, move (or drop) any pre-key comment tokens off the deleted node rather than letting
+    # ruamel re-home them on the next key.
+    for subkey in [k for k in node if k not in new_map]:
+        del node[subkey]
+        changed = True
     return changed
 
 
