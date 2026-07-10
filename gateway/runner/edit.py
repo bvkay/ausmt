@@ -176,6 +176,8 @@ def _dispatch_edit(cfg, job: dict, scratch_dir: Path) -> dict:
             validator_path=str(cfg.validator_path or ""),
             scratch_dir=scratch_dir,
         )
+    if kind == "history":
+        return run_history_job(package_root, surveys_root=surveys_root)
     if kind == "list_stations":
         return run_list_stations_job(package_root)
     if kind == "remove_stations":
@@ -493,6 +495,117 @@ def run_read_job(package_root: Path) -> dict:
         "fields": editable_subset(data),
         "version": version if isinstance(version, str) else None,
     }
+
+
+# ---- history (read-only git log) job -------------------------------------------------------------
+# The runner OWNS the git read for the History tab (record D4 — the gateway process issues NO git verb
+# for this beyond what already exists; the runner already mounts surveys-live read-only for the
+# validator). The ONLY git verb this job runs is the READ-ONLY `log` — a pin asserts the argv carries
+# no mutating verb. Ownership: surveys-live is operator-owned while the runner is uid 10002, so git
+# would refuse with "dubious ownership"; we clear it with the INLINE `-c safe.directory=<root>` flag
+# (a command-scoped config, NO compose/deploy change, NO persistent config write) rather than a new
+# env mount. network_mode:none is irrelevant — `git log` is local.
+
+# A NUL byte terminates each commit record and a Unit-Separator (0x1f) separates the fields inside it,
+# so a multi-line release-note body can never be confused with a field/record boundary (neither byte
+# can appear in git field output). Fields: full sha, short sha, author name, ISO author date, subject.
+_HISTORY_FMT = "%H\x1f%h\x1f%an\x1f%ad\x1f%s\x1e%b\x1f"
+_HISTORY_RECORD_SEP = "\x1e"   # between the header-fields chunk and the body, then NUL ends the record
+
+# Only READ-ONLY git verbs may ever appear in a history-job argv. `log` is the whole surface; the
+# allowlist exists so a pin (and a future maintainer) can assert no mutating verb leaked in.
+_HISTORY_READONLY_VERBS = frozenset({"log"})
+
+# Cap the number of commits returned so a survey with a very long history cannot make the page or the
+# job output unbounded. Newest-first, so the cap keeps the most recent releases.
+_HISTORY_MAX = 200
+
+
+def _history_argv(package_root: Path, surveys_root: Path) -> list[str]:
+    """The ONE canonical argv for the read-only survey history log. Built here so a pin can assert its
+    shape (read-only verb + safe.directory + pathspec). `-C package_root` runs git in the package dir;
+    `-- .` limits the log to commits that touched THIS survey's package (its survey.yaml + EDIs), which
+    is exactly the per-survey audit trail the History tab shows. `%x00` terminates records."""
+    safe_dir = str(surveys_root.resolve())
+    return [
+        "git",
+        "-c", f"safe.directory={safe_dir}",
+        "-C", str(package_root),
+        "log",
+        f"--max-count={_HISTORY_MAX}",
+        f"--pretty=format:{_HISTORY_FMT}%x00",
+        "--date=iso-strict",
+        "--", ".",
+    ]
+
+
+def _parse_history(stdout: str) -> list[dict]:
+    """Parse the NUL-delimited git-log output into a list of {sha, short, author, date, subject, body}.
+    Records are NUL-separated; within a record the header fields are 0x1f-separated and the body is
+    after a 0x1e marker. Robust to a trailing empty record (git appends no final NUL for the last
+    line's %x00 in some versions — an empty/blank record is skipped)."""
+    out: list[dict] = []
+    for raw_rec in stdout.split("\x00"):
+        rec = raw_rec.strip("\n")
+        if not rec.strip():
+            continue
+        header, _, body = rec.partition(_HISTORY_RECORD_SEP)
+        parts = header.split("\x1f")
+        if len(parts) < 5:
+            continue
+        sha, short, author, date, subject = parts[0], parts[1], parts[2], parts[3], parts[4]
+        out.append({
+            "sha": sha, "short": short, "author": author, "date": date,
+            "subject": subject, "body": body.strip("\x1f").strip("\n"),
+        })
+    return out
+
+
+def run_history_job(package_root: Path, *, surveys_root: Path) -> dict:
+    """Handle a `history` edit-job: the READ-ONLY git log of the survey's package directory (version,
+    release note, when, author) for the History tab. Runs `git log` via a subprocess with the inline
+    safe.directory flag; returns {ok, commits:[...]} or {ok:False, error} on a git failure (a survey
+    whose package is not under git, or a git error, degrades to a curator-facing message — never a
+    crash). The argv carries ONLY the read-only `log` verb (asserted by a pin)."""
+    survey_yaml = package_root / "survey.yaml"
+    if not survey_yaml.is_file():
+        raise EditError(f"survey.yaml not found under {package_root.name}")
+    argv = _history_argv(package_root, surveys_root)
+    # Defence in depth: this must never carry a mutating verb. The verb is argv[argv.index('log')-agnostic]
+    # — find the first bare token after the options that is a git subcommand. Simpler: assert 'log' is
+    # present and no known-mutating verb is.
+    verb = _history_subcommand(argv)
+    if verb not in _HISTORY_READONLY_VERBS:
+        raise EditError(f"history job refused: non-read-only git verb {verb!r}")
+    try:
+        proc = subprocess.run(  # noqa: PLW1510 -- returncode inspected below
+            argv, capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise EditError(f"could not read survey history: {type(exc).__name__}") from exc
+    if proc.returncode != 0:
+        # Not a git checkout, or git error — surface a clean message, not a crash. stderr is bounded.
+        detail = (proc.stderr or "git log failed").strip().splitlines()
+        raise EditError("could not read survey history: "
+                        + (detail[0][:200] if detail else "git log failed"))
+    return {"ok": True, "commits": _parse_history(proc.stdout)}
+
+
+def _history_subcommand(argv: list[str]) -> str | None:
+    """The git SUBCOMMAND (verb) in a history argv: the first token after argv[0]=='git' that is not an
+    option (`-x`) and is not the value consumed by `-c`/`-C` (which take a following argument). Used by
+    run_history_job's read-only assertion and by the history read-only pin."""
+    i = 1
+    while i < len(argv):
+        tok = argv[i]
+        if tok in ("-c", "-C"):
+            i += 2   # skip the flag AND its value
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        return tok   # first bare token = the subcommand/verb
+    return None
 
 
 def run_merge_job(package_root: Path, *, patch: dict, bump: str, note: str, today: str,
