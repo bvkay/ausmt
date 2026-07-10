@@ -75,15 +75,18 @@ def test_no_other_usarray_station_fails():
         f"usarray gate failures diverged from the pinned negative controls: {fails}")
 
 
-def test_ccmt_uniform_zrot_derotation_acceptance():
-    """FAILS IF: a ccmt-2017 station (served survey; uniform ZROT=8, ROTATION=FIX) is not
-    de-rotated, its quadrants break after de-rotation, or its PT azimuth does not shift by
-    exactly the de-rotation angle (axial +8 deg — the empirically-pinned sign)."""
+def test_ccmt_uniform_zrot_served_as_stored_r3():
+    """FAILS IF: a ccmt-2017 station (served survey; survey-uniform ZROT=8, ROTATION=FIX — the
+    declination-class R3 case of frame POLICY v2) is ROTATED, or served without the declared
+    angle recorded, or its quadrants break as-stored. Owner ruling: the archive respects
+    acquisition frames; 8 deg ~ the local declination. (Supersedes the v1 '+8 deg shift' pin —
+    the de-rotation SIGN is now pinned by the twin test below and the synthetic round-trips.)"""
     f = _find(REALDATA / "ccmt-2017", "CC01.edi")
-    # as-read (no gate): PT azimuth in the source (rotated) frame
+    # as-read pt_az (the source acquisition frame)
     tf_raw = mtm.read(f)
     per, comp_raw = mtm.components_from_tf(tf_raw)
     import _ediparse as ep  # noqa: PLC0415
+
     def _az_series(comp):
         out = []
         for i in range(len(per)):
@@ -93,70 +96,60 @@ def test_ccmt_uniform_zrot_derotation_acceptance():
             if a is not None:
                 out.append(a)
         return out
-    az_raw = _az_series(comp_raw)
 
+    az_raw = _az_series(comp_raw)
     parsed = bp._parse_one_edi(f)
     assert "skip" not in parsed
     fr = parsed["frame"]
-    assert fr["derotated"] is True and fr["impedance_rotation_deg_source"] == 8.0
+    assert fr["derotated"] is False, "R3: ccmt must be served AS STORED (declination-class angle)"
+    assert fr["frame_served"] == "declared-azimuth"
+    assert fr["declared_azimuth_deg"] == 8.0
+    assert any("declared acquisition frame" in n and "NOT rotated" in n
+               for n in parsed["frame_notes"])
     ck = fr["convention_check"]
-    assert ck["verdict"] == "ok", "quadrants must remain Q1/Q3 after de-rotation"
+    assert ck["verdict"] == "ok", "quadrants must hold in the as-stored frame"
     assert 0 < ck["phs_xy_median_deg"] < 90 and -180 < ck["phs_yx_median_deg"] < -90
-    # axial shift: de-rotating a frame at +8 deg moves pt_az by exactly +8 (mod 180)
-    tf_d = mtm.read(f)
-    ev = conv.parse_frame_evidence(__import__("_ediparse").read_norm(f))
-    disp = conv.frame_disposition(ev, tf_d._rotation_angle, conv.z_present_mask(tf_d),
-                                  bool(tf_d.has_tipper()), int(tf_d.period.size))
-    conv.apply_derotation(tf_d, disp)
-    _, comp_d = mtm.components_from_tf(tf_d)
-    az_d = _az_series(comp_d)
-    assert len(az_d) == len(az_raw)
-    diffs = [((b - a) % 180.0) for a, b in zip(az_raw, az_d)]
-    diffs = [d - 180.0 if d > 90 else d for d in diffs]
-    assert max(abs(d - 8.0) for d in diffs) < 0.01, "pt_az must shift by exactly +8 deg per period"
+    # served products EQUAL the as-read source: per-period pt_az unshifted (no silent rotation)
+    tf_chk = mtm.read(f)
+    _, comp_chk = mtm.components_from_tf(tf_chk)
+    az_chk = _az_series(comp_chk)
+    assert az_chk == az_raw
 
 
 def test_auslamp_pax_derotation_matches_custodian_twin():
-    """FAILS IF: per-period (PAX) de-rotation of a served AusLAMP-SA station does not reproduce
-    the custodian's own geographic-frame export (the harness twin) to near machine precision —
-    the strongest available ground truth for the de-rotation formula AND for the per-period
-    disposition that keeps the flagship servable."""
-    served_root = Path(__file__).resolve()
-    for up in served_root.parents:
-        cand = up / "ausmt-surveys" / "surveys" / "auslamp-sa"
-        if cand.is_dir():
-            served = cand
-            break
-    else:
-        pytest.skip("realdata corpus not present (AUSMT_REALDATA unset) — sibling ausmt-surveys "
-                    "checkout with auslamp-sa not found for the twin pin")
+    """FAILS IF: per-period (R1/PAX) de-rotation of a PAX-rotated AusLAMP-SA specimen does not
+    reproduce the custodian's own zero-reference export to near machine precision — the strongest
+    available ground truth for the de-rotation formula AND the R1 per-period disposition.
+
+    RELOCATED (2026-07-10, architect-directed): the pin used to read the served
+    ausmt-surveys/auslamp-sa files, which are scheduled for retirement (replaced by seven
+    individual campaign surveys). The four twin pairs now live in the local harness at
+    .audit/realdata/_specimens/auslamp-pax/{pax,zero}/ (see its README.txt) so the pin survives
+    the corpus swap. _specimens is underscore-prefixed, so discover_work never builds it."""
+    spec = REALDATA / "_specimens" / "auslamp-pax"
+    if not spec.is_dir():
+        pytest.skip("realdata corpus not present (AUSMT_REALDATA unset) — _specimens/auslamp-pax "
+                    "twin specimens not found")
+    import _ediparse as ep  # noqa: PLC0415
     pairs = 0
-    for name in ("SA066.edi", "SA069.edi", "SA227.edi", "SA242.edi"):
-        sp = served / "transfer_functions" / "edi" / name
-        hp = None
-        for sub in ("auslamp-sa-1-musgraves", "auslamp-sa-2-gawler"):
-            c = REALDATA / sub / "transfer_functions" / "edi" / name
-            if c.exists():
-                hp = c
-                break
-        if not (sp.exists() and hp):
+    for sp in sorted((spec / "pax").glob("*.edi")):
+        hp = spec / "zero" / sp.name
+        if not hp.exists():
             continue
         tf_s = mtm.read(sp)
-        ev = conv.parse_frame_evidence(__import__("_ediparse").read_norm(sp))
-        assert ev["zrot"] and len(conv._uniq_eps(conv._mask_sentinels(ev["zrot"]))) > 1, \
-            f"{name}: served twin must carry per-period ZROT (PAX) for this pin to mean anything"
+        ev = conv.parse_frame_evidence(ep.read_norm(sp))
+        assert ev["zrot"] and len(conv._uniq_eps(conv._mask_sentinels(ev["zrot"]))) > 1,             f"{sp.name}: specimen must carry per-period ZROT (PAX) for this pin to mean anything"
         disp = conv.frame_disposition(ev, tf_s._rotation_angle, conv.z_present_mask(tf_s),
                                       bool(tf_s.has_tipper()), int(tf_s.period.size))
-        assert disp.action == "derotate", f"{name}: expected per-period de-rotation"
+        assert disp.action == "derotate", f"{sp.name}: expected per-period de-rotation (R1)"
         conv.apply_derotation(tf_s, disp)
         Zs = np.asarray(tf_s.impedance.data)
         Zh = np.asarray(mtm.read(hp).impedance.data)
         assert Zs.shape == Zh.shape
-        keep = np.isfinite(Zs) & np.isfinite(Zh) & (np.abs(Zh) > 0) & (np.abs(Zh) < 1e8) \
-            & (np.abs(Zs) < 1e8)
+        keep = np.isfinite(Zs) & np.isfinite(Zh) & (np.abs(Zh) > 0) & (np.abs(Zh) < 1e8)             & (np.abs(Zs) < 1e8)
         rel = np.abs(Zs - Zh)[keep] / np.abs(Zh)[keep]
         assert rel.size and float(np.median(rel)) < 1e-6, (
-            f"{name}: de-rotated served Z does not match the custodian twin "
+            f"{sp.name}: de-rotated specimen Z does not match the custodian twin "
             f"(median rel {float(np.median(rel)):.2e})")
         pairs += 1
     assert pairs >= 3, "too few twin pairs found — the pin lost its ground truth"

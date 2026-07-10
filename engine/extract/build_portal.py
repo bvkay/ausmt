@@ -961,7 +961,7 @@ def _mini_yaml(text: str) -> dict:
     return result if isinstance(result, dict) else {}
 
 
-def _parse_one_edi(p):
+def _parse_one_edi(p, uniform_mode="auto"):
     """The expensive per-EDI compute: the mt_metadata parse + C25 convention gates + coord-QC +
     shared TF/science math. Returns a plain JSON-serializable dict {record, tf, sci, email_flag,
     coord_warn, frame, frame_notes} — or {"skip": {station, gate, reason}} when a convention gate
@@ -972,9 +972,15 @@ def _parse_one_edi(p):
     byte-identically into the positional products (numpy float64 serialises as a float; verified
     by test).
 
-    C25 gate order matters: Gate 1 (frame) runs FIRST and may DE-ROTATE the in-memory TF to
-    geographic north, so the record/components/science below — and Gate 2's quadrant check — all
-    see the SERVED frame. The source file bytes are never touched (D1)."""
+    `uniform_mode` is the SURVEY-scope frame-policy verdict (POLICY v2: R2/R3/R4) from
+    conv.classify_survey_frame — a station's disposition for a survey-uniform declared angle
+    depends on its SIBLINGS' angles, so process_edis computes it survey-wide, threads it here AND
+    into the C18 cache key (a cached parse is only valid under the same policy context). "auto" =
+    the single-station default for direct API/test use.
+
+    C25 gate order matters: Gate 1 (frame) runs FIRST and may DE-ROTATE the in-memory TF to the
+    file's declared zero-azimuth reference, so the record/components/science below — and Gate 2's
+    quadrant check — all see the SERVED frame. The source file bytes are never touched (D1)."""
     tfobj = mtm.read(p)                          # parse ONCE, reuse below
     _raw = ep.read_norm(p)   # raw EDI text: frame evidence + coord-QC + processing-metadata scrape
     _did = cat.grab(_raw, "DATAID")
@@ -986,7 +992,8 @@ def _parse_one_edi(p):
     _ev = conv.parse_frame_evidence(_raw)
     _n_per = int(tfobj.period.size) if tfobj.period is not None else 0
     _disp = conv.frame_disposition(_ev, getattr(tfobj, "_rotation_angle", None),
-                                   conv.z_present_mask(tfobj), bool(tfobj.has_tipper()), _n_per)
+                                   conv.z_present_mask(tfobj), bool(tfobj.has_tipper()), _n_per,
+                                   uniform_mode=uniform_mode)
     if _disp.action == "fail":
         try:
             _sid, _ = cat.parse_dataid(_did)
@@ -1087,12 +1094,26 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         sys.exit("ERROR: the mt_metadata stack is required for the build "
                  "(pip install -r environments/requirements-mtmetadata-lock.txt).")
     _use_cache = cache is not None and getattr(cache, "enabled", False)
+    # ---- C25 POLICY v2 survey-scope pre-scan (cheap lexical pass; read_norm is cached so the
+    # text is read once and reused by the per-station parse below). A station's disposition for a
+    # survey-uniform declared angle depends on its SIBLINGS' angles (R2 inconsistent-survey vs
+    # R3 declination-class vs R4 analysis-frame), so the mode is classified survey-wide here and
+    # folded into the C18 cache key via `kind` — a cached parse must never replay under a
+    # DIFFERENT policy context (e.g. a new station flipping the survey from R3 to R2).
+    _angles = []
     for p in sorted(edi_paths):
-        _ck = cache.key(edi_sha=sha256(p), survey_digest=survey_digest, kind="parse") if _use_cache else None
+        try:
+            _angles.append(conv.declared_uniform_angle(conv.parse_frame_evidence(ep.read_norm(p))))
+        except Exception:  # noqa: BLE001  (unreadable file -> the per-station loop reports it)
+            continue
+    _fmode, _fctx = conv.classify_survey_frame(_angles)
+    _kind = f"parse#{_fctx}"
+    for p in sorted(edi_paths):
+        _ck = cache.key(edi_sha=sha256(p), survey_digest=survey_digest, kind=_kind) if _use_cache else None
         parsed = cache.get_json(_ck) if _ck else None
         if parsed is None:
             try:
-                parsed = _parse_one_edi(p)
+                parsed = _parse_one_edi(p, uniform_mode=_fmode if _fmode != "none" else "auto")
             except Exception as e:  # noqa: BLE001
                 print(f"  PARSE FAIL {p.name}: {e}", file=sys.stderr)
                 continue

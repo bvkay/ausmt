@@ -455,4 +455,68 @@ def test_process_edis_reports_gate_drops(tmp_path):
     assert len(drops) == 1 and "[sign-convention]" in drops[0]["reason"]
     (_p, r) = stations[0]
     assert r["frame"]["convention_check"]["verdict"] == "ok"
-    assert r["frame"]["frame_served"].startswith("geographic-north")
+    assert r["frame"]["frame_served"] == "declared-zero"
+    assert r["frame"]["declared_azimuth_deg"] == 0.0
+
+
+# ---------------------------------------------------------------------------------------------
+# POLICY v2 (owner-ruled): R3 record-not-rotate and R2 survey-inconsistency
+# ---------------------------------------------------------------------------------------------
+def test_small_uniform_angle_served_as_stored_r3(tmp_path):
+    """FAILS IF: a survey-uniform declination-class declaration (|theta| <= FRAME_KEEP_MAX_DEG,
+    here 8 deg — the ccmt-2017 class) is ROTATED, mislabelled, or served without the declared
+    angle recorded. Owner ruling: the archive respects acquisition frames — serve AS STORED,
+    record honestly. The precondition assert proves the fixture really is rotated as-read, so a
+    gate that rotates it would visibly diverge from the as-read products (the pin can fail)."""
+    base = bp._parse_one_edi(VULCAN)
+    rot_text = _vulcan_rotated(8.0)
+    # PRECONDITION: as-read the fixture pt_az really is shifted vs the original (~ -8 deg)
+    p_raw = _write(tmp_path, "r3_raw_check.edi", rot_text)
+    tf_raw = mtm.read(p_raw)
+    assert np.allclose(np.asarray(tf_raw._rotation_angle), 8.0)
+    parsed = _parse(tmp_path, "r3.edi", rot_text)
+    assert "skip" not in parsed
+    fr = parsed["frame"]
+    assert fr["derotated"] is False, "R3 must serve AS STORED — no rotation"
+    assert fr["frame_served"] == "declared-azimuth"
+    assert fr["declared_azimuth_deg"] == 8.0
+    assert fr["impedance_rotation_deg_source"] is None   # nothing was rotated
+    assert any("declared acquisition frame" in n and "NOT rotated" in n
+               for n in parsed["frame_notes"])
+    # served products EQUAL the as-read (rotated) fixture, i.e. shifted ~8 deg vs the original
+    az_base, az_srv = _pt_az_row(base), _pt_az_row(parsed)
+    n = min(len(az_base), len(az_srv))
+    worst_vs_base = max(_circ180(a, b) for a, b in zip(az_base[:n], az_srv[:n]))
+    assert worst_vs_base > 5.0, (
+        "served pt_az matches the UNROTATED original — the station was silently de-rotated; "
+        "R3 requires as-stored serving")
+    assert fr["convention_check"]["verdict"] == "ok"
+
+
+def test_survey_inconsistent_angles_derotate_r2(tmp_path):
+    """FAILS IF: a survey whose per-station uniform angles disagree beyond
+    SURVEY_ANGLE_SPREAD_MAX_DEG (the tumby-bay 20/10/24/-4 class) is NOT de-rotated to one frame.
+    Both fixture angles are individually <= FRAME_KEEP_MAX_DEG (they would RECORD standalone —
+    asserted as the precondition), so this pins that the SURVEY context flips the outcome."""
+    t8, t14 = _vulcan_rotated(8.0), _vulcan_rotated(14.0)
+    # PRECONDITION: standalone (no survey context) the 8-deg file RECORDS, not rotates
+    solo = _parse(tmp_path, "solo8.edi", t8)
+    assert solo["frame"]["derotated"] is False
+    assert solo["frame"]["frame_served"] == "declared-azimuth"
+    # survey context: 8 vs 14 -> spread 6 > 5 -> R2 -> de-rotate BOTH to zero
+    sdir = tmp_path / "survey"
+    sdir.mkdir()
+    (sdir / "A.edi").write_text(t8, encoding="latin-1")
+    (sdir / "B.edi").write_text(t14, encoding="latin-1")
+    report = {}
+    stations, tf_rows, sci_rows = bp.process_edis(
+        sorted(sdir.glob("*.edi")), "T", "org", "t-slug", report=report)
+    assert len(stations) == 2
+    base_az = _pt_az_row(bp._parse_one_edi(VULCAN))
+    for (_p, r), row in zip(stations, tf_rows):
+        assert r["frame"]["derotated"] is True, f"{_p.name}: R2 must de-rotate the whole survey"
+        assert r["frame"]["frame_served"] == "declared-zero"
+        az = [a for a in row[bp.tfmod.TF_COLUMNS.index("pt_az")] if a is not None]
+        n = min(len(az), len(base_az))
+        worst = max(_circ180(a, b) for a, b in zip(az[:n], base_az[:n]))
+        assert worst <= 0.2, f"{_p.name}: de-rotated products must match the unrotated original"

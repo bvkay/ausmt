@@ -17,56 +17,73 @@ load-bearing for spectra) AND `_rotation_angle` (cross-checked; disagreement = F
 has no rotate utility (verified: no `def rotate` in the installed package; mtpy not a dep), so the
 de-rotation is implemented here and pinned (below).
 
-Disposition (evidence hierarchy):
-1. **Impedance branch, >ZROT present** — ZROT is the stored-tensor frame (the EDI standard's
-   `ROT=ZROT` block attribute). Uniform 0 -> pass. Uniform nonzero -> DE-ROTATE to geographic:
-   `Z' = R(-θ) Z R(-θ)^T`, `R(β) = [[cosβ, sinβ], [-sinβ, cosβ]]`. Per-period varying (all angles
-   finite) -> DE-ROTATE PER PERIOD (see the flagship ruling below). HMEAS azimuths on this branch
-   are ACQUISITION metadata, never a gate trigger (USArray: sensor azimuths ±19° with ZROT=0 =
-   processed-to-geographic; an unconditional azimuth trigger would mass-flag correct data).
-2. **Impedance branch, no ZROT** — coherent rotated HMEAS pair (HY = HX+90 ±0.5°, HX ≠ 0) is the
-   frame declaration -> de-rotate by HX. Incoherent azimuths (harness-Tasmania HX=180/HY=90
-   placeholders) are NOT evidence -> serve + record "frame not machine-verifiable"; Gate 2 still
-   checks. RHOROT nonzero with no ZROT -> FAIL (rho declared rotated, Z frame undeclared).
-3. **Spectra branch** — uniform ROTSPEC and/or coherent azimuths; when both exist and
-   |HMEAS-implied| == |ROTSPEC| they are ONE rotation (the Black Hill 2005 GEOTOOLS shape:
-   HX=90/HY=180 + ROTSPEC=90), not two; disagreement -> FAIL naming both. Nonzero -> de-rotate
-   Z AND tipper together (same rotated channels).
-4. **Tipper frame is independent of Z**: >TROT/>TROT.EXP when present (AusLAMP-SA serves
-   PAX-rotated Z with TROT=0 — tipper untouched); else tipper-block `ROT=ZROT` follows θ_Z; else
-   not de-rotated, with a note when θ_Z ≠ 0. Errors propagate in quadrature
-   (`var' = Σ (R_ik R_jl)² var_kl`). Periods with PARTIAL components are masked wholesale before
-   rotation (a fill would smear into every element) and counted in a note.
-5. **FAIL (station skipped, loud, structured)** is reserved for the UNKNOWABLE: sentinel (~1e32)
-   angles at data-bearing periods; text-vs-reader disagreement; per-period rotation in a
-   non-descending-frequency file (alignment unverifiable); ROTSPEC-vs-azimuth conflict; RHOROT
-   ambiguity. Every reason names the angles and the fix. Fail = skip + stderr GATE FAIL line +
-   build_report `stations_dropped` {station, reason} + a survey warning.
+Disposition — frame POLICY v2 (owner-ruled 2026-07-10; supersedes the v1 "de-rotate everything
+declared"). Owner context: the MT community collects AND processes in geomagnetic north; nearly
+all Australian data lives in that acquisition frame; 3D modelling does not want strike rotations
+forced on it. The archive therefore respects acquisition frames. Evidence hierarchy is unchanged
+(ZROT wins on the impedance branch; azimuths only where nothing else declares; ROTSPEC+azimuths
+on spectra; Black Hill |HMEAS-implied| == |ROTSPEC| is ONE rotation, disagreement FAILs).
+Survey-scope classification (classify_survey_frame; the C18 cache key carries the policy context
+via kind="parse#<ctx>", since a station's disposition depends on its siblings' angles):
 
-**Flagship ruling (supersedes "nonuniform -> FAIL"; adversarially confirm).** The served
-AusLAMP-SA (396 stations) declares `ROTATION=PAX` with per-period ZROT — the impedance is
-genuinely principal-axis-rotated per frequency (served curves/azimuths were frame-mixed).
-Ground truth: de-rotating the served files by their per-period ZROT reproduces the custodian's
-own geographic-frame exports (the .audit harness twins) to machine precision (median relative
-residual ~0 vs 0.15-0.39 for identity; 4 twin pairs; pinned in
-`test_convention_gates_realdata.py`). A fully-specified per-period rotation is exactly invertible
-— the "no single frame exists" rationale for FAIL does not hold for this class, and a literal
-nonuniform->FAIL kills the flagship. Ruling implemented: fully-specified -> de-rotate per period;
-unknowable -> FAIL. ccmt-2017 (uniform ZROT=8, ≈ the local declination), olympic-dam-2004
-(ZROT=TROT=-60), tumby-bay (ZROT=20/10/24/356) de-rotate under the same rule.
+* **R1 — per-period nonuniform rotation (PAX class): de-rotate per period** to the file's
+  declared zero-azimuth reference. Frame MIXING is unservable. Z0(i) = R(-θi) Z(i) R(-θi)^T,
+  T0(i) = T(i) R(-θi)^T, R(β) = [[cosβ, sinβ], [-sinβ, cosβ]]; tipper independently under its own
+  TROT (AusLAMP-SA: PAX-rotated Z with TROT=0 — tipper untouched); errors in quadrature; partial
+  periods masked wholesale before rotation. Pinned by the custodian-twin proof (below) and the
+  synthetic round-trips. (auslamp-sa 396 stations — de-rotated while it remains served; the
+  compilation is scheduled for retirement in favour of seven campaign surveys.)
+* **R2 — station-uniform but survey-inconsistent** (per-station angles spreading >
+  SURVEY_ANGLE_SPREAD_MAX_DEG = 5° within one survey): de-rotate the whole survey to zero — one
+  survey must serve one frame. (tumby-bay 20/10/24/356.)
+* **R3 — survey-uniform |θ| ≤ FRAME_KEEP_MAX_DEG = 15°: serve AS STORED.** An honest
+  acquisition-frame (declination-class) declaration; the data is NOT rotated; the frame fields
+  record frame_served="declared-azimuth" + declared_azimuth_deg and the conditioning note reads
+  "served in its declared acquisition frame, x-axis θ° from the file's zero/geographic
+  reference". (ccmt-2017 +8° ≈ local declination — untouched, recorded.)
+* **R4 — survey-uniform |θ| > 15°: de-rotate to zero.** Beyond any Australian declination — an
+  analysis/nonstandard frame, wrong for a common archive and map display. (olympic-dam-2004
+  ZROT=TROT=-60; the synthetic Black Hill spectra shape at 90°.)
+* **FAIL (station skipped, loud, structured)** — reserved for the UNKNOWABLE: sentinel (~1e32)
+  angles at data-bearing periods; text-vs-reader disagreement; per-period rotation in a
+  non-descending-frequency file; ROTSPEC-vs-azimuth conflict; RHOROT-rotated with the Z frame
+  undeclared. Every reason names the angles and the fix (build_report stations_dropped + survey
+  warning + stderr GATE FAIL line).
 
-**Serving note (deliberate correction):** served derived products CHANGE for auslamp-sa (396),
-ccmt-2017 (55), olympic-dam-2004 (46) and tumby-bay (35) stations — they now serve in geographic
-north. Source EDI bytes are NEVER rewritten (D1 byte-fidelity); the canonical/served XML remains
-mt_metadata-faithful to the source (it carries the source's declared rotation). Open item: the
-EMTF XML's own orientation statements for rotated sources remain a normalize()-surface honesty
-question (final-audit 4.2 class), out of scope here.
+The 15° / 5° thresholds are v1 POLICY values (owner-tunable), single-sourced in _conventions.py
+(FRAME_KEEP_MAX_DEG, SURVEY_ANGLE_SPREAD_MAX_DEG). Rationale: 15° bounds the Australian
+declination range; 5° bounds honest per-survey processing variation.
+
+**Frame-label honesty.** The de-rotation target and all labels are the file's DECLARED
+ZERO-AZIMUTH REFERENCE — geographic north per the EDI convention, but de facto
+geomagnetic/acquisition north for compass-referenced surveys without declination stamps. Field
+values: frame_served = "declared-zero" | "declared-azimuth" (+ declared_azimuth_deg). Nothing
+asserts absolute geographic where the file does not prove it; the absolute-frame ambiguity of
+undeclared frames is stated, not papered over.
+
+**Custodian-twin ground truth (pins the formula, the sign and the R1 disposition).** De-rotating
+the PAX-rotated AusLAMP-SA exports by their per-period ZROT reproduces the custodian's own
+zero-reference exports to machine precision (median relative residual ~0 vs 0.15-0.39 for
+identity; 4 twin pairs). The four twin pairs are preserved at
+.audit/realdata/_specimens/auslamp-pax/{pax,zero}/ (local harness; retirement-proofed — the
+served compilation the pax/ copies came from is scheduled for deletion), consumed by
+test_convention_gates_realdata.py. The neighbour PT-azimuth arbitration was run and reported
+AMBIGUOUS (no discriminating power at 8° against ~50° regional differences); the sign rests on
+the twin proof, not on it.
+
+**Serving note (deliberate corrections):** derived products CHANGE for auslamp-sa (396,
+per-period de-rotation), olympic-dam-2004 (46, -60° de-rotation) and tumby-bay (36, R2
+de-rotation) — 478 stations; ccmt-2017 serves byte-identically to before the gates (as stored)
+with its 8° frame now RECORDED. Source EDI bytes are NEVER rewritten (D1); the canonical/served
+XML remains mt_metadata-faithful to the source. Open item: the EMTF XML's own orientation
+statements for rotated sources remain a normalize()-surface honesty question (final-audit 4.2
+class), out of scope here.
 
 ## D2. Gate 2 — sign-convention quadrant check (T1.2/C25)
 
 Under e^{+iωt}, x=north: arg(Zxy) ∈ Q1, arg(Zyx) ∈ Q3. Per station, MEDIAN phase of each
 off-diagonal over the mid-band (central 60%) of USABLE periods (both phases present, both |Z| ≥
-1e-6 floor), evaluated AFTER Gate-1 de-rotation, on the exact served component arrays. Verdicts:
+1e-6 floor), evaluated on the SERVED component arrays (post-de-rotation, or as-stored under R3). Verdicts:
 * BOTH medians out of quadrant -> FAIL, message names the signature (e^{-iωt} conjugation:
   Zxy→Q4/Zyx→Q2; x/y axis swap: Zxy→Q3/Zyx→Q1 — the three real USArray negative controls'
   shape). This is what makes the C20 induction-arrow "toward conductors" claim safe.
