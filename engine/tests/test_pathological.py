@@ -56,6 +56,40 @@ def test_build_degrades_gracefully(tmp_path):
     assert len(stations) == len(tf_rows) == len(sci_rows)      # rows aligned
 
 
+def test_inf_error_values_do_not_drop_the_station(tmp_path):
+    """FAILS IF: an EDI carrying a literal `inf` in an impedance-ERROR array (MTpy writes inf for
+    dead/infinite-variance points) crashes TF assembly and drops the whole station. Pre-fix
+    (2026-07-10): sig()'s log10(inf) -> int(inf) raised OverflowError, build_portal caught it as a
+    station-level PARSE FAIL, and FOUR real stations (FR01, NF19, NF21, SA26W_2) were silently
+    absent from the served corpus over single bad error points. Post-fix: the station SERVES and
+    the non-finite error points render as null (the None path every consumer already tolerates) —
+    never as a raw inf, which would poison tf.json (non-RFC `Infinity` rejected by JSON.parse)."""
+    edi = tmp_path / "edi"; edi.mkdir()
+    m = re.search(r"(^>ZXY\.VAR[^\n]*\n\s*)(-?\d+\.\d+(?:[eE][+-]?\d+)?)", BASE, flags=re.MULTILINE)
+    assert m, "sample EDI lost its ZXY.VAR block (test set-up wrong)"
+    (edi / "infvar.edi").write_text(BASE[: m.start(2)] + "inf" + BASE[m.end(2):], encoding="latin-1")
+    stations, tf_rows, sci_rows = build_portal.process_edis(
+        sorted(edi.glob("*.edi")), "InfVar", "Test", "infvar", "mt_metadata")
+    files = {r["file"] for _p, r in stations}
+    assert "infvar.edi" in files, \
+        "a single inf error point dropped the whole station (the OverflowError PARSE-FAIL class)"
+    row = next(r for _p, r in stations if r["file"] == "infvar.edi")
+    assert row["n_periods"] > 0
+    assert len(stations) == len(tf_rows) == len(sci_rows)
+    # No raw non-finite value may reach the serialized row (JSON-poison guard).
+    import json as _json
+    import math as _math
+    def _all_finite(o):
+        if isinstance(o, float):
+            return _math.isfinite(o)
+        if isinstance(o, dict):
+            return all(_all_finite(v) for v in o.values())
+        if isinstance(o, (list, tuple)):
+            return all(_all_finite(v) for v in o)
+        return True
+    assert _all_finite(_json.loads(_json.dumps(tf_rows))), "a non-finite value leaked into tf rows"
+
+
 def test_missing_impedance_handled_without_crash(tmp_path):
     """An EDI with the impedance blocks stripped is handled WITHOUT a crash. (The graceful-degradation
     guarantee is build survival; the exact science of a degraded station is not asserted — mt_metadata

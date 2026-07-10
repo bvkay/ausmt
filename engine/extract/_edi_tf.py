@@ -37,6 +37,15 @@ def sig(x, n=4):
         return None
     if x == 0:
         return 0
+    # Non-finite -> None (rides the existing None path every consumer already tolerates). MTpy
+    # writes literal `inf` into impedance-ERROR arrays for dead/infinite-variance points;
+    # math.log10(inf) -> int(inf) raised OverflowError here, build_portal caught it as a
+    # station-level "PARSE FAIL" and SILENTLY DROPPED the whole station (2026-07-10: FR01, NF19,
+    # NF21, SA26W_2 — 4 real stations lost from the served corpus over single bad error points).
+    # None serializes as JSON null ("no finite error estimate", honest); returning inf raw would
+    # poison tf.json (Python json emits non-RFC `Infinity`, which browsers' JSON.parse rejects).
+    if not math.isfinite(x):
+        return None
     return round(x, max(0, n - 1 - int(math.floor(math.log10(abs(x))))))
 
 
@@ -82,7 +91,20 @@ def tf_from_components(periods, comp):
     n = len(periods)
 
     def at(arr, i):
-        return arr[i] if arr and i < len(arr) else None
+        # The single accessor every per-point read flows through — so non-finite values are
+        # filtered HERE, once, instead of per column. MTpy writes literal `inf` into error
+        # arrays for dead points (2026-07-10: FR01/NF19/NF21/SA26W_2), and inf survives round()
+        # (round(inf,1)=inf) while norm_phase would mint a NaN ((inf+180)%360). A leaked
+        # non-finite poisons tf.json: Python json emits non-RFC `Infinity`, browsers' JSON.parse
+        # rejects the whole file. Non-finite -> None = "no value here", the path every column
+        # already handles. sig() carries its own guard too (it also rounds values, e.g. the
+        # period, that do not flow through this accessor).
+        if not arr or i >= len(arr):
+            return None
+        v = arr[i]
+        if isinstance(v, float) and not math.isfinite(v):
+            return None
+        return v
 
     def rt(v):  # tipper-component rounding (C20): 4 dp preserves arrow direction; None stays None
         return round(v, 4) if v is not None else None
