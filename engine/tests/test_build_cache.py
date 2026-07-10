@@ -58,8 +58,19 @@ EXPECTED_WRITES = 3 * N_STATIONS
 def clean_salt(monkeypatch):
     """Force the cache's dirty-checkout gate to see a CLEAN tree so the cache fires (the dev worktree
     is dirty during development; CI is clean). Patches the gate INPUT, not the gate — is_salt_degenerate
-    still runs its real logic over engine_commit + this (clean) result."""
+    still runs its real logic over engine_commit + this (clean) result.
+
+    A4 (the C18c flake): ALSO pin the engine commit and clear the cache-relevant env vars. The commit
+    used to be re-resolved via a live `git rev-parse` inside every in-process build, so concurrent git
+    activity on the machine (2026-07-07: the force-push/merge-queue day) between a test's two builds
+    flipped the salt and full-missed the 'warm' build — a nondeterministic counter failure that passed
+    on rerun. Pinned here so no cache test's counters can ever depend on ambient git or shell state;
+    the salt tests below patch this NAME themselves when they need a moving commit."""
     monkeypatch.setattr(cache_mod, "_dirty_checkout", lambda cwd: False)
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "testpin" if Path(cwd) == build_portal.HERE else None)
+    monkeypatch.delenv("AUSMT_ENGINE_COMMIT", raising=False)
+    monkeypatch.delenv("AUSMT_CACHE_MAX_MB", raising=False)
 
 
 def _make_survey(tmp_path, edis, *, name="Cache Survey", slug="cache-survey",
@@ -92,6 +103,30 @@ def _cache_counters(out: Path) -> dict:
 
 def _digest(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def _forensics(cache_dir: Path, *outs: Path) -> str:
+    """Failure-time context for counter asserts (A4): every build's FULL counters block (salt_fp,
+    degenerate/reason, write_errors/read_errors included) plus the cache dir's entry listing. The
+    2026-07-07 C18c failures were undiagnosable afterwards because none of this was captured; with
+    it, one glance discriminates the classes — degenerate/salt_fp drift -> salt instability;
+    write_errors/read_errors -> environmental I/O; plain counter drift -> content. Evaluated only
+    when an assert actually fails (Python's assert-message lazy evaluation)."""
+    lines = ["--- forensics ---"]
+    for o in outs:
+        try:
+            lines.append(f"{o.name}: {_cache_counters(o)}")
+        except OSError as e:
+            lines.append(f"{o.name}: <no build_provenance.json: {type(e).__name__}: {e}>")
+    try:
+        ents = sorted(p for p in cache_dir.rglob("*") if p.is_file())
+        lines.append(f"cache entries ({len(ents)}):")
+        for p in ents:
+            st = p.stat()
+            lines.append(f"  {p.relative_to(cache_dir)}  {st.st_size}B  mtime={st.st_mtime:.0f}")
+    except OSError as e:
+        lines.append(f"cache dir unreadable: {type(e).__name__}: {e}")
+    return "\n".join(lines)
 
 
 def _served_xml(out: Path):
@@ -217,10 +252,15 @@ def test_stale_cache_refusal_impedance_edit_is_served(tmp_path, clean_salt):
     counters = _cache_counters(out2)
 
     # Exact counter arithmetic (deterministic, §4.6): the edited station misses parse + xml (2) and
-    # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each).
-    assert counters["misses"] == 2, f"the byte-changed EDI did not miss exactly (parse+xml): {counters}"
-    assert counters["hits"] == 3 * (N_STATIONS - 1), f"the unchanged station(s) did not fully hit: {counters}"
-    assert counters["writes"] == 3, f"the edited station did not repopulate its 3 blobs: {counters}"
+    # re-puts parse/xml/meta (3 writes); every OTHER station fully hits (3 each). On failure, dump
+    # both builds' full counters + the cache listing (A4 — the 2026-07-07 C18c failures left nothing
+    # to diagnose from; salt_fp/degenerate/write_errors in the dump now name the class directly).
+    assert counters["misses"] == 2, \
+        f"the byte-changed EDI did not miss exactly (parse+xml): {counters}\n{_forensics(cache, out1, out2)}"
+    assert counters["hits"] == 3 * (N_STATIONS - 1), \
+        f"the unchanged station(s) did not fully hit: {counters}\n{_forensics(cache, out1, out2)}"
+    assert counters["writes"] == 3, \
+        f"the edited station did not repopulate its 3 blobs: {counters}\n{_forensics(cache, out1, out2)}"
 
     xml2 = {p.name: p for p in _served_xml(out2)}
     assert set(xml2) == set(xml1), (sorted(xml1), sorted(xml2))
@@ -493,6 +533,58 @@ def test_c18b_unstamped_cache_meta_reads_as_suspect_not_current(tmp_path, clean_
     assert f"consistency: FAIL {slug}" in txt, txt
 
 
+def test_straddled_build_cannot_poison_the_cache(tmp_path, clean_salt, monkeypatch):
+    """★ THE INCIDENT ROOT CAUSE (M1, Amendment A4). FAILS IF: a survey.yaml edit landing AFTER
+    discovery but BEFORE that survey's per-survey processing lets the straddled build write cache
+    entries whose XML embeds the PRE-edit metadata KEYED under the POST-edit digest — so a
+    subsequent clean warm build serves the pre-edit citation from cache. Independent observable:
+    the citation INSIDE the served XML bytes vs the organisation in the on-disk survey.yaml —
+    never counters, never stamp self-consistency (which is exactly what this poisoning defeats:
+    the poisoned entry's stamp EQUALS the live digest, so the C18b gate stayed green over it).
+
+    Proven failing on pre-fix HEAD: survey.yaml was read TWICE per build — metadata at
+    discover_work, the cache-key digest at the per-survey loop top, a window spanning every
+    preceding survey's work (minutes on the production corpus, where the 2026-07-07 build
+    20260707T002709Z warm-served a stale Olympic Dam citation at hits=3017/misses=0). The fix
+    derives meta AND digest from ONE read in discovery — coherent by construction. The seam here
+    (edit fired right after discover_work returns) is fix-agnostic, so this test still fails if a
+    loop-time re-read is ever reintroduced."""
+    surveys = _make_survey(tmp_path, SAMPLE_EDIS)          # organisation: Test Org
+    sy = surveys / "cache-survey" / "survey.yaml"
+    cache = tmp_path / "cache"
+
+    real_discover = build_portal.discover_work
+
+    def _straddling_discover(a, ap, validator):
+        res = real_discover(a, ap, validator)
+        # The "editor save / gateway publish" lands inside the running build, after discovery.
+        sy.write_text(sy.read_text(encoding="utf-8").replace(
+            "organisation: Test Org", "organisation: Edited Org"), encoding="utf-8")
+        return res
+
+    monkeypatch.setattr(build_portal, "discover_work", _straddling_discover)
+    out1 = tmp_path / "out1"
+    assert _build(surveys, out1, cache) == 0               # the STRADDLED build
+    monkeypatch.setattr(build_portal, "discover_work", real_discover)
+
+    # The straddled build itself must not verify clean under the armed gate: its products derive
+    # from PRE-edit bytes while the live yaml is post-edit (pre-fix HEAD was blind here — the
+    # loop-time digest matched the post-edit yaml, blessing the poisoned products).
+    rc, txt = _verify_data_dir_surveys(out1, surveys)
+    assert rc != 0, f"verify.py blessed a STRADDLED build (C18b blindness, incident shape):\n{txt}"
+
+    # A clean rebuild on the now-stable post-edit tree must serve the POST-edit citation. On
+    # pre-fix HEAD every station HIT the poisoned entries and served 'Test Org' from cache.
+    out2 = tmp_path / "out2"
+    assert _build(surveys, out2, cache) == 0
+    served = _served_xml(out2)
+    assert served, "no XML served (test set-up wrong)"
+    for xp in served:
+        a = _xml_authors(xp)
+        assert a == "Edited Org", \
+            f"POISONED CACHE SERVED: {xp.name} cites {a!r} but the live survey.yaml says 'Edited Org'"
+
+
 def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
     """FAILS IF: a cache populated under a PRE-BUMP entry-format tag is read (hit) by the current
     build instead of MISSING cleanly. Each tag bump re-keys every blob, so a pre-bump entry's key
@@ -648,6 +740,69 @@ def test_torn_entry_xml_without_meta_is_a_miss_not_a_phantom_hit(tmp_path, clean
 
 
 # --------------------------------------------------------------------------------------------------
+# A4: environment-induced I/O failures are survived AND attributable (the Windows AV/indexer class)
+# --------------------------------------------------------------------------------------------------
+
+def test_transient_write_lock_is_retried_persistent_failure_is_counted(tmp_path, monkeypatch):
+    """FAILS IF: (a) a TRANSIENT PermissionError from the atomic rename (a Windows AV/on-access
+    scanner briefly holding the fresh tmp — the other surviving C18c-flake candidate) permanently
+    drops the cache entry, i.e. the retry is gone and the silent spurious-future-miss returns; or
+    (b) a PERSISTENT rename failure goes uncounted (write_errors) or raises into the build.
+    Independent observable: the entry's readability through a FRESH BuildCache instance (on-disk
+    truth, not the writing instance's own tallies), plus the write_errors counter."""
+    import os
+    cache_root = tmp_path / "cache"
+    bc = _bc(root=cache_root)
+    assert bc.enabled, bc.counters()
+
+    real_replace = os.replace
+    state = {"fail": 1}   # fail the next N renames under cache_root, then delegate
+
+    def _flaky_replace(src, dst, *args, **kw):
+        if state["fail"] > 0 and str(dst).startswith(str(cache_root)):
+            state["fail"] -= 1
+            raise PermissionError(13, "held by on-access scanner", str(dst))
+        return real_replace(src, dst, *args, **kw)
+
+    monkeypatch.setattr(cache_mod.os, "replace", _flaky_replace)
+
+    k1 = bc.key(edi_sha="s1", survey_digest="y", kind="xml")
+    bc.put_bytes(k1, "xml", b"payload-1")
+    assert bc.writes == 1 and bc.write_errors == 0, \
+        f"a single transient lock was not absorbed by the retry: {bc.counters()}"
+    fresh = _bc(root=cache_root)
+    assert fresh.get_bytes(k1, "xml") == b"payload-1", \
+        "transient lock dropped the entry (no retry) — the silent spurious-miss class is back"
+
+    state["fail"] = 10 ** 9                        # persistent: every attempt fails
+    k2 = bc.key(edi_sha="s2", survey_digest="y", kind="xml")
+    bc.put_bytes(k2, "xml", b"payload-2")          # must swallow, never raise into the build
+    assert bc.write_errors == 1, f"a persistently dropped write went uncounted: {bc.counters()}"
+    state["fail"] = 0
+    fresh2 = _bc(root=cache_root)
+    assert fresh2.get_bytes(k2, "xml") is None and fresh2.misses == 1, \
+        "a dropped write left a partial entry behind"
+
+
+def test_unreadable_entry_counts_read_error_absent_stays_plain_miss(tmp_path):
+    """FAILS IF: a PRESENT-but-unreadable entry (lock/permissions — simulated with a directory at
+    the entry path: an OSError that is NOT FileNotFoundError, on Windows and POSIX alike) is not
+    distinguished from a cold miss via read_errors — or an ABSENT entry starts counting read_errors,
+    which would smear the deterministic §4.6 miss arithmetic on every clean run."""
+    bc = _bc(root=tmp_path / "cache")
+    k = bc.key(edi_sha="s1", survey_digest="y", kind="xml")
+    assert bc.get_bytes(k, "xml") is None          # absent -> plain miss
+    assert bc.misses == 1 and bc.read_errors == 0, bc.counters()
+    p = bc._path(k, "xml")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.mkdir()                                      # present but unreadable as a file
+    assert bc.get_bytes(k, "xml") is None
+    assert bc.misses == 2 and bc.read_errors == 1, \
+        f"an unreadable entry was indistinguishable from a cold miss: {bc.counters()}"
+    assert bc.corrupt == 0 and bc.hits == 0, bc.counters()
+
+
+# --------------------------------------------------------------------------------------------------
 # C18b (A3): per-survey instrumentation — one stderr line per served survey; deltas sum to the total
 # --------------------------------------------------------------------------------------------------
 
@@ -796,6 +951,75 @@ def test_degenerate_salt_dirty_checkout_no_reads_or_writes(tmp_path, monkeypatch
 
 
 # --------------------------------------------------------------------------------------------------
+# A4: salt stability across in-process builds (the C18c flake class) + its injection companions
+# --------------------------------------------------------------------------------------------------
+
+def test_salt_stable_across_in_process_builds(tmp_path, clean_salt):
+    """FAILS IF: two back-to-back builds in ONE interpreter, over unchanged sources, construct caches
+    whose salt fingerprints differ or whose salt is degenerate — the C18c flake class (the engine
+    commit was re-resolved via a live per-build `git rev-parse`, so git activity or a transient
+    rev-parse failure between a test's two builds flipped the key space and full-missed the warm
+    build). Independent observable: salt_fp digests the ACTUAL key-derivation input of each
+    separately-constructed BuildCache — not a counter derived from itself; the warm-hit assertion
+    ties fingerprint equality to real key resolution."""
+    surveys = _make_survey(tmp_path, SAMPLE_EDIS)
+    cache = tmp_path / "cache"
+    assert _build(surveys, tmp_path / "b1", cache) == 0
+    assert _build(surveys, tmp_path / "b2", cache) == 0
+    c1, c2 = _cache_counters(tmp_path / "b1"), _cache_counters(tmp_path / "b2")
+    assert c1["degenerate"] is False and c2["degenerate"] is False, (c1, c2)
+    assert c1["salt_fp"] == c2["salt_fp"], \
+        f"salt flipped between two in-process builds over unchanged sources: {c1['salt_fp']} != {c2['salt_fp']}"
+    assert c2["hits"] == EXPECTED_WARM_HITS, c2   # fingerprint equality reflects real key resolution
+
+
+def test_salt_instability_is_observable_via_salt_fp(tmp_path, clean_salt, monkeypatch):
+    """Injection companion (Invariant 10: proves the stability observable CAN fail). FAILS IF: an
+    engine commit that CHANGES between two in-process builds does not surface as differing salt_fp
+    values plus a full-miss 'warm' build — the exact 2026-07-07 C18c mechanism, deterministic here."""
+    surveys = _make_survey(tmp_path, SAMPLE_EDIS)
+    cache = tmp_path / "cache"
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "commitA" if Path(cwd) == build_portal.HERE else None)
+    assert _build(surveys, tmp_path / "b1", cache) == 0
+    monkeypatch.setattr(build_portal, "_git_commit_at",
+                        lambda cwd: "commitB" if Path(cwd) == build_portal.HERE else None)
+    assert _build(surveys, tmp_path / "b2", cache) == 0
+    c1, c2 = _cache_counters(tmp_path / "b1"), _cache_counters(tmp_path / "b2")
+    assert c1["salt_fp"] != c2["salt_fp"], "a changed engine commit must change the salt fingerprint"
+    assert c2["hits"] == 0 and c2["misses"] == EXPECTED_COLD_MISSES, \
+        f"a flipped salt must full-miss the warm build (the C18c flake shape): {c2}"
+
+
+def test_git_commit_memoised_per_process_success_only(tmp_path, monkeypatch):
+    """FAILS IF: (a) a successful engine-commit resolution is re-resolved by a later call in the same
+    process (the memo is gone — reopening the live per-build rev-parse the C18c flake rode), or (b) a
+    FAILED resolution is memoised (a later build in the process would be permanently degenerate).
+    Independent observable: real subprocess invocation count under the unpatched resolver."""
+    import subprocess as sp
+    calls = {"n": 0}
+
+    def _counting(cmd, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return b"abc1234\n"
+        raise RuntimeError("transient rev-parse failure")
+
+    monkeypatch.setattr(sp, "check_output", _counting)
+    repo_a, repo_b = str(tmp_path / "repoA"), str(tmp_path / "repoB")
+    try:
+        assert build_portal._git_commit_at(repo_a) == "abc1234"     # resolves, memoised
+        assert build_portal._git_commit_at(repo_a) == "abc1234"     # memo hit ...
+        assert calls["n"] == 1, "a memoised success was re-resolved (per-build rev-parse is back)"
+        assert build_portal._git_commit_at(repo_b) is None          # failure -> None ...
+        assert build_portal._git_commit_at(repo_b) is None          # ... and RETRIED (not memoised)
+        assert calls["n"] == 3, "a FAILED resolution was memoised — later builds stay degenerate"
+    finally:
+        build_portal._GIT_COMMIT_MEMO.pop(repo_a, None)
+        build_portal._GIT_COMMIT_MEMO.pop(repo_b, None)
+
+
+# --------------------------------------------------------------------------------------------------
 # 5. Equivalence (CI guard, design §4.5): warm build == the build that populated its cache
 # --------------------------------------------------------------------------------------------------
 
@@ -850,10 +1074,12 @@ def test_no_change_rebuild_counters_are_deterministic(tmp_path, clean_salt):
     assert c_cold["misses"] == EXPECTED_COLD_MISSES, c_cold
     assert c_cold["writes"] == EXPECTED_WRITES, c_cold
 
-    # warm rw build: all hit, none miss, none write.
+    # warm rw build: all hit, none miss, none write. Forensics on failure (A4): this pair of
+    # counter asserts is the other load-bearing shape the C18c flake class can fire.
     assert _build(surveys, tmp_path / "warm", cache) == 0
     c_warm = _cache_counters(tmp_path / "warm")
-    assert c_warm["hits"] == EXPECTED_WARM_HITS, c_warm
+    assert c_warm["hits"] == EXPECTED_WARM_HITS, \
+        f"{c_warm}\n{_forensics(cache, tmp_path / 'cold', tmp_path / 'warm')}"
     assert c_warm["misses"] == 0, c_warm
     assert c_warm["writes"] == 0, c_warm
 
