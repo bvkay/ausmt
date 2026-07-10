@@ -411,12 +411,16 @@ SURVEY_HUB_JS = """
 # string can never inject markup — coordinates are computed numbers, but the discipline is uniform so a
 # source sweep can assert no innerHTML-with-data path exists.
 #
-# THE PHASE FACT (mirrors gateway/phaseqc.py — the authoritative, pinned server-side spec):
+# THE PHASE FACT (mirrors gateway/phaseqc.py — the authoritative, pinned server-side spec; the
+# EXECUTABLE Node parity pin runs these very functions against phaseqc, fix-round F3):
 #   tf.json t[4] = phs_yx_adj is stored with a +180 presentation shift (engine _edi_tf.norm_phase). The
-#   workbench SUBTRACTS 180 and re-wraps to recover TRUE φyx, plots it on a FULL ±180 axis with the Q3
-#   (−180…−90) band shaded, and classifies against Q3. φxy (t[3]) is stored true, plotted 0…90 with the
-#   Q1 band shaded, classified against Q1. Out-of-quadrant points are drawn RED; each phase plot carries
-#   a verdict footer strip BENEATH it (never overlapping the caption).
+#   workbench SUBTRACTS 180 and re-wraps (FLOORED modulo — JS's truncated % diverges on negatives,
+#   fix-round F1) to recover TRUE φyx, plots it on a FULL ±180 axis with the Q3 (−180…−90) band shaded.
+#   φxy (t[3]) is stored true, plotted 0…90 with the Q1 band shaded. ENGINE-GATE ALIGNED (fix-round F4,
+#   _conventions.py Gate 2): a point draws RED only when outside its band by MORE than
+#   QUADRANT_SLACK_DEG (10°, cross-import-pinned equal to the engine constant); the verdict strip
+#   beneath each phase plot is the MEDIAN of classified points vs band+slack (yx median on the
+#   seam-mapped (−360,0] axis) and carries the median value.
 STATIONS_JS = r"""
 (function () {
   var host = document.getElementById('survey-stations');
@@ -433,12 +437,51 @@ STATIONS_JS = r"""
             pt_max: 7, pt_az: 8, pt_beta: 9, rho_xy_err: 10, rho_yx_err: 11, phs_xy_err: 12,
             phs_yx_err: 13, tzx_re: 14, tzx_im: 15, tzy_re: 16, tzy_im: 17 };
 
-  // ---- phase-quadrant classification (mirrors gateway/phaseqc.py EXACTLY) ----
-  var YX_SHIFT = 180.0, Q1_LO = 0.0, Q1_HI = 90.0, Q3_LO = -180.0, Q3_HI = -90.0;
-  function wrap180(p) { return ((p + 180.0) % 360.0) - 180.0; }
-  function trueYx(stored) { return stored == null ? null : Math.round(wrap180(stored - YX_SHIFT) * 10) / 10; }
-  function inQ1(pxy) { return pxy == null ? null : (pxy >= Q1_LO && pxy <= Q1_HI); }
-  function inQ3(stored) { var v = trueYx(stored); return v == null ? null : (v >= Q3_LO && v <= Q3_HI); }
+  // ---- phase-quadrant classification (mirrors gateway/phaseqc.py EXACTLY — the pinned spec; the
+  // executable Node parity pin runs THESE functions against phaseqc over a boundary sweep) ----
+  var YX_SHIFT = 180.0, Q1_LO = 0.0, Q1_HI = 90.0, Q3_LO = -180.0, Q3_HI = -90.0, SLACK = 10.0;
+  // FLOORED modulo (fix-round F1): JS % is TRUNCATED (keeps the dividend's sign) and does NOT match
+  // Python's floored % on negatives — the truncated version sent every negative stored t[4] (exactly
+  // the wrong-convention stations this feature exists to catch) off-canvas and flipped verdicts (735
+  // sweep mismatches, F3 red). floormod below is CPython's float-% algorithm EXACTLY (fmod + ONE
+  // conditional add), which the executable parity pin requires BIT-identical: the review's
+  // ((x%360)+360)%360 idiom is floored in semantics but its unconditional +360 introduces a 1-ulp
+  // drift on negative remainders that flips 1dp rounding at the slack edges (stored=100.05 ->
+  // inQ3 false vs true — caught by the F3 pin itself, see the fix-round report).
+  function floormod(x, y) { var r = x % y; if (r !== 0 && r < 0) r += y; return r; }
+  function wrap180(p) { return floormod(p + 180.0, 360.0) - 180.0; }
+  // toFixed(1) — NOT Math.round(x*10)/10 — mirrors CPython round(x, 1): both round the EXACT decimal
+  // value of the double (multiplying by 10 first manufactures .5 halves that do not exist in the true
+  // value and rounds them half-up). On a genuine exact tie toFixed is half-up vs Python's half-even,
+  // but 1dp tf.json values (norm_phase rounds t[4] to 1dp) can never produce an exact x.x5 double.
+  function trueYx(stored) { return stored == null ? null : parseFloat(wrap180(stored - YX_SHIFT).toFixed(1)); }
+  // mapYx: the engine gate's wrap-safe yx axis — TRUE phase mapped to (-360, 0] so Q3 ± slack is one
+  // contiguous window and a value near ±180 cannot straddle the seam (phaseqc._map_yx mirror).
+  function mapYx(t) { return t <= 0 ? t : t - 360.0; }
+  // Per-point flags = band ± SLACK (fix-round F4b: a red dot means outside the band by MORE than the
+  // slack), matching the engine gate's bands (phaseqc.in_quadrant_xy / in_quadrant_yx mirrors).
+  function inQ1(pxy) { return pxy == null ? null : (pxy >= Q1_LO - SLACK && pxy <= Q1_HI + SLACK); }
+  function inQ3(stored) {
+    var v = trueYx(stored);
+    if (v == null) return null;
+    var m = mapYx(v);
+    return (m >= Q3_LO - SLACK && m <= Q3_HI + SLACK);
+  }
+  // The engine gate's median (phaseqc._median mirror): sorted; middle, or the mean of the two middles.
+  function medianOf(vals) {
+    var s = vals.slice().sort(function (a, b) { return a - b; });
+    var m = Math.floor(s.length / 2);
+    return (s.length % 2) ? s[m] : 0.5 * (s[m - 1] + s[m]);
+  }
+
+  // ---- data URLs (fix-round F2): ABSOLUTE, never page-relative — from the hub page URL
+  // /gateway/curator/survey/<slug> a relative 'data/...' resolves under /gateway/curator/survey/
+  // and 404s, killing the whole tab. Matches the Overview/context-bar JS. Single-sourced here so the
+  // executable URL parity pin can drive these exact functions.
+  function dataUrl(name) { return '/data/' + name; }
+  function stationJsonUrl(slug2, id) {
+    return '/data/products/' + encodeURIComponent(slug2) + '/' + encodeURIComponent(id) + '/station.json';
+  }
 
   // ---- tiny DOM helpers (no innerHTML with data) ----
   function el(tag, text, cls) {
@@ -603,13 +646,31 @@ STATIONS_JS = r"""
     return wrapPlot('tipper |T| and Re Tzx / Re Tzy (as read)', s);
   }
 
+  // Series classification (phaseqc.classify_series mirror, fix-round F4c): per-point band±slack
+  // flags (the red dots) + the MEDIAN verdict, engine-rule aligned — for yx the median is computed on
+  // the seam-mapped (-360, 0] axis and reported back in (-180, 180] (the engine's med_yx_report rule).
   function classify(vals, mode) {
-    var fn = (mode === 'xy') ? inQ1 : inQ3;
-    var points = (vals || []).map(fn);
+    var points, trues, median = null, medianIn = null;
+    if (mode === 'xy') {
+      points = (vals || []).map(inQ1);
+      trues = (vals || []).filter(function (v) { return v != null; });
+      if (trues.length) {
+        median = medianOf(trues);
+        medianIn = (median >= Q1_LO - SLACK && median <= Q1_HI + SLACK);
+      }
+    } else {
+      points = (vals || []).map(inQ3);
+      trues = (vals || []).map(trueYx).filter(function (v) { return v != null; });
+      if (trues.length) {
+        var medMapped = medianOf(trues.map(mapYx));
+        medianIn = (medMapped >= Q3_LO - SLACK && medMapped <= Q3_HI + SLACK);
+        median = medMapped < -180.0 ? medMapped + 360.0 : medMapped;
+      }
+    }
     var classified = points.filter(function (p) { return p !== null; });
     var anyOut = classified.some(function (p) { return p === false; });
-    var allIn = classified.length > 0 && classified.every(function (p) { return p === true; });
-    return { points: points, any_out: anyOut, all_in: allIn, n: classified.length };
+    return { points: points, any_out: anyOut, n: classified.length,
+             median: median, medianIn: medianIn };
   }
 
   // A plot card: a caption div + the svg. The verdict strip is appended SEPARATELY, beneath.
@@ -620,18 +681,25 @@ STATIONS_JS = r"""
     box.appendChild(svgNode);
     return box;
   }
-  // The verdict footer strip beneath a phase plot (never overlapping the caption). ✓ in-quadrant /
-  // ⚠ out-of-quadrant, with the expected-quadrant text spelled out.
-  function verdictStrip(cls, expectText) {
+  // The verdict footer strip beneath a phase plot (never overlapping the caption). The VERDICT is the
+  // MEDIAN of the classified points vs band+slack (fix-round F4c — the engine gate's rule), and the
+  // strip carries the median value ('expect Q3 (−180…−90°) — median φyx −134.8° — in quadrant ✓').
+  // Red dots (per-point beyond-slack flags) can coexist with a green median verdict — that is the
+  // engine-rule alignment: scattered outliers do not flip a station verdict, a coherent median does.
+  function verdictStrip(cls, expectText, comp) {
     var strip = el('div', null, 'sub');
     strip.style.margin = '.15rem 0 .5rem';
-    if (cls.n === 0) { strip.textContent = expectText + ' — no phase data'; return strip; }
-    if (cls.any_out) {
-      strip.textContent = expectText + ' — out of quadrant ⚠';
-      strip.style.color = '#D9534F';
-    } else {
-      strip.textContent = expectText + ' — in quadrant ✓';
+    if (cls.n === 0 || cls.median == null) {
+      strip.textContent = expectText + ' — no phase data';
+      return strip;
+    }
+    var medTxt = 'median ' + comp + ' ' + cls.median.toFixed(1) + '°';
+    if (cls.medianIn) {
+      strip.textContent = expectText + ' — ' + medTxt + ' — in quadrant ✓';
       strip.style.color = '#5BAE6A';
+    } else {
+      strip.textContent = expectText + ' — ' + medTxt + ' — out of quadrant ⚠';
+      strip.style.color = '#D9534F';
     }
     return strip;
   }
@@ -697,8 +765,8 @@ STATIONS_JS = r"""
     var panel = factsPanel(cat, sc, null, buildId, lagPending);
     detail.appendChild(panel);
     // Enrich with the per-station station.json (frame/conditioning/QA) if the products tree is served.
-    var stStr = encodeURIComponent(slug) + '/' + encodeURIComponent(cat[C.id]) + '/station.json';
-    fetchJson('data/products/' + stStr).then(function (station) {
+    // ABSOLUTE url via the single-sourced helper (fix-round F2 — a page-relative fetch 404s here).
+    fetchJson(stationJsonUrl(slug, cat[C.id])).then(function (station) {
       if (station && !station.__missing) {
         var enriched = factsPanel(cat, sc, station, buildId, lagPending);
         detail.replaceChild(enriched, panel);
@@ -716,9 +784,9 @@ STATIONS_JS = r"""
     if (!t) { plots.appendChild(el('p', 'No response-curve data served for this station.', 'sub')); detail.appendChild(plots); return; }
     var rp = rhoPlot(t); if (rp) plots.appendChild(rp);
     var pxy = phiXyPlot(t);
-    if (pxy) { plots.appendChild(pxy.node); plots.appendChild(verdictStrip(pxy.verdict, 'expect Q1 (0…90°)')); }
+    if (pxy) { plots.appendChild(pxy.node); plots.appendChild(verdictStrip(pxy.verdict, 'expect Q1 (0…90°)', 'φxy')); }
     var pyx = phiYxPlot(t);
-    if (pyx) { plots.appendChild(pyx.node); plots.appendChild(verdictStrip(pyx.verdict, 'expect Q3 (−180…−90°)')); }
+    if (pyx) { plots.appendChild(pyx.node); plots.appendChild(verdictStrip(pyx.verdict, 'expect Q3 (−180…−90°)', 'φyx')); }
     var tp = tipperPlot(t); if (tp) plots.appendChild(tp);
     detail.appendChild(plots);
   }
@@ -726,7 +794,9 @@ STATIONS_JS = r"""
     if (document.getElementById('station-remove')) return;
     var p = el('p'); p.id = 'station-remove';
     var a = el('a', 'Remove this station (opens the removal flow)');
-    a.href = 'edit/' + encodeURIComponent(slug) + '/stations';   // the EXISTING removal flow; no new route
+    // ABSOLUTE href (fix-round F2 class): a page-relative 'edit/...' from /gateway/curator/survey/<slug>
+    // resolves under /survey/ and 404s — same defect class as the relative data fetches.
+    a.href = '/gateway/curator/edit/' + encodeURIComponent(slug) + '/stations';
     p.appendChild(a);
     detail.appendChild(p);
   }
@@ -794,12 +864,12 @@ STATIONS_JS = r"""
     });
   }
 
-  // ---- load + join ----
+  // ---- load + join (ABSOLUTE urls via dataUrl — fix-round F2) ----
   Promise.all([
-    fetchJson('data/catalogue.json').catch(function () { return { __err: true }; }),
-    fetchJson('data/sci.json').catch(function () { return { __err: true }; }),
-    fetchJson('data/tf.json').catch(function () { return { __err: true }; }),
-    fetchJson('data/build.json').catch(function () { return { __err: true }; })
+    fetchJson(dataUrl('catalogue.json')).catch(function () { return { __err: true }; }),
+    fetchJson(dataUrl('sci.json')).catch(function () { return { __err: true }; }),
+    fetchJson(dataUrl('tf.json')).catch(function () { return { __err: true }; }),
+    fetchJson(dataUrl('build.json')).catch(function () { return { __err: true }; })
   ]).then(function (res) {
     var cat = res[0], sci = res[1], tf = res[2], build = res[3];
     if (!cat || cat.__err || cat.__missing || !Array.isArray(cat)) {
@@ -2308,10 +2378,13 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
         f'{err}'
         '<form method="post" action="/gateway/curator/uploaders/create">'
         f'{csrf}'
+        # maxlength attrs = client courtesy; the SERVER caps are the gate (app._KEY_*_MAX_CHARS, F5).
         '<p><label class="k">Name (required, unique)</label>'
-        '<input type="text" name="name" placeholder="e.g. field-team-1" required autocomplete="off"></p>'
+        '<input type="text" name="name" placeholder="e.g. field-team-1" required autocomplete="off" '
+        'maxlength="120"></p>'
         '<p><label class="k">Email (optional, curator-only)</label>'
-        '<input type="text" name="email" placeholder="contact@example.org" autocomplete="off"></p>'
+        '<input type="text" name="email" placeholder="contact@example.org" autocomplete="off" '
+        'maxlength="254"></p>'
         '<p><button class="b-accent" type="submit">Create key</button></p>'
         '</form></div>'
     )
@@ -2351,7 +2424,7 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
                     'style="margin:0;display:flex;gap:.3rem;align-items:flex-start">'
                     f'{csrf}'
                     f'<textarea name="note" rows="2" placeholder="who it\'s for / expiry intent" '
-                    f'style="min-height:2.4rem">{_esc(k.note or "")}</textarea>'
+                    f'maxlength="2000" style="min-height:2.4rem">{_esc(k.note or "")}</textarea>'
                     '<button class="b-accent" type="submit" '
                     'style="padding:.3rem .6rem;font-size:.75rem">Save</button></form>')
             trs.append(
