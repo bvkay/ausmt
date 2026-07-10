@@ -537,8 +537,12 @@ What it **never** copies, and why:
 > **WAL WARNING.** `gateway/db.py` opens the DB in **WAL mode** (`PRAGMA journal_mode=WAL`). A raw file
 > copy of a *live* WAL database can miss committed transactions still in the `-wal` sidecar, silently
 > producing a torn snapshot. `backup.sh` copies the DB **through SQLite's online backup API**
-> (`sqlite3 <db> ".backup <dest>"`, or the Python `sqlite3` `.backup()` fallback via the gateway image
-> when the host has no `sqlite3`), which is transactionally consistent even against a live writer.
+> (`sqlite3 <db> ".backup <dest>"`), which is transactionally consistent even against a live writer.
+> A host **`sqlite3` is therefore required** whenever a gateway DB exists — it is the one WAL-safe
+> copier. There is **no docker/Python fallback** (an earlier one was removed 2026-07-10: it could not
+> open a live WAL DB through a read-only mount, and could not write the operator-owned staging dir as
+> the container uid — it failed both ways on the first real run). If `sqlite3` is missing, `backup.sh`
+> refuses loudly rather than raw-copy; install it (`sudo apt-get install -y sqlite3`).
 
 Retention: the newest **14** snapshot directories are kept on the box; `backups/latest` is a symlink to
 the newest.
@@ -556,26 +560,49 @@ runbook describes — "Serve reconcile" step 0). The operator (`g3-i7`) must be 
 If this prep is missing, `backup.sh` fails **loudly and early** ("state dir is not readable … ownership
 prep is missing") instead of producing a broken snapshot. Fix it before enabling the timer.
 
+> **Watch item — sidecar perms after a compose recreation.** The `-shm`/`-wal` sidecars are minted
+> **fresh** by the gateway whenever the container is recreated (`docker compose up -d` after an image
+> bump). Depending on the gateway umask, the new sidecars may **drop the group-write bit** the
+> operator's group-membership read path needs — so a backup that ran fine by hand can start failing on
+> the next nightly. `backup.sh` now **preflights** this and dies naming the file with the fix
+> (`sudo chmod g+rw <files>`), but the durable answer is to **re-check the first nightly run after any
+> compose recreation** (or fix the gateway umask so new sidecars keep `g+rw`).
+
 #### Install the nightly timer
 
-The timer runs `backup.sh` once a day. Edit the `__PLACEHOLDER__` paths + `User=` in the `.service`
-(exactly like the reconcile unit — systemd does not expand env vars in `ExecStart`/`WorkingDirectory`,
-so they are literal sed placeholders), then install:
+Two one-time prerequisites first (both are preflighted by `backup.sh`, which now fails loudly and
+early if either is missing — do them BEFORE the first `systemctl start`):
 
 ```sh
-# In deploy/systemd/ausmt-backup.service, replace:
-#   __DEPLOY_DIR__ -> /srv/ausmt/code/deploy      __ENV_FILE__ -> /srv/ausmt/code/deploy/.env
+# 1. A host sqlite3 — the ONLY WAL-safe copier; there is no fallback. Without it `backup.sh` refuses.
+sudo apt-get install -y sqlite3        # (dnf install -y sqlite / apk add sqlite / brew install sqlite)
+
+# 2. Pre-create the backups dir owned by the OPERATOR. The data root (e.g. /srv/ausmt) is root-owned,
+#    so backup.sh cannot mkdir the backups dir itself — without this the run dies at PUBLISH time,
+#    AFTER a successful snapshot. Create it once (substitute the operator account for $USER if you run
+#    this as a different user):
+sudo install -d -o "$USER" -g "$(id -gn)" -m 0750 "$AUSMT_DATA_DIR/backups"
+```
+
+The timer then runs `backup.sh` once a day. Edit the `__PLACEHOLDER__` paths + `User=` in the
+`.service` (exactly like the reconcile unit — systemd does not expand env vars in
+`ExecStart`/`WorkingDirectory`, so they are literal sed placeholders), then install:
+
+```sh
+# In deploy/systemd/ausmt-backup.service, replace with YOUR absolute paths (the production box keeps
+# the checkout under the operator's home, NOT /srv/ausmt/code — that path does not exist there):
+#   __DEPLOY_DIR__ -> /home/<operator>/ausmt-code/deploy   __ENV_FILE__ -> /home/<operator>/ausmt-code/deploy/.env
 # and set User= to the operator account. .env must define AUSMT_DATA_DIR.
 sudo cp deploy/systemd/ausmt-backup.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now ausmt-backup.timer
 systemctl list-timers ausmt-backup.timer     # confirm the next run
 sudo systemctl start ausmt-backup.service     # take one backup NOW to test
-ls -l /srv/ausmt/backups/                      # confirm a <utc-ts>/ dir + latest symlink appeared
+ls -l "$AUSMT_DATA_DIR/backups/"               # confirm a <utc-ts>/ dir + latest symlink appeared
 ```
 
 Cron equivalent (if you are not on systemd):
-`20 3 * * *  AUSMT_DATA_DIR=/srv/ausmt /srv/ausmt-code/deploy/backup.sh`
+`20 3 * * *  AUSMT_DATA_DIR=/srv/ausmt /home/<operator>/ausmt-code/deploy/backup.sh`
 
 #### Mac pull setup (off-box copy over the tailnet)
 
@@ -651,7 +678,9 @@ reconstruct.
 | Symptom | Cause → fix |
 | --- | --- |
 | `backup.sh`: "state dir is not readable … ownership prep is missing" | The operator is not in group 10002, or the state dir lacks `g+rX`. Run the one-time **ownership prep** above. |
-| `backup.sh`: "neither sqlite3 … nor docker is available … refusing to raw-copy a live WAL DB" | No WAL-safe path. Install `sqlite3` on the host (`apt install sqlite3`), or run where the gateway image is available for the Python fallback. Never work around this by raw-copying the DB. |
+| `backup.sh`: "host sqlite3 not found … refusing to raw-copy a live WAL DB" | No WAL-safe path. Install `sqlite3` on the host (`sudo apt-get install -y sqlite3`) — it is the ONLY WAL-safe copier and there is **no fallback**. Never work around this by raw-copying the DB. |
+| `backup.sh`: "WAL sidecar(s) not writable … `sudo chmod g+rw`" | A `docker compose up -d` **recreation** minted fresh `-shm`/`-wal` sidecars that dropped the group-write bit the operator's read path needs. Run the printed `sudo chmod g+rw <files>` (or fix the gateway umask so new sidecars keep `g+rw`). **Re-check the first nightly run after any compose recreation.** |
+| `backup.sh`: "backups dir does not exist and its parent is not writable … `sudo install -d`" | The backups dir was never pre-created and its parent (the data root) is root-owned, so `backup.sh` cannot create it. Run the printed `sudo install -d -o <operator> … -m 0750 <dir>` (the install-runbook prerequisite). |
 | `pull-backup.sh`: "could not resolve 'latest' … remote unreachable" | The tailnet is down, SSH auth failed, or no backup has run yet (`backups/latest` missing). Check `tailscale status`, your SSH key, and `systemctl list-timers ausmt-backup.timer` on the box. |
 | `restore-drill.sh`: "integrity_check did NOT return ok" | The snapshot is **corrupt** — it would not restore. Check `backup.sh` used the WAL-safe `.backup` (host `sqlite3` present?), then re-take and re-drill. Do not rely on that snapshot. |
 | `restore-drill.sh`: "the uploader_keys table is MISSING (schema < v2)" | The DB predates curator-managed keys. Back up from a v2 gateway, or migrate first. |

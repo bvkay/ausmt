@@ -7,15 +7,17 @@
 # INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (there is no %-spec
 # for these; systemd does not expand env vars in ExecStart/WorkingDirectory), then copy this file to
 # /etc/systemd/system/ :
-#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /srv/ausmt/code/deploy)
-#   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /srv/ausmt/code/deploy/.env)
+#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /home/<operator>/ausmt-code/deploy)
+#   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /home/<operator>/ausmt-code/deploy/.env)
+# NOTE: the production box keeps the checkout under the operator's HOME, not /srv/ausmt/code (that path
+# does not exist there); use YOUR real checkout path.
 # The script reads AUSMT_DATA_DIR from the EnvironmentFile (.env), so this unit depends on NO shell
 # profile (the 2026-07-08 "works interactively, fails from the timer" class — the vars live in .env,
 # loaded here, not in ~/.bashrc).
 
 [Unit]
 Description=AusMT nightly backup (WAL-safe sqlite snapshot of gateway state; prune to newest 14)
-Documentation=file:///srv/ausmt/code/deploy/README.md
+Documentation=file:///home/<operator>/ausmt-code/deploy/README.md
 # The timestamps + prune want a real UTC clock; only meaningful once time is synced.
 After=time-sync.target
 Wants=time-sync.target
