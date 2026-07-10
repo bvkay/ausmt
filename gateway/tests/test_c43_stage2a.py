@@ -32,14 +32,43 @@ from gateway.tests.conftest import (
 # Phase quadrant classification + the φyx +180 unwrap (phaseqc — the authoritative seam)
 # ==================================================================================================
 def test_phi_xy_quadrant_classification():
-    """φxy (t[3], stored = true) classifies against Q1 (0…90). FAILS IF an in-Q1 value is called out,
-    or an out-of-Q1 value is called in."""
+    """φxy (t[3], stored = true) classifies against Q1 widened by the engine-gate slack (fix-round F4:
+    band −10…100 with QUADRANT_SLACK_DEG = 10). FAILS IF an in-band(+slack) value is flagged (a red
+    dot on a point the engine gate tolerates), an outside-by-more-than-slack value is not flagged, or
+    the slack edges are wrong (the −10.0/100.0 edge vectors are IN; −10.1/100.1 are OUT — a
+    hard-band implementation fails the edge vectors)."""
+    s = phaseqc.QUADRANT_SLACK_DEG
+    assert s == 10.0
     assert phaseqc.in_quadrant_xy(0.0) is True
     assert phaseqc.in_quadrant_xy(45.0) is True
     assert phaseqc.in_quadrant_xy(90.0) is True
-    assert phaseqc.in_quadrant_xy(-10.0) is False
+    assert phaseqc.in_quadrant_xy(-10.0) is True      # slack edge — the engine gate tolerates this
+    assert phaseqc.in_quadrant_xy(100.0) is True      # slack edge
+    assert phaseqc.in_quadrant_xy(-10.1) is False     # beyond slack => red dot
+    assert phaseqc.in_quadrant_xy(100.1) is False
     assert phaseqc.in_quadrant_xy(120.0) is False
     assert phaseqc.in_quadrant_xy(None) is None
+
+
+def test_quadrant_slack_matches_engine_gate():
+    """CROSS-IMPORT PARITY PIN (fix-round F4a, architect ruling): the workbench's QUADRANT_SLACK_DEG
+    must EQUAL the engine gate's single-sourced constant (engine/extract/_conventions.py:98) — the
+    workbench verdict and the served-corpus Gate-2 verdict must never diverge on tolerance. FAILS IF
+    either side changes its slack without the other. _conventions imports stdlib-only at module level
+    (numpy is function-local), so this import runs in the stack-less gateway CI env."""
+    import importlib
+    import sys
+    from pathlib import Path
+    eng = Path(__file__).resolve().parents[2] / "engine" / "extract"
+    assert (eng / "_conventions.py").is_file(), f"engine gate module missing at {eng}"
+    sys.path.insert(0, str(eng))
+    try:
+        conv = importlib.import_module("_conventions")
+    finally:
+        sys.path.remove(str(eng))
+    assert phaseqc.QUADRANT_SLACK_DEG == conv.QUADRANT_SLACK_DEG, (
+        f"workbench slack {phaseqc.QUADRANT_SLACK_DEG} != engine gate slack "
+        f"{conv.QUADRANT_SLACK_DEG} (_conventions.py) — the two verdicts have diverged")
 
 
 def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
@@ -62,42 +91,77 @@ def test_phi_yx_unwrap_true_q3_classifies_in_quadrant():
 
 
 def test_phi_yx_unwrap_true_q1_classifies_out_of_quadrant():
-    """The converse: a station whose TRUE φyx is in Q1 (a genuinely wrong-quadrant yx) has stored t[4]
-    near ±135/−170, and must classify OUT of Q3. FAILS IF the unwrap is skipped (stored −135 would then
-    read as Q3 = 'in', hiding the real wrong-quadrant station)."""
-    for true_yx in (45.0, 10.0, -45.0, -89.0):
+    """The converse: a station whose TRUE φyx is beyond the Q3 band by MORE than the slack (a genuinely
+    wrong-quadrant yx) must classify OUT. FAILS IF the unwrap is skipped (stored −135 would then read
+    as Q3 = 'in', hiding the real wrong-quadrant station) or the slack edge is wrong (−79.9 is 10.1°
+    outside the band => OUT; −80.0 is exactly at the slack edge => IN)."""
+    for true_yx in (45.0, 10.0, -45.0, -79.9):
         stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
         assert phaseqc.in_quadrant_yx(stored) is False, (true_yx, stored)
 
 
-def test_classify_series_aggregate_verdict():
-    """classify_series aggregates a phase column: any_out drives the ⚠ verdict + red points, all_in the
-    ✓ verdict. FAILS IF a single out-of-quadrant point does not flip any_out, or an all-None series
-    invents a verdict."""
-    # xy series: one out-of-Q1 point among in-Q1 points => any_out True, all_in False.
+def test_phi_yx_slack_and_seam_edges():
+    """Fix-round F4 edge semantics for yx: (a) a true value within the slack of the band (−85, −80) is
+    IN (the engine gate tolerates it — no red dot); (b) a true value just past +180 THROUGH THE SEAM
+    (+175 maps to −185 on the (−360,0] axis, within slack of the −180 edge) is IN — the seam mapping is
+    what makes Q3±slack one contiguous window. FAILS IF the seam mapping is dropped (naive (−180,180]
+    comparison calls +175 OUT) or the slack is not applied."""
+    for true_yx in (-85.0, -80.0, 175.0, 171.0):
+        stored = round(phaseqc.wrap180(true_yx + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
+        assert phaseqc.in_quadrant_yx(stored) is True, (true_yx, stored)
+    # Just beyond the seam-side slack: true +169.9 maps to −190.1 — 0.1° beyond => OUT.
+    stored = round(phaseqc.wrap180(169.9 + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
+    assert phaseqc.in_quadrant_yx(stored) is False, stored
+
+
+def test_classify_series_median_verdict():
+    """classify_series (fix-round F4c — engine-rule alignment): the VERDICT is the MEDIAN of classified
+    points vs band+slack (median_in), per-point flags mark only beyond-slack points (red dots), and the
+    reported median rides the engine's seam-mapped axis for yx. FAILS IF a scattered outlier flips the
+    verdict (median-vs-point confusion), the median seam mapping is dropped (a ±180-straddling cluster
+    would median near 0 and read as catastrophically out), or an all-None series invents a verdict."""
+    # xy: one beyond-slack outlier among in-band points => red dot (points[2] False) but the MEDIAN
+    # verdict stays IN — scattered outliers must not flip a station verdict (the engine rule).
     xy = phaseqc.classify_series([10.0, 45.0, 200.0], mode="xy")
-    assert xy["any_out"] is True and xy["all_in"] is False and xy["n_classified"] == 3
     assert xy["points"] == [True, True, False]
-    # yx series (stored values): all TRUE-Q3 => all_in True. Stored for true −135/−100 = +45/+80.
-    yx_stored = [round(phaseqc.wrap180(v + 180.0), 1) for v in (-135.0, -100.0)]
+    assert xy["any_out"] is True
+    assert xy["median"] == 45.0 and xy["median_in"] is True
+    # xy: a coherently wrong series => median beyond band+slack => verdict OUT.
+    xy_bad = phaseqc.classify_series([-120.0, -130.0, -140.0], mode="xy")
+    assert xy_bad["median"] == -130.0 and xy_bad["median_in"] is False
+    # yx healthy Q3 cluster: median reported in (−180,180], verdict IN.
+    yx_stored = [round(phaseqc.wrap180(v + 180.0), 1) for v in (-135.0, -100.0, -170.0)]
     yx = phaseqc.classify_series(yx_stored, mode="yx")
-    assert yx["all_in"] is True and yx["any_out"] is False
-    # all-None => no verdict.
+    assert yx["median"] == -135.0 and yx["median_in"] is True and yx["any_out"] is False
+    # yx SEAM-STRADDLING cluster (true −179/−178/+179): the (−360,0] mapping keeps the median at the
+    # seam (−179 side, mapped −181 for +179) instead of a nonsense near-0 average; verdict IN.
+    yx_seam = phaseqc.classify_series(
+        [round(phaseqc.wrap180(v + 180.0), 1) for v in (-179.0, -178.0, 179.0)], mode="yx")
+    assert yx_seam["median_in"] is True, yx_seam
+    assert yx_seam["median"] == -179.0, yx_seam   # mapped median −179 (middle of −181/−179/−178)
+    # all-None => no verdict at all.
     empty = phaseqc.classify_series([None, None], mode="xy")
-    assert empty["any_out"] is False and empty["all_in"] is False and empty["n_classified"] == 0
+    assert empty["any_out"] is False and empty["median"] is None and empty["median_in"] is None
+    assert empty["n_classified"] == 0
 
 
 def test_stations_js_mirrors_phaseqc_constants():
-    """SOURCE ASSERTION: the browser-side STATIONS_JS embeds the SAME phase constants phaseqc defines,
-    so the mirror cannot silently drift from the pinned server-side spec. FAILS IF the JS drops the
-    +180 shift, the Q1/Q3 bounds, or the unwrap-then-classify structure."""
+    """SOURCE ASSERTION: the browser-side STATIONS_JS embeds the SAME phase constants + structural
+    elements phaseqc defines (the EXECUTABLE parity pin proves the semantics; this cheap sweep catches
+    a wholesale removal even where node is unavailable). FAILS IF the JS drops the +180 shift, the
+    Q1/Q3 bounds, the slack, the floored modulo, the seam map, or the unwrap-then-classify structure."""
     js = curatorpage.STATIONS_JS
     assert "YX_SHIFT = 180.0" in js, "the +180 presentation shift must be in the JS mirror"
     assert "Q1_LO = 0.0" in js and "Q1_HI = 90.0" in js
     assert "Q3_LO = -180.0" in js and "Q3_HI = -90.0" in js
-    # trueYx must SUBTRACT the shift then wrap (the unwrap), and inQ3 must go through trueYx.
+    assert "SLACK = 10.0" in js, "the engine-gate slack must be in the JS mirror (fix-round F4)"
+    # FLOORED modulo (fix-round F1): the CPython float-% form, never bare truncated %.
+    assert "function floormod" in js and "if (r !== 0 && r < 0) r += y" in js
+    # trueYx must SUBTRACT the shift then wrap (the unwrap), and inQ3 must go through trueYx + mapYx.
     assert "wrap180(stored - YX_SHIFT)" in js, "φyx must be unwrapped (stored - shift), not read raw"
     assert "var v = trueYx(stored)" in js, "inQ3 must classify the UNWRAPPED true phase"
+    assert "function mapYx" in js and "mapYx(v)" in js, "yx must classify on the seam-mapped axis"
+    assert "function medianOf" in js, "the median verdict (F4c) must be in the JS mirror"
 
 
 # ==================================================================================================
@@ -454,6 +518,75 @@ def test_revoked_key_renders_read_only(tmp_path):
             # No note-editor FORM and no revoke FORM target this revoked key id.
             assert f"/gateway/curator/uploaders/{kid}/note" not in page.text
             assert f"/gateway/curator/uploaders/{kid}/revoke" not in page.text
+    run(_body())
+
+
+def test_revoked_key_note_post_refused(tmp_path):
+    """F6 PIN (architect ruling — revoked keys are IMMUTABLE audit rows). A note POST to a REVOKED key
+    id is refused 4xx and the stored note is UNCHANGED — the UI hiding the editor is not the
+    enforcement; the route + the DB `AND revoked_utc IS NULL` guard are. FAILS IF the route accepts a
+    note update on a revoked id (the shipped pre-fix behaviour, 'by-design' docstring overruled), or
+    the DB layer alone would have persisted it."""
+    async def _body():
+        from gateway import uploader_keys as uploader_keys_mod
+        async with app_client(tmp_path, git_runner=FakeGit()) as (client, _app, gw, cfg):
+            await curator_login(client)
+            kid = gw.db.create_uploader_key(name="frozen-key", email=None,
+                                            key_sha256=uploader_keys_mod.key_hash("k1"),
+                                            created_by=CURATOR_NAME)
+            assert gw.db.set_uploader_key_note(kid, note="frozen at revocation") is True
+            assert gw.db.revoke_uploader_key(kid, revoked_by=CURATOR_NAME) is True
+            csrf = csrf_for_session(client)
+            r = await client.post(f"/gateway/curator/uploaders/{kid}/note",
+                                  data={"note": "mutated after revoke", "csrf_token": csrf},
+                                  follow_redirects=False)
+            assert r.status_code == 409, (r.status_code, r.text)
+            key = gw.db.get_uploader_key(kid)
+            assert key.note == "frozen at revocation", "the revoked key's note must be unchanged"
+            # DB-layer guard is independent (belt-and-braces under the route check).
+            assert gw.db.set_uploader_key_note(kid, note="direct DB mutation") is False
+            assert gw.db.get_uploader_key(kid).note == "frozen at revocation"
+    run(_body())
+
+
+def test_note_and_create_length_caps(tmp_path):
+    """F5 PIN. Over-length inputs are REFUSED (400) and nothing persists beyond the cap: a 2001-char
+    note POST leaves the stored note unchanged; an over-length name/email on create creates no key.
+    (Cap posture: REJECT, not truncate — silently dropping the tail of a curator's text loses
+    information without telling them.) FAILS IF an over-length value persists or is truncated in."""
+    async def _body():
+        from gateway import uploader_keys as uploader_keys_mod
+        async with app_client(tmp_path, git_runner=FakeGit()) as (client, _app, gw, cfg):
+            await curator_login(client)
+            kid = gw.db.create_uploader_key(name="cap-key", email=None,
+                                            key_sha256=uploader_keys_mod.key_hash("k1"),
+                                            created_by=CURATOR_NAME)
+            csrf = csrf_for_session(client)
+            # Over-length note => 400, stored note unchanged (None).
+            r = await client.post(f"/gateway/curator/uploaders/{kid}/note",
+                                  data={"note": "x" * 2001, "csrf_token": csrf},
+                                  follow_redirects=False)
+            assert r.status_code == 400, (r.status_code, r.text)
+            assert gw.db.get_uploader_key(kid).note is None
+            # Exactly at the cap => accepted (the cap is inclusive).
+            r = await client.post(f"/gateway/curator/uploaders/{kid}/note",
+                                  data={"note": "y" * 2000, "csrf_token": csrf},
+                                  follow_redirects=False)
+            assert r.status_code == 303
+            assert gw.db.get_uploader_key(kid).note == "y" * 2000
+            # Over-length NAME on create => 400, no key row created.
+            n_before = len(gw.db.list_uploader_keys())
+            r = await client.post("/gateway/curator/uploaders/create",
+                                  data={"name": "n" * 121, "csrf_token": csrf},
+                                  follow_redirects=False)
+            assert r.status_code == 400
+            assert len(gw.db.list_uploader_keys()) == n_before
+            # Over-length EMAIL on create => 400, no key row created.
+            r = await client.post("/gateway/curator/uploaders/create",
+                                  data={"name": "ok-name", "email": "e" * 255, "csrf_token": csrf},
+                                  follow_redirects=False)
+            assert r.status_code == 400
+            assert len(gw.db.list_uploader_keys()) == n_before
     run(_body())
 
 
