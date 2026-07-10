@@ -314,6 +314,29 @@ def test_no_page_renderer_emits_inline_handlers_or_scripts():
     assert offenders == [], "inline JS is dead under the CSP:\n" + "\n".join(offenders)
 
 
+def test_c43_external_js_constants_are_raw_and_referenced_externally():
+    """C43 Stage-1 CSP coverage (record D13): the new nav-shell + survey-hub behaviours ship as
+    EXTERNAL route constants (script-src 'self' kills inline), and the pages that use them reference
+    them by external <script src=…>, never inline. FAILS IF a C43 JS constant is removed/renamed
+    (coverage silently narrows) or a page inlines its script instead of referencing the route. This
+    NAMES the C43 constants so their coverage cannot quietly vanish."""
+    import re
+    from pathlib import Path
+
+    from gateway import curatorpage
+    # The new C43 external JS constants exist and are RAW JS (no <script> wrapper, no on*= handler).
+    for const_name in ("CONTEXT_BAR_JS", "SURVEY_HUB_JS"):
+        js = getattr(curatorpage, const_name)
+        assert isinstance(js, str) and js.strip(), f"{const_name} vanished or empty"
+        assert "<script" not in js, f"{const_name} must be raw JS, not <script>-wrapped"
+        assert not re.search(r"""\bon[a-z]{3,}\s*=\s*['"]""", js), \
+            f"{const_name} uses an inline on*= handler (dead under CSP) — use addEventListener"
+    # The shell + hub reference the routes externally (src=), never inline.
+    src = (Path(curatorpage.__file__)).read_text(encoding="utf-8")
+    assert 'src="/gateway/curator/context-bar.js"' in src
+    assert 'src="/gateway/curator/survey-hub.js"' in src
+
+
 def test_rendered_forms_carry_the_delegated_data_attributes():
     """S1 PIN: the delegated behaviours only work if the RENDERED markup carries the data
     attributes — reverting them regresses silently otherwise (ui.js keeps serving handlers nothing
