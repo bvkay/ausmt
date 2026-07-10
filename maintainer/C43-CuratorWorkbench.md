@@ -1,0 +1,320 @@
+# C43 — Curator Workbench (frozen design)
+
+Owner directive (2026-07-10): per-station data view/edit is "quite hard — one long list with
+fields"; collections have no curator UI at all; controls must be "expanded and made easier to use",
+covering "all possible bases and scenarios". Sharpened by the NCI framing (owner, same day): Nirin
+console access may be scarce — **the workbench could be the sole practical entry point** for
+day-to-day operations, so its coverage boundary is drawn deliberately, not by accident.
+
+The design ran as a four-round live mockup review (2026-07-10) and was **locked by the owner** at
+v4. The approved mockup is archived at `maintainer-archive/C43-mockup-v4-approved.html` (operator
+archive, outside this repo). This record is normative; the mockup is the visual reference it was
+frozen from. Four freeze conditions attached by the architect are carried in D9–D12 and marked
+**[FC-1]**..**[FC-4]**.
+
+## D1. Current state (verified 2026-07-10, main @ 252a96f)
+
+The gateway is a FastAPI app (`gateway/app.py:1367`, 1523 lines) whose pages are hand-assembled
+strings — no template engine, no templates dir; the shared shell is a `string.Template` `_HEAD`
+with inline CSS (`gateway/curatorpage.py:164`, `:50-75`), and all JS is served as same-origin
+external route constants (`ui.js`, `serve-state.js`, `editor.js` — `app.py:1444-1462`) because the
+CSP forbids inline script. The CSP is applied by Caddy, not the app
+(`deploy/docker/caddy/Caddyfile:58-59`): `script-src 'self'` (no inline JS), `style-src` allows
+`'unsafe-inline'` (which is what permits the inline `<style>` shell). What exists today:
+
+* **Metadata editor** — one long form: a scalar panel + **11 structured section panels** + a
+  CARE advanced-JSON panel + the bump/release-note tray, concatenated
+  (`curatorpage.py:983-1021`; section specs `editor_form.py:46-113`). Everything submits at once.
+* **Per-station view: ABSENT.** The only station-scoped page is the removal checkbox list
+  (`app.py:1485`, handler `:825`).
+* **Collections: built but invisible.** The engine rolls up `collection.id` across surveys
+  (`engine/extract/build_portal.py:380-421`) and writes `collections.json` (`:2461`); the
+  case/whitespace near-duplicate warning dies on build stderr (`:2458-2460`). The curator UI shows
+  only the per-survey `collection` section panel — no rollup, no member list, no collision warning.
+* **Serve panel** (on the queue page): published HEAD via injected git runner
+  (`gateway/serve_state.py:100`), `reconcile-status.json` read (`:77`), and browser-side
+  same-origin fetches of `/data/build.json` + `/data/build_report.json`
+  (`curatorpage.py:363,403`) — the gateway has **no site-data mount**. Exactly **one** intent file
+  exists: `rebuild.request`, written atomically, content audit-only, host reconcile agent keys on
+  existence and never parses it (`serve_state.py:30,44-48`).
+* **Uploader keys** — mint/list/revoke with `created_utc` and `last_used_utc` already stored
+  (`gateway/db.py:115-125`) **and rendered** (`curatorpage.py:1256-1257`). Missing: a free-text
+  note, submission counts, an unused-key nudge.
+* **Publish path** — gateway never parses YAML (`metaedit.py:1-7`); YAML round-trips only in the
+  gw-runner (`gateway/runner/edit.py`), the validator verdict gates server-side with 409 on FAIL
+  (`app.py:772-774`, `:927-929`), and git runs under `PUBLISH_LOCK` with fixed author + fail-closed
+  rollback (`gateway/publish.py:45,49-50,350`).
+
+## D2. Binding constraints (unchanged by C43, except the one D8 exception)
+
+1. **C40 — the gateway gains no privileges.** No site-data mount, no docker socket, no host shell.
+   Anything privileged rides the request-file pattern: the browser writes an intent file, a
+   host-side systemd agent executes a fixed recipe.
+2. **CSP `script-src 'self'`** — no inline JS on any `/gateway/*` page, ever. New JS = new external
+   route constants, same as today.
+3. **Publish-through-git** — every edit is a published commit with a version bump and a required
+   release note; no drafts. Validator gate stays server-side.
+4. **No-YAML-in-gateway** — the gateway process never parses or emits YAML; all survey.yaml work
+   happens in gw-runner jobs.
+5. **PII containment** — the gateway DB never enters any git repo. Key notes (D7) live in sqlite
+   only.
+
+## D3. Information architecture
+
+Persistent left rail on every curator page: **Surveys**, **Collections** | Intake: **Submission
+queue**, **Uploader keys** | Operations: **Serve state**. A context bar carries the breadcrumb, the
+ever-present drift chip (`serving <build> · current|behind` + `published HEAD <sha>`), and the
+Request-rebuild button. The scenario-coverage matrix (D11) is this record's checklist, **not a
+shipped screen**. The submission queue keeps its proven review flow untouched (D6).
+
+## D4. Survey hub
+
+Route: one hub per survey, tabs **Overview & QA** (landing) / **Stations** / **Metadata** /
+**History**. The hub replaces "one long list with fields" with task surfaces; QA lands first
+because the commonest curator question is "is this survey healthy?".
+
+**Overview & QA** — cards (serving/published counts, QA flag count, frame declaration, last build
+time + engine sha), then **Needs attention**: every build_report warning/refusal rendered as an
+actionable row — refused stations with their gate diagnosis and an inspect link, warning clusters
+(e.g. a line-coherent quadrant cluster) grouped, metadata issues (e.g. an email address as citation
+author) linking straight into the owning editor section. Refused stations stay in the published
+package — withheld from serving only; the fix is custodian-side re-export and each row says so.
+(Stage 1 renders each diagnosis inline and links to the existing station-removal list; the
+drill-down "inspect" target activates in Stage 2 — no dangling links.)
+A conditioning summary table lists honesty notes across served stations. Today all of this dies in
+a build log; the QA tab is build_report made actionable.
+
+**Stations** — filterable station table (id, lat/lon, periods, quality chip) with a drill-down
+panel: facts (position + C42 policy, period band, frame declaration, convention verdict,
+dimensionality, median relative error, tipper presence, source file + sha256), then plots, then the
+C42 coordinate-policy fieldset (exact / generalised / withheld — a change publishes a survey.yaml
+edit like any other), Save policy, Remove station.
+
+* **Plots (owner-ruled specifics):** ρa (xy/yx); **φxy on a 0…90 axis with the Q1 band shaded**;
+  **φyx on a full +180…−180 axis with the Q3 band shaded**; out-of-quadrant points drawn **red**;
+  each phase plot carries a **verdict footer strip beneath the plot** ("expect Q1 (0…90°) — in
+  quadrant ✓" / "expect Q3 — out of quadrant ⚠") so captions are never overlapped; tipper |T| with
+  Re Tzx / Re Tzy. Wrong-quadrant stations must be identifiable at a glance.
+* **Data path (owner-ruled):** station facts and curve data come **browser-side, same-origin from
+  the served `/data` corpus** — the serve-panel pattern (`curatorpage.py:363`), zero new gateway
+  privileges. A new site-data mount is rejected.
+* **[FC-2] Served-vs-published lag is labelled on the panel itself** — "facts from build
+  `<build_id>`; publish pending" whenever served ≠ published — not only via the global drift chip.
+
+**Metadata** — the existing editor restructured into a sticky section TOC + one section shown at a
+time, **per-section submit** ("only this section is submitted"), inline field-level validation
+(e.g. the email-as-citation-author trap gets a field error with the fix spelled out), per-section
+advanced-JSON override, and the commit tray (semver bump select + required release note + "Preview
+diff & validate"). Preview shows the exact YAML diff + validator verdict before anything commits.
+
+**History** — read-only git log of the survey's package via a runner read-job (the gateway already
+mounts surveys-live for publish; the runner does the reading). Rename & retirement actions land
+here only after the C41 record freezes — until then they stay operator recipes.
+
+## D5. Collections console
+
+Honest model: **there is no collection object** — the id lives in each member's survey.yaml; the
+console is a projection plus a batch-edit choreographer. The rollup is computed via gw-runner
+read-jobs over surveys-live (same seam as the edit list; no schema change, no new privilege).
+
+* List: collection, member count, station count, status; **the case/whitespace near-duplicate
+  warning surfaces here at edit time** (today: build stderr, `build_portal.py:2458-2460`), with a
+  one-click "merge into <id>" that is just a batch edit over the minority members.
+* Create collection; edit all details (title, id/slug, type, status, description) with fan-out
+  disclosure: "changing the id rewrites N member survey.yamls — shown as one batched confirm."
+* **Batch semantics (owner-ruled): ATOMIC.** Saving previews one combined diff across all member
+  surveys, validator-checked per survey; **any member failing validation blocks the lot**; the
+  batch lands as N commits with one shared release note. Add/remove member and rename ride the
+  same choreography.
+
+## D6. Submission queue — review flow unchanged. Review → checklist → sandboxed preview →
+approve/return/reject was production-proven 2026-07-08; C43 deliberately leaves that flow alone.
+The queue gains the shared nav + drift chip (Stage 1) and one additive surface: a **read-only
+quarantine view** (Stage 2) — inspect a quarantined submission's contents and refusal reason;
+the quarantine read-mount is verified at contract time.
+
+## D7. Uploader keys
+
+Deltas over today's page (created/last-used already render — D1): a **free-text note** per key
+(who it's for, expiry intent — sqlite only, never git), **submission counts** from the audit
+trail, an explicit **unused-key nudge** (active · never used), revoked keys retained as visible
+audit rows, and a rotation-runbook link on the page. Lifecycle stays mint → use → revoke with
+re-mint for rotation; key material is hashes-only and deliberately uneditable. The mint banner
+stays shown-once with transmission guidance (one-time-secret link or phone — never plain email).
+
+## D8. Serve state — operations floor
+
+The panel is promoted to a first-class screen: the existing cards (published HEAD, served build +
+currency, last reconcile, corpus counts) plus:
+
+* **Operations floor** — four cards fed by a host-written **`ops-status.json`** in the state dir
+  (same pattern as `reconcile-status.json`). The writer is the existing alert timer **with its
+  recipe extended**: it already gathers service health, disk, reconcile staleness, and backup
+  freshness; the C43 delta adds the code-checkout facts and the retained-build inventory to what
+  it emits — that inventory is produced by nothing today. Cards: **Backups** (snapshot age, retained count, last drill verdict,
+  off-box pull state), **Alerts** (dead-man ping beating, recipient display — recipients are
+  managed in the alerting-service dashboard, not on the box), **Box** (uptime, disk, service
+  health, ClamAV signature age), **Code checkout** (sha vs origin/main, last pulled, staleness
+  chip). A stale checkout or overdue backup flips its card amber — the same facts the email alerts
+  fire on, visible before the email arrives.
+* **Retained builds** — table of retained build dirs (inventory carried in `ops-status.json`) with
+  **"serve this build…" = rollback**: an atomic `current` swap to an already-verified retained
+  build via `rollback.request` — it never rebuilds, it repoints; the next reconcile tick shows the
+  drift honestly and must not auto-revert while a manual pin is in place. Each served/retained
+  build row links to a **build detail** view: the build log tail plus the C18-A4 cache-forensics
+  counters (salt_fp, write_errors/read_errors) surfaced from the build products — exact field
+  locations verified at Stage-2 contract time (`maintainer/C18-BuildCacheDesign.md`, Amendment A4).
+* **Backup snapshots** — table with drill verdict and off-box state, plus the **guarded restore**
+  (owner-ruled, drill-first destructive op): stop gateway → **drill the snapshot first** (integrity
+  + schema; a failing drill aborts untouched) → swap DB → restart → log the whole sequence.
+  Confirmation requires **typing the snapshot id**; the dialog states exactly which submissions
+  (received after the snapshot) are erased. Disaster restore (dead box) remains console territory:
+  if the box can't serve this page, no button can help.
+* **Actions** — Update box…, Snapshot now, Force full rebuild… (flag on `rebuild.request`), Pause
+  auto-rebuild (a flag file the reconcile timer respects; **auto-expires after 6 h**; resume is
+  explicit) — each writes an intent file for the host agent; nothing gives the gateway a shell.
+* **Log tails** — the host agent copies recent build/reconcile log tails into the state dir for
+  read-only display.
+
+**Update box — the one bounded C40 exception (owner-ruled).** It runs exactly the standing refresh
+recipe — `git pull --ff-only` on the code checkout, then `compose pull` + `up -d` — nothing
+parameterised, nothing else runnable. Trust analysis: the recipe can only deploy what
+branch-protected main has already built and published, i.e. the same thing deployed by hand today;
+the request is curator-authenticated, CSRF-bound, audit-logged, serialised under a lock. Rationale:
+at NCI it turns every merge-day console session into a button. This is a deliberate amendment to
+the C40 container-lifecycle boundary, bounded to this single fixed recipe.
+
+## D9. [FC-1] Request-file hardening spec (normative for every new intent file)
+
+`rebuild.request` today is existence-keyed and content-ignored — safe because it is unparameterised.
+C43 adds new intents in two classes: **id-carrying** (`rollback.request`, `restore.request` — the
+first parameterised intents in the system) and **fixed/unparameterised** (`update.request`,
+`backup.request`, and the pause flag — `rebuild.request`-class plain files; an implementer must
+not invent parameters for these). All MUST satisfy:
+
+1. **Fixed-enum intents only.** The host agent acts on a closed allow-list of intent filenames; an
+   unknown file in the state dir is logged and ignored, never executed.
+2. **Host-side validation is the real gate** (gateway-side checks are UX only): the rollback build
+   id is validated against the real retained-build inventory; the restore snapshot id against the
+   real snapshot list; ids must match a strict `[A-Za-z0-9TZ_.-]`-class pattern before any use; no
+   attacker-controllable string ever reaches a shell — fixed recipes with allow-listed arguments
+   only.
+3. **Single-flight + rate limit.** One privileged action at a time under a host-side lock; repeat
+   requests within the window are refused and logged.
+4. **Audit line per action** — append-only log in the state dir carrying intent, parameters,
+   requesting **curator name**, and outcome.
+5. **Typed confirmation for restore** — the snapshot id typed by the curator is carried in the
+   intent and re-checked host-side; mismatch aborts.
+6. **Pre-NCI hostile re-audit flag:** `update.request` and `restore.request` are explicitly flagged
+   for the pre-NCI hostile re-audit — neither ships to an internet-facing deployment before that
+   audit passes.
+7. **Persistent-pause alarm.** A slow re-arm of the pause flag (once per expiry window) keeps
+   auto-rebuild dead forever while passing rule 3's rate limit. The reconcile status must
+   therefore expose pause state, and a pause active or re-armed beyond **24 h cumulative** flips
+   the ops-floor card amber and enters the alert-timer facts — an authenticated attacker (stolen
+   session, curator-page XSS) cannot silently keep serving frozen.
+
+## D10. [FC-3] [FC-4] Staging — each stage ships alone through the normal lane process
+
+Stage discipline is a freeze condition: **no stage absorbs the next**; each stage is its own
+contract, tests, adversarial review, owner push.
+
+* **Stage 1 (thin):** nav shell + context bar/drift chip on all pages; survey hub with the
+  **Overview & QA tab** and the **sectioned Metadata tab** (TOC, per-section submit, commit tray);
+  **[FC-4] the editor diff-minimal YAML fix folds in here** (old task #32: the editor's
+  section-assembly re-emits with formatting drift while the removal path is surgical — make the
+  editor emit like the removal already does), so per-section "empty = unchanged" is **visibly true
+  in diffs**. Stations/History tabs appear as links to existing pages (removal list) or not at all.
+  No collections, no ops actions.
+* **Stage 2:** stations drill-down (served-fetch data path, plots, [FC-2] lag label) + operations
+  floor (ops-status.json) + retained-builds rollback, build detail + log tails + the **read-only
+  History tab** (git-log via runner read-job — the Stage-4 rename/retire actions do NOT ride
+  along) + the **read-only quarantine view** (D6) + keys deltas (D7) — pulled forward per the NCI
+  sole-entry framing — **plus the D9 hardening**; the privileged writes (Update box, restore) ship
+  only with D9 complete, never partially.
+* **Stage 3:** collections console (atomic batch choreography).
+* **Stage 4:** C41/C42-gated actions as those records land (survey rename/retire in History;
+  coordinate-policy binding once the C42 engine lane exists).
+
+## D11. Coverage checklist (adopted from the owner-final scenario matrix, v4)
+
+| Scenario | Surface | Disposition |
+|---|---|---|
+| Review/approve/return/reject a submission | Queue (unchanged) | shipping today |
+| Fix one metadata field without touching the rest | Hub › Metadata, per-section patch | Stage 1 |
+| Survey health at a glance; act on warnings | Hub › Overview & QA | Stage 1 |
+| Inspect one station (coords, QA, frame, conditioning, curves) | Hub › Stations panel | Stage 2 |
+| Understand why a station was refused; know the fix | QA rows + station panel diagnosis | Stages 1–2 |
+| Remove stations (validation preview) | Hub › Stations (existing flow, rehomed) | shipping today |
+| Coordinate policy: exact / generalised / withheld | Station panel + survey default | Stage 4 (C42) |
+| Set/clear embargo with disclosure | Hub › Metadata › Access | Stage 1 (rehome) |
+| See collections; fix case-collision before it splits a programme | Collections console | Stage 3 |
+| Rename a collection / move members (atomic batch) | Collections console | Stage 3 |
+| Mint/annotate/revoke keys; spot unused keys | Keys | Stage 2 (small) |
+| Rename a survey (slug) with lineage | Hub › History | Stage 4 (C41) |
+| Retire a survey | Hub › danger zone | Stage 4 (C41) |
+| Audit trail (who/what/when/why) | Hub › History (read-only git log) | Stage 2 |
+| Monitor drift; request rebuild | Drift chip everywhere + Serve state | shipping today |
+| Rebuild forensics (cache, salt, errors — A4 counters) | Serve state › build detail | Stage 2 |
+| Backups/alerts/box freshness in one place | Serve state › ops floor | Stage 2 |
+| Roll back serving to a retained build | "serve this build" (rollback.request) | Stage 2 (D9) |
+| Force full rebuild (ignore cache) | Request rebuild › full flag | Stage 2 |
+| Snapshot on demand before a risky edit | Snapshot now (backup.request) | Stage 2 |
+| Read build/reconcile log tails | Serve state › logs | Stage 2 |
+| Inspect a quarantined submission | Queue › quarantine view | Stage 2 (verify mount at contract time) |
+| Update the box (pull code + images, redeploy) | Update box… (fixed recipe) | Stage 2 (D8/D9) |
+| Restore gateway DB from snapshot (drill-first) | Serve state › restore | Stage 2 (D9) |
+| Pause auto-rebuild during a multi-edit session | Serve state › Actions (auto-expiring) | Stage 2 |
+| ClamAV signature freshness | Serve state › Box card | Stage 2 |
+| Add/replace station files in a published survey | correction-linked resubmission | future (C44-class) |
+| Batch multi-survey ops (bulk publish/retire, corpus swaps) | batch actions | future (C44-class) |
+
+## D12. The deliberate boundary (NCI sole-entry planning)
+
+Intentionally **outside** the workbench: container lifecycle beyond the D8 fixed refresh recipe,
+bootstrap-key rotation in `.env`, and dead-box disaster restore. These need facility VM-console
+access — worth securing that access path once, up front, precisely so it never becomes an email
+chain in an emergency. Everything inside the boundary rides the request-file pattern.
+
+## D13. Verification requirements (Invariant 10 — each stage's contract carries these)
+
+* **CSP sweep** extended to every new page/route: no inline `<script>`, no `on*` handlers
+  (pattern: `gateway/tests/test_serve_reconcile.py:295-314`). FAILS IF any new surface ships
+  inline JS.
+* **Diff-minimality pin (Stage 1, #32):** a single-field edit produces a diff touching only that
+  field's lines. Must be proven **failing on the current emitter first** (red-then-green). The
+  existing no-op pin (unchanged submit → NO diff, `test_editor_form_flow.py`) stays green.
+* **Per-section patch pin (Stage 1):** submitting section A never rewrites section B's bytes.
+* **Atomicity pin (Stage 3):** a collection batch where member N fails validation lands **zero**
+  commits.
+* **Request-file pins (Stage 2):** host agent refuses an unknown intent enum; refuses a rollback id
+  not in the inventory; refuses a restore whose typed id mismatches; every action writes its audit
+  line. Each refusal case proven able to fail.
+* **Pause-expiry pin (Stage 2):** with a pause flag older than 6 h, the reconcile timer treats
+  auto-rebuild as ACTIVE and the flag as expired. FAILS IF a stale pause flag still suppresses
+  reconcile — proven against a never-expire implementation first.
+* **Persistent-pause pin (Stage 2):** a pause re-armed past the 24 h cumulative threshold surfaces
+  in the reconcile-status/ops facts. FAILS IF a slow-drip re-pause stays invisible.
+* **Rollback-repoints pin (Stage 2):** after a `rollback.request` naming a retained build,
+  `current` points at that build dir and the build inventory is unchanged (no new build dir, no
+  engine invocation). FAILS IF rollback triggers a rebuild or leaves `current` unswapped.
+* **Update fixed-recipe pin (Stage 2):** the host agent executes the identical fixed refresh
+  recipe regardless of `update.request` content — a request carrying unknown/extra fields is
+  refused (or the fields provably ignored) and logged. FAILS IF request content can vary the
+  executed commands.
+* **Single-flight pin (Stage 2):** a second privileged intent arriving while one is in flight is
+  refused and logged. FAILS IF two privileged recipes can run concurrently.
+* **Lag-label pin (Stage 2):** with served ≠ published fixtures, the station panel shows the
+  [FC-2] label.
+* **No-YAML-in-gateway pin:** the gateway process still never imports a YAML parser.
+* Standing lane rules apply unchanged: full CI-leg mirror before push-ready, authorship audit,
+  content-verified merges.
+
+## Provenance
+
+Mockup v4 approved and locked by the owner 2026-07-10 after four live review rounds; archived at
+`maintainer-archive/C43-mockup-v4-approved.html`. Owner rulings incorporated: φyx on a full
++180…−180 axis with verdict strips beneath plots; atomic collection batches; served-fetch station
+data path; Update-box as the bounded C40 exception; guarded drill-first DB restore; keys carry
+creation dates (already true — D1) plus notes; ops floor covering backups, alerts, uptime, git
+pull/version. Current-state map verified against main @ 252a96f the same day.
