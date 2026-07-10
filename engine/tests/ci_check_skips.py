@@ -75,6 +75,13 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
     # (D3.1 arm iv), never skips.
     "engine image build: gateway tree not shipped",   # test_validator_gate.py — D3.1 arm (iii), image lanes only
+    # C25: test_convention_gates_realdata.py — the real-corpus convention-gate pins (the three
+    # named USArray negative controls, the ccmt-2017 de-rotation acceptance, the AusLAMP-SA
+    # custodian-twin proof) run only where the .audit/realdata harness exists (the dev box; the
+    # corpus is not in the repo and not in any CI lane). Same dev-box-only class as the
+    # sibling-validator skip above. The synthetic gate pins in test_convention_gates.py RUN
+    # everywhere — this entry never excuses those.
+    "realdata corpus not present (AUSMT_REALDATA unset)",
 ]
 
 # `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token

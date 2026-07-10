@@ -37,6 +37,7 @@
         "stations_built": {"type": "integer", "minimum": 0},
         "stations_dropped": {
           "type": "array",
+          "description": "structured per-station drops; populated by the C25 convention gates (a gate FAIL names the gate, the angles and the fix)",
           "items": {
             "type": "object",
             "required": ["station", "reason"],
@@ -52,6 +53,11 @@
           "type": "array",
           "items": {"$ref": "#/definitions/conditioning_entry"},
           "description": "one entry per DISTINCT canonical-conditioning note, ordered by first appearance"
+        },
+        "frame": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/conditioning_entry"},
+          "description": "C25 frame/convention notes (derotation records, convention WARNs, insufficient-data notes), same aggregation shape as conditioning; optional for pre-C25 reports"
         },
         "cache": {
           "type": "object",
