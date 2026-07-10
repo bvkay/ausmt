@@ -310,6 +310,54 @@ chain in an emergency. Everything inside the boundary rides the request-file pat
 * Standing lane rules apply unchanged: full CI-leg mirror before push-ready, authorship audit,
   content-verified merges.
 
+## D14. Stage-2a hostile security review (2026-07-10) — D2 constraint outcomes
+
+Adversarial review of the S2a curator surfaces (quarantine serving, history read-job, key notes,
+stations JS) against the D2 binding constraints. Diff: 5 commits (d62a7f6…fb4514b).
+
+**D2 constraints — verified UPHELD:**
+
+* **D2.1 (gateway gains no privileges).** The Stations tab and history use existing surfaces: the
+  stations JS reads the same-origin served `/data` corpus (no new mount); the history git read runs
+  in the **runner** (which already mounts surveys-live read-only), not the gateway, via a `history`
+  read-job — the gateway issues no new git verb. UPHELD.
+* **D2.2 (CSP `script-src 'self'`).** STATIONS_JS ships as an external route constant
+  (`/gateway/curator/stations.js`), no inline JS. Source sweep pins assert no `<script>` wrapper, no
+  `on*=` handler, no `innerHTML`-with-data path (SVG built via `createElementNS`, all values via
+  `textContent`). The quarantine file route serves untrusted submitter bytes under
+  `default-src 'none'; sandbox` + `nosniff` + `Content-Disposition: attachment` (no filename → no
+  CRLF-injection surface) + `application/octet-stream`. UPHELD.
+* **D2.5 (PII containment — DB never enters git).** Key notes are sqlite-only; a pin
+  (`test_key_note_absent_from_git_bound_artifacts`) greps surveys-live for a note needle and asserts
+  absence. Quarantine list/detail expose id/slug/updated/reason only — **no submitter email**. UPHELD.
+
+**Path containment (quarantine file route).** `root not in target.parents` on `resolve()`-d paths,
+mirroring the preview sandbox. `is_valid_id` (26-char Crockford base32, no separators/dots) gates the
+id before any path build. Symlinks are rejected at unpack (zipsafety S_IFLNK → ZipRejection) AND
+`resolve()` dereferences any that exist so an out-of-root target 404s; the listing separately skips
+`is_symlink()`. Traversal pin plants a real out-of-root file and confirms 404 (non-vacuous). SOUND.
+
+**History read-job argv.** Slug is `_SLUG_RE`-validated (cannot start with `-`) before it reaches
+`-C package_root`; the argv is fully hardcoded (read-only `log` verb + `-c safe.directory=<resolved
+surveys_root>` + `--` pathspec); `-c safe.directory` is interpolated from a **resolved** path, not a
+request field. An allowlist guard (`_HISTORY_READONLY_VERBS = {"log"}`) plus a mutation-proof pin
+back the read-only assertion. Author/subject/body are `_esc`'d on render. SOUND.
+
+**Residual items — ALL RESOLVED in the same lane's fix round (commits 03d5f2b/6594eb0/80384c1),
+before any push:**
+
+* Stations JS relative fetch URLs (would have 404'd the whole tab in deployment) → fixed: all
+  fetches ride single-sourced absolute `dataUrl()`/`stationJsonUrl()`; pinned by an executable
+  Node URL-construction test proven red against the pre-fix JS. The same fix round also corrected
+  the JS `wrap180` truncated-`%` divergence from Python (found by the physics lens) and replaced
+  the source-string parity pin with an executable Node parity pin — **standing rule from this
+  lane: browser JS gets executable test coverage from the start; string pins alone are banned.**
+* Uploader note length cap → fixed: note ≤ 2000 / name ≤ 120 / email ≤ 254, server-side REJECT
+  with 400 (never silent truncation), pinned.
+* Revoked-key note POST → the "by-design" docstring was overruled at the architect gate (D7 says
+  read-only audit rows): route 409s on a revoked id + `AND revoked_utc IS NULL` in the DB layer,
+  both guards independently pinned.
+
 ## Provenance
 
 Mockup v4 approved and locked by the owner 2026-07-10 after four live review rounds; archived at
