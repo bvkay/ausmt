@@ -46,11 +46,12 @@
 #   AUSMT_BACKUP_DIR       backups root (else $AUSMT_DATA_DIR/backups)
 #   AUSMT_BACKUP_RETAIN    snapshots to keep (default 14)
 #   AUSMT_BACKUP_SQLITE    the sqlite3 command (default `sqlite3`); a test/CI shim hooks here
-#   AUSMT_GATEWAY_IMAGE    gateway image for the docker python-sqlite fallback (host has no sqlite3)
-#   AUSMT_BACKUP_NO_DOCKER set to 1 to disable the docker fallback (used to test the hard refusal)
 #
-# Dependency-light on purpose: POSIX sh, coreutils, and EITHER a host `sqlite3` OR a runnable gateway
-# image for the fallback. Read it top to bottom. Run ONE restore drill after installing it
+# Dependency-light on purpose: POSIX sh, coreutils, and a host `sqlite3` (required whenever a gateway
+# DB exists — it is the ONLY WAL-safe snapshot path; a docker/Python fallback was tried and REMOVED
+# after 2026-07-10: a live WAL DB cannot be opened through a read-only mount, and the mktemp out-dir is
+# 0700-operator-owned so the container uid cannot write into it — the fallback failed both ways on the
+# first real run). Read it top to bottom. Run ONE restore drill after installing it
 # (deploy/scripts/restore-drill.sh): a backup that has never been restored is a hypothesis, not a
 # backup. See deploy/README.md "Backups & restore".
 
@@ -63,10 +64,6 @@ set -eu
 BACKUPS_DIR="${1:-${AUSMT_BACKUP_DIR:-$AUSMT_DATA_DIR/backups}}"
 RETAIN="${AUSMT_BACKUP_RETAIN:-14}"
 SQLITE_CMD="${AUSMT_BACKUP_SQLITE:-sqlite3}"
-
-# The gateway image, only for the sqlite fallback when the host has no sqlite3. Matches compose.yaml
-# naming; override AUSMT_GATEWAY_IMAGE if your tag differs.
-GATEWAY_IMAGE="${AUSMT_GATEWAY_IMAGE:-ghcr.io/${OWNER:-bvkay}/ausmt-gateway:${TAG:-latest}}"
 
 STATE_DIR="$AUSMT_DATA_DIR/gateway/state"
 DB="$STATE_DIR/gateway.sqlite"
@@ -96,6 +93,50 @@ if ! ls "$STATE_DIR" >/dev/null 2>&1; then
 fi
 
 # --------------------------------------------------------------------------------------------------
+# 0a. Preflight the WAL sidecar permissions — BEFORE any snapshot work, so a permission trap fails
+#     LOUDLY up front instead of mid-snapshot. sqlite3's .backup opens the live WAL DB, which needs to
+#     read (and, for -shm, mmap) the -wal/-shm sidecars. A `docker compose up -d` RECREATION mints
+#     fresh sidecars owned by the gateway uid; depending on the gateway umask they may DROP the
+#     group-write bit the operator's group-membership read path relies on — so a run that passed by
+#     hand can fail on the next nightly after a compose recreate. Catch it here with the exact fix.
+# --------------------------------------------------------------------------------------------------
+if [ -f "$DB" ]; then
+  _unwritable=""
+  for _sc in "$DB-wal" "$DB-shm"; do
+    [ -e "$_sc" ] || continue          # sidecars only exist while the DB is open in WAL mode
+    [ -w "$_sc" ] || _unwritable="$_unwritable $_sc"
+  done
+  if [ -n "$_unwritable" ]; then
+    die "WAL sidecar(s) not writable by $(id -un 2>/dev/null || echo '?'):$_unwritable
+      Opening a live WAL DB writes to its -wal/-shm sidecars even for a read-only .backup, so this run
+      would fail. Container recreation makes fresh sidecars; they may drop the group-write bit — re-apply
+      it after a 'docker compose up -d', or fix the gateway umask so new sidecars keep g+rw. Fix now:
+          sudo chmod g+rw$_unwritable
+      See deploy/README.md \"Backups & restore\" ownership prep (step 0)."
+  fi
+fi
+
+# --------------------------------------------------------------------------------------------------
+# 0b. Preflight the backups dir — BEFORE the snapshot, so we never do a successful snapshot only to die
+#     at publish time because the parent is root-owned (the 2026-07-10 trap: /srv/ausmt is root-owned,
+#     so the script's `mkdir -p $BACKUPS_DIR` at publish time fails AFTER the snapshot succeeded). If
+#     the backups dir does not yet exist and its parent is not writable by us, refuse now with the exact
+#     one-time create command (pre-create it owned by the operator, like every other one-time prep).
+# --------------------------------------------------------------------------------------------------
+if [ ! -d "$BACKUPS_DIR" ]; then
+  _parent="$(dirname "$BACKUPS_DIR")"
+  if [ ! -w "$_parent" ]; then
+    _me="$(id -un 2>/dev/null || echo YOUR_OPERATOR_USER)"
+    _grp="$(id -gn 2>/dev/null || echo "$_me")"
+    die "backups dir does not exist and its parent is not writable: $BACKUPS_DIR
+      ($_parent is not writable by $_me — a root-owned data root is the usual cause). The snapshot would
+      succeed and then die at publish time. Pre-create it once, owned by the operator:
+          sudo install -d -o $_me -g $_grp -m 0750 $BACKUPS_DIR
+      See deploy/README.md \"Backups & restore\" install runbook."
+  fi
+fi
+
+# --------------------------------------------------------------------------------------------------
 # 1. Consistent sqlite snapshot (WAL-safe). The gateway may be LIVE while this runs.
 # --------------------------------------------------------------------------------------------------
 snapshot_sqlite() {
@@ -108,25 +149,22 @@ snapshot_sqlite() {
   # command -v on the FIRST word of SQLITE_CMD: it may be `sqlite3` or a `sh /path/shim.sh` override.
   sqlite_bin=${SQLITE_CMD%% *}
   if command -v "$sqlite_bin" >/dev/null 2>&1; then
-    # Preferred: sqlite3's online .backup API takes a transactionally-consistent copy of a live WAL DB.
+    # The ONLY WAL-safe path: sqlite3's online .backup API takes a transactionally-consistent copy of a
+    # live WAL DB. There is deliberately no fallback — see the die below.
     log "snapshotting $DB via '$sqlite_bin' .backup"
     # shellcheck disable=SC2086 -- SQLITE_CMD may be a multi-word override (e.g. `sh shim.sh`).
     $SQLITE_CMD "$DB" ".backup '$dest'"
-  elif [ "${AUSMT_BACKUP_NO_DOCKER:-0}" != "1" ] && command -v docker >/dev/null 2>&1; then
-    # Fallback: no host sqlite3, but the gateway image ships Python (stdlib sqlite3 has the same online
-    # backup API). Mount the DB read-only + a writable out-dir, run in-container as uid 10002 (the DB
-    # owner) so the read succeeds under the ownership split.
-    log "host sqlite3 not found — snapshotting via the gateway image's Python sqlite3 backup API"
-    docker run --rm --user 10002:10002 \
-      -v "$STATE_DIR:/db:ro" \
-      -v "$WORK:/out" \
-      --entrypoint python "$GATEWAY_IMAGE" -c \
-      'import sqlite3; src=sqlite3.connect("file:/db/gateway.sqlite?mode=ro", uri=True); dst=sqlite3.connect("/out/gateway.sqlite.bak"); src.backup(dst); dst.close(); src.close(); print("ok")'
-    mv "$WORK/gateway.sqlite.bak" "$dest"
   else
-    die "neither sqlite3 ('$sqlite_bin') nor docker is available for a WAL-safe snapshot — refusing to
-      raw-copy a live WAL DB (a raw cp can produce a torn snapshot). Install sqlite3 on the host, or run
-      where the gateway image is available. See deploy/README.md \"Backups & restore\" troubleshooting."
+    # Hard refusal — NOT a raw cp. A raw cp of a live WAL DB can miss committed transactions still in the
+    # -wal sidecar (torn snapshot). sqlite3 is the one WAL-safe copier; installing it is one line on any
+    # host. A docker/Python fallback was tried and removed (2026-07-10): it cannot open a live WAL DB
+    # through a read-only mount, and cannot write into the 0700-operator-owned staging dir as the
+    # container uid — it failed both ways on the first real run.
+    die "host sqlite3 not found ('$sqlite_bin') and a gateway DB exists at $DB — refusing to raw-copy a
+      live WAL DB (a raw cp can produce a torn snapshot). Install sqlite3 on the host and re-run:
+          sudo apt-get install -y sqlite3      # Debian/Ubuntu
+          # (dnf install -y sqlite / apk add sqlite / brew install sqlite on other hosts)
+      See deploy/README.md \"Backups & restore\" troubleshooting."
   fi
 }
 
