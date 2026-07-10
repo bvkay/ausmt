@@ -42,6 +42,7 @@ import _mtm as mtm                  # noqa: E402  (mt_metadata extractor — the
 import _edi_science as sci          # noqa: E402  (science_from_components, proc_info)
 import _mth5 as m5                   # noqa: E402  (MTH5 reader; optional, needs mth5+mt_metadata)
 import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_params/drho/dphase/EMPTY_TF)
+import _conventions as conv         # noqa: E402  (C25 convention gates: frame guard + quadrant check)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS  # noqa: E402  (single-source positional column contract)
 
@@ -961,18 +962,49 @@ def _mini_yaml(text: str) -> dict:
 
 
 def _parse_one_edi(p):
-    """The expensive per-EDI compute: the mt_metadata parse + coord-QC + shared TF/science math.
-    Returns a plain JSON-serializable dict {record, tf, sci, email_flag} (or {skip: reason}) — the
-    C18-cacheable unit. Kept side-effect-free (no stderr, no survey/org finalisation) so a cache HIT
-    reproduces the identical value a MISS computes; the caller applies the survey-scoped finalisation
-    and emits the warnings. `record`/`tf`/`sci` round-trip through JSON byte-identically into the
-    positional products (numpy float64 serialises as a float; verified by test)."""
+    """The expensive per-EDI compute: the mt_metadata parse + C25 convention gates + coord-QC +
+    shared TF/science math. Returns a plain JSON-serializable dict {record, tf, sci, email_flag,
+    coord_warn, frame, frame_notes} — or {"skip": {station, gate, reason}} when a convention gate
+    FAILS the station (fail-closed; the caller logs it loudly and records the structured drop).
+    This is the C18-cacheable unit. Kept side-effect-free (no stderr, no survey/org finalisation)
+    so a cache HIT reproduces the identical value a MISS computes; the caller applies the
+    survey-scoped finalisation and emits the warnings. `record`/`tf`/`sci` round-trip through JSON
+    byte-identically into the positional products (numpy float64 serialises as a float; verified
+    by test).
+
+    C25 gate order matters: Gate 1 (frame) runs FIRST and may DE-ROTATE the in-memory TF to
+    geographic north, so the record/components/science below — and Gate 2's quadrant check — all
+    see the SERVED frame. The source file bytes are never touched (D1)."""
     tfobj = mtm.read(p)                          # parse ONCE, reuse below
+    _raw = ep.read_norm(p)   # raw EDI text: frame evidence + coord-QC + processing-metadata scrape
+    _did = cat.grab(_raw, "DATAID")
+
+    # ---- C25 Gate 1: rotation/frame guard (full design in extract/_conventions.py). Evidence =
+    # the raw text (ZROT/TROT/ROTSPEC/HMEAS — load-bearing for spectra files, which mt_metadata
+    # reads with NO rotation metadata at all) cross-checked against the TF's own _rotation_angle.
+    # FAIL -> the station is skipped: never serve an unresolvable frame (C8 posture).
+    _ev = conv.parse_frame_evidence(_raw)
+    _n_per = int(tfobj.period.size) if tfobj.period is not None else 0
+    _disp = conv.frame_disposition(_ev, getattr(tfobj, "_rotation_angle", None),
+                                   conv.z_present_mask(tfobj), bool(tfobj.has_tipper()), _n_per)
+    if _disp.action == "fail":
+        try:
+            _sid, _ = cat.parse_dataid(_did)
+        except Exception:  # noqa: BLE001
+            _sid = None
+        return {"skip": {"station": _sid or p.stem, "gate": "rotation-frame",
+                         "reason": _disp.fail_reason}}
+    _frame_notes = list(_disp.notes)
+    if _disp.action == "derotate":
+        _n_masked = conv.apply_derotation(tfobj, _disp)
+        if _n_masked:
+            _frame_notes.append(f"frame: {_n_masked} period(s) had partial components and could "
+                                f"not be de-rotated honestly — masked (a fill would smear into "
+                                f"every rotated element)")
+
     r = mtm.record_from_tf(tfobj, p.name)
     # mt_metadata reads only the HEAD coordinate, so run the INFO-vs-HEAD DMS-bug detection +
     # the processing-metadata scrape on the raw EDI text (kept helpers; not a TF re-parse).
-    _raw = ep.read_norm(p)   # raw EDI text: coord-QC + processing-metadata scrape
-    _did = cat.grab(_raw, "DATAID")
     # Curator signal only (C3): the SOURCE EDI (as submitted/served) still carries whatever the
     # custodian wrote; we never mutate it (D1). proc_note() redacts its own returned note; this is
     # purely a flag for the caller's loud per-survey WARNING.
@@ -1008,11 +1040,26 @@ def _parse_one_edi(p):
     tf = tfmod.tf_from_components(per, comp) if per else ep.EMPTY_TF
     srow = sci.science_from_components(per, comp, proc) if per \
         else sci.science_from_components(None, {}, None)
-    return {"record": r, "tf": tf, "sci": srow, "email_flag": email_flag, "coord_warn": coord_warn}
+
+    # ---- C25 Gate 2: sign-convention quadrant check, on the SERVED (post-derotation) components.
+    # BOTH off-diagonal medians coherently out of quadrant -> FAIL (a pure convention flip: the
+    # station is skipped, never served under the wrong e^{±iωt} sense). ONE out -> honesty WARN
+    # (3D/distortion does that legitimately). Too little data -> explicit insufficient note.
+    _ck = conv.convention_check(comp)
+    if _ck["verdict"] == "fail":
+        return {"skip": {"station": r["id"], "gate": "sign-convention", "reason": _ck["detail"]}}
+    if _ck["verdict"] in ("warn_xy", "warn_yx"):
+        _frame_notes.append(f"convention: {_ck['detail']}")
+    elif _ck["verdict"] == "insufficient":
+        _frame_notes.append(f"convention: {_ck['detail']}")
+    _frame = dict(_disp.facts)
+    _frame["convention_check"] = _ck
+    return {"record": r, "tf": tf, "sci": srow, "email_flag": email_flag, "coord_warn": coord_warn,
+            "frame": _frame, "frame_notes": _frame_notes}
 
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
-                 cache=None, survey_digest=""):
+                 cache=None, survey_digest="", report=None):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
     mt_metadata is the SOLE engine (the dependency-free regex extractor + _spectra were retired in
@@ -1021,10 +1068,19 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
     `extractor` param is retained for call-site compatibility and is ignored (mt_metadata is the sole
     engine).
 
+    C25: the per-EDI parse runs the convention gates (extract/_conventions.py). A gate FAIL skips
+    the station LOUDLY (stderr + a structured drop record); a derotation/warn is carried as
+    conditioning-style frame notes. `report`, when given, is a dict the caller owns that collects
+    the survey-scoped gate output: {"stations_dropped": [{station, reason}],
+    "frame_notes": {station_id: [note, ...]}} — the main loop feeds these into build_report.json
+    (stations_dropped + warnings) and the survey-level NOTICE log. Optional so existing callers
+    (tests) are unchanged.
+
     C18: when `cache` is an ENABLED BuildCache, the per-EDI parse result (_parse_one_edi's plain-dict
     output) is content-addressed by the source EDI sha + salt, so an unchanged EDI on a warm rebuild
     reads the parse from cache instead of re-invoking mt_metadata. The restored value feeds the SAME
-    survey-scoped finalisation below, so the emitted rows are byte-identical to a fresh parse."""
+    survey-scoped finalisation below, so the emitted rows are byte-identical to a fresh parse (a
+    cached gate-skip replays identically too)."""
     stations, tf_rows, sci_rows = [], [], []
     _email_hits = []   # curator signal (C3): source filenames whose raw >INFO block carries an email
     if not mtm.available():
@@ -1042,6 +1098,17 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                 continue
             if _ck:
                 cache.put_json(_ck, parsed)   # populate for the next warm build
+        # C25 gate FAIL (fresh or cache-replayed): the station is skipped LOUDLY — stderr names the
+        # gate, the angles and the fix; the structured drop rides into build_report.json via
+        # `report` so the skip is machine-visible, never a silent absence.
+        if parsed.get("skip"):
+            _sk = parsed["skip"]
+            print(f"  GATE FAIL {p.name} [{_sk['gate']}]: {_sk['reason']}", file=sys.stderr)
+            if report is not None:
+                report.setdefault("stations_dropped", []).append(
+                    {"station": _sk.get("station") or p.stem,
+                     "reason": f"[{_sk['gate']}] {_sk['reason']}"})
+            continue
         r, tf, srow = parsed["record"], parsed["tf"], parsed["sci"]
         # Emit the deferred per-EDI diagnostics identically whether parsed from source or cache.
         if parsed.get("email_flag"):
@@ -1061,10 +1128,22 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         r["id"] = safe_component(r.get("id"))          # untrusted DATAID -> no traversal / XSS
         r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
         r["comps"] = "".join(r.get("components") or [])
+        r["frame"] = parsed.get("frame")               # C25 frame facts -> station.json
+        if parsed.get("frame_notes"):
+            r["_frame_notes"] = parsed["frame_notes"]  # keyed by FINAL id below (post-disambiguate)
         stations.append((p, r))
         tf_rows.append(tf)
         sci_rows.append(srow)
     _disambiguate(stations, slug)   # keep same-station re-processings as distinct variant records
+    # C25: hand the frame notes to the caller keyed by the FINAL (post-disambiguation) station id —
+    # the same key discipline the canonical-conditioning notes use.
+    if report is not None:
+        for (_p, _r) in stations:
+            if _r.get("_frame_notes"):
+                report.setdefault("frame_notes", {})[_r["id"]] = _r.pop("_frame_notes")
+    else:
+        for (_p, _r) in stations:
+            _r.pop("_frame_notes", None)
     if _email_hits:
         # Loud, ONCE per survey (not per file — a survey can have hundreds of EDIs from the same
         # custodian). This is a curator flag, not a mutation: the served original .edi bytes are the
@@ -1375,7 +1454,7 @@ def aggregate_conditioning(notes_by_station: dict) -> list:
     return entries
 
 
-def conditioning_log_lines(slug: str, notes_by_station: dict) -> list:
+def conditioning_log_lines(slug: str, notes_by_station: dict, prefix: str = "[xml]") -> list:
     """Render the per-survey conditioning NOTICE lines from the SHARED aggregation. One line per
     distinct note (never per station — that was the ~792-line noise), ordered by first appearance:
 
@@ -1384,13 +1463,15 @@ def conditioning_log_lines(slug: str, notes_by_station: dict) -> list:
         most,      many absentees -> `... — <k>/<N> stations (<N-k> stations without it)`
         few/half  -> `... — <note> — stations: <ids>`  (the enumerated-carriers case)
 
-    Returns the lines (the caller prints them to stderr, where the old per-station NOTICEs went), so a
-    test can assert the exact text. Empty input -> no lines."""
+    `prefix` tags the note family: "[xml]" (canonical conditioning, the default — existing tests
+    pin that exact text) or "[frame]" (C25 frame/convention notes). Returns the lines (the caller
+    prints them to stderr, where the old per-station NOTICEs went), so a test can assert the exact
+    text. Empty input -> no lines."""
     lines = []
     for e in aggregate_conditioning(notes_by_station):
         n = e["_n_total"]
         count = e["count"]
-        head = f"  [xml] NOTICE {slug}: {e['note']}"
+        head = f"  {prefix} NOTICE {slug}: {e['note']}"
         if count == n:
             lines.append(f"{head} — all {n} stations")
         elif e["except"] is not None:  # small absentee complement enumerated by the shared fn
@@ -2035,11 +2116,17 @@ def main(argv=None):
         # this one iteration — the parse gets in process_edis and the xml gets in _emit_served_xml).
         _c0 = (build_cache.hits, build_cache.misses, build_cache.writes) \
             if (build_cache is not None and build_cache.enabled) else None
+        # C25: survey-scoped gate output (structured drops + per-station frame notes) — collected
+        # by process_edis, fed into build_report.json + the NOTICE log below.
+        _gate_report: dict = {}
         if kind == "mth5":
             stations, tf_rows, sci_rows = process_mth5(inputs, label, org, slug)   # MTH5 path not cached
         else:
             stations, tf_rows, sci_rows = process_edis(inputs, label, org, slug, a.extractor,
-                                                       cache=build_cache, survey_digest=_survey_digest)
+                                                       cache=build_cache, survey_digest=_survey_digest,
+                                                       report=_gate_report)
+        for _d in _gate_report.get("stations_dropped", []):
+            _survey_warnings.append(f"station {_d['station']} SKIPPED by convention gate: {_d['reason']}")
         if not stations:
             n_in = len(inputs)
             print(f"  WARNING: survey '{label}' produced 0 stations from {n_in} input file(s) and "
@@ -2202,6 +2289,11 @@ def main(argv=None):
                     # source-id preserved in the Site Name, citation provenance). Present only when the
                     # station was actually conditioned, so an unconditioned station is not implied to be.
                     "canonical_conditioning": (conditioning_notes.get(r["id"]) or None),
+                    # frame (C25): the measured frame facts + the sign-convention verdict for THIS
+                    # station — what rotation the source declared, whether the engine de-rotated to
+                    # geographic north at ingest, and the Gate-2 quadrant medians. None only for
+                    # inputs the gates do not cover (the flag-gated MTH5 path).
+                    "frame": r.get("frame"),
                 }, indent=1), encoding="utf-8")
                 (sdir / "dimensionality.json").write_text(_jdump({
                     "classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
@@ -2245,16 +2337,29 @@ def main(argv=None):
         # aggregation that also drives the report below, so the log and the report can never disagree.
         for _cline in conditioning_log_lines(slug, conditioning_notes):
             print(_cline, file=sys.stderr)
+        # C25 frame/convention NOTICE lines: same one-line-per-distinct-note discipline, separate
+        # prefix and a separate build_report field — frame facts must never masquerade as
+        # canonical-XML conditioning (station.json keeps them apart the same way).
+        _frame_notes_by_station = _gate_report.get("frame_notes", {})
+        for _fline in conditioning_log_lines(slug, _frame_notes_by_station, prefix="[frame]"):
+            print(_fline, file=sys.stderr)
+        # Convention WARNs (one off-diagonal out of quadrant) are survey-level warnings in the
+        # report — the honest "look at this" surface. Derotation/insufficient/unverifiable notes
+        # stay in `frame` (they are recorded facts, not warnings).
+        for _fe in conditioning_report(_frame_notes_by_station):
+            if _fe["note"].startswith("convention:") and "outside its expected quadrant" in _fe["note"]:
+                _survey_warnings.append(f"{_fe['note']} — {_fe['count']} station(s): "
+                                        f"{_fe['stations'] or _fe['except'] or _fe['count']}")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
-            # The build drops stations only inside process_edis (a bare print+continue on an
-            # unusable EDI), which returns no structured drop record; per the brief we do NOT rebuild
-            # that logging path just to capture it, so this is [] for a survey that built (survey-LEVEL
-            # 0-station drops are recorded corpus-side in dropped_surveys and the totals below).
-            "stations_dropped": [],
+            # C25: convention-gate skips are STRUCTURED drops ({station, reason}); the legacy
+            # unusable-EDI print+continue path still records nothing here (per the original brief).
+            "stations_dropped": list(_gate_report.get("stations_dropped", [])),
             "warnings": list(_survey_warnings),
             # Same shared aggregation as the log lines above: [{note,count,stations|null,except|null}].
             "conditioning": conditioning_report(conditioning_notes),
+            # C25: frame/convention notes, same aggregation shape as `conditioning`.
+            "frame": conditioning_report(_frame_notes_by_station),
             "cache": ({"digest": (_survey_digest or "")[:12], "hits": _dh, "misses": _dm, "writes": _dw}
                       if _c0 is not None else {"digest": (_survey_digest or "")[:12],
                                               "hits": 0, "misses": 0, "writes": 0}),
