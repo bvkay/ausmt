@@ -40,6 +40,14 @@ _UPLOAD_CHUNK = 1024 * 1024
 _POLL_INTERVAL_S = 5.0
 _STATUS_404_BODY = b"not found"  # byte-identical for every unknown/invalid token (design §3)
 
+# C43 fix-round F5: server-side length caps on the uploader-key free-text fields. The caps are the
+# GATE (an over-length POST is refused 400, never silently truncated); the form maxlength attributes
+# are client courtesy only. Modest values: a note is "who it's for / expiry intent" (2000 chars is
+# paragraphs), a name is a short operator label, an email caps at the RFC 5321 path limit.
+_NOTE_MAX_CHARS = 2000
+_KEY_NAME_MAX_CHARS = 120
+_KEY_EMAIL_MAX_CHARS = 254
+
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -677,6 +685,15 @@ class Gateway:
         email = (email_field or "").strip() or None
         if not name:
             return self.handle_uploaders(request, error="A name is required.", status_code=400)
+        # F5 (fix-round): modest server-side caps, consistent with the note cap — refused, not truncated.
+        if len(name) > _KEY_NAME_MAX_CHARS:
+            return self.handle_uploaders(
+                request, error=f"Name too long ({len(name)} chars; max {_KEY_NAME_MAX_CHARS}).",
+                status_code=400)
+        if email and len(email) > _KEY_EMAIL_MAX_CHARS:
+            return self.handle_uploaders(
+                request, error=f"Email too long ({len(email)} chars; max {_KEY_EMAIL_MAX_CHARS}).",
+                status_code=400)
         key = uploader_keys_mod.mint_key()
         try:
             self.db.create_uploader_key(
@@ -706,11 +723,20 @@ class Gateway:
 
     def handle_uploader_note(self, request: Request, key_id: int, note: str | None,
                              csrf: str | None) -> Response:
-        """POST set-note (C43 D7): session + CSRF gated. Stores a free-text curator annotation on the
-        key — SQLITE ONLY, never a git-bound path (the PII-containment invariant, D2.5). Idempotent —
-        setting a note on an unknown id updates nothing and still redirects back (no oracle for whether
-        the id existed). An empty note clears it (stored NULL). Does NOT touch key material or the
-        active/revoked lifecycle — the note is documentation, not a lifecycle control."""
+        """POST set-note (C43 D7): session + CSRF gated. Stores a free-text curator annotation on an
+        ACTIVE key — SQLITE ONLY, never a git-bound path (the PII-containment invariant, D2.5).
+
+        F6 (fix-round, architect ruling): a REVOKED key is a READ-ONLY audit row (record D7) — a note
+        POST to a revoked id is REFUSED with 409 and changes nothing (the UI already hides the editor;
+        this is the server-side enforcement, plus the DB layer's own `AND revoked_utc IS NULL` guard).
+        An UNKNOWN id keeps the idempotent no-oracle redirect (matching revoke's posture).
+
+        F5 (fix-round): the note is capped at _NOTE_MAX_CHARS server-side — an over-length POST is
+        REFUSED with 400 (rejected, not truncated: silently dropping the tail of a curator's note
+        loses information without telling them; the 400 matches the house 'a decision note is
+        required' style). The textarea carries maxlength as client courtesy; this is the gate.
+
+        An empty note clears it (stored NULL). Never touches key material or the lifecycle."""
         curator = self._session_curator(request)
         if curator is None:
             return self._unauthorized_api()
@@ -719,6 +745,16 @@ class Gateway:
             return self._forbidden("bad csrf token")
         # CRLF-normalise like the editor scalars so a textarea edit never embeds a lone \r.
         clean = (note or "").replace("\r\n", "\n").replace("\r", "\n")
+        if len(clean) > _NOTE_MAX_CHARS:
+            return JSONResponse(
+                {"detail": f"note too long ({len(clean)} chars; max {_NOTE_MAX_CHARS})"},
+                status_code=400, headers={"Cache-Control": "no-store"})
+        key = self.db.get_uploader_key(key_id)
+        if key is not None and key.revoked_utc is not None:
+            # F6: revoked = read-only audit row; the note is frozen at revocation time.
+            return JSONResponse(
+                {"detail": "this key is revoked — a revoked key is a read-only audit row"},
+                status_code=409, headers={"Cache-Control": "no-store"})
         self.db.set_uploader_key_note(key_id, note=clean)
         return RedirectResponse("/gateway/curator/uploaders", status_code=303)
 

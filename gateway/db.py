@@ -440,16 +440,28 @@ class Database:
             return cur.rowcount > 0
 
     def set_uploader_key_note(self, key_id: int, *, note: str) -> bool:
-        """Set the free-text `note` on an uploader key (schema v3, C43 D7). Returns True if a row was
-        updated. Allowed on a revoked key too — the note is documentation/audit context, not a
-        lifecycle control (revocation stays a one-way mint->use->revoke; this never touches key
-        material or the active/revoked state). An empty string clears the note (stored as NULL so the
-        page renders "—"). PII containment: writes ONLY this sqlite column, never a git-bound path."""
+        """Set the free-text `note` on an ACTIVE uploader key (schema v3, C43 D7). Returns True if a
+        row was updated; False for an unknown id OR a REVOKED key — record D7 rules a revoked key a
+        READ-ONLY audit row, so its note is frozen at revocation time (fix-round F6, overruling the
+        earlier 'editable audit context' reading; the `AND revoked_utc IS NULL` guard is the DB-level
+        enforcement, belt-and-braces under the route's own state check). An empty string clears the
+        note (stored as NULL so the page renders "—"). This never touches key material or the
+        active/revoked state. PII containment: writes ONLY this sqlite column, never a git-bound
+        path."""
         value = note.strip() or None
         with self._lock, self._conn:
             cur = self._conn.execute(
-                "UPDATE uploader_keys SET note = ? WHERE id = ?", (value, key_id))
+                "UPDATE uploader_keys SET note = ? WHERE id = ? AND revoked_utc IS NULL",
+                (value, key_id))
             return cur.rowcount > 0
+
+    def get_uploader_key(self, key_id: int) -> UploaderKey | None:
+        """One uploader key by id (active or revoked), else None — the route-level state check for the
+        F6 revoked-immutability rule reads this before accepting a note update."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM uploader_keys WHERE id = ?", (key_id,)).fetchone()
+        return self._row_to_uploader_key(row) if row else None
 
     def submission_counts_by_uploader(self) -> dict[str, int]:
         """Map uploader NAME -> number of submissions attributed to that key, derived from the AUDIT
