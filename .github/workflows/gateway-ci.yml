@@ -10,17 +10,23 @@ name: gateway-ci
 # (179 passed, ~10s, 0 skips) — the suite drives async bodies via asyncio.run(), so no
 # pytest-asyncio plugin is needed (see gateway/requirements-dev.txt).
 #
-# PATH-SCOPED (ADR-001 monorepo): only runs when the gateway/ subtree (or this workflow) changes.
+# PATH-SCOPED (ADR-001 monorepo): runs when the gateway/ OR deploy/ subtree (or this workflow)
+# changes. deploy/ is here because the deploy unit tests (deploy/tests) were wired into this lane's
+# pytest invocation in PR #19 — but the trigger paths never followed, so a deploy-only change could
+# merge without its own tests ever running in CI (caught 2026-07-10: the backup-hardening branch
+# touched only deploy/** and would have merged hollow-green).
 
 on:
   workflow_dispatch:
   push:
     paths:
       - "gateway/**"
+      - "deploy/**"
       - ".github/workflows/gateway-ci.yml"
   pull_request:
     paths:
       - "gateway/**"
+      - "deploy/**"
       - ".github/workflows/gateway-ci.yml"
 
 concurrency:
