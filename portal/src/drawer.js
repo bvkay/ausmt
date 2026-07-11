@@ -112,6 +112,49 @@ function provenanceBox(s){
     rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")+
     `</table><div class="prov" style="margin-top:6px">Every product traces to its input file, the extractor and version, and the screening parameters above — reproducible offline by <i>AusMT</i>.</div></details>`;
 }
+// C25-V3 (frame policy v3, owner ruling 2026-07-11): the engine serves impedances AS STORED in the
+// source's declared acquisition frame and NEVER de-rotates. When that frame is non-trivial we report
+// it to the READER — terse, honest, no interpretation. frameLineText is PURE (DOM-free) so a Node pin
+// (tools/frame_line_test.js) can drive it. Inputs are the VERBATIM station.json `frame` block values:
+//   declared_azimuth_deg  — the recorded acquisition-frame angle (0 => served in the declared-zero /
+//                           geographic reference; no line). survey_frame_note — the V3-B "mixed
+//                           declared frames across stations" note (present only for an inconsistent
+//                           survey). Trigger: a non-zero declared angle OR a survey mixed-frames note.
+function frameLineText(frame){
+  if(!frame||typeof frame!=="object") return "";
+  const az=frame.declared_azimuth_deg;
+  const hasAngle=(typeof az==="number"&&isFinite(az)&&Math.abs(az)>0.01);
+  const mixed=(typeof frame.survey_frame_note==="string"&&frame.survey_frame_note.trim())?frame.survey_frame_note.trim():"";
+  if(!hasAngle&&!mixed) return "";
+  if(hasAngle){
+    const a=Math.round(az*10)/10;                         // at most 1 dp — the recorded value, terse
+    let line="Impedances served in the source's declared "+(a>0?"+":"")+a+"° acquisition frame (as stored — not rotated to geographic north).";
+    if(mixed) line+=" This survey mixes declared frames across stations.";
+    return line;
+  }
+  return "This survey mixes declared acquisition frames across stations; each station is served as stored.";
+}
+// Per-station frame facts live ONLY in the per-station station.json (the positional catalogue has no
+// frame column, and adding one would need a contract change). So fetch it lazily at drawer-open — the
+// SAME product the curator workbench reads — and inject the line if the drawer still shows this station.
+// Best-effort: an absent/withheld station.json (older builds, no --products, or a file:// portal) just
+// yields no line, never an error. Only called for OPEN-access surveys (a withheld survey serves no
+// impedances, so a "served in frame X" line would be false).
+function loadStationFrameLine(s){
+  const slug=s.slug||((SMETA[s.survey]||{}).slug);
+  if(!slug||!s.id) return Promise.resolve();              // cannot locate station.json — skip
+  const url=dataUrl("products/"+encodeURIComponent(slug)+"/"+encodeURIComponent(s.id)+"/station.json");
+  return fetch(url).then(r=>r.ok?r.json():null).then(doc=>{
+    if(!doc||!doc.frame) return;
+    const txt=frameLineText(doc.frame);
+    if(!txt) return;
+    const el=document.getElementById("frameline");
+    if(el&&el.dataset.ausmt===s.ausmt_id){                // guard: drawer may have moved on (async)
+      el.textContent=txt;
+      el.style.cssText="font-size:12px;color:var(--muted);margin:2px 0 10px;line-height:1.4";
+    }
+  }).catch(()=>{});                                       // withheld / offline / file:// => no line
+}
 function openStation(i){
   const s=ST[i],t=TFD[i]||[[]],m=SMETA[s.survey]||{},sc=SCI[i]||[];
   // UX3 item 7a: sc[SC.dim] (dimensionality) is no longer surfaced in the drawer screening grid — it's
@@ -144,6 +187,9 @@ function openStation(i){
    (isOpenAccess(m)
      ? rhoPlot(t)+phasePlot(t)+`<div id="pt_anchor"></div>`+ptPlot(t)+arrowPlot(t)   // C20: arrow panel BELOW the phase tensor, replacing the |T| plot
      : accessPanel(m)+`<div id="pt_anchor"></div>`)+
+   // C25-V3: reader-facing frame line — populated lazily from station.json by loadStationFrameLine()
+   // below (empty, so zero-height, until/unless this station declares a non-trivial acquisition frame).
+   `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
    `<div class="sechead">Screening diagnostics <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+diag+
    `<div class="dim">Geoelectric strike: <b>${strikeTxt}</b>${skew!=null?` · median |β| <b>${skew}°</b> · 3-D periods <b>${p3d}%</b>`:""}.<br>`+
    `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
@@ -166,6 +212,7 @@ function openStation(i){
      `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`+
    `<div class="api">Planned read API (static JSON on the hosted site):<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
   drawer.classList.add("open");drawer.scrollTop=0;
+  if(isOpenAccess(m)) loadStationFrameLine(s);   // C25-V3: inject the frame line if this station declares one
 }
 function closeDrawer(){drawer.classList.remove("open");if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);}
 async function fetchEdi(file,avail,survey){
