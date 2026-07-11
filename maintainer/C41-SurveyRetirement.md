@@ -105,8 +105,12 @@ No new privilege: the action rides the exact machinery every metadata edit and s
 already uses (C40 intact — no new mounts, no shell, no intent files; this is a PUBLISH action,
 not an ops action, so D9 request-file hardening does not apply). The blast radius of a hostile
 or mistaken click is bounded by git: one revertable commit, serving unchanged until a rebuild,
-and the typed-slug + note + CSRF + session gates in front of it. The audit trail is the commit
-itself (author fixed, curator name in the note per the publish convention).
+and the **session + CSRF + valid TOTP second factor + typed-slug + release-note** gates in
+front of it (the TOTP factor is the D2 owner amendment, 2026-07-11 — this gate list was written
+before the amendment and is corrected here to name it: an enrolled curator's *current, un-replayed,
+rate-limited* code is required in addition to the typed slug, so a stolen session alone cannot
+retire a survey). The audit trail is the commit itself (author fixed, curator name in the note per
+the publish convention).
 
 ## D4. Verification (Invariant 10 — implementation lane carries these)
 
@@ -121,6 +125,17 @@ itself (author fixed, curator name in the note per the publish convention).
   (round-trip on a real fixture package).
 * **Empty-corpus stop-condition**: the implementer BUILDS an empty surveys-live and reports:
   clean build → no guard; broken build → last-survey refusal implemented + pinned. Do not guess.
+  **RESOLVED (C41-IMPL, 2026-07-11): BROKEN → last-survey guard implemented + pinned.** Evidence:
+  the real engine build against an empty `surveys/` exits **2** — `"pipeline produced 0 stations
+  from 0 survey(s) attempted — failing the build (empty products are not a success). Use
+  --allow-empty ..."` (verbatim; `engine/tests/test_empty_build.py::test_empty_build_fails_without_allow_empty`
+  pins the same rc=2). The PRODUCTION serve path does NOT pass `--allow-empty`: `deploy/Makefile`
+  `rebuild-data` invokes `build-runner --surveys /srv/surveys/surveys --out … --bundle-edi
+  --products … --incremental …` with no `--allow-empty`, and `reconcile.sh` runs exactly that make
+  target. So retiring the LAST survey empties the corpus, the next rebuild fails, and the retired
+  survey keeps serving off the last good build indefinitely — the precise silent-drift failure this
+  record exists to remove. The gateway therefore REFUSES to retire the final remaining survey
+  (published-slug count == 1 ⇒ 409, nothing staged), pinned in the retirement flow tests.
 * House rules: engine-truth fixtures, mutation-proofs for pins guarding new behaviour, UI
   browser-verified at the architect gate before any push block (standing rule 2026-07-11).
 
