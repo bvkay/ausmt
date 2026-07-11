@@ -3445,10 +3445,33 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         f'<div style="flex:1 1 auto;min-width:0;max-width:52rem" id="hub-sections">'
         f'{"".join(forms)}</div>'
         '</div>'
+        # C41 D2: the danger zone lives at the BOTTOM of the Metadata tab (destructive ops beside the
+        # editing surface; History stays read-only), collapsed + visually separated.
+        + _hub_danger_zone(slug)
         # editor.js only — survey-hub.js is included ONCE by render_survey_hub for every tab
         # (C43-HUB: the header counts + Stations chip need it hub-wide).
-        '<script src="/gateway/curator/editor.js" defer></script>'
+        + '<script src="/gateway/curator/editor.js" defer></script>'
     )
+
+
+def _hub_danger_zone(slug: str) -> str:
+    """The Metadata tab's danger zone (C41 D2): a collapsed, visually-separated <details> whose only
+    affordance is a link to the retirement confirmation page (which carries the typed-slug + note +
+    TOTP gate). No form or destructive control here — a single click only OPENS the confirmation
+    page. The link is inline-styled (the button classes rely on the `button{}` base rules an <a> does
+    not inherit)."""
+    bad = _PALETTE["bad"]
+    return (
+        f'<details style="margin-top:2rem;border:1px solid {bad};border-radius:8px;padding:1rem;'
+        'background:rgba(168,84,84,.08)">'
+        f'<summary style="cursor:pointer;color:{bad};font-weight:600">Danger zone</summary>'
+        '<p class="sub" style="margin:.75rem 0 .5rem">Retiring a survey removes its ENTIRE package '
+        'from the repository in one commit (reversible by <code>git revert</code>). It requires a '
+        'typed confirmation, a release note, and your authenticator code.</p>'
+        f'<p><a href="/gateway/curator/survey/{_esc(slug)}/retire" '
+        f'style="display:inline-block;background:{bad};color:#fff;padding:.5rem 1rem;'
+        'border-radius:6px;font-weight:600;text-decoration:none">Remove survey…</a></p>'
+        '</details>')
 
 
 def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict, csrf_token: str,
@@ -3705,6 +3728,109 @@ def render_removal_preview(*, slug: str, version: str, removed: list, station_co
     if nav is not None:
         return _shell(f"AusMT remove stations {slug}", body, nav=nav)
     return _page(f"AusMT remove stations {slug}", body)
+
+
+# ---- survey retirement (C41 D2) — the danger-zone confirmation + terminal page --------------------
+# Whole-survey removal: a git rm -r of the survey package, gated by a typed slug + a required release
+# note + a valid TOTP second factor. The confirmation page DISCLOSES exactly what the record D2 lists
+# (package contents + N stations, serving-until-rebuild, collections recompute, bookmark/DOI honesty,
+# the git-revert undo). No inline JS: the submit rides the shared CURATOR_UI_JS data-confirm.
+
+
+def render_survey_retire_confirm(*, slug: str, station_count: int | None, csrf_token: str,
+                                 enrolled: bool, is_last_survey: bool, error: str = "",
+                                 nav: "NavContext | None" = None) -> str:
+    """The retirement confirmation page (C41 D2): the full disclosure + the typed-slug / release-note /
+    TOTP-code form. When the last-survey guard fires (retiring would empty the corpus and break the
+    build) or the curator is not enrolled in the second factor, the form is replaced by the honest
+    refusal in its place — the disclosure still renders so the curator understands the action either
+    way."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    n_txt = (f"{station_count} station file(s)" if isinstance(station_count, int)
+             else "all its station files")
+    disclosure = (
+        '<div class="panel"><h2>What retiring this survey does</h2><ul>'
+        f'<li><strong>Deletes the survey package</strong> — <code>{_esc(slug)}/survey.yaml</code> and '
+        f'{_esc(n_txt)} (the whole <code>surveys/{_esc(slug)}</code> directory) are removed with '
+        '<code>git rm -r</code> in ONE commit.</li>'
+        '<li><strong>Serving is unchanged until the next rebuild</strong> — the survey keeps serving '
+        'off the current build; the drift chip and serve panel show the lag honestly. Request a '
+        'rebuild from the serve-state screen to serve the removal.</li>'
+        '<li><strong>Collections recompute</strong> — any collection this survey belonged to drops it '
+        'on the next rebuild (the member simply disappears).</li>'
+        '<li><strong>Reader links break at the next rebuild</strong> — bookmarks to this survey 404; '
+        'a minted DOI keeps resolving to a dead entry until the custodian updates its DOI metadata '
+        '(DOI hygiene is the custodian&rsquo;s — this discloses it, it does not solve it).</li>'
+        '<li><strong>Reversible</strong> — this is one commit; <code>git revert</code> of it restores '
+        'the package byte-for-byte (ask the operator). git IS the soft delete; nothing is lost.</li>'
+        '</ul></div>')
+    if is_last_survey:
+        action = (
+            '<div class="panel"><h2>Cannot retire the last survey</h2>'
+            f'{err}'
+            '<p class="sub">This is the only published survey. An empty corpus breaks the next rebuild '
+            '(the production build does not permit an empty result), so the retired survey would keep '
+            'serving off the last good build indefinitely. Publish another survey before retiring this '
+            'one.</p>'
+            '<p><a href="/gateway/curator/survey/'
+            f'{_esc(slug)}">back to the survey</a></p></div>')
+    elif not enrolled:
+        action = (
+            '<div class="panel"><h2>Enrol your authenticator first</h2>'
+            f'{err}'
+            '<p class="sub">Retiring a survey requires a time-based one-time code (the second factor). '
+            'You are not enrolled. Set up your authenticator on the '
+            '<a href="/gateway/curator/security">Security</a> page, then return here.</p>'
+            '<p><a href="/gateway/curator/survey/'
+            f'{_esc(slug)}">back to the survey</a></p></div>')
+    else:
+        confirm_msg = (f"Retire {slug}? This git-rm's the whole survey package "
+                       "(reversible by git revert).")
+        action = (
+            '<div class="panel"><h2>Confirm retirement</h2>'
+            f'{err}'
+            f'<form method="post" action="/gateway/curator/survey/{_esc(slug)}/retire" '
+            f'data-confirm="{_esc(confirm_msg)}">'
+            f'{csrf}'
+            '<p><label class="k">Type the survey slug to confirm</label>'
+            f'<input type="text" name="typed_slug" autocomplete="off" placeholder="{_esc(slug)}"></p>'
+            '<p><label class="k">Release note (required — why retired; becomes the commit message)'
+            '</label>'
+            '<textarea name="note" placeholder="e.g. superseded by …, withdrawn by the custodian" '
+            'required></textarea></p>'
+            '<p><label class="k">Authenticator code (required — the second factor)</label>'
+            '<input type="text" name="code" inputmode="numeric" autocomplete="off" '
+            'placeholder="123456" style="max-width:12rem"></p>'
+            '<p><button class="b-bad" type="submit">Retire survey</button></p>'
+            '</form></div>')
+    body = (
+        f'<h1>Retire survey — {_esc(slug)}</h1>'
+        '<p class="sub">This is a destructive action, protected by a typed confirmation and your '
+        'authenticator. Read what it does before confirming.</p>'
+        f'{disclosure}{action}'
+    )
+    if nav is not None:
+        return _shell(f"AusMT retire {slug}", body, nav=nav)
+    return _page(f"AusMT retire {slug}", body)
+
+
+def render_survey_retired(*, slug: str, curator: str) -> str:
+    """The terminal page after a successful retirement: confirmation + the serve-until-rebuild reality +
+    the git-revert undo (record D2). A chrome-less _page like the station-removal terminal confirm."""
+    body = (
+        f'<h1>Retired survey — {_esc(slug)}</h1>'
+        '<p class="sub">The survey package was removed from surveys-live and pushed in one commit '
+        f'(curator:{_esc(curator)}). The serve-reconcile agent rebuilds and serves the result on its '
+        'next tick (typically within 15 minutes) — see the serve-state panel, or run '
+        '<code>make rebuild-data</code> by hand. Until then the survey keeps serving off the current '
+        'build; the drift chip shows the lag.</p>'
+        '<p class="sub"><strong>Undo:</strong> this is reversible — <code>git revert</code> of the '
+        'retirement commit restores the package byte-for-byte. Ask the operator.</p>'
+        '<p><a href="/gateway/curator/edit">back to surveys</a> · '
+        '<a href="/gateway/curator/serve">serve state</a></p>'
+    )
+    return _page(f"AusMT retired {slug}", body)
 
 
 # ---- uploader keys (schema v2 — curator-managed submit keys) ---------------------------------

@@ -472,3 +472,105 @@ def test_real_git_station_removal_rollback_on_push_reject(tmp_path, hermetic_git
         "the git-rm'd EDI must be restored on rollback"
     committed = (surveys_live / "surveys" / "multi" / "survey.yaml").read_bytes()
     assert committed == b"slug: multi\nversion: 1.2.0\n", "removal yaml survived a rolled-back removal"
+
+
+# --------------------------------------------------------------------------------------------------
+# D1.h — the survey-retirement commit path (commit_survey_removal) on a REAL repo pair (C41 T4)
+# --------------------------------------------------------------------------------------------------
+def test_real_git_survey_retirement_removes_package_and_pushes(tmp_path, hermetic_git_env):
+    # D1.h(i) — commit_survey_removal git-rm -r's the WHOLE survey package in one commit with the
+    # gateway identity and pushes; the package is gone from the committed tree, a SIBLING survey
+    # remains, and the commit touches EXACTLY the slug's paths (survey-scope diff-minimality). FAILS IF
+    # the wrong tree is removed, a sibling is touched, the diff is not minimal, or the push does not
+    # arrive.
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(surveys_live, env, "retireme",
+                                     "slug: retireme\nversion: 1.0.0\n", ("SA1.edi", "SA2.edi"))
+    _seed_published_survey_with_edis(surveys_live, env, "keepme",
+                                     "slug: keepme\nversion: 2.0.0\n", ("SB1.edi",))
+
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    new_ref = publish.commit_survey_removal(
+        publish.real_git_runner, surveys_live, "retireme",
+        curator_name="curator1", note="superseded by keepme", pre=pre)
+
+    assert new_ref, "commit_survey_removal returned no ref"
+    # The whole package is gone from the COMMITTED tree; the sibling survey remains.
+    tree = _git(["ls-tree", "-r", "--name-only", "HEAD"], surveys_live, env).stdout
+    assert "surveys/retireme/" not in tree, "the retired package survived in the tree"
+    assert "surveys/keepme/survey.yaml" in tree, "a sibling survey was removed"
+    # Survey-scope diff-minimality: every path the commit changed is under the slug's directory.
+    changed = _git(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+                   surveys_live, env).stdout.split()
+    assert changed, "the retirement commit changed nothing"
+    assert all(p.startswith("surveys/retireme/") for p in changed), \
+        f"the retirement commit touched paths outside the slug: {changed}"
+    # Fixed gateway identity + note in body + push arrival + clean on main.
+    an = _git(["log", "-1", "--format=%an <%ae>"], surveys_live, env).stdout.strip()
+    assert an == f"{publish.COMMIT_AUTHOR_NAME} <{publish.COMMIT_AUTHOR_EMAIL}>"
+    assert "superseded by keepme" in _commit_message(surveys_live, env)
+    remote = _git(["rev-parse", "main"], origin, env).stdout.strip()
+    local = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    assert remote == local, "retirement push did not arrive at origin"
+    assert _git(["rev-parse", "--abbrev-ref", "HEAD"], surveys_live, env).stdout.strip() == "main"
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+
+
+def test_real_git_survey_retirement_rollback_on_push_reject(tmp_path, hermetic_git_env):
+    # D1.h(ii) — a pre-receive reject rolls surveys-live back byte-for-byte: the WHOLE retired package
+    # is restored, the ref/branch are the pre-state, the tree is clean. FAILS IF a rejected retirement
+    # leaves the package removed (a half-retired publication ledger).
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(surveys_live, env, "retireme",
+                                     "slug: retireme\nversion: 1.0.0\n", ("SA1.edi", "SA2.edi"))
+    pre_ref = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    _install_reject_hook(origin)
+
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    with pytest.raises(publish.PublishError) as ei:
+        publish.commit_survey_removal(
+            publish.real_git_runner, surveys_live, "retireme",
+            curator_name="curator1", note="doomed", pre=pre)
+    assert ei.value.phase == "git-push"
+    # Rolled back byte-for-byte: HEAD/branch restored, tree clean, the whole package RESTORED.
+    assert _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip() == pre_ref
+    assert _git(["rev-parse", "--abbrev-ref", "HEAD"], surveys_live, env).stdout.strip() == "main"
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+    assert (surveys_live / "surveys" / "retireme" / "survey.yaml").is_file()
+    assert (surveys_live / "surveys" / "retireme" / "transfer_functions" / "edi" / "SA1.edi").is_file()
+    assert (surveys_live / "surveys" / "retireme" / "transfer_functions" / "edi" / "SA2.edi").is_file()
+
+
+def test_real_git_survey_retirement_revert_restores_package_byte_identical(tmp_path, hermetic_git_env):
+    # D1.h(iii) — THE UNDO GUARANTEE (record D2, load-bearing): `git revert` of the retirement commit
+    # restores the package BYTE-IDENTICALLY. Capture every file's exact bytes before retiring, retire
+    # (real commit+push), then revert the commit and assert every file returns byte-for-byte. FAILS IF
+    # the revert does not restore the package exactly (the 'git IS the soft delete' property that lets
+    # retirement need no tombstone state machine).
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(surveys_live, env, "retireme",
+                                     "slug: retireme\nversion: 1.4.2\n", ("SA1.edi", "SA2.edi", "SA3.edi"))
+    pkg = surveys_live / "surveys" / "retireme"
+    before = {p.relative_to(surveys_live).as_posix(): p.read_bytes()
+              for p in sorted(pkg.rglob("*")) if p.is_file()}
+    assert before, "no package files captured"
+
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    new_ref = publish.commit_survey_removal(
+        publish.real_git_runner, surveys_live, "retireme",
+        curator_name="curator1", note="withdrawn by custodian", pre=pre)
+    assert not pkg.exists(), "the package was not removed by the retirement"
+
+    # Revert with the FIXTURE git (not the code under test) — the undo an operator would run.
+    _git(["revert", "--no-edit", new_ref], surveys_live, env)
+    after = {rel: (surveys_live / rel).read_bytes() for rel in before}
+    assert after == before, "git revert did not restore the retired package byte-for-byte"

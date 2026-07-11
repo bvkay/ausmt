@@ -340,6 +340,58 @@ def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: 
     return new_ref
 
 
+def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_name: str, note: str,
+                          pre: PreState) -> str:
+    """Whole-survey retirement (C41 D2): `git rm -r` the ENTIRE survey package under
+    surveys-live/surveys/<slug>/ in ONE commit inside the same rollback guard as the station-removal
+    path, then ff-only merge + push. Returns the new commit sha.
+
+    This GENERALISES the station-removal machinery to survey scope (record D2 "Mechanics"): unlike a
+    station removal there is NO survey.yaml to re-write and NO validator run (there is nothing left to
+    validate) — the whole directory goes. Survey-scope DIFF-MINIMALITY: `git rm -r -- surveys/<slug>`
+    touches exactly the slug's paths and nothing else. Fail-closed at every step: a failure anywhere
+    (git-rm, commit-hook, non-ff merge, push rejection) rolls surveys-live back byte-for-byte to `pre`
+    and re-raises, so a failed retirement leaves the publication ledger untouched.
+
+    The undo (record D2, load-bearing): because this publishes through git, `git revert <this commit>`
+    restores the package byte-identically — git IS the soft delete, so no tombstone state machine is
+    needed. The commit records who curated and why (author fixed to the gateway identity, curator name
+    + retire note in the body per the publish convention); NEVER a submitter email (there is none — a
+    published survey has no submitter contact in git)."""
+    dest_root = surveys_live / "surveys"
+    dest_dir = dest_root / slug
+    dest_dir_resolved = dest_dir.resolve()
+    root_resolved = dest_root.resolve()
+    if dest_dir_resolved != root_resolved and root_resolved not in dest_dir_resolved.parents:
+        raise PublishError("guard", "survey path escapes surveys-live/surveys")
+    if not dest_dir.is_dir():
+        raise PublishError("guard", f"survey {slug!r} does not exist in surveys-live")
+
+    branch = f"retire/{slug}"
+    subject = f"retire survey by curator:{curator_name}: {slug}"
+    body = (f"Curated-by: curator:{curator_name}\nSurvey: {slug}\n"
+            f"Retired: {slug}\nRetire-note: {note}")
+    rel_path = f"surveys/{slug}"
+    try:
+        _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
+        # git rm -r removes the whole survey tree from the index AND the working tree in one step.
+        _git(git_runner, ["rm", "-r", "--", rel_path], surveys_live, "git-rm")
+        _git(git_runner,
+             ["-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
+              "commit", "-m", subject, "-m", body],
+             surveys_live, "git-commit")
+        new_ref = _capture_head(git_runner, surveys_live) or ""
+        _git(git_runner, ["checkout", "main"], surveys_live, "git-checkout-main")
+        _git(git_runner, ["merge", "--ff-only", branch], surveys_live, "git-merge")
+        push = git_runner(["push", "origin", "main"], cwd=surveys_live)
+        if push.returncode != 0:
+            raise PublishError("git-push", (push.stderr or push.stdout or "push failed").strip()[:500])
+    except PublishError:
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise
+    return new_ref
+
+
 def _git(git_runner, args: list[str], cwd: Path, phase: str) -> GitResult:
     res = git_runner(args, cwd=cwd)
     if res.returncode != 0:

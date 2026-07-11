@@ -1376,6 +1376,168 @@ class Gateway:
         publish.commit_station_removal(self._git_runner, surveys_live, slug, new_yaml, removed,
                                        expected_sha, curator, note, pre)
 
+    # ---- C41 survey retirement (D2) — the destructive whole-survey removal + its TOTP gate --------
+
+    def _station_count_for(self, slug: str) -> int | None:
+        """The published station (EDI) count for `slug`, via the runner's list_stations job — for the
+        retirement confirmation disclosure (record D2: 'N station files, N stated'). Degrades to None
+        (runner down / refusal) so the confirmation page still renders honestly without a number,
+        never a 500 on the disclosure path."""
+        try:
+            result = self._edit_runner(metaedit.make_list_stations_job(slug))
+        except metaedit.EditRunnerError as exc:
+            logger.warning("retire confirm: list-stations failed for %s: %s", slug, exc)
+            return None
+        if not result.get("ok"):
+            return None
+        stations = result.get("stations")
+        return len(stations) if isinstance(stations, list) else None
+
+    def _is_last_survey(self) -> bool:
+        """True if the corpus holds one (or zero) published surveys, so retiring one would EMPTY it.
+        C41 T6 (evidenced, not guessed): the production serve build (deploy/Makefile rebuild-data)
+        invokes build_portal WITHOUT --allow-empty, and the real engine exits 2 on an empty corpus, so
+        an empty surveys-live breaks the next rebuild and the retired survey keeps serving off the last
+        good build indefinitely. The last-survey guard refuses this."""
+        slugs = metaedit.list_published_slugs(self.cfg.surveys_live_dir)
+        return len(slugs) <= 1
+
+    def _retire_confirm_response(self, request: Request, name: str, slug: str, *, error: str = "",
+                                 status_code: int = 200) -> Response:
+        """Render the retirement confirmation page for `slug`: the record-D2 disclosure + the typed-slug
+        / release-note / TOTP-code form — or, when the action cannot proceed, the honest refusal in
+        place of the form (the last-survey guard, or an un-enrolled curator). Reused by the GET
+        confirmation route AND by the POST handler's fail-closed re-renders (so a refusal shows the
+        reason on the same page with the right status code)."""
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(
+            request, active="surveys",
+            crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
+                  f'<a href="/gateway/curator/survey/{curatorpage._esc(slug)}">'  # noqa: SLF001
+                  f'{curatorpage._esc(slug)}</a> › <b>retire survey</b>')  # noqa: SLF001
+        is_last = self._is_last_survey()
+        totp_row = self.db.get_totp(name)
+        enrolled = totp_row is not None and totp_row.active
+        # Only pay for the station-count runner round-trip when the form will actually render.
+        station_count = self._station_count_for(slug) if (not is_last and enrolled) else None
+        return self._html(curatorpage.render_survey_retire_confirm(
+            slug=slug, station_count=station_count, csrf_token=csrf, enrolled=enrolled,
+            is_last_survey=is_last, error=error, nav=nav), status_code=status_code)
+
+    def handle_survey_retire_confirm(self, request: Request, slug: str) -> Response:
+        """GET the retirement confirmation page (record D2): session-gated. Resolves the package (404 if
+        the slug is unknown), then renders the disclosure + form (or the refusal when the last-survey
+        guard fires or the curator is not enrolled). No mutation — a GET only reads."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        return self._retire_confirm_response(request, name, slug)
+
+    async def handle_survey_retire(self, request: Request, slug: str, form: dict) -> Response:
+        """POST the retirement (record D2): the server GATES IN ORDER — session, CSRF, the last-survey
+        guard, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), then the typed-
+        slug match and the required note — and only then consumes the code and commits `git rm -r` under
+        PUBLISH_LOCK. ANY failure returns 400/409/429 with NOTHING staged (no git mutation runs before
+        every gate has passed).
+
+        Ordering nuance: the TOTP code is VERIFIED (and replay-checked) at the TOTP gate position, but
+        the code is only CONSUMED (last_used_step advanced, atomically) AFTER the typed-slug/note gates
+        pass — so a mistyped slug or an empty note does NOT burn the curator's code (they can retry with
+        the same still-valid code). The atomic consume closes the TOCTOU: a concurrent re-use loses."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        # T6 last-survey guard (evidenced): refusing to retire the final survey (an empty corpus breaks
+        # the next rebuild). Checked before the TOTP gate so a doomed retirement never burns a code.
+        if self._is_last_survey():
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="Refusing to retire the last remaining survey — an empty corpus breaks the next "
+                      "rebuild, so the retired survey would keep serving. Publish another survey first.",
+                status_code=409)
+        # TOTP gate (fail-closed). Unenrolled => refuse with an enrol pointer (rendered by the confirm
+        # page's not-enrolled state).
+        totp_row = self.db.get_totp(name)
+        if totp_row is None or not totp_row.active:
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="You must enrol an authenticator before retiring a survey — see Security.",
+                status_code=409)
+        if self._totp_limiter.blocked():
+            return self._retire_confirm_response(
+                request, name, slug, error="Too many code attempts — wait and retry.",
+                status_code=429)
+        code = (form.get("code") or "").strip()
+        step = totp.verify(code, totp_row.secret)
+        if step is None:
+            self._totp_limiter.record_failure()
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="That code did not match — check your authenticator and try again.",
+                status_code=400)
+        # Replay CHECK at the TOTP gate (the consume/advance happens after the content gates). A code at
+        # or below the last consumed step is a replay of an already-used code.
+        if totp_row.last_used_step is not None and step <= totp_row.last_used_step:
+            self._totp_limiter.record_failure()
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="That code was already used — wait for a fresh code from your authenticator.",
+                status_code=409)
+        # The code is valid: clear the throttle (it guards wrong CODES, not wrong slugs/notes below).
+        self._totp_limiter.record_success()
+        # Typed-slug + note gates (BEFORE consuming the code, so a typo does not burn it).
+        typed = (form.get("typed_slug") or "").strip()
+        if typed != slug:
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="The typed survey name did not match — type the exact slug to confirm.",
+                status_code=400)
+        note = (form.get("note") or "").strip()
+        if not note:
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="A release note is required (why the survey is retired) — it becomes the commit "
+                      "message.", status_code=400)
+        # All gates passed: CONSUME the code atomically (advance last_used_step). A concurrent re-use of
+        # the same code loses this race and is refused with nothing staged.
+        if not self.db.consume_totp_step(name, step):
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="That code was already used — wait for a fresh code from your authenticator.",
+                status_code=409)
+        return await self._commit_retire(slug, name, note)
+
+    async def _commit_retire(self, slug: str, curator: str, note: str) -> Response:
+        surveys_live = self.cfg.surveys_live_dir
+        if surveys_live is None:
+            return JSONResponse({"detail": "AUSMT_SURVEYS_LIVE is not configured"}, status_code=503)
+        try:
+            safe_slug = publish.validate_slug(slug)
+        except publish.PublishError as exc:
+            return JSONResponse({"detail": exc.message}, status_code=400)
+        async with publish.PUBLISH_LOCK:
+            try:
+                await asyncio.to_thread(
+                    self._commit_retire_blocking, surveys_live, safe_slug, curator, note)
+            except publish.PublishError as exc:
+                logger.warning("survey retirement publish failed for %s at %s: %s",
+                               slug, exc.phase, exc.message)
+                return JSONResponse({"detail": f"publish failed: {exc.message}"}, status_code=409)
+        return self._html(curatorpage.render_survey_retired(slug=slug, curator=curator))
+
+    def _commit_retire_blocking(self, surveys_live: Path, slug: str, curator: str, note: str) -> None:
+        pre = publish.preflight(self._git_runner, surveys_live)
+        publish.commit_survey_removal(self._git_runner, surveys_live, slug, curator, note, pre)
+
     def _edit_package_or_error(self, slug: str):
         """Resolve the surveys-live package dir for `slug` or return a Response (404). Charset-
         validates the slug (publish.validate_slug) BEFORE it touches a path — the same guard the
@@ -2097,6 +2259,18 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     async def curator_stations_confirm(request: Request, slug: str):
         form = dict(await request.form())
         return await gw.handle_stations_confirm(request, slug, form)
+
+    # ---- C41 survey retirement. GET renders the danger-zone confirmation page (blocking read-job ->
+    # threadpool, `def`); the POST is async (it verifies the TOTP factor then takes the PUBLISH_LOCK for
+    # the git rm -r). Both live under the survey hub path so the crumb + rail highlight stay coherent.
+    @app.get("/gateway/curator/survey/{slug}/retire")
+    def curator_survey_retire_confirm(request: Request, slug: str):
+        return gw.handle_survey_retire_confirm(request, slug)
+
+    @app.post("/gateway/curator/survey/{slug}/retire")
+    async def curator_survey_retire(request: Request, slug: str):
+        form = dict(await request.form())
+        return await gw.handle_survey_retire(request, slug, form)
 
     @app.post("/gateway/curator/submission/{submission_id}/{action}")
     async def curator_action(request: Request, submission_id: str, action: str,
