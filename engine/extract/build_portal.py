@@ -2409,7 +2409,16 @@ def main(argv=None):
                                                         lic, len(_xsrc),
                                                         nci_base=nci_base, base_url=base_url))
             if flags["survey_h5_enabled"]:
-                _hrel, _hpath, _hn = emit_survey_mth5(stations, slug, label, out)
+                # C42 (F1): emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
+                # (TF(fn=...)), bypassing the masked record entirely — an unfiltered station list served
+                # a withheld station's exact lat/lon/elev inside the h5 while every JSON surface was
+                # correctly null (the leak-sweep's HDF5 leg pins this). Filter to the byte-gated
+                # exact-only set (the same per-station predicate as the EDI copy loop above): the
+                # non-exact contribution is WITHHELD from the bundle — never rewritten (D3 posture).
+                _h5_stations = [(p, r) for (p, r) in stations
+                                if coordacc.coordinates_served(coordacc.station_policy(
+                                    _coord_default, _coord_overrides, r.get("id")))]
+                _hrel, _hpath, _hn = emit_survey_mth5(_h5_stations, slug, label, out)
                 if _hpath:
                     manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
                                                            lic, _hn, nci_base=nci_base, base_url=base_url))

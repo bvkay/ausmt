@@ -193,11 +193,48 @@ def _sweep_tree_for_value(out_dir, value, *, epsilon=1e-3, label=""):
 
 def _sweep_non_exact_true_values(out_dir):
     """Sweep the WHOLE emitted tree for EVERY true value of the generalised + withheld stations
-    (lat/lon 6dp AND the distinctive elevation). Returns all hits."""
+    (lat/lon 6dp AND the distinctive elevation). Returns all hits.
+
+    NOTE: this text/byte sweep is STRUCTURALLY BLIND to binary containers — an IEEE-754 double
+    inside an HDF5 file never matches a string variant, and the text-token numeric parse cannot see
+    it either. Served *.h5 bundles are therefore swept SEPARATELY and NUMERICALLY by
+    _sweep_h5_for_non_exact (the F1 fix-round leg); a leak-sweep over a build that enables any
+    binary distribution emitter must run BOTH legs."""
     hits = []
     for st in (GEN, HID):
         for field in ("lat", "lon", "elev"):
             hits += _sweep_tree_for_value(out_dir, st[field], label=f"{st['id']}.{field}")
+    return hits
+
+
+def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
+    """The NUMERIC HDF5 leg of the leak-sweep (F1): open every served *.h5 under out_dir with the
+    engine's own mth5 reader and read each transfer function's summary position
+    (latitude/longitude/elevation) as NUMBERS. Returns hits [(file, msg)] when:
+
+      * a non-exact station's true lat/lon/elev appears within epsilon, OR
+      * a non-exact station is PRESENT in the bundle at all — the per-station byte gate withholds
+        the whole contribution (we never rewrite custodian bytes, D3), so presence itself is a
+        gate bypass regardless of the values it carries.
+
+    Exists because the text sweep cannot see into binary containers. Historically RED against the
+    pre-F1 build, where emit_survey_mth5 received the FULL station list and re-read the RAW source
+    EDIs (TF(fn=...)), bypassing both the mask and the byte gate."""
+    import _mth5 as m5  # noqa: PLC0415  (the engine's own MTH5 reader — same TF->record logic)
+    hits = []
+    for hp in sorted(out_dir.rglob("*.h5")):
+        rel = hp.relative_to(out_dir).as_posix()
+        for rec, _per, _comp in m5.records_and_components(hp):
+            rid = str(rec.get("id") or "")
+            for st in (GEN, HID):
+                if st["id"].lower() in rid.lower():
+                    hits.append((rel, f"non-exact station {st['id']} PRESENT in served MTH5 "
+                                      f"(byte gate bypassed; record id {rid!r})"))
+                for field, key in (("lat", "lat"), ("lon", "lon"), ("elev", "elev_m")):
+                    v = rec.get(key)
+                    if v is not None and abs(float(v) - st[field]) <= epsilon:
+                        hits.append((rel, f"numeric {v} within {epsilon} of true "
+                                          f"{st['id']}.{field} ({st[field]})"))
     return hits
 
 
@@ -207,17 +244,26 @@ def _sweep_non_exact_true_values(out_dir):
 
 def test_leak_sweep_no_true_value_of_a_non_exact_station_anywhere(tmp_path):
     """CENTREPIECE. Build one exact + one generalised + one withheld station with distinctive coords +
-    elevation; sweep EVERY byte of the emitted out/ tree for the true values of the two non-exact
-    stations (6dp, trimmed, 3-dp derivative, DMS; plus numeric parse epsilon >= 1e-3).
+    elevation, with EVERY flag-gated distribution emitter enabled (--survey-h5 — F1: an emitter left
+    out of the fixture build is an emitter the sweep never audits); sweep EVERY byte of the emitted
+    out/ tree for the true values of the two non-exact stations (6dp, trimmed, 3-dp derivative, DMS;
+    plus numeric parse epsilon >= 1e-3) AND numerically sweep every served *.h5 bundle — the text
+    sweep is structurally blind to IEEE-754 doubles inside binary containers, so the HDF5 leg reads
+    each bundled TF's latitude/longitude/elevation as numbers via the engine's own reader.
 
-    FAILS IF any true value (or a rounded derivative finer than the 0.1deg disclosure) of the generalised
-    OR withheld station appears anywhere in served output.
+    FAILS IF any true value (or a rounded derivative finer than the 0.1deg disclosure) of the
+    generalised OR withheld station appears anywhere in served output — text or binary — or a
+    non-exact station is present in the served MTH5 bundle at all.
     """
-    out, r = _build(tmp_path, [EXACT, GEN, HID])
+    out, r = _build(tmp_path, [EXACT, GEN, HID], extra=("--survey-h5",))
     assert r.returncode == 0, r.stderr
-    hits = _sweep_non_exact_true_values(out)
+    hits = _sweep_non_exact_true_values(out) + _sweep_h5_for_non_exact(out)
     assert not hits, "TRUE coordinate/elevation of a non-exact station leaked:\n" + "\n".join(
         f"  {f}: {h}" for f, h in hits)
+    # the exact station must still be IN the served MTH5 (the h5 leg must be sweeping a real bundle,
+    # not a vacuously absent one — the byte gate withholds contributions, never the whole bundle).
+    h5s = sorted(out.rglob("*.h5"))
+    assert h5s, "--survey-h5 build must serve an MTH5 bundle (else the HDF5 leg is vacuous)"
 
 
 def test_leak_sweep_mutation_all_exact_flip_finds_every_value(tmp_path):

@@ -152,6 +152,16 @@ coordinates** regardless of what is served:
   anywhere in served output. Mutation-proof TWO ways: flip the fixture to all-exact and show the
   sweep finds every value; and plant a bare 3-dp derivative to show the epsilon catches it.
   Artifact-agnostic — new emitters are covered by construction.
+  **Amendment (2026-07-11 fix round, F1):** the sweep build enables EVERY flag-gated distribution
+  emitter (`--survey-h5` and any future flag) and covers binary containers NUMERICALLY — the
+  served MTH5 bundle is opened and each transfer function's tf_summary latitude/longitude/
+  elevation read as numbers (same epsilon), and a non-exact station's mere PRESENCE in the bundle
+  is itself a failure. A text sweep is structurally blind to IEEE-754 doubles inside binary
+  containers, and an emitter left out of the fixture build is an emitter the sweep never audits:
+  the hostile panel constructed a real leaking build this way (emit_survey_mth5 re-read the RAW
+  source EDIs for the FULL station list, serving a withheld station's exact position inside the
+  h5 while every JSON surface was correctly null). Historically red; fixed by filtering the
+  bundle's station list through the same per-station byte-gate predicate as the EDI/XML copies.
 * **Warm-cache sweep pin:** run the full leak-sweep on a SECOND build with the policy already in
   place and survey.yaml unchanged (cache hits > 0, misses = 0). FAILS IF a warm-cache build
   leaks a true coordinate a cold build masks — pins the D3 cache-boundary invariant, which no
