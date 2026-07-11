@@ -15,6 +15,7 @@ boundary. Requires the mt_metadata/mth5 build stack.
 """
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -49,9 +50,13 @@ def clean_salt(monkeypatch):
 # Each station gets a UNIQUE lat/lon/elev so the sweep can attribute a leak to a specific policy class.
 # Elevations are distinctive DECIMALS (not round integers like 222.0 whose bare '222' string collides
 # with impedance-data substrings in the served EDI/XML) so an elevation hit unambiguously means a leak.
+# HID's FILE NAME differs from its DATAID (fix round 2, pin 5): the withheld station is keyed CORRECTLY
+# by its STATION id (HIDENINE, from DATAID) while living in HIDEFILE.edi — proving the correct path
+# masks everything even when the file name and station id disagree.
 EXACT = {"id": "EXACTONE", "lat": -31.234567, "lon": 135.234567, "elev": 111.61, "policy": "exact"}
 GEN = {"id": "GENFIVE", "lat": -32.876543, "lon": 136.876543, "elev": 222.73, "policy": "generalised"}
-HID = {"id": "HIDENINE", "lat": -33.555551, "lon": 137.555559, "elev": 333.47, "policy": "withheld"}
+HID = {"id": "HIDENINE", "file": "HIDEFILE.edi", "lat": -33.555551, "lon": 137.555559, "elev": 333.47,
+       "policy": "withheld"}
 # generalised expected cell (the ONLY position a generalised station may disclose)
 GEN_CELL = (round(GEN["lat"], 1), round(GEN["lon"], 1))   # (-32.9, 136.9)
 
@@ -88,7 +93,9 @@ def _stage_survey(base, stations, *, declare_policy=True, extent=True, overrides
     edidir = d / "transfer_functions" / "edi"
     edidir.mkdir(parents=True)
     for st in stations:
-        (edidir / f"{st['id']}.edi").write_text(_rewrite_edi(src, st), encoding="utf-8")
+        # a station dict may carry "file" to decouple the FILE NAME from the DATAID (fix round 2:
+        # the station id derives from DATAID, never the file name — probe-e's whole attack class).
+        (edidir / st.get("file", f"{st['id']}.edi")).write_text(_rewrite_edi(src, st), encoding="utf-8")
     lines = [
         'schema_version: "0.1"',
         f"slug: {slug}",
@@ -356,20 +363,24 @@ def test_byte_gate_non_exact_edi_xml_absent_from_all_surfaces(tmp_path):
     assert served_stations == {EXACT["id"]}, \
         f"only the exact station may be served; manifest served: {sorted(served_stations)}"
 
-    # on-disk EDI/XML: only the exact station's files exist
+    # on-disk EDI/XML: only the exact station's files exist. Check BOTH the station id AND the file
+    # stem (HID's file name differs from its DATAID since fix round 2 — a leaked copy would be
+    # HIDEFILE.edi, which an id-only check would miss).
     edi_names = {p.stem for p in out.rglob("edi/**/*.edi")}
     xml_names = {p.stem for p in out.rglob("xml/**/*.xml")}
-    assert GEN["id"] not in edi_names and HID["id"] not in edi_names, \
-        f"non-exact EDI present on disk: {sorted(edi_names)}"
-    assert GEN["id"] not in xml_names and HID["id"] not in xml_names, \
-        f"non-exact XML present on disk: {sorted(xml_names)}"
+    _hid_file_stem = HID["file"].rsplit(".", 1)[0]
+    assert GEN["id"] not in edi_names and HID["id"] not in edi_names \
+        and _hid_file_stem not in edi_names, f"non-exact EDI present on disk: {sorted(edi_names)}"
+    assert GEN["id"] not in xml_names and HID["id"] not in xml_names \
+        and _hid_file_stem not in xml_names, f"non-exact XML present on disk: {sorted(xml_names)}"
     assert EXACT["id"] in edi_names, "the exact station's EDI must still be served"
 
-    # zips must not contain a non-exact station's bytes
+    # zips must not contain a non-exact station's bytes (id OR file-stem named)
     for zp in out.rglob("bundles/*.zip"):
         with zipfile.ZipFile(zp) as z:
             for name in z.namelist():
-                assert GEN["id"] not in name and HID["id"] not in name, \
+                assert GEN["id"] not in name and HID["id"] not in name \
+                    and _hid_file_stem not in name, \
                     f"{zp.name} bundles a non-exact station's file: {name}"
 
 
@@ -644,6 +655,214 @@ def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
     # loud, named drop — never a silent absence
     assert "coordinate-access policy INVALID" in r.stderr and "bad-survey" in r.stderr, \
         f"the drop must name the offending survey loudly; stderr:\n{r.stderr}"
+
+
+# =====================================================================================================
+# FIX ROUND 2: one shared matcher — validation and application cannot diverge (probe-e class)
+# =====================================================================================================
+
+# Probe-e (the verifier's constructed leak): file ALPHA.edi whose DATAID is BRAVO — the custodian
+# naturally keys the override by the FILE name (ALPHA: withheld) — plus an unrelated gamma.edi whose
+# DATAID happens to be ALPHA. Pre-fix: validation passed via the stem candidate, the corpus backstop
+# passed via the OTHER station's id, and at rc=0 the custodian's sensitive station served EXACT
+# coordinates on every surface while the unrelated station was silently masked instead.
+SENS = {"id": "BRAVO", "file": "ALPHA.edi", "lat": -34.111111, "lon": 138.222222, "elev": 150.55,
+        "policy": "withheld"}   # the custodian's sensitive site (keyed WRONGLY, by file name)
+DECOY = {"id": "ALPHA", "file": "gamma.edi", "lat": -34.933333, "lon": 138.744444, "elev": 260.77,
+         "policy": "exact"}     # the unrelated station whose id coincides with SENS's file stem
+
+
+def test_probe_e_stem_keyed_override_fails_loudly_not_silently_misapplied(tmp_path):
+    """PROBE-E PIN (fix round 2, blocking). The stem-keyed override + id/stem-coincidence fixture:
+    override key 'ALPHA' is simultaneously the id of one station AND the file stem of a DIFFERENT
+    station — an ambiguous, almost-certainly-filename-keyed policy. Validation must FAIL LOUDLY at
+    the pre-emission point (survey dropped, the survey's REAL station ids listed so the custodian
+    learns the correct handles), rc=0, and the healthy co-survey must serve.
+
+    HISTORICALLY RED against the pre-fix build: rc=0 with the sensitive station's TRUE coordinates
+    served on every surface (the sweep below found them) and the unrelated station silently masked.
+    """
+    base = tmp_path / "surveys"
+    base.mkdir(parents=True)
+    _stage_survey(base, [EXACT], slug="good-survey", name="Good Survey",
+                  coordinates_default="exact", overrides={})
+    _stage_survey(base, [SENS, DECOY], slug="probe-survey", name="Probe Survey",
+                  coordinates_default="exact", overrides={"ALPHA": "withheld"})
+    out = tmp_path / "out"
+    r = subprocess.run(
+        [sys.executable, "-m", "extract.build_portal", "--surveys", str(base), "--out", str(out),
+         "--products", str(out / "products"), "--bundle-edi", "--no-validate"],
+        cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, f"survey-granularity drop, never an abort: rc={r.returncode}\n{r.stderr}"
+    # THE LEAK CHECK (this is what was red pre-fix): the sensitive station's true position must not
+    # appear anywhere in served output.
+    leak = (_sweep_tree_for_value(out, SENS["lat"], label="SENS.lat")
+            + _sweep_tree_for_value(out, SENS["lon"], label="SENS.lon"))
+    assert not leak, "probe-e leak — the mis-keyed survey SERVED the sensitive true position:\n" + \
+        "\n".join(f"  {f}: {h}" for f, h in leak)
+    # the ambiguous survey is dropped loudly, listing its REAL station ids
+    assert "coordinate-access policy INVALID" in r.stderr and "probe-survey" in r.stderr, \
+        f"the ambiguous override must drop the survey loudly; stderr:\n{r.stderr}"
+    assert "BRAVO" in r.stderr, \
+        f"the SKIP must list the survey's real station ids (custodian guidance); stderr:\n{r.stderr}"
+    # nothing of the probe survey serves; the healthy co-survey does
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    served = {row[1] for row in cat}
+    assert served == {"Good Survey"}, f"only the healthy survey may serve; got {served}"
+    assert not (out / "edi" / "probe-survey").exists(), "no probe-survey bytes may be served"
+
+
+def test_validated_override_keys_always_apply(tmp_path):
+    """VALIDATED=>APPLIES PROPERTY PIN (fix round 2): for an engine-built survey containing a
+    DATAID!=stem station AND a processing-variant pair, EVERY override key that passes validation
+    changes at least one station record's effective policy — validation and application share ONE
+    matcher, so a validated no-op key is structurally impossible. FAILS IF any validated key is a
+    no-op (e.g. a re-introduced prefix tolerance validating keys the matcher never applies).
+    Also pins the negative arms: a file stem is NOT a valid key; a variant-suffixed id is NOT a
+    valid key (the rejection lists the BASE ids)."""
+    import build_portal as bp  # noqa: PLC0415
+    src = SAMPLE_EDI.read_text(encoding="utf-8")
+    edidir = tmp_path / "prop-survey" / "transfer_functions" / "edi"
+    edidir.mkdir(parents=True)
+    plan = [
+        ({"id": "BRAVO", "lat": -34.111111, "lon": 138.222222, "elev": 150.55}, "ALPHA.edi"),
+        ({"id": "SITE1", "lat": -34.501234, "lon": 138.401234, "elev": 210.31}, "SITE1_LemiGraph.edi"),
+        ({"id": "SITE1", "lat": -34.501234, "lon": 138.401234, "elev": 210.31}, "SITE1_Ohmega.edi"),
+        ({"id": "NORM", "lat": -34.701111, "lon": 138.601111, "elev": 190.13}, "NORM.edi"),
+    ]
+    for st, fname in plan:
+        (edidir / fname).write_text(_rewrite_edi(src, st), encoding="utf-8")
+    stations, _tf, _sci = bp.process_edis(sorted(edidir.glob("*.edi")), "Prop Survey", "Org",
+                                          "prop-survey", "mt_metadata", report={})
+    bases = {coordacc.base_station_id(r.get("id"), r.get("variant")) for (_p, r) in stations}
+    assert bases == {"BRAVO", "SITE1", "NORM"}, f"fixture must yield these bases: {bases}"
+    assert any(r.get("variant") for (_p, r) in stations), \
+        "the SITE1 pair must be variant-tagged (else the variant arm is vacuous)"
+    # THE PROPERTY: every key that validates, applies.
+    for k in sorted(bases):
+        ov = {k: "withheld"}
+        coordacc.validate_overrides(ov, stations)   # must not raise
+        n = sum(1 for (_p, r) in stations
+                if coordacc.station_policy("exact", ov, r.get("id"), r.get("variant")) == "withheld")
+        assert n >= 1, f"validated override key {k!r} is a NO-OP (matcher divergence)"
+    # variant inheritance: the base key covers BOTH variant records of the physical station
+    ov = {"SITE1": "withheld"}
+    n = sum(1 for (_p, r) in stations
+            if coordacc.station_policy("exact", ov, r.get("id"), r.get("variant")) == "withheld")
+    assert n == 2, f"a base-id override must cover all its variants, covered {n}"
+    # a file stem is NOT a valid key, full stop
+    with pytest.raises(coordacc.CoordinatePolicyError):
+        coordacc.validate_overrides({"ALPHA": "withheld"}, stations)
+    # a variant-suffixed id is NOT a valid key; the rejection lists the BASE ids
+    with pytest.raises(coordacc.CoordinatePolicyError) as ei:
+        coordacc.validate_overrides({"SITE1.lemigraph": "withheld"}, stations)
+    assert "SITE1" in str(ei.value), f"the rejection must list base ids: {ei.value}"
+
+
+def test_variant_pair_base_override_masks_all_variants(tmp_path):
+    """VARIANT PIN (fix round 2): two processings of ONE physical station (same DATAID, deduped to
+    SITE1.lemigraph / SITE1.ohmega by the engine's variant tagging). Privacy of the physical site
+    covers ALL its variants: an override on the BASE id must mask BOTH records and byte-gate BOTH
+    files. HISTORICALLY RED: pre-fix, the base key passed validation then matched NO record at
+    application (r['id'] carries the variant suffix), and the corpus backstop aborted the whole
+    build (rc=1)."""
+    vara = {"id": "SITE1", "file": "SITE1_LemiGraph.edi", "lat": -34.501234, "lon": 138.401234,
+            "elev": 210.31, "policy": "withheld"}
+    varb = {"id": "SITE1", "file": "SITE1_Ohmega.edi", "lat": -34.501234, "lon": 138.401234,
+            "elev": 210.31, "policy": "withheld"}
+    out, r = _build(tmp_path, [EXACT, vara, varb],
+                    coordinates_default="exact", overrides={"SITE1": "withheld"})
+    assert r.returncode == 0, f"base-id override must build, rc={r.returncode}\n{r.stderr}"
+    cols = _cat_cols()
+    ilat, ilon, iid = cols.index("lat"), cols.index("lon"), cols.index("id")
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    variants = [row for row in cat if str(row[iid]).startswith("SITE1.")]
+    assert len(variants) == 2, f"both variant records must stay catalogued: {[row[iid] for row in cat]}"
+    for row in variants:
+        assert row[ilat] is None and row[ilon] is None, \
+            f"variant {row[iid]} must inherit the base's withheld policy, got {row[ilat]},{row[ilon]}"
+    # the physical site's true position is nowhere in served output; its files are byte-gated
+    assert not _sweep_tree_for_value(out, vara["lat"], label="SITE1.lat"), "variant true lat leaked"
+    served_edis = {p.name for p in out.rglob("edi/**/*.edi")}
+    assert not any(n.startswith("SITE1") for n in served_edis), \
+        f"variant files must be byte-gated: {sorted(served_edis)}"
+
+
+def test_variant_suffixed_override_key_is_rejected(tmp_path):
+    """VARIANT-KEY PIN (fix round 2): a FULL variant-suffixed id as an override key is INVALID — the
+    survey is dropped loudly and the message lists the BASE ids. HISTORICALLY RED: pre-fix the
+    prefix tolerance validated it and the mask applied it to ONE variant only — the other variant
+    of the same physical station served its TRUE position (silent partial mask)."""
+    vara = {"id": "SITE1", "file": "SITE1_LemiGraph.edi", "lat": -34.501234, "lon": 138.401234,
+            "elev": 210.31, "policy": "exact"}
+    varb = {"id": "SITE1", "file": "SITE1_Ohmega.edi", "lat": -34.501234, "lon": 138.401234,
+            "elev": 210.31, "policy": "exact"}
+    base = tmp_path / "surveys"
+    base.mkdir(parents=True)
+    _stage_survey(base, [EXACT], slug="good-survey", name="Good Survey",
+                  coordinates_default="exact", overrides={})
+    _stage_survey(base, [vara, varb], slug="variant-survey", name="Variant Survey",
+                  coordinates_default="exact", overrides={"SITE1.lemigraph": "withheld"})
+    out = tmp_path / "out"
+    r = subprocess.run(
+        [sys.executable, "-m", "extract.build_portal", "--surveys", str(base), "--out", str(out),
+         "--products", str(out / "products"), "--bundle-edi", "--no-validate"],
+        cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    # pre-fix red: the variant survey BUILT with one variant masked and the other serving its true
+    # position. Post-fix: the survey is dropped loudly, message lists the base id.
+    leak = _sweep_tree_for_value(out, varb["lat"], label="SITE1.lat")
+    assert not leak, "partial mask — the sibling variant served the physical site's TRUE position:\n" \
+        + "\n".join(f"  {f}: {h}" for f, h in leak)
+    assert "coordinate-access policy INVALID" in r.stderr and "variant-survey" in r.stderr, \
+        f"variant-suffixed key must drop the survey loudly; stderr:\n{r.stderr}"
+    assert "SITE1" in r.stderr, f"the rejection must list the base ids; stderr:\n{r.stderr}"
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    assert {row[1] for row in cat} == {"Good Survey"}, "only the healthy survey serves"
+
+
+def test_mth5_input_survey_bad_override_dropped_before_bytes(tmp_path):
+    """MTH5-INPUT PIN (fix round 2): override validation for an mth5-input survey runs at the point
+    its station ids become known (after the h5 opens) and BEFORE any of that survey's bytes/products
+    are emitted — a bad override drops that survey alone, loudly, rc=0, the co-survey serves.
+    HISTORICALLY RED: pre-fix, mth5-input surveys skipped discovery validation entirely and the
+    corpus backstop aborted the WHOLE build (rc=1). The mth5 fixture is ENGINE-PRODUCED: a first
+    real build's --survey-h5 bundle is re-staged as an mth5-input package."""
+    # build 1: produce a real TF MTH5 through the real pipeline
+    out1, r1 = _build(tmp_path / "seed", [{**EXACT}], extra=("--survey-h5",), declare_policy=False)
+    assert r1.returncode == 0, r1.stderr
+    h5s = sorted(out1.rglob("bundles/*-tf.h5"))
+    assert h5s, "seed build must produce the engine-made MTH5 bundle"
+    # build 2: a corpus with a healthy EDI survey + an mth5-INPUT survey with a bogus override
+    base = tmp_path / "surveys"
+    base.mkdir(parents=True)
+    _stage_survey(base, [{**GEN, "policy": "exact"}], slug="good-survey", name="Good Survey",
+                  coordinates_default="exact", overrides={})
+    mdir = base / "mth5-survey" / "transfer_functions" / "mth5"
+    mdir.mkdir(parents=True)
+    shutil.copy(h5s[0], mdir / "stations.h5")
+    (base / "mth5-survey" / "survey.yaml").write_text("\n".join([
+        'schema_version: "0.1"', "slug: mth5-survey", 'name: "MTH5 Survey"', "country: Australia",
+        'organisation: "AusMT CI"', 'license: "CC-BY-4.0"', "data_type: BBMT",
+        "access:", "  level: open", "  coordinates: exact",
+        "  coordinate_overrides:", "    NOSUCHSTATION: withheld"]) + "\n", encoding="utf-8")
+    out = tmp_path / "out"
+    r = subprocess.run(
+        [sys.executable, "-m", "extract.build_portal", "--surveys", str(base), "--out", str(out),
+         "--products", str(out / "products"), "--bundle-edi", "--no-validate"],
+        cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, \
+        f"an mth5-input survey's bad override must not abort the build (pre-fix red): rc={r.returncode}\n{r.stderr}"
+    assert "coordinate-access policy INVALID" in r.stderr and "mth5-survey" in r.stderr, \
+        f"the mth5 survey must be dropped loudly; stderr:\n{r.stderr}"
+    # NONE of the mth5 survey's bytes/products reached out/
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    assert {row[1] for row in cat} == {"Good Survey"}, "only the healthy survey may be catalogued"
+    smeta = json.loads((out / "surveys.json").read_text(encoding="utf-8"))
+    assert "MTH5 Survey" not in smeta, "the dropped survey must not be published in surveys.json"
+    assert not (out / "products" / "mth5-survey").exists(), "no products for the dropped survey"
+    assert not any("mth5-survey" in p.as_posix() for p in out.rglob("*") if p.is_file()), \
+        "no artifact of the dropped mth5 survey may exist under out/"
 
 
 # =====================================================================================================

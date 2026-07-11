@@ -16,6 +16,8 @@ is a no-op for every one of its stations, so the whole existing corpus builds by
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 # The three policies, in the order the record lists them (D2). "exact" is the default.
 COORDINATE_POLICIES = ("exact", "generalised", "withheld")
 
@@ -56,9 +58,10 @@ def parse_coordinate_policy(access_block):
 
     Returns (default: str, overrides: dict[str, str]) with every value a member of
     COORDINATE_POLICIES. Raises CoordinatePolicyError on any unknown enum value (survey default OR an
-    override value) — fail-closed, never coerced to exact. Override IDS are validated against the real
-    station set separately, at mask time (apply_coordinate_policy), because the station ids are only
-    known after parsing.
+    override value) — fail-closed, never coerced to exact. Override IDS are validated separately, via
+    validate_overrides (fix round 2: in the build loop at the point the REAL parsed station ids exist,
+    for both EDI and MTH5 inputs, before any of that survey's bytes are emitted), because the station
+    ids are only known after parsing.
 
     `access_block` may be anything the YAML gave us (the `access` value): a mapping, or — under the
     older flat schema where `access:` was a bare level string — a non-mapping, in which case there is
@@ -92,11 +95,76 @@ def parse_coordinate_policy(access_block):
     return default, overrides
 
 
-def station_policy(default, overrides, station_id):
-    """The effective policy for one station: its per-station override if declared, else the survey
-    default. `station_id` is matched against the override keys as-declared (the caller validates that
-    every override key names a real station, so an unmatched key never silently no-ops)."""
-    return (overrides or {}).get(str(station_id), default)
+def base_station_id(station_id, variant=None):
+    """THE id half of the one shared matcher (fix round 2): the PHYSICAL station id an override keys
+    on — the record id with its engine-appended processing-variant tag stripped. build_portal's
+    _disambiguate dedups DATAID collisions as `<base>.<variant>` AND stores the tag on the record
+    (`r["variant"]`), so stripping uses that field — NEVER dot-guessing on the id string, because a
+    natural DATAID may legitimately contain '.' (safe_component preserves it). A record with no
+    variant tag IS its own base."""
+    sid = str(station_id) if station_id is not None else ""
+    if variant:
+        suffix = "." + str(variant)
+        if sid.endswith(suffix):
+            return sid[: -len(suffix)]
+    return sid
+
+
+def station_policy(default, overrides, station_id, variant=None):
+    """The APPLICATION half of the one shared matcher: the effective policy for one station — its
+    per-station override if declared, else the survey default. Override keys are BASE station ids
+    (fix round 2 ruling): the record's id is base-stripped via base_station_id before matching, so
+    privacy of a physical site covers ALL its processing variants. EXACT base match only — no
+    prefixes, no stems. validate_overrides() is the validation half, checking keys against the very
+    same base_station_id derivation, so a validated key can never be a silent no-op."""
+    return (overrides or {}).get(base_station_id(station_id, variant), default)
+
+
+def validate_overrides(overrides, stations):
+    """THE VALIDATION half of the one shared matcher (fix round 2): every override key must be the
+    BASE station id of at least one ACTUAL parsed station record in `stations` [(path, record), ...]
+    — the same records, the same base_station_id derivation that station_policy applies with, so
+    validation and application cannot diverge BY CONSTRUCTION (the probe-e class: a stem∪prefix
+    candidate set validated keys the matcher never applied, silently serving a withheld-intent
+    station's exact position).
+
+    Rules (all fail-closed, raising CoordinatePolicyError):
+      * a key matching NO station's base id fails — file stems are NOT valid keys, full stop (the
+        record id derives from the EDI DATAID / MTH5 station, never the file name);
+      * a FULL variant-suffixed id (`<base>.<variant>`) is NOT a valid key — overrides key the base;
+        an override on the base covers all its variants;
+      * a key that IS some station's id but ALSO the file stem of a DIFFERENT station (probe-e's
+        exact construction) is AMBIGUOUS — almost certainly a filename-keyed mistake — and fails
+        loudly rather than silently masking the wrong physical site.
+
+    Every failure message LISTS the survey's real base station ids, so a custodian who keyed by
+    filename learns the correct handles immediately."""
+    if not overrides:
+        return
+    bases = {}
+    for (p, r) in stations:
+        bases.setdefault(base_station_id(r.get("id"), r.get("variant")), []).append(p)
+    unknown = sorted(k for k in overrides if k not in bases)
+    if unknown:
+        raise CoordinatePolicyError(
+            f"access.coordinate_overrides names station id(s) {unknown} that match no station in "
+            f"this survey. Override keys are BASE STATION ids (from the EDI DATAID / MTH5 station "
+            f"id) — never file names, and never variant-suffixed ids (an override on the base id "
+            f"covers all processing variants). This survey's station ids: {sorted(bases)}.")
+    # probe-e ambiguity guard: a key that names one station's id but is ALSO the file stem of a
+    # DIFFERENT station is almost certainly filename-keyed. Masking whichever station happens to
+    # carry that id would silently serve the intended site's exact position — refuse instead.
+    for (p, r) in stations:
+        stem = Path(str(p)).stem if p is not None else ""
+        b = base_station_id(r.get("id"), r.get("variant"))
+        for k in overrides:
+            if k == stem and k != b:
+                raise CoordinatePolicyError(
+                    f"access.coordinate_overrides key {k!r} is AMBIGUOUS: it is the file name of "
+                    f"{Path(str(p)).name!r} whose station id is {b!r}, while also matching a "
+                    f"different station's id. Override keys are STATION ids, never file names — "
+                    f"refusing to guess which physical site you meant (fail closed). This survey's "
+                    f"station ids: {sorted(bases)}.")
 
 
 def coordinates_served(policy) -> bool:
@@ -169,32 +237,25 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
     rewritten too (see _mask_qc_report) — the qc report is computed on TRUE coords (correct) and then
     de-leaked here, at the SAME single seam.
 
-    Validates that every override id names a real station in `stations`; an override naming no station
-    is a survey-level build FAILURE (CoordinatePolicyError, fail-closed) — never a silent no-op.
+    Re-validates the overrides against `stations` via validate_overrides (the SAME shared matcher);
+    an invalid override here is a hard failure (CoordinatePolicyError) — never a silent no-op.
 
     Returns the set of ausmt_ids that were masked (non-exact), for the caller's byte-gate/logging.
     """
-    # Fail-closed BACKSTOP (defence in depth): every override key must name a real station id in this
-    # survey's station set. Since F2, override ids are validated PER SURVEY at discovery time
-    # (build_portal._edi_station_id_candidates inside discover_work's try/except), where a typo drops
-    # only the offending survey — so for EDI-input surveys this raise should be UNREACHABLE for
-    # override-id errors. It still guards the flag-gated MTH5 input path (whose station ids are only
-    # known after an mth5 open, too heavy for discovery) and any direct API caller; if it ever fires
-    # in a full build it aborts loudly rather than serving under a half-applied policy.
-    if overrides:
-        real_ids = {r.get("id") for (_p, r) in stations}
-        unknown = [sid for sid in overrides if sid not in real_ids]
-        if unknown:
-            raise CoordinatePolicyError(
-                f"access.coordinate_overrides names station id(s) {sorted(unknown)} that do not exist "
-                f"in this survey (present: {sorted(x for x in real_ids if x)}) — refusing to build "
-                f"(fail closed; fix the override id or remove it).")
+    # Fail-closed BACKSTOP (defence in depth, fix round 2): the SAME validate_overrides the build
+    # loop already ran — on the SAME station records, at the point their ids became known and before
+    # any bytes were emitted, for BOTH input kinds (EDI and MTH5 alike). Same function + same inputs
+    # => this raise is UNREACHABLE on every input path of a full build, by construction (pinned:
+    # probe-e, variant, and mth5-input pins all prove survey-granularity drops with rc=0). It still
+    # guards direct API callers; if it ever fires in a full build that is a bug upstream, and
+    # aborting loudly beats serving under a half-applied policy.
+    validate_overrides(overrides, stations)
 
     masked_ausmt_ids = set()
     policy_by_ausmt: dict = {}
     policy_by_file: dict = {}
     for (p, r) in stations:
-        pol = station_policy(default, overrides, r.get("id"))
+        pol = station_policy(default, overrides, r.get("id"), r.get("variant"))
         # record the resolved policy under BOTH keys the qc fields use (ausmt_id, and the fid = file
         # name / r["file"]) so the qc rewrite can resolve either field's identity.
         policy_by_ausmt[r.get("ausmt_id")] = pol
@@ -265,7 +326,7 @@ def apply_coordinate_policy_corpus(all_stations, policy_of_survey, qc=None):
         masked_ausmt_ids |= apply_coordinate_policy(group, default, overrides, qc=None)
         # accumulate the resolved per-station policy under both qc identity keys for the corpus rewrite.
         for (p, r) in group:
-            pol = station_policy(default, overrides, r.get("id"))
+            pol = station_policy(default, overrides, r.get("id"), r.get("variant"))
             policy_by_ausmt[r.get("ausmt_id")] = pol
             _fid = r.get("file") or getattr(p, "name", None)
             if _fid is not None:

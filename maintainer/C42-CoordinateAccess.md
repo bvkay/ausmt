@@ -67,18 +67,42 @@ badges the state honestly: "position generalised to 0.1° at custodian request" 
 withheld at custodian request", replacing the universal "locations are public" drawer text with
 policy-aware wording.
 
-**Amendment (2026-07-11 fix round, F2) — engine fail-closed granularity:** both policy error
-classes (unknown enum value AND an override id naming no station) fail at **SURVEY granularity**:
-the offending survey is dropped loudly at discovery time (its override ids are cross-checked
-against the ids its EDI files can yield — DATAID + stem) and NOTHING of it is served, while the
-rest of the corpus builds normally. One survey's typo must never zero the whole portal build.
-The corpus-seam raise inside `apply_coordinate_policy` remains as a defence-in-depth BACKSTOP
-only (unreachable for EDI-input surveys; it still guards the flag-gated MTH5 input path, whose
-station ids are only known after an mth5 open). Note the pipeline reality this makes explicit:
-exact stations' source bytes are emitted (copied/zipped) inside the per-survey loop, BEFORE the
-corpus mask seam runs — the holding invariant for source bytes is therefore the **per-station
-byte gate at the copy/emit sites**, not raise-before-emission; the seam masks the derived
-record surfaces, the gate withholds the bytes.
+**Amendment (2026-07-11 fix round, F2; as amended by fix round 2) — engine fail-closed
+granularity:** both policy error classes (unknown enum value AND an invalid override id) fail at
+**SURVEY granularity**: the offending survey is dropped loudly and NOTHING of it is served, while
+the rest of the corpus builds normally. One survey's typo must never zero the whole portal build.
+Note the pipeline reality this makes explicit: exact stations' source bytes are emitted
+(copied/zipped) inside the per-survey loop, BEFORE the corpus mask seam runs — the holding
+invariant for source bytes is therefore the **per-station byte gate at the copy/emit sites**, not
+raise-before-emission; the seam masks the derived record surfaces, the gate withholds the bytes.
+
+**Amendment (2026-07-11 fix round 2) — override key semantics; one matcher by construction:**
+fix round 1's discovery-time cross-check ("the ids its EDI files can yield — DATAID + stem",
+with prefix tolerance) was BROKEN by the adversarial pass (probe-e): the candidate set was
+strictly looser than the id set the mask applies with, so a filename-keyed override could
+VALIDATE yet never APPLY — a withheld-intent station served its exact position at rc=0 while an
+unrelated id-coincident station was silently masked instead. The ruling:
+
+* **Override keys are STATION ids — never file names, full stop.** The station id derives from
+  the EDI DATAID (Phoenix compound form unpacked) / MTH5 station id; a failed validation's SKIP
+  message lists the survey's REAL station ids so a custodian who keyed by filename learns the
+  correct handles immediately.
+* **Base-id matching covers processing variants.** Privacy attaches to the PHYSICAL site: when
+  DATAID collisions are deduped as `<base>.<variant>`, an override keys the BASE id and every
+  variant record inherits it (the matcher strips the engine-appended variant tag via the record's
+  own `variant` field — never by dot-guessing, since a natural DATAID may contain '.'). A full
+  variant-suffixed id as an override key is INVALID (rejected; the listing shows bases).
+* **Validation and application share ONE matcher, by construction.** Override ids are validated
+  in the build loop at the point the REAL parsed station records exist — for BOTH input kinds
+  (EDI and MTH5 alike), before any of that survey's bytes/products are emitted — by the very
+  function (`validate_overrides`/`base_station_id`) whose derivation `station_policy` applies
+  with. There is no discovery-time scrape (any second derivation is a divergence risk). A key
+  that names one station's id but is ALSO the file stem of a DIFFERENT station (probe-e's exact
+  construction) is AMBIGUOUS and fails closed rather than masking whichever site happens to
+  carry the id.
+* The corpus-seam raise inside `apply_coordinate_policy` calls the SAME validator on the SAME
+  records and is therefore unreachable on EVERY input path of a full build (pinned); it remains
+  as the final backstop for direct API callers.
 
 ## D3. The masking seam — one choke point, ordered
 
@@ -197,6 +221,18 @@ coordinates** regardless of what is served:
 * **Validator pins:** unknown enum value → FAIL; override id naming no real station → FAIL.
 * **Default-stability pin:** a survey with no `access.coordinates` field builds byte-identical
   catalogue coords to pre-C42. FAILS IF the default changes anything.
+* **Matcher pins (2026-07-11 fix round 2 — the probe-e class):** the id/stem-coincidence fixture
+  (file `ALPHA.edi` with DATAID `BRAVO` + an unrelated station whose id is `ALPHA`, override
+  keyed `ALPHA`) is dropped LOUDLY with the real station ids listed — FAILS IF the mis-keyed
+  survey builds and serves the withheld-intent station's true position (the constructed leak).
+  The validated⇒applies PROPERTY pin: over an engine-built survey with a DATAID≠stem station and
+  a processing-variant pair, EVERY override key that passes validation changes at least one
+  record's effective policy — FAILS IF any validated key is a no-op (matcher divergence). The
+  variant pin: a base-id override masks ALL variant records and byte-gates all their files; a
+  variant-suffixed key is rejected listing the bases — FAILS IF a sibling variant serves the
+  physical site's true position. The MTH5-input pin: a bad override on an mth5-input survey
+  drops that survey alone before any of its bytes reach out/, rc=0 — FAILS IF the whole corpus
+  aborts or any artifact of the dropped survey is emitted.
 
 ## D7. Implementation staging
 
