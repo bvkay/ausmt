@@ -185,7 +185,11 @@ else
   if [ "$PROFILE" = "gateway" ] && [ -d "$SURVEYS/.git" ]; then
     # `-perm -020` = "has the group-write bit"; the negation finds entries that LACK it.
     offender=$(find "$SURVEYS/.git" ! -perm -020 -print 2>/dev/null | head -n 1)
-    shared=$(git -C "$SURVEYS" config --get core.sharedRepository 2>/dev/null || true)
+    # Read the config FILE directly, not via `git -C` repo discovery: discovery fails on a repo
+    # git considers dubious (preflight under sudo sees an operator-owned checkout) and on minimal
+    # .git trees, silently turning a hardened PASS into a WARN (post-merge CI red 2026-07-11 —
+    # this check's first ubuntu execution; it skips on Windows dev boxes).
+    shared=$(git config --file "$SURVEYS/.git/config" --get core.sharedRepository 2>/dev/null || true)
     if [ -n "$offender" ]; then
       fail "$SURVEYS/.git has entries WITHOUT group-write (e.g. $offender) — a gateway publish (uid 10002) creates foreign-owned, non-g+w object dirs and eventually locks the operator out of 'git pull' (incident 2026-07-11)" "git -C '$SURVEYS' config core.sharedRepository group && sudo chgrp -R 10002 '$SURVEYS/.git' && sudo chmod -R g+rwX '$SURVEYS/.git'   (see deploy/README.md 'surveys-live must be writable by uid 10002')"
     else
