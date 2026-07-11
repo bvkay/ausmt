@@ -1,6 +1,7 @@
 # C41 — Survey lifecycle, part A: retirement (frozen design); rename (deferred)
 
-Owner directive (2026-07-11): a curator-side **Remove survey** action. Motivation, in the owner's
+Owner directive (2026-07-11): a curator-side **Remove survey** action. APPROVED BY THE OWNER
+2026-07-11 with one amendment (the deletion second factor — see D2); mechanism locked TOTP. Motivation, in the owner's
 words, "this allows us to bypass the git issues on the box, and also makes it NCI future proof."
 Sharpened: the gateway publish flow commits **into the box's own surveys-live checkout** (mounted
 rw, `deploy/compose.yaml:198`) and pushes outward with operator credentials — it needs **no
@@ -49,6 +50,31 @@ every publish step) that discloses exactly:
 Confirmation requires **typing the slug** (the guarded-destructive-op pattern from the C43 D8
 restore design) plus a **required release note** (why retired — it becomes the commit message
 body). Mismatch → 400, nothing staged.
+
+**Second factor (owner amendment, 2026-07-11; mechanism locked TOTP same day).** Full deletion
+additionally requires a **valid TOTP code** — the typed slug protects against mistakes; the
+second factor protects against a stolen curator session, a different and worse threat. The
+owner's initial mechanism proposal (emailed ~10-minute one-time key) was revised to TOTP on two
+architect grounds the owner accepted: an emailed code returns a sending secret to the box
+(violating the A3 no-SMTP posture) and depends on box egress — the exact failure mode of the
+2026-07-11 DNS outage would have locked deletion out. TOTP design:
+
+* **RFC 6238, stdlib-only** (hmac/hashlib/struct/base64/time — no new dependency), 30 s steps,
+  ±1 step verify window (box clock skew tolerance), per-curator secret.
+* **Storage**: per-curator TOTP secret in the gateway sqlite (schema migration, additive) — the
+  DB is already the secrets/PII home: never in git, WAL-safe backed up, restore-drilled.
+* **Enrolment**: curator-session-gated Security page showing the base32 secret + otpauth:// URI
+  for manual authenticator entry (no QR-image dependency; single-digit curator population).
+  **Re-enrolment/rotation requires the CURRENT code** — a session alone must never rotate the
+  secret, else the second factor collapses into the first. Lost-authenticator recovery is a
+  **console action** (delete the enrolment row on the box) — deliberately in the same D12
+  boundary class as bootstrap-key rotation.
+* **Verification**: fail-closed — deletion by an unenrolled curator is refused with an enrol
+  pointer; wrong/absent code → 400, nothing staged; replay within the window rejected
+  (last-used counter per curator); attempts rate-limited (the login-throttle pattern).
+* **Shared mechanism**: this is the workbench's destructive-op second factor — the 2b-ii DB
+  restore adopts the same module and requirement, and C41 part B (rename) inherits it. One
+  enrolment, every dangerous button.
 
 **Mechanics.** Generalise the station-removal publish machinery to survey scope: preflight clean
 checkout → `git rm -r <slug>` → ONE commit (fixed author `AusMT Gateway`, note in body) →
