@@ -2,10 +2,10 @@
 
 Owner ruling (2026-07-10, audit item 6.1): **the custodian chooses** whether a station's
 coordinates are served exact, generalised, or withheld. This record freezes the design.
-Status: frozen, pending owner countersign on one flagged call — **D5 repo-visibility
-governance** (⚑ inline). A second flag (elevation under generalised) dissolved during
-adversarial verification: no served JSON surface carries elevation, and the byte-gate removes
-the only bearers — see D2.
+Status: **FROZEN — owner-countersigned in full.** D5 repo-visibility governance countersigned by
+the owner 2026-07-11 ("D5 governance statement is perfect"). The earlier elevation flag dissolved
+during adversarial verification: no served JSON surface carries elevation, and the byte-gate
+removes the only bearers — see D2. Implementation lanes may cut.
 
 ## D1. Current state (verified 2026-07-10, main @ 3d4be17)
 
