@@ -115,11 +115,17 @@ _HEAD = """<!doctype html>
  /* C43 S2a-SPLIT: Stations tab split view. WIDE = station LIST left / DATA panel right; the panel
     comes FIRST in DOM (so on a narrow single column it stacks first — owner ruling) and is placed
     into the RIGHT grid column explicitly on wide screens. align-items:start keeps both columns
-    TOP-ALIGNED so the (short) list never pushes the (tall) panel off-screen. */
- .stations-split{display:grid;grid-template-columns:20rem minmax(0,1fr);gap:1.25rem;
-   align-items:start;margin-top:.5rem}
- .stations-split .st-list{grid-column:1}   /* list: left column (DOM-second) */
- .stations-split .st-panel{grid-column:2}  /* panel: right column (DOM-first) */
+    TOP-ALIGNED so the (short) list never pushes the (tall) panel off-screen.
+    grid-row:1 on BOTH is load-bearing (usability incident 2026-07-11): with only grid-COLUMN set,
+    auto-placement cannot move the cursor backwards within a row — the DOM-second list wanting
+    column 1 lands in ROW 2, i.e. BELOW the panel (invisible while the placeholder was one line
+    tall; three screens down once a real station rendered). Both items are pinned to row 1.
+    The list column is sized to fit its five columns un-truncated (~26rem); the panel takes the
+    remaining width (the stations tab opts into the wide page measure). */
+ .stations-split{display:grid;grid-template-columns:minmax(24rem,28rem) minmax(0,1fr);
+   gap:1.25rem;align-items:start;margin-top:.5rem}
+ .stations-split .st-list{grid-column:1;grid-row:1}   /* list: left column (DOM-second) */
+ .stations-split .st-panel{grid-column:2;grid-row:1}  /* panel: right column (DOM-first) */
  /* The list is its OWN scroll region — a fixed-height container with its own scrollbar, NEVER a
     full-page-length table (a >300-station survey must not push the panel off-screen). The filter box
     sits ABOVE the scroll region (outside .st-scroll) so it stays put while the rows scroll. */
@@ -135,9 +141,9 @@ _HEAD = """<!doctype html>
  @media (max-width:720px){.shell{display:block}.rail{flex-basis:auto;border-right:0;
    border-bottom:1px solid #2E4254}
    /* narrow: collapse to one column. DOM order is panel-first, so the panel stacks ABOVE the list
-      with no `order` needed; the grid-column placements above are inert at one column. */
+      with no `order` needed; grid-row returns to auto so the two stack (row 1 / row 2). */
    .stations-split{grid-template-columns:1fr}
-   .stations-split .st-list,.stations-split .st-panel{grid-column:1}
+   .stations-split .st-list,.stations-split .st-panel{grid-column:1;grid-row:auto}
    .st-scroll{max-height:24rem}}
 </style></head>
 <body>
@@ -2285,7 +2291,10 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
                 'and every build-report warning as an actionable row.</p>')
         inner = _hub_overview_body(slug)
     body = f'{head}{strip}{inner}'
-    return _shell(f"AusMT survey {slug}", body, nav=nav)
+    # The stations tab opts into the wide measure (H2 pattern): a split of list + facts/plots needs
+    # the full viewport — inside the default 960px wrap the list truncated and the panel cramped
+    # (owner usability report 2026-07-11). The other tabs keep the reading measure.
+    return _shell(f"AusMT survey {slug}", body, nav=nav, wide=(tab == "stations"))
 
 
 def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: dict | None,
