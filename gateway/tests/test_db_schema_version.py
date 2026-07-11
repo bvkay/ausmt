@@ -140,6 +140,86 @@ def test_v2_db_with_data_upgrades_to_v3_adding_note(tmp_path):
         reopened.close()
 
 
+def test_fresh_db_lands_at_v4_with_curator_totp(tmp_path):
+    """A fresh DB is stamped at SCHEMA_VERSION (>= 4) and carries the curator_totp table (the C41 D2
+    migration) with exactly its four columns. Fails if the v4 migration never ran on a fresh DB, or a
+    schema change dropped/renamed a column."""
+    path = tmp_path / "gateway.sqlite"
+    db.Database(path).close()
+    assert db.SCHEMA_VERSION >= 4
+    assert _user_version(path) == db.SCHEMA_VERSION
+    cols = _table_columns(path, "curator_totp")
+    assert cols == {"curator_name", "secret", "enrolled_utc", "last_used_step"}
+
+
+def test_v3_db_with_data_upgrades_to_v4_adding_curator_totp(tmp_path):
+    """A v3 DB (uploader_keys present, NO curator_totp, stamped 3) with an existing uploader-key row
+    upgrades to v4 cleanly: the migration ADDS curator_totp and the existing key row survives. Fails if
+    the v4 migration drops data or does not create curator_totp. Simulates the C41 D2 migration on an
+    already-deployed v3 DB. NON-VACUOUS: the pre-fix state genuinely lacks the table, so a no-op
+    migration would leave user_version at 3 and the table assertion would fail."""
+    path = tmp_path / "gateway.sqlite"
+    seeded = db.Database(path)
+    kid = seeded.create_uploader_key(
+        name="field-team-1", email="t@example.org", key_sha256="d" * 64, created_by="curator-a")
+    seeded.close()
+    # Force the on-disk state back to a real v3: drop curator_totp and reset the stamp so the v4
+    # migration has genuine work to do — not a no-op that would pass vacuously.
+    raw = sqlite3.connect(str(path))
+    raw.execute("DROP TABLE IF EXISTS curator_totp")
+    raw.execute("PRAGMA user_version=3")
+    raw.commit()
+    raw.close()
+    assert _user_version(path) == 3
+    assert "curator_totp" not in {
+        r[0] for r in sqlite3.connect(str(path)).execute(
+            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+
+    reopened = db.Database(path)
+    try:
+        assert _user_version(path) == db.SCHEMA_VERSION
+        cols = _table_columns(path, "curator_totp")
+        assert cols == {"curator_name", "secret", "enrolled_utc", "last_used_step"}
+        # The pre-existing uploader-key row survives the v3->v4 upgrade untouched.
+        row = [k for k in reopened.list_uploader_keys() if k.id == kid][0]
+        assert row.name == "field-team-1", "existing rows must survive the v3->v4 upgrade"
+    finally:
+        reopened.close()
+
+
+def test_curator_totp_begin_activate_consume_and_replay(tmp_path):
+    """The v4 TOTP row lifecycle at the DB layer: begin (pending, not active), activate (stamps
+    enrolled_utc + last_used_step, only from pending), and consume_totp_step (advances only on a
+    STRICTLY-GREATER step for an ACTIVE row — the race-free replay guard). Fails if a pending row is
+    treated as active, a replayed/older step is consumed, or activate rewinds a live enrolment."""
+    path = tmp_path / "gateway.sqlite"
+    database = db.Database(path)
+    try:
+        assert database.get_totp("curator1") is None                 # not enrolled
+        database.begin_totp_enrolment("curator1", "SECRETBASE32")
+        pending = database.get_totp("curator1")
+        assert pending is not None and pending.active is False        # PENDING, not active
+        assert pending.secret == "SECRETBASE32"
+        # An unactivated (pending) enrolment cannot consume a step (fail-closed for the deletion gate).
+        assert database.consume_totp_step("curator1", 100) is False
+        # Activate at step 100 -> active, last_used_step = 100 (that code is now spent).
+        assert database.activate_totp("curator1", 100) is True
+        active = database.get_totp("curator1")
+        assert active.active is True and active.last_used_step == 100
+        # Re-activate is a no-op (does not rewind last_used_step on a live enrolment).
+        assert database.activate_totp("curator1", 50) is False
+        assert database.get_totp("curator1").last_used_step == 100
+        # Replay: the activating step (100) and any older step are refused.
+        assert database.consume_totp_step("curator1", 100) is False
+        assert database.consume_totp_step("curator1", 99) is False
+        # A strictly-greater step is consumed once and then itself becomes a replay.
+        assert database.consume_totp_step("curator1", 101) is True
+        assert database.get_totp("curator1").last_used_step == 101
+        assert database.consume_totp_step("curator1", 101) is False
+    finally:
+        database.close()
+
+
 def test_v1_db_with_data_upgrades_to_v2(tmp_path):
     """A v1 DB (current tables, stamped 1) with an existing submission row upgrades to v2 cleanly:
     the migration adds uploader_keys and the existing row survives. Fails if the migration drops data

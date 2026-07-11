@@ -93,6 +93,23 @@ class Submission:
     token_hash: str
 
 
+@dataclass(frozen=True)
+class CuratorTotp:
+    """One curator's TOTP enrolment (schema v4, C41 D2). `secret` is the ONLY copy of the base32 TOTP
+    secret (shown once at enrolment, never re-rendered). `enrolled_utc` is NULL while the enrolment is
+    PENDING activation and stamped once a valid code has proved the authenticator; `active` therefore
+    == enrolled_utc is not None, and ONLY an active enrolment satisfies the survey-deletion gate.
+    `last_used_step` is the highest RFC 6238 time-step already consumed (the replay guard)."""
+    curator_name: str
+    secret: str
+    enrolled_utc: str | None
+    last_used_step: int | None
+
+    @property
+    def active(self) -> bool:
+        return self.enrolled_utc is not None
+
+
 class IllegalTransition(Exception):
     """Raised when transition() is asked for a move not in states.ALLOWED. Surfaced (not swallowed)
     so a programming error is loud; the row and audit log are left untouched."""
@@ -133,6 +150,37 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v4_curator_totp(conn: sqlite3.Connection) -> None:
+    """v4 (C41 D2 owner amendment): per-curator TOTP secret for the destructive-op second factor. The
+    DB is already the secrets/PII home (never git, WAL-safe backed up, restore-drilled), so the secret
+    lives here beside the session store — a survey deletion needs a valid TOTP code in addition to the
+    curator session.
+
+    ONE row per curator (curator_name PK):
+      * secret        — the base32 TOTP secret (the ONLY copy; shown once at enrolment, never re-shown);
+      * enrolled_utc  — NULL while an enrolment is PENDING activation, stamped when a valid code proves
+                        the authenticator works; `enrolled_utc IS NOT NULL` == the factor is ACTIVE and
+                        satisfies the deletion gate (an unactivated row does NOT — fail-closed);
+      * last_used_step— the highest RFC 6238 time-step already consumed, so a code can never be
+                        replayed within or across its window (a deletion needs a step STRICTLY GREATER).
+
+    Additive-only (the C43 lane invariant): a single CREATE TABLE IF NOT EXISTS, no existing column
+    touched, no data migrated. IF NOT EXISTS makes a re-run on a partially-migrated DB idempotent
+    (mirrors v2's rationale). No unenrol/delete method exists by design (record D2, D12 boundary):
+    lost-authenticator recovery is a console action (delete the row on the box), the same class as
+    bootstrap-key rotation."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS curator_totp (
+            curator_name TEXT PRIMARY KEY,
+            secret TEXT NOT NULL,
+            enrolled_utc TEXT,
+            last_used_step INTEGER
+        )
+        """
+    )
+
+
 def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
     """v3 (C43 D7): add a free-text `note` column to uploader_keys — a curator annotation (who the key
     is for, expiry intent). ADDITIVE-ONLY (the C43 lane invariant): a single `ALTER TABLE ... ADD
@@ -149,10 +197,11 @@ def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE uploader_keys ADD COLUMN note TEXT")
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 _MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
     (2, _migrate_v2_uploader_keys),
     (3, _migrate_v3_uploader_key_note),
+    (4, _migrate_v4_curator_totp),
 ]
 
 
@@ -504,6 +553,62 @@ class Database:
             last_used_utc=row["last_used_utc"],
             note=row["note"] if "note" in keys else None,
         )
+
+    # ---- curator TOTP (schema v4 — destructive-op second factor, C41 D2) ------------------------
+
+    def get_totp(self, curator_name: str) -> CuratorTotp | None:
+        """The curator's TOTP row (active OR pending), else None. `None` == not enrolled at all; a
+        returned row with `active` False == a PENDING enrolment (secret set, not yet activated)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT curator_name, secret, enrolled_utc, last_used_step "
+                "FROM curator_totp WHERE curator_name = ?", (curator_name,)).fetchone()
+        if row is None:
+            return None
+        return CuratorTotp(
+            curator_name=row["curator_name"], secret=row["secret"],
+            enrolled_utc=row["enrolled_utc"], last_used_step=row["last_used_step"])
+
+    def begin_totp_enrolment(self, curator_name: str, secret: str) -> None:
+        """Stage a PENDING enrolment: store `secret` with enrolled_utc NULL and last_used_step reset.
+        Used for the FIRST enrolment AND for a rotation (the route gates a rotation behind a valid
+        CURRENT code before calling this — a session alone must never rotate the secret, else the
+        second factor collapses into the first). INSERT OR REPLACE so a re-begin overwrites cleanly;
+        the enrolment is NOT active (does not satisfy the deletion gate) until activate_totp stamps
+        enrolled_utc — that is what proves the authenticator works before the factor gates anything."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO curator_totp (curator_name, secret, enrolled_utc, "
+                "last_used_step) VALUES (?, ?, NULL, NULL)", (curator_name, secret))
+
+    def activate_totp(self, curator_name: str, step: int) -> bool:
+        """Activate a PENDING enrolment: stamp enrolled_utc = now AND set last_used_step = `step` (the
+        activating code's step, so that code cannot be immediately replayed to satisfy a deletion).
+        The `enrolled_utc IS NULL` guard means only a PENDING row activates — a re-activate of an
+        already-active row is a no-op (returns False), so an activation cannot silently rewind
+        last_used_step on a live enrolment. Returns True iff a pending row was activated."""
+        now = _utc_now()
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE curator_totp SET enrolled_utc = ?, last_used_step = ? "
+                "WHERE curator_name = ? AND enrolled_utc IS NULL", (now, step, curator_name))
+            return cur.rowcount > 0
+
+    def consume_totp_step(self, curator_name: str, step: int) -> bool:
+        """Atomically consume a verified code's `step` for an ACTIVE enrolment: advance last_used_step
+        to `step` ONLY if the enrolment is active AND `step` is STRICTLY GREATER than the last consumed
+        step (or none consumed yet). Returns True iff the step was consumed; False means a REPLAY (the
+        step was already used or is older) OR the curator is not actively enrolled. The whole check-and-
+        advance is one UPDATE under the lock, so two concurrent deletions cannot both consume the same
+        code — the replay guard is race-free at the DB layer (mirrors transition()'s lock-across-check-
+        then-write rationale)."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE curator_totp SET last_used_step = ? "
+                "WHERE curator_name = ? AND enrolled_utc IS NOT NULL "
+                "AND (last_used_step IS NULL OR last_used_step < ?)",
+                (step, curator_name, step))
+            return cur.rowcount > 0
 
     # ---- the single state-mutation path --------------------------------------------------------
 

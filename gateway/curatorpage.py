@@ -1764,7 +1764,11 @@ _RAIL = (
     ("Surveys", (("surveys", "Surveys", "/gateway/curator/edit"),)),
     ("Intake", (("queue", "Submission queue", "/gateway/curator/queue"),
                 ("uploaders", "Uploader keys", "/gateway/curator/uploaders"))),
-    ("Operations", (("serve", "Serve state", "/gateway/curator/serve"),)),
+    # Security sits under Operations beside Serve state (C41 T2): it is an operator-facing account
+    # concern — enrolling the authenticator that gates the destructive workbench actions — not a
+    # per-survey editing surface, so Operations is its home rather than Surveys/Intake.
+    ("Operations", (("serve", "Serve state", "/gateway/curator/serve"),
+                    ("security", "Security", "/gateway/curator/security"))),
 )
 
 
@@ -3919,6 +3923,122 @@ def render_uploader_created(*, curator_name: str, name: str, key: str) -> str:
         '<a href="/gateway/curator/queue">queue</a></p>'
     )
     return _page("AusMT uploader key created", body)
+
+
+# ---- curator security: TOTP second factor (schema v4 — C41 D2) -----------------------------------
+# The Security page enrols the per-curator TOTP authenticator that gates the destructive workbench
+# actions (survey retirement first). Three states, no inline JS (every form is a plain POST):
+#   * none    — not enrolled; offer "Begin enrolment" (generates a secret).
+#   * pending — a secret was generated but not activated; the secret was shown ONCE and is not
+#               re-rendered on a reload, so offer "activate with a code" AND "begin again".
+#   * active  — enrolled; offer "rotate" (which requires a CURRENT code — a session alone must never
+#               rotate the secret, else the second factor collapses into the first, D2).
+# The secret + otpauth URI are rendered ONLY as the immediate response to begin/rotate (the show-once
+# view), never on a GET — the DB stores the secret but the page never re-displays it.
+
+
+def _totp_begin_form(csrf: str, *, label: str) -> str:
+    return ('<form method="post" action="/gateway/curator/security/enrol">'
+            f'{csrf}'
+            f'<p><button class="b-accent" type="submit">{_esc(label)}</button></p>'
+            '</form>')
+
+
+def _totp_code_form(csrf: str, *, action: str, label: str, button: str, button_class: str) -> str:
+    return (f'<form method="post" action="{_esc(action)}">'
+            f'{csrf}'
+            f'<p><label class="k">{_esc(label)}</label>'
+            '<input type="text" name="code" inputmode="numeric" autocomplete="off" '
+            'placeholder="123456" style="max-width:12rem"></p>'
+            f'<p><button class="{_esc(button_class)}" type="submit">{_esc(button)}</button></p>'
+            '</form>')
+
+
+def _totp_secret_panel(secret: str, otpauth_uri: str, csrf: str) -> str:
+    """The SHOW-ONCE view rendered as the direct response to enrol/rotate: the base32 secret + the
+    otpauth:// URI for manual authenticator entry (no QR image dependency, D2), then the activate form.
+    The secret is never rendered again — a reload of the security page shows the pending state without
+    it."""
+    return (
+        '<div class="panel"><h2>Add this secret to your authenticator (shown once)</h2>'
+        '<p class="sub">Enter this secret into your authenticator app (Google Authenticator, Aegis, '
+        '1Password, …) by manual entry, or paste the otpauth URI. It is shown ONCE and cannot be '
+        'retrieved again — if you lose it before activating, begin again for a fresh secret.</p>'
+        '<p><label class="k">Secret (base32, manual entry)</label>'
+        f'<pre style="user-select:all">{_esc(secret)}</pre></p>'
+        '<p><label class="k">otpauth URI</label>'
+        f'<pre style="user-select:all">{_esc(otpauth_uri)}</pre></p>'
+        '<h3>Activate</h3>'
+        '<p class="sub">Enter a current code from your authenticator to prove it works — the factor '
+        'is NOT active (and will not gate anything) until you do.</p>'
+        + _totp_code_form(csrf, action="/gateway/curator/security/activate",
+                          label="Code from your authenticator", button="Activate",
+                          button_class="b-ok")
+        + '</div>')
+
+
+def render_security(*, curator_name: str, csrf_token: str, state: str, secret: str | None = None,
+                    otpauth_uri: str | None = None, enrolled_utc: str | None = None,
+                    error: str = "", nav: "NavContext | None" = None) -> str:
+    """The Security page (C41 T2): enrol / activate / rotate the per-curator TOTP second factor. `state`
+    is 'none' | 'pending' | 'active'. When `secret` is supplied (the immediate response to a begin or
+    rotate) the show-once secret panel is rendered regardless of state; otherwise the page renders the
+    stored state with NO secret. Every form is a plain POST (no inline JS — strictPages CSP)."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    intro = (
+        '<h1>Security — two-factor for destructive actions</h1>'
+        f'<p class="sub">Signed in as curator:{_esc(curator_name)}</p>'
+        '<p class="sub">Retiring a survey (and other destructive workbench actions) requires a '
+        'time-based one-time code (TOTP) from your authenticator app in addition to your session, so '
+        'a stolen session alone cannot delete a survey. The secret is stored only in the gateway '
+        'database (never in git). If you lose your authenticator, recovery is a console action by the '
+        'operator — there is deliberately no self-service reset or unenrol here.</p>'
+    )
+    if secret is not None:
+        panel = _totp_secret_panel(secret, otpauth_uri or "", csrf)
+    elif state == "pending":
+        panel = (
+            '<div class="panel"><h2>Enrolment pending activation</h2>'
+            f'{err}'
+            '<p class="sub">You began an enrolment but have not activated it. The secret is shown '
+            'ONCE at generation and is not stored in a retrievable form. If you saved it in your '
+            'authenticator, enter a current code to activate. Otherwise, begin again for a fresh '
+            'secret.</p>'
+            + _totp_code_form(csrf, action="/gateway/curator/security/activate",
+                              label="Code from your authenticator", button="Activate",
+                              button_class="b-ok")
+            + '<h3>Or start over</h3>'
+            + _totp_begin_form(csrf, label="Begin again (new secret)")
+            + '</div>')
+    elif state == "active":
+        panel = (
+            '<div class="panel"><h2>Two-factor is enrolled</h2>'
+            f'<p class="sub">Active since {_dt_html(enrolled_utc or "")}. Your authenticator is '
+            'required for destructive actions such as survey retirement.</p>'
+            f'{err}'
+            '<h3>Rotate the secret</h3>'
+            '<p class="sub">Rotating requires a CURRENT code from your existing authenticator — a '
+            'session alone cannot rotate the secret. You will be shown a new secret once and must '
+            'activate it (deletion is refused while a rotation is pending activation). To disable or '
+            'reset a lost authenticator, ask the operator (a console action).</p>'
+            + _totp_code_form(csrf, action="/gateway/curator/security/rotate",
+                              label="Current code", button="Rotate secret",
+                              button_class="b-accent")
+            + '</div>')
+    else:  # none
+        panel = (
+            '<div class="panel"><h2>Not enrolled</h2>'
+            f'{err}'
+            '<p class="sub">You have not enrolled an authenticator. Begin enrolment to generate a '
+            'secret; you will add it to your authenticator app and confirm a code before it becomes '
+            'active.</p>'
+            + _totp_begin_form(csrf, label="Begin enrolment")
+            + '</div>')
+    body = intro + panel
+    if nav is not None:
+        return _shell("AusMT security", body, nav=nav)
+    return _page("AusMT security", body)
 
 
 def render_detail(*, submission_id: str, state: str, updated_utc: str,

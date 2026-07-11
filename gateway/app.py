@@ -27,7 +27,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import checklist as checklist_mod
 from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, metaedit, publish,
-               serve_state, states, statuspage, uploader_keys as uploader_keys_mod, zipsafety)
+               serve_state, states, statuspage, totp, uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
 from .orcid import is_valid_orcid
@@ -90,6 +90,12 @@ class Gateway:
         # the gateway must keep working even if curator config is broken. The rate limiter is a single
         # process-global (design §6: no per-source trust on a tailnet).
         self._login_limiter = curator_auth.LoginRateLimiter(
+            max_attempts=cfg.login_max_attempts, window_s=cfg.login_window_s)
+        # C41 D2: a SECOND process-global throttle for the destructive-op TOTP factor (the same
+        # login-throttle pattern, a distinct counter so a burst of wrong codes cannot lock out normal
+        # login and vice-versa). Reuses the login knobs (5 attempts / 5 min) — a single-digit curator
+        # population entering a real 6-digit code will not trip it, but a brute-force stream will.
+        self._totp_limiter = curator_auth.LoginRateLimiter(
             max_attempts=cfg.login_max_attempts, window_s=cfg.login_window_s)
         # Tracks submission ids with a live in-process publish task, so the poll-loop reconciliation
         # (design §5.4) can tell a genuinely-stuck PUBLISHING row (gateway restarted mid-publish) from
@@ -817,6 +823,128 @@ class Gateway:
                 status_code=409, headers={"Cache-Control": "no-store"})
         self.db.set_uploader_key_note(key_id, note=clean)
         return RedirectResponse("/gateway/curator/uploaders", status_code=303)
+
+    # ---- curator security: TOTP second factor (schema v4 — C41 D2) ---------------------------
+
+    def _totp_state(self, curator_name: str) -> tuple[str, str | None]:
+        """Map the stored TOTP row to a page state: ('none'|'pending'|'active', enrolled_utc)."""
+        row = self.db.get_totp(curator_name)
+        if row is None:
+            return "none", None
+        if not row.active:
+            return "pending", None
+        return "active", row.enrolled_utc
+
+    def handle_security(self, request: Request, error: str = "", status_code: int = 200) -> Response:
+        """GET the Security page: shows the curator's enrolment state (none/pending/active). Session-
+        gated like the other curator GET pages. NEVER renders the secret (it is shown once, only as the
+        direct response to enrol/rotate)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        state, enrolled = self._totp_state(name)
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="security", crumb="<b>Security</b>")
+        return self._html(curatorpage.render_security(
+            curator_name=name, csrf_token=csrf, state=state, enrolled_utc=enrolled,
+            error=error, nav=nav), status_code=status_code)
+
+    def _security_page_with_secret(self, request: Request, name: str, secret: str) -> Response:
+        """Render the Security page with the SHOW-ONCE secret + otpauth URI (the response to a begin or
+        a rotate). The secret is displayed here and never again."""
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="security", crumb="<b>Security</b>")
+        uri = totp.otpauth_uri(secret, account=name)
+        return self._html(curatorpage.render_security(
+            curator_name=name, csrf_token=csrf, state="pending", secret=secret,
+            otpauth_uri=uri, nav=nav))
+
+    def handle_security_enrol(self, request: Request, csrf: str | None) -> Response:
+        """POST begin-enrolment: session + CSRF gated. Generates a fresh secret, stores it as a PENDING
+        enrolment (not active), and shows it ONCE with the activate form. Refused when an enrolment is
+        already ACTIVE — an active secret is rotated (with the current code), never silently replaced by
+        a session-only begin (that would be the collapse D2 forbids)."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        row = self.db.get_totp(curator)
+        if row is not None and row.active:
+            return self.handle_security(
+                request, error="You are already enrolled. Use Rotate (with your current code) to "
+                                "replace the secret.", status_code=409)
+        secret = totp.generate_secret()
+        self.db.begin_totp_enrolment(curator, secret)
+        return self._security_page_with_secret(request, curator, secret)
+
+    def handle_security_activate(self, request: Request, code: str | None,
+                                 csrf: str | None) -> Response:
+        """POST activate: session + CSRF gated + rate-limited. Verifies `code` against the PENDING
+        secret and, on success, marks the enrolment ACTIVE (the activating step is recorded as used so
+        it cannot be replayed to gate a deletion). Fail-closed: no pending enrolment, a wrong/absent
+        code, or a tripped rate limit => the page re-renders with an error and NOTHING is activated."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        row = self.db.get_totp(curator)
+        if row is None or row.active:
+            return self.handle_security(
+                request, error="There is no pending enrolment to activate. Begin enrolment first.",
+                status_code=409)
+        if self._totp_limiter.blocked():
+            return self.handle_security(
+                request, error="Too many code attempts — wait and retry.", status_code=429)
+        step = totp.verify(code or "", row.secret)
+        if step is None:
+            self._totp_limiter.record_failure()
+            return self.handle_security(
+                request, error="That code did not match — check your authenticator and try again.",
+                status_code=400)
+        self._totp_limiter.record_success()
+        # activate_totp only fires on a still-pending row; a concurrent activate that already flipped
+        # it returns False, which we surface as "already active" rather than a spurious error.
+        self.db.activate_totp(curator, step)
+        return self.handle_security(
+            request, error="")  # renders the now-active state
+
+    def handle_security_rotate(self, request: Request, code: str | None,
+                               csrf: str | None) -> Response:
+        """POST rotate: session + CSRF gated + rate-limited. Requires a valid CURRENT code from the
+        ACTIVE enrolment (the collapse guard — a session alone must never rotate the secret, D2). On a
+        valid current code, generates a NEW secret, stages it as PENDING (the old one is retired), and
+        shows it once. Fail-closed: not active, a wrong/absent current code, or a tripped rate limit =>
+        the page re-renders with an error and the existing secret is UNCHANGED."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        row = self.db.get_totp(curator)
+        if row is None or not row.active:
+            return self.handle_security(
+                request, error="You are not enrolled, so there is nothing to rotate. Begin enrolment.",
+                status_code=409)
+        if self._totp_limiter.blocked():
+            return self.handle_security(
+                request, error="Too many code attempts — wait and retry.", status_code=429)
+        # The CURRENT-code check is the collapse guard: verify against the ACTIVE secret. Dropping this
+        # check (a mutation) would let a session-only rotation through — the collapse-guard pin.
+        step = totp.verify(code or "", row.secret)
+        if step is None:
+            self._totp_limiter.record_failure()
+            return self.handle_security(
+                request, error="Rotation requires a valid CURRENT code from your existing "
+                                "authenticator.", status_code=400)
+        self._totp_limiter.record_success()
+        secret = totp.generate_secret()
+        self.db.begin_totp_enrolment(curator, secret)  # stages the new secret as pending (old retired)
+        return self._security_page_with_secret(request, curator, secret)
 
     # ---- C31 metadata editor -----------------------------------------------------------------
 
@@ -1840,6 +1968,28 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_uploader_note(request: Request, key_id: int, note: str = Form(default=""),
                               csrf_token: str = Form(default="")):
         return gw.handle_uploader_note(request, key_id, note, csrf_token)
+
+    # ---- curator security: TOTP second factor (schema v4 — C41 D2). GET is `def` (blocking sqlite
+    # read -> threadpool). The code-verifying POSTs are `async def` so the throttle decision
+    # (blocked-check -> verify -> record) runs to completion on the event loop with NO await between
+    # its steps — atomic against a concurrent burst without needing the login route's evaluate() form.
+    @app.get("/gateway/curator/security")
+    def curator_security(request: Request):
+        return gw.handle_security(request)
+
+    @app.post("/gateway/curator/security/enrol")
+    async def curator_security_enrol(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_security_enrol(request, csrf_token)
+
+    @app.post("/gateway/curator/security/activate")
+    async def curator_security_activate(request: Request, code: str = Form(default=""),
+                                        csrf_token: str = Form(default="")):
+        return gw.handle_security_activate(request, code, csrf_token)
+
+    @app.post("/gateway/curator/security/rotate")
+    async def curator_security_rotate(request: Request, code: str = Form(default=""),
+                                      csrf_token: str = Form(default="")):
+        return gw.handle_security_rotate(request, code, csrf_token)
 
     # ---- C40 serve-reconcile: the curator "request rebuild" button. Session + CSRF (checked in the
     # handler); writes the zero-argument rebuild.request the host reconcile agent consumes. `def`
