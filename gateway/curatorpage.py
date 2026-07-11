@@ -1157,10 +1157,12 @@ STATIONS_JS = r"""
   }
   function latLonText(lat, lon) { return num(lat, 3) + ' / ' + num(lon, 3); }
   // Position + the C42 policy marker. '(exact)' is STATIC TEXT today (the C42 per-station
-  // fieldset is Stage 4); the coordinate-PARSE QC flag (catalogue coord_flag, e.g.
-  // dms_sign_ambiguous) is a different fact and stays appended when set.
+  // fieldset is Stage 4); the coordinate-PARSE QC flag (catalogue coord_flag) is a different
+  // fact and stays appended when set — the boolean form keeps the established 'coordinate flag
+  // set' wording (a bare 'true' says nothing), a string value renders verbatim.
   function positionText(lat, lon, coordFlag) {
     var t = num(lat, 4) + ', ' + num(lon, 4) + ' (exact)';
+    if (coordFlag === true) return t + ' · coordinate flag set';
     return coordFlag ? t + ' · coord QC: ' + String(coordFlag) : t;
   }
   function bandText(pmin, pmax, nper) {

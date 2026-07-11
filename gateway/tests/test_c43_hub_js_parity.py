@@ -670,7 +670,9 @@ process.stdout.write(JSON.stringify(out));
     # Formatter shapes over served values (no invention, mockup forms).
     for st in got.values():
         assert re.match(r"^-?\d+\.\d{3} / -?\d+\.\d{3}$", st["latlon"]), st["latlon"]
-        assert st["position"].endswith(" (exact)") or " (exact) · coord QC: " in st["position"]
+        assert (st["position"].endswith(" (exact)")
+                or " (exact) · coordinate flag set" in st["position"]
+                or " (exact) · coord QC: " in st["position"]), st["position"]
         assert re.match(r"^-?\d+(\.\d+)? – -?\d+(\.\d+)? s · \d+ periods$", st["band"]), st["band"]
         assert re.match(r"^\d+(\.\d)? %$", st["mre"]), st["mre"]
         assert st["tipper"] in ("present", "absent")
