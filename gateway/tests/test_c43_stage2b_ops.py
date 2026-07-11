@@ -296,3 +296,24 @@ def test_freshness_chip_is_earned_never_defaulted():
     behind = {"sha": "b898f26", "origin": "bb7efe7", "behind": 3, "comparable": True}
     card = _freshness_card({"freshness": {"code": {}, "surveys_live": behind}})
     assert ">behind<" in card
+
+
+def test_ops_status_stale_future_timestamp_is_stale():
+    """FUTURE-TIMESTAMP FAIL-CLOSED PIN (verifier finding, 2026-07-11). A generated_at in the
+    FUTURE (forward clock step on the box, then the timer dies) must be STALE — a negative age is
+    doubt, not freshness; without this, the ops floor would render FRESH cards for the whole skew
+    window, the exact silent-staleness the mechanism exists to prevent. FAILS IF a future-dated
+    file renders fresh."""
+    from gateway.serve_state import ops_status_stale
+    base = {"timer_period_min": 15}
+    now = 1_800_000_000.0
+    import time as _t
+    def iso(epoch):
+        return _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(epoch))
+    # 1 second, 1 hour, 10 days in the future: all STALE.
+    for ahead in (1, 3600, 864000):
+        s = dict(base, generated_at=iso(now + ahead))
+        assert ops_status_stale(s, now_epoch=now) is True, f"future +{ahead}s must be STALE"
+    # Sanity: genuinely fresh (5 min old) stays fresh; over-window stays stale.
+    assert ops_status_stale(dict(base, generated_at=iso(now - 300)), now_epoch=now) is False
+    assert ops_status_stale(dict(base, generated_at=iso(now - 3600)), now_epoch=now) is True

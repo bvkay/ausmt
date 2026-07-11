@@ -132,7 +132,11 @@ def ops_status_stale(status: dict | None, *, now_epoch: float | None = None,
     except (TypeError, ValueError):
         period = default_period_min
     now = time.time() if now_epoch is None else now_epoch
-    return (now - ts) > (stale_periods * period * 60.0)
+    # Fail-closed BOTH directions (gate finding 2026-07-11): a FUTURE generated_at (forward clock
+    # step, then the timer dies) must be STALE too — a negative age is not freshness, it is doubt,
+    # and doubt resolves to STALE. Freshness is the narrow band 0 <= age <= threshold.
+    age = now - ts
+    return not (0.0 <= age <= (stale_periods * period * 60.0))
 
 
 @dataclass(frozen=True)
