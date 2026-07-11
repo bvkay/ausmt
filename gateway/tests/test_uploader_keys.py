@@ -337,10 +337,12 @@ def test_keys_page_wide_layout_short_datetimes_and_note_width():
     assert re.findall(r"<[^>]*\son[a-z]{2,}\s*=", html) == [], "inline handler on the keys page"
 
 
-def test_wide_layout_is_keys_page_only():
+def test_wide_layout_is_opt_in_only():
     """H2 SCOPE PIN (owner: widen the keys page, 'do not silently change every other page's
-    measure'). Another _shell page (the queue) must NOT carry the wide marker — the default wrap
-    measure is unchanged. FAILS IF the wide variant leaks into _shell's default."""
+    measure'). `wide` is a PER-PAGE OPT-IN — sanctioned users today: the keys page (H2) and the
+    survey hub's STATIONS tab (usability fix 2026-07-11); everything else keeps the default 960px
+    measure. This pin holds the default: the queue page must NOT carry the wide marker. FAILS IF
+    the wide variant leaks into _shell's default."""
     from gateway.curatorpage import render_queue
     html = render_queue(curator_name="ben", rows=[], csrf_token="tok", serve_panel="", nav=_nav())
     assert '<div class="wrap">' in html, "the queue page must keep the default measure"

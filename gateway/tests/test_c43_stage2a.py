@@ -233,6 +233,10 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert r.status_code == 200
             body = r.text
             assert 'class="stations-split"' in body, "the split grid container must render"
+            # The stations tab opts into the wide measure (usability fix 2026-07-11: inside the
+            # default 960px wrap the list truncated and the panel cramped); the hub's OTHER tabs
+            # keep the reading measure — scope-checked below via the overview tab.
+            assert 'class="wrap wide"' in body, "the stations tab must use the wide page measure"
             i_panel = body.find('id="station-detail"')
             i_list = body.find('id="stations-list"')
             assert i_panel >= 0, "the DATA panel slot (#station-detail) must render"
@@ -243,6 +247,11 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
                 "the data panel (#station-detail) must PRECEDE the list (#stations-list) in DOM order "
                 "so narrow screens stack panel-first")
             assert 'class="st-list"' in body, "the list container carries the grid-left .st-list class"
+            # Scope: the wide measure is the STATIONS tab's opt-in only — the hub's overview tab
+            # keeps the default reading measure (the H2 'no silent global widening' rule).
+            r2 = await client.get("/gateway/curator/survey/s2a-survey")
+            assert r2.status_code == 200 and 'class="wrap wide"' not in r2.text, (
+                "the wide measure must not leak to the hub's other tabs")
             assert 'class="st-panel"' in body, "the panel container carries the grid-right .st-panel class"
     run(_body())
 
@@ -258,11 +267,20 @@ def test_stations_split_css_layout_mechanism_present():
           the panel above the list.
     FAILS IF any of the three mechanism pieces is dropped from the shell CSS."""
     head = curatorpage._HEAD
-    # (a) two-column grid with explicit list-left / panel-right placement.
+    # (a) two-column grid with explicit list-left / panel-right placement — INCLUDING grid-row.
     assert ".stations-split{display:grid" in head, "the split must be a CSS grid"
-    assert "grid-template-columns:20rem minmax(0,1fr)" in head, "wide: fixed list col + fluid panel col"
-    assert ".stations-split .st-list{grid-column:1}" in head, "the LIST occupies the LEFT column"
-    assert ".stations-split .st-panel{grid-column:2}" in head, "the PANEL occupies the RIGHT column"
+    assert "grid-template-columns:minmax(24rem,28rem) minmax(0,1fr)" in head, (
+        "wide: the list column must fit its five columns un-truncated (24-28rem), panel takes the rest "
+        "(usability incident 2026-07-11: a fixed 20rem list truncated Quality and forced an inner "
+        "horizontal scrollbar)")
+    # grid-ROW is load-bearing, not decoration (usability incident 2026-07-11): with only grid-COLUMN
+    # set, auto-placement cannot move backwards within a row, so the DOM-second list wanting column 1
+    # lands in ROW 2 — BELOW the panel; three screens down once a real station renders. Both items
+    # must be pinned to row 1. FAILS IF either grid-row:1 is dropped.
+    assert ".stations-split .st-list{grid-column:1;grid-row:1}" in head, (
+        "the LIST must be pinned to column 1 ROW 1 (grid auto-placement drops it to row 2 otherwise)")
+    assert ".stations-split .st-panel{grid-column:2;grid-row:1}" in head, (
+        "the PANEL must be pinned to column 2 ROW 1")
     assert "align-items:start" in head, "columns are top-aligned so the list never pushes the panel down"
     # (b) the list's own fixed-height scroll region.
     assert ".st-scroll{max-height:" in head and "overflow-y:auto" in head, (
@@ -273,6 +291,9 @@ def test_stations_split_css_layout_mechanism_present():
     narrow = m.group(1)
     assert ".stations-split{grid-template-columns:1fr}" in narrow, (
         "narrow screens must collapse the split to a single column so the panel stacks above the list")
+    assert "grid-row:auto" in narrow, (
+        "narrow: grid-row must return to auto so the two items STACK (the wide grid-row:1 pins would "
+        "otherwise force both into one row = side-by-side squeeze on a phone)")
 
 
 def test_stations_split_no_page_scroll_on_row_select():
