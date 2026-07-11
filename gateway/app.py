@@ -482,10 +482,12 @@ class Gateway:
             rows.append({"id": sub.id, "slug": sub.slug, "submitter_name": sub.submitter_name,
                          "state": sub.state, "updated_utc": sub.updated_utc, "warn_count": warn_count})
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
-        panel = self._serve_panel_html(csrf)
         nav = self._nav_context(request, active="queue", crumb="<b>Submission queue</b>")
+        # C43 FR2-1: the queue page is purely the queue now (owner ruling, ratified 2026-07-11). The
+        # serve-state panel moved to /gateway/curator/serve; the ever-present drift chip + that screen
+        # own the served-vs-published job, so a second copy here was redundant.
         return self._html(curatorpage.render_queue(curator_name=name, rows=rows, csrf_token=csrf,
-                                                   serve_panel=panel, nav=nav))
+                                                   nav=nav))
 
     def _nav_context(self, request: Request, *, active: str, crumb: str) -> "curatorpage.NavContext":
         """Build the C43 nav-shell chrome inputs (S1-1) for a curator page. Reads the published
@@ -498,26 +500,16 @@ class Gateway:
             active=active, crumb=crumb, published_head=published.short,
             published_available=published.available, csrf=csrf)
 
-    def _serve_panel_html(self, csrf: str) -> str:
-        """Build the C40 serve-state panel (design §3). All server-side reads are best-effort — the
-        panel must NEVER 500 the queue page: the published HEAD degrades to "unavailable" and the
-        status/pending reads swallow their own errors. The served build.json/build_report.json are
-        fetched BROWSER-side (the gateway has no site-data mount), so nothing here touches site-data."""
-        published = serve_state.read_published_head(self._git_runner, self.cfg.surveys_live_dir)
-        status = serve_state.read_reconcile_status(self.cfg.state_dir)
-        pending = serve_state.rebuild_request_pending(self.cfg.state_dir)
-        return curatorpage.render_serve_panel(
-            published_head=published.short, published_available=published.available,
-            status=status, pending=pending, csrf_token=csrf)
-
     def handle_rebuild_request(self, request: Request, csrf: str | None) -> Response:
         """POST /gateway/curator/rebuild (design §3, brief note 4): session + CSRF gated exactly like
         the uploader-key POSTs. Writes /gw/state/rebuild.request ATOMICALLY with {requested_at,
         requested_by} — AUDIT ONLY; the host reconcile agent keys on the file's EXISTENCE and never
         parses its content (zero-argument by design). Idempotent (a second press overwrites the same
         file). Fails CLOSED with a 503 if the state dir is missing/unwritable (mirrors the house
-        curator-503 style) rather than pretending the request was queued. On success, redirects back
-        to the queue's serve-state section (303, matching how the other curator form posts respond)."""
+        curator-503 style) rather than pretending the request was queued. On success, redirects to the
+        serve-state screen's panel (303) — C43 FR2-1 moved the serve panel (and its pending indicator)
+        off the queue page to /gateway/curator/serve, so that is where the curator lands to see the
+        'rebuild requested — pending' state (matching how the other curator form posts respond)."""
         curator = self._session_curator(request)
         if curator is None:
             return self._unauthorized_api()
@@ -530,7 +522,7 @@ class Gateway:
             logger.warning("rebuild request could not be recorded (fail closed): %s", exc)
             return JSONResponse({"detail": "rebuild request could not be recorded"}, status_code=503,
                                 headers={"Cache-Control": "no-store"})
-        return RedirectResponse("/gateway/curator/queue#serve-state", status_code=303)
+        return RedirectResponse("/gateway/curator/serve#serve-state", status_code=303)
 
     def handle_serve_state(self, request: Request) -> Response:
         """GET /gateway/curator/serve — the first-class serve-state screen (C43 S2b-i, record D8/D15).
@@ -651,6 +643,19 @@ class Gateway:
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
+    def handle_surveys_list_js(self, request: Request) -> Response:
+        """GET /gateway/curator/surveys-list.js — the Surveys list's browser-side enrichment (C43
+        FR2-1): fill the display name / version / licence / served station-count columns from the
+        served /data corpus (surveys.json + build_report.json), the serve-panel pattern (script-src
+        'self' blocks inline). Session-gated for consistency; the content is a public-repo constant.
+        DEGRADES: without it every row still shows its slug + the hub link, the page never breaks."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.SURVEYS_LIST_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
     def handle_editor_ui_js(self, request: Request) -> Response:
         """GET /gateway/curator/editor.js — the metadata-editor's repeatable-row add/remove behaviour
         as a same-origin EXTERNAL script. Same CSP reason as serve-state.js/ui.js: the strictPages
@@ -680,12 +685,16 @@ class Gateway:
         cl = self._build_checklist(sub, validator, preview)
         preview_index = (self.cfg.quarantine_dir / sub.id / "reports" / "preview-data" / "index.html")
         csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        # C43 FR2-1: the detail page joins the nav shell (full width, two-column review layout).
+        nav = self._nav_context(request, active="queue",
+                                crumb='<a href="/gateway/curator/queue">Submission queue</a> › '
+                                      f'<b>{curatorpage._esc(sub.id[:12])}</b>')  # noqa: SLF001
         html_out = curatorpage.render_detail(
             submission_id=sub.id, state=sub.state, updated_utc=sub.updated_utc,
             submitter_name=sub.submitter_name, submitter_email=sub.submitter_email,
             submitter_orcid=sub.submitter_orcid, validate_report=validator,
             preview_summary=preview, cl=cl, csrf_token=csrf, note=last_note or "",
-            has_preview=preview_index.exists())
+            has_preview=preview_index.exists(), nav=nav)
         return self._html(html_out)
 
     def _build_checklist(self, sub: db.Submission, validator, preview) -> checklist_mod.Checklist:
@@ -1887,6 +1896,13 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/stations.js")
     def curator_stations_js(request: Request):
         return gw.handle_stations_js(request)
+
+    # The C43 FR2-1 Surveys-list enrichment script — EXTERNAL for the same CSP reason; the surveys
+    # list loads it to fill the name/version/licence/count columns from the served corpus. Degrades to
+    # the slug-only rows without JS.
+    @app.get("/gateway/curator/surveys-list.js")
+    def curator_surveys_list_js(request: Request):
+        return gw.handle_surveys_list_js(request)
 
     # ---- C31 metadata-editor routes (session-gated; POSTs CSRF-checked in the handler). GET pages
     # do blocking directory/subprocess work so they are `def` (threadpool), matching the C10/C11

@@ -337,16 +337,26 @@ def test_keys_page_wide_layout_short_datetimes_and_note_width():
     assert re.findall(r"<[^>]*\son[a-z]{2,}\s*=", html) == [], "inline handler on the keys page"
 
 
-def test_wide_layout_is_opt_in_only():
-    """H2 SCOPE PIN (owner: widen the keys page, 'do not silently change every other page's
-    measure'). `wide` is a PER-PAGE OPT-IN — sanctioned users today: the keys page (H2) and the
-    survey hub's STATIONS tab (usability fix 2026-07-11); everything else keeps the default 960px
-    measure. This pin holds the default: the queue page must NOT carry the wide marker. FAILS IF
-    the wide variant leaks into _shell's default."""
-    from gateway.curatorpage import render_queue
-    html = render_queue(curator_name="ben", rows=[], csrf_token="tok", serve_panel="", nav=_nav())
-    assert '<div class="wrap">' in html, "the queue page must keep the default measure"
-    assert 'class="wrap wide"' not in html, "the wide variant must not leak beyond the keys page"
+def test_wide_by_default_narrow_by_exception():
+    """C43 FR2-1 SCOPE PIN (owner ruling, 2026-07-11: "all the curator pages should be like the
+    surveys-stations page — full width, intuitive"). The scope invariant FLIPPED from H2's per-page
+    opt-in to WIDE-BY-DEFAULT: every shelled working page (via _shell) fills the viewport; the ONLY
+    narrow survivors are the chrome-less _page users — the login page and the terminal confirm pages
+    (a centred form stays a centred form). The old H2 'queue must NOT be wide' assertion dies with this
+    ruling. FAILS IF a shelled working page reverts to the narrow measure, or a centred-form _page page
+    silently goes wide."""
+    from gateway.curatorpage import render_login, render_queue, render_uploader_created
+    # Wide-by-default: the queue (a shelled working page) now fills the width — the exact assertion
+    # the superseded H2 pin forbade.
+    queue = render_queue(curator_name="ben", rows=[], csrf_token="tok", nav=_nav())
+    assert '<div class="wrap wide">' in queue, "a shelled working page must be wide by default"
+    # Narrow survivors: the login page and the show-once uploader-key page are chrome-less _page
+    # centred forms — they keep the reading measure, never the wide marker.
+    for narrow_html, what in ((render_login(), "login"),
+                              (render_uploader_created(curator_name="ben", name="k", key="secret"),
+                               "uploader-created")):
+        assert '<div class="wrap">' in narrow_html, f"{what} must stay a centred form (narrow)"
+        assert 'class="wrap wide"' not in narrow_html, f"{what} must not go wide"
 
 
 def test_keys_page_served_wide_end_to_end(tmp_path):

@@ -164,6 +164,55 @@ def test_survey_list_links_to_hub_not_edit_form(tmp_path):
     run(_body())
 
 
+def test_surveys_list_is_a_table_filled_browser_side(tmp_path):
+    """C43 FR2-1 SURVEYS-TABLE PIN. The Surveys list is a proper TABLE (not a bare link list): a row
+    per slug with Survey / Slug / Version / Licence / Stations columns, the slug rendered as a mono
+    chip, the Survey cell linking to the hub, and data-cell placeholders the external surveys-list.js
+    fills from the served corpus (surveys.json + build_report.json). The server renders only slugs (a
+    directory listing, never content parsing); absent facts render '—'. FAILS IF the table/columns are
+    absent, a row loses its data-survey-slug hook or hub link, or the enrichment script is not
+    referenced."""
+    async def _body():
+        surveys_live = _hub_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get("/gateway/curator/edit")
+            assert r.status_code == 200
+            html = r.text
+            assert 'id="surveys-table"' in html, "the surveys list must be a table"
+            for col in ("<th>Survey</th>", "<th>Slug</th>", "<th>Version</th>",
+                        "<th>Licence</th>", "<th>Stations</th>"):
+                assert col in html, col
+            assert 'data-survey-slug="hub-survey-2026"' in html, "each row carries its slug hook"
+            assert 'href="/gateway/curator/survey/hub-survey-2026"' in html, "the row links to the hub"
+            assert '<span class="slugchip">hub-survey-2026</span>' in html, "slug as a mono chip"
+            assert 'data-cell="version"' in html and 'data-cell="stations"' in html
+            assert 'src="/gateway/curator/surveys-list.js"' in html, "the enrichment script is referenced"
+    run(_body())
+
+
+def test_surveys_list_js_route_raw_and_session_gated(tmp_path):
+    """The surveys-list.js route serves RAW JS (not <script>-wrapped) and is session-gated (anon =>
+    303 to login), like the other C43 external scripts. FAILS IF it 404s, serves HTML, or is
+    ungated."""
+    async def _body():
+        surveys_live = _hub_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            r_anon = await client.get("/gateway/curator/surveys-list.js", follow_redirects=False)
+            assert r_anon.status_code == 303, "anonymous must redirect to login"
+            await curator_login(client)
+            r = await client.get("/gateway/curator/surveys-list.js")
+            assert r.status_code == 200
+            assert "javascript" in r.headers["content-type"]
+            assert "<script" not in r.text.lower(), "raw JS, not HTML-wrapped"
+            assert "surveys-table" in r.text and "build_report.json" in r.text
+    run(_body())
+
+
 def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
     """The Overview & QA tab renders the QA scaffold (browser-populated from /data). C43 Stage 2a: the
     Stations and History tab-strip entries are now REAL in-hub tabs (?tab=stations / ?tab=history),

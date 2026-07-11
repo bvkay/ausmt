@@ -218,6 +218,43 @@ def test_hostile_pii_filename_renders_inert(tmp_path):
     assert "&lt;img src=x onerror=alert(1)&gt;" in html_out
 
 
+def test_detail_full_width_two_column_layout():
+    # C43 FR2-1 DETAIL-LAYOUT PIN. The submission detail page fills the width (wide shell) and, when a
+    # preview exists, arranges the review CONTEXT (submitter PII / checklist / reports) LEFT and the
+    # sandboxed PREVIEW RIGHT via .detail-split, with the review ACTIONS beneath. LAYOUT ONLY — the
+    # submitter block, the CSRF field, and the null-origin sandboxed iframe are unchanged. Failure
+    # criterion: fails if the page loses the wide shell, the two-column split, or the context-left /
+    # preview-right placement (and no split when there is no preview).
+    from gateway import checklist as checklist_mod
+    from gateway import curatorpage
+    from gateway.curatorpage import NavContext
+
+    cl = checklist_mod.Checklist(checks=[
+        checklist_mod.Check("structure", "Package structure", checklist_mod.PASS, "ok",
+                            blocking=False)])
+    nav = NavContext(active="queue", crumb="<b>x</b>", published_head="abc1234",
+                     published_available=True, csrf="tok")
+
+    def _render(has_preview):
+        return curatorpage.render_detail(
+            submission_id="01ABCDEFGHIJKLMNOPQRSTUVWX", state=states.VALIDATED, updated_utc="now",
+            submitter_name="Nora Curie", submitter_email="submitter@example.org", submitter_orcid=None,
+            validate_report={"items": []}, preview_summary=None, cl=cl, csrf_token="tok",
+            note="", has_preview=has_preview, nav=nav)
+
+    html = _render(True)
+    assert '<div class="wrap wide">' in html, "the detail page must be full width in the shell"
+    assert 'class="detail-split"' in html, "the two-column split must render when a preview exists"
+    left = html.split('class="dcol left"', 1)[1].split('class="dcol right"', 1)[0]
+    right = html.split('class="dcol right"', 1)[1]
+    assert "Submitter (curator-only)" in left, "the PII/context column is the LEFT column"
+    assert 'id="prev"' in right and "sandbox=" in right, "the sandboxed preview is the RIGHT column"
+    # The review actions still render (layout-only change): the approve form is present, full width.
+    assert "/approve" in html and curator_auth.CSRF_FIELD in html
+    # No preview => single column (no split).
+    assert 'class="detail-split"' not in _render(False), "no split when there is no preview"
+
+
 def test_public_status_identical_for_ack_vs_nonack(tmp_path):
     # C11b §4.8: the PUBLIC status page output is byte-identical for an acknowledged vs a
     # non-acknowledged submission in the same state — acknowledgement is a CURATOR-only detail and must

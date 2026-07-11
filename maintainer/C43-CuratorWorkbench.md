@@ -31,12 +31,15 @@ CSP forbids inline script. The CSP is applied by Caddy, not the app
   (`engine/extract/build_portal.py:380-421`) and writes `collections.json` (`:2461`); the
   case/whitespace near-duplicate warning dies on build stderr (`:2458-2460`). The curator UI shows
   only the per-survey `collection` section panel — no rollup, no member list, no collision warning.
-* **Serve panel** (on the queue page): published HEAD via injected git runner
-  (`gateway/serve_state.py:100`), `reconcile-status.json` read (`:77`), and browser-side
-  same-origin fetches of `/data/build.json` + `/data/build_report.json`
-  (`curatorpage.py:363,403`) — the gateway has **no site-data mount**. Exactly **one** intent file
+* **Serve panel** — published HEAD via injected git runner (`gateway/serve_state.py:100`),
+  `reconcile-status.json` read (`:77`), and browser-side same-origin fetches of `/data/build.json` +
+  `/data/build_report.json` — the gateway has **no site-data mount**. Exactly **one** intent file
   exists: `rebuild.request`, written atomically, content audit-only, host reconcile agent keys on
-  existence and never parses it (`serve_state.py:30,44-48`).
+  existence and never parses it (`serve_state.py:30,44-48`). *(2026-07-11 owner ruling, ratified —
+  FR2-1: the inline copy of this panel was REMOVED from the queue page; it lives only on the
+  first-class `/gateway/curator/serve` screen now, with the ever-present drift chip carrying the
+  published-HEAD glance. This removal is an owner decision, not architect judgment — the queue page
+  is purely the queue.)*
 * **Uploader keys** — mint/list/revoke with `created_utc` and `last_used_utc` already stored
   (`gateway/db.py:115-125`) **and rendered** (`curatorpage.py:1256-1257`). Missing: a free-text
   note, submission counts, an unused-key nudge.
@@ -94,7 +97,9 @@ edit like any other), Save policy, Remove station.
   **φyx on a full +180…−180 axis with the Q3 band shaded**; out-of-quadrant points drawn **red**;
   each phase plot carries a **verdict footer strip beneath the plot** ("expect Q1 (0…90°) — in
   quadrant ✓" / "expect Q3 — out of quadrant ⚠") so captions are never overlapped; tipper |T| with
-  Re Tzx / Re Tzy. Wrong-quadrant stations must be identifiable at a glance.
+  Re Tzx / Re Tzy. Wrong-quadrant stations must be identifiable at a glance. *(2026-07-11 owner
+  ruling supersedes the mockup: both phases on a single ±180 plot — φxy and φyx share one axis, both
+  expected bands shaded, one verdict strip carrying both component verdicts.)*
 * **Data path (owner-ruled):** station facts and curve data come **browser-side, same-origin from
   the served `/data` corpus** — the serve-panel pattern (`curatorpage.py:363`), zero new gateway
   privileges. A new site-data mount is rejected.

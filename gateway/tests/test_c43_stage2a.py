@@ -164,6 +164,37 @@ def test_stations_js_mirrors_phaseqc_constants():
     assert "function medianOf" in js, "the median verdict (F4c) must be in the JS mirror"
 
 
+def test_combined_phase_plot_supersedes_separate_plots_source():
+    """C43 FR2-3 SOURCE PIN (owner ruling 2026-07-11: both phases on ONE ±180 plot). The two separate
+    phase plots are SUPERSEDED by a single combined plot: STATIONS_JS carries the pure combinedPhasePlan
+    mapper + one phasePlot (full ±180 axis, both bands shaded by owner) + phaseVerdictParts (BOTH
+    components) + combinedVerdictStrip; the old phiXyPlot / phiYxPlot and the single-component
+    verdictStrip are GONE; and renderPlots stacks ρa, the combined phase plot (+ its verdict strip),
+    then tipper. FAILS IF a separate per-component phase plot returns, the mapper/verdict-parts
+    disappear, or the plot order drifts. (There were no pre-existing EXECUTABLE per-plot pins to rework
+    — the plots were covered only via classify() parity; the executable mapper pin lives in
+    test_c43_hub_js_parity.py::test_combined_phase_plan_mapper_from_real_corpus.)"""
+    js = curatorpage.STATIONS_JS
+    assert "function combinedPhasePlan(" in js, "the pure combined-phase mapper must exist"
+    assert "function phasePlot(" in js, "the single combined phase plot must exist"
+    assert "function phaseVerdictParts(" in js, "both-component verdict parts must exist"
+    assert "function combinedVerdictStrip(" in js
+    assert "function phiXyPlot(" not in js, "the separate φxy plot must stay superseded"
+    assert "function phiYxPlot(" not in js, "the separate φyx plot must stay superseded"
+    assert "function verdictStrip(" not in js, "the single-component verdict strip is superseded"
+    # The combined plot is the FULL ±180 axis carrying both series, with both bands shaded by owner.
+    assert "var lo = -180, hi = 180;" in js, "the combined phase axis must span the full ±180"
+    assert "comp: 'xy', lo: Q1_LO, hi: Q1_HI" in js, "Q1 band owned by xy"
+    assert "comp: 'yx', lo: Q3_LO, hi: Q3_HI" in js, "Q3 band owned by yx"
+    # renderPlots order: ρa, combined phase (+ its verdict strip), tipper.
+    m = re.search(r"function renderPlots\(host, t\)\s*\{(.*?)\n  \}", js, re.DOTALL)
+    assert m, "renderPlots must exist"
+    rp = m.group(1)
+    assert rp.index("rhoPlot(t)") < rp.index("phasePlot(t)") < rp.index("tipperPlot(t)"), (
+        "plots must stack ρa, then the combined phase plot, then tipper")
+    assert "combinedVerdictStrip(ph.plan)" in rp, "the combined verdict strip rides beneath the phase plot"
+
+
 # ==================================================================================================
 # [FC-2] lag label on the Stations panel
 # ==================================================================================================
@@ -217,12 +248,13 @@ def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
 # S2a-SPLIT: the Stations tab split layout (list LEFT / data panel RIGHT; narrow = panel-first)
 # ==================================================================================================
 def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
-    """S2a-SPLIT RENDER PIN. The Stations tab body carries the split structure: a .stations-split
-    grid whose DATA PANEL container (#station-detail) precedes the LIST container (#stations-list) in
-    DOM order, and the list container carries the .st-list class the CSS grids into the LEFT column.
-    Panel-first DOM order is the load-bearing narrow-stacking mechanism (see the CSS pin below): on a
-    one-column layout the panel stacks above the list with NO `order` needed. FAILS IF the split
-    container is absent, the two slots are missing, or the panel does NOT precede the list in DOM."""
+    """C43 FR2-2 RENDER PIN (three thirds; supersedes the S2a two-column split by owner ruling round
+    2, reworked-not-deleted). The Stations tab body carries the split grid with THREE slots: the
+    station FACTS (#station-facts, .st-facts) and the PLOTS column (#station-plots-col, .st-plots)
+    precede the site TABLE (#stations-list, .st-list) in DOM order — facts, then plots, then table.
+    Facts-first DOM order is the load-bearing narrow-stacking mechanism (see the CSS pin below): on a
+    one-column layout they stack facts / plots / table with NO `order` needed. FAILS IF the split
+    container is absent, a slot is missing, or the DOM order is not facts < plots < table."""
     async def _body():
         surveys_live = _hub_survey(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -233,67 +265,77 @@ def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
             assert r.status_code == 200
             body = r.text
             assert 'class="stations-split"' in body, "the split grid container must render"
-            # The stations tab opts into the wide measure (usability fix 2026-07-11: inside the
-            # default 960px wrap the list truncated and the panel cramped); the hub's OTHER tabs
-            # keep the reading measure — scope-checked below via the overview tab.
+            # C43 FR2-1: every hub tab is wide by default now (the Stations tab included).
             assert 'class="wrap wide"' in body, "the stations tab must use the wide page measure"
-            i_panel = body.find('id="station-detail"')
+            i_facts = body.find('id="station-facts"')
+            i_plots = body.find('id="station-plots-col"')
             i_list = body.find('id="stations-list"')
-            assert i_panel >= 0, "the DATA panel slot (#station-detail) must render"
-            assert i_list >= 0, "the LIST slot (#stations-list) must render"
-            # DOM ORDER (amended owner ruling): the DATA PANEL comes FIRST so it stacks ABOVE the list
-            # on a narrow single column. A list-first DOM (the reverse) fails here.
-            assert i_panel < i_list, (
-                "the data panel (#station-detail) must PRECEDE the list (#stations-list) in DOM order "
-                "so narrow screens stack panel-first")
-            assert 'class="st-list"' in body, "the list container carries the grid-left .st-list class"
-            # Scope: the wide measure is the STATIONS tab's opt-in only — the hub's overview tab
-            # keeps the default reading measure (the H2 'no silent global widening' rule).
+            assert i_facts >= 0, "the FACTS slot (#station-facts) must render"
+            assert i_plots >= 0, "the PLOTS slot (#station-plots-col) must render"
+            assert i_list >= 0, "the TABLE slot (#stations-list) must render"
+            # DOM ORDER (owner ruling round 2): facts FIRST, then plots, then table — so a narrow
+            # single column stacks facts / plots / table (panel-first stacking preserved).
+            assert i_facts < i_plots < i_list, (
+                "DOM order must be facts (#station-facts) < plots (#station-plots-col) < table "
+                "(#stations-list) so narrow screens stack facts-first")
+            assert 'class="st-list"' in body, "the table container carries the grid-left .st-list class"
+            assert 'class="st-facts"' in body, "the facts container carries the middle .st-facts class"
+            assert 'class="st-plots"' in body, "the plots container carries the right .st-plots class"
+            # C43 FR2-1 scope (invariant FLIPPED): the hub's OTHER tabs are ALSO wide now — wide-by-
+            # default supersedes the H2 'stations-only opt-in', so the overview tab (the old negative
+            # control) is wide too.
             r2 = await client.get("/gateway/curator/survey/s2a-survey")
-            assert r2.status_code == 200 and 'class="wrap wide"' not in r2.text, (
-                "the wide measure must not leak to the hub's other tabs")
-            assert 'class="st-panel"' in body, "the panel container carries the grid-right .st-panel class"
+            assert r2.status_code == 200 and 'class="wrap wide"' in r2.text, (
+                "C43 FR2-1: every hub tab fills the width (the old overview-not-wide control retired)")
     run(_body())
 
 
 def test_stations_split_css_layout_mechanism_present():
-    """S2a-SPLIT CSS-MECHANISM PIN. Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
+    """C43 FR2-2 CSS-MECHANISM PIN (three thirds; supersedes the S2a two-column mechanism by owner
+    ruling, reworked-not-deleted). Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
     regression that silently breaks the layout goes red even though the DOM is unchanged:
-      (a) WIDE: .stations-split is a 2-column grid; the list is placed in grid-column 1 (LEFT) and the
-          panel in grid-column 2 (RIGHT) — the amended list-left/panel-right arrangement.
-      (b) The list scrolls in its OWN fixed-height region: .st-scroll has overflow-y + a max-height
-          (never a full-page table — the >300-row requirement).
-      (c) NARROW (max-width:720px): the grid collapses to one column, so panel-first DOM order stacks
-          the panel above the list.
-    FAILS IF any of the three mechanism pieces is dropped from the shell CSS."""
+      (a) WIDE: .stations-split is a 3-column grid; the site table is placed in grid-column 1 (LEFT),
+          the facts in column 2 (MIDDLE), and the plots in column 3 (RIGHT) — all on grid-ROW 1.
+      (b) The site table scrolls in its OWN fixed-height region: .st-scroll has overflow-y + a
+          max-height (never a full-page table — the >300-row requirement).
+      (c) The plots column scrolls its fixed-width SVGs internally (overflow-x) rather than overflowing
+          the page.
+      (d) NARROW (max-width:1120px): the grid collapses to one column, so facts-first DOM order stacks
+          facts / plots / table.
+    FAILS IF any mechanism piece is dropped from the shell CSS."""
     head = curatorpage._HEAD
-    # (a) two-column grid with explicit list-left / panel-right placement — INCLUDING grid-row.
+    # (a) three-column grid with explicit table-left / facts-middle / plots-right placement. grid-ROW
+    # is load-bearing, not decoration (usability incident 2026-07-11): with only grid-COLUMN set,
+    # auto-placement cannot move backwards within a row, so a DOM-later item wanting an earlier column
+    # drops to ROW 2 silently. ALL THREE must pin grid-row:1. FAILS IF any grid-row:1 is dropped.
     assert ".stations-split{display:grid" in head, "the split must be a CSS grid"
-    assert "grid-template-columns:minmax(24rem,28rem) minmax(0,1fr)" in head, (
-        "wide: the list column must fit its five columns un-truncated (24-28rem), panel takes the rest "
-        "(usability incident 2026-07-11: a fixed 20rem list truncated Quality and forced an inner "
-        "horizontal scrollbar)")
-    # grid-ROW is load-bearing, not decoration (usability incident 2026-07-11): with only grid-COLUMN
-    # set, auto-placement cannot move backwards within a row, so the DOM-second list wanting column 1
-    # lands in ROW 2 — BELOW the panel; three screens down once a real station renders. Both items
-    # must be pinned to row 1. FAILS IF either grid-row:1 is dropped.
+    assert "grid-template-columns:minmax(21rem,25rem) minmax(0,1fr) minmax(0,1fr)" in head, (
+        "wide: three columns — the table column fits its columns un-truncated (21-25rem), facts + "
+        "plots split the rest")
     assert ".stations-split .st-list{grid-column:1;grid-row:1}" in head, (
-        "the LIST must be pinned to column 1 ROW 1 (grid auto-placement drops it to row 2 otherwise)")
-    assert ".stations-split .st-panel{grid-column:2;grid-row:1}" in head, (
-        "the PANEL must be pinned to column 2 ROW 1")
-    assert "align-items:start" in head, "columns are top-aligned so the list never pushes the panel down"
-    # (b) the list's own fixed-height scroll region.
+        "the TABLE must be pinned to column 1 ROW 1 (grid auto-placement drops it to row 2 otherwise)")
+    assert ".stations-split .st-facts{grid-column:2;grid-row:1}" in head, (
+        "the FACTS must be pinned to column 2 ROW 1")
+    assert ".stations-split .st-plots{grid-column:3;grid-row:1" in head, (
+        "the PLOTS must be pinned to column 3 ROW 1")
+    assert "align-items:start" in head, "columns are top-aligned so a tall column never pushes others down"
+    # (b) the table's own fixed-height scroll region.
     assert ".st-scroll{max-height:" in head and "overflow-y:auto" in head, (
-        "the list must scroll in a fixed-height region, never as a full-page table")
-    # (c) narrow collapse to one column (panel-first DOM => panel-above-list stacking).
-    m = re.search(r"@media \(max-width:720px\)\{(.*?)\}\s*</style>", head, re.DOTALL)
-    assert m, "the responsive @media block must exist"
-    narrow = m.group(1)
+        "the table must scroll in a fixed-height region, never as a full-page table")
+    # (c) the plots column scrolls its fixed-width SVGs internally (no page overflow).
+    assert ".st-plots{grid-column:3;grid-row:1;min-width:0;overflow-x:auto}" in head, (
+        "the plots column must scroll its fixed-width SVGs internally, not overflow the page")
+    # (d) narrow collapse to one column (facts-first DOM => facts/plots/table stacking). Scope the
+    # search to the 1120px stack block (between it and the following 1024px detail block).
+    assert "@media (max-width:1120px){" in head, "the 1120px stack breakpoint must exist"
+    i1120 = head.index("@media (max-width:1120px){")
+    i1024 = head.index("@media (max-width:1024px){", i1120)
+    narrow = head[i1120:i1024]
     assert ".stations-split{grid-template-columns:1fr}" in narrow, (
-        "narrow screens must collapse the split to a single column so the panel stacks above the list")
+        "narrow screens must collapse the split to a single column so facts/plots/table stack")
     assert "grid-row:auto" in narrow, (
-        "narrow: grid-row must return to auto so the two items STACK (the wide grid-row:1 pins would "
-        "otherwise force both into one row = side-by-side squeeze on a phone)")
+        "narrow: grid-row must return to auto so the three items STACK (the wide grid-row:1 pins would "
+        "otherwise force all three into one squeezed row)")
 
 
 def test_stations_split_no_page_scroll_on_row_select():

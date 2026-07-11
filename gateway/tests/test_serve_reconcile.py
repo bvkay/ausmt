@@ -117,8 +117,11 @@ def test_rebuild_requires_csrf(tmp_path):
 
 def test_rebuild_success_writes_valid_request_and_redirects(tmp_path):
     """A valid session + CSRF writes a well-formed rebuild.request attributed to the curator and
-    redirects (303) back to the queue's serve-state section. FAILS IF: the file is absent/malformed,
-    the curator is not recorded, or the response is not a redirect."""
+    redirects (303) to the SERVE-STATE screen's panel. C43 FR2-1 (owner ruling, ratified 2026-07-11)
+    moved the serve panel off the queue page to /gateway/curator/serve, so the redirect follows it
+    there — that is where the curator now sees the 'rebuild requested — pending' state. FAILS IF: the
+    file is absent/malformed, the curator is not recorded, or the response is not a redirect to the
+    serve screen."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
@@ -126,7 +129,7 @@ def test_rebuild_success_writes_valid_request_and_redirects(tmp_path):
                                   data={"csrf_token": csrf_for_session(client)},
                                   follow_redirects=False)
             assert r.status_code == 303
-            assert "/gateway/curator/queue" in r.headers.get("location", "")
+            assert "/gateway/curator/serve" in r.headers.get("location", "")
             req = cfg.state_dir / serve_state.REQUEST_FILENAME
             assert req.exists()
             doc = json.loads(req.read_text(encoding="utf-8"))
@@ -176,16 +179,23 @@ def test_rebuild_unwritable_state_dir_503(tmp_path):
     run(_body())
 
 
-# ---- panel rendering on the queue page ---------------------------------------------------------
+# ---- panel rendering on the SERVE-STATE screen -------------------------------------------------
+# C43 FR2-1 (owner ruling, ratified 2026-07-11): the serve-state panel was REMOVED from the queue page
+# — the dedicated /gateway/curator/serve screen (which embeds render_serve_panel) + the ever-present
+# drift chip own the served-vs-published job now. These panel-render pins MOVE with the panel to its
+# new home /serve (checked against test_c43_stage2b_ops.py: that file pins the ops floor / sync strip
+# / build detail but NOT the panel's serve-state id, the not-installed hint, serve-state.js, the
+# pending indicator, or the reconcile log tail — so these are not duplicated and are retargeted, not
+# deleted). The queue page is proven pure-queue by test_queue_page_is_pure_queue below.
 
-def test_queue_panel_renders_without_status(tmp_path):
-    """With no reconcile-status.json the queue page still renders the serve-state panel and shows the
+def test_serve_panel_renders_without_status(tmp_path):
+    """With no reconcile-status.json the SERVE screen still renders the serve-state panel and shows the
     "agent not installed" hint + the browser-fetch placeholders + the rebuild button. FAILS IF: the
     panel is missing, or a missing status file breaks the page."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
             await curator_login(client)
-            r = await client.get("/gateway/curator/queue")
+            r = await client.get("/gateway/curator/serve")
             assert r.status_code == 200
             assert 'id="serve-state"' in r.text
             assert "reconcile agent is not installed" in r.text or "not installed" in r.text
@@ -197,10 +207,11 @@ def test_queue_panel_renders_without_status(tmp_path):
     run(_body())
 
 
-def test_queue_panel_renders_status_and_pending(tmp_path):
-    """With a status file present AND a pending rebuild.request, the panel shows the last outcome and
-    the pending indicator. FAILS IF: the panel does not surface the reconcile action, or the pending
-    flag is not shown when a request file exists (the curator would not know a rebuild is queued)."""
+def test_serve_panel_renders_status_and_pending(tmp_path):
+    """With a status file present AND a pending rebuild.request, the SERVE screen's panel shows the
+    last outcome and the pending indicator. FAILS IF: the panel does not surface the reconcile action,
+    or the pending flag is not shown when a request file exists (the curator would not know a rebuild
+    is queued)."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             cfg.state_dir.mkdir(parents=True, exist_ok=True)
@@ -210,7 +221,7 @@ def test_queue_panel_renders_status_and_pending(tmp_path):
                 "log_file": "/x/y.build.log", "log_tail": None}), encoding="utf-8")
             (cfg.state_dir / serve_state.REQUEST_FILENAME).write_text("{}", encoding="utf-8")
             await curator_login(client)
-            r = await client.get("/gateway/curator/queue")
+            r = await client.get("/gateway/curator/serve")
             assert r.status_code == 200
             assert "rebuilt" in r.text
             assert "2026-07-08T00:00:00Z" in r.text
@@ -218,9 +229,10 @@ def test_queue_panel_renders_status_and_pending(tmp_path):
     run(_body())
 
 
-def test_queue_panel_failed_shows_log_tail(tmp_path):
-    """A failed reconcile shows the log tail so a shell-less curator sees WHY the last build did not
-    serve. FAILS IF: a failed status hides the log tail (the NCI no-console requirement)."""
+def test_serve_panel_failed_shows_log_tail(tmp_path):
+    """A failed reconcile shows the log tail on the SERVE screen so a shell-less curator sees WHY the
+    last build did not serve. FAILS IF: a failed status hides the log tail (the NCI no-console
+    requirement)."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             cfg.state_dir.mkdir(parents=True, exist_ok=True)
@@ -230,18 +242,20 @@ def test_queue_panel_failed_shows_log_tail(tmp_path):
                 "log_file": "/x/y.build.log",
                 "log_tail": "VERIFY FAILED -- current left untouched"}), encoding="utf-8")
             await curator_login(client)
-            r = await client.get("/gateway/curator/queue")
+            r = await client.get("/gateway/curator/serve")
             assert r.status_code == 200
             assert "failed" in r.text
             assert "VERIFY FAILED" in r.text, "a failed reconcile must surface its log tail"
     run(_body())
 
 
-def test_queue_panel_published_head_via_git_seam(tmp_path):
-    """The panel's server-side published HEAD comes from the injected git seam (the publish flow's
-    runner). With a seam returning a known short sha, the page shows it; with a failing seam it shows
-    'unavailable' and does NOT 500. FAILS IF: the git seam result is not reflected, or a git error
-    500s the queue page."""
+def test_published_head_via_git_seam_on_shell_and_serve(tmp_path):
+    """The server-side published HEAD comes from the injected git seam (the publish flow's runner). It
+    is surfaced on EVERY shelled page by the context-bar drift chip AND on the serve screen's panel;
+    with a seam returning a known short sha the page shows it, with a failing seam it shows
+    'unavailable' and does NOT 500. (C43 FR2-1: the queue no longer carries the panel, but the drift
+    chip carries the published HEAD hub-wide, so the queue page still reflects the seam.) FAILS IF: the
+    git seam result is not reflected, or a git error 500s the page."""
     async def _body():
         # Seam that returns a fixed HEAD for rev-parse.
         def good_git(args, *, cwd, env=None):
@@ -250,30 +264,32 @@ def test_queue_panel_published_head_via_git_seam(tmp_path):
             return GitResult(returncode=0, stdout="", stderr="")
         async with app_client(tmp_path, git_runner=good_git) as (client, _app, _gw, _cfg):
             await curator_login(client)
-            r = await client.get("/gateway/curator/queue")
-            assert r.status_code == 200
-            assert "feed123" in r.text
+            for url in ("/gateway/curator/queue", "/gateway/curator/serve"):
+                r = await client.get(url)
+                assert r.status_code == 200, url
+                assert "feed123" in r.text, url
 
         def bad_git(args, *, cwd, env=None):
             return GitResult(returncode=128, stdout="", stderr="dubious ownership")
         async with app_client(tmp_path, git_runner=bad_git) as (client, _app, _gw, _cfg):
             await curator_login(client)
-            r = await client.get("/gateway/curator/queue")
-            assert r.status_code == 200  # never 500
-            assert "unavailable" in r.text
+            for url in ("/gateway/curator/queue", "/gateway/curator/serve"):
+                r = await client.get(url)
+                assert r.status_code == 200, url  # never 500
+                assert "unavailable" in r.text, url
     run(_body())
 
 
-# ---- CSP delivery: the panel JS must be an EXTERNAL script (strictPages blocks inline) ----------
+# ---- CSP delivery + the queue-is-pure-queue invariant (strictPages blocks inline) ---------------
 
-def test_queue_page_has_no_inline_scripts_or_handlers(tmp_path):
-    """CSP PIN (the 2026-07-08 panel incident): Caddy serves every /gateway/* page under
-    script-src 'self' — inline <script> blocks and inline event-handler attributes are silently
-    BLOCKED by the browser, so any inline JS on a curator page is dead code that only fails in
-    production. The rendered queue page must reference the panel + shared-UI JS as external
-    same-origin scripts and carry ZERO inline scripts or inline event handlers. FAILS IF: anyone
-    re-inlines a script or adds an onclick-style attribute (either would ship a page whose JS
-    never runs behind Caddy)."""
+def test_queue_page_is_pure_queue_and_csp_clean(tmp_path):
+    """C43 FR2-1 + CSP PIN. The queue page is PURELY the queue now (owner ruling, ratified
+    2026-07-11): the inline serve-state panel is GONE — it does NOT reference serve-state.js and
+    carries no serve-state panel id (that job moved to /gateway/curator/serve + the drift chip). It
+    still carries the shared UI script and stays CSP-clean: Caddy serves every /gateway/* page under
+    script-src 'self', so inline <script> blocks and inline on*= handlers are silently BLOCKED and any
+    inline JS is dead code that only fails in production. FAILS IF: the serve panel leaks back onto the
+    queue, or anyone re-inlines a script / adds an onclick-style attribute."""
     import re
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, _cfg):
@@ -284,10 +300,14 @@ def test_queue_page_has_no_inline_scripts_or_handlers(tmp_path):
             for m in re.finditer(r"<script\b[^>]*>", html):
                 assert re.search(r"\bsrc\s*=", m.group(0)), \
                     f"inline <script> is dead under the CSP: {m.group(0)}"
-            assert 'src="/gateway/curator/serve-state.js"' in html
+            # The serve panel and its script must NOT be on the queue anymore (moved to /serve).
+            assert 'src="/gateway/curator/serve-state.js"' not in html, \
+                "the serve-state panel script must not ride the pure-queue page (it moved to /serve)"
+            assert 'id="serve-state"' not in html, "the serve-state panel must be gone from the queue"
             assert 'src="/gateway/curator/ui.js"' in html
             handlers = re.findall(r"<[^>]*\son\w+\s*=", html)
             assert handlers == [], f"inline event handlers are dead under the CSP: {handlers}"
+    run(_body())
     run(_body())
 
 

@@ -799,3 +799,97 @@ process.stdout.write(JSON.stringify({
     assert row["n"] == 4 and len(got["unpadded"]) == 1, "the remap must not disturb grouping"
     assert row["ids"] == ["L2", "L3", "L10", "L15"], row["ids"]
     assert row["sid"] == "L2 … L15", f"backwards/lexicographic range label: {row['sid']!r}"
+
+
+# ==================================================================================================
+# C43 FR2-3 — the ONE combined ±180 phase plot's pure data mapper (owner ruling 2026-07-11: both
+# phases on a single axis; supersedes the mockup's two separate plots). combinedPhasePlan +
+# phaseVerdictParts run IN NODE against the tf rows the REAL ENGINE emitted, judged against the
+# parity-tested phaseqc.classify_series (the SAME seam the plot dots use) and an INDEPENDENT Python
+# band model. The named mutation-proofs (drop the yx unwrap; merge the two bands into one; drop a
+# verdict component) each red this pin; the verbatim reds ride the C43 record.
+# ==================================================================================================
+def _phase_driver(body: str) -> str:
+    from gateway.tests.test_c43_stage2a_js_parity import _extract_constants
+    js = curatorpage.STATIONS_JS
+    parts = ["import { readFileSync } from 'fs';", _extract_constants(js)]
+    tmap = re.search(r"var T = \{.*?\};", js, re.DOTALL)
+    assert tmap, "the tf column map (var T = {...}) not found in STATIONS_JS"
+    parts.append(tmap.group(0))
+    for n in ("floormod", "wrap180", "trueYx", "mapYx", "inQ1", "inQ3", "medianOf", "classify",
+              "combinedPhasePlan", "phaseVerdictParts"):
+        parts.append(_extract_js_function(js, n))
+    parts.append(body)
+    return "\n".join(parts)
+
+
+def test_combined_phase_plan_mapper_from_real_corpus(warn_report, tmp_path):
+    """C43 FR2-3 COMBINED-PHASE-PLAN PIN (engine truth). The pure combinedPhasePlan, driven in Node
+    with the tf rows the REAL engine emitted, produces: (1) the φxy series verbatim (stored = true) and
+    the φyx series UNWRAPPED to true phase (stored − 180, re-wrapped — trueYx); (2) per-point flags +
+    median verdicts MATCHING phaseqc.classify_series (the parity-tested seam the plot dots use); (3)
+    TWO band owners on the ±180 axis — Q1 belongs to xy, Q3 (+ the +170..+180 seam continuation) to yx,
+    and NO band crosses 0 (Q1 and Q3 stay separately owned). phaseVerdictParts yields BOTH component
+    verdicts, in order, with the out flag = median-out.
+
+    MUTATION-PROOFS (each reds this pin): dropping the yx unwrap (reading yx RAW) — non-vacuous because
+    a warn station's stored φyx differs from its true φyx by ~180 (assertion (1)); MERGING the two
+    bands into one that crosses 0 (assertion (3) — no band may cross 0); dropping a verdict component
+    (the verdict must carry BOTH φxy and φyx). FAILS IF any holds."""
+    from gateway import phaseqc
+    corpus = _load_corpus(warn_report)
+    ids = ["A1", "CP1L02", "CP1B10"]   # clean control, a Zyx warn, a Zxy warn
+    driver = _phase_driver("""
+const p = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const byId = {};
+for (var i = 0; i < p.catalogue.length; i++) byId[p.catalogue[i][0]] = i;   // catalogue[i][C.id] = 0
+const out = {};
+p.ids.forEach(function (id) {
+  var t = p.tf[byId[id]];
+  var plan = combinedPhasePlan(t);
+  out[id] = { plan: plan, verdict: phaseVerdictParts(plan) };
+});
+process.stdout.write(JSON.stringify(out));
+""")
+    got = _run_node(tmp_path, driver, {"catalogue": corpus["catalogue"], "tf": corpus["tf"],
+                                       "ids": ids})
+    T_PHS_XY, T_PHS_YX = 3, 4   # pinned by the STATIONS_JS tf column map
+    by_id = {r[0]: i for i, r in enumerate(corpus["catalogue"])}
+    for sid in ids:
+        t = corpus["tf"][by_id[sid]]
+        plan = got[sid]["plan"]
+        assert plan is not None, sid
+        xy_stored, yx_stored = t[T_PHS_XY], t[T_PHS_YX]
+        # (1) series: φxy verbatim (true); φyx UNWRAPPED. Dropping the unwrap dies here.
+        assert plan["xy"]["series"] == xy_stored, sid
+        exp_yx = [phaseqc.true_phi_yx(v) for v in yx_stored]
+        assert plan["yx"]["series"] == exp_yx, sid
+        # non-vacuous: at least one true φyx differs from its stored value (else the unwrap is a no-op).
+        assert any(v is not None and tv is not None and abs(tv - v) > 1e-9
+                   for v, tv in zip(yx_stored, exp_yx)), (
+            f"{sid}: fixture must carry a φyx whose true value differs from stored (unwrap non-vacuous)")
+        # (2) flags + median match phaseqc (the seam the dots use).
+        cxy = phaseqc.classify_series(xy_stored, mode="xy")
+        cyx = phaseqc.classify_series(yx_stored, mode="yx")
+        assert plan["xy"]["points"] == cxy["points"], sid
+        assert plan["yx"]["points"] == cyx["points"], sid
+        assert plan["xy"]["median"] == cxy["median"], sid
+        assert plan["yx"]["median"] == cyx["median"], sid
+        assert plan["xy"]["medianIn"] == cxy["median_in"], sid
+        assert plan["yx"]["medianIn"] == cyx["median_in"], sid
+        # (3) band ownership: Q1 -> xy; Q3 (+ seam) -> yx; NO band crosses 0 (merged-band mutation dies).
+        bands = plan["bands"]
+        assert [b for b in bands if b["comp"] == "xy"] == [{"comp": "xy", "lo": 0.0, "hi": 90.0}], sid
+        yx_bands = [b for b in bands if b["comp"] == "yx"]
+        assert {"comp": "yx", "lo": -180.0, "hi": -90.0} in yx_bands, (sid, yx_bands)
+        assert any(b.get("seam") and b["lo"] == 170.0 and b["hi"] == 180.0 for b in yx_bands), (
+            f"{sid}: the +170..+180 seam continuation band (φyx wraps ±180) must be present")
+        for b in bands:
+            assert not (b["lo"] < 0 < b["hi"]), (
+                f"{sid}: no band may cross 0 — that would merge Q1 and Q3 into one owner: {b}")
+        # verdict: BOTH components (φxy then φyx), out flag = median-out.
+        verdict = got[sid]["verdict"]
+        assert [p["comp"] for p in verdict] == ["φxy", "φyx"], (sid, verdict)
+        assert [p["expect"] for p in verdict] == ["Q1", "Q3"], (sid, verdict)
+        assert verdict[0]["out"] == (cxy["n_classified"] > 0 and not cxy["median_in"]), sid
+        assert verdict[1]["out"] == (cyx["n_classified"] > 0 and not cyx["median_in"]), sid
