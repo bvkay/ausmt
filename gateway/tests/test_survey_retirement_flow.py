@@ -212,6 +212,30 @@ def test_retire_unenrolled_curator_refused_with_enrol_pointer(tmp_path):
     run(_body())
 
 
+def test_retire_pending_enrolment_does_not_satisfy_gate(tmp_path):
+    """A curator with a PENDING (begun but not activated) enrolment is refused (409) — an unactivated
+    enrolment does NOT satisfy the deletion gate (fail-closed). FAILS IF a pending secret gates a
+    retirement. The code used is a valid code FOR the pending secret, proving it is the ACTIVATION
+    state (not the code validity) that blocks."""
+    async def _body():
+        surveys_live = _live_with_surveys(tmp_path)
+        git = FakeGit()
+        async with app_client(tmp_path, git_runner=git,
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, gw, _cfg):
+            await curator_login(client)
+            # Begin but do NOT activate: a pending row (active False) with a real, correct code.
+            secret = totp.generate_secret()
+            gw.db.begin_totp_enrolment(CURATOR_NAME, secret)
+            assert gw.db.get_totp(CURATOR_NAME).active is False
+            r = await _retire(client, "survey-a-2026", code=_code(secret))
+            assert r.status_code == 409
+            assert "security" in r.text.lower() or "enrol" in r.text.lower()
+            assert _mutating_git(git) == []
+            assert (surveys_live / "surveys" / "survey-a-2026").exists()
+    run(_body())
+
+
 def test_retire_wrong_code_refused_nothing_staged(tmp_path):
     """A wrong TOTP code is refused (400) with nothing staged. FAILS IF a wrong code retires the
     survey."""
