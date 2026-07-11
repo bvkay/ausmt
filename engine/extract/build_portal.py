@@ -962,7 +962,7 @@ def _mini_yaml(text: str) -> dict:
     return result if isinstance(result, dict) else {}
 
 
-def _parse_one_edi(p, uniform_mode="auto"):
+def _parse_one_edi(p):
     """The expensive per-EDI compute: the mt_metadata parse + C25 convention gates + coord-QC +
     shared TF/science math. Returns a plain JSON-serializable dict {record, tf, sci, email_flag,
     coord_warn, frame, frame_notes} — or {"skip": {station, gate, reason}} when a convention gate
@@ -973,15 +973,14 @@ def _parse_one_edi(p, uniform_mode="auto"):
     byte-identically into the positional products (numpy float64 serialises as a float; verified
     by test).
 
-    `uniform_mode` is the SURVEY-scope frame-policy verdict (POLICY v2: R2/R3/R4) from
-    conv.classify_survey_frame — a station's disposition for a survey-uniform declared angle
-    depends on its SIBLINGS' angles, so process_edis computes it survey-wide, threads it here AND
-    into the C18 cache key (a cached parse is only valid under the same policy context). "auto" =
-    the single-station default for direct API/test use.
-
-    C25 gate order matters: Gate 1 (frame) runs FIRST and may DE-ROTATE the in-memory TF to the
-    file's declared zero-azimuth reference, so the record/components/science below — and Gate 2's
-    quadrant check — all see the SERVED frame. The source file bytes are never touched (D1)."""
+    C25 frame POLICY v3 (owner ruling 2026-07-11): Gate 1 NEVER rotates served data — it PASSES the
+    station (served AS STORED, the declared frame recorded in `frame`) or FAILS it (per-period frame
+    mixing V3-C, or an unknowable frame). Because a station's disposition no longer depends on its
+    siblings' angles (every uniform declaration serves as-stored regardless of the survey), this
+    parse is survey-context-INDEPENDENT again — no policy mode is threaded and the C18 cache key
+    carries no policy context. The V3-B survey-level "mixed declared frames" note is applied by the
+    caller (process_edis), not here. Gate 2's quadrant check sees the SERVED (as-stored) frame. The
+    source file bytes are never touched (D1)."""
     tfobj = mtm.read(p)                          # parse ONCE, reuse below
     _raw = ep.read_norm(p)   # raw EDI text: frame evidence + coord-QC + processing-metadata scrape
     _did = cat.grab(_raw, "DATAID")
@@ -989,12 +988,13 @@ def _parse_one_edi(p, uniform_mode="auto"):
     # ---- C25 Gate 1: rotation/frame guard (full design in extract/_conventions.py). Evidence =
     # the raw text (ZROT/TROT/ROTSPEC/HMEAS — load-bearing for spectra files, which mt_metadata
     # reads with NO rotation metadata at all) cross-checked against the TF's own _rotation_angle.
-    # FAIL -> the station is skipped: never serve an unresolvable frame (C8 posture).
+    # v3: PASS -> served AS STORED (declared frame recorded); FAIL -> the station is skipped (never
+    # serve a per-period-mixed or unresolvable frame; C8 posture). The engine does NOT de-rotate —
+    # the de-rotation math in _conventions is diagnostic-only and no serve-path caller invokes it.
     _ev = conv.parse_frame_evidence(_raw)
     _n_per = int(tfobj.period.size) if tfobj.period is not None else 0
     _disp = conv.frame_disposition(_ev, getattr(tfobj, "_rotation_angle", None),
-                                   conv.z_present_mask(tfobj), bool(tfobj.has_tipper()), _n_per,
-                                   uniform_mode=uniform_mode)
+                                   conv.z_present_mask(tfobj), bool(tfobj.has_tipper()), _n_per)
     if _disp.action == "fail":
         try:
             _sid, _ = cat.parse_dataid(_did)
@@ -1003,12 +1003,6 @@ def _parse_one_edi(p, uniform_mode="auto"):
         return {"skip": {"station": _sid or p.stem, "gate": "rotation-frame",
                          "reason": _disp.fail_reason}}
     _frame_notes = list(_disp.notes)
-    if _disp.action == "derotate":
-        _n_masked = conv.apply_derotation(tfobj, _disp)
-        if _n_masked:
-            _frame_notes.append(f"frame: {_n_masked} period(s) had partial components and could "
-                                f"not be de-rotated honestly — masked (a fill would smear into "
-                                f"every rotated element)")
 
     r = mtm.record_from_tf(tfobj, p.name)
     # mt_metadata reads only the HEAD coordinate, so run the INFO-vs-HEAD DMS-bug detection +
@@ -1095,26 +1089,25 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         sys.exit("ERROR: the mt_metadata stack is required for the build "
                  "(pip install -r environments/requirements-mtmetadata-lock.txt).")
     _use_cache = cache is not None and getattr(cache, "enabled", False)
-    # ---- C25 POLICY v2 survey-scope pre-scan (cheap lexical pass; read_norm is cached so the
-    # text is read once and reused by the per-station parse below). A station's disposition for a
-    # survey-uniform declared angle depends on its SIBLINGS' angles (R2 inconsistent-survey vs
-    # R3 declination-class vs R4 analysis-frame), so the mode is classified survey-wide here and
-    # folded into the C18 cache key via `kind` — a cached parse must never replay under a
-    # DIFFERENT policy context (e.g. a new station flipping the survey from R3 to R2).
+    # ---- C25 POLICY v3 survey-scope pre-scan (cheap lexical pass; read_norm is cached so the text
+    # is read once and reused by the per-station parse below). Under v3 a station's disposition is
+    # survey-context-INDEPENDENT (every uniform declaration serves as-stored; every per-period
+    # declaration refuses), so this scan NO LONGER changes any per-station parse and no policy
+    # context enters the C18 cache key (kind="parse"). It exists ONLY to detect the V3-B
+    # survey-inconsistency and surface the "mixed declared frames" note — applied per station below.
     _angles = []
     for p in sorted(edi_paths):
         try:
             _angles.append(conv.declared_uniform_angle(conv.parse_frame_evidence(ep.read_norm(p))))
         except Exception:  # noqa: BLE001  (unreadable file -> the per-station loop reports it)
             continue
-    _fmode, _fctx = conv.classify_survey_frame(_angles)
-    _kind = f"parse#{_fctx}"
+    _survey_frame_note = conv.classify_survey_frame(_angles)   # V3-B note string, or None
     for p in sorted(edi_paths):
-        _ck = cache.key(edi_sha=sha256(p), survey_digest=survey_digest, kind=_kind) if _use_cache else None
+        _ck = cache.key(edi_sha=sha256(p), survey_digest=survey_digest, kind="parse") if _use_cache else None
         parsed = cache.get_json(_ck) if _ck else None
         if parsed is None:
             try:
-                parsed = _parse_one_edi(p, uniform_mode=_fmode if _fmode != "none" else "auto")
+                parsed = _parse_one_edi(p)
             except Exception as e:  # noqa: BLE001
                 print(f"  PARSE FAIL {p.name}: {e}", file=sys.stderr)
                 continue
@@ -1151,8 +1144,19 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
         r["comps"] = "".join(r.get("components") or [])
         r["frame"] = parsed.get("frame")               # C25 frame facts -> station.json
-        if parsed.get("frame_notes"):
-            r["_frame_notes"] = parsed["frame_notes"]  # keyed by FINAL id below (post-disambiguate)
+        # C25 V3-B: a survey with inconsistent per-station declared frames carries the survey-level
+        # "mixed declared frames" note. Stamp it here (AFTER the context-free per-station parse, so
+        # it never enters the C18 cache) into BOTH the station's frame facts (-> station.json, so the
+        # portal drawer can surface it) and its frame notes (-> build_report `frame` array + the
+        # [frame] NOTICE log, one aggregated line per survey). Every station is still served AS
+        # STORED — nothing is de-rotated; the note is reporting, not correction.
+        _fn = list(parsed.get("frame_notes") or [])
+        if _survey_frame_note:
+            _fn.append(_survey_frame_note)
+            if isinstance(r.get("frame"), dict):
+                r["frame"]["survey_frame_note"] = _survey_frame_note
+        if _fn:
+            r["_frame_notes"] = _fn                     # keyed by FINAL id below (post-disambiguate)
         stations.append((p, r))
         tf_rows.append(tf)
         sci_rows.append(srow)
