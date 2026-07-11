@@ -62,6 +62,23 @@ BACKUP_MAX_H="${AUSMT_ALERT_BACKUP_MAX_H:-26}"
 COMPOSE_CMD="${AUSMT_ALERT_COMPOSE:-docker compose}"
 CURL_CMD="${AUSMT_ALERT_CURL:-curl}"
 
+# C43 S2b-i: this timer is ALSO the ops-status.json writer (record D8/D15). Its cadence (the systemd
+# ausmt-alert.timer period, ~15 min) is the staleness clock the curator ops floor reads: a file older
+# than ~2 periods flips every dependent card STALE. Override only if you retimed the unit.
+TIMER_PERIOD_MIN="${AUSMT_ALERT_PERIOD_MIN:-15}"
+# The gateway state dir (10002-owned, group-writable to the operator — the same shared-group prep the
+# reconcile agent uses) is where reconcile-status.json AND ops-status.json live. Empty when
+# AUSMT_DATA_DIR is unset (we then skip the ops-status write, loudly, rather than write into /).
+DATA_DIR_ROOT="${AUSMT_DATA_DIR:-}"
+STATE_DIR="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/gateway/state}"
+OPS_STATUS_FILE="${STATE_DIR:+$STATE_DIR/ops-status.json}"
+SITE_DATA="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/site-data}"
+
+# Facts the check_* functions compute for the fail-ping ARE ALSO the ops-floor facts — hoisted into
+# these globals as each check runs so the ops writer reuses them (one `docker compose ps`, one `df`).
+OPS_PS_JSON=""
+OPS_DISK_PCT=""
+
 # The four long-running compose services this box monitors. build-runner is EXCLUDED on purpose: it is
 # a one-shot job (compose profile "jobs") that is SUPPOSED to be absent between builds, so "not running"
 # is its normal state — alerting on it would fire constantly. gw-runner IS included: it is long-running
@@ -82,6 +99,10 @@ $1"
 }
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
+
+# Full ISO-8601 UTC (the EXACT format reconcile.sh writes into last_run) — the ops-status.json
+# generated_at the gateway's staleness clock parses. Kept identical so both files parse the same way.
+now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # python3/python for the two JSON parses. Probe by EXECUTION (a Windows dev box can have a non-functional
 # `python3` App-Store shim), exactly as reconcile.sh does. Only the service + reconcile checks need it;
@@ -127,6 +148,7 @@ check_services() {
   # --profile gateway so gateway/clamd/gw-runner (all under that profile) are listed alongside portal.
   # shellcheck disable=SC2086 -- COMPOSE_CMD may be a multi-word command (e.g. `docker compose` or a shim).
   ps_json="$($COMPOSE_CMD --profile gateway ps --format json --all 2>/dev/null)"
+  OPS_PS_JSON="$ps_json"   # hoist for the ops-status writer (the Box card's service list)
   if [ -z "$ps_json" ]; then
     # No output at all: the compose invocation itself failed (docker down? wrong dir?) — that IS a fault,
     # every monitored service is unaccounted for.
@@ -231,6 +253,7 @@ check_disk() {
   fi
   # -P => POSIX one-line-per-fs format; the 5th field of the data row is "NN%".
   used_pct="$(df -P "$data_dir" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
+  OPS_DISK_PCT="$used_pct"   # hoist for the ops-status writer (the Box card's disk gauge)
   if [ -z "$used_pct" ]; then
     add_failure "disk: could not read df output for $data_dir"
     return
@@ -353,18 +376,303 @@ check_backup() {
 }
 
 # --------------------------------------------------------------------------------------------------
-# Not-configured short-circuit: if AUSMT_ALERT_URL is unset/empty, print ONE loud note and exit 0.
-# NEVER fake a ping, NEVER break the timer. This lets the units be installed before the operator has
-# created the external check (the runbook order), without the timer flapping.
+# C43 S2b-i: write ops-status.json for the curator ops floor (record D8/D15). SEPARATE from the ping:
+# it runs every pass — INCLUDING when alerting is unconfigured — because the ops floor must reflect
+# box state before (and independently of) the external dead-man monitor being wired. Atomic (mktemp +
+# chmod 0644 + mv, the reconcile.sh posture) so the gateway container (uid 10002, group-shared state
+# dir) never reads a half-written file and can always read a complete one. Best-effort: ANY failure
+# here is a warning, never a change to the pass's exit code (the ping is the timer's real contract).
+#
+# The facts, over what the checks already gather (service health / disk / reconcile / backup):
+#   * freshness: code checkout AND surveys-live, each local short HEAD vs its last-fetched tracking
+#     ref (@{u}). NO fetch here (a network side effect in the alert timer is itself a failure mode,
+#     and a fetch that cannot reach origin is exactly the reconcile sync-strip's job) — so this
+#     reflects the last SUCCESSFUL fetch; behind => the card's row goes amber. (Record D15: the two
+#     signals are complementary — the sync strip catches "cannot reach origin", freshness catches
+#     "reached it, but the checkout is behind".)
+#   * reconcile sync state: action + a sync_failed STREAK (count + since), derived by carrying the
+#     previous ops-status.json forward — so a 4-hour hidden sync_failed (incident 2026-07-11) reads
+#     as "failing for N ticks since T", not a silent single line.
+#   * retained-build inventory: each site-data/builds/<ts> dir's build.json (id/engine/source) +
+#     build_report.json (stations) + build_provenance.json `cache` block (the C18-A4 forensics:
+#     salt_fp / write_errors / read_errors) + a serving marker (== current symlink target).
+#   * log tail: the newest site-data/logs/*.build.log, last 60 lines, copied into the file (the
+#     gateway has no site-data mount — this is how a shell-less curator reads build forensics).
 # --------------------------------------------------------------------------------------------------
-if [ -z "$ALERT_URL" ]; then
-  printf '%s alert: ALERTING NOT CONFIGURED -- AUSMT_ALERT_URL is unset/empty in the environment.\n' "$(date -u +%H:%M:%SZ)" >&2
-  printf 'alert: create the external check + paste its ping URL into deploy/.env as AUSMT_ALERT_URL. See deploy/README.md "Alerting". No ping sent.\n' >&2
-  exit 0
-fi
+write_ops_status() {
+  # _checks_ok=1 when the run found no failures (the summary is empty); _installed=1 when a ping URL
+  # is configured. Both are computed by the caller and passed in.
+  _checks_ok="$1"; _installed="$2"
+
+  if [ -z "$STATE_DIR" ] || [ ! -d "$STATE_DIR" ]; then
+    printf '%s ops-status: state dir unavailable (%s) -- not writing ops-status.json\n' \
+      "$(date -u +%H:%M:%SZ)" "${STATE_DIR:-<AUSMT_DATA_DIR unset>}" >&2
+    return 0
+  fi
+  if [ -z "$PY" ]; then
+    printf '%s ops-status: no python3/python -- not writing ops-status.json\n' "$(date -u +%H:%M:%SZ)" >&2
+    return 0
+  fi
+
+  # ----- git freshness (NO fetch): local short HEAD vs last-fetched tracking ref, both repos -----
+  _code_dir="${AUSMT_CODE_DIR:-}"
+  _code_sha=""; _code_origin=""
+  if [ -n "$_code_dir" ] && [ -e "$_code_dir/.git" ]; then
+    _code_sha=$(git -C "$_code_dir" rev-parse --short HEAD 2>/dev/null || true)
+    _code_origin=$(git -C "$_code_dir" rev-parse --short '@{u}' 2>/dev/null || true)
+  fi
+  _sl_dir="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/surveys-live}"
+  _sl_sha=""; _sl_origin=""
+  if [ -n "$_sl_dir" ] && [ -e "$_sl_dir/.git" ]; then
+    _sl_sha=$(git -C "$_sl_dir" rev-parse --short HEAD 2>/dev/null || true)
+    _sl_origin=$(git -C "$_sl_dir" rev-parse --short '@{u}' 2>/dev/null || true)
+  fi
+
+  # ----- uptime (best-effort, box card) -----
+  _uptime=""
+  if command -v uptime >/dev/null 2>&1; then
+    _uptime=$(uptime -p 2>/dev/null || true)
+    [ -n "$_uptime" ] || _uptime=$(uptime 2>/dev/null | sed 's/^[[:space:]]*//' || true)
+  fi
+
+  # ----- systemd backup failure flag (reuse the check_backup signal) -----
+  _backup_systemd_failed=0
+  if command -v systemctl >/dev/null 2>&1; then
+    [ "$(systemctl is-failed ausmt-backup.service 2>/dev/null || true)" = "failed" ] && _backup_systemd_failed=1
+  fi
+
+  _tmp=$(mktemp "$OPS_STATUS_FILE.tmp.XXXXXX" 2>/dev/null) || {
+    printf '%s ops-status: cannot create tmp under %s -- not writing\n' "$(date -u +%H:%M:%SZ)" "$STATE_DIR" >&2
+    return 0; }
+  # 0644 so the gateway CONTAINER (uid 10002) can read it via the shared state dir (same rationale as
+  # reconcile.sh's status writer — mktemp is 0600, the consumer is a different uid).
+  chmod 0644 "$_tmp" 2>/dev/null || true
+
+  AUSMT_OPS_NOW="$(now_utc)" \
+  AUSMT_OPS_PERIOD_MIN="$TIMER_PERIOD_MIN" \
+  AUSMT_OPS_PREV="$OPS_STATUS_FILE" \
+  AUSMT_OPS_RECONCILE="${STATE_DIR}/reconcile-status.json" \
+  AUSMT_OPS_BACKUPS_DIR="${AUSMT_BACKUP_DIR:-${DATA_DIR_ROOT:+$DATA_DIR_ROOT/backups}}" \
+  AUSMT_OPS_BACKUP_MAX_H="$BACKUP_MAX_H" \
+  AUSMT_OPS_BACKUP_SYSTEMD_FAILED="$_backup_systemd_failed" \
+  AUSMT_OPS_ALERT_INSTALLED="$_installed" \
+  AUSMT_OPS_CHECKS_OK="$_checks_ok" \
+  AUSMT_OPS_DISK_PCT="$OPS_DISK_PCT" \
+  AUSMT_OPS_DISK_MAX="$DISK_PCT_MAX" \
+  AUSMT_OPS_PS_JSON="$OPS_PS_JSON" \
+  AUSMT_OPS_UPTIME="$_uptime" \
+  AUSMT_OPS_CLAMAV_DIR="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/gateway/clamav}" \
+  AUSMT_OPS_CODE_SHA="$_code_sha" AUSMT_OPS_CODE_ORIGIN="$_code_origin" \
+  AUSMT_OPS_SL_SHA="$_sl_sha" AUSMT_OPS_SL_ORIGIN="$_sl_origin" \
+  AUSMT_OPS_SITE_DATA="${SITE_DATA:-}" \
+  "$PY" - > "$_tmp" <<'PYEOF'
+import datetime, glob, json, os
+
+def _b(name):
+    return os.environ.get(name, "") == "1"
+
+def _s(name):
+    v = os.environ.get(name, "")
+    return v if v else None
+
+def _load(path):
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+def _prefix_eq(a, b):
+    # Both are `git rev-parse --short` outputs; tolerate a length mismatch either direction.
+    if not a or not b:
+        return None                      # cannot judge without both sides
+    return a.startswith(b) or b.startswith(a)
+
+now = os.environ["AUSMT_OPS_NOW"]
+prev = _load(os.environ.get("AUSMT_OPS_PREV"))
+
+# ---- reconcile + sync_failed streak (carried forward from the previous ops-status.json) ----
+rec = _load(os.environ.get("AUSMT_OPS_RECONCILE")) or {}
+action = rec.get("action")
+last_run = rec.get("last_run")
+sync_failed = (action == "sync_failed")
+prev_rec = (prev or {}).get("reconcile") or {}
+if sync_failed:
+    if prev_rec.get("sync_failed"):
+        streak = int(prev_rec.get("sync_failed_streak") or 0) + 1
+        since = prev_rec.get("sync_failed_since") or last_run
+    else:
+        streak = 1
+        since = last_run
+else:
+    streak, since = 0, None
+reconcile = {"action": action, "last_run": last_run, "sync_failed": sync_failed,
+             "sync_failed_streak": streak, "sync_failed_since": since,
+             "build_id": rec.get("build_id"), "built": rec.get("built"), "head": rec.get("head")}
+
+# ---- backups ----
+backups_dir = os.environ.get("AUSMT_OPS_BACKUPS_DIR") or ""
+snaps = []
+if backups_dir and os.path.isdir(backups_dir):
+    for name in sorted(os.listdir(backups_dir), reverse=True):
+        d = os.path.join(backups_dir, name)
+        if os.path.isdir(d) and name[:1].isdigit() and name.endswith("Z"):
+            snaps.append((name, d))
+_now_ts = datetime.datetime.now().timestamp()
+def _age_h(path):
+    try:
+        return round((_now_ts - os.path.getmtime(path)) / 3600.0, 1)
+    except OSError:
+        return None
+newest = snaps[0] if snaps else None
+# The snapshot table (B5): newest-first {name, age_hours}, capped (retention is ~14 on the box).
+snap_list = [{"name": name, "age_hours": _age_h(d)} for name, d in snaps[:30]]
+drill = _load(os.path.join(backups_dir, "latest-drill.json")) if backups_dir else None
+backups = {"newest": newest[0] if newest else None,
+           "age_hours": _age_h(newest[1]) if newest else None, "count": len(snaps),
+           "snapshots": snap_list,
+           "max_hours": int(os.environ.get("AUSMT_OPS_BACKUP_MAX_H") or 26),
+           "systemd_failed": _b("AUSMT_OPS_BACKUP_SYSTEMD_FAILED"),
+           "drill": drill}   # {"verdict":..,"at":..} if restore-drill writes one, else null
+
+# ---- alerts (dead-man ping): installed + this run's self-check verdict ----
+alerts = {"installed": _b("AUSMT_OPS_ALERT_INSTALLED"), "checks_ok": _b("AUSMT_OPS_CHECKS_OK")}
+
+# ---- box: uptime / disk / services / clamav signature age ----
+services = []
+raw = os.environ.get("AUSMT_OPS_PS_JSON", "").strip()
+records = []
+if raw.startswith("["):
+    try:
+        records = json.loads(raw)
+    except Exception:
+        records = []
+else:
+    for line in raw.splitlines():
+        line = line.strip()
+        if line:
+            try:
+                records.append(json.loads(line))
+            except Exception:
+                pass
+for r in records:
+    if isinstance(r, dict):
+        nm = r.get("Service") or r.get("Name")
+        if nm:
+            services.append({"name": nm, "state": (r.get("State") or "").lower(),
+                             "health": (r.get("Health") or "").lower()})
+services.sort(key=lambda s: s["name"])
+
+clamav_age_days = None
+cd = os.environ.get("AUSMT_OPS_CLAMAV_DIR") or ""
+if cd and os.path.isdir(cd):
+    newest_sig = None
+    for pat in ("*.cvd", "*.cld"):
+        for f in glob.glob(os.path.join(cd, pat)):
+            try:
+                m = os.path.getmtime(f)
+            except OSError:
+                continue
+            if newest_sig is None or m > newest_sig:
+                newest_sig = m
+    if newest_sig is not None:
+        clamav_age_days = round((datetime.datetime.now().timestamp() - newest_sig) / 86400.0, 1)
+
+disk_pct = os.environ.get("AUSMT_OPS_DISK_PCT") or ""
+box = {"uptime": _s("AUSMT_OPS_UPTIME"),
+       "disk_pct": int(disk_pct) if disk_pct.isdigit() else None,
+       "disk_max_pct": int(os.environ.get("AUSMT_OPS_DISK_MAX") or 85),
+       "services": services, "clamav_sig_age_days": clamav_age_days}
+
+# ---- freshness: BOTH repos, local short HEAD vs last-fetched tracking ref ----
+def _fresh(sha_env, origin_env):
+    sha = _s(sha_env); origin = _s(origin_env)
+    eq = _prefix_eq(sha, origin)
+    return {"sha": sha, "origin": origin,
+            "behind": (eq is False), "comparable": (eq is not None)}
+freshness = {"code": _fresh("AUSMT_OPS_CODE_SHA", "AUSMT_OPS_CODE_ORIGIN"),
+             "surveys_live": _fresh("AUSMT_OPS_SL_SHA", "AUSMT_OPS_SL_ORIGIN")}
+
+# ---- retained-build inventory + the C18-A4 cache forensics (build_provenance.json `cache`) ----
+site_data = os.environ.get("AUSMT_OPS_SITE_DATA") or ""
+builds = []
+serving_dir = None
+if site_data:
+    cur = os.path.join(site_data, "current")
+    try:
+        serving_dir = os.path.basename(os.readlink(cur).rstrip("/")) if os.path.islink(cur) else \
+            os.path.basename(os.path.realpath(cur).rstrip("/"))
+    except OSError:
+        serving_dir = None
+    builds_root = os.path.join(site_data, "builds")
+    if os.path.isdir(builds_root):
+        for name in sorted(os.listdir(builds_root), reverse=True)[:10]:
+            bdir = os.path.join(builds_root, name)
+            if not os.path.isdir(bdir):
+                continue
+            bj = _load(os.path.join(bdir, "build.json")) or {}
+            rep = _load(os.path.join(bdir, "build_report.json")) or {}
+            prov = _load(os.path.join(bdir, "build_provenance.json")) or {}
+            cache = prov.get("cache") if isinstance(prov.get("cache"), dict) else {}
+            stations = None
+            surveys = rep.get("surveys") if isinstance(rep.get("surveys"), dict) else None
+            if surveys is not None:
+                try:
+                    stations = sum(int(s.get("stations_built") or 0) for s in surveys.values())
+                except Exception:
+                    stations = None
+            builds.append({
+                "dir": name,
+                "build_id": bj.get("build_id"),
+                "engine_commit": bj.get("engine_commit"),
+                "source_commit": bj.get("source_commit"),
+                "stations": stations,
+                "serving": (name == serving_dir),
+                # C18-A4 cache forensics live in build_provenance.json's top-level `cache` block —
+                # NOT in build.json/build_report.json (verified against build_portal.py). Render what
+                # exists; absent keys (a non-incremental build) stay null.
+                "cache": {"enabled": cache.get("enabled"), "mode": cache.get("mode"),
+                          "salt_fp": cache.get("salt_fp"),
+                          "write_errors": cache.get("write_errors"),
+                          "read_errors": cache.get("read_errors"),
+                          "hits": cache.get("hits"), "misses": cache.get("misses"),
+                          "degenerate": cache.get("degenerate"), "reason": cache.get("reason")},
+            })
+
+# ---- log tail: newest build log (site-data/logs/*.build.log), last 60 lines ----
+logs = {"build": None, "build_file": None}
+if site_data:
+    logdir = os.path.join(site_data, "logs")
+    cands = sorted(glob.glob(os.path.join(logdir, "*.build.log")), reverse=True)
+    if cands:
+        try:
+            with open(cands[0], encoding="utf-8", errors="replace") as fh:
+                logs["build"] = "\n".join(fh.read().splitlines()[-60:])
+            logs["build_file"] = os.path.basename(cands[0])
+        except OSError:
+            pass
+
+doc = {"generated_at": now, "timer_period_min": int(os.environ.get("AUSMT_OPS_PERIOD_MIN") or 15),
+       "reconcile": reconcile, "backups": backups, "alerts": alerts, "box": box,
+       "freshness": freshness, "builds": builds, "logs": logs}
+print(json.dumps(doc, indent=1))
+PYEOF
+
+  if [ -s "$_tmp" ]; then
+    mv -f "$_tmp" "$OPS_STATUS_FILE" 2>/dev/null || { rm -f "$_tmp" 2>/dev/null || true; \
+      printf '%s ops-status: mv into place failed\n' "$(date -u +%H:%M:%SZ)" >&2; }
+  else
+    rm -f "$_tmp" 2>/dev/null || true
+    printf '%s ops-status: writer produced no output -- ops-status.json left unchanged\n' "$(date -u +%H:%M:%SZ)" >&2
+  fi
+}
 
 # --------------------------------------------------------------------------------------------------
 # Run every check (each appends to FAILURES; none of them exit — we want ALL failures in one alert).
+# These run REGARDLESS of whether alerting is configured: their facts feed BOTH the ping (below) and
+# the ops-status.json write (the curator ops floor is independent of the external dead-man monitor).
 # --------------------------------------------------------------------------------------------------
 check_services
 check_disk
@@ -373,6 +681,28 @@ check_backup
 
 # Strip the leading blank line add_failure introduces.
 SUMMARY="$(printf '%s' "$FAILURES" | sed '/^$/d')"
+
+# --------------------------------------------------------------------------------------------------
+# C43 S2b-i: write the ops-status.json for the curator ops floor — EVERY pass, BEFORE the ping and
+# BEFORE the not-configured short-circuit, so the floor reflects box state even on a box whose
+# external monitor is not yet wired. Best-effort: it never changes the pass's exit code.
+#   arg1 = checks_ok (1 when the summary is empty), arg2 = alert_installed (1 when a URL is set).
+# --------------------------------------------------------------------------------------------------
+if [ -z "$SUMMARY" ]; then _checks_ok=1; else _checks_ok=0; fi
+if [ -n "$ALERT_URL" ]; then _alert_installed=1; else _alert_installed=0; fi
+write_ops_status "$_checks_ok" "$_alert_installed"
+
+# --------------------------------------------------------------------------------------------------
+# Not-configured short-circuit: if AUSMT_ALERT_URL is unset/empty, print ONE loud note and exit 0.
+# NEVER fake a ping, NEVER break the timer. This lets the units be installed before the operator has
+# created the external check (the runbook order), without the timer flapping. (The ops-status.json
+# write above already ran, so the curator floor is populated on an unconfigured box too.)
+# --------------------------------------------------------------------------------------------------
+if [ -z "$ALERT_URL" ]; then
+  printf '%s alert: ALERTING NOT CONFIGURED -- AUSMT_ALERT_URL is unset/empty in the environment.\n' "$(date -u +%H:%M:%SZ)" >&2
+  printf 'alert: create the external check + paste its ping URL into deploy/.env as AUSMT_ALERT_URL. See deploy/README.md "Alerting". No ping sent.\n' >&2
+  exit 0
+fi
 
 if [ -z "$SUMMARY" ]; then
   # ALL OK — send the success beat. -f fails on HTTP >= 400, -sS is quiet but shows errors, -m 10 caps

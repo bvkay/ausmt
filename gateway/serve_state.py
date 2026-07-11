@@ -19,6 +19,7 @@ design), so a compromised gateway can at worst trigger one rebuild per timer tic
 """
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import time
@@ -29,6 +30,10 @@ from pathlib import Path
 # (cfg.state_dir == /gw/state; host: $AUSMT_DATA_DIR/gateway/state). Names fixed by design §3.
 REQUEST_FILENAME = "rebuild.request"
 STATUS_FILENAME = "reconcile-status.json"
+# C43 S2b-i: the ops floor's host-written state file (record D8/D15). Written by the alert timer
+# (deploy/scripts/alert.sh) into the SAME state dir, read SERVER-side here (the reconcile-status.json
+# seam — no new mount, C40 intact). The gateway never writes it.
+OPS_STATUS_FILENAME = "ops-status.json"
 
 
 class StateDirUnwritable(Exception):
@@ -85,6 +90,53 @@ def read_reconcile_status(state_dir: Path) -> dict | None:
         return doc if isinstance(doc, dict) else None
     except (OSError, ValueError):
         return None
+
+
+def read_ops_status(state_dir: Path) -> dict | None:
+    """Return the parsed ops-status.json (the ops floor's host-written facts), or None if it is absent
+    (the alert timer is not installed / has not run) or unreadable/malformed. Never raises — mirrors
+    read_reconcile_status: a broken ops file must not 500 the serve screen; the caller treats None as
+    'no ops status' and renders STALE cards (never last-known-good silently)."""
+    path = state_dir / OPS_STATUS_FILENAME
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def ops_status_stale(status: dict | None, *, now_epoch: float | None = None,
+                     default_period_min: float = 15.0, stale_periods: float = 2.0) -> bool:
+    """True when ops-status.json is missing (status None), or older than ~`stale_periods` timer periods
+    — the ops floor then renders explicit STALE cards instead of last-known-good (record D8/D15). A
+    missing OR unparseable `generated_at` is STALE (fail loud, never silently fresh). The timer period
+    is read from the file's own `timer_period_min` (the writer stamps its cadence); a bad/absent value
+    falls back to `default_period_min`. `now_epoch` is injectable so the staleness pin is deterministic.
+
+    FAILS-CLOSED by construction: any doubt about freshness resolves to STALE, so stale data can never
+    render as fresh (the pin's failure criterion)."""
+    if not isinstance(status, dict):
+        return True
+    gen = status.get("generated_at")
+    if not isinstance(gen, str) or not gen:
+        return True
+    try:
+        ts = calendar.timegm(time.strptime(gen, "%Y-%m-%dT%H:%M:%SZ"))
+    except (ValueError, TypeError):
+        return True
+    try:
+        period = float(status.get("timer_period_min"))
+        if period <= 0:
+            period = default_period_min
+    except (TypeError, ValueError):
+        period = default_period_min
+    now = time.time() if now_epoch is None else now_epoch
+    # Fail-closed BOTH directions (gate finding 2026-07-11): a FUTURE generated_at (forward clock
+    # step, then the timer dies) must be STALE too — a negative age is not freshness, it is doubt,
+    # and doubt resolves to STALE. Freshness is the narrow band 0 <= age <= threshold.
+    age = now - ts
+    return not (0.0 <= age <= (stale_periods * period * 60.0))
 
 
 @dataclass(frozen=True)

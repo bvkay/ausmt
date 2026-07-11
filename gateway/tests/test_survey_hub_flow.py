@@ -134,7 +134,9 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
                 assert 'href="/gateway/curator/edit"' in r.text          # Surveys
                 assert 'href="/gateway/curator/queue"' in r.text          # Submission queue
                 assert 'href="/gateway/curator/uploaders"' in r.text      # Uploader keys
-                assert "#serve-state" in r.text                            # Serve state
+                # Serve state: C43 S2b-i promoted the panel to a first-class screen, so the rail
+                # now points at /gateway/curator/serve (was the queue's #serve-state anchor).
+                assert 'href="/gateway/curator/serve"' in r.text           # Serve state
                 # Collections is Stage 3 — NOT in the rail (not even as a disabled placeholder).
                 assert ">Collections<" not in r.text, f"{path}: Collections leaked into the rail"
                 # Drift chip + published HEAD + Request-rebuild button.

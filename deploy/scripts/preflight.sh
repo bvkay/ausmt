@@ -175,6 +175,29 @@ else
     fail "$SURVEYS does not exist" "git clone <ausmt-surveys-url> '$SURVEYS'"
   fi
 
+  # C43 S2b-i: the shared-group publish permissions time-bomb (incident 2026-07-11). The gateway
+  # publishes into surveys-live as uid 10002; WITHOUT `core.sharedRepository=group`, git creates new
+  # .git/objects dirs that are NOT group-writable, so the operator (in the shared group) eventually
+  # cannot `git pull`/gc — the checkout silently rots behind origin. Catch the drift EARLY: any entry
+  # under .git missing the group-write bit means the shared-group model is not (fully) in place. This
+  # is gateway-only (the model applies to the publish path) and needs POSIX mode bits (a Windows dev
+  # box has no meaningful group-write bit — the check simply does not run there).
+  if [ "$PROFILE" = "gateway" ] && [ -d "$SURVEYS/.git" ]; then
+    # `-perm -020` = "has the group-write bit"; the negation finds entries that LACK it.
+    offender=$(find "$SURVEYS/.git" ! -perm -020 -print 2>/dev/null | head -n 1)
+    shared=$(git -C "$SURVEYS" config --get core.sharedRepository 2>/dev/null || true)
+    if [ -n "$offender" ]; then
+      fail "$SURVEYS/.git has entries WITHOUT group-write (e.g. $offender) — a gateway publish (uid 10002) creates foreign-owned, non-g+w object dirs and eventually locks the operator out of 'git pull' (incident 2026-07-11)" "git -C '$SURVEYS' config core.sharedRepository group && sudo chgrp -R 10002 '$SURVEYS/.git' && sudo chmod -R g+rwX '$SURVEYS/.git'   (see deploy/README.md 'surveys-live must be writable by uid 10002')"
+    else
+      case "$shared" in
+        group|true|1|2|all|world|everybody)
+          pass "$SURVEYS/.git is group-writable and core.sharedRepository=$shared (shared-group publish model in place)" ;;
+        *)
+          warn "$SURVEYS/.git is group-writable now, but core.sharedRepository is not 'group' — a future gateway publish may create non-g+w object dirs and re-arm the lockout" "git -C '$SURVEYS' config core.sharedRepository group" ;;
+      esac
+    fi
+  fi
+
   if [ "$PROFILE" = "gateway" ]; then
     GW="$DATA_DIR/gateway"
     all_ok=1

@@ -358,6 +358,58 @@ before any push:**
   read-only audit rows): route 409s on a revoked id + `AND revoked_utc IS NULL` in the DB layer,
   both guards independently pinned.
 
+## D15. Stage-2b-i record amendments (serve-state promotion + operations floor, 2026-07-11)
+
+Recorded per the freeze rule (D13/Invariant 10 amendment discipline, as D14 was). Stage 2b-i is the
+**READ-ONLY** half of Stage 2: the serve panel becomes a first-class screen and the operations floor
+lands, **without** any privileged intent file, the pause flag, or any action button — those are Stage
+2b-ii, gated on the full D9 hardening. Two owner/incident-driven amendments to the frozen record:
+
+### D8 amendment (operations floor — the ops-status.json writer + freshness + sync loudness)
+
+Refines and supersedes the D8 "Operations floor" bullet where they differ:
+
+* **The ops-status.json writer is the existing alert timer with its recipe EXTENDED** — not a new
+  agent. `deploy/scripts/alert.sh` (on `ausmt-alert.timer`, every ~15 min) already gathers **service
+  health, disk, reconcile staleness, and backup freshness**; the C43 delta ADDS, and emits into a
+  host-written `ops-status.json` in the gateway state dir (the `reconcile-status.json` pattern —
+  tmp+mv atomic, group-readable by the gateway container): **code-checkout sha vs its origin,
+  surveys-live sha vs ITS origin, the retained-build inventory** (produced by nothing today), and
+  **recent build/reconcile log tails copied into the state dir** (bounded, ~60 lines each) so a
+  shell-less curator can read forensics the gateway has no mount to reach. The gateway reads this file
+  **server-side** (exactly the `reconcile-status.json` seam — `gateway/serve_state.py`; no new mount,
+  C40 intact).
+* **The freshness card covers BOTH repos vs their origins**, not just the code checkout. Incident
+  2026-07-11 (owner-experienced): a stale `surveys-live` sat **4+ h behind GitHub** while the drift
+  chip read "current" — because the chip compares the *served* build against the *local* published
+  HEAD, and both were the same (stale) local sha. The freshness card therefore shows **code checkout
+  AND surveys-live**, each local sha vs its last-fetched origin ref, a behind repo flipping its row
+  amber. (Honest labelling: the card reflects the last **successful** fetch; a fetch that never
+  reaches origin is the sync-strip's job below — the two are complementary, and BOTH are required to
+  make the incident visible.)
+* **reconcile sync state is surfaced loudly on the ops floor.** A `sync_failed`/sync-error streak is
+  a **first-class amber/red condition** — a loud band on the serve screen, driven by the fresh
+  `reconcile-status.json` `action` (not gated behind ops-status staleness), enriched with the streak
+  count/duration when derivable from ops-status. Incident-backed: the `sync_failed` **hid for 4 h**
+  buried in `reconcile-status.json` while nothing on the curator surface said the box could not reach
+  GitHub. A stale or missing `ops-status.json` (older than ~2 timer periods) makes every dependent
+  card render an explicit **STALE** state — never last-known-good silently.
+
+Still explicitly OUT of Stage 2b-i (Stage 2b-ii, per D8/D9): "serve this build…" rollback, the
+guarded restore, Update-box, Snapshot-now, Force-full-rebuild, Pause auto-rebuild — every privileged
+action and its intent file. The retained-builds table, build-detail (log tail + the C18-A4
+cache-forensics counters), and the backup-snapshots table ship **read-only** here, with **no action
+controls rendered at all** (omitted, not disabled placeholders).
+
+### D4 amendment (stations-tab layout, as shipped — owner-final 2026-07-11)
+
+The Stage-2a Stations tab shipped a **split layout**, owner-ruled final 2026-07-11: the station
+**list on the LEFT** inside a fixed-height, independently scrollable container (a >300-station survey
+scrolls within the list and never pushes the panel off-screen; the filter box sits above the scroll
+region), the **data panel on the RIGHT**, and **panel-first stacking on narrow** viewports (the panel
+is DOM-first so it stacks above the list at one column with no `order` needed). Codified so the
+frozen record matches `gateway/curatorpage.py` `.stations-split` as deployed.
+
 ## Provenance
 
 Mockup v4 approved and locked by the owner 2026-07-10 after four live review rounds; archived at

@@ -112,6 +112,23 @@ _HEAD = """<!doctype html>
  .card{flex:1 1 8rem;background:$panel;border-radius:8px;padding:.75rem 1rem}
  .card .n{font-size:1.4rem;font-weight:700}
  .card .l{color:$muted;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+ /* C43 S2b-i operations floor (serve-state screen). Server-rendered cards — no JS (the facts come
+    from ops-status.json read server-side, the reconcile-status.json seam), so nothing here touches
+    the strictPages script-src 'self' CSP. */
+ .ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.75rem;margin:.75rem 0}
+ .ops .opscard{background:$panel;border-radius:8px;padding:.75rem 1rem}
+ .ops h3{font-size:.9rem;font-weight:600;margin:0 0 .5rem;display:flex;align-items:center;
+   justify-content:space-between;gap:.5rem}
+ .pill{display:inline-block;padding:.05rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;
+   color:$bg;white-space:nowrap}
+ .fact{display:flex;justify-content:space-between;gap:1rem;font-size:.83rem;padding:.2rem 0;
+   border-bottom:1px solid #22323f}
+ .fact:last-child{border-bottom:0}
+ .fact .fk{color:$muted}
+ .fact .fv{text-align:right;word-break:break-word}
+ .opsband{border-radius:6px;padding:.6rem .9rem;margin:.75rem 0;font-size:.88rem}
+ .opsnote{color:$muted;font-size:.78rem;margin:.4rem 0 0}
+ .stale{color:$warn;font-weight:600}
  /* C43 S2a-SPLIT: Stations tab split view. WIDE = station LIST left / DATA panel right; the panel
     comes FIRST in DOM (so on a narrow single column it stacks first — owner ruling) and is placed
     into the RIGHT grid column explicitly on wide screens. align-items:start keeps both columns
@@ -1075,7 +1092,7 @@ _RAIL = (
     ("Surveys", (("surveys", "Surveys", "/gateway/curator/edit"),)),
     ("Intake", (("queue", "Submission queue", "/gateway/curator/queue"),
                 ("uploaders", "Uploader keys", "/gateway/curator/uploaders"))),
-    ("Operations", (("serve", "Serve state", "/gateway/curator/queue#serve-state"),)),
+    ("Operations", (("serve", "Serve state", "/gateway/curator/serve"),)),
 )
 
 
@@ -1496,6 +1513,372 @@ SERVE_PANEL_JS = """
   });
 })();
 """
+
+
+# ---- C43 S2b-i: serve-state screen + operations floor ------------------------------------------
+# The serve panel promoted to a first-class screen (record D8/D15): the existing published/served
+# blocks (render_serve_panel) + a loud reconcile SYNC strip + a four-card operations FLOOR + the
+# retained-builds and backup-snapshots tables + a build-detail view. Everything here is READ-ONLY —
+# NO privileged action is rendered (rollback/restore/update/backup/pause are Stage 2b-ii; omitted,
+# never disabled placeholders). The floor facts come from ops-status.json read SERVER-side
+# (serve_state.read_ops_status), so the floor is pure server-rendered HTML: no new JS, nothing for the
+# strictPages CSP (script-src 'self') to block. Missing/stale ops-status.json => every dependent card
+# renders an explicit STALE state (never last-known-good silently).
+
+_OPS_KIND_COLOUR = {"ok": _PALETTE["ok"], "warn": _PALETTE["warn"], "bad": _PALETTE["bad"],
+                    "muted": _PALETTE["muted"]}
+
+
+def _pill(label: str, kind: str) -> str:
+    colour = _OPS_KIND_COLOUR.get(kind, _PALETTE["muted"])
+    return f'<span class="pill" style="background:{colour}">{_esc(label)}</span>'
+
+
+def _fact(k: str, v: str) -> str:
+    """One fact row — the KEY is escaped; the VALUE is trusted HTML the caller has already escaped
+    (values may carry a <code>/<span> wrapper). Callers must _esc any data before it reaches here."""
+    return f'<div class="fact"><span class="fk">{_esc(k)}</span><span class="fv">{v}</span></div>'
+
+
+def _ops_card(title: str, pill_html: str, body: str) -> str:
+    return f'<div class="opscard"><h3>{_esc(title)}{pill_html}</h3>{body}</div>'
+
+
+def _stale_card(title: str, generated_at, note: str) -> str:
+    gen = _esc(generated_at) if generated_at else "never"
+    body = (f'<p class="stale">STALE — no fresh data</p>'
+            f'<p class="opsnote">{_esc(note)} Last ops-status.json: {gen}.</p>')
+    return _ops_card(title, _pill("stale", "warn"), body)
+
+
+def _stale_note(what: str, generated_at) -> str:
+    gen = _esc(generated_at) if generated_at else "never"
+    return (f'<p class="stale">STALE — {_esc(what)} unavailable.</p>'
+            f'<p class="opsnote">ops-status.json is missing or older than ~2 timer periods '
+            f'(last: {gen}). Not showing last-known-good.</p>')
+
+
+def _backups_card(ops: dict) -> str:
+    b = ops.get("backups") or {}
+    newest = b.get("newest")
+    age = b.get("age_hours")
+    maxh = b.get("max_hours") or 26
+    count = b.get("count")
+    systemd_failed = bool(b.get("systemd_failed"))
+    drill = b.get("drill") if isinstance(b.get("drill"), dict) else None
+    over = isinstance(age, (int, float)) and age > maxh
+    kind = "bad" if systemd_failed else ("warn" if (over or not newest) else "ok")
+    label = "FAILED" if systemd_failed else ("overdue" if over else ("none" if not newest else "ok"))
+    facts = [
+        _fact("Newest snapshot", f'<span class="dt">{_esc(newest)}</span>' if newest else "— none yet"),
+        _fact("Age", f"{_esc(age)} h (threshold {_esc(maxh)} h)" if age is not None else "—"),
+        _fact("Retained", _esc(count) if count is not None else "—"),
+        _fact("Last drill", (f'{_esc(drill.get("verdict"))} ({_esc(drill.get("at"))})' if drill
+                             else "no drill recorded")),
+        _fact("Backup unit", "FAILED" if systemd_failed else "ok"),
+    ]
+    return _ops_card("Backups", _pill(label, kind), "".join(facts))
+
+
+def _alerts_card(ops: dict) -> str:
+    a = ops.get("alerts") or {}
+    installed = bool(a.get("installed"))
+    checks_ok = bool(a.get("checks_ok"))
+    if not installed:
+        body = (_fact("Dead-man ping", "not installed")
+                + '<p class="opsnote">The external dead-man monitor is not wired yet — install it so a '
+                  'silent stall (crash-loop, full disk, stale backup) reaches the curator. See deploy '
+                  'README "Alerting".</p>')
+        return _ops_card("Alerts", _pill("not installed", "muted"), body)
+    kind = "ok" if checks_ok else "warn"
+    body = (_fact("Dead-man ping", "installed")
+            + _fact("Box self-checks", "passing" if checks_ok else "FAILING")
+            + '<p class="opsnote">The beat lands at the external monitor (it routes the alert email); '
+              "this shows whether it is wired and whether the box's own checks pass right now.</p>")
+    return _ops_card("Alerts", _pill("ok" if checks_ok else "check", kind), body)
+
+
+def _box_card(ops: dict) -> str:
+    box = ops.get("box") or {}
+    uptime = box.get("uptime")
+    disk = box.get("disk_pct")
+    disk_max = box.get("disk_max_pct") or 85
+    services = box.get("services") or []
+    clam = box.get("clamav_sig_age_days")
+    disk_over = isinstance(disk, (int, float)) and disk > disk_max
+    bad_services = [s for s in services if isinstance(s, dict)
+                    and (s.get("state") != "running"
+                         or (s.get("health") and s.get("health") not in ("healthy", "starting")))]
+    kind = "warn" if (disk_over or bad_services) else "ok"
+    if services:
+        parts = []
+        for s in services:
+            if not isinstance(s, dict):
+                continue
+            st = s.get("state") or "?"
+            h = s.get("health")
+            ok = st == "running" and (not h or h in ("healthy", "starting"))
+            txt = _esc(s.get("name")) + ": " + _esc(st) + (f"/{_esc(h)}" if h else "")
+            parts.append(txt if ok else f'<span style="color:{_PALETTE["warn"]};font-weight:600">{txt}</span>')
+        svc_html = "<br>".join(parts)
+    else:
+        svc_html = "—"
+    if disk is None:
+        disk_v = "—"
+    else:
+        disk_txt = f"{_esc(disk)}% of {_esc(disk_max)}%"
+        disk_v = f'<span style="color:{_PALETTE["warn"]};font-weight:600">{disk_txt}</span>' if disk_over else disk_txt
+    facts = [
+        _fact("Uptime", _esc(uptime) if uptime else "—"),
+        _fact("Disk", disk_v),
+        _fact("Services", svc_html),
+        _fact("ClamAV signatures", f"{_esc(clam)} days old" if clam is not None else "unknown"),
+    ]
+    return _ops_card("Box", _pill("degraded" if kind == "warn" else "ok", kind), "".join(facts))
+
+
+def _freshness_row(label: str, repo: dict) -> str:
+    repo = repo or {}
+    sha = repo.get("sha")
+    origin = repo.get("origin")
+    behind = bool(repo.get("behind"))
+    comparable = bool(repo.get("comparable"))
+    if not sha:
+        v = "unavailable (not a checkout / no HEAD)"
+    elif not comparable:
+        v = f'<code>{_esc(sha)}</code> — origin unknown (no fetch since last sync)'
+    elif behind:
+        v = (f'<code>{_esc(sha)}</code> vs origin <code>{_esc(origin)}</code> — '
+             f'<span style="color:{_PALETTE["warn"]};font-weight:600">behind</span>')
+    else:
+        v = f'<code>{_esc(sha)}</code> — current'
+    return _fact(label, v)
+
+
+def _freshness_card(ops: dict) -> str:
+    f = ops.get("freshness") or {}
+    code = f.get("code") or {}
+    sl = f.get("surveys_live") or {}
+    behind = bool(code.get("behind")) or bool(sl.get("behind"))
+    # "current" is EARNED, never defaulted (the 2026-07-11 incident was a lying "current" chip):
+    # it requires BOTH repos to carry a comparable sha. Unavailable/unparseable freshness — a
+    # broken checkout, or alert.sh/gateway schema skew — pills "unknown" in warn colour, because
+    # a floor that cannot see the repos must never claim they are current.
+    known = all(bool(r.get("sha")) and bool(r.get("comparable")) for r in (code, sl))
+    if behind:
+        pill, kind = "behind", "warn"
+    elif known:
+        pill, kind = "current", "ok"
+    else:
+        pill, kind = "unknown", "warn"
+    body = (_freshness_row("Code checkout", code) + _freshness_row("surveys-live", sl)
+            + '<p class="opsnote">Local HEAD vs the last successfully-fetched origin; a fetch that '
+              'cannot reach origin surfaces in the reconcile sync state above, not here (record D15).</p>')
+    return _ops_card("Freshness (vs origin)", _pill(pill, kind), body)
+
+
+def _sync_strip(status, ops, ops_stale: bool) -> str:
+    """The reconcile SYNC state, surfaced LOUDLY (record D8/D15). Driven by the FRESH
+    reconcile-status.json `action` (NOT gated behind ops-status staleness — the incident was a
+    sync_failed that hid for 4 h), enriched with the sync_failed streak from ops-status when it is
+    fresh. A sync_failed is a first-class red band; a build `failed` is amber; noop/rebuilt are calm."""
+    action = status.get("action") if isinstance(status, dict) else None
+    last_run = status.get("last_run") if isinstance(status, dict) else None
+    lr = _esc(last_run) if last_run else "?"
+    streak_txt = ""
+    if not ops_stale and isinstance(ops, dict):
+        rec = ops.get("reconcile") or {}
+        if rec.get("sync_failed"):
+            n = rec.get("sync_failed_streak")
+            since = rec.get("sync_failed_since")
+            bits = []
+            if since:
+                bits.append(f"failing since {_esc(since)}")
+            if isinstance(n, int) and n > 1:
+                bits.append(f"{n} consecutive ticks")
+            if bits:
+                streak_txt = " — " + ", ".join(bits)
+    if action == "sync_failed":
+        return (f'<div class="opsband" style="background:{_PALETTE["bad"]};color:{_PALETTE["bg"]};font-weight:600">'
+                f'surveys-live SYNC FAILED — the box could not fast-forward from origin; the served and '
+                f'published data may be behind GitHub{streak_txt}. (last reconcile {lr})</div>')
+    if action == "failed":
+        return (f'<div class="opsband" style="background:{_PALETTE["warn"]};color:{_PALETTE["bg"]};font-weight:600">'
+                f'Last rebuild FAILED — the previous build is still serving (fail-closed). See "Last '
+                f'reconcile" above for the log tail. (last reconcile {lr})</div>')
+    if action in ("noop", "rebuilt"):
+        return (f'<div class="opsband" style="background:{_PALETTE["panel"]}">Reconcile sync: '
+                f'<b>{_esc(action)}</b> at {lr} — surveys-live in sync with origin as of the last tick.</div>')
+    if action:
+        return (f'<div class="opsband" style="background:{_PALETTE["panel"]}">Last reconcile: '
+                f'{_esc(action)} at {lr}.</div>')
+    return (f'<div class="opsband" style="background:{_PALETTE["panel"]}">No reconcile status yet — '
+            'the reconcile timer is not installed or has not run a pass.</div>')
+
+
+def _builds_table(ops, ops_stale: bool, generated_at) -> str:
+    if ops is None or ops_stale:
+        return _stale_note("build inventory", generated_at)
+    builds = ops.get("builds") or []
+    if not builds:
+        return '<p class="sub">No retained builds reported by the box.</p>'
+    rows = []
+    for b in builds:
+        if not isinstance(b, dict):
+            continue
+        d = b.get("dir") or ""
+        bid = b.get("build_id")
+        # The build dir name (a sortable UTC timestamp) is the row label; the full opaque build_id
+        # rides the title (hover). The detail route matches this dir against the SAME ops-status
+        # inventory server-side — it never opens a file by this name, so an unknown ref just 404s.
+        href = "/gateway/curator/serve/build/" + _esc(d)
+        serving = f'<span class="pill" style="background:{_PALETTE["ok"]}">serving</span>' if b.get("serving") else ""
+        rows.append(
+            "<tr>"
+            f'<td><a href="{href}"><code title="{_esc(bid) if bid else ""}">{_esc(d)}</code></a> {serving}</td>'
+            f'<td>{_esc(b.get("engine_commit") or "-")}</td>'
+            f'<td>{_esc(b.get("source_commit") or "-")}</td>'
+            f'<td>{_esc(b.get("stations")) if b.get("stations") is not None else "-"}</td>'
+            f'<td><a href="{href}">detail</a></td>'
+            "</tr>")
+    return ('<table><tr><th>Build (dir)</th><th>Engine</th><th>Source</th><th>Stations</th><th></th></tr>'
+            + "".join(rows) + "</table>")
+
+
+def _backups_table(ops, ops_stale: bool, generated_at) -> str:
+    if ops is None or ops_stale:
+        return _stale_note("backup snapshots", generated_at)
+    b = ops.get("backups") or {}
+    snaps = b.get("snapshots") or []
+    if not snaps and b.get("newest"):   # tolerate an older writer that carried only the newest
+        snaps = [{"name": b.get("newest"), "age_hours": b.get("age_hours")}]
+    if not snaps:
+        return '<p class="sub">No backup snapshots reported by the box.</p>'
+    rows = []
+    for s in snaps:
+        if not isinstance(s, dict):
+            continue
+        age = s.get("age_hours")
+        rows.append(f'<tr><td><span class="dt">{_esc(s.get("name"))}</span></td>'
+                    f'<td>{(_esc(age) + " h") if age is not None else "-"}</td></tr>')
+    return '<table><tr><th>Snapshot</th><th>Age</th></tr>' + "".join(rows) + "</table>"
+
+
+def render_serve_page(*, published_head, published_available: bool, status, pending: bool,
+                      csrf_token: str, ops, ops_stale: bool, nav: "NavContext") -> str:
+    """The first-class serve-state screen (record D8/D15). The existing serve panel (published HEAD,
+    served build + currency, per-survey build report, last reconcile — render_serve_panel) plus the
+    reconcile SYNC strip, the four-card operations FLOOR, and the retained-builds + backup-snapshots
+    tables. Read-only: no privileged action control is rendered. `ops` is the parsed ops-status.json
+    (or None); `ops_stale` is True when it is missing OR older than ~2 timer periods — either flips
+    every dependent surface to an explicit STALE state."""
+    panel = render_serve_panel(published_head=published_head, published_available=published_available,
+                               status=status, pending=pending, csrf_token=csrf_token)
+    generated_at = ops.get("generated_at") if isinstance(ops, dict) else None
+    sync = _sync_strip(status, ops, ops_stale)
+    stale = ops is None or ops_stale
+    if stale:
+        floor = ('<div class="ops">'
+                 + _stale_card("Backups", generated_at, "Backup state unavailable.")
+                 + _stale_card("Alerts", generated_at, "Alert state unavailable.")
+                 + _stale_card("Box", generated_at, "Box state unavailable.")
+                 + _stale_card("Freshness (vs origin)", generated_at, "Repo freshness unavailable.")
+                 + "</div>")
+        stale_banner = (f'<div class="opsband" style="background:{_PALETTE["warn"]};color:{_PALETTE["bg"]};font-weight:600">'
+                        f'Operations floor is STALE — ops-status.json is missing or older than ~2 timer '
+                        f'periods (last: {_esc(generated_at) if generated_at else "never"}). The alert '
+                        f'timer (deploy/scripts/alert.sh) may not be installed or running. Cards below '
+                        f'show STALE, not last-known-good.</div>')
+    else:
+        floor = ('<div class="ops">'
+                 + _backups_card(ops) + _alerts_card(ops) + _box_card(ops) + _freshness_card(ops)
+                 + "</div>")
+        stale_banner = ""
+    body = (
+        '<h1>Serve state</h1>'
+        '<p class="sub">Published vs served, and the box operations floor. Read-only — rollback, '
+        'restore, box update, and pause are a later stage and are deliberately not shown here.</p>'
+        f'{panel}'
+        '<h2>Reconcile sync</h2>'
+        f'{sync}'
+        '<h2>Operations floor</h2>'
+        f'{stale_banner}'
+        f'{floor}'
+        '<h2>Retained builds</h2>'
+        f'{_builds_table(ops, ops_stale, generated_at)}'
+        '<h2>Backup snapshots</h2>'
+        f'{_backups_table(ops, ops_stale, generated_at)}'
+    )
+    return _shell("AusMT serve state", body, nav=nav)
+
+
+def find_build(ops, build_ref: str):
+    """Return the ops-status.json builds[] entry whose `dir` matches build_ref, or None. Pure lookup
+    over the SERVER-read inventory — never a filesystem path build (a hostile ref just does not match
+    and yields None => a 'no such build' page, never a traversal)."""
+    if not isinstance(ops, dict):
+        return None
+    for b in ops.get("builds") or []:
+        if isinstance(b, dict) and b.get("dir") == build_ref:
+            return b
+    return None
+
+
+def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: "NavContext") -> str:
+    """Read-only forensics for one retained build (record D8/D15 B4): identity + the C18-A4 cache
+    counters (salt_fp / write_errors / read_errors, from build_provenance.json via ops-status.json) +
+    the build log tail (the newest build log the box copied into the state dir). NO 'serve this build'
+    action — rollback is Stage 2b-ii."""
+    back = '<p style="margin-top:1rem"><a href="/gateway/curator/serve">back to serve state</a></p>'
+    if ops_stale:
+        body = ('<h1>Build detail</h1>'
+                f'<p class="stale">STALE — ops-status.json is missing or older than ~2 timer periods '
+                f'(last: {_esc(generated_at) if generated_at else "never"}). Build forensics unavailable.</p>'
+                + back)
+        return _shell("AusMT build detail", body, nav=nav)
+    if build is None:
+        body = ('<h1>Build detail</h1>'
+                '<p class="sub">No such retained build in the current inventory.</p>' + back)
+        return _shell("AusMT build detail", body, nav=nav)
+    cache = build.get("cache") or {}
+
+    def cv(k):
+        v = cache.get(k)
+        return _esc(v) if v is not None else "—"
+
+    idrows = [
+        _fact("Build id", f'<code>{_esc(build.get("build_id") or "-")}</code>'),
+        _fact("Build dir", f'<code>{_esc(build.get("dir") or "-")}</code>'),
+        _fact("Engine commit", _esc(build.get("engine_commit") or "-")),
+        _fact("Source commit", _esc(build.get("source_commit") or "-")),
+        _fact("Stations", _esc(build.get("stations")) if build.get("stations") is not None else "-"),
+        _fact("Serving", "yes" if build.get("serving") else "no"),
+    ]
+    cacherows = [
+        _fact("Cache enabled", cv("enabled")),
+        _fact("Cache mode", cv("mode")),
+        _fact("Salt fingerprint (salt_fp)", f'<code>{cv("salt_fp")}</code>'),
+        _fact("Write errors", cv("write_errors")),
+        _fact("Read errors", cv("read_errors")),
+        _fact("Hits / misses", f'{cv("hits")} / {cv("misses")}'),
+    ]
+    if cache.get("degenerate"):
+        cacherows.append(_fact("Degenerate", f'{cv("degenerate")} ({cv("reason")})'))
+    log_block = (f'<pre>{_esc(log_tail)}</pre>') if log_tail else '<p class="sub">No build log tail available.</p>'
+    body = (
+        '<h1>Build detail</h1>'
+        '<p class="sub">Read-only forensics for a retained build. The C18-A4 cache counters come from '
+        "build_provenance.json (via ops-status.json); the log tail is the most recent build log the box "
+        'copied into the state dir.</p>'
+        '<h2>Identity</h2>'
+        f'<div class="opscard">{"".join(idrows)}</div>'
+        '<h2>Cache forensics (C18-A4)</h2>'
+        f'<div class="opscard">{"".join(cacherows)}</div>'
+        '<h2>Build log tail</h2>'
+        f'{log_block}'
+        + back
+    )
+    return _shell("AusMT build detail", body, nav=nav)
 
 
 def _checklist_panel(cl: "checklist_mod.Checklist") -> str:

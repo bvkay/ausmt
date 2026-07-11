@@ -20,6 +20,7 @@ whole file runs on the gateway-ci lane with no skip-tripwire allow-list entry ne
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import shutil
 import subprocess
@@ -275,3 +276,145 @@ def test_curl_failure_on_success_path_exits_nonzero(tmp_path):
     assert r.returncode != 0, "a failed success-ping must surface as a nonzero exit, not be hidden"
     assert _curl_calls(tree), "curl must have been attempted"
     assert "ping" in r.stderr.lower(), "a failed ping must produce a loud message"
+
+
+# ==================================================================================================
+# (e) C43 S2b-i: alert.sh ALSO writes ops-status.json for the curator ops floor (record D8/D15).
+# The producer half of the serve-state operations floor. Same shim/black-box posture — every
+# assertion reads the emitted ops-status.json (an independent on-disk observable), never the script's
+# self-report. All run on the gateway-ci lane (sh + python + git present); no skip-tripwire entry.
+# ==================================================================================================
+_OPS_TOP_KEYS = ("generated_at", "timer_period_min", "reconcile", "backups", "alerts", "box",
+                 "freshness", "builds", "logs")
+
+
+def _ops_doc(tree: dict) -> dict:
+    return json.loads((tree["state"] / "ops-status.json").read_text(encoding="utf-8"))
+
+
+def _add_retained_build(tree: dict, dir_name: str = "20260710T032000Z", *,
+                        provenance_cache: dict | None = None, serving: bool = True) -> Path:
+    """Materialise a site-data/builds/<dir_name>/ retained build the ops writer inventories:
+    build.json (identity) + build_report.json (stations) + build_provenance.json (the C18-A4 cache
+    block) + a build log; optionally the `current` symlink (best-effort — no-op where symlinks are
+    unprivileged, e.g. Windows, so the serving marker just does not match)."""
+    site = tree["data"] / "site-data"
+    bdir = site / "builds" / dir_name
+    bdir.mkdir(parents=True, exist_ok=True)
+    (site / "logs").mkdir(parents=True, exist_ok=True)
+    (bdir / "build.json").write_text(json.dumps(
+        {"build_id": "abc1234-def5678-2026-07-10T03:20:00Z", "engine_commit": "abc1234",
+         "source_commit": "def5678"}), encoding="utf-8")
+    (bdir / "build_report.json").write_text(json.dumps(
+        {"surveys": {"s1": {"stations_built": 3}, "s2": {"stations_built": 5}}}), encoding="utf-8")
+    if provenance_cache is None:
+        provenance_cache = {"enabled": True, "mode": "rw", "salt_fp": "deadbeef0000",
+                            "write_errors": 0, "read_errors": 0, "hits": 6, "misses": 0}
+    (bdir / "build_provenance.json").write_text(json.dumps({"cache": provenance_cache}),
+                                                encoding="utf-8")
+    (site / "logs" / f"{dir_name}.build.log").write_text("line1\nBUILD OK\n", encoding="utf-8")
+    if serving:
+        cur = site / "current"
+        try:
+            if cur.is_symlink() or cur.exists():
+                cur.unlink()
+            cur.symlink_to(Path("builds") / dir_name)
+        except OSError:
+            pass
+    return bdir
+
+
+def test_ops_status_emitted_schema_valid_atomic_ping_unchanged(tmp_path):
+    """EMISSION PIN (B6). One alert.sh pass writes a schema-valid ops-status.json into the state dir
+    ATOMICALLY (no surviving .tmp), AND the dead-man ping behaviour is UNCHANGED — an all-OK run still
+    sends EXACTLY ONE success beat to $URL (never /fail). FAILS IF: ops-status.json is absent, is not
+    valid JSON, is missing any required top-level block, a .tmp orphan survives, OR the ping call
+    count/target changed (the ping and the ops-write must stay independent)."""
+    tree = _make_tree(tmp_path)
+    _add_retained_build(tree)
+    r = _run(tree)
+    # dead-man ping UNCHANGED: exactly one success beat, to $URL, not /fail.
+    assert r.returncode == 0, r.stderr
+    calls = _curl_calls(tree)
+    assert len(calls) == 1 and _URL in calls[0] and "/fail" not in calls[0], calls
+    # ops-status.json: present, valid, complete.
+    ops = tree["state"] / "ops-status.json"
+    assert ops.exists(), "ops-status.json must be written each run"
+    doc = json.loads(ops.read_text(encoding="utf-8"))
+    for key in _OPS_TOP_KEYS:
+        assert key in doc, f"ops-status.json missing top-level {key!r}: {sorted(doc)}"
+    assert doc["generated_at"].endswith("Z") and "T" in doc["generated_at"], doc["generated_at"]
+    assert set(doc["freshness"]) == {"code", "surveys_live"}, "freshness must cover BOTH repos"
+    assert isinstance(doc["builds"], list) and doc["builds"], "retained-build inventory must be listed"
+    # atomic: no orphan tmp left behind.
+    assert list(tree["state"].glob("ops-status.json.tmp*")) == [], "atomic write left a tmp orphan"
+
+
+def test_ops_status_builds_carry_a4_cache_forensics_producer_truth(tmp_path):
+    """PRODUCER-TRUTH PIN (B4). The C18-A4 cache forensics (salt_fp / write_errors / read_errors) are
+    produced by engine.extract.cache.BuildCache.counters() and land in build_provenance.json's
+    TOP-LEVEL `cache` block — NOT in build.json or build_report.json (verified against
+    build_portal.py). alert.sh must lift them from that exact file into ops-status.json builds[].cache.
+    Driven by the REAL cache producer (constructed here, not a hand-typed block), so a field rename in
+    the engine reds this pin. FAILS IF: alert.sh reads the counters from the wrong file, drops one, or
+    the producer's field names drift out from under the reader.
+
+    Uses the real producer's counters() rather than a full engine sample-survey build (which would
+    need mt_metadata + the allow-listed skip): the direct construction exercises the SAME producer
+    that writes build_provenance.json and runs on every lane, so the field contract is pinned without
+    a stack dependency."""
+    import sys as _sys
+    eng = str(Path(__file__).resolve().parents[2] / "engine" / "extract")
+    _sys.path.insert(0, eng)
+    try:
+        import cache as cache_mod
+    finally:
+        if eng in _sys.path:
+            _sys.path.remove(eng)
+    bc = cache_mod.BuildCache(tmp_path / "cachedir", engine_commit="testpin", lib_versions={},
+                              contract_digest="contract-x", disabled_reason="producer-truth pin")
+    real_cache = bc.counters()
+    for k in ("salt_fp", "write_errors", "read_errors"):
+        assert k in real_cache, f"engine cache.counters() no longer exposes {k!r}: {real_cache}"
+    tree = _make_tree(tmp_path)
+    _add_retained_build(tree, provenance_cache=real_cache)
+    r = _run(tree)
+    assert r.returncode == 0, r.stderr
+    doc = _ops_doc(tree)
+    assert doc["builds"], "the retained-build inventory must list the build"
+    got = doc["builds"][0]["cache"]
+    assert got["salt_fp"] == real_cache["salt_fp"], (got, real_cache)
+    assert got["write_errors"] == real_cache["write_errors"], (got, real_cache)
+    assert got["read_errors"] == real_cache["read_errors"], (got, real_cache)
+
+
+def test_ops_status_written_when_alerting_unconfigured(tmp_path):
+    """The ops floor is INDEPENDENT of the external monitor: ops-status.json is written even when
+    AUSMT_ALERT_URL is unset (and NO ping is sent — the dead-man behaviour is untouched, matching the
+    (a) test). FAILS IF: an unconfigured box writes no ops-status.json, a ping was sent, or
+    alerts.installed does not reflect the missing URL."""
+    tree = _make_tree(tmp_path)
+    r = _run(tree, env_extra={"AUSMT_ALERT_URL": ""})
+    assert r.returncode == 0, r.stderr
+    assert _curl_calls(tree) == [], "no ping when unconfigured (dead-man behaviour untouched)"
+    ops = tree["state"] / "ops-status.json"
+    assert ops.exists(), "ops-status.json must be written even on an unconfigured box"
+    assert _ops_doc(tree)["alerts"]["installed"] is False, "alerts.installed must reflect no URL"
+
+
+def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
+    """INCIDENT-AS-TEST, producer side (record D15). A reconcile action=sync_failed that persists must
+    be visible as a GROWING streak (count + a stable `since`), not a silent single line — the
+    2026-07-11 incident where a sync_failed hid for 4 h. FAILS IF: the streak does not accumulate
+    across passes, or `since` is not carried forward from the first failing pass."""
+    tree = _make_tree(tmp_path, reconcile_action="sync_failed")   # fresh last_run
+    _run(tree)
+    d1 = _ops_doc(tree)
+    assert d1["reconcile"]["sync_failed"] is True, d1["reconcile"]
+    assert d1["reconcile"]["sync_failed_streak"] == 1, d1["reconcile"]
+    since1 = d1["reconcile"]["sync_failed_since"]
+    assert since1, "the first failing pass must record a sync_failed_since"
+    _run(tree)   # still failing -> streak grows, since preserved
+    d2 = _ops_doc(tree)
+    assert d2["reconcile"]["sync_failed_streak"] == 2, d2["reconcile"]
+    assert d2["reconcile"]["sync_failed_since"] == since1, d2["reconcile"]

@@ -532,6 +532,57 @@ class Gateway:
                                 headers={"Cache-Control": "no-store"})
         return RedirectResponse("/gateway/curator/queue#serve-state", status_code=303)
 
+    def handle_serve_state(self, request: Request) -> Response:
+        """GET /gateway/curator/serve — the first-class serve-state screen (C43 S2b-i, record D8/D15).
+        The existing serve panel (published HEAD, served build + currency, per-survey build report,
+        last reconcile) PLUS the operations floor: the reconcile SYNC strip, four cards (Backups,
+        Alerts, Box, Freshness), and the retained-builds + backup-snapshots tables — all READ-ONLY (no
+        privileged action rendered). The ops facts come from ops-status.json read SERVER-side (the
+        reconcile-status.json seam — serve_state.read_ops_status; no new mount, C40 intact). Every
+        read is best-effort: published HEAD degrades to 'unavailable', a missing/stale ops-status.json
+        flips every dependent card to an explicit STALE state — the page never 500s. `def` (blocking
+        file/git reads run in Starlette's threadpool, matching the queue rationale)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        published = serve_state.read_published_head(self._git_runner, self.cfg.surveys_live_dir)
+        status = serve_state.read_reconcile_status(self.cfg.state_dir)
+        pending = serve_state.rebuild_request_pending(self.cfg.state_dir)
+        ops = serve_state.read_ops_status(self.cfg.state_dir)
+        ops_stale = serve_state.ops_status_stale(ops)
+        nav = self._nav_context(request, active="serve", crumb="<b>Serve state</b>")
+        return self._html(curatorpage.render_serve_page(
+            published_head=published.short, published_available=published.available,
+            status=status, pending=pending, csrf_token=csrf, ops=ops, ops_stale=ops_stale, nav=nav))
+
+    def handle_serve_build_detail(self, request: Request, build_ref: str) -> Response:
+        """GET /gateway/curator/serve/build/{build_ref} — read-only build forensics (S2b-i B4). Matches
+        build_ref against the ops-status.json inventory SERVER-side (serve_state.read_ops_status +
+        curatorpage.find_build) — NEVER a filesystem path build, so a hostile ref just fails to match
+        and yields a 'no such build' page, never a traversal. Renders identity + the C18-A4 cache
+        counters (salt_fp / write_errors / read_errors) + the build log tail. NO serve/rollback action
+        (Stage 2b-ii). A stale/missing ops-status.json renders an explicit STALE state."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        ops = serve_state.read_ops_status(self.cfg.state_dir)
+        ops_stale = serve_state.ops_status_stale(ops)
+        build = curatorpage.find_build(ops, build_ref)
+        generated_at = ops.get("generated_at") if isinstance(ops, dict) else None
+        # The single newest build log (ops-status logs.build) belongs to the NEWEST build — associate
+        # it only there, so an older retained build never claims a log that is not its own.
+        log_tail = None
+        if isinstance(ops, dict) and build is not None:
+            blist = ops.get("builds") or []
+            if blist and isinstance(blist[0], dict) and blist[0].get("dir") == build_ref:
+                log_tail = (ops.get("logs") or {}).get("build")
+        nav = self._nav_context(request, active="serve",
+                                crumb='<a href="/gateway/curator/serve">Serve state</a> › '
+                                      f'<b>{curatorpage._esc(build_ref)}</b>')  # noqa: SLF001
+        return self._html(curatorpage.render_build_detail(
+            build=build, generated_at=generated_at, log_tail=log_tail, ops_stale=ops_stale, nav=nav))
+
     def handle_curator_ui_js(self, request: Request) -> Response:
         """GET /gateway/curator/ui.js — the shared curator-page behaviours (delegated data-confirm /
         data-toggle-big handlers) as an external same-origin script. The strictPages CSP blocks
@@ -1771,6 +1822,17 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.post("/gateway/curator/rebuild")
     def curator_rebuild(request: Request, csrf_token: str = Form(default="")):
         return gw.handle_rebuild_request(request, csrf_token)
+
+    # ---- C43 S2b-i: the first-class serve-state screen + the read-only build-detail view. Both GETs
+    # do blocking file/git reads -> `def` (threadpool), matching the queue rationale. Read-only: no
+    # POST, no privileged action (rollback/restore/update/backup/pause are Stage 2b-ii).
+    @app.get("/gateway/curator/serve")
+    def curator_serve_state(request: Request):
+        return gw.handle_serve_state(request)
+
+    @app.get("/gateway/curator/serve/build/{build_ref}")
+    def curator_serve_build_detail(request: Request, build_ref: str):
+        return gw.handle_serve_build_detail(request, build_ref)
 
     # The serve-state panel's JS as an EXTERNAL same-origin script — the strictPages CSP
     # (script-src 'self') blocks inline scripts on every /gateway/* page, so the queue page loads
