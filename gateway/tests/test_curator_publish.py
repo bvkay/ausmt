@@ -442,7 +442,12 @@ def test_submitter_email_case_variants_classified_submitter(tmp_path):
                 assert r.status_code == 409, (
                     f"case variant {db_email!r}/{artifact_email!r} was acknowledgeable (§0 bypass)")
                 assert gw.db.get(sid).state == states.VALIDATED
-                assert git.calls == []
+                # The detail GET above renders the nav shell, whose drift chip reads the published HEAD
+                # via a read-only `git rev-parse --short HEAD` (C43 FR2-1: the detail page joined the
+                # shell) — benign and expected. The security guarantee is that NO PUBLISH git ran on the
+                # refusal, so filter out the read-only rev-parse and assert nothing else touched git.
+                publish_calls = [c for c in git.calls if list(c[:1]) != ["rev-parse"]]
+                assert publish_calls == [], f"a publish git op ran despite the refusal: {publish_calls}"
     run(_body())
 
 

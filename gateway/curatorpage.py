@@ -133,20 +133,31 @@ _HEAD = """<!doctype html>
  .opsband{border-radius:6px;padding:.6rem .9rem;margin:.75rem 0;font-size:.88rem}
  .opsnote{color:$muted;font-size:.78rem;margin:.4rem 0 0}
  .stale{color:$warn;font-weight:600}
- /* C43 S2a-SPLIT: Stations tab split view. WIDE = station LIST left / DATA panel right; the panel
-    comes FIRST in DOM (so on a narrow single column it stacks first — owner ruling) and is placed
-    into the RIGHT grid column explicitly on wide screens. align-items:start keeps both columns
-    TOP-ALIGNED so the (short) list never pushes the (tall) panel off-screen.
-    grid-row:1 on BOTH is load-bearing (usability incident 2026-07-11): with only grid-COLUMN set,
-    auto-placement cannot move the cursor backwards within a row — the DOM-second list wanting
-    column 1 lands in ROW 2, i.e. BELOW the panel (invisible while the placeholder was one line
-    tall; three screens down once a real station rendered). Both items are pinned to row 1.
-    The list column is sized to fit its five columns un-truncated (~26rem); the panel takes the
-    remaining width (the stations tab opts into the wide page measure). */
- .stations-split{display:grid;grid-template-columns:minmax(24rem,28rem) minmax(0,1fr);
+ /* C43 FR2-2: Stations tab THREE thirds (owner ruling round 2, 2026-07-11). WIDE = site table
+    (col 1) | station facts (col 2) | plots (col 3), all grid-ROW 1, top-aligned. DOM order is
+    facts-first then plots then table (the panel-first stacking rule preserved: on a narrow single
+    column the facts stack ABOVE the plots ABOVE the table). grid-row:1 on ALL THREE is load-bearing
+    (usability incident 2026-07-11): with only grid-COLUMN set, auto-placement cannot move the cursor
+    backwards within a row — a DOM-later item wanting an earlier column drops to ROW 2 silently. The
+    table column is a minmax so it never truncates its columns (may be slightly narrower than a strict
+    third); facts + plots split the rest, and the plots column scrolls its fixed-width SVGs internally
+    rather than overflowing the page. Chosen template: minmax(21rem,25rem) | minmax(0,1fr) |
+    minmax(0,1fr). The three-thirds needs a wide desktop; below the 1120px stack breakpoint the three
+    items collapse to one column (facts, plots, table — DOM order). */
+ .stations-split{display:grid;
+   grid-template-columns:minmax(21rem,25rem) minmax(0,1fr) minmax(0,1fr);
    gap:1.25rem;align-items:start;margin-top:.5rem}
- .stations-split .st-list{grid-column:1;grid-row:1}   /* list: left column (DOM-second) */
- .stations-split .st-panel{grid-column:2;grid-row:1}  /* panel: right column (DOM-first) */
+ .stations-split .st-list{grid-column:1;grid-row:1}   /* site table: left column (DOM-last) */
+ .stations-split .st-facts{grid-column:2;grid-row:1}  /* station facts: middle column (DOM-first) */
+ .stations-split .st-plots{grid-column:3;grid-row:1;min-width:0;overflow-x:auto} /* plots: right */
+ /* C43 FR2-1: submission-detail two-column arrangement (review context left, sandboxed preview
+    right). grid-row:1 on both explicitly-placed columns (the auto-placement incident). Collapses to
+    one column below 1024px (DOM order: context, then preview). */
+ .detail-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+   gap:1.25rem;align-items:start}
+ .detail-split .dcol{min-width:0}
+ .detail-split .dcol.left{grid-column:1;grid-row:1}
+ .detail-split .dcol.right{grid-column:2;grid-row:1}
  /* The list is its OWN scroll region — a fixed-height container with its own scrollbar, NEVER a
     full-page-length table (a >300-station survey must not push the panel off-screen). The filter box
     sits ABOVE the scroll region (outside .st-scroll) so it stays put while the rows scroll. */
@@ -192,13 +203,20 @@ _HEAD = """<!doctype html>
  .toc .state.issue{color:$bad;font-weight:600}
  .badinput{border-color:$bad !important;background:rgba(168,84,84,.15) !important}
  .fielderr{color:$bad;font-size:.8rem;margin:.25rem 0 0}
- @media (max-width:720px){.shell{display:block}.rail{flex-basis:auto;border-right:0;
-   border-bottom:1px solid #2E4254}
-   /* narrow: collapse to one column. DOM order is panel-first, so the panel stacks ABOVE the list
-      with no `order` needed; grid-row returns to auto so the two stack (row 1 / row 2). */
+ /* The three-thirds Stations layout needs a wide desktop (site table + facts + a fixed-width plots
+    column). Below 1120px collapse it to ONE column: DOM order is facts-first then plots then table,
+    so they stack facts / plots / table with no `order` needed; grid-row returns to auto so the three
+    stack (the wide grid-row:1 pins would otherwise force all three into one squeezed row). The
+    detail-split collapses at the same 1024px reading-width threshold. */
+ @media (max-width:1120px){
    .stations-split{grid-template-columns:1fr}
-   .stations-split .st-list,.stations-split .st-panel{grid-column:1;grid-row:auto}
+   .stations-split .st-list,.stations-split .st-facts,.stations-split .st-plots{
+     grid-column:1;grid-row:auto}
    .st-scroll{max-height:24rem}}
+ @media (max-width:1024px){.detail-split{grid-template-columns:1fr}
+   .detail-split .dcol.left,.detail-split .dcol.right{grid-column:1;grid-row:auto}}
+ @media (max-width:720px){.shell{display:block}.rail{flex-basis:auto;border-right:0;
+   border-bottom:1px solid #2E4254}}
 </style></head>
 <body>
 """
@@ -1058,43 +1076,72 @@ STATIONS_JS = r"""
     return wrapPlot('apparent resistivity ρ (Ω·m), log–log', s);
   }
 
-  // ---- φxy plot: 0..90 axis with the Q1 band shaded ----
-  function phiXyPlot(t) {
-    var per = t[T.periods], vals = t[T.phs_xy];
-    if (!per || !per.length || !vals.some(function (v) { return v != null; })) return null;
-    var H = 100, x = xScale(per);
-    var lo = -20, hi = 110;                    // a little headroom around 0..90
-    var y = function (v) { return 4 + (hi - v) / (hi - lo) * (H - 26); };
-    var s = svg('svg', { width: W, height: H, role: 'img' });
-    // Q1 expected band (0..90) shaded FIRST (under the frame + curve).
-    s.appendChild(svg('rect', { x: PADL, y: y(Q1_HI), width: (W - PADL - PADR),
-      height: (y(Q1_LO) - y(Q1_HI)), fill: '#5BAE6A', 'fill-opacity': 0.10 }));
-    xFrame(s, per, x, H);
-    [0, 45, 90].forEach(function (v) { s.appendChild(svgText(PADL - 4, y(v) + 3, String(v), { anchor: 'end' })); });
-    var cls = classify(vals, 'xy');
-    linePath(s, per, vals, x, y, '#E0782F');
-    dots(s, per, vals, x, y, '#E0782F', cls.points);
-    return { node: wrapPlot('phase φxy (°) — expect Q1 (0…90°)', s), verdict: cls };
+  // ---- combined phase plan (C43 FR2-3): the pure, DOM-FREE data mapper for the ONE ±180 phase plot
+  // (owner ruling 2026-07-11 — φxy and φyx share a single axis). It carries the two SERIES (true φxy =
+  // stored t[3], which has no shift; true φyx = stored t[4] UNWRAPPED via trueYx), their per-point
+  // band±slack flags + median verdicts (from the parity-tested classify — NO recompute), and the band
+  // OWNERS: Q1 belongs to xy, Q3 (+ its ±180 seam continuation) belongs to yx. The Node harness
+  // (test_c43_hub_js_parity / stage2a_js_parity) drives THIS function against classify(); the
+  // mutation-proofs live here — reading the yx series raw (dropping trueYx) reds the series pin, and a
+  // band that crossed 0 (a merged Q1+Q3 band) reds the band-ownership pin. Returns null when the
+  // station carries no phase data at all.
+  function combinedPhasePlan(t) {
+    if (!t) return null;
+    var per = t[T.periods];
+    if (!per || !per.length) return null;
+    var xyStored = t[T.phs_xy] || [];
+    var yxStored = t[T.phs_yx_adj] || [];
+    var hasXy = xyStored.some(function (v) { return v != null; });
+    var hasYx = yxStored.some(function (v) { return v != null; });
+    if (!hasXy && !hasYx) return null;
+    var cxy = classify(xyStored, 'xy');   // stored φxy IS true
+    var cyx = classify(yxStored, 'yx');   // classify unwraps the +180 shift internally
+    return {
+      xy: { series: xyStored.slice(),
+            points: cxy.points, median: cxy.median, medianIn: cxy.medianIn, n: cxy.n },
+      yx: { series: yxStored.map(trueYx),         // UNWRAP the +180 presentation shift to true φyx
+            points: cyx.points, median: cyx.median, medianIn: cyx.medianIn, n: cyx.n },
+      // Band owners on the ±180 display axis: Q1 -> xy; Q3 -> yx, plus the seam continuation
+      // +170..+180 (φyx near +180 classifies IN Q3 via the wrap-safe (-360,0] axis — phaseqc._map_yx).
+      // NO band crosses 0: Q1 and Q3 stay SEPARATELY owned (the band-ownership invariant the pin guards).
+      bands: [ { comp: 'xy', lo: Q1_LO, hi: Q1_HI },
+               { comp: 'yx', lo: Q3_LO, hi: Q3_HI },
+               { comp: 'yx', lo: 170.0, hi: 180.0, seam: true } ]
+    };
   }
 
-  // ---- φyx plot: FULL +180..-180 axis with the Q3 band shaded; TRUE φyx (stored - 180, re-wrapped) ----
-  function phiYxPlot(t) {
-    var per = t[T.periods], stored = t[T.phs_yx_adj];
-    if (!per || !per.length || !stored.some(function (v) { return v != null; })) return null;
-    var trueVals = stored.map(trueYx);
-    var H = 132, x = xScale(per);
-    var lo = -180, hi = 180;                   // FULL axis (owner ruling)
+  // ---- combined φ plot: ONE +180…−180 axis carrying BOTH φxy and φyx (owner ruling 2026-07-11) ----
+  function phasePlot(t) {
+    var plan = combinedPhasePlan(t);
+    if (!plan) return null;
+    var per = t[T.periods];
+    var H = 150, x = xScale(per);
+    var lo = -180, hi = 180;                    // FULL ±180 axis, shared by both components
     var y = function (v) { return 4 + (hi - v) / (hi - lo) * (H - 26); };
     var s = svg('svg', { width: W, height: H, role: 'img' });
-    // Q3 expected band (-180..-90) shaded.
-    s.appendChild(svg('rect', { x: PADL, y: y(Q3_HI), width: (W - PADL - PADR),
-      height: (y(Q3_LO) - y(Q3_HI)), fill: '#5BAE6A', 'fill-opacity': 0.10 }));
+    // BOTH expected bands shaded (the ok tone at TWO opacities — Q1 lighter, Q3 darker — so the two
+    // are subtly distinguishable), owners taken from the plan. The seam band shows that φyx near +180
+    // is still Q3 (the wrap); the caption names the wrap too.
+    plan.bands.forEach(function (b) {
+      s.appendChild(svg('rect', { x: PADL, y: y(b.hi), width: (W - PADL - PADR),
+        height: (y(b.lo) - y(b.hi)), fill: '#5BAE6A',
+        'fill-opacity': b.comp === 'xy' ? 0.09 : 0.17 }));
+    });
     xFrame(s, per, x, H);
-    [-180, -90, 0, 90, 180].forEach(function (v) { s.appendChild(svgText(PADL - 4, y(v) + 3, String(v), { anchor: 'end' })); });
-    var cls = classify(stored, 'yx');          // classify on STORED (the fn unwraps internally)
-    linePath(s, per, trueVals, x, y, '#2E8FA3');
-    dots(s, per, trueVals, x, y, '#2E8FA3', cls.points);
-    return { node: wrapPlot('phase φyx (°, TRUE) — expect Q3 (−180…−90°)', s), verdict: cls };
+    [-180, -90, 0, 90, 180].forEach(function (v) {
+      s.appendChild(svgText(PADL - 4, y(v) + 3, String(v), { anchor: 'end' })); });
+    // φxy (stored = true) in the ρa-xy colour, φyx (unwrapped true) in the ρa-yx colour — each phase
+    // component matches its ρa curve for cross-plot reading. Out-of-band(+slack) points draw RED per
+    // component (classify().points), so a wrong-quadrant point is red on either series.
+    linePath(s, per, plan.xy.series, x, y, '#E0782F');
+    dots(s, per, plan.xy.series, x, y, '#E0782F', plan.xy.points);
+    linePath(s, per, plan.yx.series, x, y, '#2E8FA3');
+    dots(s, per, plan.yx.series, x, y, '#2E8FA3', plan.yx.points);
+    // Tiny in-plot legend naming which series + band is whose.
+    s.appendChild(svgText(W - 10, 14, 'φxy · Q1 band', { anchor: 'end', size: 9, fill: '#E0782F' }));
+    s.appendChild(svgText(W - 10, 25, 'φyx · Q3 band', { anchor: 'end', size: 9, fill: '#2E8FA3' }));
+    return { node: wrapPlot('phase φ (°) — φxy expect Q1 (0…90°) · φyx expect Q3 (−180…−90°, '
+                          + 'wraps ±180)', s), plan: plan };
   }
 
   // ---- tipper: |T| (t[5]) plus Re Tzx (t[14]) and Re Tzy (t[16]) as read (no sign games) ----
@@ -1302,26 +1349,42 @@ STATIONS_JS = r"""
     box.appendChild(svgNode);
     return box;
   }
-  // The verdict footer strip beneath a phase plot (never overlapping the caption). The VERDICT is the
-  // MEDIAN of the classified points vs band+slack (fix-round F4c — the engine gate's rule), and the
-  // strip carries the median value ('expect Q3 (−180…−90°) — median φyx −134.8° — in quadrant ✓').
-  // Red dots (per-point beyond-slack flags) can coexist with a green median verdict — that is the
-  // engine-rule alignment: scattered outliers do not flip a station verdict, a coherent median does.
-  function verdictStrip(cls, expectText, comp) {
+  // The combined verdict-strip PARTS (C43 FR2-3): ONE strip beneath the single phase plot carries
+  // BOTH component verdicts. Pure + DOM-free so the Node harness pins that BOTH components are present
+  // (a strip missing a component reds the mutation-proof). Each part is {comp, expect, text, out};
+  // the VERDICT is the MEDIAN vs band+slack (fix-round F4c — the engine gate's rule) using the SAME
+  // classify() output the plot dots use (no recompute). Red dots (per-point beyond-slack flags) can
+  // coexist with a green median verdict — scattered outliers do not flip a station verdict, a coherent
+  // median does. `out` drives the warn colour on that component's lead.
+  function phaseVerdictParts(plan) {
+    function part(comp, expect, c) {
+      if (!c || c.n === 0 || c.median == null) {
+        return { comp: comp, expect: expect, text: 'expect ' + expect + ' — no phase data',
+                 out: false };
+      }
+      var med = 'median ' + comp + ' ' + c.median.toFixed(1) + '°';
+      if (c.medianIn) {
+        return { comp: comp, expect: expect,
+                 text: 'expect ' + expect + ' — ' + med + ' — in quadrant ✓', out: false };
+      }
+      return { comp: comp, expect: expect,
+               text: 'expect ' + expect + ' — ' + med + ' — out of quadrant ⚠', out: true };
+    }
+    return [ part('φxy', 'Q1', plan && plan.xy),
+             part('φyx', 'Q3', plan && plan.yx) ];
+  }
+
+  // ONE verdict strip beneath the combined phase plot, carrying BOTH component verdicts joined ' · ';
+  // an out-of-quadrant component leads in the warn colour, the in-quadrant one stays green.
+  function combinedVerdictStrip(plan) {
     var strip = el('div', null, 'sub');
     strip.style.margin = '.15rem 0 .5rem';
-    if (cls.n === 0 || cls.median == null) {
-      strip.textContent = expectText + ' — no phase data';
-      return strip;
-    }
-    var medTxt = 'median ' + comp + ' ' + cls.median.toFixed(1) + '°';
-    if (cls.medianIn) {
-      strip.textContent = expectText + ' — ' + medTxt + ' — in quadrant ✓';
-      strip.style.color = '#5BAE6A';
-    } else {
-      strip.textContent = expectText + ' — ' + medTxt + ' — out of quadrant ⚠';
-      strip.style.color = '#D9534F';
-    }
+    phaseVerdictParts(plan).forEach(function (p, i) {
+      if (i) strip.appendChild(document.createTextNode(' · '));
+      var span = el('span', p.text);
+      span.style.color = p.out ? '#D9534F' : '#5BAE6A';
+      strip.appendChild(span);
+    });
     return strip;
   }
 
@@ -1416,45 +1479,47 @@ STATIONS_JS = r"""
     return panel;
   }
 
-  // ---- drill-down: facts + plots + remove link ----
+  // ---- drill-down: facts (col 2) + plots (col 3) + remove link ----
   function openStation(idx, rows, buildId, lagPending) {
-    var detail = document.getElementById('station-detail');
-    detail.textContent = '';
+    var factsHost = document.getElementById('station-facts');
+    var plotsHost = document.getElementById('station-plots-col');
+    factsHost.textContent = ''; plotsHost.textContent = '';
     var r = rows[idx];
     var cat = r.cat, sc = r.sc, t = r.tf;
     var cls = classifyStation(t);   // ONE classification: panel chip + sentence + (list chips)
-    // The facts panel renders immediately from catalogue/sci; station.json enriches it when it loads.
+    // Facts render immediately from catalogue/sci into the MIDDLE column; station.json enriches them
+    // when it loads. Plots depend only on t (tf) so they render once into the RIGHT column.
     var panel = factsPanel(cat, sc, null, buildId, lagPending, cls);
-    detail.appendChild(panel);
-    // Enrich with the per-station station.json (frame/conditioning/QA) if the products tree is served.
-    // ABSOLUTE url via the single-sourced helper (fix-round F2 — a page-relative fetch 404s here).
+    factsHost.appendChild(panel);
+    renderPlots(plotsHost, t);
+    appendRemove(factsHost, cat);
+    // Enrich the facts with the per-station station.json (frame/conditioning/QA) if the products tree
+    // is served. ABSOLUTE url via the single-sourced helper (fix-round F2 — a page-relative fetch 404s).
     fetchJson(stationJsonUrl(slug, cat[C.id])).then(function (station) {
       var enriched = factsPanel(cat, sc, station || { __missing: true }, buildId, lagPending, cls);
-      detail.replaceChild(enriched, panel);
+      factsHost.replaceChild(enriched, panel);
       panel = enriched;
-      appendPlots(detail, t);
-      appendRemove(detail, cat);
+      appendRemove(factsHost, cat);
     }).catch(function () {
       // Products not served for this build: re-render with the honest Frame placeholder.
       var fallback = factsPanel(cat, sc, { __missing: true }, buildId, lagPending, cls);
-      detail.replaceChild(fallback, panel);
+      factsHost.replaceChild(fallback, panel);
       panel = fallback;
+      appendRemove(factsHost, cat);
     });
-
-    appendPlots(detail, t);
-    appendRemove(detail, cat);
   }
-  function appendPlots(detail, t) {
-    if (document.getElementById('station-plots')) return;   // guard: appended once
-    var plots = el('div'); plots.id = 'station-plots';
-    if (!t) { plots.appendChild(el('p', 'No response-curve data served for this station.', 'sub')); detail.appendChild(plots); return; }
-    var rp = rhoPlot(t); if (rp) plots.appendChild(rp);
-    var pxy = phiXyPlot(t);
-    if (pxy) { plots.appendChild(pxy.node); plots.appendChild(verdictStrip(pxy.verdict, 'expect Q1 (0…90°)', 'φxy')); }
-    var pyx = phiYxPlot(t);
-    if (pyx) { plots.appendChild(pyx.node); plots.appendChild(verdictStrip(pyx.verdict, 'expect Q3 (−180…−90°)', 'φyx')); }
-    var tp = tipperPlot(t); if (tp) plots.appendChild(tp);
-    detail.appendChild(plots);
+  // Build the plots column (col 3): ρa, the NEW combined ±180 phase plot (+ its two-component verdict
+  // strip), then tipper — in that vertical order (owner ruling round 2). Idempotent: clears first.
+  function renderPlots(host, t) {
+    host.textContent = '';
+    if (!t) {
+      host.appendChild(el('p', 'No response-curve data served for this station.', 'sub'));
+      return;
+    }
+    var rp = rhoPlot(t); if (rp) host.appendChild(rp);
+    var ph = phasePlot(t);
+    if (ph) { host.appendChild(ph.node); host.appendChild(combinedVerdictStrip(ph.plan)); }
+    var tp = tipperPlot(t); if (tp) host.appendChild(tp);
   }
   function appendRemove(detail, cat) {
     if (document.getElementById('station-remove')) return;
@@ -1467,11 +1532,12 @@ STATIONS_JS = r"""
     detail.appendChild(p);
   }
 
-  // ---- list + filter (S2a-SPLIT: the list slot is the LEFT column; the DATA panel #station-detail
-  // is a pre-rendered sibling in the RIGHT column). The table lives inside a FIXED-HEIGHT scroll
-  // region (.st-scroll) with the filter box ABOVE it, so a >300-station survey scrolls WITHIN the
-  // list and never pushes the panel off-screen. Row click populates the panel WITHOUT the page
-  // scrolling (no location hash, no scrollIntoView) and highlights the selected row. ----
+  // ---- list + filter (C43 FR2-2: the site table is the LEFT column; the FACTS panel #station-facts
+  // and the PLOTS column #station-plots-col are pre-rendered siblings in the middle/right columns).
+  // The table lives inside a FIXED-HEIGHT scroll region (.st-scroll) with the filter box ABOVE it, so
+  // a >300-station survey scrolls WITHIN the list and never pushes the facts/plots off-screen. Row
+  // click populates the facts + plots WITHOUT the page scrolling (no location hash, no scrollIntoView)
+  // and highlights the selected row. ----
   function render(rows, buildId, lagPending) {
     var list = document.getElementById('stations-list');
     list.textContent = '';
@@ -1508,8 +1574,7 @@ STATIONS_JS = r"""
         if (selected) selected.classList.remove('on');
         tr.classList.add('on');
         selected = tr;
-        // Clear any prior plots/remove so a re-open rebuilds cleanly, then populate the RIGHT panel.
-        var d = document.getElementById('station-detail'); if (d) d.textContent = '';
+        // openStation clears + repopulates the facts (col 2) and plots (col 3) columns in place.
         openStation(i, rows, buildId, lagPending);
       }
       tr.addEventListener('click', select);
@@ -1572,6 +1637,68 @@ STATIONS_JS = r"""
   }).catch(function (e) {
     host.textContent = '';
     host.appendChild(el('p', 'Could not load the served corpus: ' + e.message, 'sub'));
+  });
+})();
+"""
+
+
+# The Surveys-list browser script (C43 FR2-1): fill the display name / version / licence / served
+# station-count columns from the served /data corpus SAME-ORIGIN (surveys.json + build_report.json —
+# the serve-panel pattern, ZERO new gateway privileges; the gateway has no site-data mount). surveys.json
+# is keyed by the display LABEL, so we join by each entry's own `slug` field (mirrors the Stations tab's
+# ausmt_id join — the label is not the slug). ABSENT facts render absent ('—'), never invented. RAW JS
+# served by GET /gateway/curator/surveys-list.js — inline is dead under script-src 'self'; every value
+# goes in via textContent (never innerHTML) so a served-metadata string cannot inject markup. DEGRADES:
+# without the script every row still shows its slug + the hub link.
+SURVEYS_LIST_JS = r"""
+(function () {
+  var table = document.getElementById('surveys-table');
+  if (!table) return;
+  function fetchJson(url) {
+    return fetch(url, { credentials: 'omit', cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) return { __missing: true };
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  // surveys.json is keyed by the survey display LABEL (its NAME — the portal reads the same key as the
+  // survey title); each entry carries its own `slug` (the engine stamps it —
+  // build_portal.survey_meta_from_yaml; the entry has NO separate `name` field). Build a slug ->
+  // {label, entry} map from the values (the label IS the display name), the same way the Stations tab
+  // joins the catalogue by ausmt_id rather than the label column.
+  function bySlug(surveys) {
+    var out = {};
+    if (!surveys || surveys.__missing || surveys.__err || typeof surveys !== 'object') return out;
+    Object.keys(surveys).forEach(function (label) {
+      var e = surveys[label];
+      if (e && e.slug != null) out[String(e.slug)] = { label: label, entry: e };
+    });
+    return out;
+  }
+  // ABSENT => leave the server-rendered '—' placeholder (never invent a value).
+  function setCell(tr, key, value) {
+    var span = tr.querySelector('[data-cell="' + key + '"]');
+    if (!span) return;
+    if (value != null && value !== '') span.textContent = String(value);
+  }
+  Promise.all([
+    fetchJson('/data/surveys.json').catch(function () { return { __err: true }; }),
+    fetchJson('/data/build_report.json').catch(function () { return { __err: true }; })
+  ]).then(function (res) {
+    var surveys = bySlug(res[0]);
+    var rep = res[1];
+    var repSurveys = (rep && !rep.__err && !rep.__missing) ? (rep.surveys || {}) : {};
+    table.querySelectorAll('tr[data-survey-slug]').forEach(function (tr) {
+      var slug = tr.getAttribute('data-survey-slug');
+      var rec = surveys[slug];
+      if (rec) {
+        setCell(tr, 'name', rec.label);         // the display name is the surveys.json key (label)
+        setCell(tr, 'version', rec.entry.version);
+        setCell(tr, 'licence', rec.entry.lic);
+      }
+      var rs = repSurveys[slug];
+      if (rs && rs.stations_built != null) setCell(tr, 'stations', rs.stations_built);
+    });
   });
 })();
 """
@@ -1709,12 +1836,17 @@ def _context_bar(nav: "NavContext") -> str:
     )
 
 
-def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = False) -> str:
+def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = True) -> str:
     """Wrap a page body in the Stage-1 nav shell: left rail + context bar + main content. The external
     context-bar script (drift chip served-build half) loads at the tail, joining ui.js. Chrome-less
-    pages (login, terminal confirms) use _page instead. `wide` is a PER-PAGE opt-out of the 960px
-    content measure (H2: the uploader-keys page spreads its issued-keys table across the full width);
-    the default measure is deliberately unchanged for every other page."""
+    pages (login, terminal confirms) use _page instead.
+
+    `wide` is WIDE-BY-DEFAULT (C43 FR2-1 owner ruling, 2026-07-11: "all the curator pages should be
+    like the surveys-stations page — full width, intuitive"). Every shelled working page fills the
+    viewport; a page that wants the centred reading measure passes wide=False (none do today — the
+    only narrow survivors are the login page and the terminal confirm pages, which are chrome-less
+    _page users). Pages that want a comfortable FORM measure inside the wide page cap the field column
+    locally (e.g. the Metadata TOC form, the uploader create form) rather than narrowing the shell."""
     return (
         _head(title)
         + '<div class="shell">'
@@ -1749,7 +1881,11 @@ def _state_badge(state: str) -> str:
 
 
 def render_queue(*, curator_name: str, rows: list, csrf_token: str,
-                 serve_panel: str = "", nav: "NavContext | None" = None) -> str:
+                 nav: "NavContext | None" = None) -> str:
+    """The review queue (C43 FR2-1: purely the queue). The inline serve-state panel was REMOVED here
+    by owner ruling (2026-07-11, ratified): the dedicated /gateway/curator/serve screen + the
+    ever-present drift chip in the context bar own the served-vs-published job now — a second copy on
+    the queue page was redundant. Full width via the wide-by-default shell; the table breathes."""
     if rows:
         trs = []
         for r in rows:
@@ -1779,7 +1915,6 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
         '<a href="/gateway/curator/quarantine">quarantined submissions</a> '
         f'{logout}</p>'
         f'<div class="panel">{table}</div>'
-        f'{serve_panel}'
     )
     if nav is not None:
         return _shell("AusMT curator queue", body, nav=nav)
@@ -3115,20 +3250,24 @@ def _hub_stations_body(slug: str, *, build_lag: dict | None = None) -> str:
     served build's source_commit and, on drift, renders 'facts from build <id> — publish pending' on
     the panel itself. Degrades: without JS the placeholder stays, the page never breaks."""
     published = (build_lag or {}).get("published_head") or ""
-    # S2a-SPLIT scaffold: the split container carries BOTH slots the JS fills. DOM ORDER IS PANEL
-    # FIRST (#station-detail) then LIST (#stations-list) — so on a narrow single column the data panel
-    # stacks ABOVE the list (owner ruling); on wide screens .stations-split places the list into the
-    # LEFT column and the panel into the RIGHT column via grid-column (see shell CSS). The list slot
-    # holds the filter box + the fixed-height .st-scroll region the JS builds the table into. Server
-    # renders only the scaffold + loading placeholder; stations.js fills it from the served /data
-    # corpus (catalogue/sci/tf/build). Degrades: without JS the placeholder stays, the page never
-    # breaks.
+    # C43 FR2-2 scaffold: THREE thirds (owner ruling round 2). The split container carries THREE slots
+    # the JS fills: station FACTS (#station-facts, col 2), the PLOTS column (#station-plots-col, col 3),
+    # and the site TABLE (#stations-list, col 1). DOM ORDER is FACTS then PLOTS then TABLE — so on a
+    # narrow single column they stack facts / plots / table (the panel-first stacking rule preserved);
+    # on wide screens .stations-split places each into its grid COLUMN (table left, facts middle, plots
+    # right) all on grid-ROW 1 (see shell CSS). The list slot holds the filter box + the fixed-height
+    # .st-scroll region the JS builds the table into. Server renders only the scaffold + loading
+    # placeholders; stations.js fills them from the served /data corpus (catalogue/sci/tf/build).
+    # Degrades: without JS the placeholders stay, the page never breaks.
     return (
         f'<div id="survey-stations" data-survey-slug="{_esc(slug)}" '
         f'data-published-head="{_esc(published)}">'
         '<div class="stations-split">'
-        '<div id="station-detail" class="st-panel">'
-        '<p class="sub">Select a station from the list to view its facts and response curves.</p>'
+        '<div id="station-facts" class="st-facts">'
+        '<p class="sub">Select a station from the table to view its facts.</p>'
+        '</div>'
+        '<div id="station-plots-col" class="st-plots">'
+        '<p class="sub">Response curves appear here once a station is selected.</p>'
         '</div>'
         '<div id="stations-list" class="st-list">'
         '<p class="sub">Loading stations from the served corpus…</p>'
@@ -3292,9 +3431,15 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
                'highlighted section(s).</p>')
     return (
         f'{err}'
+        # C43 FR2-1: the Metadata tab rides the wide page, but a form input must NOT stretch to
+        # 1600px — the field column is CAPPED to a comfortable form measure (~52rem) while the TOC
+        # keeps its 12rem rail; the space to the right of the capped column is left for the TOC and
+        # future preview real estate. The wide page is for tables/plots, not for stretching a text
+        # input across the whole viewport.
         '<div style="display:flex;gap:1.25rem;align-items:flex-start">'
         f'<nav class="toc" id="hub-toc" style="flex:0 0 12rem">{"".join(toc_links)}</nav>'
-        f'<div style="flex:1 1 auto;min-width:0" id="hub-sections">{"".join(forms)}</div>'
+        f'<div style="flex:1 1 auto;min-width:0;max-width:52rem" id="hub-sections">'
+        f'{"".join(forms)}</div>'
         '</div>'
         # editor.js only — survey-hub.js is included ONCE by render_survey_hub for every tab
         # (C43-HUB: the header counts + Stations chip need it hub-wide).
@@ -3334,10 +3479,11 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     # EXTERNAL same-origin script, ONCE per page (strictPages CSP blocks inline JS). Degrades:
     # placeholders/scaffolds remain, the page never breaks.
     body = f'{head}{strip}{inner}<script src="/gateway/curator/survey-hub.js" defer></script>'
-    # The stations tab opts into the wide measure (H2 pattern): a split of list + facts/plots needs
-    # the full viewport — inside the default 960px wrap the list truncated and the panel cramped
-    # (owner usability report 2026-07-11). The other tabs keep the reading measure.
-    return _shell(f"AusMT survey {slug}", body, nav=nav, wide=(tab == "stations"))
+    # C43 FR2-1: EVERY hub tab fills the viewport (wide-by-default via _shell). The Metadata tab keeps
+    # a comfortable FORM measure INSIDE the wide page (the TOC form caps its own field column — see
+    # _hub_metadata_body), so a form input never stretches to 1600px while the Stations/Overview/
+    # History tabs use the full width for their tables and the three-thirds split.
+    return _shell(f"AusMT survey {slug}", body, nav=nav)
 
 
 def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: dict | None,
@@ -3386,19 +3532,42 @@ def render_edit_preview(*, slug: str, version: str, diff: str, validate_report: 
 
 def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
                      nav: "NavContext | None" = None) -> str:
-    """The Surveys list (C43 Stage 1 S1-1: the former edit-list page, now the rail's Surveys surface).
-    Each row links to the per-survey HUB (Overview & QA landing tab), NOT straight to the edit form —
-    the hub is the task home. A directory listing of surveys-live, never content parsing."""
+    """The Surveys list (C43 Stage 1 S1-1; C43 FR2-1 makes it a proper TABLE). Server-rendered from a
+    DIRECTORY LISTING of surveys-live (never content parsing — the survey.yaml presence is a stat, not
+    a load), so the server knows only the slugs. The richer columns — display name, version, licence,
+    and served station count — are filled BROWSER-side by surveys-list.js from the served /data corpus
+    (surveys.json + build_report.json; the serve-panel pattern, zero new gateway privileges). ABSENT
+    facts render absent ('—'), never invented: a survey not yet in the served corpus shows only its
+    slug. Every row links to the per-survey HUB (the task home), NOT the edit form."""
     if slugs:
-        items = "".join(
-            f'<li><a href="/gateway/curator/survey/{_esc(s)}">{_esc(s)}</a></li>' for s in slugs)
-        listing = f"<ul>{items}</ul>"
+        rows = []
+        for s in slugs:
+            slug = _esc(s)
+            rows.append(
+                f'<tr data-survey-slug="{slug}">'
+                f'<td><a href="/gateway/curator/survey/{slug}">'
+                f'<span data-cell="name">{slug}</span></a></td>'
+                f'<td><span class="slugchip">{slug}</span></td>'
+                f'<td><span data-cell="version">&mdash;</span></td>'
+                f'<td><span data-cell="licence">&mdash;</span></td>'
+                f'<td><span data-cell="stations">&mdash;</span></td>'
+                "</tr>")
+        listing = (
+            '<table id="surveys-table"><tr><th>Survey</th><th>Slug</th><th>Version</th>'
+            '<th>Licence</th><th>Stations</th></tr>'
+            + "".join(rows) + "</table>"
+            '<p class="sub" style="margin:.6rem 0 0">Name, version, licence and served station count '
+            'are read from the live served corpus; a survey not yet built into the corpus shows only '
+            'its slug.</p>')
     else:
         listing = '<p class="sub">No published surveys in surveys-live.</p>'
     body = (
         '<h1>Surveys</h1>'
         f'<p class="sub">Signed in as curator:{_esc(curator_name)}</p>'
         f'<div class="panel">{listing}</div>'
+        # EXTERNAL same-origin script (strictPages CSP blocks inline JS). Degrades: without it every
+        # row still shows its slug + the hub link, the page never breaks.
+        '<script src="/gateway/curator/surveys-list.js" defer></script>'
     )
     if nav is not None:
         return _shell("AusMT surveys", body, nav=nav)
@@ -3756,7 +3925,13 @@ def render_detail(*, submission_id: str, state: str, updated_utc: str,
                   submitter_name: str, submitter_email: str, submitter_orcid: str | None,
                   validate_report: dict | None, preview_summary: dict | None,
                   cl: "checklist_mod.Checklist", csrf_token: str, note: str = "",
-                  has_preview: bool) -> str:
+                  has_preview: bool, nav: "NavContext | None" = None) -> str:
+    """The submission review page. C43 FR2-1: full width inside the nav shell (wide-by-default) with a
+    two-column arrangement when a preview exists — the review CONTEXT (submitter PII, checklist, report
+    bundle, last note) on the LEFT, the sandboxed PREVIEW on the RIGHT — and the review ACTION forms
+    (approve / return / reject) beneath, full width. LAYOUT ONLY: the action logic, the CSRF fields,
+    the null-origin sandbox, and the PII split are all unchanged. Without `nav` it renders chrome-less
+    (the source-literal render-pin path); the two-column split still applies and collapses on narrow."""
     preview = ""
     if has_preview:
         # NULL-ORIGIN SANDBOX (design §7): sandbox="allow-scripts" WITHOUT allow-same-origin — the
@@ -3778,14 +3953,29 @@ def render_detail(*, submission_id: str, state: str, updated_utc: str,
             'Toggle full size</button></p></div>'
         )
     note_panel = f'<div class="panel"><h2>Last note</h2><pre>{_esc(note)}</pre></div>' if note else ""
-    body = (
-        f'<h1>Submission {_esc(submission_id[:12])} {_state_badge(state)}</h1>'
-        f'<p class="sub">updated {_esc(updated_utc)} · <a href="/gateway/curator/queue">back to queue</a></p>'
-        + _submitter_panel(name=submitter_name, email=submitter_email, orcid=submitter_orcid)
+    context = (
+        _submitter_panel(name=submitter_name, email=submitter_email, orcid=submitter_orcid)
         + _checklist_panel(cl)
         + _reports_panel(validate_report=validate_report, preview_summary=preview_summary)
-        + preview
         + note_panel
-        + _action_forms(submission_id=submission_id, state=state, csrf_token=csrf_token, cl=cl)
     )
+    actions = _action_forms(submission_id=submission_id, state=state, csrf_token=csrf_token, cl=cl)
+    header = (
+        f'<h1>Submission {_esc(submission_id[:12])} {_state_badge(state)}</h1>'
+        f'<p class="sub">updated {_esc(updated_utc)} · '
+        '<a href="/gateway/curator/queue">back to queue</a></p>')
+    if has_preview:
+        # Two columns: review context (PII/checklist/reports/note) LEFT, sandboxed preview RIGHT;
+        # the action forms sit beneath, full width. grid-row pinned on both dcols (auto-placement
+        # incident). Collapses to one column on narrow (context, then preview).
+        middle = (
+            '<div class="detail-split">'
+            f'<div class="dcol left">{context}</div>'
+            f'<div class="dcol right">{preview}</div>'
+            '</div>')
+    else:
+        middle = context
+    body = header + middle + actions
+    if nav is not None:
+        return _shell(f"AusMT submission {submission_id[:12]}", body, nav=nav)
     return _page(f"AusMT submission {submission_id[:12]}", body)
