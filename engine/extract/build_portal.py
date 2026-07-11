@@ -1912,6 +1912,28 @@ def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
     return errs
 
 
+def _edi_station_id_candidates(edi_paths):
+    """C42 (F2): the station ids a survey's EDI files can yield, scraped LIGHTLY at discovery time so
+    a coordinate_overrides id can be validated per survey BEFORE the build invests in it. Mirrors the
+    id derivation process_edis will apply: the parsed DATAID station (cat.parse_dataid unpacks the
+    Phoenix 'P=x R=y' compound form) with the file stem as the fallback, both through the same
+    safe_component sanitisation. read_norm is lru-cached, so the text read here is REUSED by the C25
+    pre-scan and the per-station parse — no extra IO. An unreadable file contributes its stem only
+    (the per-station loop reports the read failure itself). Disambiguation suffixes (colliding
+    DATAIDs -> X.a/X.b) are handled by the caller's prefix match."""
+    cand = set()
+    for p in edi_paths:
+        cand.add(safe_component(Path(p).stem))
+        try:
+            raw = ep.read_norm(p)
+            sid, _ = cat.parse_dataid(cat.grab(raw, "DATAID"))
+            if sid:
+                cand.add(safe_component(sid))
+        except Exception:  # noqa: BLE001  (unreadable/garbled EDI -> stem-only candidate)
+            continue
+    return cand
+
+
 def discover_work(a, ap, validator):
     """One work entry per survey, from --surveys packages or --raw EDI folders. Returns
     (work, survey_extent): work = [(label, org, inputs, kind, meta-or-None, pkgdir-or-None, slug,
@@ -1975,12 +1997,30 @@ def discover_work(a, ap, validator):
             # structured schema that mapping would otherwise land in station.json as a dict.
             smeta = survey_meta_from_yaml(y)
             survey_extent[label] = _extent_of(y)  # for the build-time out-of-extent QC FYI
-            # C42: parse the coordinate-access policy from THIS survey's access block. An unknown enum
-            # value is a survey-level build FAILURE (fail-closed, D2): the survey is DROPPED loudly and
-            # NOTHING is served for it — never a silent fallback to exact. (Override ids are validated
-            # later, at the mask seam, once the real station ids are known.)
+            # C42: parse the coordinate-access policy from THIS survey's access block. Any policy error
+            # — an unknown enum value OR (F2) an override id naming no station in this survey's files —
+            # is a SURVEY-level build failure (fail-closed, D2): the survey is DROPPED loudly, NOTHING
+            # is served for it, and the REST of the corpus builds. Never a silent fallback to exact,
+            # never a whole-build abort for one survey's typo (the pre-F2 behaviour: the error
+            # propagated uncaught from the corpus mask seam and zeroed every survey's output).
             try:
                 coord_policy[label] = coordacc.parse_coordinate_policy(y.get("access"))
+                _c42_overrides = coord_policy[label][1]
+                if _c42_overrides and kind == "edi":
+                    # F2: validate override ids HERE, per survey, against the ids this survey's EDI
+                    # files can actually yield (DATAID + stem; prefix match covers disambiguation
+                    # suffixes). MTH5-input surveys are NOT validated here (their ids are only known
+                    # after an mth5 open — too heavy for discovery); for them the corpus-seam raise in
+                    # apply_coordinate_policy remains the guard.
+                    _cand = _edi_station_id_candidates(inputs)
+                    _unknown = [sid for sid in _c42_overrides
+                                if sid not in _cand and sid.split(".")[0] not in _cand]
+                    if _unknown:
+                        raise coordacc.CoordinatePolicyError(
+                            f"access.coordinate_overrides names station id(s) {sorted(_unknown)} that "
+                            f"do not exist in this survey's transfer_functions/edi files (candidate "
+                            f"ids: {sorted(_cand)}) — refusing to build this survey (fail closed; fix "
+                            f"the override id or remove it).")
             except coordacc.CoordinatePolicyError as _cpe:
                 print(f"SKIP {d.name}: coordinate-access policy INVALID — {_cpe}", file=sys.stderr)
                 survey_extent.pop(label, None)

@@ -77,21 +77,22 @@ def _rewrite_edi(src_text, station):
 
 
 def _stage_survey(base, stations, *, declare_policy=True, extent=True, overrides=None,
-                  coordinates_default=None):
+                  coordinates_default=None, slug="sweep-survey", name="Coord Access Sweep Survey"):
     """Write a survey package (survey.yaml + one EDI per station) into `base`. `stations` is a list of
     the EXACT/GEN/HID-style dicts. When declare_policy, the yaml gets access.coordinates (from the
     stations' policies unless coordinates_default is given) + per-station coordinate_overrides. Returns
-    the package dir."""
+    the package dir. `slug`/`name` allow staging SEVERAL surveys under one --surveys root (the F2
+    survey-granularity pin)."""
     src = SAMPLE_EDI.read_text(encoding="utf-8")
-    d = base / "sweep-survey"
+    d = base / slug
     edidir = d / "transfer_functions" / "edi"
     edidir.mkdir(parents=True)
     for st in stations:
         (edidir / f"{st['id']}.edi").write_text(_rewrite_edi(src, st), encoding="utf-8")
     lines = [
         'schema_version: "0.1"',
-        "slug: sweep-survey",
-        'name: "Coord Access Sweep Survey"',
+        f"slug: {slug}",
+        f'name: "{name}"',
         "country: Australia",
         'organisation: "AusMT CI"',
         'abstract: "engine-produced C42 leak-sweep fixture"',
@@ -603,12 +604,46 @@ def test_fail_closed_override_names_no_station_drops_survey(tmp_path):
         [sys.executable, "-m", "extract.build_portal", "--surveys", str(base), "--out", str(out),
          "--products", str(out / "products"), "--bundle-edi", "--no-validate", "--allow-empty"],
         cwd=str(ROOT), capture_output=True, text=True)
-    # the override id is validated at the mask seam (after parse), so the build reaches the mask and
-    # raises there — a hard, loud failure. Either the build exits non-zero OR (if caught) nothing serves.
+    # the override id is validated per survey at DISCOVERY (F2), so the offending survey is dropped
+    # loudly and nothing of it serves; the corpus-seam raise remains only as a backstop.
     assert r.returncode != 0 or json.loads((out / "catalogue.json").read_text()) == [], \
         f"a bogus override id must fail the build or serve nothing; rc={r.returncode} stderr={r.stderr}"
     assert "coordinate_overrides names station id" in (r.stderr + r.stdout) or r.returncode != 0, \
         f"the bogus override must be reported; stderr:\n{r.stderr}"
+
+
+def test_fail_closed_override_typo_drops_only_that_survey(tmp_path):
+    """F2 (survey granularity): a corpus of TWO surveys, one healthy and one whose coordinate_overrides
+    names a station that does not exist. The typo must drop ONLY the offending survey — loudly — while
+    the healthy survey builds and serves in full, rc=0.
+
+    FAILS IF one survey's override typo aborts the WHOLE build (rc!=0 / no catalogue at all — the
+    pre-F2 behaviour, where CoordinatePolicyError propagated uncaught from the corpus mask seam), or
+    if the bad survey's stations/bytes appear anyway, or the drop is silent."""
+    base = tmp_path / "surveys"
+    base.mkdir(parents=True)
+    _stage_survey(base, [EXACT], slug="good-survey", name="Good Survey",
+                  coordinates_default="exact", overrides={})
+    _stage_survey(base, [{**GEN, "policy": "exact"}], slug="bad-survey", name="Bad Survey",
+                  coordinates_default="exact", overrides={"NOSUCHSTATION": "withheld"})
+    out = tmp_path / "out"
+    r = subprocess.run(
+        [sys.executable, "-m", "extract.build_portal", "--surveys", str(base), "--out", str(out),
+         "--products", str(out / "products"), "--bundle-edi", "--no-validate"],
+        cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, \
+        f"one survey's override typo must not abort the whole build (pre-F2 red): rc={r.returncode}\n{r.stderr}"
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    surveys_served = {row[1] for row in cat}   # r[1] = survey label (positional contract)
+    assert "Good Survey" in surveys_served, f"the healthy survey must serve fully; got {surveys_served}"
+    assert "Bad Survey" not in surveys_served, \
+        f"the mis-configured survey must be absent from the catalogue; got {surveys_served}"
+    # bytes: the good survey's EDI is served; the bad survey has NO served bytes at all
+    assert (out / "edi" / "good-survey").exists(), "good survey's EDI dir must be served"
+    assert not (out / "edi" / "bad-survey").exists(), "bad survey must have NO served EDI bytes"
+    # loud, named drop — never a silent absence
+    assert "coordinate-access policy INVALID" in r.stderr and "bad-survey" in r.stderr, \
+        f"the drop must name the offending survey loudly; stderr:\n{r.stderr}"
 
 
 # =====================================================================================================

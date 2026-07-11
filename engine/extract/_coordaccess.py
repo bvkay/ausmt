@@ -174,7 +174,13 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
 
     Returns the set of ausmt_ids that were masked (non-exact), for the caller's byte-gate/logging.
     """
-    # Fail-closed: every override key must name a real station id in this survey's station set.
+    # Fail-closed BACKSTOP (defence in depth): every override key must name a real station id in this
+    # survey's station set. Since F2, override ids are validated PER SURVEY at discovery time
+    # (build_portal._edi_station_id_candidates inside discover_work's try/except), where a typo drops
+    # only the offending survey — so for EDI-input surveys this raise should be UNREACHABLE for
+    # override-id errors. It still guards the flag-gated MTH5 input path (whose station ids are only
+    # known after an mth5 open, too heavy for discovery) and any direct API caller; if it ever fires
+    # in a full build it aborts loudly rather than serving under a half-applied policy.
     if overrides:
         real_ids = {r.get("id") for (_p, r) in stations}
         unknown = [sid for sid in overrides if sid not in real_ids]

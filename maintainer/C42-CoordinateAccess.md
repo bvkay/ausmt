@@ -67,6 +67,19 @@ badges the state honestly: "position generalised to 0.1° at custodian request" 
 withheld at custodian request", replacing the universal "locations are public" drawer text with
 policy-aware wording.
 
+**Amendment (2026-07-11 fix round, F2) — engine fail-closed granularity:** both policy error
+classes (unknown enum value AND an override id naming no station) fail at **SURVEY granularity**:
+the offending survey is dropped loudly at discovery time (its override ids are cross-checked
+against the ids its EDI files can yield — DATAID + stem) and NOTHING of it is served, while the
+rest of the corpus builds normally. One survey's typo must never zero the whole portal build.
+The corpus-seam raise inside `apply_coordinate_policy` remains as a defence-in-depth BACKSTOP
+only (unreachable for EDI-input surveys; it still guards the flag-gated MTH5 input path, whose
+station ids are only known after an mth5 open). Note the pipeline reality this makes explicit:
+exact stations' source bytes are emitted (copied/zipped) inside the per-survey loop, BEFORE the
+corpus mask seam runs — the holding invariant for source bytes is therefore the **per-station
+byte gate at the copy/emit sites**, not raise-before-emission; the seam masks the derived
+record surfaces, the gate withholds the bytes.
+
 ## D3. The masking seam — one choke point, ordered
 
 Pipeline order is the design's load-bearing rule:
