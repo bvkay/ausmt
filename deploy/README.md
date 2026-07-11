@@ -252,8 +252,27 @@ The publish flow stages/commits/pushes into `surveys-live`, so the gateway mount
 (chowning it to a container uid breaks your `git pull`). Give uid 10002 write access one of two ways:
 
 - **Shared group (recommended):**
-  `chgrp -R 10002 "$AUSMT_DATA_DIR/surveys-live" && chmod -R g+rws "$AUSMT_DATA_DIR/surveys-live"` —
-  you still own the files and can `git pull`; the setgid bit keeps new files group-10002.
+  ```sh
+  # 1. Group-own surveys-live by the gateway group, setgid so NEW files inherit that group:
+  sudo chgrp -R 10002 "$AUSMT_DATA_DIR/surveys-live"
+  sudo chmod -R g+rwXs "$AUSMT_DATA_DIR/surveys-live"
+  # 2. THE PERMISSIONS TIME-BOMB (incident 2026-07-11 — do not skip this): tell git itself to create
+  #    group-writable objects. The gateway publishes as uid 10002; without this, git's default 0444
+  #    objects + 0755 object dirs are NOT group-writable, so YOU (in the shared group) progressively
+  #    lose the ability to `git pull`/gc as the gateway writes new .git/objects dirs you cannot touch
+  #    — the checkout then silently rots behind GitHub:
+  git -C "$AUSMT_DATA_DIR/surveys-live" config core.sharedRepository group
+  # 3. Make sure BOTH the gateway (uid 10002) and YOUR operator account are in group 10002 — the
+  #    shared group only helps if both writers are members:
+  getent group 10002 >/dev/null || sudo groupadd -g 10002 ausmtgw
+  sudo usermod -aG "$(getent group 10002 | cut -d: -f1)" "$USER"    # then re-login (or `newgrp`)
+  ```
+  You still own the files and can `git pull`; the setgid bit keeps new files group-10002, and
+  `core.sharedRepository=group` keeps every git-created object group-writable. **If you are already
+  locked out** (a publish ran before step 2), re-apply the model to what git already wrote:
+  `sudo chgrp -R 10002 "$AUSMT_DATA_DIR/surveys-live/.git" && sudo chmod -R g+rwX "$AUSMT_DATA_DIR/surveys-live/.git"`.
+  `make preflight PROFILE=gateway` **checks this for you** and fails loudly (with the exact fix) if any
+  `.git` entry has lost group-write — run it after the first publish to confirm the model held.
 - **Dedicated gateway checkout:** give the gateway its own `surveys-live` owned by 10002, separate
   from your read-side checkout.
 
@@ -418,6 +437,7 @@ JS in the curator origin). preview-data is already embargo-safe + PII-scrubbed b
 | **`docker compose` errors: `required variable AUSMT_… is missing` / interpolation error** | A `${VAR:?}`-guarded variable is unset. After C33 only **`AUSMT_DATA_DIR`** and **`OWNER`** are hard-guarded (every service needs them); `AUSMT_SUBMIT_KEY`/`AUSMT_CODE_DIR` no longer block portal-only commands. | Set the named var in `deploy/.env` (see the grouped `.env.example`). `make preflight` lists exactly which required vars are missing for your profile. |
 | **`docker compose pull` "worked" but the engine/gateway images are still old/missing** | `docker compose pull` only pulls services with **no profile** — i.e. just `portal`. `build-runner` (profile `jobs`) and the gateway services (profile `gateway`) are skipped. | Pull with the profiles: `docker compose --profile jobs --profile gateway pull` (or `docker compose --profile "*" pull` on compose v2.24+). `make preflight` flags any image missing locally. |
 | **A CI sample / stray file appeared in `surveys-live` and got into a build** | A test/CI artifact (or a manual copy) left an untracked file in the read-side `surveys-live` checkout; the engine reads the whole tree. | Inspect before removing: `git -C "$AUSMT_DATA_DIR/surveys-live" clean -nd` (dry run) — review the list, then `git -C "$AUSMT_DATA_DIR/surveys-live" clean -fd` to remove untracked cruft. Re-run `make rebuild-data`. |
+| **`git pull` on `surveys-live` fails `Permission denied` / `insufficient permission for adding an object`** (incident 2026-07-11) | The gateway published as uid 10002 and created `.git/objects` dirs **without group-write** because `core.sharedRepository=group` was never set — you (in the shared group) can no longer write them. The checkout then silently falls behind GitHub (the serve-state Freshness card / sync strip flags this). | Set the model and re-apply it to what git already wrote: `git -C "$AUSMT_DATA_DIR/surveys-live" config core.sharedRepository group && sudo chgrp -R 10002 "$AUSMT_DATA_DIR/surveys-live/.git" && sudo chmod -R g+rwX "$AUSMT_DATA_DIR/surveys-live/.git"`. Confirm with `make preflight PROFILE=gateway` (§3 "surveys-live must be writable by uid 10002"). |
 | **Portal serves but pages are empty / `current` missing** | No build has run yet (or the last build failed before the swap). | `make rebuild-data`; on failure it prints the failed `builds/<ts>` dir to inspect. `current` is only swapped after a clean verify. |
 | **Host-side `ln`/`mv` on `current` gives `Permission denied`** | `site-data` is owned by uid 10001; you are not that user. | Don't swap by hand — `make rebuild-data` does the swap in-container as 10001. |
 | **The C13 "Submit to AusMT" button never appears on Add Survey** | The gateway is not up/reachable, so the `/gateway/healthz` probe fails and the UI stays in manual-PR mode. | Bring the gateway up (section 3); `curl 127.0.0.1:8444/gateway/healthz` on the box; check Caddy is proxying `/gateway/*`. |
