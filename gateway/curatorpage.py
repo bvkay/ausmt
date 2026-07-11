@@ -403,7 +403,8 @@ SURVEY_HUB_JS = """
 # /data corpus (catalogue.json / sci.json / tf.json / surveys.json + build.json) — the serve-panel
 # pattern, ZERO new gateway privileges (the gateway has no site-data mount). The catalogue/sci/tf
 # arrays are INDEX-ALIGNED (station i is catalogue[i]/sci[i]/tf[i] — the engine appends them in one
-# pass); we filter to this survey's rows by the catalogue `survey` column.
+# pass); we filter to this survey's rows by ausmt_id prefix ('au.<slug>.', surveyRows below) — the
+# catalogue `survey` column carries the display LABEL, never the slug (hotfix H1, 2026-07-11).
 #
 # CSP + XSS discipline (the same rules SURVEY_HUB_JS follows, extended to SVG): served external under
 # script-src 'self'; EVERY value goes in via textContent or a DOM property, NEVER innerHTML with data;
@@ -481,6 +482,33 @@ STATIONS_JS = r"""
   function dataUrl(name) { return '/data/' + name; }
   function stationJsonUrl(slug2, id) {
     return '/data/products/' + encodeURIComponent(slug2) + '/' + encodeURIComponent(id) + '/station.json';
+  }
+
+  // ---- survey row selection (hotfix H1, 2026-07-11) ----
+  // ENGINE TRUTH: the catalogue `survey` column (C.survey) carries the survey's display LABEL
+  // (build_portal: r["survey"] = survey_label, e.g. "Burra 2017-18"), NEVER the slug — the merged
+  // Stage-2a filter compared it to the hub's slug and matched NOTHING, blanking the Stations tab on
+  // every production survey (owner-reported). Join on ausmt_id (C.ausmt_id) instead: the engine
+  // constructs it as au.<safe_component(slug)>.<station id>, and every slug the engine produces is
+  // a safe_component FIXED POINT, so 'au.' + slug + '.' selects exactly this survey's rows. The
+  // trailing dot is the survey boundary — 'au.burra-2017.' cannot prefix-match
+  // 'au.burra-2017-18.A1'. A hypothetical slug that is NOT a fixed point (e.g. one containing '..',
+  // which the engine never emits and no on-disk package carries) fails EMPTY (zero rows — the
+  // honest no-stations message), never WRONG (another survey's rows). DOM-free BY DESIGN: the
+  // executable Node pin drives THIS function with an engine-produced catalogue
+  // (test_c43_stage2a_js_parity.py) — the shipped defect was an inline, undrivable filter loop.
+  function surveyRows(cat, sci, tf, slug2) {
+    var prefix = 'au.' + slug2 + '.';
+    var rows = [];
+    for (var i = 0; i < cat.length; i++) {
+      if (String(cat[i][C.ausmt_id]).indexOf(prefix) !== 0) continue;
+      rows.push({
+        cat: cat[i],
+        sc: (Array.isArray(sci) && sci[i]) ? sci[i] : null,
+        tf: (Array.isArray(tf) && tf[i]) ? tf[i] : null
+      });
+    }
+    return rows;
   }
 
   // ---- tiny DOM helpers (no innerHTML with data) ----
@@ -886,17 +914,9 @@ STATIONS_JS = r"""
     if (publishedHead && served) {
       lagPending = !(publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
     }
-    // Join catalogue/sci/tf BY INDEX, filtered to this survey's rows.
-    var rows = [];
-    for (var i = 0; i < cat.length; i++) {
-      if (String(cat[i][C.survey]) !== slug) continue;
-      rows.push({
-        cat: cat[i],
-        sc: (Array.isArray(sci) && sci[i]) ? sci[i] : null,
-        tf: (Array.isArray(tf) && tf[i]) ? tf[i] : null
-      });
-    }
-    render(rows, buildId, lagPending);
+    // Join catalogue/sci/tf BY INDEX, filtered to this survey's rows by ausmt_id prefix (H1 —
+    // the survey column is the display label, never the slug; see surveyRows).
+    render(surveyRows(cat, sci, tf, slug), buildId, lagPending);
   }).catch(function (e) {
     host.textContent = '';
     host.appendChild(el('p', 'Could not load the served corpus: ' + e.message, 'sub'));
