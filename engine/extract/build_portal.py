@@ -43,6 +43,7 @@ import _edi_science as sci          # noqa: E402  (science_from_components, proc
 import _mth5 as m5                   # noqa: E402  (MTH5 reader; optional, needs mth5+mt_metadata)
 import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_params/drho/dphase/EMPTY_TF)
 import _conventions as conv         # noqa: E402  (C25 convention gates: frame guard + quadrant check)
+import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS  # noqa: E402  (single-source positional column contract)
 
@@ -1286,6 +1287,65 @@ def _apply_coord_resolution(stations, cr):
         r["coord_resolution"] = {"chosen": choose, "basis": cr.get("basis"), "source": "survey.yaml"}
 
 
+def _write_station_products(job, prov):
+    """Render + write one station's --products station.json + dimensionality.json (C42 deferred so it
+    runs AFTER the coordinate mask: `r` is the SHARED station record, masked in place at the single seam,
+    so `location` carries the post-mask value every other emitter reads — no per-emitter mask logic).
+    `job` is the tuple captured in main()'s per-survey loop; `prov` is the build PROV block."""
+    (sdir, r, srow, label, org, meta, lic, slug, p, edi_served, conditioning_notes) = job
+    sdir.mkdir(parents=True, exist_ok=True)
+    (sdir / "station.json").write_text(_jdump({
+        "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label,
+        "country": (meta or {}).get("country", "Australia"), "organisation": org,
+        # C42: post-mask coordinates — exact/generalised(0.1deg)/withheld(null) per the custodian policy,
+        # read from the single-seam-masked record. This products/ surface IS served in deployment (D1).
+        "location": {"lat": r["lat"], "lon": r["lon"]},
+        "data": {"type": r.get("type"), "n_periods": r.get("n_periods"),
+                 "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
+        "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
+                        "tipper_available": "T" in (r.get("comps") or ""),
+                        "dimensionality": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
+                        "completeness_smoothness_diagnostic": {
+                            "value": srow[_SC["q"]], "basis": srow[_SC["qb"]],
+                            "note": "not a quality or geological-value judgement"}},
+        # Processing metadata — all BEST-EFFORT (scraped from the EDI; mt_metadata's
+        # structured fields are empty for most dialects). The remote_reference arrangement
+        # detail lives in `note` (the EDI INFO block); remote_site is the named reference
+        # station where derivable (Phoenix 'P=x R=y' DATAID / REFERENCE section).
+        "processing": {"software": srow[_SC["sw"]], "algorithm": srow[_SC["alg"]],
+                       "remote_reference": bool(srow[_SC["rr"]]),
+                       "remote_site": r.get("remote_site"),
+                       "note": r.get("processing_note")},
+        # C42: edi_served folds in the per-station coordinate byte-gate — a non-exact station is NOT
+        # distributed even inside a served survey, so its station.json must not advertise an EDI.
+        "distribution": {"edi_available": edi_served, "license": lic,
+                         "edi_path": f"edi/{slug}/{p.name}" if edi_served else None},
+        # provenance: input -> software/params -> output (traceable, per Egbert)
+        "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p)},
+        # coordinate QC: present only when the parse flagged something, so consumers can
+        # surface "treat with caution" without implying anything about unflagged stations.
+        "coordinate_qc": ({"flag": r.get("coord_flag"),
+                           "head_info_conflict_deg": r.get("coord_conflict_deg"),
+                           "resolution": r.get("coord_resolution")}
+                          if (r.get("coord_flag") or r.get("coord_conflict_deg")) else None),
+        # canonical_conditioning: what normalize() had to change to make this station's
+        # canonical EMTF XML schema-valid + round-trippable (rotation frame not asserted,
+        # source-id preserved in the Site Name, citation provenance). Present only when the
+        # station was actually conditioned, so an unconditioned station is not implied to be.
+        "canonical_conditioning": (conditioning_notes.get(r["id"]) or None),
+        # frame (C25): the measured frame facts + the sign-convention verdict for THIS
+        # station — what rotation the source declared, whether the engine de-rotated to
+        # geographic north at ingest, and the Gate-2 quadrant medians. None only for
+        # inputs the gates do not cover (the flag-gated MTH5 path).
+        "frame": r.get("frame"),
+    }, indent=1), encoding="utf-8")
+    (sdir / "dimensionality.json").write_text(_jdump({
+        "classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
+        "pct_periods_3d": srow[_SC["p3d"]], "method": "phase-tensor (Caldwell 2004)",
+        "screening_diagnostic": True,
+        "note": "screening diagnostic, not an interpretation product"}, indent=1), encoding="utf-8")
+
+
 def qc_pass(all_stations, survey_extent):
     """Build-time QC over the assembled catalogue. Returns a findings dict; the caller decides what
     blocks. The only HARD failure is duplicate ausmt_ids — non-unique ids corrupt the URL/export/r[12]
@@ -1587,7 +1647,8 @@ def emit_canonical_store(stations, slug, cdir, survey_meta=None):
     return n_ok, n_fail, versions, notes
 
 
-def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, survey_digest=""):
+def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, survey_digest="",
+                     coord_default="exact", coord_overrides=None):
     """Write the canonical EMTF XML for each station into the PORTAL data dir (xmldir = out/xml/<slug>)
     so EMTF XML is a downloadable format alongside the bundled EDI. Same normalize() path + impedance
     round-trip gate as the canonical store; a per-EDI failure is logged and SKIPPED (that station
@@ -1616,6 +1677,12 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     stamped = {}   # C18b (A3): {station_id: survey_digest the served XML was keyed/produced under}
     _use_cache = cache is not None and getattr(cache, "enabled", False)
     for (p, r) in stations:
+        # C42 byte gate: a non-exact (generalised/withheld) station's EMTF-XML — a full elevation +
+        # coordinate bearer (HEAD/INFO/DEFINEMEAS carried through by normalize()) — is NOT served. Skip
+        # it here so it is absent from out/xml, the xml zip and the manifest (all derive from `written`).
+        if not coordacc.coordinates_served(
+                coordacc.station_policy(coord_default, coord_overrides, r.get("id"))):
+            continue
         xml_target = Path(xmldir) / f"{r['id']}.xml"
         # The XML content AND filename are a function of the FINAL (post-_disambiguate) station id —
         # normalize() writes station_id into the Site.id / geographic-name and the <stem>.xml path. The
@@ -1852,8 +1919,15 @@ def discover_work(a, ap, validator):
     out-of-extent QC). A pure discovery phase -- it reads the filesystem + validator and produces the
     work list; the per-survey extract/science/products happen in main()'s loop over what this returns.
     yaml_digest is the sha256 of the SAME survey.yaml bytes the meta was parsed from (Amendment A4:
-    one read feeds both, so an edit landing mid-build can never split them; "" for --raw entries)."""
-    work, survey_extent = [], {}
+    one read feeds both, so an edit landing mid-build can never split them; "" for --raw entries).
+
+    C42: also returns coord_policy = {label: (default, overrides)} — the coordinate-access policy per
+    survey (D2). Carried in a SIDE CHANNEL (not on SMETA, which is emitted to surveys.json — putting
+    the always-'exact' default there would break the default-stability pin). Absent field => ('exact',
+    {}); --raw entries have no survey.yaml so are always 'exact'. An UNKNOWN enum value raises
+    CoordinatePolicyError from parse_coordinate_policy — the survey-level build fails LOUDLY (fail
+    closed); override IDS are validated later at the mask seam once the real station ids are known."""
+    work, survey_extent, coord_policy = [], {}, {}
     if a.surveys:
         for d in sorted(Path(a.surveys).iterdir()):
             if not d.is_dir() or d.name.startswith("_"):
@@ -1901,6 +1975,16 @@ def discover_work(a, ap, validator):
             # structured schema that mapping would otherwise land in station.json as a dict.
             smeta = survey_meta_from_yaml(y)
             survey_extent[label] = _extent_of(y)  # for the build-time out-of-extent QC FYI
+            # C42: parse the coordinate-access policy from THIS survey's access block. An unknown enum
+            # value is a survey-level build FAILURE (fail-closed, D2): the survey is DROPPED loudly and
+            # NOTHING is served for it — never a silent fallback to exact. (Override ids are validated
+            # later, at the mask seam, once the real station ids are known.)
+            try:
+                coord_policy[label] = coordacc.parse_coordinate_policy(y.get("access"))
+            except coordacc.CoordinatePolicyError as _cpe:
+                print(f"SKIP {d.name}: coordinate-access policy INVALID — {_cpe}", file=sys.stderr)
+                survey_extent.pop(label, None)
+                continue
             work.append((label, smeta["org"], inputs, kind, smeta, d, slug, sy_digest))
     elif a.raw:
         coll = json.loads(Path(a.collections).read_text()) if a.collections else \
@@ -1926,7 +2010,7 @@ def discover_work(a, ap, validator):
                 work.append((label, seed.get(label, {}).get("org", org), edis, "edi", seed.get(label), None, slugify(label), ""))
     else:
         ap.error("pass --surveys or --raw")
-    return work, survey_extent
+    return work, survey_extent, coord_policy
 
 
 def main(argv=None):
@@ -2053,7 +2137,7 @@ def main(argv=None):
     # cache, duration_seconds}}. Populated per survey in the loop; assembled + written alongside
     # build_provenance.json below. Public build metadata for the (planned) curator serve-state UI.
     build_report_surveys: dict = {}
-    work, survey_extent = discover_work(a, ap, validator)
+    work, survey_extent, coord_policy = discover_work(a, ap, validator)
 
     # === provenance block (traceability: input -> software/params -> output) ===
     PROV = _build_prov(a.extractor)
@@ -2103,6 +2187,15 @@ def main(argv=None):
 
     # === per-survey processing: extract + science + per-station products ===
     available_ids = set()
+    # C42: --products station.json carries a `location` (r[lat/lon]) and IS a served surface in
+    # deployment (deploy/Makefile writes products/ INSIDE the served build dir; D1/D3). Its coordinates
+    # must therefore be the POST-MASK values from the single seam — but the mask runs after the corpus-
+    # wide qc_pass, which is after this per-survey loop. So the per-station product emission is DEFERRED:
+    # each iteration appends a job here capturing its (shared, in-place-masked) station record; the jobs
+    # run AFTER apply_coordinate_policy, so station.json reads the same masked record every other emitter
+    # reads (D3: "no per-emitter logic"). Nothing else in station.json depends on the mask, so deferral is
+    # value-preserving for exact stations (proven by the default-stability pin).
+    _station_product_jobs: list = []
     # C1b: ausmt_ids whose survey is NOT served (embargoed/metadata_only/unrecognised level). The C1 gate
     # withholds the BYTES; C1b additionally withholds the DERIVED DISPLAY products (the thinned tf.json
     # curves + the science-derived sci.json fields) at EMISSION, because for an embargoed dataset the
@@ -2125,6 +2218,10 @@ def main(argv=None):
     for label, org, inputs, kind, meta, pkgdir, slug, _survey_digest in work:
         _survey_t0 = _time.perf_counter()   # build_report.json duration_seconds (wall time for this survey)
         _survey_warnings: list = []         # structured survey-scoped warnings for build_report.json
+        # C42 coordinate-access policy for THIS survey (side-channel from discover_work; ('exact', {})
+        # for a survey with no policy field and for every --raw entry). Drives the per-station byte gate
+        # at the copy/emit sites below AND the post-QC mask seam. ONE source for both.
+        _coord_default, _coord_overrides = coord_policy.get(label, ("exact", {}))
         # C18 cache key component: this survey's WHOLE survey.yaml digest (§2.5, provably
         # over-invalidating — any yaml edit re-derives just this survey; "" for --raw entries, which
         # are cache-excluded anyway). Amendment A4: the digest is CARRIED from discover_work, computed
@@ -2226,7 +2323,8 @@ def main(argv=None):
             # same license gate; served into out/xml/<slug>/ as a downloadable format.
             xml_written, _xnotes, _xstamped = _emit_served_xml(
                 stations, slug, out / "xml" / slug, survey_meta=meta,
-                cache=build_cache, survey_digest=_survey_digest)
+                cache=build_cache, survey_digest=_survey_digest,
+                coord_default=_coord_default, coord_overrides=_coord_overrides)
             # If the canonical-store pass did not run (no --canonical-dir) these are the only notes; merge
             # (both passes agree, so update is idempotent) so station.json carries conditioning either way.
             for _sid, _nl in _xnotes.items():
@@ -2254,7 +2352,15 @@ def main(argv=None):
         served_edis = []
         # product contract per station + manifest + (optional, license-gated) EDI/XML copies
         for (p, r), srow in zip(stations, sci_rows):
-            if can_serve:
+            # C42 per-station byte gate: a non-exact (generalised/withheld) station's SOURCE bytes are
+            # NEVER served — the EDI + EMTF-XML carry the true position in too many corners to redact
+            # trustworthily (D3), so the file is withheld, not rewritten. `can_serve` is the survey-scoped
+            # scalar (license/access/flag); this ANDs in the per-station coordinate policy. A withheld EDI
+            # cascades: no served copy, no manifest row, no zip entry, no available_id (the derived-EDI/XML
+            # zips + manifest all build from these copy/emit sites).
+            _cserved = coordacc.coordinates_served(
+                coordacc.station_policy(_coord_default, _coord_overrides, r.get("id")))
+            if can_serve and _cserved:
                 served_edi = sedir / p.name
                 served_edi.write_bytes(p.read_bytes())
                 available_ids.add(r["ausmt_id"])
@@ -2268,59 +2374,15 @@ def main(argv=None):
                                                         Path(_xmlp), f"xml/{slug}/{Path(_xmlp).name}",
                                                         lic, nci_base=nci_base, base_url=base_url))
             if prod:
-                # C1b: --products station.json is a CURATOR artifact (the products/ tree the maintainer
-                # reviews), NOT a distribution surface the portal serves — so it is left AS-IS with the real
-                # diagnostics/curve stats even for a non-served survey. The withholding applies only to the
-                # portal projections (tf.json/sci.json) written from withheld_ids below; this file lets the
-                # curator see the full science before deciding to publish. (Also unaffected: the canonical
-                # store under --canonical-dir, likewise a curator artifact, not a served product.)
-                sdir = prod / slug / r["id"]; sdir.mkdir(parents=True, exist_ok=True)
-                (sdir / "station.json").write_text(_jdump({
-                    "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label,
-                    "country": (meta or {}).get("country", "Australia"), "organisation": org,
-                    "location": {"lat": r["lat"], "lon": r["lon"]},
-                    "data": {"type": r.get("type"), "n_periods": r.get("n_periods"),
-                             "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
-                    "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
-                                    "tipper_available": "T" in (r.get("comps") or ""),
-                                    "dimensionality": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
-                                    "completeness_smoothness_diagnostic": {
-                                        "value": srow[_SC["q"]], "basis": srow[_SC["qb"]],
-                                        "note": "not a quality or geological-value judgement"}},
-                    # Processing metadata — all BEST-EFFORT (scraped from the EDI; mt_metadata's
-                    # structured fields are empty for most dialects). The remote_reference arrangement
-                    # detail lives in `note` (the EDI INFO block); remote_site is the named reference
-                    # station where derivable (Phoenix 'P=x R=y' DATAID / REFERENCE section).
-                    "processing": {"software": srow[_SC["sw"]], "algorithm": srow[_SC["alg"]],
-                                   "remote_reference": bool(srow[_SC["rr"]]),
-                                   "remote_site": r.get("remote_site"),
-                                   "note": r.get("processing_note")},
-                    "distribution": {"edi_available": bool(can_serve), "license": lic,
-                                     "edi_path": f"edi/{slug}/{p.name}" if can_serve else None},
-                    # provenance: input -> software/params -> output (traceable, per Egbert)
-                    "provenance": {**PROV, "input_file": p.name, "input_sha256": sha256(p)},
-                    # coordinate QC: present only when the parse flagged something, so consumers can
-                    # surface "treat with caution" without implying anything about unflagged stations.
-                    "coordinate_qc": ({"flag": r.get("coord_flag"),
-                                       "head_info_conflict_deg": r.get("coord_conflict_deg"),
-                                       "resolution": r.get("coord_resolution")}
-                                      if (r.get("coord_flag") or r.get("coord_conflict_deg")) else None),
-                    # canonical_conditioning: what normalize() had to change to make this station's
-                    # canonical EMTF XML schema-valid + round-trippable (rotation frame not asserted,
-                    # source-id preserved in the Site Name, citation provenance). Present only when the
-                    # station was actually conditioned, so an unconditioned station is not implied to be.
-                    "canonical_conditioning": (conditioning_notes.get(r["id"]) or None),
-                    # frame (C25): the measured frame facts + the sign-convention verdict for THIS
-                    # station — what rotation the source declared, whether the engine de-rotated to
-                    # geographic north at ingest, and the Gate-2 quadrant medians. None only for
-                    # inputs the gates do not cover (the flag-gated MTH5 path).
-                    "frame": r.get("frame"),
-                }, indent=1), encoding="utf-8")
-                (sdir / "dimensionality.json").write_text(_jdump({
-                    "classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
-                    "pct_periods_3d": srow[_SC["p3d"]], "method": "phase-tensor (Caldwell 2004)",
-                    "screening_diagnostic": True,
-                    "note": "screening diagnostic, not an interpretation product"}, indent=1), encoding="utf-8")
+                # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
+                # above). The job captures this station's SHARED record `r` (masked in place downstream), its
+                # science row, and the survey context needed to render — nothing here depends on cross-survey
+                # state that changes after this iteration (conditioning_notes is this survey's own dict). The
+                # per-station coordinate byte-gate (_cserved) is captured too: even inside a served survey, a
+                # non-exact station's EDI is withheld, so station.json's distribution must not advertise it.
+                _station_product_jobs.append(
+                    (prod / slug / r["id"], r, srow, label, org, meta, lic, slug, p,
+                     bool(can_serve and _cserved), conditioning_notes))
         # ---- per-survey bundles (served surveys only): pre-zipped EDIs + optional survey MTH5 ----
         if can_serve and served_edis:
             # C6: rights travel with the bytes — build a deterministic LICENSE.txt for the zip. Licensor =
@@ -2393,13 +2455,35 @@ def main(argv=None):
     # re-occupied sites and ocean-bottom/overseas/Antarctic sites are all legitimate, so the
     # out-of-extent check is per the survey's OWN declared extent, not a national bounding box.
     qc = qc_pass(all_stations, survey_extent)
+    # ---- C42 coordinate-access mask seam (D3): the ONE choke point. Ordered strictly AFTER qc_pass
+    # (which computed extent/duplicate checks on the TRUE coordinates) and BEFORE any emission below.
+    # Masks the SHARED station records in place — withheld => lat/lon/elev null, generalised => 0.1deg
+    # cell + elev null — so every downstream emitter (catalogue, mtcat, collections, the deferred
+    # station.json jobs) reads the masked value with no per-emitter logic; and rewrites the coordinate-
+    # bearing qc_report fields (outside_declared_extent lat/lon, near_duplicate at_deg) so the served
+    # qc_report carries no true-position bits of a non-exact station. The mask output is NEVER cached
+    # (the C18 cache stores the pre-mask parse; this runs after every cache read — cache-boundary
+    # invariant). A survey with no policy field is all-exact => this is a value-preserving no-op
+    # (default-stability pin). An override naming no station raises here (fail-closed).
+    _masked_ausmt_ids = coordacc.apply_coordinate_policy_corpus(
+        all_stations, lambda lbl: coord_policy.get(lbl, ("exact", {})), qc=qc)
+    if _masked_ausmt_ids:
+        print(f"C42 coordinate access: {len(_masked_ausmt_ids)} station(s) masked "
+              f"(generalised or withheld); their EDI/XML are byte-gated out and positions "
+              f"masked in all served surfaces.", file=sys.stderr)
+    # ---- deferred --products station.json/dimensionality.json: run NOW, after the mask, so each
+    # station.json `location` carries the post-mask coordinate (D3: products/ is a served surface in
+    # deployment). The jobs read the same shared records the mask mutated.
+    for _job in _station_product_jobs:
+        _write_station_products(_job, PROV)
     print("QC: "
           f"duplicate-ids {len(qc['duplicate_ausmt_ids'])} | coord-flagged {len(qc['coord_flags'])} | "
           f"coord-conflicts {len(qc['coord_conflicts'])} | near-duplicate-locations {len(qc['near_duplicate_locations'])} | "
           f"outside-declared-extent {len(qc['outside_declared_extent'])} | "
           f"no-declared-extent {qc['stations_without_survey_extent']}")
     for d in qc["near_duplicate_locations"]:
-        print(f"  [notice] near-duplicate location ~{d['at_deg']}: {d['a']} <-> {d['b']}")
+        _at = d["at_deg"] if d.get("at_deg") is not None else "(masked)"  # C42: at_deg nulled for a withheld pair
+        print(f"  [notice] near-duplicate location ~{_at}: {d['a']} <-> {d['b']}")
     for c in qc["coord_conflicts"]:
         print(f"  [notice] coordinate HEAD/INFO conflict {c['delta_deg']}° in {c['file']} ({c['ausmt_id']})")
     for fl in qc["coord_flags"]:
