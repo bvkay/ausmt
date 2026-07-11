@@ -508,3 +508,191 @@ process.stdout.write(JSON.stringify({
     assert len(got["n3"]) == 1 and got["n3"][0]["sid"] == "CP1L02 · CP1L03 · CP1L04"
     assert len(got["n2"]) == 2 and all(r["n"] == 1 for r in got["n2"]), \
         "2 same-class members must stay individual rows"
+
+
+# ==================================================================================================
+# H3 — the stations panel redesign (Commit B): the STATIONS_JS pure formatters, driven with the
+# REAL corpus rows the same fixture build emitted (catalogue/sci/tf + station.json products).
+# ==================================================================================================
+_ST_FNS = ("floormod", "wrap180", "trueYx", "mapYx", "inQ1", "inQ3", "medianOf", "classify",
+           "num", "shortSha", "portalStationUrl", "latLonText", "positionText", "bandText",
+           "dimText", "mreText", "tipperText", "signedMedian", "sentencePart",
+           "conventionSentence", "frameWords", "stationStatus", "qualityChip", "classifyStation")
+
+
+def _stations_driver(body: str) -> str:
+    from gateway.tests.test_c43_stage2a_js_parity import _extract_constants
+    js = curatorpage.STATIONS_JS
+    parts = ["import { readFileSync } from 'fs';", _extract_constants(js)]
+    for pat in (r"var C = \{.*?\};", r"var SC = \{.*?\};", r"var T = \{.*?\};"):
+        m = re.search(pat, js, re.DOTALL)
+        assert m, f"column map {pat!r} not found in STATIONS_JS"
+        parts.append(m.group(0))
+    parts += [_extract_js_function(js, n) for n in _ST_FNS]
+    parts.append(body)
+    return "\n".join(parts)
+
+
+def _load_corpus(warn_report):
+    return {name: json.loads((warn_report["out"] / f"{name}.json").read_text(encoding="utf-8"))
+            for name in ("catalogue", "sci", "tf")}
+
+
+def test_convention_sentence_vectors_match_phaseqc_medians(tmp_path):
+    """CONVENTION-SENTENCE PIN (contract H3: sentence-format vectors on the Node harness). The
+    sentence is built from the SAME classify() medians the parity-tested seam computes — the pin
+    compares the extracted JS against a Python mirror over phaseqc.classify_series for healthy /
+    yx-out (the mockup's exact shape, out-of-quadrant component LEADING) / xy-out / both-out /
+    no-data series. FAILS IF the medians drop from the sentence, the lead-swap rule breaks, the
+    wording drifts from the mockup shape, or the out flag (the warn colour driver) misfires."""
+    from gateway import phaseqc
+
+    def _stored(t):
+        return round(phaseqc.wrap180(t + phaseqc.YX_PRESENTATION_SHIFT_DEG), 1)
+
+    cases = [
+        {"xy": [44.0, 45.0, 46.0, 44.5, 45.5, 44.8],
+         "yx": [_stored(t) for t in (-134.0, -135.0, -136.0, -134.5, -135.5, -134.8)]},
+        {"xy": [44.0, 45.0, 46.0, 44.5, 45.5, 44.8],
+         "yx": [_stored(t) for t in (44.0, 45.0, 46.0, 44.5, 45.5, 44.8)]},   # yx out (mockup)
+        {"xy": [-120.0, -121.0, -122.0, -120.5, -121.5, -120.8],
+         "yx": [_stored(t) for t in (-134.0, -135.0, -136.0, -134.5, -135.5, -134.8)]},
+        {"xy": [-120.0, -121.0, -122.0, -120.5, -121.5, -120.8],
+         "yx": [_stored(t) for t in (44.0, 45.0, 46.0, 44.5, 45.5, 44.8)]},   # both out
+        {"xy": [None, None], "yx": [None, None]},                              # no data
+    ]
+    driver = _stations_driver("""
+const cases = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(JSON.stringify(cases.map(function (c) {
+  return conventionSentence(classify(c.xy, 'xy'), classify(c.yx, 'yx'));
+})));
+""")
+    got = _run_node(tmp_path, driver, cases)
+
+    def _part(comp, q, cls):
+        if cls["n_classified"] == 0 or cls["median"] is None:
+            return (f"{comp} — no verdict (insufficient phase data)", False)
+        m = cls["median"]
+        s = ("+" if m >= 0 else "") + f"{m:.1f}°"
+        if cls["median_in"]:
+            return (f"{comp} in-quadrant (median {s})", False)
+        return (f"arg({comp}) median {s} out of {q}", True)
+
+    for case, g in zip(cases, got):
+        px = _part("Zxy", "Q1", phaseqc.classify_series(case["xy"], mode="xy"))
+        py = _part("Zyx", "Q3", phaseqc.classify_series(case["yx"], mode="yx"))
+        parts = [py, px] if (py[1] and not px[1]) else [px, py]
+        assert g["text"] == f"{parts[0][0]}; {parts[1][0]}", (case, g)
+        assert g["out"] == (px[1] or py[1]), (case, g)
+    # The mockup's exact shape for the single-Zyx-warn case: the OUT component leads. (+44.9 =
+    # the even-count median of the vector series, phaseqc-computed — not a re-derivation here.)
+    assert got[1]["text"].startswith("arg(Zyx) median +44.9° out of Q3")
+    assert "; Zxy in-quadrant (median +44.9°)" in got[1]["text"]
+    assert got[1]["out"] is True and got[0]["out"] is False
+    assert got[4]["text"] == ("Zxy — no verdict (insufficient phase data); "
+                              "Zyx — no verdict (insufficient phase data)")
+
+
+def test_short_sha_canonical_and_verbatim_fallback(warn_report, tmp_path):
+    """TRUNCATED-SHA PIN (contract H3). A REAL engine-emitted catalogue sha256 truncates to
+    'xxxx…yy' (first 4 + last 2, the mockup's inline form; the FULL hash rides the title attr —
+    render pin in the treatment file); an odd/short/non-hex value renders VERBATIM (never hide
+    information — the builddisplay posture), and empty stays empty. FAILS IF the canonical form
+    drifts or the fallback truncates an unrecognised shape."""
+    cat = _load_corpus(warn_report)["catalogue"]
+    js_c = re.search(r"var C = \{.*?\};", curatorpage.STATIONS_JS, re.DOTALL)
+    assert js_c
+    real_sha = next(r[14] for r in cat if r[14])   # C.sha256 = 14 (pinned by the S2a column map)
+    assert re.match(r"^[0-9a-f]{64}$", real_sha), "engine sha256 must be 64 lowercase hex"
+    vectors = [real_sha, "ABCDEF123456", "abcdef12345", "not-a-hash", "", None]
+    driver = _stations_driver("""
+const v = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(JSON.stringify(v.map(function (x) { return shortSha(x); })));
+""")
+    got = _run_node(tmp_path, driver, vectors)
+    assert got[0] == real_sha[:4] + "…" + real_sha[-2:]
+    assert got[1] == "ABCD…56", "12-hex boundary truncates"
+    assert got[2] == "abcdef12345", "11 hex chars: below the floor — verbatim"
+    assert got[3] == "not-a-hash", "non-hex: verbatim, never hidden"
+    assert got[4] == "" and got[5] == ""
+
+
+def test_station_chips_and_facts_from_real_corpus(warn_report, tmp_path):
+    """H3 CHIP/FACTS ENGINE-TRUTH PIN. Driven with the catalogue/sci/tf rows the REAL engine
+    emitted for the doctored survey: the flipped-Zyx stations chip 'Zyx quadrant' (amber) and
+    status 'served with note'; the flipped-Zxy station chips 'Zxy quadrant'; the clean control is
+    'served' with its dimensionality as the neutral chip; the convention sentence leads with the
+    out component and warn-colours; the merged Lat/Lon cell, the one-line band, the *100 rel-err
+    presentation, and the portal deep-link URL all take the mockup's shapes from served values.
+    FAILS IF the panel chip and list chip stop sharing one QA derivation, a flipped station reads
+    'served', the clean control grows a warn, or a formatter invents/uglifies a served value."""
+    corpus = _load_corpus(warn_report)
+    driver = _stations_driver("""
+const p = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const byId = {};
+for (var i = 0; i < p.catalogue.length; i++) byId[p.catalogue[i][C.id]] = i;
+const out = {};
+p.ids.forEach(function (id) {
+  var i = byId[id];
+  var cat = p.catalogue[i], sc = p.sci[i], t = p.tf[i];
+  var cls = classifyStation(t);
+  out[id] = {
+    status: stationStatus(cls.xy, cls.yx),
+    chip: qualityChip(cls.xy, cls.yx, sc ? sc[SC.dim] : null),
+    sentence: conventionSentence(cls.xy, cls.yx),
+    latlon: latLonText(cat[C.lat], cat[C.lon]),
+    position: positionText(cat[C.lat], cat[C.lon], cat[C.coord_flag]),
+    band: bandText(cat[C.pmin], cat[C.pmax], cat[C.nper]),
+    mre: mreText(sc ? sc[SC.mre] : null),
+    tipper: tipperText(cat[C.comps]),
+    dim: sc ? sc[SC.dim] : null,
+    portal: portalStationUrl(cat[C.ausmt_id])
+  };
+});
+process.stdout.write(JSON.stringify(out));
+""")
+    got = _run_node(tmp_path, driver, {"catalogue": corpus["catalogue"], "sci": corpus["sci"],
+                                       "tf": corpus["tf"],
+                                       "ids": ["A1", "CP1L02", "CP1B10"]})
+    warned = got["CP1L02"]
+    assert warned["status"] == {"label": "served with note", "kind": "warn"}
+    assert warned["chip"] == {"label": "Zyx quadrant", "kind": "warn"}
+    assert warned["sentence"]["out"] is True
+    assert warned["sentence"]["text"].startswith("arg(Zyx) median ")
+    xy_warned = got["CP1B10"]
+    assert xy_warned["chip"] == {"label": "Zxy quadrant", "kind": "warn"}
+    assert xy_warned["sentence"]["text"].startswith("arg(Zxy) median ")
+    clean = got["A1"]
+    assert clean["status"] == {"label": "served", "kind": "ok"}
+    assert clean["chip"]["kind"] == "neutral"
+    assert clean["chip"]["label"] == str(clean["dim"]), "clean chip = the sci dimensionality"
+    assert clean["sentence"]["out"] is False
+    # Formatter shapes over served values (no invention, mockup forms).
+    for st in got.values():
+        assert re.match(r"^-?\d+\.\d{3} / -?\d+\.\d{3}$", st["latlon"]), st["latlon"]
+        assert st["position"].endswith(" (exact)") or " (exact) · coord QC: " in st["position"]
+        assert re.match(r"^-?\d+(\.\d+)? – -?\d+(\.\d+)? s · \d+ periods$", st["band"]), st["band"]
+        assert re.match(r"^\d+(\.\d)? %$", st["mre"]), st["mre"]
+        assert st["tipper"] in ("present", "absent")
+        assert st["portal"].startswith(f"/#/station/au.{SLUG}.")
+
+
+def test_stations_list_merged_latlon_and_portal_link_source():
+    """H3 SOURCE PIN. The stations LIST header carries the MERGED 'Lat / Lon' column (mockup list
+    shape — never the two separate columns), rows use latLonText, and the panel header carries
+    the portal deep-link ('open in portal ↗', new tab, noopener) plus the status badge. FAILS IF
+    the columns split again, the deep-link disappears (the portal DOES support
+    '#/station/<ausmt_id>' — checked against portal/src/main.js), or the link loses noopener."""
+    js = curatorpage.STATIONS_JS
+    assert "['Station', 'Lat / Lon', 'Periods', 'Quality']" in js
+    assert "'Lat', 'Lon'" not in js, "the separate Lat/Lon columns must stay merged"
+    assert "latLonText(cat[C.lat], cat[C.lon])" in js
+    assert "'open in portal ↗'" in js
+    assert "portalStationUrl(cat[C.ausmt_id])" in js
+    assert "pa.target = '_blank'; pa.rel = 'noopener';" in js
+    # The portal really routes this hash (the contract's if-supported condition, pinned here so a
+    # portal route change surfaces as THIS red instead of a dead link). main.js carries the route
+    # as a REGEX (escaped slashes: #\/station\/), drawer.js as the writing literal.
+    main_js = (_ENGINE_DIR.parent / "portal" / "src" / "main.js").read_text(encoding="utf-8")
+    assert re.search(r"#\\?/station\\?/", main_js), \
+        "portal deep-link route gone — the hub link would dangle"

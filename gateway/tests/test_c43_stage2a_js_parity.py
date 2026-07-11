@@ -396,13 +396,14 @@ def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
 
 
 # ==================================================================================================
-# S2a-SPLIT (secondary): frame-declaration readability — fact rows + collapsed raw JSON.
+# Frame-declaration readability — SUPERSEDED presentation, same invariant.
 #
-# The panel used to dump station.json's `frame` block as a raw JSON <pre>; it now presents the
-# load-bearing fields as ordinary fact rows and keeps the FULL raw JSON in a collapsed <details>.
-# The row-building logic is a PURE (DOM-free) function frameRows(frame); this pin drives it in Node
-# with a REAL engine-produced station.json frame (the same engine_corpus build the H1 pins use) and
-# checks it presents EXACTLY the contract's fields with VERBATIM station.json values — no recompute.
+# S2a-SPLIT presented station.json's `frame` block as typed fact rows (frameRows). C43-HUB H3
+# (owner feedback round 2) replaced that table with the mockup's single worded line —
+# frameWords(frame): 'declared-zero · no rotation declared' — with EVERY extra frame field kept in
+# the collapsed raw-JSON <details>. The invariant is unchanged: the words derive from VERBATIM
+# station.json values (frame_served / derotated / declared_azimuth_deg), never a recompute, and
+# the pin drives the exact shipped function in Node with REAL engine-produced frames.
 # ==================================================================================================
 def _js_str(v) -> str:
     """JS String() coercion for a JSON scalar (the JS frameRows uses String(v)). The ONE divergence
@@ -417,28 +418,21 @@ def _js_str(v) -> str:
     return str(v)
 
 
-def _py_frame_rows(frame: dict) -> list:
-    """The reference frameRows mapping (VERBATIM coercion, no recompute) the JS must match. Mirrors
-    the JS String()/'-'/yes-no coercions (see _js_str) so the pin compares the JS against the SERVED
-    values, not against itself."""
-    def s(v):
-        return "-" if v is None else _js_str(v)
-    rows = []
-    rows.append(["Frame served", s(frame.get("frame_served"))])
-    if "declared_azimuth_deg" in frame:
-        rows.append(["Declared azimuth (deg)", s(frame["declared_azimuth_deg"])])
-    if "derotated" in frame:
-        rows.append(["De-rotated to geographic north", "yes" if frame["derotated"] else "no"])
-    if "impedance_rotation_deg_source" in frame:
-        rows.append(["Impedance rotation source (deg)", s(frame["impedance_rotation_deg_source"])])
-    if "tipper_rotation_deg_source" in frame:
-        rows.append(["Tipper rotation source (deg)", s(frame["tipper_rotation_deg_source"])])
-    ck = frame.get("convention_check")
-    if isinstance(ck, dict):
-        rows.append(["Convention check", s(ck.get("verdict"))])
-        rows.append(["Phase φxy median (deg)", s(ck.get("phs_xy_median_deg"))])
-        rows.append(["Phase φyx median (deg)", s(ck.get("phs_yx_median_deg"))])
-    return rows
+def _py_frame_words(frame: dict) -> str:
+    """The reference frameWords mapping (VERBATIM coercion, no recompute) the JS must match.
+    Mirrors the JS String() coercions (see _js_str) so the pin compares the JS against the SERVED
+    values, not against itself: frame_served as stored, then de-rotated / declared-azimuth /
+    no-rotation from the derotated + declared_azimuth_deg fields."""
+    fs = frame.get("frame_served")
+    parts = ["-" if fs is None else _js_str(fs)]
+    az = frame.get("declared_azimuth_deg")
+    if frame.get("derotated"):
+        parts.append("de-rotated to the declared zero-azimuth reference")
+    elif az is not None and float(az) != 0:
+        parts.append(f"declared azimuth {_js_str(az)}°")
+    else:
+        parts.append("no rotation declared")
+    return " · ".join(parts)
 
 
 def _real_frames(engine_corpus) -> list:
@@ -453,44 +447,52 @@ def _real_frames(engine_corpus) -> list:
     return frames
 
 
-def test_frame_rows_verbatim_from_real_station_json(engine_corpus, tmp_path):
-    """S2a-SPLIT FRAME-ROW ENGINE-TRUTH PIN. The extracted STATIONS_JS frameRows, driven in Node with
-    the `frame` block a REAL engine build wrote to station.json, must present EXACTLY the contract's
-    load-bearing fields (frame_served, declared_azimuth_deg, derotated, impedance/tipper rotation
-    source, convention_check verdict + the two phase medians) with VERBATIM values — never a recompute.
-    Judged against an INDEPENDENT Python reference of the same verbatim coercion over the served frame.
-    FAILS IF the JS drops a field, relabels it, reorders the load-bearing rows, or transforms a value
-    (the pin exists because the fix replaced a raw-JSON blob with typed rows — a silent recompute here
-    would misrepresent what the engine served)."""
+def test_frame_words_verbatim_from_real_station_json(engine_corpus, tmp_path):
+    """FRAME-WORDS ENGINE-TRUTH PIN (C43-HUB H3, superseding the S2a frameRows table). The
+    extracted STATIONS_JS frameWords, driven in Node with the `frame` block a REAL engine build
+    wrote to station.json, must render the mockup's worded line from VERBATIM served values —
+    'declared-zero · no rotation declared' for the clean sample corpus — never a recompute.
+    Judged against an INDEPENDENT Python reference of the same verbatim coercion. FAILS IF the
+    words drift from the served fields, a de-rotated/declared-azimuth frame stops being named, or
+    the function invents vocabulary ('geomagnetic') the record does not carry."""
     frames = _real_frames(engine_corpus)
     assert frames, "fixture sanity: the engine produced no non-null station.json frame block"
     js = curatorpage.STATIONS_JS
     driver = (
         "import { readFileSync } from 'fs';\n"
-        + _extract_js_function(js, "frameRows") + "\n"
+        + _extract_js_function(js, "frameWords") + "\n"
         + """
 const frames = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-process.stdout.write(JSON.stringify(frames.map(function (f) { return frameRows(f); })));
+process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(f); })));
 """)
     got = _run_node(tmp_path, driver, frames)
     for i, fr in enumerate(frames):
-        exp = _py_frame_rows(fr)
+        exp = _py_frame_words(fr)
         assert got[i] == exp, (i, fr, got[i], exp)
-        labels = [kv[0] for kv in got[i]]
-        # The contract's load-bearing rows are all present for a full frame (the sample survey's is).
-        for required in ("Frame served", "Convention check",
-                         "Phase φxy median (deg)", "Phase φyx median (deg)"):
-            assert required in labels, (required, labels)
+        assert "geomagnetic" not in got[i]
+    # The clean sample corpus serves as-stored declared-zero frames — the mockup's exact line.
+    assert any(g == "declared-zero · no rotation declared" for g in got), got
+    # Synthetic engine-shaped variants exercise the OTHER branches (values in the engine's own
+    # field vocabulary; the real corpus is all-clean so cannot reach them).
+    variants = [{"frame_served": "declared-zero", "derotated": True,
+                 "impedance_rotation_deg_source": 14.0},
+                {"frame_served": "declared-azimuth", "declared_azimuth_deg": 8.0}]
+    got2 = _run_node(tmp_path, driver, variants)
+    assert got2[0] == "declared-zero · de-rotated to the declared zero-azimuth reference"
+    assert got2[1] == "declared-azimuth · declared azimuth 8°"
+    assert got2 == [_py_frame_words(v) for v in variants]
 
 
-def test_frame_panel_renders_fact_rows_and_collapsed_raw_json():
-    """S2a-SPLIT FRAME-PANEL SOURCE PIN. factsPanel must, for a present station.frame, build the
-    load-bearing FACT ROWS (via frameRows) AND keep the FULL raw JSON in a collapsed <details> whose
-    <pre> is JSON.stringify(station.frame, ...) set by textContent. FAILS IF the fix regresses to the
-    raw-JSON-blob-only render (no frameRows call, no <details>) or drops the verbatim raw JSON."""
+def test_frame_panel_renders_words_and_collapsed_raw_json():
+    """FRAME-PANEL SOURCE PIN (C43-HUB H3 shape). factsPanel must render the frame fact via
+    frameWords(station.frame) AND keep the FULL raw JSON (every extra frame field) in a collapsed
+    <details> whose <pre> is JSON.stringify(station.frame, ...) set by textContent. FAILS IF the
+    worded line disappears, the superseded frameRows table returns, or the verbatim raw JSON is
+    dropped."""
     js = curatorpage.STATIONS_JS
-    assert "function frameRows(" in js, "the pure frame-row builder must exist"
-    assert "frameRows(station.frame)" in js, "factsPanel must build fact rows from the served frame"
+    assert "function frameWords(" in js, "the pure frame-words builder must exist"
+    assert "frameWords(station.frame)" in js, "factsPanel must word the served frame"
+    assert "function frameRows(" not in js, "the superseded S2a fact-row table must stay replaced"
     assert "el('details')" in js, "the full raw frame declaration must be kept in a collapsed <details>"
     assert "el('summary', 'raw frame declaration')" in js, "the details summary labels the raw JSON"
     # The raw JSON is still present, verbatim, via textContent (never innerHTML).

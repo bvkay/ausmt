@@ -1139,6 +1139,107 @@ STATIONS_JS = r"""
              median: median, medianIn: medianIn };
   }
 
+  // ---- C43-HUB H3 pure formatters (DOM-free; the Node harness drives these exact functions —
+  // test_c43_hub_js_parity.py — with REAL engine corpus rows/frames) -----------------------------
+  // Truncated sha for inline display: 'CP1L04.edi · sha256 9c41…e2' with the FULL hash in the
+  // title attr. Odd shapes (non-hex, short) render VERBATIM — never hide information (the
+  // builddisplay.py posture).
+  function shortSha(h) {
+    var s = String(h == null ? '' : h);
+    if (/^[0-9a-f]{12,}$/i.test(s)) return s.slice(0, 4) + '…' + s.slice(-2);
+    return s;
+  }
+  // The portal's station deep-link: portal/src/main.js routes '#/station/<ausmt_id>' (drawer.js
+  // writes the same hash), and the portal is served at this origin's root — so the link is a
+  // same-origin fragment URL, no new privilege.
+  function portalStationUrl(ausmtId) {
+    return '/#/station/' + encodeURIComponent(String(ausmtId == null ? '' : ausmtId));
+  }
+  function latLonText(lat, lon) { return num(lat, 3) + ' / ' + num(lon, 3); }
+  // Position + the C42 policy marker. '(exact)' is STATIC TEXT today (the C42 per-station
+  // fieldset is Stage 4); the coordinate-PARSE QC flag (catalogue coord_flag, e.g.
+  // dms_sign_ambiguous) is a different fact and stays appended when set.
+  function positionText(lat, lon, coordFlag) {
+    var t = num(lat, 4) + ', ' + num(lon, 4) + ' (exact)';
+    return coordFlag ? t + ' · coord QC: ' + String(coordFlag) : t;
+  }
+  function bandText(pmin, pmax, nper) {
+    return num(pmin) + ' – ' + num(pmax) + ' s · ' + num(nper) + ' periods';
+  }
+  function dimText(dim, skew) {
+    var d = (dim == null || dim === '') ? '-' : String(dim);
+    return (skew == null) ? d : d + ' (skew β median ' + String(skew) + '°)';
+  }
+  // Median relative apparent-resistivity error as a percentage — the same *100 presentation the
+  // portal's own drawer uses for this sci field (drawer.js), 1 dp.
+  function mreText(mre) {
+    if (mre == null || !isFinite(Number(mre))) return '-';
+    return (Number(mre) * 100).toFixed(1) + ' %';
+  }
+  function tipperText(comps) {
+    return (String(comps == null ? '' : comps).indexOf('T') >= 0) ? 'present' : 'absent';
+  }
+  function signedMedian(m) { return (m >= 0 ? '+' : '') + m.toFixed(1) + '°'; }
+  function sentencePart(comp, q, c) {
+    if (!c || c.n === 0 || c.median == null) {
+      return { t: comp + ' — no verdict (insufficient phase data)', out: false };
+    }
+    if (c.medianIn) {
+      return { t: comp + ' in-quadrant (median ' + signedMedian(c.median) + ')', out: false };
+    }
+    return { t: 'arg(' + comp + ') median ' + signedMedian(c.median) + ' out of ' + q, out: true };
+  }
+  // The convention fact AS A SENTENCE with the medians (contract H3; the medians are the SAME
+  // classify() output the plots/verdict strips use — the parity-tested seam, no recompute):
+  // 'arg(Zyx) median +51.9° out of Q3; Zxy in-quadrant (median +45.2°)'. The out-of-quadrant
+  // component leads (the mockup's shape); .out drives the warn colour.
+  function conventionSentence(cXy, cYx) {
+    var px = sentencePart('Zxy', 'Q1', cXy);
+    var py = sentencePart('Zyx', 'Q3', cYx);
+    var parts = (py.out && !px.out) ? [py, px] : [px, py];
+    return { text: parts[0].t + '; ' + parts[1].t, out: px.out || py.out };
+  }
+  // The frame declaration IN WORDS (contract H3: 'declared-zero · no rotation declared'), built
+  // from VERBATIM station.json frame fields — no reinterpretation: frame_served as stored, then
+  // de-rotation / declared-azimuth / no-rotation from the derotated + declared_azimuth_deg
+  // fields. Extra frame fields stay in the collapsed raw-JSON details.
+  function frameWords(frame) {
+    if (!frame || typeof frame !== 'object') return null;
+    var parts = [String(frame.frame_served == null ? '-' : frame.frame_served)];
+    if (frame.derotated) {
+      parts.push('de-rotated to the declared zero-azimuth reference');
+    } else if (frame.declared_azimuth_deg != null && Number(frame.declared_azimuth_deg) !== 0) {
+      parts.push('declared azimuth ' + String(frame.declared_azimuth_deg) + '°');
+    } else {
+      parts.push('no rotation declared');
+    }
+    return parts.join(' · ');
+  }
+  // Panel status chip + list quality chip — BOTH derived from the same classify() results
+  // (contract H3: 'derive from the same QA data as the list chips'). A station whose median is
+  // out of its expected quadrant is 'served with note' (it IS served — Gate 2 WARNs never drop).
+  function stationStatus(cXy, cYx) {
+    var xyOut = !!(cXy && cXy.n > 0 && cXy.median != null && !cXy.medianIn);
+    var yxOut = !!(cYx && cYx.n > 0 && cYx.median != null && !cYx.medianIn);
+    if (xyOut || yxOut) return { label: 'served with note', kind: 'warn' };
+    return { label: 'served', kind: 'ok' };
+  }
+  function qualityChip(cXy, cYx, dim) {
+    var xyOut = !!(cXy && cXy.n > 0 && cXy.median != null && !cXy.medianIn);
+    var yxOut = !!(cYx && cYx.n > 0 && cYx.median != null && !cYx.medianIn);
+    if (xyOut && yxOut) return { label: 'Zxy+Zyx quadrant', kind: 'warn' };
+    if (xyOut) return { label: 'Zxy quadrant', kind: 'warn' };
+    if (yxOut) return { label: 'Zyx quadrant', kind: 'warn' };
+    return { label: (dim == null || dim === '') ? '?' : String(dim), kind: 'neutral' };
+  }
+  // One classification per station, shared by the panel chip, the convention sentence, and the
+  // list quality chip (and consistent with the plot verdict strips, which classify the same
+  // series).
+  function classifyStation(t) {
+    if (!t) return { xy: classify([], 'xy'), yx: classify([], 'yx') };
+    return { xy: classify(t[T.phs_xy] || [], 'xy'), yx: classify(t[T.phs_yx_adj] || [], 'yx') };
+  }
+
   // A plot card: a caption div + the svg. The verdict strip is appended SEPARATELY, beneath.
   function wrapPlot(caption, svgNode) {
     var box = el('div', null, 'plot');
@@ -1170,37 +1271,18 @@ STATIONS_JS = r"""
     return strip;
   }
 
-  // ---- frame-declaration readability (S2a-SPLIT secondary) ----
-  // The station.json `frame` block was rendered as a raw JSON blob; present the LOAD-BEARING fields as
-  // ordinary fact rows and keep the full JSON in a collapsed <details>. PURE (DOM-free) so the Node
-  // parity harness can drive it: returns an ordered array of [label, valueString] pairs built from
-  // VERBATIM station.json values — NO reinterpretation, NO recompute. A missing field is skipped (not
-  // shown as '-'); null/absent booleans and numbers are coerced to display strings only. The two phase
-  // medians and the convention verdict come straight from frame.convention_check (the engine's
-  // _conventions.convention_check output: {verdict, phs_xy_median_deg, phs_yx_median_deg, ...}).
-  function frameRows(frame) {
-    var rows = [];
-    if (!frame || typeof frame !== 'object') return rows;
-    function push(label, v) { if (v !== undefined) rows.push([label, v]); }
-    function str(v) { return (v === null || v === undefined) ? '-' : String(v); }
-    push('Frame served', str(frame.frame_served));
-    if ('declared_azimuth_deg' in frame) push('Declared azimuth (deg)', str(frame.declared_azimuth_deg));
-    if ('derotated' in frame) push('De-rotated to geographic north', frame.derotated ? 'yes' : 'no');
-    if ('impedance_rotation_deg_source' in frame)
-      push('Impedance rotation source (deg)', str(frame.impedance_rotation_deg_source));
-    if ('tipper_rotation_deg_source' in frame)
-      push('Tipper rotation source (deg)', str(frame.tipper_rotation_deg_source));
-    var ck = frame.convention_check;
-    if (ck && typeof ck === 'object') {
-      push('Convention check', str(ck.verdict));
-      push('Phase φxy median (deg)', str(ck.phs_xy_median_deg));
-      push('Phase φyx median (deg)', str(ck.phs_yx_median_deg));
-    }
-    return rows;
-  }
-
-  // ---- facts panel ----
-  function factsPanel(cat, sc, station, buildId, lagPending) {
+  // ---- facts panel (C43-HUB H3: the mockup's information design — science before plumbing) ----
+  // Panel header row: mono station id + status chip (derived from the SAME classify() results the
+  // list chips use) + the portal deep-link (portal route '#/station/<ausmt_id>'). Facts as a
+  // dl.facts in EXACTLY the mockup's order: Position (+ the static '(exact)' policy marker — C42
+  // fieldset is Stage 4), Band on one line, Frame in words, Convention as a sentence with the
+  // medians (warn-coloured when out), Dimensionality (+ skew β when sci carries it), Median rel.
+  // error, Tipper, Source file + TRUNCATED sha (full hash in the title attr). The panel-only
+  // catalogue plumbing rows the mockup dropped (Components/Type/Remote reference) are dropped
+  // here too — the approved information design; the raw station.json details keep the depth.
+  // `cls` is classifyStation(tf); `station` is null while station.json is in flight, __missing
+  // when the products tree is not served (the Frame row says so honestly).
+  function factsPanel(cat, sc, station, buildId, lagPending, cls) {
     var panel = el('div', null, 'panel');
     // [FC-2] lag label ON THE PANEL when served != published (not only the drift chip).
     if (lagPending) {
@@ -1208,46 +1290,55 @@ STATIONS_JS = r"""
       lag.style.color = '#D9A23B'; lag.style.fontWeight = '600';
       panel.appendChild(lag);
     }
-    panel.appendChild(el('h2', 'Station ' + cat[C.id]));
-    var tbl = el('table');
-    function row(k, v) {
-      var tr = el('tr');
-      tr.appendChild(el('td', k, 'k'));
-      tr.appendChild(el('td', v));
-      tbl.appendChild(tr);
+    var ph = el('div', null, 'ph');
+    ph.appendChild(el('span', String(cat[C.id]), 'phid'));
+    var st = stationStatus(cls.xy, cls.yx);
+    var badge = el('span', st.label, 'badge');
+    badge.style.background = (st.kind === 'warn') ? '#D9A23B' : '#5BAE6A';
+    ph.appendChild(badge);
+    if (cat[C.ausmt_id]) {
+      var go = el('span', null, 'go');
+      var pa = el('a', 'open in portal ↗');
+      pa.href = portalStationUrl(cat[C.ausmt_id]);
+      pa.target = '_blank'; pa.rel = 'noopener';
+      go.appendChild(pa);
+      ph.appendChild(go);
     }
-    row('Position (lat, lon)', num(cat[C.lat], 4) + ', ' + num(cat[C.lon], 4)
-        + (cat[C.coord_flag] ? '  (coordinate flag set)' : ''));
-    row('Period band (s)', num(cat[C.pmin]) + ' – ' + num(cat[C.pmax]) + '  (' + num(cat[C.nper]) + ' periods)');
-    row('Components', cat[C.comps] || '-');
-    row('Type', cat[C.type] || '-');
+    panel.appendChild(ph);
+
+    var dl = el('dl', null, 'facts');
+    function fact(k, v, opts) {
+      dl.appendChild(el('dt', k));
+      var dd = el('dd', v);
+      if (opts && opts.mono) dd.style.fontFamily = 'ui-monospace,Consolas,monospace';
+      if (opts && opts.warn) dd.style.color = '#D9A23B';
+      if (opts && opts.title) dd.setAttribute('title', opts.title);
+      dl.appendChild(dd);
+    }
+    fact('Position', positionText(cat[C.lat], cat[C.lon], cat[C.coord_flag]), { mono: true });
+    fact('Band', bandText(cat[C.pmin], cat[C.pmax], cat[C.nper]));
+    if (station == null) {
+      fact('Frame', '…');                       // station.json in flight
+    } else if (station.__missing || !station.frame) {
+      fact('Frame', 'not served (no station.json for this build)');
+    } else {
+      fact('Frame', frameWords(station.frame) || '-');
+    }
+    var conv = conventionSentence(cls.xy, cls.yx);
+    fact('Convention', conv.text, { warn: conv.out });
     if (sc) {
-      row('Dimensionality', sc[SC.dim] || '-');
-      row('Median relative error', num(sc[SC.mre]));
-      row('Remote reference', sc[SC.rr] ? 'yes' : 'no');
+      fact('Dimensionality', dimText(sc[SC.dim], sc[SC.skew]));
+      fact('Median rel. error', mreText(sc[SC.mre]));
     }
-    row('Tipper present', (cat[C.comps] || '').indexOf('T') >= 0 ? 'yes' : 'no');
-    row('Source file', cat[C.file] || '-');
-    row('sha256', cat[C.sha256] || '-');
-    // Per-station station.json (frame + conditioning + QA) is a richer, OPTIONAL source; fetched
-    // lazily below and appended when present. The catalogue/sci facts above always render.
-    panel.appendChild(tbl);
+    fact('Tipper', tipperText(cat[C.comps]));
+    var shaFull = String(cat[C.sha256] || '');
+    fact('Source file', (cat[C.file] || '-') + ' · sha256 ' + shortSha(shaFull),
+         { mono: true, title: shaFull ? 'sha256 ' + shaFull : null });
+    panel.appendChild(dl);
+
     if (station && !station.__missing) {
       if (station.frame) {
-        panel.appendChild(el('h2', 'Frame declaration'));
-        // Load-bearing fields as normal fact rows (verbatim station.json values — see frameRows).
-        var frows = frameRows(station.frame);
-        if (frows.length) {
-          var ftbl = el('table');
-          frows.forEach(function (kv) {
-            var tr = el('tr');
-            tr.appendChild(el('td', kv[0], 'k'));
-            tr.appendChild(el('td', kv[1]));
-            ftbl.appendChild(tr);
-          });
-          panel.appendChild(ftbl);
-        }
-        // FULL raw frame declaration kept available, collapsed (all values via textContent).
+        // FULL raw frame declaration (every extra frame field) kept available, collapsed.
         var det = el('details');
         var sum = el('summary', 'raw frame declaration'); det.appendChild(sum);
         var fp = el('pre'); fp.textContent = JSON.stringify(station.frame, null, 1); det.appendChild(fp);
@@ -1272,19 +1363,24 @@ STATIONS_JS = r"""
     detail.textContent = '';
     var r = rows[idx];
     var cat = r.cat, sc = r.sc, t = r.tf;
+    var cls = classifyStation(t);   // ONE classification: panel chip + sentence + (list chips)
     // The facts panel renders immediately from catalogue/sci; station.json enriches it when it loads.
-    var panel = factsPanel(cat, sc, null, buildId, lagPending);
+    var panel = factsPanel(cat, sc, null, buildId, lagPending, cls);
     detail.appendChild(panel);
     // Enrich with the per-station station.json (frame/conditioning/QA) if the products tree is served.
     // ABSOLUTE url via the single-sourced helper (fix-round F2 — a page-relative fetch 404s here).
     fetchJson(stationJsonUrl(slug, cat[C.id])).then(function (station) {
-      if (station && !station.__missing) {
-        var enriched = factsPanel(cat, sc, station, buildId, lagPending);
-        detail.replaceChild(enriched, panel);
-        appendPlots(detail, t);
-        appendRemove(detail, cat);
-      }
-    }).catch(function () { /* products not served for this build; facts panel already shown */ });
+      var enriched = factsPanel(cat, sc, station || { __missing: true }, buildId, lagPending, cls);
+      detail.replaceChild(enriched, panel);
+      panel = enriched;
+      appendPlots(detail, t);
+      appendRemove(detail, cat);
+    }).catch(function () {
+      // Products not served for this build: re-render with the honest Frame placeholder.
+      var fallback = factsPanel(cat, sc, { __missing: true }, buildId, lagPending, cls);
+      detail.replaceChild(fallback, panel);
+      panel = fallback;
+    });
 
     appendPlots(detail, t);
     appendRemove(detail, cat);
@@ -1339,7 +1435,8 @@ STATIONS_JS = r"""
     var scroll = el('div', null, 'st-scroll');
     var tbl = el('table');
     var head = el('tr');
-    ['Station', 'Lat', 'Lon', 'Periods', 'Quality'].forEach(function (h) { head.appendChild(el('th', h)); });
+    // C43-HUB H3: Lat/Lon MERGED into one column (the mockup's list shape).
+    ['Station', 'Lat / Lon', 'Periods', 'Quality'].forEach(function (h) { head.appendChild(el('th', h)); });
     tbl.appendChild(head);
     var selected = null;
     rows.forEach(function (r, i) {
@@ -1361,15 +1458,17 @@ STATIONS_JS = r"""
         if (ev.key === 'Enter' || ev.key === ' ') select(ev);   // Space/Enter activate the focused row
       });
       tr.appendChild(el('td', String(cat[C.id])));
-      tr.appendChild(el('td', num(cat[C.lat], 3)));
-      tr.appendChild(el('td', num(cat[C.lon], 3)));
+      tr.appendChild(el('td', latLonText(cat[C.lat], cat[C.lon])));
       tr.appendChild(el('td', num(cat[C.nper])));
-      // Quality chip: the dimensionality class + a completeness/smoothness diagnostic value (NOT a
-      // value judgement — the engine is explicit about that).
+      // Quality chip (C43-HUB H3): the SAME QA data the panel status chip derives from — a
+      // quadrant-warn component names itself ('Zyx quadrant', amber); a clean station shows its
+      // dimensionality class as the neutral diagnostic (NOT a value judgement).
       var chip = el('td');
-      var q = sc ? (sc[SC.dim] || '?') : '?';
-      var badge = el('span', q, 'badge');
-      badge.style.background = '#2E4254'; badge.style.color = '#E8EDF1';
+      var clsRow = classifyStation(r.tf);
+      var qc = qualityChip(clsRow.xy, clsRow.yx, sc ? sc[SC.dim] : null);
+      var badge = el('span', qc.label, 'badge');
+      if (qc.kind === 'warn') { badge.style.background = '#D9A23B'; }
+      else { badge.style.background = '#2E4254'; badge.style.color = '#E8EDF1'; }
       chip.appendChild(badge);
       tr.appendChild(chip);
       tbl.appendChild(tr);
