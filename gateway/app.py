@@ -1398,7 +1398,11 @@ class Gateway:
         C41 T6 (evidenced, not guessed): the production serve build (deploy/Makefile rebuild-data)
         invokes build_portal WITHOUT --allow-empty, and the real engine exits 2 on an empty corpus, so
         an empty surveys-live breaks the next rebuild and the retired survey keeps serving off the last
-        good build indefinitely. The last-survey guard refuses this."""
+        good build indefinitely. The last-survey guard refuses this.
+
+        This is the FAST PRE-REJECT used by the confirmation page + POST handler (good UX, no code
+        burned); it reads outside PUBLISH_LOCK and is therefore racy. The AUTHORITATIVE guard against
+        two concurrent retires emptying the corpus lives in _commit_retire_blocking, under the lock (F1)."""
         slugs = metaedit.list_published_slugs(self.cfg.surveys_live_dir)
         return len(slugs) <= 1
 
@@ -1456,8 +1460,10 @@ class Gateway:
         pkg = self._edit_package_or_error(slug)
         if isinstance(pkg, Response):
             return pkg
-        # T6 last-survey guard (evidenced): refusing to retire the final survey (an empty corpus breaks
-        # the next rebuild). Checked before the TOTP gate so a doomed retirement never burns a code.
+        # T6 last-survey guard — FAST PRE-REJECT (F1): refusing to retire the final survey (an empty
+        # corpus breaks the next rebuild). Checked before the TOTP gate so a doomed retirement never
+        # burns a code, and it surfaces the guard on the confirmation page. It is OUTSIDE PUBLISH_LOCK
+        # and racy by design; the AUTHORITATIVE, lock-serialised guard is in _commit_retire_blocking.
         if self._is_last_survey():
             return self._retire_confirm_response(
                 request, name, slug,
@@ -1536,6 +1542,18 @@ class Gateway:
 
     def _commit_retire_blocking(self, surveys_live: Path, slug: str, curator: str, note: str) -> None:
         pre = publish.preflight(self._git_runner, surveys_live)
+        # F1 (TOCTOU) — the AUTHORITATIVE last-survey guard, re-evaluated INSIDE PUBLISH_LOCK after
+        # preflight from on-disk truth. The check in handle_survey_retire is only a fast, friendly
+        # pre-reject (it shows the guard on the confirmation page and avoids burning a TOTP code); it is
+        # OUTSIDE the lock and therefore racy — two concurrent retires can both read count>1 there before
+        # either commits, then both remove their survey and EMPTY the corpus. This runs under
+        # PUBLISH_LOCK, so it serialises against every other retire/publish: once a first retire has
+        # removed its survey, a second interleaved retire sees the now-smaller corpus HERE and is refused.
+        # Two retires can therefore never empty the corpus (the silent-drift break the guard exists for).
+        if len(metaedit.list_published_slugs(surveys_live)) <= 1:
+            raise publish.PublishError(
+                "guard", "refusing to retire the last remaining survey "
+                         "(an empty corpus breaks the next rebuild)")
         publish.commit_survey_removal(self._git_runner, surveys_live, slug, curator, note, pre)
 
     def _edit_package_or_error(self, slug: str):

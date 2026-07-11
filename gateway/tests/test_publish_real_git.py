@@ -23,12 +23,13 @@ init+commit+bare per test, no sleeps (the app's settle_publish drives the async 
 """
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from gateway import publish, states
+from gateway import metaedit, publish, states
 from gateway.tests.conftest import (
     app_client, csrf_for_session, curator_login, run, seed_validated, settle_publish,
 )
@@ -574,3 +575,63 @@ def test_real_git_survey_retirement_revert_restores_package_byte_identical(tmp_p
     _git(["revert", "--no-edit", new_ref], surveys_live, env)
     after = {rel: (surveys_live / rel).read_bytes() for rel in before}
     assert after == before, "git revert did not restore the retired package byte-for-byte"
+
+
+def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_env):
+    # F1 (TOCTOU) — two CONCURRENT retires against a 2-survey corpus must NOT both succeed and EMPTY it.
+    # The outside-lock guard (handle_survey_retire) is racy: both requests read count=2 before either
+    # commits. This drives _commit_retire (the PUBLISH_LOCK holder) directly for BOTH surveys under
+    # asyncio.gather, isolating the AUTHORITATIVE inside-lock guard from the TOTP replay counter (whose
+    # single shared last_used_step would make a full-HTTP concurrency drive nondeterministic — the TOTP
+    # gate is pinned separately). A slow git-push shim makes the first-acquiring retire HOLD the lock
+    # while the second queues, guaranteeing the interleave. Assert: exactly one 200 + one 409, the
+    # surviving survey remains, and the corpus NEVER empties.
+    # HISTORICAL RED (HEAD before F1, no inside-lock guard): BOTH retires succeed (statuses [200, 200])
+    # and list_published_slugs() == 0 (corpus emptied) — captured verbatim in the report.
+    import time as _time
+
+    env = hermetic_git_env
+
+    async def _body():
+        # This is the ONLY test that awaits the module-level publish.PUBLISH_LOCK directly (the other
+        # real-git tests call publish.commit_* without the lock). Under the full suite an earlier test's
+        # background publish task can leave that asyncio.Lock bound (and even held) on its now-closed
+        # loop, so awaiting it here would raise "bound to a different event loop" — a pytest-only
+        # artifact (production has ONE loop and `async with` always releases). Bind a FRESH lock to THIS
+        # loop for the duration so the concurrency semantics under test are exercised in isolation; leave
+        # a fresh, unlocked lock behind for later tests.
+        publish.PUBLISH_LOCK = asyncio.Lock()
+        try:
+            surveys_live = tmp_path / "surveys-live"
+            origin = tmp_path / "origin.git"
+            _init_repo_pair(surveys_live, origin, env)
+            _seed_published_survey_with_edis(surveys_live, env, "surv-a-2026",
+                                             "slug: surv-a-2026\nversion: 1.0.0\n", ("SA1.edi",))
+            _seed_published_survey_with_edis(surveys_live, env, "surv-b-2026",
+                                             "slug: surv-b-2026\nversion: 1.0.0\n", ("SB1.edi",))
+
+            # A git runner that sleeps on push so the first retire HOLDS PUBLISH_LOCK while the second
+            # queues on it (the parametrised-runner shim pattern) — the interleave the TOCTOU needs.
+            def slow_push_git(args, *, cwd, env=None):
+                if args and args[0] == "push":
+                    _time.sleep(0.5)
+                return publish.real_git_runner(args, cwd=cwd, env=env)
+
+            async with app_client(tmp_path, git_runner=slow_push_git,
+                                  surveys_live_dir=surveys_live) as (_client, _app, gw, _cfg):
+                r_a, r_b = await asyncio.gather(
+                    gw._commit_retire("surv-a-2026", "curator1", "retire A"),
+                    gw._commit_retire("surv-b-2026", "curator1", "retire B"))
+                statuses = sorted([r_a.status_code, r_b.status_code])
+                assert statuses == [200, 409], \
+                    f"expected one success + one guard-refusal, got {statuses}"
+                remaining = metaedit.list_published_slugs(surveys_live)
+                assert len(remaining) == 1, f"concurrent retires emptied the corpus: {remaining}"
+                # The 409 body names the last-survey guard (not some other publish failure).
+                refused = r_a if r_a.status_code == 409 else r_b
+                import json as _json
+                detail = _json.loads(bytes(refused.body).decode("utf-8"))["detail"]
+                assert "last remaining survey" in detail.lower(), detail
+        finally:
+            publish.PUBLISH_LOCK = asyncio.Lock()
+    run(_body())
