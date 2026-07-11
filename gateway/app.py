@@ -824,10 +824,13 @@ class Gateway:
             curator_name=name, slugs=slugs, csrf_token=csrf, nav=nav))
 
     def handle_survey_hub(self, request: Request, slug: str, tab: str = "overview") -> Response:
-        """The per-survey hub (C43 Stage 1 S1-2). Overview & QA (default) or Metadata tab, inside the
-        nav shell. Overview needs no server-side survey content (browser-populated from /data). The
-        Metadata tab enqueues the same `read` edit-job the edit form uses to seed its per-section
-        widgets. Sync `def` route -> the seam's bounded blocking poll runs in Starlette's threadpool."""
+        """The per-survey hub (C43 Stage 1 S1-2; C43-HUB header treatment). Overview & QA (default) /
+        Stations / Metadata / History, inside the nav shell. EVERY tab runs the metadata read-job so
+        the mockup's header (title + slug chip + orientation line) renders hub-wide — strict on the
+        Metadata tab (the editor is useless without fields, so a failure bounces to the list),
+        DEGRADABLE elsewhere (header falls back to the slug). Tab content beyond the header stays
+        browser-populated from /data (Overview/Stations) or runner read-jobs (History). Sync `def`
+        route -> the seam's bounded blocking poll runs in Starlette's threadpool."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
@@ -853,7 +856,20 @@ class Gateway:
                 return self.handle_edit_list(request)
             version = result.get("version")
             fields = result.get("fields") or {}
-        elif tab == "history":
+        else:
+            # C43-HUB H1: every tab renders the mockup's header (title + slug chip + orientation
+            # line from version/licence/access/collection), so the read-job runs hub-wide. On the
+            # non-metadata tabs it DEGRADES instead of bouncing: a failed read renders the header
+            # with the slug and no orientation segments — the tab's own content is unaffected.
+            try:
+                result = self._edit_runner(metaedit.make_read_job(slug))
+            except metaedit.EditRunnerError as exc:
+                logger.warning("survey-hub read-job failed for %s (header degrades): %s", slug, exc)
+                result = None
+            if result and result.get("ok"):
+                version = result.get("version")
+                fields = result.get("fields") or {}
+        if tab == "history":
             # The runner OWNS the git read (record D4 / S2a-2): enqueue a `history` read-job and render
             # the returned commit list. A runner error/refusal degrades to a curator-facing message on
             # the tab (never a 500, never a blank page) — the audit trail is informational, not gating.

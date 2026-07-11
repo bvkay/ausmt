@@ -444,8 +444,11 @@ def test_history_tab_renders_real_git_log(tmp_path):
             assert "fixed the citation author" in r.text          # the release-note body renders
             # NO rename/retire ACTION in the History tab (Stage 4). Read-only: the History body carries
             # no <form> and no rename/retire action route. (The copy may mention "rename" descriptively
-            # — the pin is on the absence of an ACTION, not the word.)
-            history_body = r.text.split('history</h1>', 1)[-1]
+            # — the pin is on the absence of an ACTION, not the word.) Anchor: the tab body's own
+            # lead copy (C43-HUB replaced the per-tab h1 with the unified mockup header, so the old
+            # '…— history</h1>' anchor no longer exists; the context-bar rebuild form sits ABOVE it).
+            assert "Read-only audit trail" in r.text
+            history_body = r.text.split("Read-only audit trail", 1)[-1]
             assert "<form" not in history_body, "the History tab must carry no action form (read-only)"
             assert "/rename" not in r.text and "/retire" not in r.text
     run(_body())
