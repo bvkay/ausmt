@@ -26,6 +26,10 @@ from .curator_auth import CSRF_FIELD
 _PALETTE = {
     "bg": "#13202B", "panel": "#1B2C3A", "ink": "#E8EDF1", "muted": "#8FA3B0",
     "accent": "#E0782F", "ok": "#5BAE6A", "warn": "#D9A23B", "bad": "#A85454",
+    # C43-HUB: the blue INFO severity (mockup semantics: red fail / amber warn / blue info). The
+    # dark palette had no info hue before the survey-hub treatment needed one; steel blue in the
+    # same lightness family as ok/warn/bad — an ADDITION for the third severity, not a repaint.
+    "info": "#5B84AE",
 }
 
 _STATUS_COLOUR = {
@@ -155,6 +159,39 @@ _HEAD = """<!doctype html>
  tr.st-row.on{background:#243747}          /* selected row stays visibly highlighted */
  tr.st-row.on td:first-child{box-shadow:inset 3px 0 0 $accent}
  details summary{cursor:pointer;color:$muted;font-size:.8rem;margin:.5rem 0 .25rem}
+ /* ---- C43-HUB survey-hub treatment (mockup v4 structure in the dark palette) ---- */
+ .slugchip{display:inline-block;background:$panel;border:1px solid #2E4254;border-radius:6px;
+   padding:.05rem .5rem;font-size:.72rem;color:$muted;font-weight:600;vertical-align:.15rem;
+   font-family:ui-monospace,Consolas,monospace}
+ .card .d{color:$muted;font-size:.75rem;margin-top:.15rem}
+ .card .n small{font-size:.85rem;color:$muted;font-weight:600}
+ .card .n.warn{color:$warn}
+ /* Needs-attention severity ROWS: the coloured LEFT BORDER carries the severity hue —
+    red fail / amber warn / blue info (the mockup's semantics, dark-palette values). */
+ .qa{border-left:3px solid #2E4254;background:$panel;border-radius:0 6px 6px 0;
+   padding:.5rem .75rem;margin:.5rem 0;font-size:.85rem;display:flex;gap:.6rem;
+   align-items:baseline;flex-wrap:wrap}
+ .qa.fail{border-left-color:$bad}
+ .qa.warn{border-left-color:$warn}
+ .qa.info{border-left-color:$info}
+ .qa .sid{font-family:ui-monospace,Consolas,monospace;font-weight:600;white-space:nowrap}
+ .qa .why{color:$muted;min-width:0}
+ .qa .go{margin-left:auto;white-space:nowrap}
+ .note{background:$bg;border:1px solid #2E4254;border-radius:6px;padding:.45rem .7rem;
+   font-size:.8rem;color:$muted;margin:.4rem 0 .9rem}
+ /* Station drill-down facts (mockup dl.facts) + panel header row */
+ dl.facts{display:grid;grid-template-columns:10rem 1fr;gap:.3rem .8rem;margin:0;font-size:.85rem}
+ dl.facts dt{color:$muted}
+ dl.facts dd{margin:0;min-width:0;word-break:break-word}
+ .ph{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;border-bottom:1px solid #2E4254;
+   padding-bottom:.5rem;margin-bottom:.6rem}
+ .ph .phid{font-family:ui-monospace,Consolas,monospace;font-weight:700;font-size:1rem}
+ .ph .go{margin-left:auto;white-space:nowrap}
+ /* Metadata TOC state hints + the display-layer inline field error */
+ .toc .state{float:right;color:$muted;font-size:.72rem;margin-left:.5rem}
+ .toc .state.issue{color:$bad;font-weight:600}
+ .badinput{border-color:$bad !important;background:rgba(168,84,84,.15) !important}
+ .fielderr{color:$bad;font-size:.8rem;margin:.25rem 0 0}
  @media (max-width:720px){.shell{display:block}.rail{flex-basis:auto;border-right:0;
    border-bottom:1px solid #2E4254}
    /* narrow: collapse to one column. DOM order is panel-first, so the panel stacks ABOVE the list
@@ -297,19 +334,39 @@ CONTEXT_BAR_JS = """
 """
 
 
-# The survey hub's browser-side script (C43 Stage 1 S1-2). TWO jobs, both degradable:
-#   1. OVERVIEW & QA tab — fetch /data/build_report.json + /data/build.json SAME-ORIGIN, filter to
-#      this survey (#survey-qa[data-survey-slug]), and render the health cards, the "Needs attention"
-#      rows (each build-report warning/refusal as an actionable row with its inline diagnosis), and
-#      the conditioning summary. Refused stations link ONLY to the existing station-removal list (the
-#      drill-down is Stage 2 — no dangling links); metadata-class issues link to the Metadata tab's
-#      owning section. The gateway has NO site-data mount, so this MUST be browser-side (the serve-
-#      panel precedent).
-#   2. METADATA tab — enhance the sticky TOC to show ONE section at a time (#hub-toc / .hub-section).
+# The survey hub's browser-side script (C43 Stage 1 S1-2; REBUILT by C43-HUB to the approved mockup's
+# information design). Jobs, all degradable:
+#   1. HUB HEADER + TAB STRIP (every tab) — fill the orientation line's station counts
+#      ([data-hub-counts]: 'N stations published, M serving') and the Stations tab chip
+#      ([data-stations-chip]: 'd dropped · f flagged', hidden at 0/0) from /data/build_report.json.
+#   2. OVERVIEW & QA tab — fetch /data/build_report.json SAME-ORIGIN, filter to this survey
+#      (#survey-qa[data-survey-slug]), and render the mockup's four health cards (Serving/published,
+#      QA flags, Frame, Last build — the build-id card is REMOVED: that fact lives in the drift chip
+#      and the serve screen), the "Needs attention" SEVERITY ROWS (red fail / amber warn / blue info;
+#      terse diagnosis with the full gate text in a title attr; same-class prefix runs >=3 CLUSTERED
+#      onto one row), the refused-package note ONCE, and the conditioning summary table.
+#   3. METADATA tab — enhance the sticky TOC to show ONE section at a time (#hub-toc / .hub-section).
 #      Without this script the server renders every section stacked and fully functional (graceful).
+#
+# DATA HONESTY (owner rulings 2026-07-11, contract C43-HUB):
+#   * QA flags = the sum of counts over the survey.frame CONVENTION-WARN entries ("served with note"
+#     stations) — ONE definition (qaFlagCount) shared by the H2 card and the H1 tab chip.
+#   * The Frame card headline derives from the frame notes' DE-ROTATION entries ONLY (convention/
+#     quadrant warns are QA flags, not frame state); the sub-line uses the record's own vocabulary
+#     ("declared-zero reference" — never "geomagnetic", which the engine deliberately never asserts).
+#   * The citation-author info row renders ONLY when the server stamped data-citation-email on the
+#     scaffold (derived server-side from the SAME helper the Metadata tab's inline error uses) —
+#     never inferred by matching warning strings (the old /citation|author|email/ branch is deleted).
+#   * Warnings strings that MIRROR structured sources (the per-drop 'station X SKIPPED …' echo and
+#     the 'convention: …' aggregation echo) are filtered — the structured rows render them properly.
+#
+# ANY logic beyond DOM wiring lives in NAMED, DOM-FREE functions (clusterWarnings, attentionItems,
+# attentionPlan, cardsPlan, hubCounts, qaFlagCount, frameCardFacts, terseDrop, terseWarn,
+# stationsChipText, attentionHref, conditioningScope, …) driven executable by the Node harness
+# (gateway/tests/test_c43_hub_js_parity.py) with a build_report the REAL ENGINE produced.
 # RAW JS served by GET /gateway/curator/survey-hub.js — inline is dead under script-src 'self'. Every
 # value goes in via textContent (never innerHTML) so a build-report string cannot inject markup.
-SURVEY_HUB_JS = """
+SURVEY_HUB_JS = r"""
 (function () {
   // ---- Metadata TOC: one section visible at a time (progressive enhancement) ----
   var toc = document.getElementById('hub-toc');
@@ -337,11 +394,312 @@ SURVEY_HUB_JS = """
     show(onlink ? onlink.getAttribute('data-hub-section') : first);
   }
 
-  // ---- Overview & QA: browser-side from the served /data corpus ----
-  var qa = document.getElementById('survey-qa');
-  if (!qa) return;
-  var slug = qa.getAttribute('data-survey-slug') || '';
+  // ================================================================================================
+  // C43-HUB pure helpers — DOM-FREE by design: the Node harness (test_c43_hub_js_parity.py) drives
+  // these exact functions with a build_report the REAL ENGINE produced. No DOM, no fetch, no state.
+  // ================================================================================================
 
+  // A convention-WARN frame note (build_portal Gate 2 WARN class): 'convention: arg(Zxy|Zyx)
+  // mid-band median X deg is outside its expected quadrant while the other off-diagonal is
+  // in-quadrant — …'. THE one QA-flag definition (owner ruling Q2).
+  function isQuadrantWarnNote(note) {
+    return typeof note === 'string' && note.indexOf('convention: ') === 0 &&
+           note.indexOf('outside its expected quadrant') >= 0;
+  }
+
+  // QA flags = sum of carrier counts over convention-warn frame entries ("served with note").
+  // Shared by the H2 QA-flags card AND the H1 Stations-chip flagged number (pinned equal).
+  function qaFlagCount(frameEntries) {
+    var n = 0;
+    (frameEntries || []).forEach(function (e) {
+      if (e && isQuadrantWarnNote(e.note)) n += (e.count || 0);
+    });
+    return n;
+  }
+
+  // published = built + dropped (the refused stations stay in the package); serving = built.
+  function hubCounts(survey) {
+    var built = (survey && survey.stations_built != null) ? survey.stations_built : null;
+    var dropped = (survey && survey.stations_dropped) ? survey.stations_dropped.length : 0;
+    return {
+      serving: built,
+      published: built == null ? null : built + dropped,
+      dropped: dropped,
+      flagged: qaFlagCount(survey && survey.frame)
+    };
+  }
+
+  // The Stations tab chip: 'd dropped · f flagged' — null (chip stays hidden) at 0/0.
+  function stationsChipText(counts) {
+    if (!counts || (!counts.dropped && !counts.flagged)) return null;
+    return counts.dropped + ' dropped · ' + counts.flagged + ' flagged';
+  }
+
+  // Frame card (owner ruling Q1): headline from DE-ROTATION notes ONLY — no de-rotation notes =>
+  // 'as-stored', otherwise 'N de-rotated' (N = union of enumerated carriers; count lower bound when
+  // a note's carriers are not enumerated). Convention/insufficient notes count as NEITHER. Sub-line
+  // in the record's own vocabulary: R3 'declared acquisition frame' notes when present, else
+  // 'declared-zero reference'. The word 'geomagnetic' appears NOWHERE (C25's deliberate refusal).
+  function frameCardFacts(frameEntries) {
+    var ids = {}, exact = true, floor = 0, declared = false;
+    (frameEntries || []).forEach(function (e) {
+      if (!e || typeof e.note !== 'string' || e.note.indexOf('frame: ') !== 0) return;
+      if (e.note.indexOf('de-rotated') >= 0) {
+        if (e.stations && e.stations.length) {
+          e.stations.forEach(function (s) { ids[String(s)] = true; });
+        } else {
+          exact = false;
+          if ((e.count || 0) > floor) floor = e.count;
+        }
+      }
+      if (e.note.indexOf('declared acquisition frame') >= 0) declared = true;
+    });
+    var uniq = Object.keys(ids).length;
+    var derot = exact ? uniq : Math.max(uniq, floor);
+    return {
+      headline: derot ? (derot + ' de-rotated') : 'as-stored',
+      sub: declared ? 'declared acquisition frame recorded' : 'declared-zero reference'
+    };
+  }
+
+  function signedDegStr(v) {
+    // '+43.6°' / '-73.5°' from a NUMERIC STRING as the engine printed it (no re-rounding).
+    return (parseFloat(v) >= 0 ? '+' : '') + v + '°';
+  }
+
+  // Terse diagnosis for a REFUSAL ({station, reason} from stations_dropped; reason is
+  // '[<gate>] <detail>'). Returns {cls, terse}; the FULL reason always rides the row title attr,
+  // and an unrecognised shape falls back VERBATIM (never hide information — builddisplay posture).
+  function terseDrop(reason) {
+    var s = String(reason || '');
+    var m = /^\[([^\]]+)\]\s*([\s\S]*)$/.exec(s);
+    var gate = m ? m[1] : 'gate';
+    var detail = m ? m[2] : s;
+    if (/^BOTH off-diagonal/.test(detail)) {
+      var dash = detail.indexOf(' — ');
+      var tail = dash >= 0 ? detail.slice(dash + 3) : '';
+      var sigm = /^(.*?signature)/.exec(tail);
+      var sig = sigm ? sigm[1] : 'coherent out-of-quadrant phases';
+      var xy = /arg Zxy=(-?\d+(?:\.\d+)?) deg/.exec(detail);
+      var yx = /arg Zyx=(-?\d+(?:\.\d+)?) deg/.exec(detail);
+      return { cls: gate + ':' + sig,
+               terse: 'refused — both off-diagonals out of quadrant; ' + sig
+                    + (xy && yx ? ' (Zxy ' + signedDegStr(xy[1]) + ', Zyx ' + signedDegStr(yx[1]) + ')' : '') };
+    }
+    var first = detail.split(/;|\. /)[0];
+    return { cls: gate, terse: 'refused — ' + (first || detail) };
+  }
+
+  // Terse diagnosis + class for a convention-WARN frame note. cls carries the component so
+  // clustering groups SAME-CLASS warns only.
+  function terseWarn(note) {
+    var m = /^convention: arg\(Z(xy|yx)\) mid-band median (-?\d+(?:\.\d+)?) deg/.exec(String(note || ''));
+    if (!m) return { cls: 'frame-note', terse: String(note || '') };
+    var comp = 'Z' + m[1];
+    var other = m[1] === 'xy' ? 'Zyx' : 'Zxy';
+    return { cls: 'quadrant:' + comp,
+             terse: 'arg(' + comp + ') median ' + signedDegStr(m[2]) + ' out of expected quadrant; '
+                  + other + ' in-quadrant — served with note' };
+  }
+
+  // The flat item list feeding clusterWarnings: refusals (fail) from stations_dropped, quadrant
+  // warns (warn) EXPANDED per enumerated carrier station from survey.frame, and residual survey
+  // warnings (warn, unclustered). Warnings strings that MIRROR structured sources are filtered:
+  // the per-drop echo ('station X SKIPPED by convention gate: …') and the aggregated convention
+  // echo ('convention: …') — the structured rows above render those facts properly.
+  function attentionItems(survey) {
+    var items = [];
+    ((survey && survey.stations_dropped) || []).forEach(function (d) {
+      var t = terseDrop(d && d.reason);
+      items.push({ kind: 'fail', station: String((d && d.station) || ''), cls: t.cls,
+                   terse: t.terse, full: String((d && d.reason) || ''), link: 'removal' });
+    });
+    ((survey && survey.frame) || []).forEach(function (e) {
+      if (!e || !isQuadrantWarnNote(e.note)) return;
+      var t = terseWarn(e.note);
+      if (e.stations && e.stations.length) {
+        e.stations.forEach(function (sid) {
+          items.push({ kind: 'warn', station: String(sid), cls: t.cls, terse: t.terse,
+                       full: String(e.note), link: 'stations' });
+        });
+      } else {
+        // Carriers not enumerated (large set): one aggregate row, never per-station rows.
+        items.push({ kind: 'warn', station: (e.count || 0) + ' stations', cls: t.cls,
+                     terse: t.terse, full: String(e.note), link: 'stations', noCluster: true });
+      }
+    });
+    ((survey && survey.warnings) || []).forEach(function (w) {
+      var s = String(w);
+      if (/^station .* SKIPPED by convention gate: /.test(s)) return;  // mirrors stations_dropped
+      if (/^convention: /.test(s)) return;                             // mirrors frame entries
+      items.push({ kind: 'warn', station: 'survey', cls: 'survey-warning', terse: s, full: s,
+                   link: null, noCluster: true });
+    });
+    return items;
+  }
+
+  // The alphabetic prefix of a station id (trailing digit run stripped): 'CP1L02' -> 'CP1L'.
+  // null when there is nothing to cluster on (no trailing digits, or an all-digit id).
+  function idPrefix(id) {
+    var m = /^(.*[^0-9])(\d+)$/.exec(String(id || ''));
+    return m ? m[1] : null;
+  }
+
+  // One-line class summary for a clustered row, derived from the item's CLASS (never a guess).
+  function classSummary(it) {
+    if (it.kind === 'fail') {
+      var i = it.cls.indexOf(':');
+      var sig = i >= 0 ? it.cls.slice(i + 1) : 'coherent convention violations';
+      return 'refused — ' + sig + ' (details per station)';
+    }
+    var m = /^quadrant:(Zxy|Zyx)$/.exec(it.cls);
+    if (m) return 'one off-diagonal (' + m[1] + ') out of expected quadrant — served with note';
+    return it.terse;
+  }
+
+  // CLUSTERING (contract H2): items of the SAME class whose station ids share an alphabetic prefix
+  // run, >=3 members, collapse to ONE row — 'CP1L02 … CP1L13' (or 'A · B · C' at exactly 3) +
+  // '<n> stations — <class summary>; clustered on one line', full notes in the title. Groups of <3
+  // and unclusterable items render individually. Row order follows first appearance.
+  function clusterWarnings(items) {
+    var seq = [], groups = {};
+    (items || []).forEach(function (it) {
+      var pfx = it.noCluster ? null : idPrefix(it.station);
+      var key = pfx ? (it.kind + '|' + it.cls + '|' + pfx) : null;
+      if (!key) { seq.push({ single: it }); return; }
+      if (!groups[key]) { groups[key] = []; seq.push({ groupKey: key }); }
+      groups[key].push(it);
+    });
+    var out = [];
+    seq.forEach(function (s) {
+      if (s.single) {
+        out.push({ kind: s.single.kind, sid: s.single.station, text: s.single.terse,
+                   title: s.single.full, link: s.single.link, n: 1, ids: [s.single.station] });
+        return;
+      }
+      var g = groups[s.groupKey];
+      if (!g) return;
+      delete groups[s.groupKey];
+      if (g.length < 3) {
+        g.forEach(function (it) {
+          out.push({ kind: it.kind, sid: it.station, text: it.terse, title: it.full,
+                     link: it.link, n: 1, ids: [it.station] });
+        });
+        return;
+      }
+      var ids = g.map(function (it) { return it.station; }).sort();
+      var sid = g.length === 3 ? ids.join(' · ')
+                               : ids[0] + ' … ' + ids[ids.length - 1];
+      out.push({ kind: g[0].kind, sid: sid,
+                 text: g.length + ' stations — ' + classSummary(g[0]) + '; clustered on one line',
+                 title: g.map(function (it) { return it.station + ': ' + it.full; }).join('\n'),
+                 link: g[0].link, n: g.length, ids: ids });
+    });
+    return out;
+  }
+
+  // The refused-package boilerplate — rendered ONCE under the refusal rows (contract H2), never
+  // repeated per row (the pin fails if this marker enters a per-row loop).
+  var REFUSED_NOTE = 'Refused stations stay in the published package — they are withheld from '
+                   + 'serving only. Fix is custodian-side re-export; each row carries the diagnosis.';
+
+  function truncEmail(v) {
+    var s = String(v || '');
+    var at = s.indexOf('@');
+    return at > 0 ? s.slice(0, at + 1) + '…' : s;
+  }
+  function metaInfoText(email, built) {
+    return 'citation author is an email address (' + truncEmail(email) + ') — baked into '
+         + (built != null ? 'all ' + built + ' served' : 'every served') + ' station XML';
+  }
+
+  // The FULL render plan for Needs attention: fail rows, the package note ONCE (only when there
+  // are refusals), then warn rows, then the metadata info row (only when the server stamped the
+  // citation-email attribute). Pure: [{row}| {note}] entries, in render order.
+  function attentionPlan(survey, citationEmail) {
+    var rows = clusterWarnings(attentionItems(survey));
+    var plan = [];
+    rows.forEach(function (r) { if (r.kind === 'fail') plan.push({ row: r }); });
+    if (plan.length) plan.push({ note: REFUSED_NOTE });
+    rows.forEach(function (r) { if (r.kind !== 'fail') plan.push({ row: r }); });
+    if (citationEmail) {
+      plan.push({ row: { kind: 'info', sid: 'metadata',
+                         text: metaInfoText(citationEmail, survey && survey.stations_built),
+                         title: null, link: 'metadata', n: 1, ids: [] } });
+    }
+    return plan;
+  }
+
+  // Row action-link targets (contract H2): refusals -> the station-removal list; quadrant warns ->
+  // the Stations tab; metadata-class issues -> the owning Metadata section.
+  function attentionHref(link, slug2) {
+    if (link === 'removal') return '/gateway/curator/edit/' + encodeURIComponent(slug2) + '/stations';
+    if (link === 'stations') return '/gateway/curator/survey/' + encodeURIComponent(slug2) + '?tab=stations';
+    if (link === 'metadata') return '/gateway/curator/survey/' + encodeURIComponent(slug2) + '?tab=metadata';
+    return null;
+  }
+  function attentionLinkText(row) {
+    if (row.link === 'removal') return 'inspect';
+    if (row.link === 'metadata') return 'fix in Metadata';
+    if (row.link === 'stations') return row.n > 1 ? 'review stations' : 'review station';
+    return null;
+  }
+
+  function durationText(d) {
+    if (d == null) return '-';
+    var n = Number(d);
+    if (!isFinite(n)) return '-';
+    return (n >= 10 ? String(Math.round(n)) : n.toFixed(1)) + ' s';
+  }
+  function cacheWord(cache) {
+    var h = (cache && cache.hits) || 0, m = (cache && cache.misses) || 0;
+    if (m > 0 && h === 0) return 'cold';
+    if (h > 0 && m === 0) return 'warm';
+    if (h > 0 && m > 0) return 'mixed';
+    return '';
+  }
+
+  // The mockup's FOUR cards — Serving/published, QA flags, Frame, Last build. The build-id card is
+  // deliberately ABSENT (that fact lives in the drift chip + the serve screen); the pin asserts it.
+  function cardsPlan(survey, rep) {
+    var counts = hubCounts(survey);
+    var fc = frameCardFacts(survey && survey.frame);
+    var cache = (survey && survey.cache) || {};
+    var buildSub = [cacheWord(cache),
+                    (rep && rep.engine_commit) ? 'engine ' + rep.engine_commit : '']
+                   .filter(function (x) { return !!x; }).join(' · ');
+    return [
+      { label: 'Serving / published',
+        value: counts.serving == null ? '-' : String(counts.serving),
+        small: counts.published == null ? '' : ' / ' + counts.published,
+        sub: counts.dropped ? counts.dropped + ' refused by convention gate'
+                            : 'all published stations serving',
+        tone: '' },
+      { label: 'QA flags', value: String(counts.flagged), small: '',
+        sub: counts.flagged ? 'served with note — one off-diagonal out of quadrant'
+                            : 'no quadrant warnings in this build',
+        tone: counts.flagged ? 'warn' : '' },
+      { label: 'Frame', value: fc.headline, small: '', sub: fc.sub, tone: '' },
+      { label: 'Last build', value: durationText(survey && survey.duration_seconds), small: '',
+        sub: buildSub, tone: '' }
+    ];
+  }
+
+  // Conditioning scope cell: 'all 147' when every served station carries the note; the enumerated
+  // carrier set when short; 'N (all except …)' for the complement form; the bare count otherwise.
+  function conditioningScope(entry, built) {
+    if (!entry) return '';
+    if (built != null && entry.count === built) return 'all ' + built;
+    if (entry.stations && entry.stations.length) return entry.stations.join(', ');
+    if (entry.except && entry.except.length) {
+      return entry.count + ' (all except ' + entry.except.join(', ') + ')';
+    }
+    return String(entry.count);
+  }
+
+  // ================================================================================================
+  // DOM wiring (everything below is presentation over the pure plan builders above)
+  // ================================================================================================
   function el(tag, text, cls) {
     var e = document.createElement(tag);
     if (text != null) e.textContent = text;
@@ -355,18 +713,68 @@ SURVEY_HUB_JS = """
       return r.json();
     });
   }
-  function card(host, n, label) {
-    var c = el('div', null, 'card');
-    c.appendChild(el('div', String(n), 'n'));
-    c.appendChild(el('div', label, 'l'));
-    host.appendChild(c);
+
+  // ONE build_report fetch shared by the header counts, the tab chip, and the overview render.
+  var _repPromise = null;
+  function buildReport() {
+    if (!_repPromise) {
+      _repPromise = fetchJson('/data/build_report.json').catch(function () { return {__err: true}; });
+    }
+    return _repPromise;
+  }
+  function surveyFromReport(rep, slug2) {
+    if (!rep || rep.__missing || rep.__err) return null;
+    return (rep.surveys || {})[slug2] || null;
   }
 
-  Promise.all([
-    fetchJson('/data/build_report.json').catch(function () { return {__err: true}; }),
-    fetchJson('/data/build.json').catch(function () { return {__err: true}; })
-  ]).then(function (res) {
-    var rep = res[0], build = res[1];
+  // ---- header counts + Stations tab chip (every hub tab) ----
+  var tabsEl = document.querySelector('[data-hub-tabs]');
+  var hubSlug = tabsEl ? (tabsEl.getAttribute('data-survey-slug') || '') : '';
+  var chipEl = document.querySelector('[data-stations-chip]');
+  var countsEl = document.querySelector('[data-hub-counts]');
+  if (hubSlug && (chipEl || countsEl)) {
+    buildReport().then(function (rep) {
+      var survey = surveyFromReport(rep, hubSlug);
+      if (!survey) return;
+      var counts = hubCounts(survey);
+      if (chipEl) {
+        var t = stationsChipText(counts);
+        if (t) { chipEl.textContent = t; chipEl.hidden = false; }
+      }
+      if (countsEl && counts.published != null) {
+        countsEl.textContent = '';
+        countsEl.appendChild(document.createTextNode(
+          ' · ' + counts.published + ' stations published, '));
+        countsEl.appendChild(el('b', counts.serving + ' serving'));
+        countsEl.hidden = false;
+      }
+    });
+  }
+
+  // ---- Overview & QA: browser-side from the served /data corpus ----
+  var qa = document.getElementById('survey-qa');
+  if (!qa) return;
+  var slug = qa.getAttribute('data-survey-slug') || '';
+  var citationEmail = qa.getAttribute('data-citation-email') || '';
+
+  function attentionRowEl(row) {
+    var div = el('div', null, 'qa ' + row.kind);
+    div.appendChild(el('span', row.sid, 'sid'));
+    var why = el('span', row.text, 'why');
+    if (row.title && row.title !== row.text) why.setAttribute('title', row.title);
+    div.appendChild(why);
+    var href = attentionHref(row.link, slug);
+    if (href) {
+      var go = el('span', null, 'go');
+      var a = el('a', attentionLinkText(row));
+      a.href = href;
+      go.appendChild(a);
+      div.appendChild(go);
+    }
+    return div;
+  }
+
+  buildReport().then(function (rep) {
     var cards = document.getElementById('qa-cards');
     var attention = document.getElementById('qa-attention');
     var cond = document.getElementById('qa-conditioning');
@@ -376,57 +784,39 @@ SURVEY_HUB_JS = """
       cards.appendChild(el('p', 'No build report available yet (/data/build_report.json).', 'sub'));
       return;
     }
-    var survey = (rep.surveys || {})[slug];
+    var survey = surveyFromReport(rep, slug);
     if (!survey) {
-      cards.appendChild(el('p', 'This survey is not in the current build report — it may not have '
-        + 'been built into the served corpus yet.', 'sub'));
+      cards.appendChild(el('p', 'This survey is not in the current build report — it may not '
+        + 'have been built into the served corpus yet.', 'sub'));
       return;
     }
-    var dropped = survey.stations_dropped || [];
-    var warnings = survey.warnings || [];
-    var conditioning = survey.conditioning || [];
 
-    // Health cards.
-    card(cards, survey.stations_built != null ? survey.stations_built : '-', 'Stations built');
-    card(cards, dropped.length, 'Refused stations');
-    card(cards, warnings.length, 'QA warnings');
-    var buildId = (build && !build.__missing && !build.__err) ? (build.build_id || '-') : '-';
-    card(cards, buildId, 'Served build');
+    // The four cards (label / value+small / sub — the mockup's card anatomy).
+    cardsPlan(survey, rep).forEach(function (c) {
+      var box = el('div', null, 'card');
+      box.appendChild(el('div', c.label, 'l'));
+      var v = el('div', c.value, c.tone ? 'n ' + c.tone : 'n');
+      if (c.small) v.appendChild(el('small', c.small));
+      box.appendChild(v);
+      if (c.sub) box.appendChild(el('div', c.sub, 'd'));
+      cards.appendChild(box);
+    });
 
-    // Needs attention: refusals then warnings, each an actionable row with inline diagnosis.
-    if (!dropped.length && !warnings.length) {
-      attention.appendChild(el('p', 'Nothing needs attention — no refused stations or QA warnings '
-        + 'in the current build.', 'sub'));
+    // Needs attention: severity rows from the pure plan (fail rows, ONE package note, warn rows,
+    // the metadata info row when stamped).
+    var plan = attentionPlan(survey, citationEmail);
+    if (!plan.length) {
+      attention.appendChild(el('p', 'Nothing needs attention — no refused stations or QA '
+        + 'warnings in the current build.', 'sub'));
     } else {
-      dropped.forEach(function (d) {
-        var row = el('div', null, 'panel');
-        row.style.margin = '.5rem 0';
-        row.appendChild(el('div', 'Refused: ' + d.station));
-        row.appendChild(el('div', d.reason, 'sub'));
-        var note = el('p', 'Refused stations stay in the published package but are withheld from '
-          + 'serving — the fix is a custodian-side re-export. To remove it here instead:', 'sub');
-        row.appendChild(note);
-        var a = el('a', 'manage stations (remove EDIs)');
-        a.href = '/gateway/curator/edit/' + encodeURIComponent(slug) + '/stations';
-        row.appendChild(a);
-        attention.appendChild(row);
-      });
-      warnings.forEach(function (w) {
-        var row = el('div', null, 'panel');
-        row.style.margin = '.5rem 0';
-        row.appendChild(el('div', 'Warning', 'k'));
-        row.appendChild(el('div', String(w)));
-        // Metadata-class warnings (e.g. an email as citation author) link to the Metadata tab.
-        if (/citation|author|email|doi|orcid|license|licence|metadata/i.test(String(w))) {
-          var a = el('a', 'open the Metadata tab');
-          a.href = '/gateway/curator/survey/' + encodeURIComponent(slug) + '?tab=metadata';
-          row.appendChild(a);
-        }
-        attention.appendChild(row);
+      plan.forEach(function (step) {
+        if (step.note) attention.appendChild(el('div', step.note, 'note'));
+        else attention.appendChild(attentionRowEl(step.row));
       });
     }
 
-    // Conditioning summary.
+    // Conditioning summary (the mockup's tight two-column table).
+    var conditioning = survey.conditioning || [];
     if (!conditioning.length) {
       cond.appendChild(el('p', 'No conditioning notes recorded for this survey.', 'sub'));
     } else {
@@ -437,10 +827,7 @@ SURVEY_HUB_JS = """
       conditioning.forEach(function (c) {
         var tr = el('tr');
         tr.appendChild(el('td', c.note));
-        var scope = String(c.count);
-        if (c.stations && c.stations.length) scope += ' (' + c.stations.join(', ') + ')';
-        else if (c.except && c.except.length) scope += ' (all except ' + c.except.join(', ') + ')';
-        tr.appendChild(el('td', scope));
+        tr.appendChild(el('td', conditioningScope(c, survey.stations_built)));
         tbl.appendChild(tr);
       });
       cond.appendChild(tbl);
@@ -1067,7 +1454,7 @@ def _head(title: str) -> str:
     return Template(_HEAD).substitute(
         title=_esc(title), bg=_PALETTE["bg"], ink=_PALETTE["ink"], muted=_PALETTE["muted"],
         accent=_PALETTE["accent"], panel=_PALETTE["panel"], ok=_PALETTE["ok"],
-        warn=_PALETTE["warn"], bad=_PALETTE["bad"],
+        warn=_PALETTE["warn"], bad=_PALETTE["bad"], info=_PALETTE["info"],
     )
 
 
@@ -2444,38 +2831,104 @@ _HUB_TABS = (("overview", "Overview & QA"), ("stations", "Stations"),
 _HUB_TAB_KEYS = frozenset(k for k, _ in _HUB_TABS)
 
 
+# C43-HUB (Q3 ruling, 2026-07-11): the ONE display-layer email heuristic behind all three
+# citation-author surfaces — the Overview info row (data-citation-email scaffold attribute), the
+# Metadata TOC issue hint, and the Metadata inline field error — so they can never disagree.
+# DISPLAY-LAYER ONLY: the server validator and the preview/confirm POST path are untouched (pinned).
+_EMAIL_DISPLAY_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# The contract's inline-error copy (H4), rendered verbatim wherever the heuristic fires.
+_CITATION_EMAIL_ERROR = ("This looks like an email address — citation authors are published "
+                         "verbatim in every station's XML. Use a name; keep the email in Contact.")
+
+
+def citation_author_email(fields: dict) -> tuple[str, str] | None:
+    """(owning_section, offending_value) when the survey's CITATION AUTHOR looks like an email
+    address, else None. Mirrors the engine's _investigators_of precedence EXACTLY (build_portal.py):
+    lead_investigator.name, when present, IS the citation author baked into every served station
+    XML — principal_investigators names are used only when there is no lead. A display heuristic,
+    never a validator: the runner-side validation rules are unchanged."""
+    li = fields.get("lead_investigator")
+    if isinstance(li, dict) and li.get("name"):
+        name = str(li["name"]).strip()
+        return ("lead_investigator", name) if _EMAIL_DISPLAY_RE.match(name) else None
+    for pi in (fields.get("principal_investigators") or []):
+        if isinstance(pi, dict) and pi.get("name"):
+            name = str(pi["name"]).strip()
+            if _EMAIL_DISPLAY_RE.match(name):
+                return ("principal_investigators", name)
+    return None
+
+
+def _hub_header(slug: str, *, fields: dict, version: str | None) -> str:
+    """The hub header (C43-HUB H1, every tab): the survey TITLE (survey.yaml name/project_name,
+    falling back to the slug when the read-job degraded) + a mono slug chip, then the mockup's
+    orientation line — 'v<version> · <licence> · <access> · collection <id>' from the metadata
+    read-job fields, each segment rendered ONLY when the survey carries the fact (never invented),
+    plus a hidden counts span survey-hub.js fills browser-side from build_report
+    ('N stations published, M serving' — published = built + dropped, serving = built)."""
+    title = slug
+    for key in ("name", "project_name"):
+        v = fields.get(key)
+        if isinstance(v, str) and v.strip():
+            title = v.strip()
+            break
+    h1 = f'<h1>{_esc(title)} <span class="slugchip">{_esc(slug)}</span></h1>'
+    segs: list[str] = []
+    if version:
+        segs.append(f"v{_esc(str(version))}")
+    lic = fields.get("license")
+    if isinstance(lic, str) and lic.strip():
+        segs.append(_esc(lic.strip()))
+    acc = fields.get("access")
+    if isinstance(acc, dict) and isinstance(acc.get("level"), str) and acc["level"].strip():
+        segs.append(_esc(acc["level"].strip()))
+    coll = fields.get("collection")
+    if isinstance(coll, dict) and isinstance(coll.get("id"), str) and coll["id"].strip():
+        segs.append(f'collection <span class="dt">{_esc(coll["id"].strip())}</span>')
+    counts = '<span data-hub-counts hidden></span>'
+    return (h1 + f'<p class="sub" id="hub-orientation">{" · ".join(segs)}{counts}</p>')
+
+
 def _hub_tab_strip(slug: str, active: str) -> str:
-    """The hub tab strip (C43 Stage 2a): Overview & QA / Stations / Metadata / History, all in-hub
-    tabs. Stations gained a real drill-down panel (S2a-1) and History a real read-only git log
-    (S2a-2), so both are now tabs rather than the Stage-1 link-out/absence."""
-    parts = ['<div class="tabs">']
+    """The hub tab strip (C43 Stage 2a; C43-HUB H1 adds the browser-populated Stations chip):
+    Overview & QA / Stations / Metadata / History, all in-hub tabs. The Stations entry carries a
+    hidden chip slot ([data-stations-chip]) survey-hub.js fills with '<d> dropped · <f> flagged'
+    from build_report — hidden at 0/0, so a healthy survey shows no chip. The strip carries the
+    slug (data-survey-slug) so the chip/header script works on EVERY tab, not just Overview."""
+    parts = [f'<div class="tabs" data-hub-tabs data-survey-slug="{_esc(slug)}">']
     for key, label in _HUB_TABS:
         on = " on" if key == active else ""
+        chip = ""
+        if key == "stations":
+            chip = (f' <span class="badge" data-stations-chip hidden '
+                    f'style="background:{_PALETTE["warn"]}"></span>')
         parts.append(
             f'<a class="hubtab{on}" href="/gateway/curator/survey/{_esc(slug)}?tab={key}">'
-            f'{_esc(label)}</a>')
+            f'{_esc(label)}{chip}</a>')
     parts.append("</div>")
     return "".join(parts)
 
 
-def _hub_overview_body(slug: str) -> str:
-    """The Overview & QA tab body. Every value is populated BROWSER-side by survey-hub.js from
-    /data/build_report.json + /data/build.json filtered to THIS survey (data-survey-slug). The server
-    renders only the scaffold + loading placeholders — it has no site-data mount, so it cannot read
-    the served corpus (the same constraint the serve panel lives under). Refused/warning rows render
-    their gate diagnosis inline; the only links out are to the existing station-removal list (the
-    drill-down is Stage 2 — no dangling links). Metadata-class issues link to the Metadata tab."""
+def _hub_overview_body(slug: str, *, citation_email: str | None = None) -> str:
+    """The Overview & QA tab body (C43-HUB H2 scaffold). Every value is populated BROWSER-side by
+    survey-hub.js from /data/build_report.json filtered to THIS survey (data-survey-slug). The
+    server renders only the scaffold + loading placeholders — it has no site-data mount, so it
+    cannot read the served corpus (the serve-panel constraint). `citation_email` (the Q3-ruled
+    server-side heuristic over the metadata read-job fields) is stamped as data-citation-email so
+    the JS can render the mockup's metadata info row from a SERVED fact, never a string-match
+    guess. The section sub-lines carry the mockup's framing copy."""
+    email_attr = f' data-citation-email="{_esc(citation_email)}"' if citation_email else ""
     return (
-        f'<div id="survey-qa" data-survey-slug="{_esc(slug)}">'
+        f'<div id="survey-qa" data-survey-slug="{_esc(slug)}"{email_attr}>'
         '<div class="cards" id="qa-cards"><p class="sub">Loading survey health…</p></div>'
         '<div class="panel"><h2>Needs attention</h2>'
+        '<p class="sub" style="margin:0 0 .5rem">from build_report, newest build</p>'
         '<div id="qa-attention"><p class="sub">Loading build report…</p></div></div>'
         '<div class="panel"><h2>Conditioning summary</h2>'
+        '<p class="sub" style="margin:0 0 .5rem">honesty notes on all served stations</p>'
         '<div id="qa-conditioning"><p class="sub">Loading conditioning notes…</p></div></div>'
         '</div>'
-        # EXTERNAL same-origin script (strictPages CSP blocks inline JS). Degrades: without it the
-        # placeholders remain, the page never breaks.
-        '<script src="/gateway/curator/survey-hub.js" defer></script>'
     )
 
 
@@ -2634,8 +3087,9 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         f'<nav class="toc" id="hub-toc" style="flex:0 0 12rem">{"".join(toc_links)}</nav>'
         f'<div style="flex:1 1 auto;min-width:0" id="hub-sections">{"".join(forms)}</div>'
         '</div>'
+        # editor.js only — survey-hub.js is included ONCE by render_survey_hub for every tab
+        # (C43-HUB: the header counts + Stations chip need it hub-wide).
         '<script src="/gateway/curator/editor.js" defer></script>'
-        '<script src="/gateway/curator/survey-hub.js" defer></script>'
     )
 
 
@@ -2643,37 +3097,34 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
                       nav: "NavContext", field_errors=None, submitted: dict | None = None,
                       active_section: str | None = None, commits: list | None = None,
                       history_error: str = "", build_lag: dict | None = None) -> str:
-    """The per-survey hub (C43 Stage 1 S1-2 + Stage 2a). `tab` selects Overview & QA (default) /
-    Stations / Metadata / History. Rendered inside the nav shell. The Overview + Stations tabs are
-    browser-populated from the served /data corpus (the serve-panel pattern, zero new gateway
-    privileges); the Metadata tab is the per-section editor; the History tab is server-rendered from
-    the runner history read-job (`commits`). `fields`/`version` come from the runner read-job (needed
-    for the Metadata tab). `build_lag` (S2a-1 [FC-2]) carries the served-vs-published label state the
-    Stations JS renders when served ≠ published."""
+    """The per-survey hub (C43 Stage 1 S1-2 + Stage 2a + the C43-HUB mockup treatment). `tab`
+    selects Overview & QA (default) / Stations / Metadata / History. Rendered inside the nav shell
+    under ONE mockup-shaped header for every tab — the survey title + slug chip + orientation line
+    (_hub_header, from the metadata read-job `fields`/`version`; the header DEGRADES to the slug
+    when the read-job failed on a non-metadata tab). The Overview + Stations tabs are browser-
+    populated from the served /data corpus (the serve-panel pattern, zero new gateway privileges);
+    the Metadata tab is the per-section editor; the History tab is server-rendered from the runner
+    history read-job (`commits`). `build_lag` (S2a-1 [FC-2]) carries the served-vs-published label
+    state the Stations JS renders when served ≠ published. survey-hub.js loads ONCE for every tab
+    (header counts + Stations chip are hub-wide); it degrades to the server-rendered scaffold."""
     tab = tab if tab in _HUB_TAB_KEYS else "overview"
+    fields = fields or {}
+    head = _hub_header(slug, fields=fields, version=version)
     strip = _hub_tab_strip(slug, tab)
+    citation = citation_author_email(fields)
     if tab == "metadata":
-        cur = version or "0.0.0"
-        head = (f'<h1>{_esc(slug)} — metadata</h1>'
-                f'<p class="sub">current version {_esc(cur)}</p>')
         inner = _hub_metadata_body(slug=slug, version=version, fields=fields, csrf_token=csrf_token,
                                    field_errors=field_errors, submitted=submitted,
                                    active_section=active_section)
     elif tab == "stations":
-        head = (f'<h1>{_esc(slug)} — stations</h1>'
-                '<p class="sub">Filter the station table, then open a station for its facts, response '
-                'curves, and quadrant verdicts. All data is read from the served corpus.</p>')
         inner = _hub_stations_body(slug, build_lag=build_lag)
     elif tab == "history":
-        head = (f'<h1>{_esc(slug)} — history</h1>'
-                '<p class="sub">The read-only publication audit trail.</p>')
         inner = _hub_history_body(slug=slug, commits=commits or [], error=history_error)
     else:
-        head = (f'<h1>{_esc(slug)}</h1>'
-                '<p class="sub">Survey health at a glance — served vs published counts, QA flags, '
-                'and every build-report warning as an actionable row.</p>')
-        inner = _hub_overview_body(slug)
-    body = f'{head}{strip}{inner}'
+        inner = _hub_overview_body(slug, citation_email=citation[1] if citation else None)
+    # EXTERNAL same-origin script, ONCE per page (strictPages CSP blocks inline JS). Degrades:
+    # placeholders/scaffolds remain, the page never breaks.
+    body = f'{head}{strip}{inner}<script src="/gateway/curator/survey-hub.js" defer></script>'
     # The stations tab opts into the wide measure (H2 pattern): a split of list + facts/plots needs
     # the full viewport — inside the default 960px wrap the list truncated and the panel cramped
     # (owner usability report 2026-07-11). The other tabs keep the reading measure.
