@@ -246,6 +246,25 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     assert not re.search(r"""\bon[a-z]{3,}\s*=\s*['"]""", js)
 
 
+def test_station_panel_no_raw_json_outside_collapsed_details():
+    """GATE F1/F2 SOURCE PIN (2026-07-11 browser pass). The stations panel renders NO raw JSON
+    outside a collapsed <details>: the ONLY <pre> in STATIONS_JS is the collapsed 'raw
+    station.json' dump; the old visible 'Conditioning / QA notes' and 'Coordinate QC' pre blocks
+    are gone; conditioning and coordinate QC render as ONE terse dl line each
+    (conditioningLine / coordQcLine over served station.json values). FAILS IF a visible pre
+    returns, the terse lines unwire, or the collapsed dump disappears."""
+    js = curatorpage.STATIONS_JS
+    assert js.count("el('pre')") == 1, (
+        "exactly ONE pre — the collapsed raw station.json dump — is allowed in the panel")
+    assert "el('summary', 'raw station.json')" in js
+    assert "'Conditioning / QA notes'" not in js, "the visible conditioning JSON block must stay gone"
+    assert "el('h2', 'Coordinate QC')" not in js, "the visible coordinate-QC JSON block must stay gone"
+    assert "function conditioningLine(" in js
+    assert "conditioningLine(station.canonical_conditioning)" in js, "terse conditioning line wired"
+    assert "function coordQcLine(" in js
+    assert "coordQcLine(station.coordinate_qc)" in js, "terse coordinate-QC line wired"
+
+
 # --------------------------------------------------------------------------------------------------
 # H4 — metadata TOC state hints + the inline citation-email field error (display-layer only)
 # --------------------------------------------------------------------------------------------------

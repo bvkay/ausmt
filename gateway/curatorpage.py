@@ -545,6 +545,18 @@ SURVEY_HUB_JS = r"""
     return m ? m[1] : null;
   }
 
+  // Numeric-aware id ordering (gate F3): a lexicographic sort renders an UNPADDED run's range
+  // label backwards ('L10 … L3'). Ids sharing a prefix compare by the trailing digit run AS AN
+  // INTEGER; anything else falls back to plain string order. Zero-padded corpora order
+  // identically either way.
+  function idOrder(a, b) {
+    var sa = String(a), sb = String(b);
+    var ma = /^(.*?)(\d+)$/.exec(sa);
+    var mb = /^(.*?)(\d+)$/.exec(sb);
+    if (ma && mb && ma[1] === mb[1]) return Number(ma[2]) - Number(mb[2]);
+    return sa < sb ? -1 : (sa > sb ? 1 : 0);
+  }
+
   // One-line class summary for a clustered row, derived from the item's CLASS (never a guess).
   function classSummary(it) {
     if (it.kind === 'fail') {
@@ -587,7 +599,7 @@ SURVEY_HUB_JS = r"""
         });
         return;
       }
-      var ids = g.map(function (it) { return it.station; }).sort();
+      var ids = g.map(function (it) { return it.station; }).sort(idOrder);   // F3: numeric-aware
       var sid = g.length === 3 ? ids.join(' · ')
                                : ids[0] + ' … ' + ids[ids.length - 1];
       out.push({ kind: g[0].kind, sid: sid,
@@ -1241,6 +1253,40 @@ STATIONS_JS = r"""
     if (!t) return { xy: classify([], 'xy'), yx: classify([], 'yx') };
     return { xy: classify(t[T.phs_xy] || [], 'xy'), yx: classify(t[T.phs_yx_adj] || [], 'yx') };
   }
+  // Terse conditioning fragment (gate F1): each canonical_conditioning note string terses to a
+  // PREFIX of itself — the text before the engine's own ' — ' explanation separator — and a
+  // fragment is never allowed to strand an open parenthesis (the channel-orientations note has
+  // its em-dash INSIDE parens; a mid-paren cut would garble). Prefix-derivation means the line
+  // can never say something the note does not; the FULL notes ride the title attr and the raw
+  // JSON stays in the collapsed details.
+  function terseConditioningNote(note) {
+    var s = String(note == null ? '' : note);
+    var cut = s.indexOf(' — ');
+    var frag = cut >= 0 ? s.slice(0, cut) : s;
+    var open = (frag.match(/\(/g) || []).length;
+    var close = (frag.match(/\)/g) || []).length;
+    if (open > close) frag = frag.slice(0, frag.indexOf('(')).replace(/\s+$/, '');
+    return frag;
+  }
+  // The mockup's ONE conditioning line: terse fragments joined ' · '.
+  function conditioningLine(notes) {
+    var frags = (notes || []).map(terseConditioningNote).filter(function (f) { return !!f; });
+    return frags.length ? frags.join(' · ') : null;
+  }
+  // Terse coordinate-QC line (gate F2): the station.json coordinate_qc fields on one line —
+  // flag verbatim, the HEAD/INFO conflict when recorded, the resolution when recorded. A null
+  // field is OMITTED, never asserted (no invented 'unresolved'). Warn-toned by the caller when
+  // flagged; the Position row's catalogue-flag marker stays the primary signal.
+  function coordQcLine(qc) {
+    if (!qc || typeof qc !== 'object') return null;
+    var parts = [];
+    if (qc.flag) parts.push(String(qc.flag));
+    if (qc.head_info_conflict_deg != null) {
+      parts.push('HEAD/INFO conflict ' + String(qc.head_info_conflict_deg) + '°');
+    }
+    if (qc.resolution) parts.push('resolution: ' + String(qc.resolution));
+    return parts.length ? parts.join(' · ') : null;
+  }
 
   // A plot card: a caption div + the svg. The verdict strip is appended SEPARATELY, beneath.
   function wrapPlot(caption, svgNode) {
@@ -1318,6 +1364,12 @@ STATIONS_JS = r"""
       dl.appendChild(dd);
     }
     fact('Position', positionText(cat[C.lat], cat[C.lon], cat[C.coord_flag]), { mono: true });
+    // Gate F2: the coordinate-QC detail as ONE terse line right under Position (warn-toned when
+    // flagged) — the raw JSON lives only in the collapsed details below.
+    if (station && !station.__missing && station.coordinate_qc) {
+      var cq = coordQcLine(station.coordinate_qc);
+      if (cq) fact('Coordinate QC', cq, { warn: !!station.coordinate_qc.flag });
+    }
     fact('Band', bandText(cat[C.pmin], cat[C.pmax], cat[C.nper]));
     if (station == null) {
       fact('Frame', '…');                       // station.json in flight
@@ -1333,28 +1385,27 @@ STATIONS_JS = r"""
       fact('Median rel. error', mreText(sc[SC.mre]));
     }
     fact('Tipper', tipperText(cat[C.comps]));
+    // Gate F1: conditioning as ONE terse line (the mockup's 'Conditioning: sign_convention
+    // library default · …' shape) — prefix-derived fragments, FULL notes on the title attr.
+    if (station && !station.__missing && station.canonical_conditioning) {
+      var cl2 = conditioningLine(station.canonical_conditioning);
+      if (cl2) fact('Conditioning', cl2,
+                    { title: (station.canonical_conditioning || []).join('\n') });
+    }
     var shaFull = String(cat[C.sha256] || '');
     fact('Source file', (cat[C.file] || '-') + ' · sha256 ' + shortSha(shaFull),
          { mono: true, title: shaFull ? 'sha256 ' + shaFull : null });
     panel.appendChild(dl);
 
     if (station && !station.__missing) {
-      if (station.frame) {
-        // FULL raw frame declaration (every extra frame field) kept available, collapsed.
-        var det = el('details');
-        var sum = el('summary', 'raw frame declaration'); det.appendChild(sum);
-        var fp = el('pre'); fp.textContent = JSON.stringify(station.frame, null, 1); det.appendChild(fp);
-        panel.appendChild(det);
-      }
-      var cc = station.canonical_conditioning;
-      if (cc) {
-        panel.appendChild(el('h2', 'Conditioning / QA notes'));
-        var cp = el('pre'); cp.textContent = JSON.stringify(cc, null, 1); panel.appendChild(cp);
-      }
-      if (station.coordinate_qc) {
-        panel.appendChild(el('h2', 'Coordinate QC'));
-        var qp = el('pre'); qp.textContent = JSON.stringify(station.coordinate_qc, null, 1); panel.appendChild(qp);
-      }
+      // Gate F1/F2: NO raw JSON visible outside a collapsed details. ONE details carries the
+      // ENTIRE fetched station.json verbatim (frame + conditioning + coordinate QC + every
+      // extra field) — superseding the frame-only 'raw frame declaration' block; all values via
+      // textContent, never innerHTML.
+      var det = el('details');
+      var sum = el('summary', 'raw station.json'); det.appendChild(sum);
+      var fp = el('pre'); fp.textContent = JSON.stringify(station, null, 1); det.appendChild(fp);
+      panel.appendChild(det);
     }
     return panel;
   }

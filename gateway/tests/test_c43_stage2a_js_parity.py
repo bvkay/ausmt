@@ -484,17 +484,19 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
 
 
 def test_frame_panel_renders_words_and_collapsed_raw_json():
-    """FRAME-PANEL SOURCE PIN (C43-HUB H3 shape). factsPanel must render the frame fact via
-    frameWords(station.frame) AND keep the FULL raw JSON (every extra frame field) in a collapsed
-    <details> whose <pre> is JSON.stringify(station.frame, ...) set by textContent. FAILS IF the
-    worded line disappears, the superseded frameRows table returns, or the verbatim raw JSON is
-    dropped."""
+    """FRAME-PANEL SOURCE PIN (C43-HUB H3 shape; gate F1/F2 round widened the collapsed dump to
+    the WHOLE station.json). factsPanel must render the frame fact via frameWords(station.frame)
+    AND keep the FULL raw document (frame + conditioning + coordinate QC + every extra field) in
+    a collapsed <details> whose <pre> is JSON.stringify(station, ...) set by textContent. FAILS
+    IF the worded line disappears, the superseded frameRows table returns, or the verbatim raw
+    JSON is dropped/narrowed."""
     js = curatorpage.STATIONS_JS
     assert "function frameWords(" in js, "the pure frame-words builder must exist"
     assert "frameWords(station.frame)" in js, "factsPanel must word the served frame"
     assert "function frameRows(" not in js, "the superseded S2a fact-row table must stay replaced"
-    assert "el('details')" in js, "the full raw frame declaration must be kept in a collapsed <details>"
-    assert "el('summary', 'raw frame declaration')" in js, "the details summary labels the raw JSON"
-    # The raw JSON is still present, verbatim, via textContent (never innerHTML).
-    assert "fp.textContent = JSON.stringify(station.frame, null, 1)" in js, (
-        "the collapsed block must carry the FULL verbatim frame JSON via textContent")
+    assert "el('details')" in js, "the raw station.json must be kept in a collapsed <details>"
+    assert "el('summary', 'raw station.json')" in js, "the details summary labels the raw JSON"
+    # The raw JSON is still present, verbatim, via textContent (never innerHTML) — the WHOLE
+    # fetched document (a frame-only narrowing would silently hide conditioning/coordinate QC).
+    assert "fp.textContent = JSON.stringify(station, null, 1)" in js, (
+        "the collapsed block must carry the FULL verbatim station.json via textContent")

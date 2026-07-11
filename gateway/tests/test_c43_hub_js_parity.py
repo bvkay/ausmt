@@ -213,9 +213,9 @@ def warn_report(tmp_path_factory):
 # --------------------------------------------------------------------------------------------------
 _HUB_FNS = ("isQuadrantWarnNote", "qaFlagCount", "hubCounts", "stationsChipText",
             "frameCardFacts", "signedDegStr", "terseDrop", "terseWarn", "attentionItems",
-            "idPrefix", "classSummary", "clusterWarnings", "truncEmail", "metaInfoText",
-            "attentionPlan", "attentionHref", "attentionLinkText", "durationText",
-            "cacheWord", "cardsPlan", "conditioningScope")
+            "idPrefix", "idOrder", "classSummary", "clusterWarnings", "truncEmail",
+            "metaInfoText", "attentionPlan", "attentionHref", "attentionLinkText",
+            "durationText", "cacheWord", "cardsPlan", "conditioningScope")
 
 
 def _hub_driver(body: str) -> str:
@@ -517,7 +517,8 @@ process.stdout.write(JSON.stringify({
 _ST_FNS = ("floormod", "wrap180", "trueYx", "mapYx", "inQ1", "inQ3", "medianOf", "classify",
            "num", "shortSha", "portalStationUrl", "latLonText", "positionText", "bandText",
            "dimText", "mreText", "tipperText", "signedMedian", "sentencePart",
-           "conventionSentence", "frameWords", "stationStatus", "qualityChip", "classifyStation")
+           "conventionSentence", "frameWords", "stationStatus", "qualityChip", "classifyStation",
+           "terseConditioningNote", "conditioningLine", "coordQcLine")
 
 
 def _stations_driver(body: str) -> str:
@@ -698,3 +699,103 @@ def test_stations_list_merged_latlon_and_portal_link_source():
     main_js = (_ENGINE_DIR.parent / "portal" / "src" / "main.js").read_text(encoding="utf-8")
     assert re.search(r"#\\?/station\\?/", main_js), \
         "portal deep-link route gone — the hub link would dangle"
+
+
+# ==================================================================================================
+# Gate fix round (2026-07-11 browser pass): F1/F2 terse lines + F3 numeric range ordering
+# ==================================================================================================
+def _station_docs(warn_report) -> list:
+    """Every station.json document the REAL engine wrote for the fixture survey."""
+    return [json.loads((sdir / "station.json").read_text(encoding="utf-8"))
+            for sdir in sorted((warn_report["products"] / SLUG).iterdir())]
+
+
+def test_terse_conditioning_and_coordqc_lines_from_real_station_json(warn_report, tmp_path):
+    """GATE F1/F2 ENGINE-TRUTH PIN. terseConditioningNote / conditioningLine / coordQcLine driven
+    with the station.json documents the REAL engine wrote. Invariants: every conditioning
+    fragment is a PREFIX of its source note (derivation, never invention); a note carrying the
+    engine's ' — ' explanation is genuinely TERSED (fragment strictly shorter); no fragment
+    strands an open parenthesis (the channel-orientations note's em-dash sits inside parens);
+    the line is the fragments joined ' · '. coordQcLine renders the flag verbatim and OMITS null
+    fields — the real fixture's {flag, null, null} yields exactly the flag, and grafting the
+    engine's own field shapes exercises conflict/resolution. FAILS IF a fragment invents text,
+    the explanation stops being elided, a paren is stranded, or a null field is asserted."""
+    docs = _station_docs(warn_report)
+    cond_docs = [d for d in docs if d.get("canonical_conditioning")]
+    qc_docs = [d for d in docs if d.get("coordinate_qc")]
+    assert cond_docs, "fixture sanity: the engine recorded canonical_conditioning"
+    assert qc_docs, "fixture sanity: the engine recorded coordinate_qc"
+    driver = _stations_driver("""
+const p = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(JSON.stringify({
+  cond: p.cond.map(function (notes) {
+    return { frags: notes.map(function (n) { return terseConditioningNote(n); }),
+             line: conditioningLine(notes) };
+  }),
+  qc: p.qc.map(function (q) { return coordQcLine(q); }),
+  variants: p.variants.map(function (q) { return coordQcLine(q); })
+}));
+""")
+    real_qc = qc_docs[0]["coordinate_qc"]
+    variants = [dict(real_qc, head_info_conflict_deg=1.7),
+                dict(real_qc, resolution="info"),
+                {}]
+    got = _run_node(tmp_path, driver, {
+        "cond": [d["canonical_conditioning"] for d in cond_docs],
+        "qc": [d["coordinate_qc"] for d in qc_docs],
+        "variants": variants})
+    tersed_any = False
+    for doc, res in zip(cond_docs, got["cond"]):
+        notes = doc["canonical_conditioning"]
+        assert len(res["frags"]) == len(notes)
+        for note, frag in zip(notes, res["frags"]):
+            assert frag and note.startswith(frag), (note, frag)          # prefix — never invented
+            assert frag.count("(") == frag.count(")"), (note, frag)      # no stranded paren
+            if " — " in note:
+                assert len(frag) < len(note), (note, frag)               # explanation ELIDED
+                tersed_any = True
+        assert res["line"] == " · ".join(res["frags"])
+    assert tersed_any, "fixture sanity: at least one note carries an ' — ' explanation to elide"
+    # Real coordinate_qc: flag verbatim, null conflict/resolution OMITTED.
+    for doc, line in zip(qc_docs, got["qc"]):
+        q = doc["coordinate_qc"]
+        expected = [str(q["flag"])] if q.get("flag") else []
+        if q.get("head_info_conflict_deg") is not None:
+            expected.append(f"HEAD/INFO conflict {q['head_info_conflict_deg']}°")
+        if q.get("resolution"):
+            expected.append(f"resolution: {q['resolution']}")
+        assert line == (" · ".join(expected) if expected else None), (q, line)
+    assert got["variants"][0] == f"{real_qc['flag']} · HEAD/INFO conflict 1.7°"
+    assert got["variants"][1] == f"{real_qc['flag']} · resolution: info"
+    assert got["variants"][2] is None, "an empty coordinate_qc renders NO line"
+
+
+def test_cluster_range_label_numeric_order(warn_report, tmp_path):
+    """GATE F3 PIN. The cluster range label orders NUMERICALLY on the trailing digit run: the
+    PRODUCER-TRUTH CP1L items remapped to the panel's unpadded-id vector (CP1L02→L2, CP1L03→L3,
+    CP1L04→L10, CP1L05→L15 — same items, only the id text changed) must render 'L2 … L15', never
+    the lexicographic 'L10 … L3'-class backwards label; the zero-padded real corpus renders
+    unchanged ('CP1L02 … CP1L05'). FAILS IF the sort reverts to lexicographic (shown red) or the
+    remap disturbs grouping/count."""
+    driver = _hub_driver("""
+const p = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const items = attentionItems(p.survey).filter(function (it) {
+  return it.cls === 'quadrant:Zyx';
+});
+const remap = { CP1L02: 'L2', CP1L03: 'L3', CP1L04: 'L10', CP1L05: 'L15' };
+const unpadded = items.map(function (it) {
+  var copy = {}; for (var k in it) copy[k] = it[k];
+  copy.station = remap[it.station] || it.station;
+  return copy;
+});
+process.stdout.write(JSON.stringify({
+  padded: clusterWarnings(items),
+  unpadded: clusterWarnings(unpadded)
+}));
+""")
+    got = _run_node(tmp_path, driver, {"survey": warn_report["survey"]})
+    assert got["padded"][0]["sid"] == "CP1L02 … CP1L05", "zero-padded corpora render unchanged"
+    row = got["unpadded"][0]
+    assert row["n"] == 4 and len(got["unpadded"]) == 1, "the remap must not disturb grouping"
+    assert row["ids"] == ["L2", "L3", "L10", "L15"], row["ids"]
+    assert row["sid"] == "L2 … L15", f"backwards/lexicographic range label: {row['sid']!r}"
