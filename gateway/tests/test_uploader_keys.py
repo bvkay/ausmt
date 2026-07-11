@@ -266,3 +266,96 @@ def test_uploader_email_absent_from_public_status(tmp_path):
             assert status.status_code == 200
             assert unique not in status.text
     run(_body())
+
+
+# ---- H2 (C43-S2a-HOTFIX): keys-page layout — full width, short datetimes, usable note editor ----
+# Owner feedback (live box, 2026-07-11): "use the full width of the page, to spread out the issued
+# keys table to make it easier to tell what is going on." The shipped page rendered inside the
+# shell's 960px .wrap: the note textarea was a few characters wide and the Created/Last-used ISO
+# datetimes wrapped over three lines.
+
+def _nav():
+    from gateway.curatorpage import NavContext
+    return NavContext(active="uploaders", crumb="<b>Uploader keys</b>", published_head=None,
+                      published_available=False, csrf="test-csrf-token")
+
+
+def test_short_utc_canonical_and_verbatim_fallback():
+    """H2 PIN (display shortener contract, the S2a-5 build-id posture). db._utc_now's canonical
+    '%Y-%m-%dT%H:%M:%SZ' shape renders as 'YYYY-MM-DD HH:MM' (date + minutes); ANY other shape is
+    returned VERBATIM, never mangled. FAILS IF the canonical form stops shortening (the three-line
+    wrap comes back) or a non-canonical value is truncated/emptied (audit data silently lost)."""
+    from gateway.curatorpage import short_utc
+    assert short_utc("2026-07-08T07:49:12Z") == "2026-07-08 07:49"
+    assert short_utc("2026-12-31T23:59:59Z") == "2026-12-31 23:59"
+    # VERBATIM fallback — never mangled, never emptied.
+    for odd in ("not-a-timestamp", "2026-07-08 07:49:12", "2026-07-08T07:49:12+00:00",
+                "2026-07-08T07:49:12", ""):
+        assert short_utc(odd) == odd, f"non-canonical {odd!r} must pass through verbatim"
+
+
+def test_keys_page_wide_layout_short_datetimes_and_note_width():
+    """H2 RENDER PIN. The rendered keys page carries (a) the wide-layout marker on its content wrap
+    (the per-page variant — the shell's 960px measure is untouched elsewhere), (b) every stored
+    datetime in the short 'YYYY-MM-DD HH:MM' form with the FULL ISO in a title attribute (hover
+    keeps the audit precision; the cell stops wrapping over three lines), (c) a usable note editor
+    (34ch textarea) that KEEPS the 2000 cap, and (d) no inline JS (CSP discipline unchanged).
+    FAILS IF the wide marker is dropped, a raw ISO renders as visible cell text again, the title
+    loses the full ISO, the textarea loses its width or its cap, or inline JS appears."""
+    from gateway.curatorpage import render_uploaders
+    from gateway.db import UploaderKey
+    active = UploaderKey(id=1, name="field-team-1", email="ft1@example.org", key_sha256="h" * 64,
+                         created_utc="2026-07-08T07:49:12Z", created_by="ben",
+                         revoked_utc=None, revoked_by=None,
+                         last_used_utc="2026-07-10T23:05:59Z", note=None)
+    fresh = UploaderKey(id=2, name="fresh-key", email=None, key_sha256="h" * 64,
+                        created_utc="2026-07-09T00:00:01Z", created_by="ben",
+                        revoked_utc=None, revoked_by=None, last_used_utc=None, note=None)
+    revoked = UploaderKey(id=3, name="old-key", email=None, key_sha256="h" * 64,
+                          created_utc="2026-01-02T03:04:05Z", created_by="ben",
+                          revoked_utc="2026-06-30T11:22:33Z", revoked_by="ben",
+                          last_used_utc="2026-06-01T10:00:00Z", note="retired")
+    html = render_uploaders(curator_name="ben", keys=[active, fresh, revoked],
+                            csrf_token="tok", submission_counts={"field-team-1": 2}, nav=_nav())
+    # (a) the wide-layout marker, on the content wrap.
+    assert '<div class="wrap wide">' in html, "keys page must opt into the wide layout"
+    # (b) short form + full-ISO title for created / last-used / revoked timestamps.
+    for full, short in (("2026-07-08T07:49:12Z", "2026-07-08 07:49"),      # created (active)
+                        ("2026-07-10T23:05:59Z", "2026-07-10 23:05"),      # last used (active)
+                        ("2026-06-30T11:22:33Z", "2026-06-30 11:22")):     # revoked-at
+        assert f'title="{full}"' in html, f"full ISO {full} must ride in a title attribute"
+        assert f">{short}<" in html, f"short form {short} must be the visible text"
+        assert f">{full}<" not in html, f"raw ISO {full} must not render as visible cell text"
+    assert "never" in html  # a never-used key still says so in Last used
+    # (c) the note editor is usable and still capped.
+    assert "width:34ch" in html, "the note textarea must carry a usable width"
+    assert 'maxlength="2000"' in html, "the 2000-char note cap must survive the layout change"
+    # (d) CSP discipline: no inline <script>, no on*= handler in the rendered bytes.
+    import re
+    for m in re.finditer(r"<script\b[^>]*>", html):
+        assert re.search(r"\bsrc\s*=", m.group(0)), f"inline <script> on the keys page: {m.group(0)}"
+    assert re.findall(r"<[^>]*\son[a-z]{2,}\s*=", html) == [], "inline handler on the keys page"
+
+
+def test_wide_layout_is_keys_page_only():
+    """H2 SCOPE PIN (owner: widen the keys page, 'do not silently change every other page's
+    measure'). Another _shell page (the queue) must NOT carry the wide marker — the default wrap
+    measure is unchanged. FAILS IF the wide variant leaks into _shell's default."""
+    from gateway.curatorpage import render_queue
+    html = render_queue(curator_name="ben", rows=[], csrf_token="tok", serve_panel="", nav=_nav())
+    assert '<div class="wrap">' in html, "the queue page must keep the default measure"
+    assert 'class="wrap wide"' not in html, "the wide variant must not leak beyond the keys page"
+
+
+def test_keys_page_served_wide_end_to_end(tmp_path):
+    """H2 ROUTE PIN. The SERVED /gateway/curator/uploaders page (through the app + nav shell)
+    carries the wide marker — the renderer pin above can't catch an app-side regression that stops
+    passing nav (falling back to the chrome-less _page). FAILS IF the served bytes lose the wide
+    wrap."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            page = await client.get("/gateway/curator/uploaders")
+            assert page.status_code == 200
+            assert '<div class="wrap wide">' in page.text
+    run(_body())

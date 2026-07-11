@@ -16,6 +16,7 @@ never on /gateway/status/*.
 from __future__ import annotations
 
 import html
+import re
 from string import Template
 
 from . import checklist as checklist_mod
@@ -50,6 +51,8 @@ _HEAD = """<!doctype html>
 <style>
  body{margin:0;background:$bg;color:$ink;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
  .wrap{max-width:960px;margin:0 auto;padding:2rem 1.25rem}
+ .wrap.wide{max-width:none} /* per-page opt-in (H2: the keys page) — the default measure stands */
+ .dt{font-variant-numeric:tabular-nums;white-space:nowrap} /* short datetimes never wrap (H2) */
  a{color:$accent}
  h1{font-size:1.15rem;font-weight:600;margin:0 0 .25rem}
  h2{font-size:1rem;font-weight:600;margin:0 0 .5rem}
@@ -403,7 +406,8 @@ SURVEY_HUB_JS = """
 # /data corpus (catalogue.json / sci.json / tf.json / surveys.json + build.json) — the serve-panel
 # pattern, ZERO new gateway privileges (the gateway has no site-data mount). The catalogue/sci/tf
 # arrays are INDEX-ALIGNED (station i is catalogue[i]/sci[i]/tf[i] — the engine appends them in one
-# pass); we filter to this survey's rows by the catalogue `survey` column.
+# pass); we filter to this survey's rows by ausmt_id prefix ('au.<slug>.', surveyRows below) — the
+# catalogue `survey` column carries the display LABEL, never the slug (hotfix H1, 2026-07-11).
 #
 # CSP + XSS discipline (the same rules SURVEY_HUB_JS follows, extended to SVG): served external under
 # script-src 'self'; EVERY value goes in via textContent or a DOM property, NEVER innerHTML with data;
@@ -481,6 +485,33 @@ STATIONS_JS = r"""
   function dataUrl(name) { return '/data/' + name; }
   function stationJsonUrl(slug2, id) {
     return '/data/products/' + encodeURIComponent(slug2) + '/' + encodeURIComponent(id) + '/station.json';
+  }
+
+  // ---- survey row selection (hotfix H1, 2026-07-11) ----
+  // ENGINE TRUTH: the catalogue `survey` column (C.survey) carries the survey's display LABEL
+  // (build_portal: r["survey"] = survey_label, e.g. "Burra 2017-18"), NEVER the slug — the merged
+  // Stage-2a filter compared it to the hub's slug and matched NOTHING, blanking the Stations tab on
+  // every production survey (owner-reported). Join on ausmt_id (C.ausmt_id) instead: the engine
+  // constructs it as au.<safe_component(slug)>.<station id>, and every slug the engine produces is
+  // a safe_component FIXED POINT, so 'au.' + slug + '.' selects exactly this survey's rows. The
+  // trailing dot is the survey boundary — 'au.burra-2017.' cannot prefix-match
+  // 'au.burra-2017-18.A1'. A hypothetical slug that is NOT a fixed point (e.g. one containing '..',
+  // which the engine never emits and no on-disk package carries) fails EMPTY (zero rows — the
+  // honest no-stations message), never WRONG (another survey's rows). DOM-free BY DESIGN: the
+  // executable Node pin drives THIS function with an engine-produced catalogue
+  // (test_c43_stage2a_js_parity.py) — the shipped defect was an inline, undrivable filter loop.
+  function surveyRows(cat, sci, tf, slug2) {
+    var prefix = 'au.' + slug2 + '.';
+    var rows = [];
+    for (var i = 0; i < cat.length; i++) {
+      if (String(cat[i][C.ausmt_id]).indexOf(prefix) !== 0) continue;
+      rows.push({
+        cat: cat[i],
+        sc: (Array.isArray(sci) && sci[i]) ? sci[i] : null,
+        tf: (Array.isArray(tf) && tf[i]) ? tf[i] : null
+      });
+    }
+    return rows;
   }
 
   // ---- tiny DOM helpers (no innerHTML with data) ----
@@ -886,17 +917,9 @@ STATIONS_JS = r"""
     if (publishedHead && served) {
       lagPending = !(publishedHead.indexOf(served) === 0 || served.indexOf(publishedHead) === 0);
     }
-    // Join catalogue/sci/tf BY INDEX, filtered to this survey's rows.
-    var rows = [];
-    for (var i = 0; i < cat.length; i++) {
-      if (String(cat[i][C.survey]) !== slug) continue;
-      rows.push({
-        cat: cat[i],
-        sc: (Array.isArray(sci) && sci[i]) ? sci[i] : null,
-        tf: (Array.isArray(tf) && tf[i]) ? tf[i] : null
-      });
-    }
-    render(rows, buildId, lagPending);
+    // Join catalogue/sci/tf BY INDEX, filtered to this survey's rows by ausmt_id prefix (H1 —
+    // the survey column is the display label, never the slug; see surveyRows).
+    render(surveyRows(cat, sci, tf, slug), buildId, lagPending);
   }).catch(function (e) {
     host.textContent = '';
     host.appendChild(el('p', 'Could not load the served corpus: ' + e.message, 'sub'));
@@ -915,6 +938,25 @@ def _url_quote(value) -> str:
     server-enumerated (never curator-typed) but may carry spaces/odd chars a bare href would break."""
     from urllib.parse import quote
     return quote(str(value), safe="")
+
+
+# The canonical stored-UTC shape (db._utc_now: time.strftime("%Y-%m-%dT%H:%M:%SZ")).
+_UTC_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}Z$")
+
+
+def short_utc(ts: str) -> str:
+    """The display form of a stored UTC timestamp (H2): the canonical db shape renders as
+    '2026-07-08 07:49' (date + minutes — operator resolution; the full ISO rides in the cell's
+    title attribute at the call site). VERBATIM fallback: any other shape is returned unchanged,
+    never mangled or emptied — the S2a-5 build-id shortener posture (audit data is sacred)."""
+    m = _UTC_TS_RE.match(ts or "")
+    return f"{m.group(1)} {m.group(2)}" if m else (ts or "")
+
+
+def _dt_html(ts: str) -> str:
+    """A datetime table cell fragment: the short form as visible text, the full stored ISO in a
+    title attribute (hover keeps the audit precision), tabular-nums + nowrap via .dt."""
+    return f'<span class="dt" title="{_esc(ts)}">{_esc(short_utc(ts))}</span>'
 
 
 def _head(title: str) -> str:
@@ -1018,17 +1060,19 @@ def _context_bar(nav: "NavContext") -> str:
     )
 
 
-def _shell(title: str, body: str, *, nav: "NavContext") -> str:
+def _shell(title: str, body: str, *, nav: "NavContext", wide: bool = False) -> str:
     """Wrap a page body in the Stage-1 nav shell: left rail + context bar + main content. The external
     context-bar script (drift chip served-build half) loads at the tail, joining ui.js. Chrome-less
-    pages (login, terminal confirms) use _page instead."""
+    pages (login, terminal confirms) use _page instead. `wide` is a PER-PAGE opt-out of the 960px
+    content measure (H2: the uploader-keys page spreads its issued-keys table across the full width);
+    the default measure is deliberately unchanged for every other page."""
     return (
         _head(title)
         + '<div class="shell">'
         + _rail_html(nav.active)
         + '<div class="main">'
         + _context_bar(nav)
-        + '<div class="wrap">' + body + '</div>'
+        + ('<div class="wrap wide">' if wide else '<div class="wrap">') + body + '</div>'
         + '</div></div>'
         + '<script src="/gateway/curator/context-bar.js" defer></script>'
         + _TAIL
@@ -2376,7 +2420,9 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
         '(revoke and create a new one if lost). The email is a curator-only contact for the uploader '
         'and never appears on any public page.</p>'
         f'{err}'
-        '<form method="post" action="/gateway/curator/uploaders/create">'
+        # The create form keeps a comfortable reading measure on the (wide, H2) page — a
+        # name/email input stretched across the whole viewport helps nobody.
+        '<form method="post" action="/gateway/curator/uploaders/create" style="max-width:40rem">'
         f'{csrf}'
         # maxlength attrs = client courtesy; the SERVER caps are the gate (app._KEY_*_MAX_CHARS, F5).
         '<p><label class="k">Name (required, unique)</label>'
@@ -2399,7 +2445,8 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
             n_sub = counts.get(k.name, 0)
             if k.revoked_utc:
                 status = (f'<span class="badge" style="background:{_PALETTE["bad"]}">revoked</span> '
-                          f'<span class="k">{_esc(k.revoked_utc)} by curator:{_esc(k.revoked_by or "")}</span>')
+                          f'<span class="k">{_dt_html(k.revoked_utc)} '
+                          f'by curator:{_esc(k.revoked_by or "")}</span>')
                 action = ""
                 # A revoked key's note is read-only audit context — rendered, never an editable form.
                 note_cell = (f'<span class="k">{_esc(k.note)}</span>' if k.note
@@ -2423,16 +2470,21 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
                     f'<form method="post" action="/gateway/curator/uploaders/{_esc(k.id)}/note" '
                     'style="margin:0;display:flex;gap:.3rem;align-items:flex-start">'
                     f'{csrf}'
+                    # H2: a USABLE editor width (34ch, capped to the cell) — the global 100% width
+                    # inside a cramped cell rendered a few characters wide. The 2000 cap stays.
                     f'<textarea name="note" rows="2" placeholder="who it\'s for / expiry intent" '
-                    f'maxlength="2000" style="min-height:2.4rem">{_esc(k.note or "")}</textarea>'
+                    f'maxlength="2000" style="min-height:2.4rem;width:34ch;max-width:100%">'
+                    f'{_esc(k.note or "")}</textarea>'
                     '<button class="b-accent" type="submit" '
                     'style="padding:.3rem .6rem;font-size:.75rem">Save</button></form>')
             trs.append(
                 "<tr>"
                 f'<td>{_esc(k.name)}</td>'
                 f'<td>{_esc(k.email or "-")}</td>'
-                f'<td class="k">{_esc(k.created_utc)}<br>by curator:{_esc(k.created_by)}</td>'
-                f'<td class="k">{_esc(k.last_used_utc or "never")}</td>'
+                # H2: short datetime as visible text, full stored ISO on hover (title) — the raw
+                # ISO wrapped over three lines in the cramped cells.
+                f'<td class="k">{_dt_html(k.created_utc)}<br>by curator:{_esc(k.created_by)}</td>'
+                f'<td class="k">{_dt_html(k.last_used_utc) if k.last_used_utc else "never"}</td>'
                 f'<td class="k">{_esc(n_sub)}</td>'
                 f'<td>{note_cell}</td>'
                 f'<td>{status}</td>'
@@ -2451,7 +2503,9 @@ def render_uploaders(*, curator_name: str, keys: list, csrf_token: str, error: s
         f'<div class="panel"><h2>Issued keys</h2>{runbook}{table}</div>'
     )
     if nav is not None:
-        return _shell("AusMT uploader keys", body, nav=nav)
+        # H2 (owner feedback): the keys page uses the FULL page width so the issued-keys table
+        # spreads out — a per-page variant; every other page keeps the default measure.
+        return _shell("AusMT uploader keys", body, nav=nav, wide=True)
     return _page("AusMT uploader keys", body)
 
 
