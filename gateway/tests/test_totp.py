@@ -115,6 +115,30 @@ def test_undecodable_secret_fails_closed():
     assert totp.verify("000000", "!!!not base32!!!", now) is None
 
 
+def test_empty_or_blank_secret_fails_closed():
+    """verify() against an empty or whitespace-only secret returns None (F2). An empty base32 string
+    decodes to b'' — a VALID HMAC key — so without the empty-secret guard verify() would compute an
+    empty-key code and MATCH it. This pin is MUTATION-PROOF: it feeds verify() the exact code an
+    empty-key HMAC produces, so removing the guard in _decode_secret makes verify() return the matched
+    step (not None) and this goes RED. FAILS IF an empty/blank secret can gate anything."""
+    import hashlib
+    import hmac
+    import struct
+
+    now = 1_700_000_000
+    step = totp.current_step(now)
+    # The code an empty-key (b'') HMAC would produce at this step — the vulnerability if _decode_secret
+    # were to accept "" -> b''. Reconstructs the RFC 4226 truncation over the empty key.
+    digest = hmac.new(b"", struct.pack(">Q", step), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    truncated = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    empty_key_code = str(truncated % 1_000_000).zfill(6)   # exactly code_at()'s truncation, digits=6
+    # Even THIS code (which WOULD match an empty key) is refused, proving it is the guard, not luck.
+    assert totp.verify(empty_key_code, "", now) is None
+    assert totp.verify(empty_key_code, "   ", now) is None
+    assert totp.verify("123456", "", now) is None
+
+
 def test_otpauth_uri_shape():
     """The provisioning URI carries the bare secret, the issuer/account label, and explicit
     algorithm/digits/period so a non-defaulting authenticator still matches. FAILS IF the secret is
