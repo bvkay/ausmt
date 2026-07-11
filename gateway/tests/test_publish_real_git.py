@@ -23,12 +23,13 @@ init+commit+bare per test, no sleeps (the app's settle_publish drives the async 
 """
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from gateway import publish, states
+from gateway import metaedit, publish, states
 from gateway.tests.conftest import (
     app_client, csrf_for_session, curator_login, run, seed_validated, settle_publish,
 )
@@ -472,3 +473,165 @@ def test_real_git_station_removal_rollback_on_push_reject(tmp_path, hermetic_git
         "the git-rm'd EDI must be restored on rollback"
     committed = (surveys_live / "surveys" / "multi" / "survey.yaml").read_bytes()
     assert committed == b"slug: multi\nversion: 1.2.0\n", "removal yaml survived a rolled-back removal"
+
+
+# --------------------------------------------------------------------------------------------------
+# D1.h — the survey-retirement commit path (commit_survey_removal) on a REAL repo pair (C41 T4)
+# --------------------------------------------------------------------------------------------------
+def test_real_git_survey_retirement_removes_package_and_pushes(tmp_path, hermetic_git_env):
+    # D1.h(i) — commit_survey_removal git-rm -r's the WHOLE survey package in one commit with the
+    # gateway identity and pushes; the package is gone from the committed tree, a SIBLING survey
+    # remains, and the commit touches EXACTLY the slug's paths (survey-scope diff-minimality). FAILS IF
+    # the wrong tree is removed, a sibling is touched, the diff is not minimal, or the push does not
+    # arrive.
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(surveys_live, env, "retireme",
+                                     "slug: retireme\nversion: 1.0.0\n", ("SA1.edi", "SA2.edi"))
+    _seed_published_survey_with_edis(surveys_live, env, "keepme",
+                                     "slug: keepme\nversion: 2.0.0\n", ("SB1.edi",))
+
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    new_ref = publish.commit_survey_removal(
+        publish.real_git_runner, surveys_live, "retireme",
+        curator_name="curator1", note="superseded by keepme", pre=pre)
+
+    assert new_ref, "commit_survey_removal returned no ref"
+    # The whole package is gone from the COMMITTED tree; the sibling survey remains.
+    tree = _git(["ls-tree", "-r", "--name-only", "HEAD"], surveys_live, env).stdout
+    assert "surveys/retireme/" not in tree, "the retired package survived in the tree"
+    assert "surveys/keepme/survey.yaml" in tree, "a sibling survey was removed"
+    # Survey-scope diff-minimality: every path the commit changed is under the slug's directory.
+    changed = _git(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+                   surveys_live, env).stdout.split()
+    assert changed, "the retirement commit changed nothing"
+    assert all(p.startswith("surveys/retireme/") for p in changed), \
+        f"the retirement commit touched paths outside the slug: {changed}"
+    # Fixed gateway identity + note in body + push arrival + clean on main.
+    an = _git(["log", "-1", "--format=%an <%ae>"], surveys_live, env).stdout.strip()
+    assert an == f"{publish.COMMIT_AUTHOR_NAME} <{publish.COMMIT_AUTHOR_EMAIL}>"
+    assert "superseded by keepme" in _commit_message(surveys_live, env)
+    remote = _git(["rev-parse", "main"], origin, env).stdout.strip()
+    local = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    assert remote == local, "retirement push did not arrive at origin"
+    assert _git(["rev-parse", "--abbrev-ref", "HEAD"], surveys_live, env).stdout.strip() == "main"
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+
+
+def test_real_git_survey_retirement_rollback_on_push_reject(tmp_path, hermetic_git_env):
+    # D1.h(ii) — a pre-receive reject rolls surveys-live back byte-for-byte: the WHOLE retired package
+    # is restored, the ref/branch are the pre-state, the tree is clean. FAILS IF a rejected retirement
+    # leaves the package removed (a half-retired publication ledger).
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(surveys_live, env, "retireme",
+                                     "slug: retireme\nversion: 1.0.0\n", ("SA1.edi", "SA2.edi"))
+    pre_ref = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    _install_reject_hook(origin)
+
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    with pytest.raises(publish.PublishError) as ei:
+        publish.commit_survey_removal(
+            publish.real_git_runner, surveys_live, "retireme",
+            curator_name="curator1", note="doomed", pre=pre)
+    assert ei.value.phase == "git-push"
+    # Rolled back byte-for-byte: HEAD/branch restored, tree clean, the whole package RESTORED.
+    assert _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip() == pre_ref
+    assert _git(["rev-parse", "--abbrev-ref", "HEAD"], surveys_live, env).stdout.strip() == "main"
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+    assert (surveys_live / "surveys" / "retireme" / "survey.yaml").is_file()
+    assert (surveys_live / "surveys" / "retireme" / "transfer_functions" / "edi" / "SA1.edi").is_file()
+    assert (surveys_live / "surveys" / "retireme" / "transfer_functions" / "edi" / "SA2.edi").is_file()
+
+
+def test_real_git_survey_retirement_revert_restores_package_byte_identical(tmp_path, hermetic_git_env):
+    # D1.h(iii) — THE UNDO GUARANTEE (record D2, load-bearing): `git revert` of the retirement commit
+    # restores the package BYTE-IDENTICALLY. Capture every file's exact bytes before retiring, retire
+    # (real commit+push), then revert the commit and assert every file returns byte-for-byte. FAILS IF
+    # the revert does not restore the package exactly (the 'git IS the soft delete' property that lets
+    # retirement need no tombstone state machine).
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_published_survey_with_edis(surveys_live, env, "retireme",
+                                     "slug: retireme\nversion: 1.4.2\n", ("SA1.edi", "SA2.edi", "SA3.edi"))
+    pkg = surveys_live / "surveys" / "retireme"
+    before = {p.relative_to(surveys_live).as_posix(): p.read_bytes()
+              for p in sorted(pkg.rglob("*")) if p.is_file()}
+    assert before, "no package files captured"
+
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    new_ref = publish.commit_survey_removal(
+        publish.real_git_runner, surveys_live, "retireme",
+        curator_name="curator1", note="withdrawn by custodian", pre=pre)
+    assert not pkg.exists(), "the package was not removed by the retirement"
+
+    # Revert with the FIXTURE git (not the code under test) — the undo an operator would run.
+    _git(["revert", "--no-edit", new_ref], surveys_live, env)
+    after = {rel: (surveys_live / rel).read_bytes() for rel in before}
+    assert after == before, "git revert did not restore the retired package byte-for-byte"
+
+
+def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_env):
+    # F1 (TOCTOU) — two CONCURRENT retires against a 2-survey corpus must NOT both succeed and EMPTY it.
+    # The outside-lock guard (handle_survey_retire) is racy: both requests read count=2 before either
+    # commits. This drives _commit_retire (the PUBLISH_LOCK holder) directly for BOTH surveys under
+    # asyncio.gather, isolating the AUTHORITATIVE inside-lock guard from the TOTP replay counter (whose
+    # single shared last_used_step would make a full-HTTP concurrency drive nondeterministic — the TOTP
+    # gate is pinned separately). A slow git-push shim makes the first-acquiring retire HOLD the lock
+    # while the second queues, guaranteeing the interleave. Assert: exactly one 200 + one 409, the
+    # surviving survey remains, and the corpus NEVER empties.
+    # HISTORICAL RED (HEAD before F1, no inside-lock guard): BOTH retires succeed (statuses [200, 200])
+    # and list_published_slugs() == 0 (corpus emptied) — captured verbatim in the report.
+    import time as _time
+
+    env = hermetic_git_env
+
+    async def _body():
+        # This is the ONLY test that awaits the module-level publish.PUBLISH_LOCK directly (the other
+        # real-git tests call publish.commit_* without the lock). Under the full suite an earlier test's
+        # background publish task can leave that asyncio.Lock bound (and even held) on its now-closed
+        # loop, so awaiting it here would raise "bound to a different event loop" — a pytest-only
+        # artifact (production has ONE loop and `async with` always releases). Bind a FRESH lock to THIS
+        # loop for the duration so the concurrency semantics under test are exercised in isolation; leave
+        # a fresh, unlocked lock behind for later tests.
+        publish.PUBLISH_LOCK = asyncio.Lock()
+        try:
+            surveys_live = tmp_path / "surveys-live"
+            origin = tmp_path / "origin.git"
+            _init_repo_pair(surveys_live, origin, env)
+            _seed_published_survey_with_edis(surveys_live, env, "surv-a-2026",
+                                             "slug: surv-a-2026\nversion: 1.0.0\n", ("SA1.edi",))
+            _seed_published_survey_with_edis(surveys_live, env, "surv-b-2026",
+                                             "slug: surv-b-2026\nversion: 1.0.0\n", ("SB1.edi",))
+
+            # A git runner that sleeps on push so the first retire HOLDS PUBLISH_LOCK while the second
+            # queues on it (the parametrised-runner shim pattern) — the interleave the TOCTOU needs.
+            def slow_push_git(args, *, cwd, env=None):
+                if args and args[0] == "push":
+                    _time.sleep(0.5)
+                return publish.real_git_runner(args, cwd=cwd, env=env)
+
+            async with app_client(tmp_path, git_runner=slow_push_git,
+                                  surveys_live_dir=surveys_live) as (_client, _app, gw, _cfg):
+                r_a, r_b = await asyncio.gather(
+                    gw._commit_retire("surv-a-2026", "curator1", "retire A"),
+                    gw._commit_retire("surv-b-2026", "curator1", "retire B"))
+                statuses = sorted([r_a.status_code, r_b.status_code])
+                assert statuses == [200, 409], \
+                    f"expected one success + one guard-refusal, got {statuses}"
+                remaining = metaedit.list_published_slugs(surveys_live)
+                assert len(remaining) == 1, f"concurrent retires emptied the corpus: {remaining}"
+                # The 409 body names the last-survey guard (not some other publish failure).
+                refused = r_a if r_a.status_code == 409 else r_b
+                import json as _json
+                detail = _json.loads(bytes(refused.body).decode("utf-8"))["detail"]
+                assert "last remaining survey" in detail.lower(), detail
+        finally:
+            publish.PUBLISH_LOCK = asyncio.Lock()
+    run(_body())

@@ -27,7 +27,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import checklist as checklist_mod
 from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, metaedit, publish,
-               serve_state, states, statuspage, uploader_keys as uploader_keys_mod, zipsafety)
+               serve_state, states, statuspage, totp, uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
 from .orcid import is_valid_orcid
@@ -90,6 +90,12 @@ class Gateway:
         # the gateway must keep working even if curator config is broken. The rate limiter is a single
         # process-global (design §6: no per-source trust on a tailnet).
         self._login_limiter = curator_auth.LoginRateLimiter(
+            max_attempts=cfg.login_max_attempts, window_s=cfg.login_window_s)
+        # C41 D2: a SECOND process-global throttle for the destructive-op TOTP factor (the same
+        # login-throttle pattern, a distinct counter so a burst of wrong codes cannot lock out normal
+        # login and vice-versa). Reuses the login knobs (5 attempts / 5 min) — a single-digit curator
+        # population entering a real 6-digit code will not trip it, but a brute-force stream will.
+        self._totp_limiter = curator_auth.LoginRateLimiter(
             max_attempts=cfg.login_max_attempts, window_s=cfg.login_window_s)
         # Tracks submission ids with a live in-process publish task, so the poll-loop reconciliation
         # (design §5.4) can tell a genuinely-stuck PUBLISHING row (gateway restarted mid-publish) from
@@ -818,6 +824,128 @@ class Gateway:
         self.db.set_uploader_key_note(key_id, note=clean)
         return RedirectResponse("/gateway/curator/uploaders", status_code=303)
 
+    # ---- curator security: TOTP second factor (schema v4 — C41 D2) ---------------------------
+
+    def _totp_state(self, curator_name: str) -> tuple[str, str | None]:
+        """Map the stored TOTP row to a page state: ('none'|'pending'|'active', enrolled_utc)."""
+        row = self.db.get_totp(curator_name)
+        if row is None:
+            return "none", None
+        if not row.active:
+            return "pending", None
+        return "active", row.enrolled_utc
+
+    def handle_security(self, request: Request, error: str = "", status_code: int = 200) -> Response:
+        """GET the Security page: shows the curator's enrolment state (none/pending/active). Session-
+        gated like the other curator GET pages. NEVER renders the secret (it is shown once, only as the
+        direct response to enrol/rotate)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        state, enrolled = self._totp_state(name)
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="security", crumb="<b>Security</b>")
+        return self._html(curatorpage.render_security(
+            curator_name=name, csrf_token=csrf, state=state, enrolled_utc=enrolled,
+            error=error, nav=nav), status_code=status_code)
+
+    def _security_page_with_secret(self, request: Request, name: str, secret: str) -> Response:
+        """Render the Security page with the SHOW-ONCE secret + otpauth URI (the response to a begin or
+        a rotate). The secret is displayed here and never again."""
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="security", crumb="<b>Security</b>")
+        uri = totp.otpauth_uri(secret, account=name)
+        return self._html(curatorpage.render_security(
+            curator_name=name, csrf_token=csrf, state="pending", secret=secret,
+            otpauth_uri=uri, nav=nav))
+
+    def handle_security_enrol(self, request: Request, csrf: str | None) -> Response:
+        """POST begin-enrolment: session + CSRF gated. Generates a fresh secret, stores it as a PENDING
+        enrolment (not active), and shows it ONCE with the activate form. Refused when an enrolment is
+        already ACTIVE — an active secret is rotated (with the current code), never silently replaced by
+        a session-only begin (that would be the collapse D2 forbids)."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        row = self.db.get_totp(curator)
+        if row is not None and row.active:
+            return self.handle_security(
+                request, error="You are already enrolled. Use Rotate (with your current code) to "
+                                "replace the secret.", status_code=409)
+        secret = totp.generate_secret()
+        self.db.begin_totp_enrolment(curator, secret)
+        return self._security_page_with_secret(request, curator, secret)
+
+    def handle_security_activate(self, request: Request, code: str | None,
+                                 csrf: str | None) -> Response:
+        """POST activate: session + CSRF gated + rate-limited. Verifies `code` against the PENDING
+        secret and, on success, marks the enrolment ACTIVE (the activating step is recorded as used so
+        it cannot be replayed to gate a deletion). Fail-closed: no pending enrolment, a wrong/absent
+        code, or a tripped rate limit => the page re-renders with an error and NOTHING is activated."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        row = self.db.get_totp(curator)
+        if row is None or row.active:
+            return self.handle_security(
+                request, error="There is no pending enrolment to activate. Begin enrolment first.",
+                status_code=409)
+        if self._totp_limiter.blocked():
+            return self.handle_security(
+                request, error="Too many code attempts — wait and retry.", status_code=429)
+        step = totp.verify(code or "", row.secret)
+        if step is None:
+            self._totp_limiter.record_failure()
+            return self.handle_security(
+                request, error="That code did not match — check your authenticator and try again.",
+                status_code=400)
+        self._totp_limiter.record_success()
+        # activate_totp only fires on a still-pending row; a concurrent activate that already flipped
+        # it returns False, which we surface as "already active" rather than a spurious error.
+        self.db.activate_totp(curator, step)
+        return self.handle_security(
+            request, error="")  # renders the now-active state
+
+    def handle_security_rotate(self, request: Request, code: str | None,
+                               csrf: str | None) -> Response:
+        """POST rotate: session + CSRF gated + rate-limited. Requires a valid CURRENT code from the
+        ACTIVE enrolment (the collapse guard — a session alone must never rotate the secret, D2). On a
+        valid current code, generates a NEW secret, stages it as PENDING (the old one is retired), and
+        shows it once. Fail-closed: not active, a wrong/absent current code, or a tripped rate limit =>
+        the page re-renders with an error and the existing secret is UNCHANGED."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, csrf):
+            return self._forbidden("bad csrf token")
+        row = self.db.get_totp(curator)
+        if row is None or not row.active:
+            return self.handle_security(
+                request, error="You are not enrolled, so there is nothing to rotate. Begin enrolment.",
+                status_code=409)
+        if self._totp_limiter.blocked():
+            return self.handle_security(
+                request, error="Too many code attempts — wait and retry.", status_code=429)
+        # The CURRENT-code check is the collapse guard: verify against the ACTIVE secret. Dropping this
+        # check (a mutation) would let a session-only rotation through — the collapse-guard pin.
+        step = totp.verify(code or "", row.secret)
+        if step is None:
+            self._totp_limiter.record_failure()
+            return self.handle_security(
+                request, error="Rotation requires a valid CURRENT code from your existing "
+                                "authenticator.", status_code=400)
+        self._totp_limiter.record_success()
+        secret = totp.generate_secret()
+        self.db.begin_totp_enrolment(curator, secret)  # stages the new secret as pending (old retired)
+        return self._security_page_with_secret(request, curator, secret)
+
     # ---- C31 metadata editor -----------------------------------------------------------------
 
     def handle_edit_list(self, request: Request) -> Response:
@@ -1247,6 +1375,186 @@ class Gateway:
         pre = publish.preflight(self._git_runner, surveys_live)
         publish.commit_station_removal(self._git_runner, surveys_live, slug, new_yaml, removed,
                                        expected_sha, curator, note, pre)
+
+    # ---- C41 survey retirement (D2) — the destructive whole-survey removal + its TOTP gate --------
+
+    def _station_count_for(self, slug: str) -> int | None:
+        """The published station (EDI) count for `slug`, via the runner's list_stations job — for the
+        retirement confirmation disclosure (record D2: 'N station files, N stated'). Degrades to None
+        (runner down / refusal) so the confirmation page still renders honestly without a number,
+        never a 500 on the disclosure path."""
+        try:
+            result = self._edit_runner(metaedit.make_list_stations_job(slug))
+        except metaedit.EditRunnerError as exc:
+            logger.warning("retire confirm: list-stations failed for %s: %s", slug, exc)
+            return None
+        if not result.get("ok"):
+            return None
+        stations = result.get("stations")
+        return len(stations) if isinstance(stations, list) else None
+
+    def _is_last_survey(self) -> bool:
+        """True if the corpus holds one (or zero) published surveys, so retiring one would EMPTY it.
+        C41 T6 (evidenced, not guessed): the production serve build (deploy/Makefile rebuild-data)
+        invokes build_portal WITHOUT --allow-empty, and the real engine exits 2 on an empty corpus, so
+        an empty surveys-live breaks the next rebuild and the retired survey keeps serving off the last
+        good build indefinitely. The last-survey guard refuses this.
+
+        This is the FAST PRE-REJECT used by the confirmation page + POST handler (good UX, no code
+        burned); it reads outside PUBLISH_LOCK and is therefore racy. The AUTHORITATIVE guard against
+        two concurrent retires emptying the corpus lives in _commit_retire_blocking, under the lock (F1)."""
+        slugs = metaedit.list_published_slugs(self.cfg.surveys_live_dir)
+        return len(slugs) <= 1
+
+    def _retire_confirm_response(self, request: Request, name: str, slug: str, *, error: str = "",
+                                 status_code: int = 200) -> Response:
+        """Render the retirement confirmation page for `slug`: the record-D2 disclosure + the typed-slug
+        / release-note / TOTP-code form — or, when the action cannot proceed, the honest refusal in
+        place of the form (the last-survey guard, or an un-enrolled curator). Reused by the GET
+        confirmation route AND by the POST handler's fail-closed re-renders (so a refusal shows the
+        reason on the same page with the right status code)."""
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(
+            request, active="surveys",
+            crumb=f'<a href="/gateway/curator/edit">Surveys</a> › '
+                  f'<a href="/gateway/curator/survey/{curatorpage._esc(slug)}">'  # noqa: SLF001
+                  f'{curatorpage._esc(slug)}</a> › <b>retire survey</b>')  # noqa: SLF001
+        is_last = self._is_last_survey()
+        totp_row = self.db.get_totp(name)
+        enrolled = totp_row is not None and totp_row.active
+        # Only pay for the station-count runner round-trip when the form will actually render.
+        station_count = self._station_count_for(slug) if (not is_last and enrolled) else None
+        return self._html(curatorpage.render_survey_retire_confirm(
+            slug=slug, station_count=station_count, csrf_token=csrf, enrolled=enrolled,
+            is_last_survey=is_last, error=error, nav=nav), status_code=status_code)
+
+    def handle_survey_retire_confirm(self, request: Request, slug: str) -> Response:
+        """GET the retirement confirmation page (record D2): session-gated. Resolves the package (404 if
+        the slug is unknown), then renders the disclosure + form (or the refusal when the last-survey
+        guard fires or the curator is not enrolled). No mutation — a GET only reads."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        return self._retire_confirm_response(request, name, slug)
+
+    async def handle_survey_retire(self, request: Request, slug: str, form: dict) -> Response:
+        """POST the retirement (record D2): the server GATES IN ORDER — session, CSRF, the last-survey
+        guard, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), then the typed-
+        slug match and the required note — and only then consumes the code and commits `git rm -r` under
+        PUBLISH_LOCK. ANY failure returns 400/409/429 with NOTHING staged (no git mutation runs before
+        every gate has passed).
+
+        Ordering nuance: the TOTP code is VERIFIED (and replay-checked) at the TOTP gate position, but
+        the code is only CONSUMED (last_used_step advanced, atomically) AFTER the typed-slug/note gates
+        pass — so a mistyped slug or an empty note does NOT burn the curator's code (they can retry with
+        the same still-valid code). The atomic consume closes the TOCTOU: a concurrent re-use loses."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        pkg = self._edit_package_or_error(slug)
+        if isinstance(pkg, Response):
+            return pkg
+        # T6 last-survey guard — FAST PRE-REJECT (F1): refusing to retire the final survey (an empty
+        # corpus breaks the next rebuild). Checked before the TOTP gate so a doomed retirement never
+        # burns a code, and it surfaces the guard on the confirmation page. It is OUTSIDE PUBLISH_LOCK
+        # and racy by design; the AUTHORITATIVE, lock-serialised guard is in _commit_retire_blocking.
+        if self._is_last_survey():
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="Refusing to retire the last remaining survey — an empty corpus breaks the next "
+                      "rebuild, so the retired survey would keep serving. Publish another survey first.",
+                status_code=409)
+        # TOTP gate (fail-closed). Unenrolled => refuse with an enrol pointer (rendered by the confirm
+        # page's not-enrolled state).
+        totp_row = self.db.get_totp(name)
+        if totp_row is None or not totp_row.active:
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="You must enrol an authenticator before retiring a survey — see Security.",
+                status_code=409)
+        if self._totp_limiter.blocked():
+            return self._retire_confirm_response(
+                request, name, slug, error="Too many code attempts — wait and retry.",
+                status_code=429)
+        code = (form.get("code") or "").strip()
+        step = totp.verify(code, totp_row.secret)
+        if step is None:
+            self._totp_limiter.record_failure()
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="That code did not match — check your authenticator and try again.",
+                status_code=400)
+        # Replay CHECK at the TOTP gate (the consume/advance happens after the content gates). A code at
+        # or below the last consumed step is a replay of an already-used code.
+        if totp_row.last_used_step is not None and step <= totp_row.last_used_step:
+            self._totp_limiter.record_failure()
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="That code was already used — wait for a fresh code from your authenticator.",
+                status_code=409)
+        # The code is valid: clear the throttle (it guards wrong CODES, not wrong slugs/notes below).
+        self._totp_limiter.record_success()
+        # Typed-slug + note gates (BEFORE consuming the code, so a typo does not burn it).
+        typed = (form.get("typed_slug") or "").strip()
+        if typed != slug:
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="The typed survey name did not match — type the exact slug to confirm.",
+                status_code=400)
+        note = (form.get("note") or "").strip()
+        if not note:
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="A release note is required (why the survey is retired) — it becomes the commit "
+                      "message.", status_code=400)
+        # All gates passed: CONSUME the code atomically (advance last_used_step). A concurrent re-use of
+        # the same code loses this race and is refused with nothing staged.
+        if not self.db.consume_totp_step(name, step):
+            return self._retire_confirm_response(
+                request, name, slug,
+                error="That code was already used — wait for a fresh code from your authenticator.",
+                status_code=409)
+        return await self._commit_retire(slug, name, note)
+
+    async def _commit_retire(self, slug: str, curator: str, note: str) -> Response:
+        surveys_live = self.cfg.surveys_live_dir
+        if surveys_live is None:
+            return JSONResponse({"detail": "AUSMT_SURVEYS_LIVE is not configured"}, status_code=503)
+        try:
+            safe_slug = publish.validate_slug(slug)
+        except publish.PublishError as exc:
+            return JSONResponse({"detail": exc.message}, status_code=400)
+        async with publish.PUBLISH_LOCK:
+            try:
+                await asyncio.to_thread(
+                    self._commit_retire_blocking, surveys_live, safe_slug, curator, note)
+            except publish.PublishError as exc:
+                logger.warning("survey retirement publish failed for %s at %s: %s",
+                               slug, exc.phase, exc.message)
+                return JSONResponse({"detail": f"publish failed: {exc.message}"}, status_code=409)
+        return self._html(curatorpage.render_survey_retired(slug=slug, curator=curator))
+
+    def _commit_retire_blocking(self, surveys_live: Path, slug: str, curator: str, note: str) -> None:
+        pre = publish.preflight(self._git_runner, surveys_live)
+        # F1 (TOCTOU) — the AUTHORITATIVE last-survey guard, re-evaluated INSIDE PUBLISH_LOCK after
+        # preflight from on-disk truth. The check in handle_survey_retire is only a fast, friendly
+        # pre-reject (it shows the guard on the confirmation page and avoids burning a TOTP code); it is
+        # OUTSIDE the lock and therefore racy — two concurrent retires can both read count>1 there before
+        # either commits, then both remove their survey and EMPTY the corpus. This runs under
+        # PUBLISH_LOCK, so it serialises against every other retire/publish: once a first retire has
+        # removed its survey, a second interleaved retire sees the now-smaller corpus HERE and is refused.
+        # Two retires can therefore never empty the corpus (the silent-drift break the guard exists for).
+        if len(metaedit.list_published_slugs(surveys_live)) <= 1:
+            raise publish.PublishError(
+                "guard", "refusing to retire the last remaining survey "
+                         "(an empty corpus breaks the next rebuild)")
+        publish.commit_survey_removal(self._git_runner, surveys_live, slug, curator, note, pre)
 
     def _edit_package_or_error(self, slug: str):
         """Resolve the surveys-live package dir for `slug` or return a Response (404). Charset-
@@ -1841,6 +2149,28 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
                               csrf_token: str = Form(default="")):
         return gw.handle_uploader_note(request, key_id, note, csrf_token)
 
+    # ---- curator security: TOTP second factor (schema v4 — C41 D2). GET is `def` (blocking sqlite
+    # read -> threadpool). The code-verifying POSTs are `async def` so the throttle decision
+    # (blocked-check -> verify -> record) runs to completion on the event loop with NO await between
+    # its steps — atomic against a concurrent burst without needing the login route's evaluate() form.
+    @app.get("/gateway/curator/security")
+    def curator_security(request: Request):
+        return gw.handle_security(request)
+
+    @app.post("/gateway/curator/security/enrol")
+    async def curator_security_enrol(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_security_enrol(request, csrf_token)
+
+    @app.post("/gateway/curator/security/activate")
+    async def curator_security_activate(request: Request, code: str = Form(default=""),
+                                        csrf_token: str = Form(default="")):
+        return gw.handle_security_activate(request, code, csrf_token)
+
+    @app.post("/gateway/curator/security/rotate")
+    async def curator_security_rotate(request: Request, code: str = Form(default=""),
+                                      csrf_token: str = Form(default="")):
+        return gw.handle_security_rotate(request, code, csrf_token)
+
     # ---- C40 serve-reconcile: the curator "request rebuild" button. Session + CSRF (checked in the
     # handler); writes the zero-argument rebuild.request the host reconcile agent consumes. `def`
     # (not async) — a tiny atomic file write, no await, consistent with the other simple POSTs.
@@ -1947,6 +2277,18 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     async def curator_stations_confirm(request: Request, slug: str):
         form = dict(await request.form())
         return await gw.handle_stations_confirm(request, slug, form)
+
+    # ---- C41 survey retirement. GET renders the danger-zone confirmation page (blocking read-job ->
+    # threadpool, `def`); the POST is async (it verifies the TOTP factor then takes the PUBLISH_LOCK for
+    # the git rm -r). Both live under the survey hub path so the crumb + rail highlight stay coherent.
+    @app.get("/gateway/curator/survey/{slug}/retire")
+    def curator_survey_retire_confirm(request: Request, slug: str):
+        return gw.handle_survey_retire_confirm(request, slug)
+
+    @app.post("/gateway/curator/survey/{slug}/retire")
+    async def curator_survey_retire(request: Request, slug: str):
+        form = dict(await request.form())
+        return await gw.handle_survey_retire(request, slug, form)
 
     @app.post("/gateway/curator/submission/{submission_id}/{action}")
     async def curator_action(request: Request, submission_id: str, action: str,

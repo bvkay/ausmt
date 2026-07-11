@@ -372,14 +372,22 @@ class FakeGit:
                         child.unlink()
         elif verb == "rm":
             # `git rm -- <path>...` removes from the index AND the working tree. Model the working-tree
-            # side so the station-removal rollback test is honest (a rollback must restore a git-rm'd
-            # file). The leading `--` and any flags are skipped; the rest are repo-relative paths.
+            # side so the removal rollback tests are honest (a rollback must restore a git-rm'd path).
+            # The leading `--` and any flags are skipped; the rest are repo-relative paths. C41: `git rm
+            # -r -- surveys/<slug>` retires a WHOLE survey (a DIRECTORY), so when `-r`/`-rf` is present a
+            # directory target is removed recursively (rmtree) — modeled explicitly (C35b strict-fake:
+            # extending the fake to survey-scope removal is a deliberate act, with the real-git lane in
+            # test_publish_real_git.py as the reference for the true recursive-rm semantics).
+            import shutil
+            recursive = any(a.startswith("-") and "r" in a for a in args[1:] if a != "--")
             for arg in args[1:]:
                 if arg == "--" or arg.startswith("-"):
                     continue
                 p = Path(cwd) / arg
                 if p.is_file():
                     p.unlink()
+                elif p.is_dir() and recursive:
+                    shutil.rmtree(p)
         elif verb in ("add", "merge", "push", "branch"):
             # No modeled state change, but these ARE verbs the publish/edit sequence legitimately
             # drives, so they get an explicit rc=0 (the fake does not model push ARRIVAL — the real-git
