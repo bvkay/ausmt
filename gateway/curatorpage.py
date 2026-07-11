@@ -1216,7 +1216,10 @@ STATIONS_JS = r"""
   // The frame declaration IN WORDS (contract H3: 'declared-zero · no rotation declared'), built
   // from VERBATIM station.json frame fields — no reinterpretation: frame_served as stored, then
   // de-rotation / declared-azimuth / no-rotation from the derotated + declared_azimuth_deg
-  // fields. Extra frame fields stay in the collapsed raw-JSON details.
+  // fields. C25-V3 F2: tipper_declared_azimuth_deg (present ONLY when the tipper's uniform declared
+  // frame diverges from the impedance's declared azimuth — the engine omits it otherwise) appends a
+  // 'tipper declared azimuth N°' part, same verbatim String() coercion. Extra frame fields stay in
+  // the collapsed raw-JSON details.
   function frameWords(frame) {
     if (!frame || typeof frame !== 'object') return null;
     var parts = [String(frame.frame_served == null ? '-' : frame.frame_served)];
@@ -1226,6 +1229,9 @@ STATIONS_JS = r"""
       parts.push('declared azimuth ' + String(frame.declared_azimuth_deg) + '°');
     } else {
       parts.push('no rotation declared');
+    }
+    if (frame.tipper_declared_azimuth_deg != null) {
+      parts.push('tipper declared azimuth ' + String(frame.tipper_declared_azimuth_deg) + '°');
     }
     return parts.join(' · ');
   }

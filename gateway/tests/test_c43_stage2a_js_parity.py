@@ -422,7 +422,9 @@ def _py_frame_words(frame: dict) -> str:
     """The reference frameWords mapping (VERBATIM coercion, no recompute) the JS must match.
     Mirrors the JS String() coercions (see _js_str) so the pin compares the JS against the SERVED
     values, not against itself: frame_served as stored, then de-rotated / declared-azimuth /
-    no-rotation from the derotated + declared_azimuth_deg fields."""
+    no-rotation from the derotated + declared_azimuth_deg fields, then (C25-V3 F2) the divergent
+    tipper frame from tipper_declared_azimuth_deg (present only when it diverges — the engine omits
+    it when equal or undeclared)."""
     fs = frame.get("frame_served")
     parts = ["-" if fs is None else _js_str(fs)]
     az = frame.get("declared_azimuth_deg")
@@ -432,6 +434,9 @@ def _py_frame_words(frame: dict) -> str:
         parts.append(f"declared azimuth {_js_str(az)}°")
     else:
         parts.append("no rotation declared")
+    taz = frame.get("tipper_declared_azimuth_deg")
+    if taz is not None:
+        parts.append(f"tipper declared azimuth {_js_str(taz)}°")
     return " · ".join(parts)
 
 
@@ -473,13 +478,19 @@ process.stdout.write(JSON.stringify(frames.map(function (f) { return frameWords(
     # The clean sample corpus serves as-stored declared-zero frames — the mockup's exact line.
     assert any(g == "declared-zero · no rotation declared" for g in got), got
     # Synthetic engine-shaped variants exercise the OTHER branches (values in the engine's own
-    # field vocabulary; the real corpus is all-clean so cannot reach them).
+    # field vocabulary; the real corpus is all-clean so cannot reach them). The third is the
+    # C25-V3 F2 panel case d: divergent tipper frame (TROT=-60 with declared-zero impedances) —
+    # tipper_declared_azimuth_deg is emitted by the engine ONLY when divergent, so its presence
+    # must surface a 'tipper declared azimuth' part.
     variants = [{"frame_served": "declared-zero", "derotated": True,
                  "impedance_rotation_deg_source": 14.0},
-                {"frame_served": "declared-azimuth", "declared_azimuth_deg": 8.0}]
+                {"frame_served": "declared-azimuth", "declared_azimuth_deg": 8.0},
+                {"frame_served": "declared-zero", "declared_azimuth_deg": 0.0,
+                 "tipper_declared_azimuth_deg": -60.0}]
     got2 = _run_node(tmp_path, driver, variants)
     assert got2[0] == "declared-zero · de-rotated to the declared zero-azimuth reference"
     assert got2[1] == "declared-azimuth · declared azimuth 8°"
+    assert got2[2] == "declared-zero · no rotation declared · tipper declared azimuth -60°"
     assert got2 == [_py_frame_words(v) for v in variants]
 
 
