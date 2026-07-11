@@ -67,6 +67,25 @@ ok(A.line({}) === "", "a frame with no declared angle and no mixed note must pro
 ok(A.line(null) === "", "a null frame must produce NO line");
 ok(A.line({ frame_served: "declared-zero", declared_azimuth_deg: 0 }) === "", "declared-zero => no line");
 
+// --- frameLineText: F2 divergent tipper frame (field present ONLY when divergent) ------------------
+const tipOnly = A.line({ declared_azimuth_deg: 0, tipper_declared_azimuth_deg: -60 });
+ok(/Tipper served in its own declared -60° frame/.test(tipOnly),
+  "case d (TROT=-60, ZROT=0) must show the tipper frame line: " + tipOnly);
+ok(/declared-zero reference/.test(tipOnly),
+  "the tipper-only line must place the impedances in the declared-zero reference: " + tipOnly);
+const tipBoth = A.line({ declared_azimuth_deg: 8, tipper_declared_azimuth_deg: -60 });
+ok(/\+8°/.test(tipBoth) && /Tipper served in its own declared -60° frame/.test(tipBoth),
+  "divergent tipper beside a nonzero impedance angle must show BOTH: " + tipBoth);
+const tipZero = A.line({ declared_azimuth_deg: -60, tipper_declared_azimuth_deg: 0 });
+ok(/-60°/.test(tipZero) && /Tipper served in its own declared 0° frame/.test(tipZero),
+  "the reverse shape (rotated Z, zero tipper) must show the 0° tipper frame: " + tipZero);
+// absent field (engine omits it when equal/undeclared) -> no tipper wording
+ok(!/Tipper/.test(A.line({ declared_azimuth_deg: 8 })),
+  "no tipper wording without the divergence field");
+// a non-numeric hostile value in the tipper field is ignored (validated number only)
+ok(!/Tipper/.test(A.line({ declared_azimuth_deg: 8, tipper_declared_azimuth_deg: "<img>" })),
+  "a non-numeric tipper field must be ignored, never rendered");
+
 // --- frameLineText: V3-B mixed-frames note ---------------------------------------------------------
 const MIX = "frame: mixed declared frames across stations: 8°…20° — each station is served in its own frame";
 const mixed0 = A.line({ declared_azimuth_deg: 0, survey_frame_note: MIX });

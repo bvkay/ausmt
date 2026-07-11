@@ -116,23 +116,30 @@ function provenanceBox(s){
 // source's declared acquisition frame and NEVER de-rotates. When that frame is non-trivial we report
 // it to the READER — terse, honest, no interpretation. frameLineText is PURE (DOM-free) so a Node pin
 // (tools/frame_line_test.js) can drive it. Inputs are the VERBATIM station.json `frame` block values:
-//   declared_azimuth_deg  — the recorded acquisition-frame angle (0 => served in the declared-zero /
-//                           geographic reference; no line). survey_frame_note — the V3-B "mixed
-//                           declared frames across stations" note (present only for an inconsistent
-//                           survey). Trigger: a non-zero declared angle OR a survey mixed-frames note.
+//   declared_azimuth_deg        — the recorded acquisition-frame angle (0 => served in the
+//                                 declared-zero / geographic reference; no line by itself).
+//   tipper_declared_azimuth_deg — F2: present ONLY when the tipper's uniform declared frame DIVERGES
+//                                 from the impedance's declared azimuth (the engine omits it when
+//                                 equal or undeclared), so presence itself is the trigger.
+//   survey_frame_note           — the V3-B "mixed declared frames across stations" note (present only
+//                                 for an inconsistent survey).
+// Trigger: a non-zero declared angle, a divergent tipper frame, or a survey mixed-frames note.
 function frameLineText(frame){
   if(!frame||typeof frame!=="object") return "";
   const az=frame.declared_azimuth_deg;
   const hasAngle=(typeof az==="number"&&isFinite(az)&&Math.abs(az)>0.01);
+  const taz=frame.tipper_declared_azimuth_deg;
+  const hasTip=(typeof taz==="number"&&isFinite(taz));    // engine emits it ONLY when divergent (F2)
   const mixed=(typeof frame.survey_frame_note==="string"&&frame.survey_frame_note.trim())?frame.survey_frame_note.trim():"";
-  if(!hasAngle&&!mixed) return "";
-  if(hasAngle){
-    const a=Math.round(az*10)/10;                         // at most 1 dp — the recorded value, terse
-    let line="Impedances served in the source's declared "+(a>0?"+":"")+a+"° acquisition frame (as stored — not rotated to geographic north).";
-    if(mixed) line+=" This survey mixes declared frames across stations.";
-    return line;
-  }
-  return "This survey mixes declared acquisition frames across stations; each station is served as stored.";
+  if(!hasAngle&&!hasTip&&!mixed) return "";
+  const fmt=v=>{const a=Math.round(v*10)/10;return (a>0?"+":"")+a+"°";};   // at most 1 dp, terse
+  const parts=[];
+  if(hasAngle) parts.push("Impedances served in the source's declared "+fmt(az)+" acquisition frame (as stored — not rotated to geographic north).");
+  if(hasTip) parts.push("Tipper served in its own declared "+fmt(taz)+" frame"+(hasAngle?"":" while impedances are in the declared-zero reference")+" (as stored).");
+  if(mixed) parts.push(parts.length
+    ? "This survey mixes declared frames across stations."
+    : "This survey mixes declared acquisition frames across stations; each station is served as stored.");
+  return parts.join(" ");
 }
 // Per-station frame facts live ONLY in the per-station station.json (the positional catalogue has no
 // frame column, and adding one would need a contract change). So fetch it lazily at drawer-open — the
