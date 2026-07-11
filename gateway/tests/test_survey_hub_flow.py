@@ -162,11 +162,11 @@ def test_survey_list_links_to_hub_not_edit_form(tmp_path):
     run(_body())
 
 
-def test_hub_overview_tab_scaffold_and_stations_link_no_history(tmp_path):
-    """The Overview & QA tab renders the QA scaffold (browser-populated from /data), a Stations
-    tab-strip entry LINKING to the existing removal page, and NO History tab (Stage 2). FAILS IF the
-    QA data-hook is missing, the Stations link dangles to a non-existent drill-down, or a History tab
-    ships early."""
+def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
+    """The Overview & QA tab renders the QA scaffold (browser-populated from /data). C43 Stage 2a: the
+    Stations and History tab-strip entries are now REAL in-hub tabs (?tab=stations / ?tab=history),
+    NOT the Stage-1 link-out/absence. FAILS IF the QA data-hook is missing, or the Stations/History
+    tabs regress to the Stage-1 link-out / are absent."""
     async def _body():
         surveys_live = _hub_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -179,10 +179,11 @@ def test_hub_overview_tab_scaffold_and_stations_link_no_history(tmp_path):
             assert 'data-survey-slug="hub-survey-2026"' in r.text
             assert 'id="qa-cards"' in r.text and 'id="qa-attention"' in r.text
             assert 'src="/gateway/curator/survey-hub.js"' in r.text
-            # Stations links to the EXISTING removal flow (labelled), not a Stage-2 drill-down.
-            assert 'href="/gateway/curator/edit/hub-survey-2026/stations">Stations' in r.text
-            # NO History tab in Stage 1.
-            assert ">History<" not in r.text
+            # Stage 2a: Stations + History are real in-hub tabs (the tab strip points at ?tab=...).
+            assert '?tab=stations">Stations' in r.text
+            assert '?tab=history">History' in r.text
+            # The Stage-1 Stations link-out to the removal page is GONE from the tab strip.
+            assert 'stations">Stations (remove EDIs)' not in r.text
     run(_body())
 
 

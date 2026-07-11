@@ -83,14 +83,61 @@ def _table_columns(path, table: str) -> set[str]:
 
 def test_fresh_db_lands_at_v2_with_uploader_keys(tmp_path):
     """A fresh DB is stamped at the current SCHEMA_VERSION (>= 2) and carries the uploader_keys table
-    (the feat/uploader-key-management migration). Fails if the migration never ran on a fresh DB."""
+    (the feat/uploader-key-management migration), INCLUDING the v3 `note` column (C43 D7). Fails if the
+    migration never ran on a fresh DB, or a schema change dropped/renamed a column."""
     path = tmp_path / "gateway.sqlite"
     db.Database(path).close()
-    assert db.SCHEMA_VERSION >= 2
+    assert db.SCHEMA_VERSION >= 3
     assert _user_version(path) == db.SCHEMA_VERSION
     cols = _table_columns(path, "uploader_keys")
     assert cols == {"id", "name", "email", "key_sha256", "created_utc", "created_by",
-                    "revoked_utc", "revoked_by", "last_used_utc"}
+                    "revoked_utc", "revoked_by", "last_used_utc", "note"}
+
+
+def test_v2_db_with_data_upgrades_to_v3_adding_note(tmp_path):
+    """A v2 DB (uploader_keys WITHOUT the note column, stamped 2) with an existing key row upgrades to
+    v3 cleanly: the migration ADDS the `note` column (defaulting existing rows to NULL) and the
+    existing row survives with its other fields intact. Fails if the v3 migration drops data, does not
+    add `note`, or the ALTER is not additive. Simulates the C43 D7 migration on an already-deployed v2
+    DB. NON-VACUOUS: the pre-fix state genuinely lacks the column, so a no-op migration would leave
+    user_version at 2 and the note assertion would KeyError/mismatch."""
+    path = tmp_path / "gateway.sqlite"
+    seeded = db.Database(path)
+    kid = seeded.create_uploader_key(
+        name="field-team-1", email="t@example.org", key_sha256="c" * 64, created_by="curator-a")
+    seeded.close()
+    # Force the on-disk state back to a real v2: drop the v3 `note` column (SQLite lacks DROP COLUMN on
+    # old versions, so rebuild the v2-shape table) and reset the stamp so the v3 migration has real work.
+    raw = sqlite3.connect(str(path))
+    raw.executescript(
+        """
+        CREATE TABLE uploader_keys_v2 (
+            id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, email TEXT,
+            key_sha256 TEXT NOT NULL UNIQUE, created_utc TEXT NOT NULL, created_by TEXT NOT NULL,
+            revoked_utc TEXT, revoked_by TEXT, last_used_utc TEXT);
+        INSERT INTO uploader_keys_v2 (id, name, email, key_sha256, created_utc, created_by,
+            revoked_utc, revoked_by, last_used_utc)
+          SELECT id, name, email, key_sha256, created_utc, created_by,
+            revoked_utc, revoked_by, last_used_utc FROM uploader_keys;
+        DROP TABLE uploader_keys;
+        ALTER TABLE uploader_keys_v2 RENAME TO uploader_keys;
+        PRAGMA user_version=2;
+        """
+    )
+    raw.commit()
+    raw.close()
+    assert _user_version(path) == 2
+    assert "note" not in _table_columns(path, "uploader_keys")
+
+    reopened = db.Database(path)
+    try:
+        assert _user_version(path) == db.SCHEMA_VERSION
+        assert "note" in _table_columns(path, "uploader_keys")
+        row = [k for k in reopened.list_uploader_keys() if k.id == kid][0]
+        assert row.note is None, "an existing row's note defaults to NULL after the additive ALTER"
+        assert row.name == "field-team-1" and row.created_by == "curator-a", "other fields survive"
+    finally:
+        reopened.close()
 
 
 def test_v1_db_with_data_upgrades_to_v2(tmp_path):

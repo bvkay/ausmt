@@ -54,9 +54,14 @@ def _utc_now() -> str:
 
 @dataclass(frozen=True)
 class UploaderKey:
-    """One issued uploader key (schema v2). key_sha256 is the ONLY copy of the secret; the plaintext
-    is shown once at creation and never stored. A revoked key keeps its row (audit trail); active ==
-    revoked_utc IS NULL."""
+    """One issued uploader key (schema v2; `note` added in v3). key_sha256 is the ONLY copy of the
+    secret; the plaintext is shown once at creation and never stored. A revoked key keeps its row
+    (audit trail); active == revoked_utc IS NULL.
+
+    `note` (schema v3, C43 D7): a free-text curator annotation (who the key is for, expiry intent).
+    PII CONTAINMENT (D2.5): like every other column here it lives ONLY in this sqlite DB — it never
+    enters a git-bound artifact (survey.yaml, a commit message, the publication ledger). A grep test
+    pins its absence from the git-bound tree."""
     id: int
     name: str
     email: str | None
@@ -66,6 +71,7 @@ class UploaderKey:
     revoked_utc: str | None
     revoked_by: str | None
     last_used_utc: str | None
+    note: str | None = None
 
     @property
     def active(self) -> bool:
@@ -127,9 +133,26 @@ def _migrate_v2_uploader_keys(conn: sqlite3.Connection) -> None:
     )
 
 
-SCHEMA_VERSION = 2
+def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
+    """v3 (C43 D7): add a free-text `note` column to uploader_keys — a curator annotation (who the key
+    is for, expiry intent). ADDITIVE-ONLY (the C43 lane invariant): a single `ALTER TABLE ... ADD
+    COLUMN note TEXT`, which SQLite applies without rewriting the table and which defaults every
+    existing row's note to NULL (rendered as "—"). No existing column is touched, no data migrated.
+
+    Idempotency: unlike v2's `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN` has no IF NOT
+    EXISTS form, so a re-run on an already-migrated DB would raise "duplicate column name". The
+    version stamp makes a re-run impossible in the normal path (a v3 DB reads user_version 3 and
+    _migrate returns before applying anything), but this guard makes the step itself idempotent for
+    the belt-and-braces partial-migration case v2's docstring calls out."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(uploader_keys)").fetchall()}
+    if "note" not in cols:
+        conn.execute("ALTER TABLE uploader_keys ADD COLUMN note TEXT")
+
+
+SCHEMA_VERSION = 3
 _MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
     (2, _migrate_v2_uploader_keys),
+    (3, _migrate_v3_uploader_key_note),
 ]
 
 
@@ -416,13 +439,70 @@ class Database:
             )
             return cur.rowcount > 0
 
+    def set_uploader_key_note(self, key_id: int, *, note: str) -> bool:
+        """Set the free-text `note` on an ACTIVE uploader key (schema v3, C43 D7). Returns True if a
+        row was updated; False for an unknown id OR a REVOKED key — record D7 rules a revoked key a
+        READ-ONLY audit row, so its note is frozen at revocation time (fix-round F6, overruling the
+        earlier 'editable audit context' reading; the `AND revoked_utc IS NULL` guard is the DB-level
+        enforcement, belt-and-braces under the route's own state check). An empty string clears the
+        note (stored as NULL so the page renders "—"). This never touches key material or the
+        active/revoked state. PII containment: writes ONLY this sqlite column, never a git-bound
+        path."""
+        value = note.strip() or None
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE uploader_keys SET note = ? WHERE id = ? AND revoked_utc IS NULL",
+                (value, key_id))
+            return cur.rowcount > 0
+
+    def get_uploader_key(self, key_id: int) -> UploaderKey | None:
+        """One uploader key by id (active or revoked), else None — the route-level state check for the
+        F6 revoked-immutability rule reads this before accepting a note update."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM uploader_keys WHERE id = ?", (key_id,)).fetchone()
+        return self._row_to_uploader_key(row) if row else None
+
+    def submission_counts_by_uploader(self) -> dict[str, int]:
+        """Map uploader NAME -> number of submissions attributed to that key, derived from the AUDIT
+        TRAIL (the opening transition's reason), never a new column. insert_submission writes the
+        opening transition reason as `upload received (uploader:<name>)` for a DB-key submit (the
+        env/bootstrap key writes the bare `upload received` with no uploader, so it is excluded here).
+        This counts OPENING transitions (from_state IS NULL) whose reason carries an uploader tag — one
+        per submission — so the tally is submissions-per-key straight from the existing audit data.
+
+        The name is extracted from the exact reason format between `(uploader:` and the final `)`. A
+        name containing `)` would be ambiguous, but uploader names are curator-chosen labels (e.g.
+        `field-team-1`); the count is a best-effort operator aid, and a mis-parsed exotic name only
+        mis-buckets that one key's count, never corrupts anything."""
+        prefix = "upload received (uploader:"
+        out: dict[str, int] = {}
+        # The prefix is a fixed literal with no % or _ wildcard chars, so `prefix + "%"` is a safe
+        # LIKE pattern (nothing to escape); the exact-parse below is the real filter, LIKE is only the
+        # index-friendly prefilter.
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT reason FROM transitions WHERE from_state IS NULL AND reason LIKE ?",
+                (prefix + "%", ),
+            ).fetchall()
+        for row in rows:
+            reason = row["reason"] or ""
+            if reason.startswith(prefix) and reason.endswith(")"):
+                name = reason[len(prefix):-1]
+                out[name] = out.get(name, 0) + 1
+        return out
+
     @staticmethod
     def _row_to_uploader_key(row: sqlite3.Row) -> UploaderKey:
+        # `note` is a v3 column: guard the key access so a pre-migration row (or a test fixture built
+        # against an older schema) degrades to None rather than raising a KeyError.
+        keys = row.keys()
         return UploaderKey(
             id=row["id"], name=row["name"], email=row["email"], key_sha256=row["key_sha256"],
             created_utc=row["created_utc"], created_by=row["created_by"],
             revoked_utc=row["revoked_utc"], revoked_by=row["revoked_by"],
             last_used_utc=row["last_used_utc"],
+            note=row["note"] if "note" in keys else None,
         )
 
     # ---- the single state-mutation path --------------------------------------------------------

@@ -143,6 +143,13 @@ def make_merge_job(slug: str, patch: dict, bump: str, note: str, today: str) -> 
     }
 
 
+def make_history_job(slug: str) -> dict:
+    """A `history` edit-job (C43 D6/S2a-2): the runner returns the READ-ONLY git log of the survey's
+    package directory (version, release note, when, author). The runner OWNS the git read (record D4)
+    so the gateway process issues no git verb for this; job carries only the slug."""
+    return {"kind": "history", "slug": slug}
+
+
 def make_list_stations_job(slug: str) -> dict:
     """A list_stations edit-job: the runner enumerates the survey's EDI files (station list) + version.
     A directory listing, never a content parse — job carries only the slug."""
