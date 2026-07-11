@@ -2617,11 +2617,12 @@ def _section_error_html(errors_for_section) -> str:
 
 
 def _text_input(name: str, value, placeholder: str = "", input_type: str = "text",
-                extra_hint: str = "") -> str:
+                extra_hint: str = "", css_class: str = "") -> str:
     val = "" if value is None else value
     ph = f' placeholder="{_esc(placeholder)}"' if placeholder else ""
     hint = f' {extra_hint}' if extra_hint else ""
-    return (f'<input type="{_esc(input_type)}" name="{_esc(name)}" '
+    cls = f' class="{_esc(css_class)}"' if css_class else ""
+    return (f'<input type="{_esc(input_type)}" name="{_esc(name)}"{cls} '
             f'value="{_esc(val)}"{ph}>{hint}')
 
 
@@ -2648,29 +2649,39 @@ def _sub_value(section: str, subkey: str, fields: dict, submitted: dict | None):
 
 
 def _map_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
-                       err_map: dict) -> str:
+                       err_map: dict, display_errs: dict | None = None) -> str:
+    """`display_errs` (C43-HUB H4): {subkey: message} DISPLAY-LAYER inline errors — the red input
+    + explanatory line under it (the mockup's citation-author-email example). Rendering only:
+    the runner-side validator and the preview/confirm POST path are untouched (pinned)."""
     from . import editor_form
     subfields = editor_form.MAP_SECTIONS[section]
     rows = [f'<h2>{_esc(title)}</h2>', _section_error_html(err_map.get(section))]
     for subkey, label, placeholder, kind in subfields:
         name = f"s_{section}_{subkey}"
         val = _sub_value(section, subkey, fields, submitted)
+        derr = (display_errs or {}).get(subkey)
+        derr_html = f'<span class="fielderr">{_esc(derr)}</span>' if derr else ""
+        bad = "badinput" if derr else ""
         if kind == "select" and section == "access":
             rows.append(_access_level_widget(name, val))
         elif kind == "date":
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                        f'{_text_input(name, val, placeholder, input_type="date")}</p>')
+                        f'{_text_input(name, val, placeholder, input_type="date", css_class=bad)}'
+                        f'{derr_html}</p>')
         elif kind == "email":
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                        f'{_text_input(name, val, placeholder, input_type="email")}</p>')
+                        f'{_text_input(name, val, placeholder, input_type="email", css_class=bad)}'
+                        f'{derr_html}</p>')
         elif kind == "levels" and section == "time_series":
             rows.append(_levels_widget(section, subkey, fields, submitted))
         elif kind == "ror":
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                        f'{_text_input(name, val, placeholder, extra_hint=_ROR_HINT)}</p>')
+                        f'{_text_input(name, val, placeholder, extra_hint=_ROR_HINT, css_class=bad)}'
+                        f'{derr_html}</p>')
         else:
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                        f'{_text_input(name, val, placeholder)}</p>')
+                        f'{_text_input(name, val, placeholder, css_class=bad)}'
+                        f'{derr_html}</p>')
     rows.append(_snapshot_hidden(section, fields))
     rows.append(_advanced_json_details(section, fields))
     return f'<div class="panel">{"".join(rows)}</div>'
@@ -2740,7 +2751,10 @@ ROW_INDEX_TOKEN = "ROWIDX"
 
 
 def _list_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
-                        err_map: dict) -> str:
+                        err_map: dict, display_error: str | None = None) -> str:
+    """`display_error` (C43-HUB H4): a DISPLAY-LAYER section-level error line (list rows have no
+    single offending input to redden, so the message renders under the heading). Rendering only —
+    the server validator and POST path are untouched."""
     from . import editor_form
     subfields = editor_form.LIST_SECTIONS[section]
     # Prefill existing rows: resubmitted rows win (preserve typed values on a validation error),
@@ -2782,6 +2796,8 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
                 f'{_list_row_html(section, ROW_INDEX_TOKEN, subfields, None)}'
                 '</template>')
     heading = [f'<h2>{_esc(title)}</h2>', _section_error_html(err_map.get(section))]
+    if display_error:
+        heading.append(f'<p class="fielderr">{_esc(display_error)}</p>')
     return (f'<div class="panel" data-editor-section="{_esc(section)}">'
             + "".join(heading)
             + f'<div data-editor-rows="{_esc(section)}">{"".join(rendered)}</div>'
@@ -3081,20 +3097,42 @@ def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
     for c in commits:
         body = c.get("body") or ""
         note_html = f'<div class="k" style="white-space:pre-wrap">{_esc(body)}</div>' if body else ""
+        # C43-HUB H5 (density polish to the mockup's table): When and Author MERGED into the
+        # mockup's single 'When · by' column ('2026-07-10 · ben') — values verbatim from the
+        # history read-job, no reformatting. No behaviour change.
+        when_by = " · ".join(x for x in (c.get("date") or "", c.get("author") or "") if x)
         rows.append(
             "<tr>"
             f'<td><code>{_esc(c.get("short") or "")}</code></td>'
             f'<td>{_esc(c.get("subject") or "")}{note_html}</td>'
-            f'<td class="k">{_esc(c.get("date") or "")}</td>'
-            f'<td class="k">{_esc(c.get("author") or "")}</td>'
+            f'<td class="k dt">{_esc(when_by)}</td>'
             "</tr>")
-    table = ('<table><tr><th>Commit</th><th>Change / release note</th><th>When</th><th>Author</th></tr>'
+    table = ('<table><tr><th>Commit</th><th>Change / release note</th><th>When · by</th></tr>'
              + "".join(rows) + "</table>")
     return (
         '<p class="sub">Read-only audit trail — every published change to this survey package '
         '(version bumps, release notes, station removals), newest first. Rename and retirement '
         'actions are not offered here.</p>'
         f'<div class="panel">{table}</div>')
+
+
+def _toc_state_hint(section: str, fields: dict, flagged_section: str | None) -> str:
+    """The TOC state hint (C43-HUB H4): render-time facts only — the issue chip on the section the
+    citation-email heuristic flagged, entry COUNTS for list sections, and the access level /
+    collection id values. A section with nothing derivable gets no hint (never a placeholder)."""
+    from . import editor_form
+    if section == flagged_section:
+        return '<span class="state issue">1 issue</span>'
+    val = fields.get(section)
+    if section in editor_form.LIST_SECTIONS and isinstance(val, list) and val:
+        return f'<span class="state">{len(val)}</span>'
+    if section == "access" and isinstance(val, dict) \
+            and isinstance(val.get("level"), str) and val["level"].strip():
+        return f'<span class="state">{_esc(val["level"].strip())}</span>'
+    if section == "collection" and isinstance(val, dict) \
+            and isinstance(val.get("id"), str) and val["id"].strip():
+        return f'<span class="state">{_esc(val["id"].strip())}</span>'
+    return ""
 
 
 def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_token: str,
@@ -3104,9 +3142,14 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     OWN commit tray (bump + required note + Preview) so "only this section is submitted" is literally
     true — the form carries only that section's widgets, and the merge seam scopes the patch to them.
     Every section keeps its advanced-JSON override (inside its panel). Server renders ALL sections
-    (fully functional without JS); survey-hub.js enhances the TOC to show one section at a time."""
+    (fully functional without JS); survey-hub.js enhances the TOC to show one section at a time.
+    C43-HUB H4: TOC entries carry render-time state hints (_toc_state_hint), and the section the
+    citation-email heuristic flags renders the mockup's inline field error — DISPLAY-LAYER only,
+    the same citation_author_email helper the Overview info row uses (they can never disagree)."""
     from . import editor_form
     err_map = _field_error_map(field_errors)
+    flag = citation_author_email(fields)
+    flagged_section = flag[0] if flag else None
     cur = version or "0.0.0"
 
     # The scalar panel is its own "section" (id: _scalars) so editing a top-level scalar submits only
@@ -3130,9 +3173,16 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     sections: list[tuple[str, str, str]] = [("_scalars", "Core fields", scalar_panel_inner)]
     for section in _SECTION_ORDER:
         if section in editor_form.MAP_SECTIONS:
-            inner = _map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map)
+            # H4 inline error: the flagged map section's name input goes red with the contract's
+            # explanatory copy (the mockup's own example).
+            derrs = ({"name": _CITATION_EMAIL_ERROR}
+                     if flagged_section == section else None)
+            inner = _map_section_panel(section, _SECTION_TITLES[section], fields, submitted,
+                                       err_map, display_errs=derrs)
         elif section in editor_form.LIST_SECTIONS:
-            inner = _list_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map)
+            derr = _CITATION_EMAIL_ERROR if flagged_section == section else None
+            inner = _list_section_panel(section, _SECTION_TITLES[section], fields, submitted,
+                                        err_map, display_error=derr)
         else:
             continue
         sections.append((section, _SECTION_TITLES[section], inner))
@@ -3168,8 +3218,9 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     for key, title, inner in sections:
         sec_id = f"sec-{_esc(key)}"
         on = " on" if key == default_key else ""
+        hint = _toc_state_hint(key, fields, flagged_section)
         toc_links.append(f'<a class="tocitem{on}" href="#{sec_id}" data-hub-section="{_esc(key)}">'
-                         f'{_esc(title)}</a>')
+                         f'{_esc(title)}{hint}</a>')
         forms.append(
             f'<form class="hub-section" id="{sec_id}" data-hub-section-form="{_esc(key)}" '
             f'method="post" action="/gateway/curator/edit/{_esc(slug)}/preview">'

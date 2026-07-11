@@ -24,7 +24,8 @@ import re
 
 from gateway import curatorpage, metaedit
 from gateway.tests.conftest import (
-    FakeGit, app_client, curator_login, inproc_edit_runner, run, write_survey_live,
+    FakeGit, app_client, csrf_for_session, curator_login, inproc_edit_runner, run,
+    write_survey_live,
 )
 
 # A survey carrying every orientation-line fact (version/licence/access/collection) + a display
@@ -50,6 +51,14 @@ access:
 collection:
   id: capricorn
   title: Capricorn
+
+publications:
+  - author: "Kay, B."
+    year: "2026"
+    title: "Capricorn MT synthesis"
+  - author: "Lovelace, A."
+    year: "2025"
+    title: "Earlier interpretation"
 """
 
 # The same survey with the mockup's own H4 defect: the citation author is an email address.
@@ -235,6 +244,145 @@ def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     # The CSP/XSS discipline extends to the rewritten constant.
     assert ".innerHTML" not in js and "<script" not in js.lower()
     assert not re.search(r"""\bon[a-z]{3,}\s*=\s*['"]""", js)
+
+
+# --------------------------------------------------------------------------------------------------
+# H4 — metadata TOC state hints + the inline citation-email field error (display-layer only)
+# --------------------------------------------------------------------------------------------------
+def test_metadata_toc_state_hints(tmp_path):
+    """H4 TOC-HINT PIN. The Metadata TOC entries carry render-time state hints: the red '1 issue'
+    chip on the section the citation-email heuristic flags, entry COUNTS on non-empty list
+    sections (publications: 2), and the access level / collection id values. A clean survey shows
+    NO issue chip. FAILS IF a hint is invented for an empty section, the issue chip misses the
+    flagged section (or fires clean), or a count drifts from the survey's own entries."""
+    async def _body():
+        surveys_live = _live(tmp_path, yaml_text=HUB_YAML_EMAIL_AUTHOR)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
+            assert r.status_code == 200
+            toc = re.search(r'<nav class="toc"[^>]*>(.*?)</nav>', r.text, re.DOTALL).group(1)
+            assert ('data-hub-section="lead_investigator">Lead investigator'
+                    '<span class="state issue">1 issue</span>') in toc
+            assert ('data-hub-section="publications">Publications'
+                    '<span class="state">2</span>') in toc
+            assert ('data-hub-section="access">Access'
+                    '<span class="state">open</span>') in toc
+            assert ('data-hub-section="collection">Collection'
+                    '<span class="state">capricorn</span>') in toc
+            # Empty list sections carry NO hint (never a 0 placeholder).
+            assert re.search(r'data-hub-section="funding">Funding</a>', toc), toc
+    run(_body())
+
+    async def _clean(tmp2):
+        surveys_live = _live(tmp2)
+        async with app_client(tmp2, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
+            assert '<span class="state issue">' not in r.text, "no issue chip on a clean survey"
+    run(_clean(tmp_path / "clean"))
+
+
+def test_metadata_inline_email_field_error(tmp_path):
+    """H4 INLINE-ERROR PIN (the mockup's own example). With an email as the citation author, the
+    Lead investigator NAME input renders red (class badinput) and carries the contract's
+    explanatory copy in a .fielderr line; a clean survey renders NEITHER. FAILS IF the error
+    misses the email case, fires on a name, attaches to the wrong input, or the copy drifts."""
+    async def _body():
+        surveys_live = _live(tmp_path, yaml_text=HUB_YAML_EMAIL_AUTHOR)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
+            assert ('<input type="text" name="s_lead_investigator_name" class="badinput" '
+                    'value="graham.heinson@adelaide.edu.au"') in r.text
+            assert ('<span class="fielderr">This looks like an email address — citation authors '
+                    'are published verbatim in every station&#x27;s XML. Use a name; keep the '
+                    'email in Contact.</span>') in r.text
+            # ONLY the flagged input reddens.
+            assert r.text.count('class="badinput"') == 1
+    run(_body())
+
+    async def _clean(tmp2):
+        surveys_live = _live(tmp2)
+        async with app_client(tmp2, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
+            # class attributes, not the (always-present) .badinput/.fielderr CSS rules.
+            assert 'class="badinput"' not in r.text and 'class="fielderr"' not in r.text
+    run(_clean(tmp_path / "clean"))
+
+
+def test_metadata_email_error_is_display_layer_only(tmp_path):
+    """H4 POST-PATH-UNTOUCHED PIN. Submitting the Lead investigator section WITH the email value
+    still flows through the UNCHANGED preview path: 200, the normal preview page (diff + verdict
+    + confirm form — the seam validator passes), no gateway-side rejection. The heuristic is
+    display-layer ONLY; the server validator stays authoritative. FAILS IF the display check
+    leaks into the POST path (a 4xx, a re-rendered form, or a missing confirm)."""
+    async def _body():
+        surveys_live = _live(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            data = {
+                "s_lead_investigator_name": "graham.heinson@adelaide.edu.au",
+                "s_lead_investigator_orcid": "0000-0002-1825-0097",
+                "o_lead_investigator":
+                    '{"name": "Ada Lovelace", "orcid": "0000-0002-1825-0097"}',
+                "note": "swap author for email (should preview fine — display-layer only)",
+                "bump": "patch", "csrf_token": csrf,
+            }
+            r = await client.post(f"/gateway/curator/edit/{SLUG}/preview",
+                                  data=data, follow_redirects=False)
+            assert r.status_code == 200
+            assert "Preview edit" in r.text
+            assert "graham.heinson@adelaide.edu.au" in r.text     # the change IS previewed
+            assert "Confirm &amp; commit" in r.text               # and not blocked
+    run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# H5 — history density polish (the mockup's merged 'When · by' column)
+# --------------------------------------------------------------------------------------------------
+def test_history_when_by_merged_column(tmp_path):
+    """H5 DENSITY PIN. The History table merges When and Author into the mockup's single
+    'When · by' column ('<date> · <author>', values verbatim from the history read-job); the
+    separate Author column is gone; behaviour (read-only real git log) is unchanged. FAILS IF
+    the columns split again or the author drops out of the merged cell."""
+    import subprocess
+
+    async def _body():
+        surveys_live = _live(tmp_path)
+
+        def git(*a):
+            subprocess.run(["git", "-C", str(surveys_live), *a], check=True,
+                           capture_output=True, text=True)
+
+        git("init", "-q")
+        git("config", "user.email", "curator@ausmt.local")
+        git("config", "user.name", "AusMT Gateway")
+        git("add", "-A")
+        git("commit", "-qm", "initial import of capr-hub-2026")
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=history")
+            assert r.status_code == 200
+            assert "<th>When · by</th>" in r.text
+            assert "<th>Author</th>" not in r.text and "<th>When</th>" not in r.text
+            assert re.search(r'<td class="k dt">[^<]+ · AusMT Gateway</td>', r.text), \
+                "the merged cell must carry '<date> · <author>'"
+    run(_body())
 
 
 def test_severity_css_maps_to_dark_palette_hues(tmp_path):
