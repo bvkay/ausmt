@@ -25,10 +25,11 @@ import json
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from gateway import curatorpage, phaseqc
+from gateway import curatorpage, phaseqc, publish
 
 NODE = shutil.which("node")
 
@@ -218,3 +219,172 @@ process.stdout.write(JSON.stringify(out));
         assert g["n"] == exp["n_classified"], (i, case, g, exp)
         assert g["median"] == exp["median"], (i, case, g["median"], exp["median"])
         assert g["medianIn"] == exp["median_in"], (i, case, g, exp)
+
+
+# ==================================================================================================
+# H1 (C43-S2a-HOTFIX): the Stations-tab row filter, driven by an ENGINE-PRODUCED catalogue.
+#
+# THE LESSON IS THE PIN: the merged Stage-2a filter compared the catalogue `survey` column to the
+# hub's SLUG, but the engine writes the survey display LABEL there (build_portal.py:
+# r["survey"] = survey_label) — zero matches, Stations tab blank on EVERY production survey
+# (owner-reported 2026-07-11). No pin caught it because none drove the filter with rows the ENGINE
+# produced. These pins run the REAL engine (the same _run_preview seam the gateway uses) over the
+# engine's own sample survey and drive the EXTRACTED filter function with the emitted catalogue —
+# hand-built rows are banned here by design.
+#
+# Skip posture: the engine stack (mt_metadata) is absent in the stackless gateway CI lane, so these
+# pins skip there with EXACTLY the lane's one allow-listed tripwire reason (gateway-ci.yml --allow);
+# on the dev box (ausmt env) and the engine lanes they RUN. Node-absent boxes hit the file-level
+# pytestmark above, which is deliberately NOT allow-listed.
+# ==================================================================================================
+_ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
+# EXACTLY the gateway lane's one allow-listed skip reason (.github/workflows/gateway-ci.yml --allow).
+_ENGINE_SKIP_REASON = "real engine stack / sample survey / validator not present"
+
+
+def _has_real_engine() -> bool:
+    """Mirrors test_runner.py's precondition for the no-mocks engine e2e: mt_metadata importable +
+    the sample survey + a validator (sibling or vendored — _run_preview's in-build validation needs
+    one). The mt_metadata requirement is what legitimately skips the H1 engine-truth pins in the
+    stackless gateway lane."""
+    import importlib.util
+
+    from gateway.tests.conftest import resolve_validator_dir
+    return (importlib.util.find_spec("mt_metadata") is not None
+            and (_ENGINE_DIR / "data" / "sample-survey" / "survey.yaml").is_file()
+            and resolve_validator_dir() is not None)
+
+
+@pytest.fixture(scope="module")
+def engine_corpus(tmp_path_factory):
+    """A REAL engine-built corpus (catalogue/sci/tf + the slug-keyed products/ tree) over the
+    engine's own 2-EDI sample survey, laid out as TWO surveys whose slugs are chosen so one is a
+    PROPER PREFIX of the other (burra-2017 / burra-2017-18) — the filter pin must prove the
+    trailing-dot survey boundary in 'au.<slug>.', not just non-emptiness. Labels (survey.yaml
+    `name`) deliberately differ from slugs, as on every real survey."""
+    if not _has_real_engine():
+        pytest.skip(_ENGINE_SKIP_REASON)
+    import time
+
+    from gateway.runner import runner as gw_runner
+    from gateway.runner.runner import RunnerConfig
+    from gateway.tests.conftest import require_validator_dir
+    base = tmp_path_factory.mktemp("h1-engine-corpus")
+    sample = _ENGINE_DIR / "data" / "sample-survey"
+    surveys = {"burra-2017": "Burra Reconnaissance 2017", "burra-2017-18": "Burra 2017-18"}
+    sy = (sample / "survey.yaml").read_text(encoding="utf-8")
+    assert "slug: sample-survey" in sy and 'name: "CI Sample Survey"' in sy, (
+        "sample survey.yaml drifted — the two-survey fixture derives from its slug/name lines")
+    pkg = base / "package"
+    for slug, label in surveys.items():
+        d = pkg / slug
+        (d / "transfer_functions" / "edi").mkdir(parents=True)
+        (d / "survey.yaml").write_text(
+            sy.replace("slug: sample-survey", f"slug: {slug}")
+              .replace('name: "CI Sample Survey"', f'name: "{label}"'), encoding="utf-8")
+        for edi in sorted((sample / "transfer_functions" / "edi").glob("*.edi")):
+            shutil.copy(edi, d / "transfer_functions" / "edi" / edi.name)
+    cfg = RunnerConfig(incoming_dir=base / "incoming", quarantine_dir=base / "quarantine",
+                       jobs_dir=base / "jobs", validator_path=str(require_validator_dir()),
+                       timeout_s=900, engine_dir=_ENGINE_DIR)
+    out = base / "preview-data"
+    summary_path = base / "preview-summary.json"
+    ok = gw_runner._run_preview(cfg, pkg, out, summary_path, deadline=time.monotonic() + 600)
+    assert ok, f"real engine preview build failed: {summary_path.read_text(encoding='utf-8')}"
+    corpus = {name: json.loads((out / f"{name}.json").read_text(encoding="utf-8"))
+              for name in ("catalogue", "sci", "tf")}
+    corpus["surveys"] = surveys
+    corpus["products"] = out / "products"
+    return corpus
+
+
+def test_stations_filter_selects_engine_built_rows_by_slug(engine_corpus, tmp_path):
+    """H1 EXECUTABLE ENGINE-TRUTH PIN. The extracted STATIONS_JS row filter (surveyRows), driven in
+    Node with the catalogue the REAL ENGINE emitted, must return EXACTLY the stations the engine
+    built for each slug — judged against the engine's own slug-keyed products/<slug>/ tree, an
+    INDEPENDENT observable (the products tree is keyed by slug on disk; the catalogue rows carry
+    the label). FAILS IF the filter misses a station the engine built for the slug (the shipped
+    Stage-2a defect: label-vs-slug compare matched nothing — shown red 2026-07-11, 0 of 2 rows for
+    both fixture slugs) OR pulls a sibling survey's rows across the trailing-dot boundary
+    (au.burra-2017. must not match au.burra-2017-18.*, and vice versa)."""
+    js = curatorpage.STATIONS_JS
+    cmap = re.search(r"var C = \{.*?\};", js, re.DOTALL)
+    assert cmap, "the catalogue column map (var C = {...}) not found in STATIONS_JS"
+    driver = (
+        "import { readFileSync } from 'fs';\n"
+        + cmap.group(0) + "\n"
+        + _extract_js_function(js, "surveyRows") + "\n"
+        + """
+const p = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const out = {};
+for (const slug of p.slugs) {
+  out[slug] = surveyRows(p.cat, p.sci, p.tf, slug).map(function (r) {
+    return { id: r.cat[C.id], ausmt_id: r.cat[C.ausmt_id], survey_col: r.cat[C.survey],
+             sc: r.sc !== null, tf: r.tf !== null };
+  });
+}
+process.stdout.write(JSON.stringify(out));
+""")
+    slugs = sorted(engine_corpus["surveys"])
+    got = _run_node(tmp_path, driver, {
+        "cat": engine_corpus["catalogue"], "sci": engine_corpus["sci"],
+        "tf": engine_corpus["tf"], "slugs": slugs})
+    for slug in slugs:
+        label = engine_corpus["surveys"][slug]
+        built = sorted(p.name for p in (engine_corpus["products"] / slug).iterdir())
+        assert built, f"fixture sanity: the engine built no stations for {slug}"
+        rows = got[slug]
+        assert sorted(r["id"] for r in rows) == built, (
+            f"slug {slug!r}: filter selected {sorted(r['id'] for r in rows)} but the engine built "
+            f"{built} (products/{slug}/) — a missed station blanks the Stations tab; an extra one "
+            f"leaks a sibling survey across the au.<slug>. boundary")
+        for r in rows:
+            assert r["ausmt_id"].startswith(f"au.{slug}."), (slug, r)
+            assert r["sc"] and r["tf"], f"index-aligned sci/tf must join for {r['ausmt_id']}"
+            # ENGINE TRUTH, pinned where the defect lived: the catalogue survey column carries the
+            # display LABEL, never the slug. If the engine ever changes that, this narrates the seam.
+            assert r["survey_col"] == label != slug, (
+                f"engine semantics drifted: catalogue survey column is {r['survey_col']!r}, "
+                f"expected the display label {label!r} (never the slug)")
+
+
+def test_engine_slugs_are_safe_component_fixed_points(engine_corpus):
+    """H1 VERIFY-GATE PIN, engine-truth form (architect ruling 2026-07-11). The 'au.' + slug + '.'
+    prefix join is exact ONLY because every slug that can reach the hub is a safe_component FIXED
+    POINT: the engine passes every declared slug through safe_component before it enters ausmt_id
+    (build_portal.py discover_work), safe_component is idempotent, and the hub route 404s unless an
+    on-disk <slug>/survey.yaml package exists — so no non-fixed-point slug is reachable. The literal
+    every-validate_slug-legal-slug form of the gate is FALSE (a legal slug may contain '..', which
+    safe_component collapses to '-'; verified 2026-07-11: 108 of 4920 legal probes transform); such
+    a slug fails EMPTY (zero rows — the honest no-stations message), never WRONG (a sibling's rows).
+    FAILS IF the engine's slug normalisation drifts so a produced slug is no longer a fixed point
+    (the prefix join would then silently blank that survey's Stations tab), or a fixture-tree
+    package declares a non-fixed-point slug."""
+    import importlib
+    import sys
+    eng = str(_ENGINE_DIR / "extract")
+    sys.path.insert(0, eng)
+    try:
+        bp = importlib.import_module("build_portal")
+    finally:
+        sys.path.remove(eng)
+    # (1) Every slug the engine ACTUALLY PRODUCED (its own slug-keyed products tree) round-trips,
+    #     and passes the hub route's charset gate (publish.validate_slug) — i.e. it is reachable.
+    produced = sorted(p.name for p in engine_corpus["products"].iterdir() if p.is_dir())
+    assert produced, "fixture sanity: the engine produced no slug-keyed products"
+    for slug in produced:
+        assert bp.safe_component(slug) == slug, (
+            f"engine-produced slug {slug!r} is not a safe_component fixed point — "
+            f"'au.' + slug + '.' would no longer prefix-match its own ausmt_ids")
+        publish.validate_slug(slug)
+    # (2) Every on-disk package slug in the fixture tree (engine/data/<pkg>/survey.yaml), read the
+    #     way the engine reads it (declared slug, else the directory name).
+    import yaml
+    checked = 0
+    for sy in sorted(_ENGINE_DIR.glob("data/*/survey.yaml")):
+        y = yaml.safe_load(sy.read_text(encoding="utf-8"))
+        declared = str(y.get("slug", sy.parent.name)) if isinstance(y, dict) else sy.parent.name
+        assert bp.safe_component(declared) == declared, (
+            f"fixture package {sy.parent.name} declares non-fixed-point slug {declared!r}")
+        checked += 1
+    assert checked, "fixture sanity: no engine/data/*/survey.yaml packages found"
