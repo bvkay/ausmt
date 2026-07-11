@@ -214,6 +214,85 @@ def test_fc2_lag_label_rendered_when_served_differs_from_published(tmp_path):
 
 
 # ==================================================================================================
+# S2a-SPLIT: the Stations tab split layout (list LEFT / data panel RIGHT; narrow = panel-first)
+# ==================================================================================================
+def test_stations_split_scaffold_structure_and_dom_order(tmp_path):
+    """S2a-SPLIT RENDER PIN. The Stations tab body carries the split structure: a .stations-split
+    grid whose DATA PANEL container (#station-detail) precedes the LIST container (#stations-list) in
+    DOM order, and the list container carries the .st-list class the CSS grids into the LEFT column.
+    Panel-first DOM order is the load-bearing narrow-stacking mechanism (see the CSS pin below): on a
+    one-column layout the panel stacks above the list with NO `order` needed. FAILS IF the split
+    container is absent, the two slots are missing, or the panel does NOT precede the list in DOM."""
+    async def _body():
+        surveys_live = _hub_survey(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get("/gateway/curator/survey/s2a-survey?tab=stations")
+            assert r.status_code == 200
+            body = r.text
+            assert 'class="stations-split"' in body, "the split grid container must render"
+            i_panel = body.find('id="station-detail"')
+            i_list = body.find('id="stations-list"')
+            assert i_panel >= 0, "the DATA panel slot (#station-detail) must render"
+            assert i_list >= 0, "the LIST slot (#stations-list) must render"
+            # DOM ORDER (amended owner ruling): the DATA PANEL comes FIRST so it stacks ABOVE the list
+            # on a narrow single column. A list-first DOM (the reverse) fails here.
+            assert i_panel < i_list, (
+                "the data panel (#station-detail) must PRECEDE the list (#stations-list) in DOM order "
+                "so narrow screens stack panel-first")
+            assert 'class="st-list"' in body, "the list container carries the grid-left .st-list class"
+            assert 'class="st-panel"' in body, "the panel container carries the grid-right .st-panel class"
+    run(_body())
+
+
+def test_stations_split_css_layout_mechanism_present():
+    """S2a-SPLIT CSS-MECHANISM PIN. Pins the ACTUAL layout mechanism the render pin relies on, so a CSS
+    regression that silently breaks the layout goes red even though the DOM is unchanged:
+      (a) WIDE: .stations-split is a 2-column grid; the list is placed in grid-column 1 (LEFT) and the
+          panel in grid-column 2 (RIGHT) — the amended list-left/panel-right arrangement.
+      (b) The list scrolls in its OWN fixed-height region: .st-scroll has overflow-y + a max-height
+          (never a full-page table — the >300-row requirement).
+      (c) NARROW (max-width:720px): the grid collapses to one column, so panel-first DOM order stacks
+          the panel above the list.
+    FAILS IF any of the three mechanism pieces is dropped from the shell CSS."""
+    head = curatorpage._HEAD
+    # (a) two-column grid with explicit list-left / panel-right placement.
+    assert ".stations-split{display:grid" in head, "the split must be a CSS grid"
+    assert "grid-template-columns:20rem minmax(0,1fr)" in head, "wide: fixed list col + fluid panel col"
+    assert ".stations-split .st-list{grid-column:1}" in head, "the LIST occupies the LEFT column"
+    assert ".stations-split .st-panel{grid-column:2}" in head, "the PANEL occupies the RIGHT column"
+    assert "align-items:start" in head, "columns are top-aligned so the list never pushes the panel down"
+    # (b) the list's own fixed-height scroll region.
+    assert ".st-scroll{max-height:" in head and "overflow-y:auto" in head, (
+        "the list must scroll in a fixed-height region, never as a full-page table")
+    # (c) narrow collapse to one column (panel-first DOM => panel-above-list stacking).
+    m = re.search(r"@media \(max-width:720px\)\{(.*?)\}\s*</style>", head, re.DOTALL)
+    assert m, "the responsive @media block must exist"
+    narrow = m.group(1)
+    assert ".stations-split{grid-template-columns:1fr}" in narrow, (
+        "narrow screens must collapse the split to a single column so the panel stacks above the list")
+
+
+def test_stations_split_no_page_scroll_on_row_select():
+    """S2a-SPLIT NO-SCROLL PIN. Clicking a station must populate the RIGHT panel WITHOUT scrolling the
+    page away. The row handler must NOT navigate to a fragment or call scrollIntoView — it selects the
+    row (adds the .on highlight) and repopulates #station-detail in place. FAILS IF the JS reintroduces
+    a location-hash link (href='#') or a scroll call in the row-selection path (the merged behaviour put
+    the drill-down BELOW a full-page table and used an in-list anchor, which jumped the viewport)."""
+    js = curatorpage.STATIONS_JS
+    # The whole ROW is the selection target (st-row), not an in-cell anchor with href='#'.
+    assert "'st-row'" in js, "each list row carries the .st-row selection class"
+    assert "classList.add('on')" in js, "the selected row gets a visible highlight (.on)"
+    # No scroll CALL and no scroll-to-hash navigation in the JS (a prose mention in a comment is fine;
+    # a .scrollIntoView( invocation or an assignment to location.hash is the viewport-jumping vector).
+    assert ".scrollIntoView(" not in js, "row selection must not call scrollIntoView (viewport jump)"
+    assert "location.hash" not in js, "row selection must not navigate to a fragment (viewport jump)"
+    assert "link.href = '#'" not in js, "the merged in-list hash anchor (viewport-jumping) must be gone"
+
+
+# ==================================================================================================
 # CSP sweep extended to every NEW Stage-2a renderer + JS constant
 # ==================================================================================================
 def test_c43_stage2a_js_constants_are_raw_and_csp_clean():

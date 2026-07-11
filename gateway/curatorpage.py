@@ -112,8 +112,33 @@ _HEAD = """<!doctype html>
  .card{flex:1 1 8rem;background:$panel;border-radius:8px;padding:.75rem 1rem}
  .card .n{font-size:1.4rem;font-weight:700}
  .card .l{color:$muted;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+ /* C43 S2a-SPLIT: Stations tab split view. WIDE = station LIST left / DATA panel right; the panel
+    comes FIRST in DOM (so on a narrow single column it stacks first — owner ruling) and is placed
+    into the RIGHT grid column explicitly on wide screens. align-items:start keeps both columns
+    TOP-ALIGNED so the (short) list never pushes the (tall) panel off-screen. */
+ .stations-split{display:grid;grid-template-columns:20rem minmax(0,1fr);gap:1.25rem;
+   align-items:start;margin-top:.5rem}
+ .stations-split .st-list{grid-column:1}   /* list: left column (DOM-second) */
+ .stations-split .st-panel{grid-column:2}  /* panel: right column (DOM-first) */
+ /* The list is its OWN scroll region — a fixed-height container with its own scrollbar, NEVER a
+    full-page-length table (a >300-station survey must not push the panel off-screen). The filter box
+    sits ABOVE the scroll region (outside .st-scroll) so it stays put while the rows scroll. */
+ .st-scroll{max-height:70vh;overflow-y:auto;border:1px solid #2E4254;border-radius:6px}
+ .st-scroll table{margin:0}
+ .st-scroll th{position:sticky;top:0;background:$panel;z-index:1}
+ .st-list .st-filter{margin:0 0 .5rem}
+ tr.st-row{cursor:pointer}
+ tr.st-row:hover{background:#1B2C3A}
+ tr.st-row.on{background:#243747}          /* selected row stays visibly highlighted */
+ tr.st-row.on td:first-child{box-shadow:inset 3px 0 0 $accent}
+ details summary{cursor:pointer;color:$muted;font-size:.8rem;margin:.5rem 0 .25rem}
  @media (max-width:720px){.shell{display:block}.rail{flex-basis:auto;border-right:0;
-   border-bottom:1px solid #2E4254}}
+   border-bottom:1px solid #2E4254}
+   /* narrow: collapse to one column. DOM order is panel-first, so the panel stacks ABOVE the list
+      with no `order` needed; the grid-column placements above are inert at one column. */
+   .stations-split{grid-template-columns:1fr}
+   .stations-split .st-list,.stations-split .st-panel{grid-column:1}
+   .st-scroll{max-height:24rem}}
 </style></head>
 <body>
 """
@@ -735,6 +760,35 @@ STATIONS_JS = r"""
     return strip;
   }
 
+  // ---- frame-declaration readability (S2a-SPLIT secondary) ----
+  // The station.json `frame` block was rendered as a raw JSON blob; present the LOAD-BEARING fields as
+  // ordinary fact rows and keep the full JSON in a collapsed <details>. PURE (DOM-free) so the Node
+  // parity harness can drive it: returns an ordered array of [label, valueString] pairs built from
+  // VERBATIM station.json values — NO reinterpretation, NO recompute. A missing field is skipped (not
+  // shown as '-'); null/absent booleans and numbers are coerced to display strings only. The two phase
+  // medians and the convention verdict come straight from frame.convention_check (the engine's
+  // _conventions.convention_check output: {verdict, phs_xy_median_deg, phs_yx_median_deg, ...}).
+  function frameRows(frame) {
+    var rows = [];
+    if (!frame || typeof frame !== 'object') return rows;
+    function push(label, v) { if (v !== undefined) rows.push([label, v]); }
+    function str(v) { return (v === null || v === undefined) ? '-' : String(v); }
+    push('Frame served', str(frame.frame_served));
+    if ('declared_azimuth_deg' in frame) push('Declared azimuth (deg)', str(frame.declared_azimuth_deg));
+    if ('derotated' in frame) push('De-rotated to geographic north', frame.derotated ? 'yes' : 'no');
+    if ('impedance_rotation_deg_source' in frame)
+      push('Impedance rotation source (deg)', str(frame.impedance_rotation_deg_source));
+    if ('tipper_rotation_deg_source' in frame)
+      push('Tipper rotation source (deg)', str(frame.tipper_rotation_deg_source));
+    var ck = frame.convention_check;
+    if (ck && typeof ck === 'object') {
+      push('Convention check', str(ck.verdict));
+      push('Phase φxy median (deg)', str(ck.phs_xy_median_deg));
+      push('Phase φyx median (deg)', str(ck.phs_yx_median_deg));
+    }
+    return rows;
+  }
+
   // ---- facts panel ----
   function factsPanel(cat, sc, station, buildId, lagPending) {
     var panel = el('div', null, 'panel');
@@ -771,7 +825,23 @@ STATIONS_JS = r"""
     if (station && !station.__missing) {
       if (station.frame) {
         panel.appendChild(el('h2', 'Frame declaration'));
-        var fp = el('pre'); fp.textContent = JSON.stringify(station.frame, null, 1); panel.appendChild(fp);
+        // Load-bearing fields as normal fact rows (verbatim station.json values — see frameRows).
+        var frows = frameRows(station.frame);
+        if (frows.length) {
+          var ftbl = el('table');
+          frows.forEach(function (kv) {
+            var tr = el('tr');
+            tr.appendChild(el('td', kv[0], 'k'));
+            tr.appendChild(el('td', kv[1]));
+            ftbl.appendChild(tr);
+          });
+          panel.appendChild(ftbl);
+        }
+        // FULL raw frame declaration kept available, collapsed (all values via textContent).
+        var det = el('details');
+        var sum = el('summary', 'raw frame declaration'); det.appendChild(sum);
+        var fp = el('pre'); fp.textContent = JSON.stringify(station.frame, null, 1); det.appendChild(fp);
+        panel.appendChild(det);
       }
       var cc = station.canonical_conditioning;
       if (cc) {
@@ -832,44 +902,55 @@ STATIONS_JS = r"""
     detail.appendChild(p);
   }
 
-  // ---- table + filter ----
+  // ---- list + filter (S2a-SPLIT: the list slot is the LEFT column; the DATA panel #station-detail
+  // is a pre-rendered sibling in the RIGHT column). The table lives inside a FIXED-HEIGHT scroll
+  // region (.st-scroll) with the filter box ABOVE it, so a >300-station survey scrolls WITHIN the
+  // list and never pushes the panel off-screen. Row click populates the panel WITHOUT the page
+  // scrolling (no location hash, no scrollIntoView) and highlights the selected row. ----
   function render(rows, buildId, lagPending) {
-    host.textContent = '';
+    var list = document.getElementById('stations-list');
+    list.textContent = '';
     if (lagPending) {
       var lag = el('p', 'Facts from build ' + (buildId || '(unknown)') + ' — publish pending', 'sub');
       lag.style.color = '#D9A23B'; lag.style.fontWeight = '600';
-      host.appendChild(lag);
+      list.appendChild(lag);
     }
     if (!rows.length) {
-      host.appendChild(el('p', 'No stations for this survey in the served corpus (' + slug + ').', 'sub'));
+      list.appendChild(el('p', 'No stations for this survey in the served corpus (' + slug + ').', 'sub'));
       return;
     }
-    var filterWrap = el('p');
+    var filterWrap = el('p', null, 'st-filter');
     var filter = document.createElement('input');
     filter.type = 'search'; filter.placeholder = 'filter stations by id…';
     filter.style.maxWidth = '18rem';
     filterWrap.appendChild(filter);
-    host.appendChild(filterWrap);
+    list.appendChild(filterWrap);
 
+    var scroll = el('div', null, 'st-scroll');
     var tbl = el('table');
     var head = el('tr');
     ['Station', 'Lat', 'Lon', 'Periods', 'Quality'].forEach(function (h) { head.appendChild(el('th', h)); });
     tbl.appendChild(head);
+    var selected = null;
     rows.forEach(function (r, i) {
       var cat = r.cat, sc = r.sc;
-      var tr = el('tr');
+      var tr = el('tr', null, 'st-row');
       tr.setAttribute('data-station-id', String(cat[C.id]).toLowerCase());
-      var idCell = el('td');
-      var link = el('a', String(cat[C.id]));
-      link.href = '#';
-      link.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        // Clear any prior plots/remove so a re-open rebuilds cleanly.
+      tr.setAttribute('tabindex', '0');   // keyboard-focusable row (whole-row selection target)
+      function select(ev) {
+        if (ev) ev.preventDefault();
+        if (selected) selected.classList.remove('on');
+        tr.classList.add('on');
+        selected = tr;
+        // Clear any prior plots/remove so a re-open rebuilds cleanly, then populate the RIGHT panel.
         var d = document.getElementById('station-detail'); if (d) d.textContent = '';
         openStation(i, rows, buildId, lagPending);
+      }
+      tr.addEventListener('click', select);
+      tr.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') select(ev);   // Space/Enter activate the focused row
       });
-      idCell.appendChild(link);
-      tr.appendChild(idCell);
+      tr.appendChild(el('td', String(cat[C.id])));
       tr.appendChild(el('td', num(cat[C.lat], 3)));
       tr.appendChild(el('td', num(cat[C.lon], 3)));
       tr.appendChild(el('td', num(cat[C.nper])));
@@ -883,8 +964,8 @@ STATIONS_JS = r"""
       tr.appendChild(chip);
       tbl.appendChild(tr);
     });
-    host.appendChild(tbl);
-    host.appendChild(el('div', null)).id = 'station-detail';
+    scroll.appendChild(tbl);
+    list.appendChild(scroll);
 
     filter.addEventListener('input', function () {
       var q = filter.value.trim().toLowerCase();
@@ -2018,10 +2099,25 @@ def _hub_stations_body(slug: str, *, build_lag: dict | None = None) -> str:
     served build's source_commit and, on drift, renders 'facts from build <id> — publish pending' on
     the panel itself. Degrades: without JS the placeholder stays, the page never breaks."""
     published = (build_lag or {}).get("published_head") or ""
+    # S2a-SPLIT scaffold: the split container carries BOTH slots the JS fills. DOM ORDER IS PANEL
+    # FIRST (#station-detail) then LIST (#stations-list) — so on a narrow single column the data panel
+    # stacks ABOVE the list (owner ruling); on wide screens .stations-split places the list into the
+    # LEFT column and the panel into the RIGHT column via grid-column (see shell CSS). The list slot
+    # holds the filter box + the fixed-height .st-scroll region the JS builds the table into. Server
+    # renders only the scaffold + loading placeholder; stations.js fills it from the served /data
+    # corpus (catalogue/sci/tf/build). Degrades: without JS the placeholder stays, the page never
+    # breaks.
     return (
         f'<div id="survey-stations" data-survey-slug="{_esc(slug)}" '
         f'data-published-head="{_esc(published)}">'
+        '<div class="stations-split">'
+        '<div id="station-detail" class="st-panel">'
+        '<p class="sub">Select a station from the list to view its facts and response curves.</p>'
+        '</div>'
+        '<div id="stations-list" class="st-list">'
         '<p class="sub">Loading stations from the served corpus…</p>'
+        '</div>'
+        '</div>'
         '</div>'
         # EXTERNAL same-origin script (strictPages CSP blocks inline JS). Degrades gracefully.
         '<script src="/gateway/curator/stations.js" defer></script>'
