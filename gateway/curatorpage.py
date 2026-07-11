@@ -1660,11 +1660,21 @@ def _freshness_card(ops: dict) -> str:
     code = f.get("code") or {}
     sl = f.get("surveys_live") or {}
     behind = bool(code.get("behind")) or bool(sl.get("behind"))
-    kind = "warn" if behind else "ok"
+    # "current" is EARNED, never defaulted (the 2026-07-11 incident was a lying "current" chip):
+    # it requires BOTH repos to carry a comparable sha. Unavailable/unparseable freshness — a
+    # broken checkout, or alert.sh/gateway schema skew — pills "unknown" in warn colour, because
+    # a floor that cannot see the repos must never claim they are current.
+    known = all(bool(r.get("sha")) and bool(r.get("comparable")) for r in (code, sl))
+    if behind:
+        pill, kind = "behind", "warn"
+    elif known:
+        pill, kind = "current", "ok"
+    else:
+        pill, kind = "unknown", "warn"
     body = (_freshness_row("Code checkout", code) + _freshness_row("surveys-live", sl)
             + '<p class="opsnote">Local HEAD vs the last successfully-fetched origin; a fetch that '
               'cannot reach origin surfaces in the reconcile sync state above, not here (record D15).</p>')
-    return _ops_card("Freshness (vs origin)", _pill("behind" if behind else "current", kind), body)
+    return _ops_card("Freshness (vs origin)", _pill(pill, kind), body)
 
 
 def _sync_strip(status, ops, ops_stale: bool) -> str:

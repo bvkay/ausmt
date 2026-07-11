@@ -275,3 +275,24 @@ def test_serve_page_and_build_detail_have_no_inline_js(tmp_path):
                 handlers = re.findall(r"<[^>]*\son\w+\s*=", html)
                 assert handlers == [], f"inline handlers in {url}: {handlers}"
     run(_body())
+
+
+def test_freshness_chip_is_earned_never_defaulted():
+    """FRESHNESS-CHIP FAIL-CLOSED PIN (architect gate finding, 2026-07-11). 'current' must be
+    EARNED — both repos carrying a comparable sha — never reached by fallthrough. With freshness
+    data absent/unparseable (schema skew, broken checkout) the chip pills 'unknown', because a
+    floor that cannot see the repos must never claim they are current (the incident class was a
+    lying 'current' chip). FAILS IF unavailable freshness renders the 'current' pill."""
+    from gateway.curatorpage import _freshness_card
+    # Unavailable: no sha on either repo (e.g. wrong-shaped ops-status from a version skew).
+    card = _freshness_card({"freshness": {"code": {}, "surveys_live": {}}})
+    assert ">unknown<" in card, "unavailable freshness must pill 'unknown'"
+    assert ">current<" not in card, "unavailable freshness must NEVER pill 'current'"
+    # Earned: both repos comparable and not behind.
+    ok = {"sha": "9ad6b3e", "origin": "9ad6b3e", "behind": 0, "comparable": True}
+    card = _freshness_card({"freshness": {"code": dict(ok), "surveys_live": dict(ok)}})
+    assert ">current<" in card
+    # Behind still wins over unknown.
+    behind = {"sha": "b898f26", "origin": "bb7efe7", "behind": 3, "comparable": True}
+    card = _freshness_card({"freshness": {"code": {}, "surveys_live": behind}})
+    assert ">behind<" in card
