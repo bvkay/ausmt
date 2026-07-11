@@ -520,15 +520,19 @@ if backups_dir and os.path.isdir(backups_dir):
         d = os.path.join(backups_dir, name)
         if os.path.isdir(d) and name[:1].isdigit() and name.endswith("Z"):
             snaps.append((name, d))
-newest = snaps[0] if snaps else None
-age_h = None
-if newest:
+_now_ts = datetime.datetime.now().timestamp()
+def _age_h(path):
     try:
-        age_h = round((datetime.datetime.now().timestamp() - os.path.getmtime(newest[1])) / 3600.0, 1)
+        return round((_now_ts - os.path.getmtime(path)) / 3600.0, 1)
     except OSError:
-        age_h = None
+        return None
+newest = snaps[0] if snaps else None
+# The snapshot table (B5): newest-first {name, age_hours}, capped (retention is ~14 on the box).
+snap_list = [{"name": name, "age_hours": _age_h(d)} for name, d in snaps[:30]]
 drill = _load(os.path.join(backups_dir, "latest-drill.json")) if backups_dir else None
-backups = {"newest": newest[0] if newest else None, "age_hours": age_h, "count": len(snaps),
+backups = {"newest": newest[0] if newest else None,
+           "age_hours": _age_h(newest[1]) if newest else None, "count": len(snaps),
+           "snapshots": snap_list,
            "max_hours": int(os.environ.get("AUSMT_OPS_BACKUP_MAX_H") or 26),
            "systemd_failed": _b("AUSMT_OPS_BACKUP_SYSTEMD_FAILED"),
            "drill": drill}   # {"verdict":..,"at":..} if restore-drill writes one, else null
