@@ -610,3 +610,132 @@ def test_survey_inconsistent_angles_served_as_stored_with_note_v3b(tmp_path):
     all_notes = [n for lst in fnotes.values() for n in lst]
     assert any("mixed declared frames across stations" in n for n in all_notes), \
         "the V3-B mixed-frames note must reach the caller's report (build_report frame array)"
+
+
+# ---------------------------------------------------------------------------------------------
+# Fix round F1: declared-zero stations participate in the V3-B vote as angle 0.0
+# ---------------------------------------------------------------------------------------------
+def test_classify_survey_frame_declared_zero_participates_f1():
+    """F1 (panel table). FAILS IF: declared-zero (kind 'none') stations are excluded from the V3-B
+    spread vote or the note's min/max range. A served station always sits in SOME declared frame —
+    zero serves under the declared-zero reference — so [0°, 20°] mixes frames exactly as [8°, 20°]
+    does, and the stamped range must include the 0° members.
+    Historical red: pre-F1 code voted over kind=='uniform' only — [0°, 20°] got NO note and
+    [0°, 8°, 20°] understated the range as '8°…20°'."""
+    z = ("none", 0.0)
+    u = lambda a: ("uniform", float(a))  # noqa: E731
+    n1 = conv.classify_survey_frame([z, u(20)])
+    assert n1 and "0°…20°" in n1, f"[0, 20] must fire with the full range: {n1!r}"
+    n2 = conv.classify_survey_frame([z, z, u(20)])
+    assert n2 and "0°…20°" in n2, f"[0, 0, 20] must fire with the full range: {n2!r}"
+    n3 = conv.classify_survey_frame([z, u(8), u(20)])
+    assert n3 and "0°…20°" in n3, \
+        f"[0, 8, 20] must state the FULL range including the 0° members: {n3!r}"
+    n4 = conv.classify_survey_frame([u(8), u(20)])
+    assert n4 and "8°…20°" in n4, f"[8, 20] unchanged: {n4!r}"
+    assert conv.classify_survey_frame([z, z, z]) is None, "[0, 0, 0]: spread 0 — no note"
+    assert conv.classify_survey_frame([z, u(4)]) is None, "spread 4 <= 5 — no note"
+    # per-period (V3-C) stations are refused, never served — they cannot mix a SERVED frame
+    assert conv.classify_survey_frame([("per-period", None), z]) is None
+    assert conv.classify_survey_frame([]) is None
+
+
+def test_survey_zero_member_gets_mixed_frames_note_f1(tmp_path):
+    """F1 integration. FAILS IF: a survey mixing a declared-zero station with a 20° one gets NO
+    mixed-frames note (the pre-F1 defect: zero members were invisible to the vote), or the note's
+    range omits the 0° member it is stamped on. Both stations still serve AS STORED.
+    Historical red: pre-F1 code emitted no note for [0°, 20°]."""
+    sdir = tmp_path / "survey"
+    sdir.mkdir()
+    (sdir / "A.edi").write_text(VULCAN.read_text(encoding="latin-1"), encoding="latin-1")  # ZROT=0
+    (sdir / "B.edi").write_text(_vulcan_rotated(20.0), encoding="latin-1")
+    report = {}
+    stations, tf_rows, sci_rows = bp.process_edis(
+        sorted(sdir.glob("*.edi")), "T", "org", "t-slug", report=report)
+    assert len(stations) == 2
+    for (_p, r) in stations:
+        fr = r["frame"]
+        assert fr["derotated"] is False, f"{_p.name}: still served as stored"
+        note = fr.get("survey_frame_note") or ""
+        assert "mixed declared frames across stations" in note, \
+            f"{_p.name}: the zero-member survey must carry the V3-B note (pre-F1 red)"
+        assert "0°…20°" in note, \
+            f"{_p.name}: the note's range must include the 0° member: {note!r}"
+    served = {r["frame"]["declared_azimuth_deg"] for (_p, r) in stations}
+    assert served == {0.0, 20.0}, "each station still records its OWN declared angle"
+
+
+# ---------------------------------------------------------------------------------------------
+# Fix round F2: divergent tipper/impedance declared frames are REPORTED (never rotated)
+# ---------------------------------------------------------------------------------------------
+_N_VULCAN = 62   # Vulcan_A1's period count (>FREQ //62)
+
+
+def _vulcan_with_tipper(zrot_deg, trot_deg):
+    """Vulcan_A1 + a synthetic varying tipper (TXR/TXI/TYR/TYI .EXP blocks) + a uniform declared
+    TROT — the runtime text-transform pattern (no real tipper EDI is in the repo; the Phoenix
+    spectra tipper is a masked placeholder). zrot_deg nonzero re-expresses Z + declares ZROT via
+    _vulcan_rotated; the tipper VALUES are irrelevant to the frame gate (declarations only) but
+    vary so nothing resembles the flat-|T| placeholder class."""
+    n = _N_VULCAN
+    text = _vulcan_rotated(zrot_deg) if abs(zrot_deg) > 1e-9 \
+        else VULCAN.read_text(encoding="latin-1")
+
+    def _rows(vals):
+        return "\n".join(" ".join(f"{v: .9E}" for v in vals[i:i + 6])
+                         for i in range(0, len(vals), 6))
+
+    txr = [0.10 + 0.20 * i / (n - 1) for i in range(n)]
+    txi = [-0.05 + 0.10 * i / (n - 1) for i in range(n)]
+    tyr = [0.30 - 0.15 * i / (n - 1) for i in range(n)]
+    tyi = [0.02 + 0.05 * i / (n - 1) for i in range(n)]
+    block = (f">TROT  //{n}\n{_rows([float(trot_deg)] * n)}\n"
+             f">TXR.EXP //{n}\n{_rows(txr)}\n>TXI.EXP //{n}\n{_rows(txi)}\n"
+             f">TYR.EXP //{n}\n{_rows(tyr)}\n>TYI.EXP //{n}\n{_rows(tyi)}\n")
+    assert ">END" in text
+    return text.replace(">END", block + ">END")
+
+
+def test_divergent_tipper_frame_reported_f2(tmp_path):
+    """F2 (panel case d: TROT=-60, ZROT=0). FAILS IF: a station whose uniform declared tipper frame
+    DIVERGES from its impedance declared azimuth is refused, rotated, or served with the divergence
+    UNREPORTED. Owner doctrine: "if we know any details about the coordinate frame we report it" —
+    the divergent tipper frame must land first-class in station.json
+    (frame.tipper_declared_azimuth_deg) AND as a frame note (build_report/QA + the portal line).
+    Historical red: pre-F2 the -60° tipper frame lived only in frame.evidence.trot."""
+    fx = _vulcan_with_tipper(0.0, -60.0)
+    # PRECONDITION: the fixture really has a tipper and really declares TROT=-60 uniform
+    p_raw = _write(tmp_path, "cased_raw.edi", fx)
+    assert mtm.read(p_raw).has_tipper(), "fixture must carry a real tipper"
+    ev = conv.parse_frame_evidence(fx)
+    assert conv._uniq_eps(conv._mask_sentinels(ev["trot"])) == [-60.0]
+    parsed = _parse(tmp_path, "cased.edi", fx)
+    assert "skip" not in parsed, f"case d must SERVE (divergence is reported, not refused): {parsed.get('skip')}"
+    fr = parsed["frame"]
+    assert fr["derotated"] is False and fr["frame_served"] == "declared-zero"
+    assert fr["tipper_declared_azimuth_deg"] == -60.0, \
+        "the divergent tipper frame must be a first-class station.json field"
+    assert any("tipper" in n and "divergent" in n and "NOT rotated" in n
+               for n in parsed["frame_notes"]), \
+        f"the divergence must be a frame note: {parsed['frame_notes']}"
+    # the reverse shape (AusLAMP-SA class: rotated Z, zero tipper) reports too
+    parsed2 = _parse(tmp_path, "rev.edi", _vulcan_with_tipper(-60.0, 0.0))
+    assert "skip" not in parsed2
+    fr2 = parsed2["frame"]
+    assert fr2["declared_azimuth_deg"] == -60.0
+    assert fr2["tipper_declared_azimuth_deg"] == 0.0, \
+        "a zero tipper frame under a rotated impedance is equally divergent — report it"
+
+
+def test_equal_tipper_frame_not_reported_f2(tmp_path):
+    """F2 negative space. FAILS IF: an EQUAL tipper/impedance declaration (ZROT=TROT=-60) or a
+    zero/zero one produces the divergence field or note — equal-or-absent TROT means no change, no
+    noise (mutation-proof for the F2 pin: the field appears ONLY on divergence)."""
+    for name, zr, tr in (("eq60.edi", -60.0, -60.0), ("eq0.edi", 0.0, 0.0)):
+        parsed = _parse(tmp_path, name, _vulcan_with_tipper(zr, tr))
+        assert "skip" not in parsed, name
+        fr = parsed["frame"]
+        assert "tipper_declared_azimuth_deg" not in fr, \
+            f"{name}: equal declarations must NOT emit the divergence field"
+        assert not any("divergent" in n for n in parsed["frame_notes"]), \
+            f"{name}: equal declarations must NOT emit the divergence note"

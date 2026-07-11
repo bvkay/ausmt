@@ -153,7 +153,9 @@ def parse_frame_evidence(text: str) -> dict:
     spectra = (">=SPECTRASECT" in up) or re.search(r"^>SPECTRA\b", text, re.M | re.I) is not None
     rotspec = [float(x) for x in re.findall(r"ROTSPEC\s*=\s*(-?[\d.]+)", text, re.I)] or None
     tip_attr = re.search(r"^>TX[RI](?:\.EXP)?\b[^\n]*ROT\s*=\s*(\w+)", text, re.M | re.I)
-    freqs = _block_values(text, "FREQ")
+    # (fix round F3: the v2 freq_descending field is GONE — it existed solely to verify the
+    # angle-to-period alignment before a per-period de-rotation, and v3 refuses ALL per-period
+    # rotation at the gate (V3-C), so frequency ordering no longer bears on any disposition.)
     return {
         "branch": "spectra" if spectra else "mt",
         "zrot": _block_values(text, "ZROT"),
@@ -166,8 +168,6 @@ def parse_frame_evidence(text: str) -> dict:
         "azm_ex": _first_azm(text, "EMEAS", "EX"),
         "azm_ey": _first_azm(text, "EMEAS", "EY"),
         "tipper_rot_attr": tip_attr.group(1).upper() if tip_attr else None,
-        "freq_descending": (freqs is None or len(freqs) < 2
-                            or all(a >= b for a, b in zip(freqs, freqs[1:]))),
     }
 
 
@@ -242,19 +242,24 @@ def declared_uniform_angle(ev: dict):
 
 def classify_survey_frame(station_angles: list):
     """POLICY v3 survey-scope scan from every station's declared_uniform_angle output. Returns the
-    V3-B mixed-declared-frames NOTE (a string) when the survey's per-station uniform angles are
+    V3-B mixed-declared-frames NOTE (a string) when the survey's per-station declared angles are
     inconsistent (spread beyond SURVEY_ANGLE_SPREAD_MAX_DEG), else None.
+
+    DECLARED-ZERO stations participate as angle 0.0 (fix round F1): a served station always sits in
+    SOME declared frame — zero/undeclared serves under the declared-zero reference — so a [0°, 20°]
+    survey mixes frames exactly as an [8°, 20°] one does, and the note's range must include the 0°
+    members it is stamped on. Only per-period (V3-C) stations stay out of the vote: they are
+    refused, never served, so they cannot mix a SERVED frame.
 
     Unlike v2, this classification does NOT change any per-station disposition — every uniform
     declaration serves AS STORED and every per-period declaration refuses, regardless of survey
     context. It exists ONLY to surface the survey-level "mixed declared frames" note in
     build_report + station.json + the portal (V3-B); the engine never de-rotates and never refuses a
-    station on survey-consistency grounds. Per-period (V3-C) stations refuse individually and do not
-    enter the vote."""
-    uni = [t for k, t in station_angles if k == "uniform"]
-    if not uni:
+    station on survey-consistency grounds."""
+    angles = [t for k, t in station_angles if k in ("uniform", "none")]
+    if not angles:
         return None
-    lo, hi = min(uni), max(uni)
+    lo, hi = min(angles), max(angles)
     if (hi - lo) > SURVEY_ANGLE_SPREAD_MAX_DEG:
         return (f"frame: mixed declared frames across stations: {lo:g}°…{hi:g}° — each station is "
                 f"served in its own declared acquisition frame; this survey does not share one "
@@ -448,6 +453,20 @@ def frame_disposition(ev: dict, rot_mtm, z_present: list, has_tipper: bool,
                          f"DIFFERENT frame — a single served tipper curve would mix frames "
                          f"period-by-period (misleading-by-construction); fix: re-export in a single "
                          f"coherent frame.")
+        if len(tu) == 1:
+            # F2 (owner doctrine: "if we know any details about the coordinate frame we report it"):
+            # a UNIFORM declared tipper frame that DIFFERS from the impedance's declared azimuth is a
+            # known frame detail — record it first-class (station.json tipper_declared_azimuth_deg)
+            # + note it (build_report/QA + the portal frame line). Covers both directions: TROT=-60
+            # with ZROT=0 (the panel's case d) AND TROT=0 with a nonzero impedance azimuth (the
+            # AusLAMP-SA shape: rotated Z, zero tipper). Equal or absent TROT: no field, no noise.
+            t_th = _norm_angle(tu[0])
+            z_th = recorded if recorded is not None else 0.0
+            if abs(_norm_angle(t_th - z_th)) > ROT_UNIFORM_EPS_DEG:
+                facts["tipper_declared_azimuth_deg"] = round(t_th, 4)
+                notes.append(f"frame: tipper declared in a {t_th:g} deg frame while the impedance "
+                             f"is declared at {z_th:g} deg — divergent tipper/impedance frames; "
+                             f"both served as stored (NOT rotated)")
 
     return _done(recorded_deg=recorded)
 

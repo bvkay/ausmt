@@ -18,25 +18,38 @@ Gate 1 keeps its DETECTION (the evidence parse, the classification, the reportin
 CORRECTION. It now returns exactly two serve-path verdicts — **serve AS STORED** (recording the
 declared frame) or **REFUSE** — and never rotates a byte or a tensor.
 
-* **V3-A — uniform declared frame, ANY angle.** A survey-uniform declared rotation (ZROT / coherent
-  HMEAS azimuths / single SPECTRA ROTSPEC), of ANY magnitude, is served AS STORED; the angle is
-  recorded in every frame-bearing surface (station.json `frame`: `frame_served="declared-azimuth"`
-  + `declared_azimuth_deg`; the XML orientation fields as they already flow; the catalogue
-  `coord_flag` class untouched). This ABSORBS the old R3 (record ≤15°) and R4 (de-rotate >15°): the
-  arbitrary 15° `FRAME_KEEP_MAX_DEG` threshold **dies** (deleted from `_conventions.py`).
-  olympic-dam-class (−60°) serves in its acquisition frame.
-* **V3-B — survey-inconsistent, per-station-uniform** (per-station uniform angles spreading beyond
+* **V3-A — uniform declared frame, ANY angle.** A survey-uniform declared rotation (ZROT / uniform
+  TROT / coherent HMEAS azimuths / single SPECTRA ROTSPEC), of ANY magnitude, is served AS STORED;
+  the angle is recorded in every frame-bearing surface (station.json `frame`:
+  `frame_served="declared-azimuth"` + `declared_azimuth_deg`; the XML orientation fields as they
+  already flow; the catalogue `coord_flag` class untouched). This ABSORBS the old R3 (record ≤15°)
+  and R4 (de-rotate >15°): the arbitrary 15° `FRAME_KEEP_MAX_DEG` threshold **dies** (deleted from
+  `_conventions.py`). olympic-dam-class (−60°) serves in its acquisition frame.
+  **Divergent tipper frame (fix round F2):** when the tipper's UNIFORM declared rotation (TROT)
+  differs from the impedance's declared azimuth — either direction: TROT=−60 under ZROT=0, or
+  TROT=0 under a rotated Z (the AusLAMP-SA shape) — the divergence is a known frame detail and is
+  REPORTED, never rotated: station.json `frame` gains first-class `tipper_declared_azimuth_deg`, a
+  frame note names both angles (build_report/QA), and the portal frame line + workbench frame words
+  include the tipper frame. Equal-or-absent TROT: no field, no noise.
+* **V3-B — survey-inconsistent, per-station-uniform** (per-station declared angles spreading beyond
   `SURVEY_ANGLE_SPREAD_MAX_DEG` = 5°). Each station STILL serves AS STORED with its own declared
   angle; the survey gains a frame note — "mixed declared frames across stations: <n1>°…<n2>°" — that
   flows into `build_report`'s `frame` entries (workbench QA tab) AND each member's station.json
   `frame.survey_frame_note` (the portal drawer). NO de-rotation, NO refusal. (tumby-bay re-serves in
-  its per-station acquisition frames.)
+  its per-station acquisition frames.) **Declared-zero stations participate in the vote as angle
+  0.0 (fix round F1):** a served station always sits in SOME declared frame — zero/undeclared serves
+  under the declared-zero reference — so a [0°, 20°] survey mixes frames exactly as an [8°, 20°]
+  one does, and the note's range includes its 0° members ("0°…20°"). Only per-period (V3-C)
+  stations stay out of the vote: refused, never served, they cannot mix a SERVED frame.
 * **V3-C — per-period rotation within a station** (per-period ZROT/TROT, or per-block SPECTRA
   ROTSPEC — the PAX class). REFUSE the station, exactly like a convention-gate refusal: withheld
   from serving, a `stations_dropped` entry whose reason names the per-period rotation and states the
   fix ("re-export in a single coherent frame"), actionable in the workbench QA tab. NO de-rotation.
   A single served curve stitched from period-varying frames is misleading-by-construction; absence
-  is honester.
+  is honester. The uniform↔per-period boundary is `ROT_UNIFORM_EPS_DEG` = 0.01°: a rotation block
+  whose values agree within ±0.01° collapses to ONE uniform angle and serves (V3-A), while
+  per-period rounding scatter beyond ±0.01° refuses as V3-C (characterised sensitivity — a
+  deliberately tight, defensible margin: real uniform exports repeat the identical value).
 * **Sign-convention / quadrant gates (Gate 2, D2) are UNTOUCHED.** The three USArray negative
   controls (TTW52 / VAS56 / CAR05) still refuse for their own reasons.
 
@@ -110,9 +123,10 @@ via kind="parse#<ctx>", since a station's disposition depends on its siblings' a
   ZROT=TROT=-60; the synthetic Black Hill spectra shape at 90°.)
 * **FAIL (station skipped, loud, structured)** — reserved for the UNKNOWABLE: sentinel (~1e32)
   angles at data-bearing periods; text-vs-reader disagreement; per-period rotation in a
-  non-descending-frequency file; ROTSPEC-vs-azimuth conflict; RHOROT-rotated with the Z frame
-  undeclared. Every reason names the angles and the fix (build_report stations_dropped + survey
-  warning + stderr GATE FAIL line).
+  non-descending-frequency file *(superseded: v3 refuses ALL per-period rotation — V3-C — so the
+  descending-order special case is moot and the `freq_descending` evidence field is deleted)*;
+  ROTSPEC-vs-azimuth conflict; RHOROT-rotated with the Z frame undeclared. Every reason names the
+  angles and the fix (build_report stations_dropped + survey warning + stderr GATE FAIL line).
 
 The 15° / 5° thresholds are v1 POLICY values (owner-tunable), single-sourced in _conventions.py
 (FRAME_KEEP_MAX_DEG, SURVEY_ANGLE_SPREAD_MAX_DEG). Rationale: 15° bounds the Australian
@@ -169,9 +183,10 @@ CONVENTION_MIN_ABS_Z, ROT_UNIFORM_EPS_DEG, AZIMUTH_TOL_DEG); tests import them.
 
 * station.json gains a non-positional `frame` block (facts: evidence summary, source rotation,
   `derotated` flag — always `false` under v3, `frame_served`, `declared_azimuth_deg`,
-  `convention_check` verdict + medians, and — for a V3-B survey — `survey_frame_note`) — the
-  canonical_conditioning precedent; NO positional contract change (C18 cache digest untouched; salt
-  re-keys on engine commit as designed).
+  `convention_check` verdict + medians, — for a V3-B survey — `survey_frame_note`, and — when the
+  tipper's uniform declared frame diverges from the impedance azimuth (F2) —
+  `tipper_declared_azimuth_deg`) — the canonical_conditioning precedent; NO positional contract
+  change (C18 cache digest untouched; salt re-keys on engine commit as designed).
 * build_report.json: survey `stations_dropped` now carries the structured gate drops; new
   optional `frame` array (same aggregation shape as `conditioning`); convention WARNs land in
   `warnings`. Schema updated additively.
