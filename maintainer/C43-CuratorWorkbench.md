@@ -398,6 +398,46 @@ not invent parameters for these). All MUST satisfy:
    the ops-floor card amber and enters the alert-timer facts — an authenticated attacker (stolen
    session, curator-page XSS) cannot silently keep serving frozen.
 
+### D9-A. Stage-2b-ii implementation gate (2026-07-12 — executed hostile panel)
+
+The privileged-actions lane (host agent `deploy/scripts/actions.sh` + gateway buttons + access-log
+enablement) passed a 4-lens adversarial + verify panel. **The host gate held** under a
+compromised-gateway threat model — ids are charset-filtered AND matched against the real inventory
+(never a path built from the untrusted id), the recipes reach no shell, restore drills-first-aborts,
+swaps are atomic, CSP holds (external JS only) and every echoed value (`_esc`) incl. the host-written
+audit tail. 7 findings confirmed (1 blocking), fixed S1-S6 (red-then-green). Two would have shipped
+broken — the discipline earned its cost:
+
+* **S1 (BLOCKING, privacy) — the access log leaked the real client IP.** `ip_mask` masked
+  `remote_ip`/`client_ip`, but Caddy's JSON encoder logs the full `request>headers` map, and behind
+  tailscale-serve the true client IP arrives UNMASKED in `X-Forwarded-For`/`X-Real-IP` — making the
+  public promise ("a full IP is never stored") FALSE. Fix: delete every non-UA header from the log
+  filter (C45 D2 "no headers beyond UA") + `trusted_proxies` (tailscale CGNAT 100.64.0.0/10 +
+  loopback) so `client_ip` is the masked REAL client. **A privacy commitment needs a REAL-caddy
+  runtime pin** (XFF request → log line has no unmasked IP anywhere) — config-syntax assertion is
+  insufficient; ships wait-for-greens + a box smoke.
+* **S2 (material, correctness) — `docker compose -C <dir>` is invalid** (`-C` is a git flag). Every
+  compose call in update/restore errored on real docker and fell back to bare compose in the wrong
+  CWD — the privileged actions were broken on the real box, MASKED by the shim tests. Fix:
+  `--project-directory`; pin the ARGUMENT SHAPE so a shim can't hide a real-flag error again.
+* **S3 (material, availability) — restore left the gateway STOPPED** on the mktemp-fail path (the one
+  post-stop abort that skipped `up -d gateway`) — downs the sole ops surface with no in-band recovery
+  during a disaster restore. Fix: restart on every post-stop exit.
+* **S4 (minor) — audit-line forging:** `audit()` stripped only CR/LF; attacker-controlled
+  `requested_by` (+ ids on refusal paths) could inject `outcome=ok` tokens and unicode line
+  separators (which `splitlines()` breaks on) into the audit record the D9 model relies on. Fix:
+  `tr -dc '[:print:]'` + outcome-first/quoted so no forged token precedes the host-computed one.
+* **S5 (minor) — frozen-state visibility:** the persistent-pause alarm keyed on flag PRESENCE not
+  FRESHNESS (diverging from reconcile's honoring criterion), and a standing `rollback.pin` froze
+  auto-rebuild forever with no expiry/alarm — both mean a box can serve-frozen more silently than
+  rule 7 intends. Fix: alarm on freshness; give the pin the same continuous-`first_seen` alarm.
+* **S6 (promise precision) — "only aggregate counts are kept" is ahead of reality** (the aggregator
+  is the later C45-impl lane; masked logs are retained ~7 d now). Promise text amended to what is
+  true today; final wording owner-reviewed.
+
+Lesson re-affirmed: shim-based tests must ALSO pin the real argument shape (S2), and a public
+privacy property needs a runtime pin against real infrastructure, not a config assertion (S1).
+
 ## D10. [FC-3] [FC-4] Staging — each stage ships alone through the normal lane process
 
 Stage discipline is a freeze condition: **no stage absorbs the next**; each stage is its own
