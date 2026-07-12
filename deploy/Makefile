@@ -62,7 +62,10 @@ down:
 # container (/out) and inside the portal container (/srv/data), so the swap stays live-atomic.
 #
 # C18: this is the ONE place the incremental build cache is switched ON
-# (--incremental --cache-dir /out/cache --cache-mode rw). The cache lives at /out/cache -- a SIBLING
+# (--incremental --cache-dir /out/cache --cache-mode $CACHE_MODE, default rw). C43 S2b-ii: a curator
+# "Force full rebuild" writes rebuild.request with a `full` flag; reconcile.sh reads it and sets
+# AUSMT_BUILD_CACHE_MODE=refresh, so the engine recomputes everything (no cache reuse) for that one
+# build. Unset => rw (today's behaviour, byte-identical). The cache lives at /out/cache -- a SIBLING
 # of /out/builds, so the `ls -1t | tail -n +6 | rm -rf` prune below (which runs INSIDE /out/builds)
 # never touches it, and it survives the `mv -T current` swap. It only speeds a rebuild; it can never
 # change output bytes (verify.py stays full/cache-blind, and the CI equivalence test pins that). The
@@ -79,11 +82,12 @@ rebuild-data:
 	DATA_DIR=$${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}/site-data; \
 	TS=$$(date -u +%Y%m%dT%H%M%SZ); \
 	BUILD_REL="builds/$$TS"; \
-	echo "rebuild-data: building into $$DATA_DIR/$$BUILD_REL"; \
+	CACHE_MODE=$${AUSMT_BUILD_CACHE_MODE:-rw}; \
+	echo "rebuild-data: building into $$DATA_DIR/$$BUILD_REL (cache-mode=$$CACHE_MODE)"; \
 	if ! docker compose -f compose.yaml --profile jobs run --rm build-runner \
 	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi \
 	      --products /out/$$BUILD_REL/products \
-	      --incremental --cache-dir /out/cache --cache-mode rw; then \
+	      --incremental --cache-dir /out/cache --cache-mode $$CACHE_MODE; then \
 	  echo "rebuild-data: BUILD FAILED -- current left untouched. Inspect $$DATA_DIR/$$BUILD_REL" >&2; \
 	  exit 1; \
 	fi; \

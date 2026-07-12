@@ -236,25 +236,52 @@ def test_serve_routes_require_session(tmp_path):
     run(_body())
 
 
-def test_serve_screen_renders_no_privileged_action(tmp_path):
-    """Stage 2b-i is READ-ONLY: the serve screen must not render any privileged ACTION CONTROL
-    (rollback/restore/update/backup/pause) — they are Stage 2b-ii, omitted (not disabled). Checks the
-    real controls, not the explanatory prose: the ONLY form action allowed is the shipping C40
-    /gateway/curator/rebuild (Request rebuild), and the only button label is 'Request rebuild'. FAILS
-    IF a form posts to any other route, or a privileged action button leaks onto the screen."""
+def test_serve_screen_action_forms_are_allowlisted(tmp_path):
+    """Stage 2b-ii ADDS the privileged actions (supersedes the 2b-i read-only pin). The serve screen
+    now renders the D8 buttons, but every <form> action MUST be in the closed allow-list of curator
+    serve-action routes — no form may post to an unexpected route. This is the render-side guard that a
+    stray/typo'd action route never ships. FAILS IF a form posts outside the allow-list."""
+    allowed = {
+        "/gateway/curator/rebuild",                 # shipping C40 request-rebuild
+        "/gateway/curator/serve/update",
+        "/gateway/curator/serve/snapshot",
+        "/gateway/curator/serve/rebuild-full",
+        "/gateway/curator/serve/pause",
+        "/gateway/curator/serve/resume",
+    }
+
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
             _write_ops(cfg, _fresh_ops())
             html = (await client.get("/gateway/curator/serve")).text
-            # Every <form> on the read-only screen may only post to the allowed C40 rebuild route.
-            for action in re.findall(r'<form[^>]*\baction="([^"]*)"', html):
-                assert action == "/gateway/curator/rebuild", (
-                    f"a non-rebuild form action leaked onto the read-only serve screen: {action!r}")
-            # Every server-rendered <button> may only be the Request-rebuild button.
-            for label in re.findall(r"<button[^>]*>(.*?)</button>", html, re.DOTALL):
-                assert "Request rebuild" in label, (
-                    f"an unexpected action button leaked onto the read-only serve screen: {label!r}")
+            actions = re.findall(r'<form[^>]*\baction="([^"]*)"', html)
+            # Rollback/restore are LINKS to their own confirm pages (not inline forms on this screen).
+            for action in actions:
+                assert action in allowed, f"a serve-screen form posts to a non-allowlisted route: {action!r}"
+            # The D8 action buttons are present (the actions surface actually shipped).
+            assert "/gateway/curator/serve/update" in actions, "the Update box action must render"
+            assert "/gateway/curator/serve/snapshot" in actions, "the Snapshot action must render"
+            assert ("/gateway/curator/serve/pause" in actions
+                    or "/gateway/curator/serve/resume" in actions), "the Pause/Resume action must render"
+    run(_body())
+
+
+def test_serve_screen_pause_and_resume_are_mutually_exclusive(tmp_path):
+    """The Pause and Resume controls are mutually exclusive: with no pause.flag the screen offers
+    Pause; with a pause.flag it offers Resume (never both). FAILS IF both render at once, or the wrong
+    one shows for the pause state."""
+    import gateway.serve_state as ss
+
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_ops(cfg, _fresh_ops())
+            html = (await client.get("/gateway/curator/serve")).text
+            assert "/gateway/curator/serve/pause" in html and "/gateway/curator/serve/resume" not in html
+            ss.write_pause_flag(cfg.state_dir, requested_by="curator1")
+            html2 = (await client.get("/gateway/curator/serve")).text
+            assert "/gateway/curator/serve/resume" in html2 and "/gateway/curator/serve/pause\"" not in html2
     run(_body())
 
 
@@ -317,3 +344,32 @@ def test_ops_status_stale_future_timestamp_is_stale():
     # Sanity: genuinely fresh (5 min old) stays fresh; over-window stays stale.
     assert ops_status_stale(dict(base, generated_at=iso(now - 300)), now_epoch=now) is False
     assert ops_status_stale(dict(base, generated_at=iso(now - 3600)), now_epoch=now) is True
+
+
+# --------------------------------------------------------------------------------------------------
+# C43 S2b-ii: the _ACTION_COLOUR render gap (incident-backed) + the new pause/pinned states.
+# --------------------------------------------------------------------------------------------------
+def test_untracked_blocked_renders_red_with_log_tail():
+    """RENDER-GAP PIN (incident-backed). action=untracked_blocked is a REFUSED rebuild that needs an
+    operator — it must render in the RED (bad) colour AND surface its log_tail (the offending-dir list
+    reconcile wrote), not default to muted with the detail buried. FAILS IF untracked_blocked pills
+    muted, or its detail is dropped."""
+    from gateway.curatorpage import _ACTION_COLOUR, _PALETTE, _reconcile_status_block
+    assert _ACTION_COLOUR.get("untracked_blocked") == _PALETTE["bad"], \
+        "untracked_blocked must map to the red/bad colour, not the muted default"
+    html = _reconcile_status_block({
+        "action": "untracked_blocked", "last_run": "2026-07-12T00:00:00Z", "head": "abc1234",
+        "log_tail": "REFUSED: untracked entr(y/ies) under surveys/: test-2026"})
+    assert _PALETTE["bad"] in html, "untracked_blocked must render in the bad (red) colour"
+    assert "test-2026" in html, "the offending-dir detail (log_tail) must be surfaced, not buried"
+
+
+def test_paused_and_pinned_states_render_their_detail():
+    """The new paused/pinned reconcile states carry an operator-actionable detail (why serving is being
+    held) that must be shown. FAILS IF a paused/pinned status drops its detail."""
+    from gateway.curatorpage import _ACTION_COLOUR, _PALETTE, _reconcile_status_block
+    assert _ACTION_COLOUR.get("paused") == _PALETTE["warn"]
+    assert _ACTION_COLOUR.get("pinned") == _PALETTE["warn"]
+    html = _reconcile_status_block({"action": "paused", "last_run": "2026-07-12T00:00:00Z",
+                                    "log_tail": "auto-rebuild PAUSED by a curator pause.flag"})
+    assert "PAUSED" in html, "the paused detail must be surfaced"

@@ -78,6 +78,15 @@ REQUEST_FILE="$STATE_DIR/rebuild.request"
 STATUS_FILE="$STATE_DIR/reconcile-status.json"
 LOCK_FILE="${AUSMT_RECONCILE_LOCK:-$AUSMT_DATA_DIR/reconcile.lock}"
 MAKE_CMD="${AUSMT_RECONCILE_MAKE:-make -C $AUSMT_CODE_DIR/deploy rebuild-data}"
+# C43 S2b-ii (record D8/D9/D13): the curator "pause auto-rebuild" flag + the "serve this build"
+# rollback pin — both host-written by the actions agent (deploy/scripts/actions.sh) / the gateway, and
+# RESPECTED here (this agent never writes them). A FRESH pause.flag suppresses the drift rebuild; a
+# pause older than PAUSE_EXPIRY_MIN is IGNORED (auto-expired — a stale flag never freezes serving
+# forever, D13 pause-expiry). rollback.pin holds reconcile off an auto-revert of a manual rollback
+# until an explicit rebuild.request moves forward (D13 rollback-repoints).
+PAUSE_FLAG="$STATE_DIR/pause.flag"
+ROLLBACK_PIN="$STATE_DIR/rollback.pin"
+PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"   # 6 h (record D8/D13)
 
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
@@ -145,6 +154,24 @@ except Exception:
 PYEOF
 }
 
+# C43 S2b-ii Force-full-rebuild: echo "1" iff rebuild.request carries a truthy `full` flag (the ONLY
+# field reconcile ever parses from the request — the rest stays audit-only, existence-keyed). A full
+# rebuild runs the engine in cache-REFRESH mode (recompute everything, no cache reuse). A missing/
+# malformed request or a false flag => empty (=> default cache-rw). Never fails the script.
+read_full_flag() {
+  [ -f "$REQUEST_FILE" ] || return 0
+  "$PY" - "$REQUEST_FILE" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        doc = json.load(fh)
+    if isinstance(doc, dict) and doc.get("full") is True:
+        print("1")
+except Exception:
+    pass
+PYEOF
+}
+
 # write_status <action> <head> <built> <build_id> <log_file> [detail]: build reconcile-status.json in
 # a temp file then mv it over the target — an atomic rename so the gateway panel never reads a
 # half-written file. Values are passed as argv (never interpolated into the JSON) so a stray
@@ -168,6 +195,9 @@ write_status() {
   AUSMT_RS_ACTION="$_action" AUSMT_RS_HEAD="$_head" AUSMT_RS_BUILT="$_built" \
   AUSMT_RS_BUILD_ID="$_build_id" AUSMT_RS_LOG_FILE="$_log_file" AUSMT_RS_DETAIL="$_detail" \
   AUSMT_RS_LAST_RUN="$(now_utc)" \
+  AUSMT_RS_PAUSED="${PAUSED:-0}" AUSMT_RS_PAUSE_EXPIRED="${PAUSE_EXPIRED:-0}" \
+  AUSMT_RS_PAUSE_SINCE="${PAUSE_SINCE:-}" \
+  AUSMT_RS_PINNED="${PINNED:-0}" AUSMT_RS_PINNED_BUILD="${PINNED_BUILD:-}" \
   "$PY" - > "$_tmp" <<'PYEOF'
 import json, os
 action = os.environ["AUSMT_RS_ACTION"]
@@ -195,6 +225,15 @@ doc = {
     "build_id": orval("AUSMT_RS_BUILD_ID"),
     "log_file": log_file,
     "log_tail": log_tail,
+    # C43 S2b-ii: pause + rollback-pin state, exposed on EVERY status write (record D9.7 — the
+    # reconcile status must surface pause state so an authenticated attacker cannot silently keep
+    # serving frozen). paused == a FRESH pause.flag suppressing the drift rebuild; pause_expired ==
+    # a stale flag that was IGNORED; pinned == a manual "serve this build" rollback pin standing.
+    "paused": os.environ.get("AUSMT_RS_PAUSED") == "1",
+    "pause_expired": os.environ.get("AUSMT_RS_PAUSE_EXPIRED") == "1",
+    "pause_since": orval("AUSMT_RS_PAUSE_SINCE"),
+    "pinned": os.environ.get("AUSMT_RS_PINNED") == "1",
+    "pinned_build": orval("AUSMT_RS_PINNED_BUILD"),
 }
 print(json.dumps(doc, indent=1))
 PYEOF
@@ -206,6 +245,47 @@ PYEOF
 # critical section — never two builds at once. The caller below takes the lock on fd 9 and then
 # calls run_pass IN-PROCESS while the fd is held (no re-exec); the fd closes on exit, releasing it.
 run_pass() {
+  # 0. PAUSE + ROLLBACK-PIN state (record D9.7). Computed FIRST so EVERY status write below surfaces
+  #    it (an authenticated attacker must not be able to keep serving frozen silently). PAUSED == a
+  #    pause.flag within its expiry window (honoured); PAUSE_EXPIRED == a stale flag that is IGNORED
+  #    (auto-expired, D13); PINNED == a manual "serve this build" rollback pin standing.
+  PAUSED=0; PAUSE_EXPIRED=0; PAUSE_SINCE=""
+  if [ -f "$PAUSE_FLAG" ]; then
+    if [ -n "$(find "$PAUSE_FLAG" -maxdepth 0 -mmin "+$PAUSE_EXPIRY_MIN" 2>/dev/null)" ]; then
+      PAUSE_EXPIRED=1                      # older than the expiry => auto-expired => IGNORED
+    else
+      PAUSED=1                             # within the expiry => honoured (suppress drift rebuild)
+    fi
+    PAUSE_SINCE=$(AUSMT_PF="$PAUSE_FLAG" "$PY" - <<'PYEOF' 2>/dev/null || true
+import json, os
+try:
+    with open(os.environ["AUSMT_PF"], encoding="utf-8") as fh:
+        d = json.load(fh)
+    v = d.get("paused_at") if isinstance(d, dict) else None
+    if isinstance(v, str) and v:
+        print(v)
+except Exception:
+    pass
+PYEOF
+)
+  fi
+  PINNED=0; PINNED_BUILD=""
+  if [ -f "$ROLLBACK_PIN" ]; then
+    PINNED=1
+    PINNED_BUILD=$(AUSMT_RP="$ROLLBACK_PIN" "$PY" - <<'PYEOF' 2>/dev/null || true
+import json, os
+try:
+    with open(os.environ["AUSMT_RP"], encoding="utf-8") as fh:
+        d = json.load(fh)
+    v = d.get("pinned_build") if isinstance(d, dict) else None
+    if isinstance(v, str) and v:
+        print(v)
+except Exception:
+    pass
+PYEOF
+)
+  fi
+
   # 1. SYNC: fast-forward-only pull. A diverged/blocked checkout must NOT be built from (§4).
   if ! sync_out=$(git -C "$SURVEYS_LIVE" pull --ff-only 2>&1); then
     printf 'reconcile: git pull --ff-only failed (surveys-live diverged?):\n%s\n' "$sync_out" >&2
@@ -274,7 +354,11 @@ run_pass() {
   fi
 
   request_present=0
-  [ -f "$REQUEST_FILE" ] && request_present=1
+  full_rebuild=0
+  if [ -f "$REQUEST_FILE" ]; then
+    request_present=1
+    [ "$(read_full_flag)" = "1" ] && full_rebuild=1     # C43 S2b-ii Force-full-rebuild flag
+  fi
 
   # LOOP GUARD (the 2026-07-08 class): an unreadable built-identity reads as drift, and a rebuild
   # SHOULD make build.json readable — so if the LAST pass already rebuilt (or already tripped this
@@ -327,6 +411,41 @@ PYEOF
     esac
   fi
 
+  # 2b. PAUSE (record D8/D13). A FRESH pause.flag suppresses the DRIFT-triggered rebuild ("pause
+  #     auto-rebuild during a multi-edit session"). An explicit rebuild.request is deliberate, not
+  #     "auto", so it is honoured even while paused. A pause older than PAUSE_EXPIRY_MIN was already
+  #     resolved to PAUSE_EXPIRED (ignored) in step 0 — a stale flag NEVER suppresses (pause-expiry pin).
+  if [ "${PAUSED:-0}" -eq 1 ] && [ "$request_present" -eq 0 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf 'reconcile: [dry-run] auto-rebuild PAUSED (fresh pause.flag) => would NOT rebuild\n'
+      return 0
+    fi
+    _pd="auto-rebuild PAUSED by a curator pause.flag${PAUSE_SINCE:+ (since $PAUSE_SINCE)}; drift is not being rebuilt. Resume from the serve screen (or it auto-expires after ${PAUSE_EXPIRY_MIN} min)."
+    write_status "paused" "$head" "$built" "$(read_build_id)" "" "$_pd"
+    printf 'reconcile: auto-rebuild paused (fresh pause.flag) — head=%s built=%s, NOT rebuilding\n' "${head:-?}" "${built:-?}"
+    return 0
+  fi
+
+  # 2c. ROLLBACK PIN (record D13 rollback-repoints). While a manual "serve this build" pin stands,
+  #     reconcile must NOT auto-rebuild — that would revert the rollback the curator deliberately made.
+  #     An explicit rebuild.request is a deliberate MOVE-FORWARD: it clears the pin and proceeds to
+  #     build. Without a request, hold and report the pin honestly (drift is EXPECTED under a pin).
+  if [ "${PINNED:-0}" -eq 1 ]; then
+    if [ "$request_present" -eq 1 ]; then
+      rm -f "$ROLLBACK_PIN"; PINNED=0; PINNED_BUILD=""
+      printf 'reconcile: rollback pin cleared by an explicit rebuild.request — moving forward\n'
+    else
+      if [ "$DRY_RUN" -eq 1 ]; then
+        printf 'reconcile: [dry-run] rollback pin present => would HOLD (no rebuild)\n'
+        return 0
+      fi
+      _pd="serving a manually pinned build${PINNED_BUILD:+ (builds/$PINNED_BUILD)}; reconcile is holding and will NOT auto-rebuild. Press Request rebuild to move forward to the published HEAD."
+      write_status "pinned" "$head" "$built" "$(read_build_id)" "" "$_pd"
+      printf 'reconcile: rollback pin present (serving builds/%s) — holding, NOT rebuilding\n' "${PINNED_BUILD:-?}"
+      return 0
+    fi
+  fi
+
   # 3. DECIDE
   if [ "$drift" -eq 0 ] && [ "$request_present" -eq 0 ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
@@ -360,14 +479,22 @@ PYEOF
   fi
   rm -f "$_lprobe"
   log_file="$LOG_DIR/$(date -u +%Y%m%dT%H%M%SZ).build.log"
-  printf 'reconcile: %s => rebuilding, log: %s\n' "$reason" "$log_file"
+  # C43 S2b-ii Force-full-rebuild: a `full` rebuild.request runs the engine in cache-REFRESH mode (the
+  # Makefile reads AUSMT_BUILD_CACHE_MODE, defaulting to rw). Empty otherwise => the default cache-rw.
+  if [ "$full_rebuild" -eq 1 ]; then
+    _cache_mode="refresh"
+    printf 'reconcile: %s => FULL rebuild (cache-refresh, no reuse), log: %s\n' "$reason" "$log_file"
+  else
+    _cache_mode=""
+    printf 'reconcile: %s => rebuilding, log: %s\n' "$reason" "$log_file"
+  fi
 
   # Run the rebuild, capturing stdout+stderr to the log. The make target is already atomic
   # (build -> verify -> swap current): a failure leaves the OLD build serving (§4). The script runs
   # under `set -u` (not `-e`), so a non-zero make exit does NOT abort — we capture rc and still write
   # a status document either way.
   # shellcheck disable=SC2086 -- MAKE_CMD is an intentional word-split command (default or shim).
-  $MAKE_CMD > "$log_file" 2>&1
+  AUSMT_BUILD_CACHE_MODE="$_cache_mode" $MAKE_CMD > "$log_file" 2>&1
   rc=$?
 
   # Prune the log dir to the newest 20 *.build.log (operator forensics; never served — LOG_DIR is a

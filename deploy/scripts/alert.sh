@@ -61,6 +61,11 @@ RECONCILE_MAX_MIN="${AUSMT_ALERT_RECONCILE_MAX_MIN:-45}"
 BACKUP_MAX_H="${AUSMT_ALERT_BACKUP_MAX_H:-26}"
 COMPOSE_CMD="${AUSMT_ALERT_COMPOSE:-docker compose}"
 CURL_CMD="${AUSMT_ALERT_CURL:-curl}"
+# C43 S2b-ii (record D9.7): a curator pause of auto-rebuild that is active or slow-re-armed past this
+# CUMULATIVE threshold flips the ops-floor Freshness/Serve card amber AND fails a check here — so an
+# authenticated attacker (stolen session / curator-page XSS) cannot silently keep serving frozen
+# forever by re-arming the pause once per expiry window (which would slip a single-flag age check).
+PAUSE_MAX_H="${AUSMT_ALERT_PAUSE_MAX_H:-24}"
 
 # C43 S2b-i: this timer is ALSO the ops-status.json writer (record D8/D15). Its cadence (the systemd
 # ausmt-alert.timer period, ~15 min) is the staleness clock the curator ops floor reads: a file older
@@ -78,6 +83,14 @@ SITE_DATA="${DATA_DIR_ROOT:+$DATA_DIR_ROOT/site-data}"
 # these globals as each check runs so the ops writer reuses them (one `docker compose ps`, one `df`).
 OPS_PS_JSON=""
 OPS_DISK_PCT=""
+# C43 S2b-ii persistent-pause tracking (record D9.7). check_pause computes these ONCE (carrying the
+# continuous-span first_seen forward from the previous ops-status.json) so BOTH the fail-ping and the
+# ops-status.json pause fact use the same verdict.
+OPS_PAUSE_ACTIVE=0
+OPS_PAUSE_PAUSED_AT=""
+OPS_PAUSE_FIRST_SEEN=""
+OPS_PAUSE_CUMULATIVE_H=""
+OPS_PAUSE_PERSISTENT=0
 
 # The four long-running compose services this box monitors. build-runner is EXCLUDED on purpose: it is
 # a one-shot job (compose profile "jobs") that is SUPPOSED to be absent between builds, so "not running"
@@ -387,6 +400,85 @@ check_backup() {
 }
 
 # --------------------------------------------------------------------------------------------------
+# Check e (C43 S2b-ii): PERSISTENT-PAUSE alarm (record D9.7).
+#   The curator can pause auto-rebuild (pause.flag; reconcile auto-expires it after 6 h). A single
+#   pause is fine. The threat is a SLOW RE-ARM — re-writing the flag once per expiry window keeps
+#   auto-rebuild dead forever while every INDIVIDUAL flag stays "fresh" (a single-flag age check would
+#   never fire). We defeat that by carrying a CONTINUOUS-SPAN first_seen forward from the previous
+#   ops-status.json: as long as a pause.flag is present on each tick, first_seen persists across
+#   re-arms, so cumulative = now - first_seen grows past the window and this fails LOUDLY.
+#   A pause active/re-armed beyond PAUSE_MAX_H cumulative is a failure line AND an ops-floor amber fact.
+# --------------------------------------------------------------------------------------------------
+check_pause() {
+  data_dir="${AUSMT_DATA_DIR:-}"
+  [ -n "$data_dir" ] || return 0            # AUSMT_DATA_DIR gaps are already reported by other checks
+  pause_flag="$data_dir/gateway/state/pause.flag"
+  [ -f "$pause_flag" ] || return 0          # no pause => nothing to track (globals stay at defaults)
+  OPS_PAUSE_ACTIVE=1
+  [ -n "$PY" ] || return 0                  # cannot compute cumulative without python; the ops fact
+                                            # still shows active, just not the persistence verdict
+  # Compute: first_seen (carried from prev ops-status if it was already active, else now), the flag's
+  # own paused_at, the cumulative hours, and the persistent verdict. Prints: first_seen|paused_at|hours|persistent
+  line=$(AUSMT_PF="$pause_flag" AUSMT_PREV="${OPS_STATUS_FILE:-}" AUSMT_NOW="$(now_utc)" \
+         AUSMT_MAX_H="$PAUSE_MAX_H" "$PY" - <<'PYEOF' 2>/dev/null || true
+import datetime, json, os
+
+def load(p):
+    if not p or not os.path.isfile(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+def parse(ts):
+    if not isinstance(ts, str) or not ts:
+        return None
+    try:
+        return datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except Exception:
+        return None
+
+now_s = os.environ["AUSMT_NOW"]
+now = parse(now_s)
+flag = load(os.environ.get("AUSMT_PF"))
+paused_at = flag.get("paused_at") if isinstance(flag, dict) else None
+
+prev = load(os.environ.get("AUSMT_PREV")) or {}
+prev_pause = prev.get("pause") if isinstance(prev.get("pause"), dict) else {}
+# Carry the continuous-span first_seen: only if the previous tick ALSO saw an active pause.
+if prev_pause.get("active") and prev_pause.get("first_seen"):
+    first_seen = prev_pause.get("first_seen")
+else:
+    first_seen = paused_at or now_s        # a fresh span starts now (or at the flag's own stamp)
+
+fs = parse(first_seen)
+hours = ""
+persistent = 0
+if fs is not None and now is not None:
+    h = (now - fs).total_seconds() / 3600.0
+    hours = f"{h:.1f}"
+    try:
+        if h > float(os.environ.get("AUSMT_MAX_H") or 24):
+            persistent = 1
+    except Exception:
+        pass
+print(f"{first_seen}|{paused_at or ''}|{hours}|{persistent}")
+PYEOF
+)
+  if [ -n "$line" ]; then
+    OPS_PAUSE_FIRST_SEEN=$(printf '%s' "$line" | cut -d'|' -f1)
+    OPS_PAUSE_PAUSED_AT=$(printf '%s' "$line" | cut -d'|' -f2)
+    OPS_PAUSE_CUMULATIVE_H=$(printf '%s' "$line" | cut -d'|' -f3)
+    OPS_PAUSE_PERSISTENT=$(printf '%s' "$line" | cut -d'|' -f4)
+  fi
+  if [ "${OPS_PAUSE_PERSISTENT:-0}" = "1" ]; then
+    add_failure "pause: auto-rebuild has been PAUSED for ${OPS_PAUSE_CUMULATIVE_H}h cumulative (threshold ${PAUSE_MAX_H}h) -- serving may be frozen. Resume auto-rebuild from the serve screen, or investigate a re-armed pause (stolen session / XSS). first_seen=${OPS_PAUSE_FIRST_SEEN}"
+  fi
+}
+
+# --------------------------------------------------------------------------------------------------
 # C43 S2b-i: write ops-status.json for the curator ops floor (record D8/D15). SEPARATE from the ping:
 # it runs every pass — INCLUDING when alerting is unconfigured — because the ops floor must reflect
 # box state before (and independently of) the external dead-man monitor being wired. Atomic (mktemp +
@@ -476,6 +568,10 @@ write_ops_status() {
   AUSMT_OPS_CODE_SHA="$_code_sha" AUSMT_OPS_CODE_ORIGIN="$_code_origin" \
   AUSMT_OPS_SL_SHA="$_sl_sha" AUSMT_OPS_SL_ORIGIN="$_sl_origin" \
   AUSMT_OPS_SITE_DATA="${SITE_DATA:-}" \
+  AUSMT_OPS_PAUSE_ACTIVE="$OPS_PAUSE_ACTIVE" AUSMT_OPS_PAUSE_PAUSED_AT="$OPS_PAUSE_PAUSED_AT" \
+  AUSMT_OPS_PAUSE_FIRST_SEEN="$OPS_PAUSE_FIRST_SEEN" AUSMT_OPS_PAUSE_CUMULATIVE_H="$OPS_PAUSE_CUMULATIVE_H" \
+  AUSMT_OPS_PAUSE_PERSISTENT="$OPS_PAUSE_PERSISTENT" AUSMT_OPS_PAUSE_MAX_H="$PAUSE_MAX_H" \
+  AUSMT_OPS_STATE_DIR="${STATE_DIR:-}" \
   "$PY" - > "$_tmp" <<'PYEOF'
 import datetime, glob, json, os
 
@@ -665,9 +761,44 @@ if site_data:
         except OSError:
             pass
 
+# ---- pause state (C43 S2b-ii, record D9.7): active + the continuous-span persistence verdict ----
+def _f(name):
+    v = os.environ.get(name, "")
+    return v if v else None
+pause = {"active": os.environ.get("AUSMT_OPS_PAUSE_ACTIVE", "") == "1",
+         "paused_at": _f("AUSMT_OPS_PAUSE_PAUSED_AT"),
+         "first_seen": _f("AUSMT_OPS_PAUSE_FIRST_SEEN"),
+         "cumulative_hours": (float(os.environ["AUSMT_OPS_PAUSE_CUMULATIVE_H"])
+                              if os.environ.get("AUSMT_OPS_PAUSE_CUMULATIVE_H", "").replace(".", "", 1).isdigit()
+                              else None),
+         "persistent": os.environ.get("AUSMT_OPS_PAUSE_PERSISTENT", "") == "1",
+         "max_hours": int(os.environ.get("AUSMT_OPS_PAUSE_MAX_H") or 24)}
+
+# ---- pending privileged intents + the actions audit tail (C43 S2b-ii, record D8/D9). Read-only
+#      surfacing so the serve screen shows what is queued/in-flight and the recent action outcomes;
+#      the gateway has no other view of the host actions agent's work. ----
+state_dir = os.environ.get("AUSMT_OPS_STATE_DIR") or ""
+intents = []
+_KNOWN = ("update.request", "backup.request", "rollback.request", "restore.request")
+if state_dir and os.path.isdir(state_dir):
+    for _n in _KNOWN:
+        if os.path.isfile(os.path.join(state_dir, _n)):
+            intents.append(_n[:-len(".request")])   # "update"/"backup"/"rollback"/"restore"
+audit_tail = []
+if state_dir:
+    _al = os.path.join(state_dir, "actions-audit.log")
+    if os.path.isfile(_al):
+        try:
+            with open(_al, encoding="utf-8", errors="replace") as fh:
+                audit_tail = [ln.rstrip("\n") for ln in fh.read().splitlines()][-40:]
+        except OSError:
+            pass
+actions = {"pending": intents, "audit_tail": audit_tail}
+
 doc = {"generated_at": now, "timer_period_min": int(os.environ.get("AUSMT_OPS_PERIOD_MIN") or 15),
        "reconcile": reconcile, "backups": backups, "alerts": alerts, "box": box,
-       "freshness": freshness, "builds": builds, "logs": logs}
+       "freshness": freshness, "builds": builds, "logs": logs,
+       "pause": pause, "actions": actions}
 print(json.dumps(doc, indent=1))
 PYEOF
 
@@ -689,6 +820,7 @@ check_services
 check_disk
 check_reconcile
 check_backup
+check_pause
 
 # Strip the leading blank line add_failure introduces.
 SUMMARY="$(printf '%s' "$FAILURES" | sed '/^$/d')"

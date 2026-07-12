@@ -49,6 +49,12 @@ services:
       # host-side swap takes effect immediately with no restart. (The relative symlink
       # current -> builds/<ts> stays valid because both ends live under this one mount.)
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/site-data:/srv/data:ro
+      # C45 D5: the access-log volume. Caddy writes /var/log/caddy/access.json (masked-at-edge IPs,
+      # rotated, 7-day retention — see the Caddyfile `log` block). Host side under the data root so the
+      # later analytics aggregator (a host-side timer) reads it; the portal only WRITES it. Create it
+      # once: `mkdir -p $AUSMT_DATA_DIR/logs/caddy` (Caddy runs as root in-container, so it can write
+      # the mount regardless of host ownership). NOT read-only — Caddy must write + roll here.
+      - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/logs/caddy:/var/log/caddy
 
   build-runner:
     image: ghcr.io/${OWNER:?set OWNER in .env}/ausmt-engine:${TAG:-latest}

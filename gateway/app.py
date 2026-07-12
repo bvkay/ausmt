@@ -562,10 +562,19 @@ class Gateway:
         pending = serve_state.rebuild_request_pending(self.cfg.state_dir)
         ops = serve_state.read_ops_status(self.cfg.state_dir)
         ops_stale = serve_state.ops_status_stale(ops)
+        # C43 S2b-ii: the privileged-action surface. Pending intents + the audit tail are read
+        # REAL-TIME straight from the state dir the gateway writes (fresher than ops-status.json's
+        # ~15-min snapshot); pause + the rollback pin drive the banners.
+        pending_intents = serve_state.pending_intents(self.cfg.state_dir)
+        paused = serve_state.pause_active(self.cfg.state_dir)
+        rollback_pin = serve_state.read_rollback_pin(self.cfg.state_dir)
+        audit_tail = serve_state.read_actions_audit_tail(self.cfg.state_dir)
         nav = self._nav_context(request, active="serve", crumb="<b>Serve state</b>")
         return self._html(curatorpage.render_serve_page(
             published_head=published.short, published_available=published.available,
-            status=status, pending=pending, csrf_token=csrf, ops=ops, ops_stale=ops_stale, nav=nav))
+            status=status, pending=pending, csrf_token=csrf, ops=ops, ops_stale=ops_stale, nav=nav,
+            pending_intents=pending_intents, paused=paused, rollback_pin=rollback_pin,
+            audit_tail=audit_tail))
 
     def handle_serve_build_detail(self, request: Request, build_ref: str) -> Response:
         """GET /gateway/curator/serve/build/{build_ref} — read-only build forensics (S2b-i B4). Matches
@@ -593,6 +602,256 @@ class Gateway:
                                       f'<b>{curatorpage._esc(build_ref)}</b>')  # noqa: SLF001
         return self._html(curatorpage.render_build_detail(
             build=build, generated_at=generated_at, log_tail=log_tail, ops_stale=ops_stale, nav=nav))
+
+    # ---- C43 S2b-ii: privileged serve-state ACTIONS (record D8/D9). Every write is session + CSRF
+    # gated; the intent file is the ONLY thing the gateway does — the host actions agent validates and
+    # executes (the gateway gains no shell, C40 intact). Single-flight (one pending intent of a kind)
+    # is enforced in serve_state.write_intent under a lock; a StateDirUnwritable fails CLOSED (503).
+
+    def _serve_redirect(self) -> Response:
+        return RedirectResponse("/gateway/curator/serve#serve-state", status_code=303)
+
+    def _write_intent_or_error(self, kind: str, curator: str) -> Response:
+        """Shared body for the simple single-flight intents (update/backup): write, then redirect to the
+        serve screen (where the pending banner + audit tail show the outcome). A pending duplicate is a
+        benign no-op (still redirect — the banner already shows it); an unwritable state dir is a
+        fail-closed 503, never a pretend-queued success."""
+        try:
+            serve_state.write_intent(self.cfg.state_dir, kind, requested_by=curator)
+        except serve_state.IntentAlreadyPending:
+            logger.info("serve action %s already pending — single-flight no-op", kind)
+        except serve_state.StateDirUnwritable as exc:
+            logger.warning("serve action %s could not be recorded (fail closed): %s", kind, exc)
+            return JSONResponse({"detail": f"{kind} request could not be recorded"}, status_code=503,
+                                headers={"Cache-Control": "no-store"})
+        return self._serve_redirect()
+
+    def handle_serve_update(self, request: Request, csrf: str | None) -> Response:
+        """POST /gateway/curator/serve/update — write update.request (the bounded C40 exception; the
+        host runs the fixed refresh recipe). Session + CSRF; single-flight."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        if not curator_auth.csrf_ok(self._raw_session(request), csrf):
+            return self._forbidden("bad csrf token")
+        return self._write_intent_or_error("update", curator)
+
+    def handle_serve_snapshot(self, request: Request, csrf: str | None) -> Response:
+        """POST /gateway/curator/serve/snapshot — write backup.request (the host runs deploy/backup.sh).
+        Session + CSRF; single-flight."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        if not curator_auth.csrf_ok(self._raw_session(request), csrf):
+            return self._forbidden("bad csrf token")
+        return self._write_intent_or_error("backup", curator)
+
+    def handle_serve_rebuild_full(self, request: Request, csrf: str | None) -> Response:
+        """POST /gateway/curator/serve/rebuild-full — Force full rebuild: write rebuild.request with the
+        `full` flag so reconcile rebuilds in cache-refresh mode. Idempotent (overwrites), so no
+        single-flight. Session + CSRF; fail-closed 503 on an unwritable state dir."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        if not curator_auth.csrf_ok(self._raw_session(request), csrf):
+            return self._forbidden("bad csrf token")
+        try:
+            serve_state.write_rebuild_request(self.cfg.state_dir, requested_by=curator, full=True)
+        except serve_state.StateDirUnwritable as exc:
+            logger.warning("force-full rebuild could not be recorded (fail closed): %s", exc)
+            return JSONResponse({"detail": "rebuild request could not be recorded"}, status_code=503,
+                                headers={"Cache-Control": "no-store"})
+        return self._serve_redirect()
+
+    def handle_serve_pause(self, request: Request, csrf: str | None) -> Response:
+        """POST /gateway/curator/serve/pause — write pause.flag (reconcile skips auto-rebuild while
+        fresh; auto-expires after 6 h). Session + CSRF; fail-closed 503."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        if not curator_auth.csrf_ok(self._raw_session(request), csrf):
+            return self._forbidden("bad csrf token")
+        try:
+            serve_state.write_pause_flag(self.cfg.state_dir, requested_by=curator)
+        except serve_state.StateDirUnwritable as exc:
+            logger.warning("pause could not be recorded (fail closed): %s", exc)
+            return JSONResponse({"detail": "pause could not be recorded"}, status_code=503,
+                                headers={"Cache-Control": "no-store"})
+        return self._serve_redirect()
+
+    def handle_serve_resume(self, request: Request, csrf: str | None) -> Response:
+        """POST /gateway/curator/serve/resume — explicit resume: remove pause.flag. Session + CSRF;
+        idempotent (a missing flag is a no-op)."""
+        curator = self._session_curator(request)
+        if curator is None:
+            return self._unauthorized_api()
+        if not curator_auth.csrf_ok(self._raw_session(request), csrf):
+            return self._forbidden("bad csrf token")
+        try:
+            serve_state.remove_pause_flag(self.cfg.state_dir)
+        except serve_state.StateDirUnwritable as exc:
+            logger.warning("resume could not be recorded (fail closed): %s", exc)
+            return JSONResponse({"detail": "resume could not be recorded"}, status_code=503,
+                                headers={"Cache-Control": "no-store"})
+        return self._serve_redirect()
+
+    def _find_build_in_ops(self, build_ref: str):
+        """(build_entry_or_None, ops_stale). UX lookup of a retained build against ops-status.json —
+        the gateway-side check is UX only; the host re-validates against the real inventory (D9.2)."""
+        ops = serve_state.read_ops_status(self.cfg.state_dir)
+        ops_stale = serve_state.ops_status_stale(ops)
+        return curatorpage.find_build(ops, build_ref), ops_stale
+
+    def _snapshot_in_ops(self, snapshot_ref: str):
+        """(exists_bool, ops_stale). UX membership of a snapshot in ops-status.json backups.snapshots.
+        When ops is stale we cannot verify — return (True, True) so the host (the real gate) decides,
+        rather than a stale-ops false refusal."""
+        ops = serve_state.read_ops_status(self.cfg.state_dir)
+        ops_stale = serve_state.ops_status_stale(ops)
+        if ops_stale or not isinstance(ops, dict):
+            return True, True
+        snaps = ((ops.get("backups") or {}).get("snapshots")) or []
+        names = {s.get("name") for s in snaps if isinstance(s, dict)}
+        # tolerate an older writer that carried only the newest
+        newest = (ops.get("backups") or {}).get("newest")
+        if newest:
+            names.add(newest)
+        return (snapshot_ref in names), False
+
+    def handle_serve_rollback_confirm(self, request: Request, build_ref: str) -> Response:
+        """GET /gateway/curator/serve/rollback/{build_ref} — the "serve this build" confirm page
+        (typed build id). Session-gated; no mutation."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        build, _stale = self._find_build_in_ops(build_ref)
+        serving = bool(build.get("serving")) if isinstance(build, dict) else False
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="serve",
+                                crumb='<a href="/gateway/curator/serve">Serve state</a> › '
+                                      f'<b>serve {curatorpage._esc(build_ref)}</b>')  # noqa: SLF001
+        return self._html(curatorpage.render_rollback_confirm(
+            build_ref=build_ref, build=build, serving=serving, csrf_token=csrf, nav=nav))
+
+    def handle_serve_rollback(self, request: Request, build_ref: str, form: dict) -> Response:
+        """POST /gateway/curator/serve/rollback/{build_ref} — write rollback.request naming the build.
+        Gates IN ORDER: session, CSRF, the typed-build-id match, and the UX inventory check (the HOST
+        re-validates the id against the REAL retained inventory — D9.2). Single-flight."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        build, _stale = self._find_build_in_ops(build_ref)
+        serving = bool(build.get("serving")) if isinstance(build, dict) else False
+        csrf = curator_auth.csrf_token_for(raw)
+        nav = self._nav_context(request, active="serve",
+                                crumb='<a href="/gateway/curator/serve">Serve state</a> › '
+                                      f'<b>serve {curatorpage._esc(build_ref)}</b>')  # noqa: SLF001
+
+        def _refuse(error: str, code: int) -> Response:
+            return self._html(curatorpage.render_rollback_confirm(
+                build_ref=build_ref, build=build, serving=serving, csrf_token=csrf, error=error,
+                nav=nav), status_code=code)
+
+        if build is None:
+            return _refuse("That build is not in the retained inventory — pick one from the table.", 409)
+        if serving:
+            return _refuse("That build is already being served — nothing to roll back to.", 409)
+        typed = (form.get("typed_build") or "").strip()
+        if typed != build_ref:
+            return _refuse("The typed build id did not match — type the exact build id to confirm.", 400)
+        try:
+            serve_state.write_intent(self.cfg.state_dir, "rollback", requested_by=name,
+                                     extra={"build_id": build_ref})
+        except serve_state.IntentAlreadyPending:
+            return _refuse("A rollback is already pending — wait for the host agent to apply it.", 409)
+        except serve_state.StateDirUnwritable as exc:
+            logger.warning("rollback could not be recorded (fail closed): %s", exc)
+            return _refuse("The rollback request could not be recorded (state dir unwritable).", 503)
+        return self._serve_redirect()
+
+    def handle_serve_restore_confirm(self, request: Request, snapshot_ref: str) -> Response:
+        """GET /gateway/curator/serve/restore/{snapshot_ref} — the guarded-restore confirm page (typed
+        snapshot id + TOTP). Session-gated; no mutation."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        exists, _stale = self._snapshot_in_ops(snapshot_ref)
+        totp_row = self.db.get_totp(name)
+        enrolled = totp_row is not None and totp_row.active
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(request, active="serve",
+                                crumb='<a href="/gateway/curator/serve">Serve state</a> › '
+                                      f'<b>restore {curatorpage._esc(snapshot_ref)}</b>')  # noqa: SLF001
+        return self._html(curatorpage.render_restore_confirm(
+            snapshot_ref=snapshot_ref, snapshot_exists=exists, csrf_token=csrf, enrolled=enrolled,
+            nav=nav))
+
+    def handle_serve_restore(self, request: Request, snapshot_ref: str, form: dict) -> Response:
+        """POST /gateway/curator/serve/restore/{snapshot_ref} — write restore.request naming the
+        snapshot. REUSES the C41 destructive-op gate VERBATIM in the same order: session, CSRF, the UX
+        inventory check, the TOTP second factor (enrolled? rate-limited? valid? not-replayed?), the
+        typed-snapshot-id match, then CONSUME the code atomically and write the intent. The host
+        re-validates the id AND drills the snapshot before any swap (D9.2/D9.5/D8). ANY gate failure
+        returns 400/409/429 with NOTHING written.
+
+        Ordering nuance (identical to retire): the code is VERIFIED + replay-checked at the TOTP gate,
+        but only CONSUMED after the typed-id gate passes — a mistyped id does NOT burn the curator's
+        code."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        exists, _stale = self._snapshot_in_ops(snapshot_ref)
+        totp_row = self.db.get_totp(name)
+        enrolled = totp_row is not None and totp_row.active
+        csrf = curator_auth.csrf_token_for(raw)
+        nav = self._nav_context(request, active="serve",
+                                crumb='<a href="/gateway/curator/serve">Serve state</a> › '
+                                      f'<b>restore {curatorpage._esc(snapshot_ref)}</b>')  # noqa: SLF001
+
+        def _refuse(error: str, code: int) -> Response:
+            return self._html(curatorpage.render_restore_confirm(
+                snapshot_ref=snapshot_ref, snapshot_exists=exists, csrf_token=csrf, enrolled=enrolled,
+                error=error, nav=nav), status_code=code)
+
+        if not exists:
+            return _refuse("That snapshot is not in the backup inventory — pick one from the table.", 409)
+        # TOTP gate (fail-closed). Unenrolled => refuse with the enrol pointer (the confirm page renders
+        # the not-enrolled state).
+        if totp_row is None or not totp_row.active:
+            return _refuse("You must enrol an authenticator before restoring the DB — see Security.", 409)
+        if self._totp_limiter.blocked():
+            return _refuse("Too many code attempts — wait and retry.", 429)
+        code = (form.get("code") or "").strip()
+        step = totp.verify(code, totp_row.secret)
+        if step is None:
+            self._totp_limiter.record_failure()
+            return _refuse("That code did not match — check your authenticator and try again.", 400)
+        if totp_row.last_used_step is not None and step <= totp_row.last_used_step:
+            self._totp_limiter.record_failure()
+            return _refuse("That code was already used — wait for a fresh code from your authenticator.", 409)
+        # Valid code: clear the throttle (it guards wrong CODES, not a wrong typed id below).
+        self._totp_limiter.record_success()
+        typed = (form.get("typed_snapshot") or "").strip()
+        if typed != snapshot_ref:
+            return _refuse("The typed snapshot id did not match — type the exact id to confirm.", 400)
+        # All content gates passed: CONSUME the code atomically (a concurrent re-use loses the race).
+        if not self.db.consume_totp_step(name, step):
+            return _refuse("That code was already used — wait for a fresh code from your authenticator.", 409)
+        try:
+            serve_state.write_intent(self.cfg.state_dir, "restore", requested_by=name,
+                                     extra={"snapshot_id": snapshot_ref})
+        except serve_state.IntentAlreadyPending:
+            return _refuse("A restore is already pending — wait for the host agent to apply it.", 409)
+        except serve_state.StateDirUnwritable as exc:
+            logger.warning("restore could not be recorded (fail closed): %s", exc)
+            return _refuse("The restore request could not be recorded (state dir unwritable).", 503)
+        return self._serve_redirect()
 
     def handle_curator_ui_js(self, request: Request) -> Response:
         """GET /gateway/curator/ui.js — the shared curator-page behaviours (delegated data-confirm /
@@ -2589,6 +2848,47 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/serve/build/{build_ref}")
     def curator_serve_build_detail(request: Request, build_ref: str):
         return gw.handle_serve_build_detail(request, build_ref)
+
+    # ---- C43 S2b-ii: privileged serve-state actions. Session + CSRF checked in the handlers; each
+    # writes an intent the host actions agent executes (the gateway gains no shell). The destructive
+    # id-carrying ones (rollback, restore) are typed-confirmation POSTs; restore adds the TOTP factor.
+    @app.post("/gateway/curator/serve/update")
+    def curator_serve_update(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_serve_update(request, csrf_token)
+
+    @app.post("/gateway/curator/serve/snapshot")
+    def curator_serve_snapshot(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_serve_snapshot(request, csrf_token)
+
+    @app.post("/gateway/curator/serve/rebuild-full")
+    def curator_serve_rebuild_full(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_serve_rebuild_full(request, csrf_token)
+
+    @app.post("/gateway/curator/serve/pause")
+    def curator_serve_pause(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_serve_pause(request, csrf_token)
+
+    @app.post("/gateway/curator/serve/resume")
+    def curator_serve_resume(request: Request, csrf_token: str = Form(default="")):
+        return gw.handle_serve_resume(request, csrf_token)
+
+    @app.get("/gateway/curator/serve/rollback/{build_ref}")
+    def curator_serve_rollback_confirm(request: Request, build_ref: str):
+        return gw.handle_serve_rollback_confirm(request, build_ref)
+
+    @app.post("/gateway/curator/serve/rollback/{build_ref}")
+    async def curator_serve_rollback(request: Request, build_ref: str):
+        form = dict(await request.form())
+        return gw.handle_serve_rollback(request, build_ref, form)
+
+    @app.get("/gateway/curator/serve/restore/{snapshot_ref}")
+    def curator_serve_restore_confirm(request: Request, snapshot_ref: str):
+        return gw.handle_serve_restore_confirm(request, snapshot_ref)
+
+    @app.post("/gateway/curator/serve/restore/{snapshot_ref}")
+    async def curator_serve_restore(request: Request, snapshot_ref: str):
+        form = dict(await request.form())
+        return gw.handle_serve_restore(request, snapshot_ref, form)
 
     # The serve-state panel's JS as an EXTERNAL same-origin script — the strictPages CSP
     # (script-src 'self') blocks inline scripts on every /gateway/* page, so the queue page loads

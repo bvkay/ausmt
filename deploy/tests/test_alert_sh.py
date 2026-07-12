@@ -436,3 +436,71 @@ def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
     d2 = _ops_doc(tree)
     assert d2["reconcile"]["sync_failed_streak"] == 2, d2["reconcile"]
     assert d2["reconcile"]["sync_failed_since"] == since1, d2["reconcile"]
+
+
+# --------------------------------------------------------------------------------------------------
+# (f) C43 Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts (record D9.7 / D8/D9). A single
+# fresh pause is fine; a pause active or SLOW-RE-ARMED past the cumulative threshold (24 h) must fail a
+# check AND surface as an ops-floor fact — an authenticated attacker cannot silently keep serving
+# frozen. The pending privileged intents + the actions audit tail are surfaced read-only for the serve
+# screen. Assertions read the emitted ops-status.json + the curl record (independent observables).
+# --------------------------------------------------------------------------------------------------
+
+def _iso_ago(hours: float) -> str:
+    return (datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_fresh_pause_is_active_not_persistent(tmp_path):
+    """Non-vacuous control. A pause.flag present with NO prior continuous span is active but NOT
+    persistent: ops-status.pause.active is true, persistent is false, and the box still sends a SUCCESS
+    beat (no /fail). FAILS IF a brand-new pause trips the persistent alarm."""
+    tree = _make_tree(tmp_path)
+    (tree["state"] / "pause.flag").write_text(
+        json.dumps({"paused_at": _now_iso(), "requested_by": "curator1"}), encoding="utf-8")
+    r = _run(tree)
+    ops = _ops_doc(tree)
+    assert ops["pause"]["active"] is True, ops["pause"]
+    assert ops["pause"]["persistent"] is False, ops["pause"]
+    calls = tree["curl_record"].read_text(encoding="utf-8") if tree["curl_record"].exists() else ""
+    assert "/fail" not in calls, f"a fresh pause must not fire the fail ping: {calls}"
+    assert r.returncode == 0
+
+
+def test_persistent_pause_alarms_and_fails(tmp_path):
+    """PERSISTENT-PAUSE PIN (record D9.7). A pause whose CONTINUOUS span (carried first_seen from the
+    previous ops-status.json) exceeds the cumulative threshold flips ops-status.pause.persistent true
+    AND fires the fail ping with a pause message — even though the CURRENT flag is freshly re-armed.
+    FAILS IF a slow-drip re-armed pause stays invisible (the single-flag age check it defeats)."""
+    tree = _make_tree(tmp_path)
+    # A freshly RE-ARMED flag (its own paused_at is recent — a single-flag check would see it fresh).
+    (tree["state"] / "pause.flag").write_text(
+        json.dumps({"paused_at": _now_iso(), "requested_by": "curator1"}), encoding="utf-8")
+    # ...but the previous ops-status.json shows the pause has been continuously active for 30 h.
+    (tree["state"] / "ops-status.json").write_text(json.dumps({
+        "generated_at": _iso_ago(0.25),
+        "pause": {"active": True, "first_seen": _iso_ago(30), "persistent": False}}), encoding="utf-8")
+    r = _run(tree)
+    ops = _ops_doc(tree)
+    assert ops["pause"]["active"] is True and ops["pause"]["persistent"] is True, ops["pause"]
+    assert ops["pause"]["cumulative_hours"] is not None and ops["pause"]["cumulative_hours"] >= 24, ops["pause"]
+    calls = tree["curl_record"].read_text(encoding="utf-8")
+    assert "/fail" in calls, "a persistent pause must fire the fail ping"
+    assert "PAUSED" in calls or "pause" in calls.lower(), f"the fail body must name the pause: {calls}"
+    assert r.returncode == 1, "a persistent-pause failure must exit nonzero (journal-visible)"
+
+
+def test_pending_intents_and_audit_tail_surfaced(tmp_path):
+    """PENDING-INTENT FACTS (record D8/D9). ops-status.json surfaces the pending privileged intents and
+    the recent actions-audit.log tail so the serve screen can show what is queued/in-flight and the
+    recent action outcomes. FAILS IF a pending intent or the audit tail is not surfaced."""
+    tree = _make_tree(tmp_path)
+    (tree["state"] / "update.request").write_text('{"requested_by":"c1"}', encoding="utf-8")
+    (tree["state"] / "actions-audit.log").write_text(
+        "2026-07-12T00:00:00Z intent=backup by=curator1 id=- outcome=ok: snapshot taken\n",
+        encoding="utf-8")
+    _run(tree)
+    ops = _ops_doc(tree)
+    assert "actions" in ops, f"ops-status must carry an actions block: {sorted(ops)}"
+    assert "update" in ops["actions"]["pending"], ops["actions"]
+    assert any("intent=backup" in ln for ln in ops["actions"]["audit_tail"]), ops["actions"]["audit_tail"]

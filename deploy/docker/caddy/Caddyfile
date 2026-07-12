@@ -39,6 +39,47 @@
 :8080 {
 	encode gzip
 
+	# ---- Access log (C45 D2/D5 — usage analytics enablement, masked at the edge) -----------------
+	# Privacy-preserving HTTP access log: the CLIENT ADDRESS IS MASKED AT WRITE TIME (IPv4 -> /24,
+	# IPv6 -> /48) via Caddy's built-in ip_mask log filter, so a FULL IP never touches disk. This is
+	# the one honest change behind the amended portal privacy promise (portal/index.html). The log
+	# feeds the LATER analytics aggregator lane (C45-impl) — downloads by dataset/format + visit
+	# counts + country (from the masked /24, later); the aggregator reads only ts/method/uri/status/
+	# size/masked-address/UA and discards the raw lines after folding them (7-day retention here).
+	#
+	# The filter encoder wraps the JSON encoder: it MASKS request>remote_ip + request>client_ip and
+	# DELETES the Cookie / Authorization / Set-Cookie headers (so no session token or credential is
+	# ever logged — "no cookies, no cross-site tracking, no personal data"). Everything else is
+	# non-PII operational metadata. Rotation + a 7-day retention (roll_keep_for 168h) are Caddy's own
+	# roll options — no logrotate, no cron.
+	#
+	# ip_mask requires Caddy >= 2.5 (the base image is caddy:2-alpine, current 2.x). The block is
+	# validated at image build by `caddy validate` (portal.Dockerfile), so a syntax slip fails the
+	# build LOUDLY rather than shipping an unmasked log.
+	log {
+		output file /var/log/caddy/access.json {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 168h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip ip_mask {
+					ipv4 24
+					ipv6 48
+				}
+				request>client_ip ip_mask {
+					ipv4 24
+					ipv6 48
+				}
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>Set-Cookie delete
+			}
+		}
+	}
+
 	# Baseline security headers for every response. NOTE the CSP is deliberately NOT in this bare
 	# block: Caddy sorts multiple instances of the same directive by matcher specificity and runs
 	# the matcher-LESS instance LAST, so a default CSP here silently OVERWRITES every per-page

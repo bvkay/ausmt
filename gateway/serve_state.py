@@ -22,6 +22,7 @@ from __future__ import annotations
 import calendar
 import json
 import os
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,32 @@ STATUS_FILENAME = "reconcile-status.json"
 # seam — no new mount, C40 intact). The gateway never writes it.
 OPS_STATUS_FILENAME = "ops-status.json"
 
+# C43 S2b-ii: the privileged INTENT files the gateway WRITES and the host actions agent
+# (deploy/scripts/actions.sh) executes (record D8/D9). Fixed enum — these names MUST match the host
+# agent's allow-list exactly. The gateway only ASKS (writes an intent); the host validates + acts.
+# `rebuild.request` (above) stays existence-keyed for reconcile; these four ride the actions agent.
+INTENT_FILENAMES: dict[str, str] = {
+    "update": "update.request",
+    "backup": "backup.request",
+    "rollback": "rollback.request",
+    "restore": "restore.request",
+}
+PAUSE_FILENAME = "pause.flag"                 # a FLAG reconcile respects (not an actions-agent intent)
+ROLLBACK_PIN_FILENAME = "rollback.pin"        # host-written after a rollback; read here for display
+ACTIONS_AUDIT_FILENAME = "actions-audit.log"  # host-written append-only audit; read here (tail) only
+
+# PUBLISH_LOCK-class serialisation for the gateway-side intent writes (contract binding constraint): the
+# single-flight check ("is this kind already pending?") and the atomic write must be one critical
+# section, else two concurrent requests both see "not pending" and both write. A threading.Lock works
+# from both the sync (`def`, threadpool) and async route paths the workbench uses.
+_INTENT_LOCK = threading.Lock()
+
+
+class IntentAlreadyPending(Exception):
+    """A privileged intent of this kind is already waiting for the host agent to consume it — the
+    single-flight guard (D9.3). The route surfaces this as 'already pending' UX, never a second write
+    (one privileged action of a kind at a time)."""
+
 
 class StateDirUnwritable(Exception):
     """The gateway state dir is missing or not writable — the rebuild request cannot be recorded.
@@ -46,31 +73,147 @@ def _now_utc() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def write_rebuild_request(state_dir: Path, *, requested_by: str) -> Path:
-    """Write {requested_at, requested_by} to <state_dir>/rebuild.request ATOMICALLY (tmp + os.replace
-    — a real rename, so the host agent never sees a half-written file). Idempotent: a second press
-    overwrites the same path (design §3 — "pressing twice = still one file"). The content is AUDIT
-    ONLY (who asked, when); the host agent ignores it and keys only on existence.
-
-    Raises StateDirUnwritable if the dir is missing or the write cannot land — the route turns that
-    into a fail-closed 503 rather than pretending the request was queued.
-    """
+def _atomic_write(state_dir: Path, filename: str, payload: dict) -> Path:
+    """Atomically write `payload` as JSON to <state_dir>/<filename> (tmp + os.replace — a real rename,
+    so the host agent never reads a half-written file). Raises StateDirUnwritable on any failure so the
+    route can fail CLOSED with a 503 rather than pretend the request was queued."""
     if not state_dir.is_dir():
         raise StateDirUnwritable(f"gateway state dir does not exist: {state_dir}")
-    payload = json.dumps({"requested_at": _now_utc(), "requested_by": requested_by})
-    dest = state_dir / REQUEST_FILENAME
-    tmp = state_dir / f"{REQUEST_FILENAME}.tmp.{os.getpid()}"
+    dest = state_dir / filename
+    tmp = state_dir / f"{filename}.tmp.{os.getpid()}"
     try:
-        tmp.write_text(payload, encoding="utf-8")
-        os.replace(tmp, dest)  # atomic within the same directory
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, dest)
     except OSError as exc:
-        # Clean up a stray tmp; surface a fail-closed error the route maps to 503.
         try:
             tmp.unlink()
         except OSError:
             pass
-        raise StateDirUnwritable(f"cannot write rebuild request under {state_dir}: {exc}") from exc
+        raise StateDirUnwritable(f"cannot write {filename} under {state_dir}: {exc}") from exc
     return dest
+
+
+def write_rebuild_request(state_dir: Path, *, requested_by: str, full: bool = False) -> Path:
+    """Write {requested_at, requested_by[, full]} to <state_dir>/rebuild.request ATOMICALLY. Idempotent:
+    a second press overwrites the same path (design §3 — "pressing twice = still one file"). The content
+    is AUDIT ONLY for reconcile's existence-keyed consume — EXCEPT the optional `full` boolean (C43
+    S2b-ii Force-full-rebuild): reconcile reads ONLY that one flag and, when true, runs the build in
+    cache-REFRESH mode (recompute everything, no cache reuse). A bounded parse: the worst a compromised
+    gateway can do is force a full — same corpus, just more expensive.
+
+    Raises StateDirUnwritable if the dir is missing or the write cannot land."""
+    payload: dict = {"requested_at": _now_utc(), "requested_by": requested_by}
+    if full:
+        payload["full"] = True
+    return _atomic_write(state_dir, REQUEST_FILENAME, payload)
+
+
+def write_intent(state_dir: Path, kind: str, *, requested_by: str,
+                 extra: dict | None = None, single_flight: bool = True) -> Path:
+    """Write a privileged INTENT file for the host actions agent (record D8/D9). `kind` is one of
+    INTENT_FILENAMES (update/backup/rollback/restore); `extra` carries the validated id for the
+    parameterised kinds (rollback: {'build_id': ...}; restore: {'snapshot_id': ...}) — the HOST
+    re-validates it against the real inventory (D9.2, gateway-side is UX only). The whole payload is
+    {requested_at, requested_by, **extra}.
+
+    SINGLE-FLIGHT (D9.3): with single_flight True (the default) a pending intent of the SAME kind
+    raises IntentAlreadyPending — one privileged action of a kind at a time. The check + write are one
+    critical section under _INTENT_LOCK so two concurrent requests cannot both pass the check.
+    """
+    if kind not in INTENT_FILENAMES:
+        raise ValueError(f"unknown intent kind: {kind!r}")
+    filename = INTENT_FILENAMES[kind]
+    with _INTENT_LOCK:
+        if not state_dir.is_dir():
+            raise StateDirUnwritable(f"gateway state dir does not exist: {state_dir}")
+        if single_flight and (state_dir / filename).is_file():
+            raise IntentAlreadyPending(kind)
+        payload: dict = {"requested_at": _now_utc(), "requested_by": requested_by}
+        if extra:
+            payload.update(extra)
+        return _atomic_write(state_dir, filename, payload)
+
+
+def intent_pending(state_dir: Path, kind: str) -> bool:
+    """True if a privileged intent of `kind` is waiting for the host agent (single-flight UX)."""
+    fn = INTENT_FILENAMES.get(kind)
+    return bool(fn) and (state_dir / fn).is_file()
+
+
+def pending_intents(state_dir: Path) -> dict[str, dict]:
+    """{kind: parsed-content} for every pending privileged intent (real-time, read straight from the
+    state dir the gateway writes — fresher than ops-status.json's 15-min snapshot). A malformed intent
+    still reports as pending with an empty dict (its presence is what disables the button)."""
+    out: dict[str, dict] = {}
+    for kind, fn in INTENT_FILENAMES.items():
+        p = state_dir / fn
+        if p.is_file():
+            try:
+                with open(p, encoding="utf-8") as fh:
+                    doc = json.load(fh)
+                out[kind] = doc if isinstance(doc, dict) else {}
+            except (OSError, ValueError):
+                out[kind] = {}
+    return out
+
+
+def write_pause_flag(state_dir: Path, *, requested_by: str) -> Path:
+    """Write pause.flag {paused_at, requested_by} ATOMICALLY — reconcile then skips the auto-rebuild
+    while it is fresh (auto-expires after 6 h; the alert timer alarms on a persistent re-arm). A
+    re-pause overwrites (idempotent)."""
+    return _atomic_write(state_dir, PAUSE_FILENAME,
+                         {"paused_at": _now_utc(), "requested_by": requested_by})
+
+
+def remove_pause_flag(state_dir: Path) -> bool:
+    """Explicit RESUME: remove pause.flag. Returns True if a flag was removed, False if none existed.
+    Never raises on a missing file (resume is idempotent)."""
+    p = state_dir / PAUSE_FILENAME
+    try:
+        p.unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise StateDirUnwritable(f"cannot remove pause flag under {state_dir}: {exc}") from exc
+
+
+def pause_active(state_dir: Path) -> bool:
+    """True if a pause.flag exists (the gateway shows 'paused'; freshness/expiry is reconcile's job)."""
+    return (state_dir / PAUSE_FILENAME).is_file()
+
+
+def read_pause_flag(state_dir: Path) -> dict | None:
+    """Parsed pause.flag, or None if absent/unreadable/malformed. Never raises."""
+    return _read_json(state_dir / PAUSE_FILENAME)
+
+
+def read_rollback_pin(state_dir: Path) -> dict | None:
+    """Parsed rollback.pin (host-written after a 'serve this build' rollback), or None. Never raises —
+    the serve screen shows the pinned build when present so the drift is explained, not alarming."""
+    return _read_json(state_dir / ROLLBACK_PIN_FILENAME)
+
+
+def read_actions_audit_tail(state_dir: Path, *, n: int = 40) -> list[str]:
+    """The last `n` lines of the host actions-audit.log (append-only, host-written 0644 so the gateway
+    can read it). Read-only display of who/what/when/outcome for the privileged actions. Never raises;
+    an absent log => []."""
+    p = state_dir / ACTIONS_AUDIT_FILENAME
+    try:
+        with open(p, encoding="utf-8", errors="replace") as fh:
+            lines = [ln.rstrip("\n") for ln in fh.read().splitlines() if ln.strip()]
+        return lines[-n:]
+    except OSError:
+        return []
+
+
+def _read_json(path: Path) -> dict | None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else None
+    except (OSError, ValueError):
+        return None
 
 
 def rebuild_request_pending(state_dir: Path) -> bool:
