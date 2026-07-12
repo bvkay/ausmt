@@ -205,10 +205,10 @@ async function bootFreshWindow(dataMap) {
 
   // UX4 (D4) ZOOM-SCALED RADII. radiusForZoom/weightForZoom are pure step functions: pinned values +
   // monotone non-decreasing in z. If either drifts from the frozen table this fails.
-  ok(A.radiusForZoom(3) === 3.5 && A.radiusForZoom(4) === 3.5, "radiusForZoom(z<=4) must be 3.5");
-  ok(A.radiusForZoom(5) === 4.5, "radiusForZoom(5) must be 4.5");
-  ok(A.radiusForZoom(6) === 5, "radiusForZoom(6) must be 5");
-  ok(A.radiusForZoom(7) === 6 && A.radiusForZoom(12) === 6, "radiusForZoom(z>=7) must be 6");
+  ok(A.radiusForZoom(3) === 2.5 && A.radiusForZoom(4) === 2.5, "radiusForZoom(z<=4) must be 2.5");   // O5: every tier one step smaller
+  ok(A.radiusForZoom(5) === 3.5, "radiusForZoom(5) must be 3.5");
+  ok(A.radiusForZoom(6) === 4.5, "radiusForZoom(6) must be 4.5");
+  ok(A.radiusForZoom(7) === 5 && A.radiusForZoom(12) === 5, "radiusForZoom(z>=7) must be 5");
   ok(A.weightForZoom(4) === 1.0 && A.weightForZoom(0) === 1.0, "weightForZoom(z<=4) must be 1.0");
   ok(A.weightForZoom(5) === 1.5 && A.weightForZoom(9) === 1.5, "weightForZoom(z>=5) must be 1.5");
   for (let z = 0; z < 12; z++) {
@@ -216,14 +216,14 @@ async function bootFreshWindow(dataMap) {
     ok(A.weightForZoom(z + 1) >= A.weightForZoom(z), "weightForZoom must be monotone non-decreasing at z=" + z);
   }
 
-  // UX4 Amendment A1 COLOUR + TOOLTIP. The D1 colour split was REMOVED: EVERY colour mode is
-  // membership-blind — type mode gives member and non-member LPMT the IDENTICAL flagship teal; the
-  // AusLAMP/legacy distinction is the tooltip TYPE-LABEL SWAP (member shows "AusLAMP" INSTEAD OF the
-  // LPMT type label — not appended; non-member keeps LPMT). Two synthetic LPMT stations differing
-  // ONLY by membership.
+  // UX4 Amendment A1 COLOUR (still live) + O4 TOOLTIP (2026-07-12). Colour: EVERY colour mode is
+  // membership-blind — type mode gives member and non-member LPMT the IDENTICAL flagship teal. Tooltip:
+  // O4 slimmed it to station name + survey name ONLY, so the AusLAMP/legacy distinction is NO LONGER on
+  // the tooltip — it survives only in the D2 clustering split. Two synthetic LPMT stations differing ONLY
+  // by membership (each given a survey so the O4 tooltip has a survey name).
   A.setAuslampSet(["memb"]);
-  const _memberLp = { id: "S1", type: "LPMT", slug: "memb", q: 4.2, dim: "2-D" };
-  const _otherLp = { id: "S2", type: "LPMT", slug: "notmemb", q: 4.2, dim: "2-D" };
+  const _memberLp = { id: "S1", type: "LPMT", slug: "memb", q: 4.2, dim: "2-D", survey: "Alpha Survey" };
+  const _otherLp = { id: "S2", type: "LPMT", slug: "notmemb", q: 4.2, dim: "2-D", survey: "Beta Survey" };
   A.setColorMode("type");
   ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
     "A1: TYPE-mode colour must be IDENTICAL for AusLAMP vs non-AusLAMP LPMT (no colour split), got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
@@ -235,13 +235,15 @@ async function bootFreshWindow(dataMap) {
   ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
     "DIM-mode colour must be IDENTICAL regardless of AusLAMP membership, got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
   A.setColorMode("type");
-  // A1 tooltip swap: member = `${id} · AusLAMP · Q n` (the word AusLAMP REPLACES the LPMT label —
-  // asserting NOT-contains "LPMT" is what fails on the pre-A1 append, which carried both).
+  // O4 (owner, 2026-07-12): the hover tooltip is station name + survey name ONLY — no diagnostic Q, no
+  // type/AusLAMP label. Pre-O4 it swapped the type label to "AusLAMP" for members; that distinction now
+  // lives only in the D2 clustering split. Asserting the diagnostic + type/AusLAMP label are GONE is what
+  // fails on pre-O4 code (which carried "· Q 4.2" and the AusLAMP/LPMT label).
   const _tMemb = A.tooltipText(_memberLp), _tOther = A.tooltipText(_otherLp);
-  ok(_tMemb.indexOf("AusLAMP") >= 0 && _tMemb.indexOf("LPMT") < 0,
-    "A1: member tooltip must show AusLAMP INSTEAD OF LPMT (swap, not append), got: " + JSON.stringify(_tMemb));
-  ok(_tOther.indexOf("LPMT") >= 0 && _tOther.indexOf("AusLAMP") < 0,
-    "A1: non-member tooltip must keep the LPMT type label with no AusLAMP tag, got: " + JSON.stringify(_tOther));
+  ok(_tMemb === "S1 · Alpha Survey", "O4: member tooltip must be 'station · survey' only, got: " + JSON.stringify(_tMemb));
+  ok(_tOther === "S2 · Beta Survey", "O4: non-member tooltip must be 'station · survey' only, got: " + JSON.stringify(_tOther));
+  ok(_tMemb.indexOf("Q ") < 0 && _tMemb.indexOf("4.2") < 0, "O4: the TF diagnostic (Q) must be gone from the hover tooltip, got: " + JSON.stringify(_tMemb));
+  ok(_tMemb.indexOf("AusLAMP") < 0 && _tMemb.indexOf("LPMT") < 0, "O4: the type/AusLAMP label must be gone from the hover tooltip, got: " + JSON.stringify(_tMemb));
   A.buildAuslampSet();   // restore the boot-built set for the rest of the run
 
   // A. buildTree made REAL checkboxes (the smoke stub never did): 2 countries, 4 orgs, 4 surveys.
@@ -287,10 +289,10 @@ async function bootFreshWindow(dataMap) {
   const collRow = kids[collRowIdx];
   ok(/AusLAMP — 2 surveys · 3 stations/.test(collRow.textContent),
     "UX5: collection row label must read '<name> — <n> surveys · <m> stations' (Alpha 2 + Beta 1 = 3), got: " + collRow.textContent);
-  // member rows are PASSIVE (indented name + count, NO checkbox — per-survey toggling stays with the orgs)
-  const memberRows = [...treeEl.querySelectorAll(".collmember")];
-  ok(memberRows.length === 2, "UX5: expected 2 passive member rows, got " + memberRows.length);
-  ok(memberRows.every(r => !r.querySelector("input")), "UX5: member rows must be PASSIVE (no checkbox)");
+  // O1 (owner, 2026-07-12): the collection row carries NO nested member-survey list any more — just the
+  // name + survey count + station count. Members stay reachable via the org/country tree + collection page.
+  ok(treeEl.querySelectorAll(".collmember").length === 0,
+    "O1: collection rows must NOT nest a member-survey list, got " + treeEl.querySelectorAll(".collmember").length);
   // (b) PUSH-SYNC: unchecking the collection box flips EXACTLY the member surveys (Alpha+Beta) and
   // refreshes; non-members (Gamma, Delta) untouched. Re-check restores.
   const collBox = collRow.querySelector("input[data-coll]");
@@ -313,14 +315,15 @@ async function bootFreshWindow(dataMap) {
   const snapshot = () => [...treeEl.querySelectorAll("input")]
     .map(i => (i.getAttribute("value") || i.dataset.coll || i.dataset.org || i.dataset.country) + "=" + i.checked).join(",");
   const before = snapshot(), visBefore = JSON.stringify(A.visIds());
-  ["c:Australia", "o:Australia||OrgX", "k:auslamp"].forEach(k => A.treeSetCollapsed(k, true));
+  // O1 (2026-07-12): collection rows no longer disclose member rows, so there is no k: collapse key to
+  // exercise here — the invariant is carried by the country/org carets (which still hide survey rows).
+  ["c:Australia", "o:Australia||OrgX"].forEach(k => A.treeSetCollapsed(k, true));
   ok(snapshot() === before, "UX5 INVARIANT: collapsing changed a checkbox state.\n  before " + before + "\n  after  " + snapshot());
   ok(JSON.stringify(A.visIds()) === visBefore, "UX5 INVARIANT: collapsing changed the filter result: " + visBefore + " -> " + JSON.stringify(A.visIds()));
   // ...and the collapse REALLY hid rows (the invariant is not vacuously testing a no-op):
   ok(treeEl.querySelectorAll("label.survey.hidden").length > 0, "UX5: collapsing Australia hid no survey rows (visibility not applied)");
-  ok(memberRows.every(r => r.classList.contains("hidden")), "UX5: collapsing the collection hid no member rows");
   ok(A.visIds().includes("A1"), "UX5 INVARIANT: a checked-but-HIDDEN survey dropped off the map (visibility leaked into filtering)");
-  ["c:Australia", "o:Australia||OrgX", "k:auslamp"].forEach(k => A.treeSetCollapsed(k, false));
+  ["c:Australia", "o:Australia||OrgX"].forEach(k => A.treeSetCollapsed(k, false));
   ok(snapshot() === before && JSON.stringify(A.visIds()) === visBefore, "UX5 INVARIANT: expanding changed checkbox state or the filter result");
   ok(treeEl.querySelectorAll("label.survey.hidden").length === 0, "UX5: expanding did not unhide the survey rows");
   betaBox.checked = true; fire(betaBox, "change");
@@ -813,6 +816,6 @@ async function bootFreshWindow(dataMap) {
   ok(lineW.indexOf("https://doi.org/10.99999/alpha-tf-doi") >= 0 && lineW.indexOf("no DOI assigned") < 0,
     "U: the with-DOI CITATIONS.txt line must carry the DOI URL and no note, got: " + lineW);
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + radiusForZoom/weightForZoom pins+monotone + A1 colour-identical-all-modes + tooltip type-label SWAP, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note)");
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

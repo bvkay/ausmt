@@ -102,8 +102,7 @@ function applyTreeVisibility(){
     row.classList.toggle("hidden",treeIsCollapsed("c:"+okey.slice(0,okey.indexOf("||"))));});
   tree.querySelectorAll("label.survey").forEach(row=>{const inp=row.querySelector("input");
     row.classList.toggle("hidden",treeIsCollapsed("c:"+inp.dataset.country)||treeIsCollapsed("o:"+inp.dataset.org));});
-  tree.querySelectorAll(".collmember").forEach(row=>{row.classList.toggle("hidden",treeIsCollapsed("k:"+row.dataset.coll));});
-  tree.querySelectorAll(".caret").forEach(c=>{c.textContent=treeIsCollapsed(c.dataset.key)?"▸":"▾";});   // ▸ / ▾, single source
+  tree.querySelectorAll(".caret").forEach(c=>{c.textContent=treeIsCollapsed(c.dataset.key)?"▸":"▾";});   // ▸ / ▾, single source (O1 2026-07-12: collection carets removed — only country/org carets remain)
 }
 // UX5 (D7): caret factory — its OWN click target INSIDE the label-wrapped row. preventDefault stops
 // the label from activating its checkbox (the click-target hazard, test-pinned); stopPropagation
@@ -121,26 +120,26 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
   // programme can span orgs) so this is NOT a nesting level: the checkbox is a PUSH-ONLY bulk toggle
   // with the country/org semantics — on change it sets every MEMBER survey's checkbox (matched by
   // LABEL: COLL[cid].surveys holds labels and survey checkboxes use value=<label>) and refreshes. No
-  // derived/indeterminate state (country/org don't either — future polish). The caret reveals PASSIVE
-  // member rows (no checkbox — per-survey toggling stays with the org hierarchy; avoids three-way
-  // sync). Org rows/counts below are untouched: member surveys still live under their orgs.
+  // derived/indeterminate state (country/org don't either — future polish). O1 (2026-07-12): the row is
+  // just name + survey count + station count now — no nested member list, no caret (per-survey toggling
+  // lives in the org hierarchy). Org rows/counts below are untouched: member surveys still live under their orgs.
   const _coll=(typeof COLL!=="undefined"&&COLL)||{};
   const _cids=Object.keys(_coll).sort();
   if(_cids.length){
     const gh=document.createElement("div");gh.className="treegroup";gh.textContent="Collections";tree.appendChild(gh);
     _cids.forEach(cid=>{const c=_coll[cid],members=c.surveys||[];
       const nSt=members.reduce((a,sv)=>a+(svCount[sv]||0),0);
+      // O1 (owner, 2026-07-12): a collection row shows ONLY name + member-survey count + station count —
+      // no nested member-survey list and no disclosure caret (nothing left to disclose). Member surveys
+      // stay fully reachable via the org/country tree below and the collection page, so nothing is lost.
       const row=document.createElement("label");row.className="coll";
-      row.appendChild(_caret("k:"+cid));
       const inp=document.createElement("input");inp.type="checkbox";inp.checked=true;inp.dataset.coll=cid;
       row.appendChild(inp);
       row.appendChild(document.createTextNode(`${c.title||cid} — ${members.length} survey${members.length===1?"":"s"} · ${nSt} station${nSt===1?"":"s"}`));
       tree.appendChild(row);
       inp.addEventListener("change",()=>{
         tree.querySelectorAll('input[value]').forEach(s=>{if(members.indexOf(s.value)>=0)s.checked=inp.checked;});
-        refresh();});
-      members.forEach(sv=>{const m=document.createElement("div");m.className="collmember";m.dataset.coll=cid;
-        m.innerHTML=`${esc(sv)}<span class="n">${svCount[sv]|0}</span>`;tree.appendChild(m);});});}
+        refresh();});});}
   Object.keys(hier).sort().forEach(country=>{
     const cc=document.createElement("label");cc.className="country";
     cc.innerHTML=`<input type="checkbox" data-country="${escAttr(country)}" checked>${esc(country)}<span class="flag">${esc(CC[country]||"")}</span>`;

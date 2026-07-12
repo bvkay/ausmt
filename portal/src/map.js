@@ -79,20 +79,24 @@ map.addControl(new L.Control.Draw({draw:{polyline:false,circle:false,circlemarke
 
 // UX4 Amendment A1 (owner, 2026-07-07): the D1 colour split was REMOVED — all LPMT renders the
 // flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
-// is membership-blind. The AusLAMP/legacy distinction is carried by the TOOLTIP type-label swap
-// (tooltipText below) and the D2 clustering split, not by colour.
+// is membership-blind. The AusLAMP/legacy distinction is carried by the D2 clustering split, not by
+// colour (and, since O4 2026-07-12, no longer by the hover tooltip either).
 function markerColor(s){return colorMode==="quality"?qColor(s.q):colorMode==="dim"?(DIM_COL[s.dim]||"#5A6E7D"):(TYPE_COL[s.type]||"#999");}
 function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // C42: withheld-coord stations have no marker
-// UX4 Amendment A1: the tooltip's TYPE SLOT shows "AusLAMP" INSTEAD OF the raw LPMT type label for
-// collection members (a swap, not an append — supersedes the D1 append) — the sole AusLAMP/legacy
-// visual distinction on hover. Non-members keep their type label unchanged. PURE + Leaflet-free so
-// the jsdom driver tests the exact string shipped (same pattern as partitionMarkers).
-function tooltipText(s){return `${esc(s.id)} · ${isAuslampSurvey(s.slug,AUSLAMP_SET)?"AusLAMP":esc(s.type)} · Q ${s.q??"–"}`;}
+// O4 (owner, 2026-07-12): the station hover tooltip is SLIMMED to station name + survey name ONLY —
+// the TF completeness/smoothness diagnostic (Q) and the type/AusLAMP label were removed. The
+// AusLAMP/legacy distinction stays in the D2 clustering split; the diagnostic stays in the click
+// drawer. PURE + Leaflet-free so the jsdom driver tests the exact string shipped.
+function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // UX4 (D4): zoom-scaled marker geometry. PURE step functions (unit-tested, monotone non-decreasing in z),
 // the SINGLE source for both the initial draw (buildMarkers) and the zoomend restyle below — markers read
 // too large at national zoom but right when zoomed in, so they grow with zoom. Cluster bubbles are
 // untouched (count-driven). Values are UX4 starting points; the final table is recorded in the design doc.
-function radiusForZoom(z){return z<=4?3.5:z===5?4.5:z===6?5:6;}
+// O5 (owner, 2026-07-12): every radius tier shifted ONE STEP SMALLER — each tier takes the next-smaller
+// tier's old value (z5 4.5->3.5, z6 5->4.5, z>=7 6->5) and the smallest tier drops by the bottom step
+// (z<=4 3.5->2.5, the 1.0 gap that separated it from the z5 tier). Still monotone non-decreasing in z.
+// Cluster bubbles untouched (count-driven); weightForZoom left as-is — a 1.0 stroke does not overwhelm a 2.5 fill.
+function radiusForZoom(z){return z<=4?2.5:z===5?3.5:z===6?4.5:5;}
 function weightForZoom(z){return z<=4?1.0:1.5;}
 // current map zoom as a finite number — the headless smoke/interaction stubs' map.getZoom() returns a
 // Proxy (not a number), and even Number(proxy) throws ("cannot convert object to primitive"), so read it
@@ -103,7 +107,7 @@ function restyleForZoom(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z
 function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#13202B",fillColor:markerColor(s),fillOpacity:.92});
-  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // A1: type-label swap for AusLAMP members
+  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
   // fit to the actual POSITIONED-station extent once data is in — supersedes the AU-bounds default set at
   // map creation above. C42: null-coord (withheld) stations are excluded so the bounds never go NaN.
@@ -130,11 +134,13 @@ function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false
       if(src)map.attributionControl.addAttribution(name+": "+src);grp._loaded=true;}
     catch(e){toast(`Layer "${name}" not found — place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
+// layer control hidden pending owner revisit (2026-07-12) — overlay definitions (footprints + the user
+// GeoJSON layers) are kept and still constructed; the control is simply NOT added to the map.
 L.control.layers(null,{"Survey footprints":footprints,
   "States / territories":userLayer("States","states.geojson","#8FA3B0"),
   "Geological provinces":userLayer("Geological provinces","provinces.geojson","#5BAE6A"),
   "Cratons":userLayer("Cratons","cratons.geojson","#D9A23B"),
-  "Major crustal boundaries":userLayer("Crustal boundaries","crustal_boundaries.geojson","#A85CC4")},{collapsed:true}).addTo(map);
+  "Major crustal boundaries":userLayer("Crustal boundaries","crustal_boundaries.geojson","#A85CC4")},{collapsed:true});
 
 map.on(L.Draw.Event.CREATED,e=>{e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();});  // one active selection shape: a new box replaces the previous one rather than stacking
 map.on(L.Draw.Event.DELETED,()=>refresh());
