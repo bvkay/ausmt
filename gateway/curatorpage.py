@@ -3685,12 +3685,13 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
 # here is a rollup keyed by exact collection.id. Membership is by SLUG (read live from surveys-live),
 # never the rollup's display labels (the labels-vs-slugs trap that broke the stations tab, hotfix #33).
 
-# The programme fields whose per-member divergence the detail marks with a ◆ (record D5-A A4). Kept in
-# sync with the runner's _COLLECTION_ROLLUP_FIELDS (the job computes divergence over the same set).
-_COLLECTION_FIELDS = ("title", "type", "status", "start_year", "last_updated", "description")
+# The programme fields whose per-member divergence the console marks with a ◆ (record D5-A A4). Kept in
+# sync with the runner's _COLLECTION_DIVERGENCE_FIELDS. F2 (D5-C): `last_updated` is EXCLUDED — it is a
+# gateway-managed per-member timestamp, not a curator-reconcilable programme field (a Normalise on it
+# would have no form field to fix); it is never a divergence the console reports.
+_COLLECTION_FIELDS = ("title", "type", "status", "start_year", "description")
 _COLLECTION_FIELD_LABELS = {"title": "title", "type": "type", "status": "status",
-                            "start_year": "start year", "last_updated": "last updated",
-                            "description": "description"}
+                            "start_year": "start year", "description": "description"}
 
 
 def _collection_status_chip(status) -> str:

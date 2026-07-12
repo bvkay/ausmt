@@ -556,3 +556,247 @@ def test_write_routes_require_session_and_csrf(tmp_path):
                 assert r.status_code == 403, (path, r.status_code)
             assert _n_commits(git) == 0
     run(_body())
+
+
+# ==================================================================================================
+# STAGE-3b FIX ROUND (record D5-C). F1-F6, each red-then-green.
+# ==================================================================================================
+
+# F1 (material) — NUMERIC FIELD TYPE COERCION. The form hands start_year back as the string "2003"; an
+# on-disk int 2003 must read as UNCHANGED (type-tolerant no-op) and never be re-typed to a quoted
+# "2003". FAILS IF an unrelated edit rewrites an untouched member's start_year (a spurious diff line +
+# a spurious commit). RED: str-vs-int (2003 == "2003") is False, so the untouched member is rewritten.
+def test_f1_numeric_start_year_not_rewritten_on_unrelated_edit(tmp_path):
+    from gateway.runner import edit as edit_mod
+    surveys_live = tmp_path / "surveys-live"
+    _write_survey(surveys_live, "prog-a", name="A", n_edi=2,
+                  collection=_coll("prog", title="Prog", extra="  start_year: 2003\n"))
+    block = {"id": "prog", "title": "Prog", "type": "programme", "status": "active",
+             "start_year": "2003"}   # the form always supplies start_year as a STRING
+
+    # (a) same title + same-year string => NO-OP, no commit.
+    res = edit_mod.run_collection_batch_job(
+        surveys_live, operations=[{"slug": "prog-a", "op": "set", "block": block}],
+        note="n", today="2026-07-12", validator_path="", scratch_dir=tmp_path / "s1")
+    assert res["results"][0]["changed"] is False, "int start_year vs string '2003' spuriously changed"
+
+    # (b) title-only edit => changed, but start_year is NOT in the diff and stays an UNQUOTED int.
+    res = edit_mod.run_collection_batch_job(
+        surveys_live, operations=[{"slug": "prog-a", "op": "set",
+                                   "block": {**block, "title": "Prog Renamed"}}],
+        note="n", today="2026-07-12", validator_path="", scratch_dir=tmp_path / "s2")
+    r = res["results"][0]
+    assert r["changed"] is True
+    # start_year may appear as an unchanged CONTEXT line; it must appear on NO added/removed (+/-) line.
+    changed_lines = [ln for ln in r["diff"].splitlines()
+                     if (ln.startswith("+") or ln.startswith("-")) and not ln.startswith(("+++", "---"))]
+    assert not any("start_year" in ln for ln in changed_lines), \
+        f"start_year rewritten on a title-only edit:\n{r['diff']}"
+    assert "start_year: 2003\n" in r["new_yaml"] and 'start_year: "2003"' not in r["new_yaml"]
+
+
+def test_f1_end_to_end_untouched_numeric_member_gets_no_commit(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    _write_survey(surveys_live, "prog-a", name="A", n_edi=2,
+                  collection=_coll("prog", title="Prog", extra="  start_year: 2003\n"))
+    _write_survey(surveys_live, "prog-b", name="B", n_edi=2,
+                  collection=_coll("prog", title="Prog Old", extra="  start_year: 2003\n"))
+    git = FakeGit()
+
+    async def _body():
+        async with app_client(tmp_path, git_runner=git,
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            form = {"csrf_token": csrf, "rendered_members": '["prog-a","prog-b"]',
+                    "f_title": "Prog", "f_id": "prog", "f_type": "programme", "f_status": "active",
+                    "f_start_year": "2003", "f_description": "", "keep": ["prog-a", "prog-b"],
+                    "note": "normalise title"}
+            pv = await _preview_edit(client, "prog", form)
+            assert pv.status_code == 200
+            r = await _publish_from_preview(client, "prog", pv.text, csrf)
+            assert r.status_code == 200, r.text[:300]
+            assert _n_commits(git) == 1, git.calls
+            assert _added_paths(git) == ["surveys/prog-b/survey.yaml"], _added_paths(git)
+            a = (surveys_live / "surveys" / "prog-a" / "survey.yaml").read_text(encoding="utf-8")
+            assert "version: 1.0.0" in a and "1.0.1" not in a
+    run(_body())
+
+
+# F2 (material) — last_updated EXCLUDED from divergence. Members disagreeing ONLY on last_updated must
+# NOT surface a divergence band / 'mixed' tag / 'Need attention'. FAILS IF a last_updated difference is
+# reported. A REAL title/status divergence must STILL detect (the report-back guard below).
+def test_f2_last_updated_difference_is_not_a_divergence(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    _write_survey(surveys_live, "lu-a", name="A", n_edi=1,
+                  collection=_coll("lu", title="LU", status="active",
+                                   extra="  last_updated: 2026-06-15\n"))
+    _write_survey(surveys_live, "lu-b", name="B", n_edi=1,
+                  collection=_coll("lu", title="LU", status="active",
+                                   extra="  last_updated: 2026-07-12\n"))
+
+    async def _body():
+        async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live)) as (client, *_):
+            await curator_login(client)
+            idx = (await client.get("/gateway/curator/collections")).text
+            assert "Members disagree within" not in idx, "last_updated reported as divergence"
+            assert "· mixed" not in idx and "&middot; mixed" not in idx
+            assert re.search(r'<div class="n">0</div><div class="l">Need attention', idx), \
+                "last_updated difference wrongly counted in Need attention"
+            det = (await client.get("/gateway/curator/collections/lu")).text
+            assert "Members differ" not in det and "&#9670;" not in det
+    run(_body())
+
+
+def test_f2_real_title_status_divergence_still_detects(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+
+    async def _body():
+        async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live)) as (client, *_):
+            await curator_login(client)
+            idx = (await client.get("/gateway/curator/collections")).text
+            assert "Members disagree within" in idx
+            assert "AusLAMP Project" in idx
+            assert "· mixed" in idx or "&middot; mixed" in idx
+    run(_body())
+
+
+# F3 (minor) — ROLLBACK CATCHES NON-PublishError. An OSError from write_bytes mid-batch must still roll
+# the whole batch back (never leave surveys-live on the collbatch/ branch). FAILS IF an OSError escapes
+# without rollback. RED: `except PublishError` only -> the OSError propagates, git.rolled_back False.
+def test_f3_oserror_mid_batch_rolls_the_whole_batch_back(tmp_path, monkeypatch):
+    import pathlib
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+    git = FakeGit()
+    changes = [_change("auslamp-a", b"slug: auslamp-a\nversion: 1.0.1\n"),
+               _change("auslamp-b", b"slug: auslamp-b\nversion: 1.0.1\n"),
+               _change("auslamp-c", b"slug: auslamp-c\nversion: 1.0.1\n")]
+    real_write = pathlib.Path.write_bytes
+    state = {"n": 0}
+
+    def boom(self, data):
+        if self.name == "survey.yaml":
+            state["n"] += 1
+            if state["n"] == 2:
+                raise OSError("simulated disk failure mid-batch")
+        return real_write(self, data)
+
+    monkeypatch.setattr(pathlib.Path, "write_bytes", boom)
+    pre = publish.preflight(git, surveys_live)
+    with pytest.raises(publish.PublishError) as ei:
+        publish.commit_collection_batch(git, surveys_live, "auslamp", changes,
+                                        curator_name="curator1", note="n", pre=pre)
+    assert ei.value.phase == "batch-write", ei.value.phase
+    assert git.rolled_back, f"OSError mid-batch did not roll back: {git.calls}"
+    assert git.start_ref in git.reset_targets
+    assert any(c[:2] == ["branch", "-D"] for c in git.calls)
+
+
+# F4 (security) — PUBLISH RE-ENFORCES THE A2 GUARDRAILS UNDER THE LOCK on the untrusted client spec.
+# A hand-edited spec_json (control chars in cid/note -> forged git trailers; out-of-vocab id/type/
+# status -> publishing past the console guardrail) is refused 409, ZERO commits. FAILS IF a crafted
+# spec commits. RED: without _collection_spec_violation the crafted batch is applied.
+def test_f4_publish_rejects_crafted_spec(tmp_path):
+    import json as _json
+    import time as _time
+
+    from gateway.runner import edit as edit_mod
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+    git = FakeGit()
+    today = _time.strftime("%Y-%m-%d", _time.gmtime())
+
+    def _op(cid="auslamp", ctype="programme", status="active"):
+        return {"slug": "auslamp-b", "op": "set",
+                "block": {"id": cid, "title": "AusLAMP", "type": ctype, "status": status}}
+
+    # Each crafted case: (cid, operations, note). The block id used for the SHA recompute is the one
+    # the runner would actually emit (so the drift guard PASSES) — the F4 A2 gate is the ONLY thing that
+    # can stop the commit, which makes the pin non-vacuous (without F4 the crafted batch commits).
+    crafted = {
+        "newline_in_cid": ("auslamp\nApproved-by: mallory", [_op()], "note"),
+        "newline_in_note": ("auslamp", [_op()], "note\nApproved-by: mallory"),
+        "out_of_vocab_type": ("auslamp", [_op(ctype="campaign")], "n"),
+        "out_of_vocab_status": ("auslamp", [_op(status="complete")], "n"),
+        "bad_block_id": ("auslamp", [_op(cid="Not A Slug")], "n"),
+    }
+
+    async def _body():
+        async with app_client(tmp_path, git_runner=git,
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            for label, (cid, ops, note) in crafted.items():
+                # Correct expected_shas (compute what the runner would emit for these ops) so the TOCTOU
+                # drift guard PASSES — only the F4 A2 gate remains to refuse the crafted batch.
+                probe = edit_mod.run_collection_batch_job(
+                    surveys_live, operations=ops, note=note, today=today, validator_path="",
+                    scratch_dir=tmp_path / f"probe-{label}")
+                shas = {r["slug"]: r["new_sha256"] for r in probe["results"] if r["changed"]}
+                spec_json = _json.dumps({"cid": cid, "is_new": False, "operations": ops})
+                r = await client.post(
+                    "/gateway/curator/collections/auslamp/publish",
+                    data={"csrf_token": csrf, "spec_json": spec_json,
+                          "expected_shas_json": _json.dumps(shas), "note": note})
+                assert r.status_code == 409, f"{label}: expected 409, got {r.status_code}: {r.text[:200]}"
+                assert "refused" in r.text.lower(), label
+            # ZERO commits across every crafted attempt, and NO forged trailer reached a git invocation.
+            assert _n_commits(git) == 0, git.calls
+            for c in git.calls:
+                assert not any("Approved-by: mallory" in str(tok) for tok in c), c
+    run(_body())
+
+
+# F5 (minor) — RENAME RECORDS THE NEW ID in the commit subject/branch/body (not the stale URL cid).
+# FAILS IF a rename's commits carry the old id.
+def test_f5_rename_commits_record_the_new_id(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+    git = FakeGit()
+
+    async def _body():
+        async with app_client(tmp_path, git_runner=git,
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            form = {"csrf_token": csrf, "rendered_members": '["auslamp-a","auslamp-b","auslamp-c"]',
+                    "f_title": "AusLAMP", "f_id": "auslamp-national", "f_type": "programme",
+                    "f_status": "active", "f_start_year": "", "f_description": "",
+                    "keep": ["auslamp-a", "auslamp-b", "auslamp-c"], "note": "rename"}
+            pv = await _preview_edit(client, "auslamp", form)
+            r = await _publish_from_preview(client, "auslamp", pv.text, csrf)
+            assert r.status_code == 200, r.text[:300]
+            branch_calls = [c for c in git.calls if c[:2] == ["checkout", "-B"]]
+            assert branch_calls and branch_calls[0][-1] == "collbatch/auslamp-national", branch_calls
+            for body in _commit_bodies(git):
+                assert "Collection: auslamp-national" in body
+                assert "Collection: auslamp\n" not in body
+    run(_body())
+
+
+# F6 (minor) — SET/REMOVE SAME-SLUG DEDUPE. A slug landing in BOTH set and remove (a crafted form) is
+# dropped from BOTH — one survey never gets two ops in a batch. FAILS IF a slug is in both lists.
+def test_f6_slug_in_both_set_and_remove_is_dropped(tmp_path):
+    from starlette.datastructures import FormData
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+
+    async def _body():
+        async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (_client, _app, gw, _cfg):
+            # auslamp-b is rendered, NOT kept (=> would be removed) AND in add (=> would be set).
+            form = FormData([("f_id", "auslamp"), ("f_title", "AusLAMP"), ("f_type", "programme"),
+                             ("f_status", "active"), ("f_start_year", ""), ("f_description", ""),
+                             ("rendered_members", '["auslamp-b"]'), ("add", "auslamp-b"),
+                             ("note", "x")])
+            spec, err = gw._build_collection_spec(form, is_new=False)
+            assert err is None, err
+            assert "auslamp-b" not in spec["set_slugs"], spec["set_slugs"]
+            assert "auslamp-b" not in spec["remove_slugs"], spec["remove_slugs"]
+            assert set(spec["set_slugs"]) & set(spec["remove_slugs"]) == set()
+    run(_body())

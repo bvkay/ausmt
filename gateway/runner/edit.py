@@ -637,6 +637,12 @@ def _history_subcommand(argv: list[str]) -> str | None:
 
 # The programme-level fields the rollup carries, in the engine's field order (build_portal.py:396).
 _COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_updated", "description")
+# F2 (D5-C): the fields whose per-member DIVERGENCE the console reports + offers Normalise for.
+# EXCLUDES `last_updated`: it is a GATEWAY-MANAGED per-member timestamp (stamped on only the changed
+# members in a diff-minimal batch), NOT a curator-reconcilable programme field — including it would
+# make the console permanently report "members disagree on last_updated" with a Normalise remedy that
+# has no form field to fix it. It stays in _COLLECTION_ROLLUP_FIELDS for engine-rollup parity only.
+_COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS if f != "last_updated")
 # The status vocabulary the engine surfaces (build_portal.py:386). An out-of-vocab rolled-up status is
 # DROPPED (build_portal.py:399-400) — never surfaced as a fake status; it still shows as the member's
 # raw declared value (and as divergence when members disagree).
@@ -685,7 +691,7 @@ def _collection_divergence(members: list) -> dict:
     order; EMPTY {} when every field agrees. A member that omits a field is not an outlier (it inherits
     the rollup value), so only DECLARED values count."""
     out: dict = {}
-    for fld in _COLLECTION_ROLLUP_FIELDS:
+    for fld in _COLLECTION_DIVERGENCE_FIELDS:   # F2: last_updated excluded (gateway-managed timestamp)
         buckets: dict = {}
         order: list = []
         for m in members:
@@ -814,7 +820,13 @@ def _apply_collection_set(data, block: dict, today: str) -> bool:
     `last_updated` is a PASSENGER: stamped to `today` only when another field actually changed, so an
     already-canonical member is left byte-for-byte untouched (no spurious commit). An EMPTY desired
     field means 'leave the member's own value as-is', NEVER 'clear it' — clearing a programme field
-    stays a per-survey metadata edit (the editor never deletes a field a member declares)."""
+    stays a per-survey metadata edit (the editor never deletes a field a member declares).
+
+    F1 (D5-C): the desired-state form round-trips EVERY value as a string, so the no-op check is
+    TYPE-TOLERANT (`str(_plain(cur)) == str(new)` => unchanged), and a numeric field (`start_year`) is
+    written as a PLAIN scalar, NOT force-quoted — otherwise a member declaring int `start_year: 2003`,
+    edited only on its title, would have `2003` silently re-typed to `"2003"` (a spurious diff line +
+    a spurious commit on an untouched member, breaking the D13 diff-minimality / N-commits pins)."""
     coll = data.get("collection")
     created = False
     if not hasattr(coll, "get"):
@@ -829,13 +841,30 @@ def _apply_collection_set(data, block: dict, today: str) -> bool:
         new_val = block[key]
         if new_val in (None, ""):
             continue  # empty desired field: leave the member's own value untouched
-        if key in coll and _plain(coll[key]) == new_val:
-            continue  # unchanged leaf — leave the node (and its comment/quoting) exactly as-is
-        coll[key] = quote_ambiguous(new_val)
+        # Type-tolerant no-op: the form hands back "2003" for an on-disk int 2003 — compare as strings
+        # so an unchanged numeric is NOT rewritten (keeps its exact on-disk form + type — no diff line).
+        if key in coll and str(_plain(coll[key])) == str(new_val):
+            continue
+        coll[key] = _coerce_collection_value(key, new_val)
         changed = True
-    if changed and _plain(coll.get("last_updated")) != today:
+    if changed and str(_plain(coll.get("last_updated"))) != str(today):
         coll["last_updated"] = quote_ambiguous(today)
     return changed
+
+
+# Collection fields written as a PLAIN numeric scalar (not a quoted string) when the value is all-digit
+# — the reader-facing year is an int in the engine schema, and force-quoting it re-types 2003 -> "2003".
+_COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
+
+
+def _coerce_collection_value(key: str, new_val):
+    """Coerce a form-supplied collection value for emission (F1). A numeric field whose value is an
+    all-digit string is written as a PLAIN int (unquoted); every other value rides quote_ambiguous
+    (FIX 3) so a YAML-1.1-retypeable token is emitted quoted. A non-numeric `start_year` (e.g. a year
+    range) still passes through quote_ambiguous as a string."""
+    if key in _COLLECTION_NUMERIC_FIELDS and isinstance(new_val, str) and new_val.isdigit():
+        return int(new_val)
+    return quote_ambiguous(new_val)
 
 
 def _apply_collection_remove(data) -> bool:

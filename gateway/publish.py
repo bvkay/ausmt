@@ -474,6 +474,13 @@ def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: l
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
+    except Exception as exc:  # noqa: BLE001 -- F3: ANY mid-batch error (an OSError from write_bytes, a
+        # subprocess error from the git runner) must still roll the WORKING TREE back — never leave
+        # surveys-live on the collbatch/ branch with partial commits. Re-raised AS a PublishError so the
+        # caller's fail-closed 409 path holds (main is already protected: the ff-merge is after the loop).
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise PublishError("batch-write",
+                           f"unexpected error mid-batch ({type(exc).__name__}): {exc}"[:500]) from exc
     return new_ref
 
 

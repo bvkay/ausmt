@@ -56,6 +56,10 @@ _KEY_EMAIL_MAX_CHARS = 254
 _COLLECTION_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _COLLECTION_TYPE_VOCAB = ("programme", "release", "institutional", "other")
 _COLLECTION_STATUS_VOCAB = ("active", "completed", "archived")
+# F4 (D5-C): any control character (incl. newline/CR/TAB) is rejected in the collection id + release
+# note before they interpolate into a commit subject/body — a newline in either forges fake
+# `Curated-by:`/`Approved-by:` trailers into the git audit record (the git history IS the audit trail).
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def _token_hash(token: str) -> str:
@@ -1164,6 +1168,13 @@ class Gateway:
             if s and s not in set_slugs:
                 set_slugs.append(s)
         remove_slugs = [s for s in rendered if s not in kept]
+        # F6 (D5-C): a slug landing in BOTH set and remove (a crafted/edge form — the normal UI can't
+        # produce it, the picker excludes current members) is dropped from BOTH, so one survey never
+        # gets two ops in a batch. Dropping = the slug is left untouched (neither added nor removed).
+        both = set(set_slugs) & set(remove_slugs)
+        if both:
+            set_slugs = [s for s in set_slugs if s not in both]
+            remove_slugs = [s for s in remove_slugs if s not in both]
         return {"fields": fields, "set_slugs": set_slugs, "remove_slugs": remove_slugs}, None
 
     def _collection_operations(self, spec: dict) -> list:
@@ -1202,7 +1213,10 @@ class Gateway:
         if not note:
             return self._collection_preview_error(
                 request, cid, is_new, "A release note is required (it is written to every commit).")
-        target_cid = spec["fields"]["id"] if is_new else cid
+        # F5 (D5-C): the audit id is the DESIRED end-state id (spec.fields.id) in BOTH the create and the
+        # rename case — a rename rewrites every member's collection.id to the new id, so the commit
+        # subject/branch/body must record the NEW id, not the stale URL cid. (Non-rename edit: new == url.)
+        target_cid = spec["fields"]["id"]
         if is_new and not spec["set_slugs"]:
             return self._collection_preview_error(
                 request, cid, is_new,
@@ -1275,6 +1289,12 @@ class Gateway:
         surveys_live = self.cfg.surveys_live_dir
         if surveys_live is None:
             return JSONResponse({"detail": "AUSMT_SURVEYS_LIVE is not configured"}, status_code=503)
+        # F4 (D5-C): re-enforce the A2 guardrails on the untrusted client-carried spec BEFORE any commit
+        # — id/type/status vocab + control-char rejection in cid/note. Fail-closed 409, nothing staged.
+        violation = _collection_spec_violation(cid, operations, note)
+        if violation:
+            logger.warning("collection batch spec rejected (A2 guardrail): %s", violation)
+            return JSONResponse({"detail": f"batch refused: {violation}"}, status_code=409)
         job = metaedit.make_collection_batch_job(
             operations, note, time.strftime("%Y-%m-%d", time.gmtime()))
         async with publish.PUBLISH_LOCK:
@@ -2294,6 +2314,43 @@ def _read_json(path: Path):
 def _slug_from_refs(refs: dict) -> str | None:
     slug = refs.get("slug") if isinstance(refs, dict) else None
     return slug if isinstance(slug, str) and slug else None
+
+
+def _collection_spec_violation(cid: str, operations: list, note: str) -> str | None:
+    """F4 (D5-C): re-enforce the console's own A2 guardrails on the UNTRUSTED client-carried spec at
+    publish time (an authenticated curator can hand-edit the hidden spec_json). Returns an error string
+    or None. The validator only WARNINGs on an out-of-vocab id/status, so without this a crafted spec
+    would publish PAST the console's own guardrail; and a control char in cid/note forges git-trailer
+    lines into the commit body. Rejects: control chars in cid or note; a cid or any op-block id not
+    matching _COLLECTION_ID_RE; an out-of-vocab type/status; a malformed/unknown operation."""
+    if _CONTROL_CHAR_RE.search(cid or ""):
+        return "the collection id contains control characters"
+    if _CONTROL_CHAR_RE.search(note or ""):
+        return "the release note contains control characters"
+    if not _COLLECTION_ID_RE.match(cid or ""):
+        return "the collection id is not lowercase-hyphenated"
+    if not isinstance(operations, list) or not operations:
+        return "the batch carries no operations"
+    for op in operations:
+        if not isinstance(op, dict):
+            return "a malformed operation in the batch"
+        kind = op.get("op")
+        if kind == "remove":
+            continue
+        if kind != "set":
+            return f"an operation has an unknown kind: {kind!r}"
+        block = op.get("block")
+        if not isinstance(block, dict):
+            return "a malformed operation block in the batch"
+        if not _COLLECTION_ID_RE.match(str(block.get("id") or "")):
+            return "an operation carries an invalid collection id"
+        btype = block.get("type")
+        if btype and btype not in _COLLECTION_TYPE_VOCAB:
+            return "an operation carries an out-of-vocab collection type"
+        bstatus = block.get("status")
+        if bstatus and bstatus not in _COLLECTION_STATUS_VOCAB:
+            return "an operation carries an out-of-vocab collection status"
+    return None
 
 
 def _form_getlist(form, key: str) -> list[str]:
