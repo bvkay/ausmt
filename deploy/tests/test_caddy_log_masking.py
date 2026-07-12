@@ -189,9 +189,12 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
         logpath = Path(td) / "access.json"
         # Reuse the SHIPPED log block, but point its output at our temp file (swap the /var/log path).
         test_log_block = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", log_block)
+        # NOTE: the site's closing brace is a PLAIN (non-f) string, so it is a single literal '}' —
+        # writing '}}' here (an f-string escape) in the non-f piece emitted TWO closing braces and made
+        # the composed config unbalanced (caddy rejected it before masking was ever exercised).
         cfg = (
             "{\n\tadmin off\n\tservers " + servers_block + "\n}\n"
-            f":{port} {{\n\tlog " + test_log_block + "\n\trespond \"ok\" 200\n}}\n"
+            f":{port} {{\n\tlog " + test_log_block + "\n\trespond \"ok\" 200\n}\n"
         )
         cfgpath = Path(td) / "Caddyfile"
         cfgpath.write_text(cfg, encoding="utf-8")

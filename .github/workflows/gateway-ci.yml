@@ -45,6 +45,23 @@ jobs:
       - name: Install gateway test deps
         run: pip install -r gateway/requirements-dev.txt
 
+      # Install Caddy so the deploy/ access-log masking pins RUN here instead of skipping (C43 S2b-ii,
+      # C45 privacy). The masked-log runtime pin (test_caddy_log_masking.py) is the executable proof
+      # that the public privacy promise — "a full IP address is never stored" — is TRUE: it drives a
+      # real request with X-Forwarded-For through running Caddy and asserts the full IP appears NOWHERE
+      # in the log line, only the /24-masked form. A config-syntax assertion is NOT sufficient for a
+      # public commitment. Without caddy on PATH these pins skip, and the skip tripwire (below) FAILS
+      # loudly rather than let the privacy proof silently no-op — so this step is load-bearing, not
+      # optional. Pinned version for reproducibility (the box runs caddy:2-alpine, current 2.x).
+      - name: Install Caddy (deploy access-log masking pins)
+        run: |
+          CADDY_VERSION=2.8.4
+          curl -fsSL -o /tmp/caddy.tar.gz \
+            "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz"
+          tar -xzf /tmp/caddy.tar.gz -C /tmp caddy
+          sudo install /tmp/caddy /usr/local/bin/caddy
+          caddy version
+
       # Lint gateway/ with the SAME ruff pin + config the engine lane uses (build-products.yml:48-49):
       # ruff==0.15.17 with engine/pyproject.toml's [tool.ruff] select/ignore set. The gateway ships no
       # own ruff config, so the engine's project-wide config is the single source of the lint policy.
