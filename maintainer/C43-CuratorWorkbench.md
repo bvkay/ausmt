@@ -285,6 +285,32 @@ is after the loop). **F5 (minor)** a rename records the NEW id in the commit sub
 old→new), not the stale URL cid. **F6 (minor)** a slug landing in BOTH set and remove is de-duped so
 one survey never gets two ops in a batch.
 
+**Round-2 re-gate (2026-07-12, executed hostile probes over the F1-F6 commit):** F2/F3/F5/F6 and
+the F4 headline (no client string reaches the git audit record ungated) CONFIRMED-SAFE with
+executed evidence; three residuals, fixed as R1-R3:
+* **R1 (material)** — F1's type-tolerant no-op check and the divergence detector's type-sensitive
+  bucketing disagree: members declaring `start_year: 2003` (int) vs `"2003"` (quoted) flag as
+  divergent showing two IDENTICAL values, while Normalise no-ops (400 "No changes") — an
+  un-clearable "Need attention", the same dead-end pathology F2 closed. Divergence bucketing must
+  use THE SAME equality as the no-op check for numeric fields (normalise numeric-string declared
+  values when keying).
+* **R2 (minor)** — `start_year` gets real validation: the gateway form and the publish-time A2
+  gate both require empty or `^[0-9]{4}$` (clear 400 otherwise). Kills the executed traps:
+  `"2003²"` (isdigit-true, int()-ValueError → opaque internal error) and `"007"`→`7` /
+  `"0000"`→`0` silent literal rewrites. The emission coercion keeps a defensive
+  isdecimal+try/except regardless.
+* **R3 (minor, data-integrity)** — the A2 gate's op-block id branch used `re.match` with `$`,
+  which matches before a trailing newline: a crafted block id `"auslamp\n"` passed the gate and
+  committed (executed end-to-end; phantom-collection split — NOT a trailer forge, the top-level
+  cid path is gated). Every regex gate on this seam moves to fullmatch/`\A…\Z` semantics + the
+  control-char guard; the same trailing-newline class is checked across the seam's other
+  anchored-regex gates.
+* **Process incident (architect's own):** a round-2 probe agent mutated the shared worktree
+  mid-verification (F4 gate briefly neutered on disk, then restored; probe files left behind) —
+  the S2a D14 class again. Worktree verified restored byte-identical to the commit; standing rule
+  re-affirmed and now stated explicitly in every verification dispatch: hostile probes run ONLY
+  in hermetic exports (`git archive`), never in shared worktrees.
+
 ## D6. Submission queue — review flow unchanged. Review → checklist → sandboxed preview →
 approve/return/reject was production-proven 2026-07-08; C43 deliberately leaves that flow alone.
 The queue gains the shared nav + drift chip (Stage 1) and one additive surface: a **read-only
