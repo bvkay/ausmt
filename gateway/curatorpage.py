@@ -3713,7 +3713,7 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
         '<div class="cards">'
         f'<div class="card"><div class="n">{n_coll}</div><div class="l">Collections</div></div>'
         f'<div class="card"><div class="n">{n_members}</div><div class="l">Member surveys</div></div>'
-        f'<div class="card"><div class="n">{n_stations}</div><div class="l">Stations rolled up</div></div>'
+        f'<div class="card"><div class="n">{n_stations}</div><div class="l">Published stations</div></div>'
         f'<div class="card"><div{att_cls}>{n_attention}</div><div class="l">Need attention</div></div>'
         '</div>'
     )
@@ -3721,8 +3721,8 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
     if not collections:
         body = (
             '<h1>Collections</h1>'
-            '<p class="sub">Programme groupings, rolled up from every survey\'s '
-            '<span class="mono">collection.id</span> — the same grouping the portal shows readers.</p>'
+            '<p class="sub">Programme groupings, rolled up from every published '
+            '<span class="mono">survey.yaml</span> at the current published HEAD.</p>'
             + cards +
             '<div class="panel"><p class="sub" style="margin:0">No collections yet. A survey joins a '
             'collection by declaring a <span class="mono">collection</span> block in its '
@@ -3788,10 +3788,11 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
 
     body = (
         '<h1>Collections</h1>'
-        '<p class="sub">Programme groupings, rolled up from every survey\'s '
-        '<span class="mono">collection.id</span> — the same grouping the portal shows readers. There '
-        'is no collection object in the data model: the id lives in each member\'s '
-        '<span class="mono">survey.yaml</span>, so a collection is a projection over its members.</p>'
+        '<p class="sub">Rolled up from every published <span class="mono">survey.yaml</span> at the '
+        'current published HEAD — the edit truth. There is no collection object in the data model: the '
+        'id lives in each member\'s <span class="mono">survey.yaml</span>, so a collection is a '
+        'projection over its members. Station counts are the <b>published</b> EDI-file counts; the '
+        'served portal may differ until the next rebuild.</p>'
         + cards + bands_html + table
     )
     return _shell("AusMT collections", body, nav=nav)
@@ -3813,6 +3814,9 @@ def render_collection_detail(*, cid: str, collection: dict, near_duplicates: lis
         f'<span style="color:{_PALETTE["muted"]};font-weight:400">&middot; {n_surv} '
         f'member{"s" if n_surv != 1 else ""} &middot; {n_stn} stations</span> '
         f'{_collection_status_chip(collection.get("status"))}</h1>'
+        '<p class="sub">Rolled up from every member\'s published '
+        '<span class="mono">survey.yaml</span> at the current published HEAD; the served portal may '
+        'differ until the next rebuild.</p>'
     )
 
     def _row(label, value, *, mono=False):
@@ -3866,10 +3870,11 @@ def render_collection_detail(*, cid: str, collection: dict, near_duplicates: lis
         f'<span style="color:{_PALETTE["muted"]};font-weight:400">&middot; {n_surv} '
         f'survey{"s" if n_surv != 1 else ""} &middot; {n_stn} stations</span></h2>'
         '<div class="panel"><table>'
-        '<tr><th>Survey (slug)</th><th>Stations</th><th>Declares</th></tr>'
+        '<tr><th>Survey (slug)</th><th>Published stations</th><th>Declares</th></tr>'
         + "".join(mrows) + '</table></div>'
-        '<p class="sub" style="margin:.5rem 0 0">A <span class="mono">&#9670;</span> marks a member '
-        'whose own <span class="mono">collection</span> block disagrees with the canonical value above; '
+        '<p class="sub" style="margin:.5rem 0 0">Station counts are the <b>published</b> EDI-file '
+        'counts. A <span class="mono">&#9670;</span> marks a member whose own '
+        '<span class="mono">collection</span> block disagrees with the canonical value above; '
         'normalising the outliers arrives in the collections editor (next stage).</p>'
     )
 

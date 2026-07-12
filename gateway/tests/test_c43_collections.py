@@ -166,9 +166,11 @@ def test_index_renders_cards_bands_and_table(tmp_path):
         async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live)) as (client, *_):
             await curator_login(client)
             html = (await client.get("/gateway/curator/collections")).text
-            # Summary cards.
-            for label in ("Collections", "Member surveys", "Stations rolled up", "Need attention"):
+            # Summary cards (n_stations labelled as the PUBLISHED count — D5-B F4).
+            for label in ("Collections", "Member surveys", "Published stations", "Need attention"):
                 assert label in html, label
+            # Published-source framing is stated (not a served-portal mirror).
+            assert "published" in html and "until the next rebuild" in html
             # Both bands.
             assert "Near-duplicate ids" in html            # id collision (auslamp / AusLAMP)
             assert "Members disagree within" in html        # per-field divergence (auslamp title+status)
