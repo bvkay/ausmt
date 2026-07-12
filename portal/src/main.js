@@ -14,6 +14,12 @@ function buildState(){
     // (au.<survey-slug>.<station>). Fall back to the legacy survey-name slugification only for
     // older data that predates r[C.ausmt_id], so the id shown/exported matches the product + MTCAT.
     ausmt_id:r[C.ausmt_id]||((CC[(SMETA[r[C.survey]]||{}).country]||"au").toLowerCase()+"."+r[C.survey].toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,"")+"."+r[C.id])}));
+  // C42 A1: fold the boot-loaded coordinate policy onto each station (generalised | withheld), keyed by
+  // the authoritative ausmt_id just derived; null when exact/unmarked. Positions are already masked in the
+  // catalogue — this signals POLICY, not position — so the drawer can badge a generalised station honestly
+  // without re-deriving precision client-side (forbidden by the record). Tolerant of an absent artifact.
+  const _cp=(typeof COORD_POLICY!=="undefined"&&COORD_POLICY)||{};
+  ST.forEach(s=>{s.coordPolicy=_cp[s.ausmt_id]||null;});
   surveys=[...new Set(ST.map(s=>s.survey))].sort();
   // slug -> survey label, for the #/survey/<slug> route (the sitemap emits these; ausmt_id is
   // au.<slug>.<station> — mirrors the engine's own slug_of derivation in extract/build_portal.py
@@ -245,7 +251,7 @@ function renderBuildId(){
   if(BUILDID&&BUILDID.build_id)el.title="build "+String(BUILDID.build_id);
 }
 async function boot(){
-  if(typeof CAT==="undefined"||CAT===null){try{[CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID]=await loadData();}catch(e){showLoadError();return;}}
+  if(typeof CAT==="undefined"||CAT===null){try{[CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID,COORD_POLICY]=await loadData();}catch(e){showLoadError();return;}}
   renderBuildId();
   runInit();
 }

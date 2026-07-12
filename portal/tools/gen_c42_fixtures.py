@@ -13,10 +13,11 @@ The committed fixtures are the build's own output, so a reader can verify the ex
   * catalogue.json  — withheld => lat/lon null (cols 2/3); generalised => 0.1deg cell; exact verbatim.
   * mtcat.json      — station latitude/longitude same masking; a lone-withheld survey has bbox null.
   * products/sweep-survey/<ID>/station.json — location {lat,lon} masked; distribution.edi_available
-    false for a byte-gated (non-exact) station.
-NOTE (audited 2026-07-12): the engine emits NO explicit coordinate-access POLICY field on any
-portal-consumed artifact. Withheld is detectable (null lat/lon); generalised is a silently-rounded
-value with no marker — see the test header + the lane report for the record-vs-code discrepancy.
+    false for a byte-gated (non-exact) station; coordinate_policy present for the non-exact stations.
+  * coord_policy.json — ausmt_id -> policy ('generalised'/'withheld') for the NON-EXACT stations only.
+C42 Amendment A1 (2026-07-12): the engine now emits an explicit coordinate-policy MARKER on a boot-loaded
+artifact (coord_policy.json) for non-exact stations, so the portal can badge a generalised station's
+position honestly. Exact stations stay unmarked (no marker file for an all-exact corpus).
 """
 import json
 import re
@@ -78,7 +79,11 @@ def main():
         sys.exit("engine build failed:\n" + r.stderr)
     FIXTURES.mkdir(parents=True, exist_ok=True)
     for f in ("catalogue.json", "tf.json", "sci.json", "surveys.json", "collections.json",
-              "mtcat.json", "qc_report.json"):
+              "mtcat.json", "qc_report.json",
+              # C42 A1: the coordinate-policy marker boot artifact (ausmt_id -> policy for the non-exact
+              # stations). Emitted by the engine because this fixture survey has a generalised + a withheld
+              # station; the portal drawer reads it to badge the generalised station.
+              "coord_policy.json"):
         shutil.copy(out / f, FIXTURES / f)
     for sid in (EXACT["id"], GEN["id"], HID["id"]):
         dst = FIXTURES / "products" / "sweep-survey" / sid

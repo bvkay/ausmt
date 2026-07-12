@@ -45,7 +45,7 @@
   "software": {
    "python": "3.13.5"
   },
-  "git_commit": "3b806ad",
+  "git_commit": "1012431",
   "parameters": {
    "dimensionality": {
     "beta_per_period_deg": 3.0,
@@ -59,7 +59,7 @@
    },
    "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
   },
-  "generated": "2026-07-12T03:36:02.953445+00:00",
+  "generated": "2026-07-12T08:31:41.394182+00:00",
   "input_file": "GENFIVE.edi",
   "input_sha256": "57e74d507464a8e1d5c60b674c9873ae667b239bee05538dd1b96edeb33c74d1"
  },
@@ -92,5 +92,6 @@
    "n_periods_used": 62,
    "detail": null
   }
- }
+ },
+ "coordinate_policy": "generalised"
 }

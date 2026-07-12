@@ -45,7 +45,7 @@
   "software": {
    "python": "3.13.5"
   },
-  "git_commit": "3b806ad",
+  "git_commit": "1012431",
   "parameters": {
    "dimensionality": {
     "beta_per_period_deg": 3.0,
@@ -59,7 +59,7 @@
    },
    "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
   },
-  "generated": "2026-07-12T03:36:02.953445+00:00",
+  "generated": "2026-07-12T08:31:41.394182+00:00",
   "input_file": "EXACTONE.edi",
   "input_sha256": "1bdd596d3db1ddaf1426d9d72bbc78dfc6f1694af041f0d81eb58ec5d0edb91b"
  },

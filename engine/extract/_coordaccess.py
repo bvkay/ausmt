@@ -265,6 +265,11 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         if pol == "exact":
             continue
         masked_ausmt_ids.add(r.get("ausmt_id"))
+        # A1: stamp the RESOLVED policy on the (non-exact) record so the boot-loaded coord_policy.json
+        # marker and station.json can emit it WITHOUT re-deriving from coordinate values — the mask seam
+        # already resolved it here (the record's rule: reuse, never re-derive). Exact records are left
+        # unstamped, so an all-exact corpus keeps its zero-change default (no marker, no new key).
+        r["coord_policy"] = pol
         if pol == "withheld":
             r["lat"] = None
             r["lon"] = None

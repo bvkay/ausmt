@@ -579,6 +579,89 @@ def test_default_stability_no_policy_field_is_byte_identical(tmp_path):
 
 
 # =====================================================================================================
+# COORDINATE-POLICY MARKER PINS (Amendment A1 — the boot-loaded generalised/withheld signal)
+# =====================================================================================================
+
+def _aid_by_id(out):
+    """ausmt_id keyed by station id, read from the built catalogue (positional contract)."""
+    cols = _cat_cols()
+    iid, iaid = cols.index("id"), cols.index("ausmt_id")
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    return {row[iid]: row[iaid] for row in cat}
+
+
+def test_coord_policy_marker_emitted_for_non_exact_only(tmp_path):
+    """A1 EMIT PIN. The engine emits coord_policy.json — a boot-loaded map ausmt_id -> policy — carrying
+    EXACTLY the generalised + withheld stations, with the correct policy string, and NOT the exact one.
+    (Red-then-green: drop the r["coord_policy"] stamp or the emit and this fails — the generalised
+    station goes unmarked.) FAILS IF an exact station is marked, a non-exact station is missing, the
+    policy string is wrong, or the marker set is not exactly the two non-exact stations."""
+    out, r = _build(tmp_path, [EXACT, GEN, HID])
+    assert r.returncode == 0, r.stderr
+    cp_path = out / "coord_policy.json"
+    assert cp_path.exists(), "coord_policy.json must be emitted when the corpus has a non-exact station"
+    cp = json.loads(cp_path.read_text(encoding="utf-8"))
+    aid = _aid_by_id(out)
+    assert cp.get(aid[GEN["id"]]) == "generalised", f"generalised station must be marked; got {cp}"
+    assert cp.get(aid[HID["id"]]) == "withheld", f"withheld station must be marked; got {cp}"
+    assert aid[EXACT["id"]] not in cp, f"the EXACT station must NOT be marked; got {cp}"
+    assert set(cp) == {aid[GEN["id"]], aid[HID["id"]]}, \
+        f"exactly the two non-exact stations must be marked; got {sorted(cp)}"
+
+
+def test_coord_policy_marker_absent_for_all_exact_corpus(tmp_path):
+    """A1 ZERO-CHANGE PIN. An all-exact corpus emits NO coord_policy.json at all — the marker is additive
+    ONLY for non-exact stations, so an existing all-exact survey's served tree is byte-unchanged (no new
+    file). FAILS IF the marker file is emitted for an all-exact build."""
+    out, r = _build(tmp_path, [
+        {**EXACT}, {**GEN, "policy": "exact"}, {**HID, "policy": "exact"}], declare_policy=False)
+    assert r.returncode == 0, r.stderr
+    assert not (out / "coord_policy.json").exists(), \
+        "an all-exact corpus must NOT emit coord_policy.json (zero-change default)"
+    # non-vacuous: the catalogue really carries the (now exact) stations
+    assert EXACT["id"] in (out / "catalogue.json").read_text(encoding="utf-8")
+
+
+def test_coord_policy_marker_never_co_occurs_with_true_coords(tmp_path):
+    """A1 LEAK PIN (marker/artifact layer — mirrors the D6 leak-sweep spirit). A generalised station is
+    MARKED in coord_policy.json AND its catalogue coordinates are the 0.1° CELL — never the true 6-dp
+    position; and the marker file itself carries only ausmt_id -> policy, no coordinate. FAILS IF a marked
+    station's catalogue coords are its true position, or the marked station's true coords appear anywhere
+    in served output (including the marker file)."""
+    out, r = _build(tmp_path, [EXACT, GEN, HID])
+    assert r.returncode == 0, r.stderr
+    cols = _cat_cols()
+    iid, iaid, ilat, ilon = (cols.index(x) for x in ("id", "ausmt_id", "lat", "lon"))
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    by_id = {row[iid]: row for row in cat}
+    cp = json.loads((out / "coord_policy.json").read_text(encoding="utf-8"))
+    grow = by_id[GEN["id"]]
+    assert cp.get(grow[iaid]) == "generalised", "the generalised station must be marked (precondition)"
+    # the marker co-occurs with the ROUNDED cell, never the true position
+    assert grow[ilat] == round(GEN["lat"], 1) and grow[ilon] == round(GEN["lon"], 1), \
+        f"a marked generalised station must show the 0.1° cell, not its true coords: {grow[ilat]},{grow[ilon]}"
+    assert grow[ilat] != GEN["lat"] and grow[ilon] != GEN["lon"], "the marked cell must differ from the true position"
+    # the marker file (and the whole tree) carries none of the marked station's true position
+    assert not _sweep_tree_for_value(out, GEN["lat"], label="GEN.lat"), "generalised true lat leaked"
+    assert not _sweep_tree_for_value(out, GEN["lon"], label="GEN.lon"), "generalised true lon leaked"
+
+
+def test_station_json_carries_policy_for_non_exact_only(tmp_path):
+    """A1 (secondary surface). products/station.json carries coordinate_policy for a non-exact station and
+    NOT for an exact one (exact station.json byte-unchanged — no new key). FAILS IF the exact station.json
+    gains a coordinate_policy key, or a non-exact one lacks/mislabels it."""
+    out, r = _build(tmp_path, [EXACT, GEN, HID])
+    assert r.returncode == 0, r.stderr
+
+    def sj(sid):
+        return json.loads((out / "products" / "sweep-survey" / sid / "station.json").read_text(encoding="utf-8"))
+
+    assert "coordinate_policy" not in sj(EXACT["id"]), "exact station.json must not carry coordinate_policy"
+    assert sj(GEN["id"]).get("coordinate_policy") == "generalised"
+    assert sj(HID["id"]).get("coordinate_policy") == "withheld"
+
+
+# =====================================================================================================
 # FAIL-CLOSED PINS
 # =====================================================================================================
 
@@ -907,6 +990,10 @@ def test_unit_apply_mask_in_place_and_validates_override_ids():
     assert stations[0][1]["lat"] == -31.234567, "exact station unchanged"
     assert stations[1][1]["lat"] == -32.9 and stations[1][1]["lon"] == 136.9, "generalised to the cell"
     assert stations[1][1]["elev_m"] is None, "generalised elevation nulled (defensive invariant)"
+    # A1: the mask stamps the resolved policy on the NON-EXACT record (reused by coord_policy.json /
+    # station.json — never re-derived) and leaves the exact record unstamped (zero-change default).
+    assert stations[1][1].get("coord_policy") == "generalised", "non-exact record must carry the stamped policy"
+    assert "coord_policy" not in stations[0][1], "exact record must NOT be stamped (byte-stable)"
     # bogus override id => fail closed
     with pytest.raises(coordacc.CoordinatePolicyError):
         coordacc.apply_coordinate_policy(stations, "exact", {"NOPE": "withheld"})
