@@ -1,0 +1,9 @@
+{
+ "n_stations": 3,
+ "duplicate_ausmt_ids": [],
+ "near_duplicate_locations": [],
+ "coord_flags": [],
+ "coord_conflicts": [],
+ "outside_declared_extent": [],
+ "stations_without_survey_extent": 0
+}

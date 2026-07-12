@@ -57,7 +57,11 @@ function renderFind(){const box=document.getElementById("findResults");
   if(!h)h=`<div class="fitem fnone">no matches</div>`;
   box.innerHTML=h;box.style.display="block";}
 function hasShapes(){let a=false;drawn.eachLayer(()=>a=true);return a;}
-function inShapes(s){let inside=false;drawn.eachLayer(layer=>{if(inside)return;
+// C42 coordinate access: a custodian-withheld station has null lat/lon (no position). It must NOT be
+// spatially selectable — without this guard null coerces to 0 and a polygon over (0,0) would phantom-
+// select it. It stays in ST/visible (counted, findable by name/text), just never in a bbox/shape hit.
+function inShapes(s){if(!hasPosition(s))return false;
+  let inside=false;drawn.eachLayer(layer=>{if(inside)return;
   const rings=layer.getLatLngs();const ring=Array.isArray(rings[0])?rings[0]:rings;let inn=false;
   for(let a=0,b=ring.length-1;a<ring.length;b=a++){const yi=ring[a].lat,xi=ring[a].lng,yj=ring[b].lat,xj=ring[b].lng;
     if(((yi>s.lat)!==(yj>s.lat))&&(s.lon<(xj-xi)*(s.lat-yi)/(yj-yi)+xi))inn=!inn;}if(inn)inside=true;});return inside;}
@@ -70,7 +74,10 @@ function refresh(){paintSlider();visible=ST.filter(passes);
   // everything else (incl. legacy non-AusLAMP LPMT) into the markerClusterGroup. Both are cleared and
   // repopulated every pass; the visible set and all downstream selection/counts logic below are unchanged
   // (they operate on `visible`, not on layer state). (Was UX3's LPMT-type split — see partitionMarkers.)
-  const _part=partitionMarkers(visible);
+  // C42: only POSITIONED stations are routed to a layer — a withheld-coordinate station has no marker
+  // (buildMarkers skipped it), so feeding it here would push `undefined` into addLayers. It remains in
+  // `visible` (counted), just not on the map.
+  const _part=partitionMarkers(visible.filter(hasPosition));
   cluster.clearLayers();cluster.addLayers(_part.clustered.map(s=>s.marker));
   lpmtLayer.clearLayers();_part.unclustered.forEach(s=>lpmtLayer.addLayer(s.marker));
   if(hasShapes())selected=new Set(visible.filter(inShapes).map(s=>s.i));else selected=new Set([...selected].filter(i=>visible.some(s=>s.i===i)));

@@ -1,0 +1,96 @@
+{
+ "ausmt_id": "au.sweep-survey.HIDENINE",
+ "station": "HIDENINE",
+ "survey": "Coord Access Sweep Survey",
+ "country": "Australia",
+ "organisation": "AusMT CI",
+ "location": {
+  "lat": null,
+  "lon": null
+ },
+ "data": {
+  "type": "BBMT",
+  "n_periods": 62,
+  "period_min_s": 0.005,
+  "period_max_s": 6359.70491
+ },
+ "diagnostics": {
+  "median_relative_error": 0.019,
+  "remote_reference": true,
+  "tipper_available": false,
+  "dimensionality": "2-D",
+  "skew_beta_median_deg": 0.7,
+  "completeness_smoothness_diagnostic": {
+   "value": 5.0,
+   "basis": "e",
+   "note": "not a quality or geological-value judgement"
+  }
+ },
+ "processing": {
+  "software": "LEMIMT",
+  "algorithm": "Robust Remote Reference",
+  "remote_reference": true,
+  "remote_site": null,
+  "note": null
+ },
+ "distribution": {
+  "edi_available": false,
+  "license": "CC-BY-4.0",
+  "edi_path": null
+ },
+ "provenance": {
+  "pipeline": "ausmt/extract.build_portal",
+  "pipeline_version": "0.2.1",
+  "extractor": "mt_metadata (community canonical)",
+  "software": {
+   "python": "3.13.5"
+  },
+  "git_commit": "3b806ad",
+  "parameters": {
+   "dimensionality": {
+    "beta_per_period_deg": 3.0,
+    "skew_3d_deg": 5.0,
+    "pct_periods_3d_threshold": 40,
+    "ellip_2d_deg": 0.1,
+    "min_rez_row_sine": 0.01,
+    "beta_physical_cap_deg": 15.0,
+    "min_usable_period_frac": 0.5,
+    "skew_aggregation": "median"
+   },
+   "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
+  },
+  "generated": "2026-07-12T03:36:02.953445+00:00",
+  "input_file": "HIDEFILE.edi",
+  "input_sha256": "69fa92d0b93fc47584b9d27a048d56e0e139030c191bf20553ddd33cf2097bb5"
+ },
+ "coordinate_qc": null,
+ "canonical_conditioning": null,
+ "frame": {
+  "evidence": {
+   "branch": "mt",
+   "zrot": "0",
+   "trot": null,
+   "rotspec": null,
+   "hmeas_azimuths": {
+    "hx": 0.0,
+    "hy": 90.0
+   },
+   "emeas_azimuths": {
+    "ex": null,
+    "ey": null
+   }
+  },
+  "impedance_rotation_deg_source": null,
+  "tipper_rotation_deg_source": null,
+  "derotated": false,
+  "frame_served": "declared-zero",
+  "declared_azimuth_deg": 0.0,
+  "convention_check": {
+   "verdict": "ok",
+   "phs_xy_median_deg": 39.16,
+   "phs_yx_median_deg": -143.72,
+   "n_periods_used": 62,
+   "detail": null
+  }
+ }
+}
