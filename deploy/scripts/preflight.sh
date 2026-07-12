@@ -175,6 +175,35 @@ else
     fail "$SURVEYS does not exist" "git clone <ausmt-surveys-url> '$SURVEYS'"
   fi
 
+  # Untracked-survey-dir guard (incident 2026-07-11) — a hand-inspection catch for the same drift the
+  # reconcile agent now refuses on. The engine build enumerates the FILESYSTEM under surveys-live/
+  # surveys/ (Makefile rebuild-data passes --surveys …/surveys/surveys), NOT git — so a leftover
+  # UNTRACKED survey dir (a `test-2026` left on the box) is SERVED even though `git rm`/pushes can never
+  # remove what was never tracked, and the reconcile drift chip reads "current" honestly-but-
+  # misleadingly. BOTH profiles: `make rebuild-data` runs regardless of the gateway. DISCOVERY-FREE read
+  # (d8837d0): list the TRACKED top-level survey dirs from the object DB via an explicit --git-dir (no
+  # `git -C` worktree discovery => no dubious-ownership refusal when preflight runs under sudo against
+  # the operator-owned checkout, and no minimal-.git trap), then diff against the filesystem. Needs no
+  # POSIX mode bit, so unlike the gateway g+w check below it runs on a Windows dev box too.
+  if [ -d "$SURVEYS/.git" ] && [ -d "$SURVEYS/surveys" ]; then
+    if tracked_dirs=$(git --git-dir="$SURVEYS/.git" ls-tree -d --name-only HEAD -- surveys/ 2>/dev/null); then
+      untracked_list=""
+      for d in "$SURVEYS"/surveys/*/; do
+        [ -d "$d" ] || continue
+        rel="surveys/$(basename "$d")"
+        printf '%s\n' "$tracked_dirs" | grep -qxF "$rel" || untracked_list="$untracked_list $rel"
+      done
+      untracked_list=${untracked_list# }
+      if [ -n "$untracked_list" ]; then
+        fail "surveys-live has UNTRACKED survey dir(s) the build would SERVE though git cannot remove them (incident 2026-07-11): $untracked_list" "remove each ('rm -rf $SURVEYS/surveys/<name>'), or commit+push it if it belongs; then rebuild"
+      else
+        pass "$SURVEYS/surveys has no untracked dirs (every filesystem survey is tracked)"
+      fi
+    else
+      warn "could not read surveys-live tracked tree (no committed HEAD?) — skipping the untracked-survey-dir check" "ensure $SURVEYS is a normal checkout with a committed HEAD"
+    fi
+  fi
+
   # C43 S2b-i: the shared-group publish permissions time-bomb (incident 2026-07-11). The gateway
   # publishes into surveys-live as uid 10002; WITHOUT `core.sharedRepository=group`, git creates new
   # .git/objects dirs that are NOT group-writable, so the operator (in the shared group) eventually

@@ -244,6 +244,24 @@ def test_reconcile_action_failed_pings_fail(tmp_path):
     _assert_fail_ping(tree, r, "action=failed")
 
 
+def test_reconcile_action_untracked_blocked_pings_fail_naming_dir(tmp_path):
+    """reconcile-status.json with action=untracked_blocked (the reconcile agent REFUSED to rebuild
+    because surveys-live has untracked survey dirs — incident 2026-07-11) => a fail ping quoting the
+    refusal AND naming the offending dir from log_tail, nonzero exit. This is the deploy-side loud
+    surface for the guard (#15) — the curator's dead-man monitor emails on it, like action=failed.
+    FAILS IF: the refusal is treated as a healthy panel state (no fail ping), or the offending dir does
+    not reach the alert body."""
+    tree = _make_tree(tmp_path, reconcile_action="untracked_blocked")
+    # Enrich the status with the dir-naming log_tail the reconcile agent writes.
+    (tree["state"] / "reconcile-status.json").write_text(
+        '{"last_run":"%s","action":"untracked_blocked",'
+        '"log_tail":"REFUSED: untracked entr(y/ies) under surveys/: surveys/test-2026/"}'
+        % _now_iso(), encoding="utf-8")
+    r = _run(tree)
+    _assert_fail_ping(tree, r, "untracked_blocked")
+    assert "test-2026" in _curl_calls(tree)[0], "the fail body must name the offending dir from log_tail"
+
+
 def test_reconcile_stale_pings_fail(tmp_path):
     """reconcile-status.json whose last_run is older than AUSMT_ALERT_RECONCILE_MAX_MIN (the timer
     stalled) => a fail ping saying stale, nonzero exit. Forced with a 2020 last_run. FAILS IF: a stale

@@ -147,6 +147,79 @@ def _advance_head(tree: dict) -> str:
     return new_head
 
 
+def _commit_tracked_survey(tree: dict, name: str = "tracked-survey") -> None:
+    """Add and COMMIT a survey dir under surveys-live/surveys/<name>/ (a tracked survey). Local stays
+    ahead of origin, which a `git pull --ff-only` reports as 'Already up to date' (rc 0)."""
+    surveys = tree["surveys"]
+    (surveys / "surveys" / name).mkdir(parents=True, exist_ok=True)
+    (surveys / "surveys" / name / "survey.yaml").write_text("version: 1\n", encoding="utf-8")
+    _git(surveys, "add", "-A")
+    _git(surveys, "commit", "-qm", f"survey {name}")
+
+
+def _leave_untracked_survey(tree: dict, name: str = "test-2026") -> Path:
+    """Leave an UNTRACKED survey dir under surveys-live/surveys/<name>/ (the incident-2026-07-11 leftover:
+    never `git add`ed, so a push can never remove it, yet the filesystem-enumerating build serves it)."""
+    d = tree["surveys"] / "surveys" / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "survey.yaml").write_text("version: 1\n", encoding="utf-8")
+    return d
+
+
+# --------------------------------------------------------------------------------------------------
+# Untracked-survey-dir guard (#15, incident 2026-07-11). The build enumerates the FILESYSTEM under
+# surveys/, so a leftover UNTRACKED dir is served though git can never remove it. reconcile.sh must
+# REFUSE the rebuild and record a distinct, dir-naming refusal state. RED-then-green pins.
+# --------------------------------------------------------------------------------------------------
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_untracked_survey_dir_refuses_rebuild(tmp_path):
+    """surveys-live has a tracked survey AND an UNTRACKED survey dir under surveys/ => the shim is NOT
+    invoked (no build), the status action is 'untracked_blocked' naming the offending dir, and the
+    script EXITS 1 so monitoring flags it. FAILS IF: reconcile builds anyway (shim marker appears — the
+    exact 2026-07-11 'served for a day' bug), or the refusal state does not name the dir, or it exits 0
+    and hides the misconfiguration."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")  # built != HEAD => would otherwise rebuild
+    _commit_tracked_survey(tree)
+    _leave_untracked_survey(tree, "test-2026")
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 1, f"a refused rebuild must exit 1; got {r.returncode}: {r.stderr}"
+    assert not tree["marker"].exists(), "an untracked survey dir must REFUSE the rebuild (no shim)"
+    st = _status(tree)
+    assert st is not None and st["action"] == "untracked_blocked", st
+    assert st["log_tail"] and "test-2026" in st["log_tail"], (
+        f"the refusal must name the offending dir in log_tail; got {st!r}")
+    assert "test-2026" in r.stderr, "the refusal must also name the dir on stderr (journal)"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_clean_survey_tree_still_rebuilds(tmp_path):
+    """A surveys/ tree with ONLY tracked survey dirs (no untracked leftovers) + drift => the guard is
+    transparent and the rebuild proceeds exactly as before. FAILS IF: the guard false-positives on a
+    clean tree and blocks a legitimate rebuild (a regression to the C40 reconcile behaviour)."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    _commit_tracked_survey(tree)  # tracked only — nothing untracked under surveys/
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 0, r.stderr
+    assert tree["marker"].exists(), "a clean survey tree must still rebuild on drift"
+    st = _status(tree)
+    assert st is not None and st["action"] == "rebuilt", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_untracked_dry_run_refuses_without_writing(tmp_path):
+    """--dry-run on an untracked-dir tree => the shim is NOT invoked and NO status file is written (it
+    only PRINTS the refusal), exit 0. FAILS IF: --dry-run writes the status file or invokes the build."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    _commit_tracked_survey(tree)
+    _leave_untracked_survey(tree, "test-2026")
+    r = _run(tree, "--dry-run", env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 0, r.stderr
+    assert not tree["marker"].exists(), "--dry-run must NOT invoke the shim"
+    assert _status(tree) is None, "--dry-run must NOT write the status file"
+    assert "untracked_blocked" in r.stdout
+
+
 # --------------------------------------------------------------------------------------------------
 
 @pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")

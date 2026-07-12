@@ -276,7 +276,9 @@ check_disk() {
 #     * the file is missing (the reconcile timer is not running / never wrote one) — WARN-class only on
 #       a fresh install; here we treat absence as a fail because on a configured box the timer must run,
 #     * last_run is older than AUSMT_ALERT_RECONCILE_MAX_MIN (the timer stalled), OR
-#     * action == "failed" (a build/verify failure — the C40 fail-closed state).
+#     * action == "failed" (a build/verify failure — the C40 fail-closed state), OR
+#     * action == "untracked_blocked" (the reconcile agent REFUSED to rebuild because surveys-live has
+#       untracked survey dirs the build would serve — incident 2026-07-11; needs an operator, no self-heal).
 #   noop/rebuilt/sync_failed are all healthy timer outcomes (they exit 0) and do NOT fail here — a
 #   sync_failed is an operator-visible panel state, not a monitoring alert (README §4).
 # --------------------------------------------------------------------------------------------------
@@ -310,6 +312,15 @@ last_run = doc.get("last_run")
 
 if action == "failed":
     print(f"action=failed (last build/verify failed; last_run={last_run})")
+    raise SystemExit(0)
+
+if action == "untracked_blocked":
+    # The reconcile agent REFUSED to rebuild: surveys-live has untracked survey dirs the build would
+    # SERVE though git cannot remove them (incident 2026-07-11). This needs an operator and does not
+    # self-heal, so it is an ALERT (unlike sync_failed, which is a transient panel state). The offending
+    # names are carried in log_tail — surface them so the dead-man ping names the dir(s).
+    detail = doc.get("log_tail") or "untracked survey dir(s) present"
+    print(f"action=untracked_blocked - reconcile REFUSED the rebuild: {detail} (last_run={last_run})")
     raise SystemExit(0)
 
 # Age check on last_run (ISO-8601 UTC, e.g. 2026-07-10T03:20:00Z — the format reconcile.sh writes).
