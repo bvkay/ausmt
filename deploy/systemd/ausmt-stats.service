@@ -1,0 +1,53 @@
+# AusMT usage-analytics aggregator (C45 D4/D5). A oneshot unit the ausmt-stats.timer fires once a day:
+# it runs deploy/scripts/aggregate_stats.py, which folds the Caddy access log (masked-at-edge IPs, from
+# the 2b-ii log block) into a cumulative stats.json in the gateway state dir. The workbench Analytics
+# screen reads that file. The aggregator is STDLIB-only (no maxminddb, no new dependency), never raises
+# into the timer, writes atomically (tmp -> 0644 -> rename), and discards the raw log lines after
+# folding. See deploy/README.md "Usage analytics".
+#
+# INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (there is no %-spec for
+# these; systemd does not expand env vars in ExecStart/WorkingDirectory), then copy this file to
+# /etc/systemd/system/ :
+#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /home/<operator>/ausmt-code/deploy)
+#   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /home/<operator>/ausmt-code/deploy/.env)
+# NOTE: the production box keeps the checkout under the operator's HOME, not /srv/ausmt/code (that path
+# does not exist there); use YOUR real checkout path.
+# The script reads AUSMT_DATA_DIR from the EnvironmentFile (.env), so this unit depends on NO shell
+# profile (the 2026-07-08 "works interactively, fails from the timer" class — the vars live in .env,
+# loaded here, not in ~/.bashrc). If the db-ip CSV is missing every country resolves to "unknown" and the
+# run still completes (the aggregator degrades gracefully); see the runbook for placing/refreshing it.
+
+[Unit]
+Description=AusMT usage-analytics aggregator (fold Caddy access log -> stats.json, daily)
+# __DEPLOY_DIR__ placeholder (resolved by the install sed exactly like ExecStart below) — NEVER a
+# literal <operator> path (the 2026-07 backup-unit bug: a hardcoded file:///home/<operator>/… pointed at
+# a path that never existed). The runbook is this repo's deploy/README.md ("Usage analytics").
+Documentation=file://__DEPLOY_DIR__/README.md
+# Date bucketing (which UTC day a request falls in) wants a real, synced clock; only meaningful once
+# time is synced.
+After=time-sync.target
+Wants=time-sync.target
+
+[Service]
+Type=oneshot
+# Run as the OPERATOR uid — the same account that runs docker compose / make rebuild-data / backup.sh by
+# hand, and the account in the shared group 10002 that can WRITE the gateway state dir (where stats.json
+# lands, beside reconcile-status.json / ops-status.json). It reads the Caddy log volume + the served
+# site-data/current/manifest.json (both under $AUSMT_DATA_DIR). NOT root, NOT the gateway container uid.
+# Set this to that account (the same User= as ausmt-alert.service / ausmt-backup.service / ausmt-reconcile.service).
+User=ausmt
+# .env carries AUSMT_DATA_DIR (and any AUSMT_STATS_* override — log dir, manifest path, db-ip CSV path);
+# loaded the same way docker compose, preflight.sh, and the backup/alert/reconcile units load it.
+EnvironmentFile=__ENV_FILE__
+WorkingDirectory=__DEPLOY_DIR__
+# One pass: read the log(s), fold each complete day into stats.json, exit. Invoked via `python3` (no
+# reliance on the file's exec bit) — stdlib only, so the system python3 is sufficient. The aggregator
+# ALWAYS exits 0 on the normal path (best-effort, timer-safe); a broken input degrades a metric, it does
+# not abort the run.
+ExecStart=/usr/bin/env python3 __DEPLOY_DIR__/scripts/aggregate_stats.py
+# The fold is quick (read a few log files, one manifest, one CSV, one JSON write); bound a wedged run
+# well under the daily cadence.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
