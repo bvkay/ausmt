@@ -40,7 +40,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, YAMLError
 from ruamel.yaml.representer import RoundTripRepresenter
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
@@ -714,15 +714,23 @@ def run_collections_job(surveys_root: Path) -> dict:
     order: list = []           # ids in first-seen (sorted-slug) order — matches the engine's order
     for slug in _published_slugs(surveys_root):
         pkg = surveys_root / "surveys" / slug
+        # F3 (D5-B): a malformed survey.yaml (ruamel YAMLError) or a non-mapping top-level must drop
+        # THIS survey and keep projecting the rest — mirroring build_portal.py:810-817, which warns and
+        # drops the one bad package. Catching only OSError before would have let one bad file blank the
+        # WHOLE console ({ok:False} -> the gateway's empty state).
         try:
             data = _load_bytes((pkg / "survey.yaml").read_bytes())
-        except OSError:
+        except (OSError, YAMLError):
             continue
-        coll = data.get("collection") if hasattr(data, "get") else None
-        if not (hasattr(coll, "get") and coll.get("id") not in (None, "")):
+        if not hasattr(data, "get"):
+            continue  # empty file / list / scalar top-level — not a survey mapping; drop just this one
+        coll = data.get("collection")
+        # F2 (D5-B): membership predicate = the engine's truthiness (build_portal.py:389 `if c and
+        # c.get("id")`), so a falsy id (0/False/"") drops exactly as the engine drops it.
+        if not (hasattr(coll, "get") and coll.get("id")):
             continue
         cid = str(coll.get("id"))
-        name = data.get("name") if hasattr(data, "get") else None
+        name = data.get("name")
         label = str(name) if name not in (None, "") else slug
         declared = _declared_collection_block(coll)
         n_stations = len(list_edi_files(pkg))
@@ -740,14 +748,16 @@ def run_collections_job(surveys_root: Path) -> dict:
         for fld in _COLLECTION_ROLLUP_FIELDS:
             if e.get(fld) in (None, "") and declared.get(fld) not in (None, ""):
                 e[fld] = declared.get(fld)
+        # F1 (D5-B): drop an out-of-vocab status INSIDE the per-member fold (build_portal.py:399-400),
+        # not once at the end — nulling an invalid status here re-opens the slot so a LATER member's
+        # VALID status fills it (invalid-first + valid-later => the valid status, matching the engine).
+        if e["status"] and e["status"] not in _COLLECTION_STATUS_VOCAB:
+            e["status"] = None
         members_by_id[cid].append({"slug": slug, "label": label, "n_stations": n_stations,
                                    "declared": declared})
     collections: dict = {}
     for cid in order:
         e = rollup[cid]
-        # Drop an out-of-vocab rolled-up status (build_portal.py:399-400) — never surface a fake status.
-        if e["status"] and e["status"] not in _COLLECTION_STATUS_VOCAB:
-            e["status"] = None
         members = members_by_id[cid]
         collections[cid] = {
             "id": cid,
