@@ -800,3 +800,193 @@ def test_f6_slug_in_both_set_and_remove_is_dropped(tmp_path):
             assert "auslamp-b" not in spec["remove_slugs"], spec["remove_slugs"]
             assert set(spec["set_slugs"]) & set(spec["remove_slugs"]) == set()
     run(_body())
+
+
+# ==================================================================================================
+# ROUND-2 RE-GATE (record D5-C round 2). R1-R3, each red-then-green from the executed probes.
+# ==================================================================================================
+
+# R1 (material) — DIVERGENCE/NO-OP EQUALITY MISMATCH. Members declaring start_year int 2003 vs quoted
+# "2003" must NOT flag a divergence (the two seams share ONE equality: str-form for numeric fields) —
+# the type-sensitive json.dumps keying flagged two IDENTICAL rendered values while Normalise no-op'd
+# (400 "No changes"): an un-clearable Need-attention. FAILS IF a type-only difference flags. A REAL
+# value difference (2003 vs 2005) must STILL flag, and Normalise must still clear it.
+def test_r1_type_only_start_year_difference_is_not_divergence(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    # Identical collections except the start_year TYPE: int vs quoted string.
+    _write_survey(surveys_live, "ty-a", name="A", n_edi=1,
+                  collection=_coll("ty", title="TY", extra="  start_year: 2003\n"))
+    _write_survey(surveys_live, "ty-b", name="B", n_edi=1,
+                  collection=_coll("ty", title="TY", extra='  start_year: "2003"\n'))
+
+    async def _body():
+        async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            idx = (await client.get("/gateway/curator/collections")).text
+            assert "Members disagree within" not in idx, "type-only start_year flagged as divergence"
+            assert "· mixed" not in idx and "&middot; mixed" not in idx
+            assert re.search(r'<div class="n">0</div><div class="l">Need attention', idx), \
+                "type-only difference wrongly counted in Need attention"
+            det = (await client.get("/gateway/curator/collections/ty")).text
+            assert "Members differ" not in det and "&#9670;" not in det
+    run(_body())
+
+
+def test_r1_real_start_year_difference_still_flags_and_normalise_clears(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    _write_survey(surveys_live, "ty-a", name="A", n_edi=1,
+                  collection=_coll("ty", title="TY", extra="  start_year: 2003\n"))
+    _write_survey(surveys_live, "ty-b", name="B", n_edi=1,
+                  collection=_coll("ty", title="TY", extra="  start_year: 2005\n"))
+    git = FakeGit()
+
+    async def _body():
+        async with app_client(tmp_path, git_runner=git,
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            # The REAL difference still flags (the R1 fix must not weaken real detection).
+            idx = (await client.get("/gateway/curator/collections")).text
+            assert "Members disagree within" in idx
+            assert "2005" in idx
+            # ... and Normalise CLEARS it: preview with the canonical value is NOT a 400 "No changes";
+            # exactly the divergent member commits.
+            csrf = csrf_for_session(client)
+            form = {"csrf_token": csrf, "rendered_members": '["ty-a","ty-b"]',
+                    "f_title": "TY", "f_id": "ty", "f_type": "programme", "f_status": "active",
+                    "f_start_year": "2003", "f_description": "", "keep": ["ty-a", "ty-b"],
+                    "note": "normalise start year"}
+            pv = await _preview_edit(client, "ty", form)
+            assert pv.status_code == 200, f"Normalise dead-end: {pv.status_code}"
+            r = await _publish_from_preview(client, "ty", pv.text, csrf)
+            assert r.status_code == 200, r.text[:300]
+            assert _n_commits(git) == 1, git.calls
+            b = (surveys_live / "surveys" / "ty-b" / "survey.yaml").read_text(encoding="utf-8")
+            assert "start_year: 2003\n" in b and "2005" not in b
+    run(_body())
+
+
+# R2 (minor) — START_YEAR VALIDATION. The form and the publish A2 gate both require empty or exactly
+# 4 digits, with a CLEAR 400/409 (never an opaque internal error); the emission coercion is total
+# (isdecimal + try/except + round-trip-stable, so "0000" is never silently rewritten to 0). FAILS IF
+# "2003²" 500s / commits, "007" passes, or a literal is rewritten.
+def test_r2_form_rejects_bad_start_year_with_clear_400(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+
+    async def _body():
+        async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            for bad in ("2003²", "007", "20033", "twenty"):
+                form = {"csrf_token": csrf, "rendered_members": '["auslamp-a","auslamp-b","auslamp-c"]',
+                        "f_title": "AusLAMP", "f_id": "auslamp", "f_type": "programme",
+                        "f_status": "active", "f_start_year": bad, "f_description": "",
+                        "keep": ["auslamp-a", "auslamp-b", "auslamp-c"], "note": "n"}
+                r = await _preview_edit(client, "auslamp", form)
+                assert r.status_code == 400, f"{bad!r}: expected a clear 400, got {r.status_code}"
+                assert "Start year" in r.text, f"{bad!r}: the 400 must name the field"
+    run(_body())
+
+
+def test_r2_publish_gate_mirrors_start_year_check(tmp_path):
+    import json as _json
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+    git = FakeGit()
+
+    async def _body():
+        async with app_client(tmp_path, git_runner=git,
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            for bad in ("2003²", "007"):
+                ops = [{"slug": "auslamp-b", "op": "set",
+                        "block": {"id": "auslamp", "title": "AusLAMP", "type": "programme",
+                                  "status": "active", "start_year": bad}}]
+                spec_json = _json.dumps({"cid": "auslamp", "is_new": False, "operations": ops})
+                r = await client.post(
+                    "/gateway/curator/collections/auslamp/publish",
+                    data={"csrf_token": csrf, "spec_json": spec_json,
+                          "expected_shas_json": "{}", "note": "n"})
+                assert r.status_code == 409, f"{bad!r}: expected 409, got {r.status_code}"
+                assert "refused" in r.text.lower()
+            assert _n_commits(git) == 0
+    run(_body())
+
+
+def test_r2_coercion_is_total_and_never_rewrites_literals():
+    """The emission coercion (unit): "2003" -> plain int; "2003²" (isdigit-True!) never raises and
+    stays a string; "0000"/"007" round-trip-unstable -> stay strings (no silent literal rewrite);
+    a year range stays a string. FAILS IF int() can raise out of the emission path or a literal is
+    rewritten."""
+    from gateway.runner.edit import _coerce_collection_value
+    assert _coerce_collection_value("start_year", "2003") == 2003
+    v = _coerce_collection_value("start_year", "2003²")   # must NOT raise ValueError
+    assert str(v) == "2003²"
+    assert str(_coerce_collection_value("start_year", "0000")) == "0000"   # not int 0
+    assert str(_coerce_collection_value("start_year", "007")) == "007"     # not int 7
+    assert str(_coerce_collection_value("start_year", "2003-2005")) == "2003-2005"
+    # Non-numeric fields never int-coerce.
+    assert str(_coerce_collection_value("title", "2003")) == "2003"
+
+
+# R3 (minor, data-integrity) — ANCHORED-REGEX TRAILING-NEWLINE CLASS. A crafted op-block id
+# "auslamp\n" passed `.match` (Python `$` matches before a trailing newline), committed
+# `id: "auslamp\n"` — a phantom-collection split (executed end-to-end). Every regex gate on this seam
+# is now fullmatch + the block-id branch carries the control-char guard. FAILS IF the crafted block id
+# reaches a commit.
+def test_r3_trailing_newline_block_id_is_refused(tmp_path):
+    import json as _json
+    import time as _time
+
+    from gateway.runner import edit as edit_mod
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+    git = FakeGit()
+    today = _time.strftime("%Y-%m-%d", _time.gmtime())
+    ops = [{"slug": "auslamp-b", "op": "set",
+            "block": {"id": "auslamp\n", "title": "AusLAMP", "type": "programme",
+                      "status": "active"}}]
+
+    async def _body():
+        async with app_client(tmp_path, git_runner=git,
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, *_):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            # Correct expected_shas (as the F4 pin does) so ONLY the A2 gate can refuse — non-vacuous.
+            probe = edit_mod.run_collection_batch_job(
+                surveys_live, operations=ops, note="n", today=today, validator_path="",
+                scratch_dir=tmp_path / "probe")
+            shas = {r["slug"]: r["new_sha256"] for r in probe["results"] if r["changed"]}
+            r = await client.post(
+                "/gateway/curator/collections/auslamp/publish",
+                data={"csrf_token": csrf,
+                      "spec_json": _json.dumps({"cid": "auslamp", "is_new": False,
+                                                "operations": ops}),
+                      "expected_shas_json": _json.dumps(shas), "note": "n"})
+            assert r.status_code == 409, f"phantom-id block committed: {r.status_code}"
+            assert _n_commits(git) == 0, git.calls
+            # The phantom id never reached disk.
+            b = (surveys_live / "surveys" / "auslamp-b" / "survey.yaml").read_text(encoding="utf-8")
+            assert 'id: "auslamp\n' not in b and "id: auslamp\n" in b
+    run(_body())
+
+
+def test_r3_trailing_newline_slug_refused_by_runner_gate(tmp_path):
+    """The runner's batch slug gate is fullmatch too: a crafted op slug "auslamp-b\\n" (which `.match`
+    accepted) is refused as an invalid slug — the whole job errors, nothing computed. FAILS IF a
+    trailing-newline slug passes the runner gate."""
+    from gateway.runner import edit as edit_mod
+    surveys_live = tmp_path / "surveys-live"
+    _seed_auslamp(surveys_live)
+    with pytest.raises(edit_mod.EditError, match="invalid slug"):
+        edit_mod.run_collection_batch_job(
+            surveys_live,
+            operations=[{"slug": "auslamp-b\n", "op": "set",
+                         "block": {"id": "auslamp", "title": "T"}}],
+            note="n", today="2026-07-12", validator_path="", scratch_dir=tmp_path / "s")

@@ -1132,7 +1132,9 @@ class Gateway:
         submit is never accidentally removed). Returns (spec, None) or (None, error_message). Server-
         side guardrails (A2): the id must be lowercase-hyphenated; type/status must be in-vocab."""
         fid = (form.get("f_id") or "").strip()
-        if not _COLLECTION_ID_RE.match(fid):
+        # R3 (D5-C round 2): fullmatch, not match — an anchored `$` matches before a trailing newline.
+        # (.strip() above already removes one; every regex gate on this seam is exact-semantics anyway.)
+        if not _COLLECTION_ID_RE.fullmatch(fid):
             return None, "The collection id must be lowercase-hyphenated (a-z 0-9 -), e.g. 'auslamp-sa'."
         ftype = (form.get("f_type") or "").strip()
         if ftype and ftype not in _COLLECTION_TYPE_VOCAB:
@@ -1140,13 +1142,19 @@ class Gateway:
         fstatus = (form.get("f_status") or "").strip()
         if fstatus and fstatus not in _COLLECTION_STATUS_VOCAB:
             return None, "Invalid collection status."
+        fstart = (form.get("f_start_year") or "").strip()
+        # R2 (D5-C round 2): start_year is empty or EXACTLY a 4-digit year — a clear 400 naming the
+        # field. Kills the executed traps: "2003²" (isdigit-True but int()-ValueError -> an opaque
+        # internal error) and "007" (a silent literal rewrite to 7).
+        if fstart and not re.fullmatch(r"[0-9]{4}", fstart):
+            return None, "Start year must be a 4-digit year (e.g. 2003), or left empty."
         desc = (form.get("f_description") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
         fields = {
             "id": fid,
             "title": (form.get("f_title") or "").strip(),
             "type": ftype,
             "status": fstatus,
-            "start_year": (form.get("f_start_year") or "").strip(),
+            "start_year": fstart,
             "description": desc,
         }
         try:
@@ -2321,13 +2329,20 @@ def _collection_spec_violation(cid: str, operations: list, note: str) -> str | N
     publish time (an authenticated curator can hand-edit the hidden spec_json). Returns an error string
     or None. The validator only WARNINGs on an out-of-vocab id/status, so without this a crafted spec
     would publish PAST the console's own guardrail; and a control char in cid/note forges git-trailer
-    lines into the commit body. Rejects: control chars in cid or note; a cid or any op-block id not
-    matching _COLLECTION_ID_RE; an out-of-vocab type/status; a malformed/unknown operation."""
+    lines into the commit body. Rejects: control chars in cid, note, or any op-block id; a cid or any
+    op-block id not matching _COLLECTION_ID_RE; an out-of-vocab type/status; a non-4-digit start_year;
+    a malformed/unknown operation.
+
+    R3 (D5-C round 2): every regex gate here is FULLMATCH, not match — an anchored `$` matches before a
+    trailing newline, so `.match` accepted a crafted block id "auslamp\\n" (executed end-to-end: HTTP
+    200, committed `id: "auslamp\\n"` — a phantom-collection split). The block-id branch also carries
+    the _CONTROL_CHAR_RE guard the cid branch has (belt: fullmatch alone already rejects a control
+    char, since none is in the id charset)."""
     if _CONTROL_CHAR_RE.search(cid or ""):
         return "the collection id contains control characters"
     if _CONTROL_CHAR_RE.search(note or ""):
         return "the release note contains control characters"
-    if not _COLLECTION_ID_RE.match(cid or ""):
+    if not _COLLECTION_ID_RE.fullmatch(cid or ""):
         return "the collection id is not lowercase-hyphenated"
     if not isinstance(operations, list) or not operations:
         return "the batch carries no operations"
@@ -2342,7 +2357,8 @@ def _collection_spec_violation(cid: str, operations: list, note: str) -> str | N
         block = op.get("block")
         if not isinstance(block, dict):
             return "a malformed operation block in the batch"
-        if not _COLLECTION_ID_RE.match(str(block.get("id") or "")):
+        bid = str(block.get("id") or "")
+        if _CONTROL_CHAR_RE.search(bid) or not _COLLECTION_ID_RE.fullmatch(bid):
             return "an operation carries an invalid collection id"
         btype = block.get("type")
         if btype and btype not in _COLLECTION_TYPE_VOCAB:
@@ -2350,6 +2366,12 @@ def _collection_spec_violation(cid: str, operations: list, note: str) -> str | N
         bstatus = block.get("status")
         if bstatus and bstatus not in _COLLECTION_STATUS_VOCAB:
             return "an operation carries an out-of-vocab collection status"
+        # R2 (D5-C round 2): mirror the form's start_year gate — the spec is untrusted, so a crafted
+        # "2003²"/"007" must be refused here too, not surface as a runner error or a literal rewrite.
+        # A JSON int (e.g. 2003) is fine: its str form is the same 4-digit literal.
+        bstart = block.get("start_year")
+        if bstart not in (None, "") and not re.fullmatch(r"[0-9]{4}", str(bstart)):
+            return "an operation carries an invalid start year (must be a 4-digit year)"
     return None
 
 

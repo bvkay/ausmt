@@ -643,6 +643,12 @@ _COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_upda
 # make the console permanently report "members disagree on last_updated" with a Normalise remedy that
 # has no form field to fix it. It stays in _COLLECTION_ROLLUP_FIELDS for engine-rollup parity only.
 _COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS if f != "last_updated")
+# Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (D5-C
+# round 2, R1): the editor's no-op check compares str-form (F1), the divergence detector buckets
+# str-form (R1 — else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
+# Normalise then no-ops on: an un-clearable "Need attention"), and emission writes a round-trip-stable
+# decimal as a plain int (R2).
+_COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
 # The status vocabulary the engine surfaces (build_portal.py:386). An out-of-vocab rolled-up status is
 # DROPPED (build_portal.py:399-400) — never surfaced as a fake status; it still shows as the member's
 # raw declared value (and as divergence when members disagree).
@@ -698,7 +704,15 @@ def _collection_divergence(members: list) -> dict:
             v = m["declared"].get(fld)
             if v in (None, ""):
                 continue
-            key = json.dumps(v, sort_keys=True, default=str)   # a stable hashable key for any scalar
+            # R1 (D5-C round 2): a NUMERIC field buckets by the SAME str-form equality as the editor's
+            # no-op check — int 2003 and quoted "2003" are ONE value. Type-sensitive json.dumps keying
+            # flagged them as divergent (two IDENTICAL rendered values) while Normalise no-op'd (400
+            # "No changes"): an un-clearable Need-attention. Non-numeric fields keep the type-stable
+            # json.dumps key (a stable hashable for any scalar).
+            if fld in _COLLECTION_NUMERIC_FIELDS:
+                key = str(v)
+            else:
+                key = json.dumps(v, sort_keys=True, default=str)
             if key not in buckets:
                 buckets[key] = {"value": v, "members": []}
                 order.append(key)
@@ -852,18 +866,23 @@ def _apply_collection_set(data, block: dict, today: str) -> bool:
     return changed
 
 
-# Collection fields written as a PLAIN numeric scalar (not a quoted string) when the value is all-digit
-# — the reader-facing year is an int in the engine schema, and force-quoting it re-types 2003 -> "2003".
-_COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
-
-
 def _coerce_collection_value(key: str, new_val):
-    """Coerce a form-supplied collection value for emission (F1). A numeric field whose value is an
-    all-digit string is written as a PLAIN int (unquoted); every other value rides quote_ambiguous
-    (FIX 3) so a YAML-1.1-retypeable token is emitted quoted. A non-numeric `start_year` (e.g. a year
-    range) still passes through quote_ambiguous as a string."""
-    if key in _COLLECTION_NUMERIC_FIELDS and isinstance(new_val, str) and new_val.isdigit():
-        return int(new_val)
+    """Coerce a form-supplied collection value for emission (F1, hardened per D5-C round 2 R2). A
+    numeric field (_COLLECTION_NUMERIC_FIELDS, defined with the collection constants above) whose value
+    is an all-DECIMAL string is written as a PLAIN int (unquoted) — but ONLY when the int round-trips
+    to the identical literal: int("0000") -> 0 would silently rewrite the curator's typed "0000", so a
+    non-round-trip literal stays a quoted string. isdecimal, NOT isdigit — the executed "2003²" probe
+    is isdigit-True but int()-ValueError — plus a defensive try/except so NO input can raise out of the
+    emission path (the gateway form + publish A2 gate both enforce ^[0-9]{4}$ upstream; this is the
+    belt). Every other value rides quote_ambiguous (FIX 3) so a YAML-1.1-retypeable token is emitted
+    quoted."""
+    if key in _COLLECTION_NUMERIC_FIELDS and isinstance(new_val, str) and new_val.isdecimal():
+        try:
+            n = int(new_val)
+        except ValueError:  # pragma: no cover -- isdecimal makes this unreachable; belt per R2
+            return quote_ambiguous(new_val)
+        if str(n) == new_val:
+            return n
     return quote_ambiguous(new_val)
 
 
@@ -909,7 +928,10 @@ def run_collection_batch_job(surveys_root: Path, *, operations: list, note: str,
     results: list = []
     for i, op in enumerate(operations):
         slug = str(op.get("slug") or "")
-        if not _SLUG_RE.match(slug):
+        # R3 (D5-C round 2): FULLMATCH, not match — an anchored `$` matches before a trailing newline,
+        # so `.match` accepted "slug\n" (the executed phantom-collection class). This seam's ops arrive
+        # from the untrusted client-carried spec at publish time, so the gate must be exact.
+        if not _SLUG_RE.fullmatch(slug):
             raise EditError(f"invalid slug in collection batch: {slug!r}")
         kind = str(op.get("op") or "")
         pkg = (surveys_root / "surveys" / slug).resolve()
