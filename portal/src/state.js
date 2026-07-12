@@ -9,6 +9,12 @@ let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState(); backs t
 // SMETA[label].slug. Empty when collections.json is absent or has no auslamp collection — graceful
 // degrade: isAuslampSurvey() then returns false for everything and the map behaves as before UX4.
 let AUSLAMP_SET=new Set();
+// C42 Amendment A1: ausmt_id -> coordinate policy ('generalised' | 'withheld') for NON-EXACT stations,
+// loaded at boot from the OPTIONAL coord_policy.json (absent for an all-exact corpus => empty => no
+// badges — graceful degrade, same tolerant-of-absence pattern as collections/manifest). buildState()
+// folds it onto each station as s.coordPolicy; the drawer badges from that. It carries POLICY, never a
+// coordinate — positions are already masked in the catalogue (generalised => 0.1° cell, withheld => null).
+let COORD_POLICY={};
 
 const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#E0782F",AMT:"#A85CC4",GDS:"#5BAE6A",other:"#999"};
 const DIM_COL={"1-D":"#2E8FA3","2-D":"#D9A23B","3-D":"#A85454",null:"#5A6E7D"};

@@ -36,7 +36,11 @@ async function loadData(){const u=["catalogue.json","tf.json","sci.json","survey
   // No skew-handshake check here yet (comparing this against a contract hash the portal itself
   // carries) — that's C16, once the contract-hash plumbing exists.
   let build=null; try{const r=await fetch(dataUrl("build.json"));if(r.ok)build=await r.json();}catch(e){}
-  return [c,t,s,sv,prov,coll,man,build];}
+  // C42 Amendment A1: optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted
+  // by the engine ONLY when a survey has a non-exact station. Absent for an all-exact corpus (the common
+  // case) => {} => no badges. Same tolerant-of-absence pattern as collections/manifest/build above.
+  let cpol={}; try{const r=await fetch(dataUrl("coord_policy.json"));if(r.ok)cpol=await r.json();}catch(e){}
+  return [c,t,s,sv,prov,coll,man,build,cpol];}
 
 // ---- download manifest resolver (slice #4 — the distribution backbone) ------------------------
 // manifest.json indexes every downloadable artifact: per-station files (EDI/EMTF-XML) and per-survey

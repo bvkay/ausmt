@@ -4,17 +4,14 @@
 // (tests/fixtures/c42/, produced by tools/gen_c42_fixtures.py — never hand-typed rows) and drives
 // the null-coord (withheld) render/selection/drawer paths plus the honest-counts invariant.
 //
-// AUDITED GROUND TRUTH (real build, 2026-07-12): the engine emits NO explicit coordinate-access
-// policy field on any portal-consumed artifact. The ONLY signals are the masked VALUES:
-//   * withheld    -> catalogue lat/lon = null   (DETECTABLE)
-//   * generalised -> catalogue lat/lon = the 0.1deg cell, a silently-rounded number (NO marker;
-//                    indistinguishable from an exact station that happens to sit on a 0.1deg grid
-//                    point). edi_available=0 is shared with embargo/licence gating, so it is NOT a
-//                    generalised signal.
-// The portal therefore keys off `lat==null || lon==null` for the withheld path. It renders the
-// generalised value VERBATIM (the record's rule: no client-side re-rounding / re-derivation of
-// precision) — a generalised BADGE is out of reach without an engine policy field (see the lane
-// report; that piece is escalated, not implemented).
+// GROUND TRUTH (real build; C42 Amendment A1, 2026-07-12): the engine masks the coordinate VALUE AND —
+// for a NON-EXACT station — emits an explicit coordinate-policy MARKER on a boot-loaded artifact:
+//   * withheld    -> catalogue lat/lon = null   (DETECTABLE from the value alone) + coord_policy marker
+//   * generalised -> catalogue lat/lon = the 0.1deg cell (rendered VERBATIM — the record forbids
+//                    client-side re-rounding) + coord_policy marker ('generalised'), so the portal can
+//                    badge it honestly instead of showing a silently-rounded number.
+// coord_policy.json (ausmt_id -> policy) is loaded at boot (data.js) and folded onto each station as
+// s.coordPolicy (main.js). It carries POLICY, never a coordinate — positions stay masked in the catalogue.
 //
 // Pins:
 //  1 (null-coords render): buildMarkers/partitionMarkers produce NO marker for a withheld station and
@@ -26,6 +23,9 @@
 //  4 (selection): inShapes(withheld) is false (excluded from spatial selection — it has no position)
 //    yet the withheld station is findable by id/text and stays in ST.
 //  5 (counts): the survey station count includes the withheld station.
+//  A1 (generalised badge): a generalised station's drawer shows the "position generalised to ~0.1°
+//    (custodian policy)" badge beside the masked 0.1deg value, and NEVER its true 6-dp coords; an exact
+//    station shows no such badge.
 // Mirrors tools/frame_line_test.js: load modules in order, stub Leaflet, run in the window scope.
 const fs = require("fs");
 const path = require("path");
@@ -100,7 +100,7 @@ win.fetch = (url) => {
 const MODULES = ["contract", "security", "state", "data", "plots", "map", "filters", "drawer", "exports", "main"];
 let code = MODULES.map((f) => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={" +
-  "setup:(c,t,s,sv,coll)=>{CAT=c;TFD=t;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;buildState();buildTree();}," +
+  "setup:(c,t,s,sv,coll,cp)=>{CAT=c;TFD=t;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;COORD_POLICY=cp||{};buildState();buildTree();}," +
   "idxOf:(id)=>ST.findIndex(s=>s.id===id)," +
   "buildMarkersRun:()=>{buildMarkers();return {marker:ST.map(s=>({id:s.id,has:s.marker!==undefined}))};}," +
   // driveRefresh runs the REAL refresh() (which routes partitionMarkers(visible.filter(hasPosition)) into the
@@ -124,7 +124,7 @@ let failures = 0;
 function ok(cond, msg) { if (!cond) { console.error("  FAIL: " + msg); failures++; } }
 
 const A = win.__api;
-A.setup(readFix("catalogue.json"), readFix("tf.json"), readFix("sci.json"), readFix("surveys.json"), readFix("collections.json"));
+A.setup(readFix("catalogue.json"), readFix("tf.json"), readFix("sci.json"), readFix("surveys.json"), readFix("collections.json"), readFix("coord_policy.json"));
 const iEx = A.idxOf("EXACTONE"), iGen = A.idxOf("GENFIVE"), iHid = A.idxOf("HIDENINE");
 ok(iEx >= 0 && iGen >= 0 && iHid >= 0, "all three fixture stations must load (precondition)");
 
@@ -170,10 +170,21 @@ if (dGen.ok) {
   // the generalised value is rendered VERBATIM (0.1deg cell), never re-rounded or badged-as-exact
   ok(/-32\.9(0*)?\s*,\s*136\.9/.test(dGen.html), "PIN2: generalised drawer must render the masked 0.1deg value verbatim");
   ok(!/coordinates withheld/i.test(dGen.html), "PIN2: a generalised station must not show the withheld line");
+  // A1 BADGE: the "position generalised to ~0.1° (custodian policy)" line renders from the engine marker
+  ok(/position generalised to ~0\.1° \(custodian policy\)/.test(dGen.html),
+    "PIN-A1: generalised drawer must show the 'position generalised to ~0.1°' badge (from coord_policy.json)");
+  // A1 LEAK: the badge co-occurs with the ROUNDED cell, NEVER the true 6-dp coords (mirror the leak-sweep
+  // spirit at the DOM layer — a generalised station's badge is present AND its shown coords are rounded)
+  ok(dGen.html.indexOf("32.876543") < 0 && dGen.html.indexOf("136.876543") < 0,
+    "PIN-A1 leak: the generalised station's TRUE coordinates must appear nowhere in the DOM");
 }
 const dEx = A.openDrawer(iEx);
 ok(dEx.ok, "PIN2: opening the exact drawer must not throw: " + dEx.err);
-if (dEx.ok) ok(/-31\.234567\s*,\s*135\.234567/.test(dEx.html), "PIN2: exact drawer must render the verbatim coordinates");
+if (dEx.ok) {
+  ok(/-31\.234567\s*,\s*135\.234567/.test(dEx.html), "PIN2: exact drawer must render the verbatim coordinates");
+  // A1: an exact station must NOT show the generalised badge (the marker is non-exact-only)
+  ok(!/position generalised/i.test(dEx.html), "PIN-A1: an exact station must NOT show the generalised badge");
+}
 
 // --- Pin 4: spatial selection excludes withheld, text search still finds it -------------------------
 A.addWorldShape();  // a polygon covering the whole globe (incl. the (0,0) phantom point)

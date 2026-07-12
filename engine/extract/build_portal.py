@@ -1298,7 +1298,7 @@ def _write_station_products(job, prov):
     `job` is the tuple captured in main()'s per-survey loop; `prov` is the build PROV block."""
     (sdir, r, srow, label, org, meta, lic, slug, p, edi_served, conditioning_notes) = job
     sdir.mkdir(parents=True, exist_ok=True)
-    (sdir / "station.json").write_text(_jdump({
+    _doc = {
         "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label,
         "country": (meta or {}).get("country", "Australia"), "organisation": org,
         # C42: post-mask coordinates — exact/generalised(0.1deg)/withheld(null) per the custodian policy,
@@ -1342,7 +1342,15 @@ def _write_station_products(job, prov):
         # geographic north at ingest, and the Gate-2 quadrant medians. None only for
         # inputs the gates do not cover (the flag-gated MTH5 path).
         "frame": r.get("frame"),
-    }, indent=1), encoding="utf-8")
+    }
+    # C42 A1: carry the coordinate policy on station.json too (secondary to the boot-loaded
+    # coord_policy.json — the surface the portal drawer reads — but consistent for a curator reading
+    # the product). Added ONLY for a non-exact station (reuses the mask-seam-stamped r["coord_policy"]);
+    # an exact station.json gains no key, so it is byte-unchanged.
+    _cp = r.get("coord_policy")
+    if _cp and _cp != "exact":
+        _doc["coordinate_policy"] = _cp
+    (sdir / "station.json").write_text(_jdump(_doc, indent=1), encoding="utf-8")
     (sdir / "dimensionality.json").write_text(_jdump({
         "classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
         "pct_periods_3d": srow[_SC["p3d"]], "method": "phase-tensor (Caldwell 2004)",
@@ -2569,6 +2577,25 @@ def main(argv=None):
             raise ValueError(f"{_label} row width != {len(_cols)} (the positional contract) — regenerate "
                              f"from contract/columns.json; APPEND, never reorder")
     (out / "catalogue.json").write_text(_jdump(compact, separators=(",", ":")), encoding="utf-8")
+    # ---- C42 Amendment A1: the coordinate-policy MARKER boot artifact ----
+    # The drawer renders from the in-memory catalogue loaded at boot (station.json is never fetched on
+    # navigation), so a generalised station's "position generalised" badge needs a boot-loaded signal.
+    # Rather than append a positional catalogue COLUMN — which would add a trailing element to EVERY row of
+    # EVERY survey and break the zero-change default the record promises for all-exact corpora — emit a
+    # SEPARATE optional artifact (the record's A1 sanctions "an equivalent boot artifact"): a compact map
+    # ausmt_id -> policy for NON-EXACT stations ONLY. It reuses the policy the mask seam stamped on each
+    # record (r["coord_policy"]) — never re-derived from coordinate values — and carries NO coordinate, only
+    # the policy string, so the leak-sweep cannot trip on it. Emitted ONLY when at least one station is
+    # non-exact, so an all-exact corpus is byte-identical (no new file) — the zero-change default preserved.
+    _coord_policy_map = {r["ausmt_id"]: r["coord_policy"]
+                         for (p, r) in all_stations
+                         if r.get("coord_policy") and r["coord_policy"] != "exact"}
+    if _coord_policy_map:
+        (out / "coord_policy.json").write_text(
+            _jdump(_coord_policy_map, separators=(",", ":")), encoding="utf-8")
+        if prod:
+            (prod / "coord_policy.json").write_text(
+                _jdump(_coord_policy_map, separators=(",", ":")), encoding="utf-8")
     (out / "tf.json").write_text(_jdump(tf_out, separators=(",", ":")), encoding="utf-8")
     (out / "sci.json").write_text(_jdump(sci_out, separators=(",", ":")), encoding="utf-8")
     (out / "surveys.json").write_text(_jdump(surveys_meta, separators=(",", ":")), encoding="utf-8")

@@ -20,22 +20,52 @@ function badge(l,st,title){const c=st==="ok"?"ok":st==="part"?"part":st==="no"?"
 // data), so the drawer must render an ACCESS PANEL in place of the four plots rather than four blank frames.
 function accessLevelOf(m){return (m&&m.access)?String(m.access):"open";}
 function isOpenAccess(m){return accessLevelOf(m)==="open";}
+// C42 Amendment A1: the boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null),
+// folded onto s by buildState() from coord_policy.json. The engine masks the VALUE (generalised => 0.1°
+// cell rendered verbatim, withheld => null lat/lon) AND — for a non-exact station — emits this policy
+// marker so the portal can badge honestly WITHOUT re-deriving precision client-side (forbidden by the
+// record). Pure (no DOM/Leaflet) so the jsdom driver exercises it.
+function coordPolicyOf(s){return (s&&s.coordPolicy)||null;}
+// True when a station's SERVED position is masked. A withheld station is detectable from its null coords
+// alone (belt-and-braces if the marker artifact never loaded); a generalised station needs the marker
+// (its 0.1° cell is a valid-looking position, indistinguishable from an exact grid-point without it).
+function coordsMasked(s){return !hasPosition(s)||coordPolicyOf(s)==="generalised"||coordPolicyOf(s)==="withheld";}
+// Survey-level honesty predicate: are ALL of a survey's station locations served EXACT? Backs the access-
+// panel stance text — "Station locations are public" is asserted only when this is true (D2/A1).
+function surveyLocationsPublic(sv){return !ST.some(s=>s.survey===sv&&coordsMasked(s));}
+// The drawer's lat/lon cell. Withheld => the honest withheld line (no coords). Generalised => the masked
+// 0.1° cell rendered VERBATIM (never re-rounded — the record forbids client-side re-derivation) PLUS the
+// "position generalised" badge, so a reader knows the ~0.1° number is a custodian generalisation, not a
+// precise fix. Exact => the verbatim 6-dp position.
+function coordCellHtml(s){
+  if(!hasPosition(s)) return `<span style="color:var(--muted)">coordinates withheld (custodian policy)</span>`;
+  const coords=`${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}`;
+  return coordPolicyOf(s)==="generalised"
+    ? `${coords}<br><span style="color:var(--muted)">position generalised to ~0.1° (custodian policy)</span>`
+    : coords;
+}
 // The access panel replacing the plots area for a non-open survey. Verbatim copy (esc()'d) per level:
 // embargoed(+date) / embargoed(no date) / metadata_only; any other non-open value falls back to the
 // no-date embargo wording (fail-closed: an unknown level is treated as withheld, never as open).
-function accessPanel(m){
+function accessPanel(m,sv){
   const lvl=accessLevelOf(m);
   const when=(m&&m.embargo_until)?String(m.embargo_until):"";
+  // C42 A1: the location-publicity clause is only asserted when EVERY station's position is served exact.
+  // When a custodian has generalised/withheld any station, "locations are public" is FALSE — say so.
+  // (Disclosing that a location is generalised/withheld reveals POLICY, not POSITION.)
+  const stance=surveyLocationsPublic(sv)
+    ? "Station locations and survey metadata are public"
+    : "Survey metadata is public; some station locations are generalised or withheld at the custodian's request";
   let title,body;
   if(lvl==="metadata_only"){
     title="Metadata only";
-    body="This survey is listed metadata-only. Station locations and survey metadata are public; transfer functions are available from the custodian — see the survey's contact and identifiers.";
+    body="This survey is listed metadata-only. "+stance+"; transfer functions are available from the custodian — see the survey's contact and identifiers.";
   }else if(when){
     title="Embargoed until "+when;
-    body="This survey is embargoed until "+when+". Station locations and survey metadata are public; transfer functions and downloads are withheld until the embargo lifts.";
+    body="This survey is embargoed until "+when+". "+stance+"; transfer functions and downloads are withheld until the embargo lifts.";
   }else{
     title="Embargoed";
-    body="This survey is embargoed. Station locations and survey metadata are public; transfer functions and downloads are withheld.";
+    body="This survey is embargoed. "+stance+"; transfer functions and downloads are withheld.";
   }
   return `<div class="plot accesspanel"><div class="badges" style="margin-bottom:8px">${badge(title,"part")}</div>`+
     `<div class="emptynote" style="padding:8px 4px">${esc(body)}</div></div>`;
@@ -193,7 +223,7 @@ function openStation(i){
    // The #pt_anchor is kept (empty) so the "Phase tensor" related-product scroll target never dangles.
    (isOpenAccess(m)
      ? rhoPlot(t)+phasePlot(t)+`<div id="pt_anchor"></div>`+ptPlot(t)+arrowPlot(t)   // C20: arrow panel BELOW the phase tensor, replacing the |T| plot
-     : accessPanel(m)+`<div id="pt_anchor"></div>`)+
+     : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
    // C25-V3: reader-facing frame line — populated lazily from station.json by loadStationFrameLine()
    // below (empty, so zero-height, until/unless this station declares a non-trivial acquisition frame).
    `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
@@ -214,11 +244,12 @@ function openStation(i){
      `<button data-cite="ris" data-survey="${escAttr(s.survey)}">RIS</button></div></div>`+
    `<div class="sechead">Metadata &amp; API</div><table class="meta">`+
      `<tr><td>ausmt_id</td><td>${esc(s.ausmt_id)}</td></tr>`+
-     // C42 coordinate access: a custodian-withheld station carries null lat/lon (the engine masks the
-     // VALUE — no policy field). Show an honest line instead of null-derefing .toFixed. A generalised
-     // station carries the 0.1° cell and renders VERBATIM here (no client-side re-rounding). hasPosition
-     // (map.js) is the shared predicate.
-     `<tr><td>lat, lon</td><td>${hasPosition(s)?`${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}`:`<span style="color:var(--muted)">coordinates withheld (custodian policy)</span>`}</td></tr>`+
+     // C42 coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE) — show the
+     // honest withheld line instead of null-derefing .toFixed. A generalised station carries the 0.1° cell,
+     // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
+     // engine's coord_policy marker (A1). coordCellHtml encapsulates all three; hasPosition is the shared
+     // predicate.
+     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
      `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
      `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`+
    `<div class="api">Planned read API (static JSON on the hosted site):<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
