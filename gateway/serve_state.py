@@ -197,11 +197,17 @@ def read_rollback_pin(state_dir: Path) -> dict | None:
 def read_actions_audit_tail(state_dir: Path, *, n: int = 40) -> list[str]:
     """The last `n` lines of the host actions-audit.log (append-only, host-written 0644 so the gateway
     can read it). Read-only display of who/what/when/outcome for the privileged actions. Never raises;
-    an absent log => []."""
+    an absent log => [].
+
+    Splits on '\\n' ONLY (never str.splitlines()): the host already scrubs control + unicode-separator
+    chars from the attacker-controlled fields (actions.sh _scrub, S4), but the gateway must not TRUST
+    that a host file is clean — splitlines() would treat a stray U+2028/U+2029/VT/FF as a line break
+    and could fabricate whole tail entries from one crafted line. Splitting on the host's real
+    separator (\\n) keeps a crafted line as ONE rendered entry (later _esc'd, so inert)."""
     p = state_dir / ACTIONS_AUDIT_FILENAME
     try:
         with open(p, encoding="utf-8", errors="replace") as fh:
-            lines = [ln.rstrip("\n") for ln in fh.read().splitlines() if ln.strip()]
+            lines = [ln.rstrip("\r") for ln in fh.read().split("\n") if ln.strip()]
         return lines[-n:]
     except OSError:
         return []

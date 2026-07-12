@@ -34,6 +34,17 @@
 {
 	# Disable the admin API — not needed for a static file vhost, avoids an extra listening port.
 	admin off
+
+	# C45 D2 (S1): trust the fronting proxy so Caddy derives `client_ip` from the forwarded address —
+	# then the ip_mask log filter below masks the REAL client, not the loopback proxy. tailscale-serve
+	# fronts this from the CGNAT range 100.64.0.0/10 over loopback; `private_ranges` covers RFC1918 +
+	# loopback + link-local, and we add the tailscale CGNAT range explicitly (it is NOT in
+	# private_ranges). Without this, `client_ip` would be the proxy and the true client IP would only
+	# survive UNMASKED in X-Forwarded-For — which is why the log filter ALSO deletes every
+	# address-bearing header (see the `log` block). Both halves are required to keep the promise true.
+	servers {
+		trusted_proxies static private_ranges 100.64.0.0/10 127.0.0.1/8 ::1
+	}
 }
 
 :8080 {
@@ -47,11 +58,14 @@
 	# counts + country (from the masked /24, later); the aggregator reads only ts/method/uri/status/
 	# size/masked-address/UA and discards the raw lines after folding them (7-day retention here).
 	#
-	# The filter encoder wraps the JSON encoder: it MASKS request>remote_ip + request>client_ip and
-	# DELETES the Cookie / Authorization / Set-Cookie headers (so no session token or credential is
-	# ever logged — "no cookies, no cross-site tracking, no personal data"). Everything else is
-	# non-PII operational metadata. Rotation + a 7-day retention (roll_keep_for 168h) are Caddy's own
-	# roll options — no logrotate, no cron.
+	# The filter encoder wraps the JSON encoder: it MASKS request>remote_ip + request>client_ip AND
+	# DELETES every header that can carry a full client address or a credential (S1) — Caddy's JSON
+	# encoder logs the WHOLE request>headers map by default, so behind a proxy the true client IP
+	# arrives UNMASKED in X-Forwarded-For / X-Real-IP / Forwarded; those, plus Referer (can carry PII)
+	# and Cookie / Authorization / Set-Cookie (session tokens / credentials) are all deleted. What
+	# remains (User-Agent for bot filtering, Accept*, etc.) is non-PII. The server terminates plain
+	# HTTP on :8080 (TLS is tailscale's), so there is no request>tls block to leak. Rotation + a 7-day
+	# retention (roll_keep_for 168h) are Caddy's own roll options — no logrotate, no cron.
 	#
 	# ip_mask requires Caddy >= 2.5 (the base image is caddy:2-alpine, current 2.x). The block is
 	# validated at image build by `caddy validate` (portal.Dockerfile), so a syntax slip fails the
@@ -76,6 +90,10 @@
 				request>headers>Cookie delete
 				request>headers>Authorization delete
 				request>headers>Set-Cookie delete
+				request>headers>X-Forwarded-For delete
+				request>headers>X-Real-IP delete
+				request>headers>Forwarded delete
+				request>headers>Referer delete
 			}
 		}
 	}

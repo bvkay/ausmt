@@ -71,6 +71,27 @@ def test_access_log_masks_client_address_at_edge():
     assert re.search(r"request>headers>Cookie\s+delete", block), "the Cookie header must be deleted"
     assert re.search(r"request>headers>Authorization\s+delete", block), \
         "the Authorization header must be deleted"
+    # S1: every header that can carry a FULL client address must be deleted — behind a proxy the real
+    # IP arrives unmasked in these, and the masked-at-edge promise would be false otherwise.
+    for hdr in ("X-Forwarded-For", "X-Real-IP", "Forwarded", "Referer"):
+        assert re.search(rf"request>headers>{re.escape(hdr)}\s+delete", block), \
+            f"the {hdr} header must be deleted (it can carry the unmasked client IP/PII)"
+
+
+def test_trusted_proxies_configured_for_real_client_masking():
+    """S1 PIN. Caddy must trust the fronting proxy so `client_ip` is the REAL client (from the
+    forwarded address) that ip_mask then masks — not the loopback proxy. The tailscale CGNAT range
+    (100.64.0.0/10) must be trusted explicitly (it is NOT in private_ranges). FAILS IF trusted_proxies
+    is absent or omits the CGNAT range (then the masked client_ip would be the proxy, and the true IP
+    would leak via the now-deleted headers had they not been deleted — defence in depth needs both)."""
+    text = _caddyfile_text()
+    # Match the trusted_proxies DIRECTIVE line itself (not a mention in a comment) and assert the CGNAT
+    # range is ON that line — removing it from the directive (while it survives in a comment) must red.
+    m = re.search(r"^\s*trusted_proxies\s+static\s+(.+)$", text, re.MULTILINE)
+    assert m, "trusted_proxies must be configured so client_ip is derived from the trusted forwarded address"
+    directive_ranges = m.group(1)
+    assert "100.64.0.0/10" in directive_ranges, \
+        "the tailscale CGNAT range must be in the trusted_proxies directive (not in private_ranges)"
 
 
 def test_access_log_has_rotation_and_7_day_retention():
@@ -110,9 +131,100 @@ def test_portal_promise_matches_logging_behaviour():
                     reason="no caddy binary on PATH — masking is config-asserted; caddy validate runs in CI")
 def test_caddyfile_validates_with_caddy():
     """LIVE-VALIDATE LEG (ubuntu/CI). `caddy validate` accepts the Caddyfile (the log block + ip_mask
-    filter parse under the shipped Caddy). FAILS IF the log block is syntactically invalid for the
-    installed Caddy version. Skips where caddy is absent (this dev box)."""
+    filter + trusted_proxies parse under the shipped Caddy). FAILS IF any is syntactically invalid for
+    the installed Caddy version. Skips where caddy is absent (this dev box)."""
     r = subprocess.run(
         ["caddy", "validate", "--adapter", "caddyfile", "--config", str(_CADDYFILE)],
         capture_output=True, text=True)
     assert r.returncode == 0, f"caddy validate rejected the Caddyfile:\n{r.stdout}\n{r.stderr}"
+
+
+def _extract_block(text: str, opener: str) -> str:
+    """Brace-match a `<opener> {...}` block out of the real Caddyfile (so the runtime pin exercises the
+    SHIPPED directives, not a re-typed copy)."""
+    m = re.search(re.escape(opener) + r"\s*\{", text)
+    assert m, f"could not find {opener!r} block in the Caddyfile"
+    i = text.index("{", m.start())
+    depth = 0
+    for j in range(i, len(text)):
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[i:j + 1]         # the {...} including braces
+    raise AssertionError("unbalanced braces")
+
+
+@pytest.mark.skipif(shutil.which("caddy") is None,
+                    reason="no caddy binary — the masked-log-line pin is the ubuntu/CI leg (wait-for-greens)")
+def test_real_caddy_masks_forwarded_client_ip_in_the_log():
+    """S1 HEADLINE — REAL-CADDY RUNTIME PIN (ubuntu/CI, wait-for-greens). A request carrying
+    `X-Forwarded-For: 203.0.113.7` through a running Caddy using the SHIPPED log filter + trusted_proxies
+    writes a log line in which the full client IP appears NOWHERE — only the /24-masked form 203.0.113.0.
+    FAILS IF 203.0.113.7 appears anywhere in the emitted JSON (fields OR headers). This is the property
+    the public privacy promise rests on; a config-syntax pin alone is insufficient. Skips without caddy.
+
+    Box smoke equivalent (run on the deployed box):
+        curl -s -H 'X-Forwarded-For: 203.0.113.7' http://127.0.0.1:8443/ >/dev/null
+        grep -c 203.0.113.7 $AUSMT_DATA_DIR/logs/caddy/access.json   # must be 0
+        grep -c 203.0.113.0 $AUSMT_DATA_DIR/logs/caddy/access.json   # must be >= 1
+    """
+    import socket
+    import tempfile
+    import time
+    import urllib.request
+
+    text = _caddyfile_text()
+    log_block = _extract_block(text, "\tlog")          # the shipped log {...}
+    servers_block = _extract_block(text, "servers")    # the shipped trusted_proxies {...}
+
+    # A free loopback port.
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+
+    with tempfile.TemporaryDirectory() as td:
+        logpath = Path(td) / "access.json"
+        # Reuse the SHIPPED log block, but point its output at our temp file (swap the /var/log path).
+        test_log_block = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", log_block)
+        cfg = (
+            "{\n\tadmin off\n\tservers " + servers_block + "\n}\n"
+            f":{port} {{\n\tlog " + test_log_block + "\n\trespond \"ok\" 200\n}}\n"
+        )
+        cfgpath = Path(td) / "Caddyfile"
+        cfgpath.write_text(cfg, encoding="utf-8")
+        # validate first for a clear failure if the composed config is bad
+        v = subprocess.run(["caddy", "validate", "--adapter", "caddyfile", "--config", str(cfgpath)],
+                           capture_output=True, text=True)
+        assert v.returncode == 0, f"composed test Caddyfile invalid:\n{v.stdout}\n{v.stderr}\n---\n{cfg}"
+        proc = subprocess.Popen(
+            ["caddy", "run", "--adapter", "caddyfile", "--config", str(cfgpath)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            # wait for the port to accept
+            for _ in range(100):
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                        break
+                except OSError:
+                    time.sleep(0.1)
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/",
+                                         headers={"X-Forwarded-For": "203.0.113.7"})
+            urllib.request.urlopen(req, timeout=5).read()
+            # give the file writer a moment to flush the line
+            for _ in range(50):
+                if logpath.is_file() and logpath.stat().st_size > 0:
+                    break
+                time.sleep(0.1)
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        body = logpath.read_text(encoding="utf-8") if logpath.is_file() else ""
+        assert body, "caddy wrote no access-log line"
+        assert "203.0.113.7" not in body, f"the FULL client IP leaked into the log line: {body}"
+        assert "203.0.113.0" in body, f"the masked /24 client IP is not in the log line: {body}"

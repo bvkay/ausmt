@@ -410,3 +410,17 @@ def test_write_intent_single_flight_raises(tmp_path):
     import pytest
     with pytest.raises(serve_state.IntentAlreadyPending):
         serve_state.write_intent(state, "update", requested_by="c1")
+
+
+def test_audit_tail_reader_does_not_fabricate_lines_from_unicode_separators(tmp_path):
+    """S4 (gateway defence-in-depth). read_actions_audit_tail must split on '\n' ONLY, so a crafted
+    line carrying a unicode line separator (U+2028) — even if one ever reached the host log — stays ONE
+    entry, not two. FAILS IF splitlines()-style splitting fabricates an extra tail entry from one line."""
+    state = tmp_path / "state"
+    state.mkdir()
+    # One real line whose content embeds a U+2028; the host scrubs these, but the reader must not trust it.
+    (state / serve_state.ACTIONS_AUDIT_FILENAME).write_text(
+        "2026-07-12T00:00:00Z outcome=ok intent=backup by=c1 id=- forged=evil\n",
+        encoding="utf-8")
+    tail = serve_state.read_actions_audit_tail(state)
+    assert len(tail) == 1, f"a U+2028 must not fabricate a second tail entry: {tail!r}"

@@ -82,7 +82,10 @@ STATE_DIR="$AUSMT_DATA_DIR/gateway/state"
 SITE_DATA="$AUSMT_DATA_DIR/site-data"
 BUILDS_DIR="$SITE_DATA/builds"
 CURRENT_LINK="$SITE_DATA/current"
-DB="$STATE_DIR/gateway.sqlite"
+# The live gateway DB. AUSMT_ACTIONS_DB overrides it (default $STATE_DIR/gateway.sqlite) — used by the
+# restore-abort test to exercise the staging-failure path (a DB path whose parent is missing makes the
+# restore mktemp fail), and harmless in production (leave it unset).
+DB="${AUSMT_ACTIONS_DB:-$STATE_DIR/gateway.sqlite}"
 BACKUPS_DIR="${AUSMT_BACKUP_DIR:-$AUSMT_DATA_DIR/backups}"
 
 AUDIT_LOG="$STATE_DIR/actions-audit.log"
@@ -107,6 +110,16 @@ INTENT_RESTORE="restore.request"
 
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 now_epoch() { date -u +%s 2>/dev/null || date +%s; }
+
+# compose <args...>: run `docker compose` against THIS deployment's compose file. Uses `-f <file>`
+# (NOT `-C <dir>` — compose has no -C flag; that was a real-box breakage the shim masked, S2). `-f`
+# also anchors the project directory to the file's parent, so .env loads from deploy/ regardless of
+# the CWD (the systemd unit sets WorkingDirectory, but a manual run must work too). No fragile
+# `|| bare` fallback — a compose error surfaces honestly.
+compose() {
+  # shellcheck disable=SC2086 -- COMPOSE_CMD may be multi-word (default `docker compose`/a test shim).
+  $COMPOSE_CMD -f "$CODE_DIR/deploy/compose.yaml" "$@"
+}
 
 # python3/python for the JSON field reads. Probe by EXECUTION (a Windows dev box can carry a non-
 # functional App-Store python3 shim), exactly as reconcile.sh/alert.sh do.
@@ -136,19 +149,30 @@ except Exception:
 PYEOF
 }
 
-# audit <kind> <by> <id> <outcome>: append ONE line to the state-dir audit log (D9.4). We hold the
-# flock, and a single short append is atomic on POSIX, so no extra locking is needed. The log is made
-# group-readable (0644) so the gateway container (uid 10002, shared-group state dir) can render the
-# tail on the serve screen (read-only). Never fails the pass.
+# _scrub <value>: return the value stripped of EVERYTHING that could forge an audit line under a
+# compromised gateway (D9, S4). `LC_ALL=C tr -dc '[:print:]'` keeps ONLY ASCII printable bytes 0x20-
+# 0x7E — dropping all C0/C1 control chars (\n\r\t\v\f) AND every byte of a multibyte UTF-8 sequence,
+# so unicode line separators U+2028/U+2029 (which the gateway's splitlines-free reader also ignores)
+# cannot survive. Then drop `=` so an attacker-controlled `by`/`id` can never inject a `key=value`
+# token (e.g. a forged `outcome=ok`). Capped at 120 chars.
+_scrub() {
+  printf '%s' "$1" | LC_ALL=C tr -dc '[:print:]' | tr -d '=' | cut -c1-120
+}
+
+# audit <kind> <by> <id> <outcome>: append ONE line to the state-dir audit log (D9.4). The
+# host-computed `outcome=` is written FIRST so a forged token in the attacker-controlled `by`/`id`
+# fields can never PRECEDE the real outcome (defence-in-depth over the _scrub above). We hold the
+# flock, and a single short append is atomic on POSIX. The log is group-readable (0644) so the
+# gateway container (uid 10002, shared-group state dir) can render the tail (read-only). Never fails.
 audit() {
-  _kind="$1"; _by="${2:-unknown}"; _id="${3:--}"; _outcome="$4"
+  _kind="$1"; _by=$(_scrub "${2:-unknown}"); _id=$(_scrub "${3:--}"); _outcome="$4"
   [ -n "$_by" ] || _by="unknown"
   [ -n "$_id" ] || _id="-"
-  # Newlines/controls in metadata would forge audit lines — collapse them (the host is the last gate).
-  _by=$(printf '%s' "$_by" | tr -d '\n\r' | cut -c1-120)
-  _id=$(printf '%s' "$_id" | tr -d '\n\r' | cut -c1-120)
+  # `outcome` is host-computed (never attacker-controlled), so it is not scrubbed — but strip newlines
+  # defensively so a future outcome string can never break the one-line-per-action invariant.
+  _outcome=$(printf '%s' "$_outcome" | tr -d '\n\r')
   mkdir -p "$STATE_DIR" 2>/dev/null || true
-  printf '%s intent=%s by=%s id=%s outcome=%s\n' "$(now_utc)" "$_kind" "$_by" "$_id" "$_outcome" \
+  printf '%s outcome=%s intent=%s by=%s id=%s\n' "$(now_utc)" "$_outcome" "$_kind" "$_by" "$_id" \
     >> "$AUDIT_LOG" 2>/dev/null || true
   chmod 0644 "$AUDIT_LOG" 2>/dev/null || true
 }
@@ -210,10 +234,11 @@ record_ran() {
 recipe_update() {
   [ -n "$CODE_DIR" ] || { printf 'actions: update needs AUSMT_CODE_DIR (the code checkout)\n' >&2; return 1; }
   [ -e "$CODE_DIR/.git" ] || { printf 'actions: update: %s is not a git checkout\n' "$CODE_DIR" >&2; return 1; }
-  # shellcheck disable=SC2086 -- GIT_CMD/COMPOSE_CMD may be multi-word (default `docker compose`/shim).
+  # git DOES take -C (it is a git checkout); compose does NOT — it goes through compose() (`-f`, S2).
+  # shellcheck disable=SC2086 -- GIT_CMD may be multi-word (default `git`/a test shim).
   $GIT_CMD -C "$CODE_DIR" pull --ff-only || return 1
-  $COMPOSE_CMD -C "$CODE_DIR/deploy" pull || $COMPOSE_CMD pull || return 1
-  $COMPOSE_CMD -C "$CODE_DIR/deploy" up -d || $COMPOSE_CMD up -d || return 1
+  compose pull || return 1
+  compose up -d || return 1
   return 0
 }
 
@@ -266,51 +291,61 @@ PYEOF
 # DB byte-untouched, then the gateway is restarted) -> swap the DB -> restart. Returns 0 on a completed
 # swap, 1 on any failure; sets $RESTORE_OUTCOME to a human phrase for the audit line.
 RESTORE_OUTCOME=""
+
+# _gateway_start / _gateway_stop: bring the gateway container down/up via compose (`-f`, S2). Best-
+# effort — a shim records the call in tests; a real failure to restart is bounded by compose's own
+# `restart: unless-stopped`.
+_gateway_stop()  { compose --profile gateway stop gateway 2>/dev/null || true; }
+_gateway_start() { compose --profile gateway up -d gateway 2>/dev/null || true; }
+
 recipe_restore() {
   _sid="$1"; _by="$2"
   _snap="$BACKUPS_DIR/$_sid"
   _snapdb="$_snap/gateway.sqlite"
   if [ ! -f "$_snapdb" ]; then
+    # NOT yet stopped — safe to bail without a restart.
     RESTORE_OUTCOME="refused: snapshot has no gateway.sqlite"
     printf 'actions: restore: snapshot %s has no gateway.sqlite\n' "$_snap" >&2
     return 1
   fi
-  # 1. Stop the gateway so nothing writes the live DB during the sequence (best-effort; a shim records
-  #    the call in tests). We restart it in every exit path below.
-  # shellcheck disable=SC2086
-  $COMPOSE_CMD -C "$CODE_DIR/deploy" --profile gateway stop gateway 2>/dev/null \
-    || $COMPOSE_CMD --profile gateway stop gateway 2>/dev/null || true
+  # 1. Stop the gateway so nothing writes the live DB during the sequence. From HERE ON the gateway is
+  #    DOWN, so EVERY exit path below MUST restart it (S3: the sole ops surface must never be left down,
+  #    including on a disk/inode-exhaustion mktemp failure — that was the shipped bug).
+  _gateway_stop
   # 2. DRILL FIRST. A failing drill ABORTS — the live DB is never touched (the "drill-fail aborts
-  #    untouched" pin: live DB byte-identical after).
+  #    untouched" pin: live DB byte-identical after). Restart on the way out.
   # shellcheck disable=SC2086 -- DRILL_CMD may be a multi-word override.
   if ! $DRILL_CMD "$_snap" >/dev/null 2>&1; then
     RESTORE_OUTCOME="refused: drill FAILED — live DB untouched"
     printf 'actions: restore ABORTED — the snapshot failed the restore drill; the live DB was NOT touched.\n' >&2
-    # shellcheck disable=SC2086
-    $COMPOSE_CMD -C "$CODE_DIR/deploy" --profile gateway up -d gateway 2>/dev/null \
-      || $COMPOSE_CMD --profile gateway up -d gateway 2>/dev/null || true
+    _gateway_start
     return 1
   fi
-  # 3. Swap the DB atomically: copy the snapshot DB into the state dir under a temp name, then mv -f
-  #    over the live DB. Remove the -wal/-shm sidecars so the restored file is authoritative (a stale
-  #    sidecar alongside a swapped DB would confuse SQLite on the next open — backup.sh's own note).
-  _dbtmp=$(mktemp "$DB.restore.XXXXXX" 2>/dev/null) || { RESTORE_OUTCOME="failed: cannot stage restore tmp"; return 1; }
-  if ! cp "$_snapdb" "$_dbtmp" 2>/dev/null; then
+  # 3. Swap the DB atomically: copy the snapshot DB into the DB dir under a temp name, then mv -f over
+  #    the live DB. Remove the -wal/-shm sidecars so the restored file is authoritative (a stale sidecar
+  #    alongside a swapped DB would confuse SQLite on the next open — backup.sh's own note). ONE restart
+  #    (step 4) runs on every post-stop path, so an early failure here can never leave the box stopped.
+  _swap_rc=0
+  _dbtmp=$(mktemp "$DB.restore.XXXXXX" 2>/dev/null)
+  if [ -z "$_dbtmp" ]; then
+    RESTORE_OUTCOME="failed: cannot stage restore tmp"; _swap_rc=1
+  elif ! cp "$_snapdb" "$_dbtmp" 2>/dev/null; then
     rm -f "$_dbtmp" 2>/dev/null || true
-    RESTORE_OUTCOME="failed: could not copy snapshot DB"
-    # shellcheck disable=SC2086
-    $COMPOSE_CMD -C "$CODE_DIR/deploy" --profile gateway up -d gateway 2>/dev/null \
-      || $COMPOSE_CMD --profile gateway up -d gateway 2>/dev/null || true
+    RESTORE_OUTCOME="failed: could not copy snapshot DB"; _swap_rc=1
+  else
+    chmod 0600 "$_dbtmp" 2>/dev/null || true
+    rm -f "$DB-wal" "$DB-shm" 2>/dev/null || true
+    if ! mv -f "$_dbtmp" "$DB" 2>/dev/null; then
+      rm -f "$_dbtmp" 2>/dev/null || true
+      RESTORE_OUTCOME="failed: could not swap DB"; _swap_rc=1
+    fi
+  fi
+  # 4. Restart the gateway on EVERY post-stop exit (success OR any staging/copy/swap failure). This is
+  #    the single restart the "restart in every exit path" invariant requires.
+  _gateway_start
+  if [ "$_swap_rc" -ne 0 ]; then
     return 1
   fi
-  chmod 0600 "$_dbtmp" 2>/dev/null || true
-  rm -f "$DB-wal" "$DB-shm" 2>/dev/null || true
-  mv -f "$_dbtmp" "$DB" 2>/dev/null || { rm -f "$_dbtmp"; RESTORE_OUTCOME="failed: could not swap DB"; \
-    $COMPOSE_CMD -C "$CODE_DIR/deploy" --profile gateway up -d gateway 2>/dev/null || $COMPOSE_CMD --profile gateway up -d gateway 2>/dev/null || true; return 1; }
-  # 4. Restart the gateway on the restored DB.
-  # shellcheck disable=SC2086
-  $COMPOSE_CMD -C "$CODE_DIR/deploy" --profile gateway up -d gateway 2>/dev/null \
-    || $COMPOSE_CMD --profile gateway up -d gateway 2>/dev/null || true
   RESTORE_OUTCOME="ok: restored from $_sid"
   return 0
 }

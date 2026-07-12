@@ -66,6 +66,13 @@ CURL_CMD="${AUSMT_ALERT_CURL:-curl}"
 # authenticated attacker (stolen session / curator-page XSS) cannot silently keep serving frozen
 # forever by re-arming the pause once per expiry window (which would slip a single-flag age check).
 PAUSE_MAX_H="${AUSMT_ALERT_PAUSE_MAX_H:-24}"
+# S5(a): the alarm must key on the SAME freshness reconcile honours — an EXPIRED pause.flag reconcile
+# IGNORES is NOT freezing serving, so it must not alarm (and does not extend the cumulative span). Kept
+# in step with reconcile's AUSMT_RECONCILE_PAUSE_EXPIRY_MIN (default 6 h).
+PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"
+# S5(b): a standing rollback.pin freezes auto-rebuild with NO expiry — give it the same persistent-
+# freeze visibility as a pause: a pin held continuously past this many hours raises an ops fact + fails.
+PIN_MAX_H="${AUSMT_ALERT_PIN_MAX_H:-$PAUSE_MAX_H}"
 
 # C43 S2b-i: this timer is ALSO the ops-status.json writer (record D8/D15). Its cadence (the systemd
 # ausmt-alert.timer period, ~15 min) is the staleness clock the curator ops floor reads: a file older
@@ -91,6 +98,12 @@ OPS_PAUSE_PAUSED_AT=""
 OPS_PAUSE_FIRST_SEEN=""
 OPS_PAUSE_CUMULATIVE_H=""
 OPS_PAUSE_PERSISTENT=0
+# S5(b): rollback-pin persistent-freeze tracking, parallel to the pause block above.
+OPS_PIN_ACTIVE=0
+OPS_PIN_BUILD=""
+OPS_PIN_FIRST_SEEN=""
+OPS_PIN_CUMULATIVE_H=""
+OPS_PIN_PERSISTENT=0
 
 # The four long-running compose services this box monitors. build-runner is EXCLUDED on purpose: it is
 # a one-shot job (compose profile "jobs") that is SUPPOSED to be absent between builds, so "not running"
@@ -414,6 +427,12 @@ check_pause() {
   [ -n "$data_dir" ] || return 0            # AUSMT_DATA_DIR gaps are already reported by other checks
   pause_flag="$data_dir/gateway/state/pause.flag"
   [ -f "$pause_flag" ] || return 0          # no pause => nothing to track (globals stay at defaults)
+  # S5(a): key on the SAME freshness reconcile honours. An EXPIRED flag (mtime older than the expiry)
+  # is IGNORED by reconcile — it is NOT freezing serving, so it must not alarm and must NOT extend the
+  # cumulative span (leave the globals at their defaults => active=0 => the carried span resets).
+  if [ -n "$(find "$pause_flag" -maxdepth 0 -mmin "+$PAUSE_EXPIRY_MIN" 2>/dev/null)" ]; then
+    return 0
+  fi
   OPS_PAUSE_ACTIVE=1
   [ -n "$PY" ] || return 0                  # cannot compute cumulative without python; the ops fact
                                             # still shows active, just not the persistence verdict
@@ -475,6 +494,79 @@ PYEOF
   fi
   if [ "${OPS_PAUSE_PERSISTENT:-0}" = "1" ]; then
     add_failure "pause: auto-rebuild has been PAUSED for ${OPS_PAUSE_CUMULATIVE_H}h cumulative (threshold ${PAUSE_MAX_H}h) -- serving may be frozen. Resume auto-rebuild from the serve screen, or investigate a re-armed pause (stolen session / XSS). first_seen=${OPS_PAUSE_FIRST_SEEN}"
+  fi
+}
+
+# --------------------------------------------------------------------------------------------------
+# Check f (C43 S2b-ii, S5(b)): PERSISTENT ROLLBACK-PIN alarm.
+#   A "serve this build" rollback writes rollback.pin, which reconcile respects INDEFINITELY (no
+#   expiry) — a curator who rolls back and forgets freezes the box on an old build silently. Give the
+#   pin the SAME persistent-freeze visibility as a pause: carry a continuous first_seen forward while
+#   the pin stands; a pin held past PIN_MAX_H cumulative is a failure line + an ops-floor fact.
+# --------------------------------------------------------------------------------------------------
+check_pin() {
+  data_dir="${AUSMT_DATA_DIR:-}"
+  [ -n "$data_dir" ] || return 0
+  pin_file="$data_dir/gateway/state/rollback.pin"
+  [ -f "$pin_file" ] || return 0            # no pin => nothing to track
+  OPS_PIN_ACTIVE=1
+  [ -n "$PY" ] || return 0
+  line=$(AUSMT_PIN="$pin_file" AUSMT_PREV="${OPS_STATUS_FILE:-}" AUSMT_NOW="$(now_utc)" \
+         AUSMT_MAX_H="$PIN_MAX_H" "$PY" - <<'PYEOF' 2>/dev/null || true
+import datetime, json, os
+
+def load(p):
+    if not p or not os.path.isfile(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+def parse(ts):
+    if not isinstance(ts, str) or not ts:
+        return None
+    try:
+        return datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except Exception:
+        return None
+
+now_s = os.environ["AUSMT_NOW"]
+now = parse(now_s)
+pin = load(os.environ.get("AUSMT_PIN"))
+build = pin.get("pinned_build") if isinstance(pin, dict) else None
+pinned_at = pin.get("pinned_at") if isinstance(pin, dict) else None
+
+prev = load(os.environ.get("AUSMT_PREV")) or {}
+prev_pin = prev.get("pin") if isinstance(prev.get("pin"), dict) else {}
+if prev_pin.get("active") and prev_pin.get("first_seen"):
+    first_seen = prev_pin.get("first_seen")
+else:
+    first_seen = pinned_at or now_s
+
+fs = parse(first_seen)
+hours = ""
+persistent = 0
+if fs is not None and now is not None:
+    h = (now - fs).total_seconds() / 3600.0
+    hours = f"{h:.1f}"
+    try:
+        if h > float(os.environ.get("AUSMT_MAX_H") or 24):
+            persistent = 1
+    except Exception:
+        pass
+print(f"{first_seen}|{build or ''}|{hours}|{persistent}")
+PYEOF
+)
+  if [ -n "$line" ]; then
+    OPS_PIN_FIRST_SEEN=$(printf '%s' "$line" | cut -d'|' -f1)
+    OPS_PIN_BUILD=$(printf '%s' "$line" | cut -d'|' -f2)
+    OPS_PIN_CUMULATIVE_H=$(printf '%s' "$line" | cut -d'|' -f3)
+    OPS_PIN_PERSISTENT=$(printf '%s' "$line" | cut -d'|' -f4)
+  fi
+  if [ "${OPS_PIN_PERSISTENT:-0}" = "1" ]; then
+    add_failure "pin: a rollback pin (serving builds/${OPS_PIN_BUILD:-?}) has stood for ${OPS_PIN_CUMULATIVE_H}h (threshold ${PIN_MAX_H}h) -- auto-rebuild is frozen on an old build. Force/Request a rebuild to move forward, or remove the pin. first_seen=${OPS_PIN_FIRST_SEEN}"
   fi
 }
 
@@ -571,6 +663,9 @@ write_ops_status() {
   AUSMT_OPS_PAUSE_ACTIVE="$OPS_PAUSE_ACTIVE" AUSMT_OPS_PAUSE_PAUSED_AT="$OPS_PAUSE_PAUSED_AT" \
   AUSMT_OPS_PAUSE_FIRST_SEEN="$OPS_PAUSE_FIRST_SEEN" AUSMT_OPS_PAUSE_CUMULATIVE_H="$OPS_PAUSE_CUMULATIVE_H" \
   AUSMT_OPS_PAUSE_PERSISTENT="$OPS_PAUSE_PERSISTENT" AUSMT_OPS_PAUSE_MAX_H="$PAUSE_MAX_H" \
+  AUSMT_OPS_PIN_ACTIVE="$OPS_PIN_ACTIVE" AUSMT_OPS_PIN_BUILD="$OPS_PIN_BUILD" \
+  AUSMT_OPS_PIN_FIRST_SEEN="$OPS_PIN_FIRST_SEEN" AUSMT_OPS_PIN_CUMULATIVE_H="$OPS_PIN_CUMULATIVE_H" \
+  AUSMT_OPS_PIN_PERSISTENT="$OPS_PIN_PERSISTENT" AUSMT_OPS_PIN_MAX_H="$PIN_MAX_H" \
   AUSMT_OPS_STATE_DIR="${STATE_DIR:-}" \
   "$PY" - > "$_tmp" <<'PYEOF'
 import datetime, glob, json, os
@@ -773,6 +868,15 @@ pause = {"active": os.environ.get("AUSMT_OPS_PAUSE_ACTIVE", "") == "1",
                               else None),
          "persistent": os.environ.get("AUSMT_OPS_PAUSE_PERSISTENT", "") == "1",
          "max_hours": int(os.environ.get("AUSMT_OPS_PAUSE_MAX_H") or 24)}
+# S5(b): rollback-pin persistent-freeze fact, parallel to pause.
+pin = {"active": os.environ.get("AUSMT_OPS_PIN_ACTIVE", "") == "1",
+       "pinned_build": _f("AUSMT_OPS_PIN_BUILD"),
+       "first_seen": _f("AUSMT_OPS_PIN_FIRST_SEEN"),
+       "cumulative_hours": (float(os.environ["AUSMT_OPS_PIN_CUMULATIVE_H"])
+                            if os.environ.get("AUSMT_OPS_PIN_CUMULATIVE_H", "").replace(".", "", 1).isdigit()
+                            else None),
+       "persistent": os.environ.get("AUSMT_OPS_PIN_PERSISTENT", "") == "1",
+       "max_hours": int(os.environ.get("AUSMT_OPS_PIN_MAX_H") or 24)}
 
 # ---- pending privileged intents + the actions audit tail (C43 S2b-ii, record D8/D9). Read-only
 #      surfacing so the serve screen shows what is queued/in-flight and the recent action outcomes;
@@ -798,7 +902,7 @@ actions = {"pending": intents, "audit_tail": audit_tail}
 doc = {"generated_at": now, "timer_period_min": int(os.environ.get("AUSMT_OPS_PERIOD_MIN") or 15),
        "reconcile": reconcile, "backups": backups, "alerts": alerts, "box": box,
        "freshness": freshness, "builds": builds, "logs": logs,
-       "pause": pause, "actions": actions}
+       "pause": pause, "pin": pin, "actions": actions}
 print(json.dumps(doc, indent=1))
 PYEOF
 
@@ -821,6 +925,7 @@ check_disk
 check_reconcile
 check_backup
 check_pause
+check_pin
 
 # Strip the leading blank line add_failure introduces.
 SUMMARY="$(printf '%s' "$FAILURES" | sed '/^$/d')"

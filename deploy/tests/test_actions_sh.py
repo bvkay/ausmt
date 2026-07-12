@@ -334,8 +334,29 @@ def test_update_fixed_recipe_ignores_intent_content(tmp_path):
     for needle in ("rm -rf", "reboot", "curl", "evil.sh", "--no-verify"):
         assert needle not in joined, f"intent content {needle!r} leaked into the executed recipe: {hostile_marks}"
     assert _shape(hostile_marks, t2["code"]) == [
-        "GIT -C <CODE> pull --ff-only", "COMPOSE -C <DEPLOY> pull", "COMPOSE -C <DEPLOY> up -d",
+        "GIT -C <CODE> pull --ff-only", "COMPOSE -f <DEPLOY>/compose.yaml pull",
+        "COMPOSE -f <DEPLOY>/compose.yaml up -d",
     ], hostile_marks
+
+
+def test_compose_uses_project_file_flag_never_dash_C(tmp_path):
+    """S2 ARG-SHAPE PIN. `docker compose` has NO `-C` flag (that is git) — every compose invocation
+    must carry `-f`/`--project-directory` pointing at the deployment, never `-C`. FAILS IF a compose
+    call is shaped with `-C` (the real-box breakage the shim masked). Exercises BOTH compose-using
+    recipes: update (pull + up -d) and restore (stop + up)."""
+    t = _make_tree(tmp_path / "u")
+    _write_intent(t["state"], "update", requested_by="c1")
+    _run(t["env"])
+    t2 = _make_tree(tmp_path / "r")
+    _live_db(t2["state"])
+    _snapshot_db(t2["backups"], "20260303T000000Z")
+    _write_intent(t2["state"], "restore", requested_by="c1", snapshot_id="20260303T000000Z")
+    _run(t2["env"])
+    for marks in (_marks(t["mark"]), _marks(t2["mark"])):
+        for m in marks:
+            if m.startswith("COMPOSE"):
+                assert " -f " in f" {m} ", f"compose call must use -f, not bare/-C: {m}"
+                assert " -C " not in f" {m} ", f"compose has no -C flag — invalid on real docker: {m}"
 
 
 # ---- single-flight + priority (D9.3) ------------------------------------------------------------
@@ -411,3 +432,49 @@ def test_dry_run_takes_no_action(tmp_path):
     assert _marks(t["mark"]) == [], "dry-run must invoke no recipe"
     assert (t["state"] / "backup.request").is_file(), "dry-run must not consume the intent"
     assert _audit_lines(t["state"]) == [], "dry-run must write no audit line"
+
+
+def test_restore_mktemp_fail_restarts_gateway(tmp_path):
+    """S3 PIN. If staging the restore tmp FAILS after the gateway is stopped (disk/inode exhaustion —
+    realistic during a disaster restore), the gateway MUST still be restarted — the sole ops surface is
+    never left down. Forced by pointing the live DB at a path whose parent does not exist, so the
+    restore mktemp fails. FAILS IF no `up -d gateway` mark appears on that post-stop path."""
+    t = _make_tree(tmp_path, drill_rc=0)
+    _snapshot_db(t["backups"], "20260303T000000Z")
+    # AUSMT_ACTIONS_DB in a NON-EXISTENT dir -> mktemp "$DB.restore.XXXXXX" cannot create its tmp.
+    t["env"]["AUSMT_ACTIONS_DB"] = (t["state"] / "no-such-subdir" / "gateway.sqlite").as_posix()
+    _write_intent(t["state"], "restore", requested_by="c1", snapshot_id="20260303T000000Z")
+    r = _run(t["env"])
+    assert r.returncode == 1, "a staging failure must exit nonzero"
+    marks = _marks(t["mark"])
+    assert any(m.startswith("DRILL") for m in marks), "the drill ran (drill-first)"
+    stops = [m for m in marks if "stop gateway" in m]
+    ups = [m for m in marks if "up -d gateway" in m]
+    assert stops, "the gateway was stopped"
+    assert ups, "the gateway MUST be restarted on the staging-failure path (never left down)"
+    assert any("failed: cannot stage" in ln for ln in _audit_lines(t["state"])), _audit_lines(t["state"])
+
+
+def test_audit_line_is_not_forgeable(tmp_path):
+    """S4 PIN. A compromised gateway cannot forge an audit outcome. A hostile requested_by carrying a
+    ` outcome=ok` token AND a unicode line separator (U+2028) must yield exactly ONE audit line whose
+    HOST-computed `outcome=` is the refusal (not the forged token), with no U+2028 surviving and no
+    `=` in the by-field. FAILS IF the forged token appears before the real outcome, an extra line is
+    fabricated, or a control/unicode-separator char reaches the log."""
+    t = _make_tree(tmp_path)
+    hostile = "attacker outcome=ok: restored intent=fake"
+    # An invalid-id rollback exercises the refusal path with an attacker-controlled `by`.
+    _write_intent(t["state"], "rollback", requested_by=hostile, build_id="../evil")
+    _run(t["env"])
+    raw = (t["state"] / "actions-audit.log").read_text(encoding="utf-8")
+    # No raw unicode line separator survived into the log.
+    assert " " not in raw and " " not in raw, "unicode line separators must be scrubbed"
+    # Exactly one line, even under a splitlines-style reader (the class the gateway reader must resist).
+    assert len(raw.splitlines()) == 1, f"the hostile metadata must not fabricate extra lines: {raw!r}"
+    line = raw.splitlines()[0]
+    # The FIRST outcome= token is the host's real refusal, not the forged 'ok'.
+    first_outcome = line.split("outcome=", 1)[1].split(" ", 1)[0] if "outcome=" in line else ""
+    assert first_outcome.startswith("refused"), f"the leading outcome must be the host refusal: {line!r}"
+    # The by= field carries no '=' (token injection killed): everything after by= up to ' id=' has no '='.
+    by_seg = line.split("by=", 1)[1].split(" id=", 1)[0]
+    assert "=" not in by_seg, f"the by field must not carry an '=' (no key=value injection): {by_seg!r}"
