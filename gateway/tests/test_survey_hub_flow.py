@@ -113,10 +113,10 @@ def test_c43_js_routes_are_session_gated(tmp_path):
 # NAV SHELL presence (S1-1)
 # --------------------------------------------------------------------------------------------------
 def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
-    """Every session-gated curator page renders the left rail (with the Stage-1 surfaces and NOT
-    Collections) and the context bar's drift chip carrying the server-rendered published HEAD +
-    Request-rebuild button. FAILS IF a page loses the shell or the rail gains a Collections entry
-    (Stage 3) before its stage."""
+    """Every session-gated curator page renders the left rail (the Stage-1 surfaces PLUS the Stage-3a
+    Collections entry, record D5-A) and the context bar's drift chip carrying the server-rendered
+    published HEAD + Request-rebuild button. FAILS IF a page loses the shell or the rail drops a
+    surface."""
     async def _body():
         surveys_live = _hub_client(tmp_path)
         git = FakeGit()  # its rev-parse returns a stable short HEAD -> the chip shows it server-side
@@ -137,8 +137,10 @@ def test_nav_shell_rail_and_drift_chip_on_every_page(tmp_path):
                 # Serve state: C43 S2b-i promoted the panel to a first-class screen, so the rail
                 # now points at /gateway/curator/serve (was the queue's #serve-state anchor).
                 assert 'href="/gateway/curator/serve"' in r.text           # Serve state
-                # Collections is Stage 3 — NOT in the rail (not even as a disabled placeholder).
-                assert ">Collections<" not in r.text, f"{path}: Collections leaked into the rail"
+                # Collections joined the rail in Stage 3a (record D5-A) — present on every page (not
+                # the active item on these non-collections pages).
+                assert 'href="/gateway/curator/collections">Collections</a>' in r.text, \
+                    f"{path}: Collections missing from the rail"
                 # Drift chip + published HEAD + Request-rebuild button.
                 assert 'id="drift-chip"' in r.text, f"{path}: no drift chip"
                 assert "published HEAD" in r.text

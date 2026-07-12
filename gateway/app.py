@@ -1027,6 +1027,53 @@ class Gateway:
             slug=slug, tab=tab, version=version, fields=fields, csrf_token=csrf, nav=nav,
             commits=commits, history_error=history_error, build_lag=build_lag))
 
+    def handle_collections_index(self, request: Request) -> Response:
+        """GET /gateway/curator/collections (C43 Stage 3a, record D5-A). Enqueue the whole-corpus
+        `collections` read-job (the runner is the only place YAML is parsed — C31 §0.1) and render the
+        read-only index: summary cards, the list table, and the id-near-duplicate + per-field
+        divergence bands. A runner error degrades to the empty state (never a 500 — the projection is
+        informational). Sync `def` route -> the seam's bounded blocking poll runs in the threadpool."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        nav = self._nav_context(request, active="collections", crumb="<b>Collections</b>")
+        collections, near_duplicates = self._read_collections()
+        return self._html(curatorpage.render_collections_index(
+            collections=collections, near_duplicates=near_duplicates, nav=nav))
+
+    def handle_collection_detail(self, request: Request, cid: str) -> Response:
+        """GET /gateway/curator/collections/{id} (C43 Stage 3a, record D5-A). Enqueue the same
+        whole-corpus read-job and render the read-only detail for ONE collection id: rollup facts, the
+        member/Declares table, and the per-collection inconsistency callouts. An unknown id -> 404 (no
+        crash). READ-ONLY: no form inputs, no POST — editing is Stage 3b."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        collections, near_duplicates = self._read_collections()
+        collection = collections.get(cid)
+        if collection is None:
+            return self._not_found()
+        nav = self._nav_context(
+            request, active="collections",
+            crumb='<a href="/gateway/curator/collections">Collections</a> › '
+                  f'<b>{curatorpage._esc(cid)}</b>')  # noqa: SLF001
+        return self._html(curatorpage.render_collection_detail(
+            cid=cid, collection=collection, near_duplicates=near_duplicates, nav=nav))
+
+    def _read_collections(self) -> tuple[dict, list]:
+        """Run the whole-corpus collections read-job and return (collections, near_duplicates). Degrades
+        to the empty projection on a runner error or a refusal — the console is read-only and
+        informational, so an unavailable runner shows 'no collections yet', never a 500."""
+        try:
+            result = self._edit_runner(metaedit.make_collections_job())
+        except metaedit.EditRunnerError as exc:
+            logger.warning("collections read-job failed (empty state): %s", exc)
+            return {}, []
+        if not result.get("ok"):
+            logger.warning("collections read-job refused: %s", result.get("error"))
+            return {}, []
+        return result.get("collections") or {}, result.get("near_duplicates") or []
+
     def _build_lag_hint(self) -> dict:
         """The server-side half of the Stations [FC-2] lag label: the published surveys-live HEAD (or
         None). The stations JS fetches /data/build.json browser-side, reads its build_id + source_commit,
@@ -2246,6 +2293,17 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/survey/{slug}")
     def curator_survey_hub(request: Request, slug: str, tab: str = "overview"):
         return gw.handle_survey_hub(request, slug, tab)
+
+    # ---- C43 Stage 3a collections console (record D5-A). Two READ-ONLY GET pages: the index +
+    # per-id detail. Blocking whole-corpus read-job -> `def` (threadpool), matching the survey-hub
+    # rationale. No POST, no write control — creation/edit/merge/normalise are Stage 3b.
+    @app.get("/gateway/curator/collections")
+    def curator_collections_index(request: Request):
+        return gw.handle_collections_index(request)
+
+    @app.get("/gateway/curator/collections/{cid}")
+    def curator_collection_detail(request: Request, cid: str):
+        return gw.handle_collection_detail(request, cid)
 
     @app.get("/gateway/curator/edit/{slug}")
     def curator_edit_form(request: Request, slug: str):

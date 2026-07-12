@@ -132,6 +132,123 @@ read-jobs over surveys-live (same seam as the edit list; no schema change, no ne
   batch lands as N commits with one shared release note. Add/remove member and rename ride the
   same choreography.
 
+### D5-A. Design freeze (2026-07-12 — owner-approved preview)
+
+Normative visual reference: **`maintainer-archive/C43-collections-preview-approved.html`** (owner
+sign-off 2026-07-12, rendered in the shipped dark workbench system). This subsection is
+design-authoritative for the Stage-3 contract(s); where it sharpens the bullets above, it governs.
+
+**Grounding (verified 2026-07-12, engine at `origin/main` 69d1e27).** The `collection` block is
+Model B — it lives redundantly in **each member's `survey.yaml`**: `id, title, type, status,
+start_year, last_updated, description` (`engine/tests/test_collections.py:38-41`; facet
+`build_portal.py:654-663`; rollup `:381-422`; near-dup `:425-433`; stderr-only warn `:2573-2575`).
+The rollup takes programme-level fields **from the first member that declares them** — so divergence
+is real and silent today. `collections.json[id].surveys` holds member **labels, not slugs** (the
+labels-vs-slugs trap that broke the stations tab, hotfix #33). Validator: id `^[a-z0-9]+(-[a-z0-9]+)*$`
+and status ∈ {active,completed,archived} are **WARNING-grade, non-blocking**
+(`vendored_validation/validate_survey.py:399-411`); title/type/start_year/description unvalidated.
+The nav rail deliberately omits Collections today (`curatorpage.py:1088-1096`).
+
+**A1 — information architecture: TWO server-rendered views** (owner-approved; supersedes the
+mockup's single stacked screen), mirroring the shipped Surveys-list → survey-hub pattern:
+* **Index** `GET /gateway/curator/collections` — summary cards, the list table (Collection ·
+  Type · Members · Stations · Status), **New collection…**, and the inconsistency bands (A4).
+* **Detail** `GET /gateway/curator/collections/{id}` — the fan-out edit form, the membership
+  manager (A3), and the staged-batch bar. Full-width (`.wrap wide`), dark, reusing the shipped
+  design system verbatim (`.cards/.chip/.panel/tables/.opsband`-derived bands). Collections joins
+  the rail under the Surveys group.
+
+**A2 — controlled vocabularies (engine truth, corrects the mockup):**
+* **type** = `programme | release | institutional | other` (the docs vocab,
+  `docs/.../collection-ids.md`; the mockup's *campaign/compilation* are dropped). type is
+  validator-unenforced, so the console's select IS the guardrail; **also update the docs if this
+  ever changes.**
+* **status** = `active | completed | archived` (the mockup's "complete" would silently null on
+  build — out-of-vocab is dropped, `test_collections.py:71-84`).
+* **description = the reader-facing programme abstract** (portal collection page); a first-class
+  multi-line field, fanned out like the rest. `start_year` editable; `last_updated` is
+  gateway-managed on any edit (not hand-typed).
+
+**A3 — membership manager (owner directive 2026-07-12: "easy to remove and/or add surveys,
+intuitive").** A two-column surface on the detail view:
+* **Current members** — one row per member (resolved by **slug**, read live from surveys-live —
+  NEVER the rollup's display labels), each with one-click **remove**; a staged removal is visibly
+  struck through with undo.
+* **Add surveys** — a **searchable** picker (the shipped stations-filter pattern) over surveys
+  **not** already in this collection, each showing its current membership: `no collection` vs
+  `in "<other-id>" → moves`. Adding a survey that already belongs elsewhere is a **move** (its
+  `collection.id` is rewritten) and the picker says so before commit.
+* Adds, removes, field edits and normalise/merge all **stage together** into ONE atomic batch; a
+  staged-changes bar shows what is pending; nothing is written until Preview → Publish.
+
+**A4 — the projection surfaces EVERY inconsistency (owner ruling: detect + one-click normalise).**
+Two honesty seams, both with a one-click remedy that is just a staged batch over the outliers:
+* **Id near-duplicates** — ids differing only by case/whitespace (the existing
+  `_near_duplicate_collection_ids` check, moved off stderr onto the index band) → **Merge into
+  "<id>"** (batch-edits the minority members' id).
+* **Per-field divergence** — members of one id disagreeing on a field (title/status/type/…) →
+  a band on the index and inline `◆` markers on the detail form + a **Declares** column in the
+  member list naming the outliers → **Normalise** (batch-edits the ◆ members to the chosen value).
+
+**A5 — create = assign to ≥1 survey.** A collection with no members cannot exist (no object), so
+**New collection…** collects the details AND an initial member; it is a batch that sets the block
+on the chosen survey(s).
+
+**A6 — atomic batch choreography (the load-bearing, publish-path core).** Stage → **Preview
+combined diff** → for every affected survey build the `collection`-block patch, **validate each**
+(the `_run_validator` seam, `runner/edit.py:436-465`); commit only if **all** pass, as **N commits
+(one per affected survey, each version-bumped) sharing one release note**, under `PUBLISH_LOCK`,
+with **fail-closed rollback of the whole batch** if any commit fails mid-apply. Version-bump per
+member is accepted churn — it is exactly the existing single-survey collection-section edit applied
+N times (owner acknowledged 2026-07-12). D13 atomicity pin governs: **member N fails ⇒ ZERO commits
+land** (red-proven).
+
+**A7 — implementation split (de-risks the write path; read-job proven before writes ride it):**
+* **Stage 3a — read-only projection:** the gw-runner collections read-job (returns, per id: the
+  rollup fields + each member's raw declared values + n_stations + near-dup groups + per-field
+  divergence), the index + detail **views**, the inconsistency bands, nav gains Collections. No
+  writes. Delivers the "see collections / spot the collision" value immediately.
+* **Stage 3b — atomic batch writes:** edit / add / remove / rename / merge / normalise / create,
+  all via A6. Rides 3a's read-job. Carries the atomicity + rollback + CSP + executable-JS pins.
+
+### D5-B. Stage-3a gate findings + published-source framing (2026-07-12)
+
+The 3a read-only projection passed a 4-lens adversarial gate + independent verify. **Security lens
+CLEAN** (every field value escaped; the `<img onerror>` probe title rendered inert in a real
+browser; read-job read-only; unknown id → 404). The parity lens surfaced that the runner's
+**light reimplementation of the rollup drifts from the engine's `_group_collections`** in edge
+cases — the fragility inherent to parity-by-reimplementation. Resolution:
+
+**Framing (architect decision).** The console is a **PUBLISHED-SOURCE projection, NOT a
+served-portal mirror.** It reads the `survey.yaml`s at published HEAD — the *edit* truth (correct
+for an editing tool) and the only view that can compute per-member divergence (the built
+`collections.json` has already collapsed divergence to first-declarer). It may therefore legitimately
+differ from the *served* build until the next rebuild — the same published-vs-served lag the drift
+chip already carries. Copy says so ("rolled up from every published survey.yaml"; served may differ
+until rebuild); `n_stations` is the **published EDI-file count**, labelled as such (the portal's is
+the post-gate served count). **Pin 1 is narrowed to SAME-INPUT parity:** the runner's rollup logic
+must equal `_group_collections` *given the same member set* — the achievable, meaningful invariant
+(a built survey's contribution matches the portal); it does not claim to reproduce the build's drop
+logic. Build-dropped members (0-station / validation-FAIL surveys still carrying a `collection.id`)
+ARE included in the published-source view by design; a "not currently building" flag is a 3b/enrich
+follow-up.
+
+**Fixes (same-input logic drifts the panel caught — all red-then-green):**
+* **F1 (material)** out-of-vocab status drop moved INSIDE the per-member fold (mirror
+  `build_portal.py:399-400`) so nulling an invalid status re-opens the slot for a later member's
+  valid value; parity fixture: invalid-status-first + valid-later ⇒ rollup = valid.
+* **F2 (minor)** membership predicate → engine truthiness (`if coll.get('id')`, drop `id: 0`/`False`).
+* **F3 (material)** malformed-YAML per-survey resilience: catch the ruamel `YAMLError` (not just
+  `OSError`) and drop-and-continue that one survey, mirroring `build_portal.py:810-817` — one bad
+  file must not blank the whole console; **negative-control pin** added.
+* **F4** published-source copy + `n_stations` label; parity-pin claim narrowed to same-input.
+* **F5** rollup-parity pin strengthened to exercise F1/F2 edges (non-vacuous — imports the real
+  engine fn on the same member set).
+
+**Future hardening (noted, deferred — engine-touch, out of 3a scope):** parity-by-reimplementation
+is drift-prone; a shared single-source rollup module imported by both engine and runner would
+prevent this class permanently.
+
 ## D6. Submission queue — review flow unchanged. Review → checklist → sandboxed preview →
 approve/return/reject was production-proven 2026-07-08; C43 deliberately leaves that flow alone.
 The queue gains the shared nav + drift chip (Stage 1) and one additive surface: a **read-only
