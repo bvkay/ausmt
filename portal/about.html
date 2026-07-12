@@ -14,7 +14,7 @@
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
-  body{font-family:var(--sans);background:var(--ink);color:var(--text);margin:0;line-height:1.6}
+  body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6}
   /* Uniform chrome (fix/about-uniform-chrome): the three-zone header below is copied verbatim from
      index.html's post-UX3 header so About carries the same chrome as the portal. Left = brand, centre =
      nav + page links (genuinely centred via the flex:1 side zones), right = the mtcat.json link. About
@@ -31,19 +31,23 @@
   .logolink{display:flex;align-items:center;flex:none}
   .auscope-logo{height:30px;width:auto;display:block}
   .tagline{color:var(--muted);font-size:12.5px}
-  nav{display:flex;gap:4px}
+  nav{display:flex;gap:6px}
   /* Centre-zone nav items are links on this static page (index uses <button>s that switch app views).
-     They match index's nav button look, incl. the .active state that marks the current page. */
-  nav a{background:none;border:0;color:var(--muted);font-size:13.5px;padding:7px 12px;border-radius:4px;text-decoration:none;cursor:pointer}
-  nav a.active{color:var(--text);background:var(--panel-2)}
-  nav a:hover{color:var(--text)}
+     They match index's UX6 Wave B (B4) nav buttons: equal-width bordered boxes, ≥40px targets, and a
+     copper-filled active state (#16110b on --copper = 6.16:1). None of Map/Surveys/Collections is the
+     current page here, so none is active — the current page (About) is marked on its own .about link. */
+  nav a{flex:1;min-width:92px;min-height:40px;display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
+    padding:0 16px;border-radius:5px;text-decoration:none;cursor:pointer}
+  nav a:hover{border-color:var(--copper)}
+  nav a.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
   .contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
   .contribute:hover{border-color:var(--copper)}
   .about{color:var(--muted);font-size:13px;text-decoration:none;padding:6px 11px;border-radius:4px}
   .about:hover{color:var(--text)}
   .about.active{color:var(--text);background:var(--panel-2)}
-  .ver{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
-  .apilink{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
+  .ver{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
+  .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
   .apilink:hover{color:var(--copper)}
   /* Matches index.html: at narrow widths the three header zones stack full-width and left-align, so the
      centred nav / right-aligned mtcat link don't read as stranded fragments once they wrap. */
@@ -67,9 +71,22 @@
   .toc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:0 0 26px;font-size:13.5px}
   .toc a{color:var(--muted);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
   .toc a:hover{color:var(--text)}
-  .pill{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
+  .pill{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0}
   .cta{display:inline-block;background:var(--copper);color:#12202b;font-weight:700;text-decoration:none;padding:9px 16px;border-radius:5px;margin-top:4px}
-  footer{color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:16px;margin-top:30px}
+  /* UX6 Wave B (B3): same footer pattern as index — one visible line + an "About this build" popover.
+     About is a static page: it carries the version chip but intentionally NO #buildId (main.js/build.json
+     are not loaded here, so a #buildId span would sit permanently empty). */
+  footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;margin-top:30px}
+  footer details.aboutbuild{display:inline-block;position:relative}
+  footer details.aboutbuild>summary{display:inline;cursor:pointer;color:var(--copper);list-style:none}
+  footer details.aboutbuild>summary::-webkit-details-marker{display:none}
+  footer details.aboutbuild>summary::marker{content:""}
+  footer details.aboutbuild>summary:hover{text-decoration:underline}
+  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+    width:min(440px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.5);text-align:left;font-size:12px;color:var(--muted);
+    line-height:1.5;z-index:50}
+  footer .aboutbuild-body .ver{margin-top:8px;display:inline-block}
 </style>
 </head>
 <body>
@@ -288,13 +305,17 @@
        stay permanently empty here; it is intentionally omitted. The mtcat.json link moved to the header
        (hright zone) to match index, so it is no longer duplicated here. -->
   <footer>
-    AusMT is a national MT research infrastructure. It indexes processed transfer functions and
-    their provenance; it does not host raw time-series or make geological interpretations.
-    The portal software is licensed under Apache-2.0; survey data remains licensed by its custodians
-    (see <a class="link" href="#policy">Data policy</a>). Copyright © 2026 AuScope and the AusMT contributors.
-    <div style="margin-top:10px">
-      <span class="ver" data-ver-chip></span>
-    </div>
+    © 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
+    <details class="aboutbuild">
+      <summary>About this build</summary>
+      <div class="aboutbuild-body">
+        AusMT is a national MT research infrastructure. It indexes processed transfer functions and
+        their provenance; it does not host raw time-series or make geological interpretations.
+        The portal software is licensed under Apache-2.0; survey data remains licensed by its custodians
+        (see <a class="link" href="#policy">Data policy</a>).
+        <span class="ver" data-ver-chip></span>
+      </div>
+    </details>
   </footer>
 </main>
 <script src="config.js"></script>
