@@ -1,0 +1,62 @@
+{
+ "portal": {
+  "portal_id": "ausmt",
+  "portal_name": "AusMT — Australia's Magnetotelluric Data Portal",
+  "schema": "mtcat",
+  "version": "1.0",
+  "schema_url": "mtcat.schema.json",
+  "metadata_license": "CC0-1.0",
+  "generated_at": "2026-07-12T03:36:03Z"
+ },
+ "surveys": [
+  {
+   "survey_id": "sweep-survey",
+   "title": "Coord Access Sweep Survey",
+   "organisation": "AusMT CI",
+   "organisation_ror": null,
+   "raid": null,
+   "country": "Australia",
+   "version": null,
+   "collection_id": null,
+   "doi": null,
+   "license": "CC-BY-4.0",
+   "access": "open",
+   "bbox": {
+    "west": 135.234567,
+    "south": -32.9,
+    "east": 136.9,
+    "north": -31.234567
+   },
+   "centroid": {
+    "latitude": -32.067284,
+    "longitude": 136.067284
+   }
+  }
+ ],
+ "stations": [
+  {
+   "station_id": "au.sweep-survey.EXACTONE",
+   "survey_id": "sweep-survey",
+   "latitude": -31.234567,
+   "longitude": 135.234567,
+   "data_type": "BBMT"
+  },
+  {
+   "station_id": "au.sweep-survey.GENFIVE",
+   "survey_id": "sweep-survey",
+   "latitude": -32.9,
+   "longitude": 136.9,
+   "data_type": "BBMT"
+  },
+  {
+   "station_id": "au.sweep-survey.HIDENINE",
+   "survey_id": "sweep-survey",
+   "latitude": null,
+   "longitude": null,
+   "data_type": "BBMT"
+  }
+ ],
+ "collections": [],
+ "mt_metadata_version": "1.0.9",
+ "mth5_version": "0.6.8"
+}

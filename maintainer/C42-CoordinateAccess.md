@@ -251,6 +251,28 @@ coordinates** regardless of what is served:
 Default `exact` means lanes 1–3 ship with zero behaviour change for every existing survey; the
 feature activates only when a custodian first sets a policy.
 
+## Amendment A1 (2026-07-12) — portal-lane finding: the generalised badge needs an engine signal
+
+The portal lane shipped withheld handling in full (null-coords are unambiguous: no marker, no
+spatial selection, honest counts, the "coordinates withheld (custodian policy)" drawer line —
+browser-verified, crash sites closed). But the lane's executor STOP-reported a real record-vs-code
+gap: **the merged engine emits NO policy field on any portal-consumed artifact** — a generalised
+station is a silently 0.1°-rounded number, indistinguishable from an exact station on a grid
+point, and `distribution.edi_available=false` is shared with embargo/licence gating. The record's
+own D-rules forbid recomputing coordinate precision client-side, so the "position generalised"
+badge (this record's D2/D6) is **unimplementable portal-side today**. It was NOT faked; the
+generalised value renders verbatim, unbadged, for now.
+
+**Resolution (architect ruling): a small engine+portal follow-up delta.** The engine emits a
+per-station coordinate-policy marker for NON-EXACT stations on a BOOT-LOADED artifact (the drawer
+renders from the in-memory catalogue — `station.json` is never fetched on navigation, so the
+signal must ride the catalogue row (additive column) or an equivalent boot artifact). Disclosing
+"generalised"/"withheld" reveals policy, not position — it is the honesty this record already
+mandates. Exact stations stay unmarked (zero-change default preserved). The same delta carries
+the survey-level access-panel wording fix (`drawer.js:32-38` "Station locations … are public" —
+now only conditionally true) and the portal badge itself. Leak-sweep pins extend to assert the
+marker never co-occurs with exact coordinates for a non-exact station.
+
 ## Provenance
 
 Owner ruling 2026-07-10 (A1: "we give the user the option to withhold coordinates, or a
@@ -258,4 +280,5 @@ generalisation, or have it exact"). Recon map of every coordinate-bearing artifa
 against main @ 3d4be17 the same day (two latent leaks found during recon: served qc_report
 coords, served products/station.json). Architect positions flagged to the owner before freeze:
 EDI withholding over redaction (rationale in D3), elevation-withheld-under-generalised (D2 ⚑),
-repo-visibility governance (D5 ⚑).
+repo-visibility governance (D5 ⚑). Amendment A1 2026-07-12 (portal lane executor stop-and-report;
+generalised-badge engine-signal delta ruled).

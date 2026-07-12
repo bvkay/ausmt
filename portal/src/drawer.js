@@ -214,7 +214,11 @@ function openStation(i){
      `<button data-cite="ris" data-survey="${escAttr(s.survey)}">RIS</button></div></div>`+
    `<div class="sechead">Metadata &amp; API</div><table class="meta">`+
      `<tr><td>ausmt_id</td><td>${esc(s.ausmt_id)}</td></tr>`+
-     `<tr><td>lat, lon</td><td>${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}</td></tr>`+
+     // C42 coordinate access: a custodian-withheld station carries null lat/lon (the engine masks the
+     // VALUE — no policy field). Show an honest line instead of null-derefing .toFixed. A generalised
+     // station carries the 0.1° cell and renders VERBATIM here (no client-side re-rounding). hasPosition
+     // (map.js) is the shared predicate.
+     `<tr><td>lat, lon</td><td>${hasPosition(s)?`${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}`:`<span style="color:var(--muted)">coordinates withheld (custodian policy)</span>`}</td></tr>`+
      `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
      `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`+
    `<div class="api">Planned read API (static JSON on the hosted site):<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
@@ -258,7 +262,9 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const tip=Math.round(100*ss.filter(s=>s.comps.includes("T")).length/ss.length);
   const qs=ss.map(s=>s.q).filter(v=>v!=null);const qavg=qs.length?(qs.reduce((a,b)=>a+b,0)/qs.length).toFixed(1):"–";
   const fixes=ss.filter(s=>s.fixed).length;
-  const ext=`${(Math.max(...ss.map(s=>s.lon))-Math.min(...ss.map(s=>s.lon))).toFixed(1)}° × ${(Math.max(...ss.map(s=>s.lat))-Math.min(...ss.map(s=>s.lat))).toFixed(1)}°`;
+  // C42: extent over POSITIONED stations only — a withheld-coord station (null lat/lon) would make Math.max NaN.
+  const _pos=ss.filter(hasPosition);
+  const ext=_pos.length?`${(Math.max(..._pos.map(s=>s.lon))-Math.min(..._pos.map(s=>s.lon))).toFixed(1)}° × ${(Math.max(..._pos.map(s=>s.lat))-Math.min(..._pos.map(s=>s.lat))).toFixed(1)}°`:"—";
   const mixbar=Object.entries(mix).map(([ty,n])=>`<div style="width:${100*n/ss.length}%;background:${TYPE_COL[ty]}" title="${esc(ty)}: ${n}"></div>`).join("");
   // UX3 item 7b: the "N×3-D / N×2-D / N×1-D" dimensionality fragment was removed from the stats line
   // (dimensionality is inferable from the phase tensor + skew, which stay shown). The per-station `dim`
@@ -330,16 +336,20 @@ function renderCards(){const vis=surveys.filter(surveyVisible);
     ? vis.map(surveyCard).join("")
     : `<div class="emptynote">No surveys match the current filters. Loosen the data-type, period, quality, country/survey or survey-search filters on the left.</div>`;}
 function focusSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
-  map.fitBounds(L.latLngBounds(ST.filter(s=>s.survey===sv).map(s=>[s.lat,s.lon])).pad(0.15));}
+  // C42: fit only POSITIONED stations — a withheld-coord station has no [lat,lon] to bound (avoids NaN bounds).
+  const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15));}
 function selectSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
   selected=new Set(ST.filter(s=>s.survey===sv).map(s=>s.i));updateSel();
-  map.fitBounds(L.latLngBounds(ST.filter(s=>s.survey===sv).map(s=>[s.lat,s.lon])).pad(0.15));toast(`Selected all ${selected.size} ${sv} stations — use the download buttons in the left panel.`);}
+  const _sb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_sb.length)map.fitBounds(L.latLngBounds(_sb).pad(0.15));toast(`Selected all ${selected.size} ${sv} stations — use the download buttons in the left panel.`);}
 
-function bbox(ss){return {w:Math.min(...ss.map(s=>s.lon)),e:Math.max(...ss.map(s=>s.lon)),so:Math.min(...ss.map(s=>s.lat)),no:Math.max(...ss.map(s=>s.lat))};}
-function miniScatter(ss){const W2=372,H2=200,pad=12;const b=bbox(ss);
+// C42: bbox over POSITIONED stations only — a withheld-coord station (null lat/lon) would poison Math.min/max
+// with NaN. Empty (all-withheld survey) => a degenerate 0° box so callers never crash on b.e/b.w.
+function bbox(ss){const p=(ss||[]).filter(hasPosition),xs=p.map(s=>s.lon),ys=p.map(s=>s.lat);
+  return xs.length?{w:Math.min(...xs),e:Math.max(...xs),so:Math.min(...ys),no:Math.max(...ys)}:{w:0,e:0,so:0,no:0};}
+function miniScatter(ss){const W2=372,H2=200,pad=12;const pp=(ss||[]).filter(hasPosition);const b=bbox(pp);
   const dx=(b.e-b.w)||1,dy=(b.no-b.so)||1,sc=Math.min((W2-2*pad)/dx,(H2-2*pad)/dy);
   const ox=(W2-dx*sc)/2,oy=(H2-dy*sc)/2;
-  const d=ss.map(s=>`<circle cx="${(ox+(s.lon-b.w)*sc).toFixed(1)}" cy="${(H2-oy-(s.lat-b.so)*sc).toFixed(1)}" r="2.6" fill="${TYPE_COL[s.type]||"#999"}" fill-opacity=".85"/>`).join("");
+  const d=pp.map(s=>`<circle cx="${(ox+(s.lon-b.w)*sc).toFixed(1)}" cy="${(H2-oy-(s.lat-b.so)*sc).toFixed(1)}" r="2.6" fill="${TYPE_COL[s.type]||"#999"}" fill-opacity=".85"/>`).join("");
   return `<svg width="${W2}" height="${H2}" role="img" style="background:#16242f;border:1px solid var(--line);border-radius:6px">`+
     `<text x="${pad}" y="14" fill="#8FA3B0" font-size="9" font-family="monospace">${b.no.toFixed(1)}°,${b.w.toFixed(1)}° → ${b.so.toFixed(1)}°,${b.e.toFixed(1)}°</text>${d}</svg>`;}
 function relatedSurveys(sv){const m=SMETA[sv]||{},b=bbox(ST.filter(s=>s.survey===sv));

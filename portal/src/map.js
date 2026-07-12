@@ -55,9 +55,19 @@ map.addLayer(lpmtLayer);
 // (no collections.json / no auslamp collection) => graceful degrade: nothing is AusLAMP, everything
 // clusters exactly as before the split.
 function isAuslampSurvey(slug,auslampSet){return !!(slug&&auslampSet&&auslampSet.has(slug));}
+// C42 coordinate access: a station whose custodian WITHHELD its coordinates carries null lat/lon in the
+// served catalogue — the engine masks the VALUE (there is no separate policy field; withheld => null,
+// generalised => a 0.1° cell rendered verbatim). hasPosition is the ONE pure predicate every map path
+// uses to skip a position-less station: no marker, no footprint vertex, no fitBounds point, no spatial
+// selection. It stays in ST (counted, findable by name); it simply is not ON the map. PURE + Leaflet-free
+// so jsdom drives it directly (same idiom as isAuslampSurvey/partitionMarkers).
+function hasPosition(s){return !!(s&&s.lat!=null&&s.lon!=null&&isFinite(s.lat)&&isFinite(s.lon));}
 // PURE partition: split a station list into the plain unclustered layer (AusLAMP members) vs. the cluster
 // group (everything else). Side-effect-free so it is unit-testable without Leaflet — refresh() below is the
 // only Leaflet-touching caller. Reads the module-global AUSLAMP_SET (state.js), which boot fills.
+// It splits ONLY on membership (position-agnostic); refresh() feeds it just the positioned stations
+// (visible.filter(hasPosition)) so a withheld-coordinate station — which has no marker — never reaches
+// addLayers. Keeping position OUT of this function keeps the split cleanly unit-testable with id-only stubs.
 function partitionMarkers(stations){
   const unclustered=[],clustered=[];
   (stations||[]).forEach(s=>{(isAuslampSurvey(s&&s.slug,AUSLAMP_SET)?unclustered:clustered).push(s);});
@@ -72,7 +82,7 @@ map.addControl(new L.Control.Draw({draw:{polyline:false,circle:false,circlemarke
 // is membership-blind. The AusLAMP/legacy distinction is carried by the TOOLTIP type-label swap
 // (tooltipText below) and the D2 clustering split, not by colour.
 function markerColor(s){return colorMode==="quality"?qColor(s.q):colorMode==="dim"?(DIM_COL[s.dim]||"#5A6E7D"):(TYPE_COL[s.type]||"#999");}
-function recolor(){ST.forEach(s=>s.marker.setStyle({fillColor:markerColor(s)}));}
+function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // C42: withheld-coord stations have no marker
 // UX4 Amendment A1: the tooltip's TYPE SLOT shows "AusLAMP" INSTEAD OF the raw LPMT type label for
 // collection members (a swap, not an append — supersedes the D1 append) — the sole AusLAMP/legacy
 // visual distinction on hover. Non-members keep their type label unchanged. PURE + Leaflet-free so
@@ -91,12 +101,13 @@ function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFi
 function restyleForZoom(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
 function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);ST.forEach(s=>{
+  if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#13202B",fillColor:markerColor(s),fillOpacity:.92});
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // A1: type-label swap for AusLAMP members
   s.marker.on("click",()=>openStation(s.i));});
-  // fit to the actual station extent once data is in (>=1 station) — supersedes the AU-bounds default
-  // set at map creation above, which only serves the pre-data/empty state.
-  if(ST.length>=1)map.fitBounds(ST.map(s=>[s.lat,s.lon]));}
+  // fit to the actual POSITIONED-station extent once data is in — supersedes the AU-bounds default set at
+  // map creation above. C42: null-coord (withheld) stations are excluded so the bounds never go NaN.
+  const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);if(pts.length)map.fitBounds(pts);}
 // UX4 (D4): restyle every marker on each zoom step so radius/weight track the tier. preferCanvas is on
 // (map creation) so a full restyle of ~1200 circleMarkers per step is acceptable; registered once here.
 map.on("zoomend",restyleForZoom);
@@ -107,7 +118,7 @@ function hull(points){const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if
   for(const p of pts.reverse()){while(hi.length>=2&&cr(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p);}
   return lo.slice(0,-1).concat(hi.slice(0,-1));}
 const footprints=L.featureGroup();
-function buildFootprints(){const by={};ST.forEach(s=>(by[s.survey]=by[s.survey]||[]).push([s.lon,s.lat]));
+function buildFootprints(){const by={};ST.forEach(s=>{if(!hasPosition(s))return;(by[s.survey]=by[s.survey]||[]).push([s.lon,s.lat]);});   // C42: skip withheld-coord stations (no hull vertex)
  Object.entries(by).forEach(([sv,pts],k)=>{const h=hull(pts);if(h.length<3)return;
    L.polygon(h.map(p=>[p[1],p[0]]),{color:Object.values(TYPE_COL)[k%4],weight:1.4,fillOpacity:.04,interactive:false}).bindTooltip(esc(sv)).addTo(footprints);});}
 const userLayers={};

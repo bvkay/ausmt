@@ -46,7 +46,7 @@ function licenseInstrumentText(m){
 }
 document.getElementById("dlCsv").onclick=()=>{track("DownloadGenerated",{format:"csv",n:sel().length});
   save("ausmt-stations-"+tsUTC()+".csv",csvRows(sel()).map(csvRow).join("\r\n"),"text/csv");};
-document.getElementById("dlGeo").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});const fc={type:"FeatureCollection",features:sel().map(s=>{const sc=SCI[s.i]||[];return{type:"Feature",geometry:{type:"Point",coordinates:[s.lon,s.lat]},
+document.getElementById("dlGeo").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});const fc={type:"FeatureCollection",features:sel().map(s=>{const sc=SCI[s.i]||[];return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // C42: a withheld-coord station is an unlocated feature (spec-legal null geometry) — never a (0,0)/[null,null] phantom point
   properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:!!sc[SC.rr],source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,file:s.file}};})};  // C6: licence rides each GeoJSON feature
   save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(fc,null,1),"application/geo+json");};
 document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
