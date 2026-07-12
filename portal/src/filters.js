@@ -51,7 +51,7 @@ function renderFind(){const box=document.getElementById("findResults");
   const svs=surveys.filter(sv=>sv.toLowerCase().includes(q)).slice(0,8);
   const sts=ST.filter(s=>s.id.toLowerCase().includes(q)||(s.file||"").toLowerCase().includes(q)).slice(0,8);
   let h="";
-  if(colls.length)h+=`<div class="fgroup">Collections</div>`+colls.map(cid=>`<div class="fitem" data-find="coll" data-id="${escAttr(cid)}">${esc(COL[cid].title||cid)}<span class="fmeta">${COL[cid].n_surveys} surveys · ${COL[cid].n_stations} sites</span></div>`).join("");
+  if(colls.length)h+=`<div class="fgroup">Collections</div>`+colls.map(cid=>`<div class="fitem" data-find="coll" data-id="${escAttr(cid)}">${esc(COL[cid].title||cid)}<span class="fmeta">${COL[cid].n_surveys} surveys · ${COL[cid].n_stations} stations</span></div>`).join("");
   if(svs.length)h+=`<div class="fgroup">Surveys</div>`+svs.map(sv=>`<div class="fitem" data-find="survey" data-id="${escAttr(sv)}">${esc(sv)}</div>`).join("");
   if(sts.length)h+=`<div class="fgroup">Stations${sts.length>=8?" (first 8)":""}</div>`+sts.map(s=>`<div class="fitem" data-find="station" data-i="${s.i}">${esc(s.id)}<span class="fmeta">${esc(s.survey)}</span></div>`).join("");
   if(!h)h=`<div class="fitem fnone">no matches</div>`;

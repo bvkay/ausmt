@@ -331,7 +331,7 @@
   </div>
   <div class="hzone hright">
     <div class="counts" title="stations passing the current filters · stations selected · total stations in the catalogue"><b id="nVis">0</b> shown · <b id="nSel">0</b> selected · <span id="nTot">0</span> total</div>
-    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">mtcat.json ↗</a>
+    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
   </div>
 </header>
 
@@ -362,7 +362,7 @@
   <section data-views="map">
     <h2>Selection</h2>
     <div class="selbox">
-      <div class="selnum"><b class="big" id="selBig">0</b><span class="biglab"> sites selected</span></div>
+      <div class="selnum"><b class="big" id="selBig">0</b><span class="biglab"> stations selected</span></div>
       <div class="hint" id="selHint">Draw a polygon or rectangle on the map (toolbar, top-left), or take everything that passes the filters.</div>
       <div class="btnrow">
         <button class="wide" id="selAll">Select all filtered</button>
@@ -407,10 +407,10 @@
       </div>
       <div class="advgroup" data-views="map">
         <h2>Colour stations by</h2>
-        <div class="seg" id="colorSeg"><button data-c="type" class="on">Data type</button><button data-c="quality">TF diagnostic</button><button data-c="dim">Dimensionality</button></div>
+        <div class="seg" id="colorSeg"><button data-c="type" class="on">Data type</button><button data-c="quality">Completeness</button><button data-c="dim">Dimensionality</button></div>
       </div>
       <div class="advgroup">
-        <h2>Min. TF diagnostic <span style="text-transform:none;letter-spacing:0">(not a quality verdict)</span></h2>
+        <h2>Min. automated completeness/smoothness check <span style="text-transform:none;letter-spacing:0">(not a quality verdict)</span></h2>
         <div class="seg" id="qSeg"><button data-q="0" class="on">Any</button><button data-q="3">≥3</button><button data-q="4">≥4</button><button data-q="4.5">≥4.5</button></div>
       </div>
     </details>
@@ -437,7 +437,7 @@
           <p>Package and submit your EDIs with guided validation.</p>
         </button>
         <button type="button" class="introtile" id="tileIntegrate">
-          <h3>Integrate</h3>
+          <h3>Programmatic access</h3>
           <p>Machine-readable catalogue — MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
         </button>
       </div>
