@@ -249,6 +249,68 @@ follow-up.
 is drift-prone; a shared single-source rollup module imported by both engine and runner would
 prevent this class permanently.
 
+### D5-C. Stage-3b (batch editor) gate findings + fixes (2026-07-12)
+
+The 3b WRITE path passed a 4-lens adversarial gate + verify (8 confirmed, 2 refuted). **The core
+choreography was sound** — atomicity gate before any git verb, confirm re-applies+re-validates under
+`PUBLISH_LOCK` (does not trust the preview), `cid` sanitised into the branch name, per-survey scoped
+`git add`, whole-batch rollback; and **no XSS** (browser-verified inert across editor/membership/
+preview/confirm). The findings cluster in three design seams, fixed as F1-F6 (all red-then-green):
+
+**Design clarifications (governing):**
+* **`last_updated` is EXCLUDED from divergence detection** (drop it from the runner
+  `_collection_divergence` loop AND `curatorpage._COLLECTION_FIELDS`/`_divergence_summary`), kept in
+  `_COLLECTION_ROLLUP_FIELDS` for engine parity only. It is a gateway-managed per-member timestamp,
+  NOT a curator-reconcilable programme field — stamping it on only the changed members (diff-minimal)
+  otherwise makes the console permanently report "members disagree on last_updated" with a Normalise
+  remedy that has no form field to fix it. (**F2, material.**)
+* **Numeric fields preserve type.** The desired-state form round-trips values as strings, so the
+  no-op check must be type-tolerant (`str(_plain(cur)) == str(new)` ⇒ unchanged) and the writer must
+  NOT force-quote all-digit numerics (`start_year`), else every edit silently re-types `2003` →
+  `"2003"`, emitting a spurious diff line and a spurious commit on an untouched member — breaking the
+  D13 diff-minimality / N-commits pins. (**F1, material.**)
+* **Publish re-enforces the A2 guardrails under the lock.** The confirm re-validates for validator
+  FAIL, but MUST also re-enforce the console's own A2 controlled vocab (id matches
+  `_COLLECTION_ID_RE`; type/status in-vocab) and reject control chars/newlines in `cid` and `note`
+  BEFORE committing — the client-carried `spec_json` is untrusted (an authenticated curator can hand-
+  edit it). Rationale: the git history IS the audit record; a newline-laden `cid` interpolated into
+  the commit body forges fake `Curated-by:`/`Approved-by:` trailers, and an out-of-vocab id/status is
+  only a WARNING to the validator so it would otherwise publish past the console's own guardrail.
+  (**F4, closes the two security-injection findings.**)
+
+**Remaining fixes:** **F3 (minor)** rollback catches non-`PublishError` (an `OSError` on
+`write_bytes` mid-batch) — broaden the guard, roll the whole batch back, re-raise; never leave
+surveys-live on the `collbatch/` branch with partial commits (main is already protected — the merge
+is after the loop). **F5 (minor)** a rename records the NEW id in the commit subject/branch/body (or
+old→new), not the stale URL cid. **F6 (minor)** a slug landing in BOTH set and remove is de-duped so
+one survey never gets two ops in a batch.
+
+**Round-2 re-gate (2026-07-12, executed hostile probes over the F1-F6 commit):** F2/F3/F5/F6 and
+the F4 headline (no client string reaches the git audit record ungated) CONFIRMED-SAFE with
+executed evidence; three residuals, fixed as R1-R3:
+* **R1 (material)** — F1's type-tolerant no-op check and the divergence detector's type-sensitive
+  bucketing disagree: members declaring `start_year: 2003` (int) vs `"2003"` (quoted) flag as
+  divergent showing two IDENTICAL values, while Normalise no-ops (400 "No changes") — an
+  un-clearable "Need attention", the same dead-end pathology F2 closed. Divergence bucketing must
+  use THE SAME equality as the no-op check for numeric fields (normalise numeric-string declared
+  values when keying).
+* **R2 (minor)** — `start_year` gets real validation: the gateway form and the publish-time A2
+  gate both require empty or `^[0-9]{4}$` (clear 400 otherwise). Kills the executed traps:
+  `"2003²"` (isdigit-true, int()-ValueError → opaque internal error) and `"007"`→`7` /
+  `"0000"`→`0` silent literal rewrites. The emission coercion keeps a defensive
+  isdecimal+try/except regardless.
+* **R3 (minor, data-integrity)** — the A2 gate's op-block id branch used `re.match` with `$`,
+  which matches before a trailing newline: a crafted block id `"auslamp\n"` passed the gate and
+  committed (executed end-to-end; phantom-collection split — NOT a trailer forge, the top-level
+  cid path is gated). Every regex gate on this seam moves to fullmatch/`\A…\Z` semantics + the
+  control-char guard; the same trailing-newline class is checked across the seam's other
+  anchored-regex gates.
+* **Process incident (architect's own):** a round-2 probe agent mutated the shared worktree
+  mid-verification (F4 gate briefly neutered on disk, then restored; probe files left behind) —
+  the S2a D14 class again. Worktree verified restored byte-identical to the commit; standing rule
+  re-affirmed and now stated explicitly in every verification dispatch: hostile probes run ONLY
+  in hermetic exports (`git archive`), never in shared worktrees.
+
 ## D6. Submission queue — review flow unchanged. Review → checklist → sandboxed preview →
 approve/return/reject was production-proven 2026-07-08; C43 deliberately leaves that flow alone.
 The queue gains the shared nav + drift chip (Stage 1) and one additive surface: a **read-only

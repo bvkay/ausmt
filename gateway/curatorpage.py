@@ -16,6 +16,7 @@ never on /gateway/status/*.
 from __future__ import annotations
 
 import html
+import json as _json
 import re
 from string import Template
 
@@ -237,6 +238,45 @@ _HEAD = """<!doctype html>
  .dnote{background:$bg;border:1px dashed #2E4254;border-radius:8px;padding:.7rem 1rem;
    margin:1.25rem 0 0;font-size:.82rem;color:$muted}
  .dnote b{color:$ink}
+ /* ---- C43 Stage 3b collections EDITOR (record D5-A A3/A5/A6; owner-approved preview views 2/3).
+    The fan-out edit form + the two-column membership manager + the batch-diff confirm. The ONLY JS on
+    these pages is the candidate-picker filter (external route constant collections.js, CSP-safe —
+    textContent DOM, no inline on*). Verbatim class idiom from the approved preview. ---- */
+ .formrow{display:grid;grid-template-columns:9rem minmax(0,1fr);gap:.6rem 1rem;align-items:start;
+   padding:.5rem 0;border-bottom:1px solid #22323f}
+ .formrow:last-of-type{border-bottom:0}
+ .formrow>label{color:$muted;font-size:.85rem;padding-top:.5rem}
+ .formrow select{font:inherit;background:$bg;color:$ink;border:1px solid #2E4254;border-radius:6px;
+   padding:.5rem;width:100%;max-width:40rem}
+ .hint{color:$muted;font-size:.78rem;margin-top:.25rem}
+ .diverge{color:$warn;font-size:.78rem;margin-top:.3rem;display:flex;gap:.4rem}
+ .diverge b{color:$warn}
+ .fnote{background:$bg;border-left:3px solid $accent;border-radius:0 6px 6px 0;padding:.6rem .85rem;
+   margin:1rem 0 0;font-size:.83rem;color:$ink}
+ .fnote b{color:$ink}
+ .btnrow{display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap}
+ button.ghost{background:transparent;color:$ink;border:1px solid #2E4254}
+ /* two-column membership manager (A3) */
+ .memberwrap{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:.5rem}
+ .mcol{background:$panel;border-radius:8px;overflow:hidden}
+ .ph2{padding:.6rem 1rem;border-bottom:1px solid #2E4254;font-weight:600;font-size:.85rem;
+   display:flex;align-items:center;gap:.5rem}
+ .ph2 .c{color:$muted;font-weight:400}
+ .mfilter{display:block;margin:.6rem 1rem;width:auto}
+ .mscroll{max-height:22rem;overflow-y:auto}
+ .mscroll table{margin:0} .mscroll td,.mscroll th{padding:.4rem .75rem}
+ .mscroll th{position:sticky;top:0;background:$panel;z-index:1}
+ .memrow input[type=checkbox]{width:auto;max-width:none}
+ .memrow.hide{display:none}
+ .badge-none{color:$muted;font-size:.72rem}
+ /* per-survey diff + validator rows on the batch-diff confirm (view 3) */
+ .commitrow{display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;
+   border-bottom:1px solid #22323f;font-size:.82rem}
+ .commitrow:last-child{border-bottom:0}
+ .tick{color:$ok;font-weight:700}
+ .cross{color:$bad;font-weight:700}
+ .verdlist{background:$bg;border:1px solid #2E4254;border-radius:6px;margin-top:.4rem}
+ @media (max-width:860px){.memberwrap{grid-template-columns:1fr}}
  /* The three-thirds Stations layout needs a wide desktop (site table + facts + a fixed-width plots
     column). Below 1120px collapse it to ONE column: DOM order is facts-first then plots then table,
     so they stack facts / plots / table with no `order` needed; grid-row returns to auto so the three
@@ -3645,12 +3685,13 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
 # here is a rollup keyed by exact collection.id. Membership is by SLUG (read live from surveys-live),
 # never the rollup's display labels (the labels-vs-slugs trap that broke the stations tab, hotfix #33).
 
-# The programme fields whose per-member divergence the detail marks with a ◆ (record D5-A A4). Kept in
-# sync with the runner's _COLLECTION_ROLLUP_FIELDS (the job computes divergence over the same set).
-_COLLECTION_FIELDS = ("title", "type", "status", "start_year", "last_updated", "description")
+# The programme fields whose per-member divergence the console marks with a ◆ (record D5-A A4). Kept in
+# sync with the runner's _COLLECTION_DIVERGENCE_FIELDS. F2 (D5-C): `last_updated` is EXCLUDED — it is a
+# gateway-managed per-member timestamp, not a curator-reconcilable programme field (a Normalise on it
+# would have no form field to fix); it is never a divergence the console reports.
+_COLLECTION_FIELDS = ("title", "type", "status", "start_year", "description")
 _COLLECTION_FIELD_LABELS = {"title": "title", "type": "type", "status": "status",
-                            "start_year": "start year", "last_updated": "last updated",
-                            "description": "description"}
+                            "start_year": "start year", "description": "description"}
 
 
 def _collection_status_chip(status) -> str:
@@ -3692,12 +3733,31 @@ def _near_dup_group_for(cid: str, near_duplicates: list) -> list | None:
     return None
 
 
+def _merge_link_html(group: list, collections: dict) -> str:
+    """The 'Merge into <majority>' entry point (record E) for one near-duplicate id group: a link into
+    the MINORITY collection's editor with the majority id pre-filled in the id field — a rename that
+    rewrites the minority members onto the canonical id (same preview -> publish flow). Majority = the
+    group id with the most members; ties break on sort order (deterministic)."""
+    def _n(gid):
+        return int((collections.get(gid) or {}).get("n_surveys") or 0)
+    majority = max(sorted(group), key=_n)
+    links = []
+    for minority in group:
+        if minority == majority:
+            continue
+        href = f"{_collection_href(minority)}?id={_url_quote(majority)}"
+        links.append(f'<a href="{_esc(href)}">Merge <span class="mono">{_esc(minority)}</span> into '
+                     f'<span class="mono">{_esc(majority)}</span>&hellip;</a>')
+    return " &middot; ".join(links)
+
+
 def render_collections_index(*, collections: dict, near_duplicates: list,
                              nav: "NavContext") -> str:
-    """The collections index (record D5-A A1): summary cards, the two inconsistency bands (id
-    near-duplicates + per-field divergence), and the list table. READ-ONLY — no 'New collection…'
-    button (creation is Stage 3b). An empty corpus renders a clean 'No collections yet' state, never an
-    error (matches the engine's collections.json == {})."""
+    """The collections index (record D5-A A1). Summary cards, the two inconsistency bands (id
+    near-duplicates + per-field divergence, each with its one-click remedy — record E: Merge /
+    Normalise link into the editor with the canonical value pre-filled), the list table, and the
+    'New collection…' entry (record A5). An empty corpus renders a clean 'No collections yet' state,
+    never an error (matches the engine's collections.json == {})."""
     collections = collections or {}
     near_duplicates = near_duplicates or []
     # Summary tallies.
@@ -3724,9 +3784,14 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
             '<p class="sub">Programme groupings, rolled up from every published '
             '<span class="mono">survey.yaml</span> at the current published HEAD.</p>'
             + cards +
+            '<div style="margin:1rem 0">'
+            '<a class="b-accent" style="display:inline-block;padding:.5rem 1rem;border-radius:6px;'
+            f'color:{_PALETTE["bg"]};font-weight:600" href="/gateway/curator/collections/new">'
+            'New collection&hellip;</a></div>'
             '<div class="panel"><p class="sub" style="margin:0">No collections yet. A survey joins a '
             'collection by declaring a <span class="mono">collection</span> block in its '
-            '<span class="mono">survey.yaml</span>; once one does, its programme appears here.</p></div>'
+            '<span class="mono">survey.yaml</span> — start one with <b>New collection…</b> above (it '
+            'assigns the block to the surveys you pick), or a survey declares it directly.</p></div>'
         )
         return _shell("AusMT collections", body, nav=nav)
 
@@ -3743,8 +3808,7 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
             'The portal groups by exact id, so this splits one programme into separate collections.'
             '<span class="why">A reader browsing programmes sees the same name more than once, each '
             'with a partial member list.</span>'
-            '<span class="fix">Merging the minority members onto one id arrives in the collections '
-            'editor (next stage).</span>'
+            f'<span class="fix">{_merge_link_html(group, collections)}</span>'
             '</div>')
     # (b) per-field divergence, one band per collection that disagrees.
     for cid, c in collections.items():
@@ -3757,8 +3821,8 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
             f'<b>&#9888; Members disagree within &ldquo;{_esc(title)}&rdquo;</b> &mdash; {summary}.'
             '<span class="why">The rollup takes whichever member builds first — readers may see '
             'either. This is silent on the portal today.</span>'
-            '<span class="fix">Normalising the outliers to one value arrives in the collections '
-            'editor (next stage).</span>'
+            f'<span class="fix"><a href="{_esc(_collection_href(cid))}">Review &amp; '
+            'normalise&hellip;</a></span>'
             '</div>')
     bands_html = "".join(bands)
 
@@ -3793,92 +3857,194 @@ def render_collections_index(*, collections: dict, near_duplicates: list,
         'id lives in each member\'s <span class="mono">survey.yaml</span>, so a collection is a '
         'projection over its members. Station counts are the <b>published</b> EDI-file counts; the '
         'served portal may differ until the next rebuild.</p>'
-        + cards + bands_html + table
+        + cards
+        + '<div style="margin:1rem 0">'
+          '<a class="b-accent" style="display:inline-block;padding:.5rem 1rem;border-radius:6px;'
+          f'color:{_PALETTE["bg"]};font-weight:600" href="/gateway/curator/collections/new">'
+          'New collection&hellip;</a></div>'
+        + bands_html + table
     )
     return _shell("AusMT collections", body, nav=nav)
 
 
-def render_collection_detail(*, cid: str, collection: dict, near_duplicates: list,
+_COLLECTION_TYPE_VOCAB = ("programme", "release", "institutional", "other")
+_COLLECTION_STATUS_VOCAB = ("active", "completed", "archived")
+
+
+def _select_html(name: str, options, selected, *, blank_label: str) -> str:
+    """A <select> with a leading '(unset)' blank option — used for type/status where the rollup value
+    may be absent. `selected` is the currently-selected value (or None/''). Every value escaped."""
+    sel = str(selected) if selected not in (None, "") else ""
+    opts = [f'<option value=""{" selected" if sel == "" else ""}>{_esc(blank_label)}</option>']
+    for o in options:
+        mark = " selected" if o == sel else ""
+        opts.append(f'<option value="{_esc(o)}"{mark}>{_esc(o)}</option>')
+    return f'<select name="{_esc(name)}">' + "".join(opts) + "</select>"
+
+
+def _diverge_line(divergence: dict, canonical, fld: str) -> str:
+    """The ◆ 'N members differ' hint under an editable field (view 2). Names the outlier value(s) that
+    disagree with the canonical (form) value; empty when the field agrees across members. Every value
+    escaped."""
+    buckets = (divergence or {}).get(fld)
+    if not buckets:
+        return ""
+    parts = []
+    for b in buckets:
+        val = b.get("value")
+        if val == canonical:
+            continue  # the canonical value is not an outlier
+        members = b.get("members") or []
+        who = ", ".join(_esc(m) for m in members)
+        parts.append(f'&ldquo;{_esc(val)}&rdquo; &mdash; {who}')
+    if not parts:
+        return ""
+    return ('<div class="diverge"><span>&#9670;</span><div><b>Members differ:</b> '
+            + " &middot; ".join(parts)
+            + '. Saving sets every member to the value above.</div></div>')
+
+
+def _collection_form_fields(*, collection: dict, prefill_id: str | None, divergence: dict,
+                            n_surv: int, is_new: bool) -> str:
+    """The fan-out edit form fields (view 2): title / id (lowercase-hyphenated + fan-out disclosure) /
+    type / status / start year / description, seeded with the rollup (canonical) values and marked with
+    ◆ divergence hints. `prefill_id` overrides the id field (the Merge entry point pre-fills the
+    canonical id). Shared by the editor and the create form (create passes an empty collection)."""
+    c = collection or {}
+    title_v = _esc(c.get("title") or "")
+    id_v = _esc(prefill_id if prefill_id else (c.get("id") or ""))
+    start_v = _esc(c.get("start_year") or "")
+    desc_v = _esc(c.get("description") or "")
+    fanout = ("" if is_new else
+              f'Changing the id rewrites {n_surv} member <span class="mono">survey.yaml</span>'
+              f'{"s" if n_surv != 1 else ""} — shown as one batched confirm. ')
+    return (
+        '<div class="formrow"><label>Title</label><div>'
+        f'<input name="f_title" value="{title_v}">'
+        + _diverge_line(divergence, c.get("title"), "title") +
+        '</div></div>'
+        '<div class="formrow"><label>Id (slug)</label><div>'
+        f'<input class="mono" name="f_id" value="{id_v}">'
+        f'<div class="hint">{fanout}Must be lowercase-hyphenated '
+        '(<span class="mono">a&ndash;z 0&ndash;9 -</span>).</div>'
+        '</div></div>'
+        '<div class="formrow"><label>Type</label><div>'
+        + _select_html("f_type", _COLLECTION_TYPE_VOCAB, c.get("type"), blank_label="(unset)")
+        + _diverge_line(divergence, c.get("type"), "type") +
+        '</div></div>'
+        '<div class="formrow"><label>Status</label><div>'
+        + _select_html("f_status", _COLLECTION_STATUS_VOCAB, c.get("status"), blank_label="(unset)")
+        + _diverge_line(divergence, c.get("status"), "status") +
+        '</div></div>'
+        '<div class="formrow"><label>Start year</label><div>'
+        f'<input class="num" name="f_start_year" value="{start_v}" style="max-width:8rem">'
+        + _diverge_line(divergence, c.get("start_year"), "start_year") +
+        '</div></div>'
+        '<div class="formrow"><label>Description</label><div>'
+        f'<textarea name="f_description" style="min-height:6rem">{desc_v}</textarea>'
+        '<div class="hint">The reader-facing programme summary shown on the portal\'s collection '
+        'page. Fans out to every member like the other fields.</div>'
+        + _diverge_line(divergence, c.get("description"), "description") +
+        '</div></div>'
+    )
+
+
+def _membership_manager(*, members: list, candidates: list, cid: str, is_new: bool) -> str:
+    """The two-column membership manager (record A3): current members (each a keep checkbox, checked;
+    unchecking stages a removal) beside a SEARCHABLE candidate picker (add checkboxes) over surveys NOT
+    already in this collection, each showing `no collection` vs `in "<id>" -> moves`. The filter is the
+    ONLY JS (external collections.js). `members` is the collection's current member list (by SLUG);
+    `candidates` is every published survey with its current_collection_id."""
+    # Current-members column (omitted for a brand-new collection).
+    cur_col = ""
+    if not is_new:
+        mrows = []
+        for m in members:
+            slug = m.get("slug")
+            n_stn = int(m.get("n_stations") or 0)
+            mrows.append(
+                '<tr class="memrow">'
+                f'<td><input type="checkbox" name="keep" value="{_esc(slug)}" checked '
+                'title="untick to remove from this collection"></td>'
+                f'<td class="mono">{_esc(slug)}</td>'
+                f'<td class="num">{n_stn}</td></tr>')
+        cur_col = (
+            '<div class="mcol">'
+            f'<div class="ph2">In this collection <span class="c">&middot; {len(members)} '
+            f'survey{"s" if len(members) != 1 else ""}</span></div>'
+            '<div class="mscroll"><table>'
+            '<tr><th>keep</th><th>Survey</th><th>Stations</th></tr>'
+            + "".join(mrows) + '</table></div></div>')
+
+    # Candidate picker: every published survey NOT already a member of THIS collection.
+    member_slugs = {m.get("slug") for m in (members or [])}
+    prows = []
+    for s in candidates or []:
+        slug = s.get("slug")
+        if slug in member_slugs:
+            continue
+        cur = s.get("current_collection_id")
+        if cur:
+            currently = (f'<span class="badge-move">in &ldquo;{_esc(cur)}&rdquo; &rarr; moves</span>')
+        else:
+            currently = '<span class="badge-none">no collection</span>'
+        n_stn = int(s.get("n_stations") or 0)
+        # data-slug + data-cur feed the filter (textContent match on slug + current id).
+        prows.append(
+            f'<tr class="memrow" data-filter="{_esc(str(slug) + " " + str(cur or ""))}">'
+            f'<td><input type="checkbox" name="add" value="{_esc(slug)}"></td>'
+            f'<td class="mono">{_esc(slug)}</td>'
+            f'<td class="num">{n_stn}</td>'
+            f'<td>{currently}</td></tr>')
+    pick_col = (
+        '<div class="mcol">'
+        '<div class="ph2">Add surveys <span class="c">&middot; search, then check</span></div>'
+        '<input class="mfilter" id="cand-filter" placeholder="filter surveys by name or slug&hellip;" '
+        'autocomplete="off">'
+        '<div class="mscroll"><table id="cand-table">'
+        '<tr><th>add</th><th>Survey</th><th>Stations</th><th>Currently</th></tr>'
+        + ("".join(prows) if prows else
+           '<tr><td colspan="4" class="badge-none" style="padding:.6rem .75rem">'
+           'no other published surveys to add</td></tr>')
+        + '</table></div></div>')
+    return (
+        f'<h2 style="margin-top:1.5rem">Members <span style="color:{_PALETTE["muted"]};'
+        'font-weight:400">&middot; manage which surveys belong</span></h2>'
+        '<div class="memberwrap">' + cur_col + pick_col + '</div>'
+        '<p class="sub" style="margin:.6rem 0 0">Adding a survey that already belongs to another '
+        'collection <b>moves</b> it (its <span class="mono">collection.id</span> changes) — the picker '
+        'says so before you commit. Everything here stages into ONE atomic batch: nothing is written '
+        'until you Preview and Publish.</p>')
+
+
+def render_collection_detail(*, cid: str, collection: dict, candidates: list, near_duplicates: list,
+                             csrf_token: str, prefill_id: str | None = None, error: str = "",
                              nav: "NavContext") -> str:
-    """The read-only collection detail (record D5-A A1/A4): the rollup facts as read-only rows, the
-    member table with a Declares column naming per-field outliers, and the per-collection inconsistency
-    callouts. NO form inputs, NO membership controls, NO POST — a one-line note says editing arrives in
-    the next stage. The handler resolves `collection` from the projection (unknown id -> 404 before
-    this renderer is reached)."""
+    """The collection EDITOR (record D5-A A3/A6, owner-approved preview view 2). Turns the Stage-3a
+    read-only detail into ONE desired-end-state form: the fan-out field inputs (seeded with the rollup
+    values, ◆ divergence hints), the two-column membership manager (keep/remove + a searchable add
+    picker), and the required release note. Preview POSTs the whole form; the server computes the delta
+    and renders the batch-diff confirm. The form state IS the staged state (no client-side staging) —
+    the ONLY JS is the candidate-picker filter. `prefill_id` pre-fills the id field (the Merge entry
+    point). The handler 404s an unknown id before this renderer is reached."""
     near_duplicates = near_duplicates or []
     title = collection.get("title") or cid
     n_surv = int(collection.get("n_surveys") or 0)
     n_stn = int(collection.get("n_stations") or 0)
+    divergence = collection.get("divergence") or {}
     header = (
         f'<h1>{_esc(title)} '
         f'<span style="color:{_PALETTE["muted"]};font-weight:400">&middot; {n_surv} '
         f'member{"s" if n_surv != 1 else ""} &middot; {n_stn} stations</span> '
         f'{_collection_status_chip(collection.get("status"))}</h1>'
-        '<p class="sub">Rolled up from every member\'s published '
-        '<span class="mono">survey.yaml</span> at the current published HEAD; the served portal may '
-        'differ until the next rebuild.</p>'
+        '<p class="sub">Edit fields and membership below, then preview. Every change fans out across '
+        'the member <span class="mono">survey.yaml</span>s as ONE atomic, validator-checked batch — '
+        'any member failing validation blocks the whole batch. Published-source: rolled up from every '
+        'member at the current published HEAD; the served portal may differ until the next rebuild.</p>'
     )
+    err_html = (f'<div class="cband"><b>&#9888; {_esc(error)}</b></div>') if error else ""
 
-    def _row(label, value, *, mono=False):
-        if value in (None, ""):
-            shown = '<span style="color:%s">&mdash;</span>' % _PALETTE["muted"]
-        else:
-            cls = ' class="mono"' if mono else ""
-            shown = f'<span{cls}>{_esc(value)}</span>'
-        return f"<dt>{_esc(label)}</dt><dd>{shown}</dd>"
-
-    rollup = (
-        '<div class="panel"><div class="ph">Rollup facts <span class="go" '
-        'style="color:%s;font-size:.78rem;font-weight:400">first-declarer across members — read-only</span></div>'
-        % _PALETTE["muted"]
-        + '<dl class="crollup">'
-        + _row("Title", collection.get("title") or cid)
-        + _row("Id", cid, mono=True)
-        + _row("Type", collection.get("type"))
-        + _row("Status", collection.get("status"))
-        + _row("Start year", collection.get("start_year"))
-        + _row("Last updated", collection.get("last_updated"))
-        + _row("Description", collection.get("description"))
-        + '</dl></div>'
-    )
-
-    # Member table with the Declares column (per-field outliers vs the canonical rollup value).
-    members = collection.get("members") or []
-    mrows = []
-    for m in members:
-        declared = m.get("declared") or {}
-        outliers = []
-        for fld in _COLLECTION_FIELDS:
-            v = declared.get(fld)
-            if v in (None, ""):
-                continue
-            if v != collection.get(fld):
-                outliers.append(_COLLECTION_FIELD_LABELS.get(fld, fld))
-        if outliers:
-            declares = " ".join(f'<span class="badge-move">{_esc(o)} &#9670;</span>'
-                                for o in outliers)
-        else:
-            declares = '<span class="badge-ok">consistent</span>'
-        mrows.append(
-            '<tr>'
-            f'<td class="mono">{_esc(m.get("slug"))}</td>'
-            f'<td class="num">{int(m.get("n_stations") or 0)}</td>'
-            f'<td>{declares}</td>'
-            '</tr>')
-    member_table = (
-        '<h2 style="margin-top:1.5rem">Members '
-        f'<span style="color:{_PALETTE["muted"]};font-weight:400">&middot; {n_surv} '
-        f'survey{"s" if n_surv != 1 else ""} &middot; {n_stn} stations</span></h2>'
-        '<div class="panel"><table>'
-        '<tr><th>Survey (slug)</th><th>Published stations</th><th>Declares</th></tr>'
-        + "".join(mrows) + '</table></div>'
-        '<p class="sub" style="margin:.5rem 0 0">Station counts are the <b>published</b> EDI-file '
-        'counts. A <span class="mono">&#9670;</span> marks a member whose own '
-        '<span class="mono">collection</span> block disagrees with the canonical value above; '
-        'normalising the outliers arrives in the collections editor (next stage).</p>'
-    )
-
-    # Per-collection inconsistency callouts.
+    # Per-collection inconsistency callouts (now actionable IN this editor).
     callouts = []
     group = _near_dup_group_for(cid, near_duplicates)
     if group:
@@ -3886,25 +4052,222 @@ def render_collection_detail(*, cid: str, collection: dict, near_duplicates: lis
         callouts.append(
             '<div class="cband">'
             f'<b>&#9888; Near-duplicate id</b> &mdash; this id collides with {others} '
-            '(differs only by case or whitespace), so the portal groups them as separate '
-            'collections. Merging arrives in the collections editor (next stage).</div>')
-    summary = _divergence_summary(collection.get("divergence") or {})
+            '(differs only by case or whitespace). To merge, change the <b>Id</b> field below to the '
+            'canonical id and preview — that rewrites this collection\'s members onto it.</div>')
+    summary = _divergence_summary(divergence)
     if summary:
         callouts.append(
             '<div class="cband">'
-            f'<b>&#9888; Members disagree</b> &mdash; {summary}. The rollup takes whichever builds '
-            'first; normalising the outliers arrives in the collections editor (next stage).</div>')
+            f'<b>&#9888; Members disagree</b> &mdash; {summary}. The fields below hold the canonical '
+            '(first-declarer) value; previewing normalises every &#9670; member to it.</div>')
     callouts_html = "".join(callouts)
 
-    note = (
-        '<div class="dnote"><b>Read-only.</b> Editing a collection — changing its fields, adding or '
-        'removing member surveys, merging near-duplicate ids and normalising divergent fields — '
-        'arrives in the next stage (the collections editor). Every change there fans out as an atomic, '
-        'validator-checked batch across the member surveys.</div>'
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    members = collection.get("members") or []
+    rendered_members = _json.dumps([m.get("slug") for m in members])
+    form = (
+        f'<form method="post" action="/gateway/curator/collections/{_url_quote(cid)}/preview">'
+        f'{csrf}'
+        f'<input type="hidden" name="rendered_members" value="{_esc(rendered_members)}">'
+        '<div class="panel"><div class="ph">Edit collection '
+        f'<span class="go" style="color:{_PALETTE["muted"]};font-size:.78rem;font-weight:400;'
+        'margin-left:auto">changes fan out to every member survey</span></div>'
+        '<div class="pb">'
+        + _collection_form_fields(collection=collection, prefill_id=prefill_id,
+                                  divergence=divergence, n_surv=n_surv, is_new=False)
+        + _membership_manager(members=members, candidates=candidates, cid=cid, is_new=False)
+        + '<div class="formrow" style="margin-top:1rem;border:0"><label>Release note</label><div>'
+        '<input name="note" placeholder="Why (required) — written to every commit in the batch" '
+        'style="max-width:52rem" required>'
+        '<div class="hint">Required. One shared note is written to every commit in the batch.</div>'
+        '</div></div>'
+        '<div class="fnote"><b>Preview shows one combined diff across every affected member</b> '
+        '(N commits, one shared release note), validator-checked per survey. The batch is '
+        '<b>atomic</b>: any member failing validation blocks it — nothing commits. Unchanged members '
+        'get no commit.</div>'
+        '<div class="btnrow">'
+        '<button class="b-accent" type="submit">Preview batch diff&hellip;</button>'
+        '<a class="ghost" style="display:inline-block;padding:.5rem 1rem;border-radius:6px" '
+        'href="/gateway/curator/collections">Cancel</a>'
+        '</div>'
+        '</div></div></form>'
     )
 
-    body = header + callouts_html + rollup + member_table + note
+    body = (header + err_html + callouts_html + form
+            + '<script src="/gateway/curator/collections.js" defer></script>')
     return _shell(f"AusMT collection · {cid}", body, nav=nav)
+
+
+def render_collection_create(*, candidates: list, csrf_token: str, error: str = "",
+                             nav: "NavContext") -> str:
+    """The create form (record A5): a collection with no members cannot exist, so this collects the
+    details AND an initial member set (≥1) — the same fan-out form + candidate picker as the editor,
+    minus a current-members column. Preview POSTs to /collections/new/preview; the server refuses zero
+    members (400). The ONLY JS is the candidate-picker filter."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    err_html = (f'<div class="cband"><b>&#9888; {_esc(error)}</b></div>') if error else ""
+    header = (
+        '<h1>New collection</h1>'
+        '<p class="sub">There is no collection object in the data model — a collection exists only '
+        'because its members declare it. So this sets the <span class="mono">collection</span> block '
+        'on the survey(s) you pick (at least one), as ONE atomic, validator-checked batch.</p>'
+    )
+    form = (
+        '<form method="post" action="/gateway/curator/collections/new/preview">'
+        f'{csrf}'
+        '<input type="hidden" name="rendered_members" value="[]">'
+        '<div class="panel"><div class="ph">New collection details</div><div class="pb">'
+        + _collection_form_fields(collection={}, prefill_id=None, divergence={}, n_surv=0, is_new=True)
+        + _membership_manager(members=[], candidates=candidates, cid="", is_new=True)
+        + '<div class="formrow" style="margin-top:1rem;border:0"><label>Release note</label><div>'
+        '<input name="note" placeholder="Why (required) — written to every commit in the batch" '
+        'style="max-width:52rem" required>'
+        '<div class="hint">Required. One shared note is written to every member\'s commit.</div>'
+        '</div></div>'
+        '<div class="fnote"><b>Pick at least one member.</b> Preview shows the combined diff across '
+        'the chosen surveys (one commit each, one shared release note), validator-checked per survey — '
+        'the batch is atomic.</div>'
+        '<div class="btnrow">'
+        '<button class="b-accent" type="submit">Preview batch diff&hellip;</button>'
+        '<a class="ghost" style="display:inline-block;padding:.5rem 1rem;border-radius:6px" '
+        'href="/gateway/curator/collections">Cancel</a>'
+        '</div>'
+        '</div></div></form>'
+        '<script src="/gateway/curator/collections.js" defer></script>'
+    )
+    body = header + err_html + form
+    return _shell("AusMT new collection", body, nav=nav)
+
+
+def render_collection_batch_preview(*, cid: str, is_new: bool, results: list, note: str,
+                                    spec_json: str, expected_shas_json: str, has_fail: bool,
+                                    csrf_token: str, nav: "NavContext") -> str:
+    """The batch-diff confirm (record D5-A A6, owner-approved preview view 3): the combined per-survey
+    diff, a per-survey validator verdict (PASS/FAIL), the N-commits / one-shared-note disclosure, the
+    release note, and — only when EVERY affected survey passed — a Publish button. A FAIL shows the
+    verdict and NO publish button (and the server 409s regardless — the button absence is UX). `results`
+    are the CHANGED surveys only; `spec_json`/`expected_shas_json` are carried to the publish POST so it
+    re-applies + re-validates under the lock (TOCTOU guard — it does NOT trust this preview)."""
+    changed = [r for r in results if r.get("changed")]
+    n = len(changed)
+    action = ("/gateway/curator/collections/new/publish" if is_new
+              else f"/gateway/curator/collections/{_url_quote(cid)}/publish")
+    back = ("/gateway/curator/collections/new" if is_new
+            else f"/gateway/curator/collections/{_url_quote(cid)}")
+
+    # Combined diff — one block per changed survey (escaped, no truncation).
+    diff_blocks = []
+    for r in changed:
+        eff = r.get("effect") or "edit"
+        diff_blocks.append(
+            f'<div style="font-weight:600;font-size:.82rem;margin:.6rem 0 .2rem">'
+            f'<span class="mono">{_esc(r.get("slug"))}</span> '
+            f'<span style="color:{_PALETTE["muted"]};font-weight:400">&middot; {_esc(eff)} &middot; '
+            f'&rarr; {_esc(r.get("new_version") or "")}</span></div>'
+            f'<pre>{_esc(r.get("diff") or "")}</pre>')
+    diff_panel = (
+        '<div class="panel"><div class="ph">Combined diff '
+        f'<span class="go" style="color:{_PALETTE["muted"]};font-size:.78rem;font-weight:400;'
+        f'margin-left:auto">{n} survey.yaml{"s" if n != 1 else ""} &middot; {n} '
+        f'commit{"s" if n != 1 else ""} &middot; 1 shared release note</span></div>'
+        '<div class="pb">' + "".join(diff_blocks) + '</div></div>')
+
+    # Per-survey validator verdicts.
+    vrows = []
+    for r in changed:
+        if r.get("has_fail"):
+            mark = '<span class="cross">&#10007;</span>'
+            verdict = f'<span style="margin-left:auto;color:{_PALETTE["bad"]}">FAIL</span>'
+        else:
+            mark = '<span class="tick">&#10003;</span>'
+            verdict = f'<span style="margin-left:auto;color:{_PALETTE["ok"]}">PASS</span>'
+        vrows.append(
+            f'<div class="commitrow">{mark} <span class="mono">{_esc(r.get("slug"))}</span> '
+            f'<span style="color:{_PALETTE["muted"]}">{_esc(r.get("effect") or "edit")} &rarr; '
+            f'{_esc(r.get("new_version") or "")}</span>{verdict}</div>')
+    verdict_panel = (
+        '<div class="panel"><div class="ph">Per-survey validation</div><div class="pb">'
+        '<div class="verdlist">' + "".join(vrows) + '</div></div></div>')
+
+    if has_fail:
+        banner = (f'<p style="color:{_PALETTE["bad"]};font-weight:600">The validator FAILED on at '
+                  'least one member — this batch cannot be published. Fix the offending survey and '
+                  're-preview. Nothing has been committed.</p>')
+        confirm = ""
+    else:
+        banner = (f'<p style="color:{_PALETTE["ok"]};font-weight:600">Every affected member passed '
+                  '(WARNINGs do not block). Confirm to commit the whole batch atomically.</p>')
+        csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+        confirm = (
+            '<div class="panel"><div class="ph">Publish batch</div><div class="pb">'
+            '<div class="fnote">Reversible: each commit is an ordinary published edit. The batch '
+            're-applies and re-validates under the publish lock at commit time — a stale preview or a '
+            'concurrent edit is refused, nothing partial ever lands.</div>'
+            f'<form method="post" action="{_esc(action)}" data-confirm="Publish this '
+            f'{n}-commit batch?">'
+            f'{csrf}'
+            f'<input type="hidden" name="spec_json" value="{_esc(spec_json)}">'
+            f'<input type="hidden" name="expected_shas_json" value="{_esc(expected_shas_json)}">'
+            f'<input type="hidden" name="note" value="{_esc(note)}">'
+            f'<p class="btnrow"><button class="b-ok" type="submit">Publish batch &mdash; {n} '
+            f'commit{"s" if n != 1 else ""}</button></p>'
+            '</form></div></div>')
+
+    body = (
+        f'<h1>Preview batch &mdash; {_esc(cid) if not is_new else "new collection"}</h1>'
+        f'<p class="sub">One combined preview before anything is written. {n} affected '
+        f'survey{"s" if n != 1 else ""}; every one is validated; the batch commits only if all pass. '
+        f'&middot; <a href="{_esc(back)}">back to editor</a></p>'
+        f'{banner}'
+        f'<div class="fnote"><b>Release note (all commits):</b> {_esc(note)}</div>'
+        f'{diff_panel}{verdict_panel}{confirm}'
+    )
+    return _shell(f"AusMT preview batch · {cid or 'new'}", body, nav=nav)
+
+
+# ---- C43 Stage 3b candidate-picker filter (the ONLY JS on the editor/create pages) ---------------
+# Served by GET /gateway/curator/collections.js as an EXTERNAL same-origin script (the strictPages CSP
+# is script-src 'self' — inline blocks/on* are dead). Mirrors the shipped stations-filter pattern:
+# textContent read, className toggle only; NO innerHTML-with-data, no eval, no fetch. DOM-free logic
+# (matchRow) is factored out so the executable Node parity pin can drive it (F: string pins are banned).
+COLLECTIONS_JS = r"""
+'use strict';
+(function () {
+  // Pure, DOM-free: does a candidate row (its filter text) match the query? Case-insensitive
+  // substring over the whitespace-joined "slug currentCollectionId". Empty query matches everything.
+  // Extracted + driven by the Node parity pin (test_c43_stage3b_js_parity.py).
+  function matchRow(filterText, query) {
+    var q = String(query == null ? '' : query).trim().toLowerCase();
+    if (q === '') return true;
+    return String(filterText == null ? '' : filterText).toLowerCase().indexOf(q) !== -1;
+  }
+
+  function apply(input, rows) {
+    var q = input.value;
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var ft = row.getAttribute('data-filter') || '';
+      // className toggle only — never innerHTML.
+      if (matchRow(ft, q)) { row.classList.remove('hide'); }
+      else { row.classList.add('hide'); }
+    }
+  }
+
+  function wire() {
+    var input = document.getElementById('cand-filter');
+    var table = document.getElementById('cand-table');
+    if (!input || !table) return;
+    var rows = table.querySelectorAll('tr.memrow');
+    input.addEventListener('input', function () { apply(input, rows); });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
+  }
+})();
+"""
 
 
 # ---- station (EDI) removal ------------------------------------------------------------------------

@@ -155,6 +155,18 @@ def _dispatch_edit(cfg, job: dict, scratch_dir: Path) -> dict:
     # runner's own mount, reads each `collection` block, and mutates nothing (history-job trust class).
     if job.get("kind") == "collections":
         return run_collections_job(Path(cfg.surveys_root))
+    # C43 Stage 3b (record D5-A A6): the atomic collection batch. Whole-corpus too (it names its own
+    # affected slugs in the operations list), so it dispatches here before the single-slug gate. The
+    # runner is the ONLY place survey.yaml is parsed/patched/emitted (C31 §0.1); this computes each
+    # affected member's patched bytes + validator report — the gateway commits them (publish.py).
+    if job.get("kind") == "collection_batch":
+        return run_collection_batch_job(
+            Path(cfg.surveys_root),
+            operations=list(job.get("operations") or []),
+            note=str(job.get("note") or ""),
+            today=str(job.get("today") or ""),
+            validator_path=str(cfg.validator_path or ""),
+            scratch_dir=scratch_dir)
     slug = str(job.get("slug") or "")
     if not _SLUG_RE.match(slug):
         raise EditError(f"invalid slug in edit job: {slug!r}")
@@ -625,6 +637,18 @@ def _history_subcommand(argv: list[str]) -> str | None:
 
 # The programme-level fields the rollup carries, in the engine's field order (build_portal.py:396).
 _COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_updated", "description")
+# F2 (D5-C): the fields whose per-member DIVERGENCE the console reports + offers Normalise for.
+# EXCLUDES `last_updated`: it is a GATEWAY-MANAGED per-member timestamp (stamped on only the changed
+# members in a diff-minimal batch), NOT a curator-reconcilable programme field — including it would
+# make the console permanently report "members disagree on last_updated" with a Normalise remedy that
+# has no form field to fix it. It stays in _COLLECTION_ROLLUP_FIELDS for engine-rollup parity only.
+_COLLECTION_DIVERGENCE_FIELDS = tuple(f for f in _COLLECTION_ROLLUP_FIELDS if f != "last_updated")
+# Collection fields treated as NUMERIC end-to-end. The three seams MUST agree on one equality (D5-C
+# round 2, R1): the editor's no-op check compares str-form (F1), the divergence detector buckets
+# str-form (R1 — else int 2003 vs "2003" flags a divergence showing two IDENTICAL values that
+# Normalise then no-ops on: an un-clearable "Need attention"), and emission writes a round-trip-stable
+# decimal as a plain int (R2).
+_COLLECTION_NUMERIC_FIELDS = frozenset({"start_year"})
 # The status vocabulary the engine surfaces (build_portal.py:386). An out-of-vocab rolled-up status is
 # DROPPED (build_portal.py:399-400) — never surfaced as a fake status; it still shows as the member's
 # raw declared value (and as divergence when members disagree).
@@ -673,14 +697,22 @@ def _collection_divergence(members: list) -> dict:
     order; EMPTY {} when every field agrees. A member that omits a field is not an outlier (it inherits
     the rollup value), so only DECLARED values count."""
     out: dict = {}
-    for fld in _COLLECTION_ROLLUP_FIELDS:
+    for fld in _COLLECTION_DIVERGENCE_FIELDS:   # F2: last_updated excluded (gateway-managed timestamp)
         buckets: dict = {}
         order: list = []
         for m in members:
             v = m["declared"].get(fld)
             if v in (None, ""):
                 continue
-            key = json.dumps(v, sort_keys=True, default=str)   # a stable hashable key for any scalar
+            # R1 (D5-C round 2): a NUMERIC field buckets by the SAME str-form equality as the editor's
+            # no-op check — int 2003 and quoted "2003" are ONE value. Type-sensitive json.dumps keying
+            # flagged them as divergent (two IDENTICAL rendered values) while Normalise no-op'd (400
+            # "No changes"): an un-clearable Need-attention. Non-numeric fields keep the type-stable
+            # json.dumps key (a stable hashable for any scalar).
+            if fld in _COLLECTION_NUMERIC_FIELDS:
+                key = str(v)
+            else:
+                key = json.dumps(v, sort_keys=True, default=str)
             if key not in buckets:
                 buckets[key] = {"value": v, "members": []}
                 order.append(key)
@@ -712,6 +744,7 @@ def run_collections_job(surveys_root: Path) -> dict:
     rollup: dict = {}          # id -> first-declarer rollup field dict
     members_by_id: dict = {}   # id -> [member dict] (in slug order)
     order: list = []           # ids in first-seen (sorted-slug) order — matches the engine's order
+    all_surveys: list = []     # A6 candidate list: EVERY published survey + its current membership
     for slug in _published_slugs(surveys_root):
         pkg = surveys_root / "surveys" / slug
         # F3 (D5-B): a malformed survey.yaml (ruamel YAMLError) or a non-mapping top-level must drop
@@ -724,16 +757,23 @@ def run_collections_job(surveys_root: Path) -> dict:
             continue
         if not hasattr(data, "get"):
             continue  # empty file / list / scalar top-level — not a survey mapping; drop just this one
+        name = data.get("name")
+        label = str(name) if name not in (None, "") else slug
+        n_stations = len(list_edi_files(pkg))
         coll = data.get("collection")
         # F2 (D5-B): membership predicate = the engine's truthiness (build_portal.py:389 `if c and
         # c.get("id")`), so a falsy id (0/False/"") drops exactly as the engine drops it.
-        if not (hasattr(coll, "get") and coll.get("id")):
-            continue
-        cid = str(coll.get("id"))
-        name = data.get("name")
-        label = str(name) if name not in (None, "") else slug
+        has_membership = bool(hasattr(coll, "get") and coll.get("id"))
+        current_cid = str(coll.get("id")) if has_membership else None
+        # A6 candidate list (Stage 3b add-picker): every published survey, with its CURRENT membership
+        # so the picker can show `no collection` vs `in "<id>" -> moves`. Membership by SLUG (never the
+        # rollup's display labels). Read-only; same trust class as the rollup below.
+        all_surveys.append({"slug": slug, "label": label, "n_stations": n_stations,
+                            "current_collection_id": current_cid})
+        if not has_membership:
+            continue  # contributes to the candidate list above, but to no collection rollup
+        cid = current_cid
         declared = _declared_collection_block(coll)
-        n_stations = len(list_edi_files(pkg))
         if cid not in rollup:
             order.append(cid)
             members_by_id[cid] = []
@@ -769,7 +809,181 @@ def run_collections_job(surveys_root: Path) -> dict:
             "members": members,
             "divergence": _collection_divergence(members),
         }
-    return {"ok": True, "collections": collections, "near_duplicates": _near_duplicate_ids(order)}
+    return {"ok": True, "collections": collections,
+            "near_duplicates": _near_duplicate_ids(order), "surveys": all_surveys}
+
+
+# ---- collection batch (atomic multi-survey collection-block write) job ---------------------------
+# C43 Stage 3b (record D5-A A6). The gateway resolves the desired end-state (collection fields + the
+# final member set) into a list of per-survey OPERATIONS and hands them here; the runner — the ONLY
+# YAML parser (C31 §0.1) — applies each survey's `collection`-block patch, bumps its version (patch),
+# appends the ONE shared release note, and validates the patched package on a scratch copy. It returns
+# each affected survey's patched bytes + validator report; the gateway's publish.commit_collection_batch
+# does the atomic N-commit git write (validate-all-then-commit-all). This computes; it does NOT commit.
+
+# The programme fields (besides id) the collection editor sets; kept in the engine's field order.
+_COLLECTION_EDIT_FIELDS = ("title", "type", "start_year", "status", "description")
+
+
+def _apply_collection_set(data, block: dict, today: str) -> bool:
+    """Set the desired collection fields into a member's `collection` block IN PLACE, surgically — only
+    fields the desired block DECLARES (non-empty), and only when the value actually differs (an
+    unchanged field keeps its exact on-disk form, so it produces NO diff line — diff-minimality). A
+    survey that had NO block gets one created (an add/move). Returns True iff anything changed.
+
+    `last_updated` is a PASSENGER: stamped to `today` only when another field actually changed, so an
+    already-canonical member is left byte-for-byte untouched (no spurious commit). An EMPTY desired
+    field means 'leave the member's own value as-is', NEVER 'clear it' — clearing a programme field
+    stays a per-survey metadata edit (the editor never deletes a field a member declares).
+
+    F1 (D5-C): the desired-state form round-trips EVERY value as a string, so the no-op check is
+    TYPE-TOLERANT (`str(_plain(cur)) == str(new)` => unchanged), and a numeric field (`start_year`) is
+    written as a PLAIN scalar, NOT force-quoted — otherwise a member declaring int `start_year: 2003`,
+    edited only on its title, would have `2003` silently re-typed to `"2003"` (a spurious diff line +
+    a spurious commit on an untouched member, breaking the D13 diff-minimality / N-commits pins)."""
+    coll = data.get("collection")
+    created = False
+    if not hasattr(coll, "get"):
+        from ruamel.yaml.comments import CommentedMap
+        coll = CommentedMap()
+        data["collection"] = coll
+        created = True
+    changed = created
+    for key in ("id",) + _COLLECTION_EDIT_FIELDS:
+        if key not in block:
+            continue
+        new_val = block[key]
+        if new_val in (None, ""):
+            continue  # empty desired field: leave the member's own value untouched
+        # Type-tolerant no-op: the form hands back "2003" for an on-disk int 2003 — compare as strings
+        # so an unchanged numeric is NOT rewritten (keeps its exact on-disk form + type — no diff line).
+        if key in coll and str(_plain(coll[key])) == str(new_val):
+            continue
+        coll[key] = _coerce_collection_value(key, new_val)
+        changed = True
+    if changed and str(_plain(coll.get("last_updated"))) != str(today):
+        coll["last_updated"] = quote_ambiguous(today)
+    return changed
+
+
+def _coerce_collection_value(key: str, new_val):
+    """Coerce a form-supplied collection value for emission (F1, hardened per D5-C round 2 R2). A
+    numeric field (_COLLECTION_NUMERIC_FIELDS, defined with the collection constants above) whose value
+    is an all-DECIMAL string is written as a PLAIN int (unquoted) — but ONLY when the int round-trips
+    to the identical literal: int("0000") -> 0 would silently rewrite the curator's typed "0000", so a
+    non-round-trip literal stays a quoted string. isdecimal, NOT isdigit — the executed "2003²" probe
+    is isdigit-True but int()-ValueError — plus a defensive try/except so NO input can raise out of the
+    emission path (the gateway form + publish A2 gate both enforce ^[0-9]{4}$ upstream; this is the
+    belt). Every other value rides quote_ambiguous (FIX 3) so a YAML-1.1-retypeable token is emitted
+    quoted."""
+    if key in _COLLECTION_NUMERIC_FIELDS and isinstance(new_val, str) and new_val.isdecimal():
+        try:
+            n = int(new_val)
+        except ValueError:  # pragma: no cover -- isdecimal makes this unreachable; belt per R2
+            return quote_ambiguous(new_val)
+        if str(n) == new_val:
+            return n
+    return quote_ambiguous(new_val)
+
+
+def _apply_collection_remove(data) -> bool:
+    """Drop a member's `collection` block entirely (remove it from the collection — 'no collection').
+    Returns True iff a block was present to remove. The survey stays published; only its programme
+    membership goes. A version bump + release note record it like any other content edit."""
+    if "collection" in data:
+        del data["collection"]
+        return True
+    return False
+
+
+def _collection_effect(kind: str, old_cid: str | None, new_cid: str) -> str:
+    """A display label for one survey's role in the batch: added / moved / removed / edit. Pure sugar
+    for the batch-diff confirm; the git commit records the authoritative before/after."""
+    if kind == "remove":
+        return "removed"
+    if old_cid is None:
+        return "added"
+    if new_cid and old_cid != new_cid:
+        return "moved"
+    return "edit"
+
+
+def run_collection_batch_job(surveys_root: Path, *, operations: list, note: str, today: str,
+                             validator_path: str, scratch_dir: Path) -> dict:
+    """Handle a `collection_batch` edit-job (record D5-A A6): apply the per-survey collection-block
+    operations, returning each AFFECTED survey's patched bytes + unified diff + validator report +
+    version bump. NO git, NO commit — the gateway's commit_collection_batch does the atomic write.
+
+    Each operation is `{slug, op: 'set'|'remove', block?: {...}}`. A 'set' patches (or creates) the
+    member's `collection` block toward the desired fields; a 'remove' drops the block. A member whose
+    block does NOT actually change is returned `changed: False` (no version bump, no commit — diff-
+    minimality). A structural problem (bad slug, missing survey.yaml, non-semver current version) raises
+    EditError for the WHOLE job so nothing is half-computed. Returns {ok, results: [...]}"""
+    note = str(note or "").strip()
+    if not note:
+        raise EditError("a release note is required for a collection batch")
+    if not isinstance(operations, list) or not operations:
+        raise EditError("no operations in the collection batch")
+    root_resolved = (surveys_root / "surveys").resolve()
+    results: list = []
+    for i, op in enumerate(operations):
+        slug = str(op.get("slug") or "")
+        # R3 (D5-C round 2): FULLMATCH, not match — an anchored `$` matches before a trailing newline,
+        # so `.match` accepted "slug\n" (the executed phantom-collection class). This seam's ops arrive
+        # from the untrusted client-carried spec at publish time, so the gate must be exact.
+        if not _SLUG_RE.fullmatch(slug):
+            raise EditError(f"invalid slug in collection batch: {slug!r}")
+        kind = str(op.get("op") or "")
+        pkg = (surveys_root / "surveys" / slug).resolve()
+        if pkg != root_resolved and root_resolved not in pkg.parents:
+            raise EditError("collection-batch path escapes the surveys tree")
+        survey_yaml = pkg / "survey.yaml"
+        if not survey_yaml.is_file():
+            raise EditError(f"survey.yaml not found under {slug}")
+        original_bytes = survey_yaml.read_bytes()
+        data = _load_bytes(original_bytes)
+        if not hasattr(data, "get"):
+            raise EditError(f"survey.yaml is not a mapping: {slug}")
+        old_coll = data.get("collection")
+        old_cid = (str(old_coll.get("id"))
+                   if hasattr(old_coll, "get") and old_coll.get("id") else None)
+        if kind == "set":
+            block = op.get("block") or {}
+            changed = _apply_collection_set(data, block, today)
+            effect = _collection_effect(kind, old_cid, str(block.get("id") or ""))
+        elif kind == "remove":
+            changed = _apply_collection_remove(data)
+            effect = "removed"
+        else:
+            raise EditError(f"unknown collection-batch op {kind!r} for {slug}")
+        if not changed:
+            results.append({"slug": slug, "op": kind, "changed": False, "effect": "unchanged",
+                            "old_collection_id": old_cid})
+            continue
+        old_version = data.get("version")
+        old_v_str = old_version if isinstance(old_version, str) else "0.0.0"
+        new_version = suggest_bump(old_v_str, "patch")
+        if not semver_greater(new_version, old_v_str):
+            raise EditError(
+                f"cannot bump {slug}: current version {old_v_str!r} is not MAJOR.MINOR.PATCH semver — "
+                f"fix it via a PR first (a content edit requires a semver-greater bump, C31 §0.3)")
+        append_release_note(data, new_version, today, note)
+        new_bytes = _dump_bytes(data)
+        diff = "".join(difflib.unified_diff(
+            original_bytes.decode("utf-8", "replace").splitlines(keepends=True),
+            new_bytes.decode("utf-8", "replace").splitlines(keepends=True),
+            fromfile=f"a/{slug}/survey.yaml", tofile=f"b/{slug}/survey.yaml"))
+        report = _validate_patched(pkg, new_bytes, validator_path, scratch_dir / f"{i:03d}-{slug}")
+        results.append({
+            "slug": slug, "op": kind, "changed": True, "effect": effect,
+            "old_collection_id": old_cid, "current_version": old_v_str, "new_version": new_version,
+            "diff": diff,
+            "new_yaml": new_bytes.decode("utf-8", "replace"),
+            "new_yaml_b64": base64.b64encode(new_bytes).decode("ascii"),
+            "new_sha256": hashlib.sha256(new_bytes).hexdigest(),
+            "validator": report, "has_fail": report_has_fail(report),
+        })
+    return {"ok": True, "results": results}
 
 
 def run_merge_job(package_root: Path, *, patch: dict, bump: str, note: str, today: str,

@@ -626,7 +626,11 @@ def inproc_edit_runner(surveys_live: Path, *, validator_override=validator_pass,
         import uuid
         scratch = cfg.jobs_dir / "edit" / "scratch" / uuid.uuid4().hex
         try:
-            if validator_override is not None and job.get("kind") == "merge":
+            # The merge AND the C43 Stage-3b collection_batch jobs both validate patched packages via
+            # edit._validate_patched (per survey for the batch); override it so the test controls the
+            # per-survey verdict. The override callable receives the survey package_root, so a batch
+            # test can PASS most surveys and FAIL a chosen one by inspecting package_root.name (slug).
+            if validator_override is not None and job.get("kind") in ("merge", "collection_batch"):
                 orig = edit_mod._validate_patched
                 edit_mod._validate_patched = (
                     lambda pr, _nb, _vp, _sd: validator_override(pr))
