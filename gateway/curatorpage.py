@@ -203,6 +203,40 @@ _HEAD = """<!doctype html>
  .toc .state.issue{color:$bad;font-weight:600}
  .badinput{border-color:$bad !important;background:rgba(168,84,84,.15) !important}
  .fielderr{color:$bad;font-size:.8rem;margin:.25rem 0 0}
+ /* ---- C43 Stage 3a collections console (record D5-A; owner-approved preview 2026-07-12). Fully
+    server-rendered, READ-ONLY — ZERO JS (the strictPages CSP is script-src 'self'). The bands derive
+    from the shipped .opsband warn token; the status chips + member/Declares table are new classes
+    that reuse the panel/table idiom. ---- */
+ .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+ .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+ tr.rowlink{cursor:pointer}
+ tr.rowlink:hover{background:#1B2C3A}
+ .statuschip{display:inline-flex;align-items:center;gap:.4rem;border-radius:999px;padding:.1rem .6rem;
+   font-size:.72rem;font-weight:600}
+ .statuschip .d{width:.5rem;height:.5rem;border-radius:50%}
+ .s-active{background:rgba(91,174,106,.15);color:$ok} .s-active .d{background:$ok}
+ .s-completed{background:rgba(143,163,176,.15);color:$muted} .s-completed .d{background:$muted}
+ .s-archived{background:rgba(143,163,176,.12);color:$muted} .s-archived .d{background:$muted}
+ .s-unknown{background:rgba(143,163,176,.1);color:$muted} .s-unknown .d{background:$muted}
+ .mixed{color:$warn;font-size:.72rem;white-space:nowrap}
+ /* Inconsistency bands: the amber warn seam from the preview (derived from .opsband). */
+ .cband{border-radius:8px;padding:.7rem 1rem;margin:.75rem 0;font-size:.85rem;
+   background:#3a2f1c;border:1px solid #5a4a24}
+ .cband b{color:$warn}
+ .cband .why{color:$muted;display:block;margin-top:.25rem}
+ .cband .fix{color:$muted;font-size:.8rem;margin-top:.4rem}
+ /* Read-only detail: rollup facts as a definition grid + the member/Declares table markers. */
+ dl.crollup{display:grid;grid-template-columns:10rem 1fr;gap:.3rem .8rem;margin:0;font-size:.88rem}
+ dl.crollup dt{color:$muted}
+ dl.crollup dd{margin:0;min-width:0;word-break:break-word}
+ .badge-move{color:$warn;font-size:.72rem;white-space:nowrap}
+ .badge-ok{color:$muted;font-size:.72rem}
+ .divergerow{color:$warn;font-size:.8rem;margin:.3rem 0 0;display:flex;gap:.4rem}
+ .divergerow b{color:$warn}
+ /* A dashed, muted "next stage" note (the editor lands in 3b) — the preview's .dnote. */
+ .dnote{background:$bg;border:1px dashed #2E4254;border-radius:8px;padding:.7rem 1rem;
+   margin:1.25rem 0 0;font-size:.82rem;color:$muted}
+ .dnote b{color:$ink}
  /* The three-thirds Stations layout needs a wide desktop (site table + facts + a fixed-width plots
     column). Below 1120px collapse it to ONE column: DOM order is facts-first then plots then table,
     so they stack facts / plots / table with no `order` needed; grid-row returns to auto so the three
@@ -1757,11 +1791,12 @@ def _page(title: str, body: str) -> str:
 # precedented serve-state pattern) — ALL JS stays in external route constants (the strictPages CSP is
 # script-src 'self'). Published HEAD is server-rendered here from serve_state.read_published_head.
 
-# The rail sections and their entries, as (group, [(key, label, href)]). Stage-1 ONLY surfaces that
-# EXIST ship — Collections is Stage 3 and is DELIBERATELY absent (not a disabled placeholder, per the
-# contract). "Serve state" links to the queue page's serve panel anchor (the panel lives there today).
+# The rail sections and their entries, as (group, [(key, label, href)]). Collections joined the
+# Surveys group in Stage 3a (record D5-A) — the read-only projection at /gateway/curator/collections;
+# it sits beside Surveys because a collection is a programme grouping OF surveys.
 _RAIL = (
-    ("Surveys", (("surveys", "Surveys", "/gateway/curator/edit"),)),
+    ("Surveys", (("surveys", "Surveys", "/gateway/curator/edit"),
+                 ("collections", "Collections", "/gateway/curator/collections"))),
     ("Intake", (("queue", "Submission queue", "/gateway/curator/queue"),
                 ("uploaders", "Uploader keys", "/gateway/curator/uploaders"))),
     # Security sits under Operations beside Serve state (C41 T2): it is an operator-facing account
@@ -3599,6 +3634,272 @@ def render_edit_list(*, curator_name: str, slugs: list, csrf_token: str,
     if nav is not None:
         return _shell("AusMT surveys", body, nav=nav)
     return _page("AusMT surveys", body)
+
+
+# ---- C43 Stage 3a collections console (record D5-A) -----------------------------------------------
+# Two READ-ONLY server-rendered views over the runner's collections projection: the index (summary
+# cards + list table + inconsistency bands) and the per-id detail (rollup facts + member/Declares
+# table + callouts). NO write controls in 3a — creation/edit/merge/normalise are Stage 3b. ZERO JS:
+# the whole surface is server-rendered (the strictPages CSP is script-src 'self').
+# The projection has no collection OBJECT: the id lives in each member's survey.yaml, so a "collection"
+# here is a rollup keyed by exact collection.id. Membership is by SLUG (read live from surveys-live),
+# never the rollup's display labels (the labels-vs-slugs trap that broke the stations tab, hotfix #33).
+
+# The programme fields whose per-member divergence the detail marks with a ◆ (record D5-A A4). Kept in
+# sync with the runner's _COLLECTION_ROLLUP_FIELDS (the job computes divergence over the same set).
+_COLLECTION_FIELDS = ("title", "type", "status", "start_year", "last_updated", "description")
+_COLLECTION_FIELD_LABELS = {"title": "title", "type": "type", "status": "status",
+                            "start_year": "start year", "last_updated": "last updated",
+                            "description": "description"}
+
+
+def _collection_status_chip(status) -> str:
+    """The rollup status as a coloured chip (active/completed/archived); a missing/out-of-vocab status
+    (the engine drops those from the rollup) renders a muted 'no status' chip rather than an empty
+    cell, so the read is never ambiguous."""
+    s = str(status) if status not in (None, "") else ""
+    cls = {"active": "s-active", "completed": "s-completed",
+           "archived": "s-archived"}.get(s, "s-unknown")
+    label = s if s else "no status"
+    return f'<span class="statuschip {cls}"><span class="d"></span>{_esc(label)}</span>'
+
+
+def _collection_href(cid: str) -> str:
+    return f"/gateway/curator/collections/{_url_quote(cid)}"
+
+
+def _divergence_summary(divergence: dict) -> str:
+    """A human phrase for a collection's per-field divergence: e.g.
+    '2 titles (AusLAMP ×1, AusLAMP Project ×1) · 2 statuses (active ×1, completed ×1)'. Every value is
+    escaped. Empty divergence yields '' (caller renders no band)."""
+    parts = []
+    for fld in _COLLECTION_FIELDS:
+        buckets = divergence.get(fld)
+        if not buckets:
+            continue
+        label = _COLLECTION_FIELD_LABELS.get(fld, fld)
+        breakdown = ", ".join(
+            f'<span class="mono">{_esc(b.get("value"))}</span> &times;{len(b.get("members") or [])}'
+            for b in buckets)
+        parts.append(f'{len(buckets)} <b>{_esc(label)}</b> values ({breakdown})')
+    return " &middot; ".join(parts)
+
+
+def _near_dup_group_for(cid: str, near_duplicates: list) -> list | None:
+    for group in near_duplicates or []:
+        if cid in group:
+            return group
+    return None
+
+
+def render_collections_index(*, collections: dict, near_duplicates: list,
+                             nav: "NavContext") -> str:
+    """The collections index (record D5-A A1): summary cards, the two inconsistency bands (id
+    near-duplicates + per-field divergence), and the list table. READ-ONLY — no 'New collection…'
+    button (creation is Stage 3b). An empty corpus renders a clean 'No collections yet' state, never an
+    error (matches the engine's collections.json == {})."""
+    collections = collections or {}
+    near_duplicates = near_duplicates or []
+    # Summary tallies.
+    n_coll = len(collections)
+    n_members = sum(int(c.get("n_surveys") or 0) for c in collections.values())
+    n_stations = sum(int(c.get("n_stations") or 0) for c in collections.values())
+    attention = {cid for cid, c in collections.items() if c.get("divergence")}
+    for group in near_duplicates:
+        attention.update(group)
+    n_attention = len(attention)
+    att_cls = ' class="n warn"' if n_attention else ' class="n"'
+    cards = (
+        '<div class="cards">'
+        f'<div class="card"><div class="n">{n_coll}</div><div class="l">Collections</div></div>'
+        f'<div class="card"><div class="n">{n_members}</div><div class="l">Member surveys</div></div>'
+        f'<div class="card"><div class="n">{n_stations}</div><div class="l">Stations rolled up</div></div>'
+        f'<div class="card"><div{att_cls}>{n_attention}</div><div class="l">Need attention</div></div>'
+        '</div>'
+    )
+
+    if not collections:
+        body = (
+            '<h1>Collections</h1>'
+            '<p class="sub">Programme groupings, rolled up from every survey\'s '
+            '<span class="mono">collection.id</span> — the same grouping the portal shows readers.</p>'
+            + cards +
+            '<div class="panel"><p class="sub" style="margin:0">No collections yet. A survey joins a '
+            'collection by declaring a <span class="mono">collection</span> block in its '
+            '<span class="mono">survey.yaml</span>; once one does, its programme appears here.</p></div>'
+        )
+        return _shell("AusMT collections", body, nav=nav)
+
+    # Inconsistency bands. (a) id near-duplicates.
+    bands = []
+    for group in near_duplicates:
+        named = " and ".join(
+            f'<span class="mono">{_esc(gid)}</span> ({int((collections.get(gid) or {}).get("n_surveys") or 0)} '
+            f'survey{"s" if int((collections.get(gid) or {}).get("n_surveys") or 0) != 1 else ""})'
+            for gid in group)
+        bands.append(
+            '<div class="cband">'
+            f'<b>&#9888; Near-duplicate ids</b> &mdash; {named} differ only by case or whitespace. '
+            'The portal groups by exact id, so this splits one programme into separate collections.'
+            '<span class="why">A reader browsing programmes sees the same name more than once, each '
+            'with a partial member list.</span>'
+            '<span class="fix">Merging the minority members onto one id arrives in the collections '
+            'editor (next stage).</span>'
+            '</div>')
+    # (b) per-field divergence, one band per collection that disagrees.
+    for cid, c in collections.items():
+        summary = _divergence_summary(c.get("divergence") or {})
+        if not summary:
+            continue
+        title = c.get("title") or cid
+        bands.append(
+            '<div class="cband">'
+            f'<b>&#9888; Members disagree within &ldquo;{_esc(title)}&rdquo;</b> &mdash; {summary}.'
+            '<span class="why">The rollup takes whichever member builds first — readers may see '
+            'either. This is silent on the portal today.</span>'
+            '<span class="fix">Normalising the outliers to one value arrives in the collections '
+            'editor (next stage).</span>'
+            '</div>')
+    bands_html = "".join(bands)
+
+    # List table.
+    rows = []
+    for cid in collections:
+        c = collections[cid]
+        title = c.get("title") or cid
+        n_surv = int(c.get("n_surveys") or 0)
+        mixed = ' <span class="mixed">&middot; mixed</span>' if c.get("divergence") else ""
+        rows.append(
+            '<tr class="rowlink">'
+            f'<td><a href="{_esc(_collection_href(cid))}"><b>{_esc(title)}</b></a> '
+            f'<span class="mono" style="color:{_PALETTE["muted"]}">{_esc(cid)}</span></td>'
+            f'<td>{_esc(c.get("type")) if c.get("type") else "&mdash;"}</td>'
+            f'<td class="num">{n_surv} survey{"s" if n_surv != 1 else ""}</td>'
+            f'<td class="num">{int(c.get("n_stations") or 0)}</td>'
+            f'<td>{_collection_status_chip(c.get("status"))}{mixed}</td>'
+            '</tr>')
+    table = (
+        '<div class="panel"><table>'
+        '<tr><th>Collection</th><th>Type</th><th>Members</th><th>Stations</th><th>Status</th></tr>'
+        + "".join(rows) + '</table></div>'
+        '<p class="sub" style="margin:.6rem 0 0">Membership is resolved by survey <b>slug</b>, read '
+        'live from surveys-live via a runner read-job — never the rollup\'s display labels.</p>'
+    )
+
+    body = (
+        '<h1>Collections</h1>'
+        '<p class="sub">Programme groupings, rolled up from every survey\'s '
+        '<span class="mono">collection.id</span> — the same grouping the portal shows readers. There '
+        'is no collection object in the data model: the id lives in each member\'s '
+        '<span class="mono">survey.yaml</span>, so a collection is a projection over its members.</p>'
+        + cards + bands_html + table
+    )
+    return _shell("AusMT collections", body, nav=nav)
+
+
+def render_collection_detail(*, cid: str, collection: dict, near_duplicates: list,
+                             nav: "NavContext") -> str:
+    """The read-only collection detail (record D5-A A1/A4): the rollup facts as read-only rows, the
+    member table with a Declares column naming per-field outliers, and the per-collection inconsistency
+    callouts. NO form inputs, NO membership controls, NO POST — a one-line note says editing arrives in
+    the next stage. The handler resolves `collection` from the projection (unknown id -> 404 before
+    this renderer is reached)."""
+    near_duplicates = near_duplicates or []
+    title = collection.get("title") or cid
+    n_surv = int(collection.get("n_surveys") or 0)
+    n_stn = int(collection.get("n_stations") or 0)
+    header = (
+        f'<h1>{_esc(title)} '
+        f'<span style="color:{_PALETTE["muted"]};font-weight:400">&middot; {n_surv} '
+        f'member{"s" if n_surv != 1 else ""} &middot; {n_stn} stations</span> '
+        f'{_collection_status_chip(collection.get("status"))}</h1>'
+    )
+
+    def _row(label, value, *, mono=False):
+        if value in (None, ""):
+            shown = '<span style="color:%s">&mdash;</span>' % _PALETTE["muted"]
+        else:
+            cls = ' class="mono"' if mono else ""
+            shown = f'<span{cls}>{_esc(value)}</span>'
+        return f"<dt>{_esc(label)}</dt><dd>{shown}</dd>"
+
+    rollup = (
+        '<div class="panel"><div class="ph">Rollup facts <span class="go" '
+        'style="color:%s;font-size:.78rem;font-weight:400">first-declarer across members — read-only</span></div>'
+        % _PALETTE["muted"]
+        + '<dl class="crollup">'
+        + _row("Title", collection.get("title") or cid)
+        + _row("Id", cid, mono=True)
+        + _row("Type", collection.get("type"))
+        + _row("Status", collection.get("status"))
+        + _row("Start year", collection.get("start_year"))
+        + _row("Last updated", collection.get("last_updated"))
+        + _row("Description", collection.get("description"))
+        + '</dl></div>'
+    )
+
+    # Member table with the Declares column (per-field outliers vs the canonical rollup value).
+    members = collection.get("members") or []
+    mrows = []
+    for m in members:
+        declared = m.get("declared") or {}
+        outliers = []
+        for fld in _COLLECTION_FIELDS:
+            v = declared.get(fld)
+            if v in (None, ""):
+                continue
+            if v != collection.get(fld):
+                outliers.append(_COLLECTION_FIELD_LABELS.get(fld, fld))
+        if outliers:
+            declares = " ".join(f'<span class="badge-move">{_esc(o)} &#9670;</span>'
+                                for o in outliers)
+        else:
+            declares = '<span class="badge-ok">consistent</span>'
+        mrows.append(
+            '<tr>'
+            f'<td class="mono">{_esc(m.get("slug"))}</td>'
+            f'<td class="num">{int(m.get("n_stations") or 0)}</td>'
+            f'<td>{declares}</td>'
+            '</tr>')
+    member_table = (
+        '<h2 style="margin-top:1.5rem">Members '
+        f'<span style="color:{_PALETTE["muted"]};font-weight:400">&middot; {n_surv} '
+        f'survey{"s" if n_surv != 1 else ""} &middot; {n_stn} stations</span></h2>'
+        '<div class="panel"><table>'
+        '<tr><th>Survey (slug)</th><th>Stations</th><th>Declares</th></tr>'
+        + "".join(mrows) + '</table></div>'
+        '<p class="sub" style="margin:.5rem 0 0">A <span class="mono">&#9670;</span> marks a member '
+        'whose own <span class="mono">collection</span> block disagrees with the canonical value above; '
+        'normalising the outliers arrives in the collections editor (next stage).</p>'
+    )
+
+    # Per-collection inconsistency callouts.
+    callouts = []
+    group = _near_dup_group_for(cid, near_duplicates)
+    if group:
+        others = " and ".join(f'<span class="mono">{_esc(g)}</span>' for g in group if g != cid)
+        callouts.append(
+            '<div class="cband">'
+            f'<b>&#9888; Near-duplicate id</b> &mdash; this id collides with {others} '
+            '(differs only by case or whitespace), so the portal groups them as separate '
+            'collections. Merging arrives in the collections editor (next stage).</div>')
+    summary = _divergence_summary(collection.get("divergence") or {})
+    if summary:
+        callouts.append(
+            '<div class="cband">'
+            f'<b>&#9888; Members disagree</b> &mdash; {summary}. The rollup takes whichever builds '
+            'first; normalising the outliers arrives in the collections editor (next stage).</div>')
+    callouts_html = "".join(callouts)
+
+    note = (
+        '<div class="dnote"><b>Read-only.</b> Editing a collection — changing its fields, adding or '
+        'removing member surveys, merging near-duplicate ids and normalising divergent fields — '
+        'arrives in the next stage (the collections editor). Every change there fans out as an atomic, '
+        'validator-checked batch across the member surveys.</div>'
+    )
+
+    body = header + callouts_html + rollup + member_table + note
+    return _shell(f"AusMT collection · {cid}", body, nav=nav)
 
 
 # ---- station (EDI) removal ------------------------------------------------------------------------
