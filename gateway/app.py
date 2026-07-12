@@ -9,12 +9,14 @@ No CORS headers anywhere (design §1) — same-origin by construction through Ca
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import hashlib
 import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -47,6 +49,13 @@ _STATUS_404_BODY = b"not found"  # byte-identical for every unknown/invalid toke
 _NOTE_MAX_CHARS = 2000
 _KEY_NAME_MAX_CHARS = 120
 _KEY_EMAIL_MAX_CHARS = 254
+
+# C43 Stage 3b collections editor — the gateway-side guardrails (record D5-A A2: the console's select
+# IS the guardrail; type/id/status are validator-WARNING-grade only, so the write path enforces them
+# here before an operation is built). The id vocab is the engine's (docs/.../collection-ids.md).
+_COLLECTION_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+_COLLECTION_TYPE_VOCAB = ("programme", "release", "institutional", "other")
+_COLLECTION_STATUS_VOCAB = ("active", "completed", "archived")
 
 
 def _token_hash(token: str) -> str:
@@ -676,6 +685,20 @@ class Gateway:
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
+    def handle_collections_js(self, request: Request) -> Response:
+        """GET /gateway/curator/collections.js — the C43 Stage-3b collections editor's ONLY browser
+        script: the candidate-picker filter (record A3). Same CSP reason as the other external scripts
+        (strictPages script-src 'self' blocks inline); textContent/className only, no innerHTML-with-
+        data. Session-gated for consistency; the content is a public-repo constant. DEGRADES: without
+        it the add-picker shows every candidate unfiltered — the form still works, the page never
+        breaks (an executable Node parity pin drives the filter, test_c43_stage3b_js_parity.py)."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.COLLECTIONS_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
     def handle_curator_detail(self, request: Request, submission_id: str) -> Response:
         name = self._require_session(request)
         if isinstance(name, Response):
@@ -1037,42 +1060,276 @@ class Gateway:
         if isinstance(name, Response):
             return name
         nav = self._nav_context(request, active="collections", crumb="<b>Collections</b>")
-        collections, near_duplicates = self._read_collections()
+        collections, near_duplicates, _surveys = self._read_collections()
         return self._html(curatorpage.render_collections_index(
             collections=collections, near_duplicates=near_duplicates, nav=nav))
 
-    def handle_collection_detail(self, request: Request, cid: str) -> Response:
-        """GET /gateway/curator/collections/{id} (C43 Stage 3a, record D5-A). Enqueue the same
-        whole-corpus read-job and render the read-only detail for ONE collection id: rollup facts, the
-        member/Declares table, and the per-collection inconsistency callouts. An unknown id -> 404 (no
-        crash). READ-ONLY: no form inputs, no POST — editing is Stage 3b."""
+    def handle_collection_detail(self, request: Request, cid: str, *, error: str = "",
+                                 status_code: int = 200) -> Response:
+        """GET /gateway/curator/collections/{id} (C43 Stage 3b, record D5-A A3/A6). Render the collection
+        EDITOR for ONE id: the fan-out edit form + the two-column membership manager over the candidate
+        list. An unknown id -> 404. `?id=<canonical>` pre-fills the id field (the Merge entry point,
+        record E). `error` re-renders after a refused preview (no-op / invalid id)."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
-        collections, near_duplicates = self._read_collections()
+        collections, near_duplicates, surveys = self._read_collections()
         collection = collections.get(cid)
         if collection is None:
             return self._not_found()
+        prefill_id = request.query_params.get("id") or None
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
         nav = self._nav_context(
             request, active="collections",
             crumb='<a href="/gateway/curator/collections">Collections</a> › '
                   f'<b>{curatorpage._esc(cid)}</b>')  # noqa: SLF001
         return self._html(curatorpage.render_collection_detail(
-            cid=cid, collection=collection, near_duplicates=near_duplicates, nav=nav))
+            cid=cid, collection=collection, candidates=surveys, near_duplicates=near_duplicates,
+            csrf_token=csrf, prefill_id=prefill_id, error=error, nav=nav), status_code=status_code)
 
-    def _read_collections(self) -> tuple[dict, list]:
-        """Run the whole-corpus collections read-job and return (collections, near_duplicates). Degrades
-        to the empty projection on a runner error or a refusal — the console is read-only and
-        informational, so an unavailable runner shows 'no collections yet', never a 500."""
+    def handle_collection_create(self, request: Request, *, error: str = "",
+                                 status_code: int = 200) -> Response:
+        """GET /gateway/curator/collections/new (record A5): the create form — details + the candidate
+        picker (≥1 member). A collection with no members cannot exist, so this is a batch that sets the
+        `collection` block on the chosen survey(s)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        _collections, _near, surveys = self._read_collections()
+        csrf = curator_auth.csrf_token_for(self._raw_session(request))
+        nav = self._nav_context(
+            request, active="collections",
+            crumb='<a href="/gateway/curator/collections">Collections</a> › <b>new</b>')
+        return self._html(curatorpage.render_collection_create(
+            candidates=surveys, csrf_token=csrf, error=error, nav=nav), status_code=status_code)
+
+    def _read_collections(self) -> tuple[dict, list, list]:
+        """Run the whole-corpus collections read-job and return (collections, near_duplicates, surveys)
+        — `surveys` is the candidate list (every published survey + its current membership) for the
+        add-picker. Degrades to the empty projection on a runner error or refusal — an unavailable
+        runner shows 'no collections yet', never a 500."""
         try:
             result = self._edit_runner(metaedit.make_collections_job())
         except metaedit.EditRunnerError as exc:
             logger.warning("collections read-job failed (empty state): %s", exc)
-            return {}, []
+            return {}, [], []
         if not result.get("ok"):
             logger.warning("collections read-job refused: %s", result.get("error"))
-            return {}, []
-        return result.get("collections") or {}, result.get("near_duplicates") or []
+            return {}, [], []
+        return (result.get("collections") or {}, result.get("near_duplicates") or [],
+                result.get("surveys") or [])
+
+    # ---- C43 Stage 3b collections editor: the WRITE path (record D5-A A6) ---------------------
+
+    def _build_collection_spec(self, form, *, is_new: bool):
+        """Turn the editor/create form into the desired-end-state spec, or (None, error). The form IS
+        the staged state (no client staging): scalar fields + keep/add checkboxes over the picker +
+        the render-time member set (a hidden field, so a member added elsewhere between render and
+        submit is never accidentally removed). Returns (spec, None) or (None, error_message). Server-
+        side guardrails (A2): the id must be lowercase-hyphenated; type/status must be in-vocab."""
+        fid = (form.get("f_id") or "").strip()
+        if not _COLLECTION_ID_RE.match(fid):
+            return None, "The collection id must be lowercase-hyphenated (a-z 0-9 -), e.g. 'auslamp-sa'."
+        ftype = (form.get("f_type") or "").strip()
+        if ftype and ftype not in _COLLECTION_TYPE_VOCAB:
+            return None, "Invalid collection type."
+        fstatus = (form.get("f_status") or "").strip()
+        if fstatus and fstatus not in _COLLECTION_STATUS_VOCAB:
+            return None, "Invalid collection status."
+        desc = (form.get("f_description") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        fields = {
+            "id": fid,
+            "title": (form.get("f_title") or "").strip(),
+            "type": ftype,
+            "status": fstatus,
+            "start_year": (form.get("f_start_year") or "").strip(),
+            "description": desc,
+        }
+        try:
+            rendered = json.loads(form.get("rendered_members") or "[]")
+        except ValueError:
+            rendered = []
+        if not isinstance(rendered, list):
+            rendered = []
+        rendered = [str(s) for s in rendered]
+        kept = set(_form_getlist(form, "keep"))
+        added = _form_getlist(form, "add")
+        # Desired end-state membership: (render-time members that stayed kept) then any adds; removals
+        # are render-time members no longer kept. A slug added AND kept resolves to one 'set'.
+        set_slugs: list[str] = []
+        for s in rendered:
+            if s in kept and s not in set_slugs:
+                set_slugs.append(s)
+        for s in added:
+            if s and s not in set_slugs:
+                set_slugs.append(s)
+        remove_slugs = [s for s in rendered if s not in kept]
+        return {"fields": fields, "set_slugs": set_slugs, "remove_slugs": remove_slugs}, None
+
+    def _collection_operations(self, spec: dict) -> list:
+        """Resolve a spec into the runner's per-survey operation list: a 'set' (with the non-empty
+        desired block) for every desired member, a 'remove' for every dropped member. The runner then
+        determines which surveys ACTUALLY change (diff-minimality — an already-canonical kept member
+        yields no commit)."""
+        fields = spec["fields"]
+        block = {k: v for k, v in fields.items() if v not in (None, "")}
+        ops = [{"slug": s, "op": "set", "block": block} for s in spec["set_slugs"]]
+        ops += [{"slug": s, "op": "remove"} for s in spec["remove_slugs"]]
+        return ops
+
+    def _collection_preview_error(self, request: Request, cid: str, is_new: bool, error: str,
+                                  status_code: int = 400) -> Response:
+        return (self.handle_collection_create(request, error=error, status_code=status_code)
+                if is_new else
+                self.handle_collection_detail(request, cid, error=error, status_code=status_code))
+
+    async def handle_collection_preview(self, request: Request, cid: str, form, *,
+                                        is_new: bool) -> Response:
+        """POST .../collections/{id}/preview (or .../new/preview): compute the desired-state delta,
+        apply it to each affected survey IN A RUNNER JOB (parse + patch the `collection` block + bump
+        version), validate each, and render the combined batch-diff confirm (record D5-A A6, preview
+        view 3). NO commit. Session + CSRF gated; the blocking runner poll runs off the loop."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        note = (form.get("note") or "").strip()
+        spec, err = self._build_collection_spec(form, is_new=is_new)
+        if err:
+            return self._collection_preview_error(request, cid, is_new, err)
+        if not note:
+            return self._collection_preview_error(
+                request, cid, is_new, "A release note is required (it is written to every commit).")
+        target_cid = spec["fields"]["id"] if is_new else cid
+        if is_new and not spec["set_slugs"]:
+            return self._collection_preview_error(
+                request, cid, is_new,
+                "Pick at least one member — a collection with no members cannot exist.")
+        operations = self._collection_operations(spec)
+        if not operations:
+            return self._collection_preview_error(
+                request, cid, is_new, "No members selected — nothing to preview.")
+        job = metaedit.make_collection_batch_job(
+            operations, note, time.strftime("%Y-%m-%d", time.gmtime()))
+        try:
+            result = await asyncio.to_thread(self._edit_runner, job)
+        except metaedit.EditRunnerError as exc:
+            logger.warning("collection batch preview failed for %s: %s", target_cid, exc)
+            return self._collection_preview_error(
+                request, cid, is_new, f"the batch could not be processed: {exc}")
+        if not result.get("ok"):
+            return self._collection_preview_error(
+                request, cid, is_new, result.get("error") or "batch refused")
+        changed = [r for r in (result.get("results") or []) if r.get("changed")]
+        if not changed:
+            return self._collection_preview_error(
+                request, cid, is_new,
+                "No changes — the collection already matches these values and members.")
+        has_fail = any(r.get("has_fail") for r in changed)
+        # Carry the RESOLVED operations (deterministic) + the preview shas so publish re-applies and
+        # re-validates under the lock and 409s on any drift (do NOT trust this preview — TOCTOU guard).
+        spec_json = json.dumps({"cid": target_cid, "is_new": is_new, "operations": operations})
+        expected_shas = {r["slug"]: r["new_sha256"] for r in changed}
+        crumb_new = ('<a href="/gateway/curator/collections">Collections</a> › new › <b>preview</b>'
+                     if is_new else
+                     '<a href="/gateway/curator/collections">Collections</a> › '
+                     f'<a href="/gateway/curator/collections/{curatorpage._esc(cid)}">'  # noqa: SLF001
+                     f'{curatorpage._esc(cid)}</a> › <b>preview batch</b>')
+        nav = self._nav_context(request, active="collections", crumb=crumb_new)
+        return self._html(curatorpage.render_collection_batch_preview(
+            cid=target_cid, is_new=is_new, results=changed, note=note, spec_json=spec_json,
+            expected_shas_json=json.dumps(expected_shas), has_fail=has_fail,
+            csrf_token=curator_auth.csrf_token_for(raw), nav=nav))
+
+    async def handle_collection_publish(self, request: Request, cid: str, form: dict, *,
+                                        is_new: bool) -> Response:
+        """POST .../collections/{id}/publish (or .../new/publish): re-apply + re-validate the batch
+        UNDER THE LOCK from the carried spec (do NOT trust the preview — the C41 TOCTOU lesson), verify
+        the per-survey shas still match the preview, then commit the atomic N-commit batch. Session +
+        CSRF gated."""
+        name = self._session_curator(request)
+        if name is None:
+            return self._unauthorized_api()
+        raw = self._raw_session(request)
+        if not curator_auth.csrf_ok(raw, form.get("csrf_token")):
+            return self._forbidden("bad csrf token")
+        note = (form.get("note") or "").strip()
+        try:
+            spec = json.loads(form.get("spec_json") or "{}")
+            expected = json.loads(form.get("expected_shas_json") or "{}")
+        except ValueError:
+            return self._forbidden("malformed confirm payload")
+        if not isinstance(spec, dict) or not isinstance(expected, dict):
+            return self._forbidden("malformed confirm payload")
+        operations = spec.get("operations") or []
+        target_cid = str(spec.get("cid") or cid or "")
+        if not operations or not note:
+            return JSONResponse({"detail": "nothing to publish"}, status_code=409)
+        expected = {str(k): str(v) for k, v in expected.items()}
+        return await self._commit_collection(target_cid, operations, expected, name, note, is_new)
+
+    async def _commit_collection(self, cid: str, operations: list, expected_shas: dict,
+                                 curator: str, note: str, is_new: bool) -> Response:
+        surveys_live = self.cfg.surveys_live_dir
+        if surveys_live is None:
+            return JSONResponse({"detail": "AUSMT_SURVEYS_LIVE is not configured"}, status_code=503)
+        job = metaedit.make_collection_batch_job(
+            operations, note, time.strftime("%Y-%m-%d", time.gmtime()))
+        async with publish.PUBLISH_LOCK:
+            # RE-APPLY + RE-VALIDATE under the lock — the confirm never trusts the preview (TOCTOU).
+            try:
+                result = await asyncio.to_thread(self._edit_runner, job)
+            except metaedit.EditRunnerError as exc:
+                logger.warning("collection batch confirm job failed for %s: %s", cid, exc)
+                return JSONResponse({"detail": "the batch could not be processed"}, status_code=500)
+            if not result.get("ok"):
+                return JSONResponse({"detail": result.get("error") or "batch refused"},
+                                    status_code=409)
+            changed = [r for r in (result.get("results") or []) if r.get("changed")]
+            fresh = {r["slug"]: r["new_sha256"] for r in changed}
+            if fresh != expected_shas:
+                # The affected set or its bytes drifted since the preview — refuse rather than commit
+                # something the curator did not confirm (a concurrent edit; the surveys moved).
+                return JSONResponse(
+                    {"detail": "preview is stale (the surveys changed underneath) — re-open the "
+                               "collection editor and preview again"}, status_code=409)
+            changes = []
+            for r in changed:
+                try:
+                    new_yaml = base64.b64decode(r.get("new_yaml_b64") or "")
+                except (ValueError, TypeError):
+                    return JSONResponse({"detail": "the batch could not be processed"},
+                                        status_code=500)
+                changes.append({"slug": r["slug"], "new_yaml": new_yaml,
+                                "expected_sha256": r["new_sha256"],
+                                "has_fail": bool(r.get("has_fail")), "effect": r.get("effect") or "edit"})
+            try:
+                await asyncio.to_thread(
+                    self._commit_collection_blocking, surveys_live, cid, changes, curator, note)
+            except publish.PublishError as exc:
+                logger.warning("collection batch publish failed for %s at %s: %s",
+                               cid, exc.phase, exc.message)
+                # Fail-closed: surveys-live was rolled back byte-for-byte inside commit_collection_batch.
+                return JSONResponse({"detail": f"publish failed: {exc.message}"}, status_code=409)
+        n = len(changes)
+        return self._html(
+            curatorpage._page(  # noqa: SLF001 -- reuse the page chrome for the terminal confirmation
+                f"AusMT collection batch {cid}",
+                f'<h1>Collection batch committed &mdash; {curatorpage._esc(cid)}</h1>'  # noqa: SLF001
+                f'<p class="sub">{n} member survey.yaml{"s" if n != 1 else ""} committed to '
+                'surveys-live and pushed (one commit each, one shared release note). The '
+                'serve-reconcile agent rebuilds and serves the result on its next tick (typically '
+                'within 15 minutes) — see the serve-state panel, or run '
+                '<code>make rebuild-data</code> by hand.</p>'
+                '<p><a href="/gateway/curator/collections">back to collections</a></p>'))
+
+    def _commit_collection_blocking(self, surveys_live: Path, cid: str, changes: list,
+                                    curator: str, note: str) -> None:
+        pre = publish.preflight(self._git_runner, surveys_live)
+        publish.commit_collection_batch(self._git_runner, surveys_live, cid, changes, curator,
+                                        note, pre)
 
     def _build_lag_hint(self) -> dict:
         """The server-side half of the Stations [FC-2] lag label: the published surveys-live HEAD (or
@@ -2039,6 +2296,24 @@ def _slug_from_refs(refs: dict) -> str | None:
     return slug if isinstance(slug, str) and slug else None
 
 
+def _form_getlist(form, key: str) -> list[str]:
+    """Every value submitted for a repeated form field (checkboxes), from Starlette's FormData
+    multidict — getlist(key) returns ALL checked values (a collapsed dict() would keep only the last).
+    A plain-dict fallback (single value) keeps the helper usable on either shape. Blanks dropped."""
+    getlist = getattr(form, "getlist", None)
+    raw = getlist(key) if callable(getlist) else form.get(key)
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        raw = [raw]
+    out: list[str] = []
+    for v in raw:
+        s = str(v).strip()
+        if s:
+            out.append(s)
+    return out
+
+
 def _selected_removals(form) -> list[str]:
     """The EDI filenames the curator ticked, from repeated `remove` checkboxes. Starlette's FormData
     is a multidict, so getlist('remove') returns EVERY checked value (a plain dict() would collapse
@@ -2294,16 +2569,46 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_survey_hub(request: Request, slug: str, tab: str = "overview"):
         return gw.handle_survey_hub(request, slug, tab)
 
-    # ---- C43 Stage 3a collections console (record D5-A). Two READ-ONLY GET pages: the index +
-    # per-id detail. Blocking whole-corpus read-job -> `def` (threadpool), matching the survey-hub
-    # rationale. No POST, no write control — creation/edit/merge/normalise are Stage 3b.
+    # ---- C43 collections console. Index (3a) + the Stage-3b editor/create/preview/publish WRITE path
+    # (record D5-A A6). GET pages are `def` (blocking whole-corpus read-job -> threadpool); the POSTs
+    # are async (they await the runner seam / take the PUBLISH_LOCK for git). The preview POSTs pass the
+    # RAW FormData (not a collapsed dict) so the repeated keep/add checkboxes survive. NOTE: the /new
+    # routes are registered BEFORE /{cid} so 'new' is not swallowed as a collection id.
     @app.get("/gateway/curator/collections")
     def curator_collections_index(request: Request):
         return gw.handle_collections_index(request)
 
+    @app.get("/gateway/curator/collections.js")
+    def curator_collections_js(request: Request):
+        return gw.handle_collections_js(request)
+
+    @app.get("/gateway/curator/collections/new")
+    def curator_collection_new(request: Request):
+        return gw.handle_collection_create(request)
+
+    @app.post("/gateway/curator/collections/new/preview")
+    async def curator_collection_new_preview(request: Request):
+        form = await request.form()
+        return await gw.handle_collection_preview(request, "", form, is_new=True)
+
+    @app.post("/gateway/curator/collections/new/publish")
+    async def curator_collection_new_publish(request: Request):
+        form = dict(await request.form())
+        return await gw.handle_collection_publish(request, "", form, is_new=True)
+
     @app.get("/gateway/curator/collections/{cid}")
     def curator_collection_detail(request: Request, cid: str):
         return gw.handle_collection_detail(request, cid)
+
+    @app.post("/gateway/curator/collections/{cid}/preview")
+    async def curator_collection_preview(request: Request, cid: str):
+        form = await request.form()
+        return await gw.handle_collection_preview(request, cid, form, is_new=False)
+
+    @app.post("/gateway/curator/collections/{cid}/publish")
+    async def curator_collection_publish(request: Request, cid: str):
+        form = dict(await request.form())
+        return await gw.handle_collection_publish(request, cid, form, is_new=False)
 
     @app.get("/gateway/curator/edit/{slug}")
     def curator_edit_form(request: Request, slug: str):
