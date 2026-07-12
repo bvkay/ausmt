@@ -71,6 +71,13 @@ RUN python -m pip install --no-cache-dir -U pip \
 # compose gateway profile wires up separately.
 COPY gateway/ /app/gateway/
 
+# The entrypoint wrapper sets umask 0002 before exec'ing the gateway, so the sqlite WAL sidecars the
+# gateway mints stay group-writable for the shared-group host backup across container recreates
+# (incident 2026-07-11 — see the script header). `chmod` because a Windows/MSYS build host does not
+# carry the exec bit through COPY. Installed root-owned before the USER drop below.
+COPY deploy/docker/gateway-entrypoint.sh /usr/local/bin/gateway-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/gateway-entrypoint.sh
+
 # AUSMT_GW_DATA is the mount point compose.yaml uses for the gateway's gw/ tree (state/incoming/
 # quarantine/jobs). Baked here so a compose deployment following that convention works with no extra
 # config; overridable at `docker run -e AUSMT_GW_DATA=...`. AUSMT_SUBMIT_KEY is intentionally NOT set
@@ -84,7 +91,8 @@ USER gwuser
 
 EXPOSE 8000
 
-# `python -m gateway` runs create_app() (which fail-closes on a missing submit key) then uvicorn on
-# 0.0.0.0:8000 — container-internal; compose publishes it loopback-only and Caddy fronts it same-
-# origin (design §1). No CMD args: the config surface is env-only (design §7).
-ENTRYPOINT ["python", "-m", "gateway"]
+# The entrypoint wrapper sets umask 0002 (durable group-writable WAL sidecars, incident 2026-07-11)
+# then execs `python -m gateway`, which runs create_app() (fail-closes on a missing submit key) then
+# uvicorn on 0.0.0.0:8000 — container-internal; compose publishes it loopback-only and Caddy fronts it
+# same-origin (design §1). No CMD args: the config surface is env-only (design §7).
+ENTRYPOINT ["/usr/local/bin/gateway-entrypoint.sh"]

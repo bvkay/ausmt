@@ -8,6 +8,9 @@
 # WHAT IT DOES (design §3, in order):
 #   1. sync   — git -C surveys-live pull --ff-only. On failure: write status action=sync_failed and
 #               exit 0 WITHOUT rebuilding (never build from a state we cannot fast-forward to, §4).
+#   1b. untracked-guard — if surveys-live has UNTRACKED entries under surveys/ (a leftover survey dir
+#               the build would enumerate and SERVE, but git can never remove — incident 2026-07-11):
+#               write status action=untracked_blocked naming the dirs, exit 1, DO NOT rebuild.
 #   2. compare — built = source_commit from site-data/current/build.json; head = short HEAD of
 #               surveys-live (matched to the STORED short-hash length by prefix). Missing/unreadable
 #               build.json => treat as drift (rebuild), because we cannot prove what is served.
@@ -18,9 +21,10 @@
 #               curator panel can show the last outcome (design §3).
 #
 # EXIT CODE: 0 on noop / rebuilt / sync_failed (the timer must NOT flap on an operator-visible
-# sync divergence or a normal no-op); 1 ONLY on action=failed (a build/verify failure), so a
-# monitoring `systemctl status` surfaces a genuinely broken build while a diverged checkout stays a
-# quiet, panel-visible state.
+# sync divergence or a normal no-op); 1 on action=failed (a build/verify failure) AND on
+# action=untracked_blocked (a refused rebuild — both need an operator, neither self-heals), so a
+# monitoring `systemctl status` surfaces them while a diverged checkout stays a quiet, panel-visible
+# state.
 #
 # LOCK: flock -n on a lock file (default $AUSMT_DATA_DIR/reconcile.lock). If another run holds it,
 # exit 0 SILENTLY without touching the status file (two overlapping ticks must not both build, §4;
@@ -141,13 +145,15 @@ except Exception:
 PYEOF
 }
 
-# write_status <action> <head> <built> <build_id> <log_file>: build reconcile-status.json in a temp
-# file then mv it over the target — an atomic rename so the gateway panel never reads a half-written
-# file. Values are passed as argv (never interpolated into the JSON) so a stray quote/backslash in a
-# path or commit cannot break the document. log_tail is the last ~30 lines of the log on
-# rebuilt/failed, else null.
+# write_status <action> <head> <built> <build_id> <log_file> [detail]: build reconcile-status.json in
+# a temp file then mv it over the target — an atomic rename so the gateway panel never reads a
+# half-written file. Values are passed as argv (never interpolated into the JSON) so a stray
+# quote/backslash in a path or commit cannot break the document. log_tail is the last ~30 lines of the
+# log on rebuilt/failed, else null — UNLESS the optional 6th arg `detail` is given, in which case it is
+# used as log_tail verbatim (the untracked-dir refusal below has no build log; its offending-dir list
+# IS the detail the panel/ops-floor should show).
 write_status() {
-  _action="$1"; _head="$2"; _built="$3"; _build_id="$4"; _log_file="$5"
+  _action="$1"; _head="$2"; _built="$3"; _build_id="$4"; _log_file="$5"; _detail="${6:-}"
   mkdir -p "$STATE_DIR"
   # mktemp, same rationale as the probe above (review L5): O_EXCL + unpredictable name in a dir a
   # container uid can also write — never a predictable `.tmp.$$` a symlink could be planted at.
@@ -160,13 +166,18 @@ write_status() {
   # non-secret operational metadata (actions, commits, log tail).
   chmod 0644 "$_tmp" || { printf 'reconcile: cannot chmod status tmp %s\n' "$_tmp" >&2; rm -f "$_tmp"; return 1; }
   AUSMT_RS_ACTION="$_action" AUSMT_RS_HEAD="$_head" AUSMT_RS_BUILT="$_built" \
-  AUSMT_RS_BUILD_ID="$_build_id" AUSMT_RS_LOG_FILE="$_log_file" AUSMT_RS_LAST_RUN="$(now_utc)" \
+  AUSMT_RS_BUILD_ID="$_build_id" AUSMT_RS_LOG_FILE="$_log_file" AUSMT_RS_DETAIL="$_detail" \
+  AUSMT_RS_LAST_RUN="$(now_utc)" \
   "$PY" - > "$_tmp" <<'PYEOF'
 import json, os
 action = os.environ["AUSMT_RS_ACTION"]
 log_file = os.environ.get("AUSMT_RS_LOG_FILE") or None
+detail = os.environ.get("AUSMT_RS_DETAIL") or ""
 log_tail = None
-if action in ("rebuilt", "failed") and log_file and os.path.isfile(log_file):
+if detail:
+    # A caller-supplied detail (the untracked-dir refusal) IS the log_tail — there is no build log.
+    log_tail = detail
+elif action in ("rebuilt", "failed") and log_file and os.path.isfile(log_file):
     try:
         with open(log_file, encoding="utf-8", errors="replace") as fh:
             lines = fh.read().splitlines()
@@ -206,6 +217,37 @@ run_pass() {
     fi
     write_status "sync_failed" "$head_short" "$built_now" "" ""
     return 0
+  fi
+
+  # 1b. UNTRACKED-SURVEY-DIR GUARD (incident 2026-07-11). The engine build enumerates the FILESYSTEM
+  # under surveys-live/surveys/ (Makefile rebuild-data passes --surveys …/surveys/surveys), NOT git —
+  # so a leftover UNTRACKED survey dir (a `test-2026` left on the box) is SERVED even though `git rm`/
+  # pushes can never remove what was never tracked, and the drift compare below reads "current"
+  # honestly-but-misleadingly. REFUSE to rebuild while such dirs exist: a rebuild would bake the
+  # untracked content into the served corpus. This check lives DEPLOY-side, where git context exists —
+  # the engine stays git-unaware by design. `git -C surveys-live status --porcelain` is the operator-
+  # context idiom already used above (reconcile runs as the operator, not sudo); `?? ` lines are
+  # untracked entries and --untracked-files=normal collapses an untracked dir to one entry. Scope to
+  # the survey tree the build actually reads (surveys/). The original sin was SILENCE — this fails LOUD:
+  # action=untracked_blocked (a distinct, panel-visible refusal state naming the dirs), exit 1 so
+  # `systemctl status` flags it, and the alert timer's reconcile check fail-pings the curator.
+  if [ -d "$SURVEYS_LIVE/surveys" ]; then
+    untracked=$(git -C "$SURVEYS_LIVE" status --porcelain --untracked-files=normal -- surveys/ 2>/dev/null \
+                  | sed -n 's/^?? //p')
+    if [ -n "$untracked" ]; then
+      offenders=$(printf '%s' "$untracked" | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')
+      printf 'reconcile: REFUSING rebuild — surveys-live has UNTRACKED entr(y/ies) under surveys/: %s\n' "$offenders" >&2
+      printf 'reconcile: the build enumerates the FILESYSTEM, so these WOULD be served though git cannot remove them (incident 2026-07-11). Remove (rm -rf) or commit+push them, then the next tick rebuilds.\n' >&2
+      if [ "$DRY_RUN" -eq 1 ]; then
+        printf 'reconcile: [dry-run] would write status action=untracked_blocked (no rebuild)\n'
+        return 0
+      fi
+      head_short=$(git -C "$SURVEYS_LIVE" rev-parse --short HEAD 2>/dev/null || true)
+      built_now=$(read_source_commit)
+      _detail="REFUSED: untracked entr(y/ies) under surveys/ - the build enumerates the filesystem, so these would be SERVED though git cannot remove them (incident 2026-07-11): $offenders. Remove (rm -rf) or commit+push them, then the next tick rebuilds."
+      write_status "untracked_blocked" "$head_short" "$built_now" "$(read_build_id)" "" "$_detail"
+      return 1
+    fi
   fi
 
   # 2. COMPARE: built = served source_commit; head = surveys-live short HEAD matched to the STORED

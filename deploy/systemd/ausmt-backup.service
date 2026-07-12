@@ -17,7 +17,10 @@
 
 [Unit]
 Description=AusMT nightly backup (WAL-safe sqlite snapshot of gateway state; prune to newest 14)
-Documentation=file:///home/<operator>/ausmt-code/deploy/README.md
+# __DEPLOY_DIR__ placeholder (resolved by the install sed, exactly like ExecStart below) — the previous
+# hardcoded file:///home/<operator>/… left a literal <operator> in the installed unit, pointing at a
+# path that never existed. The runbook is this repo's deploy/README.md ("Backups & restore").
+Documentation=file://__DEPLOY_DIR__/README.md
 # The timestamps + prune want a real UTC clock; only meaningful once time is synced.
 After=time-sync.target
 Wants=time-sync.target
