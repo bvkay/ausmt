@@ -635,3 +635,104 @@ def test_real_git_concurrent_retire_cannot_empty_corpus(tmp_path, hermetic_git_e
         finally:
             publish.PUBLISH_LOCK = asyncio.Lock()
     run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# D5-A A6 — the collection-batch commit path (commit_collection_batch) on a REAL repo pair
+# --------------------------------------------------------------------------------------------------
+def _seed_collection_member(surveys_live: Path, env: dict[str, str], slug: str, yaml_text: str) -> None:
+    pkg = surveys_live / "surveys" / slug
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "survey.yaml").write_bytes(yaml_text.encode("utf-8"))
+    _git(["add", "-A"], surveys_live, env)
+    _git(["commit", "-m", f"seed {slug}"], surveys_live, env)
+    _git(["push", "origin", "main"], surveys_live, env)
+
+
+def test_real_git_collection_batch_n_commits_diff_minimal(tmp_path, hermetic_git_env):
+    # C43-3b D13 pins 4 (diff-minimality) + N-commits on REAL git: a 2-survey batch lands EXACTLY 2
+    # commits on main (one per member), each commit's diff touches ONLY that member's survey.yaml, and
+    # both share the one release note. FAILS IF the count is wrong, a commit's diff spans another
+    # survey, or the push does not arrive.
+    import hashlib
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_collection_member(surveys_live, env, "m-a", "slug: m-a\nversion: 1.0.0\n")
+    _seed_collection_member(surveys_live, env, "m-b", "slug: m-b\nversion: 2.3.4\n")
+    base = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+
+    ya = b"slug: m-a\nversion: 1.0.1\ncollection:\n  id: prog\n"
+    yb = b"slug: m-b\nversion: 2.3.5\ncollection:\n  id: prog\n"
+    changes = [
+        {"slug": "m-a", "new_yaml": ya, "expected_sha256": hashlib.sha256(ya).hexdigest(),
+         "has_fail": False, "effect": "added"},
+        {"slug": "m-b", "new_yaml": yb, "expected_sha256": hashlib.sha256(yb).hexdigest(),
+         "has_fail": False, "effect": "added"},
+    ]
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    new_ref = publish.commit_collection_batch(
+        publish.real_git_runner, surveys_live, "prog", changes,
+        curator_name="curator1", note="create prog collection", pre=pre)
+    assert new_ref
+
+    # EXACTLY 2 commits since the base (one per member).
+    n = _git(["rev-list", "--count", f"{base}..HEAD"], surveys_live, env).stdout.strip()
+    assert n == "2", f"expected 2 commits, got {n}"
+    # Each of the 2 new commits' diff names ONLY its own survey's file (diff-minimality).
+    shas = _git(["rev-list", f"{base}..HEAD"], surveys_live, env).stdout.split()
+    touched = set()
+    for sha in shas:
+        files = _git(["show", "--name-only", "--format=", sha], surveys_live, env).stdout.split()
+        assert len(files) == 1, f"commit {sha} touched >1 file: {files}"
+        touched.add(files[0])
+    assert touched == {"surveys/m-a/survey.yaml", "surveys/m-b/survey.yaml"}, touched
+    # Both commits carry the shared release note.
+    for sha in shas:
+        body = _git(["log", "-1", "--format=%B", sha], surveys_live, env).stdout
+        assert "create prog collection" in body
+    # The bytes landed + the push arrived.
+    assert (surveys_live / "surveys" / "m-a" / "survey.yaml").read_bytes() == ya
+    assert (surveys_live / "surveys" / "m-b" / "survey.yaml").read_bytes() == yb
+    assert _git(["rev-parse", "main"], origin, env).stdout.strip() == \
+        _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+
+
+def test_real_git_collection_batch_rollback_on_push_reject(tmp_path, hermetic_git_env):
+    # C43-3b D13 pin 2 (rollback) on REAL git: a pre-receive reject rolls the WHOLE batch back byte-for-
+    # byte (ref + branch + clean tree) and re-raises. FAILS IF any member's bytes survive, the ref moved,
+    # or the tree is left dirty/off-main (a partial batch on the ledger).
+    import hashlib
+    env = hermetic_git_env
+    surveys_live = tmp_path / "surveys-live"
+    origin = tmp_path / "origin.git"
+    _init_repo_pair(surveys_live, origin, env)
+    _seed_collection_member(surveys_live, env, "m-a", "slug: m-a\nversion: 1.0.0\n")
+    _seed_collection_member(surveys_live, env, "m-b", "slug: m-b\nversion: 2.0.0\n")
+    pre_ref = _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip()
+    orig_a = (surveys_live / "surveys" / "m-a" / "survey.yaml").read_bytes()
+    orig_b = (surveys_live / "surveys" / "m-b" / "survey.yaml").read_bytes()
+    _install_reject_hook(origin)
+
+    ya = b"slug: m-a\nversion: 1.0.1\ncollection:\n  id: prog\n"
+    yb = b"slug: m-b\nversion: 2.0.1\ncollection:\n  id: prog\n"
+    changes = [
+        {"slug": "m-a", "new_yaml": ya, "expected_sha256": hashlib.sha256(ya).hexdigest(),
+         "has_fail": False, "effect": "added"},
+        {"slug": "m-b", "new_yaml": yb, "expected_sha256": hashlib.sha256(yb).hexdigest(),
+         "has_fail": False, "effect": "added"},
+    ]
+    pre = publish.preflight(publish.real_git_runner, surveys_live)
+    with pytest.raises(publish.PublishError) as ei:
+        publish.commit_collection_batch(
+            publish.real_git_runner, surveys_live, "prog", changes,
+            curator_name="curator1", note="doomed", pre=pre)
+    assert ei.value.phase == "git-push"
+    # Rolled back byte-for-byte: ref, branch, clean tree, and BOTH members' bytes restored.
+    assert _git(["rev-parse", "HEAD"], surveys_live, env).stdout.strip() == pre_ref
+    assert _git(["rev-parse", "--abbrev-ref", "HEAD"], surveys_live, env).stdout.strip() == "main"
+    assert _git(["status", "--porcelain"], surveys_live, env).stdout.strip() == ""
+    assert (surveys_live / "surveys" / "m-a" / "survey.yaml").read_bytes() == orig_a
+    assert (surveys_live / "surveys" / "m-b" / "survey.yaml").read_bytes() == orig_b

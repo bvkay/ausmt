@@ -180,17 +180,22 @@ def test_index_renders_cards_bands_and_table(tmp_path):
             assert "&middot; mixed" in html or "· mixed" in html
             # Membership-by-slug honesty line.
             assert "resolved by survey <b>slug</b>" in html
-            # READ-ONLY: no 'New collection…' creation control in 3a (creation is Stage 3b).
-            assert "New collection" not in html
+            # C43 Stage 3b: the 'New collection…' entry (record A5) and the actionable band remedies
+            # (record E) now appear (the read-only 3a 'next stage' copy is superseded).
+            assert "New collection" in html
+            assert 'href="/gateway/curator/collections/new"' in html
+            assert "Merge" in html and "into" in html          # near-dup merge entry point
+            assert "normalise" in html                          # divergence normalise entry point
     run(_body())
 
 
 # --------------------------------------------------------------------------------------------------
-# Detail information design: rollup facts, the member/Declares table naming outliers, the per-field
-# callout, and the read-only next-stage note. NO form inputs / NO submit controls (read-only). FAILS
-# IF a form input or the outlier marker is missing/leaked.
+# Detail = the Stage-3b EDITOR (record D5-A A3/A6, preview view 2): the fan-out edit form seeded with
+# the rollup values + ◆ divergence hints, the two-column membership manager (keep + a searchable add
+# picker), the required release note, and the preview POST target. FAILS IF an editor surface is
+# missing. (The read-only 3a assertions are superseded by this write-path stage.)
 # --------------------------------------------------------------------------------------------------
-def test_detail_renders_rollup_declares_and_is_read_only(tmp_path):
+def test_detail_is_editor_with_membership_manager(tmp_path):
     surveys_live = tmp_path / "surveys-live"
     _seed_corpus(surveys_live)
 
@@ -198,21 +203,21 @@ def test_detail_renders_rollup_declares_and_is_read_only(tmp_path):
         async with app_client(tmp_path, edit_runner=inproc_edit_runner(surveys_live)) as (client, *_):
             await curator_login(client)
             html = (await client.get("/gateway/curator/collections/auslamp")).text
-            assert "Rollup facts" in html
-            assert "Declares" in html
-            # The divergent member (auslamp-sa-ne-2014 declares a different title + status) is marked;
-            # the first-declarer member is 'consistent'.
-            assert "auslamp-sa-ne-2014" in html
-            assert "badge-move" in html          # at least one ◆ outlier badge
-            assert "consistent" in html
-            # Read-only: the ONLY form in the page is the shared context-bar Request-rebuild chrome
-            # (action=/rebuild). NO collections-targeted form, NO edit widgets (textarea/select/
-            # checkbox), NO membership 'add'/'remove'/'save'/'preview' controls — those are Stage 3b.
-            assert 'action="/gateway/curator/collections' not in html, "detail leaked a collections POST form"
-            for widget in ("<textarea", "<select", 'type="checkbox"'):
-                assert widget not in html, f"read-only detail leaked an edit widget: {widget}"
-            forms = re.findall(r'<form\b[^>]*action="([^"]*)"', html)
-            assert forms == ["/gateway/curator/rebuild"], \
-                f"the only form must be the rebuild chrome; found {forms}"
-            assert "Read-only." in html
+            # Fan-out edit form posting to the preview route, with the field inputs seeded.
+            assert 'action="/gateway/curator/collections/auslamp/preview"' in html
+            assert 'name="f_title"' in html and 'name="f_id"' in html
+            assert 'name="f_type"' in html and 'name="f_status"' in html
+            assert 'name="f_description"' in html and 'name="note"' in html
+            # The id fan-out disclosure (changing the id rewrites N members).
+            assert "Changing the id rewrites" in html
+            # ◆ divergence hint under a diverging field (auslamp title/status diverge).
+            assert "Members differ" in html and "&#9670;" in html
+            # Two-column membership manager: current members (keep) + candidate picker (add) + filter.
+            assert 'name="keep"' in html and 'name="add"' in html
+            assert 'id="cand-filter"' in html
+            # A member that is NOT already in auslamp shows as a candidate (capricorn-2010 -> moves).
+            assert "capricorn-2010" in html and "moves" in html
+            # The candidate-picker filter is external JS (CSP), never inline.
+            assert 'src="/gateway/curator/collections.js"' in html
+            _assert_csp_clean(html)
     run(_body())

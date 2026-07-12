@@ -339,14 +339,19 @@ def test_zero_collection_corpus_is_empty(tmp_path):
     _mk(sroot, "lone-a", name="Lone A", collection=None, n_edi=1)
     _mk(sroot, "lone-b", name="Lone B", collection=None, n_edi=1)
     res = edit.run_collections_job(sroot)
-    assert res == {"ok": True, "collections": {}, "near_duplicates": []}, res
+    # No collections, but the two collection-less surveys ARE candidates for the add-picker (Stage 3b).
+    assert res["ok"] is True
+    assert res["collections"] == {}
+    assert res["near_duplicates"] == []
+    assert {s["slug"] for s in res["surveys"]} == {"lone-a", "lone-b"}
+    assert all(s["current_collection_id"] is None for s in res["surveys"])
 
 
 def test_missing_surveys_dir_is_empty(tmp_path):
     """A surveys-live with no surveys/ dir at all (fresh box) returns the empty projection, not a
     crash."""
     res = edit.run_collections_job(tmp_path / "surveys-live")
-    assert res == {"ok": True, "collections": {}, "near_duplicates": []}, res
+    assert res == {"ok": True, "collections": {}, "near_duplicates": [], "surveys": []}, res
 
 
 def test_collections_job_dispatches_without_a_slug(tmp_path):
