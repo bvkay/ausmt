@@ -160,6 +160,23 @@ def make_collections_job() -> dict:
     return {"kind": "collections"}
 
 
+def make_collection_batch_job(operations: list, note: str, today: str) -> dict:
+    """A `collection_batch` edit-job (C43 Stage 3b / record D5-A A6): the runner applies each per-survey
+    collection-block operation, bumps each affected survey's version, appends the ONE shared release
+    note, and validates each on a scratch copy — returning each affected survey's patched bytes +
+    validator report (it does NOT commit; the gateway's publish.commit_collection_batch does the atomic
+    N-commit write). `operations` is [{slug, op:'set'|'remove', block?:{id,title,type,status,
+    start_year,description}}]; the runner re-validates every slug's charset before it becomes a path
+    component (it never trusts a field handed to it in a job file). Whole-corpus (names its own affected
+    slugs), so the job carries no top-level slug."""
+    return {
+        "kind": "collection_batch",
+        "operations": list(operations),
+        "note": note,
+        "today": today,
+    }
+
+
 def make_list_stations_job(slug: str) -> dict:
     """A list_stations edit-job: the runner enumerates the survey's EDI files (station list) + version.
     A directory listing, never a content parse — job carries only the slug."""
