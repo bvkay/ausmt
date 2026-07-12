@@ -392,6 +392,91 @@ def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_nam
     return new_ref
 
 
+def commit_collection_batch(git_runner, surveys_live: Path, cid: str, changes: list,
+                            curator_name: str, note: str, pre: PreState) -> str:
+    """C43 Stage 3b (record D5-A A6, D13 atomicity pin): commit an atomic collection batch as N commits
+    (one per CHANGED member survey, each version-bumped) sharing ONE release note, all inside ONE
+    rollback guard. This GENERALISES commit_metadata_edit from 1 survey to N — the only write path for
+    collection edit / add / remove / move / rename / merge / normalise / create.
+
+    `changes` is the list of CHANGED surveys only, each a dict:
+      {slug, new_yaml: bytes, expected_sha256, has_fail, effect}
+
+    ATOMICITY GATE (D13 pin 1, red-then-green) — VALIDATE-ALL-THEN-COMMIT-ALL. If ANY change carries
+    `has_fail` True, this REFUSES before touching git: ZERO commits land, nothing is written. The gate
+    runs first, so a partial batch (some members committed, then a failing one aborts) can never
+    happen. (Proven RED against an interleaved commit-then-validate variant, which lands the passing
+    members before hitting the failing one.)
+
+    Each survey's own survey.yaml bytes are written and committed INDIVIDUALLY (`git add` scoped to that
+    one path), so each commit's diff touches ONLY that survey's file (diff-minimality, D13 pin 4). The
+    §0.6 TOCTOU hash pin holds PER survey: `expected_sha256` is what the curator saw in the preview; we
+    re-hash the bytes about to be written and refuse the WHOLE batch on any mismatch (a stale preview or
+    a concurrent edit). Fail-closed at EVERY step: a failure anywhere (stale-hash refusal, a write
+    error, a commit-hook rejection, a non-ff merge, a push rejection) rolls surveys-live back byte-for-
+    byte to `pre` and re-raises — never a partial batch. Returns the new HEAD commit sha.
+
+    The commits record who curated + the batch note (the git history is the audit record); NEVER a
+    submitter email (a published survey carries no submitter contact in git)."""
+    if not changes:
+        raise PublishError("guard", "empty collection batch — nothing to commit")
+    # ATOMICITY GATE — checked BEFORE any git verb: a single member's validator FAIL blocks the lot with
+    # ZERO commits (all-then-commit-all). This is the load-bearing invariant D13 pin 1 proves.
+    failed = sorted(str(c.get("slug")) for c in changes if c.get("has_fail"))
+    if failed:
+        raise PublishError("validator",
+                           "batch blocked: validator FAILED on " + ", ".join(failed)
+                           + " — nothing was committed")
+    # Re-hash pin (§0.6 TOCTOU) + path/existence guards for EVERY survey BEFORE mutating anything, so a
+    # bad member is caught while surveys-live is still pristine (nothing to roll back yet).
+    dest_root = surveys_live / "surveys"
+    root_resolved = dest_root.resolve()
+    prepared: list[tuple[str, bytes, Path, str]] = []
+    for c in changes:
+        slug = validate_slug(c.get("slug"))
+        new_yaml = c.get("new_yaml")
+        if not isinstance(new_yaml, (bytes, bytearray)):
+            raise PublishError("guard", f"collection batch: missing bytes for {slug!r}")
+        new_yaml = bytes(new_yaml)
+        if hashlib.sha256(new_yaml).hexdigest() != c.get("expected_sha256"):
+            raise PublishError(
+                "hash-pin",
+                "the previewed batch no longer matches (stale preview or concurrent edit) — re-open "
+                "the collection editor and preview again")
+        dest_dir = dest_root / slug
+        dr = dest_dir.resolve()
+        if dr != root_resolved and root_resolved not in dr.parents:
+            raise PublishError("guard", "collection-batch path escapes surveys-live/surveys")
+        if not dest_dir.is_dir():
+            raise PublishError("guard", f"survey {slug!r} does not exist in surveys-live")
+        prepared.append((slug, new_yaml, dest_dir, str(c.get("effect") or "edit")))
+
+    branch = "collbatch/" + (re.sub(r"[^A-Za-z0-9._-]", "-", str(cid)) or "collection")[:80]
+    try:
+        _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
+        for slug, new_yaml, dest_dir, effect in prepared:
+            (dest_dir / "survey.yaml").write_bytes(new_yaml)
+            # `git add` scoped to THIS survey's file so the commit's diff is minimal (D13 pin 4).
+            _git(git_runner, ["add", "--", f"surveys/{slug}/survey.yaml"], surveys_live, "git-add")
+            subject = f"collection edit by curator:{curator_name}: {slug} ({effect} -> {cid})"
+            body = (f"Curated-by: curator:{curator_name}\nSurvey: {slug}\n"
+                    f"Collection: {cid}\nBatch-note: {note}")
+            _git(git_runner,
+                 ["-c", f"user.name={COMMIT_AUTHOR_NAME}", "-c", f"user.email={COMMIT_AUTHOR_EMAIL}",
+                  "commit", "-m", subject, "-m", body],
+                 surveys_live, "git-commit")
+        new_ref = _capture_head(git_runner, surveys_live) or ""
+        _git(git_runner, ["checkout", "main"], surveys_live, "git-checkout-main")
+        _git(git_runner, ["merge", "--ff-only", branch], surveys_live, "git-merge")
+        push = git_runner(["push", "origin", "main"], cwd=surveys_live)
+        if push.returncode != 0:
+            raise PublishError("git-push", (push.stderr or push.stdout or "push failed").strip()[:500])
+    except PublishError:
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise
+    return new_ref
+
+
 def _git(git_runner, args: list[str], cwd: Path, phase: str) -> GitResult:
     res = git_runner(args, cwd=cwd)
     if res.returncode != 0:
