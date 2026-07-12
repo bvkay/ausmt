@@ -3394,7 +3394,9 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
         derr = (display_errs or {}).get(subkey)
         derr_html = f'<span class="fielderr">{_esc(derr)}</span>' if derr else ""
         bad = "badinput" if derr else ""
-        if kind == "select" and section == "access":
+        if kind == "select" and section == "access" and subkey == "coordinates":
+            rows.append(_coordinate_access_widget(name, val))
+        elif kind == "select" and section == "access":
             rows.append(_access_level_widget(name, val))
         elif kind == "date":
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
@@ -3427,6 +3429,30 @@ def _access_level_widget(name: str, value) -> str:
         for lv in editor_form.ACCESS_LEVELS)
     return (f'<p><label class="k">Access level</label>'
             f'<select name="{_esc(name)}">{opts}</select></p>')
+
+
+def _coordinate_access_widget(name: str, value) -> str:
+    """The C42 survey-level coordinate-access policy <select>: exact / generalised / withheld, with a
+    leading blank '(default: exact)' option. Mirrors _access_level_widget but — unlike level — an UNSET
+    policy stays blank (submits ""), so the assembler never writes access.coordinates for a survey that
+    never set it (the record's byte-unchanged promise; absent => exact). An out-of-vocab STORED value is
+    SHOWN as its own selected option rather than silently coerced, so the curator sees and can fix it —
+    the render degrades safely, it does not crash. Server-rendered <select>, no JS (CSP unaffected)."""
+    from . import editor_form
+    cur = str(value) if value not in (None, "") else ""
+    opts = [f'<option value=""{" selected" if cur == "" else ""}>(default: exact)</option>']
+    for pol in editor_form.COORDINATE_POLICIES:
+        opts.append(
+            f'<option value="{_esc(pol)}"{" selected" if pol == cur else ""}>{_esc(pol)}</option>')
+    if cur and cur not in editor_form.COORDINATE_POLICIES:
+        # A stored value outside the vocab (e.g. a hand-edited survey.yaml): show it selected so the
+        # curator sees and can correct it — never crash, never silently drop it (the render pin).
+        opts.append(f'<option value="{_esc(cur)}" selected>{_esc(cur)} (stored value)</option>')
+    return (f'<p><label class="k">Coordinate access</label>'
+            f'<select name="{_esc(name)}">{"".join(opts)}</select>'
+            f'<br><span class="sub">Survey default for served station coordinates: exact as recorded, '
+            f'generalised to 0.1&deg; (~11 km), or withheld. Leave as default to serve them exactly.'
+            f'</span></p>')
 
 
 def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | None) -> str:

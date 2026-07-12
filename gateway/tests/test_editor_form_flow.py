@@ -17,6 +17,7 @@ from __future__ import annotations
 import html as _html
 import re
 
+from gateway import curatorpage
 from gateway.tests.conftest import (
     FakeGit, app_client, csrf_for_session, curator_login, inproc_edit_runner, run,
     write_survey_live,
@@ -255,6 +256,7 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             assert 'name="s_organisation_ror"' in body
             assert 'name="s_lead_investigator_orcid"' in body
             assert 'name="s_access_level"' in body and "<select" in body
+            assert 'name="s_access_coordinates"' in body  # C42 coordinate-access <select>
             assert 'name="s_access_embargo_until"' in body and 'type="date"' in body
             assert 'name="l_principal_investigators_0_name"' in body      # repeatable row
             assert 'name="c_time_series_levels_available_raw_packed"' in body  # checkbox
@@ -458,4 +460,70 @@ def test_editor_js_route_and_no_inline_js(tmp_path):
             for m in _re.finditer(r"<script\b[^>]*>", body):
                 assert _re.search(r"\bsrc\s*=", m.group(0)), f"inline script on edit page: {m.group(0)}"
             assert _re.findall(r"<[^>]*\son\w+\s*=", body) == []
+    run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# C42 coordinate-access <select>: render pin + end-to-end diff-minimality
+# --------------------------------------------------------------------------------------------------
+def test_coordinate_widget_renders_options_with_current_value_selected():
+    """RENDER PIN: the coordinate-access <select> offers the allowed options with the stored value
+    selected. FAILS IF an option is missing or the current value is not marked selected. Server-rendered
+    <select>, no JS (CSP unaffected)."""
+    html = curatorpage._coordinate_access_widget("s_access_coordinates", "generalised")
+    assert 'name="s_access_coordinates"' in html
+    for pol in ("exact", "generalised", "withheld"):
+        assert f'value="{pol}"' in html
+    # the current value is selected (attribute order-agnostic).
+    assert re.search(r'<option value="generalised"[^>]*\bselected', html) or \
+        re.search(r'\bselected[^>]*value="generalised"', html)
+    # a leading blank/default option exists so UNSET can round-trip to "no key written".
+    assert re.search(r'<option value=""', html)
+
+
+def test_coordinate_widget_unset_selects_blank_default():
+    """RENDER PIN: with NO stored policy (None), the blank '(default: exact)' option is the selected
+    one — so the browser submits "" and the assembler writes nothing. FAILS IF a real policy is
+    pre-selected for a survey that never set one (which would force a diff on save)."""
+    html = curatorpage._coordinate_access_widget("s_access_coordinates", None)
+    assert re.search(r'<option value=""[^>]*\bselected', html)
+    # no concrete policy is pre-selected.
+    for pol in ("exact", "generalised", "withheld"):
+        assert not re.search(rf'<option value="{pol}"[^>]*\bselected', html)
+
+
+def test_coordinate_widget_out_of_vocab_value_shown_not_crashed():
+    """RENDER PIN: an out-of-vocab STORED value (e.g. a hand-edited survey.yaml) is SHOWN (as its own
+    selected option), never silently dropped and never a crash. FAILS IF the render raises or the value
+    vanishes from the markup (the curator could not see/fix it)."""
+    html = curatorpage._coordinate_access_widget("s_access_coordinates", "bogus_policy")
+    assert "bogus_policy" in html  # shown, not dropped
+    assert re.search(r'<option value="bogus_policy"[^>]*\bselected', html)  # and selected
+
+
+def test_set_coordinate_policy_lands_in_yaml_diff(tmp_path):
+    """END-TO-END DIFF-MINIMALITY: setting access.coordinates via the form on a survey that lacked it
+    produces a diff adding that key and NOTHING else spurious. FAILS IF the coordinate policy does not
+    reach the yaml, or another unchanged section leaks into the diff."""
+    async def _body():
+        surveys_live, _pkg = _rich_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            form_html = (await client.get("/gateway/curator/edit/rich-survey-2026")).text
+            fields = _harvest_form_fields(form_html)
+            fields["s_access_coordinates"] = "withheld"  # rich-survey has no policy today
+            fields["note"] = "withhold coordinates"
+            fields["bump"] = "patch"
+            fields["csrf_token"] = csrf
+            r = await client.post("/gateway/curator/edit/rich-survey-2026/preview",
+                                  data=fields, follow_redirects=False)
+            assert r.status_code == 200
+            assert "coordinates" in r.text and "withheld" in r.text  # the policy reached the diff
+            # No unrelated section leaked: PI names / the ROR stay put (only appear if rewritten).
+            diff = r.text[r.text.index("Changes to survey.yaml"):]
+            assert "Grace Hopper" not in _added_removed_lines(diff)
+            assert "University of Example" not in _added_removed_lines(diff)
     run(_body())

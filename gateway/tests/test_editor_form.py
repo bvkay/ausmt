@@ -11,7 +11,9 @@ end-to-end round-trip through the real gateway seam lives in test_metadata_edit.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +23,21 @@ from gateway import editor_form as ef
 def _snap(section: str, value) -> dict:
     """A form fragment carrying only the hidden original-snapshot for `section`."""
     return {f"o_{section}": json.dumps(value)}
+
+
+# The REAL engine coordinate-access parser, loaded from its file by path (engine-truth). engine/ is
+# NOT a package (no __init__.py; build_portal imports `_coordaccess` flat off sys.path), so we load the
+# module standalone via importlib — no sys.path pollution, no shadowing. It only imports pathlib, so it
+# loads cleanly in the stack-less gateway test env. Used by the KEY-PARITY pin: the editor's assembled
+# access block must be read back by THIS function as the intended policy.
+_ENGINE_COORDACCESS_PY = Path(__file__).resolve().parents[2] / "engine" / "extract" / "_coordaccess.py"
+
+
+def _load_engine_coordaccess():
+    spec = importlib.util.spec_from_file_location("_ausmt_engine_coordaccess_ro", _ENGINE_COORDACCESS_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 # ---- map sections: assembly + round-trip --------------------------------------------------------
@@ -133,6 +150,127 @@ def test_bad_embargo_date_errors():
             **_snap("access", {"level": "open"})}
     with pytest.raises(ef.SectionError):
         ef.assemble_section(form, "access")
+
+
+# ---- access.coordinates (C42 survey-level coordinate-access policy) ------------------------------
+
+def test_coordinate_policy_key_and_vocab_match_engine():
+    """The editor's declared key + vocab are IDENTICAL to what the engine consumes: the sub-key is
+    'coordinates' (the one parse_coordinate_policy reads) and COORDINATE_POLICIES equals the engine's.
+    FAILS IF the editor offers a value the engine would reject, or reads/writes a different key (the
+    labels-vs-slugs silent-no-op class)."""
+    coordacc = _load_engine_coordaccess()
+    # the sub-field the editor renders/assembles under access is exactly 'coordinates'.
+    assert any(sub == "coordinates" for (sub, *_rest) in ef.MAP_SECTIONS["access"])
+    assert ef.COORDINATE_POLICIES == coordacc.COORDINATE_POLICIES
+
+
+def test_coordinate_policy_key_parity_through_real_engine_parser():
+    """KEY-PARITY PIN (the important one): every policy the editor ASSEMBLES for access.coordinates is
+    read back by the ENGINE's real parse_coordinate_policy as that same policy — engine-truth, not a
+    hand-typed expectation. FAILS IF a key/spelling mismatch makes the editor's setting a silent no-op
+    (the engine would fall back to 'exact')."""
+    coordacc = _load_engine_coordaccess()
+    for policy in ef.COORDINATE_POLICIES:
+        form = {
+            "s_access_level": "open",
+            "s_access_coordinates": policy,
+            **_snap("access", {"level": "open"}),
+        }
+        assembled = ef.assemble_section(form, "access")
+        # the engine parses the SAME block the editor emits.
+        default, overrides = coordacc.parse_coordinate_policy(assembled)
+        assert default == policy, (
+            f"editor-assembled {assembled!r} parsed by the engine to {default!r}, not the intended "
+            f"{policy!r} — a key/spelling mismatch would make the policy a silent no-op")
+        assert overrides == {}  # survey-level lane only; no per-station overrides written here
+
+
+def test_coordinate_policy_unset_round_trips_to_omit():
+    """DIFF-MINIMALITY (zero-change promise): a survey with NO access.coordinates, submitted with the
+    blank/default select, contributes NOTHING to the patch. FAILS IF the editor writes
+    access.coordinates for a survey that never set it (a spurious diff on every existing survey)."""
+    original = {"level": "embargoed", "embargo_until": "2027-01-01", "contact": "x@e.org"}
+    form = {
+        "s_access_level": "embargoed",
+        "s_access_coordinates": "",  # blank/default option -> unset
+        "s_access_embargo_until": "2027-01-01",
+        "s_access_contact": "x@e.org",
+        **_snap("access", original),
+    }
+    assert ef.assemble_section(form, "access") is ef._OMIT
+    # And the engine reads that untouched block as the default 'exact' (byte-unchanged == exact).
+    coordacc = _load_engine_coordaccess()
+    assert coordacc.parse_coordinate_policy(original) == ("exact", {})
+
+
+def test_setting_coordinate_policy_adds_only_that_key():
+    """DIFF-MINIMALITY: setting the policy on a survey that LACKED it yields a block adding ONLY
+    access.coordinates. FAILS IF it touches any other access key (the Stage-1 minimality property)."""
+    original = {"level": "embargoed", "embargo_until": "2027-01-01", "contact": "x@e.org"}
+    form = {
+        "s_access_level": "embargoed",
+        "s_access_coordinates": "withheld",
+        "s_access_embargo_until": "2027-01-01",
+        "s_access_contact": "x@e.org",
+        **_snap("access", original),
+    }
+    assert ef.assemble_section(form, "access") == {**original, "coordinates": "withheld"}
+
+
+def test_changing_coordinate_policy_touches_only_that_key():
+    """DIFF-MINIMALITY: changing an existing policy touches ONLY access.coordinates. FAILS IF another
+    key moves (e.g. an absent embargo gets introduced as null)."""
+    original = {"level": "open", "coordinates": "exact", "contact": "x@e.org"}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "generalised",
+        "s_access_contact": "x@e.org",
+        **_snap("access", original),
+    }
+    assert ef.assemble_section(form, "access") == {
+        "level": "open", "coordinates": "generalised", "contact": "x@e.org"}
+
+
+def test_unchanged_coordinate_policy_round_trips_to_omit():
+    """DIFF-MINIMALITY: a survey that ALREADY has a policy, resubmitted unchanged, is a no-op. FAILS IF
+    an unchanged coordinates value re-emits the section (a spurious diff)."""
+    original = {"level": "open", "coordinates": "generalised", "contact": "x@e.org"}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "generalised",
+        "s_access_contact": "x@e.org",
+        **_snap("access", original),
+    }
+    assert ef.assemble_section(form, "access") is ef._OMIT
+
+
+def test_bad_coordinate_policy_errors():
+    """A coordinates value outside the vocab surfaces a per-field error (fail-closed at the form), so
+    the form never accepts a value the engine would reject at build. FAILS IF a bad policy is accepted."""
+    form = {"s_access_level": "open", "s_access_coordinates": "fuzzy",
+            **_snap("access", {"level": "open"})}
+    with pytest.raises(ef.SectionError) as ei:
+        ef.assemble_section(form, "access")
+    assert ei.value.section == "access"
+    assert "coordinate" in ei.value.message.lower()
+
+
+def test_coordinate_and_level_selects_validate_independently():
+    """Both access selects validate against their OWN vocab: a valid coordinates value must not trip
+    the level check, and a valid level must not trip the coordinates check. FAILS IF the shared
+    'select' branch cross-rejects (e.g. 'generalised' rejected as a bad access level)."""
+    # a valid coordinates value + valid level assembles cleanly (no cross-rejection).
+    form = {"s_access_level": "open", "s_access_coordinates": "generalised",
+            **_snap("access", {"level": "open"})}
+    out = ef.assemble_section(form, "access")
+    assert out["coordinates"] == "generalised" and out["level"] == "open"
+    # a bad LEVEL still errors on the level (coordinates being valid must not mask it).
+    bad = {"s_access_level": "public", "s_access_coordinates": "exact",
+           **_snap("access", {"level": "open"})}
+    with pytest.raises(ef.SectionError) as ei:
+        ef.assemble_section(bad, "access")
+    assert "access level" in ei.value.message.lower()
 
 
 # ---- time_series levels checkboxes --------------------------------------------------------------

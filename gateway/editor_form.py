@@ -60,9 +60,16 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
     ],
     "access": [
-        # level is a <select> and embargo_until a date — rendered specially by curatorpage, but the
-        # sub-keys and order live here so assembly and rendering agree.
+        # level + coordinates are <select>s and embargo_until a date — rendered specially by
+        # curatorpage, but the sub-keys and order live here so assembly and rendering agree.
         ("level", "Access level", "", "select"),
+        # C42: the SURVEY-LEVEL coordinate-access policy (exact/generalised/withheld). Its key
+        # ("coordinates") and value vocab (COORDINATE_POLICIES) are EXACTLY what the engine's
+        # extract/_coordaccess.parse_coordinate_policy reads (access.get("coordinates")), so a set
+        # value is never a silent no-op. Blank/unset => the key is not written (absent => exact; the
+        # record's zero-change promise). The per-station coordinate_overrides map is the C43 Stage-4
+        # stations-panel lane, NOT here.
+        ("coordinates", "Coordinate access", "", "select"),
         ("embargo_until", "Embargo until", "", "date"),
         ("contact", "Access contact", "email or role address", "email"),
     ],
@@ -115,6 +122,15 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
 ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
 
+# C42 access.coordinates enum — the SURVEY-LEVEL coordinate-access policy. Declared like ACCESS_LEVELS
+# and IDENTICAL (key + value spellings) to the engine's extract/_coordaccess.COORDINATE_POLICIES, which
+# parse_coordinate_policy reads from access["coordinates"]. "exact" is the default (absent => exact); the
+# editor never WRITES the key at the default, so a survey that never sets a policy stays byte-unchanged.
+# A key/spelling mismatch here would make the setting a silent no-op — pinned by the key-parity test,
+# which feeds the editor-assembled block through the REAL engine parser (engine-truth, not a hand-typed
+# expectation).
+COORDINATE_POLICIES = ("exact", "generalised", "withheld")
+
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
 # — the checkboxes plus the advanced JSON fallback cover the rest.
 TIME_SERIES_LEVELS = ("raw_packed", "level0", "level1")
@@ -163,9 +179,15 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
                                     "(expected a '10.' prefix, e.g. 10.5281/zenodo.123)")
     if kind == "date" and not _valid_date(value):
         raise SectionError(section, f"{subkey}: '{value}' is not an ISO date (YYYY-MM-DD)")
-    if kind == "select" and section == "access" and value not in ACCESS_LEVELS:
-        raise SectionError(section, f"access level '{value}' is not one of "
-                                    f"{', '.join(ACCESS_LEVELS)}")
+    if kind == "select" and section == "access":
+        # Two selects live in the access section: level and (C42) coordinates. Each validates against
+        # its OWN vocab — a single 'not in ACCESS_LEVELS' check would reject every coordinates value.
+        if subkey == "coordinates" and value not in COORDINATE_POLICIES:
+            raise SectionError(section, f"coordinate access '{value}' is not one of "
+                                        f"{', '.join(COORDINATE_POLICIES)}")
+        if subkey == "level" and value not in ACCESS_LEVELS:
+            raise SectionError(section, f"access level '{value}' is not one of "
+                                        f"{', '.join(ACCESS_LEVELS)}")
 
 
 # ---- assembly -----------------------------------------------------------------------------------
