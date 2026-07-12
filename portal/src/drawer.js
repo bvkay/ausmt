@@ -218,7 +218,7 @@ function openStation(i){
   const keysafe=s.ausmt_id.replace(/[^a-z0-9]/g,"_");
   drawer.innerHTML=
    `<div class="dhead"><span class="sid">${esc(s.id)}</span><span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`+
-   (m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Open collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+
+   (m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+
    `<button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${esc(s.survey)} · ${esc(s.org)} · ${esc(s.country)}</div>`+
    collLine(m)+
@@ -304,7 +304,7 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   // UX3 item 7b: the "N×3-D / N×2-D / N×1-D" dimensionality fragment was removed from the stats line
   // (dimensionality is inferable from the phase tensor + skew, which stay shown). The per-station `dim`
   // tally that fed it is gone with it.
-  return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey story">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Open collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${esc(m.org||"custodian unknown")} · ${esc(m.country||"")}</div>`+
+  return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey story">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${esc(m.org||"custodian unknown")} · ${esc(m.country||"")}</div>`+
    `<div class="mixbar">${mixbar}</div>`+
    `<div class="stats"><b>${ss.length}</b> stations · Automated completeness/smoothness check <b>${qavg}/5</b> · tipper <b>${tip}%</b><br>periods <b>${fmtP(pmin)}–${fmtP(pmax)}s</b><br>extent ${ext} · ${fixes} coord QC flag${fixes===1?"":"s"}</div>`+
    `<div class="badges">${badge("EDI",m.edi||"ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",m.doi?"ok":"no")}${badge(m.lic||"licence ?",m.lic&&m.lic.startsWith("CC")?"ok":"unk")}</div>`+
@@ -487,7 +487,7 @@ function collLine(m){
 // Collections INDEX (the "Collections" tab): one card per collection in COLL, each opening the
 // full-width collection page. A collection appears automatically when surveys share a collection.id.
 function collectionCard(cid){const c=COLL[cid];
-  return `<div class="scard"><h3 style="cursor:pointer" data-act="collection" data-coll="${escAttr(cid)}" title="Open collection">${esc(c.title||cid)}</h3>`+
+  return `<div class="scard"><h3 style="cursor:pointer" data-act="collection" data-coll="${escAttr(cid)}" title="Explore collection">${esc(c.title||cid)}</h3>`+
     `<div class="cust">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""}</div>`+
     `<div class="stats"><b>${c.n_surveys}</b> survey${c.n_surveys===1?"":"s"} · <b>${c.n_stations}</b> station${c.n_stations===1?"":"s"}${c.start_year?" · since <b>"+esc(c.start_year)+"</b>":""}</div>`+
     (c.description?`<div class="desc">${esc(c.description)}</div>`:"")+
