@@ -130,11 +130,13 @@ function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false
       if(src)map.attributionControl.addAttribution(name+": "+src);grp._loaded=true;}
     catch(e){toast(`Layer "${name}" not found — place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
+// layer control hidden pending owner revisit (2026-07-12) — overlay definitions (footprints + the user
+// GeoJSON layers) are kept and still constructed; the control is simply NOT added to the map.
 L.control.layers(null,{"Survey footprints":footprints,
   "States / territories":userLayer("States","states.geojson","#8FA3B0"),
   "Geological provinces":userLayer("Geological provinces","provinces.geojson","#5BAE6A"),
   "Cratons":userLayer("Cratons","cratons.geojson","#D9A23B"),
-  "Major crustal boundaries":userLayer("Crustal boundaries","crustal_boundaries.geojson","#A85CC4")},{collapsed:true}).addTo(map);
+  "Major crustal boundaries":userLayer("Crustal boundaries","crustal_boundaries.geojson","#A85CC4")},{collapsed:true});
 
 map.on(L.Draw.Event.CREATED,e=>{e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();});  // one active selection shape: a new box replaces the previous one rather than stacking
 map.on(L.Draw.Event.DELETED,()=>refresh());
