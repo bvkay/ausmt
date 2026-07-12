@@ -436,3 +436,125 @@ def test_ops_status_sync_failed_streak_increments_across_runs(tmp_path):
     d2 = _ops_doc(tree)
     assert d2["reconcile"]["sync_failed_streak"] == 2, d2["reconcile"]
     assert d2["reconcile"]["sync_failed_since"] == since1, d2["reconcile"]
+
+
+# --------------------------------------------------------------------------------------------------
+# (f) C43 Stage 2b-ii: PERSISTENT-PAUSE alarm + pending-intent facts (record D9.7 / D8/D9). A single
+# fresh pause is fine; a pause active or SLOW-RE-ARMED past the cumulative threshold (24 h) must fail a
+# check AND surface as an ops-floor fact — an authenticated attacker cannot silently keep serving
+# frozen. The pending privileged intents + the actions audit tail are surfaced read-only for the serve
+# screen. Assertions read the emitted ops-status.json + the curl record (independent observables).
+# --------------------------------------------------------------------------------------------------
+
+def _iso_ago(hours: float) -> str:
+    return (datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_fresh_pause_is_active_not_persistent(tmp_path):
+    """Non-vacuous control. A pause.flag present with NO prior continuous span is active but NOT
+    persistent: ops-status.pause.active is true, persistent is false, and the box still sends a SUCCESS
+    beat (no /fail). FAILS IF a brand-new pause trips the persistent alarm."""
+    tree = _make_tree(tmp_path)
+    (tree["state"] / "pause.flag").write_text(
+        json.dumps({"paused_at": _now_iso(), "requested_by": "curator1"}), encoding="utf-8")
+    r = _run(tree)
+    ops = _ops_doc(tree)
+    assert ops["pause"]["active"] is True, ops["pause"]
+    assert ops["pause"]["persistent"] is False, ops["pause"]
+    calls = tree["curl_record"].read_text(encoding="utf-8") if tree["curl_record"].exists() else ""
+    assert "/fail" not in calls, f"a fresh pause must not fire the fail ping: {calls}"
+    assert r.returncode == 0
+
+
+def test_persistent_pause_alarms_and_fails(tmp_path):
+    """PERSISTENT-PAUSE PIN (record D9.7). A pause whose CONTINUOUS span (carried first_seen from the
+    previous ops-status.json) exceeds the cumulative threshold flips ops-status.pause.persistent true
+    AND fires the fail ping with a pause message — even though the CURRENT flag is freshly re-armed.
+    FAILS IF a slow-drip re-armed pause stays invisible (the single-flag age check it defeats)."""
+    tree = _make_tree(tmp_path)
+    # A freshly RE-ARMED flag (its own paused_at is recent — a single-flag check would see it fresh).
+    (tree["state"] / "pause.flag").write_text(
+        json.dumps({"paused_at": _now_iso(), "requested_by": "curator1"}), encoding="utf-8")
+    # ...but the previous ops-status.json shows the pause has been continuously active for 30 h.
+    (tree["state"] / "ops-status.json").write_text(json.dumps({
+        "generated_at": _iso_ago(0.25),
+        "pause": {"active": True, "first_seen": _iso_ago(30), "persistent": False}}), encoding="utf-8")
+    r = _run(tree)
+    ops = _ops_doc(tree)
+    assert ops["pause"]["active"] is True and ops["pause"]["persistent"] is True, ops["pause"]
+    assert ops["pause"]["cumulative_hours"] is not None and ops["pause"]["cumulative_hours"] >= 24, ops["pause"]
+    calls = tree["curl_record"].read_text(encoding="utf-8")
+    assert "/fail" in calls, "a persistent pause must fire the fail ping"
+    assert "PAUSED" in calls or "pause" in calls.lower(), f"the fail body must name the pause: {calls}"
+    assert r.returncode == 1, "a persistent-pause failure must exit nonzero (journal-visible)"
+
+
+def test_pending_intents_and_audit_tail_surfaced(tmp_path):
+    """PENDING-INTENT FACTS (record D8/D9). ops-status.json surfaces the pending privileged intents and
+    the recent actions-audit.log tail so the serve screen can show what is queued/in-flight and the
+    recent action outcomes. FAILS IF a pending intent or the audit tail is not surfaced."""
+    tree = _make_tree(tmp_path)
+    (tree["state"] / "update.request").write_text('{"requested_by":"c1"}', encoding="utf-8")
+    (tree["state"] / "actions-audit.log").write_text(
+        "2026-07-12T00:00:00Z intent=backup by=curator1 id=- outcome=ok: snapshot taken\n",
+        encoding="utf-8")
+    _run(tree)
+    ops = _ops_doc(tree)
+    assert "actions" in ops, f"ops-status must carry an actions block: {sorted(ops)}"
+    assert "update" in ops["actions"]["pending"], ops["actions"]
+    assert any("intent=backup" in ln for ln in ops["actions"]["audit_tail"]), ops["actions"]["audit_tail"]
+
+
+def test_expired_pause_flag_does_not_alarm(tmp_path):
+    """S5(a) PIN. An EXPIRED pause.flag (mtime older than the expiry reconcile honours) is IGNORED by
+    reconcile — so it is NOT freezing serving and must NOT alarm, even if a stale ops-status shows a
+    long prior span. FAILS IF an expired flag still trips the persistent-pause alarm (alarming on a
+    non-freeze). Non-vacuous vs test_persistent_pause_alarms_and_fails (a FRESH re-armed flag DOES)."""
+    tree = _make_tree(tmp_path)
+    flag = tree["state"] / "pause.flag"
+    flag.write_text(json.dumps({"paused_at": _iso_ago(30)}), encoding="utf-8")
+    old = datetime.datetime.now().timestamp() - 7 * 3600      # 7 h old; expiry default 360 min (6 h)
+    os.utime(flag, (old, old))
+    (tree["state"] / "ops-status.json").write_text(json.dumps({
+        "generated_at": _iso_ago(0.25),
+        "pause": {"active": True, "first_seen": _iso_ago(30), "persistent": False}}), encoding="utf-8")
+    r = _run(tree, env_extra={"AUSMT_RECONCILE_PAUSE_EXPIRY_MIN": "360"})
+    ops = _ops_doc(tree)
+    assert ops["pause"]["active"] is False, "an expired flag is not freezing => not active"
+    assert ops["pause"]["persistent"] is False, ops["pause"]
+    calls = tree["curl_record"].read_text(encoding="utf-8") if tree["curl_record"].exists() else ""
+    assert "/fail" not in calls, f"an expired pause must not fire the fail ping: {calls}"
+    assert r.returncode == 0
+
+
+def test_persistent_rollback_pin_alarms_and_fails(tmp_path):
+    """S5(b) PIN. A rollback.pin held continuously past the threshold (carried first_seen) raises an
+    ops-floor fact AND fires the fail ping — a pin freezes auto-rebuild with no expiry, so it needs the
+    same visibility as a persistent pause. FAILS IF a long-standing pin stays silent."""
+    tree = _make_tree(tmp_path)
+    (tree["state"] / "rollback.pin").write_text(
+        json.dumps({"pinned_build": "20260101T000000Z", "pinned_at": _iso_ago(30)}), encoding="utf-8")
+    (tree["state"] / "ops-status.json").write_text(json.dumps({
+        "generated_at": _iso_ago(0.25),
+        "pin": {"active": True, "first_seen": _iso_ago(30), "persistent": False}}), encoding="utf-8")
+    r = _run(tree)
+    ops = _ops_doc(tree)
+    assert ops["pin"]["active"] is True and ops["pin"]["persistent"] is True, ops["pin"]
+    assert ops["pin"]["cumulative_hours"] is not None and ops["pin"]["cumulative_hours"] >= 24, ops["pin"]
+    calls = tree["curl_record"].read_text(encoding="utf-8")
+    assert "/fail" in calls and ("pin" in calls.lower()), f"a persistent pin must fire the fail ping: {calls}"
+    assert r.returncode == 1
+
+
+def test_fresh_pin_active_not_persistent(tmp_path):
+    """Non-vacuous control for S5(b): a freshly-set pin is active but NOT persistent (no fail ping)."""
+    tree = _make_tree(tmp_path)
+    (tree["state"] / "rollback.pin").write_text(
+        json.dumps({"pinned_build": "20260101T000000Z", "pinned_at": _now_iso()}), encoding="utf-8")
+    r = _run(tree)
+    ops = _ops_doc(tree)
+    assert ops["pin"]["active"] is True and ops["pin"]["persistent"] is False, ops["pin"]
+    calls = tree["curl_record"].read_text(encoding="utf-8") if tree["curl_record"].exists() else ""
+    assert "/fail" not in calls
+    assert r.returncode == 0

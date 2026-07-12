@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AusMT - Australia's Magnetotelluric Data Portal</title>
-<!-- Privacy-respecting analytics (Plausible: cookieless, no IPs stored, no cross-site tracking).
-     OFF by default. To enable, self-host or use plausible.io, then uncomment the next line and set
-     your domain. AusMT deliberately collects NO personal data.
+<!-- Privacy: AusMT's server logs truncate IP addresses at the edge (IPv4 to /24, IPv6 to /48) -- a
+     full IP address is never stored. Logs are retained briefly (about 7 days) and used only for
+     aggregate reporting (downloads by dataset, visit counts). No cookies, no cross-site tracking, no
+     personal data.
+     Optional Plausible analytics (cookieless, no cross-site tracking) is OFF by default. To enable,
+     self-host or use plausible.io, then uncomment the next line and set your domain.
 <script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script>
 -->
 <script src="src/analytics-shim.js"></script><!-- external (not inline) so CSP stays script-src 'self' -->

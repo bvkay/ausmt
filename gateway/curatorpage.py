@@ -134,6 +134,8 @@ _HEAD = """<!doctype html>
  .opsband{border-radius:6px;padding:.6rem .9rem;margin:.75rem 0;font-size:.88rem}
  .opsnote{color:$muted;font-size:.78rem;margin:.4rem 0 0}
  .stale{color:$warn;font-weight:600}
+ /* C43 S2b-ii: the read-only action-audit tail on the serve screen — a bounded, scrollable log. */
+ .audittail{max-height:16rem;overflow:auto;font-size:.78rem;line-height:1.5}
  /* C43 FR2-2: Stations tab THREE thirds (owner ruling round 2, 2026-07-11). WIDE = site table
     (col 1) | station facts (col 2) | plots (col 3), all grid-ROW 1, top-aligned. DOM order is
     facts-first then plots then table (the panel-first stacking rule preserved: on a narrow single
@@ -2013,7 +2015,15 @@ def render_queue(*, curator_name: str, rows: list, csrf_token: str,
 _ACTION_COLOUR = {
     "rebuilt": _PALETTE["ok"], "noop": _PALETTE["muted"], "failed": _PALETTE["bad"],
     "sync_failed": _PALETTE["bad"],
+    # C43 S2b-i ops-guards render gap (incident-backed): untracked_blocked is a REFUSED rebuild that
+    # needs an operator — render it RED, not defaulted to muted, and surface its log_tail (the
+    # offending-dir list reconcile wrote as the detail). S2b-ii adds the pause/pinned states.
+    "untracked_blocked": _PALETTE["bad"],
+    "paused": _PALETTE["warn"], "pinned": _PALETTE["warn"],
 }
+
+# Actions whose log_tail/detail carries an operator-actionable explanation the status block must show.
+_ACTION_SHOW_TAIL = ("failed", "sync_failed", "untracked_blocked", "paused", "pinned")
 
 
 def _reconcile_status_block(status: dict | None) -> str:
@@ -2039,9 +2049,14 @@ def _reconcile_status_block(status: dict | None) -> str:
         rows.append(f'<tr><td class="k">Log file</td><td>{_esc(status.get("log_file"))}</td></tr>')
     table = "<table>" + "".join(rows) + "</table>"
     tail = ""
-    if action in ("failed", "sync_failed") and status.get("log_tail"):
-        tail = (f'<p class="sub" style="color:{_PALETTE["bad"]};font-weight:600">'
-                f'Last build did not serve — old data still live. Log tail:</p>'
+    if action in _ACTION_SHOW_TAIL and status.get("log_tail"):
+        # untracked_blocked/failed/sync_failed are hard states (red); paused/pinned are intentional
+        # (amber) — either way the detail is operator-actionable and must be shown, not buried.
+        hard = action in ("failed", "sync_failed", "untracked_blocked")
+        colour = _PALETTE["bad"] if hard else _PALETTE["warn"]
+        lead = ("Last build did not serve — old data still live. Detail:" if hard
+                else "Auto-rebuild is being held. Detail:")
+        tail = (f'<p class="sub" style="color:{colour};font-weight:600">{lead}</p>'
                 f'<pre>{_esc(status.get("log_tail"))}</pre>')
     return table + tail
 
@@ -2475,7 +2490,8 @@ def _sync_strip(status, ops, ops_stale: bool) -> str:
             'the reconcile timer is not installed or has not run a pass.</div>')
 
 
-def _builds_table(ops, ops_stale: bool, generated_at) -> str:
+def _builds_table(ops, ops_stale: bool, generated_at, *, csrf_token: str = "",
+                  actions: bool = False) -> str:
     if ops is None or ops_stale:
         return _stale_note("build inventory", generated_at)
     builds = ops.get("builds") or []
@@ -2491,20 +2507,26 @@ def _builds_table(ops, ops_stale: bool, generated_at) -> str:
         # rides the title (hover). The detail route matches this dir against the SAME ops-status
         # inventory server-side — it never opens a file by this name, so an unknown ref just 404s.
         href = "/gateway/curator/serve/build/" + _esc(d)
-        serving = f'<span class="pill" style="background:{_PALETTE["ok"]}">serving</span>' if b.get("serving") else ""
+        is_serving = bool(b.get("serving"))
+        serving = f'<span class="pill" style="background:{_PALETTE["ok"]}">serving</span>' if is_serving else ""
+        # C43 S2b-ii: "serve this build…" = rollback (a link to the typed-id confirm page). The
+        # currently-serving build offers no rollback-to-itself. rollback is a repoint, never a rebuild.
+        act = ""
+        if actions and d and not is_serving:
+            act = f' · <a href="/gateway/curator/serve/rollback/{_esc(d)}">serve this build…</a>'
         rows.append(
             "<tr>"
             f'<td><a href="{href}"><code title="{_esc(bid) if bid else ""}">{_esc(d)}</code></a> {serving}</td>'
             f'<td>{_esc(b.get("engine_commit") or "-")}</td>'
             f'<td>{_esc(b.get("source_commit") or "-")}</td>'
             f'<td>{_esc(b.get("stations")) if b.get("stations") is not None else "-"}</td>'
-            f'<td><a href="{href}">detail</a></td>'
+            f'<td><a href="{href}">detail</a>{act}</td>'
             "</tr>")
     return ('<table><tr><th>Build (dir)</th><th>Engine</th><th>Source</th><th>Stations</th><th></th></tr>'
             + "".join(rows) + "</table>")
 
 
-def _backups_table(ops, ops_stale: bool, generated_at) -> str:
+def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False) -> str:
     if ops is None or ops_stale:
         return _stale_note("backup snapshots", generated_at)
     b = ops.get("backups") or {}
@@ -2518,13 +2540,123 @@ def _backups_table(ops, ops_stale: bool, generated_at) -> str:
         if not isinstance(s, dict):
             continue
         age = s.get("age_hours")
-        rows.append(f'<tr><td><span class="dt">{_esc(s.get("name"))}</span></td>'
-                    f'<td>{(_esc(age) + " h") if age is not None else "-"}</td></tr>')
-    return '<table><tr><th>Snapshot</th><th>Age</th></tr>' + "".join(rows) + "</table>"
+        name = s.get("name") or ""
+        # C43 S2b-ii: guarded restore (a link to the typed-id + TOTP confirm page). Drill-first,
+        # destructive — the confirm page carries the disclosure + the second factor.
+        act = ""
+        if actions and name:
+            act = f'<td><a href="/gateway/curator/serve/restore/{_esc(name)}">restore…</a></td>'
+        else:
+            act = "<td></td>" if actions else ""
+        rows.append(f'<tr><td><span class="dt">{_esc(name)}</span></td>'
+                    f'<td>{(_esc(age) + " h") if age is not None else "-"}</td>{act}</tr>')
+    head = ('<table><tr><th>Snapshot</th><th>Age</th>'
+            + ("<th></th>" if actions else "") + "</tr>")
+    return head + "".join(rows) + "</table>"
+
+
+# ---- C43 S2b-ii: privileged ACTION controls on the serve screen (record D8/D9) ----------------
+# The D8 buttons. All post to session+CSRF-gated routes that write an INTENT the host actions agent
+# executes (the gateway gains no shell — C40). Single-flight (D9.3): a pending intent of a kind
+# disables its button and shows the pending state. The destructive/id-carrying ones (rollback,
+# restore) are their own confirmation PAGES (typed id; restore also a TOTP code). Everything here
+# rides the shared data-confirm delegation in CURATOR_UI_JS — NO inline handler (strictPages CSP).
+
+def _act_form(route: str, label: str, csrf: str, *, cls: str = "b-accent", confirm: str = "",
+              disabled: bool = False, title: str = "") -> str:
+    """One action <form> posting to `route`. When disabled (single-flight pending), the button is
+    inert and titled with why. The confirm rides data-confirm (delegated in ui.js) — never inline JS."""
+    dc = f' data-confirm="{_esc(confirm)}"' if (confirm and not disabled) else ""
+    dis = " disabled" if disabled else ""
+    ttl = f' title="{_esc(title)}"' if title else ""
+    return (f'<form class="act" method="post" action="{route}"{dc} '
+            'style="display:inline-block;margin:.2rem .4rem .2rem 0">'
+            f'{csrf}<button class="{cls}" type="submit"{dis}{ttl}>{_esc(label)}</button></form>')
+
+
+def _serve_actions_panel(*, csrf_token: str, pending_intents: dict, paused: bool,
+                         rollback_pin: dict | None, audit_tail: list) -> str:
+    """The D8 actions box: Update / Snapshot / Force-full-rebuild / Pause-or-Resume, plus the pending
+    intents banner and the read-only audit tail. Per-build rollback + per-snapshot restore live on
+    their rows (below) as links to their own confirm pages."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    pi = pending_intents or {}
+
+    def _btn(kind, route, label, confirm, cls="b-accent"):
+        p = pi.get(kind)
+        if p:
+            by = p.get("requested_by") or "?"
+            return _act_form(route, f"{label} (pending)", csrf, cls=cls, disabled=True,
+                             title=f"already requested by {by} — waiting for the host agent")
+        return _act_form(route, label, csrf, cls=cls, confirm=confirm)
+
+    update_btn = _btn("update", "/gateway/curator/serve/update", "Update box…",
+                      "Update the box now? Runs git pull --ff-only + docker compose pull + up -d "
+                      "(deploys what main already published). This is the bounded C40 exception.")
+    snapshot_btn = _btn("backup", "/gateway/curator/serve/snapshot", "Snapshot now",
+                        "Take an on-box DB snapshot now?", cls="b-ok")
+    # Force full rebuild rides rebuild.request (full flag), not the single-flight intent set — it is
+    # idempotent like the plain rebuild, so it is never disabled.
+    fullrebuild_btn = _act_form(
+        "/gateway/curator/serve/rebuild-full", "Force full rebuild…", csrf, cls="b-warn",
+        confirm="Force a FULL rebuild (ignore the build cache, recompute everything) on the next "
+                "reconcile tick? Slower, but bypasses a suspect cache.")
+    if paused:
+        pause_btn = _act_form("/gateway/curator/serve/resume", "Resume auto-rebuild", csrf, cls="b-ok",
+                              confirm="Resume automatic rebuilds now?")
+    else:
+        pause_btn = _act_form("/gateway/curator/serve/pause", "Pause auto-rebuild", csrf, cls="b-warn",
+                              confirm="Pause automatic rebuilds during a multi-edit session? It "
+                                      "auto-expires after 6 h; Resume to lift it sooner.")
+
+    # Pending banner (single-flight visibility).
+    banner = ""
+    if pi:
+        items = ", ".join(f'{_esc(k)} (by {_esc(v.get("requested_by") or "?")})' for k, v in pi.items())
+        banner = (f'<p class="opsnote" style="color:{_PALETTE["warn"]};font-weight:600">'
+                  f'Pending host action(s): {items} — waiting for the actions agent (runs every ~2 min). '
+                  f'The matching button is disabled until it lands.</p>')
+    pause_note = ""
+    if paused:
+        pause_note = ('<p class="opsnote">Auto-rebuild is PAUSED — drift is not being rebuilt. It '
+                      'auto-expires after 6 h; a pause that persists past 24 h raises an alert.</p>')
+    pin_note = ""
+    if rollback_pin:
+        pb = rollback_pin.get("pinned_build") or "?"
+        pin_note = (f'<p class="opsnote" style="color:{_PALETTE["warn"]};font-weight:600">'
+                    f'A rollback pin is standing — serving builds/{_esc(pb)}; reconcile will NOT '
+                    f'auto-rebuild until you Force/Request a rebuild to move forward.</p>')
+
+    audit_html = _audit_tail_block(audit_tail)
+    return (
+        '<div class="panel">'
+        '<h2>Actions</h2>'
+        '<p class="sub">Privileged host actions — each writes an intent the on-box actions agent '
+        'executes (the gateway itself has no shell; every action is audited below).</p>'
+        f'{banner}{pause_note}{pin_note}'
+        f'<div style="margin:.5rem 0">{update_btn}{snapshot_btn}{fullrebuild_btn}{pause_btn}</div>'
+        f'{audit_html}'
+        '</div>'
+    )
+
+
+def _audit_tail_block(audit_tail: list) -> str:
+    """Read-only render of the host actions-audit.log tail (who/what/when/outcome). Every line is
+    host-generated in a fixed shape but still _esc'd — the audit log is display data, not markup."""
+    lines = [ln for ln in (audit_tail or []) if isinstance(ln, str) and ln.strip()]
+    if not lines:
+        return ('<h3>Action audit</h3><p class="sub">No privileged actions recorded yet '
+                '(actions-audit.log is empty or the actions agent has not run).</p>')
+    # Newest last in the file; show newest FIRST for the reader.
+    body = "\n".join(_esc(ln) for ln in reversed(lines))
+    return (f'<h3>Action audit <span class="sub">(newest first)</span></h3>'
+            f'<pre class="audittail">{body}</pre>')
 
 
 def render_serve_page(*, published_head, published_available: bool, status, pending: bool,
-                      csrf_token: str, ops, ops_stale: bool, nav: "NavContext") -> str:
+                      csrf_token: str, ops, ops_stale: bool, nav: "NavContext",
+                      pending_intents: dict | None = None, paused: bool = False,
+                      rollback_pin: dict | None = None, audit_tail: list | None = None) -> str:
     """The first-class serve-state screen (record D8/D15). The existing serve panel (published HEAD,
     served build + currency, per-survey build report, last reconcile — render_serve_panel) plus the
     reconcile SYNC strip, the four-card operations FLOOR, and the retained-builds + backup-snapshots
@@ -2553,20 +2685,24 @@ def render_serve_page(*, published_head, published_available: bool, status, pend
                  + _backups_card(ops) + _alerts_card(ops) + _box_card(ops) + _freshness_card(ops)
                  + "</div>")
         stale_banner = ""
+    actions = _serve_actions_panel(csrf_token=csrf_token, pending_intents=pending_intents or {},
+                                   paused=paused, rollback_pin=rollback_pin, audit_tail=audit_tail or [])
     body = (
         '<h1>Serve state</h1>'
-        '<p class="sub">Published vs served, and the box operations floor. Read-only — rollback, '
-        'restore, box update, and pause are a later stage and are deliberately not shown here.</p>'
+        '<p class="sub">Published vs served, the box operations floor, and the privileged host '
+        'actions. Every action writes an intent the on-box agent executes (the gateway has no '
+        'shell); the destructive ones (rollback, restore) require a typed confirmation.</p>'
         f'{panel}'
         '<h2>Reconcile sync</h2>'
         f'{sync}'
+        f'{actions}'
         '<h2>Operations floor</h2>'
         f'{stale_banner}'
         f'{floor}'
         '<h2>Retained builds</h2>'
-        f'{_builds_table(ops, ops_stale, generated_at)}'
+        f'{_builds_table(ops, ops_stale, generated_at, csrf_token=csrf_token, actions=True)}'
         '<h2>Backup snapshots</h2>'
-        f'{_backups_table(ops, ops_stale, generated_at)}'
+        f'{_backups_table(ops, ops_stale, generated_at, actions=True)}'
     )
     return _shell("AusMT serve state", body, nav=nav)
 
@@ -2638,6 +2774,121 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
         + back
     )
     return _shell("AusMT build detail", body, nav=nav)
+
+
+# ---- C43 S2b-ii: rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------
+
+def render_rollback_confirm(*, build_ref: str, build, serving: bool, csrf_token: str,
+                            error: str = "", nav: "NavContext") -> str:
+    """The "serve this build" (rollback) confirmation page. Rollback is a REPOINT of `current`, never
+    a rebuild — it serves an already-verified retained build immediately, and pins reconcile off an
+    auto-revert until an explicit rebuild moves forward. Confirmation requires typing the build id. If
+    the id is not in the retained inventory (or is the currently-serving build) the form is replaced by
+    the honest refusal — the host re-validates against the real inventory regardless (D9.2)."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    back = '<p><a href="/gateway/curator/serve">back to serve state</a></p>'
+    if build is None:
+        body = (f'<h1>Serve build — {_esc(build_ref)}</h1>{err}'
+                '<div class="panel"><h2>No such retained build</h2>'
+                '<p class="sub">That build is not in the current retained inventory, so it cannot be '
+                'served. Pick a build from the retained-builds table.</p>' + back + '</div>')
+        return _shell("AusMT rollback", body, nav=nav)
+    if serving:
+        body = (f'<h1>Serve build — {_esc(build_ref)}</h1>{err}'
+                '<div class="panel"><h2>Already serving</h2>'
+                '<p class="sub">This build is the one currently being served — there is nothing to roll '
+                'back to.</p>' + back + '</div>')
+        return _shell("AusMT rollback", body, nav=nav)
+    src = build.get("source_commit") or "?"
+    disclosure = (
+        '<div class="panel"><h2>What "serve this build" does</h2><ul>'
+        f'<li><strong>Repoints <code>current</code></strong> to <code>builds/{_esc(build_ref)}</code> '
+        '(source ' + f'<code>{_esc(src)}</code>) with an atomic symlink swap — it serves an '
+        'already-verified retained build IMMEDIATELY. It NEVER rebuilds.</li>'
+        '<li><strong>Pins the reconcile agent</strong> — while the pin stands, automatic rebuilds are '
+        'held so the box does not silently revert your rollback. The drift chip shows the lag honestly.'
+        '</li>'
+        '<li><strong>To move forward again</strong> — press Force/Request rebuild on the serve screen; '
+        'that clears the pin and rebuilds to the published HEAD.</li>'
+        '</ul></div>')
+    confirm_msg = f"Serve builds/{build_ref}? Repoints current (no rebuild) and pins reconcile."
+    form = (
+        '<div class="panel"><h2>Confirm — serve this build</h2>'
+        f'{err}'
+        f'<form method="post" action="/gateway/curator/serve/rollback/{_esc(build_ref)}" '
+        f'data-confirm="{_esc(confirm_msg)}">'
+        f'{csrf}'
+        '<p><label class="k">Type the build id to confirm</label>'
+        f'<input type="text" name="typed_build" autocomplete="off" placeholder="{_esc(build_ref)}"></p>'
+        '<p><button class="b-warn" type="submit">Serve this build</button></p>'
+        '</form></div>')
+    body = (f'<h1>Serve build — {_esc(build_ref)}</h1>'
+            '<p class="sub">Roll the served corpus back to an already-verified retained build. Typed '
+            'confirmation required.</p>' + disclosure + form + back)
+    return _shell("AusMT rollback", body, nav=nav)
+
+
+def render_restore_confirm(*, snapshot_ref: str, snapshot_exists: bool, csrf_token: str,
+                           enrolled: bool, error: str = "", nav: "NavContext") -> str:
+    """The guarded DB-restore confirmation page (record D8, drill-first destructive op). Confirmation
+    requires typing the snapshot id AND a valid TOTP code (the C41 shared destructive-op second
+    factor). When the snapshot is not in the inventory, or the curator is not enrolled in the second
+    factor, the form is replaced by the honest refusal (the host re-validates + the route re-gates
+    regardless). The disclosure states exactly what a restore erases."""
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>' if error else ""
+    back = '<p><a href="/gateway/curator/serve">back to serve state</a></p>'
+    disclosure = (
+        '<div class="panel"><h2>What restoring this snapshot does</h2><ul>'
+        f'<li><strong>Replaces the live gateway DB</strong> with the snapshot '
+        f'<code>{_esc(snapshot_ref)}</code> — the on-box agent stops the gateway, DRILLS the snapshot '
+        'first (integrity + schema; a failing drill ABORTS with the live DB untouched), swaps the DB, '
+        'and restarts the gateway.</li>'
+        '<li><strong>Submissions received AFTER the snapshot are ERASED</strong> — the DB is the '
+        'submission + audit record; anything since the snapshot was taken is not in it and is lost.</li>'
+        '<li><strong>Uploader keys + curator enrolments</strong> revert to their state at the snapshot '
+        'too.</li>'
+        '<li><strong>Drill-first is the safety net</strong> — a corrupt/incompatible snapshot is '
+        'refused before the live DB is touched.</li>'
+        '</ul></div>')
+    if not snapshot_exists:
+        body = (f'<h1>Restore DB — {_esc(snapshot_ref)}</h1>{err}'
+                '<div class="panel"><h2>No such snapshot</h2>'
+                '<p class="sub">That snapshot is not in the reported backup inventory, so it cannot be '
+                'restored. Pick a snapshot from the backup-snapshots table.</p>' + back + '</div>')
+        return _shell("AusMT restore", body, nav=nav)
+    if not enrolled:
+        body = (f'<h1>Restore DB — {_esc(snapshot_ref)}</h1>'
+                '<p class="sub">A DB restore is destructive and protected by your authenticator.</p>'
+                + disclosure +
+                '<div class="panel"><h2>Enrol your authenticator first</h2>'
+                f'{err}'
+                '<p class="sub">Restoring the DB requires a time-based one-time code (the second '
+                'factor). You are not enrolled. Set it up on the '
+                '<a href="/gateway/curator/security">Security</a> page, then return here.</p>'
+                + back + '</div>')
+        return _shell("AusMT restore", body, nav=nav)
+    confirm_msg = (f"Restore the gateway DB from {snapshot_ref}? Submissions since the snapshot are "
+                   "ERASED (drill-first; a failing drill aborts untouched).")
+    form = (
+        '<div class="panel"><h2>Confirm — restore the DB</h2>'
+        f'{err}'
+        f'<form method="post" action="/gateway/curator/serve/restore/{_esc(snapshot_ref)}" '
+        f'data-confirm="{_esc(confirm_msg)}">'
+        f'{csrf}'
+        '<p><label class="k">Type the snapshot id to confirm</label>'
+        f'<input type="text" name="typed_snapshot" autocomplete="off" placeholder="{_esc(snapshot_ref)}"></p>'
+        '<p><label class="k">Authenticator code (required — the second factor)</label>'
+        '<input type="text" name="code" inputmode="numeric" autocomplete="off" '
+        'placeholder="123456" style="max-width:12rem"></p>'
+        '<p><button class="b-bad" type="submit">Restore DB from snapshot</button></p>'
+        '</form></div>')
+    body = (f'<h1>Restore DB — {_esc(snapshot_ref)}</h1>'
+            '<p class="sub">Restore the gateway database from an on-box snapshot. This is destructive '
+            'and protected by a typed confirmation and your authenticator. Read what it erases.</p>'
+            + disclosure + form + back)
+    return _shell("AusMT restore", body, nav=nav)
 
 
 def _checklist_panel(cl: "checklist_mod.Checklist") -> str:

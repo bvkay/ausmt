@@ -1,0 +1,25 @@
+# AusMT curator-actions timer (C43 Stage 2b-ii). Fires ausmt-actions.service every 2 minutes so a
+# curator's Update / Snapshot / Rollback / Restore press lands within a couple of minutes. Install:
+#   sudo cp deploy/systemd/ausmt-actions.{service,timer} /etc/systemd/system/
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ausmt-actions.timer
+#   systemctl list-timers ausmt-actions.timer     # confirm the next run
+# See deploy/README.md "Curator actions (privileged host agent)".
+
+[Unit]
+Description=AusMT curator actions every 2 minutes (execute pending workbench intents)
+Documentation=file:///srv/ausmt/code/deploy/README.md
+
+[Timer]
+# Every 2 minutes. Short cadence so a curator waiting on the serve screen sees the action land quickly;
+# the agent is a no-op when no intent is pending, and its host-side flock guarantees single-flight.
+OnCalendar=*:0/2
+# Catch up one missed run after downtime rather than waiting for the next slot.
+Persistent=true
+# A little jitter so a fleet of boxes (or a co-scheduled reconcile/backup timer) does not all fire on
+# the exact same second. The agent is idempotent (one intent per tick, atomic swaps), so jitter is free.
+RandomizedDelaySec=20
+
+[Install]
+WantedBy=timers.target

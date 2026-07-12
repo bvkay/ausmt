@@ -1,0 +1,43 @@
+# AusMT curator-workbench ACTIONS agent (C43 Stage 2b-ii, record D8/D9). A oneshot unit the
+# ausmt-actions.timer fires every ~2 min: it scans the gateway state dir for privileged INTENT files
+# the curator wrote through the workbench (update / backup / rollback / restore) and executes a FIXED
+# recipe for each — the host-side half of the C40 request-file pattern (the gateway has no shell,
+# docker socket, or site-data mount). See deploy/README.md "Curator actions (privileged host agent)".
+#
+# INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (there is no %-spec
+# for these; systemd does not expand env vars in ExecStart/WorkingDirectory), then copy this file to
+# /etc/systemd/system/ :
+#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /srv/ausmt/code/deploy)
+#   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /srv/ausmt/code/deploy/.env)
+# The script reads AUSMT_DATA_DIR + AUSMT_CODE_DIR from the EnvironmentFile (.env), like reconcile.sh.
+#
+# PRE-NCI SECURITY GATE (record D9.6): the update + restore recipes are flagged for the pre-NCI
+# hostile re-audit — do NOT enable this timer on an internet-facing deployment before that audit
+# passes. On the current tailnet-fronted box it is curator-authenticated, CSRF-bound, single-flight
+# locked, and every action is audited (gateway/state/actions-audit.log).
+
+[Unit]
+Description=AusMT curator actions (execute privileged workbench intents: update/backup/rollback/restore)
+Documentation=file:///srv/ausmt/code/deploy/README.md
+# The update recipe pulls code + images and redeploys, so it wants the network + a real clock.
+After=network-online.target time-sync.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Run as the operator uid that owns the code checkout and can drive `docker compose` (the same user
+# you run `make rebuild-data`/`docker compose` as by hand). NOT root. Set this to that account — it is
+# the SAME operator uid the reconcile + backup timers already use.
+User=ausmt
+# .env carries AUSMT_DATA_DIR + AUSMT_CODE_DIR (and TAG/OWNER the compose pull/up needs); loaded the
+# same way `docker compose` and the other timers load it.
+EnvironmentFile=__ENV_FILE__
+WorkingDirectory=__DEPLOY_DIR__
+# One pass; --dry-run is NOT passed here (that is an operator's manual invocation to preview a tick).
+ExecStart=__DEPLOY_DIR__/scripts/actions.sh
+# A restore drills + swaps + restarts the gateway; an update pulls images. Give it room but bound a
+# wedged docker/compose call.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

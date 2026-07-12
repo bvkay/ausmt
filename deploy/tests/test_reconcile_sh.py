@@ -270,7 +270,6 @@ def test_log_pruning_keeps_newest_20(tmp_path):
     logs_dir = tree["data"] / "site-data" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     # Pre-seed 25 stale logs with staggered mtimes so ls -1t has a stable order.
-    import time
     for i in range(25):
         p = logs_dir / f"2020010{i:02d}T000000Z.build.log"
         p.write_text(f"stale {i}\n", encoding="utf-8")
@@ -577,3 +576,117 @@ def test_status_file_readable_by_gateway_uid(tmp_path):
     mode = (tree["state"] / "reconcile-status.json").stat().st_mode
     assert mode & 0o044 == 0o044, (
         f"status file must be group+other readable for the gateway uid; mode is {oct(mode)}")
+
+
+# --------------------------------------------------------------------------------------------------
+# C43 Stage 2b-ii: PAUSE auto-rebuild + ROLLBACK PIN (record D8/D13). A fresh pause.flag suppresses the
+# drift rebuild; a STALE flag (older than the expiry) is IGNORED (auto-expires); a rollback.pin holds
+# reconcile off an auto-revert until an explicit rebuild.request moves forward. RED-then-green pins:
+# each proves it can fail (the paused/pinned case does NOT rebuild; the expired/explicit case DOES).
+# --------------------------------------------------------------------------------------------------
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_fresh_pause_flag_suppresses_drift_rebuild(tmp_path):
+    """PAUSE PIN (record D8/D13). With a FRESH pause.flag and drift (no rebuild.request), reconcile does
+    NOT rebuild — action=paused, the make shim is NOT invoked, and the status exposes paused=true.
+    FAILS IF a fresh pause still rebuilds on drift. Non-vacuous: the expiry test below (stale flag)
+    DOES rebuild, so the flag — not a broken build path — is what suppresses it."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")     # built != HEAD => drift
+    _advance_head(tree)
+    (tree["state"] / "pause.flag").write_text(
+        json.dumps({"paused_at": "2026-07-12T00:00:00Z", "requested_by": "curator1"}), encoding="utf-8")
+    r = _run(tree)
+    assert r.returncode == 0, r.stderr
+    assert not tree["marker"].exists(), "a fresh pause.flag must SUPPRESS the drift rebuild (shim not run)"
+    st = _status(tree)
+    assert st and st.get("action") == "paused", f"expected action=paused, got {st}"
+    assert st.get("paused") is True, "reconcile status must expose the pause state (record D9.7)"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_stale_pause_flag_is_expired_and_rebuilds(tmp_path):
+    """PAUSE-EXPIRY PIN (record D13). A pause.flag OLDER than the expiry window is IGNORED — reconcile
+    treats auto-rebuild as ACTIVE and rebuilds on drift. FAILS IF a stale pause flag still suppresses
+    the rebuild (proven against a never-expire implementation). The flag's mtime is set 7 h old with a
+    6 h expiry."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    new_head = _advance_head(tree)
+    flag = tree["state"] / "pause.flag"
+    flag.write_text(json.dumps({"paused_at": "2026-07-11T00:00:00Z"}), encoding="utf-8")
+    import time
+    old = time.time() - 7 * 3600
+    os.utime(flag, (old, old))                                # 7 h old, expiry default 360 min
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1", "AUSMT_RECONCILE_PAUSE_EXPIRY_MIN": "360"})
+    assert r.returncode == 0, r.stderr
+    assert tree["marker"].exists(), "a STALE pause.flag must NOT suppress the rebuild (auto-expired)"
+    st = _status(tree)
+    assert st and st.get("action") == "rebuilt", f"expected action=rebuilt after expiry, got {st}"
+    assert st.get("pause_expired") is True, "status must mark the stale flag as expired"
+    assert st.get("built", "").startswith(new_head[:7]), "the rebuild must have advanced the served commit"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_rollback_pin_holds_reconcile_off_auto_revert(tmp_path):
+    """ROLLBACK-REPOINTS PIN (reconcile side, record D13). While a rollback.pin stands, reconcile must
+    NOT auto-rebuild on drift (which would revert the manual rollback) — action=pinned, shim not run.
+    FAILS IF a pinned rollback is silently reverted by the next tick."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")     # served older build => drift vs HEAD
+    _advance_head(tree)
+    (tree["state"] / "rollback.pin").write_text(
+        json.dumps({"pinned_build": "20260101T000000Z", "pinned_by": "curator1",
+                    "pinned_at": "2026-07-12T00:00:00Z"}), encoding="utf-8")
+    r = _run(tree)
+    assert r.returncode == 0, r.stderr
+    assert not tree["marker"].exists(), "a rollback.pin must HOLD reconcile off the auto-rebuild"
+    st = _status(tree)
+    assert st and st.get("action") == "pinned", f"expected action=pinned, got {st}"
+    assert st.get("pinned") is True and st.get("pinned_build") == "20260101T000000Z", st
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_explicit_rebuild_request_clears_rollback_pin(tmp_path):
+    """A rollback.pin does NOT freeze serving forever: an explicit rebuild.request is a deliberate
+    MOVE-FORWARD that clears the pin and rebuilds (record D13). FAILS IF a rebuild.request is ignored
+    while pinned, or the pin survives the deliberate rebuild."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    _advance_head(tree)
+    pin = tree["state"] / "rollback.pin"
+    pin.write_text(json.dumps({"pinned_build": "20260101T000000Z"}), encoding="utf-8")
+    (tree["state"] / "rebuild.request").write_text("{}", encoding="utf-8")
+    r = _run(tree, env_extra={"SHIM_REBUILD": "1"})
+    assert r.returncode == 0, r.stderr
+    assert tree["marker"].exists(), "an explicit rebuild.request must rebuild even while pinned"
+    assert not pin.exists(), "the explicit move-forward must clear the rollback.pin"
+    st = _status(tree)
+    assert st and st.get("action") == "rebuilt", f"expected action=rebuilt, got {st}"
+    assert st.get("pinned") is False, "the pin must be cleared after the deliberate rebuild"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_force_full_rebuild_flag_sets_cache_refresh(tmp_path):
+    """FORCE-FULL PIN (record D8, C43 S2b-ii). A rebuild.request carrying `full: true` makes reconcile
+    run the build in cache-REFRESH mode (AUSMT_BUILD_CACHE_MODE=refresh in the make environment); a
+    plain request (no flag) leaves it at the default (empty => Makefile rw). FAILS IF the full flag does
+    not reach the build's cache mode, or a plain request forces refresh. Observed via a make shim that
+    records the env var it was invoked with."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    _advance_head(tree)
+    rec = tmp_path / "cache_mode.txt"
+    make_shim = tmp_path / "make_cache_shim.sh"
+    make_shim.write_text(
+        "#!/bin/sh\n"
+        f'printf "MODE=[%s]\n" "${{AUSMT_BUILD_CACHE_MODE:-<unset>}}" >> "{rec.as_posix()}"\n',
+        encoding="utf-8")
+    make_shim.chmod(0o755)
+    env_extra = {"AUSMT_RECONCILE_MAKE": f"sh {make_shim.as_posix()}"}
+
+    # full: true => refresh
+    (tree["state"] / "rebuild.request").write_text('{"requested_by":"c1","full":true}', encoding="utf-8")
+    _run(tree, env_extra=env_extra)
+    # plain request => default (empty). The request itself forces a rebuild, so no new drift is needed.
+    (tree["state"] / "rebuild.request").write_text('{"requested_by":"c1"}', encoding="utf-8")
+    _run(tree, env_extra=env_extra)
+
+    modes = [ln for ln in rec.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert modes[0] == "MODE=[refresh]", f"full:true must set cache-refresh, got {modes}"
+    assert modes[1] in ("MODE=[]", "MODE=[<unset>]"), f"a plain request must NOT force refresh, got {modes}"
