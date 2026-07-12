@@ -211,6 +211,44 @@ land** (red-proven).
 * **Stage 3b — atomic batch writes:** edit / add / remove / rename / merge / normalise / create,
   all via A6. Rides 3a's read-job. Carries the atomicity + rollback + CSP + executable-JS pins.
 
+### D5-B. Stage-3a gate findings + published-source framing (2026-07-12)
+
+The 3a read-only projection passed a 4-lens adversarial gate + independent verify. **Security lens
+CLEAN** (every field value escaped; the `<img onerror>` probe title rendered inert in a real
+browser; read-job read-only; unknown id → 404). The parity lens surfaced that the runner's
+**light reimplementation of the rollup drifts from the engine's `_group_collections`** in edge
+cases — the fragility inherent to parity-by-reimplementation. Resolution:
+
+**Framing (architect decision).** The console is a **PUBLISHED-SOURCE projection, NOT a
+served-portal mirror.** It reads the `survey.yaml`s at published HEAD — the *edit* truth (correct
+for an editing tool) and the only view that can compute per-member divergence (the built
+`collections.json` has already collapsed divergence to first-declarer). It may therefore legitimately
+differ from the *served* build until the next rebuild — the same published-vs-served lag the drift
+chip already carries. Copy says so ("rolled up from every published survey.yaml"; served may differ
+until rebuild); `n_stations` is the **published EDI-file count**, labelled as such (the portal's is
+the post-gate served count). **Pin 1 is narrowed to SAME-INPUT parity:** the runner's rollup logic
+must equal `_group_collections` *given the same member set* — the achievable, meaningful invariant
+(a built survey's contribution matches the portal); it does not claim to reproduce the build's drop
+logic. Build-dropped members (0-station / validation-FAIL surveys still carrying a `collection.id`)
+ARE included in the published-source view by design; a "not currently building" flag is a 3b/enrich
+follow-up.
+
+**Fixes (same-input logic drifts the panel caught — all red-then-green):**
+* **F1 (material)** out-of-vocab status drop moved INSIDE the per-member fold (mirror
+  `build_portal.py:399-400`) so nulling an invalid status re-opens the slot for a later member's
+  valid value; parity fixture: invalid-status-first + valid-later ⇒ rollup = valid.
+* **F2 (minor)** membership predicate → engine truthiness (`if coll.get('id')`, drop `id: 0`/`False`).
+* **F3 (material)** malformed-YAML per-survey resilience: catch the ruamel `YAMLError` (not just
+  `OSError`) and drop-and-continue that one survey, mirroring `build_portal.py:810-817` — one bad
+  file must not blank the whole console; **negative-control pin** added.
+* **F4** published-source copy + `n_stations` label; parity-pin claim narrowed to same-input.
+* **F5** rollup-parity pin strengthened to exercise F1/F2 edges (non-vacuous — imports the real
+  engine fn on the same member set).
+
+**Future hardening (noted, deferred — engine-touch, out of 3a scope):** parity-by-reimplementation
+is drift-prone; a shared single-source rollup module imported by both engine and runner would
+prevent this class permanently.
+
 ## D6. Submission queue — review flow unchanged. Review → checklist → sandboxed preview →
 approve/return/reject was production-proven 2026-07-08; C43 deliberately leaves that flow alone.
 The queue gains the shared nav + drift chip (Stage 1) and one additive surface: a **read-only
