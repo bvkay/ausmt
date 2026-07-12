@@ -249,6 +249,42 @@ follow-up.
 is drift-prone; a shared single-source rollup module imported by both engine and runner would
 prevent this class permanently.
 
+### D5-C. Stage-3b (batch editor) gate findings + fixes (2026-07-12)
+
+The 3b WRITE path passed a 4-lens adversarial gate + verify (8 confirmed, 2 refuted). **The core
+choreography was sound** — atomicity gate before any git verb, confirm re-applies+re-validates under
+`PUBLISH_LOCK` (does not trust the preview), `cid` sanitised into the branch name, per-survey scoped
+`git add`, whole-batch rollback; and **no XSS** (browser-verified inert across editor/membership/
+preview/confirm). The findings cluster in three design seams, fixed as F1-F6 (all red-then-green):
+
+**Design clarifications (governing):**
+* **`last_updated` is EXCLUDED from divergence detection** (drop it from the runner
+  `_collection_divergence` loop AND `curatorpage._COLLECTION_FIELDS`/`_divergence_summary`), kept in
+  `_COLLECTION_ROLLUP_FIELDS` for engine parity only. It is a gateway-managed per-member timestamp,
+  NOT a curator-reconcilable programme field — stamping it on only the changed members (diff-minimal)
+  otherwise makes the console permanently report "members disagree on last_updated" with a Normalise
+  remedy that has no form field to fix it. (**F2, material.**)
+* **Numeric fields preserve type.** The desired-state form round-trips values as strings, so the
+  no-op check must be type-tolerant (`str(_plain(cur)) == str(new)` ⇒ unchanged) and the writer must
+  NOT force-quote all-digit numerics (`start_year`), else every edit silently re-types `2003` →
+  `"2003"`, emitting a spurious diff line and a spurious commit on an untouched member — breaking the
+  D13 diff-minimality / N-commits pins. (**F1, material.**)
+* **Publish re-enforces the A2 guardrails under the lock.** The confirm re-validates for validator
+  FAIL, but MUST also re-enforce the console's own A2 controlled vocab (id matches
+  `_COLLECTION_ID_RE`; type/status in-vocab) and reject control chars/newlines in `cid` and `note`
+  BEFORE committing — the client-carried `spec_json` is untrusted (an authenticated curator can hand-
+  edit it). Rationale: the git history IS the audit record; a newline-laden `cid` interpolated into
+  the commit body forges fake `Curated-by:`/`Approved-by:` trailers, and an out-of-vocab id/status is
+  only a WARNING to the validator so it would otherwise publish past the console's own guardrail.
+  (**F4, closes the two security-injection findings.**)
+
+**Remaining fixes:** **F3 (minor)** rollback catches non-`PublishError` (an `OSError` on
+`write_bytes` mid-batch) — broaden the guard, roll the whole batch back, re-raise; never leave
+surveys-live on the `collbatch/` branch with partial commits (main is already protected — the merge
+is after the loop). **F5 (minor)** a rename records the NEW id in the commit subject/branch/body (or
+old→new), not the stale URL cid. **F6 (minor)** a slug landing in BOTH set and remove is de-duped so
+one survey never gets two ops in a batch.
+
 ## D6. Submission queue — review flow unchanged. Review → checklist → sandboxed preview →
 approve/return/reject was production-proven 2026-07-08; C43 deliberately leaves that flow alone.
 The queue gains the shared nav + drift chip (Stage 1) and one additive surface: a **read-only
