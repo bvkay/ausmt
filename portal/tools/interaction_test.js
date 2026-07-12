@@ -216,14 +216,14 @@ async function bootFreshWindow(dataMap) {
     ok(A.weightForZoom(z + 1) >= A.weightForZoom(z), "weightForZoom must be monotone non-decreasing at z=" + z);
   }
 
-  // UX4 Amendment A1 COLOUR + TOOLTIP. The D1 colour split was REMOVED: EVERY colour mode is
-  // membership-blind — type mode gives member and non-member LPMT the IDENTICAL flagship teal; the
-  // AusLAMP/legacy distinction is the tooltip TYPE-LABEL SWAP (member shows "AusLAMP" INSTEAD OF the
-  // LPMT type label — not appended; non-member keeps LPMT). Two synthetic LPMT stations differing
-  // ONLY by membership.
+  // UX4 Amendment A1 COLOUR (still live) + O4 TOOLTIP (2026-07-12). Colour: EVERY colour mode is
+  // membership-blind — type mode gives member and non-member LPMT the IDENTICAL flagship teal. Tooltip:
+  // O4 slimmed it to station name + survey name ONLY, so the AusLAMP/legacy distinction is NO LONGER on
+  // the tooltip — it survives only in the D2 clustering split. Two synthetic LPMT stations differing ONLY
+  // by membership (each given a survey so the O4 tooltip has a survey name).
   A.setAuslampSet(["memb"]);
-  const _memberLp = { id: "S1", type: "LPMT", slug: "memb", q: 4.2, dim: "2-D" };
-  const _otherLp = { id: "S2", type: "LPMT", slug: "notmemb", q: 4.2, dim: "2-D" };
+  const _memberLp = { id: "S1", type: "LPMT", slug: "memb", q: 4.2, dim: "2-D", survey: "Alpha Survey" };
+  const _otherLp = { id: "S2", type: "LPMT", slug: "notmemb", q: 4.2, dim: "2-D", survey: "Beta Survey" };
   A.setColorMode("type");
   ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
     "A1: TYPE-mode colour must be IDENTICAL for AusLAMP vs non-AusLAMP LPMT (no colour split), got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
@@ -235,13 +235,15 @@ async function bootFreshWindow(dataMap) {
   ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
     "DIM-mode colour must be IDENTICAL regardless of AusLAMP membership, got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
   A.setColorMode("type");
-  // A1 tooltip swap: member = `${id} · AusLAMP · Q n` (the word AusLAMP REPLACES the LPMT label —
-  // asserting NOT-contains "LPMT" is what fails on the pre-A1 append, which carried both).
+  // O4 (owner, 2026-07-12): the hover tooltip is station name + survey name ONLY — no diagnostic Q, no
+  // type/AusLAMP label. Pre-O4 it swapped the type label to "AusLAMP" for members; that distinction now
+  // lives only in the D2 clustering split. Asserting the diagnostic + type/AusLAMP label are GONE is what
+  // fails on pre-O4 code (which carried "· Q 4.2" and the AusLAMP/LPMT label).
   const _tMemb = A.tooltipText(_memberLp), _tOther = A.tooltipText(_otherLp);
-  ok(_tMemb.indexOf("AusLAMP") >= 0 && _tMemb.indexOf("LPMT") < 0,
-    "A1: member tooltip must show AusLAMP INSTEAD OF LPMT (swap, not append), got: " + JSON.stringify(_tMemb));
-  ok(_tOther.indexOf("LPMT") >= 0 && _tOther.indexOf("AusLAMP") < 0,
-    "A1: non-member tooltip must keep the LPMT type label with no AusLAMP tag, got: " + JSON.stringify(_tOther));
+  ok(_tMemb === "S1 · Alpha Survey", "O4: member tooltip must be 'station · survey' only, got: " + JSON.stringify(_tMemb));
+  ok(_tOther === "S2 · Beta Survey", "O4: non-member tooltip must be 'station · survey' only, got: " + JSON.stringify(_tOther));
+  ok(_tMemb.indexOf("Q ") < 0 && _tMemb.indexOf("4.2") < 0, "O4: the TF diagnostic (Q) must be gone from the hover tooltip, got: " + JSON.stringify(_tMemb));
+  ok(_tMemb.indexOf("AusLAMP") < 0 && _tMemb.indexOf("LPMT") < 0, "O4: the type/AusLAMP label must be gone from the hover tooltip, got: " + JSON.stringify(_tMemb));
   A.buildAuslampSet();   // restore the boot-built set for the rest of the run
 
   // A. buildTree made REAL checkboxes (the smoke stub never did): 2 countries, 4 orgs, 4 surveys.

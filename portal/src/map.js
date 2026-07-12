@@ -79,15 +79,15 @@ map.addControl(new L.Control.Draw({draw:{polyline:false,circle:false,circlemarke
 
 // UX4 Amendment A1 (owner, 2026-07-07): the D1 colour split was REMOVED — all LPMT renders the
 // flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
-// is membership-blind. The AusLAMP/legacy distinction is carried by the TOOLTIP type-label swap
-// (tooltipText below) and the D2 clustering split, not by colour.
+// is membership-blind. The AusLAMP/legacy distinction is carried by the D2 clustering split, not by
+// colour (and, since O4 2026-07-12, no longer by the hover tooltip either).
 function markerColor(s){return colorMode==="quality"?qColor(s.q):colorMode==="dim"?(DIM_COL[s.dim]||"#5A6E7D"):(TYPE_COL[s.type]||"#999");}
 function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // C42: withheld-coord stations have no marker
-// UX4 Amendment A1: the tooltip's TYPE SLOT shows "AusLAMP" INSTEAD OF the raw LPMT type label for
-// collection members (a swap, not an append — supersedes the D1 append) — the sole AusLAMP/legacy
-// visual distinction on hover. Non-members keep their type label unchanged. PURE + Leaflet-free so
-// the jsdom driver tests the exact string shipped (same pattern as partitionMarkers).
-function tooltipText(s){return `${esc(s.id)} · ${isAuslampSurvey(s.slug,AUSLAMP_SET)?"AusLAMP":esc(s.type)} · Q ${s.q??"–"}`;}
+// O4 (owner, 2026-07-12): the station hover tooltip is SLIMMED to station name + survey name ONLY —
+// the TF completeness/smoothness diagnostic (Q) and the type/AusLAMP label were removed. The
+// AusLAMP/legacy distinction stays in the D2 clustering split; the diagnostic stays in the click
+// drawer. PURE + Leaflet-free so the jsdom driver tests the exact string shipped.
+function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // UX4 (D4): zoom-scaled marker geometry. PURE step functions (unit-tested, monotone non-decreasing in z),
 // the SINGLE source for both the initial draw (buildMarkers) and the zoomend restyle below — markers read
 // too large at national zoom but right when zoomed in, so they grow with zoom. Cluster bubbles are
