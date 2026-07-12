@@ -92,7 +92,11 @@ function tooltipText(s){return `${esc(s.id)} · ${isAuslampSurvey(s.slug,AUSLAMP
 // the SINGLE source for both the initial draw (buildMarkers) and the zoomend restyle below — markers read
 // too large at national zoom but right when zoomed in, so they grow with zoom. Cluster bubbles are
 // untouched (count-driven). Values are UX4 starting points; the final table is recorded in the design doc.
-function radiusForZoom(z){return z<=4?3.5:z===5?4.5:z===6?5:6;}
+// O5 (owner, 2026-07-12): every radius tier shifted ONE STEP SMALLER — each tier takes the next-smaller
+// tier's old value (z5 4.5->3.5, z6 5->4.5, z>=7 6->5) and the smallest tier drops by the bottom step
+// (z<=4 3.5->2.5, the 1.0 gap that separated it from the z5 tier). Still monotone non-decreasing in z.
+// Cluster bubbles untouched (count-driven); weightForZoom left as-is — a 1.0 stroke does not overwhelm a 2.5 fill.
+function radiusForZoom(z){return z<=4?2.5:z===5?3.5:z===6?4.5:5;}
 function weightForZoom(z){return z<=4?1.0:1.5;}
 // current map zoom as a finite number — the headless smoke/interaction stubs' map.getZoom() returns a
 // Proxy (not a number), and even Number(proxy) throws ("cannot convert object to primitive"), so read it
@@ -103,7 +107,7 @@ function restyleForZoom(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z
 function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#13202B",fillColor:markerColor(s),fillOpacity:.92});
-  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // A1: type-label swap for AusLAMP members
+  s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
   // fit to the actual POSITIONED-station extent once data is in — supersedes the AU-bounds default set at
   // map creation above. C42: null-coord (withheld) stations are excluded so the bounds never go NaN.

@@ -205,10 +205,10 @@ async function bootFreshWindow(dataMap) {
 
   // UX4 (D4) ZOOM-SCALED RADII. radiusForZoom/weightForZoom are pure step functions: pinned values +
   // monotone non-decreasing in z. If either drifts from the frozen table this fails.
-  ok(A.radiusForZoom(3) === 3.5 && A.radiusForZoom(4) === 3.5, "radiusForZoom(z<=4) must be 3.5");
-  ok(A.radiusForZoom(5) === 4.5, "radiusForZoom(5) must be 4.5");
-  ok(A.radiusForZoom(6) === 5, "radiusForZoom(6) must be 5");
-  ok(A.radiusForZoom(7) === 6 && A.radiusForZoom(12) === 6, "radiusForZoom(z>=7) must be 6");
+  ok(A.radiusForZoom(3) === 2.5 && A.radiusForZoom(4) === 2.5, "radiusForZoom(z<=4) must be 2.5");   // O5: every tier one step smaller
+  ok(A.radiusForZoom(5) === 3.5, "radiusForZoom(5) must be 3.5");
+  ok(A.radiusForZoom(6) === 4.5, "radiusForZoom(6) must be 4.5");
+  ok(A.radiusForZoom(7) === 5 && A.radiusForZoom(12) === 5, "radiusForZoom(z>=7) must be 5");
   ok(A.weightForZoom(4) === 1.0 && A.weightForZoom(0) === 1.0, "weightForZoom(z<=4) must be 1.0");
   ok(A.weightForZoom(5) === 1.5 && A.weightForZoom(9) === 1.5, "weightForZoom(z>=5) must be 1.5");
   for (let z = 0; z < 12; z++) {
