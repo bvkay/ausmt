@@ -1844,7 +1844,11 @@ _RAIL = (
     # Security sits under Operations beside Serve state (C41 T2): it is an operator-facing account
     # concern — enrolling the authenticator that gates the destructive workbench actions — not a
     # per-survey editing surface, so Operations is its home rather than Surveys/Intake.
+    # Analytics (C45) sits under Operations beside Serve state: it is a read-only, operator/reporting
+    # surface over the box's own usage aggregates (downloads/visits/countries), the same trust class as
+    # the ops floor — not a per-survey editing surface.
     ("Operations", (("serve", "Serve state", "/gateway/curator/serve"),
+                    ("analytics", "Analytics", "/gateway/curator/analytics"),
                     ("security", "Security", "/gateway/curator/security"))),
 )
 
@@ -2774,6 +2778,210 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
         + back
     )
     return _shell("AusMT build detail", body, nav=nav)
+
+
+# ---- C45 usage-analytics screen (record D4/D5) -------------------------------------------------
+# A READ-ONLY Operations page rendering the host aggregator's stats.json (downloads/visits/countries +
+# a daily series). SAME trust class as the ops floor: the facts come from stats.json read SERVER-side
+# (serve_state.read_stats — the ops-status.json seam, no new mount, C40 intact). ZERO JS: the daily
+# series is a SERVER-RENDERED inline SVG sparkline, so nothing here touches the strictPages CSP
+# (script-src 'self'). Fail-closed: a missing stats.json shows an honest empty state; a stale one (old
+# generated_at, the serve_state band) shows a prominent STALE banner — never a 500, never a silent
+# last-known-good masquerading as live.
+
+def _human_bytes(n) -> str:
+    """A compact human size for a byte count (aggregate download volume). Non-numeric -> '—'."""
+    try:
+        v = float(n)
+    except (TypeError, ValueError):
+        return "—"
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if v < 1024 or unit == "TB":
+            return (f"{int(v)} {unit}" if unit == "B" else f"{v:.1f} {unit}")
+        v /= 1024.0
+    return f"{v:.1f} TB"
+
+
+def _num_card(value, label) -> str:
+    return f'<div class="card"><div class="n">{_esc(value)}</div><div class="l">{_esc(label)}</div></div>'
+
+
+def _analytics_cards(stats: dict) -> str:
+    totals = stats.get("totals") or {}
+    downloads = totals.get("downloads") or 0
+    visits = totals.get("visits") or 0
+    unattributed = totals.get("unattributed") or 0
+    volume = _human_bytes(totals.get("download_bytes"))
+    countries = stats.get("countries") or {}
+    n_countries = len([c for c in countries if c and c != "unknown"])
+    by_dataset = (stats.get("downloads") or {}).get("by_dataset") or {}
+    cards = (
+        _num_card(downloads, "Downloads")
+        + _num_card(visits, "Portal visits")
+        + _num_card(n_countries, "Countries")
+        + _num_card(len(by_dataset), "Datasets downloaded")
+        + _num_card(volume, "Download volume")
+        + _num_card(unattributed, "Unattributed")
+    )
+    return f'<div class="cards">{cards}</div>'
+
+
+def _format_breakdown(stats: dict) -> str:
+    by_format = (stats.get("downloads") or {}).get("by_format") or {}
+    if not by_format:
+        return ""
+    parts = ", ".join(f"{_esc(k)}: <b>{_esc(v)}</b>"
+                      for k, v in sorted(by_format.items(), key=lambda kv: (-kv[1], kv[0])))
+    return f'<p class="opsnote">Downloads by format — {parts}.</p>'
+
+
+def _dataset_label(row: dict) -> str:
+    """The station id (a per-station file) or the survey-package slug + '(bundle)' (a per-survey
+    bundle) — the finest attribution the manifest reverse map yields."""
+    if row.get("station"):
+        return _esc(row.get("station"))
+    if row.get("slug"):
+        return f'{_esc(row.get("slug"))} <span class="k">(bundle)</span>'
+    return "—"
+
+
+def _top_datasets_table(stats: dict, *, n: int = 20) -> str:
+    by_dataset = (stats.get("downloads") or {}).get("by_dataset") or {}
+    if not by_dataset:
+        return '<p class="sub">No attributed downloads yet.</p>'
+    rows = sorted(by_dataset.values(), key=lambda r: (-int(r.get("downloads") or 0),
+                                                      str(r.get("survey") or "")))
+    trs = []
+    for r in rows[:n]:
+        trs.append(
+            "<tr>"
+            f'<td>{_esc(r.get("survey") or "—")}</td>'
+            f'<td>{_dataset_label(r)}</td>'
+            f'<td>{_esc(r.get("format") or "—")}</td>'
+            f'<td class="num">{_esc(r.get("downloads") or 0)}</td>'
+            "</tr>")
+    more = ("" if len(rows) <= n else
+            f'<p class="opsnote">Showing the top {n} of {len(rows)} datasets by downloads.</p>')
+    return ('<table><thead><tr><th>Survey</th><th>Station / package</th><th>Format</th>'
+            '<th class="num">Downloads</th></tr></thead><tbody>'
+            + "".join(trs) + "</tbody></table>" + more)
+
+
+def _country_table(stats: dict) -> str:
+    countries = stats.get("countries") or {}
+    if not countries:
+        return '<p class="sub">No country data yet.</p>'
+    rows = sorted(countries.items(), key=lambda kv: (-int(kv[1] or 0), str(kv[0])))
+    trs = []
+    for cc, count in rows:
+        label = "unknown" if (not cc or cc == "unknown") else cc
+        trs.append(f'<tr><td>{_esc(label)}</td><td class="num">{_esc(count)}</td></tr>')
+    return ('<table><thead><tr><th>Country</th><th class="num">Requests (downloads + visits)</th>'
+            '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>")
+
+
+def _daily_sparkline(daily: list) -> str:
+    """A SERVER-RENDERED inline SVG sparkline of the daily downloads (accent) and visits (info) series.
+    NO JS — pure SVG, so it is inert under the strictPages CSP. Empty/one-point series degrade to a
+    note / a single marker. Every interpolated value is numeric or _esc'd."""
+    pts = [d for d in (daily or []) if isinstance(d, dict) and isinstance(d.get("date"), str)]
+    if not pts:
+        return '<p class="sub">No daily series yet.</p>'
+    pts = sorted(pts, key=lambda d: d["date"])
+    downloads = [max(int(d.get("downloads") or 0), 0) for d in pts]
+    visits = [max(int(d.get("visits") or 0), 0) for d in pts]
+    peak = max(downloads + visits + [1])
+    w, h, pad = 720, 120, 10
+    plot_h = h - 2 * pad
+    n = len(pts)
+
+    def _coords(series):
+        out = []
+        for i, v in enumerate(series):
+            x = pad + (0 if n == 1 else (w - 2 * pad) * i / (n - 1))
+            y = pad + plot_h - (v / peak) * plot_h
+            out.append(f"{x:.1f},{y:.1f}")
+        return " ".join(out)
+
+    dl_accent = _PALETTE["accent"]
+    vis_info = _PALETTE["info"]
+    grid = "#2E4254"
+    baseline_y = pad + plot_h
+    if n == 1:
+        # A single day: draw two markers rather than a degenerate line.
+        dx = pad
+        marks = (f'<circle cx="{dx}" cy="{pad + plot_h - (downloads[0] / peak) * plot_h:.1f}" r="3" '
+                 f'fill="{dl_accent}"/>'
+                 f'<circle cx="{dx}" cy="{pad + plot_h - (visits[0] / peak) * plot_h:.1f}" r="3" '
+                 f'fill="{vis_info}"/>')
+        series_svg = marks
+    else:
+        series_svg = (
+            f'<polyline fill="none" stroke="{dl_accent}" stroke-width="2" points="{_coords(downloads)}"/>'
+            f'<polyline fill="none" stroke="{vis_info}" stroke-width="2" stroke-dasharray="4 3" '
+            f'points="{_coords(visits)}"/>')
+    first_date, last_date = _esc(pts[0]["date"]), _esc(pts[-1]["date"])
+    svg = (
+        f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none" role="img" '
+        f'aria-label="Daily downloads and visits" style="width:100%;height:auto;max-width:100%">'
+        f'<line x1="{pad}" y1="{baseline_y}" x2="{w - pad}" y2="{baseline_y}" stroke="{grid}" '
+        f'stroke-width="1"/>'
+        f'{series_svg}'
+        f'<text x="{pad}" y="{h - 1}" fill="{_PALETTE["muted"]}" font-size="11">{first_date}</text>'
+        f'<text x="{w - pad}" y="{h - 1}" fill="{_PALETTE["muted"]}" font-size="11" '
+        f'text-anchor="end">{last_date}</text>'
+        f'<text x="{pad}" y="{pad + 8}" fill="{_PALETTE["muted"]}" font-size="11">peak {peak}</text>'
+        "</svg>")
+    legend = (f'<p class="opsnote"><span style="color:{dl_accent}">&#9644;</span> downloads &nbsp; '
+              f'<span style="color:{vis_info}">&#9644;</span> visits &nbsp;·&nbsp; {n} day(s)</p>')
+    return f'<div style="overflow-x:auto">{svg}</div>{legend}'
+
+
+def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str:
+    """The C45 usage-analytics screen (record D4/D5): summary cards, a top-datasets table, a country
+    table, and a server-rendered daily sparkline over the aggregator's stats.json. `stats` is the parsed
+    stats.json (or None); `stats_stale` is True when it is missing OR older than ~2 timer periods (the
+    serve_state band). Read-only, ZERO JS. A None stats renders the honest EMPTY state; a present-but-
+    stale one renders the data under a prominent STALE banner (never last-known-good silently as live)."""
+    generated_at = stats.get("generated_at") if isinstance(stats, dict) else None
+    intro = ('<h1>Usage analytics</h1>'
+             '<p class="sub">Downloads and portal visits from the server access log, aggregated daily '
+             '(masked-at-edge IPs, aggregates only — no addresses or user-agents are stored). '
+             'Per-station and per-survey <em>views</em> are not server-countable — the portal renders '
+             'them client-side with no per-navigation request (record D3), so this screen reports '
+             'downloads and whole-portal visits, honestly, not page views.</p>')
+    if not isinstance(stats, dict):
+        body = (intro
+                + '<div class="opsband" style="background:' + _PALETTE["panel"] + '">'
+                + '<p style="margin:0"><b>No usage analytics yet.</b> The aggregator has not written a '
+                + 'stats.json. Install the <code>ausmt-stats</code> timer and place the db-ip CSV '
+                + '(deploy/README.md &rarr; "Usage analytics"); the first daily fold populates this '
+                + 'screen.</p></div>')
+        return _shell("AusMT usage analytics", body, nav=nav)
+
+    if stats_stale:
+        chip = (f'<div class="opsband" style="background:{_PALETTE["warn"]};color:{_PALETTE["bg"]};'
+                f'font-weight:600">Usage analytics are STALE — stats.json is missing recent updates or '
+                f'is older than ~2 aggregation periods (last generated: '
+                f'{_esc(generated_at) if generated_at else "never"}). The ausmt-stats timer may not be '
+                f'running. The figures below are as of that time, not live.</div>')
+    else:
+        chip = (f'<p class="sub" style="margin-top:-.5rem">Updated '
+                f'<span class="dt" title="{_esc(generated_at)}">{_esc(short_utc(generated_at or ""))}</span>'
+                f' · aggregated daily.</p>')
+    body = (
+        intro
+        + chip
+        + _analytics_cards(stats)
+        + _format_breakdown(stats)
+        + '<h2>Daily downloads &amp; visits</h2>'
+        + _daily_sparkline(stats.get("daily") or [])
+        + '<h2>Top datasets</h2>'
+        + _top_datasets_table(stats)
+        + '<h2>By country</h2>'
+        + _country_table(stats)
+    )
+    return _shell("AusMT usage analytics", body, nav=nav)
 
 
 # ---- C43 S2b-ii: rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------

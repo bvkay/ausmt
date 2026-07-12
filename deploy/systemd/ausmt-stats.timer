@@ -1,0 +1,28 @@
+# AusMT usage-analytics timer. Fires ausmt-stats.service once a day (off-peak). Install:
+#   sudo cp deploy/systemd/ausmt-stats.{service,timer} /etc/systemd/system/
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ausmt-stats.timer
+#   systemctl list-timers ausmt-stats.timer          # confirm the next run
+#   sudo systemctl start ausmt-stats.service         # fold once NOW to test (writes gateway/state/stats.json)
+# See deploy/README.md "Usage analytics" for placing/refreshing the db-ip CSV and reading the Analytics
+# screen.
+
+[Unit]
+Description=AusMT usage-analytics aggregation once a day at 03:35 UTC (+ jitter)
+
+[Timer]
+# Once a day at a fixed off-peak time. UTC; the box runs UTC. 03:35 sits AFTER the nightly backup
+# (03:20) and clear of the reconcile quarter-hours (:00/:15/:30/:45), so the fold does not start in
+# lockstep with a rebuild or a snapshot. Any time works — the aggregator only folds COMPLETE days
+# (strictly before today), so the exact minute is not load-bearing.
+OnCalendar=*-*-* 03:35:00
+# Spread the fire up to 30 min so a fleet of boxes (or the co-scheduled backup/reconcile timers) do not
+# all run on the exact same second.
+RandomizedDelaySec=1800
+# Catch up one missed run after downtime (a box off overnight still folds on the next boot) rather than
+# skipping a whole day — and the fold is idempotent, so a catch-up run cannot double-count.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

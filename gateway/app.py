@@ -576,6 +576,24 @@ class Gateway:
             pending_intents=pending_intents, paused=paused, rollback_pin=rollback_pin,
             audit_tail=audit_tail))
 
+    def handle_analytics(self, request: Request) -> Response:
+        """GET /gateway/curator/analytics — the C45 usage-analytics screen (record D4/D5). READ-ONLY:
+        renders the host aggregator's stats.json (downloads/visits/countries + a daily series) read
+        SERVER-side (serve_state.read_stats — the ops-status.json seam; no new mount, no new privilege,
+        C40 intact). Fail-closed like the ops floor: a missing stats.json shows the honest empty state, a
+        stale one (old generated_at, the serve_state staleness band — fail-closed both directions) shows
+        a STALE banner; the page never 500s and never renders a stale file as live. ZERO JS (the daily
+        series is a server-rendered inline SVG), so it is clean under the strictPages CSP. `def`
+        (blocking file read -> Starlette threadpool, matching the serve-screen rationale)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        stats = serve_state.read_stats(self.cfg.state_dir)
+        stats_stale = serve_state.ops_status_stale(stats)
+        nav = self._nav_context(request, active="analytics", crumb="<b>Usage analytics</b>")
+        return self._html(curatorpage.render_analytics_page(
+            stats=stats, stats_stale=stats_stale, nav=nav))
+
     def handle_serve_build_detail(self, request: Request, build_ref: str) -> Response:
         """GET /gateway/curator/serve/build/{build_ref} — read-only build forensics (S2b-i B4). Matches
         build_ref against the ops-status.json inventory SERVER-side (serve_state.read_ops_status +
@@ -2848,6 +2866,13 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/serve/build/{build_ref}")
     def curator_serve_build_detail(request: Request, build_ref: str):
         return gw.handle_serve_build_detail(request, build_ref)
+
+    # ---- C45 usage-analytics screen (record D4/D5). READ-ONLY: renders the host aggregator's
+    # stats.json (downloads/visits/countries + a daily series). `def` (blocking file read -> threadpool,
+    # matching the serve-screen rationale). No POST, no privileged action — a reporting surface.
+    @app.get("/gateway/curator/analytics")
+    def curator_analytics(request: Request):
+        return gw.handle_analytics(request)
 
     # ---- C43 S2b-ii: privileged serve-state actions. Session + CSRF checked in the handlers; each
     # writes an intent the host actions agent executes (the gateway gains no shell). The destructive

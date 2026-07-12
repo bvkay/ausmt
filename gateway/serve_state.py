@@ -35,6 +35,11 @@ STATUS_FILENAME = "reconcile-status.json"
 # (deploy/scripts/alert.sh) into the SAME state dir, read SERVER-side here (the reconcile-status.json
 # seam — no new mount, C40 intact). The gateway never writes it.
 OPS_STATUS_FILENAME = "ops-status.json"
+# C45 usage analytics (record D4/D5). The host aggregator (deploy/scripts/aggregate_stats.py, a daily
+# timer) folds the Caddy access log into this cumulative stats.json in the SAME state dir; the Analytics
+# screen reads it SERVER-side (the ops-status.json seam — no new mount, no new privilege, C40 intact).
+# The gateway NEVER writes it. It carries aggregates only — counts + dailies, never an address or a UA.
+STATS_FILENAME = "stats.json"
 
 # C43 S2b-ii: the privileged INTENT files the gateway WRITES and the host actions agent
 # (deploy/scripts/actions.sh) executes (record D8/D9). Fixed enum — these names MUST match the host
@@ -247,6 +252,20 @@ def read_ops_status(state_dir: Path) -> dict | None:
     read_reconcile_status: a broken ops file must not 500 the serve screen; the caller treats None as
     'no ops status' and renders STALE cards (never last-known-good silently)."""
     path = state_dir / OPS_STATUS_FILENAME
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def read_stats(state_dir: Path) -> dict | None:
+    """Return the parsed stats.json (the C45 usage-analytics aggregates), or None if it is absent (the
+    aggregator timer is not installed / has not run) or unreadable/malformed. Never raises — mirrors
+    read_ops_status: a broken stats file must not 500 the Analytics screen; the caller treats None as
+    'no analytics yet' and renders the empty state (never a partial/last-known-good crash)."""
+    path = state_dir / STATS_FILENAME
     try:
         with open(path, encoding="utf-8") as fh:
             doc = json.load(fh)

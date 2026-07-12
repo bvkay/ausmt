@@ -806,6 +806,87 @@ reconstruct.
 
 ---
 
+### Usage analytics (C45)
+
+AusMT records anonymous, aggregate usage — **downloads by survey / station / format**, **portal
+visits**, and **downloads/visits by country** — for AuScope reporting and custodian conversations
+("your survey was downloaded N times from M countries"). It is deliberately **not** ad-tech: no
+cookies, no cross-site tracking, no per-user identity.
+
+**How it works.** The portal container's Caddy writes a privacy-preserving access log (client IP
+**masked at write time** — IPv4 → /24, IPv6 → /48 — so a full address never touches disk; the log
+block ships in `deploy/docker/caddy/Caddyfile`). A daily host timer runs a stdlib-Python aggregator
+(`deploy/scripts/aggregate_stats.py`) that folds each **complete** day of the log into a cumulative
+`stats.json` in the gateway state dir, then the workbench **Analytics** screen
+(`/gateway/curator/analytics`) renders it. `stats.json` carries **aggregates only** — counts and a
+daily series — **never an address (masked or not) and never a user-agent**.
+
+> **What it cannot report.** Per-station / per-survey *page views* are **not** server-countable: the
+> portal is a hash-routed SPA that loads the corpus once and renders every station/survey view
+> client-side with zero per-navigation request. This screen reports **downloads** (a real server
+> request) and **whole-portal visits** (one `catalogue.json` fetch per SPA boot) — honestly, not page
+> views. Per-dataset views would need a first-party beacon, a separate future decision.
+
+**Raw-log retention.** The access log is Caddy's own rolled file with a **~7-day retention**
+(`roll_keep_for 168h` in the Caddyfile) — the tail exists only for debugging. The aggregator runs
+daily and the raw lines are **not** the database: once a day is folded into `stats.json` the log is no
+longer needed, and the aggregator tolerates an already-rotated / absent log without error.
+
+#### Country resolution — the db-ip CSV (operator chore)
+
+Country is resolved from the masked address with the **db-ip.com "IP to Country Lite"** dataset —
+**CC-BY-4.0, no account, no licence key** — read directly by a stdlib bisect (no `maxminddb`, no
+`geoipupdate`, no MaxMind EULA). **A missing or unreadable CSV is not fatal**: every country simply
+resolves to `unknown` and the aggregator still completes.
+
+```sh
+# One-time: create the dir and drop the monthly CSV in (download from
+#   https://db-ip.com/db/download/ip-to-country-lite  — the CSV edition, CC-BY-4.0).
+# Attribution is REQUIRED by CC-BY: it is carried in docs/ (operations/usage-analytics.md).
+mkdir -p "$AUSMT_DATA_DIR/geoip"
+mv ~/Downloads/dbip-country-lite-*.csv "$AUSMT_DATA_DIR/geoip/dbip-country-lite.csv"
+
+# Monthly refresh: replace the same file. Stale data drifts slowly (countries rarely move), so a
+# late refresh degrades gracefully rather than breaking anything. Override the path in .env with
+# AUSMT_STATS_DBIP_CSV if you keep it elsewhere.
+```
+
+The CSV format is `start_ip,end_ip,country_code` per line (IPv4 and IPv6 ranges in one file) — exactly
+what db-ip's Lite CSV ships. A small **fixture** CSV lives at
+`deploy/tests/fixtures/dbip-country-lite.sample.csv` for the tests; **do not** use it in production.
+
+#### Install the daily timer
+
+```sh
+# 1. Make sure deploy/.env has AUSMT_DATA_DIR (+ AUSMT_CODE_DIR) — the timer reads them via
+#    EnvironmentFile, NOT your shell profile. The gateway state dir must already be group-writable to
+#    the operator (the same ownership prep the reconcile/backup units need — see "Serve reconcile").
+# 2. Copy the units and edit the placeholders (exactly like the alert/backup units):
+sudo cp deploy/systemd/ausmt-stats.{service,timer} /etc/systemd/system/
+# In deploy/systemd/ausmt-stats.service, replace with YOUR absolute paths:
+#   __DEPLOY_DIR__ -> /home/<operator>/ausmt-code/deploy   __ENV_FILE__ -> /home/<operator>/ausmt-code/deploy/.env
+# and set User= to the operator account (the same one that runs docker compose / backup.sh; NOT root).
+sudo systemctl daemon-reload
+sudo systemctl enable --now ausmt-stats.timer
+systemctl list-timers ausmt-stats.timer          # confirm the next run (daily, 03:35 UTC + jitter)
+sudo systemctl start ausmt-stats.service         # fold once NOW to test -> writes gateway/state/stats.json
+```
+
+Then open **Curator → Operations → Analytics**. Before the first fold it shows an honest empty state;
+a `stats.json` older than ~2 aggregation periods (≈ 2 days) shows a **STALE** banner (the timer is not
+running) rather than presenting old figures as live.
+
+#### Troubleshooting
+
+| Symptom | Cause → fix |
+| --- | --- |
+| Analytics screen shows "No usage analytics yet" | The `ausmt-stats` timer has not produced a `stats.json`. Install + start it (above); check `journalctl -u ausmt-stats.service`. |
+| Analytics screen shows a **STALE** banner | The timer stopped, or no complete day has been folded since. Check `systemctl list-timers ausmt-stats.timer` and the service journal. |
+| Every country shows as `unknown` | The db-ip CSV is missing/unreadable at `$AUSMT_DATA_DIR/geoip/dbip-country-lite.csv` (or `AUSMT_STATS_DBIP_CSV`). Place/refresh it (above). Counts are still correct; only the country split degrades. |
+| Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. |
+
+---
+
 ## Expose to your tailnet (optional)
 
 To reach the portal from other devices without a public port, front the loopback bind with
