@@ -289,10 +289,10 @@ async function bootFreshWindow(dataMap) {
   const collRow = kids[collRowIdx];
   ok(/AusLAMP — 2 surveys · 3 stations/.test(collRow.textContent),
     "UX5: collection row label must read '<name> — <n> surveys · <m> stations' (Alpha 2 + Beta 1 = 3), got: " + collRow.textContent);
-  // member rows are PASSIVE (indented name + count, NO checkbox — per-survey toggling stays with the orgs)
-  const memberRows = [...treeEl.querySelectorAll(".collmember")];
-  ok(memberRows.length === 2, "UX5: expected 2 passive member rows, got " + memberRows.length);
-  ok(memberRows.every(r => !r.querySelector("input")), "UX5: member rows must be PASSIVE (no checkbox)");
+  // O1 (owner, 2026-07-12): the collection row carries NO nested member-survey list any more — just the
+  // name + survey count + station count. Members stay reachable via the org/country tree + collection page.
+  ok(treeEl.querySelectorAll(".collmember").length === 0,
+    "O1: collection rows must NOT nest a member-survey list, got " + treeEl.querySelectorAll(".collmember").length);
   // (b) PUSH-SYNC: unchecking the collection box flips EXACTLY the member surveys (Alpha+Beta) and
   // refreshes; non-members (Gamma, Delta) untouched. Re-check restores.
   const collBox = collRow.querySelector("input[data-coll]");
@@ -315,14 +315,15 @@ async function bootFreshWindow(dataMap) {
   const snapshot = () => [...treeEl.querySelectorAll("input")]
     .map(i => (i.getAttribute("value") || i.dataset.coll || i.dataset.org || i.dataset.country) + "=" + i.checked).join(",");
   const before = snapshot(), visBefore = JSON.stringify(A.visIds());
-  ["c:Australia", "o:Australia||OrgX", "k:auslamp"].forEach(k => A.treeSetCollapsed(k, true));
+  // O1 (2026-07-12): collection rows no longer disclose member rows, so there is no k: collapse key to
+  // exercise here — the invariant is carried by the country/org carets (which still hide survey rows).
+  ["c:Australia", "o:Australia||OrgX"].forEach(k => A.treeSetCollapsed(k, true));
   ok(snapshot() === before, "UX5 INVARIANT: collapsing changed a checkbox state.\n  before " + before + "\n  after  " + snapshot());
   ok(JSON.stringify(A.visIds()) === visBefore, "UX5 INVARIANT: collapsing changed the filter result: " + visBefore + " -> " + JSON.stringify(A.visIds()));
   // ...and the collapse REALLY hid rows (the invariant is not vacuously testing a no-op):
   ok(treeEl.querySelectorAll("label.survey.hidden").length > 0, "UX5: collapsing Australia hid no survey rows (visibility not applied)");
-  ok(memberRows.every(r => r.classList.contains("hidden")), "UX5: collapsing the collection hid no member rows");
   ok(A.visIds().includes("A1"), "UX5 INVARIANT: a checked-but-HIDDEN survey dropped off the map (visibility leaked into filtering)");
-  ["c:Australia", "o:Australia||OrgX", "k:auslamp"].forEach(k => A.treeSetCollapsed(k, false));
+  ["c:Australia", "o:Australia||OrgX"].forEach(k => A.treeSetCollapsed(k, false));
   ok(snapshot() === before && JSON.stringify(A.visIds()) === visBefore, "UX5 INVARIANT: expanding changed checkbox state or the filter result");
   ok(treeEl.querySelectorAll("label.survey.hidden").length === 0, "UX5: expanding did not unhide the survey rows");
   betaBox.checked = true; fire(betaBox, "change");
@@ -815,6 +816,6 @@ async function bootFreshWindow(dataMap) {
   ok(lineW.indexOf("https://doi.org/10.99999/alpha-tf-doi") >= 0 && lineW.indexOf("no DOI assigned") < 0,
     "U: the with-DOI CITATIONS.txt line must carry the DOI URL and no note, got: " + lineW);
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + radiusForZoom/weightForZoom pins+monotone + A1 colour-identical-all-modes + tooltip type-label SWAP, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note)");
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
