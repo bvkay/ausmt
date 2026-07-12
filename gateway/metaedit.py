@@ -150,6 +150,16 @@ def make_history_job(slug: str) -> dict:
     return {"kind": "history", "slug": slug}
 
 
+def make_collections_job() -> dict:
+    """A `collections` edit-job (C43 D5-A / Stage 3a): a WHOLE-CORPUS read-only projection. The runner
+    reads EVERY published survey.yaml's `collection` block (the runner is the only place YAML is
+    parsed — C31 §0.1) and returns the rollup the portal shows readers (first-declarer programme
+    fields) PLUS the two honesty seams the build only prints to stderr today: id near-duplicates and
+    per-field divergence. Whole-corpus, so the job carries NO slug — the runner enumerates surveys-live
+    from its own mount. READ-ONLY: same trust class as the history job (no git write, no mutation)."""
+    return {"kind": "collections"}
+
+
 def make_list_stations_job(slug: str) -> dict:
     """A list_stations edit-job: the runner enumerates the survey's EDI files (station list) + version.
     A directory listing, never a content parse — job carries only the slug."""

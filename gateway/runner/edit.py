@@ -150,6 +150,11 @@ def process_edit_job(cfg, running_file: Path) -> None:
 
 
 def _dispatch_edit(cfg, job: dict, scratch_dir: Path) -> dict:
+    # Whole-corpus read-only jobs carry NO slug — dispatch them BEFORE the per-survey slug validation
+    # (which would reject the empty slug). The collections projection enumerates surveys-live from the
+    # runner's own mount, reads each `collection` block, and mutates nothing (history-job trust class).
+    if job.get("kind") == "collections":
+        return run_collections_job(Path(cfg.surveys_root))
     slug = str(job.get("slug") or "")
     if not _SLUG_RE.match(slug):
         raise EditError(f"invalid slug in edit job: {slug!r}")
@@ -606,6 +611,155 @@ def _history_subcommand(argv: list[str]) -> str | None:
             continue
         return tok   # first bare token = the subcommand/verb
     return None
+
+
+# ---- collections (whole-corpus read-only projection) job ----------------------------------------
+# The C43 Stage-3a collections console (record D5-A) reads EVERY published survey.yaml's `collection`
+# block and rolls them up EXACTLY as the engine's build_portal._group_collections does — the SAME
+# grouping the portal shows readers — plus the two honesty seams the build only prints to stderr
+# today: id near-duplicates and per-field divergence. The grouping/first-declarer/near-dup logic is
+# re-implemented LIGHTLY here (the runner must NOT import the heavy build_portal module — it pulls the
+# whole mt_metadata extractor stack); correctness is guaranteed by the parity pins in
+# gateway/tests/test_collections_runner.py, which assert this output equals _group_collections' on a
+# real fixture tree. READ-ONLY: no git verb, no file mutation — the history-job trust class.
+
+# The programme-level fields the rollup carries, in the engine's field order (build_portal.py:396).
+_COLLECTION_ROLLUP_FIELDS = ("title", "type", "start_year", "status", "last_updated", "description")
+# The status vocabulary the engine surfaces (build_portal.py:386). An out-of-vocab rolled-up status is
+# DROPPED (build_portal.py:399-400) — never surfaced as a fake status; it still shows as the member's
+# raw declared value (and as divergence when members disagree).
+_COLLECTION_STATUS_VOCAB = frozenset({"active", "completed", "archived"})
+
+
+def _json_scalar(v):
+    """Coerce a YAML-loaded scalar to a JSON-serialisable value: str/int/float/bool/None pass through;
+    anything else (a ruamel date/timestamp — e.g. an unquoted `last_updated: 2026-06-15`) becomes its
+    str(). The done-file writer (jobs._atomic_write_json) uses a plain json.dump with no default=, so a
+    date object would raise; this keeps the whole result JSON-safe (matching how the engine's
+    collections.json stringifies the same date)."""
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    return str(v)
+
+
+def _published_slugs(surveys_root: Path) -> list[str]:
+    """The published survey slugs: immediate child dirs of surveys-live/surveys/ holding a survey.yaml,
+    SORTED (deterministic + platform-portable — the CI OS-portability concern). Mirrors
+    metaedit.list_published_slugs AND the engine build loop's `sorted(iterdir())` order, skipping
+    `_`-prefixed scratch dirs exactly as the build does (build_portal.py:1941-1942) — so the runner's
+    first-declarer resolves in the SAME order as the portal's rollup."""
+    root = surveys_root / "surveys"
+    if not root.is_dir():
+        return []
+    return sorted(p.name for p in root.iterdir()
+                  if p.is_dir() and not p.name.startswith("_") and (p / "survey.yaml").is_file())
+
+
+def _declared_collection_block(coll) -> dict:
+    """A member's raw declared collection block as JSON-safe scalars (dates -> str). The id + the six
+    programme fields are surfaced; a member may omit any (an absent field reads as None), so the
+    console can compare per-field across members honestly (the Declares column / divergence bands)."""
+    out = {"id": _json_scalar(coll.get("id")) if hasattr(coll, "get") else None}
+    for k in _COLLECTION_ROLLUP_FIELDS:
+        out[k] = _json_scalar(coll.get(k)) if hasattr(coll, "get") else None
+    return out
+
+
+def _collection_divergence(members: list) -> dict:
+    """Per-field divergence within one collection id: for each programme field, bucket the members that
+    DECLARE a non-empty value by that value; a field with >1 distinct declared value is a divergence
+    (members silently disagree — the rollup takes whichever builds first). Returns
+    {field: [{value, members:[slug,...]}, ...]} listing every distinct declared value in first-seen
+    order; EMPTY {} when every field agrees. A member that omits a field is not an outlier (it inherits
+    the rollup value), so only DECLARED values count."""
+    out: dict = {}
+    for fld in _COLLECTION_ROLLUP_FIELDS:
+        buckets: dict = {}
+        order: list = []
+        for m in members:
+            v = m["declared"].get(fld)
+            if v in (None, ""):
+                continue
+            key = json.dumps(v, sort_keys=True, default=str)   # a stable hashable key for any scalar
+            if key not in buckets:
+                buckets[key] = {"value": v, "members": []}
+                order.append(key)
+            buckets[key]["members"].append(m["slug"])
+        if len(buckets) > 1:
+            out[fld] = [buckets[k] for k in order]
+    return out
+
+
+def _near_duplicate_ids(ids: list) -> list:
+    """Collection ids differing ONLY by case/surrounding whitespace — a typo that splits one programme
+    into separate collections (grouping is an EXACT id match). A light re-implementation of the engine's
+    build_portal._near_duplicate_collection_ids (pinned to parity): returns each colliding group as a
+    sorted list of >1 ids. Today this dies on build stderr; Stage 3a surfaces it on the index band."""
+    seen: dict = {}
+    for cid in ids:
+        seen.setdefault(str(cid).strip().lower(), []).append(cid)
+    return [sorted(g) for g in seen.values() if len(g) > 1]
+
+
+def run_collections_job(surveys_root: Path) -> dict:
+    """Handle a `collections` edit-job (record D5-A / Stage 3a): the whole-corpus read-only projection.
+    Enumerate published surveys, read each `collection` block via the runner's YAML loader, group by
+    exact `collection.id` with the engine's FIRST-DECLARER rollup, count stations per member from the
+    EDI files (a directory listing — the list_stations discipline), and surface id near-duplicates +
+    per-field divergence. Returns {ok, collections:{id:{...}}, near_duplicates:[[id,...],...]}. An empty
+    corpus (or a surveys tree with no collection blocks) returns {collections:{}, near_duplicates:[]}
+    — the clean 'no collections yet' state, never an error. READ-ONLY: reads only; mutates nothing."""
+    rollup: dict = {}          # id -> first-declarer rollup field dict
+    members_by_id: dict = {}   # id -> [member dict] (in slug order)
+    order: list = []           # ids in first-seen (sorted-slug) order — matches the engine's order
+    for slug in _published_slugs(surveys_root):
+        pkg = surveys_root / "surveys" / slug
+        try:
+            data = _load_bytes((pkg / "survey.yaml").read_bytes())
+        except OSError:
+            continue
+        coll = data.get("collection") if hasattr(data, "get") else None
+        if not (hasattr(coll, "get") and coll.get("id") not in (None, "")):
+            continue
+        cid = str(coll.get("id"))
+        name = data.get("name") if hasattr(data, "get") else None
+        label = str(name) if name not in (None, "") else slug
+        declared = _declared_collection_block(coll)
+        n_stations = len(list_edi_files(pkg))
+        if cid not in rollup:
+            order.append(cid)
+            members_by_id[cid] = []
+            # setdefault-equivalent of build_portal.py:391-394: title defaults to id, type from the
+            # first member; the other programme fields start empty and fill first-declarer below.
+            rollup[cid] = {"title": declared["title"] or cid, "type": declared["type"],
+                           "start_year": None, "status": None, "last_updated": None,
+                           "description": None}
+        e = rollup[cid]
+        # first-declarer fill (build_portal.py:396-398): an empty rollup field takes this member's
+        # declared value; a later member never overrides a field already set (silent divergence).
+        for fld in _COLLECTION_ROLLUP_FIELDS:
+            if e.get(fld) in (None, "") and declared.get(fld) not in (None, ""):
+                e[fld] = declared.get(fld)
+        members_by_id[cid].append({"slug": slug, "label": label, "n_stations": n_stations,
+                                   "declared": declared})
+    collections: dict = {}
+    for cid in order:
+        e = rollup[cid]
+        # Drop an out-of-vocab rolled-up status (build_portal.py:399-400) — never surface a fake status.
+        if e["status"] and e["status"] not in _COLLECTION_STATUS_VOCAB:
+            e["status"] = None
+        members = members_by_id[cid]
+        collections[cid] = {
+            "id": cid,
+            "title": e["title"], "type": e["type"], "status": e["status"],
+            "start_year": e["start_year"], "last_updated": e["last_updated"],
+            "description": e["description"],
+            "n_surveys": len(members),
+            "n_stations": sum(m["n_stations"] for m in members),
+            "members": members,
+            "divergence": _collection_divergence(members),
+        }
+    return {"ok": True, "collections": collections, "near_duplicates": _near_duplicate_ids(order)}
 
 
 def run_merge_job(package_root: Path, *, patch: dict, bump: str, note: str, today: str,
