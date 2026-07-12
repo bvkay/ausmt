@@ -32,6 +32,7 @@ nav:
       - Review: operations/review.md
       - Publication: operations/publication.md
       - Releases: operations/releases.md
+      - Usage Analytics: operations/usage-analytics.md
   - Interoperability:
       - Overview: interoperability/overview.md
       - Metadata Exchange: interoperability/metadata-exchange.md
