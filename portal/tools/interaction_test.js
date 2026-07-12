@@ -695,7 +695,7 @@ async function bootFreshWindow(dataMap) {
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
   const drw = doc.getElementById("drawer");
   ok(drw.innerHTML.indexOf(">Dimensionality<") < 0, "station drawer still shows a 'Dimensionality' screening cell (item 7a)");
-  ok(drw.textContent.indexOf("Geoelectric strike") >= 0, "station drawer lost the strike line (must be KEPT)");
+  ok(drw.textContent.indexOf("phase-tensor strike") >= 0, "station drawer lost the strike line (must be KEPT)");
   ok(drw.innerHTML.indexOf("mean |β|") >= 0 || drw.innerHTML.indexOf("|β|") >= 0,
     "station drawer lost the mean |β| (skew) figure (must be KEPT)");
   drw.classList.remove("open");

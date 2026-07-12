@@ -97,7 +97,7 @@
   <div class="hzone hright">
     <!-- Live counts (shown/selected/total) are app-state and meaningless on a static page, so this zone
          carries only the mtcat.json link; the zone container is kept for symmetric alignment. -->
-    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">mtcat.json ↗</a>
+    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
   </div>
 </header>
 <main>
@@ -125,7 +125,7 @@
         <p>Package and submit your EDIs with guided validation.</p>
       </div>
       <div class="card">
-        <h3>Integrate</h3>
+        <h3>Programmatic access</h3>
         <p>Machine-readable catalogue — MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
       </div>
     </div>
@@ -176,12 +176,12 @@
     <h2>Scope</h2>
     <div class="two">
       <div class="card in"><h3>Included</h3><ul>
-        <li>Transfer functions</li><li>EDI products</li><li>MTH5 products</li>
+        <li>Transfer functions</li><li>EDI products</li><li>MTH5 products, where supplied or generated through a documented pipeline</li>
         <li>Survey metadata</li><li>Station metadata</li><li>Publications &amp; DOIs</li>
       </ul></div>
       <div class="card out"><h3>Not included</h3><ul>
         <li>Raw time-series</li><li>Geological interpretation</li>
-        <li>Commercially restricted datasets</li>
+        <li>Redistribution of restricted data (still indexable metadata-only)</li>
       </ul></div>
     </div>
     <p>Where raw time-series exist, AusMT <b>links</b> to the archive that holds them (for example the
@@ -204,7 +204,7 @@
       <li><b>AusMT does not claim ownership</b> of any dataset it indexes or redistributes.</li>
       <li><b>Redistribution depends on the licence.</b> Openly licensed transfer functions may be served
       directly; otherwise AusMT lists the record and links out to the custodian's archive.</li>
-      <li><b>Some products are linked, not hosted</b>, discovery is universal even where hosting isn't.</li>
+      <li><b>Some products are linked, not hosted</b>. AusMT aims to make Australian MT holdings discoverable even where licensing or custodial arrangements prevent direct redistribution.</li>
     </ul>
   </section>
 
