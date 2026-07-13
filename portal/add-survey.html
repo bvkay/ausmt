@@ -116,8 +116,13 @@
   /* UX6 Wave B (B3): same footer pattern as index/about — one visible line + an "About this build"
      popover. Like about, this static page carries the version chip but no #buildId (main.js/build.json
      are not loaded here). */
-  footer{padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;text-align:center}
+  /* UX7a (A5): flex footer — MTCAT machine-readable link pinned bottom-left (first item), the copyright +
+     About-this-build line centred in the remaining space (matches index / about). */
+  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5}
   footer a{color:var(--copper);text-decoration:none}
+  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
+  .apilink:hover{color:var(--copper)}
   footer details.aboutbuild{display:inline-block;position:relative}
   footer details.aboutbuild>summary{display:inline;cursor:pointer;color:var(--copper);list-style:none}
   footer details.aboutbuild>summary::-webkit-details-marker{display:none}
@@ -399,14 +404,18 @@
   </fieldset>
 </main>
 <footer>
-  © 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
-  <details class="aboutbuild">
-    <summary>About this build</summary>
-    <div class="aboutbuild-body">
-      Portal software is licensed under Apache-2.0; survey data remains licensed by its custodians.
-      <span class="ver" data-ver-chip title="build &middot; MTCAT schema"></span>
-    </div>
-  </details>
+  <!-- UX7a (A5): the machine-readable MTCAT link is the first footer item, pinned bottom-left, matching
+       index and about (this page never carried it in its simpler header). -->
+  <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
+  <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
+    <details class="aboutbuild">
+      <summary>About this build</summary>
+      <div class="aboutbuild-body">
+        Portal software is licensed under Apache-2.0; survey data remains licensed by its custodians.
+        <span class="ver" data-ver-chip title="build &middot; MTCAT schema"></span>
+      </div>
+    </details>
+  </span>
 </footer>
 
 <div class="modal" id="modal"><div class="box">
