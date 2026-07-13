@@ -25,23 +25,26 @@
 // on ALL three ways of leaving a step (Next, Back, and stopTour for close/Esc/Done), so demo state
 // (the typed query, the tree scroll) never leaks past the step — the same restore discipline as
 // _tourOpened, extended per-step.
+// UX7b U11 (owner, 2026-07-13): shortened step copy — the visible text is the architect-authored deck,
+// VERBATIM. Selectors + enter/exit hooks are UNCHANGED (the Find demo still types "AusLAMP", the selbox
+// step still switches rail mode, etc. — only the visible copy changed).
 const TOUR_STEPS=[
   {sel:"#map",text:"Every dot is an MT station. Click one to see its transfer function.",
    enter:_tourEnterMapView},
-  {sel:"aside.filters",text:"Filter by survey or data type — or draw an area directly on the map. Year, period and quality screening live under “Screening (advanced)”."},
-  {sel:"#find",text:"Find anything by name — the map filters live as you type (here: AusLAMP), and the dropdown jumps straight to a matching survey, collection or station.",
+  {sel:"aside.filters",text:"Filter by data type, or draw an area on the map. More filters live under Screening (advanced)."},
+  {sel:"#find",text:"Search stations, surveys or collections. Results update as you type.",
    enter:_tourEnterFindDemo,exit:_tourExitFindDemo},
-  {sel:"#tree",text:"Or browse the hierarchy — country → organisation → survey. Tick or untick any level to show exactly the surveys you want.",
+  {sel:"#tree",text:"Browse by country, organisation or survey. Tick a level to show or hide it.",
    enter:_tourEnterTreeDemo,exit:_tourExitTreeDemo},
-  {sel:"#drawer",text:"The station drawer shows apparent resistivity, phase, tipper and phase-tensor screening — with full provenance.",
+  {sel:"#drawer",text:"The station drawer: response plots, screening checks and provenance, in tabs.",
    enter:_tourEnterStation},
-  {sel:".selbox",text:"Download single stations, whole surveys, or your current selection — licences and citations travel with the files.",
+  {sel:".selbox",text:"Download stations, surveys or selections. Licences and citations come with the files.",
    enter:_tourEnterSelbox,exit:_tourExitSelbox},
-  {sel:"#navSurveys",text:"You're on the Map view. The Surveys button lists every survey as a detailed card — let's head over."},
-  {sel:"#cardGrid .scard",text:"Each survey card is the custodian's record — stations, licence, citation and downloads — and links to the full survey story.",
+  {sel:"#navSurveys",text:"Surveys lists every survey as a card. Let's look."},
+  {sel:"#cardGrid .scard",text:"Each card is a survey at a glance. Open it for the full record.",
    enter:_tourEnterSurveysView},
-  {sel:"#navMap",text:"The Map button brings you back to the stations whenever you're ready."},
-  {sel:"#map",text:"That's the loop — find, screen, take, cite. Contribute your own survey any time from Add Survey.",
+  {sel:"#navMap",text:"Map brings you back to the stations."},
+  {sel:"#map",text:"That's it: find, screen, download, cite. Contribute your own survey from Add Survey.",
    enter:_tourEnterMap}
 ];
 
