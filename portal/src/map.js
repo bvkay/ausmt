@@ -9,21 +9,15 @@
 const map=L.map("map",{preferCanvas:true}).fitBounds([[-44.5,111.5],[-10,155]]);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
 // Custom cluster icons (self-contained styling — no dependency on MarkerCluster.Default.css, whose
-// absence rendered clusters as bare squares). Sized/coloured by child count; national-scale spiderfy
-// is disabled in favour of zoom-to-bounds so clusters never explode into huge radial spiders.
-// UX feedback round 2: clustering loosened — radius 38->24 so markers only aggregate when they'd
-// actually overlap (~two dot-diameters), which de-clusters ordinary survey spacing several zoom levels
-// sooner. The force-off floor was 12 (UX-2 reasoning: keep dense deposit grids like Vulcan ~0.9 km /
-// Kalkaroo ~200 m as count bubbles until legible); C32 SUPERSEDES that with the owner's continental-only
-// rule below (DISABLE_CLUSTERING_AT_ZOOM=6), so from state/regional zoom down every site is individual
-// even inside a dense grid — the maxClusterRadius:24 still prevents literally-overlapping dots from
-// stacking. spiderfyOnMaxZoom stays off so near-coincident re-runs (e.g. WG-8/WG-8r) zoom-to-bounds
-// rather than exploding into radial spiders.
-function clusterIcon(c){
+// absence rendered clusters as bare squares). Sized by child count; national-scale spiderfy is disabled in
+// favour of zoom-to-bounds so clusters never explode into huge radial spiders. UX8 (X3): the bubble now
+// carries the survey name in its native title tooltip (escaped — Leaflet sets the html via innerHTML).
+function clusterIcon(c,survey){
   const n=c.getChildCount();
   const cls=n<10?"cluster-small":n<100?"cluster-medium":"cluster-large";
   const size=n<10?34:n<100?42:52;
-  return L.divIcon({html:`<div><span>${n}</span></div>`,className:"ausmt-cluster "+cls,iconSize:L.point(size,size)});
+  const tip=survey?survey+" · "+n+" stations":n+" stations";
+  return L.divIcon({html:`<div title="${escAttr(tip)}"><span>${n}</span></div>`,className:"ausmt-cluster "+cls,iconSize:L.point(size,size)});
 }
 // UX4 (D3): clustering TIERS — owner extended C32's continental-only rule to ALSO group at STATE zoom.
 // Sites aggregate into count bubbles at continental (z<=4) and state (z5-6) zoom; from REGIONAL zoom
@@ -32,11 +26,48 @@ function clusterIcon(c){
 // = 7) rather than a drive-by literal. (Supersedes C32's continental-ONLY 6: the owner now wants state
 // zoom grouped too, so the grid/count-bubble view persists one zoom level deeper than before.)
 const DISABLE_CLUSTERING_AT_ZOOM=7;   // grouped at continental (z<=4) AND state (z5-6); individual from regional zoom (z>=7) down
-const cluster=L.markerClusterGroup({
-  maxClusterRadius:24, disableClusteringAtZoom:DISABLE_CLUSTERING_AT_ZOOM, spiderfyOnMaxZoom:false,
-  zoomToBoundsOnClick:true, showCoverageOnHover:false, chunkedLoading:true,
-  iconCreateFunction:clusterIcon});
-map.addLayer(cluster);
+// UX8 (X3, owner ruling — supersedes pure-spatial clustering): stations cluster BY SURVEY. Each survey
+// gets its OWN L.markerClusterGroup, so a cluster bubble is ALWAYS within one survey — two nearby surveys
+// hold SEPARATE bubbles (never one merged spatial fragment) and a compact survey collapses to ONE bubble
+// with its count. Only the grouping KEY changed (spatial -> survey); the =7 disable-clustering pin
+// (individual sites from regional zoom down), the count-driven icon and the marker radii/tooltips/colour
+// modes are unchanged. maxClusterRadius is generous (80): per-survey groups can never cross-merge, so a
+// large radius simply collapses one survey to a single bubble at clustered zooms rather than fragmenting it.
+function makeSurveyCluster(survey){
+  return L.markerClusterGroup({
+    maxClusterRadius:80, disableClusteringAtZoom:DISABLE_CLUSTERING_AT_ZOOM, spiderfyOnMaxZoom:false,
+    zoomToBoundsOnClick:true, showCoverageOnHover:false, chunkedLoading:true,
+    iconCreateFunction:c=>clusterIcon(c,survey)});
+}
+// PURE partition: bucket a marker list by the _survey stamped on each marker at build time (buildMarkers).
+// Side-effect-free so the survey-grouping is unit-testable without Leaflet (jsdom can't load it); the
+// facade below is the only Leaflet-touching caller. Two markers of DIFFERENT surveys => two buckets =>
+// two separate cluster groups => two separate bubbles (the owner's ruling, falsifiably).
+function groupMarkersBySurvey(markers){
+  const by={};
+  // guard the key TYPE (must be a real string) — under the headless Leaflet stubs a marker is a Proxy
+  // whose ._survey is another Proxy, and using that as an object key throws; there, everything falls into
+  // the "" bucket (harmless — jsdom renders no bubbles anyway; the grouping is proven on plain-object stubs).
+  (markers||[]).forEach(mk=>{const sv=(mk&&typeof mk._survey==="string")?mk._survey:"";(by[sv]=by[sv]||[]).push(mk);});
+  return by;
+}
+// Facade exposing the SAME clearLayers()/addLayers() interface refresh() (filters.js) already calls, so the
+// per-survey split needs no change there: addLayers() routes each marker into its survey's cluster group
+// (created and added to the map on first use), clearLayers() empties them all. It is intentionally NOT a
+// Leaflet layer, so — unlike the old single group — it is not itself added to the map; each per-survey
+// sub-group is.
+const _survClusters={};   // survey name -> L.markerClusterGroup (lazily added to the map)
+const cluster={
+  clearLayers(){for(const sv in _survClusters)_survClusters[sv].clearLayers();},
+  addLayers(markers){
+    const by=groupMarkersBySurvey(markers);
+    Object.keys(by).forEach(sv=>{
+      let g=_survClusters[sv];
+      if(!g){g=_survClusters[sv]=makeSurveyCluster(sv);map.addLayer(g);}
+      g.addLayers(by[sv]);
+    });
+  }
+};
 // UX4 (D2): the never-cluster privilege moved from the LPMT *type* to the AUSLAMP *programme*. UX3 gave
 // every type==="LPMT" station an unclustered plain layer so the AusLAMP national grid reads as a grid;
 // but that also un-clustered legacy long-period surveys (e.g. olympic-dam-2004), whose 58 dots then
@@ -126,6 +157,7 @@ function restyleForZoom(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z
 function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#13202B",fillColor:markerColor(s),fillOpacity:.92});
+  s.marker._survey=s.survey;   // UX8 (X3): the per-survey cluster facade buckets markers by this stamp
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
   // fit to the actual POSITIONED-station extent once data is in — supersedes the AU-bounds default set at

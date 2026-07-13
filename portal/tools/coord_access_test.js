@@ -104,10 +104,13 @@ code += "\nwindow.__api={" +
   "idxOf:(id)=>ST.findIndex(s=>s.id===id)," +
   "buildMarkersRun:()=>{buildMarkers();return {marker:ST.map(s=>({id:s.id,has:s.marker!==undefined}))};}," +
   // driveRefresh runs the REAL refresh() (which routes partitionMarkers(visible.filter(hasPosition)) into the
-  // two Leaflet layers) and reports what actually reached those layers — c+l markers, any undefined (an
-  // addLayers(undefined) crash), and the `visible` ids (counts must still include the withheld station).
-  "driveRefresh:()=>{buildMarkers();refresh();const c=(cluster._layers||[]),l=(lpmtLayer._layers||[]);" +
-  "return {routedCount:c.length+l.length,undef:c.concat(l).filter(m=>m===undefined).length,vis:visible.map(s=>s.id)};}," +
+  // map layers) and reports what actually reached them — routed markers, any undefined (an addLayers(undefined)
+  // crash), and the `visible` ids (counts must still include the withheld station). UX8 (X3): the non-AusLAMP
+  // markers now route through the per-survey cluster facade (_survClusters[sv]), so aggregate across those
+  // sub-groups plus the unclustered lpmtLayer, rather than reading the old single group's _layers.
+  "driveRefresh:()=>{buildMarkers();refresh();" +
+  "const all=[].concat(...Object.keys(_survClusters).map(sv=>_survClusters[sv]._layers||[]),(lpmtLayer._layers||[]));" +
+  "return {routedCount:all.length,undef:all.filter(m=>m===undefined).length,vis:visible.map(s=>s.id)};}," +
   "footprints:()=>{buildFootprints();return true;}," +
   "recolorRun:()=>{recolor();return true;}," +
   "openDrawer:(i)=>{try{openStation(i);return {ok:true,html:document.getElementById('drawer').innerHTML};}catch(e){return {ok:false,err:String(e&&e.stack||e)};}}," +
