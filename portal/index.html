@@ -419,6 +419,53 @@
      class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
      narrow-built legend can never get stuck collapsed with no visible way to expand it. */
   @media(max-width:760px){.maplegend-toggle{display:block}.maplegend:not(.expanded) .maplegend-body{display:none}}
+
+  /* ===== UX6 Wave E — discovery controls, compact list, collections landing, feature card ========= */
+  /* E3: discovery controls bar above the survey card grid. */
+  .discovery{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:16px;max-width:1500px}
+  .disc-sort{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .disc-sort select{width:auto;min-width:150px}
+  .disc-count{font-family:var(--mono);font-size:13px;color:var(--text);white-space:nowrap}
+  .disc-facets{display:flex;flex-wrap:wrap;gap:6px}
+  .disc-spacer{flex:1 1 auto;min-width:0}
+  .facet{font-size:12px;padding:5px 10px;border-radius:14px;border:1px solid var(--line);background:var(--panel-2);
+    color:var(--muted);cursor:pointer}
+  .facet:hover{border-color:var(--copper);color:var(--text)}
+  .facet.on{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
+  .seg.disc-layout{flex:none;width:auto}
+  .seg.disc-layout button{padding:6px 12px;font-size:12px}
+  .disc-clear{font-size:12.5px;padding:6px 12px}
+  /* E3: compact/list layout — single-line rows replacing the card grid. */
+  .cardlist{display:flex;flex-direction:column;gap:1px;max-width:1100px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .srow{display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--panel);font-size:13px}
+  .srow:nth-child(even){background:var(--panel-2)}
+  .srow:hover{background:var(--panel-2)}
+  .srow-title{flex:2 1 220px;text-align:left;background:none;border:0;padding:0;color:var(--copper);font-size:13.5px;
+    font-weight:600;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srow-title:hover{text-decoration:underline;border:0}
+  .srow-org{flex:1 1 140px;color:var(--muted);font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srow-year{flex:0 0 92px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .srow-stn{flex:0 0 92px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .srow-lic{flex:0 0 auto}
+  @media(max-width:620px){.srow-org,.srow-year{display:none}}
+  /* E5: collections landing — intro paragraph + feature-card (single wide column for ≤2 collections). */
+  .coll-intro{font-size:13.5px;line-height:1.6;color:var(--text);max-width:920px;margin-bottom:16px}
+  .coll-intro code{font-family:var(--mono);font-size:12px;color:var(--copper)}
+  .collfeature-grid{display:flex;flex-direction:column;gap:16px;max-width:1000px}
+  .scard.collfeature{padding:20px 22px}
+  .scard.collfeature h3{font-size:22px}
+  .collfeat-desc{font-style:normal}
+  .cf-expand{background:none;border:0;padding:0;color:var(--copper);font-size:12px;cursor:pointer}
+  .cf-expand:hover{text-decoration:underline;border:0}
+  .coll-orgs{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  /* E6: collection footprint scatter — svg backdrop + per-survey legend. */
+  .collscatter{margin:10px 0 4px}
+  .collscatter-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px}
+  .csl-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .csl-dot{width:9px;height:9px;border-radius:50%;flex:none}
+  /* E6: collection-page top nav row (back + view-on-map). */
+  .collpagenav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .collmapbtn{color:var(--copper)}
 </style>
 </head>
 <body>
@@ -546,8 +593,30 @@
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
   <div id="map"></div>
-  <div id="surveysview"><div id="recentStrip" class="hidden"></div><div class="cardgrid" id="cardGrid"></div></div>
-  <div id="collectionsview"><div class="cardgrid" id="collectionsGrid"></div></div>
+  <div id="surveysview"><div id="recentStrip" class="hidden"></div>
+    <!-- UX6 Wave E (E3): discovery controls — sort, live result count, facet chips (licence / DOI /
+         tipper), a compact/list toggle and clear-filters. Wired in drawer.js; state lives there. There is
+         deliberately NO sort or facet for the automated completeness/smoothness check (never a ranking). -->
+    <div class="discovery" id="discoveryControls">
+      <label class="disc-sort">Sort
+        <select id="sortSel">
+          <option value="name">Name</option>
+          <option value="year">Year</option>
+          <option value="stations">Station count</option>
+          <option value="recent">Recently added</option>
+        </select>
+      </label>
+      <span class="disc-count" id="surveyCount" role="status" aria-live="polite"></span>
+      <div class="disc-facets" id="facetChips" aria-label="Filter surveys"></div>
+      <span class="disc-spacer"></span>
+      <div class="seg disc-layout" id="layoutSeg" role="group" aria-label="Card layout">
+        <button type="button" data-layout="cards" class="on">Cards</button>
+        <button type="button" data-layout="compact">Compact</button>
+      </div>
+      <button type="button" id="clearFilters" class="disc-clear">Clear filters</button>
+    </div>
+    <div class="cardgrid" id="cardGrid"></div></div>
+  <div id="collectionsview"><div id="collectionsIntro"></div><div class="cardgrid" id="collectionsGrid"></div></div>
   <div id="collectionview"></div>
   <div id="drawer" aria-label="Station details"></div>
   <div id="introOverlay" class="introoverlay hidden">
@@ -601,6 +670,7 @@
 <script src="vendor/leaflet.markercluster.min.js"></script>
 <script src="vendor/leaflet.draw.js"></script>
 <script src="vendor/jszip.min.js"></script>
+<script src="vendor/au-outline.js"></script><!-- UX6 Wave E (E6): simplified AU coastline+states for the collection footprint (public domain; see file header) -->
 <script src="config.js"></script>
 <script src="version.js"></script>
 <script src="src/contract.js"></script>
