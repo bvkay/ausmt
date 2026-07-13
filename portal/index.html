@@ -378,6 +378,47 @@
   details.advanced[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
   details.advanced .advgroup{margin-top:14px}
   details.advanced .advgroup:first-of-type{margin-top:6px}
+
+  /* ===== UX6 Wave D — map page + sidebar structure ============================================== */
+  /* D2: Browse / Select-&-export mode panes. Wrapping the rail sections in two containers costs them
+     aside.filters' column gap, so restore it here. The seg toggle itself reuses the .seg style above. */
+  .railmodepane{display:flex;flex-direction:column;gap:16px}
+  /* D5: sidebar collapse toggle -> ~36px icon rail. width:36px!important beats BOTH the 363px base rule
+     and the inline width the resizer writes (which is not !important). */
+  .railcollapse{align-self:flex-end;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
+    width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;padding:0;flex:none}
+  .railcollapse:hover{border-color:var(--copper);color:var(--text)}
+  aside.filters.collapsed{width:36px!important;min-width:36px;padding:12px 4px;overflow:hidden}
+  aside.filters.collapsed > *:not(.railcollapse){display:none!important}
+  aside.filters.collapsed .railcollapse{align-self:center}
+  /* D4: export empty-state — the download row hides until a selection exists; this hint replaces it. */
+  .exporthint{font-size:12px;color:var(--muted);line-height:1.45;margin-top:10px}
+  /* D5: drawer left-edge resize handle. Created in main.js and parented to .content (NOT #drawer, whose
+     innerHTML drawer.js rewrites on every open) so it is never wiped and drawer.js stays untouched. */
+  #drawerResizer{position:absolute;top:0;bottom:0;width:8px;cursor:col-resize;background:transparent;z-index:1101}
+  #drawerResizer:hover,#drawerResizer.drag{background:var(--copper)}
+  /* D1: non-blocking welcome strip (replaces the auto-shown blocking intro panel). pointer-events are
+     limited to this card — the map stays fully interactive behind it. */
+  .introstrip{position:absolute;top:14px;right:14px;z-index:800;max-width:320px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:14px 16px;box-shadow:0 8px 28px rgba(0,0,0,.4)}
+  .introstrip-text{font-size:13px;line-height:1.5;color:var(--text);margin-bottom:12px}
+  .introstrip-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .introstrip-actions button{font-size:12.5px;padding:8px 12px;border-radius:5px}
+  /* D6: static map legend (bottom-left), collapsible on small widths. The data-type dots read the live
+     --lpmt/--bbmt/--amt/--gds tokens (Wave B hexes) — no hard-coded colours here. */
+  .maplegend{position:absolute;left:10px;bottom:10px;z-index:600;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;font-size:12px;color:var(--text);box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:210px}
+  .maplegend-toggle{display:none;width:100%;background:none;border:0;color:var(--muted);padding:7px 11px;
+    text-align:left;cursor:pointer;font-size:12px;font-family:var(--sans)}
+  .maplegend-body{padding:9px 11px;display:flex;flex-direction:column;gap:6px}
+  .maplegend .legrow{display:flex;align-items:center;gap:8px;line-height:1.3}
+  .maplegend .legcluster{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
+    border-radius:50%;background:rgba(224,120,47,.45);color:#12202b;font-family:var(--mono);font-weight:700;
+    font-size:10px;flex:none;border:2px solid rgba(232,237,241,.4)}
+  /* Collapsible ONLY on small widths: the toggle appears and the body defaults collapsed there (the .expanded
+     class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
+     narrow-built legend can never get stuck collapsed with no visible way to expand it. */
+  @media(max-width:760px){.maplegend-toggle{display:block}.maplegend:not(.expanded) .maplegend-body{display:none}}
 </style>
 </head>
 <body>
@@ -405,6 +446,16 @@
 
 <main>
 <aside class="filters" id="filterPane">
+  <!-- D5: collapse the rail to a ~36px icon strip (state persisted in localStorage; see main.js). -->
+  <button type="button" id="sidebarCollapse" class="railcollapse" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">‹</button>
+  <!-- D2: two-mode segmented control. Browse = find + data type + tree (+ recently added on map);
+       Select & export = the map-selection box, exports and Screening (advanced). Every element id below
+       is UNCHANGED — the split is containers + a mode toggle, not id churn. Reuses the .seg style. -->
+  <div class="seg" id="modeSeg" data-views="both">
+    <button type="button" data-mode="browse" class="on">Browse</button>
+    <button type="button" data-mode="select">Select &amp; export</button>
+  </div>
+  <div id="browseMode" class="railmodepane">
   <section data-views="both">
     <h2>Find</h2>
     <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
@@ -427,6 +478,8 @@
     <h2>Country → organisation → survey</h2>
     <div class="tree" id="tree"></div>
   </section>
+  </div><!-- /#browseMode -->
+  <div id="selectMode" class="railmodepane hidden">
   <section data-views="map">
     <h2>Selection</h2>
     <div class="selbox">
@@ -434,6 +487,11 @@
       <div class="hint" id="selHint">Draw a polygon or rectangle on the map (toolbar, top-left), or take everything that passes the filters.</div>
       <div class="btnrow">
         <button class="wide" id="selAll">Select all filtered</button>
+      </div>
+      <!-- D4: export empty-state. The download row is hidden until a selection exists; this hint stands
+           in its place. updateSel() (filters.js) toggles .hidden on both when selected.size crosses 0. -->
+      <div class="exporthint" id="exportHint">Select stations on the map or choose 'Select all filtered' to enable downloads.</div>
+      <div class="btnrow exportbtns hidden" id="exportBtns">
         <button id="dlCsv" disabled>Station CSV</button>
         <button id="dlGeo" disabled>GeoJSON</button>
         <button id="dlSh" disabled>Archive pointers</button>
@@ -483,6 +541,7 @@
       </div>
     </details>
   </section>
+  </div><!-- /#selectMode -->
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
@@ -510,6 +569,17 @@
         </button>
       </div>
       <button type="button" class="introtour" id="introTakeTour">Take the tour</button>
+    </div>
+  </div>
+  <!-- D1: non-blocking welcome strip shown on first visit (replaces the auto-shown blocking panel).
+       "Start exploring" dismisses + persists; "How AusMT works" opens the three-ways panel above (which
+       now lives behind this action + the header help entry, and no longer auto-shows). Tour stays
+       reachable via #introTakeTour inside that panel. -->
+  <div id="introStrip" class="introstrip hidden" role="region" aria-label="Welcome to AusMT">
+    <p class="introstrip-text">Explore Australian MT surveys on the map. Select a station to inspect its transfer function, or open Surveys to browse complete datasets.</p>
+    <div class="introstrip-actions">
+      <button type="button" class="primary" id="introStart">Start exploring</button>
+      <button type="button" id="introHow">How AusMT works</button>
     </div>
   </div>
 </div>

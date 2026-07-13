@@ -36,7 +36,7 @@ const TOUR_STEPS=[
   {sel:"#drawer",text:"The station drawer shows apparent resistivity, phase, tipper and phase-tensor screening — with full provenance.",
    enter:_tourEnterStation},
   {sel:".selbox",text:"Download single stations, whole surveys, or your current selection — licences and citations travel with the files.",
-   enter:_tourEnterMapView},
+   enter:_tourEnterSelbox,exit:_tourExitSelbox},
   {sel:"#navSurveys",text:"You're on the Map view. The Surveys button lists every survey as a detailed card — let's head over."},
   {sel:"#cardGrid .scard",text:"Each survey card is the custodian's record — stations, licence, citation and downloads — and links to the full survey story.",
    enter:_tourEnterSurveysView},
@@ -60,6 +60,24 @@ function _tourEnterMapView(){
 // no-op double-close at restore time.
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
+}
+// UX6 Wave D (D2 follow-up): the .selbox step's target lives in the rail's Select & export mode pane,
+// which is hidden in the default Browse mode (zero rect => the step would fall back to the centred
+// no-spotlight card). Enter: force the map view, save the visitor's rail mode, and switch to
+// Select & export so the target is visible and spotlit. Exit (Next/Back/close — the same three-path
+// discipline as the Find/tree demos): put the saved mode back, so the tour never leaks a mode change.
+// Guarded so a build without the D2 mode split degrades to the old centred-card behaviour, no crash.
+let _tourSelPrevMode=null;           // rail mode before the selbox step; null = nothing to restore
+function _tourEnterSelbox(){
+  _tourEnterMapView();
+  if(typeof setSidebarMode!=="function"||typeof sidebarMode==="undefined")return;
+  if(_tourSelPrevMode===null)_tourSelPrevMode=sidebarMode;
+  setSidebarMode("select");
+}
+function _tourExitSelbox(){
+  if(_tourSelPrevMode===null)return;
+  if(typeof setSidebarMode==="function")setSidebarMode(_tourSelPrevMode);
+  _tourSelPrevMode=null;
 }
 // UX4 D5 Find demo. Enter: save the visitor's own query (restore discipline — only undo what the
 // tour did), type "AusLAMP" and dispatch a REAL bubbling input event so the live wiring in filters.js
@@ -231,7 +249,7 @@ function startTour(){
   if(_tourStep>=0)return;              // already running
   if(!TOUR_STEPS.length)return;
   _tourOpened={drawer:false,hash:null,view:null};
-  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;   // D5 demo state: fresh every run
+  _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // D5/D2 demo state: fresh every run
   _tourEls=_tourBuild();
   _tourStep=0;_tourPosition();
 }

@@ -74,8 +74,27 @@ function partitionMarkers(stations){
   return {unclustered,clustered};
 }
 const drawn=new L.FeatureGroup().addTo(map);
+// UX6 Wave D (D3, #20): plain-language labels for the draw toolbar buttons. These override the generic
+// leaflet.draw defaults ("Draw a polygon" etc.) and MUST be set BEFORE the control is constructed — the
+// control reads L.drawLocal at build time to set each button's title (its accessible name).
+L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
+L.drawLocal.draw.toolbar.buttons.rectangle="Draw rectangle selection";
+L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
 map.addControl(new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
   polygon:{shapeOptions:{color:"#E0782F",weight:2}},rectangle:{shapeOptions:{color:"#E0782F",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}}));
+// UX6 Wave D (D3, #20): explicit aria-labels on the draw + zoom toolbar anchors, set AFTER the controls
+// are on the map (their DOM exists by then). leaflet.draw already writes the title from L.drawLocal above;
+// the aria-label makes the accessible name unambiguous for AT. No-op where the anchors aren't rendered
+// (e.g. the jsdom/smoke harness, which stubs Leaflet) — querySelectorAll simply returns nothing.
+function labelToolbar(){
+  const set=(sel,label)=>document.querySelectorAll(sel).forEach(a=>a.setAttribute("aria-label",label));
+  set(".leaflet-draw-draw-polygon","Draw polygon selection");
+  set(".leaflet-draw-draw-rectangle","Draw rectangle selection");
+  set(".leaflet-draw-edit-remove","Clear drawn shapes");
+  set(".leaflet-control-zoom-in","Zoom in");
+  set(".leaflet-control-zoom-out","Zoom out");
+}
+labelToolbar();
 
 // UX4 Amendment A1 (owner, 2026-07-07): the D1 colour split was REMOVED — all LPMT renders the
 // flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
@@ -142,5 +161,16 @@ L.control.layers(null,{"Survey footprints":footprints,
   "Cratons":userLayer("Cratons","cratons.geojson","#D9A23B"),
   "Major crustal boundaries":userLayer("Crustal boundaries","crustal_boundaries.geojson","#A85CC4")},{collapsed:true});
 
-map.on(L.Draw.Event.CREATED,e=>{e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();});  // one active selection shape: a new box replaces the previous one rather than stacking
+// UX6 Wave D (D3, #20): the selection-feedback toast copy. PURE (unit-tested) so the exact string —
+// proper singular/plural, the word "stations" (never "sites"), and the shape word — is pinned. Any
+// layerType other than "rectangle" reads as "polygon" (the only two draw modes enabled above).
+function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rectangle":"polygon";
+  return n+" station"+(n===1?"":"s")+" selected within "+shape;}
+// One active selection shape: a new box replaces the previous one rather than stacking. refresh()
+// recomputes `selected` from the new shape, THEN we toast the fresh count and (D2) surface the exports by
+// auto-switching the rail to Select & export. Named (not inline) so the jsdom driver can invoke it.
+function onDrawCreated(e){e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();
+  if(typeof toast==="function")toast(drawSelectionMsg(selected.size,e&&e.layerType));
+  if(typeof setSidebarMode==="function")setSidebarMode("select");}
+map.on(L.Draw.Event.CREATED,onDrawCreated);
 map.on(L.Draw.Event.DELETED,()=>refresh());

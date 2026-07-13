@@ -85,7 +85,13 @@ function refresh(){paintSlider();visible=ST.filter(passes);
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
   const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlCite","dlZip","strike"].forEach(id=>document.getElementById(id).disabled=!on);
-  document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":"Draw a polygon or rectangle on the map (toolbar, top-left), or take everything that passes the filters.";}
+  document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":"Draw a polygon or rectangle on the map (toolbar, top-left), or take everything that passes the filters.";
+  // UX6 Wave D (D4, #21): until a selection exists, hide the whole export row and show the empty-state
+  // hint in its place; reveal the row once there is something to export. Class toggle only — the buttons
+  // keep their own disabled state above.
+  const eb=document.getElementById("exportBtns"),eh=document.getElementById("exportHint");
+  if(eb)eb.classList.toggle("hidden",!on);
+  if(eh)eh.classList.toggle("hidden",on);}
 
 // UX5 (D7): tree disclosure state. Collapse is IN-MEMORY only (no persistence — polish item), keyed
 // "c:<country>" / "o:<country||org>" / "k:<collection id>" (the || separator is the tree's existing
@@ -187,7 +193,20 @@ document.getElementById("colorSeg").addEventListener("click",e=>{const b=e.targe
   colorMode=b.dataset.c;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));recolor();});
 document.getElementById("qSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   qMin=+b.dataset.q;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));refresh();});
-document.getElementById("selAll").onclick=()=>{selected=new Set(visible.map(s=>s.i));updateSel();};
+// UX6 Wave D (D2): rail Browse / Select & export mode. Browse (default) shows find + data type + tree
+// (+ recently added on map); Select & export shows the map-selection box, exports and Screening
+// (advanced). It is a pure show/hide of the two mode panes — it never touches data-views (view/mode are
+// orthogonal: a section is visible iff its mode pane is shown AND its own data-views allows the view).
+let sidebarMode="browse";
+function setSidebarMode(mode){sidebarMode=mode;
+  const bp=document.getElementById("browseMode"),sp=document.getElementById("selectMode"),seg=document.getElementById("modeSeg");
+  if(bp)bp.classList.toggle("hidden",mode!=="browse");
+  if(sp)sp.classList.toggle("hidden",mode!=="select");
+  if(seg)[...seg.children].forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));}
+document.getElementById("modeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b||!b.dataset.mode)return;setSidebarMode(b.dataset.mode);});
+// "Select all filtered" makes a selection, so (D2) auto-switch to Select & export for discoverability of
+// the exports it just enabled — the same nudge the draw-created handler in map.js makes.
+document.getElementById("selAll").onclick=()=>{selected=new Set(visible.map(s=>s.i));updateSel();setSidebarMode("select");};
 document.getElementById("clearSel").onclick=()=>{selected.clear();drawn.clearLayers();updateSel();};
 
 // S3: Year range filter — two plain number inputs; either change re-filters (refresh() re-reads

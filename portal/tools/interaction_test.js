@@ -48,7 +48,7 @@ const stub = () => new Proxy(function () {}, {
   get: (t, p) => {
     if (p === "then") return undefined;
     if (p === Symbol.iterator) return function* () {};
-    if (p === "setView" || p === "fitBounds") return (...args) => { mapCalls.push({ fn: p, args }); return stub(); };
+    if (p === "setView" || p === "fitBounds" || p === "invalidateSize") return (...args) => { mapCalls.push({ fn: p, args }); return stub(); };
     return stub();
   },
   apply: () => stub(), construct: () => stub(),
@@ -72,8 +72,12 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "curView:()=>curView,nST:()=>ST.length,visIds:()=>visible.map(s=>s.id)," +
   "visSurveys:()=>[...new Set(visible.map(s=>s.survey))]," +
   // intro-panel + tour hooks (S2 UX-A) — exposed so the driver can assert on internal helpers
-  // (e.g. re-reading localStorage) as well as on the rendered DOM.
-  "introSeen,tourStep:()=>_tourStep," +
+  // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro (UX6 D1) lets the
+  // driver simulate a genuine first visit (clear the key, re-run the first-visit show) for the strip.
+  "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
+  // UX6 Wave D hooks: sidebarMode reader + setSidebarMode (D2 Browse/Select toggle); onDrawCreated +
+  // drawSelectionMsg (D3 draw-created toast + its pure formatter).
+  "sidebarMode:()=>sidebarMode,setSidebarMode,onDrawCreated,drawSelectionMsg," +
   // S3 hooks: recentlyAdded() for the strip-content assertion; renderRecentlyAdded so the driver
   // can force a re-render after directly poking SMETA (not needed in the current fixture path, but
   // keeps parity with runInit()'s own call sites).
@@ -375,25 +379,36 @@ async function bootFreshWindow(dataMap) {
   win.location.hash = "#/survey/does-not-exist"; A.routeFromHash();
   ok(!doc.getElementById("drawer").classList.contains("open"), "unknown survey slug must not open the drawer");
 
-  // G. INTRO PANEL (S2 UX-A): visible on first load (no localStorage key set yet), dismiss hides it AND
-  // sets the localStorage key, and the header "How to use AusMT" link re-opens it on demand.
+  // G. WELCOME STRIP (UX6 Wave D, D1): on first visit a NON-BLOCKING corner strip (#introStrip) shows —
+  // the blocking three-ways panel (#introOverlay) NO LONGER auto-shows. The strip's "How AusMT works" and
+  // the header "How to use AusMT" both open the panel on demand; "Start exploring" dismisses the strip AND
+  // persists. The panel's own close just hides the panel (no persist) — the strip owns the first-visit key.
   win.localStorage.removeItem("ausmt_intro_dismissed");
+  const introStrip = doc.getElementById("introStrip");
   const introOverlay = doc.getElementById("introOverlay");
-  ok(introOverlay, "#introOverlay missing from index.html");
-  // The panel is shown by runInit() at boot, not on-demand; re-run the show logic the way boot() did,
-  // since A.boot() already ran once above (test A-F) — simulate "first load" by clearing the key and
-  // calling the header link's underlying behaviour via a fresh maybeShowIntro()-equivalent: the header
-  // "How to use" button always shows the panel unconditionally, which we reuse for BOTH assertions below.
-  win.document.getElementById("howToUse").click();
-  ok(!introOverlay.classList.contains("hidden"), "intro panel did not show via the header link");
+  ok(introStrip, "#introStrip (welcome corner strip) missing from index.html");
+  ok(introOverlay, "#introOverlay (three-ways panel) missing from index.html");
+  // FIRST VISIT: simulate it (clear the key + re-run the first-visit show the way runInit() does).
+  A.maybeShowIntro();
+  ok(!introStrip.classList.contains("hidden"), "welcome strip did not show on first visit");
+  // NON-BLOCKING: the strip must NOT be the full-screen blocking overlay, and the blocking panel stays
+  // hidden on first visit (only the corner strip shows). This is the load-bearing "non-blocking" assertion.
+  ok(!introStrip.classList.contains("introoverlay"), "the welcome strip must NOT use the blocking .introoverlay class (it must be non-blocking)");
+  ok(introOverlay.classList.contains("hidden"), "the blocking three-ways panel must stay hidden on first visit (only the strip shows)");
+  // "How AusMT works" (on the strip) opens the panel; closing it just hides the panel and does NOT persist.
+  doc.getElementById("introHow").click();
+  ok(!introOverlay.classList.contains("hidden"), "the strip's 'How AusMT works' action did not open the three-ways panel");
   doc.getElementById("introClose").click();
-  ok(introOverlay.classList.contains("hidden"), "dismissing the intro panel did not hide it");
-  ok(win.localStorage.getItem("ausmt_intro_dismissed") === "1", "dismiss did not set the localStorage key");
+  ok(introOverlay.classList.contains("hidden"), "closing the three-ways panel did not hide it");
+  ok(win.localStorage.getItem("ausmt_intro_dismissed") !== "1", "closing the panel must NOT persist a dismissal — only 'Start exploring' does");
+  // "Start exploring" dismisses the strip AND persists.
+  doc.getElementById("introStart").click();
+  ok(introStrip.classList.contains("hidden"), "'Start exploring' did not hide the welcome strip");
+  ok(win.localStorage.getItem("ausmt_intro_dismissed") === "1", "'Start exploring' did not set the localStorage dismissal key");
   ok(A.introSeen() === true, "introSeen() did not observe the persisted dismiss");
-  // Header link re-opens it even though the dismissed key is set (re-opening on demand must not be
-  // gated by the "seen" flag — only the automatic first-load path is).
+  // Header help re-opens the panel even after dismissal (on-demand help is NOT gated by the "seen" flag).
   win.document.getElementById("howToUse").click();
-  ok(!introOverlay.classList.contains("hidden"), "header link did not re-open a previously-dismissed panel");
+  ok(!introOverlay.classList.contains("hidden"), "header link did not re-open the panel after dismissal");
   doc.getElementById("introClose").click();
 
   // H0. ONE HELP BUTTON IN THE HEADER (UX feedback round 3, item 2): the header "Take the tour" button
@@ -498,17 +513,45 @@ async function bootFreshWindow(dataMap) {
   A.treeSetCollapsed("c:Australia", false); A.treeSetCollapsed("o:Australia||OrgX", false);   // cleanup
   ok(A.treeCollapsedKeys().length === 0, "D8 cleanup: collapse set not empty after the H3 block");
 
-  // I. EMPTY-STATE fixture: the intro panel must still render (it explains the portal even before any
-  // survey exists) and boot must not crash. A fresh window/localStorage so "first visit" is genuine.
+  // H4. UX6 Wave D (D2 follow-up): the .selbox tour step's target lives in the rail's Select & export
+  // mode pane — hidden in the default Browse mode, where the step would degrade to the centred
+  // no-spotlight card. Reaching the step must switch the rail to Select & export (jsdom has no layout,
+  // so the load-bearing observable here is the MODE + the target pane's visibility — in a real browser
+  // an unhidden pane is exactly what gives .selbox a nonzero rect and thus its spotlight), and leaving
+  // it must restore the visitor's prior mode on ALL exit paths (forward, back, close) — the same
+  // three-path restore discipline the Find/tree demo steps pin above.
+  A.setSidebarMode("browse");
+  doc.getElementById("introTakeTour").click();                              // step index 0
+  for (let k = 0; k < 5; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 5 (.selbox)
+  ok(A.tourStep() === 5, "D2-tour: ArrowRight x5 did not reach the selbox step, at step " + A.tourStep());
+  ok(A.sidebarMode() === "select", "D2-tour: the selbox step did not switch the rail to Select & export");
+  ok(!doc.getElementById("selectMode").classList.contains("hidden"),
+    "D2-tour: the Select pane (the selbox target's mode container) is still hidden on the selbox step");
+  ok(!doc.querySelector(".selbox").closest("section").classList.contains("hidden"),
+    "D2-tour: the selbox's own section is hidden on the selbox step (map view not forced?)");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 6
+  ok(A.tourStep() === 6, "D2-tour: could not step forward off the selbox step");
+  ok(A.sidebarMode() === "browse", "D2-tour: FORWARD exit did not restore the Browse mode");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 5 again
+  ok(A.tourStep() === 5 && A.sidebarMode() === "select",
+    "D2-tour: re-entering the selbox step backwards did not re-switch to Select & export");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));       // CLOSE from the step
+  ok(A.tourStep() === -1, "D2-tour: Esc from the selbox step did not close the tour");
+  ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
+
+  // I. EMPTY-STATE fixture: the welcome STRIP must still render on first visit (it explains the portal
+  // even before any survey exists) and boot must not crash. A fresh window/localStorage so "first visit"
+  // is genuine. The blocking panel stays hidden (D1 — non-blocking first-visit).
   const emptyWin = await bootFreshWindow({
     "data/catalogue.json": [], "data/tf.json": [], "data/sci.json": [], "data/surveys.json": {},
   });
   const emptyDoc = emptyWin.document;
   ok(emptyWin.__api.nST() === 0, "empty-state fixture unexpectedly loaded stations");
-  const emptyOverlay = emptyDoc.getElementById("introOverlay");
-  ok(emptyOverlay, "#introOverlay missing in the empty-data boot");
-  ok(!emptyOverlay.classList.contains("hidden"), "intro panel did not show on first visit in the empty-data state");
-  ok(/No surveys published yet/.test(emptyDoc.getElementById("map").innerHTML), "empty-state message did not render alongside the intro panel");
+  const emptyStrip = emptyDoc.getElementById("introStrip");
+  ok(emptyStrip, "#introStrip missing in the empty-data boot");
+  ok(!emptyStrip.classList.contains("hidden"), "welcome strip did not show on first visit in the empty-data state");
+  ok(emptyDoc.getElementById("introOverlay").classList.contains("hidden"), "the blocking panel must stay hidden in the empty-data first-visit state");
+  ok(/No surveys published yet/.test(emptyDoc.getElementById("map").innerHTML), "empty-state message did not render alongside the welcome strip");
 
   // I2. UX5 (D6) GATING-OFF: a boot WITHOUT collections.json renders NO Collections group (and the
   // country/org/survey rows + their carets are unaffected) — the graceful pre-collections behaviour.
@@ -914,6 +957,101 @@ async function bootFreshWindow(dataMap) {
     "C1b: an embargoed station must show NO Download EDI action in the sticky header");
   drwV.classList.remove("open");
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs)");
+  // W. UX6 Wave D (D2): rail Browse / Select & export mode. Default is Browse; the toggle swaps the two
+  // panes with EVERY existing element id intact; drawing a selection or 'Select all filtered' auto-switches
+  // to Select & export.
+  const modeSeg = doc.getElementById("modeSeg"), browseMode = doc.getElementById("browseMode"), selectMode = doc.getElementById("selectMode");
+  ok(modeSeg && browseMode && selectMode, "D2: mode segmented control / panes missing from the rail");
+  ok(A.sidebarMode() === "browse", "D2: default rail mode must be Browse, got " + A.sidebarMode());
+  ok(!browseMode.classList.contains("hidden") && selectMode.classList.contains("hidden"),
+    "D2: Browse must show the browse pane and hide the select pane by default");
+  ["find", "typeBoxes", "tree", "selAll", "dlZip", "qSeg", "colorSeg", "yearFrom", "dlOnly"].forEach(id =>
+    ok(doc.getElementById(id), "D2: element id '" + id + "' went missing after the mode split"));
+  const selBtn = [...modeSeg.children].find(b => b.dataset.mode === "select");
+  selBtn.click();
+  ok(A.sidebarMode() === "select", "D2: clicking 'Select & export' did not switch the mode");
+  ok(browseMode.classList.contains("hidden") && !selectMode.classList.contains("hidden"),
+    "D2: Select & export must hide the browse pane and show the select pane");
+  ok(selBtn.classList.contains("on"), "D2: the active mode button did not get the .on state");
+  [...modeSeg.children].find(b => b.dataset.mode === "browse").click();
+  ok(A.sidebarMode() === "browse", "D2: could not switch back to Browse");
+  A.setSidebarMode("browse");
+  doc.getElementById("selAll").click();
+  ok(A.sidebarMode() === "select", "D2: 'Select all filtered' did not auto-switch to Select & export");
+  doc.getElementById("clearSel").click();
+  A.setSidebarMode("browse");
+
+  // X. UX6 Wave D (D3, #20): the draw-created selection toast + its pure formatter. drawSelectionMsg pins
+  // the exact copy (singular/plural, the word 'stations' — never 'sites' — and the shape word).
+  // onDrawCreated fires the toast with the freshly computed count and (D2) auto-switches to Select.
+  ok(A.drawSelectionMsg(2, "polygon") === "2 stations selected within polygon",
+    "D3: polygon toast copy wrong, got: " + JSON.stringify(A.drawSelectionMsg(2, "polygon")));
+  ok(A.drawSelectionMsg(1, "rectangle") === "1 station selected within rectangle",
+    "D3: singular rectangle toast copy wrong, got: " + JSON.stringify(A.drawSelectionMsg(1, "rectangle")));
+  ok(A.drawSelectionMsg(0, "polygon").indexOf("sites") < 0 && A.drawSelectionMsg(3, "polygon").indexOf("stations") >= 0,
+    "D3: the toast must say 'stations', never 'sites'");
+  A.setSidebarMode("browse");
+  const toastEl = doc.getElementById("toast");
+  toastEl.textContent = "";
+  A.onDrawCreated({ layerType: "rectangle", layer: { options: {} } });
+  ok(/^\d+ stations? selected within rectangle$/.test(toastEl.textContent),
+    "D3: onDrawCreated did not fire the selection toast with the station count, got: " + JSON.stringify(toastEl.textContent));
+  ok(A.sidebarMode() === "select", "D3: onDrawCreated did not auto-switch the rail to Select & export");
+  doc.getElementById("clearSel").click();
+  A.setSidebarMode("browse");
+
+  // Y. UX6 Wave D (D4, #21): the export button row is hidden (empty-state hint shown) until a selection
+  // exists; making a selection reveals it. updateSel() toggles .hidden on both.
+  const exportBtns = doc.getElementById("exportBtns"), exportHint = doc.getElementById("exportHint");
+  ok(exportBtns && exportHint, "D4: #exportBtns / #exportHint missing from the Selection box");
+  doc.getElementById("clearSel").click();
+  ok(exportBtns.classList.contains("hidden"), "D4: the export row must be hidden with no selection");
+  ok(!exportHint.classList.contains("hidden"), "D4: the empty-state hint must show with no selection");
+  ok(/enable downloads/.test(exportHint.textContent), "D4: the empty-state hint copy is missing");
+  doc.getElementById("selAll").click();
+  ok(A.selCount() > 0, "D4: 'Select all filtered' did not create a selection");
+  ok(!exportBtns.classList.contains("hidden"), "D4: the export row must be revealed once a selection exists");
+  ok(exportHint.classList.contains("hidden"), "D4: the empty-state hint must hide once a selection exists");
+  doc.getElementById("clearSel").click();
+  ok(exportBtns.classList.contains("hidden"), "D4: clearing the selection did not re-hide the export row");
+  A.setSidebarMode("browse");
+
+  // Z. UX6 Wave D (D5, #24): the sidebar collapse toggle sets the .collapsed class AND calls
+  // map.invalidateSize() (recorded by the map stub) so the map reclaims the width; state persists.
+  A.setView("map");
+  const collapseBtn = doc.getElementById("sidebarCollapse"), aside = doc.getElementById("filterPane");
+  ok(collapseBtn, "D5: #sidebarCollapse toggle missing from the rail");
+  ok(!aside.classList.contains("collapsed"), "D5: the rail must start expanded");
+  const invBefore = mapCalls.filter(c => c.fn === "invalidateSize").length;
+  collapseBtn.click();
+  ok(aside.classList.contains("collapsed"), "D5: collapse toggle did not add the .collapsed class");
+  ok(mapCalls.filter(c => c.fn === "invalidateSize").length > invBefore, "D5: collapsing did not call map.invalidateSize()");
+  ok(win.localStorage.getItem("ausmt_sidebar_collapsed") === "1", "D5: collapsed state was not persisted");
+  collapseBtn.click();
+  ok(!aside.classList.contains("collapsed"), "D5: a second click did not expand the rail");
+  ok(win.localStorage.getItem("ausmt_sidebar_collapsed") === "0", "D5: expanded state was not persisted");
+
+  // AA. UX6 Wave D (D6): the static map legend — one cluster-bubble row + a coloured dot per data type,
+  // the dots reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (a hard-coded hex would fail).
+  const legend = doc.getElementById("mapLegend");
+  ok(legend, "D6: #mapLegend was not built");
+  ok(/stations \(zoom to expand\)/.test(legend.textContent), "D6: the cluster-bubble legend row is missing");
+  const legDots = [...legend.querySelectorAll(".legrow .dot")];
+  ok(legDots.length === 4, "D6: expected 4 data-type legend dots, got " + legDots.length);
+  ["--lpmt", "--bbmt", "--amt", "--gds"].forEach(tok =>
+    ok(legDots.some(d => (d.getAttribute("style") || "").indexOf("var(" + tok + ")") >= 0),
+      "D6: no legend dot reads the live token " + tok + " (a hard-coded hex would fail this)"));
+  const legToggle = doc.getElementById("mapLegendToggle");
+  ok(legToggle, "D6: the legend collapse toggle is missing");
+  const wasExpanded = legend.classList.contains("expanded");
+  legToggle.click();
+  ok(legend.classList.contains("expanded") !== wasExpanded, "D6: the legend toggle did not flip the expanded state");
+
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+    "UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
+    "UX6 Wave D welcome-strip first-visit-non-blocking + Start-exploring-persists + How-AusMT-works-opens-panel + empty-state-strip, " +
+    "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
+    "D3 draw-toast copy+fires+auto-switch, " +
+    "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
