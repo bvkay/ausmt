@@ -3282,12 +3282,12 @@ _SECTION_TITLES = {
     "organisation": "Organisation", "lead_investigator": "Lead investigator",
     "principal_investigators": "Principal investigators", "identifiers": "Identifiers",
     "publications": "Publications", "funding": "Funding", "instruments": "Instruments",
-    "time_series": "Time series", "access": "Access", "processing": "Processing",
-    "collection": "Collection",
+    "time_series": "Time series", "access": "Access", "attribution": "Attribution & rights",
+    "sources": "Source datasets", "processing": "Processing", "collection": "Collection",
 }
 _SECTION_ORDER = ("organisation", "lead_investigator", "principal_investigators", "identifiers",
-                  "publications", "funding", "instruments", "time_series", "access", "processing",
-                  "collection")
+                  "publications", "funding", "instruments", "time_series", "access", "attribution",
+                  "sources", "processing", "collection")
 
 
 def _json_text(value) -> str:
@@ -3398,6 +3398,12 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
             rows.append(_coordinate_access_widget(name, val))
         elif kind == "select" and section == "access":
             rows.append(_access_level_widget(name, val))
+        elif kind == "license":
+            rows.append(_license_select_widget(name, label, val))
+        elif kind == "profile":
+            rows.append(_profile_select_widget(name, label, val))
+        elif kind == "bool":
+            rows.append(_bool_widget(name, label, val, submitted))
         elif kind == "date":
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
                         f'{_text_input(name, val, placeholder, input_type="date", css_class=bad)}'
@@ -3455,6 +3461,77 @@ def _coordinate_access_widget(name: str, value) -> str:
             f'</span></p>')
 
 
+def _license_option_html(current: str) -> str:
+    """The <option>s for a licence <select>: the full contract vocab (editor_form.LICENSE_IDS),
+    grouped redistributable vs recognised metadata-only, `current` selected. An out-of-vocab STORED
+    value (a hand-edited / legacy licence) is shown as its own selected option so the curator sees and
+    can fix it rather than it being silently coerced — the same render-degrade discipline as
+    _coordinate_access_widget. Every value escaped. Shared by the top-level and sources[] selects."""
+    from . import editor_form
+    cur = str(current) if current not in (None, "") else ""
+
+    def opt(v):
+        return f'<option value="{_esc(v)}"{" selected" if v == cur else ""}>{_esc(v)}</option>'
+    redist = editor_form.LICENSE_REDISTRIBUTABLE
+    recog = [x for x in editor_form.LICENSE_IDS if x not in redist]
+    html = ('<optgroup label="Redistributable (AusMT serves the bytes)">'
+            + "".join(opt(v) for v in redist) + "</optgroup>"
+            + '<optgroup label="Recognised (metadata-only display)">'
+            + "".join(opt(v) for v in recog) + "</optgroup>")
+    if cur and cur not in editor_form.LICENSE_IDS:
+        html += f'<option value="{_esc(cur)}" selected>{_esc(cur)} (stored value — not a recognised id)</option>'
+    return html
+
+
+def _license_select_widget(name: str, label: str, value) -> str:
+    """A vocab-validated licence <select> for a sources[].licence field (C46). Kills the free-text seam:
+    the curator picks a recognised id, never types one. Server-rendered, no JS (CSP unaffected)."""
+    return (f'<p><label class="k">{_esc(label)}</label>'
+            f'<select name="{_esc(name)}"><option value="">(none)</option>'
+            f'{_license_option_html(value)}</select></p>')
+
+
+def _license_scalar_widget(value) -> str:
+    """The top-level `license` <select> (f_license) — the C46 free-text-seam killer for the ONE
+    package-level licence. Full contract vocab, current value selected; an out-of-vocab stored value is
+    shown as its own option (never silently coerced). Required field, so no '(none)'; a leading blank
+    appears only when nothing is stored yet. Assembled server-side in app._build_patch as before (the
+    select just constrains what f_license can carry) — no JS, CSP unaffected."""
+    cur = str(value) if value not in (None, "") else ""
+    blank = (f'<option value=""{" selected" if cur == "" else ""}>(select a licence)</option>'
+             if cur == "" else "")
+    return f'<select name="f_license">{blank}{_license_option_html(cur)}</select>'
+
+
+def _profile_select_widget(name: str, label: str, value) -> str:
+    """The C46 attribution-profile <select> (ga | generic) for a sources[].profile field. A leading
+    blank leaves it unset (default: generic at render time). An out-of-vocab stored value is shown so
+    the curator can correct it. Every value escaped."""
+    from . import editor_form
+    cur = str(value) if value not in (None, "") else ""
+    opts = [f'<option value=""{" selected" if cur == "" else ""}>(default: generic)</option>']
+    for prof in editor_form.SOURCE_PROFILES:
+        opts.append(f'<option value="{_esc(prof)}"{" selected" if prof == cur else ""}>{_esc(prof)}</option>')
+    if cur and cur not in editor_form.SOURCE_PROFILES:
+        opts.append(f'<option value="{_esc(cur)}" selected>{_esc(cur)} (stored value)</option>')
+    return (f'<p><label class="k">{_esc(label)}</label>'
+            f'<select name="{_esc(name)}">{"".join(opts)}</select></p>')
+
+
+def _bool_widget(name: str, label: str, value, submitted: dict | None) -> str:
+    """A single checkbox for a boolean sub-field (C46 attribution.changes_made). After a validation
+    error the CHECKED state comes from `submitted` (the name is present iff it was ticked) so an
+    un-tick survives the round-trip; otherwise it reflects the stored value. No JS (CSP unaffected)."""
+    if submitted is not None:
+        checked = name in submitted
+    else:
+        checked = value is True or (isinstance(value, str) and value.strip().lower() in ("true", "1", "yes"))
+    mark = " checked" if checked else ""
+    return (f'<p><label class="k">{_esc(label)}</label><br>'
+            f'<label style="display:inline-block"><input type="checkbox" name="{_esc(name)}" '
+            f'value="1" style="width:auto"{mark}> yes</label></p>')
+
+
 def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | None) -> str:
     from . import editor_form
     # Determine which levels are checked: resubmitted checkboxes win, else the original list.
@@ -3488,6 +3565,12 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None) -> 
     for subkey, label, placeholder, kind in subfields:
         name = f"l_{section}_{index}_{subkey}"
         val = (values or {}).get(subkey)
+        if kind == "license":                       # C46 sources[].licence — vocab <select>
+            cells.append(_license_select_widget(name, label, val))
+            continue
+        if kind == "profile":                       # C46 sources[].profile — ga|generic <select>
+            cells.append(_profile_select_widget(name, label, val))
+            continue
         itype = "email" if kind == "email" else "text"
         extra = _ROR_HINT if kind == "ror" else ""
         cells.append(f'<p style="margin:.15rem 0"><label class="k">{_esc(label)}</label>'
@@ -3635,8 +3718,9 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 
     scalar_rows = []
     for key, label in _EDIT_SCALARS:
-        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                           f'{_text_input(f"f_{key}", _scalar_val(key))}</p>')
+        widget = (_license_scalar_widget(_scalar_val(key)) if key == "license"
+                  else _text_input(f"f_{key}", _scalar_val(key)))
+        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>{widget}</p>')
     for key, label in _EDIT_TEXTAREAS:
         scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
                            f'<textarea name="f_{key}">{_esc(_scalar_val(key))}</textarea></p>')
@@ -3924,8 +4008,9 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
 
     scalar_rows = ['<h2>Core fields</h2>']
     for key, label in _EDIT_SCALARS:
-        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
-                           f'{_text_input(f"f_{key}", _scalar_val(key))}</p>')
+        widget = (_license_scalar_widget(_scalar_val(key)) if key == "license"
+                  else _text_input(f"f_{key}", _scalar_val(key)))
+        scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>{widget}</p>')
     for key, label in _EDIT_TEXTAREAS:
         scalar_rows.append(f'<p><label class="k">{_esc(label)}</label>'
                            f'<textarea name="f_{key}">{_esc(_scalar_val(key))}</textarea></p>')

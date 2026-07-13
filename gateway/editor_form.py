@@ -59,6 +59,20 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("project", "Project / campaign", "campaign name", "text"),
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
     ],
+    # C46 (schema 0.3): the rights of THIS AusMT release. custodian may differ from organisation.name;
+    # changes_made is the CC-BY §3(a) "indicate if changes were made" flag (a bool checkbox); statement
+    # is the verbatim custodian-required wording (REQUIRED at the validator when a source has profile
+    # ga). Keys are the FROZEN attribution allow-list — byte-identical to the surveys validator's
+    # ATTRIBUTION_KEYS (the key-parity test feeds this section through the REAL validator).
+    "attribution": [
+        ("custodian", "Custodian of record", "e.g. Geological Survey of South Australia", "text"),
+        ("custodian_ror", "Custodian ROR id", "https://ror.org/04y8k6r48", "ror"),
+        ("statement", "Attribution statement", "verbatim custodian-required wording (optional)", "text"),
+        ("changes_made", "Changes made (CC-BY §3a)", "", "bool"),
+        ("changes_summary", "Changes summary", "e.g. EMTF XML + MTH5 regenerated from custodian EDIs", "text"),
+        ("declared_by", "Declared by", "who asserted the licence/attribution facts", "text"),
+        ("declared_date", "Declared date", "", "date"),
+    ],
     "access": [
         # level + coordinates are <select>s and embargo_until a date — rendered specially by
         # curatorpage, but the sub-keys and order live here so assembly and rendering agree.
@@ -117,6 +131,19 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("model", "Model", "MTU-5C", "text"),
         ("pid", "Instrument PID", "https://instruments.auscope.org.au/… or 10.xxxx/…", "text"),
     ],
+    # C46 (schema 0.3): one entry per UPSTREAM dataset (absent = an original deposit). licence is the
+    # licence AS OBTAINED — a vocab-validated <select> (the SAME contract vocab as the top-level
+    # licence, killing the free-text seam here too); profile is the custodian attribution-profile key.
+    # Keys are the FROZEN sources allow-list — byte-identical to the surveys validator's SOURCE_KEYS.
+    "sources": [
+        ("title", "Title", "e.g. AusLAMP SA – NCI/AuScope archive", "text"),
+        ("custodian", "Custodian", "e.g. NCI / AuScope", "text"),
+        ("identifier", "Identifier (DOI / eCat / SARIG / URL)", "10.25914/… or a URL", "text"),
+        ("licence", "Licence (as obtained)", "", "license"),
+        ("retrieved", "Retrieved (date or year)", "2016 or 2016-05-01", "text"),
+        ("statement", "Attribution statement", "verbatim required wording, if prescribed (optional)", "text"),
+        ("profile", "Attribution profile", "", "profile"),
+    ],
 }
 
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
@@ -130,6 +157,28 @@ ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
 # which feeds the editor-assembled block through the REAL engine parser (engine-truth, not a hand-typed
 # expectation).
 COORDINATE_POLICIES = ("exact", "generalised", "withheld")
+
+# C46 licence vocab for the licence <select>s (the top-level `license` and each sources[].licence).
+# This is the full recognised-id vocab: redistributable ∪ recognised_only, in contract order. It is a
+# BAKED copy because the gateway APP image is CONTENT-BLIND (it ships only gateway/, never engine/ or
+# contract/ — see deploy/docker/gateway.Dockerfile), so a runtime import of the engine/portal contract
+# seam is impossible here; the copy is instead PINNED to engine/extract/_contract.py::LICENSES by
+# test_editor_form.py::test_license_vocab_matches_engine_contract (the same load-the-engine-seam-by-path
+# parity discipline that guards COORDINATE_POLICIES against _coordaccess). REDISTRIBUTABLE first, then
+# RECOGNISED_ONLY; the portal add-survey form reads the SAME vocab live from portal/src/contract.js.
+LICENSE_IDS = (
+    "CC0-1.0", "CC-BY-3.0", "CC-BY-3.0-AU", "CC-BY-4.0", "CC-BY-SA-3.0", "CC-BY-SA-4.0",
+    "CC-BY-NC-4.0", "CC-BY-NC-SA-4.0", "CC-BY-ND-4.0", "CC-BY-NC-ND-4.0", "PUBLIC DOMAIN",
+    "ODBL-1.0", "ODC-BY-1.0",
+    "CC-BY-NC-3.0", "CC-BY-NC-SA-3.0", "CC-BY-ND-3.0", "CC-BY-NC-ND-3.0",
+    "ALL RIGHTS RESERVED", "COPYRIGHT",
+)
+# The redistributable subset (first 13) — used only to GROUP the <select> (redistributable vs
+# recognised metadata-only). The gate itself is the engine's; this is a display grouping.
+LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
+# C46 custodian attribution-profile vocab (sources[].profile). "generic" is the default synthesis;
+# "ga" prescribes the Geoscience Australia form (and makes attribution.statement required at validate).
+SOURCE_PROFILES = ("ga", "generic")
 
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
 # — the checkboxes plus the advanced JSON fallback cover the rest.
@@ -188,6 +237,16 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
         if subkey == "level" and value not in ACCESS_LEVELS:
             raise SectionError(section, f"access level '{value}' is not one of "
                                         f"{', '.join(ACCESS_LEVELS)}")
+    # C46: sources[].licence is vocab-validated against the SAME contract vocab as the top-level
+    # licence (killing the free-text seam), and profile against the attribution-profile vocab. The
+    # <select> only offers vocab values, so a normal submit is always valid; this fail-closes a
+    # hand-crafted out-of-vocab POST (the same fail-closed-at-the-form posture as access.coordinates).
+    if kind == "license" and value not in LICENSE_IDS:
+        raise SectionError(section, f"licence '{value}' is not a recognised AusMT licence id "
+                                    "(pick one from the list)")
+    if kind == "profile" and value not in SOURCE_PROFILES:
+        raise SectionError(section, f"attribution profile '{value}' is not one of "
+                                    f"{', '.join(SOURCE_PROFILES)}")
 
 
 # ---- assembly -----------------------------------------------------------------------------------
@@ -239,6 +298,16 @@ def _assemble_map(form: dict, section: str):
             # never introduce an empty list the source lacked, so an all-empty map assembles to {}).
             if levels or subkey in original_keys:
                 out[subkey] = levels
+            continue
+        if kind == "bool":
+            # A checkbox (C46 attribution.changes_made) submits its value when CHECKED and is ABSENT
+            # when unchecked (mirrors _collect_levels' `is not None` test). Present => True. Unchecked:
+            # null it to False only if the original carried the key (a real change); never INTRODUCE
+            # it on a section that lacked it (the round-trip / never-introduce-an-absent-key rule).
+            if form.get(f"s_{section}_{subkey}") is not None:
+                out[subkey] = True
+            elif subkey in original_keys:
+                out[subkey] = False
             continue
         value = _form_get(form, f"s_{section}_{subkey}")
         _validate_scalar(section, subkey, kind, value)
