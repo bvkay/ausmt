@@ -306,5 +306,50 @@ ok(!/localStorage[^;\n]*submit_key/i.test(html) && !/sessionStorage[^;\n]*submit
    && !/m_submit_key[^;\n]*(localStorage|sessionStorage|cookie)/i.test(html),
    "the submit key is never written to localStorage/sessionStorage/cookies (design §0.3)");
 
+// ============================ C46 attribution / lineage capture (design §2.1) ============================
+// -- licence select vocab = the GENERATED contract list (parity, NOT a hand-copied copy). Load LICENSES
+//    from portal/src/contract.js (the same seam the page reads at runtime) and pin the page's pure vocab
+//    helper to it. FAILS IF the select vocab drifts from the contract, or the page hard-copies the ids.
+const CONTRACT_SRC = fs.readFileSync(path.join(__dirname, "..", "src", "contract.js"), "utf8");
+const LICENSES = new Function(CONTRACT_SRC + "; return LICENSES;")();
+ok(Array.isArray(LICENSES.redistributable) && Array.isArray(LICENSES.recognised_only)
+   && LICENSES.redistributable.length + LICENSES.recognised_only.length === 19,
+   "contract.js LICENSES carries the full 19-id recognised vocab");
+ok(JSON.stringify(M.licenseSelectIds(LICENSES)) === JSON.stringify([...LICENSES.redistributable, ...LICENSES.recognised_only]),
+   "licenseSelectIds derives the select vocab from the contract (redistributable then recognised_only)");
+ok(/\bLICENSES\b/.test(html) && /\.redistributable\b/.test(html) && /\.recognised_only\b/.test(html),
+   "the licence select reads the contract LICENSES (.redistributable + .recognised_only) at runtime, not a hand-copied option list");
+const licSel = html.slice(html.indexOf('id="m_license"'), html.indexOf('id="m_license"') + 60);
+ok(!/CC-BY|CC0|ODbL|PUBLIC DOMAIN/i.test(licSel),
+   "the static m_license <select> has no hand-copied licence <option>s (built at runtime)");
+ok(/id="m_src_license"/.test(html), "a source-licence <select> exists (same contract vocab, populated at runtime)");
+ok(/<script src="src\/contract\.js">/.test(html), "the page loads the generated contract (src/contract.js) for the licence vocab");
+
+// -- attribution persistence: license_declaration + uploader name -> attribution.declared_by/date, and a
+//    C46 field bumps schema_version to 0.3. Absent when the declaration is not made (byte-unchanged).
+const yAttr = M.buildSurveyYaml({ ...base, license_declaration: true, uploader_name: "Ada L", declared_date: "2026-07-13" });
+ok(/attribution:\s*\n\s*declared_by: "Ada L"\s*\n\s*declared_date: 2026-07-13/.test(yAttr),
+   "buildSurveyYaml persists attribution.declared_by + declared_date from the licence declaration");
+ok(/schema_version: "0.3"/.test(yAttr), "a package carrying C46 fields declares schema_version 0.3");
+ok(/^\s*declared_date: \d{4}-\d{2}-\d{2}$/m.test(M.buildSurveyYaml({ ...base, license_declaration: true, uploader_name: "A" })),
+   "declared_date defaults to a bare ISO date derived from the tsUTC seam when none is supplied");
+const yNoDecl = M.buildSurveyYaml({ ...base, license_declaration: false });
+ok(!/attribution:/.test(yNoDecl), "no attribution block when the licence declaration is not made (absent-when-unset)");
+ok(/schema_version: "0.2"/.test(yNoDecl), "schema_version stays 0.2 with no C46 fields");
+
+// -- source dataset: a filled source fieldset -> a sources[] entry; empty -> no sources block.
+const ySrc = M.buildSurveyYaml({ ...base, license_declaration: false,
+  sources: [{ title: "AusLAMP SA", custodian: "NCI", identifier: "10.25914/x", licence: "CC-BY-3.0-AU", retrieved: "2016" }] });
+ok(/sources:\s*\n\s*- title: "AusLAMP SA"/.test(ySrc), "buildSurveyYaml emits a sources[] entry from the source fieldset");
+ok(/licence: "CC-BY-3.0-AU"/.test(ySrc) && /retrieved: "2016"/.test(ySrc), "the sources entry carries the obtained licence + retrieved");
+ok(/schema_version: "0.3"/.test(ySrc), "a sources[] package declares schema_version 0.3");
+ok(!/sources:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [] })),
+   "no sources block when none supplied (absent-when-unset / byte-unchanged discipline)");
+ok(/profile: generic/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [{ title: "A", profile: "generic" }] })),
+   "a vocab profile (generic) is emitted as a bare scalar");
+ok(!/profile:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [{ title: "A", profile: "evil\ninjected: true" }] }))
+   && !/injected:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [{ title: "A", profile: "evil\ninjected: true" }] })),
+   "an out-of-vocab / injection profile is dropped, never emitted (bare-scalar injection guard)");
+
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
 process.exit(fail ? 1 : 0);
