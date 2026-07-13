@@ -513,6 +513,32 @@ async function bootFreshWindow(dataMap) {
   A.treeSetCollapsed("c:Australia", false); A.treeSetCollapsed("o:Australia||OrgX", false);   // cleanup
   ok(A.treeCollapsedKeys().length === 0, "D8 cleanup: collapse set not empty after the H3 block");
 
+  // H4. UX6 Wave D (D2 follow-up): the .selbox tour step's target lives in the rail's Select & export
+  // mode pane — hidden in the default Browse mode, where the step would degrade to the centred
+  // no-spotlight card. Reaching the step must switch the rail to Select & export (jsdom has no layout,
+  // so the load-bearing observable here is the MODE + the target pane's visibility — in a real browser
+  // an unhidden pane is exactly what gives .selbox a nonzero rect and thus its spotlight), and leaving
+  // it must restore the visitor's prior mode on ALL exit paths (forward, back, close) — the same
+  // three-path restore discipline the Find/tree demo steps pin above.
+  A.setSidebarMode("browse");
+  doc.getElementById("introTakeTour").click();                              // step index 0
+  for (let k = 0; k < 5; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 5 (.selbox)
+  ok(A.tourStep() === 5, "D2-tour: ArrowRight x5 did not reach the selbox step, at step " + A.tourStep());
+  ok(A.sidebarMode() === "select", "D2-tour: the selbox step did not switch the rail to Select & export");
+  ok(!doc.getElementById("selectMode").classList.contains("hidden"),
+    "D2-tour: the Select pane (the selbox target's mode container) is still hidden on the selbox step");
+  ok(!doc.querySelector(".selbox").closest("section").classList.contains("hidden"),
+    "D2-tour: the selbox's own section is hidden on the selbox step (map view not forced?)");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 6
+  ok(A.tourStep() === 6, "D2-tour: could not step forward off the selbox step");
+  ok(A.sidebarMode() === "browse", "D2-tour: FORWARD exit did not restore the Browse mode");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 5 again
+  ok(A.tourStep() === 5 && A.sidebarMode() === "select",
+    "D2-tour: re-entering the selbox step backwards did not re-switch to Select & export");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));       // CLOSE from the step
+  ok(A.tourStep() === -1, "D2-tour: Esc from the selbox step did not close the tour");
+  ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
+
   // I. EMPTY-STATE fixture: the welcome STRIP must still render on first visit (it explains the portal
   // even before any survey exists) and boot must not crash. A fresh window/localStorage so "first visit"
   // is genuine. The blocking panel stays hidden (D1 — non-blocking first-visit).
@@ -1024,7 +1050,8 @@ async function bootFreshWindow(dataMap) {
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
     "UX6 Wave D welcome-strip first-visit-non-blocking + Start-exploring-persists + How-AusMT-works-opens-panel + empty-state-strip, " +
-    "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all, D3 draw-toast copy+fires+auto-switch, " +
+    "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
+    "D3 draw-toast copy+fires+auto-switch, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
