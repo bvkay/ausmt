@@ -255,6 +255,11 @@
   .matdim.off .matglyph{color:var(--unk)}
   /* X6: the three always-visible provenance rows. */
   .prov-top{margin:6px 0 12px}
+  /* CVD amendment: inline completeness-ramp swatch. The sequential ramp's dark low end can't be a text
+     colour on the dark panel, so the ramp rides this dot and the value stays plain readable text. The
+     faint border keeps the dark low end visible against the panel. */
+  .qvdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px;
+    border:1px solid rgba(232,237,241,.35)}
   /* W3b: the captured attribution line + the upstream source-datasets list. */
   .attn{font-size:12.5px;line-height:1.5;margin:5px 0 2px;background:var(--panel-2);border:1px solid var(--line);
     border-radius:5px;padding:8px 10px}

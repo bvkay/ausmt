@@ -370,7 +370,10 @@ function stationSummaryDetails(s,m,sc){
     ["tipper",s.comps.includes("T")?"yes":"no"],
     ["remote reference",sc[SC.rr]?"yes":"not recorded"]]);
   const checks=_ssGroup(DATA_CHECKS_LABEL,[
-    ["completeness",sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b> <span class="prov">(shape/coverage screen — not a verdict)</span>`:"n/a"],
+    // CVD amendment: the ramp colour rides a .qvdot swatch (the sequential ramp's dark low end is
+    // unreadable as text on the dark panel); the value itself stays plain readable text — meaning never
+    // rode on the colour alone (the number is printed).
+    ["completeness",sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> <span class="prov">(shape/coverage screen — not a verdict)</span>`:"n/a"],
     ["TF error",mre!=null?Math.round(mre*100)+"%":"n/a"]]);
   const proc=_ssGroup("Processing",[
     ["software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
@@ -446,7 +449,7 @@ function openStation(i){
     `<details class="prov-d"><summary>Show details</summary><div class="prov-dbody">`+
     `<div class="dim">Automated screening estimate — ${strikeClause}${skew!=null?` · median |β| <b>${skew}°</b> · <b>${p3d}%</b> of evaluated periods exceeded the |β|${_betaThr!=null?` &gt; ${esc(String(_betaThr))}°`:""} screening threshold`:""}. Not a structural interpretation.<br>`+
     `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
-    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
+    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
     `</div></details>`;
   // Files — related products (incl. advanced-analysis placeholder), the AusMT-derived deliverables.
   const filesHtml=`<div class="sechead">Related products ${roleChip("AusMT-derived")}</div>`+relatedProducts(s)+

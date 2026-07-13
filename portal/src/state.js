@@ -48,8 +48,14 @@ const fmtP=p=>p>=1000?Math.round(p).toLocaleString("en-AU"):p>=1?(+p.toFixed(1))
 function clamp(x){return Math.max(0,Math.min(1,x));}
 function lerp(a,b,t){const pa=[1,3,5].map(i=>parseInt(a.substr(i,2),16)),pb=[1,3,5].map(i=>parseInt(b.substr(i,2),16));
   return "#"+pa.map((v,k)=>Math.round(v+(pb[k]-v)*t).toString(16).padStart(2,"0")).join("");}
-// C46-W3b: qColor's low end is the CURRENT status red (#E2938B, the --no token) rather than the retired
-// #A85454 (now off-palette). These are graphical dots, so AA contrast is not binding; the point is that the
-// low end tracks the status palette instead of a stale hardcoded red. (The dead --q0/--q3/--q5 CSS tokens
-// that mirrored the old ramp endpoints were removed with this change.)
-function qColor(q){if(q==null)return "#5A6E7D";const t=clamp((q-2)/3);return t<.5?lerp("#E2938B","#D9A23B",t*2):lerp("#D9A23B","#5BAE6A",(t-.5)*2);}
+// UX8 CVD amendment (supersedes the W3b red→amber→green re-shade): the completeness ramp is a CVD-safe
+// SEQUENTIAL dark→light progression (viridis principle) — dark slate-blue #2A3B66 → olive #6E7F46 → pale
+// warm yellow #F2E27E — because the old red→green endpoints measured dE76≈9.6 under a deuteranopia
+// simulation (indistinguishable for red-green CVD readers). LIGHTNESS carries the signal (relative
+// luminance rises monotonically 0.046 → 0.75 along the lerp path), so the ramp survives all three
+// dichromacies: simulated low↔high separation deutan 106.8 / protan 103.1 / tritan 69.1 dE76. The olive
+// mid keeps the ramp off the lpmt teal and the ok green (every stop ≥17 dE00 from the data-type and
+// status colours), and the null/"not evaluated" grey #5A6E7D stays clearly apart from the dark low end
+// (dE00 20, L* 45 vs 26). The dark low end is marker-fill/dot material — drawer text no longer takes
+// qColor as a text colour (it renders a .qvdot swatch beside plain readable text instead).
+function qColor(q){if(q==null)return "#5A6E7D";const t=clamp((q-2)/3);return t<.5?lerp("#2A3B66","#6E7F46",t*2):lerp("#6E7F46","#F2E27E",(t-.5)*2);}

@@ -129,6 +129,8 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // driver can drive the attribution/sources render paths that the base fixture doesn't carry.
   "screeningIndicators,maturityModel,groupMarkersBySurvey,licBadgeState,licIsOpen,attributionText," +
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
+  // CVD amendment hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
+  "qColor," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -1478,10 +1480,48 @@ async function bootFreshWindow(dataMap) {
     "W3b: a no-cite survey's Cite tab must explicitly say 'custodian citation not recorded — cite the survey package', not a silent AUSMT_SELF masquerade");
   drwN.classList.remove("open");
 
+  // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
+  // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
+  // now a SEQUENTIAL dark→light progression whose SIGNAL IS LIGHTNESS (viridis principle): dark slate-blue
+  // #2A3B66 → olive #6E7F46 → pale warm yellow #F2E27E (simulated low↔high separation deutan 106.8 /
+  // protan 103.1 / tritan 69.1 dE76 — thresholds ≥25/≥25/≥15). Pins:
+  //   (a) the EXACT stop hexes at q=2 / 3.5 / 5 (a wrong-endpoint mutation fails here — these hexes are
+  //       what the simulation numbers were measured on);
+  //   (b) relative luminance is MONOTONE NON-DECREASING across q=2..5 — the structural property that makes
+  //       the ramp CVD-safe. The old ramp FAILS this (red→amber rises, amber→green falls), so this pin is
+  //       red on a revert even if someone re-shades the endpoints;
+  //   (c) null stays the separate "not evaluated" grey #5A6E7D — never the ramp's low end;
+  //   (d) the drawer renders the ramp as a .qvdot swatch beside PLAIN text (a dark low end can't be a text
+  //       colour on the dark panel), and no completeness VALUE takes qColor as its text colour any more.
+  ok(A.qColor(2) === "#2a3b66", "CVD: qColor(2) (low end) must be the dark slate-blue #2a3b66, got " + A.qColor(2));
+  ok(A.qColor(3.5) === "#6e7f46", "CVD: qColor(3.5) (mid) must be the olive #6e7f46, got " + A.qColor(3.5));
+  ok(A.qColor(5) === "#f2e27e", "CVD: qColor(5) (high end) must be the pale warm yellow #f2e27e, got " + A.qColor(5));
+  ok(A.qColor(0) === A.qColor(2) && A.qColor(5.5) === A.qColor(5), "CVD: qColor must clamp to the endpoints outside 2..5");
+  ok(A.qColor(null) === "#5A6E7D", "CVD: qColor(null) must stay the separate 'not evaluated' grey #5A6E7D, got " + A.qColor(null));
+  const _relLum = hex => {
+    const lin = [1, 3, 5].map(i => { const c = parseInt(hex.substr(i, 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]; };
+  let _prevY = -1, _monotone = true;
+  for (let q = 2; q <= 5.001; q += 0.25) { const y = _relLum(A.qColor(q)); if (y < _prevY - 1e-9) _monotone = false; _prevY = y; }
+  ok(_monotone, "CVD: relative luminance must rise monotonically along the ramp (lightness IS the signal) — the old red→amber→green ramp fails this");
+  ok(_relLum(A.qColor(5)) - _relLum(A.qColor(2)) > 0.5,
+    "CVD: the ramp must span a LARGE lightness range (Y gap > 0.5), got " + (_relLum(A.qColor(5)) - _relLum(A.qColor(2))).toFixed(3));
+  // (d) drawer render: the Station summary's completeness row carries the .qvdot swatch, and no element
+  // in the drawer uses a qColor hex as a TEXT colour (the pre-amendment pattern was style="color:<ramp>").
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  const rsPanelQ = doc.getElementById("dp-response");
+  const qdot = rsPanelQ.querySelector(".qvdot");
+  ok(qdot != null, "CVD: the Station summary completeness row must render a .qvdot ramp swatch");
+  ok(/background:\s*#/.test(qdot.getAttribute("style") || ""), "CVD: the .qvdot must carry the ramp colour as its background");
+  const _rampTextColours = [...doc.getElementById("drawer").querySelectorAll('[style*="color:#"]')]
+    .filter(el => /color:\s*#(2a3b66|6e7f46|f2e27e)/i.test(el.getAttribute("style") || ""));
+  ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (dark ends are unreadable on the dark panel)");
+  doc.getElementById("drawer").classList.remove("open");
+
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
-    "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + CVD-safe-qColor(monotone-luminance) + W3b lic-canon+attribution+source-node+cite-fallback, " +
+    "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
