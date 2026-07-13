@@ -47,6 +47,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+# C46-W3a: the canonical licence tables (single-sourced in contract/licenses.json -> _contract via the
+# stdlib-only `extract._license_text` leaf) so the EMTF-XML Copyright truth fix builds its conditions_of_use
+# from the SAME id/URL/recognition maps as the LICENSE.txt instrument — no second licence vocabulary. This
+# resolves in every context normalize runs in: the engine test lane and the build both put engine/ on
+# sys.path (so `extract` is an importable package); the fallback covers an extract/-only-on-path caller.
+try:
+    from extract._license_text import canon_license, recognised, _LIC_URLS
+except ImportError:  # pragma: no cover - exercised only when extract/ (not engine/) is the path root
+    from _license_text import canon_license, recognised, _LIC_URLS
+
 # Mirrors mt_metadata's EMTF-XML id-field validator: letters, digits, underscore, hyphen, space.
 _ID_BAD = re.compile(r"[^a-zA-Z0-9_\- ]")
 # 'DataTypeEnum.MT_TF' -> 'MT_TF' (and any other '<Word>Enum.VALUE' the writer emits as a repr).
@@ -113,6 +123,83 @@ def _survey_meta_get(survey_meta: Optional[dict]):
     title = (cite.get("ti") or survey_meta.get("title") or "").strip() or None
     doi = (survey_meta.get("doi") or "").strip() or None
     return authors, title, doi
+
+
+# --- C46-W3a: EMTF-XML Copyright truth fix -----------------------------------------------------------
+# mt_metadata 1.0.9 ships a Copyright block whose defaults ASSERT rights the custodian never granted:
+# release_status defaults to "Unrestricted Release" and conditions_of_use to a "may be copied freely …
+# neither the author(s) … nor IRIS …" paragraph — an unowned licence statement inside every served XML.
+# We replace both with values derived from the survey's REAL declared licence + access level. mt_metadata's
+# ReleaseStatusEnum (verified on 1.0.9) accepts exactly: "Unrestricted Release", "Restricted Release",
+# "Paper Citation Required", "Academic Use Only", "Conditions Apply", "Data Citation Required".
+
+def _release_status_for(access_level) -> str:
+    """The honest EMTF-XML Copyright release_status for a survey's normalised access.level. AusMT serves
+    only openly-licensed data and the operative obligation on its open licences (the CC-BY family) is
+    attribution/citation, so `open` -> "Data Citation Required" (never the default "Unrestricted Release").
+    `embargoed`/`metadata_only` -> "Restricted Release"; an absent/unknown level (bare API use, `legacy`)
+    fails safe to "Conditions Apply" — we do not know, so we do not claim unrestricted. Every returned
+    value is a ReleaseStatusEnum member."""
+    lvl = str(access_level or "").strip().lower()
+    return {"open": "Data Citation Required",
+            "embargoed": "Restricted Release",
+            "metadata_only": "Restricted Release"}.get(lvl, "Conditions Apply")
+
+
+def _conditions_of_use_for(license_str) -> str:
+    """One short, licence-true, CUSTODIAN-owned conditions_of_use paragraph built from the canonical
+    licence id + deed URL (the contract tables) — NOT the library's IRIS boilerplate. An unrecognised /
+    absent / placeholder licence yields an explicit not-asserted line rather than a fabricated grant.
+    Contains NO ';' — the survey-comment packer that carries this into the Copyright block splits on ';'."""
+    if not recognised(license_str):
+        return ("Licence not asserted by the source in a recognised form. Consult the data custodian "
+                "before reuse.")
+    cid = canon_license(license_str)
+    url = _LIC_URLS.get(cid, "")
+    base = f"Licensed by the data custodian under {cid}" + (f" ({url})" if url else "") + "."
+    return (base + " Reuse is governed by the terms of that licence. Please cite the dataset as "
+            "attributed in the citation above.")
+
+
+def _source_citations(sources) -> str:
+    """A single 'Source datasets: …' provenance line for the Copyright additional_info field when the
+    survey declares sources[] — one segment per upstream dataset (title/identifier/custodian/licence).
+    NO ';' and NO newlines (comment-packer safe). '' when there are no sources (field left unset)."""
+    parts = []
+    for s in (sources or []):
+        if not isinstance(s, dict):
+            continue
+        seg = str(s.get("title") or "").strip() or "untitled source dataset"
+        ident = str(s.get("identifier") or "").strip()
+        cust = str(s.get("custodian") or "").strip()
+        slic = canon_license(s.get("licence"))
+        if ident:
+            seg += f" ({ident})"
+        if cust:
+            seg += f", {cust}"
+        if slic:
+            seg += f", licensed {slic}"
+        parts.append(seg)
+    return ("Source datasets: " + " | ".join(parts) + ".") if parts else ""
+
+
+def _set_copyright_comments(sm, fields: dict) -> None:
+    """Pack copyright fields into the survey_metadata comments as 'copyright.<k>:<v>' pairs joined by
+    '; ' — the ONLY channel mt_metadata's EMTF-XML writer reads for the Copyright block besides
+    citation_dataset (emtfxml.survey_metadata getter/setter <-> _parse_comments). The WRITTEN
+    <ReleaseStatus>/<ConditionsOfUse> then carry these values and survive the write->read round-trip
+    (proven by test). Idempotent: strips any pre-existing copyright.* pairs first (so re-normalising a
+    canonical XML re-derives cleanly), and sanitises each value so it cannot break the packer (';' -> ','
+    and whitespace/newlines collapsed)."""
+    existing = str(getattr(getattr(sm, "comments", None), "value", None) or "")
+    kept = [seg.strip() for seg in existing.split(";")
+            if seg.strip() and not seg.strip().lower().startswith("copyright.")]
+
+    def _san(v):
+        return " ".join(str(v).replace(";", ",").split())
+
+    packed = [f"copyright.{k}:{_san(v)}" for k, v in fields.items() if str(v).strip()]
+    sm.comments.value = "; ".join(kept + packed)
 
 
 def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
@@ -277,6 +364,32 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
             cd.doi = sm_doi                       # mt_metadata normalises to https://doi.org/<doi>
             notes.append(f"citation.doi<-survey_meta:{sm_doi}")
     except Exception:  # noqa: BLE001  (citation model varies across versions; non-fatal)
+        pass
+
+    # C46-W3a: the Copyright TRUTH FIX. mt_metadata's Copyright defaults ("Unrestricted Release" +
+    # the "copied freely … IRIS" conditions) are an UNOWNED licence statement that ships inside every
+    # served XML. Replace them with the survey's declared licence + access level: release_status from
+    # the access level, conditions_of_use built from the licence id + deed URL (custodian-owned), and
+    # (when sources[] exists) the source-dataset provenance in additional_info. The survey's own dataset
+    # DOI is ALREADY carried above (citation.doi). These reach the written <Copyright> block only via the
+    # survey-comment packing convention, and they survive the write->read round-trip (verified by test).
+    # Runs regardless of survey_meta so NO served XML keeps the boilerplate: absent licence/access ->
+    # explicit not-asserted conditions + "Conditions Apply", never a fabricated grant.
+    sm_block = survey_meta or {}
+    _lic = sm_block.get("lic")
+    _access = sm_block.get("access")
+    _sources = sm_block.get("sources")
+    _copyright = {"release_status": _release_status_for(_access),
+                  "conditions_of_use": _conditions_of_use_for(_lic)}
+    _addl = _source_citations(_sources)
+    if _addl:
+        _copyright["additional_info"] = _addl
+    try:
+        _set_copyright_comments(sm, _copyright)
+        notes.append(f"copyright.release_status={_copyright['release_status']}; "
+                     f"conditions_of_use set from licence {canon_license(_lic)} "
+                     "(replaced mt_metadata default boilerplate)")
+    except Exception:  # noqa: BLE001  (comments model varies across versions; non-fatal — never abort the write)
         pass
 
     return notes

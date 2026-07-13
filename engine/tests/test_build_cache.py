@@ -590,28 +590,29 @@ def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
     build instead of MISSING cleanly. Each tag bump re-keys every blob, so a pre-bump entry's key
     never resolves — a clean miss counted as a miss, never a replay of a stale-shape parse. C20 bumped
     the tag v3 -> v4 (parse product grew 10 -> 18 columns + placeholder-tipper mask); this simulates a
-    PRE-C20 (v3) cache by monkeypatching the fixed-salt tag back to v3, populates, then builds normally
-    (v4) and asserts zero hits + a full re-derive. (Kept under its historical name.)"""
+    PRE-BUMP cache by monkeypatching the fixed-salt tag back to the PREVIOUS tag, populates, then builds
+    normally (current tag) and asserts zero hits + a full re-derive. (Kept under its historical name; the
+    concrete tags move with each bump — C20 v3->v4, C46-W3a v4->v5 for the XML Copyright truth fix.)"""
     surveys = _make_survey(tmp_path, SAMPLE_EDIS)
     cache = tmp_path / "cache"
 
-    # Populate the cache under the OLD v3 tag by patching BuildCache to build a v3 fixed-salt.
+    # Populate the cache under the OLD (previous) tag by patching BuildCache to build a pre-bump salt.
     real_init = cache_mod.BuildCache.__init__
 
-    def _v3_init(self, *args, **kwargs):
+    def _old_tag_init(self, *args, **kwargs):
         real_init(self, *args, **kwargs)
-        self._fixed_salt = self._fixed_salt.replace("ausmt-c20-cache-v4", "ausmt-c18-cache-v3", 1)
+        self._fixed_salt = self._fixed_salt.replace("ausmt-c46-cache-v5", "ausmt-c20-cache-v4", 1)
 
     import unittest.mock as _mock
-    with _mock.patch.object(cache_mod.BuildCache, "__init__", _v3_init):
-        assert _build(surveys, tmp_path / "v3pop", cache) == 0
-    assert any(cache.rglob("*.xml")), "v3 population wrote no entries (test set-up wrong)"
+    with _mock.patch.object(cache_mod.BuildCache, "__init__", _old_tag_init):
+        assert _build(surveys, tmp_path / "oldpop", cache) == 0
+    assert any(cache.rglob("*.xml")), "pre-bump population wrote no entries (test set-up wrong)"
 
-    # Now build normally (current v4 tag). Every v3 key is unreachable => all miss, full re-derive.
-    out = tmp_path / "v4"
+    # Now build normally (current tag). Every pre-bump key is unreachable => all miss, full re-derive.
+    out = tmp_path / "current"
     assert _build(surveys, out, cache) == 0
     c = _cache_counters(out)
-    assert c["hits"] == 0, f"a v4 build hit v3-format entries (misread across the schema bump): {c}"
+    assert c["hits"] == 0, f"a current build hit pre-bump entries (misread across the tag bump): {c}"
     assert c["misses"] == EXPECTED_COLD_MISSES, c
     assert c["corrupt"] == 0, f"a clean tag miss must NOT be counted as corrupt: {c}"
 

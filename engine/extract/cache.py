@@ -176,7 +176,14 @@ class BuildCache:
             # build after C20 lands; then warm again. (The contract_digest below ALSO shifts on the
             # column append; the tag bump is the explicit, self-documenting belt-and-suspenders — same
             # discipline as C18b.) Old-format entries age out via the prune.
-            "ausmt-c20-cache-v4",
+            # v5 (C46-W3a) = the served-XML CONTENT changed corpus-wide: the EMTF-XML Copyright block now
+            # carries the survey's real licence-derived release_status + conditions_of_use instead of
+            # mt_metadata's default "Unrestricted Release"/"may be copied freely" boilerplate (a truth
+            # fix in ausmt_science.ingest.normalize.condition_tf). That formatter change is not captured
+            # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm pre-C46
+            # cache would REPLAY the boilerplate XML for an unchanged EDI on the same engine commit.
+            # Bumping the tag forces one clean full re-derive so every served XML is the truthful form.
+            "ausmt-c46-cache-v5",
             str(engine_commit),                                      # coarse engine-commit salt (§2.2)
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions (§2.3)
             self.contract_digest,                                    # columns + schema digest (§2.4)
