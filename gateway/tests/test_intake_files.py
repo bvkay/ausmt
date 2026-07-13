@@ -95,6 +95,55 @@ def test_license_md_text_equals_engine_bundle_text(tmp_path):
     assert "CC-BY-4.0" in lic and "creativecommons.org/licenses/by/4.0" in lic
 
 
+def test_intake_and_build_state_identical_attribution(tmp_path):
+    # C46 parity: the intake LICENSE.md and the build_portal bundle LICENSE.txt must state the SAME rights
+    # for the same survey. Both call sites derive their (attribution, sources, changes) through the shared
+    # _license_text.instrument_params_from_survey helper, so a survey carrying an attribution+sources block
+    # renders IDENTICAL instrument text on both paths. FAILS IF intake drops a param (the pre-C46 defect:
+    # _license_md_body never passed attribution) — the source paragraph / supersession / changes clause
+    # would then be missing from the intake rendering while the build reference carries them.
+    import _license_text as lt  # noqa: PLC0415
+    y = {
+        "license": "CC-BY-4.0",
+        "organisation": {"name": "Geological Survey of South Australia"},
+        "dates": {"start": 2024, "end": 2025},
+        "attribution": {
+            "statement": "Geological Survey of South Australia (2025)",
+            "changes_made": True,
+            "changes_summary": "EMTF XML regenerated from the custodian EDIs",
+        },
+        "sources": [
+            {"title": "AusLAMP SA – NCI/AuScope archive", "custodian": "Geoscience Australia",
+             "identifier": "10.25914/abc123", "licence": "CC-BY-3.0-AU", "retrieved": "2016-05",
+             "profile": "ga"},
+        ],
+    }
+    # REAL intake rendering (stamp stripped): this is exactly what the gw-runner writes into LICENSE.md.
+    intake_out = intake._license_md_body(y, _NOW)
+    assert intake_out is not None
+    intake_rights = intake_out.split("\n\n", 1)[1]
+
+    # The build reference: the SAME helper the build_portal LICENSE.txt call site uses, with the build's
+    # cite-synthesised attribution fallback (unused here because the survey supplies a verbatim statement)
+    # and derived_products=True (a served CC-BY survey emits EMTF XML). Rendered with filename=LICENSE.md
+    # so only the rights CONTENT is compared, not the LICENSE.txt-vs-LICENSE.md filename line.
+    build_attn = "Geological Survey of South Australia (2025) AusLAMP SA occupation"
+    p = lt.instrument_params_from_survey(
+        attribution_block=y["attribution"], sources_block=y["sources"],
+        derived_products=True, synthesized_attribution=build_attn)
+    build_rights = lt.license_instrument_text("CC-BY-4.0", "Geological Survey of South Australia", "2025",
+                                              filename="LICENSE.md", **p)
+
+    assert intake_rights == build_rights, (
+        "intake LICENSE.md and build LICENSE.txt state DIVERGENT rights:\n"
+        f"--- intake ---\n{intake_rights}\n--- build ---\n{build_rights}")
+    # Non-vacuity: the fixture must actually exercise the C46 additions, else the equality is hollow.
+    assert "Source datasets" in intake_rights
+    assert "AusLAMP SA" in intake_rights and "Geoscience Australia" in intake_rights
+    assert "The upstream dataset was obtained under CC-BY-3.0-AU" in intake_rights   # supersession
+    assert "Changes were made: EMTF XML regenerated from the custodian EDIs" in intake_rights
+
+
 def test_readme_carries_declared_metadata(tmp_path):
     # README skeleton (D3): name, organisation, dates, station count, licence, abstract, citation —
     # all from survey.yaml. FAILS IF a required field is dropped from the skeleton.
