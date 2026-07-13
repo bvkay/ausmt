@@ -322,7 +322,7 @@ function loadStationFrameLine(s){
 // others use the documented screen thresholds below.
 //   d.q          completeness/smoothness check (0..5)      -> Smoothness            green>=4  amber>=3
 //   d.azR/azN    circular resultant length + count of low-skew PT azimuths -> Strike stability  green>=.9 amber>=.75 (need >=3)
-//   d.p3d,pctThr % periods breaching the 3-D |β| screen vs PROV threshold  -> Phase tensor consistency  green<=thr amber<=2*thr
+//   d.beta,betaThr median |β| (deg) vs its PROV threshold skew_3d_deg      -> Phase tensor consistency  green<=thr amber<=2*thr
 //   d.phaseSplit median |φxy − φyx| separation (deg)       -> Phase split           green<=15 amber<=35
 //   d.decades    period band width in decades              -> Coverage              green>=4  amber>=2
 function screeningIndicators(d){
@@ -332,9 +332,9 @@ function screeningIndicators(d){
   const smooth=band(d.q,4,3,"Clean","Fair","Rough");
   const strike=(d.azN==null||d.azN<3||d.azR==null)?na:band(d.azR,0.9,0.75,"Stable","Variable","Unstable");
   let pt;
-  if(d.p3d==null)pt=na;
-  else{const thr=(d.pctThr!=null&&isFinite(d.pctThr))?d.pctThr:30;
-    pt=d.p3d<=thr?{state:"green",word:"Consistent"}:d.p3d<=2*thr?{state:"amber",word:"Mixed"}:{state:"red",word:"Complex"};}
+  if(d.beta==null)pt=na;
+  else{const thr=(d.betaThr!=null&&isFinite(d.betaThr))?d.betaThr:5;   // PROV skew_3d_deg, else a 5° default
+    pt=d.beta<=thr?{state:"green",word:"Consistent"}:d.beta<=2*thr?{state:"amber",word:"Mixed"}:{state:"red",word:"Complex"};}
   const psplit=(d.phaseSplit==null)?na:(d.phaseSplit<=15?{state:"green",word:"Aligned"}:d.phaseSplit<=35?{state:"amber",word:"Moderate"}:{state:"red",word:"Split"});
   const cov=band(d.decades,4,2,"Broad","Moderate","Narrow");
   return [
@@ -404,7 +404,7 @@ function openStation(i){
   let _phaseSplit=null;
   if(t[T.phs_xy]&&t[T.phs_yx_adj]){const _sp=[];t[T.phs_xy].forEach((v,k)=>{const w=t[T.phs_yx_adj][k];if(v!=null&&w!=null)_sp.push(Math.abs(v-w));});
     if(_sp.length){_sp.sort((a,b)=>a-b);_phaseSplit=_sp[Math.floor(_sp.length/2)];}}
-  const _inds=screeningIndicators({q:sc[SC.q],azR:_azR,azN:azs.length,p3d,pctThr:_bp.pct_periods_3d_threshold,phaseSplit:_phaseSplit,decades:dec});
+  const _inds=screeningIndicators({q:sc[SC.q],azR:_azR,azN:azs.length,beta:skew,betaThr:_bp.skew_3d_deg,phaseSplit:_phaseSplit,decades:dec});
   const keysafe=s.ausmt_id.replace(/[^a-z0-9]/g,"_");
   // ---- UX6 Wave C: sticky header (identity + chips + primary actions) + tab strip -------------------
   const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`;

@@ -1381,7 +1381,7 @@ async function bootFreshWindow(dataMap) {
 
   // X5. SCREENING INDICATORS — the five-row list is derived ONLY from computed quantities; each field->state
   // mapping is FALSIFIABLE (flip one input, exactly one indicator flips). An all-good baseline, then perturb.
-  const baseInd = { q: 4.5, azR: 0.95, azN: 5, p3d: 10, pctThr: 30, phaseSplit: 8, decades: 5 };
+  const baseInd = { q: 4.5, azR: 0.95, azN: 5, beta: 3, betaThr: 6, phaseSplit: 8, decades: 5 };
   const byKey = arr => Object.fromEntries(arr.map(it => [it.key, it]));
   const KEYS = ["smoothness", "strike", "pt", "phasesplit", "coverage"];
   const iBase = byKey(A.screeningIndicators(baseInd));
@@ -1396,14 +1396,15 @@ async function bootFreshWindow(dataMap) {
   // strike concentration R high->low flips ONLY Strike stability.
   const iR = byKey(A.screeningIndicators({ ...baseInd, azR: 0.5 }));
   ok(iR.strike.state === "red" && iR.smoothness.state === "green", "X5: flipping the strike resultant length must flip ONLY Strike stability");
-  // p3d far above the PROV threshold flips Phase-tensor consistency; raising the ECHOED pctThr above p3d restores it.
-  ok(byKey(A.screeningIndicators({ ...baseInd, p3d: 80 })).pt.state === "red", "X5: p3d far above pctThr must flip Phase-tensor consistency to red");
-  ok(byKey(A.screeningIndicators({ ...baseInd, p3d: 80, pctThr: 90 })).pt.state === "green",
-    "X5: raising the ECHOED PROV pct_periods_3d_threshold above p3d must return the indicator to green (threshold honoured)");
+  // median |β| far above the PROV threshold flips Phase-tensor consistency; raising the ECHOED skew_3d_deg
+  // threshold above the median |β| restores it (the indicator honours the provenance threshold).
+  ok(byKey(A.screeningIndicators({ ...baseInd, beta: 20 })).pt.state === "red", "X5: median |β| far above betaThr must flip Phase-tensor consistency to red");
+  ok(byKey(A.screeningIndicators({ ...baseInd, beta: 20, betaThr: 30 })).pt.state === "green",
+    "X5: raising the ECHOED PROV skew_3d_deg above the median |β| must return the indicator to green (threshold honoured)");
   ok(byKey(A.screeningIndicators({ ...baseInd, phaseSplit: 50 })).phasesplit.state === "red", "X5: a large phase split must flip Phase split to red");
   ok(byKey(A.screeningIndicators({ ...baseInd, decades: 1 })).coverage.state === "red", "X5: narrow period coverage must flip Coverage to red");
   // a not-computable input renders neutral grey 'na' — NEVER a fabricated green.
-  const iNA = byKey(A.screeningIndicators({ q: null, azR: null, azN: 0, p3d: null, phaseSplit: null, decades: null }));
+  const iNA = byKey(A.screeningIndicators({ q: null, azR: null, azN: 0, beta: null, phaseSplit: null, decades: null }));
   ok(KEYS.every(k => iNA[k].state === "na"), "X5: a not-computable input must render 'na' (not evaluated), never a fabricated green, got " + JSON.stringify(KEYS.map(k => k + ":" + iNA[k].state)));
   ok(iNA.smoothness.word === "not evaluated", "X5: an 'na' indicator must say 'not evaluated'");
   // the RENDERED Screening tab: five indicator rows + a 'Show details' expander preserving the full prose.
