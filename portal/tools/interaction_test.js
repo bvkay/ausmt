@@ -719,9 +719,13 @@ async function bootFreshWindow(dataMap) {
   drwC.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwC.classList.contains("open"), "C20: #/station/au.alpha.A1 did not open the drawer");
-  // (a) arrow panel EXISTS with the verbatim Parkinson label (the |T|-magnitude plot is gone).
-  ok(drwC.innerHTML.indexOf("Induction arrows - Parkinson convention (real arrows point toward conductors); imaginary unreversed.") >= 0,
-    "C20 D3: the induction-arrow panel + verbatim Parkinson label is missing from the drawer");
+  // (a) arrow panel EXISTS. C20 Amendment A1 (UX6 Wave C / owner decision D4): the verbatim one-line panel
+  // label is superseded by a short heading + an ALWAYS-VISIBLE convention subline. BOTH must be asserted so
+  // the convention sentence can never silently vanish later (it moved into the subline, it did not go away).
+  ok(drwC.innerHTML.indexOf("Induction arrows (Parkinson)") >= 0,
+    "C20 A1: the induction-arrow panel heading 'Induction arrows (Parkinson)' is missing from the drawer");
+  ok(drwC.innerHTML.indexOf("Real arrows point toward conductors; imaginary unreversed.") >= 0,
+    "C20 A1: the always-visible convention subline ('Real arrows point toward conductors; imaginary unreversed.') is missing");
   ok(drwC.innerHTML.indexOf("tipper magnitude |T|") < 0,
     "C20 D3: the old |T|-magnitude plot title is still present (panel was not replaced)");
   ok(drwC.innerHTML.indexOf("|T|=0.5") >= 0, "C20 D3: the |T|=0.5 unit-scale reference is missing");
@@ -746,8 +750,10 @@ async function bootFreshWindow(dataMap) {
   drwC.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A2"; A.routeFromHash();
   ok(drwC.classList.contains("open"), "C20: #/station/au.alpha.A2 did not open the drawer");
-  ok(drwC.innerHTML.indexOf("Induction arrows - Parkinson convention") < 0,
-    "C20 D3: a tipperless station must show the no-tipper state (no arrow panel)");
+  // C20 A1: the no-tipper state renders NO arrow panel — so neither the heading nor the convention subline appears.
+  ok(drwC.innerHTML.indexOf("Induction arrows (Parkinson)") < 0 &&
+     drwC.innerHTML.indexOf("Real arrows point toward conductors; imaginary unreversed.") < 0,
+    "C20 A1: a tipperless station must show the no-tipper state (no arrow panel heading or convention subline)");
   ok(!/stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML),
     "C20 D4: a station WITHOUT errors must render NO error bars");
   // A2 still plots ρ/φ/phase-tensor (the curves themselves), proving (c)/(d) are about bars/arrows only.
@@ -816,6 +822,98 @@ async function bootFreshWindow(dataMap) {
   ok(lineW.indexOf("https://doi.org/10.99999/alpha-tf-doi") >= 0 && lineW.indexOf("no DOI assigned") < 0,
     "U: the with-DOI CITATIONS.txt line must carry the DOI URL and no note, got: " + lineW);
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note)");
+  // V. UX6 WAVE C — station drawer tabs (C1) + section-role chips (C2) + plot readability/expand (C3).
+  //    Every pin states its failure criterion up front.
+  const drwV = doc.getElementById("drawer");
+  drwV.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  ok(drwV.classList.contains("open"), "WaveC: the A1 drawer did not open");
+
+  // (a) SIX tabs, each role=tab, in the mandated order. FAILS if a tab is missing, mis-roled, or reordered.
+  const tabsV = [...drwV.querySelectorAll('[role="tab"]')];
+  ok(tabsV.length === 6, "C1: expected 6 role=tab buttons, got " + tabsV.length);
+  const wantTabs = ["overview", "response", "screening", "files", "provenance", "cite"];
+  ok(wantTabs.every((n, k) => tabsV[k] && tabsV[k].dataset.tab === n),
+    "C1: tab order/ids drifted from Overview/Response/Screening/Files/Provenance/Cite, got " +
+    JSON.stringify(tabsV.map(t => t.dataset.tab)));
+  ok(drwV.querySelector('[role="tablist"]') != null, "C1: no role=tablist container in the drawer");
+
+  // (b) Overview is DEFAULT-selected; its panel is visible, the others hidden. FAILS if another tab wins.
+  const ovTab = drwV.querySelector('#dt-overview'), rsTab = drwV.querySelector('#dt-response');
+  const ovPanel = drwV.querySelector('#dp-overview'), rsPanel = drwV.querySelector('#dp-response');
+  ok(ovTab.getAttribute("aria-selected") === "true", "C1: Overview tab must be aria-selected by default");
+  ok(ovPanel && ovPanel.hidden === false, "C1: the Overview panel must be visible by default");
+  ok(rsPanel && rsPanel.hidden === true, "C1: non-Overview panels must be hidden by default");
+
+  // (c) D3: the science summary strip (.sci) is the FIRST content block of Overview. FAILS if any block
+  //     (identity/heading/etc.) is inserted above it.
+  ok(ovPanel.firstElementChild && ovPanel.firstElementChild.classList.contains("sci"),
+    "C1/D3: the science summary strip (.sci) must be the FIRST content block of Overview; got first child: " +
+    (ovPanel.firstElementChild && ovPanel.firstElementChild.className));
+
+  // (d) the sticky-header primary actions: Download EDI (open station) + Cite (jumps to the Cite tab).
+  ok(drwV.querySelector(".dtop .dl-edi") != null, "C1: an open station must offer a Download EDI action in the sticky header");
+  const citeAction = drwV.querySelector(".dtop .dl-cite");
+  ok(citeAction != null && citeAction.dataset.tab === "cite", "C1: the sticky-header Cite action must target the Cite tab");
+
+  // (e) clicking Response activates it (roving tabindex + hidden toggle). FAILS if the toggle is inert.
+  fire(rsTab, "click");
+  ok(rsPanel.hidden === false && ovPanel.hidden === true,
+    "C1: clicking the Response tab did not activate its panel / hide Overview");
+  ok(rsTab.getAttribute("aria-selected") === "true" && ovTab.getAttribute("aria-selected") === "false",
+    "C1: aria-selected did not move to Response on click");
+  fire(ovTab, "click");   // restore Overview default for later helpers
+
+  // (f) C2: section-role chips render with the engine taxonomy (muted, plain text).
+  ok(drwV.querySelector(".rolechip") != null, "C2: no section-role chips (.rolechip) rendered");
+  ok(drwV.innerHTML.indexOf("Source data") >= 0 && drwV.innerHTML.indexOf("Automated screening") >= 0 &&
+     drwV.innerHTML.indexOf("AusMT-derived") >= 0,
+    "C2: the three role-chip taxonomy labels (Source data / Automated screening / AusMT-derived) are not all present");
+
+  // (g) C3: marker-shape differentiation — the yx series draws <rect> squares, the xy series keeps <circle>.
+  //     FAILS if both series share a marker glyph again (colour-only differentiation). Colours stay frozen.
+  const rspHtml = drwV.querySelector('#dp-response').innerHTML;
+  ok(/<rect [^>]*fill="#2E8FA3"/.test(rspHtml),
+    "C3: the yx (teal #2E8FA3) series must render <rect> square markers (shape differentiation)");
+  ok(/<circle [^>]*fill="#E0782F"/.test(rspHtml),
+    "C3: the xy (copper #E0782F) series must keep <circle> markers");
+
+  // (h) C3: EXPAND MODAL. Clicking a plot's expand button opens a #plotmodal that re-renders the SAME
+  //     plotter at 2.5× (rho design width 372 -> 930, viewBox unchanged); Esc closes it WITHOUT closing the
+  //     drawer, and focus returns to the button that opened it.
+  ok(doc.getElementById("plotmodal") == null, "C3: no plot modal should be open before the expand click");
+  const rhoExpand = drwV.querySelector('.plot[data-plot="rho"] .plotexp');
+  ok(rhoExpand != null, "C3: no per-plot expand affordance on the rho plot");
+  if (rhoExpand.focus) rhoExpand.focus();
+  fire(rhoExpand, "click");
+  const modal = doc.getElementById("plotmodal");
+  ok(modal != null, "C3: clicking the expand button did not open the plot modal");
+  const modalSvg = modal.querySelector("svg");
+  ok(modalSvg != null, "C3: the expand modal did not re-render an SVG");
+  ok(modalSvg.getAttribute("width") === "930",
+    "C3: the modal must re-render at 2.5× (rho width 372→930), got width=" + modalSvg.getAttribute("width"));
+  ok(modalSvg.getAttribute("viewBox") === "0 0 372 118",
+    "C3: the modal SVG must keep the design viewBox (scale is display-only), got " + modalSvg.getAttribute("viewBox"));
+  doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the plot modal");
+  ok(drwV.classList.contains("open"), "C3: Esc on the modal must NOT also close the drawer underneath it");
+  ok(doc.activeElement === rhoExpand, "C3: focus did not return to the expand button after closing the modal");
+
+  // (i) C1b FENCE under tabs: an embargoed station shows the access panel INSIDE the Response tab, renders
+  //     no plot paths there, never offers 'EDI (via source archive)' in Files, and gives the sticky header
+  //     NO download affordance. FAILS if the gate leaks past the tab split.
+  drwV.classList.remove("open");
+  win.location.hash = "#/station/au.delta.D1"; A.routeFromHash();
+  const dRes = doc.getElementById("dp-response"), dFiles = doc.getElementById("dp-files");
+  ok(dRes.textContent.indexOf(EMBARGO_NODATE) >= 0,
+    "C1b: the embargoed access panel must render inside the Response tab; got: " + dRes.textContent.slice(0, 200));
+  ok(dRes.querySelectorAll("svg path").length === 0, "C1b: the embargoed Response tab must render no plot paths");
+  ok(dFiles.innerHTML.indexOf("EDI (via source archive)") < 0,
+    "C1b: the embargoed Files tab must NOT offer 'EDI (via source archive)'");
+  ok(doc.querySelector(".dtop .dl-edi") == null,
+    "C1b: an embargoed station must show NO Download EDI action in the sticky header");
+  drwV.classList.remove("open");
+
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
