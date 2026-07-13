@@ -146,7 +146,9 @@ def test_about_references_no_nonexistent_federation_doc():
     line 236 ("see the MTCAT v1.0 specification and FEDERATION.md in the project repositories") pointed
     readers at a fabricated document. Chief-architect ruling: REMOVE the claim, do not repoint (federation
     is documented as a property of MTCAT itself — docs/docs/developer/data-files.md calls mtcat.json "the
-    MTCAT v1.0 discovery/federation document" — and about.html links no docs-site pages to match).
+    MTCAT v1.0 discovery/federation document"). UX6 Wave F (#17): the restructured About now DOES link
+    docs-site pages (the "Detailed documentation" answer points at real mkdocs pages, incl. the MTCAT page),
+    but the fabricated FEDERATION.md filename must still never reappear here — that is what this guards.
 
     Raw-text check ON PURPOSE (unlike this module's parsed-DOM tests): even a commented-out reference is
     a stale claim waiting to be resurrected, and the parser drops comments. The companion assertion pins
