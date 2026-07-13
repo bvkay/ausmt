@@ -147,6 +147,22 @@ function routeFromHash(){
   if(curView==="collection")setView("map");}
 window.addEventListener("hashchange",routeFromHash);
 
+// UX6 Wave E (E6): "View all stations on main map" from a collection page — switch to the map view and
+// fit the map to the collection's extent. Prefers the collection's declared bbox; falls back to the
+// bounds of its member stations' positions. Uses the same setView/map seams the rest of the app does.
+function viewCollectionOnMap(cid){
+  const c=(typeof COLL!=="undefined"&&COLL)?COLL[cid]:null;
+  setView("map");
+  let b=null;
+  if(c&&c.bbox&&typeof L!=="undefined"&&L.latLngBounds){
+    b=L.latLngBounds([[c.bbox.south,c.bbox.west],[c.bbox.north,c.bbox.east]]);
+  }else if(c){
+    const members=c.surveys||[],pts=ST.filter(s=>members.indexOf(s.survey)>=0&&hasPosition(s)).map(s=>[s.lat,s.lon]);
+    if(pts.length&&typeof L!=="undefined"&&L.latLngBounds)b=L.latLngBounds(pts);
+  }
+  if(b&&typeof map!=="undefined"&&map.fitBounds)map.fitBounds(b.pad?b.pad(0.15):b);
+}
+
 const sidebar=document.getElementById("filterPane"),resizer=document.getElementById("resizer");
 function sbLimits(){return {min:248,max:Math.max(300,Math.min(620,Math.round(window.innerWidth*0.5)))};}
 function setSidebar(px){const{min,max}=sbLimits();sidebar.style.width=Math.round(Math.max(min,Math.min(max,px)))+"px";}
