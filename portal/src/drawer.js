@@ -8,6 +8,52 @@
 // copy, [data-prod] product tiles. Cross-module calls (setView/map/refresh) happen at event
 // time only. Citations live here because this is the only consumer.
 const drawer=document.getElementById("drawer");
+// UX6 Wave C: the currently-open station's TF row, stashed so the delegated [data-act="expand"] handler
+// can re-render the SAME plotter into the expand modal without re-deriving it from the DOM.
+let _curTf=null;
+// UX6 Wave C (C2): a small section-role chip using the engine README taxonomy — "Source data",
+// "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
+function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
+// UX6 Wave C (C1): one tab panel. ALL panels render in the DOM at openStation time; selectDrawerTab
+// toggles them via the `hidden` attribute + aria-selected, so the pinned innerHTML/text assertions keep
+// matching against the same rendered strings regardless of which tab is active.
+function drawerPanel(id,content,selected){
+  return `<div class="dpanel" id="dp-${id}" role="tabpanel" data-tab="${id}" aria-labelledby="dt-${id}" tabindex="0"${selected?"":" hidden"}>${content}</div>`;}
+// Activate one drawer tab (ARIA roving-tabindex + hidden toggle). Degrades to a no-op under the smoke
+// harness (stubbed drawer with querySelectorAll()->[]). Falls back to the first tab for an unknown name.
+function selectDrawerTab(name){
+  if(!drawer||!drawer.querySelectorAll)return;
+  const tabs=[...drawer.querySelectorAll('[role="tab"]')];
+  const panels=[...drawer.querySelectorAll('[role="tabpanel"]')];
+  if(!tabs.length)return;
+  if(!tabs.some(tb=>tb.dataset.tab===name))name=tabs[0].dataset.tab;
+  tabs.forEach(tb=>{const on=tb.dataset.tab===name;tb.setAttribute("aria-selected",on?"true":"false");tb.tabIndex=on?0:-1;if(tb.classList)tb.classList.toggle("on",on);});
+  panels.forEach(p=>{p.hidden=(p.dataset.tab!==name);});
+}
+// C1b gate, factored: the served-EDI descriptor for a station — {sub,st,d}. When the access gate REFUSES
+// (a non-open survey with no served EDI artifact) d is null, so neither the header Download action, the
+// Overview primary-download tile, nor the Files "Transfer function" tile offers a download affordance —
+// they say "embargoed"/"metadata only" instead. An OPEN survey keeps today's exact tile text (byte-for-
+// byte), including the "EDI (via source archive)" fallback that the C1b pins assert is ABSENT when embargoed.
+function ediDescriptor(s,m){
+  const arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
+  const ediArt=arts.find(a=>a.format==="edi");
+  if(ediArt) return {sub:"EDI (download)"+(ediArt.size?" · "+fmtBytes(ediArt.size):""),st:"ok",d:{prod:"fetch",url:ediArt.url,name:ediArt.url.split("/").pop()}};
+  if(!isOpenAccess(m)) return {sub:accessLevelOf(m)==="metadata_only"?"metadata only":"embargoed",st:"no",d:null};
+  return {sub:s.ediAvail?"EDI (download)":"EDI (via source archive)",st:s.ediAvail?"ok":"unk",d:{prod:"edi",file:s.file,avail:s.ediAvail?"1":"0",survey:s.survey}};
+}
+// C1b: the sticky-header Download EDI action. Renders NOTHING where the gate refuses (no download
+// affordance for an embargoed/metadata-only station) — otherwise a primary button routed through the
+// same [data-prod] dispatch as the product tiles.
+function headerDownloadBtn(s,m){const e=ediDescriptor(s,m);if(!e.d)return"";
+  const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
+  return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
+// Overview "primary download" tile — the same gated descriptor rendered as a single product tile (disabled
+// where the gate refuses, so it states the embargo rather than offering bytes).
+function overviewDownload(s,m){const e=ediDescriptor(s,m);
+  const attrs=e.d?Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
+  const st=e.st==="ok"?"ok":e.st==="part"?"part":e.st==="no"?"no":"unk";
+  return `<div class="prodgrid"><div class="prod ${e.d?"":"dis"}" ${attrs}><span class="pdot" style="background:var(--${st})"></span><div>Transfer function<small>${esc(e.sub)}</small></div></div></div>`;}
 
 function apa(m,doi){return `${esc(m.au)} (${esc(m.yr||"n.d.")}). ${esc(m.ti)}${m.ve?" ("+esc(m.ve)+")":""} [Data set]. ${esc(m.pb)}.`+(doi?` https://doi.org/${esc(doi)}`:"");}
 function bibtex(k,m,doi){return `@misc{${k},\n  author    = {${m.au.replace(/;/g," and")}},\n  title     = {${m.ti}},\n  year      = {${m.yr||"n.d."}},\n  publisher = {${m.pb}},\n${doi?`  doi       = {${doi}},\n`:""}  note      = {Accessed via the AusMT portal}\n}`;}
@@ -86,15 +132,12 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   // namespaced url + size). Fall back to the legacy flat-path EDI fetch / pipeline note for data sets
   // built before the manifest (or non-redistributable surveys, which aren't served).
   const arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
-  const ediArt=arts.find(a=>a.format==="edi"), xml=arts.find(a=>a.format==="emtfxml");
+  const xml=arts.find(a=>a.format==="emtfxml");
   // C1b: a non-open survey has no served TF here (bytes withheld by the C1 gate, curves withheld by C1b),
   // so the TF tile must NOT offer the "via source archive" EDI fetch — it says "embargoed"/"metadata only"
-  // (no action) instead, matching the access panel that replaced the plots above.
-  const ediTile=ediArt
-    ? {n:"Transfer function",sub:"EDI (download)"+(ediArt.size?" · "+fmtBytes(ediArt.size):""),st:"ok",d:{prod:"fetch",url:ediArt.url,name:ediArt.url.split("/").pop()}}
-    : !isOpenAccess(m)
-    ? {n:"Transfer function",sub:accessLevelOf(m)==="metadata_only"?"metadata only":"embargoed",st:"no",d:null}
-    : {n:"Transfer function",sub:s.ediAvail?"EDI (download)":"EDI (via source archive)",st:s.ediAvail?"ok":"unk",d:{prod:"edi",file:s.file,avail:s.ediAvail?"1":"0",survey:s.survey}};
+  // (no action) instead, matching the access panel that replaced the plots above. Shared gate logic lives
+  // in ediDescriptor (also feeds the sticky-header Download action + the Overview primary-download tile).
+  const ediTile={n:"Transfer function",...ediDescriptor(s,m)};
   const xmlTile=xml
     ? {n:"EMTF XML",sub:"download"+(xml.size?" · "+fmtBytes(xml.size):""),st:"ok",d:{prod:"fetch",url:xml.url,name:xml.url.split("/").pop()}}
     : {n:"EMTF XML",sub:"via pipeline",st:"part",d:{prod:"toast",msg:"EMTF XML is produced in the build pipeline (mt_metadata); served on the hosted site for redistributable surveys."}};
@@ -216,49 +259,86 @@ function openStation(i){
     `<div class="cell"><div class="lab">Remote reference</div><div class="val">${sc[SC.rr]?"yes":"not recorded"}</div></div>`+
   `</div>`;
   const keysafe=s.ausmt_id.replace(/[^a-z0-9]/g,"_");
-  drawer.innerHTML=
-   `<div class="dhead"><span class="sid">${esc(s.id)}</span><span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`+
-   (m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+
-   `<button class="close" aria-label="Close">✕</button></div>`+
-   `<div class="dsub">${esc(s.survey)} · ${esc(s.org)} · ${esc(s.country)}</div>`+
-   collLine(m)+
-   // C1b: for a non-open survey the engine withheld the display curves (empty tf series), so render the
-   // access panel here INSTEAD of the four (now-empty) plots — the response curves ARE the withheld data.
-   // The #pt_anchor is kept (empty) so the "Phase tensor" related-product scroll target never dangles.
-   (isOpenAccess(m)
-     ? rhoPlot(t)+phasePlot(t)+`<div id="pt_anchor"></div>`+ptPlot(t)+arrowPlot(t)   // C20: arrow panel BELOW the phase tensor, replacing the |T| plot
-     : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
-   // C25-V3: reader-facing frame line — populated lazily from station.json by loadStationFrameLine()
-   // below (empty, so zero-height, until/unless this station declares a non-trivial acquisition frame).
-   `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
-   `<div class="sechead">Screening diagnostics <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+diag+
-   `<div class="dim">Automated screening estimate — ${strikeClause}${skew!=null?` · median |β| <b>${skew}°</b> · <b>${p3d}%</b> of evaluated periods exceeded the |β|${_betaThr!=null?` &gt; ${esc(String(_betaThr))}°`:""} screening threshold`:""}. Not a structural interpretation.<br>`+
-   `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
-   `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
-   `<div class="sechead">Related products</div>`+relatedProducts(s)+
-   `<div class="sechead">Advanced analysis <span style="text-transform:none;letter-spacing:0">· Tier 3, generated offline</span></div>`+
-   `<div class="dim">McNeice–Jones / Groom–Bailey decomposition, distortion parameters and Lilley Mohr circles are planned <i>AusMT</i> pipeline products; they will appear here once produced. <span style="color:var(--muted)">Not computed in the browser.</span></div>`+
-   `<div class="sechead">Provenance &amp; lineage</div>`+provGraph(s)+provenanceBox(s)+
-   identifiersHtml(m)+
-   `<div class="sechead">Maturity</div>`+maturityBar(s)+
-   `<div class="badges">${badge("EDI","ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",m.doi?"ok":"no")}${badge(m.lic||"licence ?",m.lic&&m.lic.startsWith("CC")?"ok":"unk")}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC — see this station's provenance and treat with caution."):""}</div>`+
-   `<div class="sechead">Cite this station's source</div><div class="citebox">${apa(m.cite||AUSMT_SELF,m.doi)}`+
-     `<div class="cb-row"><button data-cite="apa" data-survey="${escAttr(s.survey)}">APA</button>`+
-     `<button data-cite="bibtex" data-survey="${escAttr(s.survey)}" data-key="${escAttr(keysafe)}">BibTeX</button>`+
-     `<button data-cite="ris" data-survey="${escAttr(s.survey)}">RIS</button></div></div>`+
-   `<div class="sechead">Metadata &amp; API</div><table class="meta">`+
-     `<tr><td>ausmt_id</td><td>${esc(s.ausmt_id)}</td></tr>`+
-     // C42 coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE) — show the
-     // honest withheld line instead of null-derefing .toFixed. A generalised station carries the 0.1° cell,
-     // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
-     // engine's coord_policy marker (A1). coordCellHtml encapsulates all three; hasPosition is the shared
-     // predicate.
-     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
-     `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
-     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`+
-   `<div class="api">Read API (planned) — static JSON on the hosted site:<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
+  // ---- UX6 Wave C: sticky header (identity + chips + primary actions) + tab strip -------------------
+  const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`;
+  const collChip=(m.collection&&m.collection.id)?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"";
+  // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if neither.
+  const yearTxt=m.dates?esc(m.dates):(m.year_start?esc(String(m.year_start))+(m.year_end&&m.year_end!==m.year_start?"–"+esc(String(m.year_end)):""):"");
+  const yearChip=yearTxt?`<span class="hchip">${yearTxt}</span>`:"";
+  const licBadge=badge(m.lic||"licence ?",m.lic&&m.lic.startsWith("CC")?"ok":"unk");
+  const TABS=[["overview","Overview"],["response","Response"],["screening","Screening"],["files","Files"],["provenance","Provenance"],["cite","Cite"]];
+  const tabStrip=`<div class="seg dtabs" role="tablist" aria-label="Station detail sections">`+
+    TABS.map(([id,label],k)=>`<button role="tab" id="dt-${id}" data-act="tab" data-tab="${id}" aria-controls="dp-${id}" aria-selected="${k===0}" tabindex="${k===0?0:-1}"${k===0?' class="on"':""}>${esc(label)}</button>`).join("")+`</div>`;
+  const header=`<div class="dtop">`+
+    `<div class="dhead"><span class="sid">${esc(s.id)}</span>${typeChip}${collChip}<button class="close" aria-label="Close">✕</button></div>`+
+    `<div class="dsub">${esc(s.survey)} · ${esc(s.org)} · ${esc(s.country)}</div>`+
+    collLine(m)+
+    `<div class="dchips">${yearChip}${licBadge}</div>`+
+    `<div class="dactions">${headerDownloadBtn(s,m)}<button class="dl-cite" data-act="tab" data-tab="cite">Cite</button></div>`+
+    tabStrip+`</div>`;
+  // ---- Panel content -------------------------------------------------------------------------------
+  // Overview — science summary strip FIRST (owner decision D3), then source-data facts, ONE cautious
+  // screening line (the full estimate lives on the Screening tab), then the gated primary download.
+  const ovMeta=`<table class="meta">`+
+    `<tr><td>coordinates</td><td>${coordCellHtml(s)}</td></tr>`+
+    `<tr><td>period range</td><td>${fmtP(s.pmin)}–${fmtP(s.pmax)} s</td></tr>`+
+    `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"} <span style="color:var(--muted)">(${s.comps.includes("T")?"tipper present":"no tipper"})</span></td></tr>`+
+    `<tr><td>processing software</td><td>${sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"}</td></tr></table>`;
+  const cautious=`<div class="dim"><span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b>`:"n/a"} — a shape/coverage screen, <i>not a quality or geological-value judgement</i>. Full screening on the Screening tab.</span></div>`;
+  const overviewHtml=diag+
+    `<div class="sechead">Station ${roleChip("Source data")}</div>`+ovMeta+cautious+
+    `<div class="sechead">Download ${roleChip("AusMT-derived")}</div>`+overviewDownload(s,m);
+  // Response — the four plots (rho + phase expanded; phase tensor + induction arrows collapsed). C1b:
+  // a non-open station shows the access panel here INSTEAD of the plots (curves ARE the withheld data).
+  // #pt_anchor is kept so the "Phase tensor" related-product scroll target never dangles; the frame line
+  // is populated lazily by loadStationFrameLine() for open surveys.
+  const responseHtml=`<div class="sechead">Response functions ${roleChip("AusMT-derived")}</div>`+
+    (isOpenAccess(m)
+      ? plotBlock("rho",t)+plotBlock("phase",t)+`<div id="pt_anchor"></div>`+plotCollapsible("pt",t,false)+plotCollapsible("arrow",t,false)
+      : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
+    `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`;
+  // Screening — the full automated screening estimate incl. the strike + median |β| lines (UX3-7a fence).
+  const screeningHtml=`<div class="sechead">Screening diagnostics ${roleChip("Automated screening")} <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+
+    `<div class="dim">Automated screening estimate — ${strikeClause}${skew!=null?` · median |β| <b>${skew}°</b> · <b>${p3d}%</b> of evaluated periods exceeded the |β|${_betaThr!=null?` &gt; ${esc(String(_betaThr))}°`:""} screening threshold`:""}. Not a structural interpretation.<br>`+
+    `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
+    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`;
+  // Files — related products (incl. advanced-analysis placeholder), the AusMT-derived deliverables.
+  const filesHtml=`<div class="sechead">Related products ${roleChip("AusMT-derived")}</div>`+relatedProducts(s)+
+    `<div class="sechead">Advanced analysis <span style="text-transform:none;letter-spacing:0">· Tier 3, generated offline</span></div>`+
+    `<div class="dim">McNeice–Jones / Groom–Bailey decomposition, distortion parameters and Lilley Mohr circles are planned <i>AusMT</i> pipeline products; they will appear here once produced. <span style="color:var(--muted)">Not computed in the browser.</span></div>`;
+  // Provenance — lineage + provenance table visible; identifiers / maturity / Metadata & API demoted into
+  // collapsed <details> (tertiary tier per feedback #1).
+  const metaTable=`<table class="meta">`+
+    `<tr><td>ausmt_id</td><td>${esc(s.ausmt_id)}</td></tr>`+
+    // C42 coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE) — show the
+    // honest withheld line instead of null-derefing .toFixed. A generalised station carries the 0.1° cell,
+    // rendered VERBATIM (no client-side re-rounding) with a "position generalised" badge driven by the
+    // engine's coord_policy marker (A1). coordCellHtml encapsulates all three; hasPosition is the shared predicate.
+    `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
+    `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
+    `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`+
+    `<div class="api">Read API (planned) — static JSON on the hosted site:<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
+  const provenanceHtml=`<div class="sechead">Provenance &amp; lineage ${roleChip("Source data")}</div>`+provGraph(s)+provenanceBox(s)+
+    `<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`+
+    `<details class="prov-d"><summary>Maturity &amp; status</summary><div class="prov-dbody">`+maturityBar(s)+
+      `<div class="badges">${badge("EDI","ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",m.doi?"ok":"no")}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC — see this station's provenance and treat with caution."):""}</div></div></details>`+
+    `<details class="prov-d"><summary>Metadata &amp; API</summary><div class="prov-dbody">${metaTable}</div></details>`;
+  // Cite — the citation box (assembly helpers stay test-pinned in exports/drawer; DOM location is free).
+  const citeHtml=`<div class="sechead">Cite this station's source</div><div class="citebox">${apa(m.cite||AUSMT_SELF,m.doi)}`+
+    `<div class="cb-row"><button data-cite="apa" data-survey="${escAttr(s.survey)}">APA</button>`+
+    `<button data-cite="bibtex" data-survey="${escAttr(s.survey)}" data-key="${escAttr(keysafe)}">BibTeX</button>`+
+    `<button data-cite="ris" data-survey="${escAttr(s.survey)}">RIS</button></div></div>`;
+  drawer.innerHTML=header+
+    drawerPanel("overview",overviewHtml,true)+
+    drawerPanel("response",responseHtml,false)+
+    drawerPanel("screening",screeningHtml,false)+
+    drawerPanel("files",filesHtml,false)+
+    drawerPanel("provenance",provenanceHtml,false)+
+    drawerPanel("cite",citeHtml,false);
+  _curTf=t;                                        // stash for the expand-modal handler
   drawer.classList.add("open");drawer.scrollTop=0;
-  if(isOpenAccess(m)) loadStationFrameLine(s);   // C25-V3: inject the frame line if this station declares one
+  selectDrawerTab("overview");                     // Overview default-selected (D3)
+  if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
 }
 function closeDrawer(){drawer.classList.remove("open");if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);}
 async function fetchEdi(file,avail,survey){
@@ -550,9 +630,28 @@ function dispatchProd(d){
   if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);
   else if(d.prod==="fetch"&&d.url){track("DownloadGenerated",{format:(d.name||"").split(".").pop()});downloadUrl(dataUrl(d.url),d.name);}
   else if(d.prod==="open"&&d.url)window.open(d.url,"_blank","noopener,noreferrer");
-  else if(d.prod==="scroll"&&d.sel){const el=document.querySelector(d.sel);if(el)el.scrollIntoView({behavior:"smooth"});}
+  else if(d.prod==="scroll"&&d.sel){const el=document.querySelector(d.sel);if(el){
+    // UX6 Wave C: the scroll target (#pt_anchor) now lives in the Response tab with the phase tensor in a
+    // collapsed <details> — activate its tab and open the plot collapsibles so the scroll actually reveals it.
+    const panel=el.closest?el.closest('[role="tabpanel"]'):null;
+    if(panel&&panel.dataset&&panel.dataset.tab)selectDrawerTab(panel.dataset.tab);
+    if(panel&&panel.querySelectorAll)panel.querySelectorAll("details.plotcollapse").forEach(dt=>{dt.open=true;});
+    if(el.scrollIntoView)el.scrollIntoView({behavior:"smooth"});}}
   else if(d.prod==="toast")toast(d.msg);}
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
+// UX6 Wave C: yield to an open plot-expand modal — its own Esc handler (plots.js) closes it, so the drawer
+// must NOT also close underneath it. Otherwise Escape closes the drawer as before.
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(typeof document!=="undefined"&&document.getElementById&&document.getElementById("plotmodal"))return;closeDrawer();}});
+// UX6 Wave C: ARIA tabs keyboard navigation (arrow keys / Home / End) with roving tabindex. Delegated on
+// the persistent drawer element so it survives every innerHTML re-render.
+if(drawer&&drawer.addEventListener)drawer.addEventListener("keydown",e=>{
+  const tab=(e.target&&e.target.closest)?e.target.closest('[role="tab"]'):null;if(!tab)return;
+  const tabs=[...drawer.querySelectorAll('[role="tab"]')];const idx=tabs.indexOf(tab);if(idx<0)return;
+  let ni=-1;
+  if(e.key==="ArrowRight"||e.key==="ArrowDown")ni=(idx+1)%tabs.length;
+  else if(e.key==="ArrowLeft"||e.key==="ArrowUp")ni=(idx-1+tabs.length)%tabs.length;
+  else if(e.key==="Home")ni=0;else if(e.key==="End")ni=tabs.length-1;else return;
+  e.preventDefault();const nt=tabs[ni];selectDrawerTab(nt.dataset.tab);if(nt.focus)nt.focus();
+});
 document.addEventListener("click",e=>{
   if(e.target.closest(".close")){closeDrawer();return;}
   const cite=e.target.closest("[data-cite]");
@@ -563,7 +662,9 @@ document.addEventListener("click",e=>{
   if(prod){dispatchProd(prod.dataset);return;}
   const el=e.target.closest("[data-act]");if(!el)return;
   const act=el.dataset.act,sv=el.dataset.survey,doi=el.dataset.doi;
-  if(act==="story"){e.preventDefault();openSurvey(sv);}
+  if(act==="tab"){e.preventDefault();selectDrawerTab(el.dataset.tab);}
+  else if(act==="expand"){e.preventDefault();const kind=el.dataset.plot;if(kind&&typeof openPlotModal==="function"&&_curTf)openPlotModal(kind,_curTf);}
+  else if(act==="story"){e.preventDefault();openSurvey(sv);}
   else if(act==="collection"){e.preventDefault();location.hash="#/collection/"+encodeURIComponent(el.dataset.coll);}
   else if(act==="collidx"){e.preventDefault();if(location.hash.indexOf("#/collection/")===0)history.replaceState(null,"",location.pathname+location.search);setView("collections");}
   else if(act==="focus")focusSurvey(sv);
