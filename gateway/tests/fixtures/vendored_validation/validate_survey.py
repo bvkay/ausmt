@@ -45,6 +45,23 @@ MAX_FILE_MB = 200          # files larger than this FAIL unless a curator passes
 # excuse — an out-of-enum value is a hard FAIL (there is no legacy corpus of bad levels). embargo_until must
 # be ISO YYYY-MM-DD when present. These mirror the engine's access_serve_state; keep them behaviourally in sync.
 ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
+# C42 (owner queue): the SURVEY-LEVEL coordinate-access policy read from access.coordinates. It gates
+# how station coordinates are SERVED, so an out-of-enum value is a hard FAIL (no legacy corpus of bad
+# values). Absent => exact (the record's zero-change default). Byte-identical spelling to the engine's
+# extract/_coordaccess.COORDINATE_POLICIES and gateway.editor_form.COORDINATE_POLICIES.
+COORDINATE_POLICIES = ("exact", "generalised", "withheld")
+# C46 schema-0.3 capture (design §2.1). schema_version is now VALIDATED (it was carried, never
+# checked); only these are known. attribution/sources are the 0.3 fields — present under 0.2 warns to
+# bump. The key allow-lists are FROZEN and must stay in EXACT parity with the editor's section keys
+# (gateway.editor_form MAP/LIST sections); the C46-W1c key-parity test feeds an editor-assembled patch
+# through THIS validator and asserts zero unknown-key warnings (the care-field drift lesson: an
+# unvalidated new section rots). SOURCE_PROFILES is the custodian attribution-profile vocab.
+SCHEMA_VERSIONS = ("0.2", "0.3")
+ATTRIBUTION_KEYS = frozenset({"custodian", "custodian_ror", "statement", "changes_made",
+                              "changes_summary", "declared_by", "declared_date"})
+SOURCE_KEYS = frozenset({"title", "custodian", "identifier", "licence", "retrieved", "statement",
+                         "profile"})
+SOURCE_PROFILES = frozenset({"ga", "generic"})
 # anti-masquerade: the BINARY TF types must start with their real signature. The text type (.edi) is
 # checked separately for binary content (a NUL byte ⇒ a renamed binary or a polyglot) in the loop below.
 MAGIC = {
@@ -186,61 +203,175 @@ def _load_yaml(path: Path):
         return _mini_yaml(path.read_text())  # tolerant fallback for CI without pyyaml
 
 
-def _scalar(v: str):
-    """Mini-YAML scalar: strip wrapping double-quotes; map a bare `null`/`~` literal to None so the
-    fallback agrees with PyYAML (otherwise a `dataset_doi: null` becomes the truthy STRING 'null' and
-    silently passes the DOI/PID provenance gate)."""
-    s = v.strip('"')
-    return None if s.lower() in ("null", "~") else s
+# >>> BEGIN generated _mini_yaml (vendored from ausmt engine; sync_validator_mini_yaml.py) >>>
+# DO NOT EDIT BY HAND. This function is VENDORED verbatim from the ausmt engine's
+# build_portal.py (engine/tests/test_mini_yaml_parity.py pins IT against PyYAML). Refresh with
+#   python _validation/sync_validator_mini_yaml.py --write
+# from a checkout with the ausmt monorepo beside this repo. MINI_YAML_PIN records the source
+# commit + sha256; the surveys test-suite asserts this block matches the PIN (no silent drift).
+def _mini_yaml(text: str) -> dict:
+    """Small YAML-subset parser used only when PyYAML is unavailable, sufficient for AusMT
+    `survey.yaml`. Handles nested maps, block sequences (of scalars and of maps), inline ``[]`` /
+    ``{}`` and simple flow collections, block scalars (``>`` / ``|`` collapsed to one line), quotes,
+    booleans/numbers, and ``#`` comments. It is NOT a general YAML parser; the build also accepts
+    PyYAML and the two agree on the AusMT schema (guarded by ``tests/test_mini_yaml_parity.py``).
+    Keep it in step with the survey.yaml schema."""
+    import re
 
+    def _strip_comment(v: str) -> str:
+        if not v or v[0] in "\"'":
+            return v.strip()
+        i = v.find(" #")
+        return (v[:i] if i >= 0 else v).strip()
 
-def _num(v):
-    """Coerce a numeric scalar string to int/float (PyYAML does this); leave None / non-numeric as-is.
-    Used for inline-flow values (e.g. geographic_extent bounds) so the fallback compares numerically."""
-    if not isinstance(v, str):
-        return v
-    try:
-        return int(v)
-    except ValueError:
-        try:
-            return float(v)
-        except ValueError:
-            return v
-
-
-def _mini_yaml(text: str):
-    """Small YAML subset reader (top-level scalars + one level of nested maps, e.g.
-    organisation.name / access.level / identifiers.dataset_doi) for the no-PyYAML fallback."""
-    out, parent = {}, None
-    for line in text.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        indent = len(line) - len(line.lstrip())
-        m = re.match(r"^([a-z_]+):\s*(.*)$", line.strip())
-        if not m:
-            continue
-        k = m.group(1)
-        v = re.sub(r"\s+#.*$", "", m.group(2).strip()).strip()   # drop inline comments
-        if indent == 0:
-            if v and not v.startswith(("{", "[", ">", "|", "#")):
-                out[k] = _scalar(v); parent = None
-            elif not v:
-                out[k] = {}; parent = k                 # begin a nested map
-            elif v.startswith("{") and v.endswith("}"):
-                # inline flow map (e.g. geographic_extent: {west: 1, east: 2, south: -3, north: -4}).
-                # PyYAML parses this; the block-only fallback used to leave it a string, so a non-AU
-                # extent silently fell back to AUS_BBOX. Parse one flat level, numeric-coercing values.
-                inner = {}
-                for part in v[1:-1].split(","):
-                    ik, _, iv = part.partition(":")
-                    if ik.strip():
-                        inner[ik.strip()] = _num(_scalar(iv.strip()))
-                out[k] = inner; parent = None
+    def _flow_split(s: str):
+        out, depth, cur = [], 0, ""
+        for ch in s:
+            if ch in "[{":
+                depth += 1; cur += ch
+            elif ch in "]}":
+                depth -= 1; cur += ch
+            elif ch == "," and depth == 0:
+                out.append(cur); cur = ""
             else:
-                out[k] = v; parent = None               # inline [] / block scalar — left unparsed
-        elif parent and v and not v.startswith(("{", "[")) and isinstance(out.get(parent), dict):
-            out[parent][k] = _scalar(v)
-    return out
+                cur += ch
+        if cur.strip():
+            out.append(cur)
+        return [x.strip() for x in out]
+
+    def _scalar(v):
+        v = _strip_comment(v)
+        if v == "":
+            return None
+        if (v[0] == '"' and v[-1:] == '"') or (v[0] == "'" and v[-1:] == "'"):
+            return v[1:-1]
+        if v == "[]":
+            return []
+        if v == "{}":
+            return {}
+        if v[0] == "[" and v[-1:] == "]":
+            inner = v[1:-1].strip()
+            return [_scalar(x) for x in _flow_split(inner)] if inner else []
+        if v[0] == "{" and v[-1:] == "}":
+            d = {}
+            for part in _flow_split(v[1:-1]):
+                if ":" in part:
+                    kk, _, vv = part.partition(":")
+                    d[kk.strip()] = _scalar(vv)
+            return d
+        low = v.lower()
+        if low in ("true", "false"):
+            return low == "true"
+        if low in ("null", "~"):
+            return None
+        try:
+            return int(v)
+        except ValueError:
+            try:
+                return float(v)
+            except ValueError:
+                return v
+
+    toks = []
+    for ln in text.splitlines():
+        if not ln.strip() or ln.lstrip().startswith("#"):
+            continue
+        toks.append((len(ln) - len(ln.lstrip(" ")), ln.strip()))
+    n = len(toks)
+    pos = [0]
+    key_re = re.compile(r"^([\w.\-]+):\s*(.*)$")
+
+    def _block_scalar(min_indent, style=">"):
+        buf = []
+        while pos[0] < n and toks[pos[0]][0] >= min_indent:
+            buf.append(toks[pos[0]][1]); pos[0] += 1
+        joiner = "\n" if style[0] == "|" else " "       # | literal keeps newlines; > folds to spaces
+        text_out = joiner.join(buf)
+        if not style.endswith("-") and text_out:        # clip (default) keeps one trailing newline
+            text_out += "\n"
+        return text_out
+
+    def parse(min_indent):
+        node = None
+        while pos[0] < n:
+            indent, content = toks[pos[0]]
+            if indent < min_indent:
+                break
+            if content.startswith("- "):
+                if node is None:
+                    node = []
+                if not isinstance(node, list):
+                    break
+                item = content[2:].strip()
+                m = key_re.match(item)
+                if m:
+                    sub = {}
+                    k, val = m.group(1), m.group(2).strip()
+                    if val in (">", "|", ">-", "|-"):
+                        pos[0] += 1; sub[k] = _block_scalar(indent + 2, val)
+                    elif val == "":
+                        pos[0] += 1
+                        sub[k] = parse(indent + 3) if (pos[0] < n and toks[pos[0]][0] > indent + 1) else None
+                    else:
+                        sub[k] = _scalar(val); pos[0] += 1
+                    while pos[0] < n:                       # sibling keys of the same list item
+                        i2, c2 = toks[pos[0]]
+                        if i2 == indent + 2 and not c2.startswith("- "):
+                            m2 = key_re.match(c2)
+                            if m2:
+                                k2, v2 = m2.group(1), m2.group(2).strip()
+                                if v2 in (">", "|", ">-", "|-"):
+                                    pos[0] += 1; sub[k2] = _block_scalar(indent + 4, v2)
+                                elif v2 == "":
+                                    pos[0] += 1
+                                    sub[k2] = parse(indent + 3) if (pos[0] < n and toks[pos[0]][0] > indent + 2) else None
+                                else:
+                                    sub[k2] = _scalar(v2); pos[0] += 1
+                                continue
+                        break
+                    node.append(sub)
+                else:
+                    node.append(_scalar(item)); pos[0] += 1
+                continue
+            m = key_re.match(content)
+            if not m:
+                pos[0] += 1; continue
+            if node is None:
+                node = {}
+            if not isinstance(node, dict):
+                break
+            k, val = m.group(1), m.group(2).strip()
+            if val in (">", "|", ">-", "|-"):
+                pos[0] += 1; node[k] = _block_scalar(indent + 1, val)
+            elif val == "":
+                pos[0] += 1
+                node[k] = parse(indent + 1) if (pos[0] < n and toks[pos[0]][0] > indent) else None
+            else:
+                node[k] = _scalar(val); pos[0] += 1
+        return node if node is not None else {}
+
+    result = parse(0)
+    return result if isinstance(result, dict) else {}
+# <<< END generated _mini_yaml <<<
+
+
+def _iso_date_ok(v) -> bool:
+    """True iff `v` is an ISO calendar date (YYYY-MM-DD). Dependency-light: datetime.date.fromisoformat,
+    the same check the C1 embargo gate uses. A non-string / malformed value is False, never a crash."""
+    try:
+        from datetime import date as _date  # noqa: PLC0415
+        _date.fromisoformat(str(v).strip())
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _iso_date_or_year_ok(v) -> bool:
+    """True for an ISO date (YYYY-MM-DD) OR a bare 4-digit year (YYYY). sources[].retrieved may be
+    either (a dataset is often cited by acquisition year, not an exact retrieval date). A YAML-unquoted
+    year loads as an int, so str()-coerce before matching (the mini_yaml fallback numeric-coerces too)."""
+    s = str(v).strip()
+    return bool(re.match(r"^\d{4}$", s)) or _iso_date_ok(s)
 
 
 def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
@@ -316,6 +447,18 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
                     r.add("WARNING", "metadata",
                           f"access.embargo_until {emb_raw} is in the PAST but level is still 'embargoed' — the "
                           f"survey stays withheld; flip level to open to release it (embargo is not auto-lifted)")
+    # C42 (owner queue): access.coordinates gates how station coordinates are SERVED by the engine
+    # (exact / generalised to ~11 km / withheld). When present it MUST be one of the enum — an
+    # out-of-vocab value would silently fall back to 'exact' and serve exact coordinates the curator
+    # meant to protect, so FAIL it (no legacy corpus of bad values). Absent => exact (silent, the
+    # record's zero-change default). Mirrors engine extract/_coordaccess.parse_coordinate_policy.
+    if isinstance(acc, dict):
+        coord_pol = acc.get("coordinates")
+        if coord_pol not in (None, ""):
+            if str(coord_pol).strip().lower() not in COORDINATE_POLICIES:
+                r.add("FAIL", "metadata",
+                      f"access.coordinates '{coord_pol}' is not one of {COORDINATE_POLICIES} — it gates "
+                      f"how station coordinates are served; an out-of-enum value silently serves them exactly")
     # The slug MUST equal the package folder name: the directory IS the slug, and every downstream
     # identifier/URL is au.<slug>.<station>. A divergence silently forks the survey's identity, so
     # this is a FAIL (the _template states the slug must equal the folder name).
@@ -350,6 +493,105 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         r.add("WARNING", "metadata",
               f"licence '{lic}' is not a recognised AusMT licence id (see contract/licenses.json) — "
               f"fix the id before publication; --strict FAILs this")
+    # LICENSE.md <-> survey.yaml consistency (design §2.5 — closes the silent-divergence seam). Parse the
+    # C34-generated instrument's machine "Licence:  <id>" line (extract/_license_text emits exactly that);
+    # WARN if its canonical id disagrees with survey.yaml `license` (survey.yaml is the machine source of
+    # truth). A hand-authored LICENSE.md carries no such machine line and is NOT machine-checkable — the
+    # check stays SILENT there (no false alarm, no report churn for the existing hand-authored corpus). It
+    # emits an item ONLY on a real divergence, which is the seam this closes.
+    lic_md = folder / "LICENSE.md"
+    if lic_md.exists() and lic not in (None, "", "TODO") and not str(lic).startswith("TBD"):
+        try:
+            md_text = lic_md.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            md_text = ""
+        m_lic = re.search(r"^\s*Licence:\s+(\S.*?)\s*$", md_text, re.M)
+        if m_lic and canon_license(m_lic.group(1)) != canon_license(lic):
+            r.add("WARNING", "license_md",
+                  f"LICENSE.md states licence '{m_lic.group(1).strip()}' but survey.yaml license is "
+                  f"'{lic}' — the two must agree (survey.yaml is the machine source of truth)")
+    # C46 (design §2.1): schema_version validation + attribution/sources capture. Every check here is
+    # SILENT on a clean 0.2 survey (no C46 fields, valid version, consistent LICENSE.md) so the existing
+    # corpus's report is byte-unchanged; items are emitted only for a NEW field or a real problem.
+    sv = meta.get("schema_version")
+    attribution = meta.get("attribution")
+    sources = meta.get("sources")
+    has_c46 = attribution is not None or sources is not None
+    if sv is not None:
+        sv_str = str(sv).strip()
+        if sv_str not in SCHEMA_VERSIONS:
+            r.add("WARNING", "schema",
+                  f"schema_version '{sv_str}' is not a known AusMT schema ({', '.join(SCHEMA_VERSIONS)})")
+        elif sv_str == "0.2" and has_c46:
+            r.add("WARNING", "schema",
+                  'attribution/sources are schema-0.3 fields but schema_version is "0.2" — bump '
+                  'schema_version to "0.3" so the C46 rules apply')
+    # attribution: a nested map with a FROZEN key allow-list (the care-field drift lesson). Unknown keys
+    # WARN by name; changes_made must be a bool; declared_date ISO-shape when present.
+    if attribution is not None:
+        if not isinstance(attribution, dict):
+            r.add("WARNING", "attribution",
+                  "attribution must be a mapping (key: value pairs), not a list or scalar")
+        else:
+            for k in attribution:
+                if k not in ATTRIBUTION_KEYS:
+                    r.add("WARNING", "attribution",
+                          f"attribution.{k} is not a recognised attribution key (allowed: "
+                          f"{', '.join(sorted(ATTRIBUTION_KEYS))})")
+            cm = attribution.get("changes_made")
+            if cm is not None and not isinstance(cm, bool):
+                r.add("WARNING", "attribution",
+                      f"attribution.changes_made must be a boolean true/false, got '{cm}'")
+            dd = attribution.get("declared_date")
+            if dd not in (None, "") and not _iso_date_ok(dd):
+                r.add("WARNING", "attribution",
+                      f"attribution.declared_date '{dd}' is not an ISO date (YYYY-MM-DD)")
+    # sources: a LIST of upstream-dataset maps. Per entry: FROZEN key allow-list; licence validated
+    # against the SAME vocab as the top-level license (unrecognised WARNs, FAILs under --strict);
+    # retrieved ISO-date-or-year shape; profile vocab. A "ga" profile makes attribution.statement
+    # REQUIRED (the GA form mandates exact wording).
+    any_ga = False
+    if sources is not None:
+        if not isinstance(sources, list):
+            r.add("WARNING", "sources",
+                  "sources must be a LIST of upstream-dataset entries (one map per source dataset)")
+        else:
+            for idx, s in enumerate(sources):
+                if not isinstance(s, dict):
+                    r.add("WARNING", "sources",
+                          f"sources[{idx}] must be a mapping (title/custodian/identifier/licence/…)")
+                    continue
+                for k in s:
+                    if k not in SOURCE_KEYS:
+                        r.add("WARNING", "sources",
+                              f"sources[{idx}].{k} is not a recognised source key (allowed: "
+                              f"{', '.join(sorted(SOURCE_KEYS))})")
+                slic = s.get("licence")
+                if slic not in (None, "", "TBD", "TODO"):
+                    if is_recognised_license(slic):
+                        r.add("PASS", "sources", f"sources[{idx}] licence '{slic}' is a recognised id")
+                    else:
+                        r.add("WARNING", "sources",
+                              f"sources[{idx}] licence '{slic}' is not a recognised AusMT licence id "
+                              f"(see contract/licenses.json) — fix it before publication; --strict FAILs this")
+                ret = s.get("retrieved")
+                if ret not in (None, "") and not _iso_date_or_year_ok(ret):
+                    r.add("WARNING", "sources",
+                          f"sources[{idx}].retrieved '{ret}' is not an ISO date (YYYY-MM-DD) or a year (YYYY)")
+                prof = s.get("profile")
+                if prof not in (None, "") and str(prof) not in SOURCE_PROFILES:
+                    r.add("WARNING", "sources",
+                          f"sources[{idx}].profile '{prof}' is not a recognised attribution profile "
+                          f"({', '.join(sorted(SOURCE_PROFILES))})")
+                if str(prof) == "ga":
+                    any_ga = True
+    # A GA-profile source mandates the exact custodian wording — attribution.statement REQUIRED.
+    if any_ga:
+        stmt = attribution.get("statement") if isinstance(attribution, dict) else None
+        if stmt in (None, "", "TBD", "TODO"):
+            r.add("WARNING", "attribution",
+                  "a sources[].profile is 'ga' (Geoscience Australia), which mandates exact attribution "
+                  "wording, but attribution.statement is not set — fix it before publication; --strict FAILs this")
     if not meta.get("identifiers", {}).get("dataset_doi") and not meta.get("identifiers", {}).get("survey_pid"):
         r.add("WARNING", "provenance", "no survey PID or dataset DOI — record will be badged 'provenance incomplete'")
     # C7: ORCID (ISO 7064 11-2 checksum) + ROR + RAiD format sanity — WARNING only (a curator hint;
