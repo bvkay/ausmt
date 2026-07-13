@@ -115,6 +115,11 @@ function setView(v){curView=v;
   // nested inside one (selector kept generic rather than section-only for that one sub-case).
   document.querySelectorAll('#filterPane [data-views]').forEach(sec=>{
     const a=sec.getAttribute("data-views");sec.classList.toggle("hidden",!(a==="both"||a===v));});
+  // UX6 Wave D (D6/D1): the map legend and the welcome strip sit over the map, so they belong to the map
+  // view only. The legend tracks the view exactly; the strip is only ever HIDDEN here (never re-shown —
+  // its first-visit show is owned by maybeShowIntro()/introSeen), so navigating away consumes the nudge.
+  const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
+  const _strip=document.getElementById("introStrip");if(_strip&&v!=="map")_strip.classList.add("hidden");
   if(v==="surveys"){closeDrawer();renderCards();}
   else if(v==="collections"){closeDrawer();renderCollections();}
   else setTimeout(()=>map.invalidateSize(),60);
@@ -155,6 +160,55 @@ function setSidebar(px){const{min,max}=sbLimits();sidebar.style.width=Math.round
   window.addEventListener("resize",()=>{if(window.innerWidth>760)setSidebar(parseInt(sidebar.style.width||"363",10));});
 })();
 
+// UX6 Wave D (D5, #24): collapse the filter rail to a ~36px icon strip. Class toggle only (CSS forces the
+// width with !important, beating the resizer's inline width), invalidateSize so the map reclaims the
+// space, and the state persists in localStorage.
+const SB_COLLAPSE_KEY="ausmt_sidebar_collapsed";
+function sidebarCollapsed(){try{return localStorage.getItem(SB_COLLAPSE_KEY)==="1";}catch(e){return false;}}
+function setSidebarCollapsed(collapsed){
+  sidebar.classList.toggle("collapsed",collapsed);
+  const btn=document.getElementById("sidebarCollapse");
+  if(btn){btn.setAttribute("aria-expanded",String(!collapsed));
+    btn.setAttribute("aria-label",collapsed?"Expand sidebar":"Collapse sidebar");
+    btn.title=collapsed?"Expand sidebar":"Collapse sidebar";btn.textContent=collapsed?"›":"‹";}
+  try{localStorage.setItem(SB_COLLAPSE_KEY,collapsed?"1":"0");}catch(e){/* storage unavailable — don't persist */}
+  if(curView==="map"&&typeof map!=="undefined"&&map.invalidateSize)map.invalidateSize();
+}
+(function(){
+  const btn=document.getElementById("sidebarCollapse");
+  if(btn)btn.onclick=()=>setSidebarCollapsed(!sidebar.classList.contains("collapsed"));
+  if(sidebarCollapsed())setSidebarCollapsed(true);   // apply the persisted state on load
+})();
+
+// UX6 Wave D (D5, #24): drawer left-edge drag handle. It reuses the resizer pattern but is created HERE
+// (never in drawer.js) and parented to .content — NOT #drawer, whose innerHTML drawer.js rewrites on every
+// open (which would wipe a child handle). A MutationObserver mirrors the drawer's open state onto the
+// handle's visibility + left-edge position, so drawer.js internals stay untouched. min 420px, max 60vw;
+// invalidateSize on drag end.
+(function(){
+  const drawer=document.getElementById("drawer"),content=document.getElementById("content");
+  if(!drawer||!content)return;
+  const handle=document.createElement("div");handle.id="drawerResizer";
+  handle.setAttribute("role","separator");handle.setAttribute("aria-orientation","vertical");
+  handle.setAttribute("aria-label","Resize station details panel");handle.title="Drag to resize";
+  handle.style.display="none";                        // hidden until the drawer opens
+  content.appendChild(handle);
+  let drawerW=420,dragging=false;
+  const limits=()=>({min:420,max:Math.max(420,Math.round(window.innerWidth*0.6))});
+  const place=()=>{handle.style.right=drawerW+"px";};
+  const onMove=e=>{if(!dragging)return;const x=(e.touches?e.touches[0].clientX:e.clientX);
+    const{min,max}=limits();drawerW=Math.round(Math.max(min,Math.min(max,window.innerWidth-x)));
+    drawer.style.width=drawerW+"px";place();};
+  const stop=()=>{if(!dragging)return;dragging=false;handle.classList.remove("drag");document.body.style.userSelect="";
+    if(typeof map!=="undefined"&&map.invalidateSize)map.invalidateSize();};
+  const start=e=>{if(window.innerWidth<=760)return;dragging=true;handle.classList.add("drag");document.body.style.userSelect="none";e.preventDefault();};
+  handle.addEventListener("mousedown",start);handle.addEventListener("touchstart",start,{passive:false});
+  window.addEventListener("mousemove",onMove);window.addEventListener("touchmove",onMove,{passive:false});
+  window.addEventListener("mouseup",stop);window.addEventListener("touchend",stop);
+  const sync=()=>{const open=drawer.classList.contains("open");handle.style.display=open?"block":"none";if(open)place();};
+  if(typeof MutationObserver!=="undefined"){const mo=new MutationObserver(sync);mo.observe(drawer,{attributes:true,attributeFilter:["class"]});}
+})();
+
 // Load-error copy distinguishes the two real causes rather than always blaming file:// (which was
 // this message's original, pre-container diagnosis): over HTTP a failed data load almost always
 // means the deployment simply has no published data build yet (e.g. site-data/current absent on a
@@ -180,46 +234,70 @@ function showEmptyState(){
   }
   var sv=document.getElementById("surveysview");if(sv)sv.innerHTML=html;
 }
-// --- "three ways in" intro panel (S2 UX-A) ---------------------------------------------------
-// Dismissible on first visit (localStorage key below); reachable again later via the header
-// "How to use AusMT" link. Renders in BOTH the populated and empty-data states (it explains the
-// portal even before any survey exists), so it is shown from runInit(), not boot()/loadData().
+// --- Welcome strip (UX6 Wave D, D1) + "three ways in" panel (S2 UX-A) -------------------------
+// D1 (owner-approved reversal of S2 UX-A): the blocking three-ways panel (#introOverlay) NO LONGER
+// auto-shows. On first visit a small NON-BLOCKING corner strip (#introStrip) appears over a map corner —
+// the map stays fully interactive behind it. The panel is now an on-demand help dialog, reachable only
+// via the strip's "How AusMT works" action and the header help entry (#howToUse). "Start exploring"
+// dismisses + persists exactly as the old blocking overlay's dismiss did. Both states render in the
+// populated AND empty-data paths (the strip explains the portal even before any survey exists), so the
+// first-visit show fires from runInit(), not boot()/loadData().
 const INTRO_KEY="ausmt_intro_dismissed";
 function introSeen(){try{return localStorage.getItem(INTRO_KEY)==="1";}catch(e){return false;}}
 function markIntroSeen(){try{localStorage.setItem(INTRO_KEY,"1");}catch(e){/* storage unavailable (e.g. privacy mode) — just don't persist */}}
-function showIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.remove("hidden");}
+function showIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.remove("hidden");}   // opens the three-ways help panel
 function hideIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.add("hidden");}
-function dismissIntro(){markIntroSeen();hideIntro();}
-function maybeShowIntro(){if(!introSeen())showIntro();}
+function showStrip(){const s=document.getElementById("introStrip");if(s)s.classList.remove("hidden");}
+function hideStrip(){const s=document.getElementById("introStrip");if(s)s.classList.add("hidden");}
+function dismissIntro(){markIntroSeen();hideStrip();}         // "Start exploring" (+ tile/tour flows): persist + hide the strip
+function maybeShowIntro(){if(!introSeen())showStrip();}       // first visit shows the STRIP, not the blocking panel
 
 (function(){
-  const closeBtn=document.getElementById("introClose");if(closeBtn)closeBtn.onclick=dismissIntro;
-  // Tile 1: "Browse & download" — dismiss the panel and focus the map (the default view).
-  const tB=document.getElementById("tileBrowse");if(tB)tB.onclick=()=>{dismissIntro();setView("map");};
-  // Tile 2: "Contribute a survey" — off to the guided add-survey flow.
-  const tC=document.getElementById("tileContribute");if(tC)tC.onclick=()=>{dismissIntro();window.location.href="add-survey.html";};
-  // Tile 3: "Integrate" — machine-readable catalogue docs on the About page.
-  const tI=document.getElementById("tileIntegrate");if(tI)tI.onclick=()=>{dismissIntro();window.location.href="about.html#standards";};
-  // Header link re-opens the panel on demand; it does NOT reset the dismissed flag (a later visit
-  // still starts hidden — only an explicit dismiss/first-visit state controls the localStorage key).
+  // Panel close = hide the help dialog only. It no longer persists (the panel is on-demand help now;
+  // only the strip's dismissal controls the first-visit localStorage key).
+  const closeBtn=document.getElementById("introClose");if(closeBtn)closeBtn.onclick=hideIntro;
+  // Panel tiles close the panel AND dismiss the first-visit strip, then act.
+  const tB=document.getElementById("tileBrowse");if(tB)tB.onclick=()=>{hideIntro();dismissIntro();setView("map");};
+  const tC=document.getElementById("tileContribute");if(tC)tC.onclick=()=>{hideIntro();dismissIntro();window.location.href="add-survey.html";};
+  const tI=document.getElementById("tileIntegrate");if(tI)tI.onclick=()=>{hideIntro();dismissIntro();window.location.href="about.html#standards";};
+  // Header help + the strip's "How AusMT works" both OPEN the panel on demand (NOT gated by the seen flag).
   const howTo=document.getElementById("howToUse");if(howTo)howTo.onclick=showIntro;
-  // "Take the tour" button lives inside the panel; startTour is defined in tour.js (loaded after
-  // main.js) — guarded so a missing/broken tour.js can't break the panel itself.
+  const introHow=document.getElementById("introHow");if(introHow)introHow.onclick=showIntro;
+  // "Start exploring" dismisses the first-visit strip (persist).
+  const introStart=document.getElementById("introStart");if(introStart)introStart.onclick=dismissIntro;
+  // The panel's "Take the tour" button (#introTakeTour) — the sole tour entry point — closes the panel,
+  // dismisses the strip, and launches the tour. startTour is defined in tour.js (loaded after main.js),
+  // guarded so a missing/broken tour.js can't break the wiring.
   const tourBtn=document.getElementById("introTakeTour");
-  if(tourBtn)tourBtn.onclick=()=>{dismissIntro();if(typeof startTour==="function")startTour();};
-  // UX3 item 2: the header "Take the tour" button (#headerTour) was removed — the single header help
-  // entry point is now "How to use AusMT" (#howToUse, wired above), which opens the intro panel; the
-  // panel's own "Take the tour" button (#introTakeTour) starts the tour. So there is one help button in
-  // the header, not two.
+  if(tourBtn)tourBtn.onclick=()=>{hideIntro();dismissIntro();if(typeof startTour==="function")startTour();};
+  // The header help entry is the single "How to use AusMT" button (#howToUse); #headerTour stays removed.
 })();
 
+// UX6 Wave D (D6): static map legend (bottom-left) — one cluster-bubble row + a coloured dot per data
+// type. The dots read the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (no hard-coded hexes here),
+// so they track any future colour change automatically. Built once (idempotent), parented to .content so
+// it floats over the map; setView() toggles it with the view. Collapsible on small widths (the toggle
+// only shows there via CSS); starts collapsed on a narrow viewport.
+function buildLegend(){
+  if(document.getElementById("mapLegend"))return;                 // idempotent
+  const content=document.getElementById("content");if(!content)return;
+  const types=[["--lpmt","Long period"],["--bbmt","Broadband"],["--amt","AMT"],["--gds","GDS (tipper)"]];
+  const rows=types.map(([v,label])=>`<div class="legrow"><span class="dot" style="background:var(${v})"></span>${label}</div>`).join("");
+  const small=typeof window!=="undefined"&&window.innerWidth<=760;   // body defaults collapsed on small widths
+  const el=document.createElement("div");el.id="mapLegend";el.className="maplegend";
+  el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
+    `<div class="maplegend-body"><div class="legrow"><span class="legcluster">n</span> stations (zoom to expand)</div>${rows}</div>`;
+  content.appendChild(el);
+  const toggle=el.querySelector("#mapLegendToggle");
+  if(toggle)toggle.addEventListener("click",()=>{const ex=el.classList.toggle("expanded");toggle.setAttribute("aria-expanded",String(ex));});
+}
 function runInit(){
   buildState();
   // The Collections tab only appears when the data actually has collections (surveys sharing a collection.id).
   const _nc=document.getElementById("navCollections");
   if(_nc)_nc.style.display=(typeof COLL!=="undefined"&&COLL&&Object.keys(COLL).length)?"":"none";
-  if(portalIsEmpty()){buildTree();setView("map");updateCounts();showEmptyState();maybeShowIntro();renderRecentlyAdded();return;}
-  buildMarkers();buildFootprints();buildTree();setView("map");refresh();routeFromHash();maybeShowIntro();renderRecentlyAdded();
+  if(portalIsEmpty()){buildTree();buildLegend();setView("map");updateCounts();showEmptyState();maybeShowIntro();renderRecentlyAdded();return;}
+  buildMarkers();buildFootprints();buildTree();buildLegend();setView("map");refresh();routeFromHash();maybeShowIntro();renderRecentlyAdded();
 }
 // C12: "data build <short id> · <date>" footer text, or "" when build.json didn't resolve (older
 // builds predate it — BUILDID is null — so the placeholder must stay empty, not show stale/undefined
