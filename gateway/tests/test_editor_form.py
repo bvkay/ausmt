@@ -384,3 +384,148 @@ def test_build_section_patch_empty_form_is_empty_patch():
     bare form invents sections."""
     patch, errors = ef.build_section_patch({})
     assert patch == {} and errors == []
+
+
+# ---- C46: attribution (map) + sources (list) capture --------------------------------------------
+
+# The GENERATED engine contract seam, loaded by path (engine-truth). _contract.py is a stdlib-only
+# generated constants file (no heavy stack), so it loads cleanly in the stack-less gateway test env.
+# The gateway APP image is CONTENT-BLIND (ships only gateway/), so editor_form BAKES the licence vocab;
+# this test PINS that baked copy to the contract the same way the coordinate-policy test pins its copy.
+_ENGINE_CONTRACT_PY = Path(__file__).resolve().parents[2] / "engine" / "extract" / "_contract.py"
+
+# The REAL surveys validator, loaded from the VENDORED copy that ships with the gateway (the same copy
+# the F7 oracles use). The C46-W1c key-parity pin feeds an editor-assembled patch through THIS validator
+# and asserts zero unknown-key warnings — cross-repo engine-truth, not a hand-typed expectation.
+_VENDORED_VALIDATOR_PY = (Path(__file__).resolve().parent / "fixtures" / "vendored_validation"
+                          / "validate_survey.py")
+
+
+def _load_by_path(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_license_vocab_matches_engine_contract():
+    """PARITY PIN: editor_form.LICENSE_IDS is the full recognised vocab (redistributable ∪
+    recognised_only) from the generated engine contract seam, in order. FAILS IF the baked copy drifts
+    from contract/licenses.json (an id added there but not here). This is the 'not hand-copied' guard
+    the content-blind gateway needs — it cannot import the seam at runtime, so the test pins it."""
+    contract = _load_by_path(_ENGINE_CONTRACT_PY, "_ausmt_engine_contract_ro")
+    expected = tuple(contract.LICENSES["redistributable"]) + tuple(contract.LICENSES["recognised_only"])
+    assert ef.LICENSE_IDS == expected, "editor LICENSE_IDS drifted from the generated contract"
+    assert ef.LICENSE_REDISTRIBUTABLE == tuple(contract.LICENSES["redistributable"]), \
+        "editor LICENSE_REDISTRIBUTABLE grouping drifted from the contract"
+    assert len(ef.LICENSE_IDS) == 19
+
+
+def _survey_meta_with(patch: dict) -> dict:
+    """A minimal schema-0.3 survey metadata dict carrying an editor-assembled patch fragment."""
+    return {
+        "schema_version": "0.3", "slug": "paritytest", "project_name": "Parity Test",
+        "country": "Australia", "organisation": {"name": "Org", "ror": None},
+        "access": {"level": "open"}, "license": "CC-BY-4.0", **patch,
+    }
+
+
+def _write_survey(folder: Path, meta: dict) -> None:
+    import yaml
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "survey.yaml").write_text(yaml.safe_dump(meta, sort_keys=False), encoding="utf-8")
+    (folder / "README.md").write_text("# x\n", encoding="utf-8")
+    (folder / "LICENSE.md").write_text("# Licence\n\n**CC-BY-4.0**\n", encoding="utf-8")
+
+
+_C46_FORM = {
+    "s_attribution_custodian": "Geological Survey of South Australia",
+    "s_attribution_custodian_ror": "https://ror.org/04y8k6r48",
+    "s_attribution_statement": "Cite as GSSA (2016)",
+    "s_attribution_changes_made": "1",
+    "s_attribution_changes_summary": "EMTF XML + MTH5 regenerated from custodian EDIs",
+    "s_attribution_declared_by": "A. Curator",
+    "s_attribution_declared_date": "2026-07-13",
+    "l_sources_0_title": "AusLAMP SA – NCI/AuScope archive",
+    "l_sources_0_custodian": "NCI / AuScope",
+    "l_sources_0_identifier": "10.25914/abc",
+    "l_sources_0_licence": "CC-BY-3.0-AU",
+    "l_sources_0_retrieved": "2016",
+    "l_sources_0_statement": "Cite the AusLAMP SA archive",
+    "l_sources_0_profile": "generic",
+}
+
+
+def test_key_parity_editor_patch_through_real_validator(tmp_path):
+    """KEY-PARITY PIN (the important one): an editor-assembled attribution+sources patch, written to a
+    survey.yaml and read back by the REAL vendored surveys validator, produces ZERO unknown-key
+    warnings — the editor's FROZEN section keys equal the validator's ATTRIBUTION_KEYS / SOURCE_KEYS
+    (the C42-editor key-parity lesson, cross-repo). MUTATION-PROOF below (rename one key -> red)."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_validate")
+    patch, errors = ef.build_section_patch(_C46_FORM)
+    assert not errors, errors
+    assert set(patch) == {"attribution", "sources"}, patch
+
+    folder = tmp_path / "paritytest"
+    _write_survey(folder, _survey_meta_with(patch))
+    rep = vv.validate(folder)
+    unknown = [i for i in rep.items if i["check"] in ("attribution", "sources")
+               and "not a recognised" in i["message"]]
+    assert not unknown, f"editor keys the validator does not recognise: {unknown}"
+    # and the values the editor emits are accepted (a recognised source licence PASSES, no source WARNs)
+    assert any(i["check"] == "sources" and i["level"] == "PASS" for i in rep.items)
+    assert not [i for i in rep.items if i["check"] == "sources" and i["level"] == "WARNING"]
+
+
+def test_key_parity_mutation_proof(tmp_path):
+    """NON-VACUOUS proof for the key-parity pin: renaming ONE frozen key in the assembled block makes
+    the REAL validator flag it as unrecognised. FAILS IF the validator's allow-list would silently
+    accept a drifted key (which would make the parity test above vacuous)."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_validate2")
+    patch, _ = ef.build_section_patch(_C46_FORM)
+    attr = dict(patch["attribution"])
+    attr["custodianX"] = attr.pop("custodian")          # a drifted attribution key
+    patch = {**patch, "attribution": attr}
+    folder = tmp_path / "mutant"
+    _write_survey(folder, _survey_meta_with(patch))
+    rep = vv.validate(folder)
+    assert any(i["check"] == "attribution" and "custodianX" in i["message"] for i in rep.items), \
+        "validator did not flag a drifted attribution key — the parity pin would be vacuous"
+
+
+def test_attribution_bool_and_round_trip():
+    """attribution assembles changes_made from the checkbox (present => True); an unchanged submit
+    round-trips to _OMIT. FAILS IF the bool checkbox is not read, or an unchanged submit emits a diff."""
+    form = {
+        "s_attribution_custodian": "GSSA", "s_attribution_changes_made": "1",
+        "s_attribution_declared_date": "2026-07-13",
+        **_snap("attribution", {"custodian": "GSSA", "changes_made": True, "declared_date": "2026-07-13"}),
+    }
+    assert ef.assemble_section(form, "attribution") is ef._OMIT
+    # unticking a previously-true flag is a real change to False (not a silent drop)
+    form2 = {"s_attribution_custodian": "GSSA",
+             **_snap("attribution", {"custodian": "GSSA", "changes_made": True})}
+    assert ef.assemble_section(form2, "attribution") == {"custodian": "GSSA", "changes_made": False}
+
+
+def test_attribution_bad_declared_date_errors():
+    """attribution.declared_date is a date-kind field: a malformed date surfaces a per-field error."""
+    form = {"s_attribution_declared_date": "soon", **_snap("attribution", {})}
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "attribution")
+
+
+def test_sources_licence_and_profile_vocab_enforced():
+    """sources[].licence is vocab-validated against the SAME contract vocab (killing the free-text
+    seam); profile against ga|generic. A valid pair assembles; an out-of-vocab value fail-closes at the
+    form. FAILS IF the editor would accept a value the validator/engine would reject."""
+    ok = {"l_sources_0_title": "A", "l_sources_0_licence": "CC-BY-4.0",
+          "l_sources_0_profile": "ga", **_snap("sources", [])}
+    out = ef.assemble_section(ok, "sources")
+    assert out[0]["licence"] == "CC-BY-4.0" and out[0]["profile"] == "ga"
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section({"l_sources_0_title": "A", "l_sources_0_licence": "NOT-A-LICENCE",
+                             **_snap("sources", [])}, "sources")
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section({"l_sources_0_title": "A", "l_sources_0_profile": "mystery",
+                             **_snap("sources", [])}, "sources")

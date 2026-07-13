@@ -8,6 +8,7 @@
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="src/security.js"></script>   <!-- canonical esc/escAttr/escUrl, shared with the portal (single source) -->
+<script src="src/contract.js"></script>   <!-- C46: generated licence vocab (LICENSES) — single source for the licence <select>s (never hand-copied) -->
 
 <!-- Privacy-respecting analytics OFF by default (see ANALYTICS.md). To enable, uncomment + set your domain:
 <script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script> -->
@@ -186,7 +187,9 @@
       <div><label>Project RAiD</label><input id="m_raid" placeholder="https://raid.org/…"></div>
 
       <div class="req"><label>Licence</label>
-        <select id="m_license"><option>CC-BY-4.0</option><option>CC0-1.0</option><option>CC-BY-SA-4.0</option><option value="TBD">TBD (set before publishing)</option></select></div>
+        <!-- C46: options are populated at runtime from the generated contract (LICENSES in src/contract.js),
+             grouped redistributable vs recognised-only + a TBD option — never a hand-copied list. -->
+        <select id="m_license"></select></div>
       <div class="req"><label>Access level</label>
         <select id="m_access"><option>open</option><option>metadata_only</option><option>embargoed</option></select></div>
 
@@ -215,6 +218,22 @@
               <code>survey.yaml</code> — do not use a private personal address you would not want published.</div></div>
         </div>
       </div>
+
+      <!-- C46 source dataset (optional, collapsed): the UPSTREAM archive this survey was obtained from.
+           Written into survey.yaml as a sources[] entry (schema 0.3). The source licence reuses the same
+           contract vocab as the release licence above. -->
+      <div class="full"><details id="sourceBlock">
+        <summary style="cursor:pointer">Source dataset <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional — if this survey was obtained from an upstream archive)</span></summary>
+        <div class="grid" style="margin-top:8px">
+          <div><label>Source title</label><input id="m_src_title" placeholder="e.g. AusLAMP SA – NCI/AuScope archive"></div>
+          <div><label>Source custodian</label><input id="m_src_custodian" placeholder="e.g. NCI / AuScope"></div>
+          <div><label>Source identifier</label><input id="m_src_identifier" placeholder="DOI / eCat / SARIG id / URL"></div>
+          <div><label>Source licence <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(as obtained)</span></label><select id="m_src_license"></select></div>
+          <div><label>Retrieved <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(date or year)</span></label><input id="m_src_retrieved" placeholder="2016 or 2016-05-01"></div>
+        </div>
+        <div class="hint">Records the upstream dataset this survey was derived from, its custodian, and the
+          licence you obtained it under. Written to <code>survey.yaml</code> as a <code>sources</code> entry.</div>
+      </details></div>
 
       <div class="full"><label>Abstract</label><textarea id="m_abstract" placeholder="One paragraph: location, target, band."></textarea></div>
 
@@ -657,6 +676,10 @@ function previewSurvey(meta, edis){
     lonRange:lons.length?[Math.min.apply(null,lons),Math.max.apply(null,lons)]:null,
     types, extractor:recommendedExtractor(edis)};
 }
+// C46: the recognised licence-id vocab for the licence <select>s, derived from the GENERATED contract
+// (portal/src/contract.js LICENSES) — never a hand-copied list. redistributable first, then
+// recognised-only (metadata-only display). Pure, so the jsdom test can pin it to the contract file.
+function licenseSelectIds(L){ L=L||{}; return [].concat(L.redistributable||[], L.recognised_only||[]); }
 // Structured survey.yaml (nested organisation / lead_investigator / data_types / funding / processing /
 // instruments). `name` and a primary `data_type` are also emitted for backward compatibility.
 function buildSurveyYaml(m){
@@ -664,9 +687,18 @@ function buildSurveyYaml(m){
   const ext=[m.west,m.east,m.south,m.north].every(v=>v!=null&&v!=="")
     ? `{ west: ${+m.west}, east: ${+m.east}, south: ${+m.south}, north: ${+m.north}, datum: WGS84 }` : "{}";
   const dts=(m.data_types||[]);
+  // C46 capture: persist the uploader's licence declaration as attribution (who + when), and any
+  // upstream source dataset. declared_date is a bare ISO scalar derived from the tsUTC seam (or an
+  // explicit m.declared_date). A package carrying any C46 field declares schema_version 0.3.
+  const declaredBy=String(m.declared_by||m.uploader_name||"").trim();
+  const rawDeclared=String(m.declared_date||"").trim();
+  const declaredDate=/^\d{4}-\d{2}-\d{2}$/.test(rawDeclared)?rawDeclared:tsUTCDate();
+  const emitAttribution=!!m.license_declaration&&(declaredBy||declaredDate);
+  const srcs=(m.sources||[]).filter(s=>s&&(s.title||s.custodian||s.identifier||s.licence||s.retrieved||s.statement||s.profile));
+  const emitC46=emitAttribution||srcs.length>0;
   const L=[];
   L.push("# AusMT survey package — generated by the Add Survey page. Review every value before submitting.");
-  L.push('schema_version: "0.2"');
+  L.push('schema_version: "'+(emitC46?"0.3":"0.2")+'"');
   L.push("slug: "+(m.slug||"REPLACE-ME"));
   L.push("project_name: "+q(m.name));
   L.push("name: "+q(m.name));                       // backward-compatible alias
@@ -730,6 +762,23 @@ function buildSurveyYaml(m){
   const accessContact=(m.access&&m.access!=="open"&&m.access_contact)?String(m.access_contact).trim():"";
   L.push("  embargo_until: "+(embargoDate||"null"));
   L.push("  contact: "+(accessContact?q(accessContact):"null"));
+  if(emitAttribution){
+    L.push("attribution:");
+    if(declaredBy) L.push("  declared_by: "+q(declaredBy));
+    L.push("  declared_date: "+declaredDate);   // bare ISO scalar (validated shape / tsUTC-derived)
+  }
+  if(srcs.length){
+    L.push("sources:");
+    srcs.forEach(s=>{
+      L.push("  - title: "+q(s.title));
+      L.push("    custodian: "+(s.custodian?q(s.custodian):"null"));
+      L.push("    identifier: "+(s.identifier?q(s.identifier):"null"));
+      L.push("    licence: "+(s.licence?q(s.licence):"null"));
+      L.push("    retrieved: "+(s.retrieved?q(s.retrieved):"null"));
+      if(s.statement) L.push("    statement: "+q(s.statement));
+      if(s.profile==="ga"||s.profile==="generic") L.push("    profile: "+s.profile);  // bare enum scalar, vocab-guarded
+    });
+  }
   L.push("time_series:");
   L.push("  collection_pid: null");
   L.push("  levels_available: []");
@@ -749,6 +798,7 @@ function buildSurveyYaml(m){
 async function sha256Hex(buf){ const h=await crypto.subtle.digest("SHA-256",buf);
   return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,"0")).join(""); }
 function tsUTC(){ return new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z"); } // YYYYMMDDTHHMMSSZ
+function tsUTCDate(){ const t=tsUTC(); return t.slice(0,4)+"-"+t.slice(4,6)+"-"+t.slice(6,8); } // YYYY-MM-DD from the tsUTC seam
 
 // ROR response parsing — robust across API v1 ({name, country.country_name, acronyms}) and v2
 // ({names:[{value,types}], locations:[{geonames_details.country_name}]}). Returns clean rows only;
@@ -789,7 +839,7 @@ function rorMatchesFromResponse(data){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,ediNameGate,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,rorMatchesFromResponse};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,ediNameGate,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -798,6 +848,33 @@ if(typeof document!=="undefined"&&document.getElementById){
   // C13 gateway state: set true ONLY by a passing same-origin healthz probe (design §1). Read by the
   // shared package builder so SUBMISSION.md lists the direct-upload path first when a gateway is live.
   let gatewayReady=false;
+
+  // C46: populate the licence <select>s from the GENERATED contract vocab (LICENSES from
+  // src/contract.js), grouped redistributable vs recognised metadata-only + a TBD workflow option.
+  // Never a hand-copied list — the pure exported vocab is licenseSelectIds(LICENSES).
+  function licenseOptionsHtml(selected){
+    var L=(typeof LICENSES!=="undefined")?LICENSES:{redistributable:[],recognised_only:[]};
+    function opts(ids){ return (ids||[]).map(function(id){
+      return '<option value="'+escAttr(id)+'"'+(id===selected?' selected':'')+'>'+esc(id)+'</option>'; }).join(""); }
+    return '<optgroup label="Redistributable (AusMT serves the bytes)">'+opts(L.redistributable)+'</optgroup>'+
+           '<optgroup label="Recognised (metadata-only display)">'+opts(L.recognised_only)+'</optgroup>';
+  }
+  function populateLicenseSelect(sel,opts){
+    if(!sel) return; opts=opts||{};
+    var lead=opts.blank?'<option value="">'+esc(opts.blank)+'</option>':'';
+    var tbd=opts.tbd?'<option value="TBD">TBD (set before publishing)</option>':'';
+    sel.innerHTML=lead+licenseOptionsHtml(opts.selected||"")+tbd;
+  }
+  populateLicenseSelect($("m_license"),{selected:"CC-BY-4.0",tbd:true});
+  populateLicenseSelect($("m_src_license"),{blank:"(none)"});
+
+  // C46: the optional upstream source dataset -> a sources[] entry (empty when nothing is filled).
+  function readSources(){
+    const s={ title:$("m_src_title").value.trim(), custodian:$("m_src_custodian").value.trim(),
+              identifier:$("m_src_identifier").value.trim(), licence:$("m_src_license").value,
+              retrieved:$("m_src_retrieved").value.trim() };
+    return (s.title||s.custodian||s.identifier||s.licence||s.retrieved)?[s]:[];
+  }
 
   // ----- instrument systems: manufacturer + model rows (models depend on manufacturer) -----
   const INSTR_MODELS={
@@ -941,7 +1018,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     pi:$("m_pi").value.trim(), pi_orcid:$("m_pi_orcid").value.trim(), ror:$("m_ror").value.trim(),
     dataset_doi:$("m_doi").value.trim(), pub:$("m_pub").value.trim(), pub_doi:$("m_pubdoi").value.trim(),
     project:$("m_project").value.trim(), raid:$("m_raid").value.trim(),
-    funding:readFunding(),
+    funding:readFunding(), sources:readSources(),
     collection_id:$("m_coll_id").value.trim(), collection_title:$("m_coll_title").value.trim(), collection_type:$("m_coll_type").value.trim(),
     collection_status:$("m_coll_status").value, collection_year:$("m_coll_year").value.trim(), collection_desc:$("m_coll_desc").value.trim(),
     processing_software:($("m_soft").value==="Other"?$("m_softother").value.trim():$("m_soft").value),
