@@ -299,26 +299,34 @@ async function bootFreshWindow(dataMap) {
   ok(A.visSurveys().includes("Beta Survey"), "org toggle wrongly hid a sibling org's survey");
   orgx.checked = true; fire(orgx, "change");
 
-  // C2. UX5 (D6) COLLECTIONS TOGGLE GROUP — first, cross-cutting, push-only.
+  // C2. UX7a (A3) COLLECTIONS GROUP — its OWN block ABOVE the tree (was UX5 (D6) first-WITHIN the tree),
+  //     cross-cutting, push-only. The group is now mounted in #collGroup, OUTSIDE #tree.
   const treeEl = doc.getElementById("tree");
-  const kids = [...treeEl.children];
-  const collRowIdx = kids.findIndex(k => k.classList && k.classList.contains("coll"));
-  const firstCountryIdx = kids.findIndex(k => k.classList && k.classList.contains("country"));
-  // (a) ordering + gating-on: the group exists and renders FIRST (before any .country row).
-  ok(collRowIdx >= 0, "UX5: no collection row rendered in the tree");
-  ok(firstCountryIdx > collRowIdx, "UX5: the Collections group must render BEFORE any country row, got coll@" + collRowIdx + " country@" + firstCountryIdx);
-  ok(treeEl.querySelector(".treegroup"), "UX5: Collections group heading missing");
-  const collRow = kids[collRowIdx];
+  const collGroupEl = doc.getElementById("collGroup");
+  ok(collGroupEl, "A3: #collGroup block missing from the rail");
+  const collRow = collGroupEl.querySelector("label.coll");
+  // (a) the group renders in its own block, with its heading, and NOT inside the tree.
+  ok(collRow, "A3: no collection row rendered in the #collGroup block");
+  ok(collGroupEl.querySelector(".treegroup"), "A3: Collections group heading missing from #collGroup");
+  //     HEADER-ABSENCE (hermetic): #tree must now carry NO collection rows/heading — collections live
+  //     strictly OUTSIDE and ABOVE it. Non-vacuous precisely because collRow above proves a collection
+  //     row DOES exist (in #collGroup): an empty result here is a real relocation, not a missing feature.
+  ok(!treeEl.querySelector(".coll") && !treeEl.querySelector(".treegroup"),
+    "A3: #tree must contain NO collection rows/heading (collections render in #collGroup above the tree)");
+  //     ORDER: #collGroup precedes #tree in document order (the block sits ABOVE the tree header).
+  //     compareDocumentPosition sets DOCUMENT_POSITION_FOLLOWING (4) when treeEl FOLLOWS collGroupEl.
+  ok((collGroupEl.compareDocumentPosition(treeEl) & 4) !== 0,
+    "A3: the #collGroup block must appear BEFORE #tree in document order (collections above the tree)");
   ok(/AusLAMP — 2 surveys · 3 stations/.test(collRow.textContent),
-    "UX5: collection row label must read '<name> — <n> surveys · <m> stations' (Alpha 2 + Beta 1 = 3), got: " + collRow.textContent);
+    "A3: collection row label must read '<name> — <n> surveys · <m> stations' (Alpha 2 + Beta 1 = 3), got: " + collRow.textContent);
   // O1 (owner, 2026-07-12): the collection row carries NO nested member-survey list any more — just the
   // name + survey count + station count. Members stay reachable via the org/country tree + collection page.
-  ok(treeEl.querySelectorAll(".collmember").length === 0,
-    "O1: collection rows must NOT nest a member-survey list, got " + treeEl.querySelectorAll(".collmember").length);
+  ok(collGroupEl.querySelectorAll(".collmember").length === 0,
+    "O1: collection rows must NOT nest a member-survey list, got " + collGroupEl.querySelectorAll(".collmember").length);
   // (b) PUSH-SYNC: unchecking the collection box flips EXACTLY the member surveys (Alpha+Beta) and
-  // refreshes; non-members (Gamma, Delta) untouched. Re-check restores.
+  // refreshes; non-members (Gamma, Delta) untouched. Re-check restores. Member surveys still live in #tree.
   const collBox = collRow.querySelector("input[data-coll]");
-  ok(collBox, "UX5: collection checkbox missing");
+  ok(collBox, "A3: collection checkbox missing");
   collBox.checked = false; fire(collBox, "change");
   ok(surveyBoxes.find(b => b.value === "Alpha Survey").checked === false, "UX5: collection uncheck did not flip member Alpha Survey");
   ok(surveyBoxes.find(b => b.value === "Beta Survey").checked === false, "UX5: collection uncheck did not flip member Beta Survey");
@@ -353,7 +361,11 @@ async function bootFreshWindow(dataMap) {
 
   // C4. UX5 (D7) CARET CLICK-TARGET: a caret click must NOT toggle the row's checkbox (the rows are
   // label-wrapped, so an unguarded child click would activate the label) — and must collapse/expand.
-  const ausRow = kids[firstCountryIdx];   // "Australia" sorts before "New Zealand"
+  // "Australia" sorts before "New Zealand"; find its country row directly in #tree (the shared
+  // kids/firstCountryIdx indices were dropped when the collections group moved out of the tree in A3).
+  const ausRow = [...treeEl.querySelectorAll("label.country")]
+    .find(r => { const i = r.querySelector("input[data-country]"); return i && i.getAttribute("data-country") === "Australia"; });
+  ok(ausRow, "UX5: no Australia country row found in #tree");
   const caret = ausRow.querySelector(".caret");
   ok(caret, "UX5: country row has no caret");
   const ausBox = ausRow.querySelector("input");
@@ -691,8 +703,11 @@ async function bootFreshWindow(dataMap) {
   Object.keys(DATAMAP).forEach(k => { if (k !== "data/collections.json") noCollData[k] = DATAMAP[k]; });
   const wNo = await bootFreshWindow(noCollData);
   const tNo = wNo.document.getElementById("tree");
+  const cgNo = wNo.document.getElementById("collGroup");
+  ok(cgNo && cgNo.children.length === 0 && !cgNo.querySelector("[data-coll]") && !cgNo.querySelector(".treegroup"),
+    "A3: the Collections block (#collGroup) must render EMPTY when the data has no collections (#collGroup:empty hides it)");
   ok(!tNo.querySelector("[data-coll]") && !tNo.querySelector(".treegroup"),
-    "UX5: the Collections group must NOT render when the data has no collections");
+    "A3: no collection rows/heading may appear in #tree in the no-collections boot either");
   ok(tNo.querySelectorAll("label.country").length === 2, "UX5: countries missing in the no-collections boot");
   ok(tNo.querySelectorAll(".caret").length > 0, "UX5: disclosure carets missing in the no-collections boot");
 

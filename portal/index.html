@@ -104,16 +104,22 @@
   .tree .survey input{accent-color:var(--copper)}
   .tree .survey .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-right:4px}
   /* UX5 (D7): disclosure carets — a separate click target inside each label row (its handler
-     preventDefaults so the label never activates its checkbox). UX5 (D6): the Collections toggle
-     group renders FIRST in the tree; .coll styled like .country (both are bulk toggles), passive
-     .collmember rows indented + muted with the survey-style count chip. */
+     preventDefaults so the label never activates its checkbox). UX7a (A3): the Collections toggle
+     group now renders as its OWN block (.collgroup) ABOVE the country→org→survey tree header, rather
+     than first-within the tree — so the .coll / .treegroup styles are shared between .tree and
+     .collgroup. .coll is styled like .country (both are bulk toggles). */
   .tree .caret{flex:none;width:14px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
   .tree .caret:hover{color:var(--copper)}
-  .tree .treegroup{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:4px 0 1px}
-  .tree .coll{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:3px 0;cursor:pointer}
-  .tree .coll input{accent-color:var(--copper)}
+  .tree .treegroup,.collgroup .treegroup{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:4px 0 1px}
+  .tree .coll,.collgroup .coll{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:3px 0;cursor:pointer}
+  .tree .coll input,.collgroup .coll input{accent-color:var(--copper)}
   .tree .collmember{display:flex;align-items:center;font-size:12px;color:var(--muted);padding:1px 0 1px 39px}
   .tree .collmember .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;padding-right:4px}
+  /* UX7a (A3): the Collections group as a standalone rail block above the tree. It sits between the
+     Data-type section and the tree section (rail gap:16px on each side = stronger separation). When the
+     boot data has no collections it stays empty and :empty removes it so no phantom gap remains. */
+  .collgroup{display:flex;flex-direction:column;gap:2px}
+  #collGroup:empty{display:none}
   #find{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;color:var(--text);font-size:13px;padding:7px 9px}
   #find:focus{outline:none;border-color:var(--copper)}
   .findresults{display:none;margin-top:6px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2);max-height:300px;overflow-y:auto}
@@ -596,6 +602,11 @@
     <h2>Recently added</h2>
     <div id="recentSide"></div>
   </section>
+  <!-- UX7a (A3): the Collections group renders here as its OWN block, ABOVE the tree header (was
+       first-within the tree). buildTree() (filters.js) fills #collGroup when the boot data has
+       collections; #collGroup:empty hides it otherwise. Element ids and the group-toggle behaviour are
+       unchanged — only the mount point moved out of #tree. -->
+  <div class="collgroup" id="collGroup" data-views="both"></div>
   <section data-views="both" id="treeSection">
     <h2>Country → organisation → survey</h2>
     <div class="tree" id="tree"></div>
