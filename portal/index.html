@@ -90,8 +90,11 @@
   .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
   .pread{font-family:var(--mono);font-size:13px;margin-top:9px}
   .pread span{color:var(--copper)}
-  .tree{display:flex;flex-direction:column;gap:2px;min-height:120px;max-height:60vh;height:300px;overflow-y:auto;resize:vertical;padding-right:12px;border:1px solid transparent;border-bottom:1px dashed var(--line)}
-  .tree:hover{border-bottom-color:var(--copper)}
+  /* UX7a (A4): the country→org→survey tree fills the rail's remaining height (flex-grow) and scrolls
+     internally, so the list runs to the bottom of the page. The rail itself does NOT gain a second outer
+     scrollbar — only the tree scrolls. The flex chain that makes this work (each ancestor min-height:0 so
+     the tree can shrink below its content and scroll) is set up on #browseMode / #treeSection below. */
+  .tree{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;padding-right:12px}
   .tree .country{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:3px 0;cursor:pointer}
   .tree .country input{accent-color:var(--copper)}
   .tree .country .flag{font-size:11.5px;color:var(--muted);font-weight:400;margin-left:auto;font-family:var(--mono);padding-right:2px}
@@ -355,7 +358,8 @@
   .tree .org{padding-left:18px}                                /* deeper indent so nesting reads clearly */
   .tree .survey{padding-left:52px}                             /* UX5: caret width shifted org text right — surveys follow (was 34px) */
   .tree .org .osv{text-transform:none;font-weight:400}         /* "(N surveys)" not upper-cased */
-  .tree-tall .tree{height:600px;max-height:78vh}               /* taller tree on the Surveys view */
+  /* UX7a (A4): the old .tree-tall height override is gone — #tree now flex-fills on every view, so the
+     Surveys-view special case is no longer needed (body.tree-tall is left toggled by main.js but inert). */
   .selbox .selnum{text-align:center;margin-bottom:2px}
   .selbox .biglab{font-size:12px;color:var(--muted)}
   .dsub a{color:var(--copper);text-decoration:none}            /* readable "Part of:" link */
@@ -441,9 +445,17 @@
   /* D2: Browse / Select-&-export mode panes. Wrapping the rail sections in two containers costs them
      aside.filters' column gap, so restore it here. The seg toggle itself reuses the .seg style above. */
   .railmodepane{display:flex;flex-direction:column;gap:16px}
+  /* UX7a (A4): the Browse pane and its tree section form the flex chain that lets #tree flex-fill and
+     scroll internally. Each level needs min-height:0 so the flex item can shrink below its content size
+     (otherwise the tree would push the rail into an outer scrollbar instead of scrolling itself). */
+  #browseMode{flex:1;min-height:0}
+  #treeSection{flex:1;display:flex;flex-direction:column;min-height:0}
   /* D5: sidebar collapse toggle -> ~36px icon rail. width:36px!important beats BOTH the 363px base rule
      and the inline width the resizer writes (which is not !important). */
-  .railcollapse{align-self:flex-end;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
+  /* UX7a (A2): the collapse control is anchored to the BOTTOM-right of the rail (margin-top:auto pushes it
+     past the flex-filling Browse pane / tree). Because the rail itself never scrolls (only the tree does),
+     a bottom-anchored control stays visible while the tree scrolls. */
+  .railcollapse{align-self:flex-end;margin-top:auto;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
     width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;padding:0;flex:none}
   .railcollapse:hover{border-color:var(--copper);color:var(--text)}
   aside.filters.collapsed{width:36px!important;min-width:36px;padding:12px 4px;overflow:hidden}
@@ -558,8 +570,6 @@
 
 <main>
 <aside class="filters" id="filterPane">
-  <!-- D5: collapse the rail to a ~36px icon strip (state persisted in localStorage; see main.js). -->
-  <button type="button" id="sidebarCollapse" class="railcollapse" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">‹</button>
   <!-- D2: two-mode segmented control. Browse = find + data type + tree (+ recently added on map);
        Select & export = the map-selection box, exports and Screening (advanced). Every element id below
        is UNCHANGED — the split is containers + a mode toggle, not id churn. Reuses the .seg style. -->
@@ -586,7 +596,7 @@
     <h2>Recently added</h2>
     <div id="recentSide"></div>
   </section>
-  <section data-views="both">
+  <section data-views="both" id="treeSection">
     <h2>Country → organisation → survey</h2>
     <div class="tree" id="tree"></div>
   </section>
@@ -654,6 +664,10 @@
     </details>
   </section>
   </div><!-- /#selectMode -->
+  <!-- UX7a (A2): the rail collapse control lives at the BOTTOM-right (moved from the top). D5 behaviour is
+       unchanged — it toggles the ~36px icon rail, state persisted in localStorage; see main.js. As the last
+       rail child with margin-top:auto it stays anchored to the bottom, visible while the tree scrolls. -->
+  <button type="button" id="sidebarCollapse" class="railcollapse" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">‹</button>
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
 <div class="content" id="content">
