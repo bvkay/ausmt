@@ -348,10 +348,13 @@
   @media (max-width:760px){.introtiles{grid-template-columns:1fr}}
 
   /* --- guided tour spotlight (tour.js) --- */
-  .tourbackdrop{position:fixed;inset:0;z-index:3000;background:rgba(11,15,18,.65)}
+  /* U10: the dim is JS-driven (tour.js TOUR_DIM, raised .65 -> .78). On a targeted step the backdrop
+     stays TRANSPARENT and the spot's box-shadow supplies the dim, so the spotlighted element shows fully
+     through the cutout; on a no-target step the .centered backdrop carries the dim itself. */
+  .tourbackdrop{position:fixed;inset:0;z-index:3000}
   .tourbackdrop.centered{display:flex;align-items:center;justify-content:center}
   .tourspot{position:fixed;z-index:3001;border:2px solid var(--copper);border-radius:8px;
-    box-shadow:0 0 0 4000px rgba(11,15,18,.65);pointer-events:none;transition:all .12s ease}
+    pointer-events:none;transition:all .12s ease}
   .tourcard{position:fixed;z-index:3002;max-width:340px;background:var(--panel);border:1px solid var(--copper);
     border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
   .tourcard.static{position:static;margin:0 auto}
@@ -359,6 +362,16 @@
   .tourtext{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:14px}
   .tourbtns{display:flex;justify-content:flex-end;gap:8px}
   .tourbtns button{font-size:12px;padding:7px 12px}
+  /* U9: primary advance button (Next/Done) — copper fill + dark text (Wave B nav-active treatment;
+     #16110b on --copper = 6.16:1, AA). */
+  .tourbtns .tourprimary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
+  .tourbtns .tourprimary:hover{border-color:var(--copper)}
+  /* U8: tour card caret — points AT the spotlighted target; tour.js sets the direction class + offset. */
+  .tourarrow{position:absolute;width:0;height:0;pointer-events:none}
+  .tourarrow--up{border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:8px solid var(--copper)}
+  .tourarrow--down{border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid var(--copper)}
+  .tourarrow--left{border-top:8px solid transparent;border-bottom:8px solid transparent;border-right:8px solid var(--copper)}
+  .tourarrow--right{border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:8px solid var(--copper)}
 
   /* --- S3: year range / downloadable-only / go-to-place / recently-added --- */
   .yearrange{display:flex;align-items:center;gap:8px}
