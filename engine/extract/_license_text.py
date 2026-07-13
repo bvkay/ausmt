@@ -30,9 +30,9 @@ from __future__ import annotations
 # Try the sibling form first (the pre-existing engine convention), fall back to the package-qualified
 # form for the installed-package/runner context. Either way it is stdlib-only content (no heavy deps).
 try:
-    from _contract import LICENSES
+    from _contract import LICENSES, PROFILES
 except ImportError:  # pragma: no cover - exercised only in the installed-package (runner) context
-    from extract._contract import LICENSES
+    from extract._contract import LICENSES, PROFILES
 
 # C6: normalise a raw survey.yaml licence string to a canonical id for allow-list matching. trim ->
 # collapse internal whitespace -> upper, then resolve a legacy bare alias (CC0, CC-BY, ODBL, ...) to
@@ -70,14 +70,85 @@ def recognised(license_str) -> bool:
     return canon_license(license_str) in _LIC_RECOGNISED
 
 
-def license_instrument_text(lic, licensor, year, attribution=None, filename="LICENSE.txt") -> str:
-    """C6: the LICENSE.txt that travels INSIDE every distributed survey zip so the rights don't get
+# C46 (CC-BY 4.0 §3(a) discharge): the default human summary rendered in the changes clause when a
+# survey declares no explicit attribution.changes_summary. Factual — it describes what the engine does
+# to every deposited transfer function it serves (EMTF-XML regeneration, MTH5, coordinate/identifier
+# conditioning). Owner-review wording (flagged in the C46-W2 report); to change it, edit here AND
+# regenerate engine/tests/fixtures/license_instrument_vectors.json (both mirrors read the vectors).
+DEFAULT_CHANGES_SUMMARY = (
+    "the deposited transfer functions were regenerated into AusMT's canonical distribution formats, "
+    "and station coordinates, identifiers and metadata were conditioned for release")
+
+
+def _year4(s) -> str:
+    """First run of 4 consecutive digits in a string (a source's `retrieved` date -> its year), else ''."""
+    import re  # stdlib, lazy so the leaf's import stays trivially light (D2)
+    m = re.search(r"\d{4}", str(s or ""))
+    return m.group(0) if m else ""
+
+
+def _render_profile(profile_key, licensor, year, source_title, derivative) -> str:
+    """Render a custodian's required attribution from the generated PROFILES table (C46). Falls back to
+    the `generic` profile for an unknown key. The `derivative` form (GA: 'Based on … by GA …') renders
+    only when the caller asks for it AND the profile defines one (today only `ga`); otherwise the plain
+    `attribution` template renders. Source values are passed as .format ARGUMENTS (never re-parsed), so a
+    custodian/title carrying a literal brace cannot break the template or inject a field."""
+    prof = PROFILES.get(profile_key) or PROFILES.get("generic") or {}
+    tmpl = (prof.get("derivative") if (derivative and prof.get("derivative"))
+            else prof.get("attribution")) or "{licensor} ({year})"
+    return tmpl.format(licensor=licensor, year=year, source_title=source_title)
+
+
+def resolve_changes(attribution_block, derived_products):
+    """The {made, summary} changes descriptor for license_instrument_text, resolved from a survey's
+    attribution block + whether AusMT serves derived renditions of it. `made` = the survey's explicit
+    attribution.changes_made when set, else True whenever derived renditions are served (the design's
+    'always, once XML/MTH5 serve' rule). Returns None (no clause) when not made. `summary` defaults to
+    DEFAULT_CHANGES_SUMMARY when the survey states no attribution.changes_summary."""
+    ab = attribution_block or {}
+    made = ab.get("changes_made")
+    if made is None:
+        made = bool(derived_products)
+    if not made:
+        return None
+    summary = str(ab.get("changes_summary") or "").strip() or DEFAULT_CHANGES_SUMMARY
+    return {"made": True, "summary": summary}
+
+
+def instrument_params_from_survey(*, attribution_block, sources_block, derived_products,
+                                  synthesized_attribution=None):
+    """The (attribution, sources, changes) kwargs for license_instrument_text, derived ONCE from a
+    survey's attribution/sources blocks so build_portal (the bundle LICENSE.txt) and the gw-runner (the
+    intake LICENSE.md) state IDENTICAL rights for the same survey — the single-source parity the C46 map
+    found the two call sites lacked. `attribution` = the custodian's verbatim attribution.statement when
+    present, else `synthesized_attribution` (None -> license_instrument_text synthesises who(year))."""
+    ab = attribution_block or {}
+    statement = str(ab.get("statement") or "").strip()
+    return {
+        "attribution": statement or synthesized_attribution,
+        "sources": list(sources_block) if sources_block else None,
+        "changes": resolve_changes(ab, derived_products),
+    }
+
+
+def license_instrument_text(lic, licensor, year, attribution=None, sources=None, changes=None,
+                            filename="LICENSE.txt") -> str:
+    """C6/C46: the LICENSE.txt that travels INSIDE every distributed survey zip so the rights don't get
     stripped from the bytes. Records the canonical licence id, the licensor (survey custodian org), the
     year (from the survey's date range), an attribution line, and the licence deed URL for CC/ODC ids.
     Deterministic pure text (no timestamps) so the caller can keep the zip byte-reproducible.
     `lic` is passed through canon_license so a bare alias/typo prints its canonical id (or the raw
     normalised value if unrecognised — this file ships only for redistributable surveys, so in practice
-    it is always a known id, but it never fabricates a URL for an unknown one)."""
+    it is always a known id, but it never fabricates a URL for an unknown one).
+
+    C46 additions, appended AFTER the existing attribution block and BYTE-INERT when both are absent:
+      * `sources` (list of dicts: title/custodian/identifier/licence/retrieved/statement/profile) — one
+        attribution paragraph per upstream dataset, using the source's verbatim `statement` when present
+        else the custodian profile's rendered attribution (the GA derivative form when the release makes
+        changes), plus a supersession line for any source whose licence differs from the release licence.
+      * `changes` ({made, summary}) — the CC-BY 4.0 §3(a) 'indicate if changes were made' clause.
+    When `sources` is falsy and `changes` is falsy/`made` False, the output is byte-identical to the
+    pre-C46 instrument (the frozen LICENSE.txt pins)."""
     cid = canon_license(lic)
     url = _LIC_URLS.get(cid, "")
     who = (licensor or "the survey custodian").strip()
@@ -104,4 +175,36 @@ def license_instrument_text(lic, licensor, year, attribution=None, filename="LIC
         "terms of that licence" + (f" ({url})." if url else "."),
         "",
     ]
+    # --- C46 additions (byte-inert when sources + changes are both absent): per-source attribution
+    # paragraphs, licence-supersession line(s), then the CC-BY §3(a) changes clause. Order per the
+    # C46-W2 contract. The existing None-path `lines` above is untouched, so the frozen pins hold.
+    srcs = list(sources or [])
+    if srcs:
+        made = bool(changes and changes.get("made"))
+        lines += ["Source datasets", "-" * len("Source datasets"), ""]
+        for s in srcs:
+            title = str(s.get("title") or "").strip() or "untitled source dataset"
+            cust = str(s.get("custodian") or "").strip() or "unknown custodian"
+            ident = str(s.get("identifier") or "").strip()
+            slic = canon_license(s.get("licence"))
+            head = f"{title} — {cust}" + (f" ({ident})" if ident else "") + f", licensed {slic}."
+            statement = str(s.get("statement") or "").strip()
+            if statement:
+                attr = statement
+            else:
+                profile_key = str(s.get("profile") or "generic").strip() or "generic"
+                syr = _year4(s.get("retrieved")) or yr
+                attr = _render_profile(profile_key, cust, syr, title,
+                                       derivative=(made and profile_key == "ga"))
+            lines += [head, f"  {attr}", ""]
+        for s in srcs:
+            slic = canon_license(s.get("licence"))
+            if slic and slic != cid:
+                lines += [f"The upstream dataset was obtained under {slic}; this AusMT release is "
+                          f"published by the custodian under {cid}.", ""]
+    if changes and changes.get("made"):
+        summary = str(changes.get("summary") or "").strip() or DEFAULT_CHANGES_SUMMARY
+        lines += [f"Changes were made: {summary}. AusMT serves derived renditions (canonical EMTF XML; "
+                  "MTH5 where available) generated from the deposited files; per-station conditioning "
+                  "notes are recorded in the machine-readable products.", ""]
     return "\n".join(lines)
