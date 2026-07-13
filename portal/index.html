@@ -140,18 +140,10 @@
   .dhead .close{margin-left:auto;font-size:16px;padding:4px 10px}
   .dsub{font-size:12.5px;color:var(--muted);margin-top:2px}
   .chip{display:inline-block;font-size:12px;font-weight:700;padding:1px 7px;border-radius:9px;color:#16110b;vertical-align:2px}
-  /* science summary strip — the first thing after the name */
-  .sci{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}
-  .sci .cell{background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:7px 8px;text-align:center}
-  .sci .lab{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-  .sci .val{font-family:var(--mono);font-size:13px;margin-top:3px;font-weight:600}
+  /* (UX8 X4/X7: the .sci science-summary strip and the .maturity/.step legacy-maturity bar were retired —
+     their facts now live in the Response "Station summary" fold and the "Dataset maturity" star block.) */
   .qbar{height:5px;border-radius:3px;background:var(--line);margin-top:5px;overflow:hidden}
   .qbar > div{height:5px;border-radius:3px}
-  .maturity{display:flex;gap:0;margin:10px 0 2px;align-items:stretch}
-  .step{flex:1;text-align:center;font-size:12px;padding:5px 2px;border:1px solid var(--line);color:var(--muted);position:relative}
-  .step:first-child{border-radius:4px 0 0 4px}.step:last-child{border-radius:0 4px 4px 0}
-  .step.on{background:var(--ok);color:#0f1a12;font-weight:700;border-color:var(--ok)}
-  .step.cur{outline:2px solid var(--copper);outline-offset:-2px}
   .badges{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
   .badge{font-size:12px;font-family:var(--mono);padding:2px 8px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
   .badge.ok{border-color:var(--ok);color:var(--ok)}.badge.part{border-color:var(--part);color:var(--part)}.badge.no{border-color:var(--no);color:var(--no)}

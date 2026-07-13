@@ -384,7 +384,7 @@ function openStation(i){
   // inferable from the phase tensor + skew, which stay shown (strike/|β|/3-D-periods line below). The
   // sc.json field itself is unchanged (data products are display-only edits); the map's colour-by-dim
   // mode still reads s.dim. So `dim` is intentionally not destructured here anymore.
-  const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],mre=sc[SC.mre],dec=sc[SC.decades];
+  const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
   location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});
   const _perTxt=azPers.length?` over ${fmtP(Math.min(...azPers))}–${fmtP(Math.max(...azPers))}s`:"";
