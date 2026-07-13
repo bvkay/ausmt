@@ -77,24 +77,30 @@ def test_populated_portal_value_binding(tmp_path):
     assert st["q"] == 4.2, st                          # sc[SC.q]
     assert st["dim"] == "2-D", st                      # sc[SC.dim]
 
-    # (b) exports.js CSV row for ST0 — value-binds the EXPORT call site's sc[SC.*] derefs; the ONLY
-    # coverage of qb/rr/sw (buildState/drawer don't expose them). Column order per the exports.js header.
+    # (b) exports.js CSV row for ST0 — value-binds the EXPORT call site. UX8 (W3b, owner directive) DROPPED
+    # six columns from the station CSV (quality, quality_basis, remote_ref, dimensionality, software, file),
+    # leaving a lean identity/geometry/rights row of 19 columns. Column order per the exports.js header:
+    #   0 ausmt_id 1 station 2 country 3 organisation 4 survey 5 lat 6 lon 7 type 8 components 9 n_periods
+    #   10 period_min_s 11 period_max_s 12 source_doi 13 timeseries_collection_doi 14 survey_version
+    #   15 collection 16 license 17 license_url 18 attribution
     me = re.search(r"^EXPORT0 (\[.*\])\s*$", out, re.M)
     assert me, "smoke.js did not emit EXPORT0 (CSV row):\n" + out
     ex = json.loads(me.group(1))
-    assert ex[12] == 4.2, ex                            # quality        <- sc[SC.q]
-    assert ex[13] == "error", ex                        # quality_basis  <- sc[SC.qb] == "e"
-    assert ex[14] == "yes", ex                          # remote_ref     <- sc[SC.rr]
-    assert ex[15] == "2-D", ex                          # dimensionality <- sc[SC.dim]
-    assert ex[16] == "BIRRP", ex                        # software       <- sc[SC.sw]
+    assert len(ex) == 19, ("expected 19 CSV columns after the W3b drop, got %d: %r" % (len(ex), ex))
+    assert ex[12] == "", ex                             # source_doi (Demo Survey has no DOI)
+    assert ex[13] == "10.25914/mtjg-jp22", ex           # timeseries_collection_doi <- TS_COLLECTION.doi
     # C6: the licence column travels with the exported row (sourced from SMETA[survey].lic). A
     # wrong/missing SMETA.lic deref (or dropping the column) makes this FAIL, not just crash.
-    assert ex[22] == "CC-BY-4.0", ex                    # license        <- SMETA["Demo Survey"].lic
+    assert ex[16] == "CC-BY-4.0", ex                    # license        <- SMETA["Demo Survey"].lic
     # C46: the deed URL (resolved via the canonical LICENSES.urls table, not a startsWith guess) and the
     # rendered attribution line ride at the END so rights travel with a shared CSV. Demo Survey declares
     # no attribution.statement and no dates, so the attribution falls back to the org with no year.
-    assert ex[23] == "https://creativecommons.org/licenses/by/4.0/", ex  # license_url <- canonical table
-    assert ex[24] == "X", ex                            # attribution <- org (no statement/date)
+    assert ex[17] == "https://creativecommons.org/licenses/by/4.0/", ex  # license_url <- canonical table
+    assert ex[18] == "X", ex                            # attribution <- org (no statement/date)
+    # W3b DROP is real (not just reordered): the six removed values are absent from the row. sc[SC.q]=4.2,
+    # sc[SC.sw]="BIRRP", sc[SC.dim]="2-D" and the file "ST1.edi" would all be present pre-drop.
+    for gone in (4.2, "BIRRP", "2-D", "ST1.edi", "error"):
+        assert gone not in ex, ("dropped CSV field %r still present: %r" % (gone, ex))
 
     # (c) C12: the footer's build-id text is a pure function of BUILDID (loaded from build.json) —
     # value-binds main.js's buildIdText() against the KNOWN fixture build_id/generated above, so a
