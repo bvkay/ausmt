@@ -25,23 +25,65 @@ function csvRows(stations){
   stations.forEach(s=>{const sc=SCI[s.i]||[];rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,sc[SC.q]??"",sc[SC.qb]==="e"?"error":"shape",sc[SC.rr]?"yes":"unknown",sc[SC.dim]||"",sc[SC.sw]||"",s.file,(SMETA[s.survey]||{}).doi||"",TS_COLLECTION.doi,(SMETA[s.survey]||{}).version||"",((SMETA[s.survey]||{}).collection||{}).id||"",(SMETA[s.survey]||{}).lic||""]);});
   return rows;
 }
-// C6: the LICENSE.txt content that travels inside the client-side bulk-download zip, mirroring the engine's
-// build_portal.license_instrument_text — data is already client-side via SMETA, so no fetch is needed. The
-// deed URL comes from the generated LICENSES.urls table (contract/licenses.json), keyed by the canonical id.
-function licenseInstrumentText(m){
-  const lic=(m.lic||"").trim(), canon=(LICENSES.aliases[lic.toUpperCase()]||lic).toUpperCase();
-  const url=(LICENSES.urls||{})[canon]||"";
-  const who=((m.cite&&m.cite.au)||m.org||"the survey custodian").trim();
-  const yr=(m.dates?(m.dates.match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
-  const attn=[who,yr?"("+yr+")":"",(m.cite&&m.cite.ti)||""].filter(Boolean).join(" ").trim()||who;
+// C6/C46: the LICENSE.txt content that travels inside the client-side bulk-download zip, mirroring the
+// engine's _license_text.license_instrument_text EXACTLY — the two implementations are pinned to a shared
+// vector file (engine/tests/fixtures/license_instrument_vectors.json), consumed by both an engine pytest
+// AND portal/tests/license_text_vectors.test.js, so they cannot drift silently. Deed URLs + attribution
+// PROFILES come from the generated LICENSES/PROFILES tables (contract/*.json), keyed by the canonical id.
+// Signature MIRRORS the Python leaf (lic, licensor, year, attribution, sources, changes) so the shared
+// vectors drive both sides with identical inputs; the m -> (who, yr, attn) derivation lives at the call
+// site below (as it does in build_portal), not inside the renderer.
+var DEFAULT_CHANGES_SUMMARY = "the deposited transfer functions were regenerated into AusMT's canonical distribution formats, and station coordinates, identifiers and metadata were conditioned for release";
+function canonLic(s){const u=String(s==null?"":s).trim().replace(/\s+/g," ").toUpperCase();
+  return ((LICENSES.aliases||{})[u]||u).toUpperCase();}
+function year4(s){const m=String(s==null?"":s).match(/\d{4}/);return m?m[0]:"";}   // source `retrieved` -> its year
+function renderProfile(key,licensor,year,sourceTitle,derivative){
+  const prof=(PROFILES[key]||PROFILES.generic||{});
+  const tmpl=(derivative&&prof.derivative)?prof.derivative:(prof.attribution||"{licensor} ({year})");
+  // ONE left-to-right pass (like Python str.format): a value carrying a {token} is inserted literally, never re-scanned.
+  return tmpl.replace(/\{(licensor|year|source_title)\}/g,(_,k)=>k==="licensor"?licensor:(k==="year"?year:sourceTitle));
+}
+function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
+  const cid=canonLic(lic);
+  const url=(LICENSES.urls||{})[cid]||"";
+  const who=(licensor||"the survey custodian").toString().trim();
+  const yr=(year==null?"":String(year)).trim();
+  const attn=(attribution||(who+(yr?" ("+yr+")":""))).toString().trim();
   const L=["AusMT survey data — licence and attribution","============================================","",
-    "Licence:     "+(canon||"not stated")];
+    "Licence:     "+cid];
   if(url)L.push("Licence URL: "+url);
   L.push("Licensor:    "+who,"Year:        "+(yr||"not stated"),"","Attribution (cite as):","  "+attn,"",
     "This LICENSE.txt travels with the data files in this archive. The transfer functions were",
     "distributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric",
     "releases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the",
     "terms of that licence"+(url?" ("+url+").":"."),"");
+  // C46 additions (byte-inert when sources + changes are both absent): per-source attribution paragraphs,
+  // supersession line(s), then the CC-BY §3(a) changes clause. Order + wording pinned to the Python leaf.
+  const srcs=sources||[];
+  if(srcs.length){
+    const made=!!(changes&&changes.made);
+    L.push("Source datasets","---------------","");
+    for(const s0 of srcs){const s=s0||{};
+      const title=(s.title==null?"":String(s.title)).trim()||"untitled source dataset";
+      const cust=(s.custodian==null?"":String(s.custodian)).trim()||"unknown custodian";
+      const ident=(s.identifier==null?"":String(s.identifier)).trim();
+      const slic=canonLic(s.licence);
+      const head=title+" — "+cust+(ident?" ("+ident+")":"")+", licensed "+slic+".";
+      const statement=(s.statement==null?"":String(s.statement)).trim();
+      let attr;
+      if(statement){attr=statement;}
+      else{const pk=(s.profile==null?"":String(s.profile)).trim()||"generic";
+        const syr=year4(s.retrieved)||yr;
+        attr=renderProfile(pk,cust,syr,title,made&&pk==="ga");}
+      L.push(head,"  "+attr,"");
+    }
+    for(const s0 of srcs){const slic=canonLic((s0||{}).licence);
+      if(slic&&slic!==cid)L.push("The upstream dataset was obtained under "+slic+"; this AusMT release is published by the custodian under "+cid+".","");}
+  }
+  if(changes&&changes.made){
+    const summary=(changes.summary==null?"":String(changes.summary)).trim()||DEFAULT_CHANGES_SUMMARY;
+    L.push("Changes were made: "+summary+". AusMT serves derived renditions (canonical EMTF XML; MTH5 where available) generated from the deposited files; per-station conditioning notes are recorded in the machine-readable products.","");
+  }
   return L.join("\n");
 }
 document.getElementById("dlCsv").onclick=()=>{track("DownloadGenerated",{format:"csv",n:sel().length});
@@ -88,9 +130,15 @@ document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{fo
     // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip (audit M3).
     const entry=(s.slug?s.slug+"/":"")+s.file;
     const r=await fetch(u);if(!r.ok)throw 0;f.file(entry,await r.blob());ok++;included[s.survey]=s.slug?s.slug+"/":"";}catch(e){}}
-  // C6: rights travel with the bytes — one LICENSE.txt per included survey, beside its EDIs (same slug
-  // namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip instrument.
-  Object.keys(included).forEach(sv=>f.file(included[sv]+"LICENSE.txt",licenseInstrumentText(SMETA[sv]||{})));
+  // C6/C46: rights travel with the bytes — one LICENSE.txt per included survey, beside its EDIs (same slug
+  // namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip instrument. The
+  // m -> (who, yr, attn) derivation mirrors build_portal's LICENSE.txt call site; sources/changes ride on
+  // SMETA when present (dormant until a survey carries an attribution/sources block).
+  Object.keys(included).forEach(sv=>{const m=SMETA[sv]||{};
+    const who=((m.cite&&m.cite.au)||m.org||"the survey custodian").trim();
+    const yr=(m.dates?(m.dates.match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
+    const attn=[who,yr?"("+yr+")":"",(m.cite&&m.cite.ti)||""].filter(Boolean).join(" ").trim()||who;
+    f.file(included[sv]+"LICENSE.txt",licenseInstrumentText(m.lic,who,yr,attn,m.sources||null,m.changes||null));});
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
     "Request them from the source archive:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
     // C7: m.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute

@@ -2427,7 +2427,19 @@ def main(argv=None):
             _cite = (meta or {}).get("cite") or {}
             _attn = " ".join(x for x in [_cite.get("au") or org, f"({_yr})" if _yr else "",
                                          _cite.get("ti") or label] if x).strip() or None
-            _lic_txt = license_instrument_text(lic, org, _yr, attribution=_attn)
+            # C46: thread the survey's attribution/sources blocks + a changes descriptor into the
+            # instrument. `derived_products` keys on THIS survey's ACTUAL derived-rendition emission
+            # (served EMTF XML and/or the MTH5 bundle) — not a hardcode: when the build emits neither,
+            # changes.made defaults off. The attribution/sources blocks ride on SMETA (dormant until a
+            # survey carries them); the gw-runner reads the SAME blocks from the raw survey.yaml, and both
+            # go through instrument_params_from_survey so the two instruments state identical rights.
+            from _license_text import instrument_params_from_survey  # stdlib leaf (imported at module load)
+            _derived = bool(xml_written) or bool(flags.get("survey_h5_enabled"))
+            _p = instrument_params_from_survey(
+                attribution_block=(meta or {}).get("attribution"),
+                sources_block=(meta or {}).get("sources"),
+                derived_products=_derived, synthesized_attribution=_attn)
+            _lic_txt = license_instrument_text(lic, org, _yr, **_p)
             _zrel, _zpath = _emit_survey_edi_zip(served_edis, slug, out, license_txt=_lic_txt)
             if _zpath:
                 manifest["bundles"].append(_bundle_row(label, slug, "edi-zip", _zpath, _zrel,

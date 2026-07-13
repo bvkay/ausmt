@@ -1,0 +1,199 @@
+{
+  "_comment": [
+    "C46-W2: shared test vectors pinning the licence INSTRUMENT text on BOTH mirrors of the same rule.",
+    "Consumed by TWO implementations that must never drift:",
+    "  1. engine/tests/test_license_instrument_vectors.py -> extract/_license_text.license_instrument_text",
+    "  2. portal/tests/license_text_vectors.test.js -> portal/src/exports.js licenseInstrumentText",
+    "Each vector's `expected` is the Python leaf's output (the single-source oracle); the JS mirror must",
+    "reproduce it byte-for-byte. Inputs mirror the function signature: lic, licensor, year, attribution,",
+    "sources[] (title/custodian/identifier/licence/retrieved/statement/profile), changes{made,summary}.",
+    "`kind` tags feed a non-vacuity guard (the file must exercise ga/generic/supersession/changes/none).",
+    "To regenerate after an intentional wording change: python scratchpad/gen_vectors.py (dev-only)."
+  ],
+  "vectors": [
+    {
+      "name": "none_of_the_new",
+      "kind": "none",
+      "lic": "CC-BY-4.0",
+      "licensor": "Geoscience Australia",
+      "year": "2019",
+      "attribution": null,
+      "sources": null,
+      "changes": null,
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Geoscience Australia\nYear:        2019\n\nAttribution (cite as):\n  Geoscience Australia (2019)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n"
+    },
+    {
+      "name": "attribution_only",
+      "kind": "attribution",
+      "lic": "CC-BY-4.0",
+      "licensor": "Geological Survey of South Australia",
+      "year": "2025",
+      "attribution": "Geological Survey of South Australia (2025)",
+      "sources": null,
+      "changes": null,
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Geological Survey of South Australia\nYear:        2025\n\nAttribution (cite as):\n  Geological Survey of South Australia (2025)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n"
+    },
+    {
+      "name": "changes_default_summary",
+      "kind": "changes",
+      "lic": "CC-BY-4.0",
+      "licensor": "Geological Survey of South Australia",
+      "year": "2025",
+      "attribution": null,
+      "sources": null,
+      "changes": {
+        "made": true,
+        "summary": ""
+      },
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Geological Survey of South Australia\nYear:        2025\n\nAttribution (cite as):\n  Geological Survey of South Australia (2025)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nChanges were made: the deposited transfer functions were regenerated into AusMT's canonical distribution formats, and station coordinates, identifiers and metadata were conditioned for release. AusMT serves derived renditions (canonical EMTF XML; MTH5 where available) generated from the deposited files; per-station conditioning notes are recorded in the machine-readable products.\n"
+    },
+    {
+      "name": "changes_explicit_summary",
+      "kind": "changes",
+      "lic": "CC-BY-4.0",
+      "licensor": "Geological Survey of South Australia",
+      "year": "2025",
+      "attribution": null,
+      "sources": null,
+      "changes": {
+        "made": true,
+        "summary": "EMTF XML regenerated from the custodian EDIs"
+      },
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Geological Survey of South Australia\nYear:        2025\n\nAttribution (cite as):\n  Geological Survey of South Australia (2025)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nChanges were made: EMTF XML regenerated from the custodian EDIs. AusMT serves derived renditions (canonical EMTF XML; MTH5 where available) generated from the deposited files; per-station conditioning notes are recorded in the machine-readable products.\n"
+    },
+    {
+      "name": "generic_source_same_licence",
+      "kind": "generic",
+      "lic": "CC-BY-4.0",
+      "licensor": "University of Adelaide",
+      "year": "2020",
+      "attribution": null,
+      "sources": [
+        {
+          "title": "Legacy AMT compilation",
+          "custodian": "University of Adelaide",
+          "identifier": "doi:10.4225/legacy",
+          "licence": "CC-BY-4.0",
+          "retrieved": "2018-03",
+          "profile": "generic"
+        }
+      ],
+      "changes": null,
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    University of Adelaide\nYear:        2020\n\nAttribution (cite as):\n  University of Adelaide (2020)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nSource datasets\n---------------\n\nLegacy AMT compilation — University of Adelaide (doi:10.4225/legacy), licensed CC-BY-4.0.\n  University of Adelaide (2018)\n"
+    },
+    {
+      "name": "ga_source_derivative_supersession",
+      "kind": "ga_derivative supersession",
+      "lic": "CC-BY-4.0",
+      "licensor": "Geological Survey of South Australia",
+      "year": "2025",
+      "attribution": null,
+      "sources": [
+        {
+          "title": "AusLAMP SA – NCI/AuScope archive",
+          "custodian": "Geoscience Australia",
+          "identifier": "10.25914/abc123",
+          "licence": "CC-BY-3.0-AU",
+          "retrieved": "2016-05",
+          "profile": "ga"
+        }
+      ],
+      "changes": {
+        "made": true,
+        "summary": ""
+      },
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Geological Survey of South Australia\nYear:        2025\n\nAttribution (cite as):\n  Geological Survey of South Australia (2025)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nSource datasets\n---------------\n\nAusLAMP SA – NCI/AuScope archive — Geoscience Australia (10.25914/abc123), licensed CC-BY-3.0-AU.\n  Based on AusLAMP SA – NCI/AuScope archive by Geoscience Australia (2016), used under CC-BY 4.0.\n\nThe upstream dataset was obtained under CC-BY-3.0-AU; this AusMT release is published by the custodian under CC-BY-4.0.\n\nChanges were made: the deposited transfer functions were regenerated into AusMT's canonical distribution formats, and station coordinates, identifiers and metadata were conditioned for release. AusMT serves derived renditions (canonical EMTF XML; MTH5 where available) generated from the deposited files; per-station conditioning notes are recorded in the machine-readable products.\n"
+    },
+    {
+      "name": "ga_source_attribution_no_changes",
+      "kind": "ga_attribution supersession",
+      "lic": "CC-BY-4.0",
+      "licensor": "Geological Survey of South Australia",
+      "year": "2025",
+      "attribution": null,
+      "sources": [
+        {
+          "title": "AusLAMP SA – NCI/AuScope archive",
+          "custodian": "Geoscience Australia",
+          "identifier": "10.25914/abc123",
+          "licence": "CC-BY-3.0-AU",
+          "retrieved": "2016-05",
+          "profile": "ga"
+        }
+      ],
+      "changes": null,
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Geological Survey of South Australia\nYear:        2025\n\nAttribution (cite as):\n  Geological Survey of South Australia (2025)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nSource datasets\n---------------\n\nAusLAMP SA – NCI/AuScope archive — Geoscience Australia (10.25914/abc123), licensed CC-BY-3.0-AU.\n  © Commonwealth of Australia (Geoscience Australia) 2016\n\nThe upstream dataset was obtained under CC-BY-3.0-AU; this AusMT release is published by the custodian under CC-BY-4.0.\n"
+    },
+    {
+      "name": "source_verbatim_statement",
+      "kind": "statement",
+      "lic": "CC-BY-4.0",
+      "licensor": "Some Custodian",
+      "year": "2021",
+      "attribution": null,
+      "sources": [
+        {
+          "title": "Prescribed-wording dataset",
+          "custodian": "Prescribing Custodian",
+          "identifier": "eCat/12345",
+          "licence": "CC-BY-4.0",
+          "statement": "Please cite: Prescribing Custodian, verbatim required attribution, 2020.",
+          "profile": "ga"
+        }
+      ],
+      "changes": null,
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Some Custodian\nYear:        2021\n\nAttribution (cite as):\n  Some Custodian (2021)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nSource datasets\n---------------\n\nPrescribed-wording dataset — Prescribing Custodian (eCat/12345), licensed CC-BY-4.0.\n  Please cite: Prescribing Custodian, verbatim required attribution, 2020.\n"
+    },
+    {
+      "name": "supersession_generic",
+      "kind": "supersession generic",
+      "lic": "CC-BY-4.0",
+      "licensor": "University of Adelaide",
+      "year": "2022",
+      "attribution": null,
+      "sources": [
+        {
+          "title": "Older release",
+          "custodian": "University of Adelaide",
+          "identifier": "doi:10.4225/older",
+          "licence": "CC-BY-3.0-AU",
+          "retrieved": "2014",
+          "profile": "generic"
+        }
+      ],
+      "changes": null,
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    University of Adelaide\nYear:        2022\n\nAttribution (cite as):\n  University of Adelaide (2022)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nSource datasets\n---------------\n\nOlder release — University of Adelaide (doi:10.4225/older), licensed CC-BY-3.0-AU.\n  University of Adelaide (2014)\n\nThe upstream dataset was obtained under CC-BY-3.0-AU; this AusMT release is published by the custodian under CC-BY-4.0.\n"
+    },
+    {
+      "name": "multi_source_ga_and_generic",
+      "kind": "ga_derivative generic supersession changes multi",
+      "lic": "CC-BY-4.0",
+      "licensor": "Geological Survey of South Australia",
+      "year": "2025",
+      "attribution": "Geological Survey of South Australia (2025)",
+      "sources": [
+        {
+          "title": "AusLAMP SA – NCI/AuScope archive",
+          "custodian": "Geoscience Australia",
+          "identifier": "10.25914/abc123",
+          "licence": "CC-BY-3.0-AU",
+          "retrieved": "2016-05",
+          "profile": "ga"
+        },
+        {
+          "title": "Legacy AMT compilation",
+          "custodian": "University of Adelaide",
+          "identifier": "doi:10.4225/legacy",
+          "licence": "CC-BY-4.0",
+          "retrieved": "2018-03",
+          "profile": "generic"
+        }
+      ],
+      "changes": {
+        "made": true,
+        "summary": ""
+      },
+      "expected": "AusMT survey data — licence and attribution\n============================================\n\nLicence:     CC-BY-4.0\nLicence URL: https://creativecommons.org/licenses/by/4.0/\nLicensor:    Geological Survey of South Australia\nYear:        2025\n\nAttribution (cite as):\n  Geological Survey of South Australia (2025)\n\nThis LICENSE.txt travels with the data files in this archive. The transfer functions were\ndistributed via the AusMT portal, which serves only openly licensed Australian magnetotelluric\nreleases; the licence above is the custodian's, set in the survey's survey.yaml. Reuse under the\nterms of that licence (https://creativecommons.org/licenses/by/4.0/).\n\nSource datasets\n---------------\n\nAusLAMP SA – NCI/AuScope archive — Geoscience Australia (10.25914/abc123), licensed CC-BY-3.0-AU.\n  Based on AusLAMP SA – NCI/AuScope archive by Geoscience Australia (2016), used under CC-BY 4.0.\n\nLegacy AMT compilation — University of Adelaide (doi:10.4225/legacy), licensed CC-BY-4.0.\n  University of Adelaide (2018)\n\nThe upstream dataset was obtained under CC-BY-3.0-AU; this AusMT release is published by the custodian under CC-BY-4.0.\n\nChanges were made: the deposited transfer functions were regenerated into AusMT's canonical distribution formats, and station coordinates, identifiers and metadata were conditioned for release. AusMT serves derived renditions (canonical EMTF XML; MTH5 where available) generated from the deposited files; per-station conditioning notes are recorded in the machine-readable products.\n"
+    }
+  ]
+}

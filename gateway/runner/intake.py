@@ -37,13 +37,15 @@ def _import_license_text():
     """Resolve the engine's stdlib-only _license_text leaf (D2 single source) in whichever context the
     runner runs. On the engine image `extract` is an installed package, so `extract._license_text` is
     the resolvable path; a sibling checkout with engine/extract on sys.path resolves the bare name.
-    Returns (license_instrument_text, recognised). Lazy so a bare import of this module in the stack-
-    less gateway test lane never requires the engine to be installed."""
+    Returns (license_instrument_text, recognised, redistributable, instrument_params_from_survey). Lazy so
+    a bare import of this module in the stack-less gateway test lane never requires the engine installed."""
     try:
-        from extract._license_text import license_instrument_text, recognised
+        from extract._license_text import (license_instrument_text, recognised, redistributable,
+                                            instrument_params_from_survey)
     except ImportError:  # pragma: no cover - sibling-on-sys.path fallback (engine cwd / dev checkout)
-        from _license_text import license_instrument_text, recognised  # type: ignore[no-redef]
-    return license_instrument_text, recognised
+        from _license_text import (license_instrument_text, recognised,  # type: ignore[no-redef]
+                                   redistributable, instrument_params_from_survey)
+    return license_instrument_text, recognised, redistributable, instrument_params_from_survey
 
 
 def _stamp(now_utc: datetime) -> str:
@@ -128,14 +130,24 @@ def _license_md_body(y: dict, now_utc: datetime) -> str | None:
     engine's single-source license_instrument_text (D2) so LICENSE.md and the bundle LICENSE.txt
     carry byte-identical rights wording for the same licence id."""
     lic = y.get("license")
-    license_instrument_text, recognised = _import_license_text()
+    (license_instrument_text, recognised, redistributable,
+     instrument_params_from_survey) = _import_license_text()
     if not recognised(lic):
         return None
     org = _org_of(y)
     year = _citation_year_of(y)
+    # C46: thread the survey's attribution/sources blocks + a changes descriptor so LICENSE.md carries
+    # the SAME rights the bundle LICENSE.txt does — both call sites derive them through the shared
+    # instrument_params_from_survey helper, so intake and build cannot state divergent attribution.
     # Attribution mirrors the bundle default (custodian + year) when the survey states no explicit
-    # citation author; license_instrument_text builds "who (year)" itself when attribution is None.
-    rights = license_instrument_text(lic, org, year, filename="LICENSE.md")
+    # attribution.statement (synthesized_attribution=None -> license_instrument_text builds "who (year)").
+    # `derived_products` = redistributable(lic): a survey whose bytes AusMT serves gets AusMT-derived
+    # renditions (EMTF XML / MTH5), so the CC-BY §3(a) changes clause applies; a recognised-but-metadata-
+    # only survey (bytes withheld) gets no changes clause.
+    p = instrument_params_from_survey(
+        attribution_block=y.get("attribution"), sources_block=y.get("sources"),
+        derived_products=redistributable(lic))
+    rights = license_instrument_text(lic, org, year, filename="LICENSE.md", **p)
     return f"{_stamp(now_utc)}\n\n{rights}"
 
 
