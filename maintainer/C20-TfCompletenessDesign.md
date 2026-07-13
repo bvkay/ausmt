@@ -66,3 +66,8 @@ destructure).
   negative north component), error-bar rendering presence for with-error data and absence
   otherwise, and the no-tipper state.
 - Cache: v3 entries miss cleanly post-bump (mirror the C18b test).
+
+## Amendment A1 (2026-07-13, owner-approved)
+The verbatim panel label is superseded by a short heading "Induction arrows (Parkinson)" + always-visible
+convention subline; rationale: UX6 review #12 (heading length) + accessibility (no hover-only conventions);
+the convention wording itself is unchanged and remains test-pinned in its subline form.
