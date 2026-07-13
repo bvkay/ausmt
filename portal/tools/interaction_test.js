@@ -367,7 +367,31 @@ async function bootFreshWindow(dataMap) {
   ok(items.some(it => it.dataset.find === "survey"), "Find dropdown did not offer the matching survey");
   ok(A.visSurveys().includes("Alpha Survey"), "Find blanked the map for a survey-name query");
   ok(!A.visSurveys().includes("Beta Survey"), "Find query should still exclude non-matching surveys");
-  find.value = ""; fire(find, "input");   // reset: later sections (year/downloadable-only/etc) assume no active Find query
+
+  // E2 (UX6 Wave F, F3): the live Find dropdown is keyboard-operable. ArrowDown highlights the first
+  // option as an active-descendant; Enter activates it on the SAME path as a click (opens the station);
+  // Esc clears the query. Non-vacuous: before F3 there was no keydown handler on #find, so no option ever
+  // got aria-selected, the input never carried aria-activedescendant, and Esc left the box untouched.
+  find.value = "A1"; fire(find, "input");
+  const kbFR = doc.getElementById("findResults");
+  ok(kbFR.style.display === "block", "F3: Find dropdown not open for the keyboard test");
+  find.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  const opt0 = kbFR.querySelector(".fitem[data-find]");
+  ok(!!opt0 && opt0.getAttribute("aria-selected") === "true", "F3: ArrowDown did not mark the first option aria-selected");
+  ok(!!opt0.id && find.getAttribute("aria-activedescendant") === opt0.id,
+    "F3: input aria-activedescendant does not point at the highlighted option");
+  const drawer = doc.getElementById("drawer");
+  find.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  ok(kbFR.style.display === "none", "F3: Enter did not close the Find dropdown");
+  ok(drawer.classList.contains("open") && /A1/.test(drawer.innerHTML),
+    "F3: Enter did not open station A1 (same activation path as a click)");
+  drawer.classList.remove("open");   // reset so a later section can re-open the drawer non-vacuously
+  find.value = "Alpha"; fire(find, "input");
+  ok(doc.getElementById("findResults").style.display === "block", "F3: dropdown should be open before Esc");
+  find.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  ok(find.value === "" && doc.getElementById("findResults").style.display === "none",
+    "F3: Esc did not clear the query and close the dropdown");
+  // find.value is now "" and refresh() has re-run — later sections (year/downloadable-only/etc) assume no active Find query
 
   // F. SURVEY route: #/survey/<slug> (the form the sitemap emits — 1463 links in the real build) must
   //    resolve the slug back to its survey label and open the survey story drawer (openSurvey), same as
@@ -1220,7 +1244,7 @@ async function bootFreshWindow(dataMap) {
   ok(!drwF.classList.contains("open"), "E7: the close button did not close the drawer");
   ok(doc.activeElement === opener, "E7: focus must be RESTORED to the invoking element on close");
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
     "UX6 Wave D welcome-strip first-visit-non-blocking + Start-exploring-persists + How-AusMT-works-opens-panel + empty-state-strip, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +

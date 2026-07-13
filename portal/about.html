@@ -9,7 +9,9 @@
   :root{
     --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#A85454;
+    /* UX6 Wave F (F2): --no #A85454 -> #E2938B to match the AA-fixed danger red on index/add-survey
+       (here it is only the decorative .card.out left border, but the token stays consistent across pages). */
+    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
@@ -120,18 +122,29 @@
 <main>
   <h1>About AusMT</h1>
   <p class="sub">A national discovery, provenance, and citation layer for Australian magnetotelluric transfer
-  functions; so processed MT results can be found, trusted, reused, and credited.</p>
+  functions, so processed MT results can be found, trusted, reused, and credited.</p>
 
+  <!-- UX6 Wave F (#17): About is restructured to exactly six top-level answers. The former Standards,
+       Governance, Versioning and Future-plans bodies now live on the documentation site (mkdocs), each
+       left here as a one-line pointer under "Detailed documentation" (answer 6). The #howto anchor is
+       preserved (the header "How to use AusMT" link targets it) and the Wave-A honesty rewordings (the
+       qualified MTH5 claim, the restricted-data wording, the discovery clause) are carried through intact
+       into answers 3 and 4. -->
   <div class="toc">
-    <a href="#howto">How to use</a>
-    <a href="#what">What is AusMT</a><a href="#principles">Principles</a><a href="#why">Why</a><a href="#scope">Scope</a>
-    <a href="#provenance">Provenance</a><a href="#policy">Data policy</a><a href="#contributing">Contributing</a>
-    <a href="#standards">Standards</a><a href="#governance">Governance</a><a href="#future">Future</a>
+    <a href="#what">What is AusMT</a><a href="#howto">What you can do</a><a href="#contains">What it contains</a>
+    <a href="#excludes">What it doesn't</a><a href="#why">Why it exists</a><a href="#docs">Documentation</a>
   </div>
 
+  <section id="what">
+    <h2>1 · What is AusMT?</h2>
+    <p>AusMT is a national <b>discovery, provenance, and citation</b> layer for Australian magnetotelluric
+    (MT) <b>transfer functions</b> — the processed, instrument-independent response of the Earth at each
+    site — so processed MT results can be found, trusted, reused, and credited. It is a discovery and
+    provenance layer, not a raw-data archive.</p>
+  </section>
+
   <section id="howto">
-    <h2>How to use AusMT</h2>
-    <p>Australia's magnetotelluric transfer functions — discover, screen, download, cite.</p>
+    <h2>2 · What can you do here?</h2>
     <div class="two" style="grid-template-columns:repeat(3,1fr)">
       <div class="card">
         <h3>Browse &amp; download</h3>
@@ -139,48 +152,48 @@
       </div>
       <div class="card">
         <h3>Contribute a survey</h3>
-        <p>Package and submit your EDIs with guided validation.</p>
+        <p>Package and submit your EDIs with guided validation, entirely in your browser — your files never
+        leave your machine until you submit. Local checks are advisory; a curator's repository review is
+        authoritative.</p>
       </div>
       <div class="card">
         <h3>Programmatic access</h3>
-        <p>Machine-readable catalogue — MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
+        <p>Machine-readable catalogue exports for GIS and scripts. <b>MTCAT is AusMT's machine-readable
+        catalogue format — one JSON file describing every survey</b>, served alongside GeoJSON.</p>
       </div>
     </div>
+    <p><a class="cta" href="add-survey.html">Contribute a survey →</a></p>
   </section>
 
-  <section id="what">
-    <h2>What is AusMT?</h2>
-    <p>AusMT is a portal for Australian magnetotelluric (MT) <b>transfer functions</b>, the processed,
-    instrument-independent response of the Earth at each site. It is a discovery and provenance layer, not a
-    raw-data archive. In one place it provides:</p>
-    <ul>
-      <li><b>Discovery</b> - find MT stations and surveys across the country on a map and by metadata.</li>
-      <li><b>Preservation</b> - keep processed EDI/MTH5 products and their metadata together and citable.</li>
-      <li><b>Provenance</b> - record exactly how each transfer function was produced and from which file.</li>
-      <li><b>Citation</b> - generate ready-to-use citations and acknowledgements crediting the custodians.</li>
-      <li><b>Contribution</b> - let researchers add their own surveys through a guided, reviewed workflow.</li>
-    </ul>
+  <section id="contains">
+    <h2>3 · What AusMT contains</h2>
+    <div class="card in"><ul>
+      <li>Transfer functions</li>
+      <li>EDI products</li>
+      <li>MTH5 products, where supplied or generated through a documented pipeline</li>
+      <li>Survey and station metadata</li>
+      <li>Processing provenance — source file, SHA-256 checksum, extractor, pipeline and build version, git commit</li>
+      <li>Publications &amp; DOIs, with ready-to-use citations and acknowledgements</li>
+    </ul></div>
+    <p>Unknown values are shown as "not recorded" rather than guessed, so a reader can tell what is genuinely
+    known about each product.</p>
   </section>
 
-  <section id="principles">
-    <h2>Principles</h2>
-    <p>Five principles guide what AusMT builds and the decisions its curators make:</p>
-    <ul>
-      <li><b>Discoverable</b> - every survey and station is findable in one place, on a map and by metadata,
-      regardless of which institution produced it.</li>
-      <li><b>Reusable</b> - products are described with consistent, standards-aligned metadata and explicit
-      licences so others can confidently reuse them.</li>
-      <li><b>Transparent</b> - how each transfer function was produced is recorded and shown; unknown values
-      are marked "not recorded" rather than guessed.</li>
-      <li><b>Attributable</b> - custodians, investigators, and funders are credited, with DOIs, ORCIDs, RORs,
-      and RAiDs carried through to discovery.</li>
-      <li><b>Reproducible</b> - products come from a single, versioned build pipeline whose provenance travels
-      with the data, so results can be regenerated and checked.</li>
-    </ul>
+  <section id="excludes">
+    <h2>4 · What AusMT does not contain</h2>
+    <div class="card out"><ul>
+      <li>Raw time-series</li>
+      <li>Geological interpretation</li>
+      <li>Redistribution of restricted data (still indexable metadata-only)</li>
+    </ul></div>
+    <p>Where raw time-series exist, AusMT <b>links</b> to the archive that holds them (for example the
+    NCI-AuScope MT collection) rather than hosting them itself. Openly licensed transfer functions may be
+    served directly; otherwise AusMT lists the record and links out to the custodian's archive.<br>
+    AusMT aims to make Australian MT holdings discoverable even where licensing or custodial arrangements prevent direct redistribution.</p>
   </section>
 
   <section id="why">
-    <h2>Why was AusMT created?</h2>
+    <h2>5 · Why AusMT exists</h2>
     <p>Australian MT data is scattered. The same scientific results are spread across university groups,
     government agencies, industry collaborations, supplementary files attached to papers, and ageing legacy
     archives, all in a mix of formats and conventions. That makes good data hard to find and easy to lose.</p>
@@ -189,112 +202,34 @@
     <b>attribution</b> (custodians and funders are credited, with DOIs where they exist).</p>
   </section>
 
-  <section id="scope">
-    <h2>Scope</h2>
-    <div class="two">
-      <div class="card in"><h3>Included</h3><ul>
-        <li>Transfer functions</li><li>EDI products</li><li>MTH5 products, where supplied or generated through a documented pipeline</li>
-        <li>Survey metadata</li><li>Station metadata</li><li>Publications &amp; DOIs</li>
-      </ul></div>
-      <div class="card out"><h3>Not included</h3><ul>
-        <li>Raw time-series</li><li>Geological interpretation</li>
-        <li>Redistribution of restricted data (still indexable metadata-only)</li>
-      </ul></div>
-    </div>
-    <p>Where raw time-series exist, AusMT <b>links</b> to the archive that holds them (for example the
-    NCI-AuScope MT collection) rather than hosting them itself.</p>
-  </section>
-
-  <section id="provenance">
-    <h2>Provenance</h2>
-    <p>Every station record carries a processing-provenance panel so a result can be traced and trusted. For
-    each transfer function AusMT records the <b>source file</b>, its <b>SHA-256</b> checksum, the
-    <b>extractor</b> used (mt_metadata — the community-canonical engine), the <b>pipeline software version</b>, the <b>build
-    version</b>, and the <b>git commit</b> of the build. When a value genuinely isn't known it is shown as
-    "not recorded" rather than guessed.</p>
-  </section>
-
-  <section id="policy">
-    <h2>Data policy</h2>
+  <section id="docs">
+    <h2>6 · Detailed documentation</h2>
+    <p>The full policy and technical documentation lives on the AusMT documentation site, kept current
+    alongside the framework. The material that this page used to spell out in full now lives there:</p>
     <ul>
-      <li><b>Custodians retain ownership.</b> Contributing to AusMT does not transfer any rights.</li>
-      <li><b>AusMT does not claim ownership</b> of any dataset it indexes or redistributes.</li>
-      <li><b>Redistribution depends on the licence.</b> Openly licensed transfer functions may be served
-      directly; otherwise AusMT lists the record and links out to the custodian's archive.</li>
-      <li><b>Some products are linked, not hosted</b>. AusMT aims to make Australian MT holdings discoverable even where licensing or custodial arrangements prevent direct redistribution.</li>
-    </ul>
-  </section>
-
-  <section id="contributing">
-    <h2>Contributing data</h2>
-    <p>You can prepare a submission entirely in your browser, your files never leave your machine, and the
-    workflow mirrors the curator's command-line tools:</p>
-    <p><span class="pill">Validate</span><span class="pill">Preview</span><span class="pill">Package</span>
-    <span class="pill">Review</span><span class="pill">Publish</span></p>
-    <p>You validate locally, preview what the portal will show, and package a submission archive. A curator
-    then reviews it and decides on publication — local checks are advisory, repository review is authoritative.</p>
-    <p><a class="cta" href="add-survey.html">Contribute a survey →</a></p>
-  </section>
-
-  <section id="standards">
-    <h2>Standards</h2>
-    <p>AusMT is built to align with established research-data and MT-domain standards:</p>
-    <p>
-      <span class="pill">DOI — dataset &amp; publication identifiers</span>
-      <span class="pill">ORCID — researcher identifiers</span>
-      <span class="pill">ROR — organisation identifiers</span>
-      <span class="pill">RAiD — project identifiers</span>
-      <span class="pill">FAIR — Findable, Accessible, Interoperable, Reusable</span>
-      <span class="pill">CARE — Indigenous data governance principles</span>
-      <span class="pill">mt_metadata — community MT metadata</span>
-      <span class="pill">MTH5 — community MT data container</span>
-    </p>
-    <p>On CARE specifically: a survey's CARE fields are recorded and reviewed by a curator during
-    publication — there is no automated enforcement, and nothing in the pipeline blocks publication
-    based on their content.</p>
-    <!-- C22 (2026-07-07): this line previously also cited a standalone federation markdown doc "in the
-         project repositories" — no such file exists anywhere in the repo (citation honesty: claim removed,
-         not repointed; the MTCAT spec below is the real, existing federation reference — see
-         docs/docs/data-model/mtcat.md. The guard test forbids the old filename even in comments, so it is
-         not repeated here). -->
-    <p>For interoperability between portals, AusMT emits an <b>MTCAT</b> discovery document (see the
-    <code>MTCAT v1.0</code> specification in the project repositories).</p>
-  </section>
-
-  <section id="governance">
-    <h2>Governance</h2>
-    <p>AusMT is maintained as research infrastructure, not a commercial service. Surveys are published through
-    a <b>curator review</b> process: a contributor prepares a submission, automated repository checks run, and a
-    maintainer reviews metadata and licensing before anything is published. Publication decisions rest with the
-    curators. AusMT is designed to sit alongside national infrastructure such as <b>AuScope</b> and the MT
-    community (e.g. AuScope/ANSIR instrument programs), and to migrate to a long-term institutional home as it
-    matures.</p>
-
-    <h3 id="operator">Who runs AusMT</h3>
-    <p>AusMT is operated by <b>Ben Kay, National Geophysics Program Manager, AuScope</b>, as a
-    pre-institutional deployment of the AusMT framework, on a path to hosting within AuScope/NCI
-    infrastructure.</p>
-    <p><b>Contact, corrections and takedown</b> — questions, correction requests, or takedown requests:
-    <a class="link" href="mailto:ben@auscope.org.au">ben@auscope.org.au</a>. Requests are acknowledged
-    within five business days. Takedown requests for contested data are actioned as a priority: the data
-    is withheld from distribution while the matter is resolved with the originating custodian.</p>
-    <p><b>Data responsibility</b> — survey data remains the property and responsibility of its originating
-    custodians under their stated licence. AusMT redistributes transfer-function files only where the
-    licence and access level permit; otherwise it lists metadata with a pointer to the source archive.
-    Responsibility for the scientific accuracy of contributed data rests with the originating custodian;
-    AusMT records and preserves provenance but does not alter scientific content.</p>
-    <p><b>Succession</b> — the AusMT framework is open source (Apache-2.0) and fully documented; the
-    catalogue and all served packages are rebuildable from the survey source repository by any operator,
-    so no data or capability is locked to the current operator.</p>
-  </section>
-
-  <section id="future">
-    <h2>Future directions</h2>
-    <ul>
-      <li>Validation of AusMT against a broader range of real-world surveys, metadata records, and externally authored MTH5 datasets.</li>
-      <li>Expansion of the Australian MT catalogue through the addition of historical, legacy, and newly acquired surveys.</li>
-      <li>Evolution of the MTCAT JSON schema and discovery API as an open standard for interoperable MT catalogue discovery and federation.</li>
-      <li>Support for federation between independent MT portals while preserving local stewardship, provenance, and ownership of data holdings.</li>
+      <li id="policy"><b>Data policy &amp; governance</b> — custodians retain ownership and AusMT claims no
+      ownership of anything it indexes; redistribution depends on the licence and access level. Who runs
+      AusMT, contact, corrections and takedown, and succession:
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/governance/">Governance &amp; Operation</a>.</li>
+      <li><b>Standards &amp; identifiers</b> — DOI, ORCID, ROR, RAiD, FAIR, CARE, mt_metadata and MTH5, and
+      how AusMT aligns with them:
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/standards/">Standards &amp; Alignment</a>.</li>
+      <li><b>Principles</b> — the design values behind AusMT (survey-as-object, metadata-as-data,
+      provenance-as-product, curation, interoperability):
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/scientific-philosophy/">Scientific Philosophy</a>.</li>
+      <li><b>Provenance model</b> — exactly what is recorded so a result can be traced and trusted:
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/provenance/">Provenance Model</a>.</li>
+      <li><b>Versioning</b> — how survey packages are versioned and cited:
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/versioning/">Versioning</a>.</li>
+      <li><b>Contributing</b> — the validate → preview → package → review → publish workflow:
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/operations/submission/">Submission Workflow</a>,
+      or start now on the <a class="link" href="add-survey.html">Contribute a survey</a> page.</li>
+      <li><b>Roadmap</b> — where AusMT is headed (broader validation, catalogue expansion, MTCAT as an open
+      standard, federation between portals):
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/roadmap/">Roadmap</a>.</li>
+      <li><b>MTCAT</b> — the machine-readable catalogue format; the <code>MTCAT v1.0</code> specification:
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/mtcat/">MTCAT</a>, or fetch the
+      live <a class="link" href="data/mtcat.json">mtcat.json</a> discovery document.</li>
     </ul>
   </section>
 

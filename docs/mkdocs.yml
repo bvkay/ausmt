@@ -8,6 +8,8 @@ nav:
       - Scientific Philosophy: introduction/scientific-philosophy.md
       - Data Lifecycle: introduction/data-lifecycle.md
       - Governance & Operation: introduction/governance.md
+      - Standards & Alignment: introduction/standards.md
+      - Roadmap: introduction/roadmap.md
   - Architecture:
       - Overview: architecture/overview.md
       - Repositories: architecture/repositories.md
