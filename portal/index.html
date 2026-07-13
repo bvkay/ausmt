@@ -402,13 +402,20 @@
      innerHTML drawer.js rewrites on every open) so it is never wiped and drawer.js stays untouched. */
   #drawerResizer{position:absolute;top:0;bottom:0;width:8px;cursor:col-resize;background:transparent;z-index:1101}
   #drawerResizer:hover,#drawerResizer.drag{background:var(--copper)}
-  /* D1: non-blocking welcome strip (replaces the auto-shown blocking intro panel). pointer-events are
-     limited to this card — the map stays fully interactive behind it. */
-  .introstrip{position:absolute;top:14px;right:14px;z-index:800;max-width:320px;background:var(--panel);
-    border:1px solid var(--line);border-radius:10px;padding:14px 16px;box-shadow:0 8px 28px rgba(0,0,0,.4)}
-  .introstrip-text{font-size:13px;line-height:1.5;color:var(--text);margin-bottom:12px}
-  .introstrip-actions{display:flex;gap:8px;flex-wrap:wrap}
-  .introstrip-actions button{font-size:12.5px;padding:8px 12px;border-radius:5px}
+  /* U7: first-visit "Welcome to AusMT" popup — a small centred modal (successor to the Wave D corner
+     strip). Dim backdrop; the box is small and instantly dismissible (Esc / click-out / Browse). */
+  .introwelcome{position:absolute;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;
+    background:rgba(11,15,18,.55);backdrop-filter:blur(1px);padding:24px}
+  .introwelcome.hidden{display:none!important}
+  .introwelcome-box{position:relative;max-width:400px;width:100%;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:24px 26px;box-shadow:0 12px 40px rgba(0,0,0,.45);text-align:center}
+  .introwelcome-box:focus{outline:none}
+  .introwelcome-heading{font-size:19px;font-weight:600;color:var(--text);margin:0 0 8px}
+  .introwelcome-text{font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 18px}
+  .introwelcome-actions{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+  .introwelcome-actions button{font-size:13.5px;padding:10px 14px;border-radius:6px}
+  .introwelcome-dismiss{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .introwelcome-dismiss input{accent-color:var(--copper)}
   /* D6: static map legend (bottom-left), collapsible on small widths. The data-type dots read the live
      --lpmt/--bbmt/--amt/--gds tokens (Wave B hexes) — no hard-coded colours here. */
   .maplegend{position:absolute;left:10px;bottom:10px;z-index:600;background:var(--panel);border:1px solid var(--line);
@@ -627,33 +634,39 @@
   <div id="introOverlay" class="introoverlay hidden">
     <div class="intropanel" id="introPanel" role="region" aria-label="Welcome to AusMT">
       <button type="button" class="introclose" id="introClose" aria-label="Dismiss introduction">&times;</button>
-      <p class="introhero">Australia's magnetotelluric transfer functions — discover, screen, download, cite.</p>
+      <p class="introhero">AusMT - Discover Australia's magnetotelluric surveys</p>
       <div class="introtiles">
         <button type="button" class="introtile" id="tileBrowse">
-          <h3>Browse &amp; download</h3>
-          <p>Explore surveys on the map, screen station quality, and export data with citations.</p>
+          <h3>Explore data</h3>
+          <p>Search surveys, inspect station quality, preview transfer functions and download datasets</p>
         </button>
         <button type="button" class="introtile" id="tileContribute">
           <h3>Contribute a survey</h3>
           <p>Package and submit your EDIs with guided validation.</p>
         </button>
         <button type="button" class="introtile" id="tileIntegrate">
-          <h3>Programmatic access</h3>
+          <h3>API access</h3>
           <p>Machine-readable catalogue — MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
         </button>
       </div>
       <button type="button" class="introtour" id="introTakeTour">Take the tour</button>
     </div>
   </div>
-  <!-- D1: non-blocking welcome strip shown on first visit (replaces the auto-shown blocking panel).
-       "Start exploring" dismisses + persists; "How AusMT works" opens the three-ways panel above (which
-       now lives behind this action + the header help entry, and no longer auto-shows). Tour stays
-       reachable via #introTakeTour inside that panel. -->
-  <div id="introStrip" class="introstrip hidden" role="region" aria-label="Welcome to AusMT">
-    <p class="introstrip-text">Explore Australian MT surveys on the map. Select a station to inspect its transfer function, or open Surveys to browse complete datasets.</p>
-    <div class="introstrip-actions">
-      <button type="button" class="primary" id="introStart">Start exploring</button>
-      <button type="button" id="introHow">How AusMT works</button>
+  <!-- U7 (owner, 2026-07-13): first-visit "Welcome to AusMT" popup — a small centred modal that REPLACES
+       the Wave D corner strip (#introStrip). role=dialog, focus-managed; Esc / click-out / "Browse
+       immediately" all close it. "Take the 2-minute tour" starts the tour (the #introTakeTour pathway).
+       "Don't show this again" gates persistence: ticked -> either close path persists the dismissal via
+       the existing localStorage key; unticked -> the popup may return next visit. See main.js. -->
+  <div id="introWelcome" class="introwelcome hidden" role="dialog" aria-modal="true"
+       aria-labelledby="introWelcomeHeading" aria-describedby="introWelcomeText">
+    <div class="introwelcome-box" tabindex="-1">
+      <h2 class="introwelcome-heading" id="introWelcomeHeading">Welcome to AusMT</h2>
+      <p class="introwelcome-text" id="introWelcomeText">Explore Australia's national magnetotelluric data portal</p>
+      <div class="introwelcome-actions">
+        <button type="button" class="primary" id="welcomeTour">Take the 2-minute tour (recommended)</button>
+        <button type="button" id="welcomeBrowse">Browse immediately</button>
+      </div>
+      <label class="introwelcome-dismiss"><input type="checkbox" id="welcomeDismiss"> Don't show this again</label>
     </div>
   </div>
 </div>
