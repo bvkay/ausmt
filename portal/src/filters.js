@@ -4,6 +4,8 @@
 // referenced only inside event handlers (runtime), never at load time.
 const tree=document.getElementById("tree");
 const pLo=document.getElementById("pLo"),pHi=document.getElementById("pHi");
+let findActive=-1;   // UX6 Wave F (F3): index of the keyboard-highlighted Find option (-1 = none). Declared
+                     // up here so renderFind() (which resets it) is never in its temporal dead zone.
 function sliderRead(){let lo=+pLo.value,hi=+pHi.value;if(lo>hi)[lo,hi]=[hi,lo];return[10**lo,10**hi,lo,hi];}
 function paintSlider(){const[plo,phi,lo,hi]=sliderRead();document.getElementById("pLoTxt").textContent=fmtP(plo);document.getElementById("pHiTxt").textContent=fmtP(phi);
   const f=document.getElementById("pfill");f.style.left=((lo+3)/8*100)+"%";f.style.width=((hi-lo)/8*100)+"%";}
@@ -45,7 +47,7 @@ function surveyVisible(sv){const qs=document.getElementById("find").value.trim()
 // JUMP targets (collection page / focus on the map); stations open, and the text also live-filters the map.
 function renderFind(){const box=document.getElementById("findResults");
   const q=document.getElementById("find").value.trim().toLowerCase();
-  if(!q){box.style.display="none";box.innerHTML="";return;}
+  if(!q){box.style.display="none";box.innerHTML="";findCloseState();return;}
   const COL=(typeof COLL!=="undefined"&&COLL)||{};
   const colls=Object.keys(COL).filter(cid=>(COL[cid].title||cid).toLowerCase().includes(q)||cid.toLowerCase().includes(q)).slice(0,5);
   const svs=surveys.filter(sv=>sv.toLowerCase().includes(q)).slice(0,8);
@@ -55,7 +57,14 @@ function renderFind(){const box=document.getElementById("findResults");
   if(svs.length)h+=`<div class="fgroup">Surveys</div>`+svs.map(sv=>`<div class="fitem" data-find="survey" data-id="${escAttr(sv)}">${esc(sv)}</div>`).join("");
   if(sts.length)h+=`<div class="fgroup">Stations${sts.length>=8?" (first 8)":""}</div>`+sts.map(s=>`<div class="fitem" data-find="station" data-i="${s.i}">${esc(s.id)}<span class="fmeta">${esc(s.survey)}</span></div>`).join("");
   if(!h)h=`<div class="fitem fnone">no matches</div>`;
-  box.innerHTML=h;box.style.display="block";}
+  box.innerHTML=h;box.style.display="block";
+  // UX6 Wave F (F3): make the live results keyboard-usable. The container is role="listbox" (index.html);
+  // tag each REAL result (a data-find row, not the "no matches" filler) as an option with a stable id so
+  // the input can point aria-activedescendant at the highlighted one. Matching logic above is untouched.
+  findOptions().forEach((el,i)=>{el.setAttribute("role","option");el.id="find-opt-"+i;el.setAttribute("aria-selected","false");});
+  const find=document.getElementById("find");
+  find.setAttribute("aria-expanded","true");
+  findActive=-1;find.removeAttribute("aria-activedescendant");}
 function hasShapes(){let a=false;drawn.eachLayer(()=>a=true);return a;}
 // C42 coordinate access: a custodian-withheld station has null lat/lon (no position). It must NOT be
 // spatially selectable — without this guard null coerces to 0 and a polygon over (0,0) would phantom-
@@ -180,14 +189,49 @@ document.getElementById("typeBoxes").addEventListener("change",refresh);
 tree.addEventListener("change",e=>{if(e.target.value!==undefined&&e.target.value!=="")refresh();});
 document.getElementById("find").addEventListener("input",()=>{refresh();renderFind();});
 document.getElementById("find").addEventListener("focus",renderFind);
-document.getElementById("findResults").addEventListener("click",e=>{const it=e.target.closest(".fitem");if(!it||!it.dataset.find)return;
+// UX6 Wave F (F3): activation is shared between a mouse click and a keyboard Enter (below), so both take
+// the identical path. `it` is a .fitem option element (has data-find). Kept verbatim from the old click
+// handler body — no routing change, only extracted so Enter can reuse it.
+function activateFindItem(it){if(!it||!it.dataset.find)return;
   const kind=it.dataset.find,fb=document.getElementById("find");
   if(kind==="coll"){fb.value="";refresh();location.hash="#/collection/"+encodeURIComponent(it.dataset.id);}
   else if(kind==="survey"){fb.value="";focusSurvey(it.dataset.id);}                       // focusSurvey refreshes + zooms
   else if(kind==="station"){const s=ST[+it.dataset.i];if(s){if(curView!=="map")setView("map");openStation(s.i);}}
-  document.getElementById("findResults").style.display="none";});
+  const fr=document.getElementById("findResults");fr.style.display="none";findCloseState();}
+document.getElementById("findResults").addEventListener("click",e=>{const it=e.target.closest(".fitem");activateFindItem(it);});
 // click-away closes the Find dropdown (the data-act delegated handler in drawer.js ignores .fitem)
-document.addEventListener("click",e=>{if(!e.target.closest("#find")&&!e.target.closest("#findResults")){const fr=document.getElementById("findResults");if(fr)fr.style.display="none";}});
+document.addEventListener("click",e=>{if(!e.target.closest("#find")&&!e.target.closest("#findResults")){const fr=document.getElementById("findResults");if(fr){fr.style.display="none";findCloseState();}}});
+
+// UX6 Wave F (F3): keyboard path for the Find dropdown. ArrowUp/Down move an active-descendant highlight,
+// Enter activates the highlighted option (same activateFindItem as a click), Esc clears the query. No CSS
+// rule is added to index.html for the highlight (out of this lane's file scope) — the active option is
+// styled inline to match the existing :hover treatment (copper fill, dark ink), and un-styled on move-off.
+// (findActive is declared at the top of this file to avoid a temporal-dead-zone hazard in renderFind.)
+function findOptions(){return [...document.getElementById("findResults").querySelectorAll(".fitem[data-find]")];}
+function findIsOpen(){const fr=document.getElementById("findResults");return fr&&fr.style.display==="block";}
+function findPaint(el,on){if(!el)return;const meta=el.querySelector(".fmeta");
+  if(on){el.style.background="var(--copper)";el.style.color="#16110b";if(meta)meta.style.color="#16110b";el.setAttribute("aria-selected","true");}
+  else{el.style.background="";el.style.color="";if(meta)meta.style.color="";el.setAttribute("aria-selected","false");}}
+function setFindActive(idx){const opts=findOptions(),find=document.getElementById("find");
+  if(findActive>=0&&findActive<opts.length)findPaint(opts[findActive],false);
+  findActive=opts.length?(((idx%opts.length)+opts.length)%opts.length):-1;   // wrap both directions
+  if(findActive>=0){const el=opts[findActive];findPaint(el,true);if(el.scrollIntoView)el.scrollIntoView({block:"nearest"});find.setAttribute("aria-activedescendant",el.id);}
+  else find.removeAttribute("aria-activedescendant");}
+function findCloseState(){findActive=-1;const find=document.getElementById("find");
+  find.setAttribute("aria-expanded","false");find.removeAttribute("aria-activedescendant");}
+document.getElementById("find").addEventListener("keydown",e=>{
+  if(e.key==="Escape"){const fb=document.getElementById("find");if(fb.value){fb.value="";refresh();}renderFind();return;}
+  if(!findIsOpen()||!findOptions().length)return;
+  // From the neutral state (findActive<0) ArrowDown lands on the first option and ArrowUp on the last;
+  // thereafter each wraps around the ends (setFindActive normalises the index).
+  if(e.key==="ArrowDown"){e.preventDefault();setFindActive(findActive<0?0:findActive+1);}
+  else if(e.key==="ArrowUp"){e.preventDefault();setFindActive(findActive<0?findOptions().length-1:findActive-1);}
+  else if(e.key==="Enter"){if(findActive>=0){e.preventDefault();activateFindItem(findOptions()[findActive]);}}});
+// One-time ARIA wiring so the input advertises the listbox it drives (combobox pattern). Attributes are
+// set here (not in index.html) to keep this lane's edits inside filters.js.
+(function(){const find=document.getElementById("find");if(!find)return;
+  find.setAttribute("role","combobox");find.setAttribute("aria-autocomplete","list");
+  find.setAttribute("aria-controls","findResults");find.setAttribute("aria-expanded","false");})();
 pLo.addEventListener("input",refresh);pHi.addEventListener("input",refresh);
 document.getElementById("colorSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   colorMode=b.dataset.c;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));recolor();});
