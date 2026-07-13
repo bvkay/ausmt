@@ -24,6 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent   # portal/
 ABOUT = ROOT / "about.html"
 INDEX = ROOT / "index.html"
+ADD = ROOT / "add-survey.html"
 
 
 class _Collector(HTMLParser):
@@ -159,6 +160,40 @@ def test_about_references_no_nonexistent_federation_doc():
         "about.html must not reference FEDERATION.md — that file does not exist in the repository")
     assert "MTCAT v1.0" in raw, (
         "the honest MTCAT v1.0 spec reference must survive the FEDERATION.md removal (over-deletion)")
+
+
+def test_mtcat_link_in_footer_not_header_across_pages():
+    """UX7a (A5). The machine-readable MTCAT link moved from the header's right zone into the footer's
+    bottom-left, applied identically across index / about / add-survey. Each page must carry EXACTLY ONE
+    apilink (a.apilink -> data/mtcat.json) INSIDE <footer>, and NONE inside <header>.
+
+    Failure criteria, both non-vacuous and mutually hermetic:
+      * footer-PRESENCE — FAILS if a page's <footer> does not carry exactly one a.apilink. This proves the
+        link still exists after the move, so the header-absence half below is a real relocation and not a
+        vacuous pass on a deleted element.
+      * header-ABSENCE — FAILS if any a.apilink survives inside <header>. Proven falsifiable by a git-archive
+        red-proof against the pre-move HTML (link in the header): that HTML fails header-ABSENCE here.
+
+    Parsed-DOM (not raw text): about.html also links data/mtcat.json from its <main> body with class 'link'
+    (not 'apilink'), which lives in neither <header> nor <footer>, so neither collector counts it — the
+    class match ('apilink') is deliberately specific so that body link cannot smuggle a false positive."""
+    for path in (INDEX, ABOUT, ADD):
+        header_hits = [a for (tag, a, inh) in _parse(path)
+                       if tag == "a" and inh and "apilink" in _classes(a)]
+        assert not header_hits, (
+            f"{path.name}: the MTCAT apilink must NOT appear in <header> (it moved to the footer); "
+            f"found {len(header_hits)}")
+        footer_hits = [a for (tag, a, _ab) in _footer_els(path)
+                       if tag == "a" and "apilink" in _classes(a)]
+        assert len(footer_hits) == 1, (
+            f"{path.name}: <footer> must carry exactly one MTCAT apilink (bottom-left); found {len(footer_hits)}")
+        # The honest Wave-A link target + title + visible text must survive the move verbatim.
+        assert footer_hits[0].get("href") == "data/mtcat.json", (
+            f"{path.name}: the footer MTCAT link must point at data/mtcat.json, got {footer_hits[0].get('href')}")
+        assert footer_hits[0].get("title") == "MTCAT v1.0 discovery document (JSON)", (
+            f"{path.name}: the footer MTCAT link title must be kept verbatim, got {footer_hits[0].get('title')}")
+        assert "Machine-readable record (MTCAT JSON) ↗" in path.read_text(encoding="utf-8"), (
+            f"{path.name}: the verbatim MTCAT link text must be preserved")
 
 
 def test_index_still_has_the_count_ids_the_about_guard_forbids():

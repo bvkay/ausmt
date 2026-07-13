@@ -138,10 +138,16 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
   // derived/indeterminate state (country/org don't either — future polish). O1 (2026-07-12): the row is
   // just name + survey count + station count now — no nested member list, no caret (per-survey toggling
   // lives in the org hierarchy). Org rows/counts below are untouched: member surveys still live under their orgs.
+  // UX7a (A3): the Collections group is mounted in its OWN block (#collGroup) ABOVE the country/org/survey
+  // tree, not first-within #tree. Only the mount point changed — the heading, the row label, the push-only
+  // bulk-toggle semantics and the member-survey sync (still matched against #tree's value checkboxes) are
+  // unchanged. Fallback to `tree` keeps any harness without the #collGroup element working as before.
   const _coll=(typeof COLL!=="undefined"&&COLL)||{};
   const _cids=Object.keys(_coll).sort();
+  const collGroup=document.getElementById("collGroup")||tree;
   if(_cids.length){
-    const gh=document.createElement("div");gh.className="treegroup";gh.textContent="Collections";tree.appendChild(gh);
+    if(collGroup!==tree)collGroup.innerHTML="";   // re-render safety for the dedicated block
+    const gh=document.createElement("div");gh.className="treegroup";gh.textContent="Collections";collGroup.appendChild(gh);
     _cids.forEach(cid=>{const c=_coll[cid],members=c.surveys||[];
       const nSt=members.reduce((a,sv)=>a+(svCount[sv]||0),0);
       // O1 (owner, 2026-07-12): a collection row shows ONLY name + member-survey count + station count —
@@ -151,7 +157,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
       const inp=document.createElement("input");inp.type="checkbox";inp.checked=true;inp.dataset.coll=cid;
       row.appendChild(inp);
       row.appendChild(document.createTextNode(`${c.title||cid} — ${members.length} survey${members.length===1?"":"s"} · ${nSt} station${nSt===1?"":"s"}`));
-      tree.appendChild(row);
+      collGroup.appendChild(row);
       inp.addEventListener("change",()=>{
         tree.querySelectorAll('input[value]').forEach(s=>{if(members.indexOf(s.value)>=0)s.checked=inp.checked;});
         refresh();});});}
