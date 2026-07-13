@@ -22,7 +22,12 @@
     --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
     --lpmt:#2E8FA3; --bbmt:#3F6FC4; --amt:#A85CC4; --gds:#C255A0;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#A85454; --unk:#5A6E7D;
+    /* UX6 Wave F (F2): --no lightened #A85454 -> #E2938B so it clears WCAG AA (4.5:1) as TEXT on the
+       panels it renders on (.badge.no on --panel = 5.98:1, on --panel-2 = 5.00:1; both were ~2.3-2.8:1).
+       Hue-preserving danger red, distinct from --part amber and --copper. The --q0 quality-bin colour is
+       a SEPARATE token (used only for graphical map dots via state.js qColor(), where the text-contrast
+       rule does not apply) and is left unchanged. */
+    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
     --q0:#A85454; --q3:#D9A23B; --q5:#5BAE6A;
     --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
     --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;

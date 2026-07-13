@@ -18,7 +18,8 @@
   :root{
     --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
-    --ok:#5BAE6A; --part:#D9A23B; --no:#A85454; --unk:#5A6E7D;
+    /* UX6 Wave F (F2): --no lightened #A85454 -> #E2938B for WCAG AA as text (see index.html). */
+    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
@@ -74,9 +75,13 @@
   .panel h3{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 10px}
   .v{display:flex;gap:9px;align-items:flex-start;font-size:13px;padding:3px 0}
   .badge{font-family:var(--mono);font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;flex:none;margin-top:1px}
-  .PASS{background:rgba(91,174,106,.18);color:var(--ok)}
+  /* UX6 Wave F (F2): AA text contrast on the status-chip tints. PASS tint darkened .18 -> .08 so the
+     --ok text clears 4.5:1 (was 3.91:1 -> 4.65:1). FAIL tint recoloured to the new --no red at a lower
+     alpha (rgba(168,84,84,.22) -> rgba(226,147,139,.14)) so --no text clears 4.5:1 (was 2.30:1 -> 4.74:1).
+     WARNING tint left at .18 (its --part text already clears at 4.56:1). */
+  .PASS{background:rgba(91,174,106,.08);color:var(--ok)}
   .WARNING{background:rgba(217,162,59,.18);color:var(--part)}
-  .FAIL{background:rgba(168,84,84,.22);color:var(--no)}
+  .FAIL{background:rgba(226,147,139,.14);color:var(--no)}
   .summary{font-family:var(--mono);font-size:13px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
   .vdetails{max-height:420px;overflow-y:auto;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
   .vgroup{margin-bottom:6px}
