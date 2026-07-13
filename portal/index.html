@@ -21,14 +21,13 @@
   :root{
     --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
-    --lpmt:#2E8FA3; --bbmt:#3F6FC4; --amt:#A85CC4; --gds:#C255A0;
+    --lpmt:#2E8FA3; --bbmt:#5E5ED6; --amt:#CDA1EC; --gds:#C255A0;
     /* UX6 Wave F (F2): --no lightened #A85454 -> #E2938B so it clears WCAG AA (4.5:1) as TEXT on the
        panels it renders on (.badge.no on --panel = 5.98:1, on --panel-2 = 5.00:1; both were ~2.3-2.8:1).
-       Hue-preserving danger red, distinct from --part amber and --copper. The --q0 quality-bin colour is
-       a SEPARATE token (used only for graphical map dots via state.js qColor(), where the text-contrast
-       rule does not apply) and is left unchanged. */
+       Hue-preserving danger red, distinct from --part amber and --copper. (The old --q0/--q3/--q5
+       quality-bin tokens were dead and removed by UX8; the map completeness ramp lives in state.js
+       qColor() as a CVD-safe sequential dark-to-light progression.) */
     --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
-    --q0:#A85454; --q3:#D9A23B; --q5:#5BAE6A;
     --mono:ui-monospace,'SF Mono','Cascadia Mono','Consolas',monospace;
     --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   }
@@ -156,7 +155,8 @@
   .badges{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
   .badge{font-size:12px;font-family:var(--mono);padding:2px 8px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
   .badge.ok{border-color:var(--ok);color:var(--ok)}.badge.part{border-color:var(--part);color:var(--part)}.badge.no{border-color:var(--no);color:var(--no)}
-  .sechead{font-size:12.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:16px 0 6px;border-top:1px solid var(--line);padding-top:12px}
+  /* UX8 (X9): a little more breathing room between drawer section groups; heading up 12.5 -> 13px. */
+  .sechead{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:18px 0 7px;border-top:1px solid var(--line);padding-top:13px}
   details.prov-d{margin:8px 0;border:1px solid var(--line);border-radius:6px;background:#16242f}
   details.prov-d>summary{cursor:pointer;padding:8px 10px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);user-select:none}
   details.prov-d[open]>summary{border-bottom:1px solid var(--line)}
@@ -230,6 +230,49 @@
   .plotmodal-close{font-size:15px;line-height:1;padding:4px 10px;flex:none}
   .plotmodal-svg{overflow:auto}
   .plotmodal-svg svg{max-width:100%;height:auto;display:block}
+
+  /* ===== UX8 (X4/X5/X6/X7/X9) — drawer density + Station summary + Screening indicators + maturity ===== */
+  /* X9 density: extra whitespace around the plots and the indicator list (drawer region only). */
+  #drawer .plot{margin:12px 0 5px}
+  /* X4: the "Station summary" collapsible's four-group layout (under the Response plots). */
+  .ssdetails{margin-top:16px}
+  .ssbody{padding:11px 12px}
+  .ssgroup{margin:0 0 13px}.ssgroup:last-child{margin-bottom:0}
+  .ssg-h{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 4px;font-weight:600}
+  .ssgroup .prodgrid{margin-top:6px}
+  /* X5: Screening indicator list — glyph + label + state word; a colour-blind reader sees the word too. */
+  .indlist{list-style:none;margin:12px 0 6px;padding:0;display:flex;flex-direction:column;gap:7px}
+  .indrow{display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);
+    border-left-width:3px;border-radius:5px;padding:9px 11px;font-size:12.5px}
+  .indglyph{flex:none;width:16px;text-align:center;font-size:13px}
+  .indlabel{flex:1 1 auto;min-width:0}
+  .indstate{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .ind-ok{border-left-color:var(--ok)}.ind-ok .indglyph{color:var(--ok)}
+  .ind-part{border-left-color:var(--part)}.ind-part .indglyph{color:var(--part)}
+  .ind-no{border-left-color:var(--no)}.ind-no .indglyph{color:var(--no)}
+  .ind-na{border-left-color:var(--unk)}.ind-na .indglyph{color:var(--unk)}
+  /* X7: Dataset-maturity block — stars + honest dimension states (record stewardship, not science quality). */
+  .matblock{margin:16px 0 6px}
+  .mat-h{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .mat-stars{font-size:14px;letter-spacing:1px;color:var(--part)}
+  .mat-sub{font-size:11.5px;color:var(--muted);line-height:1.45;margin:3px 0 8px}
+  .matdims{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+  .matdim{display:flex;align-items:center;gap:8px;font-size:12.5px}
+  .matdim.off{color:var(--muted)}
+  .matglyph{flex:none;width:14px;text-align:center;color:var(--part)}
+  .matdim.off .matglyph{color:var(--unk)}
+  /* X6: the three always-visible provenance rows. */
+  .prov-top{margin:6px 0 12px}
+  /* W3b: the captured attribution line + the upstream source-datasets list. */
+  .attn{font-size:12.5px;line-height:1.5;margin:5px 0 2px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:5px;padding:8px 10px}
+  .attn b{color:var(--text)}
+  .srclist{display:flex;flex-direction:column;gap:8px;margin:5px 0}
+  .srcitem{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:9px 11px}
+  .srct{font-size:13px;font-weight:600}
+  .srcm{font-size:12px;color:var(--muted);margin-top:2px;font-family:var(--mono);word-break:break-word}
+  .srcm a{color:var(--copper);text-decoration:none}
+  .srca{font-size:12px;margin-top:5px;line-height:1.45}
 
   #surveysview,#collectionsview{flex:1;overflow-y:auto;padding:20px;display:none}
   #collectionview{flex:1;overflow-y:auto;padding:24px 30px;display:none}

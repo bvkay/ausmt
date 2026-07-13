@@ -121,6 +121,14 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // UX6 Wave E hooks: collScatter (E6 footprint — driven with a stubbed AU_OUTLINE), renderCollections
   // (E5 landing), and openStationById (E7 focus — lets the driver control the invoking element before open).
   "collScatter,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
+  // UX8 (X3/X5/X7) + C46-W3b PURE helpers, exposed so the field->indicator/star/grouping mappings are
+  // unit-testable (jsdom can't render Leaflet bubbles or run real geometry): screeningIndicators(d) maps
+  // scalar inputs to the five indicator states; maturityModel(m,sc) is the star model; groupMarkersBySurvey
+  // buckets markers by their _survey stamp (the per-survey cluster split); licBadgeState/licIsOpen/
+  // attributionText are the W3b licence/attribution helpers; setSMETA patches a survey's metadata so the
+  // driver can drive the attribution/sources render paths that the base fixture doesn't carry.
+  "screeningIndicators,maturityModel,groupMarkersBySurvey,licBadgeState,licIsOpen,attributionText," +
+  "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -994,40 +1002,52 @@ async function bootFreshWindow(dataMap) {
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "WaveC: the A1 drawer did not open");
 
-  // (a) SIX tabs, each role=tab, in the mandated order. FAILS if a tab is missing, mis-roled, or reordered.
+  // (a) UX8 (X4): FIVE tabs (Overview folded into Response), each role=tab, in the mandated order.
+  //     FAILS if a tab is missing, mis-roled, reordered, or if the retired Overview tab reappears.
   const tabsV = [...drwV.querySelectorAll('[role="tab"]')];
-  ok(tabsV.length === 6, "C1: expected 6 role=tab buttons, got " + tabsV.length);
-  const wantTabs = ["overview", "response", "screening", "files", "provenance", "cite"];
+  ok(tabsV.length === 5, "C1/X4: expected 5 role=tab buttons (Overview folded away), got " + tabsV.length);
+  const wantTabs = ["response", "screening", "files", "provenance", "cite"];
   ok(wantTabs.every((n, k) => tabsV[k] && tabsV[k].dataset.tab === n),
-    "C1: tab order/ids drifted from Overview/Response/Screening/Files/Provenance/Cite, got " +
+    "C1/X4: tab order/ids drifted from Response/Screening/Files/Provenance/Cite, got " +
     JSON.stringify(tabsV.map(t => t.dataset.tab)));
+  ok(drwV.querySelector('#dt-overview') == null && drwV.querySelector('#dp-overview') == null,
+    "X4: the Overview tab/panel must be GONE (folded into the Response tab's Station summary)");
   ok(drwV.querySelector('[role="tablist"]') != null, "C1: no role=tablist container in the drawer");
 
-  // (b) Overview is DEFAULT-selected; its panel is visible, the others hidden. FAILS if another tab wins.
-  const ovTab = drwV.querySelector('#dt-overview'), rsTab = drwV.querySelector('#dt-response');
-  const ovPanel = drwV.querySelector('#dp-overview'), rsPanel = drwV.querySelector('#dp-response');
-  ok(ovTab.getAttribute("aria-selected") === "true", "C1: Overview tab must be aria-selected by default");
-  ok(ovPanel && ovPanel.hidden === false, "C1: the Overview panel must be visible by default");
-  ok(rsPanel && rsPanel.hidden === true, "C1: non-Overview panels must be hidden by default");
+  // (b) UX8 (X4): Response is DEFAULT-selected; its panel is visible, the others hidden. FAILS if another
+  //     tab wins (e.g. a revert to the Overview-default).
+  const rsTab = drwV.querySelector('#dt-response'), scTab = drwV.querySelector('#dt-screening');
+  const rsPanel = drwV.querySelector('#dp-response'), scPanel = drwV.querySelector('#dp-screening');
+  ok(rsTab.getAttribute("aria-selected") === "true", "X4: the Response tab must be aria-selected by default");
+  ok(rsPanel && rsPanel.hidden === false, "X4: the Response panel must be visible by default");
+  ok(scPanel && scPanel.hidden === true, "X4: non-Response panels must be hidden by default");
 
-  // (c) D3: the science summary strip (.sci) is the FIRST content block of Overview. FAILS if any block
-  //     (identity/heading/etc.) is inserted above it.
-  ok(ovPanel.firstElementChild && ovPanel.firstElementChild.classList.contains("sci"),
-    "C1/D3: the science summary strip (.sci) must be the FIRST content block of Overview; got first child: " +
-    (ovPanel.firstElementChild && ovPanel.firstElementChild.className));
+  // (c) UX8 (X4): the Response tab leads with the plots (an OPEN station renders svg plot paths there), and
+  //     the former Overview facts live in a collapsible "Station summary" <details> UNDER the plots — not a
+  //     leading meta strip. FAILS if the plots aren't first, or the Station summary fold is missing.
+  ok(rsPanel.querySelectorAll("svg path").length > 0, "X4: the Response panel must render the plots (svg paths)");
+  const ssDetails = [...rsPanel.querySelectorAll("details")].find(d => d.querySelector("summary") && /Station summary/.test(d.querySelector("summary").textContent));
+  ok(ssDetails, "X4: the Response tab must carry a collapsible 'Station summary' <details>");
+  // the fold sits AFTER the first plot (plots lead), and carries the owner's four group headers.
+  const firstPlot = rsPanel.querySelector(".plot");
+  ok(firstPlot && (firstPlot.compareDocumentPosition(ssDetails) & win.Node.DOCUMENT_POSITION_FOLLOWING),
+    "X4: the Station summary fold must come AFTER the plots (plots are the centerpiece)");
+  ["Station", "Transfer function", "Data checks", "Processing"].forEach(g =>
+    ok([...ssDetails.querySelectorAll(".ssg-h")].some(h => h.textContent === g),
+      "X4: the Station summary is missing the '" + g + "' group header"));
 
   // (d) the sticky-header primary actions: Download EDI (open station) + Cite (jumps to the Cite tab).
   ok(drwV.querySelector(".dtop .dl-edi") != null, "C1: an open station must offer a Download EDI action in the sticky header");
   const citeAction = drwV.querySelector(".dtop .dl-cite");
   ok(citeAction != null && citeAction.dataset.tab === "cite", "C1: the sticky-header Cite action must target the Cite tab");
 
-  // (e) clicking Response activates it (roving tabindex + hidden toggle). FAILS if the toggle is inert.
-  fire(rsTab, "click");
-  ok(rsPanel.hidden === false && ovPanel.hidden === true,
-    "C1: clicking the Response tab did not activate its panel / hide Overview");
-  ok(rsTab.getAttribute("aria-selected") === "true" && ovTab.getAttribute("aria-selected") === "false",
-    "C1: aria-selected did not move to Response on click");
-  fire(ovTab, "click");   // restore Overview default for later helpers
+  // (e) clicking Screening activates it (roving tabindex + hidden toggle); switching back restores Response.
+  fire(scTab, "click");
+  ok(scPanel.hidden === false && rsPanel.hidden === true,
+    "C1: clicking the Screening tab did not activate its panel / hide Response");
+  ok(scTab.getAttribute("aria-selected") === "true" && rsTab.getAttribute("aria-selected") === "false",
+    "C1: aria-selected did not move to Screening on click");
+  fire(rsTab, "click");   // restore Response default for later helpers
 
   // (f) C2: section-role chips render with the engine taxonomy (muted, plain text).
   ok(drwV.querySelector(".rolechip") != null, "C2: no section-role chips (.rolechip) rendered");
@@ -1339,9 +1359,128 @@ async function bootFreshWindow(dataMap) {
   ok(!drwF.classList.contains("open"), "E7: the close button did not close the drawer");
   ok(doc.activeElement === opener, "E7: focus must be RESTORED to the invoking element on close");
 
+  // ===== UX8 (X2/X3/X5/X7) + C46-W3b =============================================================
+
+  // X2. MAP LEGEND OVERLAYS THE MAP CONTAINER (bug fix). #mapLegend must be a child of #map (the Leaflet
+  // container), NOT a flex sibling of #map inside #content — so it can never participate in that layout or
+  // displace the map at load. FAILS on the pre-fix parenting (parent === "content").
+  const legEl = doc.getElementById("mapLegend");
+  ok(legEl && legEl.parentElement && legEl.parentElement.id === "map",
+    "X2: the map legend must be parented INTO the map container (#map), got parent: " + (legEl && legEl.parentElement && legEl.parentElement.id));
+
+  // X3. PER-SURVEY CLUSTER GROUPING. groupMarkersBySurvey buckets markers by their _survey stamp; TWO
+  // surveys => TWO buckets (=> two separate bubbles), and reassigning one marker's survey MOVES it between
+  // buckets. PURE (jsdom can't render Leaflet bubbles) — driven with plain-object markers with real string _survey.
+  const mkr = (id, sv) => ({ id, _survey: sv });
+  const gA = A.groupMarkersBySurvey([mkr("a", "Burra"), mkr("b", "Burra"), mkr("c", "Robertstown")]);
+  ok(Object.keys(gA).length === 2, "X3: two nearby surveys must produce TWO buckets (two bubbles), got " + Object.keys(gA).length);
+  ok(gA["Burra"].length === 2 && gA["Robertstown"].length === 1, "X3: a bucket must hold ONLY its own survey's markers (clusters never mix surveys)");
+  const gB = A.groupMarkersBySurvey([mkr("a", "Burra"), mkr("b", "Robertstown"), mkr("c", "Robertstown")]);
+  ok(gB["Burra"].length === 1 && gB["Robertstown"].length === 2,
+    "X3: reassigning a marker's _survey must move it between buckets (grouping is by survey, falsifiably)");
+
+  // X5. SCREENING INDICATORS — the five-row list is derived ONLY from computed quantities; each field->state
+  // mapping is FALSIFIABLE (flip one input, exactly one indicator flips). An all-good baseline, then perturb.
+  const baseInd = { q: 4.5, azR: 0.95, azN: 5, p3d: 10, pctThr: 30, phaseSplit: 8, decades: 5 };
+  const byKey = arr => Object.fromEntries(arr.map(it => [it.key, it]));
+  const KEYS = ["smoothness", "strike", "pt", "phasesplit", "coverage"];
+  const iBase = byKey(A.screeningIndicators(baseInd));
+  ok(KEYS.every(k => iBase[k]), "X5: the five indicators (smoothness/strike/pt/phasesplit/coverage) must all be present");
+  ok(KEYS.every(k => iBase[k].state === "green"), "X5: the all-good baseline must render every indicator green, got " + JSON.stringify(KEYS.map(k => k + ":" + iBase[k].state)));
+  ok(KEYS.every(k => iBase[k].word && iBase[k].word.length), "X5: every indicator must carry a plain-language state word (never colour alone)");
+  // q high->low flips ONLY Smoothness; nothing else changes (independent field mapping).
+  const iQ = byKey(A.screeningIndicators({ ...baseInd, q: 2.0 }));
+  ok(iQ.smoothness.state === "red", "X5: flipping q must flip Smoothness (green->red), got " + iQ.smoothness.state);
+  ok(iQ.strike.state === "green" && iQ.pt.state === "green" && iQ.phasesplit.state === "green" && iQ.coverage.state === "green",
+    "X5: flipping q must NOT change any other indicator");
+  // strike concentration R high->low flips ONLY Strike stability.
+  const iR = byKey(A.screeningIndicators({ ...baseInd, azR: 0.5 }));
+  ok(iR.strike.state === "red" && iR.smoothness.state === "green", "X5: flipping the strike resultant length must flip ONLY Strike stability");
+  // p3d far above the PROV threshold flips Phase-tensor consistency; raising the ECHOED pctThr above p3d restores it.
+  ok(byKey(A.screeningIndicators({ ...baseInd, p3d: 80 })).pt.state === "red", "X5: p3d far above pctThr must flip Phase-tensor consistency to red");
+  ok(byKey(A.screeningIndicators({ ...baseInd, p3d: 80, pctThr: 90 })).pt.state === "green",
+    "X5: raising the ECHOED PROV pct_periods_3d_threshold above p3d must return the indicator to green (threshold honoured)");
+  ok(byKey(A.screeningIndicators({ ...baseInd, phaseSplit: 50 })).phasesplit.state === "red", "X5: a large phase split must flip Phase split to red");
+  ok(byKey(A.screeningIndicators({ ...baseInd, decades: 1 })).coverage.state === "red", "X5: narrow period coverage must flip Coverage to red");
+  // a not-computable input renders neutral grey 'na' — NEVER a fabricated green.
+  const iNA = byKey(A.screeningIndicators({ q: null, azR: null, azN: 0, p3d: null, phaseSplit: null, decades: null }));
+  ok(KEYS.every(k => iNA[k].state === "na"), "X5: a not-computable input must render 'na' (not evaluated), never a fabricated green, got " + JSON.stringify(KEYS.map(k => k + ":" + iNA[k].state)));
+  ok(iNA.smoothness.word === "not evaluated", "X5: an 'na' indicator must say 'not evaluated'");
+  // the RENDERED Screening tab: five indicator rows + a 'Show details' expander preserving the full prose.
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  const scP = doc.getElementById("dp-screening");
+  ok(scP.querySelectorAll(".indrow").length === 5, "X5: the Screening tab must render five indicator rows, got " + scP.querySelectorAll(".indrow").length);
+  ok([...scP.querySelectorAll("details summary")].some(su => /Show details/.test(su.textContent)), "X5: the Screening tab must carry a 'Show details' expander");
+  ok(/phase-tensor strike/.test(scP.textContent), "X5: the full screening prose (strike line) must be preserved inside the 'Show details' expander");
+  doc.getElementById("drawer").classList.remove("open");
+
+  // X7. DATASET MATURITY — stars = achieved RECORD-STEWARDSHIP dimensions (NOT scientific quality). PURE
+  // model, falsifiable: flip a dimension's input and the star count moves. sc[SC.sw] is index 3.
+  const modFull = A.maturityModel({ lic: "CC-BY-4.0", doi: "10.1/x", ts: "ok" }, ["", "", "", "BIRRP"]);
+  ok(modFull.total === 5, "X7: the maturity model must have 5 dimensions");
+  ok(modFull.stars === 5, "X7: curated+repro+licence+doi+ts all present must give 5 stars, got " + modFull.stars);
+  const modNoDoi = A.maturityModel({ lic: "CC-BY-4.0", ts: "ok" }, ["", "", "", "BIRRP"]);
+  ok(modNoDoi.stars === modFull.stars - 1, "X7: removing the DOI must drop exactly one star, got " + modNoDoi.stars);
+  ok(modNoDoi.dims.find(d => d.key === "doi").note === "not recorded", "X7: a missing DOI reads 'not recorded' (never 'pending')");
+  const modNoTs = A.maturityModel({ lic: "CC-BY-4.0", doi: "10.1/x" }, ["", "", "", "BIRRP"]);
+  ok(modNoTs.stars === modFull.stars - 2, "X7: removing the time series drops BOTH Reproducible and Time series (2 stars), got " + modNoTs.stars);
+  ok(modNoTs.dims.find(d => d.key === "ts").note === "not available", "X7: a missing time series reads 'not available'");
+  ok(A.maturityModel({ lic: "Bananas", doi: "10.1/x", ts: "ok" }, ["", "", "", "BIRRP"]).dims.find(d => d.key === "licence").achieved === false,
+    "X7: an unrecognised licence must leave the 'Licence verified' dimension unachieved");
+  // the RENDERED Provenance tab carries the star row + the honest, not-scientific-quality framing.
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  const matP = doc.getElementById("dp-provenance");
+  ok(/Dataset maturity/.test(matP.textContent), "X7: the Provenance tab must render the 'Dataset maturity' block");
+  ok(matP.querySelector(".mat-stars") && /[★☆]/.test(matP.querySelector(".mat-stars").textContent), "X7: the maturity block must render a star row");
+  ok(/Not a measure of scientific quality/.test(matP.textContent), "X7: the maturity block must state it is NOT scientific quality");
+  // X6: the three always-visible provenance rows are present up top.
+  ok(/Processing software/.test(matP.textContent) && /Source archive/.test(matP.textContent), "X6: the Provenance tab must show the software + source-archive summary rows");
+  // X8: the Metadata & API box is a single small 'API' expander at the foot (Wave A honest text inside).
+  ok([...matP.querySelectorAll("details summary")].some(su => su.textContent.trim() === "API"), "X8: the Provenance tab must carry a single 'API' expander");
+  ok(/Read API \(planned\)/.test(matP.textContent), "X8: Wave A's honest 'Read API (planned)' text must be kept inside the API expander");
+  doc.getElementById("drawer").classList.remove("open");
+
+  // MM. C46-W3b LICENCE CLASS via the CANON TABLES (not startsWith('CC')) + the attribution line.
+  ok(A.licBadgeState("CC-BY-4.0") === "ok", "W3b: CC-BY-4.0 must badge 'ok' (redistributable)");
+  ok(A.licBadgeState("cc0") === "ok" && A.licIsOpen("CC0-1.0") === true, "W3b: CC0 (alias) must resolve to redistributable/ok");
+  ok(A.licBadgeState("ODbL") === "ok", "W3b: a non-CC OPEN licence (ODbL) must badge 'ok' — the startsWith('CC') guess would have missed it");
+  ok(A.licBadgeState("ALL RIGHTS RESERVED") === "part" && A.licIsOpen("ALL RIGHTS RESERVED") === false,
+    "W3b: a recognised-but-not-open licence must badge 'part' and NOT count as open");
+  ok(A.licBadgeState("Bananas 2.0") === "unk", "W3b: an unrecognised licence must badge 'unk'");
+  ok(A.licBadgeState(null) === "unk", "W3b: an absent licence must badge 'unk'");
+  ok(A.attributionText({ attribution: { statement: "Cite me verbatim." } }) === "Cite me verbatim.", "W3b: a verbatim attribution.statement must win");
+  ok(A.attributionText({ org: "GSSA", dates: "2019-2020" }) === "GSSA (2020)", "W3b: with no statement, synthesise org (last year)");
+  ok(A.attributionText({ org: "GSSA" }) === "GSSA", "W3b: no year -> org with no year (no fabrication)");
+
+  // NN. C46-W3b RENDER — attribution statement, source-datasets list, provGraph source node, Cite fallback.
+  // Poke Alpha with an attribution statement + a source (the base fixture carries neither). Done LAST so it
+  // cannot perturb the earlier Alpha assertions.
+  A.setSMETA("Alpha Survey", {
+    attribution: { custodian: "GSSA", statement: "GSSA (2020). Alpha survey." },
+    sources: [{ title: "Alpha raw archive", custodian: "GSSA", identifier: "10.5555/alpha-src", licence: "CC-BY-3.0-AU", profile: "generic" }],
+  });
+  const drwN = doc.getElementById("drawer"); drwN.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  ok(/GSSA \(2020\)\. Alpha survey\./.test(doc.getElementById("dp-cite").textContent), "W3b: the Cite tab must render the verbatim attribution statement");
+  const provN = doc.getElementById("dp-provenance");
+  ok(/Source dataset/.test(provN.textContent) && /10\.5555\/alpha-src/.test(provN.innerHTML),
+    "W3b: the lineage graph must gain an upstream 'Source dataset' node with the source identifier when sources[] exists");
+  drwN.classList.remove("open");
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  ok(/GSSA \(2020\)\. Alpha survey\./.test(drwN.textContent), "W3b: the survey detail must render the attribution statement");
+  ok(/Source datasets/.test(drwN.textContent) && /Alpha raw archive/.test(drwN.textContent) && /CC-BY-3\.0-AU/.test(drwN.textContent),
+    "W3b: the survey detail must render the 'Source datasets' list (title + canonical licence)");
+  // Cite EXPLICIT fallback: Beta has no cite block -> the drawer must SAY so, never silently self-attribute.
+  drwN.classList.remove("open");
+  win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
+  ok(/custodian citation not recorded/i.test(doc.getElementById("dp-cite").textContent),
+    "W3b: a no-cite survey's Cite tab must explicitly say 'custodian citation not recorded — cite the survey package', not a silent AUSMT_SELF masquerade");
+  drwN.classList.remove("open");
+
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
-    "UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
+    "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
+    "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + CVD-safe-qColor(monotone-luminance) + W3b lic-canon+attribution+source-node+cite-fallback, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
