@@ -10,7 +10,7 @@ portal:
   short_name: AusMT         # shown in the wordmark / header chip
   region: Australia
   schema: MTCAT             # discovery-document schema name (do not change)
-  schema_version: "1.0"     # MTCAT schema version (changes only when the schema changes)
+  schema_version: "1.1"     # MTCAT schema version (changes only when the schema changes)
   version: "0.2.1"          # AusMT release version — keep in step with engine/pyproject.toml; shown as "AusMT v0.2.1"
 
 deployment:

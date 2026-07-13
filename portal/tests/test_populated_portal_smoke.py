@@ -87,9 +87,14 @@ def test_populated_portal_value_binding(tmp_path):
     assert ex[14] == "yes", ex                          # remote_ref     <- sc[SC.rr]
     assert ex[15] == "2-D", ex                          # dimensionality <- sc[SC.dim]
     assert ex[16] == "BIRRP", ex                        # software       <- sc[SC.sw]
-    # C6: the licence column travels with the exported row (sourced from SMETA[survey].lic). It is the
-    # LAST column; a wrong/missing SMETA.lic deref (or dropping the column) makes this FAIL, not just crash.
-    assert ex[-1] == "CC-BY-4.0", ex                    # license        <- SMETA["Demo Survey"].lic
+    # C6: the licence column travels with the exported row (sourced from SMETA[survey].lic). A
+    # wrong/missing SMETA.lic deref (or dropping the column) makes this FAIL, not just crash.
+    assert ex[22] == "CC-BY-4.0", ex                    # license        <- SMETA["Demo Survey"].lic
+    # C46: the deed URL (resolved via the canonical LICENSES.urls table, not a startsWith guess) and the
+    # rendered attribution line ride at the END so rights travel with a shared CSV. Demo Survey declares
+    # no attribution.statement and no dates, so the attribution falls back to the org with no year.
+    assert ex[23] == "https://creativecommons.org/licenses/by/4.0/", ex  # license_url <- canonical table
+    assert ex[24] == "X", ex                            # attribution <- org (no statement/date)
 
     # (c) C12: the footer's build-id text is a pure function of BUILDID (loaded from build.json) —
     # value-binds main.js's buildIdText() against the KNOWN fixture build_id/generated above, so a

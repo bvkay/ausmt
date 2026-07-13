@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://ausmt.org/schema/mtcat-1.0.schema.json",
-  "title": "MTCAT v1.0: Magnetotelluric Catalogue interchange document",
-  "description": "MTCAT is an open JSON schema for magnetotelluric catalogue discovery. An MTCAT document provides a machine-readable description of the surveys, stations, collections, and metadata exposed by a portal, enabling interoperable discovery across independent MT catalogue systems.",
+  "$id": "https://ausmt.org/schema/mtcat-1.1.schema.json",
+  "title": "MTCAT v1.1: Magnetotelluric Catalogue interchange document",
+  "description": "MTCAT is an open JSON schema for magnetotelluric catalogue discovery. An MTCAT document provides a machine-readable description of the surveys, stations, collections, and metadata exposed by a portal, enabling interoperable discovery across independent MT catalogue systems. v1.1 (C46) adds optional per-survey rights blocks (attribution / sources / changes); additionalProperties stays true, so v1.0 consumers are unaffected.",
   "type": "object",
   "required": [
     "portal",
@@ -167,6 +167,33 @@
               "null"
             ],
             "description": "RAiD (Research Activity Identifier) of the project, if declared, e.g. https://raid.org/10.12345/AB1234"
+          },
+          "attribution": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "MTCAT 1.1 (C46): rights of THIS release — custodian of record, verbatim required attribution statement, and the CC-BY changes-made flag/summary. Present only when the survey declares it.",
+            "additionalProperties": true
+          },
+          "sources": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "description": "MTCAT 1.1 (C46): upstream source datasets (one entry per obtained dataset: title/custodian/identifier/licence/retrieved/statement/profile). Present only when the survey declares them.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "changes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "MTCAT 1.1 (C46): the survey's declared changes descriptor {made, summary} (CC-BY 4.0 §3(a)). Present only when the survey declares changes_made.",
+            "additionalProperties": true
           }
         }
       }

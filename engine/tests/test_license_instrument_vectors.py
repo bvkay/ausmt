@@ -44,7 +44,7 @@ def test_vectors_cover_the_new_rendering_classes():
     # missing — a file of only none/attribution vectors would be a hollow oracle.
     kinds = " ".join(v["kind"] for v in _load()["vectors"])
     for needed in ("none", "generic", "ga_derivative", "ga_attribution", "supersession", "changes",
-                   "statement", "multi"):
+                   "statement", "multi", "disclaimer"):
         assert needed in kinds, f"license_instrument vectors miss the {needed!r} class"
 
 
@@ -64,6 +64,13 @@ def test_expected_strings_carry_the_distinctive_wording():
     # asserted by the byte-for-byte vector match on both mirrors. Year is the retrieved year (2016).
     assert "Commonwealth of Australia (Geoscience Australia) 2016" in att
     assert "AusMT serves derived renditions" not in att
+    # C46-W3a: the GA profile's s.5 DISCLAIMER renders as the final Source-datasets paragraph — even in
+    # the no-changes vector, and even when a source supplies a verbatim statement; a generic-only source
+    # never carries it. This is the mutation target for the disclaimer render (flip a word and it reds).
+    assert "Geoscience Australia has not evaluated the data" in att
+    assert "gives no warranty regarding its accuracy" in att
+    assert "has not evaluated" in by["source_verbatim_statement"]      # profile-level, survives a statement
+    assert "has not evaluated" not in by["generic_source_same_licence"]  # generic profile: no disclaimer
     # a verbatim custodian statement wins over the profile rendering
     assert "verbatim required attribution" in by["source_verbatim_statement"]
 

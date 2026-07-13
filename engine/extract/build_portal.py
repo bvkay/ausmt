@@ -155,7 +155,7 @@ def sha256(p: Path) -> str:
 # sites and the tests that reference bp.redistributable / bp.license_instrument_text keep resolving
 # unchanged, and the LICENSE.txt output stays byte-identical (pinned by test_license_gate /
 # test_manifest).
-from _license_text import license_instrument_text, redistributable  # noqa: E402
+from _license_text import canon_license, license_instrument_text, redistributable  # noqa: E402
 
 
 # --- C1 access gate: access.level (open|metadata_only|embargoed) + embargo_until gate BYTE DISTRIBUTION,
@@ -302,22 +302,30 @@ def _artifact_integrity(p: Path):
     return p.stat().st_size, sha256(p)
 
 
-def _file_row(ausmt_id, survey, station, fmt, served: Path, rel, license_str, nci_base=None, base_url=""):
-    """One per-station downloadable-artifact manifest row, with the integrity of the SERVED bytes."""
+def _file_row(ausmt_id, survey, station, fmt, served: Path, rel, license_str, nci_base=None,
+              base_url="", custodian=None):
+    """One per-station downloadable-artifact manifest row, with the integrity of the SERVED bytes.
+    C46-W3a: the raw `license` field is KEPT for compatibility; `canon_license` adds the canonical id
+    (the de-aliased/normalised form) and `custodian` the rights-holder of record (attribution.custodian,
+    else the organisation) so a manifest consumer can resolve rights without re-parsing the raw string."""
     size, digest = _artifact_integrity(served)
     tier, url = _resolve_artifact(rel, served, nci_base, base_url)
     return {"ausmt_id": ausmt_id, "survey": survey, "station": station, "format": fmt,
             "url": url, "size": size, "sha256": digest,
-            "tier": tier, "license": license_str}
+            "tier": tier, "license": license_str, "canon_license": canon_license(license_str),
+            "custodian": custodian}
 
 
-def _bundle_row(survey, slug, fmt, served: Path, rel, license_str, n_stations, nci_base=None, base_url=""):
-    """One per-survey bundle manifest row (EDI zip / survey MTH5)."""
+def _bundle_row(survey, slug, fmt, served: Path, rel, license_str, n_stations, nci_base=None,
+                base_url="", custodian=None):
+    """One per-survey bundle manifest row (EDI zip / survey MTH5). C46-W3a: canonical licence id +
+    custodian added alongside the retained raw `license` (see _file_row)."""
     size, digest = _artifact_integrity(served)
     tier, url = _resolve_artifact(rel, served, nci_base, base_url)
     return {"survey": survey, "slug": slug, "format": fmt,
             "url": url, "size": size, "sha256": digest,
-            "tier": tier, "license": license_str, "n_stations": n_stations}
+            "tier": tier, "license": license_str, "canon_license": canon_license(license_str),
+            "custodian": custodian, "n_stations": n_stations}
 
 
 def slugify(s: str) -> str:
@@ -539,24 +547,32 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     surveys = []
     for lbl, meta in sorted(surveys_meta.items()):
         bb = bbox_of.get(lbl)
-        surveys.append({
+        m = meta or {}
+        entry = {
             "survey_id": slug_of.get(lbl, slugify(lbl)), "title": lbl,
-            "organisation": (meta or {}).get("org", "unknown"),
+            "organisation": m.get("org", "unknown"),
             # C7: additive optional federation fields (schema/mtcat.schema.json) — the organisation's ROR
             # and the project's RAiD, when the survey declares them; None when not (schema allows null).
-            "organisation_ror": (meta or {}).get("org_ror"),
-            "raid": (meta or {}).get("raid"),
-            "country": (meta or {}).get("country", "Australia"),
-            "version": (meta or {}).get("version"),
-            "collection_id": ((meta or {}).get("collection") or {}).get("id"),
-            "doi": (meta or {}).get("doi"), "license": (meta or {}).get("lic"),
+            "organisation_ror": m.get("org_ror"),
+            "raid": m.get("raid"),
+            "country": m.get("country", "Australia"),
+            "version": m.get("version"),
+            "collection_id": (m.get("collection") or {}).get("id"),
+            "doi": m.get("doi"), "license": m.get("lic"),
             # C1: emit the NORMALISED access level (a plain string — mtcat.schema.json's access is string|null).
             # SMETA already normalises it; normalise again so a raw-mode seed value stays a clean scalar.
-            "access": normalise_access_level((meta or {}).get("access", "open")),
+            "access": normalise_access_level(m.get("access", "open")),
             "bbox": ({"west": round(bb[0], 6), "south": round(bb[1], 6),
                       "east": round(bb[2], 6), "north": round(bb[3], 6)} if bb else None),
             "centroid": ({"latitude": round((bb[1] + bb[3]) / 2, 6),
-                          "longitude": round((bb[0] + bb[2]) / 2, 6)} if bb else None)})
+                          "longitude": round((bb[0] + bb[2]) / 2, 6)} if bb else None)}
+        # C46-W3a (schema 1.1): the attribution/sources/changes rights blocks, PRESENT ONLY when the
+        # survey declares them in SMETA — a survey without them keeps a byte-identical entry (the whole
+        # existing corpus). Emitted verbatim from SMETA (mtcat.schema.json is additionalProperties:true).
+        for k in ("attribution", "sources", "changes"):
+            if m.get(k) is not None:
+                entry[k] = m[k]
+        surveys.append(entry)
     stations = [{"station_id": r["ausmt_id"], "survey_id": slug_of.get(r["survey"], slugify(r["survey"])),
                  "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"]}
                 for (_p, r) in all_stations]
@@ -572,7 +588,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     doc = {
         "portal": {"portal_id": p.get("portal_id", "ausmt"),
                    "portal_name": p.get("portal_name", "AusMT — Australia's Magnetotelluric Data Portal"),
-                   "schema": "mtcat", "version": str(p.get("schema_version", "1.0")),
+                   "schema": "mtcat", "version": str(p.get("schema_version", "1.1")),
                    # FAIR-I: point harvesters at the schema served BESIDE this document (relative to the
                    # data dir — the build copies schema/mtcat.schema.json to out/mtcat.schema.json), so a
                    # second implementation can validate mtcat.json without resolving the canonical $id.
@@ -791,6 +807,22 @@ def survey_meta_from_yaml(y: dict) -> dict:
     instruments = _instruments_of(y)
     if instruments is not None:
         sm["instruments"] = instruments
+    # C46-W3a: thread the schema-0.3 attribution/sources blocks (design §2.1) into SMETA when present,
+    # ABSENT -> ABSENT (no empty placeholders), so a survey WITHOUT them yields a byte-identical entry.
+    # This LIGHTS UP the W2 build-side instrument threading (which reads SMETA.attribution/.sources) and
+    # feeds the render/export surfaces (mtcat/manifest/LICENSE.txt). `changes` is a normalised {made,
+    # summary} descriptor of the survey's DECLARED changes (from attribution.changes_made/summary) — a
+    # metadata fact carried in the discovery document, independent of which derived products THIS build
+    # happened to emit (that build-time gating lives in instrument_params_from_survey at the zip seam).
+    attribution = y.get("attribution")
+    sources = y.get("sources")
+    if isinstance(attribution, dict) and attribution:
+        sm["attribution"] = attribution
+    if isinstance(sources, list) and sources:
+        sm["sources"] = sources
+    if isinstance(attribution, dict) and attribution.get("changes_made") is not None:
+        sm["changes"] = {"made": bool(attribution.get("changes_made")),
+                         "summary": str(attribution.get("changes_summary") or "").strip()}
     return sm
 
 
@@ -1223,7 +1255,7 @@ def load_portal_config(path) -> dict:
     config is given or it cannot be read. Uses PyYAML if present, else the stdlib mini-parser."""
     default = {"portal_id": "ausmt",
                "portal_name": "AusMT — Australia's Magnetotelluric Data Portal",
-               "schema_version": "1.0"}
+               "schema_version": "1.1"}
     if not path:
         return default
     try:
@@ -1248,7 +1280,7 @@ def load_portal_config(path) -> dict:
     portal_name = name
     return {"portal_id": p.get("id", "ausmt"),
             "portal_name": portal_name,
-            "schema_version": str(p.get("schema_version", "1.0"))}
+            "schema_version": str(p.get("schema_version", "1.1"))}
 
 
 def _extent_of(y: dict):
@@ -2384,6 +2416,9 @@ def main(argv=None):
             print(f"C18 survey {slug}: digest={(_survey_digest or '<none>')[:12]} "
                   f"hits={_dh} misses={_dm} writes={_dw}", file=sys.stderr)
         served_edis = []
+        # C46-W3a: the survey's custodian of record for manifest rows — the declared attribution.custodian
+        # (rights-holder, may differ from the acquiring organisation), else the organisation. Computed once.
+        _custodian = (((meta or {}).get("attribution") or {}).get("custodian") or org)
         # product contract per station + manifest + (optional, license-gated) EDI/XML copies
         for (p, r), srow in zip(stations, sci_rows):
             # C42 per-station byte gate: a non-exact (generalised/withheld) station's SOURCE bytes are
@@ -2401,12 +2436,14 @@ def main(argv=None):
                 served_edis.append(served_edi)
                 manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "edi",
                                                     served_edi, f"edi/{slug}/{p.name}", lic,
-                                                    nci_base=nci_base, base_url=base_url))
+                                                    nci_base=nci_base, base_url=base_url,
+                                                    custodian=_custodian))
                 _xmlp = xml_written.get(r["id"])
                 if _xmlp and Path(_xmlp).exists():
                     manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "emtfxml",
                                                         Path(_xmlp), f"xml/{slug}/{Path(_xmlp).name}",
-                                                        lic, nci_base=nci_base, base_url=base_url))
+                                                        lic, nci_base=nci_base, base_url=base_url,
+                                                        custodian=_custodian))
             if prod:
                 # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
                 # above). The job captures this station's SHARED record `r` (masked in place downstream), its
@@ -2444,7 +2481,8 @@ def main(argv=None):
             if _zpath:
                 manifest["bundles"].append(_bundle_row(label, slug, "edi-zip", _zpath, _zrel,
                                                         lic, len(served_edis),
-                                                        nci_base=nci_base, base_url=base_url))
+                                                        nci_base=nci_base, base_url=base_url,
+                                                        custodian=_custodian))
             # C32 §1.1: per-survey EMTF-XML zip — unconditional (like the EDI zip) whenever served XML
             # exists. n_stations = the number of XMLs bundled (the round-trip-verified set), not the
             # station count, so it stays honest if a station had no servable XML.
@@ -2453,7 +2491,8 @@ def main(argv=None):
             if _xpath:
                 manifest["bundles"].append(_bundle_row(label, slug, "xml-zip", _xpath, _xrel,
                                                         lic, len(_xsrc),
-                                                        nci_base=nci_base, base_url=base_url))
+                                                        nci_base=nci_base, base_url=base_url,
+                                                        custodian=_custodian))
             if flags["survey_h5_enabled"]:
                 # C42 (F1): emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
                 # (TF(fn=...)), bypassing the masked record entirely — an unfiltered station list served
@@ -2467,7 +2506,13 @@ def main(argv=None):
                 _hrel, _hpath, _hn = emit_survey_mth5(_h5_stations, slug, label, out)
                 if _hpath:
                     manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
-                                                           lic, _hn, nci_base=nci_base, base_url=base_url))
+                                                           lic, _hn, nci_base=nci_base, base_url=base_url,
+                                                           custodian=_custodian))
+                    # C46-W3a: rights must travel with the MTH5 bytes too. The survey MTH5 ships as a bare
+                    # file (bundles/<slug>-tf.h5, NOT a zip — HDF5 embeds timestamps so it is not
+                    # byte-reproducible), so the SAME LICENSE.txt instrument is written BESIDE it as a
+                    # sidecar (bundles/<slug>-tf.LICENSE.txt). Identical bytes to the zip-internal LICENSE.txt.
+                    (_hpath.parent / f"{slug}-tf.LICENSE.txt").write_text(_lic_txt, encoding="utf-8")
 
         # ---- survey-level conditioning NOTICE (Deliverable 1) + build_report entry (Deliverable 2) ----
         # ONE line per DISTINCT conditioning note (not one near-identical line per station — the
