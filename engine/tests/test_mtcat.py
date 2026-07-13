@@ -65,7 +65,7 @@ def test_mtcat_emitted_and_valid(tmp_path):
     _check(doc, SCHEMA)
     assert doc["portal"]["portal_id"] == "ausmt"
     assert doc["portal"]["schema"] == "mtcat"
-    assert doc["portal"]["version"] == "1.0"
+    assert doc["portal"]["version"] == "1.1"   # C46-W3a: MTCAT minor bump (attribution/sources/changes)
     assert doc["surveys"], "at least one survey"
     assert doc["stations"], "at least one station"
 

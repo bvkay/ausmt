@@ -145,7 +145,9 @@ def license_instrument_text(lic, licensor, year, attribution=None, sources=None,
       * `sources` (list of dicts: title/custodian/identifier/licence/retrieved/statement/profile) — one
         attribution paragraph per upstream dataset, using the source's verbatim `statement` when present
         else the custodian profile's rendered attribution (the GA derivative form when the release makes
-        changes), plus a supersession line for any source whose licence differs from the release licence.
+        changes), a supersession line for any source whose licence differs from the release licence, and
+        (C46-W3a) the custodian profile's s.5 disclaimer paragraph once per distinct disclaimer when a
+        source's profile carries one (today only `ga`).
       * `changes` ({made, summary}) — the CC-BY 4.0 §3(a) 'indicate if changes were made' clause.
     When `sources` is falsy and `changes` is falsy/`made` False, the output is byte-identical to the
     pre-C46 instrument (the frozen LICENSE.txt pins)."""
@@ -202,6 +204,18 @@ def license_instrument_text(lic, licensor, year, attribution=None, sources=None,
             if slic and slic != cid:
                 lines += [f"The upstream dataset was obtained under {slic}; this AusMT release is "
                           f"published by the custodian under {cid}.", ""]
+        # C46-W3a: render each custodian profile's s.5-style DISCLAIMER once (dedup, first-seen order) as
+        # the final paragraph(s) of the Source-datasets block, when a source's profile carries one (today
+        # only `ga`). The disclaimer is a profile-level legal notice distinct from the attribution LINE,
+        # so it renders even when a source supplies a verbatim `statement` (which supplants only the line).
+        # Byte-inert when no source's profile defines a disclaimer (the generic-only vectors are unchanged).
+        _seen_disc: list[str] = []
+        for s in srcs:
+            profile_key = str(s.get("profile") or "generic").strip() or "generic"
+            disc = str((PROFILES.get(profile_key) or {}).get("disclaimer") or "").strip()
+            if disc and disc not in _seen_disc:
+                _seen_disc.append(disc)
+                lines += [disc, ""]
     if changes and changes.get("made"):
         summary = str(changes.get("summary") or "").strip() or DEFAULT_CHANGES_SUMMARY
         lines += [f"Changes were made: {summary}. AusMT serves derived renditions (canonical EMTF XML; "

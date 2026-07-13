@@ -26,7 +26,9 @@
         "size": {"type": "integer", "minimum": 0},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "tier": {"enum": ["repo", "nci"]},
-        "license": {"type": "string"}
+        "license": {"type": "string"},
+        "canon_license": {"type": "string", "description": "C46: canonical (de-aliased, normalised) licence id of the raw license string"},
+        "custodian": {"type": ["string", "null"], "description": "C46: custodian of record (attribution.custodian, else the organisation)"}
       }
     },
     "bundle": {
@@ -42,6 +44,8 @@
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "tier": {"enum": ["repo", "nci"]},
         "license": {"type": "string"},
+        "canon_license": {"type": "string", "description": "C46: canonical (de-aliased, normalised) licence id of the raw license string"},
+        "custodian": {"type": ["string", "null"], "description": "C46: custodian of record (attribution.custodian, else the organisation)"},
         "n_stations": {"type": "integer", "minimum": 0}
       }
     }

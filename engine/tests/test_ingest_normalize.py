@@ -311,3 +311,96 @@ def test_default_notes_are_edi_gated(tmp_path):
     joined = "\n".join(notes)
     assert "sign_convention" not in joined, notes
     assert "declination" not in joined, notes
+
+
+# --- C46-W3a: EMTF-XML Copyright truth fix. The served XML must NOT carry mt_metadata's default
+# "Unrestricted Release" / "may be copied freely … IRIS" boilerplate; it must state the survey's REAL
+# declared licence + access level, and those fields must SURVIVE the write->read round-trip. --------
+import re as _re2  # noqa: E402
+
+
+def _copyright_xml(res):
+    """The raw <Copyright>…</Copyright> element text of the written canonical XML."""
+    raw = res.canonical_xml.read_text(encoding="utf-8")
+    m = _re2.search(r"<Copyright>.*?</Copyright>", raw, _re2.S)
+    assert m, "no <Copyright> block in the written canonical XML"
+    return m.group(0)
+
+
+def test_copyright_boilerplate_never_emitted(tmp_path):
+    """FAILS IF: any served canonical XML carries the mt_metadata default Copyright boilerplate — the
+    live mis-statement C46-W3a fixes (every pre-fix XML claimed "Unrestricted Release" and "may be copied
+    freely … neither the author(s) … nor IRIS …" on the LIBRARY's authority, not the custodian's).
+    Checked across an open survey, an embargoed one, AND a bare (no survey_meta) call — the fix runs
+    unconditionally so NO emitted XML keeps the boilerplate."""
+    for i, sm in enumerate(({"lic": "CC-BY-4.0", "access": "open"},
+                            {"lic": "CC-BY-4.0", "access": "embargoed"},
+                            None)):
+        res = normalize(STANDARD, tmp_path / f"c{i}", survey_id="vulcan", station_id="A1", survey_meta=sm)
+        raw = res.canonical_xml.read_text(encoding="utf-8")
+        assert "Unrestricted Release" not in raw, (sm, "boilerplate release_status still emitted")
+        assert "copied freely" not in raw, (sm, "boilerplate conditions_of_use still emitted")
+        assert "IRIS" not in raw, (sm, "the IRIS-authored default conditions text still emitted")
+
+
+def test_copyright_open_survey_states_real_licence_and_roundtrips(tmp_path):
+    """FAILS IF: an OPEN CC-BY survey's Copyright block does not carry the honest release_status
+    ("Data Citation Required" — attribution is the operative CC-BY obligation) and a conditions_of_use
+    built from the licence id + deed URL. Round-trip constraint: conditions_of_use must survive the
+    mt_metadata write->read (it re-reads EXACTLY from the survey comments), and the served <ReleaseStatus>
+    element must be the clean enum value (not the "ReleaseStatusEnum.X" repr trap)."""
+    sm = {"org": "GSSA", "cite": {"ti": "Vulcan"}, "doi": "10.9999/vulcan",
+          "lic": "CC-BY-4.0", "access": "open"}
+    res = normalize(STANDARD, tmp_path, survey_id="vulcan", station_id="A1", survey_meta=sm)
+    cx = _copyright_xml(res)
+    assert "<ReleaseStatus>Data Citation Required</ReleaseStatus>" in cx, cx
+    assert "ReleaseStatusEnum" not in cx, "the enum repr leaked into the served <ReleaseStatus>"
+    assert "Licensed by the data custodian under CC-BY-4.0" in cx, cx
+    assert "https://creativecommons.org/licenses/by/4.0/" in cx, cx
+    # round-trip: the conditions_of_use survives write->read (recovered from the re-read survey comments)
+    rt = _read_back(res)
+    comments = rt.survey_metadata.comments.value or ""
+    assert "copyright.conditions_of_use:Licensed by the data custodian under CC-BY-4.0" in comments, comments
+    # and the citation_dataset backfill is UNTOUCHED by the copyright fix (both survive together)
+    assert rt.survey_metadata.citation_dataset.authors == "GSSA"
+    assert "10.9999/vulcan" in str(rt.survey_metadata.citation_dataset.doi)
+
+
+def test_copyright_restricted_access_maps_to_restricted_release(tmp_path):
+    """FAILS IF: an embargoed or metadata_only survey's release_status is not the honest
+    "Restricted Release" (the bytes are not openly released), or an absent/unknown access level does
+    not fail safe to "Conditions Apply" (we do not know, so we never claim unrestricted)."""
+    for lvl in ("embargoed", "metadata_only"):
+        res = normalize(STANDARD, tmp_path / lvl, survey_id="v", station_id="A1",
+                        survey_meta={"lic": "CC-BY-4.0", "access": lvl})
+        assert "<ReleaseStatus>Restricted Release</ReleaseStatus>" in _copyright_xml(res), lvl
+    # no survey_meta -> unknown access -> "Conditions Apply" + an explicit not-asserted conditions line
+    res = normalize(STANDARD, tmp_path / "none", survey_id="v", station_id="A1")
+    cx = _copyright_xml(res)
+    assert "<ReleaseStatus>Conditions Apply</ReleaseStatus>" in cx, cx
+    assert "Licence not asserted by the source" in cx, cx
+
+
+def test_copyright_source_datasets_in_additional_info(tmp_path):
+    """FAILS IF: a survey that declares sources[] does not carry the source-dataset provenance in the
+    Copyright additional_info (identifier + custodian + licence per source), or it does not round-trip."""
+    sm = {"lic": "CC-BY-4.0", "access": "open",
+          "sources": [{"title": "AusLAMP SA", "custodian": "Geoscience Australia",
+                       "identifier": "10.25914/abc", "licence": "CC-BY-3.0-AU"}]}
+    res = normalize(STANDARD, tmp_path, survey_id="v", station_id="A1", survey_meta=sm)
+    cx = _copyright_xml(res)
+    assert "AusLAMP SA (10.25914/abc), Geoscience Australia, licensed CC-BY-3.0-AU" in cx, cx
+    comments = _read_back(res).survey_metadata.comments.value or ""
+    assert "copyright.additional_info:Source datasets: AusLAMP SA" in comments, comments
+
+
+def test_copyright_survives_reprocessing_unchanged(tmp_path):
+    """Round-trip robustness: re-normalising an already-canonical XML (source_format=.xml) with the same
+    survey_meta reproduces a BYTE-IDENTICAL Copyright block — the re-read enum repr in the comments does
+    NOT leak into the second XML because condition_tf strips and re-derives the copyright.* pairs. FAILS
+    IF the second pass drifts (e.g. 'ReleaseStatusEnum.Data_Citation_Required' bleeding into the XML)."""
+    sm = {"lic": "CC-BY-4.0", "access": "open", "doi": "10.9999/v"}
+    r1 = normalize(STANDARD, tmp_path / "p1", survey_id="v", station_id="A1", survey_meta=sm)
+    r2 = normalize(r1.canonical_xml, tmp_path / "p2", survey_id="v", station_id="A1", survey_meta=sm)
+    assert _copyright_xml(r1) == _copyright_xml(r2), "the Copyright block drifted on re-normalisation"
+    assert "ReleaseStatusEnum" not in _copyright_xml(r2)

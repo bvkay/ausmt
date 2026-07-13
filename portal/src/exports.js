@@ -21,10 +21,25 @@ function csvRows(stations){
   // C6: `license` rides with the exported rows (sourced from SMETA[survey].lic) so the rights don't get
   // stripped when a CSV of the selection is shared. Appended at the END to keep the existing positional
   // column indices (the populated-smoke value-binding test asserts ex[12..16]) stable.
-  const rows=[["ausmt_id","station","country","organisation","survey","lat","lon","type","components","n_periods","period_min_s","period_max_s","quality","quality_basis","remote_ref","dimensionality","software","file","source_doi","timeseries_collection_doi","survey_version","collection","license"]];
-  stations.forEach(s=>{const sc=SCI[s.i]||[];rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,sc[SC.q]??"",sc[SC.qb]==="e"?"error":"shape",sc[SC.rr]?"yes":"unknown",sc[SC.dim]||"",sc[SC.sw]||"",s.file,(SMETA[s.survey]||{}).doi||"",TS_COLLECTION.doi,(SMETA[s.survey]||{}).version||"",((SMETA[s.survey]||{}).collection||{}).id||"",(SMETA[s.survey]||{}).lic||""]);});
+  // C46: license_url (the deed URL keyed off the canonical id) and attribution (the rendered attribution
+  // line — the custodian's verbatim statement when declared, else the org(year) synthesis) ride at the END
+  // after `license`, so the existing positional indices (the smoke test value-binds ex[12..16] and the
+  // license column) stay put and the rights travel with a shared CSV too.
+  const rows=[["ausmt_id","station","country","organisation","survey","lat","lon","type","components","n_periods","period_min_s","period_max_s","quality","quality_basis","remote_ref","dimensionality","software","file","source_doi","timeseries_collection_doi","survey_version","collection","license","license_url","attribution"]];
+  stations.forEach(s=>{const sc=SCI[s.i]||[];const m=SMETA[s.survey]||{};rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,sc[SC.q]??"",sc[SC.qb]==="e"?"error":"shape",sc[SC.rr]?"yes":"unknown",sc[SC.dim]||"",sc[SC.sw]||"",s.file,m.doi||"",TS_COLLECTION.doi,m.version||"",(m.collection||{}).id||"",m.lic||"",licenseUrl(m.lic),attributionLine(m)]);});
   return rows;
 }
+// C46: the licence deed URL for a raw licence string, via the canonical PROFILES/LICENSES tables (never a
+// startsWith guess); "" when the id has no single canonical URL (e.g. PUBLIC DOMAIN) or is unrecognised.
+function licenseUrl(lic){return (LICENSES.urls||{})[canonLic(lic)]||"";}
+// C46: the rendered attribution line for a survey — the custodian's verbatim attribution.statement when
+// declared, else the org(year) synthesis (the same default the LICENSE instrument uses when no statement).
+function attributionLine(m){m=m||{};
+  const st=((m.attribution||{}).statement||"").toString().trim();
+  if(st)return st;
+  const who=((m.cite&&m.cite.au)||m.org||"").toString().trim();
+  const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
+  return [who,yr?"("+yr+")":""].filter(Boolean).join(" ").trim();}
 // C6/C46: the LICENSE.txt content that travels inside the client-side bulk-download zip, mirroring the
 // engine's _license_text.license_instrument_text EXACTLY — the two implementations are pinned to a shared
 // vector file (engine/tests/fixtures/license_instrument_vectors.json), consumed by both an engine pytest
@@ -79,6 +94,13 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
     }
     for(const s0 of srcs){const slic=canonLic((s0||{}).licence);
       if(slic&&slic!==cid)L.push("The upstream dataset was obtained under "+slic+"; this AusMT release is published by the custodian under "+cid+".","");}
+    // C46-W3a: each custodian profile's s.5 disclaimer once (dedup, first-seen), the final paragraph(s)
+    // of the Source-datasets block — a profile-level legal notice, so it renders even under a verbatim
+    // statement. Byte-inert when no source's profile carries a disclaimer. Pinned to the Python leaf.
+    const seenDisc=[];
+    for(const s0 of srcs){const pk=((s0||{}).profile==null?"":String((s0||{}).profile)).trim()||"generic";
+      const disc=((PROFILES[pk]||{}).disclaimer==null?"":String((PROFILES[pk]||{}).disclaimer)).trim();
+      if(disc&&seenDisc.indexOf(disc)<0){seenDisc.push(disc);L.push(disc,"");}}
   }
   if(changes&&changes.made){
     const summary=(changes.summary==null?"":String(changes.summary)).trim()||DEFAULT_CHANGES_SUMMARY;
@@ -89,7 +111,7 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
 document.getElementById("dlCsv").onclick=()=>{track("DownloadGenerated",{format:"csv",n:sel().length});
   save("ausmt-stations-"+tsUTC()+".csv",csvRows(sel()).map(csvRow).join("\r\n"),"text/csv");};
 document.getElementById("dlGeo").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});const fc={type:"FeatureCollection",features:sel().map(s=>{const sc=SCI[s.i]||[];return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // C42: a withheld-coord station is an unlocated feature (spec-legal null geometry) — never a (0,0)/[null,null] phantom point
-  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:!!sc[SC.rr],source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,file:s.file}};})};  // C6: licence rides each GeoJSON feature
+  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:!!sc[SC.rr],source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // C6/C46: licence + deed URL + attribution ride each GeoJSON feature
   save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(fc,null,1),"application/geo+json");};
 document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
   const byColl={};sel().forEach(s=>{const doi=(SMETA[s.survey]||{}).doi||TS_COLLECTION.doi;(byColl[doi]=byColl[doi]||[]).push(s);});
@@ -111,14 +133,49 @@ document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"
 function citeLine(c,doi){return "  "+apa(c,doi)+(doi?"":"  [no DOI assigned]");}
 document.getElementById("dlCite").onclick=async()=>{track("DownloadGenerated",{format:"ris",n:sel().length});const svs=[...new Set(sel().map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
   let txt=["AusMT citation pack — generated "+today,"Stations: "+sel().length+" across "+svs.length+" survey release(s).","","== Survey source releases =="];let bib="",risT="";
-  svs.forEach(sv=>{const m=SMETA[sv]||{};txt.push(citeLine(m.cite||AUSMT_SELF,m.doi));bib+=bibtex(sv.toLowerCase().replace(/[^a-z0-9]+/g,"_"),m.cite||AUSMT_SELF,m.doi)+"\n\n";risT+=ris(m.cite||AUSMT_SELF,m.doi)+"\n\n";});
+  svs.forEach(sv=>{const m=SMETA[sv]||{};const c=m.cite||AUSMT_SELF;
+    // C46: an EXPLICIT fallback — a survey with no custodian cite block is no longer SILENTLY rendered as
+    // the AusMT brand (the pre-C46 `m.cite||AUSMT_SELF` masquerade). The human line SAYS the custodian
+    // citation is unrecorded and points at the AusMT package citation instead; the .bib/.ris twins keep
+    // the package fallback but under a survey-slug key, never claiming to BE the custodian's own citation.
+    if(m.cite){txt.push(citeLine(c,m.doi));}
+    else{txt.push("  "+sv+": custodian citation not recorded — cite the survey package:",citeLine(AUSMT_SELF,m.doi));}
+    bib+=bibtex(sv.toLowerCase().replace(/[^a-z0-9]+/g,"_"),c,m.doi)+"\n\n";risT+=ris(c,m.doi)+"\n\n";});
   txt.push("","== Time-series collection ==",citeLine(NCI_CITE,TS_COLLECTION.doi));bib+=bibtex("nci_auscope_mt",NCI_CITE,TS_COLLECTION.doi)+"\n\n";risT+=ris(NCI_CITE,TS_COLLECTION.doi)+"\n\n";
   txt.push("","== Curated catalogue metadata (suggested) ==",citeLine(AUSMT_SELF,null));bib+=bibtex("ausmt_catalogue",AUSMT_SELF,null)+"\n";risT+=ris(AUSMT_SELF,null)+"\n";
+  // C46: source-dataset citations chained — one line per UNIQUE upstream source across the selection
+  // (identifier + custodian + licence + title), so a derived release credits the dataset it was built from.
+  const srcSeen={},srcLines=[];
+  svs.forEach(sv=>{((SMETA[sv]||{}).sources||[]).forEach(s=>{if(!s)return;
+    const key=((s.identifier||s.title||"")+"|"+(s.custodian||"")).toLowerCase();if(srcSeen[key])return;srcSeen[key]=1;
+    const ident=(s.identifier||"").toString().trim(),cust=(s.custodian||"").toString().trim(),slic=canonLic(s.licence),title=(s.title||"").toString().trim();
+    srcLines.push("  "+[ident||"[no identifier]",cust?"— "+cust:"",slic?"("+slic+")":"",title?"["+title+"]":""].filter(Boolean).join(" "));});});
+  if(srcLines.length)txt.push("","== Source datasets ==",...srcLines);
   // C7: organisation ROR(s) — one line per custodian org that declared one, so the acknowledgement can
   // cite the organisation by its persistent identifier, not just its free-text name.
   const rors=[...new Set(svs.map(sv=>{const m=SMETA[sv]||{};return m.org_ror?`${m.org} (ROR: ${m.org_ror})`:null;}).filter(Boolean))];
   txt.push("","== Custodian organisation identifiers ==",...(rors.length?rors.map(r=>"  "+r):["  none recorded"]));
-  txt.push("","== Suggested acknowledgement ==","  Transfer functions were obtained via the AusMT portal, which aggregates openly licensed","  Australian magnetotelluric releases; original custodians are cited above. AusLAMP is a","  collaboration between AuScope, Geoscience Australia, state and territory geological surveys","  and university partners, with instruments supplied through the AuScope NCRIS program.","  Time series were accessed from the NCI-AuScope Magnetotelluric Collection (doi:"+TS_COLLECTION.doi+").");
+  // C46: the acknowledgement is DATA-DRIVEN, assembled from the ACTUAL selection — the custodians of
+  // record (attribution.custodian, else the organisation) plus each unique source-dataset attribution
+  // (verbatim statement, else the profile-rendered form). The AusLAMP/AuScope/NCI sentence is included
+  // ONLY when the selection references that archive (a survey's ts_pid or a source pointing at NCI/AuScope
+  // / the collection DOI) — no longer a hardcoded paragraph on every pack.
+  const custodians=[...new Set(svs.map(sv=>{const m=SMETA[sv]||{};return ((m.attribution||{}).custodian||m.org||"").toString().trim();}).filter(Boolean))];
+  const saSeen={},srcAttrs=[];
+  svs.forEach(sv=>{const m=SMETA[sv]||{};const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
+    (m.sources||[]).forEach(s=>{if(!s)return;const stmt=(s.statement||"").toString().trim();
+      const a=stmt||renderProfile((s.profile||"generic").toString().trim()||"generic",(s.custodian||"").toString().trim(),year4(s.retrieved)||yr,(s.title||"").toString().trim(),false);
+      if(a&&!saSeen[a]){saSeen[a]=1;srcAttrs.push(a);}});});
+  const usesNci=svs.some(sv=>{const m=SMETA[sv]||{};const pid=String(m.ts_pid||"");
+    const inSrc=(m.sources||[]).some(s=>{const blob=(s?((s.custodian||"")+" "+(s.identifier||"")):"").toString();return /auscope|nci/i.test(blob)||(TS_COLLECTION.doi&&blob.indexOf(TS_COLLECTION.doi)>=0);});
+    return (pid&&(/auscope|nci/i.test(pid)||(TS_COLLECTION.doi&&pid.indexOf(TS_COLLECTION.doi)>=0)))||inSrc;});
+  const ack=["","== Suggested acknowledgement ==",
+    "  Transfer functions were obtained via the AusMT portal, which aggregates openly licensed",
+    "  Australian magnetotelluric releases. Please attribute the data to its custodian(s):"];
+  (custodians.length?custodians:["(no custodian recorded — see the survey releases above)"]).forEach(cn=>ack.push("    "+cn));
+  if(srcAttrs.length){ack.push("  Source dataset attribution:");srcAttrs.forEach(a=>ack.push("    "+a));}
+  if(usesNci)ack.push("  AusLAMP is a collaboration between AuScope, Geoscience Australia, state and territory","  geological surveys and university partners, with instruments supplied through the AuScope","  NCRIS program. Time series were accessed from the NCI-AuScope Magnetotelluric Collection","  (doi:"+TS_COLLECTION.doi+").");
+  txt.push(...ack);
   const z=new JSZip();z.file("CITATIONS.txt",txt.join("\n"));z.file("citations.bib",bib);z.file("citations.ris",risT);
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);};
 document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{format:"zip",n:sel().length});const z=new JSZip(),f=z.folder("ausmt_edis");
