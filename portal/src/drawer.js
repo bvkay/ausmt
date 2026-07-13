@@ -73,6 +73,49 @@ function bibtex(k,m,doi){return `@misc{${k},\n  author    = {${m.au.replace(/;/g
 function ris(m,doi){return `TY  - DATA\nAU  - ${m.au.replace(/; /g,"\nAU  - ")}\nTI  - ${m.ti}\nPY  - ${m.yr||""}\nPB  - ${m.pb}\n${doi?`DO  - ${doi}\nUR  - https://doi.org/${doi}\n`:""}ER  -`;}
 
 function badge(l,st,title){const c=st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"";const s=st==="ok"?"✓":st==="part"?"◐":st==="no"?"✗":"?";return `<span class="badge ${c}"${title?` title="${escAttr(title)}"`:""}>${s} ${esc(l)}</span>`;}
+// C46-W3b: licence class/badge routed through the CANONICAL contract tables (contract.js LICENSES) — never
+// a `startsWith('CC')` guess (which mis-classed CC0/ODbL/ODC-BY and every non-CC open licence, and would
+// have passed a hostile "CCwhatever"). licCanon normalises aliases + case exactly like exports.canonLic.
+// licIsOpen = "redistributable" (openly licensed — the 'Open licence' facet + the 'Licence verified' star).
+// licBadgeState maps the canonical id: redistributable -> ok, recognised-but-not-open -> part, else unk.
+function licCanon(x){const u=String(x==null?"":x).trim().replace(/\s+/g," ").toUpperCase();
+  return ((LICENSES.aliases||{})[u]||u);}
+function licIsOpen(lic){return !!lic&&(LICENSES.redistributable||[]).indexOf(licCanon(lic))>=0;}
+function licBadgeState(lic){if(!lic)return "unk";const c=licCanon(lic);
+  if((LICENSES.redistributable||[]).indexOf(c)>=0)return "ok";
+  if((LICENSES.recognised_only||[]).indexOf(c)>=0)return "part";
+  return "unk";}
+// C46-W3b: the survey-level attribution line — the custodian's verbatim attribution.statement when
+// declared, else the org(year) synthesis. MIRRORS exports.attributionLine byte-for-byte so the drawer, the
+// station Cite tab, the exported CSV and the citation pack all render the SAME attribution string.
+function attributionText(m){m=m||{};
+  const st=((m.attribution||{}).statement||"").toString().trim();
+  if(st)return st;
+  const who=((m.cite&&m.cite.au)||m.org||"").toString().trim();
+  const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
+  return [who,yr?"("+yr+")":""].filter(Boolean).join(" ").trim();}
+// C46-W3b: a source's required attribution when it carries no verbatim statement — the profile-rendered
+// form via the generated PROFILES table (exports.renderProfile, present at render time), else custodian(year).
+function sourceAttr(s){s=s||{};
+  const cust=(s.custodian||"").toString().trim();
+  const yr=(s.retrieved?(String(s.retrieved).match(/\d{4}/)||[])[0]:"")||"";
+  if(typeof renderProfile==="function")return renderProfile((s.profile||"generic").toString().trim()||"generic",cust,yr,(s.title||"").toString().trim(),false);
+  return [cust,yr?"("+yr+")":""].filter(Boolean).join(" ").trim();}
+// C46-W3b: the upstream "Source datasets" list for the survey detail — one row per sources[] entry (title,
+// custodian + identifier link + canonical licence, then the required attribution). "" when none declared.
+function sourcesListHtml(m){const srcs=(m&&m.sources)||[];
+  if(!srcs.length)return"";
+  const rows=srcs.map(s0=>{const s=s0||{};
+    const title=esc((s.title||"untitled source dataset").toString().trim());
+    const cust=esc((s.custodian||"unknown custodian").toString().trim());
+    const idv=(s.identifier||"").toString().trim();
+    const ident=idv?" · "+pidLink(idv):"";
+    const slic=esc(licCanon(s.licence)||"licence not stated");
+    const stmt=(s.statement||"").toString().trim();
+    const attr=stmt?esc(stmt):esc(sourceAttr(s));
+    return `<div class="srcitem"><div class="srct">${title}</div><div class="srcm">${cust}${ident} · <span class="prov">${slic}</span></div>${attr?`<div class="srca">${attr}</div>`:""}</div>`;
+  }).join("");
+  return `<div class="sechead">Source datasets ${roleChip("Source data")}</div><div class="srclist">${rows}</div>`;}
 // C1b: a survey's access.level is authoritative for whether the portal has its DISPLAY data. "open" (or
 // absent/legacy) => served, curves present. Anything else (embargoed | metadata_only | an unknown value)
 // => NON-OPEN: the engine emits EMPTY tf series for these stations (the response curves ARE the embargoed
@@ -129,10 +172,25 @@ function accessPanel(m,sv){
   return `<div class="plot accesspanel"><div class="badges" style="margin-bottom:8px">${badge(title,"part")}</div>`+
     `<div class="emptynote" style="padding:8px 4px">${esc(body)}</div></div>`;
 }
-function maturityBar(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
-  const curated=true,fair=!!m.doi,repro=!!(sc[SC.sw]&&m.ts==="ok");
-  const lvl=repro?3:fair?2:curated?1:0;const names=["Legacy","Curated","FAIR","Reproducible"];
-  return `<div class="maturity">`+names.map((n,k)=>`<div class="step ${k<=lvl?"on":""} ${k===lvl?"cur":""}">${n}</div>`).join("")+`</div>`;}
+// UX8 (X7): dataset-maturity model. Five RECORD-STEWARDSHIP dimensions — how completely a record is
+// archived, licensed and reproducible, NOT its scientific quality (said in the block's subline). Stars =
+// achieved count. PURE so the star count is unit-testable: flip m.doi / m.ts and the count changes.
+// "not recorded" / "not available" phrasing per the honesty rules (never "pending").
+function maturityModel(m,sc){m=m||{};sc=sc||[];
+  const dims=[
+    {key:"curated",label:"Curated archive",achieved:true,note:""},
+    {key:"repro",label:"Reproducible",achieved:!!(sc[SC.sw]&&m.ts==="ok"),note:""},
+    {key:"licence",label:"Licence verified",achieved:licBadgeState(m.lic)!=="unk",note:""},
+    {key:"doi",label:"DOI",achieved:!!m.doi,note:m.doi?"minted":"not recorded"},
+    {key:"ts",label:"Time series",achieved:m.ts==="ok",note:m.ts==="ok"?"linked":"not available"},
+  ];
+  return {dims,stars:dims.filter(d=>d.achieved).length,total:dims.length};}
+function maturityBlock(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];const mod=maturityModel(m,sc);
+  const stars="★".repeat(mod.stars)+"☆".repeat(mod.total-mod.stars);
+  const rows=mod.dims.map(d=>`<li class="matdim ${d.achieved?"on":"off"}"><span class="matglyph">${d.achieved?"★":"☆"}</span><span>${esc(d.label)}${d.note?": "+esc(d.note):""}</span></li>`).join("");
+  return `<div class="matblock"><div class="mat-h">Dataset maturity <span class="mat-stars" title="${mod.stars} of ${mod.total} stewardship dimensions achieved">${stars}</span></div>`+
+    `<div class="mat-sub">Record-stewardship maturity — how completely this record is archived, licensed and reproducible. Not a measure of scientific quality.</div>`+
+    `<ul class="matdims">${rows}</ul></div>`;}
 // C7: the raw-TS pointer. A survey's OWN time_series.collection_pid (SMETA.ts_pid) is authoritative
 // when declared; TS_COLLECTION (the AusLAMP/NCI collection DOI) is only the DEPLOYMENT-WIDE default for
 // surveys that genuinely belong to that shared collection and declare no PID of their own — never a
@@ -165,14 +223,21 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const attrs=d=>d?Object.entries(d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
   return `<div class="prodgrid">`+items.map(it=>`<div class="prod ${it.d?"":"dis"}" ${attrs(it.d)}><span class="pdot" style="background:var(--${it.st==="ok"?"ok":it.st==="part"?"part":it.st==="no"?"no":"unk"})"></span><div>${esc(it.n)}<small>${esc(it.sub)}</small></div></div>`).join("")+`</div>`;}
 function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
-  const nodes=[
+  const nodes=[];
+  // C46-W3b: an upstream "source dataset" node when the survey declares sources[] — the lineage's origin,
+  // above the raw time series. Shows the first source's title + identifier link (with a "+N more" tail).
+  const srcs=(m.sources||[]);
+  if(srcs.length){const s0=srcs[0]||{};const idv=(s0.identifier||"").toString().trim();
+    const lbl=esc((s0.title||"source dataset").toString().trim())+(srcs.length>1?` <span class="prov">(+${srcs.length-1} more)</span>`:"");
+    nodes.push(["Source dataset",idv?`${lbl} · ${pidLink(idv)}`:lbl]);}
+  nodes.push(
    ["Raw time series",m.ts==="ok"?`<a href="${escUrl(tsUrlFor(m))}" target="_blank" rel="noopener noreferrer">${m.ts_pid?"survey collection":"NCI collection"}</a>`:"not located in source archives"],
    ["Processing software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
    ["Method",sc[SC.alg]?esc(sc[SC.alg]):(sc[SC.rr]?"remote reference (stated)":"not stated")],
    ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
    ["Distributed formats",`EDI ✓ · EMTF XML (pipeline)${m.mth5==="ok"?" · MTH5 ✓":""}`],
    ["Publication",m.doi?`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`:"none recorded"]
-  ];
+  );
   return `<div class="lineage">`+nodes.map((n,k)=>`<div class="lrow"><span class="ldot"></span><div><div class="lt">${esc(n[0])}</div><div class="lv">${n[1]}</div></div></div>`+(k<nodes.length-1?`<div class="lconn"></div>`:"")).join("")+`</div>`;}
 
 function provenanceBox(s){
@@ -248,6 +313,73 @@ function loadStationFrameLine(s){
     }
   }).catch(()=>{});                                       // withheld / offline / file:// => no line
 }
+// UX8 (X5): the five Screening indicators, each derived ONLY from a quantity the pipeline already computes.
+// PURE (no DOM) so the field->indicator->threshold mapping is falsifiable: flip one input and exactly one
+// indicator flips state. Each row is {key,label,state,word}; state ∈ green|amber|red|na and `word` is the
+// plain-language state so meaning never rides on colour alone. A NOT-computable input renders the neutral
+// grey 'not evaluated' — never a fabricated green. Thresholds echo PROV.parameters where the pipeline
+// records one (phase-tensor consistency uses PROV pct_periods_3d_threshold, passed in as pctThr); the
+// others use the documented screen thresholds below.
+//   d.q          completeness/smoothness check (0..5)      -> Smoothness            green>=4  amber>=3
+//   d.azR/azN    circular resultant length + count of low-skew PT azimuths -> Strike stability  green>=.9 amber>=.75 (need >=3)
+//   d.beta,betaThr median |β| (deg) vs its PROV threshold skew_3d_deg      -> Phase tensor consistency  green<=thr amber<=2*thr
+//   d.phaseSplit median |φxy − φyx| separation (deg)       -> Phase split           green<=15 amber<=35
+//   d.decades    period band width in decades              -> Coverage              green>=4  amber>=2
+function screeningIndicators(d){
+  d=d||{};
+  const na={state:"na",word:"not evaluated"};
+  const band=(v,g,a,gw,aw,rw)=>v==null?na:(v>=g?{state:"green",word:gw}:v>=a?{state:"amber",word:aw}:{state:"red",word:rw});
+  const smooth=band(d.q,4,3,"Clean","Fair","Rough");
+  const strike=(d.azN==null||d.azN<3||d.azR==null)?na:band(d.azR,0.9,0.75,"Stable","Variable","Unstable");
+  let pt;
+  if(d.beta==null)pt=na;
+  else{const thr=(d.betaThr!=null&&isFinite(d.betaThr))?d.betaThr:5;   // PROV skew_3d_deg, else a 5° default
+    pt=d.beta<=thr?{state:"green",word:"Consistent"}:d.beta<=2*thr?{state:"amber",word:"Mixed"}:{state:"red",word:"Complex"};}
+  const psplit=(d.phaseSplit==null)?na:(d.phaseSplit<=15?{state:"green",word:"Aligned"}:d.phaseSplit<=35?{state:"amber",word:"Moderate"}:{state:"red",word:"Split"});
+  const cov=band(d.decades,4,2,"Broad","Moderate","Narrow");
+  return [
+    {key:"smoothness",label:"Smoothness",state:smooth.state,word:smooth.word},
+    {key:"strike",label:"Strike stability",state:strike.state,word:strike.word},
+    {key:"pt",label:"Phase tensor consistency",state:pt.state,word:pt.word},
+    {key:"phasesplit",label:"Phase split",state:psplit.state,word:psplit.word},
+    {key:"coverage",label:"Coverage",state:cov.state,word:cov.word},
+  ];
+}
+function _indGlyph(st){return st==="green"?"✔":st==="amber"?"◐":st==="red"?"✗":"◌";}
+function _indWord(st){return st==="green"?"Green":st==="amber"?"Amber":st==="red"?"Red":"—";}
+function screeningIndicatorList(inds){
+  return `<ul class="indlist">`+inds.map(it=>{
+    const cls=it.state==="green"?"ok":it.state==="amber"?"part":it.state==="red"?"no":"na";
+    const stateTxt=it.state==="na"?"not evaluated":_indWord(it.state)+" · "+esc(it.word);
+    return `<li class="indrow ind-${cls}"><span class="indglyph">${_indGlyph(it.state)}</span>`+
+      `<span class="indlabel">${esc(it.label)}</span><span class="indstate">${stateTxt}</span></li>`;
+  }).join("")+`</ul>`;}
+// UX8 (X4): the "Station summary" collapsible under the Response plots — the owner's exact four-group
+// layout. DATA_CHECKS_LABEL is a ONE-STRING seam (owner sketched "Quality"; architect amended to "Data
+// checks") — change the one constant to re-label that group.
+const DATA_CHECKS_LABEL="Data checks";
+function _ssGroup(title,rows,extra){
+  return `<div class="ssgroup"><div class="ssg-h">${esc(title)}</div><table class="meta">`+
+    rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")+`</table>${extra||""}</div>`;}
+function stationSummaryDetails(s,m,sc){
+  const mre=sc[SC.mre];
+  const station=_ssGroup("Station",[["coordinates",coordCellHtml(s)]],overviewDownload(s,m));
+  const tf=_ssGroup("Transfer function",[
+    ["periods",`${fmtP(s.pmin)}–${fmtP(s.pmax)} s`],
+    ["components",(esc(s.comps.split("").join(" + "))||"–")],
+    ["tipper",s.comps.includes("T")?"yes":"no"],
+    ["remote reference",sc[SC.rr]?"yes":"not recorded"]]);
+  const checks=_ssGroup(DATA_CHECKS_LABEL,[
+    // CVD amendment: the ramp colour rides a .qvdot swatch (the sequential ramp's dark low end is
+    // unreadable as text on the dark panel); the value itself stays plain readable text — meaning never
+    // rode on the colour alone (the number is printed).
+    ["completeness",sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> <span class="prov">(shape/coverage screen — not a verdict)</span>`:"n/a"],
+    ["TF error",mre!=null?Math.round(mre*100)+"%":"n/a"]]);
+  const proc=_ssGroup("Processing",[
+    ["software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
+    ["source",esc(s.file)]]);
+  return `<details class="prov-d ssdetails"><summary>Station summary</summary><div class="prov-dbody ssbody">${station}${tf}${checks}${proc}</div></details>`;
+}
 function openStation(i){
   _rememberDrawerOpener();                            // E7: capture the invoking element before the rewrite
   const s=ST[i],t=TFD[i]||[[]],m=SMETA[s.survey]||{},sc=SCI[i]||[];
@@ -255,23 +387,27 @@ function openStation(i){
   // inferable from the phase tensor + skew, which stay shown (strike/|β|/3-D-periods line below). The
   // sc.json field itself is unchanged (data products are display-only edits); the map's colour-by-dim
   // mode still reads s.dim. So `dim` is intentionally not destructured here anymore.
-  const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],mre=sc[SC.mre],dec=sc[SC.decades];
+  const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
   location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});
   const _perTxt=azPers.length?` over ${fmtP(Math.min(...azPers))}–${fmtP(Math.max(...azPers))}s`:"";
   // Per-period 3-D screening threshold echoed from the build's own provenance (never hard-coded); when
   // build_provenance.json isn't loaded the degree figure is simply omitted rather than fabricated.
   const _bp=(typeof PROV!=="undefined"&&PROV&&PROV.parameters&&PROV.parameters.dimensionality)||{};const _betaThr=_bp.beta_per_period_deg;
+  // Strike circular concentration (mean resultant length R on the doubled axial angles) — the Strike-
+  // stability indicator's input, and the same doubled-angle mean feeds the strike clause below.
   let strikeClause=`median phase-tensor strike <b>not estimated</b> <span style="color:var(--muted)">(insufficient low-skew data)</span>`;
-  if(azs.length>=3){const rad=azs.map(a=>2*a*Math.PI/180);const mean=Math.atan2(rad.reduce((s,x)=>s+Math.sin(x),0),rad.reduce((s,x)=>s+Math.cos(x),0))/2*180/Math.PI;
-    const st=((mean%180)+180)%180;strikeClause=`median phase-tensor strike <b>~N${st.toFixed(0)}°E / N${((st+90)%180).toFixed(0)}°E</b> <span style="color:var(--muted)">(90° ambiguous)</span>${_perTxt}`;}
-  const diag=`<div class="sci">`+
-    `<div class="cell"><div class="lab">Period band</div><div class="val">${fmtP(s.pmin)}–${fmtP(s.pmax)}s</div></div>`+
-    `<div class="cell"><div class="lab">Coverage</div><div class="val">${dec!=null?dec+" dec":"–"}</div></div>`+
-    `<div class="cell" title="median relative apparent-resistivity error (= 2× the relative impedance error); errors are one standard error (√VAR)"><div class="lab">TF ρ error</div><div class="val">${mre!=null?Math.round(mre*100)+"%":"n/a"}</div></div>`+
-    `<div class="cell"><div class="lab">Tipper</div><div class="val">${s.comps.includes("T")?"yes":"no"}</div></div>`+
-    `<div class="cell"><div class="lab">Remote reference</div><div class="val">${sc[SC.rr]?"yes":"not recorded"}</div></div>`+
-  `</div>`;
+  let _azR=null;
+  if(azs.length>=1){const rad=azs.map(a=>2*a*Math.PI/180);
+    const _S=rad.reduce((s,x)=>s+Math.sin(x),0),_C=rad.reduce((s,x)=>s+Math.cos(x),0);
+    _azR=Math.hypot(_S,_C)/azs.length;
+    if(azs.length>=3){const mean=Math.atan2(_S,_C)/2*180/Math.PI;const st=((mean%180)+180)%180;
+      strikeClause=`median phase-tensor strike <b>~N${st.toFixed(0)}°E / N${((st+90)%180).toFixed(0)}°E</b> <span style="color:var(--muted)">(90° ambiguous)</span>${_perTxt}`;}}
+  // Median xy/yx phase split (deg) — the Phase-split indicator's input (φyx already +180°-adjusted).
+  let _phaseSplit=null;
+  if(t[T.phs_xy]&&t[T.phs_yx_adj]){const _sp=[];t[T.phs_xy].forEach((v,k)=>{const w=t[T.phs_yx_adj][k];if(v!=null&&w!=null)_sp.push(Math.abs(v-w));});
+    if(_sp.length){_sp.sort((a,b)=>a-b);_phaseSplit=_sp[Math.floor(_sp.length/2)];}}
+  const _inds=screeningIndicators({q:sc[SC.q],azR:_azR,azN:azs.length,beta:skew,betaThr:_bp.skew_3d_deg,phaseSplit:_phaseSplit,decades:dec});
   const keysafe=s.ausmt_id.replace(/[^a-z0-9]/g,"_");
   // ---- UX6 Wave C: sticky header (identity + chips + primary actions) + tab strip -------------------
   const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`;
@@ -279,8 +415,10 @@ function openStation(i){
   // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if neither.
   const yearTxt=m.dates?esc(m.dates):(m.year_start?esc(String(m.year_start))+(m.year_end&&m.year_end!==m.year_start?"–"+esc(String(m.year_end)):""):"");
   const yearChip=yearTxt?`<span class="hchip">${yearTxt}</span>`:"";
-  const licBadge=badge(m.lic||"licence ?",m.lic&&m.lic.startsWith("CC")?"ok":"unk");
-  const TABS=[["overview","Overview"],["response","Response"],["screening","Screening"],["files","Files"],["provenance","Provenance"],["cite","Cite"]];
+  const licBadge=badge(m.lic||"licence ?",licBadgeState(m.lic));
+  // UX8 (X4, owner ruling): Response is the default tab and Overview is gone (its facts fold into the
+  // Response tab's "Station summary" collapsible). Five tabs; Response first (default-selected).
+  const TABS=[["response","Response"],["screening","Screening"],["files","Files"],["provenance","Provenance"],["cite","Cite"]];
   const tabStrip=`<div class="seg dtabs" role="tablist" aria-label="Station detail sections">`+
     TABS.map(([id,label],k)=>`<button role="tab" id="dt-${id}" data-act="tab" data-tab="${id}" aria-controls="dp-${id}" aria-selected="${k===0}" tabindex="${k===0?0:-1}"${k===0?' class="on"':""}>${esc(label)}</button>`).join("")+`</div>`;
   const header=`<div class="dtop">`+
@@ -291,37 +429,43 @@ function openStation(i){
     `<div class="dactions">${headerDownloadBtn(s,m)}<button class="dl-cite" data-act="tab" data-tab="cite">Cite</button></div>`+
     tabStrip+`</div>`;
   // ---- Panel content -------------------------------------------------------------------------------
-  // Overview — science summary strip FIRST (owner decision D3), then source-data facts, ONE cautious
-  // screening line (the full estimate lives on the Screening tab), then the gated primary download.
-  const ovMeta=`<table class="meta">`+
-    `<tr><td>coordinates</td><td>${coordCellHtml(s)}</td></tr>`+
-    `<tr><td>period range</td><td>${fmtP(s.pmin)}–${fmtP(s.pmax)} s</td></tr>`+
-    `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"} <span style="color:var(--muted)">(${s.comps.includes("T")?"tipper present":"no tipper"})</span></td></tr>`+
-    `<tr><td>processing software</td><td>${sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"}</td></tr></table>`;
-  const cautious=`<div class="dim"><span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b>`:"n/a"} — a shape/coverage screen, <i>not a quality or geological-value judgement</i>. Full screening on the Screening tab.</span></div>`;
-  const overviewHtml=diag+
-    `<div class="sechead">Station ${roleChip("Source data")}</div>`+ovMeta+cautious+
-    `<div class="sechead">Download ${roleChip("AusMT-derived")}</div>`+overviewDownload(s,m);
-  // Response — the four plots (rho + phase expanded; phase tensor + induction arrows collapsed). C1b:
-  // a non-open station shows the access panel here INSTEAD of the plots (curves ARE the withheld data).
-  // #pt_anchor is kept so the "Phase tensor" related-product scroll target never dangles; the frame line
-  // is populated lazily by loadStationFrameLine() for open surveys.
+  // Response (default) — the four plots FIRST (the centerpiece; rho + phase expanded, phase tensor +
+  // induction arrows collapsed), then the collapsible "Station summary" (the owner's four-group layout,
+  // stationSummaryDetails) which absorbs the former Overview facts. C1b: a non-open station shows the
+  // access panel here INSTEAD of the plots (curves ARE the withheld data). #pt_anchor is kept so the
+  // "Phase tensor" related-product scroll target never dangles; the frame line is populated lazily.
   const responseHtml=`<div class="sechead">Response functions ${roleChip("AusMT-derived")}</div>`+
     (isOpenAccess(m)
       ? plotBlock("rho",t)+plotBlock("phase",t)+`<div id="pt_anchor"></div>`+plotCollapsible("pt",t,false)+plotCollapsible("arrow",t,false)
       : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
-    `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`;
-  // Screening — the full automated screening estimate incl. the strike + median |β| lines (UX3-7a fence).
-  const screeningHtml=`<div class="sechead">Screening diagnostics ${roleChip("Automated screening")} <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+
+    `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
+    stationSummaryDetails(s,m,sc);
+  // Screening (X5) — a five-row indicator list (glyph + label + Green/Amber/Red state word + descriptive
+  // word; never colour alone; a not-computable check is neutral grey "not evaluated"), then a "Show
+  // details" expander preserving the full automated screening prose (strike + median |β| lines, the
+  // galvanic flag, and the completeness/smoothness check with its not-a-verdict framing — UX3-7a fence).
+  const screeningHtml=`<div class="sechead">Screening indicators ${roleChip("Automated screening")} <span style="text-transform:none;letter-spacing:0">· not interpretation products</span></div>`+
+    screeningIndicatorList(_inds)+
+    `<details class="prov-d"><summary>Show details</summary><div class="prov-dbody">`+
     `<div class="dim">Automated screening estimate — ${strikeClause}${skew!=null?` · median |β| <b>${skew}°</b> · <b>${p3d}%</b> of evaluated periods exceeded the |β|${_betaThr!=null?` &gt; ${esc(String(_betaThr))}°`:""} screening threshold`:""}. Not a structural interpretation.<br>`+
     `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
-    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<b style="color:${qColor(sc[SC.q])}">${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`;
+    `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
+    `</div></details>`;
   // Files — related products (incl. advanced-analysis placeholder), the AusMT-derived deliverables.
   const filesHtml=`<div class="sechead">Related products ${roleChip("AusMT-derived")}</div>`+relatedProducts(s)+
     `<div class="sechead">Advanced analysis <span style="text-transform:none;letter-spacing:0">· Tier 3, generated offline</span></div>`+
     `<div class="dim">McNeice–Jones / Groom–Bailey decomposition, distortion parameters and Lilley Mohr circles are planned <i>AusMT</i> pipeline products; they will appear here once produced. <span style="color:var(--muted)">Not computed in the browser.</span></div>`;
-  // Provenance — lineage + provenance table visible; identifiers / maturity / Metadata & API demoted into
-  // collapsed <details> (tertiary tier per feedback #1).
+  // Provenance (X6/X7/X8) — three source-data rows visible (processing software · transfer function
+  // source file+sha · source archive), then the Dataset-maturity block (X7 stars), then EVERYTHING ELSE
+  // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
+  // behind collapsed <details>. Nothing deleted — only demoted. The API box (X8) is the last, small expander.
+  const _srcArchive=m.doi
+    ? `<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`
+    : (m.ts==="ok"?`<a href="${escUrl(tsUrlFor(m))}" target="_blank" rel="noopener noreferrer">${m.ts_pid?"survey collection":"NCI collection"}</a>`:"<span class='prov'>not recorded</span>");
+  const provTop=`<table class="meta prov-top">`+
+    `<tr><td>Processing software</td><td>${sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"}</td></tr>`+
+    `<tr><td>Transfer function</td><td>${esc(s.file)}${s.sha?` · <code title="${escAttr(s.sha)}">${esc(s.sha.slice(0,16))}…</code>`:" · <span class='prov'>no checksum</span>"}</td></tr>`+
+    `<tr><td>Source archive</td><td>${_srcArchive}</td></tr></table>`;
   const metaTable=`<table class="meta">`+
     `<tr><td>ausmt_id</td><td>${esc(s.ausmt_id)}</td></tr>`+
     // C42 coordinate access: a custodian-withheld station carries null lat/lon (masked VALUE) — show the
@@ -330,21 +474,31 @@ function openStation(i){
     // engine's coord_policy marker (A1). coordCellHtml encapsulates all three; hasPosition is the shared predicate.
     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
     `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
-    `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`+
-    `<div class="api">Read API (planned) — static JSON on the hosted site:<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
-  const provenanceHtml=`<div class="sechead">Provenance &amp; lineage ${roleChip("Source data")}</div>`+provGraph(s)+provenanceBox(s)+
+    `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
+  // X8: the Metadata & API box collapses to a single small "API" expander at the tab's foot (Wave A's
+  // honest "planned" link text kept inside).
+  const apiBlock=`<div class="api">Read API (planned) — static JSON on the hosted site:<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
+  const provenanceHtml=`<div class="sechead">Provenance ${roleChip("Source data")}</div>`+provTop+maturityBlock(s)+
+    `<details class="prov-d"><summary>Lineage graph</summary><div class="prov-dbody">${provGraph(s)}</div></details>`+
+    provenanceBox(s)+
     `<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`+
-    `<details class="prov-d"><summary>Maturity &amp; status</summary><div class="prov-dbody">`+maturityBar(s)+
-      `<div class="badges">${badge("EDI","ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",m.doi?"ok":"no")}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC — see this station's provenance and treat with caution."):""}</div></div></details>`+
-    `<details class="prov-d"><summary>Metadata &amp; API</summary><div class="prov-dbody">${metaTable}</div></details>`;
-  // Cite — the citation box (assembly helpers stay test-pinned in exports/drawer; DOM location is free).
-  const citeHtml=`<div class="sechead">Cite this station's source</div><div class="citebox">${apa(m.cite||AUSMT_SELF,m.doi)}`+
+    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",m.doi?"ok":"no")}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC — see this station's provenance and treat with caution."):""}</div></div></details>`+
+    `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
+    `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
+  // Cite — the citation box. C46-W3b: a no-cite survey is EXPLICIT ("custodian citation not recorded — cite
+  // the survey package") rather than a silent AUSMT_SELF masquerade, and the captured attribution statement
+  // (verbatim, else org(year) synthesis) renders alongside. The copy buttons keep their assembly helpers.
+  const _attn=attributionText(m);
+  const citeBody=m.cite
+    ? apa(m.cite,m.doi)
+    : `<div class="prov" style="margin-bottom:6px">Custodian citation not recorded — cite the survey package:</div>${apa(AUSMT_SELF,m.doi)}`;
+  const citeHtml=`<div class="sechead">Cite this station's source</div><div class="citebox">${citeBody}`+
+    (_attn?`<div class="attn"><b>Attribution:</b> ${esc(_attn)}</div>`:"")+
     `<div class="cb-row"><button data-cite="apa" data-survey="${escAttr(s.survey)}">APA</button>`+
     `<button data-cite="bibtex" data-survey="${escAttr(s.survey)}" data-key="${escAttr(keysafe)}">BibTeX</button>`+
     `<button data-cite="ris" data-survey="${escAttr(s.survey)}">RIS</button></div></div>`;
   drawer.innerHTML=header+
-    drawerPanel("overview",overviewHtml,true)+
-    drawerPanel("response",responseHtml,false)+
+    drawerPanel("response",responseHtml,true)+
     drawerPanel("screening",screeningHtml,false)+
     drawerPanel("files",filesHtml,false)+
     drawerPanel("provenance",provenanceHtml,false)+
@@ -352,7 +506,7 @@ function openStation(i){
   _curTf=t;                                        // stash for the expand-modal handler
   drawer.setAttribute("aria-label","Station "+s.id+" details");   // E7: refine the dialog label per subject
   drawer.classList.add("open");drawer.scrollTop=0;
-  selectDrawerTab("overview");                     // Overview default-selected (D3)
+  selectDrawerTab("response");                     // UX8 (X4): Response default-selected
   _focusDrawer();                                  // E7: move focus into the dialog
   if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
 }
@@ -409,7 +563,7 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${esc(m.org||"custodian unknown")} · ${esc(m.country||"")}</div>`+
    `<div class="mixbar">${mixbar}</div>`+
    `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtP(pmin)}–${fmtP(pmax)}s</b></div>`+
-   `<div class="badges">${badge(m.lic||"licence ?",m.lic&&m.lic.startsWith("CC")?"ok":"unk")}${badge("DOI",m.doi?"ok":"no")}</div>`+
+   `<div class="badges">${badge(m.lic||"licence ?",licBadgeState(m.lic))}${badge("DOI",m.doi?"ok":"no")}</div>`+
    cardDesc(m)+
    `<div class="cardbtns"><button data-act="story" data-survey="${escAttr(sv)}">View survey</button><button data-act="select" data-survey="${escAttr(sv)}">Download</button></div></div>`;}
 function pidLink(p){if(!p)return "<span class='prov'>not recorded</span>";if(p.startsWith("TODO"))return "<span class='prov'>not recorded</span>";
@@ -476,7 +630,7 @@ function _stationCount(sv){return ST.filter(s=>s.survey===sv).length;}
 function _surveyHasTipper(sv){return ST.some(s=>s.survey===sv&&(s.comps||"").includes("T"));}
 function _yearKey(m){return m.year_start!=null?m.year_start:(m.year_end!=null?m.year_end:-Infinity);}
 function surveyPassesFacets(sv){const m=SMETA[sv]||{};
-  if(_facets.lic&&!(m.lic&&m.lic.startsWith("CC")))return false;   // "Open licence": a CC licence recorded
+  if(_facets.lic&&!licIsOpen(m.lic))return false;   // "Open licence": an openly-licensed (redistributable) id per the canon tables
   if(_facets.doi&&!m.doi)return false;
   if(_facets.tipper&&!_surveyHasTipper(sv))return false;
   return true;}
@@ -495,7 +649,7 @@ function surveyRow(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};cons
     `<span class="srow-org">${esc(m.org||"—")}</span>`+
     `<span class="srow-year">${yearTxt||"—"}</span>`+
     `<span class="srow-stn">${ss.length} station${ss.length===1?"":"s"}</span>`+
-    `<span class="srow-lic">${badge(m.lic||"licence ?",m.lic&&m.lic.startsWith("CC")?"ok":"unk")}</span></div>`;}
+    `<span class="srow-lic">${badge(m.lic||"licence ?",licBadgeState(m.lic))}</span></div>`;}
 function renderDiscovery(n){
   const cnt=document.getElementById("surveyCount");
   if(cnt)cnt.textContent=n+" survey"+(n===1?"":"s");
@@ -623,6 +777,10 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    `<div class="dim" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
    miniScatter(ss)+
    surveySummary(ss,m)+
+   // C46-W3b: the captured attribution statement rendered where the survey's citation lives (verbatim
+   // custodian statement, else the org(year) synthesis), and the upstream "Source datasets" list.
+   (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div><div class="attn">${esc(attributionText(m))}</div>`:"")+
+   sourcesListHtml(m)+
    `<div class="sechead">Downloads</div><div class="prodgrid">`+
      surveyBundleTiles(m.slug)+
      `<div class="prod" data-act="select" data-survey="${escAttr(sv)}"><span class="pdot" style="background:var(--ok)"></span><div>All EDIs<small>select & download</small></div></div>`+

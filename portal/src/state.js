@@ -16,14 +16,19 @@ let AUSLAMP_SET=new Set();
 // coordinate — positions are already masked in the catalogue (generalised => 0.1° cell, withheld => null).
 let COORD_POLICY={};
 
-// UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#E0782F) to a distinct
-// blue, and GDS off the ok/status green (#5BAE6A) to a distinct magenta, so a data-type marker can no
-// longer be mistaken for the selection accent or a "good" status. LPMT teal is pinned (interaction
-// test). These are the map-marker colours; the index.html --bbmt/--gds legend-dot tokens carry the
-// SAME hexes so the filter legend and the map agree. (plots.js TF-curve colours are independent and
-// unchanged.) DIM_COL is a NON-STATUS palette (a cool→warm violet/magenta ramp): dimensionality
-// (1-D/2-D/3-D) is not a quality ranking, so it must not borrow the red/amber/green status colours.
-const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#3F6FC4",AMT:"#A85CC4",GDS:"#C255A0",other:"#999"};
+// UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#E0782F), and GDS off the
+// ok/status green (#5BAE6A), so a data-type marker can no longer be mistaken for the selection accent or a
+// "good" status. LPMT teal is pinned (interaction test).
+// UX8 (X1, owner-delegated): the four data-type hues are pulled further apart. BBMT #3F6FC4 -> #5E5ED6
+// (indigo) and AMT #A85CC4 -> #CDA1EC (light violet); LPMT teal and GDS magenta unchanged. The old AMT
+// purple sat only ΔE00≈10 from the GDS magenta (confusable); the new pair is ΔE00≈21 with a ~20 L*
+// lightness gap, and every data-type pair is now ΔE00≥21 (the four types are the four most mutually
+// distinct hues in the palette). These are the map-marker colours; the index.html --lpmt/--bbmt/--amt/
+// --gds tokens carry the SAME hexes so the filter legend, the type-filter swatches and the map agree
+// byte-for-byte. (plots.js TF-curve colours are independent and unchanged.) DIM_COL is a NON-STATUS
+// palette (a cool→warm violet/magenta ramp): dimensionality (1-D/2-D/3-D) is not a quality ranking, so it
+// must not borrow the red/amber/green status colours.
+const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#5E5ED6",AMT:"#CDA1EC",GDS:"#C255A0",other:"#999"};
 const DIM_COL={"1-D":"#4E8FC9","2-D":"#8A5FC0","3-D":"#C44F92",null:"#5A6E7D"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
@@ -43,4 +48,14 @@ const fmtP=p=>p>=1000?Math.round(p).toLocaleString("en-AU"):p>=1?(+p.toFixed(1))
 function clamp(x){return Math.max(0,Math.min(1,x));}
 function lerp(a,b,t){const pa=[1,3,5].map(i=>parseInt(a.substr(i,2),16)),pb=[1,3,5].map(i=>parseInt(b.substr(i,2),16));
   return "#"+pa.map((v,k)=>Math.round(v+(pb[k]-v)*t).toString(16).padStart(2,"0")).join("");}
-function qColor(q){if(q==null)return "#5A6E7D";const t=clamp((q-2)/3);return t<.5?lerp("#A85454","#D9A23B",t*2):lerp("#D9A23B","#5BAE6A",(t-.5)*2);}
+// UX8 CVD amendment (supersedes the W3b red→amber→green re-shade): the completeness ramp is a CVD-safe
+// SEQUENTIAL dark→light progression (viridis principle) — dark slate-blue #2A3B66 → olive #6E7F46 → pale
+// warm yellow #F2E27E — because the old red→green endpoints measured dE76≈9.6 under a deuteranopia
+// simulation (indistinguishable for red-green CVD readers). LIGHTNESS carries the signal (relative
+// luminance rises monotonically 0.046 → 0.75 along the lerp path), so the ramp survives all three
+// dichromacies: simulated low↔high separation deutan 106.8 / protan 103.1 / tritan 69.1 dE76. The olive
+// mid keeps the ramp off the lpmt teal and the ok green (every stop ≥17 dE00 from the data-type and
+// status colours), and the null/"not evaluated" grey #5A6E7D stays clearly apart from the dark low end
+// (dE00 20, L* 45 vs 26). The dark low end is marker-fill/dot material — drawer text no longer takes
+// qColor as a text colour (it renders a .qvdot swatch beside plain readable text instead).
+function qColor(q){if(q==null)return "#5A6E7D";const t=clamp((q-2)/3);return t<.5?lerp("#2A3B66","#6E7F46",t*2):lerp("#6E7F46","#F2E27E",(t-.5)*2);}

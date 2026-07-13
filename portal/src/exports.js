@@ -18,15 +18,16 @@ function toast(m){const t=document.getElementById("toast");t.textContent=m;t.sty
 // value-binds these columns, which is the ONLY coverage of the qb/rr/sw call sites (buildState/drawer
 // don't expose them). Output is unchanged from the inline version.
 function csvRows(stations){
-  // C6: `license` rides with the exported rows (sourced from SMETA[survey].lic) so the rights don't get
-  // stripped when a CSV of the selection is shared. Appended at the END to keep the existing positional
-  // column indices (the populated-smoke value-binding test asserts ex[12..16]) stable.
-  // C46: license_url (the deed URL keyed off the canonical id) and attribution (the rendered attribution
-  // line — the custodian's verbatim statement when declared, else the org(year) synthesis) ride at the END
-  // after `license`, so the existing positional indices (the smoke test value-binds ex[12..16] and the
-  // license column) stay put and the rights travel with a shared CSV too.
-  const rows=[["ausmt_id","station","country","organisation","survey","lat","lon","type","components","n_periods","period_min_s","period_max_s","quality","quality_basis","remote_ref","dimensionality","software","file","source_doi","timeseries_collection_doi","survey_version","collection","license","license_url","attribution"]];
-  stations.forEach(s=>{const sc=SCI[s.i]||[];const m=SMETA[s.survey]||{};rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,sc[SC.q]??"",sc[SC.qb]==="e"?"error":"shape",sc[SC.rr]?"yes":"unknown",sc[SC.dim]||"",sc[SC.sw]||"",s.file,m.doi||"",TS_COLLECTION.doi,m.version||"",(m.collection||{}).id||"",m.lic||"",licenseUrl(m.lic),attributionLine(m)]);});
+  // C6/C46: `license`, `license_url` (the deed URL keyed off the canonical id) and `attribution` (the
+  // rendered attribution line — the custodian's verbatim statement when declared, else the org(year)
+  // synthesis) travel with the exported rows so the rights don't get stripped when a CSV of the selection
+  // is shared.
+  // UX8 (W3b, owner directive): the station CSV DROPS six columns — quality, quality_basis, remote_ref,
+  // dimensionality, software and file — leaving a lean identity/geometry/rights row. (These derived-screen
+  // and per-station-file fields stay in the GeoJSON export; the smoke test's column value-binds moved to
+  // the reduced set.) The rights columns license/license_url/attribution stay.
+  const rows=[["ausmt_id","station","country","organisation","survey","lat","lon","type","components","n_periods","period_min_s","period_max_s","source_doi","timeseries_collection_doi","survey_version","collection","license","license_url","attribution"]];
+  stations.forEach(s=>{const m=SMETA[s.survey]||{};rows.push([s.ausmt_id,s.id,s.country,s.org,s.survey,s.lat,s.lon,s.type,s.comps,s.nper,s.pmin,s.pmax,m.doi||"",TS_COLLECTION.doi,m.version||"",(m.collection||{}).id||"",m.lic||"",licenseUrl(m.lic),attributionLine(m)]);});
   return rows;
 }
 // C46: the licence deed URL for a raw licence string, via the canonical PROFILES/LICENSES tables (never a

@@ -304,19 +304,24 @@ function maybeShowIntro(){if(!introSeen())showWelcome();}      // first visit sh
 
 // UX6 Wave D (D6): static map legend (bottom-left) — one cluster-bubble row + a coloured dot per data
 // type. The dots read the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (no hard-coded hexes here),
-// so they track any future colour change automatically. Built once (idempotent), parented to .content so
-// it floats over the map; setView() toggles it with the view. Collapsible on small widths (the toggle
-// only shows there via CSS); starts collapsed on a narrow viewport.
+// so they track any future colour change automatically. Built once (idempotent). Collapsible on small
+// widths (the toggle only shows there via CSS); starts collapsed on a narrow viewport.
+// UX8 (X2, bug): the legend is parented INTO the Leaflet map container (#map), not to .content. As a
+// child of #content it was a sibling of #map in that flex row — an absolutely-positioned box, but living
+// in the same positioned/flex context as the map, so it participated in that layout and could nudge the
+// map's framing at load. Inside #map (which Leaflet keeps position:relative) it is an overlay that can
+// NEVER affect the map container's own size or centre: #map's box is measured before this child is
+// appended and an absolute child adds nothing to it. It also rides #map's display toggle for free.
 function buildLegend(){
   if(document.getElementById("mapLegend"))return;                 // idempotent
-  const content=document.getElementById("content");if(!content)return;
+  const host=document.getElementById("map");if(!host)return;       // the Leaflet container is the overlay's positioning context
   const types=[["--lpmt","Long period"],["--bbmt","Broadband"],["--amt","AMT"],["--gds","GDS (tipper)"]];
   const rows=types.map(([v,label])=>`<div class="legrow"><span class="dot" style="background:var(${v})"></span>${label}</div>`).join("");
   const small=typeof window!=="undefined"&&window.innerWidth<=760;   // body defaults collapsed on small widths
   const el=document.createElement("div");el.id="mapLegend";el.className="maplegend";
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
     `<div class="maplegend-body"><div class="legrow"><span class="legcluster">n</span> stations (zoom to expand)</div>${rows}</div>`;
-  content.appendChild(el);
+  host.appendChild(el);
   const toggle=el.querySelector("#mapLegendToggle");
   if(toggle)toggle.addEventListener("click",()=>{const ex=el.classList.toggle("expanded");toggle.setAttribute("aria-expanded",String(ex));});
 }
