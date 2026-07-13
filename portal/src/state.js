@@ -16,8 +16,15 @@ let AUSLAMP_SET=new Set();
 // coordinate — positions are already masked in the catalogue (generalised => 0.1° cell, withheld => null).
 let COORD_POLICY={};
 
-const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#E0782F",AMT:"#A85CC4",GDS:"#5BAE6A",other:"#999"};
-const DIM_COL={"1-D":"#2E8FA3","2-D":"#D9A23B","3-D":"#A85454",null:"#5A6E7D"};
+// UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#E0782F) to a distinct
+// blue, and GDS off the ok/status green (#5BAE6A) to a distinct magenta, so a data-type marker can no
+// longer be mistaken for the selection accent or a "good" status. LPMT teal is pinned (interaction
+// test). These are the map-marker colours; the index.html --bbmt/--gds legend-dot tokens carry the
+// SAME hexes so the filter legend and the map agree. (plots.js TF-curve colours are independent and
+// unchanged.) DIM_COL is a NON-STATUS palette (a cool→warm violet/magenta ramp): dimensionality
+// (1-D/2-D/3-D) is not a quality ranking, so it must not borrow the red/amber/green status colours.
+const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#3F6FC4",AMT:"#A85CC4",GDS:"#C255A0",other:"#999"};
+const DIM_COL={"1-D":"#4E8FC9","2-D":"#8A5FC0","3-D":"#C44F92",null:"#5A6E7D"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};

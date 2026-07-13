@@ -22,7 +22,7 @@
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
-  body{font-family:var(--sans);background:var(--ink);color:var(--text);margin:0}
+  body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0}
   header{display:flex;align-items:center;gap:16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   .wordmark{font-weight:800;letter-spacing:.5px}
   .logolink{display:flex;align-items:center;flex:none}
@@ -30,7 +30,7 @@
   .tagline{color:var(--muted);font-size:12.5px}
   header a.back{margin-left:auto;color:var(--muted);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
   header a.back:hover{color:var(--text)}
-  .ver{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
+  .ver{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
   main{max-width:980px;margin:0 auto;padding:22px 18px 60px}
   h1{font-size:20px;margin:8px 0 4px}
   .lede{color:var(--muted);font-size:13.5px;margin:0 0 16px;line-height:1.5}
@@ -39,15 +39,15 @@
   .advisory b{color:var(--copper)}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
   .grid .full{grid-column:1 / -1}
-  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 4px}
+  label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 4px}
   input,select,textarea{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);
     border-radius:4px;padding:8px 9px;font-size:13.5px;font-family:var(--sans)}
   textarea{resize:vertical;min-height:54px}
   .req label::after{content:" *";color:var(--copper)}
-  .hint{font-size:11px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:0;line-height:1.45}
+  .hint{font-size:12px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:0;line-height:1.5}
   fieldset{border:1px solid var(--line);border-radius:8px;padding:16px;margin:0 0 18px;background:var(--panel)}
-  legend{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:0 8px}
-  .pidnote{font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;margin:-4px 0 12px}
+  legend{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);padding:0 8px}
+  .pidnote{font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0;margin:-4px 0 12px}
   .check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--text);margin:10px 0;text-transform:none;letter-spacing:0;line-height:1.45}
   .check input{width:auto;margin-top:2px;flex:none}
   .checkrow{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px}
@@ -72,7 +72,7 @@
   .panel.show{display:block}
   .panel h3{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 10px}
   .v{display:flex;gap:9px;align-items:flex-start;font-size:13px;padding:3px 0}
-  .badge{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:3px;flex:none;margin-top:1px}
+  .badge{font-family:var(--mono);font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;flex:none;margin-top:1px}
   .PASS{background:rgba(91,174,106,.18);color:var(--ok)}
   .WARNING{background:rgba(217,162,59,.18);color:var(--part)}
   .FAIL{background:rgba(168,84,84,.22);color:var(--no)}
@@ -82,12 +82,12 @@
   details.vgroup summary{font-size:12px;color:var(--muted);cursor:pointer;padding:4px 0}
   details.vgroup summary:hover{color:var(--text)}
   .rormatches{margin-top:6px;display:flex;flex-direction:column;gap:5px}
-  .rorhint{font-size:11px;color:var(--muted)}
+  .rorhint{font-size:12px;color:var(--muted)}
   .rorcard{border:1px solid var(--line);border-radius:5px;padding:7px 10px;font-size:13px;cursor:pointer;background:var(--panel-2)}
   .rorcard:hover{border-color:var(--copper)}
   .rorcard .rn{font-weight:700;font-size:13.5px}
-  .rorcard .rm{color:var(--muted);font-family:var(--mono);font-size:11px;margin-top:2px}
-  .orcidok{font-size:11px;margin-top:3px;display:block;font-family:var(--mono)}
+  .rorcard .rm{color:var(--muted);font-family:var(--mono);font-size:12px;margin-top:2px}
+  .orcidok{font-size:12px;margin-top:3px;display:block;font-family:var(--mono)}
   .orcidok.good{color:var(--ok)}
   .orcidok.bad{color:var(--part)}
   .kv{font-family:var(--mono);font-size:13px;line-height:1.7}
@@ -107,7 +107,21 @@
   .modal .bar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
   .modal .bar .spacer{margin-left:auto}
   .leaflet-container{background:#0e1822}
-  footer{padding:7px 18px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.5;text-align:center}
+  /* UX6 Wave B (B3): same footer pattern as index/about — one visible line + an "About this build"
+     popover. Like about, this static page carries the version chip but no #buildId (main.js/build.json
+     are not loaded here). */
+  footer{padding:7px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);line-height:1.5;text-align:center}
+  footer a{color:var(--copper);text-decoration:none}
+  footer details.aboutbuild{display:inline-block;position:relative}
+  footer details.aboutbuild>summary{display:inline;cursor:pointer;color:var(--copper);list-style:none}
+  footer details.aboutbuild>summary::-webkit-details-marker{display:none}
+  footer details.aboutbuild>summary::marker{content:""}
+  footer details.aboutbuild>summary:hover{text-decoration:underline}
+  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+    width:min(440px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.5);text-align:left;font-size:12px;color:var(--muted);
+    line-height:1.5;z-index:50}
+  footer .aboutbuild-body .ver{margin-top:8px;display:inline-block}
   /* C13 direct-upload ("Submit to AusMT"): hidden until the same-origin gateway healthz probe passes. */
   #gatewayBlock{display:none}
   #gatewayBlock.show{display:block}
@@ -361,8 +375,14 @@
   </fieldset>
 </main>
 <footer>
-  Copyright © 2026 AuScope and the AusMT contributors. Portal software is licensed under Apache-2.0; survey data remains licensed by its custodians.
-  <span class="ver" data-ver-chip title="build &middot; MTCAT schema"></span>
+  © 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
+  <details class="aboutbuild">
+    <summary>About this build</summary>
+    <div class="aboutbuild-body">
+      Portal software is licensed under Apache-2.0; survey data remains licensed by its custodians.
+      <span class="ver" data-ver-chip title="build &middot; MTCAT schema"></span>
+    </div>
+  </details>
 </footer>
 
 <div class="modal" id="modal"><div class="box">

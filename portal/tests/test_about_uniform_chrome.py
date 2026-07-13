@@ -54,8 +54,44 @@ _VOID = {"img", "br", "hr", "input", "meta", "link", "source", "area", "base", "
          "param", "track", "wbr"}
 
 
+class _FooterCollector(HTMLParser):
+    """Records every start tag INSIDE <footer> (running footer-depth flag), the footer analogue of
+    _Collector. Backs the UX6 Wave B (B3) footer-chrome pins: the 'About this build' popover and the
+    version chip nested inside it, asserted against the parsed DOM (comments never reach handle_starttag)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.elements = []          # (tag, attrs-dict, in_aboutbuild:bool) for elements inside <footer>
+        self._depth = 0             # footer nesting depth
+        self._ab_at = None          # footer-depth at which a details.aboutbuild opened (None => not inside)
+
+    def handle_starttag(self, tag, attrs):
+        d = {k: (v or "") for k, v in attrs}
+        if self._depth > 0 and tag != "footer":
+            self.elements.append((tag, d, self._ab_at is not None))
+        if tag == "footer":
+            self._depth += 1
+        elif self._depth > 0 and tag not in _VOID:
+            self._depth += 1
+        # The About-this-build popover region: its DESCENDANTS (recorded above BEFORE this) are inside it.
+        if self._ab_at is None and tag == "details" and "aboutbuild" in _classes(d):
+            self._ab_at = self._depth
+
+    def handle_endtag(self, tag):
+        if self._depth > 0 and tag not in _VOID:
+            self._depth -= 1
+            if self._ab_at is not None and self._depth < self._ab_at:
+                self._ab_at = None
+
+
 def _parse(path):
     p = _Collector()
+    p.feed(path.read_text(encoding="utf-8"))
+    return p.elements
+
+
+def _footer_els(path):
+    p = _FooterCollector()
     p.feed(path.read_text(encoding="utf-8"))
     return p.elements
 
@@ -130,3 +166,33 @@ def test_index_still_has_the_count_ids_the_about_guard_forbids():
     els = _parse(INDEX)
     ids = {a.get("id") for (tag, a, inh) in els}
     assert {"nVis", "nSel", "nTot"} <= ids, "index.html should still carry the live-count ids (nVis/nSel/nTot)"
+
+
+def test_footer_about_this_build_control_uniform_across_pages():
+    """UX6 Wave B (B3). FAILS if either the app page (index) or the static About page lacks the trimmed
+    footer's 'About this build' popover — a <details class="aboutbuild"> with a <summary> control — inside
+    <footer>. This is the NEW chrome, asserted identically across pages. Non-vacuous: the pre-wave footer
+    was flat text with no <details>, so both pages would fail here on the old chrome."""
+    for path in (INDEX, ABOUT):
+        els = _footer_els(path)
+        details = [a for (tag, a, _ab) in els if tag == "details" and "aboutbuild" in _classes(a)]
+        assert len(details) == 1, (
+            f"{path.name}: footer must carry exactly one <details class='aboutbuild'> (the "
+            f"'About this build' popover); found {len(details)}")
+        assert any(tag == "summary" for (tag, a, _ab) in els), (
+            f"{path.name}: the About-this-build popover needs a <summary> control to open it")
+
+
+def test_footer_version_chip_relocated_inside_about_this_build_across_pages():
+    """UX6 Wave B (B3). The version chip is RELOCATED into the footer's About-this-build popover on both
+    pages. FAILS if the single [data-ver-chip] is not NESTED inside <details class='aboutbuild'> (e.g.
+    still floating in the visible footer line, left in the header, or dropped). Non-vacuous: the pre-wave
+    chip sat directly in the footer, NOT inside any popover, so this fails on the old chrome."""
+    for path in (INDEX, ABOUT):
+        els = _footer_els(path)
+        chips = [(a, in_ab) for (tag, a, in_ab) in els if "data-ver-chip" in a]
+        assert len(chips) == 1, (
+            f"{path.name}: exactly one version chip must live inside <footer>; found {len(chips)}")
+        assert chips[0][1], (
+            f"{path.name}: the version chip must be nested inside the About-this-build popover "
+            f"(<details class='aboutbuild'>), not floating in the visible footer line")
