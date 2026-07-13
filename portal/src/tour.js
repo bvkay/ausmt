@@ -25,25 +25,33 @@
 // on ALL three ways of leaving a step (Next, Back, and stopTour for close/Esc/Done), so demo state
 // (the typed query, the tree scroll) never leaks past the step — the same restore discipline as
 // _tourOpened, extended per-step.
+// UX7b U11 (owner, 2026-07-13): shortened step copy — the visible text is the architect-authored deck,
+// VERBATIM. Selectors + enter/exit hooks are UNCHANGED (the Find demo still types "AusLAMP", the selbox
+// step still switches rail mode, etc. — only the visible copy changed).
 const TOUR_STEPS=[
   {sel:"#map",text:"Every dot is an MT station. Click one to see its transfer function.",
    enter:_tourEnterMapView},
-  {sel:"aside.filters",text:"Filter by survey or data type — or draw an area directly on the map. Year, period and quality screening live under “Screening (advanced)”."},
-  {sel:"#find",text:"Find anything by name — the map filters live as you type (here: AusLAMP), and the dropdown jumps straight to a matching survey, collection or station.",
+  {sel:"aside.filters",text:"Filter by data type, or draw an area on the map. More filters live under Screening (advanced)."},
+  {sel:"#find",text:"Search stations, surveys or collections. Results update as you type.",
    enter:_tourEnterFindDemo,exit:_tourExitFindDemo},
-  {sel:"#tree",text:"Or browse the hierarchy — country → organisation → survey. Tick or untick any level to show exactly the surveys you want.",
+  {sel:"#tree",text:"Browse by country, organisation or survey. Tick a level to show or hide it.",
    enter:_tourEnterTreeDemo,exit:_tourExitTreeDemo},
-  {sel:"#drawer",text:"The station drawer shows apparent resistivity, phase, tipper and phase-tensor screening — with full provenance.",
+  {sel:"#drawer",text:"The station drawer: response plots, screening checks and provenance, in tabs.",
    enter:_tourEnterStation},
-  {sel:".selbox",text:"Download single stations, whole surveys, or your current selection — licences and citations travel with the files.",
+  {sel:".selbox",text:"Download stations, surveys or selections. Licences and citations come with the files.",
    enter:_tourEnterSelbox,exit:_tourExitSelbox},
-  {sel:"#navSurveys",text:"You're on the Map view. The Surveys button lists every survey as a detailed card — let's head over."},
-  {sel:"#cardGrid .scard",text:"Each survey card is the custodian's record — stations, licence, citation and downloads — and links to the full survey story.",
+  {sel:"#navSurveys",text:"Surveys lists every survey as a card. Let's look."},
+  {sel:"#cardGrid .scard",text:"Each card is a survey at a glance. Open it for the full record.",
    enter:_tourEnterSurveysView},
-  {sel:"#navMap",text:"The Map button brings you back to the stations whenever you're ready."},
-  {sel:"#map",text:"That's the loop — find, screen, take, cite. Contribute your own survey any time from Add Survey.",
+  {sel:"#navMap",text:"Map brings you back to the stations."},
+  {sel:"#map",text:"That's it: find, screen, download, cite. Contribute your own survey from Add Survey.",
    enter:_tourEnterMap}
 ];
+
+// U10: overlay dim, raised from 0.65 to 0.78 (+13pp). Single source of truth, applied inline by
+// _tourLayout — on a targeted step it colours the spot's box-shadow (leaving the backdrop transparent so
+// the cutout shows the element fully); on a no-target step it colours the centred backdrop directly.
+const TOUR_DIM=0.78;
 
 let _tourStep=-1,_tourEls=null;
 // What THIS tour run has itself opened, so stopTour() undoes only that (not pre-existing visitor state).
@@ -172,11 +180,13 @@ function _tourBuild(){
   const card=document.createElement("div");card.className="tourcard";card.id="tourCard";
   card.setAttribute("role","dialog");card.setAttribute("aria-label","AusMT guided tour");
   card.innerHTML=
+    '<div class="tourarrow" id="tourArrow"></div>'+                     // U8: caret pointing at the target
     '<div class="tourstep" id="tourStepLabel"></div>'+
     '<div class="tourtext" id="tourText"></div>'+
     '<div class="tourbtns">'+
       '<button type="button" id="tourBack" aria-label="Previous tour step">Back</button>'+
-      '<button type="button" id="tourNext" aria-label="Next tour step">Next</button>'+
+      // U9: the primary advance button carries .tourprimary (copper fill, dark text).
+      '<button type="button" id="tourNext" class="tourprimary" aria-label="Next tour step">Next</button>'+
       '<button type="button" id="tourClose" aria-label="Close tour">Close</button>'+
     '</div>';
   document.body.appendChild(backdrop);document.body.appendChild(spot);document.body.appendChild(card);
@@ -184,8 +194,11 @@ function _tourBuild(){
   document.getElementById("tourNext").onclick=_tourNext;
   document.getElementById("tourClose").onclick=stopTour;
   document.addEventListener("keydown",_tourKeydown);
-  return{backdrop,spot,card};
+  window.addEventListener("resize",_tourOnResize);                     // U8: keep the card anchored on resize
+  return{backdrop,spot,card,arrow:document.getElementById("tourArrow")};
 }
+// U8: re-run only the LAYOUT (not the step's enter hook) when the viewport changes while the tour is open.
+function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 
 function _tourKeydown(e){
   if(_tourStep<0)return;
@@ -194,33 +207,89 @@ function _tourKeydown(e){
   else if(e.key==="ArrowLeft"){_tourPrev();}
 }
 
+// U8: PURE placement — given the target rect, the card size and the viewport, pick the side with room
+// (preference: below > above > right > left), centre the card on the target's axis, clamp into the
+// viewport (8px margins), and return where a caret should sit so it points AT the target. Pure/no-DOM so
+// it is unit-testable without a layout engine (jsdom has none) — the driver exercises it with synthetic
+// rects, exactly like partitionMarkers()/radiusForZoom(). GAP>0 on the chosen side is what guarantees the
+// card never overlaps its target (the perpendicular clamp can't reintroduce an overlap).
+const _TOUR_M=8,_TOUR_GAP=12,_TOUR_ARROW=8;   // viewport margin, target->card gap, caret half-width
+function _tourPlace(rect,cardW,cardH,vpW,vpH){
+  const M=_TOUR_M,GAP=_TOUR_GAP,cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+  const fits={
+    below: rect.bottom+GAP+cardH+M<=vpH,
+    above: rect.top-GAP-cardH-M>=0,
+    right: rect.right+GAP+cardW+M<=vpW,
+    left:  rect.left-GAP-cardW-M>=0
+  };
+  const order=["below","above","right","left"];
+  let side=order.find(s=>fits[s]);
+  if(!side){                                    // target ~fills the viewport: fall back to the roomiest side
+    const room={below:vpH-rect.bottom,above:rect.top,right:vpW-rect.right,left:rect.left};
+    side=order.reduce((a,b)=>room[b]>room[a]?b:a);
+  }
+  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+  let left,top,arrowDir,arrowAim;
+  if(side==="below"||side==="above"){
+    left=clamp(cx-cardW/2,M,Math.max(M,vpW-cardW-M));
+    top=side==="below"?rect.bottom+GAP:rect.top-GAP-cardH;
+    arrowDir=side==="below"?"up":"down";
+    arrowAim=clamp(cx-left,_TOUR_ARROW,Math.max(_TOUR_ARROW,cardW-_TOUR_ARROW));   // card-relative x, aimed at target centre
+  }else{
+    top=clamp(cy-cardH/2,M,Math.max(M,vpH-cardH-M));
+    left=side==="right"?rect.right+GAP:rect.left-GAP-cardW;
+    arrowDir=side==="right"?"left":"right";
+    arrowAim=clamp(cy-top,_TOUR_ARROW,Math.max(_TOUR_ARROW,cardH-_TOUR_ARROW));    // card-relative y
+  }
+  return{side,left,top,arrowDir,arrowAim};
+}
+// Arrival at a step: run its enter hook (which may switch view / open a drawer and so change the target
+// rect), THEN lay the spotlight + card + caret out. Split from _tourLayout so a resize re-lays-out WITHOUT
+// re-firing the enter hook (which would re-run a demo action).
 function _tourPosition(){
   const step=TOUR_STEPS[_tourStep];
   if(typeof step.enter==="function")step.enter();
+  _tourLayout();
+}
+function _tourLayout(){
+  const step=TOUR_STEPS[_tourStep];
   const target=step.sel?document.querySelector(step.sel):null;
   const rect=target?target.getBoundingClientRect():null;
   const hasTarget=!!(rect&&(rect.width>0||rect.height>0));
-  const{spot,card,backdrop}=_tourEls;
+  const{spot,card,backdrop,arrow}=_tourEls;
   backdrop.classList.toggle("centered",!hasTarget);
   card.classList.toggle("static",!hasTarget);
   if(!hasTarget){
-    // Target absent (e.g. empty-data state, or an enter action found nothing to open): show centred,
-    // no spotlight — same fallback as before, now also covering a no-op enter action.
+    // Target absent (empty-data state, or an enter action found nothing to open): centred card, no
+    // spotlight, no caret — the .centered backdrop carries the dim itself (U10).
     spot.style.display="none";
+    if(arrow)arrow.style.display="none";
     card.style.top="";card.style.left="";
+    backdrop.style.background="rgba(11,15,18,"+TOUR_DIM+")";
   }else{
+    // Targeted step: the spot's box-shadow supplies the dim (U10) and the backdrop stays transparent, so
+    // the spotlighted element shows fully through the cutout.
+    backdrop.style.background="transparent";
     spot.style.display="block";
     const pad=6;
     spot.style.top=Math.max(0,rect.top-pad)+"px";
     spot.style.left=Math.max(0,rect.left-pad)+"px";
     spot.style.width=(rect.width+pad*2)+"px";
     spot.style.height=(rect.height+pad*2)+"px";
-    // Prefer placing the card to the right of the spotlight; fall back to below if it would clip.
-    let left=rect.right+16,top=rect.top;
-    if(left+340>window.innerWidth)left=Math.max(8,rect.left-16-340);
-    if(left<0){left=Math.max(8,rect.left);top=rect.bottom+16;}
-    if(top+160>window.innerHeight)top=Math.max(8,window.innerHeight-176);
-    card.style.left=left+"px";card.style.top=top+"px";
+    spot.style.boxShadow="0 0 0 4000px rgba(11,15,18,"+TOUR_DIM+")";
+    // Measure the card (fall back to its CSS max-width / a typical height when there's no layout engine).
+    const cardW=card.offsetWidth||340,cardH=card.offsetHeight||160;
+    const p=_tourPlace(rect,cardW,cardH,window.innerWidth,window.innerHeight);
+    card.style.left=p.left+"px";card.style.top=p.top+"px";
+    if(arrow){
+      const A=_TOUR_ARROW;
+      arrow.style.display="block";
+      arrow.className="tourarrow tourarrow--"+p.arrowDir;
+      if(p.arrowDir==="up"){arrow.style.left=(p.arrowAim-A)+"px";arrow.style.top=(-A)+"px";}
+      else if(p.arrowDir==="down"){arrow.style.left=(p.arrowAim-A)+"px";arrow.style.top=cardH+"px";}
+      else if(p.arrowDir==="left"){arrow.style.top=(p.arrowAim-A)+"px";arrow.style.left=(-A)+"px";}
+      else{arrow.style.top=(p.arrowAim-A)+"px";arrow.style.left=cardW+"px";}
+    }
   }
   document.getElementById("tourStepLabel").textContent="Step "+(_tourStep+1)+" of "+TOUR_STEPS.length;
   document.getElementById("tourText").textContent=step.text;
@@ -258,6 +327,7 @@ function stopTour(){
   _tourExitCurrent();                  // D5: a demo step's cleanup runs on mid-tour close too
   _tourStep=-1;
   document.removeEventListener("keydown",_tourKeydown);
+  window.removeEventListener("resize",_tourOnResize);   // U8: stop tracking the viewport once the tour closes
   _tourRestore();                      // Done/Esc/close from ANY step: restore only what the tour itself changed
   if(_tourEls){
     _tourEls.backdrop.remove();_tourEls.spot.remove();_tourEls.card.remove();

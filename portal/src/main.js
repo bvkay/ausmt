@@ -115,11 +115,9 @@ function setView(v){curView=v;
   // nested inside one (selector kept generic rather than section-only for that one sub-case).
   document.querySelectorAll('#filterPane [data-views]').forEach(sec=>{
     const a=sec.getAttribute("data-views");sec.classList.toggle("hidden",!(a==="both"||a===v));});
-  // UX6 Wave D (D6/D1): the map legend and the welcome strip sit over the map, so they belong to the map
-  // view only. The legend tracks the view exactly; the strip is only ever HIDDEN here (never re-shown —
-  // its first-visit show is owned by maybeShowIntro()/introSeen), so navigating away consumes the nudge.
+  // UX6 Wave D (D6): the map legend sits over the map, so it belongs to the map view only. (The UX7b
+  // first-visit welcome popup is a modal dismissed by user action, not tied to the view — no toggle here.)
   const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
-  const _strip=document.getElementById("introStrip");if(_strip&&v!=="map")_strip.classList.add("hidden");
   if(v==="surveys"){closeDrawer();renderCards();}
   else if(v==="collections"){closeDrawer();renderCollections();}
   else setTimeout(()=>map.invalidateSize(),60);
@@ -250,43 +248,58 @@ function showEmptyState(){
   }
   var sv=document.getElementById("surveysview");if(sv)sv.innerHTML=html;
 }
-// --- Welcome strip (UX6 Wave D, D1) + "three ways in" panel (S2 UX-A) -------------------------
-// D1 (owner-approved reversal of S2 UX-A): the blocking three-ways panel (#introOverlay) NO LONGER
-// auto-shows. On first visit a small NON-BLOCKING corner strip (#introStrip) appears over a map corner —
-// the map stays fully interactive behind it. The panel is now an on-demand help dialog, reachable only
-// via the strip's "How AusMT works" action and the header help entry (#howToUse). "Start exploring"
-// dismisses + persists exactly as the old blocking overlay's dismiss did. Both states render in the
-// populated AND empty-data paths (the strip explains the portal even before any survey exists), so the
-// first-visit show fires from runInit(), not boot()/loadData().
+// --- First-visit welcome popup (UX7b U7) + "How AusMT works" help panel (S2 UX-A) ----------------
+// U7 (owner, 2026-07-13): the first-visit surface is now a small centred MODAL popup (#introWelcome),
+// successor to the Wave D corner strip. It offers exactly: "Take the 2-minute tour" (the #introTakeTour
+// pathway — starts the tour), "Browse immediately" (close), and a "Don't show this again" checkbox that
+// GATES persistence — ticked, every close path (tour / browse / Esc / click-out) persists the dismissal
+// via the existing localStorage key; unticked, the popup may return next visit. Esc and click-out behave
+// as "Browse immediately". The #introOverlay "How AusMT works" panel stays an on-demand help dialog
+// (header #howToUse). First-visit show fires from runInit() (populated AND empty-data paths).
 const INTRO_KEY="ausmt_intro_dismissed";
 function introSeen(){try{return localStorage.getItem(INTRO_KEY)==="1";}catch(e){return false;}}
 function markIntroSeen(){try{localStorage.setItem(INTRO_KEY,"1");}catch(e){/* storage unavailable (e.g. privacy mode) — just don't persist */}}
-function showIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.remove("hidden");}   // opens the three-ways help panel
+function showIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.remove("hidden");}   // opens the "How AusMT works" help panel
 function hideIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.add("hidden");}
-function showStrip(){const s=document.getElementById("introStrip");if(s)s.classList.remove("hidden");}
-function hideStrip(){const s=document.getElementById("introStrip");if(s)s.classList.add("hidden");}
-function dismissIntro(){markIntroSeen();hideStrip();}         // "Start exploring" (+ tile/tour flows): persist + hide the strip
-function maybeShowIntro(){if(!introSeen())showStrip();}       // first visit shows the STRIP, not the blocking panel
+// Welcome popup: focus is moved INTO the box on show and RESTORED to the opener on close — the same
+// best-effort/guarded pattern the drawer uses (so the headless harness, with no real focus, never throws).
+let _welcomeReturnFocus=null;
+function welcomeDismissChecked(){const c=document.getElementById("welcomeDismiss");return !!(c&&c.checked);}
+function showWelcome(){
+  const w=document.getElementById("introWelcome");if(!w)return;
+  _welcomeReturnFocus=(typeof document!=="undefined"&&document)?document.activeElement:null;
+  w.classList.remove("hidden");
+  const f=document.getElementById("welcomeTour")||w.querySelector(".introwelcome-box");
+  if(f&&f.focus){try{f.focus();}catch(e){}}
+}
+function hideWelcome(){const w=document.getElementById("introWelcome");if(w)w.classList.add("hidden");
+  const f=_welcomeReturnFocus;_welcomeReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
+// Close via Browse / Esc / click-out: persist ONLY when "Don't show this again" is ticked.
+function closeWelcome(){if(welcomeDismissChecked())markIntroSeen();hideWelcome();}
+function maybeShowIntro(){if(!introSeen())showWelcome();}      // first visit shows the WELCOME POPUP
 
 (function(){
-  // Panel close = hide the help dialog only. It no longer persists (the panel is on-demand help now;
-  // only the strip's dismissal controls the first-visit localStorage key).
+  // "How AusMT works" help panel (#introOverlay) — on-demand only (header "How to use AusMT"). Close and
+  // tiles no longer persist anything; the first-visit localStorage key is owned by the welcome popup.
   const closeBtn=document.getElementById("introClose");if(closeBtn)closeBtn.onclick=hideIntro;
-  // Panel tiles close the panel AND dismiss the first-visit strip, then act.
-  const tB=document.getElementById("tileBrowse");if(tB)tB.onclick=()=>{hideIntro();dismissIntro();setView("map");};
-  const tC=document.getElementById("tileContribute");if(tC)tC.onclick=()=>{hideIntro();dismissIntro();window.location.href="add-survey.html";};
-  const tI=document.getElementById("tileIntegrate");if(tI)tI.onclick=()=>{hideIntro();dismissIntro();window.location.href="about.html#standards";};
-  // Header help + the strip's "How AusMT works" both OPEN the panel on demand (NOT gated by the seen flag).
+  const tB=document.getElementById("tileBrowse");if(tB)tB.onclick=()=>{hideIntro();setView("map");};
+  const tC=document.getElementById("tileContribute");if(tC)tC.onclick=()=>{hideIntro();window.location.href="add-survey.html";};
+  const tI=document.getElementById("tileIntegrate");if(tI)tI.onclick=()=>{hideIntro();window.location.href="about.html#standards";};
   const howTo=document.getElementById("howToUse");if(howTo)howTo.onclick=showIntro;
-  const introHow=document.getElementById("introHow");if(introHow)introHow.onclick=showIntro;
-  // "Start exploring" dismisses the first-visit strip (persist).
-  const introStart=document.getElementById("introStart");if(introStart)introStart.onclick=dismissIntro;
-  // The panel's "Take the tour" button (#introTakeTour) — the sole tour entry point — closes the panel,
-  // dismisses the strip, and launches the tour. startTour is defined in tour.js (loaded after main.js),
-  // guarded so a missing/broken tour.js can't break the wiring.
-  const tourBtn=document.getElementById("introTakeTour");
-  if(tourBtn)tourBtn.onclick=()=>{hideIntro();dismissIntro();if(typeof startTour==="function")startTour();};
-  // The header help entry is the single "How to use AusMT" button (#howToUse); #headerTour stays removed.
+  // startTour lives in tour.js (loaded after main.js); guard so a missing/broken tour.js can't break wiring.
+  function startTourSafe(){if(typeof startTour==="function")startTour();}
+  // #introTakeTour (help panel) — the sole tour entry from the on-demand panel: hide the panel, start.
+  const tourBtn=document.getElementById("introTakeTour");if(tourBtn)tourBtn.onclick=()=>{hideIntro();startTourSafe();};
+  // Welcome popup wiring. "Take the tour" reuses the #introTakeTour pathway (start the tour) AND closes
+  // the popup persisting-if-ticked; "Browse immediately" just closes (persist-if-ticked); Esc / click-out
+  // behave as Browse immediately.
+  const wTour=document.getElementById("welcomeTour");if(wTour)wTour.onclick=()=>{closeWelcome();startTourSafe();};
+  const wBrowse=document.getElementById("welcomeBrowse");if(wBrowse)wBrowse.onclick=closeWelcome;
+  const welcome=document.getElementById("introWelcome");
+  if(welcome){
+    welcome.addEventListener("click",e=>{if(e.target===welcome)closeWelcome();});                    // click-out = Browse immediately
+    document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!welcome.classList.contains("hidden"))closeWelcome();});
+  }
 })();
 
 // UX6 Wave D (D6): static map legend (bottom-left) — one cluster-bubble row + a coloured dot per data

@@ -72,9 +72,14 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "curView:()=>curView,nST:()=>ST.length,visIds:()=>visible.map(s=>s.id)," +
   "visSurveys:()=>[...new Set(visible.map(s=>s.survey))]," +
   // intro-panel + tour hooks (S2 UX-A) — exposed so the driver can assert on internal helpers
-  // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro (UX6 D1) lets the
-  // driver simulate a genuine first visit (clear the key, re-run the first-visit show) for the strip.
+  // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
+  // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
   "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
+  // UX7b U7 welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
+  // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). U8 _tourPlace is the PURE
+  // card-placement fn (side pick + no-overlap + caret aim), unit-tested with synthetic rects since jsdom
+  // has no layout engine. U10 TOUR_DIM is the overlay alpha (the load-bearing 'increased dim' value).
+  "showWelcome,closeWelcome,tourPlace:(r,cw,ch,vw,vh)=>_tourPlace(r,cw,ch,vw,vh),tourDim:()=>TOUR_DIM," +
   // UX6 Wave D hooks: sidebarMode reader + setSidebarMode (D2 Browse/Select toggle); onDrawCreated +
   // drawSelectionMsg (D3 draw-created toast + its pure formatter).
   "sidebarMode:()=>sidebarMode,setSidebarMode,onDrawCreated,drawSelectionMsg," +
@@ -406,37 +411,126 @@ async function bootFreshWindow(dataMap) {
   win.location.hash = "#/survey/does-not-exist"; A.routeFromHash();
   ok(!doc.getElementById("drawer").classList.contains("open"), "unknown survey slug must not open the drawer");
 
-  // G. WELCOME STRIP (UX6 Wave D, D1): on first visit a NON-BLOCKING corner strip (#introStrip) shows —
-  // the blocking three-ways panel (#introOverlay) NO LONGER auto-shows. The strip's "How AusMT works" and
-  // the header "How to use AusMT" both open the panel on demand; "Start exploring" dismisses the strip AND
-  // persists. The panel's own close just hides the panel (no persist) — the strip owns the first-visit key.
-  win.localStorage.removeItem("ausmt_intro_dismissed");
-  const introStrip = doc.getElementById("introStrip");
+  // G. WELCOME POPUP (UX7b U7): on first visit a small CENTRED MODAL (#introWelcome) shows — successor to
+  // the Wave D corner strip (which is GONE). role=dialog, focus-managed; "Take the 2-minute tour" starts
+  // the tour, "Browse immediately" closes, and a "Don't show this again" checkbox GATES persistence. The
+  // #introOverlay "How AusMT works" panel stays on-demand (header help), unaffected on first visit.
+  const introWelcome = doc.getElementById("introWelcome");
   const introOverlay = doc.getElementById("introOverlay");
-  ok(introStrip, "#introStrip (welcome corner strip) missing from index.html");
-  ok(introOverlay, "#introOverlay (three-ways panel) missing from index.html");
-  // FIRST VISIT: simulate it (clear the key + re-run the first-visit show the way runInit() does).
-  A.maybeShowIntro();
-  ok(!introStrip.classList.contains("hidden"), "welcome strip did not show on first visit");
-  // NON-BLOCKING: the strip must NOT be the full-screen blocking overlay, and the blocking panel stays
-  // hidden on first visit (only the corner strip shows). This is the load-bearing "non-blocking" assertion.
-  ok(!introStrip.classList.contains("introoverlay"), "the welcome strip must NOT use the blocking .introoverlay class (it must be non-blocking)");
-  ok(introOverlay.classList.contains("hidden"), "the blocking three-ways panel must stay hidden on first visit (only the strip shows)");
-  // "How AusMT works" (on the strip) opens the panel; closing it just hides the panel and does NOT persist.
-  doc.getElementById("introHow").click();
-  ok(!introOverlay.classList.contains("hidden"), "the strip's 'How AusMT works' action did not open the three-ways panel");
-  doc.getElementById("introClose").click();
-  ok(introOverlay.classList.contains("hidden"), "closing the three-ways panel did not hide it");
-  ok(win.localStorage.getItem("ausmt_intro_dismissed") !== "1", "closing the panel must NOT persist a dismissal — only 'Start exploring' does");
-  // "Start exploring" dismisses the strip AND persists.
-  doc.getElementById("introStart").click();
-  ok(introStrip.classList.contains("hidden"), "'Start exploring' did not hide the welcome strip");
-  ok(win.localStorage.getItem("ausmt_intro_dismissed") === "1", "'Start exploring' did not set the localStorage dismissal key");
-  ok(A.introSeen() === true, "introSeen() did not observe the persisted dismiss");
-  // Header help re-opens the panel even after dismissal (on-demand help is NOT gated by the "seen" flag).
+  ok(introWelcome, "#introWelcome (first-visit welcome popup) missing from index.html");
+  ok(introOverlay, "#introOverlay (How AusMT works panel) missing from index.html");
+  ok(!doc.getElementById("introStrip"), "the Wave D corner strip (#introStrip) must be REMOVED — the welcome popup is its successor");
+  // U7 dialog semantics: role=dialog + aria-modal, and the three required elements exist.
+  ok(introWelcome.getAttribute("role") === "dialog", "the welcome popup must be role=dialog, got: " + JSON.stringify(introWelcome.getAttribute("role")));
+  ok(doc.getElementById("welcomeTour") && doc.getElementById("welcomeBrowse") && doc.getElementById("welcomeDismiss"),
+    "the welcome popup must offer the tour button, the browse button and the 'Don't show this again' checkbox");
+  ok(doc.getElementById("welcomeDismiss").type === "checkbox", "'Don't show this again' must be a checkbox");
+  // U7 verbatim copy.
+  ok(doc.getElementById("introWelcomeHeading").textContent.trim() === "Welcome to AusMT",
+    "welcome heading copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeHeading").textContent));
+  ok(doc.getElementById("introWelcomeText").textContent.trim() === "Explore Australia's national magnetotelluric data portal",
+    "welcome body copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeText").textContent));
+  // U6 "How AusMT works" panel retitles (heading + Explore-data tile + API-access tile).
+  ok(doc.querySelector("#introOverlay .introhero").textContent.trim() === "AusMT - Discover Australia's magnetotelluric surveys",
+    "U6: intro-panel main heading not retitled, got: " + JSON.stringify(doc.querySelector("#introOverlay .introhero").textContent));
+  ok(doc.querySelector("#tileBrowse h3").textContent.trim() === "Explore data",
+    "U6: browse tile title must be 'Explore data', got: " + JSON.stringify(doc.querySelector("#tileBrowse h3").textContent));
+  ok(doc.querySelector("#tileBrowse p").textContent.trim() === "Search surveys, inspect station quality, preview transfer functions and download datasets",
+    "U6: browse tile subtext wrong, got: " + JSON.stringify(doc.querySelector("#tileBrowse p").textContent));
+  ok(doc.querySelector("#tileIntegrate h3").textContent.trim() === "API access",
+    "U6: programmatic-access tile must be retitled 'API access', got: " + JSON.stringify(doc.querySelector("#tileIntegrate h3").textContent));
+  // FIRST VISIT: simulate it (clear the key + re-run the first-visit show the way runInit() does) and
+  // assert the popup shows while the on-demand help panel stays hidden.
+  win.localStorage.removeItem("ausmt_intro_dismissed");
+  A.showWelcome();
+  ok(!introWelcome.classList.contains("hidden"), "welcome popup did not show on first visit");
+  ok(introOverlay.classList.contains("hidden"), "the 'How AusMT works' panel must stay hidden on first visit (only the welcome popup shows)");
+  // FOCUS MANAGEMENT (U7): showing the popup moves focus INTO the dialog.
+  ok(introWelcome.contains(doc.activeElement), "showing the welcome popup must move focus into the dialog, active=" + (doc.activeElement && doc.activeElement.id));
+
+  // G1. CHECKBOX PERSISTENCE MATRIX (U7): dismiss ticked/unticked × close-via {tour, browse, Esc, click-out}.
+  // Ticked -> the dismissal PERSISTS (localStorage key set) on every close path; unticked -> it does NOT
+  // (the popup may return next visit). Load-bearing: on OLD code there is no such popup at all.
+  function welcomeCase(ticked, via) {
+    win.localStorage.removeItem("ausmt_intro_dismissed");
+    A.showWelcome();
+    ok(!introWelcome.classList.contains("hidden"), "matrix setup: popup not shown for " + via + "/" + ticked);
+    doc.getElementById("welcomeDismiss").checked = ticked;
+    if (via === "tour") doc.getElementById("welcomeTour").click();
+    else if (via === "browse") doc.getElementById("welcomeBrowse").click();
+    else if (via === "esc") win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
+    else if (via === "clickout") introWelcome.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    ok(introWelcome.classList.contains("hidden"), "close-via-" + via + " did not close the welcome popup");
+    const persisted = win.localStorage.getItem("ausmt_intro_dismissed") === "1";
+    ok(persisted === ticked,
+      "checkbox matrix FAILED: dismiss=" + ticked + " via " + via + " -> persisted should be " + ticked + ", got " + persisted);
+    if (A.tourStep() >= 0) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));  // close a tour the 'tour' path opened
+    doc.getElementById("welcomeDismiss").checked = false;                                                   // reset for the next case
+  }
+  ["tour", "browse", "esc", "clickout"].forEach(via => { welcomeCase(true, via); welcomeCase(false, via); });
+
+  // G2. TAKING THE TOUR from the popup actually STARTS it (the #introTakeTour pathway) and closes the popup.
+  win.localStorage.removeItem("ausmt_intro_dismissed");
+  A.showWelcome();
+  doc.getElementById("welcomeTour").click();
+  ok(A.tourStep() === 0, "welcome popup 'Take the tour' did not start the tour, at step " + A.tourStep());
+  ok(introWelcome.classList.contains("hidden"), "welcome popup 'Take the tour' did not close the popup");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));                          // close the tour cleanly
+  ok(A.tourStep() === -1, "could not close the tour started from the welcome popup");
+
+  // G3. The on-demand "How AusMT works" panel still opens from the header help entry (not gated by the seen
+  // flag) and its own close just hides it WITHOUT persisting (the welcome popup owns the first-visit key).
+  win.localStorage.removeItem("ausmt_intro_dismissed");
   win.document.getElementById("howToUse").click();
-  ok(!introOverlay.classList.contains("hidden"), "header link did not re-open the panel after dismissal");
+  ok(!introOverlay.classList.contains("hidden"), "header 'How to use AusMT' did not open the panel");
   doc.getElementById("introClose").click();
+  ok(introOverlay.classList.contains("hidden"), "closing the 'How AusMT works' panel did not hide it");
+  ok(win.localStorage.getItem("ausmt_intro_dismissed") !== "1", "opening/closing the help panel must NOT persist a dismissal");
+  win.localStorage.removeItem("ausmt_intro_dismissed");                                                     // clean state for the tour sections
+
+  // G4. TOUR CARD ANCHORING (U8) + COPPER NEXT (U9) + OVERLAY DIM (U10).
+  // U8 positioning is a PURE fn (_tourPlace) because jsdom has NO layout engine (every getBoundingClientRect
+  // is zero) — so the load-bearing side-pick / no-overlap / caret-aim coverage runs on SYNTHETIC rects, the
+  // same pattern as partitionMarkers()/radiusForZoom(). The DOM checks below then pin the arrow element, the
+  // copper Next class and the applied dim, which ARE observable in jsdom.
+  const M = 8;
+  const noOverlap = (c, r) => c.right <= r.left || c.left >= r.right || c.bottom <= r.top || c.top >= r.bottom;
+  function placeCase(rect, expectSide, expectDir, aimAxis) {
+    const cardW = 340, cardH = 160, vpW = 1200, vpH = 800;
+    const p = A.tourPlace(rect, cardW, cardH, vpW, vpH);
+    ok(p.side === expectSide, "U8: placement side for " + expectSide + " case wrong, got " + p.side);
+    ok(p.arrowDir === expectDir, "U8: caret direction for " + expectSide + " case must be " + expectDir + ", got " + p.arrowDir);
+    const box = { left: p.left, top: p.top, right: p.left + cardW, bottom: p.top + cardH };
+    ok(noOverlap(box, rect), "U8: card OVERLAPS its target on the " + expectSide + " side (box " + JSON.stringify(box) + " vs target " + JSON.stringify(rect) + ")");
+    ok(box.left >= M - 0.001 && box.right <= vpW - M + 0.001 && box.top >= M - 0.001 && box.bottom <= vpH - M + 0.001,
+      "U8: card not clamped inside the viewport 8px margins on the " + expectSide + " side, box " + JSON.stringify(box));
+    // the caret must point AT the target centre along the shared axis
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    if (aimAxis === "x") ok(Math.abs((p.left + p.arrowAim) - cx) < 1, "U8: caret does not point at the target centre-x on the " + expectSide + " side, aim=" + (p.left + p.arrowAim) + " cx=" + cx);
+    else ok(Math.abs((p.top + p.arrowAim) - cy) < 1, "U8: caret does not point at the target centre-y on the " + expectSide + " side, aim=" + (p.top + p.arrowAim) + " cy=" + cy);
+  }
+  // four differently-positioned targets exercise all four sides (below > above > right > left), each with a
+  // no-overlap + in-viewport + caret-aim assertion:
+  placeCase({ left: 500, top: 20, right: 560, bottom: 50, width: 60, height: 30 }, "below", "up", "x");     // room below
+  placeCase({ left: 500, top: 740, right: 560, bottom: 790, width: 60, height: 50 }, "above", "down", "x"); // no room below -> above
+  placeCase({ left: 0, top: 0, right: 60, bottom: 800, width: 60, height: 800 }, "right", "left", "y");     // full-height left edge -> right
+  placeCase({ left: 1140, top: 0, right: 1200, bottom: 800, width: 60, height: 800 }, "left", "right", "y");// full-height right edge -> left
+  // no-target steps stay centred with NO caret (the pure fn is not consulted; the DOM path handles it — see below).
+
+  // DOM: open the tour and pin the arrow element, the copper Next button and the raised dim. In jsdom every
+  // rect is zero, so step 0 takes the no-target branch: the caret hides and the CENTRED backdrop carries the
+  // dim — exactly the value we assert here (0.78, up from 0.65).
+  doc.getElementById("introTakeTour").click();
+  ok(doc.getElementById("tourArrow"), "U8: the tour card must contain a caret element (#tourArrow)");
+  const tNext = doc.getElementById("tourNext");
+  ok(tNext.classList.contains("tourprimary"), "U9: the tour Next button must carry the copper .tourprimary class");
+  ok(A.tourDim() === 0.78, "U10: overlay dim must be 0.78, got " + A.tourDim());
+  ok(A.tourDim() >= 0.65 + 0.10 && A.tourDim() <= 0.65 + 0.15, "U10: overlay dim must be +10..15pp over the old 0.65, got " + A.tourDim());
+  const tBack = doc.getElementById("tourBackdrop");
+  ok(/0\.78/.test(tBack.style.background) && !/0?\.65/.test(tBack.style.background),
+    "U10: the centred (no-target) backdrop must apply the 0.78 dim, got: " + JSON.stringify(tBack.style.background));
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
+  ok(A.tourStep() === -1, "G4: could not close the tour after the positioning checks");
 
   // H0. ONE HELP BUTTON IN THE HEADER (UX feedback round 3, item 2): the header "Take the tour" button
   // (#headerTour) was removed. The single header help entry point is now "How to use AusMT" (#howToUse),
@@ -566,19 +660,20 @@ async function bootFreshWindow(dataMap) {
   ok(A.tourStep() === -1, "D2-tour: Esc from the selbox step did not close the tour");
   ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
 
-  // I. EMPTY-STATE fixture: the welcome STRIP must still render on first visit (it explains the portal
-  // even before any survey exists) and boot must not crash. A fresh window/localStorage so "first visit"
-  // is genuine. The blocking panel stays hidden (D1 — non-blocking first-visit).
+  // I. EMPTY-STATE fixture (UX7b U7): the welcome POPUP must still show on first visit (it explains the
+  // portal even before any survey exists) and boot must not crash. A fresh window/localStorage so "first
+  // visit" is genuine. The on-demand help panel stays hidden.
   const emptyWin = await bootFreshWindow({
     "data/catalogue.json": [], "data/tf.json": [], "data/sci.json": [], "data/surveys.json": {},
   });
   const emptyDoc = emptyWin.document;
   ok(emptyWin.__api.nST() === 0, "empty-state fixture unexpectedly loaded stations");
-  const emptyStrip = emptyDoc.getElementById("introStrip");
-  ok(emptyStrip, "#introStrip missing in the empty-data boot");
-  ok(!emptyStrip.classList.contains("hidden"), "welcome strip did not show on first visit in the empty-data state");
-  ok(emptyDoc.getElementById("introOverlay").classList.contains("hidden"), "the blocking panel must stay hidden in the empty-data first-visit state");
-  ok(/No surveys published yet/.test(emptyDoc.getElementById("map").innerHTML), "empty-state message did not render alongside the welcome strip");
+  ok(!emptyDoc.getElementById("introStrip"), "the Wave D corner strip (#introStrip) must be gone in the empty-data boot too");
+  const emptyWelcome = emptyDoc.getElementById("introWelcome");
+  ok(emptyWelcome, "#introWelcome missing in the empty-data boot");
+  ok(!emptyWelcome.classList.contains("hidden"), "welcome popup did not show on first visit in the empty-data state");
+  ok(emptyDoc.getElementById("introOverlay").classList.contains("hidden"), "the help panel must stay hidden in the empty-data first-visit state");
+  ok(/No surveys published yet/.test(emptyDoc.getElementById("map").innerHTML), "empty-state message did not render alongside the welcome popup");
 
   // I2. UX5 (D6) GATING-OFF: a boot WITHOUT collections.json renders NO Collections group (and the
   // country/org/survey rows + their carets are unaffected) — the graceful pre-collections behaviour.
@@ -1246,7 +1341,7 @@ async function bootFreshWindow(dataMap) {
 
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
-    "UX6 Wave D welcome-strip first-visit-non-blocking + Start-exploring-persists + How-AusMT-works-opens-panel + empty-state-strip, " +
+    "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
