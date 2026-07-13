@@ -113,6 +113,9 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // pre-C22 code still reaches section T and fails THERE with a precise message, instead of dying at
   // this api hook with an unrelated-looking ReferenceError.
   "apa,bibtex,ris,AUSMT_SELF,NCI_CITE,TS_COLLECTION,citeLine:(c,d)=>citeLine(c,d),smeta:(sv)=>SMETA[sv]," +
+  // UX6 Wave E hooks: collScatter (E6 footprint — driven with a stubbed AU_OUTLINE), renderCollections
+  // (E5 landing), and openStationById (E7 focus — lets the driver control the invoking element before open).
+  "collScatter,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -1047,11 +1050,182 @@ async function bootFreshWindow(dataMap) {
   legToggle.click();
   ok(legend.classList.contains("expanded") !== wasExpanded, "D6: the legend toggle did not flip the expanded state");
 
+  // ===== UX6 WAVE E ==============================================================================
+  // BB. E1 SLIM SURVEY CARD. The card field set is reduced; the heavy blocks moved to the survey DETAIL.
+  // Each pin states what it fails on. (Alpha's blurb was reset to null in section R.)
+  doc.getElementById("drawer").classList.remove("open");
+  const cardA1 = A.cardHtml("Alpha Survey");
+  // present: title, org, collection chip, acquisition year, station count, mixbar, period range, badges, two actions.
+  ok(/View survey/.test(cardA1), "E1: slim card must offer a 'View survey' action");
+  ok(/>Download</.test(cardA1), "E1: slim card must offer a 'Download' action");
+  ok(cardA1.indexOf("mixbar") >= 0, "E1: slim card must keep the data-type mixbar");
+  ok(/2<\/b> stations/.test(cardA1), "E1: slim card must show the station count");
+  ok(cardA1.indexOf("periods") >= 0, "E1: slim card must show the period range");
+  ok(cardA1.indexOf("acquired") >= 0 && /2010\D+2012/.test(cardA1), "E1: slim card must show the acquisition year (2010–2012)");
+  ok(/DOI/.test(cardA1) && cardA1.indexOf("licence ?") >= 0, "E1: slim card must keep the licence + DOI badges");
+  // absent (moved to detail): identifiers rollup, APA cite block, spatial extent, coord-QC stats,
+  // per-format availability matrix (EDI/time-series/MTH5 badges), the completeness/smoothness check.
+  ok(cardA1.indexOf("Persistent identifiers") < 0, "E1: the identifiers block must NOT be on the slim card");
+  ok(cardA1.indexOf('class="cite"') < 0, "E1: the APA citation block must NOT be on the slim card");
+  ok(cardA1.indexOf("extent") < 0, "E1: the spatial extent must NOT be on the slim card");
+  ok(cardA1.indexOf("coord QC") < 0, "E1: the coordinate-QC flag stat must NOT be on the slim card");
+  ok(cardA1.indexOf("time series") < 0 && cardA1.indexOf("MTH5") < 0, "E1: the per-format availability matrix must NOT be on the slim card");
+  ok(cardA1.indexOf("completeness/smoothness") < 0, "E1: the completeness/smoothness check must NOT be on the slim card (it stays in the detail)");
+  // the removed renderers are NOT deleted from the codebase — they still render in the survey detail
+  // (identifiersHtml + apa are exercised by section P above and the E2 rollup below).
+
+  // CC. E3 DISCOVERY CONTROLS. Sort / live count / facets / clear / compact toggle, above the card grid.
+  // Reset the tree first — section Q's selectSurvey() left only one survey checked; the discovery view
+  // reads the same filter, so restore the full baseline (all 5 stations / 4 surveys) before asserting.
+  [...doc.querySelectorAll("#tree input")].forEach(c => { c.checked = true; });
+  A.refresh();
+  A.setView("surveys");
+  ok(A.visIds().length === 5, "E3: expected the clean 5-station baseline entering the discovery tests, got " + A.visIds().length);
+  const sortSel = doc.getElementById("sortSel"), surveyCount = doc.getElementById("surveyCount");
+  const layoutSeg = doc.getElementById("layoutSeg"), clearFilters = doc.getElementById("clearFilters"), facetChips = doc.getElementById("facetChips");
+  ok(sortSel && surveyCount && layoutSeg && clearFilters && facetChips, "E3: a discovery control is missing from #surveysview");
+  const surveyOrder = () => [...doc.querySelectorAll("#cardGrid .scard")].map(c => { const b = c.querySelector("[data-survey]"); return b ? b.dataset.survey : null; });
+  // (a) live count: 4 distinct surveys visible at baseline.
+  ok(surveyCount.textContent === "4 surveys", "E3: the live result count must read '4 surveys', got: " + JSON.stringify(surveyCount.textContent));
+  // (b) default sort = Name -> Alpha first.
+  ok(surveyOrder()[0] === "Alpha Survey", "E3: default (Name) sort must list Alpha Survey first, got: " + JSON.stringify(surveyOrder()));
+  // (c) sort = Year (newest first) -> Beta (2019) ahead of Alpha (2012); undated Gamma/Delta last.
+  sortSel.value = "year"; fire(sortSel, "change");
+  ok(surveyOrder()[0] === "Beta Survey", "E3: Year sort must put the newest (Beta 2019) first, got: " + JSON.stringify(surveyOrder()));
+  sortSel.value = "name"; fire(sortSel, "change");
+  ok(surveyOrder()[0] === "Alpha Survey", "E3: switching back to Name sort did not re-order");
+  // (d) FORBIDDEN: no completeness/smoothness option in the sort control (the screen must never rank).
+  ok([...sortSel.options].every(o => !/completeness|smoothness|quality/i.test(o.value + o.textContent)),
+    "E3 FENCE: the sort control must NOT offer a completeness/quality ranking");
+  // (e) facet chips: exactly three (licence / DOI / tipper) and none is the completeness check.
+  const facetBtns = [...facetChips.querySelectorAll("[data-facet]")];
+  ok(facetBtns.length === 3, "E3: expected 3 facet chips (licence/DOI/tipper), got " + facetBtns.length);
+  ok(facetBtns.every(b => b.dataset.facet !== "q" && !/completeness|smoothness/i.test(b.textContent)),
+    "E3 FENCE: no facet may filter by the completeness/smoothness check");
+  // (f) DOI facet narrows to the one survey with a DOI (Alpha); toggling off restores the count.
+  const doiFacet = facetChips.querySelector('[data-facet="doi"]');
+  doiFacet.click();
+  ok(surveyCount.textContent === "1 survey", "E3: the 'Has DOI' facet must narrow to 1 survey (Alpha), got: " + JSON.stringify(surveyCount.textContent));
+  ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey", "E3: the DOI facet must leave only Alpha, got: " + JSON.stringify(surveyOrder()));
+  ok(facetChips.querySelector('[data-facet="doi"]').classList.contains("on"), "E3: the active facet chip must get the .on state");
+  // (g) CLEAR resets the facets (count back to 4).
+  clearFilters.click();
+  ok(surveyCount.textContent === "4 surveys", "E3: 'Clear filters' did not reset the facets (count back to 4), got: " + JSON.stringify(surveyCount.textContent));
+  ok(!facetChips.querySelector('[data-facet="doi"]').classList.contains("on"), "E3: 'Clear filters' left a facet chip active");
+  // (h) COMPACT toggle: single-line rows replace the card grid; toggling back restores cards.
+  const cardGridEl = doc.getElementById("cardGrid");
+  layoutSeg.querySelector('[data-layout="compact"]').click();
+  ok(cardGridEl.className === "cardlist", "E3: compact toggle must switch #cardGrid to the .cardlist layout, got: " + cardGridEl.className);
+  ok(cardGridEl.querySelectorAll(".srow").length === 4 && cardGridEl.querySelectorAll(".scard").length === 0,
+    "E3: compact layout must render single-line .srow rows (no .scard), got srow=" + cardGridEl.querySelectorAll(".srow").length);
+  ok(cardGridEl.querySelector(".srow .srow-lic .badge") != null, "E3: a compact row must carry the licence badge");
+  layoutSeg.querySelector('[data-layout="cards"]').click();
+  ok(cardGridEl.className === "cardgrid" && cardGridEl.querySelectorAll(".scard").length === 4, "E3: toggling back to Cards did not restore the card grid");
+
+  // DD/GG. E2 IDENTIFIERS ROLLUP + E4 DETAIL SECTION ORDER (survey detail).
+  const drwE = doc.getElementById("drawer");
+  drwE.classList.remove("open");
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  ok(drwE.classList.contains("open"), "E2/E4: #/survey/alpha did not open the survey detail");
+  ok(drwE.getAttribute("role") === "dialog", "E7: the drawer must carry role=dialog");
+  ok(/Alpha Survey/.test(drwE.getAttribute("aria-label") || ""), "E7: the survey drawer aria-label must name the survey, got: " + JSON.stringify(drwE.getAttribute("aria-label")));
+  // E2: the identifiers block is a collapsed <details> summarising 'N of M recorded' (Alpha: pid+doi = 2 of 4).
+  const idDetails = [...drwE.querySelectorAll("details")].find(d => /Persistent identifiers:/.test(d.querySelector("summary") ? d.querySelector("summary").textContent : ""));
+  ok(idDetails, "E2: the survey detail must carry a <details> whose summary is the identifiers rollup");
+  ok(/Persistent identifiers: 2 of 4 recorded/.test(idDetails.querySelector("summary").textContent),
+    "E2: the rollup summary must read 'Persistent identifiers: 2 of 4 recorded' for Alpha (pid+doi), got: " + idDetails.querySelector("summary").textContent);
+  // E2: the explicit per-row list (with its honest 'not recorded' rows) is COLLAPSED inside, never deleted.
+  ok(/Organisation ROR/.test(idDetails.innerHTML) && /not recorded/.test(idDetails.innerHTML),
+    "E2: the collapsed body must still contain the full identifier list incl. 'not recorded' rows");
+  ok(/hdl\.handle\.net\/survey\/alpha-pid/.test(idDetails.innerHTML), "E2: the collapsed body must still render the recorded Survey PID link");
+  // E4: section order. Description before footprint; downloads ahead of funding/publications/identifiers;
+  // release history last (before the extra Related-surveys block).
+  const H = drwE.innerHTML, at = s => H.indexOf(s);
+  const oDesc = at('class="dim"'), oScatter = at("<svg"), oSummary = at("Survey summary"), oDl = at(">Downloads<"),
+        oFund = at(">Funding<"), oPubs = at("Related publications"), oIds = at("Persistent identifiers:"),
+        oRel = at("Release notes"), oRelated = at("Related surveys");
+  ok(oDesc >= 0 && oScatter > oDesc, "E4: description (1) must come before the geographic footprint (2)");
+  ok(oScatter < oSummary, "E4: footprint (2) must come before the station/period stats (3)");
+  ok(oSummary < oDl, "E4: stats (3) must come before Downloads (4)");
+  ok(oDl < oFund, "E4: Downloads (4) must come before Funding (6)");
+  ok(oFund < oPubs, "E4: Funding (6) must come before Publications (7)");
+  ok(oPubs < oIds, "E4: Publications (7) must come before the identifiers rollup (8)");
+  ok(oIds < oRel, "E4: the identifiers rollup (8) must come before Release history (9)");
+  ok(oRel < oRelated, "E4: Release history (9) must precede the trailing Related-surveys block");
+  drwE.classList.remove("open");
+
+  // DD. E5 COLLECTIONS LANDING — intro paragraph + full-width feature card (1 collection => feature mode).
+  A.setView("collections");
+  const collIntro = doc.getElementById("collectionsIntro"), collGrid = doc.getElementById("collectionsGrid");
+  ok(collIntro && /Collections group related surveys/.test(collIntro.textContent),
+    "E5: the collections landing must show the plain intro paragraph above the grid");
+  ok(collGrid.className === "collfeature-grid", "E5: with ≤2 collections the grid must use the full-width feature layout, got: " + collGrid.className);
+  const feat = collGrid.querySelector(".scard.collfeature");
+  ok(feat, "E5: a full-width feature card must render for the single collection");
+  ok(/AusLAMP/.test(feat.textContent), "E5: the feature card must name the collection");
+  ok(/Explore collection/.test(feat.textContent), "E5: the feature card must carry a prominent Explore action");
+  ok(/2 surveys/.test(feat.textContent) && /3 stations/.test(feat.textContent), "E5: the feature card must show the rollup stats (2 surveys · 3 stations)");
+  // participating organisations derived from member surveys' SMETA (Alpha=OrgX, Beta=OrgY).
+  ok(/Participating organisations/.test(feat.textContent) && /OrgX/.test(feat.textContent) && /OrgY/.test(feat.textContent),
+    "E5: the feature card must list participating organisations derived from member SMETA");
+  // the footprint scatter is embedded in the feature card.
+  ok(feat.querySelector(".collscatter svg"), "E6: the feature card must embed the collection footprint scatter");
+
+  // EE. E6 FOOTPRINT — AU outline present + dots coloured by member survey. collScatter reads the vendored
+  // AU_OUTLINE global; the harness doesn't load vendor/au-outline.js, so inject a small stub and assert the
+  // outline renders. (Absent-asset degrade is covered implicitly by the feature-card svg above, built while
+  // AU_OUTLINE was undefined — it still produced an svg with dots.)
+  // Synthetic two-survey member set (top-level `let ST` is a lexical binding, not a window property, so
+  // `win.ST` is not reachable from the driver — build the input directly, as the other pure-helper sections do).
+  const memberStations = [
+    { id: "MA1", survey: "Alpha Survey", lat: -30, lon: 136, type: "LPMT" },
+    { id: "MA2", survey: "Alpha Survey", lat: -31, lon: 137, type: "LPMT" },
+    { id: "MB1", survey: "Beta Survey", lat: -29, lon: 135, type: "BBMT" },
+  ];
+  const svgNoOutline = A.collScatter(memberStations);
+  ok(svgNoOutline.indexOf("au-outline") < 0, "E6: with no AU_OUTLINE asset the scatter must degrade to dots-only (no outline group)");
+  ok(svgNoOutline.indexOf("<circle") >= 0, "E6: the degraded scatter must still plot the station dots");
+  win.AU_OUTLINE = { coast: [[[130, -12], [150, -12], [150, -40], [130, -40], [130, -12]]], borders: [[[141, -12], [141, -40]]] };
+  const svgOutline = A.collScatter(memberStations);
+  ok(/class="au-outline"/.test(svgOutline), "E6: with an AU_OUTLINE asset the scatter must draw the outline group");
+  ok((svgOutline.match(/<path /g) || []).length >= 2, "E6: the outline must render coastline + border <path>s");
+  ok(/collscatter-legend/.test(svgOutline) && (svgOutline.match(/csl-item/g) || []).length === 2,
+    "E6: the footprint must carry a per-survey legend (one item per member survey)");
+  // the outline must sit BENEATH the dots (drawn before the <circle>s in document order).
+  ok(svgOutline.indexOf("au-outline") >= 0 && svgOutline.indexOf("au-outline") < svgOutline.indexOf("<circle"),
+    "E6: the outline group must be drawn before (beneath) the station dots");
+  delete win.AU_OUTLINE;
+
+  // FF. E6 'View all stations on main map' — from the collection page, switch to map + fitBounds (spy on map).
+  win.location.hash = "#/collection/auslamp"; A.routeFromHash();
+  ok(A.curView() === "collection", "E6: #/collection/auslamp did not open the collection page");
+  const collMapBtn = doc.querySelector('#collectionview [data-act="collmap"]');
+  ok(collMapBtn && /View all stations on main map/.test(collMapBtn.textContent), "E6: the collection page must offer 'View all stations on main map'");
+  const fbBefore = mapCalls.filter(c => c.fn === "fitBounds").length;
+  collMapBtn.click();
+  ok(A.curView() === "map", "E6: 'View all on main map' did not switch to the map view (setView)");
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length > fbBefore, "E6: 'View all on main map' did not call map.fitBounds to frame the collection");
+
+  // HH. E7 DRAWER DIALOG SEMANTICS — role/aria-label, focus moves in on open, restores to the opener on close.
+  A.setView("map");
+  const opener = doc.getElementById("navSurveys");
+  opener.focus();
+  ok(doc.activeElement === opener, "E7: test setup — the opener element did not take focus");
+  A.openStationById("au.alpha.A1");
+  const drwF = doc.getElementById("drawer");
+  ok(drwF.getAttribute("role") === "dialog" && (drwF.getAttribute("aria-label") || "").indexOf("A1") >= 0,
+    "E7: the station drawer must be role=dialog with a subject aria-label, got: " + JSON.stringify(drwF.getAttribute("aria-label")));
+  ok(drwF.contains(doc.activeElement) && doc.activeElement !== opener, "E7: focus must move INTO the drawer on open");
+  drwF.querySelector(".close").click();
+  ok(!drwF.classList.contains("open"), "E7: the close button did not close the drawer");
+  ok(doc.activeElement === opener, "E7: focus must be RESTORED to the invoking element on close");
+
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find, survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-6-tabs+ARIA + Overview-default + science-strip-first + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
     "UX6 Wave D welcome-strip first-visit-non-blocking + Start-exploring-persists + How-AusMT-works-opens-panel + empty-state-strip, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, " +
-    "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse)");
+    "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
+    "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/facets/clear/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E5 collections-intro+feature-card+participating-orgs + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
