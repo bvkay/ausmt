@@ -1,0 +1,108 @@
+# AusMT public front door (C47 public bridge) — the VPS edge for the public demo name.
+#
+# TOPOLOGY (maintainer/C47-PublicBridge.md): internet -> THIS Caddy on a small Sydney VPS (public IP,
+# DNS A/AAAA at the registrar) -> over the tailnet (WireGuard) -> the box's dedicated READER-ONLY
+# listener (Caddyfile :8081, published loopback 127.0.0.1:8445, fronted by `tailscale serve --tcp`).
+# The box gets NO inbound internet exposure and NO firewall changes. Curator/admin surfaces stay
+# tailnet-only exactly as before; this file NEVER routes to a /gateway/* surface.
+#
+# This Caddy is the TRUE edge: nothing sits in front of it (no Cloudflare — a rejected alternative,
+# see the record). So the direct peer IS the real client, and this file deliberately sets NO
+# `trusted_proxies` — it must not honour a client-supplied X-Forwarded-For (that would let a caller
+# spoof the logged client_ip). The masked access log below is therefore taken on the genuine client.
+#
+# NO hostname is baked into git: the public name and the box upstream are `{$ENV}` placeholders the
+# compose file supplies from deploy/frontdoor/.env (config-side names only, same discipline as the box
+# stack). `caddy validate` in the install script fails the deploy LOUDLY on any slip.
+{
+	# Contact address for the ACME account (Let's Encrypt) that issues the public certificate. Config
+	# only — no personal hostname. Supplied from .env.
+	email {$AUSMT_ACME_EMAIL}
+
+	# Disable the admin API — a static edge needs no extra listening port.
+	admin off
+
+	# NOTE: NO `servers { trusted_proxies ... }` here — see the header comment. This edge trusts no
+	# forwarded address; client_ip == the real remote peer, which the log block masks at write time.
+}
+
+# The public site. A bare hostname address turns on Caddy's automatic HTTPS: it obtains + renews a
+# certificate for {$AUSMT_PUBLIC_NAME} over ACME and AUTOMATICALLY serves an HTTP->HTTPS redirect on
+# :80 for the same name (C47 invariant d). Do NOT add `auto_https off` — that would drop both the cert
+# and the redirect.
+{$AUSMT_PUBLIC_NAME} {
+	encode gzip
+
+	# ---- C45 masked-at-edge access log — AT THE FRONT DOOR on public traffic (C47 invariant c) -----
+	# This is the analytics feed now: the public client is masked HERE (IPv4 -> /24, IPv6 -> /48) so a
+	# FULL IP never touches disk, with the SAME at-edge guarantees as the box's C45 block. The log is
+	# shipped over the tailnet to the box (ship-frontdoor-logs.sh) where the C45 aggregator folds it.
+	# The filter masks the client-address fields AND deletes every header that can carry a full client
+	# address (X-Forwarded-For / X-Real-IP / Forwarded — even though we trust none, a caller can still
+	# SEND them and they must never land in the log) or a credential/PII (Cookie / Authorization /
+	# Set-Cookie / Referer). Written to a DISTINCT filename (access-frontdoor.json) so that, once
+	# shipped into the box log dir beside the box's own access.json, the aggregator's `access*.json`
+	# glob folds it without collision. VPS-side retention: rotated + kept 7 days (roll_keep_for 168h),
+	# a short debugging tail — the shipped-and-folded copy on the box is the durable record.
+	log {
+		output file /var/log/caddy/access-frontdoor.json {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 168h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip ip_mask {
+					ipv4 24
+					ipv6 48
+				}
+				request>client_ip ip_mask {
+					ipv4 24
+					ipv6 48
+				}
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>Set-Cookie delete
+				request>headers>X-Forwarded-For delete
+				request>headers>X-Real-IP delete
+				request>headers>Forwarded delete
+				request>headers>Referer delete
+			}
+		}
+	}
+
+	# Baseline security headers + HSTS (public TLS is now in force, so tell browsers to stay on HTTPS).
+	# CSP is NOT set here — it rides through from the box reader listener's per-page policy via the
+	# reverse_proxy below, so the three pages keep their exact C45/portal CSPs.
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	# ---- WALL 1: explicit path refusal of every non-public route class -------------------------------
+	# `handle` is an ordered, most-specific-first router: these matchers run BEFORE the catch-all
+	# reverse_proxy, so a public caller can NEVER reach a curator/admin or contribution surface through
+	# the front door. This is an EXPLICIT DENY (an intentional 404), not accidental routing. The second
+	# wall is the box side: the reader listener (:8081) has no /gateway/* route and the tailnet ACL
+	# grants this VPS reach ONLY to that reader port (C47 invariant b — two independent walls).
+	#   * /gateway/*      — the entire submission + curator workbench surface (login, queue, publish,
+	#                        serve control, passkey enrolment, analytics screen). NEVER public.
+	#   * /add-survey.html — the contribution page (inert without a reachable gateway, refused anyway).
+	handle /gateway/* {
+		respond "not found" 404
+	}
+	handle /add-survey.html {
+		respond "not found" 404
+	}
+
+	# ---- The public reader: everything else proxies to the box reader-only listener over the tailnet.
+	# {$AUSMT_BOX_READER_UPSTREAM} is e.g. http://ausmt-box:8445 (the box's MagicDNS name + the
+	# tailscale-serve reader port) — config-side name, supplied from .env. This upstream serves ONLY the
+	# reader (portal static + /data); it has no gateway route (wall 2).
+	handle {
+		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+	}
+}
