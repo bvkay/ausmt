@@ -400,6 +400,42 @@ def test_scalar_edit_in_section_with_list_member_leaves_list_block_stable(tmp_pa
 
 
 # --------------------------------------------------------------------------------------------------
+# C42 coordinate-privacy: the Metadata-tab access edit must PRESERVE access.coordinate_overrides
+# end-to-end (build_section_patch -> apply_patch on a ruamel doc — the reviewer's exact leak path).
+# --------------------------------------------------------------------------------------------------
+def test_access_edit_preserves_coordinate_overrides_end_to_end():
+    """C42 LEAK PIN, end-to-end (RED on pre-fix HEAD dfa5bab): assemble the patch a Metadata-tab access
+    edit posts (change ONLY embargo_until; NO s_access_coordinate_overrides field — that form never
+    renders it) via editor_form.build_section_patch, then apply it to a REAL ruamel round-trip doc via
+    apply_patch. The withheld/generalised stations must survive in the emitted YAML. Before the fix the
+    assembled patch omitted coordinate_overrides and _merge_map_into deleted the whole map, reverting
+    SITE1 (withheld) to the survey default (exact) — its TRUE coordinates served on the next build.
+    FAILS IF the map is dropped by an unrelated access edit."""
+    from gateway import editor_form
+    survey = ("name: Demo survey\nversion: 1.0.0\naccess:\n  level: open\n"
+              "  embargo_until: 2026-01-01\n  contact: data@example.org\n"
+              "  coordinate_overrides:\n    SITE1: withheld\n    SITE2: generalised\n")
+    original_access = {"level": "open", "embargo_until": "2026-01-01",
+                       "contact": "data@example.org",
+                       "coordinate_overrides": {"SITE1": "withheld", "SITE2": "generalised"}}
+    # Exactly the fields _coord_policy_form's sibling Metadata-tab access panel submits: the o_access
+    # round-trip anchor (which carries the overrides map) + the four modelled scalars, embargo changed.
+    form = {"o_access": json.dumps(original_access),
+            "s_access_level": "open", "s_access_coordinates": "",
+            "s_access_embargo_until": "2027-06-30", "s_access_contact": "data@example.org"}
+    patch, errors = editor_form.build_section_patch(form)
+    assert not errors, errors
+    data = edit._load_bytes(survey.encode("utf-8"))
+    edit.apply_patch(data, patch)
+    out_yaml = edit._dump_bytes(data).decode("utf-8")
+    assert "coordinate_overrides" in out_yaml, \
+        "an embargo-only access edit deleted coordinate_overrides in the emitted YAML (C42 leak)"
+    assert data["access"]["coordinate_overrides"]["SITE1"] == "withheld"
+    assert data["access"]["coordinate_overrides"]["SITE2"] == "generalised"
+    assert str(data["access"]["embargo_until"]) == "2027-06-30"
+
+
+# --------------------------------------------------------------------------------------------------
 # review FIX 3: the parser differential (ruamel emits, PyYAML reads)
 # --------------------------------------------------------------------------------------------------
 def test_patched_ambiguous_strings_reread_as_strings_under_pyyaml(tmp_path):

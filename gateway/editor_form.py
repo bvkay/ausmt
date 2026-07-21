@@ -323,14 +323,14 @@ def _assemble_map(form: dict, section: str):
         out[subkey] = value
 
     # C43 Stage-4: the per-station coordinate-access overrides live inside the access section, beside
-    # the #53 survey-level `coordinates` select. Assembled from the stations-panel fieldset's map and
-    # included ONLY when non-empty — an empty/absent map writes NO coordinate_overrides key, so a
-    # survey that never used overrides stays byte-unchanged, and setting every station back to INHERIT
-    # removes the key (apply_patch's surgical map-merge deletes a sub-key the assembled section no
-    # longer carries). A non-empty map is written verbatim (an explicit policy pins intent even when
-    # equal to the survey default).
+    # the #53 survey-level `coordinates` select. Only ONE of the access-editing forms models the map:
+    # the stations-panel coord-policy-form POSTs s_access_coordinate_overrides; the Metadata-tab per-
+    # section access form does NOT render that field at all. So the field's ABSENCE and an explicit
+    # EMPTY map mean OPPOSITE things and are resolved apart (_resolve_coordinate_overrides) — else an
+    # ordinary access edit (change level/embargo/contact) silently drops a withheld/generalised station
+    # back to the survey default, serving its TRUE coordinates (a coordinate-privacy leak, C42).
     if section == "access":
-        overrides = _assemble_coordinate_overrides(form)
+        overrides = _resolve_coordinate_overrides(form, original)
         if overrides:
             out["coordinate_overrides"] = overrides
 
@@ -341,6 +341,31 @@ def _assemble_map(form: dict, section: str):
         if not ror and isinstance(name, str):
             return name  # re-emit the bare string exactly
     return out
+
+
+def _resolve_coordinate_overrides(form: dict, original) -> dict:
+    """The access.coordinate_overrides map to emit, distinguishing field-ABSENT from field-EMPTY —
+    the C42 coordinate-privacy contract (a withheld/generalised station must NEVER silently un-mask).
+
+      * field ABSENT (form.get is None): the submitting form does not model overrides (the Metadata-
+        tab per-section access form), so an unrelated access edit must PRESERVE the survey's existing
+        map. Re-emit it verbatim from the o_access snapshot (`original`); apply_patch's surgical merge
+        then leaves it byte-clean. Absent + no original map => {} (nothing to preserve; byte-unchanged).
+      * field PRESENT (the stations-panel coord-policy-form): assemble it. A non-empty map is written
+        verbatim; an empty / all-inherit map returns {} so apply_patch DELETES a previously-pinned key
+        (the intended set-all-to-inherit-removes-the-key — NO over-preservation regression).
+
+    The preserved values are NOT re-validated here: they came from the survey's own stored access
+    section (the same o_access anchor the four modelled scalars round-trip through), and the engine
+    validator runs on the merged result at preview time. The field-PRESENT branch fail-closes on vocab
+    exactly as before (_assemble_coordinate_overrides)."""
+    if form.get("s_access_coordinate_overrides") is None:
+        if isinstance(original, dict):
+            orig = original.get("coordinate_overrides")
+            if isinstance(orig, dict) and orig:
+                return dict(orig)
+        return {}
+    return _assemble_coordinate_overrides(form)
 
 
 def _assemble_coordinate_overrides(form: dict) -> dict:

@@ -399,6 +399,92 @@ def test_coordinate_overrides_malformed_payload_rejected():
                              **_snap("access", {"level": "open"})}, "access")
 
 
+# ---- C42 coordinate-privacy: an ordinary access edit must PRESERVE the overrides map --------------
+#
+# The Metadata-tab per-section access form models only the four access scalars (level / coordinates /
+# embargo_until / contact) — it does NOT render s_access_coordinate_overrides. So an ordinary access
+# edit (change embargo, contact, or level) submits WITHOUT that field. The assembler distinguishes the
+# ABSENT field (this form: PRESERVE the survey's existing overrides from the o_access snapshot) from an
+# explicit EMPTY map (the stations panel: DELETE the key — set-all-to-inherit). Before this fix an
+# absent field collapsed to {} exactly like an explicit clear, so apply_patch's surgical merge deleted
+# the whole coordinate_overrides map, silently reverting every withheld/generalised station to the
+# survey default (usually exact) — its TRUE coordinates served on the next build (a C42 leak).
+
+def test_ordinary_access_edit_preserves_existing_coordinate_overrides():
+    """C42 LEAK PIN (RED on pre-fix HEAD dfa5bab): a Metadata-tab access edit that changes ONLY
+    embargo_until — submitting NO s_access_coordinate_overrides field, exactly what that form posts —
+    must PRESERVE the survey's existing coordinate_overrides map. FAILS IF an unrelated access edit
+    drops a withheld/generalised station back to the survey default (the silent un-masking)."""
+    original = {"level": "open", "embargo_until": "2026-01-01", "contact": "data@example.org",
+                "coordinate_overrides": {"SITE1": "withheld", "SITE2": "generalised"}}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "",                 # the <select>'s default-blank, round-tripped
+        "s_access_embargo_until": "2027-06-30",     # the ONLY curator change
+        "s_access_contact": "data@example.org",
+        # NOTE: no s_access_coordinate_overrides — the Metadata-tab access form never renders it.
+        **_snap("access", original),
+    }
+    out = ef.assemble_section(form, "access")
+    assert out is not ef._OMIT
+    assert out["embargo_until"] == "2027-06-30"
+    assert out["coordinate_overrides"] == {"SITE1": "withheld", "SITE2": "generalised"}, \
+        "an embargo-only access edit dropped the coordinate_overrides map (C42 coordinate-privacy leak)"
+
+
+def test_access_edit_with_absent_overrides_and_no_original_stays_omit():
+    """The absent-field PRESERVE path must NOT introduce a key on a survey that never had overrides: an
+    unchanged access submit with no original map and no overrides field is still a no-op (_OMIT). FAILS
+    IF the fix fabricates an empty coordinate_overrides key (a spurious diff / broken byte-unchanged
+    promise)."""
+    original = {"level": "open", "embargo_until": "2026-01-01", "contact": "data@example.org"}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "",
+        "s_access_embargo_until": "2026-01-01",
+        "s_access_contact": "data@example.org",
+        **_snap("access", original),
+    }
+    assert ef.assemble_section(form, "access") is ef._OMIT
+
+
+def test_stations_panel_clear_all_removes_overrides_despite_original_map():
+    """OVER-PRESERVATION GUARD: field PRESENT + explicit EMPTY map (the stations-panel set-all-to-
+    inherit) must still DELETE the key even when the original carried a map and a sibling scalar also
+    changed. This is the OTHER side of the absent/present distinction — the fix must not over-preserve
+    a map the curator explicitly cleared. FAILS IF the clear-all no longer removes the key."""
+    original = {"level": "open", "contact": "old@example.org",
+                "coordinate_overrides": {"SITE1": "withheld"}}
+    form = {
+        "s_access_level": "open",
+        "s_access_contact": "new@example.org",      # a real sibling change (so the section is not _OMIT)
+        "s_access_coordinate_overrides": json.dumps({}),   # explicit clear-all (present, empty)
+        **_snap("access", original),
+    }
+    out = ef.assemble_section(form, "access")
+    assert out is not ef._OMIT
+    assert "coordinate_overrides" not in out, \
+        "an explicit clear-all did not remove the coordinate_overrides key (over-preservation regression)"
+
+
+def test_survey_level_coordinates_default_survives_sibling_scalar_edit():
+    """C42 sibling-scalar class (the survey-level policy, one level up from the per-station map): editing
+    a SIBLING access scalar (embargo) must not drop the survey-level `coordinates` policy. The Metadata
+    form round-trips the coordinates <select>, so it is re-posted verbatim and the assembler keeps it.
+    FAILS IF a sibling-only edit drops access.coordinates (the same silent un-mask, survey-granularity)."""
+    original = {"level": "open", "coordinates": "withheld", "embargo_until": "2026-01-01"}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "withheld",         # round-tripped by the <select>
+        "s_access_embargo_until": "2027-06-30",     # the only change
+        **_snap("access", original),
+    }
+    out = ef.assemble_section(form, "access")
+    assert out is not ef._OMIT
+    assert out["coordinates"] == "withheld", \
+        "a sibling-scalar access edit dropped the survey-level coordinate policy"
+
+
 def test_changing_coordinate_policy_touches_only_that_key():
     """DIFF-MINIMALITY: changing an existing policy touches ONLY access.coordinates. FAILS IF another
     key moves (e.g. an absent embargo gets introduced as null)."""

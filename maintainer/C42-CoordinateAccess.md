@@ -383,6 +383,57 @@ The Stage-4 binding (D4) shipped in two parts, plus a stop-and-report on the thi
    editor pin — the JS-assembled payload passes the REAL `parse_coordinate_policy` + `validate_overrides`
    over the same records. The C43 Stage-4 coordinate lane is complete (D4).
 
+## Amendment A2 addendum (2026-07-21) — closed a silent un-masking leak via the Metadata-tab access editor
+
+**The gap.** The Stage-4 override lane (A2 part 1) round-tripped the four modelled access scalars
+(`level`/`coordinates`/`embargo_until`/`contact`) through the hidden `#coord-policy-form` so the
+stations-panel Save would not drop them — but the REVERSE direction was unguarded. Editing ANY access
+field on the survey-hub **Metadata tab** (`_map_section_panel`, and the stations-panel form's sibling
+per-section access panel) silently DELETED the whole `access.coordinate_overrides` map. Root cause chain:
+the Metadata-tab access form never renders `s_access_coordinate_overrides`; `editor_form._assemble_map`
+collapsed field-**absent** and field-explicitly-**empty** to the same `{}`, so the assembled access
+section omitted the key; and `runner/edit._merge_map_into` surgically DELETES a sub-key present in the
+old node but absent from the assembled section (the same delete that correctly powers the stations-panel
+set-all-to-inherit). Net effect: an embargo/contact/level edit reverted every withheld/generalised
+station to the survey default (usually exact) — its TRUE coordinates served on the next build. The
+validator gate did not catch it (a survey with no overrides is valid) and the YAML diff showed only
+removed lines with no warning. This is exactly the C42 silent-leak class, reachable through routine,
+unrelated curator actions. Reproduced end-to-end through the real path (`build_section_patch` →
+`apply_patch` on a ruamel round-trip doc) before the fix.
+
+**The fix (one place, fail-safe for the whole class).** `_assemble_map` now resolves overrides via
+`_resolve_coordinate_overrides(form, original)`, which distinguishes the field being **ABSENT** (the
+Metadata-tab form does not model overrides → **PRESERVE** the survey's existing map verbatim from the
+`o_access` snapshot, which already carries it — no new hidden field, no duplication) from the field being
+**PRESENT** (the stations-panel coord-policy-form → assemble it; a non-empty map is written, an
+empty/all-inherit map writes no key so the surgical merge still DELETES it — the set-all-to-inherit
+behaviour is unchanged, no over-preservation). The distinction lives at the ASSEMBLER (the seam where the
+leak occurs), so it fail-safes for EVERY present-and-future form that assembles access without modelling
+overrides — chosen over bolting a fifth hidden round-trip field onto each form, which is exactly the
+per-form step that was forgotten here and could be forgotten again, and which would store the map twice.
+
+**Class sweep.** The only flow that assembles the `access` section and can drop
+`coordinate_overrides` is `_assemble_map` via `build_section_patch` → `apply_patch` — reached by BOTH
+the Metadata-tab per-section access form AND the stations-panel coord-policy-form; the single assembler
+fix covers both. The collections BATCH editor (Stage 3b, `run_collection_batch_job` /
+`_apply_collection_set`) touches ONLY the `collection` block and never assembles access, so it cannot
+drop overrides. Add-survey builds a fresh package (no pre-existing map to drop). The survey-level
+`coordinates` default is round-tripped as a modelled `<select>` scalar by both forms, so a
+sibling-scalar-only edit never drops it (guard-pinned).
+
+**Pins (each red-proven on pre-fix HEAD dfa5bab before the fix greened it).**
+`gateway/tests/test_editor_form.py`: `test_ordinary_access_edit_preserves_existing_coordinate_overrides`
+(embargo-only edit PRESERVES the map — RED pre-fix), `test_stations_panel_clear_all_removes_overrides_
+despite_original_map` (explicit clear-all still DELETES — over-preservation guard),
+`test_access_edit_with_absent_overrides_and_no_original_stays_omit` (no fabricated empty key),
+`test_survey_level_coordinates_default_survives_sibling_scalar_edit` (the survey-level policy survives).
+`gateway/tests/test_edit_runner.py`: `test_access_edit_preserves_coordinate_overrides_end_to_end`
+(the reviewer's exact `build_section_patch` → `apply_patch`-on-ruamel path — RED pre-fix). Full gateway
+suite 555 passed / 21 skipped (skips are the pre-existing "engine stack / validator not present"
+environmental gate); engine coord-access suite 33 passed / 1 pre-existing environmental failure
+(`test_warm_cache_sweep_still_clean`, missing first-party `ausmt_science` package — identical on the
+unfixed export, and this fix touches no engine file).
+
 ## Provenance
 
 Owner ruling 2026-07-10 (A1: "we give the user the option to withhold coordinates, or a
