@@ -273,6 +273,62 @@ the survey-level access-panel wording fix (`drawer.js:32-38` "Station locations 
 now only conditionally true) and the portal badge itself. Leak-sweep pins extend to assert the
 marker never co-occurs with exact coordinates for a non-exact station.
 
+## Amendment A2 (2026-07-21) — C43 Stage-4 lane: what shipped, and the base-id-surface gap
+
+The Stage-4 binding (D4) shipped in two parts, plus a stop-and-report on the third:
+
+1. **Editor override assembly (shipped).** `gateway/editor_form.py` now assembles
+   `access.coordinate_overrides` from the stations-panel fieldset's `{BASE_station_id: policy}` map
+   (one canonical-JSON field, `s_access_coordinate_overrides`), beside the #53 survey-level select.
+   INHERIT = a station absent from the map; an explicit policy is written verbatim (pins intent past
+   later default changes); an EMPTY/absent map writes NO key (byte-unchanged promise), and setting a
+   station back to inherit removes its key via `apply_patch`'s surgical map-merge. Values fail-close
+   against `COORDINATE_POLICIES` like the #53 select. It rides the NORMAL per-section metaedit flow
+   (`build_section_patch` → merge job → version bump, release note, validator gate) — no new publish
+   machinery. Pinned engine-truth: the KEY-PARITY pin feeds the editor-assembled block through the
+   REAL `parse_coordinate_policy` AND `validate_overrides` against realistic records (a
+   DATAID-differs-from-stem station + a processing-variant pair) — every written key accepted and
+   effective, unknown and variant-suffixed keys rejected, inherit removes, empty omits, unchanged
+   round-trips to a no-op (all red-proven first).
+
+2. **Effective-policy marker (shipped).** The stations-panel Position fact's static `(exact)` marker
+   (D4 "honest display") is replaced by the station's EFFECTIVE policy, read same-origin at boot from
+   the OPTIONAL `/data/coord_policy.json` — the SAME boot artifact the portal drawer reads (A1),
+   keyed by `ausmt_id`, engine-resolved (override-or-default already applied), so `absent => exact` is
+   honest with no client-side precision re-derivation. Served-fetch facts keep showing the masked
+   position (the workbench reads what the public reads); no new true-coordinate surface is added.
+   Pinned executable-JS (C43-S2a) via node.
+
+3. **The interactive per-station fieldset is BLOCKED on a missing base-id surface (stop-and-report,
+   A1-class).** D4 requires the fieldset keys to be **BASE station ids** (D2 fix-round-2: never file
+   stems, never variant-suffixed ids — the probe-e discipline that exists to stop a mis-keyed override
+   serving the wrong physical site's position or silently no-op'ing). Deriving a base id requires the
+   record's `variant` field (id with the engine-appended variant tag stripped via that field, NEVER
+   dot-guessing). **No served or boot artifact exposes `variant` or a base-id map:** `catalogue.json`
+   carries `id` (possibly `<base>.<variant>`) + `ausmt_id` but no `variant` column; `station.json`
+   carries `station`/`ausmt_id`/`coordinate_policy` but no `variant`; `coord_policy.json` is
+   `{ausmt_id: policy}` for non-exact stations only. Server-side is no better: the gateway app image
+   is content-blind (never imports `engine/`, no station list) and the `list_stations` runner job
+   returns file STEMS, not content-derived base ids. So neither the browser nor the gateway can
+   construct a fieldset whose keys are guaranteed base ids. Keying by `catalogue.id` would be correct
+   for the common (non-variant) station but, for a variant station, would emit a variant-suffixed key
+   — which the engine fail-closes at build (safe: no leak, the survey drops loudly), but which
+   directly violates D2's "override keys are STATION ids, never variant-suffixed" and would ship a UI
+   that generates keys the record forbids. Shipping that silently is the exact matcher-divergence
+   class fix-round-2 outlawed, so the interactive editor is held rather than shipped keyed by a
+   non-authoritative id. The **assembly + validation + marker are all in place and pinned**, so the
+   fieldset is a thin follow-up once the surface exists.
+
+   **Proposed resolution (small engine delta, A1-shaped):** emit a per-survey **base-id surface** on a
+   boot artifact — the cheapest is to widen the existing non-exact `coord_policy.json` sibling to a
+   compact `{ausmt_id: base_station_id}` map (or add `variant` to `station.json`), reusing the
+   `base_station_id(r["id"], r["variant"])` derivation the mask seam already computes, carrying NO
+   coordinate (leak-sweep-clean by construction). The stations-panel fieldset then keys strictly by
+   base id (all variant records of one physical site collapse to one control, exactly D2's intent),
+   POSTs the assembled map through the already-shipped editor path, and the engine/validator remain
+   the authoritative key gate. This needs the engine owner's sign-off (it touches a served artifact),
+   hence the stop-and-report rather than a unilateral engine change in this metadata-editing lane.
+
 ## Provenance
 
 Owner ruling 2026-07-10 (A1: "we give the user the option to withhold coordinates, or a
