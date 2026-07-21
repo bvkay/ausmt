@@ -12,7 +12,7 @@ rollback): `maintainer/C47-PublicBridge.md`. Step-by-step owner procedure: **`RU
 
 | File | Runs where | Purpose |
 |------|-----------|---------|
-| `Caddyfile` | VPS | Public edge: auto-TLS for the demo name, HTTP→HTTPS, masked access log (the analytics feed), explicit refusal of `/gateway/*` + `/add-survey.html` (wall 1), reverse-proxy of the reader to the box. |
+| `Caddyfile` | VPS | Public edge: auto-TLS for the demo name, HTTP→HTTPS, masked access log (the analytics feed), explicit refusal of the non-public classes in both slash forms — `/gateway`, `/gateway/*`, `/add-survey.html`, `/add-survey.html/` (wall 1, self-complete), reverse-proxy of the reader to the box. |
 | `compose.yaml` | VPS | The one-service Caddy stack (host networking so it dials the box over the tailnet). |
 | `.env.example` | VPS | The only place the public name + box upstream live (config-side; `.env` is gitignored). |
 | `install-frontdoor.sh` | VPS | Single apply script: validate the Caddyfile against real Caddy, then `compose up -d`. |

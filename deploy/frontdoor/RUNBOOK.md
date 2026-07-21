@@ -23,7 +23,8 @@ ACL lets the VPS reach only the reader port.
 - You have Tailscale admin access (to add a tag + ACL rule and mint an auth key).
 - You control the registrar DNS for the public demo name (e.g. `ausmt.au`).
 - The capricorn-2010 `lead_investigator` citation-metadata fix is merged and built into the corpus
-  the box currently serves (its serve-verification is step 8.1 — the cutover gate).
+  the box currently serves (its serve-verification is step 7 — the content-clean gate, run BEFORE the
+  DNS cutover).
 
 ---
 
@@ -78,6 +79,28 @@ curl -fsSL https://get.docker.com | sh
 curl -fsSL https://tailscale.com/install.sh | sh
 ```
 
+### 2N. Nectar Research Cloud variant (the owner's provider)
+
+Nectar exposes OpenStack; the steps above map to the Nectar dashboard as follows (do these in place of a
+generic provider's console, then continue at step 3).
+
+2N.1  **Launch the instance** (Compute → Instances → Launch Instance): smallest flavour, a current
+      Ubuntu LTS image, an **Australian availability zone**. Boot from image onto a small new volume.
+2N.2  **Security group** (Network → Security Groups): a group allowing INBOUND tcp **80** and **443**
+      only, from `0.0.0.0/0` — nothing else. Do **not** open **22** to the public; SSH stays closed on
+      the public interface and you administer over the tailnet after the join step (step 4). Attach the
+      group to the instance. *Bootstrap access* for the very first login (before Tailscale is up): use
+      the Nectar web console (Compute → Instances → Console) to reach the shell, **or** temporarily add
+      an SSH rule scoped to your own admin IP and remove it the moment the node has joined the tailnet.
+2N.3  **Floating (public) IP** (Network → Floating IPs): allocate one to the project and associate it
+      with the instance — this is the public IPv4 for the DNS step (step 8). Nectar floating IPs are
+      IPv4 only, so create just an **A** record later (no AAAA).
+2N.4  **Allocation:** a Nectar **project-trial** allocation is enough to stand the front door up. The
+      front door is **stateless** (no corpus or state lives on it — everything stays on the box), so
+      migrating to a full allocation later is simply a runbook re-run on a fresh instance: repeat
+      steps 2–6, re-point the DNS A record (step 8) at the new floating IP, and tear the trial instance
+      down (section 10). Nothing is lost in the move.
+
 ---
 
 ## 3. Add the dedicated tailnet tag + the ACL fence (Tailscale admin console)
@@ -99,13 +122,27 @@ On the VPS:
 sudo tailscale up --authkey <TAGGED_AUTH_KEY> --advertise-tags=tag:ausmt-frontdoor --hostname ausmt-vps
 tailscale status                           # confirm the node is up and carries tag:ausmt-frontdoor
 ```
-Verify the fence from the VPS **before** deploying anything:
+Verify the fence from the VPS **before** deploying anything. The positive leg confirms the reader port
+is reachable; the negative leg must exercise the ACL against a surface the box **actually exposes on the
+tailnet** — otherwise it proves nothing. The box's genuine curator surface on the tailnet is its
+full-portal HTTPS listener, fronted by `tailscale serve --bg https` (step 1 topology / `deploy/README.md`
+"Expose to your tailnet"): `https://ausmt-box/` on **:443**, which carries `/gateway/*`. That is what the
+ACL must deny to this tag — the reader port `:8445` is the ONLY grant.
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' http://ausmt-box:8445/                       # expect 200 (reader reachable)
-curl -sS --max-time 5 -o /dev/null -w '%{http_code}\n' http://ausmt-box:8443/ || echo BLOCKED   # expect BLOCKED/timeout
+curl -sS -o /dev/null -w '%{http_code}\n' http://ausmt-box:8445/                        # expect 200 (reader port granted)
+curl -sS -k --max-time 5 -o /dev/null -w '%{http_code}\n' \
+     https://ausmt-box/gateway/curator/queue || echo BLOCKED                            # expect BLOCKED / timeout
 ```
-The reader port answers; the full-portal port (8443, which carries `/gateway/*`) is unreachable —
-the ACL fence is doing its job.
+The reader port answers. The full-portal HTTPS surface (`:443`, which carries `/gateway/*`) is a live
+tailnet listener on the box, so the negative leg can ONLY be blocked by the ACL port-scope (8445 granted,
+443 denied) — the block genuinely proves the fence, not a dead port. (`-k` skips cert validation: we are
+testing REACHABILITY, and if the ACL denies, the TLS handshake never starts anyway.)
+
+**What a FAILING result looks like:** any HTTP status printed on the second leg (200 / 301 / 401 / 404 —
+*any* response instead of `BLOCKED`/timeout) means the front-door tag reached the box's `:443`
+full-portal surface. The ACL is NOT port-scoped to the reader — **STOP**, fix the ACL (step 3.1) so
+`tag:ausmt-frontdoor` reaches `ausmt-box:8445` and nothing else, and re-run this check before proceeding.
+Wall 2's fence is not standing until this leg is blocked.
 
 ---
 
@@ -131,7 +168,7 @@ sudo cp deploy/frontdoor/ausmt-frontdoor-logs.{service,timer} /etc/systemd/syste
 sudo systemctl daemon-reload
 sudo systemctl enable --now ausmt-frontdoor-logs.timer
 ```
-(You can run it once now to test only after the front door is serving — step 8.5.)
+(You can run it once now to test only after the front door is serving — step 9.4.)
 
 ---
 
@@ -149,17 +186,44 @@ AUSMT_ACME_EMAIL=you@example.org
 cd deploy/frontdoor
 ./install-frontdoor.sh
 ```
-**Do not create the DNS record yet** — the certificate cannot issue until DNS points at the VPS, but
-you want the content check (step 8.1) to gate the cutover. Proceed to step 7.
+**Do not create the DNS record yet** — the content-clean gate (step 7) must pass FIRST, so DNS is only
+created once the served corpus is proven clean (invariant f: content-clean BEFORE the DNS cutover). The
+certificate also cannot issue until DNS points at the VPS, so the gate is verified against the box's
+tailnet-served copy — the exact bytes the stateless front door will proxy. Proceed to step 7.
 
 ---
 
-## 7. Create the DNS record at the registrar
+## 7. Content-clean gate — verify the served corpus BEFORE the DNS cutover
 
-7.1  At your registrar, create an **A** record for the public name → the VPS public IPv4 (and an
+This gate runs **before** any DNS record exists, so there is never a public window of unverified
+content. The front door is stateless — it proxies straight to the box reader at `ausmt-box:8445` — so
+what the box serves there IS what the public will get. Verify the corpus is content-clean on that
+tailnet-served copy, specifically that the capricorn-2010 `lead_investigator` citation-metadata fix is
+live:
+```sh
+# from a tailnet device (or the VPS): hit the box reader copy directly — no DNS, no public cert needed
+curl -s http://ausmt-box:8445/data/catalogue.json | grep -i capricorn     # the survey is served
+# open the capricorn-2010 record in the portal (over the tailnet) and confirm the lead_investigator
+# citation is correct in what is actually served
+```
+Optionally exercise the full front-door path before DNS by overriding the public name to the VPS IP for
+one request (the public cert cannot issue yet, so `-k` accepts the temporary self-signed cert — this is
+why it is only a supplementary check, not the gate):
+```sh
+curl -sk --resolve ausmt.au:443:<VPS_PUBLIC_IP> https://ausmt.au/data/catalogue.json | grep -i capricorn
+```
+**If the fix is not visibly served, STOP** — rebuild/serve the corrected corpus on the box (step 1) and
+re-run this gate. Do NOT create the DNS record until this passes: the record invariant is content-clean
+BEFORE DNS cutover, not after.
+
+---
+
+## 8. Create the DNS record at the registrar
+
+8.1  At your registrar, create an **A** record for the public name → the VPS public IPv4 (and an
      **AAAA** → the VPS IPv6 if you have one). Low TTL (e.g. 300s) for the first cutover so a rollback
      propagates fast.
-7.2  Wait for propagation: `dig +short ausmt.au` returns the VPS IP.
+8.2  Wait for propagation: `dig +short ausmt.au` returns the VPS IP.
 
 Once DNS resolves to the VPS, Caddy obtains the Let's Encrypt certificate automatically. Watch it:
 ```sh
@@ -168,40 +232,35 @@ docker compose -f deploy/frontdoor/compose.yaml logs -f frontdoor    # look for 
 
 ---
 
-## 8. Verification checklist (in order — 8.1 is the cutover gate)
+## 9. Verification checklist (post-cutover, in order)
 
-8.1  **Content clean FIRST (the gate).** Before announcing/relying on the public name, confirm the
-     corpus is content-clean on the SERVED site — specifically the capricorn-2010 `lead_investigator`
-     citation-metadata fix is live in what the reader serves:
-```sh
-curl -s https://ausmt.au/data/catalogue.json | grep -i capricorn        # the survey is served
-# open the capricorn-2010 record in the portal and confirm the lead_investigator citation is correct
-```
-     If the fix is not visibly served, STOP — rebuild/serve the corrected corpus on the box before
-     going further. Do not expose stale citation metadata publicly.
+The content-clean gate already passed pre-DNS (step 7); these confirm the public path itself.
 
-8.2  **TLS issued + HTTP redirects.**
+9.1  **TLS issued + HTTP redirects.**
 ```sh
 curl -sSI https://ausmt.au/ | head -1                       # expect HTTP/2 200
 curl -sSI http://ausmt.au/  | grep -i location              # expect a 301/308 to https://
 ```
 
-8.3  **Reader + /data served.**
+9.2  **Reader + /data served (and still content-clean on the PUBLIC path).**
 ```sh
 curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/                      # 200
 curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/data/catalogue.json   # 200
+curl -s https://ausmt.au/data/catalogue.json | grep -i capricorn                 # re-confirm the fix serves publicly
 ```
 
-8.4  **Refuse checks from OUTSIDE (the public wall).**
+9.3  **Refuse checks from OUTSIDE (the public wall).**
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue   # expect 404
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway                  # expect 404 (bare)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue    # expect 404
 curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/healthz          # expect 404
 curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html          # expect 404
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html/         # expect 404 (trailing slash)
 ```
-     Every curator/admin/contribution surface must refuse. If any returns 200, STOP and roll back
-     (section 9) — a wall is breached.
+     Every curator/admin/contribution surface must refuse — in both slash forms. If any returns 200,
+     STOP and roll back (section 10) — a wall is breached.
 
-8.5  **Masked logs flowing + the fold picks them up.**
+9.4  **Masked logs flowing + the fold picks them up.**
 ```sh
 # on the VPS: a masked line landed (client address truncated, no full IP)
 sudo tail -n1 /var/log/caddy/access-frontdoor.json
@@ -212,25 +271,25 @@ ls -l "$AUSMT_DATA_DIR/logs/caddy/"            # access-frontdoor*.json present
 sudo systemctl start ausmt-stats.service
 ```
 
-The bridge is live once 8.1–8.5 all pass.
+The bridge is live once step 7 (pre-DNS gate) and 9.1–9.4 all pass.
 
 ---
 
-## 9. Rollback — withdraw public exposure entirely
+## 10. Rollback — withdraw public exposure entirely
 
 Any one of these withdraws exposure; do all three for a full teardown. Order for a fast emergency
 pull: DNS first (stops new public traffic), then stack, then ACL.
 
-9.1  **Remove the DNS record** at the registrar (delete the A/AAAA for the public name). With the low
+10.1  **Remove the DNS record** at the registrar (delete the A/AAAA for the public name). With the low
      TTL, public resolution stops within minutes. This alone ends public reachability.
-9.2  **Stop the front-door stack** on the VPS:
+10.2  **Stop the front-door stack** on the VPS:
 ```sh
 docker compose -f deploy/frontdoor/compose.yaml down
 ```
-9.3  **Revoke the ACL fence + tag:** in the Tailscale admin console, remove the two C47 acl rules and
+10.3  **Revoke the ACL fence + tag:** in the Tailscale admin console, remove the two C47 acl rules and
      the `tag:ausmt-frontdoor` tagOwner (and delete/disable the VPS node). The front-door tag can then
      reach nothing.
-9.4  **Box-side (optional, fully reverts the box):** stop shipping and withdraw the reader port —
+10.4  **Box-side (optional, fully reverts the box):** stop shipping and withdraw the reader port —
 ```sh
 sudo systemctl disable --now ausmt-frontdoor-logs.timer
 sudo tailscale serve --tcp=8445 off

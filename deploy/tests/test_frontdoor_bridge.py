@@ -112,7 +112,8 @@ def _stub_cfg(port: int) -> str:
 
 
 def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
-                   drop_gateway_deny: bool = False, unfiltered_log: bool = False) -> tuple[str, Path]:
+                   drop_gateway_deny: bool = False, narrow_matchers: bool = False,
+                   unfiltered_log: bool = False) -> tuple[str, Path]:
     """Compose a hermetic front-door config from the SHIPPED site body: rebind to :listen_port with
     auto_https off (no ACME), point the reverse_proxy at the local stub, and write the access log to a
     temp file. Optional mutations power the red-proofs."""
@@ -121,12 +122,25 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     body = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", body)
     body = body.replace("{$AUSMT_BOX_READER_UPSTREAM}", f"127.0.0.1:{stub_port}")
     if drop_gateway_deny:
-        # Remove the `handle /gateway/* { respond ... }` block (the wall-1 deny) — red-proof for (ii).
-        m = re.search(r"\thandle /gateway/\* \{", body)
-        assert m, "expected a `handle /gateway/*` deny block to remove"
-        bstart = body.index("{", m.start())
+        # Remove the whole wall-1 deny: the `@nonpublic path ...` matcher line AND its `handle @nonpublic
+        # { respond ... }` block — red-proof for (ii). Both must go together or caddy validate rejects an
+        # undefined matcher reference.
+        m = re.search(r"\t@nonpublic path .*\n", body)
+        assert m, "expected a `@nonpublic path` matcher line to remove"
+        body = body[:m.start()] + body[m.end():]
+        m2 = re.search(r"\thandle @nonpublic \{", body)
+        assert m2, "expected a `handle @nonpublic` deny block to remove"
+        bstart = body.index("{", m2.start())
         end = bstart + len(_brace_match(body, bstart))
-        body = body[:m.start()] + body[end:]
+        body = body[:m2.start()] + body[end:]
+    if narrow_matchers:
+        # Narrow the wall-1 matcher back to the PRE-FIX classes (exact /gateway/* and exact
+        # /add-survey.html only — no bare /gateway, no trailing-slash add-survey) while keeping the
+        # `handle @nonpublic` deny — red-proof for the WIDENED matcher (ii-widen). Bare /gateway and
+        # /add-survey.html/ then slip past wall 1 to the stub, proving the widening is load-bearing.
+        body, n = re.subn(r"\t@nonpublic path .*\n",
+                          "\t@nonpublic path /gateway/* /add-survey.html\n", body, count=1)
+        assert n == 1, "expected a `@nonpublic path` matcher line to narrow"
     if unfiltered_log:
         # Replace the `format filter { ... }` with a bare `format json` (no ip_mask, no header deletes)
         # — red-proof for (iii).
@@ -185,14 +199,21 @@ def test_frontdoor_does_not_trust_forwarded_addresses():
 
 
 def test_frontdoor_refuses_nonpublic_route_classes_explicitly():
-    """WALL 1 (config level): the front door carries an EXPLICIT deny (a 404 respond) for /gateway/* and
-    /add-survey.html, placed as `handle` blocks so they match before the reader reverse_proxy. FAILS IF
-    a deny is missing or is not an explicit refusal."""
+    """WALL 1 (config level): the front door carries an EXPLICIT deny (a 404 respond) via a `@nonpublic`
+    matcher that is SELF-COMPLETE — it lists every non-public class in BOTH slash forms so none slips
+    past on a bare vs trailing slash: /gateway AND /gateway/* (a bare /gateway is NOT covered by
+    /gateway/*), and /add-survey.html AND /add-survey.html/. The `handle @nonpublic` runs before the
+    reader reverse_proxy. FAILS IF a class or a slash form is missing, or the deny is not an explicit
+    404 refusal."""
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
-    gw = _brace_match(body, body.index("\thandle /gateway/* {"))
-    assert re.search(r"respond\b.*\b404", gw), "/gateway/* must explicitly respond 404"
-    add = _brace_match(body, body.index("\thandle /add-survey.html {"))
-    assert re.search(r"respond\b.*\b404", add), "/add-survey.html must explicitly respond 404"
+    m = re.search(r"@nonpublic path (.+)", body)
+    assert m, "wall 1 must carry a `@nonpublic path` matcher listing the non-public classes"
+    classes = m.group(1).split()
+    for cls in ("/gateway", "/gateway/*", "/add-survey.html", "/add-survey.html/"):
+        assert cls in classes, \
+            f"wall 1 matcher must be self-complete: {cls!r} (both slash forms) missing; got {classes}"
+    handle = _brace_match(body, body.index("\thandle @nonpublic {"))
+    assert re.search(r"respond\b.*\b404", handle), "the @nonpublic handle must explicitly respond 404"
     # The reader catch-all proxies to the box upstream placeholder (config-side name, nothing in git).
     assert "reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}" in body, \
         "the reader must proxy to the box upstream env placeholder"
@@ -269,13 +290,39 @@ def test_frontdoor_serves_reader_and_refuses_gateway_at_runtime():
             assert st == 200 and "STUB /some/reader/path" in body, f"reader not served: {st} {body!r}"
             st, body = _get(fd_port, "/data/catalogue.json")
             assert st == 200 and "STUB /data/catalogue.json" in body, f"/data not served: {st} {body!r}"
-            # (ii) non-public classes refuse at the front door, never reaching the stub
-            st, body = _get(fd_port, "/gateway/curator/queue")
-            assert st == 404, f"/gateway/* must refuse at the front door, got {st}"
-            assert "STUB" not in body, "/gateway/* must NOT reach the reader stub"
-            st, body = _get(fd_port, "/add-survey.html")
-            assert st == 404, f"/add-survey.html must refuse at the front door, got {st}"
-            assert "STUB" not in body, "/add-survey.html must NOT reach the reader stub"
+            # (ii) non-public classes refuse at the front door, never reaching the stub — in BOTH slash
+            # forms, so wall 1 is self-complete (a bare /gateway and a trailing-slash /add-survey.html/
+            # must refuse too, not just the canonical forms).
+            for path in ("/gateway/curator/queue", "/gateway", "/add-survey.html", "/add-survey.html/"):
+                st, body = _get(fd_port, path)
+                assert st == 404, f"{path} must refuse at the front door, got {st}"
+                assert "STUB" not in body, f"{path} must NOT reach the reader stub"
+        finally:
+            _stop(fd); _stop(stub)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_frontdoor_widened_matcher_redproof():
+    """(ii-widen) RED-PROOF for the WIDENED wall-1 matcher. With wall 1 narrowed back to the PRE-FIX
+    classes (exact /gateway/* and exact /add-survey.html only), a bare /gateway and a trailing-slash
+    /add-survey.html/ now slip past wall 1 and REACH the stub (200) — proving the widened matcher (bare
+    + subtree /gateway, add-survey in both slash forms) is load-bearing at wall 1, not decoration. Wall
+    2 is stubbed out (the permissive echo stub stands in for the box), so this isolates wall 1: the leak
+    is caught HERE or not at all. FAILS IF narrowing does NOT leak (the widening would prove nothing)."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        stub_port, fd_port = _free_port(), _free_port()
+        stub = _run_caddy(_stub_cfg(stub_port), td, "stub")
+        cfg, _log = _frontdoor_cfg(td, fd_port, stub_port, narrow_matchers=True)
+        fd = _run_caddy(cfg, td, "frontdoor-narrow")
+        try:
+            _wait_port(stub_port); _wait_port(fd_port)
+            st, body = _get(fd_port, "/gateway")
+            assert st == 200 and "STUB /gateway" in body, \
+                "red-proof failed: pre-fix narrow wall 1 should LEAK bare /gateway to the stub"
+            st, body = _get(fd_port, "/add-survey.html/")
+            assert st == 200 and "STUB /add-survey.html/" in body, \
+                "red-proof failed: pre-fix narrow wall 1 should LEAK /add-survey.html/ to the stub"
         finally:
             _stop(fd); _stop(stub)
 

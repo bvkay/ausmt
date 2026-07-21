@@ -57,9 +57,13 @@ box serves the reader and the gateway from the **same** port (D1) and a tailnet 
 one control is not enough — a single mis-scoped front-door path rule would otherwise reach the gateway.
 So the bridge stands up **two independent walls**:
 
-* **Wall 1 — path refusal at the front door.** The VPS Caddyfile carries explicit `handle /gateway/* {
-  respond 404 }` and `handle /add-survey.html { respond 404 }` blocks, ordered before the reader
-  reverse-proxy, so a public caller is refused by an intentional deny, never by accidental routing.
+* **Wall 1 — path refusal at the front door.** The VPS Caddyfile carries an explicit `@nonpublic`
+  deny — `@nonpublic path /gateway /gateway/* /add-survey.html /add-survey.html/` handled with a
+  `respond 404`, ordered before the reader reverse-proxy — so a public caller is refused by an
+  intentional deny, never by accidental routing. Each class is listed in BOTH slash forms so wall 1 is
+  SELF-COMPLETE: the bare `/gateway` is enumerated explicitly because `/gateway/*` does not match a
+  path with no trailing slash, and the add-survey page is refused with and without a trailing slash.
+  No member of a non-public class slips past wall 1 to the reverse-proxy on a slash technicality.
 * **Wall 2 — a gateway-less box listener behind a port-scoped ACL.** The box gains a small, dedicated
   **reader-only** Caddy listener (`:8081`, published loopback `127.0.0.1:8445`, fronted onto the tailnet
   by `tailscale serve --tcp=8445`). It serves the reader + `/data` and has **no `/gateway/*` route at
@@ -113,8 +117,9 @@ d. **TLS with automatic certificates for the public name; plain HTTP redirected*
 e. **Rollback withdraws public exposure entirely** — DNS record removal + front-door stack stop + ACL
    revoke — leaving the box's tailnet-only posture exactly as before.
 f. **Corpus content-clean before DNS cutover** — the capricorn-2010 `lead_investigator`
-   citation-metadata fix is serve-verified FIRST (the runbook's cutover gate, step 8.1), before the
-   public name is relied upon.
+   citation-metadata fix is serve-verified FIRST, against the box's tailnet-served reader copy (the
+   stateless front door proxies those exact bytes), as the runbook's content-clean gate (step 7) that
+   runs BEFORE the DNS record is created — so there is never a public window of unverified content.
 
 ## D7. Verification pins (failure criteria) — `deploy/tests/test_frontdoor_bridge.py`
 
@@ -124,9 +129,13 @@ fail. Caddy legs run in CI (`gateway-ci.yml` installs Caddy); they skip only on 
 caddy, never in CI, so they cannot silently no-op.
 
 * **Reader served + non-public refused (runtime, i+ii):** a reader request reaches the stub (200);
-  `/gateway/*` and `/add-survey.html` refuse at the front door (404) and never reach the stub.
-  *Fails if* the reader is not served or a non-public class is proxied through. **Red-proof:** with the
-  `/gateway/*` deny removed, the request leaks to the stub (200) — proving the deny is load-bearing.
+  every non-public class refuses at the front door (404) and never reaches the stub — in BOTH slash
+  forms (`/gateway/*`, a bare `/gateway`, `/add-survey.html`, and `/add-survey.html/`), so wall 1 is
+  self-complete. *Fails if* the reader is not served or any non-public form is proxied through.
+  **Red-proofs (two):** (a) with the whole `@nonpublic` deny removed, `/gateway/*` leaks to the stub
+  (200) — the deny is load-bearing; (b) with the matcher narrowed back to the PRE-FIX classes (exact
+  `/gateway/*` + exact `/add-survey.html` only), the bare `/gateway` and `/add-survey.html/` leak to
+  the stub — proving the widened, both-slash-forms matcher is what closes the gap at wall 1.
 * **Masked-at-edge on public traffic (runtime, iii):** a request whose peer is masked to `…0` and which
   sends `X-Forwarded-For: 203.0.113.7` yields a log line whose `remote_ip`/`client_ip` fields are the
   /24-masked form and in which the sent XFF appears **nowhere**. *Fails if* the full peer IP or the
@@ -155,7 +164,7 @@ deploy/frontdoor/compose.yaml down` on the VPS (stops the edge); **(3)** revoke 
 and the `tag:ausmt-frontdoor` tagOwner in the Tailscale admin (the tag can then reach nothing);
 **(4)** optionally box-side, `systemctl disable --now ausmt-frontdoor-logs.timer` and `tailscale serve
 --tcp=8445 off`. The `:8081` listener is loopback-only and harmless if left; curator/admin access over
-the tailnet is unaffected throughout. Full procedure: `deploy/frontdoor/RUNBOOK.md` §9.
+the tailnet is unaffected throughout. Full procedure: `deploy/frontdoor/RUNBOOK.md` §10.
 
 ## Provenance
 

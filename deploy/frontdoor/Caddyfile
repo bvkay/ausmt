@@ -83,18 +83,21 @@
 	}
 
 	# ---- WALL 1: explicit path refusal of every non-public route class -------------------------------
-	# `handle` is an ordered, most-specific-first router: these matchers run BEFORE the catch-all
-	# reverse_proxy, so a public caller can NEVER reach a curator/admin or contribution surface through
-	# the front door. This is an EXPLICIT DENY (an intentional 404), not accidental routing. The second
-	# wall is the box side: the reader listener (:8081) has no /gateway/* route and the tailnet ACL
-	# grants this VPS reach ONLY to that reader port (C47 invariant b — two independent walls).
-	#   * /gateway/*      — the entire submission + curator workbench surface (login, queue, publish,
-	#                        serve control, passkey enrolment, analytics screen). NEVER public.
-	#   * /add-survey.html — the contribution page (inert without a reachable gateway, refused anyway).
-	handle /gateway/* {
-		respond "not found" 404
-	}
-	handle /add-survey.html {
+	# The `@nonpublic` matcher + its `handle` run BEFORE the catch-all reverse_proxy, so a public caller
+	# can NEVER reach a curator/admin or contribution surface through the front door. This is an EXPLICIT
+	# DENY (an intentional 404), not accidental routing. Each class is matched in BOTH slash forms so
+	# wall 1 is SELF-COMPLETE — no member slips past to the reverse_proxy on a bare vs trailing slash:
+	#   * /gateway AND /gateway/*        — the entire submission + curator workbench surface (login,
+	#                        queue, publish, serve control, passkey enrolment, analytics screen). The
+	#                        bare form is listed explicitly because `/gateway/*` alone does NOT match a
+	#                        bare `/gateway` (no trailing slash). NEVER public.
+	#   * /add-survey.html AND /add-survey.html/  — the contribution page in both slash forms (inert
+	#                        without a reachable gateway, refused anyway).
+	# The second wall is the box side: the reader listener (:8081) has no /gateway/* route and the
+	# tailnet ACL grants this VPS reach ONLY to that reader port (C47 invariant b — two independent
+	# walls). Wall 1 is now self-complete for these classes; wall 2 remains the independent backstop.
+	@nonpublic path /gateway /gateway/* /add-survey.html /add-survey.html/
+	handle @nonpublic {
 		respond "not found" 404
 	}
 
