@@ -143,6 +143,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "mapSizeDegenerate:(s)=>_mapSizeDegenerate(s),mapRefitGate:(st)=>_mapRefitGate(st)," +
   "homeFitDegenerate:()=>_fitWasDegenerate,mapUserInteracted:()=>_mapUserInteracted," +
   "setMapInteracted:(v)=>{_mapUserInteracted=v;},mapCorrectHomeFit:()=>_mapCorrectHomeFit()," +
+  // The DEFERRED unconditional re-fit is the actual off-centre-on-load fix: mapDeferredHomeRefit runs the
+  // re-fit body (invalidateSize + fit HOME_BOUNDS, gated ONLY on !userInteracted, NOT on degeneracy);
+  // scheduleDeferredHomeRefit is the double-rAF scheduler the driver drives through a controllable rAF queue.
+  "mapDeferredHomeRefit:()=>_mapDeferredHomeRefit(),scheduleDeferredHomeRefit:()=>_scheduleDeferredHomeRefit()," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -172,6 +176,13 @@ async function bootFreshWindow(dataMap) {
   await new Promise(res => (win.document.readyState === "complete" ? res() : win.addEventListener("load", res, { once: true })));
   vm.runInContext(code, dom.getInternalVMContext());
   const A = win.__api;
+  // Controllable requestAnimationFrame: buildMarkers (during boot) schedules the DEFERRED home re-fit via
+  // double-rAF. Park those callbacks in a queue instead of letting jsdom's timer fire them, so (1) they never
+  // auto-fire mid-assertion and perturb the exact fitBounds counts the corrector block below relies on, and
+  // (2) the driver can drain them deterministically to observe the deferred re-fit. Nothing else in the app
+  // uses rAF, so this override only intercepts the map fix.
+  const rafQ = [];
+  win.requestAnimationFrame = (cb) => { rafQ.push(cb); return rafQ.length; };
   await A.boot();
   ok(A.nST() === 5, "fixture should load 5 stations, got " + A.nST());
 
@@ -211,6 +222,38 @@ async function bootFreshWindow(dataMap) {
   ok(A.homeFitDegenerate() === false, "item2: the corrector must clear the degenerate flag (one-shot)");
   A.mapCorrectHomeFit();
   ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbBefore + 1, "item2: the corrector must NOT re-fit a second time (one-shot; must not clobber later/E6 fits)");
+
+  // MAP OFF-CENTRE-ON-LOAD FIX (the DEFERRED re-fit) — the ACTUAL correction. The one-shot corrector above
+  // only fires when the primary fit was DEGENERATE (0x0). On a real page load the flex layout hasn't settled
+  // at fit time, so the container is NONZERO-BUT-WRONG: the degenerate gate never trips and the bad fit
+  // sticks. The deferred re-fit re-fits HOME_BOUNDS UNCONDITIONALLY (gated ONLY on !userInteracted) once
+  // layout settles (double-rAF). Regression guard: prove it is scheduled AND fires unconditionally.
+  // buildMarkers (at boot) must have SCHEDULED the deferred re-fit into our parked rAF queue (outer frame).
+  ok(rafQ.length === 1, "mapfit: buildMarkers must SCHEDULE a deferred re-fit via requestAnimationFrame, queued " + rafQ.length);
+  // Precondition: the degenerate flag is already FALSE (the corrector cleared it above) and the user is
+  // untouched — so a fit produced by draining the queue PROVES the deferred re-fit is UNCONDITIONAL, i.e.
+  // NOT gated on degeneracy (the exact bug: the old corrector would NOT fit in this state).
+  A.setMapInteracted(false);
+  ok(A.homeFitDegenerate() === false, "mapfit precondition: the degenerate flag is already cleared");
+  let _fbD = mapCalls.filter(c => c.fn === "fitBounds").length;
+  rafQ.shift()();                              // OUTER frame -> must schedule the INNER frame (double-rAF)
+  ok(rafQ.length === 1, "mapfit: the outer frame must schedule a SECOND (inner) frame so the re-fit runs after layout settles (double-rAF)");
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbD, "mapfit: no re-fit must occur until the inner frame runs");
+  rafQ.shift()();                              // INNER frame -> invalidateSize + fitBounds(HOME_BOUNDS)
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbD + 1,
+    "mapfit: the deferred re-fit must fit HOME_BOUNDS UNCONDITIONALLY once layout settles (regression: it must NOT be gated on the degenerate flag)");
+  // it re-claims the true container size FIRST (invalidateSize immediately precedes the deferred fit).
+  const _dfIdx = mapCalls.length - 1 - [...mapCalls].reverse().findIndex(c => c.fn === "fitBounds");
+  ok(mapCalls[_dfIdx - 1].fn === "invalidateSize", "mapfit: the deferred re-fit must invalidateSize before fitting, got " + mapCalls[_dfIdx - 1].fn);
+  // Gated ONLY on user control: once the user has taken over, the deferred re-fit stands down (never fight a
+  // deliberate pan/zoom). Drive the body directly so BOTH gate legs are pinned.
+  A.setMapInteracted(true);
+  _fbD = mapCalls.filter(c => c.fn === "fitBounds").length;
+  A.mapDeferredHomeRefit();
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbD, "mapfit: the deferred re-fit must NOT fire once the user has taken control");
+  A.setMapInteracted(false);
+  A.mapDeferredHomeRefit();
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbD + 1, "mapfit: untouched -> the deferred re-fit fits HOME_BOUNDS");
 
   // VER CHIP -> FOOTER (UX feedback round 3, item 3): the version chip moved out of the header into the
   // footer. version.js is a standalone page script (not in MODULES), so run it here against the real DOM
