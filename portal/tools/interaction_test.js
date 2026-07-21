@@ -86,6 +86,11 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // UX6 Wave D hooks: sidebarMode reader + setSidebarMode (D2 Browse/Select toggle); onDrawCreated +
   // drawSelectionMsg (D3 draw-created toast + its pure formatter).
   "sidebarMode:()=>sidebarMode,setSidebarMode,onDrawCreated,drawSelectionMsg," +
+  // Discoverability (SELECTION-panel draw buttons): armDraw is the panel's arm entry point (reuses the
+  // control's own mode handler); armedDrawMode is the shared active state both the buttons and the map
+  // toolbar drive; setArmedDraw is what the DRAWSTART/DRAWSTOP listeners call (icon-arm + cancel paths);
+  // drawModeHandler proves the reuse reaches the control's handler, not a duplicated invocation.
+  "armDraw,setArmedDraw,drawModeHandler,armedDrawMode:()=>armedDrawMode," +
   // S3 hooks: recentlyAdded() for the strip-content assertion; renderRecentlyAdded so the driver
   // can force a re-render after directly poking SMETA (not needed in the current fixture path, but
   // keeps parity with runInit()'s own call sites).
@@ -1283,6 +1288,48 @@ async function bootFreshWindow(dataMap) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
+  // Z. Discoverability (owner, 2026-07-21): the SELECTION panel's "Draw rectangle"/"Draw polygon" buttons
+  // ARM the same leaflet.draw handlers as the map's top-left toolbar icons, and armedDrawMode is ONE state
+  // shared across both surfaces. Pins: (a) the two buttons exist in the SELECTION panel (below 'Select all
+  // filtered') and route through armDraw — the same handler entry point (drawModeHandler), not a duplicated
+  // draw invocation; (b) arming from a button sets the shared armedDrawMode that the map toolbar also drives
+  // (via DRAWSTART -> setArmedDraw); (c) completing OR cancelling a draw clears it on both surfaces.
+  A.setSidebarMode("select");
+  const _selbox = doc.querySelector("#selectMode .selbox");
+  const drawRect = doc.getElementById("drawRect"), drawPoly = doc.getElementById("drawPoly");
+  ok(drawRect && _selbox && _selbox.contains(drawRect), "Draw: 'Draw rectangle' button missing from the SELECTION panel");
+  ok(drawPoly && _selbox && _selbox.contains(drawPoly), "Draw: 'Draw polygon' button missing from the SELECTION panel");
+  ok(_selbox.contains(doc.getElementById("selAll")), "Draw: the draw buttons must share the box with 'Select all filtered'");
+  // (a) the panel button reaches the control's OWN mode handler (the reuse entry point), not a re-impl.
+  ok(A.drawModeHandler("rectangle") != null && A.drawModeHandler("polygon") != null,
+    "Draw: the control's rectangle/polygon mode handlers must be reachable (the shared arm entry point)");
+  ok(A.armedDrawMode() === null, "Draw: nothing must be armed at rest, got " + A.armedDrawMode());
+  // (b) arming from the button sets the shared state AND lights only that button.
+  drawRect.click();
+  ok(A.armedDrawMode() === "rectangle", "Draw: clicking 'Draw rectangle' did not arm rectangle, got " + A.armedDrawMode());
+  ok(drawRect.classList.contains("armed"), "Draw: the rectangle button must light while its tool is live");
+  ok(!drawPoly.classList.contains("armed"), "Draw: the polygon button must stay inert while rectangle is armed");
+  drawPoly.click();
+  ok(A.armedDrawMode() === "polygon" && drawPoly.classList.contains("armed") && !drawRect.classList.contains("armed"),
+    "Draw: arming polygon must move the single shared state off rectangle (never both lit)");
+  // map-icon parity: DRAWSTART from the toolbar icon drives the SAME state the buttons read (setArmedDraw
+  // is exactly what the DRAWSTART listener calls) — an icon-armed mode lights the matching panel button.
+  A.setArmedDraw("rectangle");
+  ok(A.armedDrawMode() === "rectangle" && drawRect.classList.contains("armed") && !drawPoly.classList.contains("armed"),
+    "Draw: an icon-armed mode must light the matching panel button (shared state), not the button's own path");
+  // (c) completing a draw clears both surfaces (onDrawCreated -> setArmedDraw(null)).
+  A.onDrawCreated({ layerType: "rectangle", layer: { options: {} } });
+  ok(A.armedDrawMode() === null && !drawRect.classList.contains("armed") && !drawPoly.classList.contains("armed"),
+    "Draw: completing a draw must clear the armed state on both surfaces (no button stays lit)");
+  // (c) cancelling a draw (DRAWSTOP -> setArmedDraw(null)) clears both.
+  drawPoly.click();
+  ok(A.armedDrawMode() === "polygon", "Draw: re-arm before the cancel check failed");
+  A.setArmedDraw(null);
+  ok(A.armedDrawMode() === null && !drawPoly.classList.contains("armed"),
+    "Draw: cancelling a draw must clear the armed state (button must not stay lit)");
+  doc.getElementById("clearSel").click();
+  A.setSidebarMode("browse");
+
   // Y. UX6 Wave D (D4, #21): the export button row is hidden (empty-state hint shown) until a selection
   // exists; making a selection reveals it. updateSel() toggles .hidden on both.
   const exportBtns = doc.getElementById("exportBtns"), exportHint = doc.getElementById("exportHint");
@@ -1662,7 +1709,7 @@ async function bootFreshWindow(dataMap) {
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
-    "D3 draw-toast copy+fires+auto-switch, " +
+    "D3 draw-toast copy+fires+auto-switch, Draw-buttons in-SELECTION-panel reuse-toolbar-handler + shared-armedDrawMode(button/icon parity) + complete/cancel-clears-both, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
     "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/facets/clear/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E5 collections-intro+feature-card+participating-orgs + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore)");
   process.exit(0);

@@ -111,8 +111,11 @@ const drawn=new L.FeatureGroup().addTo(map);
 L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
 L.drawLocal.draw.toolbar.buttons.rectangle="Draw rectangle selection";
 L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
-map.addControl(new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
-  polygon:{shapeOptions:{color:"#EF7256",weight:2}},rectangle:{shapeOptions:{color:"#EF7256",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}}));
+// Kept as a named reference (was an inline `map.addControl(new ...)`) so the SELECTION panel's
+// Draw rectangle/polygon buttons can REUSE this control's own mode handlers — see armDraw below.
+const drawControl=new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
+  polygon:{shapeOptions:{color:"#EF7256",weight:2}},rectangle:{shapeOptions:{color:"#EF7256",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}});
+map.addControl(drawControl);
 // UX6 Wave D (D3, #20): explicit aria-labels on the draw + zoom toolbar anchors, set AFTER the controls
 // are on the map (their DOM exists by then). leaflet.draw already writes the title from L.drawLocal above;
 // the aria-label makes the accessible name unambiguous for AT. No-op where the anchors aren't rendered
@@ -126,6 +129,38 @@ function labelToolbar(){
   set(".leaflet-control-zoom-out","Zoom out");
 }
 labelToolbar();
+
+// Discoverability (owner, 2026-07-21): the SELECTION panel gained "Draw rectangle"/"Draw polygon"
+// buttons that ARM the SAME leaflet.draw handlers the map's top-left toolbar icons arm — the panel used
+// to point users to a tool at the opposite corner. We REUSE the control's own mode handlers
+// (drawControl._toolbars.draw._modes[mode].handler — the exact object each toolbar icon enables), never
+// a second draw invocation. Panel button, toolbar icon and armedDrawMode mirror ONE state: enabling a
+// handler fires DRAWSTART (whatever the source) and disabling/completing/cancelling fires DRAWSTOP, so
+// the armed reflection below stays true no matter which surface armed it.
+let armedDrawMode=null;                                   // null | "rectangle" | "polygon" — the shared armed state
+// The exact handler object the matching toolbar icon enables (leaflet.draw keys _modes by handler.type).
+// Guarded navigation so a missing/stubbed control (the jsdom harness stubs L) is a no-op, never a throw.
+function drawModeHandler(mode){const tb=drawControl&&drawControl._toolbars&&drawControl._toolbars.draw;
+  const m=tb&&tb._modes&&tb._modes[mode];return m&&m.handler||null;}
+// Reflect armedDrawMode onto the two panel buttons (the toolbar icons carry leaflet.draw's own enabled
+// class, so they need no help here). Called on every arm/disarm so a button never looks inert while its
+// tool is live, nor stays lit after a draw completes.
+function syncDrawButtons(){[["drawRect","rectangle"],["drawPoly","polygon"]].forEach(([id,mode])=>{
+  const b=document.getElementById(id);if(b)b.classList.toggle("armed",armedDrawMode===mode);});}
+// Single writer for the shared state: set/clear the mode, then reflect it. The DRAWSTART/DRAWSTOP
+// listeners below call this (so an icon-armed mode lights the buttons too); armDraw + onDrawCreated
+// call it directly.
+function setArmedDraw(mode){armedDrawMode=mode||null;syncDrawButtons();}
+// Arm a mode FROM THE PANEL by enabling the control's own handler — identical to clicking the toolbar
+// icon (leaflet.draw binds each icon to _modes[type].handler.enable). Setting armedDrawMode here gives
+// immediate feedback and covers the L-stubbed harness, where the real DRAWSTART event never fires;
+// production reconciles via the listeners below.
+function armDraw(mode){const h=drawModeHandler(mode);if(h&&typeof h.enable==="function")h.enable();setArmedDraw(mode);}
+map.on(L.Draw.Event.DRAWSTART,e=>setArmedDraw(e&&e.layerType));   // icon OR button arms -> both reflect
+map.on(L.Draw.Event.DRAWSTOP,()=>setArmedDraw(null));            // complete OR cancel -> both clear
+const _drawRect=document.getElementById("drawRect"),_drawPoly=document.getElementById("drawPoly");
+if(_drawRect)_drawRect.onclick=()=>armDraw("rectangle");
+if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 
 // UX4 Amendment A1 (owner, 2026-07-07): the D1 colour split was REMOVED — all LPMT renders the
 // flagship teal (TYPE_COL.LPMT) in type mode regardless of AusLAMP membership, and every colour mode
@@ -247,6 +282,7 @@ function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rect
 // recomputes `selected` from the new shape, THEN we toast the fresh count and (D2) surface the exports by
 // auto-switching the rail to Select & export. Named (not inline) so the jsdom driver can invoke it.
 function onDrawCreated(e){e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();
+  setArmedDraw(null);   // a completed draw disarms the mode — the panel button must not stay lit
   if(typeof toast==="function")toast(drawSelectionMsg(selected.size,e&&e.layerType));
   if(typeof setSidebarMode==="function")setSidebarMode("select");}
 map.on(L.Draw.Event.CREATED,onDrawCreated);

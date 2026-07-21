@@ -94,7 +94,7 @@ function refresh(){paintSlider();visible=ST.filter(passes);
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
   const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlCite","dlZip","strike"].forEach(id=>document.getElementById(id).disabled=!on);
-  document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":"Draw a polygon or rectangle on the map (toolbar, top-left), or take everything that passes the filters.";
+  document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":"Draw on the map with the buttons below (or the toolbar, top-left), or take everything that passes the filters.";
   // UX6 Wave D (D4, #21): until a selection exists, hide the whole export row and show the empty-state
   // hint in its place; reveal the row once there is something to export. Class toggle only — the buttons
   // keep their own disabled state above.
