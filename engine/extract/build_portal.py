@@ -2653,6 +2653,28 @@ def main(argv=None):
         if prod:
             (prod / "coord_policy.json").write_text(
                 _jdump(_coord_policy_map, separators=(",", ":")), encoding="utf-8")
+    # ---- C42 Amendment A2: the BASE-STATION-ID surface (boot artifact) ----
+    # The C43 stations-panel override fieldset must key by BASE station id — never a file stem, never a
+    # variant-suffixed id (D2 fix-round-2, the probe-e discipline). A base id is the record id with its
+    # engine-appended processing-variant tag stripped, derivable ONLY via the record's `variant` field
+    # (never dot-guessing). No served/boot artifact exposed that (A2 gap), so the workbench could not
+    # construct guaranteed-base keys. Emit a compact map ausmt_id -> base_station_id for the VARIANT
+    # stations ONLY (those whose served catalogue id differs from their base) via the SAME
+    # base_station_id() the mask seam matches with — one derivation, never a re-derivation. A non-variant
+    # station is ABSENT: its base IS its catalogue id, so the workbench falls back to that (absent =>
+    # every station is its own base). Carries NO coordinate and NO policy — only ids already in the
+    # served catalogue — so it is leak-sweep-clean by construction. Emitted ONLY when the corpus has a
+    # variant station, so a corpus with no processing variants is byte-identical (no new file) — the
+    # default-stability discipline and the A1 only-when-it-carries-information precedent. It is a SEPARATE
+    # artifact from coord_policy.json because their membership differs: coord_policy lists NON-EXACT
+    # stations; this lists VARIANT stations — a curator setting the FIRST override on a variant station in
+    # an all-exact survey needs this base id while that station is (correctly) absent from coord_policy.json.
+    _base_id_map = {r["ausmt_id"]: coordacc.base_station_id(r.get("id"), r.get("variant"))
+                    for (p, r) in all_stations
+                    if coordacc.base_station_id(r.get("id"), r.get("variant")) != r.get("id")}
+    if _base_id_map:
+        (out / "base_ids.json").write_text(
+            _jdump(_base_id_map, separators=(",", ":")), encoding="utf-8")
     (out / "tf.json").write_text(_jdump(tf_out, separators=(",", ":")), encoding="utf-8")
     (out / "sci.json").write_text(_jdump(sci_out, separators=(",", ":")), encoding="utf-8")
     (out / "surveys.json").write_text(_jdump(surveys_meta, separators=(",", ":")), encoding="utf-8")
