@@ -226,8 +226,9 @@ def test_embargoed_survey_smeta_badges_honestly(tmp_path):
 # thinned tf.json curves for an embargoed survey has published the data it withheld from download. So for
 # a non-served survey the tf.json series columns become EMPTY ARRAYS and the sci.json science-derived
 # fields are nulled; the CATALOGUE row (locations/band/nper/sha256) stays public (discovery is universal),
-# and the processing-metadata sci fields (rr/sw/alg) stay (metadata, not data). --products station.json is
-# a curator artifact, not a distribution surface, so it is deliberately NOT asserted-empty here.
+# and the processing-metadata sci fields (rr/sw/alg) stay (metadata, not data). The --products tree is a
+# DISTRIBUTION surface too (deploy/Makefile writes products/ INSIDE the served build dir; D1), so C1c
+# withholds its derived science for a non-served survey — asserted by the products leak-sweep below.
 
 def _tf_sci(out):
     """Load the emitted portal projections (tf.json, sci.json) from a build's out dir."""
@@ -314,3 +315,161 @@ def test_withheld_build_passes_verify_data_dir(tmp_path):
     r = subprocess.run([sys.executable, "scripts/verify.py", "--data-dir", str(out)],
                        cwd=str(ROOT), capture_output=True, text=True)
     assert r.returncode == 0, f"verify.py --data-dir failed on the withheld build:\n{r.stdout}\n{r.stderr}"
+
+
+# --------------------------------------------------------------------------- C1c: --products SURFACE gate
+# The per-station --products tree (station.json + dimensionality.json) IS a distribution surface: the
+# deploy Makefile writes products/ INSIDE the served build dir (deploy/Makefile ~:89, --products
+# /out/$BUILD_REL/products), and the portal serves it at /data/products/. So it rides the SAME C1 access
+# gate as tf.json/sci.json: a NON-SERVED survey (embargoed w/ active embargo, or metadata_only) must NOT
+# emit the TF-derived science (median_relative_error, dimensionality classification, skew_beta, the
+# completeness diagnostic, the frame phase medians), the exact source position, or the input sha256 — that
+# is exactly the embargoed pre-publication science the byte/display gates withhold elsewhere. Its
+# dimensionality.json (a pure interpretation product) is NOT emitted at all. The OPEN survey in the SAME
+# build is unaffected. These PINs build a 3-survey corpus (open + embargoed + metadata_only) and sweep the
+# WHOLE emitted products/ tree; the pre-C1c emitter emitted full science for every station (see
+# _reconstruct_prefix_station_json + test_products_leak_sweep_catches_prefix_emitter, the red-prove).
+
+# TF-derived science field NAMES that must never appear under a non-served survey's products.
+_PRODUCTS_SCIENCE_KEYS = ("median_relative_error", "dimensionality", "skew_beta_median_deg",
+                          "completeness_smoothness_diagnostic", "classification", "pct_periods_3d",
+                          "convention_check", "phs_xy_median_deg", "phs_yx_median_deg", "input_sha256")
+# Non-served access blocks and whether the survey serves — a metadata_only, an embargoed-future, plus the
+# open control. (An embargoed-PAST survey is ALSO non-served; the pure-gate tests above pin that case, and
+# this corpus keeps to the two distinct non-served *kinds* the task enumerates + the open control.)
+_FUT = (date.today() + timedelta(days=365)).isoformat()
+_CORPUS = {
+    "open":     ("Open Corpus Survey",     "access: { level: open }",                            True),
+    "embargo":  ("Embargoed Corpus Survey", f"access: {{ level: embargoed, embargo_until: {_FUT} }}", False),
+    "metaonly": ("MetadataOnly Corpus Survey", "access: { level: metadata_only }",               False),
+}
+
+
+def _build_products_corpus(tmp_path):
+    """Stage a 3-survey corpus (open + embargoed + metadata_only), each a copy of the CC-BY sample survey
+    under a distinct slug, and build WITH --products. Returns (out, prod_dir, served_slugs, nonserved_slugs)."""
+    src = tmp_path / "surveys_src"
+    src.mkdir()
+    served, nonserved = set(), set()
+    _survey_src = next(SURVEYS.glob("*/survey.yaml")).parent   # the sample survey dir under data/
+    for slug, (name, access_block, is_served) in _CORPUS.items():
+        d = src / slug
+        shutil.copytree(_survey_src, d)
+        y = d / "survey.yaml"
+        lines = [ln for ln in y.read_text(encoding="utf-8").splitlines()
+                 if not ln.strip().startswith(("access:", "slug:", "name:"))]
+        lines += [f"slug: {slug}", f'name: "{name}"', access_block]
+        y.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (served if is_served else nonserved).add(slug)
+    out = tmp_path / "data"
+    prod = out / "products"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(src),
+                        "--out", str(out), "--products", str(prod), "--bundle-edi", "--no-validate"],
+                       cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return out, prod, served, nonserved
+
+
+def _sweep_products_science(prod, slug):
+    """Sweep every station.json + dimensionality.json under products/<slug>/ and return the list of
+    (relpath, marker) where a TF-derived science field NAME appears, PLUS a flag for any dimensionality.json
+    present. The RAW json text is scanned, so a field nested anywhere (diagnostics/frame/...) is caught."""
+    base = prod / slug
+    hits, dim_files = [], []
+    for f in sorted(base.rglob("*.json")):
+        rel = f.relative_to(prod)
+        txt = f.read_text(encoding="utf-8")
+        doc = json.loads(txt)
+        if f.name == "dimensionality.json":
+            dim_files.append(str(rel))
+        for key in _PRODUCTS_SCIENCE_KEYS:
+            if f'"{key}"' in txt:
+                hits.append((str(rel), key))
+        # structural check too: no diagnostics/frame/processing.software/provenance.input_sha256 blocks
+        if isinstance(doc, dict):
+            if "diagnostics" in doc:
+                hits.append((str(rel), "diagnostics-block"))
+            if "frame" in doc:
+                hits.append((str(rel), "frame-block"))
+            if isinstance(doc.get("processing"), dict) and doc["processing"].get("software"):
+                hits.append((str(rel), "processing.software"))
+    return hits, dim_files
+
+
+def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
+    """C1c PIN (FAILS pre-fix — the per-station products carried full TF science for every station): after a
+    3-survey build with --products, NO non-served survey's station.json/dimensionality.json may carry any
+    TF-derived science or exact coordinates, and NO dimensionality.json is emitted for a non-served survey;
+    the OPEN survey's products are unaffected (science present, dimensionality.json present)."""
+    pytest.importorskip("mt_metadata")
+    pytest.importorskip("mth5")
+    out, prod, served, nonserved = _build_products_corpus(tmp_path)
+    # Enumerate the emitted survey slugs from surveys.json and confirm our non-served set is covered.
+    smeta = json.loads((out / "surveys.json").read_text(encoding="utf-8"))
+    emitted_slugs = {e.get("slug") for e in smeta.values()}
+    assert nonserved <= emitted_slugs and served <= emitted_slugs, \
+        f"corpus slugs missing from build: emitted={emitted_slugs}"
+    # exact station coordinates from the public catalogue (discovery universal) — the leak also exposed these
+    # in station.json's location; a non-served survey's products must not restate them.
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    from _contract import CATALOGUE_COLUMNS
+    lat_i, lon_i = CATALOGUE_COLUMNS.index("lat"), CATALOGUE_COLUMNS.index("lon")
+    coord_strings = {str(row[lat_i]) for row in cat} | {str(row[lon_i]) for row in cat}
+    coord_strings = {c for c in coord_strings if c not in ("None", "")}
+
+    for slug in sorted(nonserved):
+        hits, dim_files = _sweep_products_science(prod, slug)
+        assert hits == [], f"non-served survey {slug!r} leaked TF-derived science in products/: {hits}"
+        assert dim_files == [], f"non-served survey {slug!r} emitted dimensionality.json (interpretation): {dim_files}"
+        # exact-coordinate sweep: no catalogue lat/lon value may appear anywhere in this survey's products text
+        for f in (prod / slug).rglob("*.json"):
+            txt = f.read_text(encoding="utf-8")
+            leaked = [c for c in coord_strings if c in txt]
+            assert not leaked, f"non-served survey {slug!r} leaked exact coordinates {leaked} in {f.name}"
+        # and the withheld station.json still carries the discovery-safe identity the portal/catalogue expose
+        sj = json.loads((prod / slug / "A1" / "station.json").read_text(encoding="utf-8"))
+        assert sj.get("withheld") is True and sj["access"]["served"] is False
+        assert sj["distribution"]["edi_available"] is False and sj.get("survey")
+
+    # OPEN control: the served survey in the SAME build keeps its full science + dimensionality.json.
+    for slug in sorted(served):
+        oj = json.loads((prod / slug / "A1" / "station.json").read_text(encoding="utf-8"))
+        assert "diagnostics" in oj and oj["diagnostics"].get("dimensionality"), \
+            "the OPEN survey's products must retain their TF-derived science"
+        assert (prod / slug / "A1" / "dimensionality.json").exists(), \
+            "the OPEN survey must still emit dimensionality.json"
+
+
+def _reconstruct_prefix_station_json(sci_science_present=True):
+    """Reconstruct the PRE-C1c per-station station.json shape (full TF science, emitted for EVERY survey
+    regardless of access state). Used by the red-prove below to show the leak-sweep is non-vacuous: the
+    sweep MUST flag this pre-fix document."""
+    return {
+        "ausmt_id": "au.embargo.A1", "station": "A1", "survey": "Embargoed Corpus Survey",
+        "location": {"lat": -30.145891, "lon": 136.974795},
+        "data": {"type": "BBMT", "n_periods": 62, "period_min_s": 0.005, "period_max_s": 6359.7},
+        "diagnostics": {"median_relative_error": 0.019, "dimensionality": "2-D",
+                        "skew_beta_median_deg": 0.7,
+                        "completeness_smoothness_diagnostic": {"value": 5.0, "basis": "e"}},
+        "processing": {"software": "LEMIMT", "algorithm": "Robust Remote Reference"},
+        "provenance": {"input_sha256": "70e35e356b31bc5f65ae8194bc4ae2d02da5ff8e82c4960be455f463488ee535"},
+        "frame": {"convention_check": {"phs_xy_median_deg": 39.16, "phs_yx_median_deg": -143.72}},
+    }
+
+
+def test_products_leak_sweep_catches_prefix_emitter(tmp_path):
+    """RED-PROVE (non-vacuity): hermetically export the PRE-C1c station.json + dimensionality.json into a
+    products/ tree and run the SAME sweep the PIN above uses — it MUST flag the leak (science fields present,
+    exact coordinates present, dimensionality.json emitted). If this passed, the PIN would be vacuous."""
+    prod = tmp_path / "products"
+    sdir = prod / "embargo" / "A1"
+    sdir.mkdir(parents=True)
+    (sdir / "station.json").write_text(json.dumps(_reconstruct_prefix_station_json(), indent=1), encoding="utf-8")
+    (sdir / "dimensionality.json").write_text(json.dumps(
+        {"classification": "2-D", "skew_beta_median_deg": 0.7, "pct_periods_3d": 0}, indent=1), encoding="utf-8")
+    hits, dim_files = _sweep_products_science(prod, "embargo")
+    assert hits, "red-prove FAILED: the sweep did not flag the pre-fix science leak (PIN would be vacuous)"
+    assert dim_files, "red-prove FAILED: the sweep did not flag the pre-fix dimensionality.json"
+    # exact-coordinate detection is non-vacuous too
+    txt = (sdir / "station.json").read_text(encoding="utf-8")
+    assert "-30.145891" in txt and "136.974795" in txt, "pre-fix station.json must carry exact coordinates"
