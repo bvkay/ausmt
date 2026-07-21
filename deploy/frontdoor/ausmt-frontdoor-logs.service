@@ -1,0 +1,45 @@
+# AusMT front-door log shipping (C47 deliverable 3). A oneshot the ausmt-frontdoor-logs.timer fires
+# once a day, a few minutes AHEAD of the C45 fold (ausmt-stats.timer, 03:35 UTC): it runs
+# deploy/frontdoor/ship-frontdoor-logs.sh, which rsyncs the masked access-frontdoor*.json logs off the
+# VPS over the tailnet into $AUSMT_DATA_DIR/logs/caddy — the exact dir the aggregator globs. Same
+# trust class + install idiom as ausmt-stats.service: NON-root operator uid, .env-driven (no shell
+# profile), best-effort.
+#
+# RUNS ON THE BOX (it pulls FROM the VPS). It lives in the front-door subtree because it is part of the
+# bridge deliverable, but it is a box-side unit — install it on the box, like the other ausmt-* units.
+#
+# INSTALL — replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (systemd does not
+# expand env vars in ExecStart/WorkingDirectory), then copy this file to /etc/systemd/system/:
+#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir  (e.g. /home/<operator>/ausmt-code/deploy)
+#   __ENV_FILE__    -> the absolute path to deploy/.env              (e.g. /home/<operator>/ausmt-code/deploy/.env)
+# deploy/.env must carry AUSMT_DATA_DIR and AUSMT_FRONTDOOR_LOG_REMOTE (see deploy/.env.example +
+# deploy/frontdoor/RUNBOOK.md "Log shipping").
+
+[Unit]
+Description=AusMT front-door log shipping (pull masked access-frontdoor logs over the tailnet, daily)
+# The runbook for this unit (resolved by the install sed exactly like ExecStart) — never a literal
+# <operator> path (the 2026-07 backup-unit Documentation bug).
+Documentation=file://__DEPLOY_DIR__/frontdoor/RUNBOOK.md
+# Needs the network up (it pulls over the tailnet) and a synced clock for the log timestamps.
+After=time-sync.target network-online.target
+Wants=time-sync.target network-online.target
+
+[Service]
+Type=oneshot
+# Run as the OPERATOR uid — the same account that owns the checkout and can WRITE $AUSMT_DATA_DIR/logs/
+# caddy (where the shipped logs land, beside the box's own access.json). NOT root, NOT a container uid.
+# Set this to the same account as ausmt-stats.service / ausmt-backup.service.
+User=ausmt
+# .env carries AUSMT_DATA_DIR + AUSMT_FRONTDOOR_LOG_REMOTE (+ any AUSMT_SHIP_* override); loaded the
+# same way the other ausmt-* units load it, so the unit depends on NO shell profile.
+EnvironmentFile=__ENV_FILE__
+WorkingDirectory=__DEPLOY_DIR__
+# One pass: rsync the front-door log family into the log dir, exit. Invoked via `sh` (no reliance on
+# the file's exec bit). The script fails LOUD (non-zero) if the remote is unreachable, so a broken
+# tailnet/ssh surfaces in `systemctl status` rather than silently starving the fold.
+ExecStart=/bin/sh __DEPLOY_DIR__/frontdoor/ship-frontdoor-logs.sh
+# The pull is quick (a handful of small JSON files); bound a wedged run well under the daily cadence.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
