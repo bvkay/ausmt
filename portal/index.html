@@ -147,6 +147,9 @@
   button{font-family:var(--sans);font-size:12.5px;padding:8px 6px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
   button:hover{border-color:var(--copper)}
   button.primary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
+  /* .armed: a draw button reflecting the shared armedDrawMode (its tool is live) — matches the copper
+     active look of .primary / .seg button.on, so it reads as "currently on". */
+  button.armed{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
   button:disabled{opacity:.35;cursor:not-allowed}
   .wide{grid-column:1/-1}
 
@@ -629,9 +632,15 @@
     <h2>Selection</h2>
     <div class="selbox">
       <div class="selnum"><b class="big" id="selBig">0</b><span class="biglab"> stations selected</span></div>
-      <div class="hint" id="selHint">Draw a polygon or rectangle on the map (toolbar, top-left), or take everything that passes the filters.</div>
+      <div class="hint" id="selHint">Draw on the map with the buttons below (or the toolbar, top-left), or take everything that passes the filters.</div>
       <div class="btnrow">
         <button class="wide" id="selAll">Select all filtered</button>
+      </div>
+      <!-- Discoverability: these arm the SAME rectangle/polygon draw handlers as the map's top-left
+           toolbar icons (map.js armDraw); .armed mirrors the shared armedDrawMode both surfaces read. -->
+      <div class="btnrow">
+        <button id="drawRect">Draw rectangle</button>
+        <button id="drawPoly">Draw polygon</button>
       </div>
       <!-- D4: export empty-state. The download row is hidden until a selection exists; this hint stands
            in its place. updateSel() (filters.js) toggles .hidden on both when selected.size crosses 0. -->
