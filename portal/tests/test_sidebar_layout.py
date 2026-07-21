@@ -21,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent   # portal/
 INDEX = ROOT / "index.html"
+ABOUT = ROOT / "about.html"
 
 
 def _html():
@@ -116,3 +117,18 @@ def test_collections_block_is_above_the_tree_in_source():
     assert i_cg >= 0, "index.html has no #collGroup block"
     assert i_ts >= 0, "index.html has no #treeSection"
     assert i_cg < i_ts, "#collGroup must appear before #treeSection (collections render above the tree)"
+
+
+# ---- UX9 item 3: equal-width nav min-width token ----------------------------------------------------
+
+def test_nav_button_min_width_fits_collections_label_across_pages():
+    """UX9 (item 3). The equal-width header nav (nav button on index, nav a on about) must reserve
+    min-width:112px so the widest label ("Collections", ~109.7px) is not clipped, mirrored across both
+    pages. FAILS if either page falls back below 112px. Non-vacuous: the pre-UX9 token was 92px, which
+    this asserts against — a red-proof on the old CSS trips here."""
+    idx = _rule(_style(_html()), "nav button")
+    assert idx is not None, "index.html lost its `nav button{...}` rule"
+    assert "min-width:112px" in idx, f"index nav button must reserve min-width:112px (fit 'Collections'); got: {idx}"
+    ab = _rule(_style(ABOUT.read_text(encoding="utf-8")), "nav a")
+    assert ab is not None, "about.html lost its `nav a{...}` rule"
+    assert "min-width:112px" in ab, f"about nav link must mirror min-width:112px; got: {ab}"

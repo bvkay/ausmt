@@ -120,7 +120,10 @@ function setView(v){curView=v;
   const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
   if(v==="surveys"){closeDrawer();renderCards();}
   else if(v==="collections"){closeDrawer();renderCollections();}
-  else setTimeout(()=>map.invalidateSize(),60);
+  else setTimeout(()=>{map.invalidateSize();
+    // UX9 item 2: after the size is reclaimed, run the one-shot home-fit corrector (map.js) — it repairs the
+    // off-centre-on-load case (a degenerate primary fit) and stands down without fighting a user's own view.
+    if(typeof _mapCorrectHomeFit==="function")_mapCorrectHomeFit();},60);
   // re-apply the "hidden when no dated surveys" state — the data-views toggle above just unconditionally
   // unhid #recentSideSection for the map view, which would flash an empty section when there are none.
   if(typeof ST!=="undefined"&&ST.length)renderRecentlyAdded();

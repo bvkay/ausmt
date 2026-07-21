@@ -76,10 +76,13 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
   "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
   // UX7b U7 welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
-  // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). U8 _tourPlace is the PURE
-  // card-placement fn (side pick + no-overlap + caret aim), unit-tested with synthetic rects since jsdom
-  // has no layout engine. U10 TOUR_DIM is the overlay alpha (the load-bearing 'increased dim' value).
-  "showWelcome,closeWelcome,tourPlace:(r,cw,ch,vw,vh)=>_tourPlace(r,cw,ch,vw,vh),tourDim:()=>TOUR_DIM," +
+  // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). UX9 (owner tour redesign): the
+  // side-picking _tourPlace is retired for a CENTRED card + a LEADER to the spotlight. _tourCardBox is the
+  // PURE centred-card box (with the overlap nudge) and _tourLeader the PURE leader geometry (endpoints +
+  // suppression) — both unit-tested with synthetic rects since jsdom has no layout engine. U10 TOUR_DIM is
+  // the overlay alpha (the load-bearing 'increased dim' value).
+  "showWelcome,closeWelcome,tourCardBox:(cw,ch,vw,vh,t)=>_tourCardBox(cw,ch,vw,vh,t)," +
+  "tourLeader:(c,s,sup)=>_tourLeader(c,s,sup),tourDim:()=>TOUR_DIM," +
   // UX6 Wave D hooks: sidebarMode reader + setSidebarMode (D2 Browse/Select toggle); onDrawCreated +
   // drawSelectionMsg (D3 draw-created toast + its pure formatter).
   "sidebarMode:()=>sidebarMode,setSidebarMode,onDrawCreated,drawSelectionMsg," +
@@ -131,6 +134,15 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
   // CVD amendment hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
   "qColor," +
+  // UX9 item 2 (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
+  // degenerate (stale/0x0) container size; the fix invalidates size BEFORE the primary fit and adds a
+  // one-shot corrector on the setView('map') timer. mapSizeDegenerate/mapRefitGate are the PURE decisions
+  // (unit-tested on synthetic inputs, since jsdom has no layout engine); homeFitDegenerate/mapUserInteracted
+  // read the recorded boot state; setMapInteracted flips the user-control flag; mapCorrectHomeFit invokes
+  // the corrector so its one-shot re-fit + flag-clear are observable via the map stub's recorded calls.
+  "mapSizeDegenerate:(s)=>_mapSizeDegenerate(s),mapRefitGate:(st)=>_mapRefitGate(st)," +
+  "homeFitDegenerate:()=>_fitWasDegenerate,mapUserInteracted:()=>_mapUserInteracted," +
+  "setMapInteracted:(v)=>{_mapUserInteracted=v;},mapCorrectHomeFit:()=>_mapCorrectHomeFit()," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -162,6 +174,43 @@ async function bootFreshWindow(dataMap) {
   const A = win.__api;
   await A.boot();
   ok(A.nST() === 5, "fixture should load 5 stations, got " + A.nST());
+
+  // UX9 ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
+  // degenerate (stale/0x0) container size, so the map framed at zoom 0 / off centre. The fix (a) invalidates
+  // size BEFORE the primary fit, (b) fits with a 24px padding, and (c) adds a ONE-SHOT corrector on the
+  // setView('map') 60ms timer that re-fits HOME_BOUNDS only when the fit was degenerate AND the user has not
+  // taken control. These run synchronously at boot (the timer hasn't fired yet), so mapCalls holds the
+  // primary invalidateSize+fit here.
+  // (a)+(b): the PRIMARY fit carries padding [24,24] and is IMMEDIATELY preceded by an invalidateSize
+  //          ({animate:false,pan:false}) — the size is reclaimed before the box is measured, not after.
+  const _fitIdx = mapCalls.findIndex(c => c.fn === "fitBounds" && c.args[1] && Array.isArray(c.args[1].padding)
+    && c.args[1].padding[0] === 24 && c.args[1].padding[1] === 24);
+  ok(_fitIdx > 0, "item2: buildMarkers must fit the home bounds with {padding:[24,24]}; no such fitBounds recorded");
+  ok(mapCalls[_fitIdx - 1].fn === "invalidateSize", "item2: invalidateSize must run IMMEDIATELY BEFORE the primary fit (fit-at-fresh-size), got " + mapCalls[_fitIdx - 1].fn);
+  const _invArg = mapCalls[_fitIdx - 1].args[0] || {};
+  ok(_invArg.animate === false && _invArg.pan === false, "item2: the pre-fit invalidateSize must pass {animate:false,pan:false}, got " + JSON.stringify(_invArg));
+  // (c)-degeneracy: jsdom has no layout engine, so the headless map's size reads degenerate — exactly the
+  //                 condition the corrector exists for. Recorded at boot.
+  ok(A.homeFitDegenerate() === true, "item2: the boot fit must be recorded as degenerate under the headless (0x0) map");
+  // PURE _mapSizeDegenerate: a real box is fine; a zero/partial/absent size is degenerate.
+  ok(A.mapSizeDegenerate({ x: 800, y: 600 }) === false, "item2: an 800x600 size must not read degenerate");
+  ok(A.mapSizeDegenerate({ x: 0, y: 0 }) === true, "item2: a 0x0 size must read degenerate");
+  ok(A.mapSizeDegenerate({ x: 800 }) === true, "item2: a size missing an axis must read degenerate");
+  ok(A.mapSizeDegenerate(null) === true, "item2: an absent size must read degenerate");
+  // PURE _mapRefitGate: fires ONLY when the user has NOT taken control AND the fit was degenerate.
+  ok(A.mapRefitGate({ userInteracted: false, fitDegenerate: true }) === true, "item2: gate must fire for untouched+degenerate");
+  ok(A.mapRefitGate({ userInteracted: true, fitDegenerate: true }) === false, "item2: gate must NOT fire once the user has interacted (no fighting a deliberate view)");
+  ok(A.mapRefitGate({ userInteracted: false, fitDegenerate: false }) === false, "item2: gate must NOT fire when the primary fit was healthy");
+  // The corrector is ONE-SHOT: with the boot state (untouched + degenerate) it re-fits HOME_BOUNDS once and
+  // then stands down — a second call (and, by extension, a later return to the map or an E6 programmatic fit)
+  // records no further home re-fit.
+  ok(A.mapUserInteracted() === false, "item2: the user-control flag must start false at boot");
+  const _fbBefore = mapCalls.filter(c => c.fn === "fitBounds").length;
+  A.mapCorrectHomeFit();
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbBefore + 1, "item2: the corrector must re-fit HOME_BOUNDS once when untouched+degenerate");
+  ok(A.homeFitDegenerate() === false, "item2: the corrector must clear the degenerate flag (one-shot)");
+  A.mapCorrectHomeFit();
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbBefore + 1, "item2: the corrector must NOT re-fit a second time (one-shot; must not clobber later/E6 fits)");
 
   // VER CHIP -> FOOTER (UX feedback round 3, item 3): the version chip moved out of the header into the
   // footer. version.js is a standalone page script (not in MODULES), so run it here against the real DOM
@@ -510,40 +559,66 @@ async function bootFreshWindow(dataMap) {
   ok(win.localStorage.getItem("ausmt_intro_dismissed") !== "1", "opening/closing the help panel must NOT persist a dismissal");
   win.localStorage.removeItem("ausmt_intro_dismissed");                                                     // clean state for the tour sections
 
-  // G4. TOUR CARD ANCHORING (U8) + COPPER NEXT (U9) + OVERLAY DIM (U10).
-  // U8 positioning is a PURE fn (_tourPlace) because jsdom has NO layout engine (every getBoundingClientRect
-  // is zero) — so the load-bearing side-pick / no-overlap / caret-aim coverage runs on SYNTHETIC rects, the
-  // same pattern as partitionMarkers()/radiusForZoom(). The DOM checks below then pin the arrow element, the
-  // copper Next class and the applied dim, which ARE observable in jsdom.
-  const M = 8;
-  const noOverlap = (c, r) => c.right <= r.left || c.left >= r.right || c.bottom <= r.top || c.top >= r.bottom;
-  function placeCase(rect, expectSide, expectDir, aimAxis) {
-    const cardW = 340, cardH = 160, vpW = 1200, vpH = 800;
-    const p = A.tourPlace(rect, cardW, cardH, vpW, vpH);
-    ok(p.side === expectSide, "U8: placement side for " + expectSide + " case wrong, got " + p.side);
-    ok(p.arrowDir === expectDir, "U8: caret direction for " + expectSide + " case must be " + expectDir + ", got " + p.arrowDir);
-    const box = { left: p.left, top: p.top, right: p.left + cardW, bottom: p.top + cardH };
-    ok(noOverlap(box, rect), "U8: card OVERLAPS its target on the " + expectSide + " side (box " + JSON.stringify(box) + " vs target " + JSON.stringify(rect) + ")");
-    ok(box.left >= M - 0.001 && box.right <= vpW - M + 0.001 && box.top >= M - 0.001 && box.bottom <= vpH - M + 0.001,
-      "U8: card not clamped inside the viewport 8px margins on the " + expectSide + " side, box " + JSON.stringify(box));
-    // the caret must point AT the target centre along the shared axis
-    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-    if (aimAxis === "x") ok(Math.abs((p.left + p.arrowAim) - cx) < 1, "U8: caret does not point at the target centre-x on the " + expectSide + " side, aim=" + (p.left + p.arrowAim) + " cx=" + cx);
-    else ok(Math.abs((p.top + p.arrowAim) - cy) < 1, "U8: caret does not point at the target centre-y on the " + expectSide + " side, aim=" + (p.top + p.arrowAim) + " cy=" + cy);
-  }
-  // four differently-positioned targets exercise all four sides (below > above > right > left), each with a
-  // no-overlap + in-viewport + caret-aim assertion:
-  placeCase({ left: 500, top: 20, right: 560, bottom: 50, width: 60, height: 30 }, "below", "up", "x");     // room below
-  placeCase({ left: 500, top: 740, right: 560, bottom: 790, width: 60, height: 50 }, "above", "down", "x"); // no room below -> above
-  placeCase({ left: 0, top: 0, right: 60, bottom: 800, width: 60, height: 800 }, "right", "left", "y");     // full-height left edge -> right
-  placeCase({ left: 1140, top: 0, right: 1200, bottom: 800, width: 60, height: 800 }, "left", "right", "y");// full-height right edge -> left
-  // no-target steps stay centred with NO caret (the pure fn is not consulted; the DOM path handles it — see below).
+  // G4. TOUR REDESIGN (UX9 owner): CENTRED card + LEADER to the spotlight. The side-picking _tourPlace is
+  // retired; the card is centred for EVERY step and a leader line/arrow connects it to the spotlight. The
+  // geometry is PURE (_tourCardBox / _tourLeader) because jsdom has NO layout engine (every
+  // getBoundingClientRect is zero) — so the centred-always, overlap-nudge, leader-endpoint and map-step
+  // suppression coverage runs on SYNTHETIC rects, the same pattern as partitionMarkers()/radiusForZoom().
+  // The DOM checks below then pin the leader element, the copper Next class and the applied dim.
+  const M = 8, CLEAR = 16, cardW = 340, cardH = 160, vpW = 1200, vpH = 800;
+  const cx0 = Math.round((vpW - cardW) / 2), cy0 = Math.round((vpH - cardH) / 2);
+  // CENTRED-ALWAYS: no target -> exactly viewport-centred, not nudged.
+  let b = A.tourCardBox(cardW, cardH, vpW, vpH, null);
+  ok(b.left === cx0 && b.top === cy0, "UX9: the card must be viewport-centred with no target, got " + JSON.stringify(b));
+  ok(b.nudged === false, "UX9: a no-target card must not be nudged");
+  // A target that does NOT overlap the centred card leaves it centred.
+  b = A.tourCardBox(cardW, cardH, vpW, vpH, { left: 20, top: 20, right: 90, bottom: 60 });
+  ok(b.left === cx0 && b.top === cy0 && b.nudged === false, "UX9: a non-overlapping target must leave the card centred, got " + JSON.stringify(b));
+  // OVERLAP RULE (downward): a target under the centred card nudges it DOWN to target.bottom+16, horizontal
+  // stays centred, and it clears the target by >=16 (no residual overlap).
+  const tgtMid = { left: 500, top: 300, right: 700, bottom: 420 };
+  b = A.tourCardBox(cardW, cardH, vpW, vpH, tgtMid);
+  ok(b.nudged === true, "UX9: a target overlapping the centred card must nudge it");
+  ok(b.top === tgtMid.bottom + CLEAR, "UX9: overlap nudge must move the card DOWN to target.bottom+16, got " + b.top);
+  ok(b.left === cx0, "UX9: the overlap nudge is vertical only — horizontal stays centred, got left=" + b.left);
+  ok(b.top >= tgtMid.bottom + CLEAR - 0.001, "UX9: nudged card must clear the target by 16px");
+  // OVERLAP RULE (upward fallback): a tall target for which downward would overflow the viewport nudges UP
+  // to target.top-16-cardH instead.
+  const tgtTall = { left: 500, top: 340, right: 700, bottom: 700 };
+  b = A.tourCardBox(cardW, cardH, vpW, vpH, tgtTall);
+  ok(b.nudged === true && b.top === tgtTall.top - CLEAR - cardH,
+    "UX9: when downward won't fit, nudge UP to target.top-16-cardH, got top=" + b.top);
+  ok(b.bottom <= tgtTall.top - CLEAR + 0.001, "UX9: upward-nudged card must clear the target top by 16px");
 
-  // DOM: open the tour and pin the arrow element, the copper Next button and the raised dim. In jsdom every
-  // rect is zero, so step 0 takes the no-target branch: the caret hides and the CENTRED backdrop carries the
-  // dim — exactly the value we assert here (0.78, up from 0.65).
+  // LEADER GEOMETRY: for a centred card and an off-card spotlight, the endpoints lie ON each rect's boundary
+  // and on the card-centre<->spot-centre axis (so the line leaves the card edge nearest the target and lands
+  // on the spot edge nearest the card).
+  const cCard = { left: cx0, top: cy0, right: cx0 + cardW, bottom: cy0 + cardH };
+  const cSpot = { left: 900, top: 100, right: 1000, bottom: 200 };
+  const ld = A.tourLeader(cCard, cSpot, false);
+  ok(ld.visible === true, "UX9: the leader must be visible for a normal targeted step");
+  const onEdge = (x, y, r) => (Math.abs(x - r.left) < 1e-6 || Math.abs(x - r.right) < 1e-6 || Math.abs(y - r.top) < 1e-6 || Math.abs(y - r.bottom) < 1e-6)
+    && x >= r.left - 1e-6 && x <= r.right + 1e-6 && y >= r.top - 1e-6 && y <= r.bottom + 1e-6;
+  ok(onEdge(ld.x1, ld.y1, cCard), "UX9: the leader must start ON the card boundary, got (" + ld.x1 + "," + ld.y1 + ")");
+  ok(onEdge(ld.x2, ld.y2, cSpot), "UX9: the leader must end ON the spot boundary, got (" + ld.x2 + "," + ld.y2 + ")");
+  const ccx = (cCard.left + cCard.right) / 2, ccy = (cCard.top + cCard.bottom) / 2;
+  const scx = (cSpot.left + cSpot.right) / 2, scy = (cSpot.top + cSpot.bottom) / 2, ax = scx - ccx, ay = scy - ccy;
+  const colin = (x, y) => Math.abs(ax * (y - ccy) - ay * (x - ccx)) < 1e-6;
+  ok(colin(ld.x1, ld.y1) && colin(ld.x2, ld.y2), "UX9: both leader endpoints must lie on the card-centre<->spot-centre axis");
+  // MAP-STEP SUPPRESSION: the same rects, but suppressed (as _tourLayout passes for sel '#map' — TOUR_STEPS
+  // 0 and 9 — and for the no-target fallback) -> the leader is not drawn.
+  ok(A.tourLeader(cCard, cSpot, true).visible === false, "UX9: the leader must be suppressed (visible:false) on map steps / no-target");
+
+  // DOM: open the tour and pin the leader element, the copper Next button and the raised dim. In jsdom every
+  // rect is zero, so step 0 takes the no-target branch: the leader hides, the card is centred, and the
+  // backdrop carries the dim (0.78, up from the old 0.65).
   doc.getElementById("introTakeTour").click();
-  ok(doc.getElementById("tourArrow"), "U8: the tour card must contain a caret element (#tourArrow)");
+  ok(doc.getElementById("tourLeader"), "UX9: the tour must build a leader overlay element (#tourLeader)");
+  ok(doc.getElementById("tourLeaderLine"), "UX9: the leader overlay must contain the line element (#tourLeaderLine)");
+  ok(!doc.getElementById("tourArrow"), "UX9: the retired caret element (#tourArrow) must be gone");
+  const tCard = doc.getElementById("tourCard");
+  ok(/px$/.test(tCard.style.left) && /px$/.test(tCard.style.top), "UX9: the centred card must be positioned in px, got left=" + JSON.stringify(tCard.style.left));
+  ok(doc.getElementById("tourLeader").style.display === "none", "UX9: the leader must be hidden on the no-target step 0 (jsdom rects are zero)");
   const tNext = doc.getElementById("tourNext");
   ok(tNext.classList.contains("tourprimary"), "U9: the tour Next button must carry the copper .tourprimary class");
   ok(A.tourDim() === 0.78, "U10: overlay dim must be 0.78, got " + A.tourDim());

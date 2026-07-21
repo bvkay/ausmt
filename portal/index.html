@@ -53,7 +53,7 @@
      text (#16110b on --copper = 6.16:1, AA). Inactive buttons read as buttons (bordered, panel fill,
      full-strength text), not muted links. */
   nav{display:flex;gap:6px}
-  nav button{flex:1;min-width:92px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
+  nav button{flex:1;min-width:112px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
   nav button:hover{border-color:var(--copper)}
   nav button.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
   nav button.active:hover{border-color:var(--copper)}
@@ -406,14 +406,19 @@
   /* --- guided tour spotlight (tour.js) --- */
   /* U10: the dim is JS-driven (tour.js TOUR_DIM, raised .65 -> .78). On a targeted step the backdrop
      stays TRANSPARENT and the spot's box-shadow supplies the dim, so the spotlighted element shows fully
-     through the cutout; on a no-target step the .centered backdrop carries the dim itself. */
+     through the cutout; on a no-target step the backdrop carries the dim itself.
+     UX9 (owner): the card is CENTRED for every step; a leader line/arrow (SVG overlay) connects it to the
+     spotlight. z-order: backdrop 3000 < spot 3001 = leader (appended after the spot, so the line paints over
+     the spot's dim box-shadow) < card 3002. Map steps (TOUR_STEPS 0/9) draw no leader — the spotlight is the
+     cue; the no-target fallback draws none either. */
   .tourbackdrop{position:fixed;inset:0;z-index:3000}
-  .tourbackdrop.centered{display:flex;align-items:center;justify-content:center}
   .tourspot{position:fixed;z-index:3001;border:2px solid var(--copper);border-radius:8px;
     pointer-events:none;transition:all .12s ease}
+  .tourleader{position:fixed;inset:0;width:100%;height:100%;z-index:3001;pointer-events:none}
+  .tourleader line{stroke:var(--copper);stroke-width:2}
+  .tourleader #tourLeaderHead path{fill:var(--copper)}
   .tourcard{position:fixed;z-index:3002;max-width:340px;background:var(--panel);border:1px solid var(--copper);
     border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
-  .tourcard.static{position:static;margin:0 auto}
   .tourstep{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:8px}
   .tourtext{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:14px}
   .tourbtns{display:flex;justify-content:flex-end;gap:8px}
@@ -422,12 +427,6 @@
      #16110b on --copper = 6.16:1, AA). */
   .tourbtns .tourprimary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
   .tourbtns .tourprimary:hover{border-color:var(--copper)}
-  /* U8: tour card caret — points AT the spotlighted target; tour.js sets the direction class + offset. */
-  .tourarrow{position:absolute;width:0;height:0;pointer-events:none}
-  .tourarrow--up{border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:8px solid var(--copper)}
-  .tourarrow--down{border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid var(--copper)}
-  .tourarrow--left{border-top:8px solid transparent;border-bottom:8px solid transparent;border-right:8px solid var(--copper)}
-  .tourarrow--right{border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:8px solid var(--copper)}
 
   /* --- S3: year range / downloadable-only / go-to-place / recently-added --- */
   .yearrange{display:flex;align-items:center;gap:8px}
