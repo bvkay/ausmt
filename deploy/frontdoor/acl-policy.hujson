@@ -1,0 +1,56 @@
+// AusMT public bridge — tailnet ACL stanza (C47). This is the EXACT policy the owner PASTES into the
+// Tailscale admin console (Access controls) — merge these entries into the existing tailnet policy;
+// do not replace the whole policy with this file. It defines the dedicated front-door tag and the
+// port-granular fence: the front door reaches the box's READER port and NOTHING ELSE.
+//
+// This is deliberately the ONLY place a box tailnet IP appears, and it lives in the Tailscale admin
+// console, not in git. Fill the two <PLACEHOLDER> values from your tailnet:
+//   * the box's tailnet IP:            run `tailscale ip -4` on the box (a 100.x.y.z address)
+//   * the admin owner for the new tag: your admin user or group (e.g. "autogroup:admin")
+//
+// WHY A HOST ALIAS FOR THE BOX (not a new tag on the box): tagging the box would change its identity
+// and could disturb its EXISTING tailnet grants (its curator `tailscale serve`). A `hosts` alias
+// leaves the box exactly as it is and still lets us name it precisely in the rules below.
+
+{
+  // ---- The dedicated front-door tag (owned by your admin identity) -------------------------------
+  // Applied to the VPS when it joins: `tailscale up --advertise-tags=tag:ausmt-frontdoor` (auth-key
+  // flow in RUNBOOK.md). The VPS is the ONLY node that ever carries this tag.
+  "tagOwners": {
+    "tag:ausmt-frontdoor": ["<ADMIN_OWNER>"],   // e.g. "autogroup:admin"
+  },
+
+  // ---- Name the box so the rules can reference it without a new tag ------------------------------
+  "hosts": {
+    "ausmt-box": "<BOX_TAILNET_IP>",            // e.g. "100.101.102.103" (tailscale ip -4 on the box)
+  },
+
+  "acls": [
+    // ============================================================================================
+    // WALL 2 (the port-granular fence): the public front door may reach the box's READER port and
+    // NOTHING ELSE. Port 8445 is the tailscale-serve reader port the box exposes onto the tailnet
+    // (`tailscale serve --bg --tcp=8445 tcp://127.0.0.1:8445`), which forwards to the box's
+    // reader-only Caddy listener (:8081). The gateway/curator surface lives only on :8080/:8443 and
+    // is NOT in this dst — so even a mis-scoped front-door config cannot reach any /gateway/* surface
+    // through the tailnet. This is the wall that does not depend on the front-door config being right.
+    // ============================================================================================
+    {
+      "action": "accept",
+      "src":    ["tag:ausmt-frontdoor"],
+      "dst":    ["ausmt-box:8445"],
+    },
+
+    // ============================================================================================
+    // Log shipping (C47 deliverable 3): the BOX pulls the masked front-door access log over ssh
+    // (box -> VPS:22) so the C45 aggregator on the box can fold it. This is a SEPARATE grant whose
+    // src is the BOX, not tag:ausmt-frontdoor — so it does NOT widen the front-door tag's reach (the
+    // tag still reaches only the reader port above). Pull, not push, precisely so the front-door tag
+    // is never granted any inbound path to the box.
+    // ============================================================================================
+    {
+      "action": "accept",
+      "src":    ["ausmt-box"],
+      "dst":    ["tag:ausmt-frontdoor:22"],
+    },
+  ],
+}

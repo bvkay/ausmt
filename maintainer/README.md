@@ -25,6 +25,7 @@ frozen text. A change that contradicts a frozen decision starts with an amendmen
 | [C35b-GitTruthDesign.md](C35b-GitTruthDesign.md) | Test-reality for the publication path: real-git tests, vendored validator contract |
 | [UX4-MapAuslampScaling.md](UX4-MapAuslampScaling.md) | Map presentation: programme-based clustering, zoom-scaled markers |
 | [UX5-TreeCollections.md](UX5-TreeCollections.md) | Survey tree: collections group and disclosure controls |
+| [C47-PublicBridge.md](C47-PublicBridge.md) | Public demo bridge: a VPS front door on the tailnet exposing the reader only, with two independent walls keeping curator/admin surfaces private |
 
 The numbering is a running sequence of implementation contracts; numbers absent from this
 directory were contracts that changed code without freezing a design document.

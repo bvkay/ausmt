@@ -1,0 +1,51 @@
+# AusMT public front door — VPS stack (C47 public bridge).
+#
+# ONE service: a Caddy edge that terminates public TLS for the demo name and reverse-proxies the
+# reader to the box over the tailnet. It runs on a small Sydney VPS that has JOINED THE TAILNET under
+# a dedicated ACL tag (see acl-policy.hujson + RUNBOOK.md). Tailscale itself runs on the VPS HOST (not
+# in this compose), so this container reaches the box via the host's tailnet using the box MagicDNS
+# name in AUSMT_BOX_READER_UPSTREAM — hence network_mode: host, so Caddy resolves + dials the tailnet
+# exactly as the host does. No box firewall change, no inbound to the box.
+#
+# Bring up:  ./install-frontdoor.sh         (validates the Caddyfile, then `docker compose up -d`)
+# Stop/withdraw: docker compose -f deploy/frontdoor/compose.yaml down   (part of the rollback)
+
+services:
+  frontdoor:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # network_mode host: Caddy binds the VPS public :80/:443 directly AND dials the box over the
+    # tailnet by MagicDNS name using the host's tailscale resolver. (A bridge network would not see
+    # the host's tailnet by name.) The VPS's own firewall/security-group allows only :80 + :443
+    # inbound from the internet — see RUNBOOK.md hardening.
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      # Surfaced to the Caddyfile `{$...}` placeholders (config-side names only; nothing in git).
+      AUSMT_PUBLIC_NAME: ${AUSMT_PUBLIC_NAME:?set AUSMT_PUBLIC_NAME in deploy/frontdoor/.env}
+      AUSMT_BOX_READER_UPSTREAM: ${AUSMT_BOX_READER_UPSTREAM:?set AUSMT_BOX_READER_UPSTREAM in deploy/frontdoor/.env}
+      AUSMT_ACME_EMAIL: ${AUSMT_ACME_EMAIL:?set AUSMT_ACME_EMAIL in deploy/frontdoor/.env}
+    # Health = Caddy is up and answering locally on :80 (the ACME/redirect listener). Uses the image's
+    # BusyBox wget, like the box portal healthcheck.
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      # The shipped front-door Caddyfile, read-only.
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # ACME certificate + key material and Caddy's own state — MUST persist across restarts so a
+      # bounce does not re-request a certificate every time (Let's Encrypt rate limits).
+      - caddy_data:/data
+      - caddy_config:/config
+      # The masked access log. The box-side log-shipping timer pulls access-frontdoor*.json FROM this
+      # host path over the tailnet (ship-frontdoor-logs.sh). Create it once on the VPS:
+      #   mkdir -p /var/log/caddy   (Caddy runs as root in-container; it writes + rolls here)
+      - /var/log/caddy:/var/log/caddy
+
+volumes:
+  caddy_data:
+  caddy_config:

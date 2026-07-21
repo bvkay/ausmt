@@ -40,6 +40,14 @@ services:
       # LOOPBACK ONLY. tailscale serve --bg https / http://127.0.0.1:8443 is what actually exposes
       # this beyond the box (see deploy/README.md) -- never widen this to 0.0.0.0 or a bare port.
       - "127.0.0.1:8443:8080"
+      # C47 public bridge — the dedicated READER-ONLY listener (:8081 in the Caddyfile), the box-side
+      # "second wall". LOOPBACK ONLY, same reasoning as :8443. The box operator fronts THIS bind on the
+      # tailnet with a port-scoped `tailscale serve --bg --tcp=8445 tcp://127.0.0.1:8445`, and the
+      # tailnet ACL grants the VPS front-door tag reach to that tailnet port and nothing else — so the
+      # public edge can reach the reader and never a /gateway/* surface (which lives only on :8080).
+      # Never widen this to 0.0.0.0 or a bare port. See maintainer/C47-PublicBridge.md + the runbook
+      # at deploy/frontdoor/RUNBOOK.md.
+      - "127.0.0.1:8445:8081"
     volumes:
       # The build pipeline's OUTPUT, read-only from the portal's side. Mount the WHOLE site-data
       # tree (not site-data/current): a bind mount resolves a symlink ONCE at container start, so

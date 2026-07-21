@@ -1,0 +1,27 @@
+# AusMT front-door log-shipping timer (C47 deliverable 3). Fires ausmt-frontdoor-logs.service once a
+# day at 03:25 UTC — AFTER the nightly backup (03:20) and BEFORE the C45 fold (ausmt-stats, 03:35), so
+# each day's public logs are on the box before the aggregator reads them. Install:
+#   sudo cp deploy/frontdoor/ausmt-frontdoor-logs.{service,timer} /etc/systemd/system/
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first — see that file)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ausmt-frontdoor-logs.timer
+#   systemctl list-timers ausmt-frontdoor-logs.timer         # confirm the next run
+#   sudo systemctl start ausmt-frontdoor-logs.service        # ship once NOW to test
+# See deploy/frontdoor/RUNBOOK.md "Log shipping".
+
+[Unit]
+Description=AusMT front-door log shipping once a day at 03:25 UTC (+ jitter), ahead of the C45 fold
+
+[Timer]
+# 03:25 UTC: after the backup (03:20), before the stats fold (03:35). The aggregator only folds
+# COMPLETE days and is idempotent, so the exact minute is not load-bearing — the ordering (before the
+# fold) is what matters, and even a missed ship only defers a day's public counts to the next fold.
+OnCalendar=*-*-* 03:25:00
+# Small spread so this does not fire on the exact same second as the co-scheduled backup/stats timers.
+RandomizedDelaySec=300
+# Catch up one missed run after downtime (a box off overnight still ships on the next boot). Re-copies
+# are no-ops (rsync -a) and the fold is idempotent, so a catch-up run cannot double-count.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
