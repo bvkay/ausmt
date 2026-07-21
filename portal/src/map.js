@@ -154,6 +154,18 @@ function weightForZoom(z){return z<=4?1.0:1.5;}
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
 function restyleForZoom(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
+// UX9 item 2: the positioned-station extent buildMarkers fits to, remembered module-level so the
+// setView("map") 60ms corrector can re-fit to it (null until data with positions is in). _fitWasDegenerate
+// records whether that primary fit landed at a degenerate container size (see buildMarkers).
+let HOME_BOUNDS=null,_fitWasDegenerate=false;
+// PURE: a Leaflet map size is degenerate when it is missing or zero on either axis — the state that makes
+// fitBounds compute against a 0x0/stale box and land at zoom 0 / the wrong centre. Leaflet-free so the
+// jsdom driver pins it on synthetic sizes (the headless map's getSize() is a Proxy, so it reads degenerate).
+function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeof size.y==="number"&&size.x>0&&size.y>0);}
+// PURE: the corrector fires ONLY when the user has not taken control (never fight a deliberate view) AND the
+// primary fit was degenerate (so a healthy fit — and any later programmatic fit, e.g. E6's collection
+// framing — is left untouched). Split out so the no-fight-with-user decision is unit-testable.
+function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#13202B",fillColor:markerColor(s),fillOpacity:.92});
@@ -162,7 +174,40 @@ function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
   s.marker.on("click",()=>openStation(s.i));});
   // fit to the actual POSITIONED-station extent once data is in — supersedes the AU-bounds default set at
   // map creation above. C42: null-coord (withheld) stations are excluded so the bounds never go NaN.
-  const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);if(pts.length)map.fitBounds(pts);}
+  const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);
+  if(pts.length){
+    // Reclaim the true container size BEFORE fitting: on first load the map's cached size can be stale/0x0
+    // (its container was unlaid-out at map-create), which makes fitBounds compute against a degenerate box
+    // and land at zoom 0 / the wrong centre. invalidateSize repairs the cached size first; the fit is the
+    // PRIMARY attempt (the 60ms timer is only the corrector). We record whether the size was still degenerate
+    // at fit time so the corrector runs exactly when it is needed.
+    map.invalidateSize({animate:false,pan:false});
+    HOME_BOUNDS=pts;
+    _fitWasDegenerate=_mapSizeDegenerate(typeof map.getSize==="function"?map.getSize():null);
+    map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
+  }
+}
+// UX9 item 2: one-shot corrector, called from the setView("map") 60ms timer AFTER invalidateSize has
+// repaired the container size. Re-fits HOME_BOUNDS when the gate allows (user hasn't taken control and the
+// primary fit was degenerate), then clears the flag so it runs at most once — a later return to the map, or
+// a programmatic fit like E6, is never clobbered.
+function _mapCorrectHomeFit(){
+  if(!_mapRefitGate({userInteracted:_mapUserInteracted,fitDegenerate:_fitWasDegenerate}))return;
+  if(HOME_BOUNDS)map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
+  _fitWasDegenerate=false;   // one-shot: the boot repair fires once, then stands down
+}
+// Mark that the USER has taken control of the map, so the corrector never fights a deliberate pan/zoom.
+// Gated on genuine user gestures ONLY: Leaflet's dragstart is user-initiated (a programmatic setView/
+// fitBounds does NOT fire it), and the container wheel/touch listeners catch scroll- and pinch-zoom.
+// movestart is deliberately NOT used — it also fires on the app's own programmatic moves.
+let _mapUserInteracted=false;
+function _mapMarkInteracted(){_mapUserInteracted=true;}
+map.on("dragstart",_mapMarkInteracted);
+const _mapCont=(typeof map.getContainer==="function")?map.getContainer():null;
+if(_mapCont&&_mapCont.addEventListener){
+  _mapCont.addEventListener("wheel",_mapMarkInteracted,{passive:true});
+  _mapCont.addEventListener("touchstart",_mapMarkInteracted,{passive:true});
+}
 // UX4 (D4): restyle every marker on each zoom step so radius/weight track the tier. preferCanvas is on
 // (map creation) so a full restyle of ~1200 circleMarkers per step is acceptable; registered once here.
 map.on("zoomend",restyleForZoom);

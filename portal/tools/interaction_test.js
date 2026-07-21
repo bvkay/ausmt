@@ -131,6 +131,15 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
   // CVD amendment hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
   "qColor," +
+  // UX9 item 2 (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
+  // degenerate (stale/0x0) container size; the fix invalidates size BEFORE the primary fit and adds a
+  // one-shot corrector on the setView('map') timer. mapSizeDegenerate/mapRefitGate are the PURE decisions
+  // (unit-tested on synthetic inputs, since jsdom has no layout engine); homeFitDegenerate/mapUserInteracted
+  // read the recorded boot state; setMapInteracted flips the user-control flag; mapCorrectHomeFit invokes
+  // the corrector so its one-shot re-fit + flag-clear are observable via the map stub's recorded calls.
+  "mapSizeDegenerate:(s)=>_mapSizeDegenerate(s),mapRefitGate:(st)=>_mapRefitGate(st)," +
+  "homeFitDegenerate:()=>_fitWasDegenerate,mapUserInteracted:()=>_mapUserInteracted," +
+  "setMapInteracted:(v)=>{_mapUserInteracted=v;},mapCorrectHomeFit:()=>_mapCorrectHomeFit()," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -162,6 +171,43 @@ async function bootFreshWindow(dataMap) {
   const A = win.__api;
   await A.boot();
   ok(A.nST() === 5, "fixture should load 5 stations, got " + A.nST());
+
+  // UX9 ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
+  // degenerate (stale/0x0) container size, so the map framed at zoom 0 / off centre. The fix (a) invalidates
+  // size BEFORE the primary fit, (b) fits with a 24px padding, and (c) adds a ONE-SHOT corrector on the
+  // setView('map') 60ms timer that re-fits HOME_BOUNDS only when the fit was degenerate AND the user has not
+  // taken control. These run synchronously at boot (the timer hasn't fired yet), so mapCalls holds the
+  // primary invalidateSize+fit here.
+  // (a)+(b): the PRIMARY fit carries padding [24,24] and is IMMEDIATELY preceded by an invalidateSize
+  //          ({animate:false,pan:false}) — the size is reclaimed before the box is measured, not after.
+  const _fitIdx = mapCalls.findIndex(c => c.fn === "fitBounds" && c.args[1] && Array.isArray(c.args[1].padding)
+    && c.args[1].padding[0] === 24 && c.args[1].padding[1] === 24);
+  ok(_fitIdx > 0, "item2: buildMarkers must fit the home bounds with {padding:[24,24]}; no such fitBounds recorded");
+  ok(mapCalls[_fitIdx - 1].fn === "invalidateSize", "item2: invalidateSize must run IMMEDIATELY BEFORE the primary fit (fit-at-fresh-size), got " + mapCalls[_fitIdx - 1].fn);
+  const _invArg = mapCalls[_fitIdx - 1].args[0] || {};
+  ok(_invArg.animate === false && _invArg.pan === false, "item2: the pre-fit invalidateSize must pass {animate:false,pan:false}, got " + JSON.stringify(_invArg));
+  // (c)-degeneracy: jsdom has no layout engine, so the headless map's size reads degenerate — exactly the
+  //                 condition the corrector exists for. Recorded at boot.
+  ok(A.homeFitDegenerate() === true, "item2: the boot fit must be recorded as degenerate under the headless (0x0) map");
+  // PURE _mapSizeDegenerate: a real box is fine; a zero/partial/absent size is degenerate.
+  ok(A.mapSizeDegenerate({ x: 800, y: 600 }) === false, "item2: an 800x600 size must not read degenerate");
+  ok(A.mapSizeDegenerate({ x: 0, y: 0 }) === true, "item2: a 0x0 size must read degenerate");
+  ok(A.mapSizeDegenerate({ x: 800 }) === true, "item2: a size missing an axis must read degenerate");
+  ok(A.mapSizeDegenerate(null) === true, "item2: an absent size must read degenerate");
+  // PURE _mapRefitGate: fires ONLY when the user has NOT taken control AND the fit was degenerate.
+  ok(A.mapRefitGate({ userInteracted: false, fitDegenerate: true }) === true, "item2: gate must fire for untouched+degenerate");
+  ok(A.mapRefitGate({ userInteracted: true, fitDegenerate: true }) === false, "item2: gate must NOT fire once the user has interacted (no fighting a deliberate view)");
+  ok(A.mapRefitGate({ userInteracted: false, fitDegenerate: false }) === false, "item2: gate must NOT fire when the primary fit was healthy");
+  // The corrector is ONE-SHOT: with the boot state (untouched + degenerate) it re-fits HOME_BOUNDS once and
+  // then stands down — a second call (and, by extension, a later return to the map or an E6 programmatic fit)
+  // records no further home re-fit.
+  ok(A.mapUserInteracted() === false, "item2: the user-control flag must start false at boot");
+  const _fbBefore = mapCalls.filter(c => c.fn === "fitBounds").length;
+  A.mapCorrectHomeFit();
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbBefore + 1, "item2: the corrector must re-fit HOME_BOUNDS once when untouched+degenerate");
+  ok(A.homeFitDegenerate() === false, "item2: the corrector must clear the degenerate flag (one-shot)");
+  A.mapCorrectHomeFit();
+  ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbBefore + 1, "item2: the corrector must NOT re-fit a second time (one-shot; must not clobber later/E6 fits)");
 
   // VER CHIP -> FOOTER (UX feedback round 3, item 3): the version chip moved out of the header into the
   // footer. version.js is a standalone page script (not in MODULES), so run it here against the real DOM
