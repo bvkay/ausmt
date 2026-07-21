@@ -122,6 +122,17 @@ function sourcesListHtml(m){const srcs=(m&&m.sources)||[];
 // data), so the drawer must render an ACCESS PANEL in place of the four plots rather than four blank frames.
 function accessLevelOf(m){return (m&&m.access)?String(m.access):"open";}
 function isOpenAccess(m){return accessLevelOf(m)==="open";}
+// Withheld-download copy: the TRUTHFUL access reason for a survey with NO dataset DOI (so no honest
+// source-archive pointer exists). Embargo and licence are DISTINCT access states: a licence-restricted
+// station must never be blanket-labelled as embargoed (same access-integrity discipline as the Kalkaroo
+// fix). No em/en dashes in this copy (owner request); plain punctuation only.
+function withheldReason(m){
+  const org=(m&&m.org)||"unknown";
+  const reason=accessLevelOf(m)==="embargoed"
+    ? "dataset currently under embargo"+((m&&m.embargo_until)?" until "+String(m.embargo_until):"")
+    : "not redistributable under its licence";
+  return reason+", contact the custodian organisation ("+org+")";
+}
 // C42 Amendment A1: the boot-loaded coordinate policy for a station ('generalised' | 'withheld' | null),
 // folded onto s by buildState() from coord_policy.json. The engine masks the VALUE (generalised => 0.1°
 // cell rendered verbatim, withheld => null lat/lon) AND — for a non-exact station — emits this policy
@@ -520,9 +531,9 @@ async function fetchEdi(file,avail,survey){
   // recorded — TS_COLLECTION is the raw TIME-SERIES collection, not a transfer-function source archive,
   // and silently opening it mislabels a different dataset as "the source archive" (the pre-C7 defect).
   if(!avail){const m=SMETA[survey]||{};
-    if(m.doi){toast("This EDI isn't redistributable here — opening the source archive.");
+    if(m.doi){toast("This EDI isn't redistributable here; opening the source archive.");
       window.open("https://doi.org/"+m.doi,"_blank","noopener,noreferrer");}
-    else toast("This EDI isn't redistributable here, and no dataset DOI is recorded — contact the custodian organisation ("+(m.org||"unknown")+").");
+    else toast("This EDI isn't redistributable here: "+withheldReason(m)+".");
     return;}
   // Route through dataUrl() (honours data_base_url) — NOT a hardcoded "data/edi/" path, so the
   // portal and its data can live in separate repos / on NCI.

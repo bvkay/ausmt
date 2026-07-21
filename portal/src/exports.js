@@ -198,12 +198,13 @@ document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{fo
     const attn=[who,yr?"("+yr+")":"",(m.cite&&m.cite.ti)||""].filter(Boolean).join(" ").trim()||who;
     f.file(included[sv]+"LICENSE.txt",licenseInstrumentText(m.lic,who,yr,attn,m.sources||null,m.changes||null));});
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
-    "Request them from the source archive:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
+    "Request them from the source archive, or contact the custodian where no DOI is recorded:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
     // C7: m.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
-    // when it is absent — TS_COLLECTION is the raw time-series collection, not a TF source archive, and
-    // citing it here would mislabel a different dataset as "the source archive" (the pre-C7 defect).
+    // when it is absent (TS_COLLECTION is the raw time-series collection, not a TF source archive, and
+    // citing it here would mislabel a different dataset as "the source archive", the pre-C7 defect); so
+    // when no DOI is recorded we state the ACTUAL access reason (embargo vs licence) via withheldReason().
     return m.doi?`${s.id}  (${s.survey})  ->  https://doi.org/${m.doi}`
-                :`${s.id}  (${s.survey})  ->  no dataset DOI recorded — contact the custodian organisation (${m.org||"unknown"})`;}));
+                :`${s.id}  (${s.survey})  ->  ${withheldReason(m)}`;}));
     z.file("NOT_INCLUDED_request_from_archive.txt",lines.join("\n"));}
   if(ok===0&&!unavail.length){toast("Nothing to package.");return;}
   if(ok===0){z.file("README.txt","No EDIs were redistributable in this selection; see the archive pointers file.");}
