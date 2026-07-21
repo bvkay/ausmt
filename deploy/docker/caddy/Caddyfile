@@ -169,3 +169,64 @@
 	root * /srv/portal
 	file_server
 }
+
+# =================================================================================================
+# C47 public bridge — dedicated READER-ONLY listener (the box-side "second wall").
+# =================================================================================================
+# The VPS public front door (deploy/frontdoor/) reverse-proxies PUBLIC internet traffic to THIS
+# listener over the tailnet — never to :8080. :8080 serves BOTH the reader AND the /gateway/* curator
+# surface on ONE port; the tailnet ACL fence is port-granular, so if the public edge could reach :8080
+# a mis-scoped front-door config might route to a /gateway/* surface. This listener serves ONLY the
+# reader (portal static + /data) and carries NO /gateway/* route at all, so the ACL — which grants the
+# front-door tag reach to THIS port and nothing else — genuinely cannot touch any gateway surface even
+# if the front door were mis-scoped. Two independent walls: path-refusal at the front door (wall 1) +
+# this gateway-less listener behind a port-scoped ACL (wall 2). See maintainer/C47-PublicBridge.md.
+#
+# NO `log` block here BY DESIGN: the C45 masked access log runs AT THE FRONT DOOR on the real public
+# client (C47 invariant c). Every request to this listener arrives from the VPS tailnet peer, so a log
+# here would record only the proxy address — useless for analytics and a needless second copy.
+#
+# This is a deliberate near-duplicate of the :8080 header/CSP/data/root directives (NOT a snippet
+# import): the :8080 block is security-proven and is not refactored by this lane; any drift between the
+# two is caught by the C47 reader-listener config pin (deploy/tests/test_frontdoor_bridge.py).
+:8081 {
+	encode gzip
+
+	# Same baseline security headers as :8080 (they ride through the front-door reverse_proxy).
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+
+	# Box-side refusal of BOTH non-public route classes. Even though the reader has no /gateway/*
+	# route below, an explicit deny here makes the wall self-standing: it does not depend on the front
+	# door being correctly scoped, and add-survey.html (inert without a reachable gateway) is refused
+	# too, so this listener is genuinely reader + /data ONLY (C47 invariant a, box side).
+	@nonpublic path /add-survey.html /gateway /gateway/*
+	respond @nonpublic "not found" 404
+
+	# CSP mirrors :8080 exactly (strict everywhere except add-survey.html). add-survey.html is refused
+	# above, but its matcher is kept so the two blocks do not drift and a direct tailnet fetch still
+	# gets the right policy.
+	@strictPages not path /add-survey.html
+	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
+
+	@addSurveyPage path /add-survey.html
+	header @addSurveyPage Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://api.ror.org; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+
+	# Generated data volume — identical to :8080 (force-download families included).
+	handle_path /data/* {
+		root * /srv/data/current
+		@download path /edi/* /xml/* /bundles/* /h5/*
+		header @download Content-Disposition "attachment"
+		file_server
+	}
+
+	# NO `handle /gateway/*` here — BY DESIGN. This is the box-side wall: the gateway surface does not
+	# exist on this listener. Do NOT add a gateway route here.
+
+	# Static portal (reader pages + vendor/src/config/version), same image content as :8080.
+	root * /srv/portal
+	file_server
+}
