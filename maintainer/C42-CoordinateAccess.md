@@ -329,6 +329,42 @@ The Stage-4 binding (D4) shipped in two parts, plus a stop-and-report on the thi
    the authoritative key gate. This needs the engine owner's sign-off (it touches a served artifact),
    hence the stop-and-report rather than a unilateral engine change in this metadata-editing lane.
 
+   **Resolution — RESOLVED (engine lane, 2026-07-21).** Shipped a NEW boot artifact `base_ids.json`,
+   NOT a widening of `coord_policy.json` and NOT a `variant` field on `station.json`. It is a compact
+   corpus-wide map `{ausmt_id: base_station_id}` listing ONLY the VARIANT stations (a station whose
+   served catalogue id carries an engine-appended processing-variant tag, i.e. whose base differs from
+   its own id); it is emitted to `out/` ONLY when the corpus contains at least one variant station, and
+   the workbench reads it same-origin at `/data/base_ids.json` — the identical boot/proxy route
+   `coord_policy.json` uses (STATIONS_JS `dataUrl('base_ids.json')`, tolerant of absence). Rationale
+   against the decision criteria:
+   * **One derivation.** The value is `base_station_id(r["id"], r["variant"])` — the SAME function the
+     mask seam matches with (`_coordaccess.py`), never a re-derivation and never dot-guessing. A
+     PARITY pin asserts the emitted map equals that function over the real parsed records (engine truth).
+   * **Byte-stability.** Absent when no station is a variant, so every corpus with no processing-variant
+     stations builds byte-identically to pre-change (proven: a variant-free build's full tree is
+     byte-identical bar wall-clock timestamp fields; no new file). This is the A1 only-when-it-carries-
+     information precedent applied to the variant condition rather than the non-exact condition.
+   * **Why a SEPARATE artifact, not a widened `coord_policy.json`.** Their membership is orthogonal:
+     `coord_policy.json` lists NON-EXACT stations; this must list VARIANT stations regardless of policy —
+     because a curator setting the FIRST override on a variant station in an ALL-EXACT survey needs that
+     station's base id while it is (correctly) absent from `coord_policy.json`. Folding the two would
+     force `coord_policy.json` to carry exact stations, breaking its own zero-change contract, or would
+     miss the all-exact-with-variant case entirely. `station.json` was rejected too: it is a per-station
+     product fetched on navigation (N fetches), not a boot artifact, and the fieldset needs every base in
+     the survey AT BOOT to collapse a physical site's variants into one control.
+   * **Leak-cleanliness.** Carries ONLY ids already in the served catalogue (each `ausmt_id`, and each
+     base id which is a substring of the served `catalogue.id`) — no coordinate, no policy value. The
+     surface rides inside the D6 leak-sweep's variant fixture build (a variant-pair-withheld build emits
+     it and the whole-tree sweep audits it), so a future emitter cannot smuggle a position onto it.
+   * **Minimal blast radius / EVERY station.** A non-variant station is ABSENT from the map; the
+     workbench resolves its base to its own `catalogue.id` (`baseStationId(map, ausmtId, catId)` =
+     `map[ausmtId] || catId`), so every station in every survey — variant, non-variant, all-exact — gets
+     a guaranteed base key with no client-side derivation, and the engine/validator stay the sole
+     authority on the key (unchanged). Pins: engine emission+parity+leak+default-stability
+     (`engine/tests/test_coord_access.py`), executable-JS resolver parity
+     (`gateway/tests/test_c42_a2_base_id_js_parity.py`). The interactive fieldset — the thin follow-up —
+     now has its authoritative surface; the assembly/validation/marker were already shipped (parts 1–2).
+
 ## Provenance
 
 Owner ruling 2026-07-10 (A1: "we give the user the option to withhold coordinates, or a
