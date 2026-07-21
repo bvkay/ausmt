@@ -979,6 +979,14 @@ STATIONS_JS = r"""
   // 'absent => exact' is the honest effective policy with NO client-side precision re-derivation
   // (forbidden by the record). Absent file (all-exact corpus) => empty => every station reads 'exact'.
   var COORD_POLICY = {};
+  // C42/C43 Stage-4: the boot-loaded BASE-STATION-ID map (ausmt_id -> base_station_id), read same-origin
+  // from the OPTIONAL /data/base_ids.json (A2). It lists ONLY variant stations (a station whose served
+  // catalogue id carries an engine-appended processing-variant tag); the value is that station's ENGINE-
+  // derived base id — the one the override fieldset must key by (D2 fix-round-2: never a file stem, never
+  // a variant-suffixed id). A non-variant station is ABSENT => its base IS its own catalogue id (the
+  // baseStationId fallback). Absent file (no variant station in the corpus) => empty => every station is
+  // its own base. Carries no coordinate and no policy, so 'absent => own id' is honest with no re-derivation.
+  var BASE_IDS = {};
   var SVGNS = 'http://www.w3.org/2000/svg';
 
   // ---- column maps (single-sourced positional contract; mirror portal/src/contract.js) ----
@@ -1304,6 +1312,16 @@ STATIONS_JS = r"""
   // an explicit exact override. Pure (map + id in) so the executable JS pin exercises it.
   function effectivePolicy(policyMap, ausmtId) {
     return (policyMap && policyMap[ausmtId]) || 'exact';
+  }
+  // The station's BASE station id — the id the C42 override fieldset MUST key by (D2 fix-round-2: base
+  // ids only, never file stems, never variant-suffixed ids). The engine emits base_ids.json mapping a
+  // VARIANT station's ausmt_id to its base; a non-variant station is absent, so its base is its own
+  // catalogue id (catId). 'absent => catId' collapses all processing variants of one physical site to a
+  // single control while leaving every ordinary station keyed by its own id — with NO client-side
+  // derivation (the engine is the sole authority on the base id, exactly as it is on the effective policy).
+  // Pure (map + ids in) so the executable JS pin exercises it.
+  function baseStationId(baseMap, ausmtId, catId) {
+    return (baseMap && baseMap[ausmtId]) || catId;
   }
   // Position + the C42 EFFECTIVE-policy marker (Stage-4): '(exact)' / '(generalised)' / '(withheld)'
   // from effectivePolicy — the honest served state, not a static label. A withheld station's masked
@@ -1710,11 +1728,17 @@ STATIONS_JS = r"""
     fetchJson(dataUrl('build.json')).catch(function () { return { __err: true }; }),
     // coord_policy.json is OPTIONAL (absent for an all-exact corpus) — tolerate absence, same
     // graceful-degrade posture as the portal (empty => every station reads 'exact').
-    fetchJson(dataUrl('coord_policy.json')).catch(function () { return {}; })
+    fetchJson(dataUrl('coord_policy.json')).catch(function () { return {}; }),
+    // base_ids.json is OPTIONAL (absent when the corpus has no variant station) — tolerate absence
+    // the same way (empty => every station is its own base via the baseStationId fallback).
+    fetchJson(dataUrl('base_ids.json')).catch(function () { return {}; })
   ]).then(function (res) {
-    var cat = res[0], sci = res[1], tf = res[2], build = res[3], cpol = res[4];
+    var cat = res[0], sci = res[1], tf = res[2], build = res[3], cpol = res[4], bids = res[5];
     if (cpol && !cpol.__err && !cpol.__missing && typeof cpol === 'object' && !Array.isArray(cpol)) {
       COORD_POLICY = cpol;
+    }
+    if (bids && !bids.__err && !bids.__missing && typeof bids === 'object' && !Array.isArray(bids)) {
+      BASE_IDS = bids;
     }
     if (!cat || cat.__err || cat.__missing || !Array.isArray(cat)) {
       host.textContent = '';
