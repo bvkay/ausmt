@@ -177,10 +177,20 @@ function _tourRestore(){
 function _tourBuild(){
   const backdrop=document.createElement("div");backdrop.className="tourbackdrop";backdrop.id="tourBackdrop";
   const spot=document.createElement("div");spot.className="tourspot";spot.id="tourSpot";
+  // UX9 (owner): the LEADER is an SVG overlay spanning the viewport; a line + arrowhead connect the centred
+  // card to the spotlight. Its z-order sits BETWEEN the spot (which carries the dim) and the card (see CSS),
+  // so the line reads over the dim and the card stays on top. The line element is held directly (not looked
+  // up) so it is robust in jsdom, which does not render SVG; the arrowhead marker is browser-only cosmetics.
+  const SVGNS="http://www.w3.org/2000/svg";
+  const leader=document.createElementNS(SVGNS,"svg");
+  leader.setAttribute("class","tourleader");leader.id="tourLeader";leader.setAttribute("aria-hidden","true");
+  leader.innerHTML='<defs><marker id="tourLeaderHead" markerWidth="9" markerHeight="9" refX="7" refY="3" '+
+    'orient="auto"><path d="M0,0 L7,3 L0,6 Z"></path></marker></defs>';
+  const line=document.createElementNS(SVGNS,"line");line.setAttribute("id","tourLeaderLine");
+  line.setAttribute("marker-end","url(#tourLeaderHead)");leader.appendChild(line);
   const card=document.createElement("div");card.className="tourcard";card.id="tourCard";
   card.setAttribute("role","dialog");card.setAttribute("aria-label","AusMT guided tour");
   card.innerHTML=
-    '<div class="tourarrow" id="tourArrow"></div>'+                     // U8: caret pointing at the target
     '<div class="tourstep" id="tourStepLabel"></div>'+
     '<div class="tourtext" id="tourText"></div>'+
     '<div class="tourbtns">'+
@@ -189,15 +199,17 @@ function _tourBuild(){
       '<button type="button" id="tourNext" class="tourprimary" aria-label="Next tour step">Next</button>'+
       '<button type="button" id="tourClose" aria-label="Close tour">Close</button>'+
     '</div>';
-  document.body.appendChild(backdrop);document.body.appendChild(spot);document.body.appendChild(card);
+  document.body.appendChild(backdrop);document.body.appendChild(spot);
+  document.body.appendChild(leader);document.body.appendChild(card);
   document.getElementById("tourBack").onclick=_tourPrev;
   document.getElementById("tourNext").onclick=_tourNext;
   document.getElementById("tourClose").onclick=stopTour;
   document.addEventListener("keydown",_tourKeydown);
-  window.addEventListener("resize",_tourOnResize);                     // U8: keep the card anchored on resize
-  return{backdrop,spot,card,arrow:document.getElementById("tourArrow")};
+  window.addEventListener("resize",_tourOnResize);                     // UX9: re-centre + redraw the leader on resize
+  return{backdrop,spot,leader,line,card};
 }
-// U8: re-run only the LAYOUT (not the step's enter hook) when the viewport changes while the tour is open.
+// UX9: re-run only the LAYOUT (not the step's enter hook) when the viewport changes while the tour is open —
+// the card re-centres and the leader is recomputed; the card never re-anchors (it is always centred).
 function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 
 function _tourKeydown(e){
@@ -207,41 +219,47 @@ function _tourKeydown(e){
   else if(e.key==="ArrowLeft"){_tourPrev();}
 }
 
-// U8: PURE placement — given the target rect, the card size and the viewport, pick the side with room
-// (preference: below > above > right > left), centre the card on the target's axis, clamp into the
-// viewport (8px margins), and return where a caret should sit so it points AT the target. Pure/no-DOM so
-// it is unit-testable without a layout engine (jsdom has none) — the driver exercises it with synthetic
-// rects, exactly like partitionMarkers()/radiusForZoom(). GAP>0 on the chosen side is what guarantees the
-// card never overlaps its target (the perpendicular clamp can't reintroduce an overlap).
-const _TOUR_M=8,_TOUR_GAP=12,_TOUR_ARROW=8;   // viewport margin, target->card gap, caret half-width
-function _tourPlace(rect,cardW,cardH,vpW,vpH){
-  const M=_TOUR_M,GAP=_TOUR_GAP,cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
-  const fits={
-    below: rect.bottom+GAP+cardH+M<=vpH,
-    above: rect.top-GAP-cardH-M>=0,
-    right: rect.right+GAP+cardW+M<=vpW,
-    left:  rect.left-GAP-cardW-M>=0
+// UX9 (owner): the tour card is CENTRED for EVERY step (the pattern formerly used only as the no-target
+// fallback, now generalised). This PURE fn returns the card's fixed-position box. Base = the viewport
+// centre. OVERLAP RULE: when a target rect would sit under the centred card, nudge the card by the MINIMAL
+// vertical offset so it clears the target by _TOUR_CLEAR — deterministically DOWNWARD when that still fits
+// the viewport (bottom margin _TOUR_M), else UPWARD. No-DOM so the driver pins centred-always + the nudge on
+// synthetic rects (jsdom has no layout engine), exactly as the retired _tourPlace was.
+const _TOUR_M=8,_TOUR_CLEAR=16;   // viewport margin; target->card clearance on an overlap nudge
+function _tourCardBox(cardW,cardH,vpW,vpH,targetRect){
+  const M=_TOUR_M,CLEAR=_TOUR_CLEAR;
+  const left=Math.round((vpW-cardW)/2),baseTop=Math.round((vpH-cardH)/2);
+  let top=baseTop;
+  if(targetRect){
+    const overlaps=!(left+cardW<=targetRect.left||left>=targetRect.right||
+                     baseTop+cardH<=targetRect.top||baseTop>=targetRect.bottom);
+    if(overlaps){
+      const down=Math.round(targetRect.bottom+CLEAR),up=Math.round(targetRect.top-CLEAR-cardH);
+      // prefer downward; upward only when downward won't fit; if NEITHER fits (a target too tall to clear
+      // vertically) stay centred — an on-screen card over the target beats one nudged off the viewport.
+      top=(down+cardH<=vpH-M)?down:(up>=M?up:baseTop);
+    }
+  }
+  return{left,top,right:left+cardW,bottom:top+cardH,nudged:top!==baseTop};
+}
+// UX9 (owner): geometry of the LEADER from the centred card to the spotlight. PURE — the endpoints are the
+// boundary points where the card-centre<->spot-centre axis crosses each rect, so the line leaves the card
+// edge nearest the target and lands on the spot edge nearest the card (arrowhead at the spot end). visible
+// is false when suppressed — the map steps (the spotlight over the map IS the cue) and the no-target
+// fallback. No-DOM so the driver pins the endpoints + suppression on synthetic rects.
+function _tourLeader(cardBox,spotBox,suppressed){
+  if(suppressed)return{x1:0,y1:0,x2:0,y2:0,visible:false};
+  const ccx=(cardBox.left+cardBox.right)/2,ccy=(cardBox.top+cardBox.bottom)/2;
+  const scx=(spotBox.left+spotBox.right)/2,scy=(spotBox.top+spotBox.bottom)/2;
+  const dx=scx-ccx,dy=scy-ccy;
+  if(dx===0&&dy===0)return{x1:ccx,y1:ccy,x2:scx,y2:scy,visible:false};   // concentric — impossible once nudged clear
+  const edge=(cx,cy,hw,hh,vx,vy)=>{                                      // boundary point from a centre along (vx,vy)
+    const t=Math.min(vx!==0?hw/Math.abs(vx):Infinity,vy!==0?hh/Math.abs(vy):Infinity);
+    return[cx+vx*t,cy+vy*t];
   };
-  const order=["below","above","right","left"];
-  let side=order.find(s=>fits[s]);
-  if(!side){                                    // target ~fills the viewport: fall back to the roomiest side
-    const room={below:vpH-rect.bottom,above:rect.top,right:vpW-rect.right,left:rect.left};
-    side=order.reduce((a,b)=>room[b]>room[a]?b:a);
-  }
-  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
-  let left,top,arrowDir,arrowAim;
-  if(side==="below"||side==="above"){
-    left=clamp(cx-cardW/2,M,Math.max(M,vpW-cardW-M));
-    top=side==="below"?rect.bottom+GAP:rect.top-GAP-cardH;
-    arrowDir=side==="below"?"up":"down";
-    arrowAim=clamp(cx-left,_TOUR_ARROW,Math.max(_TOUR_ARROW,cardW-_TOUR_ARROW));   // card-relative x, aimed at target centre
-  }else{
-    top=clamp(cy-cardH/2,M,Math.max(M,vpH-cardH-M));
-    left=side==="right"?rect.right+GAP:rect.left-GAP-cardW;
-    arrowDir=side==="right"?"left":"right";
-    arrowAim=clamp(cy-top,_TOUR_ARROW,Math.max(_TOUR_ARROW,cardH-_TOUR_ARROW));    // card-relative y
-  }
-  return{side,left,top,arrowDir,arrowAim};
+  const[x1,y1]=edge(ccx,ccy,(cardBox.right-cardBox.left)/2,(cardBox.bottom-cardBox.top)/2,dx,dy);
+  const[x2,y2]=edge(scx,scy,(spotBox.right-spotBox.left)/2,(spotBox.bottom-spotBox.top)/2,-dx,-dy);
+  return{x1,y1,x2,y2,visible:true};
 }
 // Arrival at a step: run its enter hook (which may switch view / open a drawer and so change the target
 // rect), THEN lay the spotlight + card + caret out. Split from _tourLayout so a resize re-lays-out WITHOUT
@@ -256,15 +274,20 @@ function _tourLayout(){
   const target=step.sel?document.querySelector(step.sel):null;
   const rect=target?target.getBoundingClientRect():null;
   const hasTarget=!!(rect&&(rect.width>0||rect.height>0));
-  const{spot,card,backdrop,arrow}=_tourEls;
-  backdrop.classList.toggle("centered",!hasTarget);
-  card.classList.toggle("static",!hasTarget);
+  const isMapStep=step.sel==="#map";                       // the map is the backdrop — the spotlight alone is the cue, no leader
+  const{spot,card,backdrop,leader,line}=_tourEls;
+  // The card is CENTRED for EVERY step (fixed-position, computed by _tourCardBox), nudged clear of the
+  // target if it would sit under it. It never re-anchors to a side; a resize only re-centres + redraws.
+  const cardW=card.offsetWidth||340,cardH=card.offsetHeight||160;   // fall back when there's no layout engine (jsdom)
+  // The overlap nudge applies to DISCRETE targets only. A map step's target is the whole map (the backdrop),
+  // so it never nudges — the card centres over the map spotlight; the leader is suppressed there anyway.
+  const box=_tourCardBox(cardW,cardH,window.innerWidth,window.innerHeight,(hasTarget&&!isMapStep)?rect:null);
+  card.style.left=box.left+"px";card.style.top=box.top+"px";
   if(!hasTarget){
     // Target absent (empty-data state, or an enter action found nothing to open): centred card, no
-    // spotlight, no caret — the .centered backdrop carries the dim itself (U10).
+    // spotlight, no leader — the backdrop carries the dim itself (U10).
     spot.style.display="none";
-    if(arrow)arrow.style.display="none";
-    card.style.top="";card.style.left="";
+    if(leader)leader.style.display="none";
     backdrop.style.background="rgba(11,15,18,"+TOUR_DIM+")";
   }else{
     // Targeted step: the spot's box-shadow supplies the dim (U10) and the backdrop stays transparent, so
@@ -277,18 +300,15 @@ function _tourLayout(){
     spot.style.width=(rect.width+pad*2)+"px";
     spot.style.height=(rect.height+pad*2)+"px";
     spot.style.boxShadow="0 0 0 4000px rgba(11,15,18,"+TOUR_DIM+")";
-    // Measure the card (fall back to its CSS max-width / a typical height when there's no layout engine).
-    const cardW=card.offsetWidth||340,cardH=card.offsetHeight||160;
-    const p=_tourPlace(rect,cardW,cardH,window.innerWidth,window.innerHeight);
-    card.style.left=p.left+"px";card.style.top=p.top+"px";
-    if(arrow){
-      const A=_TOUR_ARROW;
-      arrow.style.display="block";
-      arrow.className="tourarrow tourarrow--"+p.arrowDir;
-      if(p.arrowDir==="up"){arrow.style.left=(p.arrowAim-A)+"px";arrow.style.top=(-A)+"px";}
-      else if(p.arrowDir==="down"){arrow.style.left=(p.arrowAim-A)+"px";arrow.style.top=cardH+"px";}
-      else if(p.arrowDir==="left"){arrow.style.top=(p.arrowAim-A)+"px";arrow.style.left=(-A)+"px";}
-      else{arrow.style.top=(p.arrowAim-A)+"px";arrow.style.left=cardW+"px";}
+    // Leader from the centred card to the spotlight — suppressed on the map steps (TOUR_STEPS 0 and 9).
+    const spotBox={left:rect.left-pad,top:rect.top-pad,right:rect.right+pad,bottom:rect.bottom+pad};
+    const ld=_tourLeader(box,spotBox,isMapStep);
+    if(leader&&line){
+      if(ld.visible){
+        leader.style.display="block";
+        line.setAttribute("x1",ld.x1);line.setAttribute("y1",ld.y1);
+        line.setAttribute("x2",ld.x2);line.setAttribute("y2",ld.y2);
+      }else leader.style.display="none";
     }
   }
   document.getElementById("tourStepLabel").textContent="Step "+(_tourStep+1)+" of "+TOUR_STEPS.length;
@@ -330,7 +350,7 @@ function stopTour(){
   window.removeEventListener("resize",_tourOnResize);   // U8: stop tracking the viewport once the tour closes
   _tourRestore();                      // Done/Esc/close from ANY step: restore only what the tour itself changed
   if(_tourEls){
-    _tourEls.backdrop.remove();_tourEls.spot.remove();_tourEls.card.remove();
+    _tourEls.backdrop.remove();_tourEls.spot.remove();_tourEls.leader.remove();_tourEls.card.remove();
     _tourEls=null;
   }
 }
