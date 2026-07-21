@@ -103,8 +103,10 @@ def real_git_runner(args: list[str], *, cwd: Path, env: dict[str, str] | None = 
 
 def validate_slug(slug: str | None) -> str:
     """Return the slug if it matches the safe charset; raise PublishError otherwise. The gate that
-    stops a spoofed slug from reaching a path or a branch name (design §5.2/§6)."""
-    if not slug or not _SLUG_RE.match(slug):
+    stops a spoofed slug from reaching a path or a branch name (design §5.2/§6). FULLMATCH, not
+    match — an anchored `$` matches before a trailing newline, so `.match` accepted "slug\n" (the
+    trailing-newline class); this is the last gate before a git/fs op, so the check must be exact."""
+    if not slug or not _SLUG_RE.fullmatch(slug):
         raise PublishError("guard", f"invalid or missing slug: {slug!r}")
     return slug
 

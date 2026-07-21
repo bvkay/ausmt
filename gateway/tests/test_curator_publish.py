@@ -320,7 +320,10 @@ def test_reconciliation_moves_stuck_publishing(tmp_path):
 
 
 def test_slug_charset_validation():
-    for bad in ("../evil", "a/b", "with space", "", ".hidden", "a" * 200):
+    # The trailing-newline cases pin task #18: an anchored `$` matches before a final newline, so a
+    # `.match` gate accepted "slug\n" and it reached a path/branch name — `.fullmatch` rejects it.
+    for bad in ("../evil", "a/b", "with space", "", ".hidden", "a" * 200,
+                "good-slug_1.2\n", "good-slug_1.2\n\n"):
         try:
             publish.validate_slug(bad)
         except publish.PublishError:
