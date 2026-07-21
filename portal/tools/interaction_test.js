@@ -994,12 +994,12 @@ async function bootFreshWindow(dataMap) {
   ok(drwC.innerHTML.indexOf("tipper magnitude |T|") < 0,
     "C20 D3: the old |T|-magnitude plot title is still present (panel was not replaced)");
   ok(drwC.innerHTML.indexOf("|T|=0.5") >= 0, "C20 D3: the |T|=0.5 unit-scale reference is missing");
-  // (b) SIGN MAPPING: parse the REAL arrow <line>s (solid copper #E0782F) inside the drawer. tzx_re>0
+  // (b) SIGN MAPPING: parse the REAL arrow <line>s (solid copper #EF7256) inside the drawer. tzx_re>0
   // means real north = -tzx_re < 0, so every real arrow must point DOWN (screen y2 > y1 = SOUTH) with
   // no east deflection (x2 == x1, since tzy_re == 0). This is the D3 falsifiability check.
   // Match ONLY the arrow-panel REAL arrows: solid copper at the arrow stroke-width "1.2" (error bars use
   // "0.8"+opacity and the imaginary arrows use "1.0", so this excludes both).
-  const realArrows = [...drwC.innerHTML.matchAll(/<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" stroke="#E0782F" stroke-width="1\.2"/g)];
+  const realArrows = [...drwC.innerHTML.matchAll(/<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" stroke="#EF7256" stroke-width="1\.2"/g)];
   ok(realArrows.length >= 1, "C20 D3: no REAL (copper) induction arrows rendered for a tippered station");
   ok(realArrows.every(m => parseFloat(m[4]) > parseFloat(m[2])),
     "C20 D3 SIGN: a REAL arrow for tzx_re>0 must point SOUTH (y2>y1); got " +
@@ -1007,8 +1007,8 @@ async function bootFreshWindow(dataMap) {
   ok(realArrows.every(m => Math.abs(parseFloat(m[3]) - parseFloat(m[1])) < 0.1),
     "C20 D3 SIGN: a REAL arrow with tzy_re=0 must have no east deflection (x2==x1); got " +
     JSON.stringify(realArrows.map(m => [m[1], m[3]])));
-  // (c) ERROR BARS present for A1 (rho copper #E0782F + teal #2E8FA3 whiskers with the .55 opacity).
-  ok(/<line [^>]*stroke="#E0782F" stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML) ||
+  // (c) ERROR BARS present for A1 (rho copper #EF7256 + teal #2E8FA3 whiskers with the .55 opacity).
+  ok(/<line [^>]*stroke="#EF7256" stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML) ||
      /<line [^>]*stroke="#2E8FA3" stroke-width=".8" stroke-opacity=".55"/.test(drwC.innerHTML),
     "C20 D4: error bars did not render for a station WITH errors");
   // (d) A2: no tipper => NO arrow panel; no errors => NO error bars.
@@ -1201,8 +1201,8 @@ async function bootFreshWindow(dataMap) {
   const rspHtml = drwV.querySelector('#dp-response').innerHTML;
   ok(/<rect [^>]*fill="#2E8FA3"/.test(rspHtml),
     "C3: the yx (teal #2E8FA3) series must render <rect> square markers (shape differentiation)");
-  ok(/<circle [^>]*fill="#E0782F"/.test(rspHtml),
-    "C3: the xy (copper #E0782F) series must keep <circle> markers");
+  ok(/<circle [^>]*fill="#EF7256"/.test(rspHtml),
+    "C3: the xy (copper #EF7256) series must keep <circle> markers");
 
   // (h) C3: EXPAND MODAL. Clicking a plot's expand button opens a #plotmodal that re-renders the SAME
   //     plotter at 2.5× (rho design width 372 -> 930, viewBox unchanged); Esc closes it WITHOUT closing the

@@ -857,7 +857,7 @@ function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&C
 // render. The projection is a plain equirectangular fit of the fixed AU box, so the outline and the dots
 // stay registered; the canvas aspect matches the box to avoid squashing.
 const AU_EXTENT={w:112,e:154,so:-44,no:-9};
-const COLL_PAL=["#2E8FA3","#E0782F","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
+const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
 function collScatter(ss){
   if(!ss.length) return "";
   const W=560,H=Math.round(W*(AU_EXTENT.no-AU_EXTENT.so)/(AU_EXTENT.e-AU_EXTENT.w)),pad=22;

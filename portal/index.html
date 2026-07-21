@@ -19,8 +19,14 @@
 <link rel="stylesheet" href="vendor/leaflet.draw.css">
 <style>
   :root{
-    --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
-    --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
+    /* Treatment D+ (owner-approved, AuScope official Style Guide): the surface hues shift toward Royal
+       Blue and the accent moves from the old copper to official AuScope Tangerine. Five tokens changed
+       (old -> new): --ink #13202B -> #11182D; --panel #1B2C3A -> #18213D; --panel-2 #22394B -> #1E2B4F;
+       --line #2E4254 -> #2B3557; --copper #E0782F -> #EF7256 (the variable name stays --copper to avoid
+       churning ~81 references; it now carries Tangerine, not copper). This :root is DUPLICATED verbatim
+       in about.html and add-survey.html — keep the five values in sync across all three. */
+    --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
+    --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
     --lpmt:#2E8FA3; --bbmt:#5E5ED6; --amt:#CDA1EC; --gds:#C255A0;
     /* UX6 Wave F (F2): --no lightened #A85454 -> #E2938B so it clears WCAG AA (4.5:1) as TEXT on the
        panels it renders on (.badge.no on --panel = 5.98:1, on --panel-2 = 5.00:1; both were ~2.3-2.8:1).
@@ -50,7 +56,7 @@
   .tagline{color:var(--muted);font-size:12.5px}
   /* UX6 Wave B (B4, owner ruling O2): the primary view nav is prominent — equal-width buttons, each a
      clearly bordered box with a ≥40px click target; the ACTIVE view is a filled copper box with dark
-     text (#16110b on --copper = 6.16:1, AA). Inactive buttons read as buttons (bordered, panel fill,
+     text (#16110b on --copper = 6.44:1, AA). Inactive buttons read as buttons (bordered, panel fill,
      full-strength text), not muted links. */
   nav{display:flex;gap:6px}
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
@@ -339,7 +345,7 @@
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
-  .marker-cluster div{background:rgba(232,237,241,.92)!important;color:#13202B!important;font-family:var(--mono);font-weight:700}.marker-cluster{background:rgba(224,120,47,.45)!important}
+  .marker-cluster div{background:rgba(232,237,241,.92)!important;color:#11182D!important;font-family:var(--mono);font-weight:700}.marker-cluster{background:rgba(239,114,86,.45)!important}
   @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}
     /* UX3 item 4: at narrow widths the three header zones stack full-width and left-align, so the
        centred nav / right-aligned counts don't read as stranded fragments once they wrap. */
@@ -354,7 +360,7 @@
   .ausmt-cluster span{line-height:1}
   .ausmt-cluster.cluster-small div{background:#5BAE6A;font-size:12px}
   .ausmt-cluster.cluster-medium div{background:#D9A23B;font-size:13px}
-  .ausmt-cluster.cluster-large div{background:#E0782F;font-size:14px}
+  .ausmt-cluster.cluster-large div{background:#EF7256;font-size:14px}
 .emptyoverlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
   background:rgba(11,15,18,.55);backdrop-filter:blur(1px);pointer-events:none;padding:24px}
 .emptyoverlay .emptystate{pointer-events:auto}
@@ -424,7 +430,7 @@
   .tourbtns{display:flex;justify-content:flex-end;gap:8px}
   .tourbtns button{font-size:12px;padding:7px 12px}
   /* U9: primary advance button (Next/Done) — copper fill + dark text (Wave B nav-active treatment;
-     #16110b on --copper = 6.16:1, AA). */
+     #16110b on --copper = 6.44:1, AA). */
   .tourbtns .tourprimary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
   .tourbtns .tourprimary:hover{border-color:var(--copper)}
 
@@ -501,7 +507,7 @@
   .maplegend-body{padding:9px 11px;display:flex;flex-direction:column;gap:6px}
   .maplegend .legrow{display:flex;align-items:center;gap:8px;line-height:1.3}
   .maplegend .legcluster{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
-    border-radius:50%;background:rgba(224,120,47,.45);color:#12202b;font-family:var(--mono);font-weight:700;
+    border-radius:50%;background:rgba(239,114,86,.45);color:#12202b;font-family:var(--mono);font-weight:700;
     font-size:10px;flex:none;border:2px solid rgba(232,237,241,.4)}
   /* Collapsible ONLY on small widths: the toggle appears and the body defaults collapsed there (the .expanded
      class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
