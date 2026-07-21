@@ -168,7 +168,10 @@ def _dispatch_edit(cfg, job: dict, scratch_dir: Path) -> dict:
             validator_path=str(cfg.validator_path or ""),
             scratch_dir=scratch_dir)
     slug = str(job.get("slug") or "")
-    if not _SLUG_RE.match(slug):
+    # FULLMATCH, not match — an anchored `$` matches before a trailing newline, so `.match` accepted
+    # "slug\n" and it became a path component below (the trailing-newline class; same fix as the
+    # collection-batch gate). The slug arrives in an untrusted job file, so the gate must be exact.
+    if not _SLUG_RE.fullmatch(slug):
         raise EditError(f"invalid slug in edit job: {slug!r}")
     surveys_root = Path(cfg.surveys_root)
     package_root = (surveys_root / "surveys" / slug).resolve()

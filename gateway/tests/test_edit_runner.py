@@ -531,6 +531,16 @@ def test_scratch_under_surveys_tree_is_refused(tmp_path):
     assert "scratch" in str(exc.value)
 
 
+def test_trailing_newline_slug_refused_at_edit_gate(tmp_path):
+    # Task #18: the single-slug edit gate uses FULLMATCH, not match — an anchored `$` matches before
+    # a trailing newline, so `.match` let "slug\n" through and it became a path component. Proven
+    # failing first against .match, where it reached "survey.yaml not found under demo-survey-2026\n".
+    _write_package(tmp_path / "surveys-live")
+    cfg = _cfg(tmp_path)
+    with pytest.raises(edit.EditError, match="invalid slug"):
+        _merge(cfg, slug="demo-survey-2026\n")
+
+
 # --------------------------------------------------------------------------------------------------
 # §3.2 semver + no-op gates
 # --------------------------------------------------------------------------------------------------
