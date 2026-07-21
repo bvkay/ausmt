@@ -972,6 +972,19 @@ STATIONS_JS = r"""
   if (!host) return;
   var slug = host.getAttribute('data-survey-slug') || '';
   var publishedHead = host.getAttribute('data-published-head') || '';
+  // C43 Stage-4 interactive fieldset: the CURRENT survey.yaml access section, server-rendered onto the
+  // panel host — the SAME source the #53 survey-level select prefills from (access.coordinates is the
+  // survey default; access.coordinate_overrides is the raw {BASE_station_id: policy} map). The default
+  // is '' => 'exact' (the byte-unchanged default); the overrides map is the authoritative explicit-vs-
+  // inherited state (a base absent from it INHERITS the default). NOT the boot-loaded coord_policy.json,
+  // which is the engine-RESOLVED effective policy for non-exact stations and cannot tell an explicit
+  // 'exact' override from a default-exact station — the fieldset needs the raw survey.yaml map to be honest.
+  var COORD_DEFAULT = host.getAttribute('data-coord-default') || '';
+  var COORD_OVERRIDES = {};
+  try {
+    var _co = JSON.parse(host.getAttribute('data-coord-overrides') || '{}');
+    if (_co && typeof _co === 'object' && !Array.isArray(_co)) COORD_OVERRIDES = _co;
+  } catch (e) { COORD_OVERRIDES = {}; }
   // C42/C43 Stage-4: the boot-loaded coordinate-access policy map (ausmt_id -> 'generalised' |
   // 'withheld'), read same-origin from the OPTIONAL /data/coord_policy.json — the SAME boot artifact
   // the portal drawer reads (A1). It lists ONLY non-exact stations and carries the ENGINE-RESOLVED
@@ -987,6 +1000,14 @@ STATIONS_JS = r"""
   // baseStationId fallback). Absent file (no variant station in the corpus) => empty => every station is
   // its own base. Carries no coordinate and no policy, so 'absent => own id' is honest with no re-derivation.
   var BASE_IDS = {};
+  // C43 Stage-4 interactive fieldset: the per-BASE control state, built ONCE from the served rows at
+  // render() and shared across drill-downs so a Save assembles EVERY station's control, not just the
+  // open one. Keyed by BASE station id (baseStationId over the base-id surface) so all processing
+  // variants of one physical site collapse to a single control (D2). See buildOverrideControls.
+  var OVERRIDE_CONTROLS = {};
+  // The 4 fieldset positions (A2: the mockup's 3 radios plus the required INHERIT position). INHERIT
+  // follows the survey default and emits NO override key; the other three are explicit overrides.
+  var COORD_POSITIONS = ['inherit', 'exact', 'generalised', 'withheld'];
   var SVGNS = 'http://www.w3.org/2000/svg';
 
   // ---- column maps (single-sourced positional contract; mirror portal/src/contract.js) ----
@@ -1323,6 +1344,55 @@ STATIONS_JS = r"""
   function baseStationId(baseMap, ausmtId, catId) {
     return (baseMap && baseMap[ausmtId]) || catId;
   }
+  // ---- C43 Stage-4 interactive override fieldset (DOM-free CORE — the executable-JS pins drive these) ----
+  // Build the per-BASE control state for the override fieldset from the CURRENT survey.yaml access
+  // section. `stations` is [{ausmtId, catId}, ...] (one per served record). Each station resolves to
+  // its BASE key via baseStationId over the base-id surface — a variant record collapses to its
+  // engine-derived base, a non-variant (or a DATAID-with-a-dot record absent from the surface) keys by
+  // its OWN catalogue id, NEVER a file stem and NEVER a dot-guess — so all processing variants of one
+  // physical site share ONE control (D2). A base carrying an EXPLICIT survey.yaml override starts at
+  // that policy (control set, explicit=true); a base with no override starts at 'inherit' (it follows
+  // the survey default). Returns { baseKey: { control, explicit, members:[catId, ...] } }.
+  function buildOverrideControls(stations, baseMap, currentOverrides) {
+    var controls = {};
+    var ovr = currentOverrides || {};
+    for (var i = 0; i < stations.length; i++) {
+      var st = stations[i];
+      var base = baseStationId(baseMap, st.ausmtId, st.catId);
+      if (!Object.prototype.hasOwnProperty.call(controls, base)) {
+        var has = Object.prototype.hasOwnProperty.call(ovr, base);
+        controls[base] = { control: has ? ovr[base] : 'inherit', explicit: has, members: [] };
+      }
+      if (controls[base].members.indexOf(st.catId) < 0) controls[base].members.push(st.catId);
+    }
+    return controls;
+  }
+  // Assemble the {BASE_station_id: policy} override map to POST from the per-base control state. A base
+  // at INHERIT emits NO key (it follows the survey default — the inherit-removes / byte-unchanged
+  // promise the editor_form assembly and apply_patch's surgical merge honour server-side); an explicit
+  // policy is written verbatim. Keys are exactly the base ids the controls were built with (base-id
+  // surface truth), so the POSTed map can never carry a stem or a variant-suffixed key.
+  function assembleOverrideMap(controls) {
+    var out = {};
+    for (var base in controls) {
+      if (!Object.prototype.hasOwnProperty.call(controls, base)) continue;
+      var pol = controls[base].control;
+      if (pol && pol !== 'inherit') out[base] = pol;
+    }
+    return out;
+  }
+  // Whether the assembled override map DIFFERS from the survey's current one (order-independent) — the
+  // Save-policy no-op guard: an unchanged map must not POST (no phantom version bump), mirroring the
+  // editor_form round-trip promise on the client so a no-op Save short-circuits before the merge job.
+  function overrideMapChanged(assembled, current) {
+    var a = assembled || {}, c = current || {};
+    var ak = Object.keys(a);
+    if (ak.length !== Object.keys(c).length) return true;
+    for (var i = 0; i < ak.length; i++) {
+      if (!Object.prototype.hasOwnProperty.call(c, ak[i]) || c[ak[i]] !== a[ak[i]]) return true;
+    }
+    return false;
+  }
   // Position + the C42 EFFECTIVE-policy marker (Stage-4): '(exact)' / '(generalised)' / '(withheld)'
   // from effectivePolicy — the honest served state, not a static label. A withheld station's masked
   // lat/lon are null (num renders '-'), a generalised station carries the 0.1deg cell VERBATIM (no
@@ -1604,6 +1674,7 @@ STATIONS_JS = r"""
     factsHost.appendChild(panel);
     renderPlots(plotsHost, t);
     appendRemove(factsHost, cat);
+    appendCoordPolicy(factsHost, cat);
     // Enrich the facts with the per-station station.json (frame/conditioning/QA) if the products tree
     // is served. ABSOLUTE url via the single-sourced helper (fix-round F2 — a page-relative fetch 404s).
     fetchJson(stationJsonUrl(slug, cat[C.id])).then(function (station) {
@@ -1611,12 +1682,14 @@ STATIONS_JS = r"""
       factsHost.replaceChild(enriched, panel);
       panel = enriched;
       appendRemove(factsHost, cat);
+      appendCoordPolicy(factsHost, cat);
     }).catch(function () {
       // Products not served for this build: re-render with the honest Frame placeholder.
       var fallback = factsPanel(cat, sc, { __missing: true }, buildId, lagPending, cls);
       factsHost.replaceChild(fallback, panel);
       panel = fallback;
       appendRemove(factsHost, cat);
+      appendCoordPolicy(factsHost, cat);
     });
   }
   // Build the plots column (col 3): ρa, the NEW combined ±180 phase plot (+ its two-component verdict
@@ -1642,6 +1715,97 @@ STATIONS_JS = r"""
     p.appendChild(a);
     detail.appendChild(p);
   }
+  // ---- C43 Stage-4 interactive coordinate-policy fieldset (the drill-down affordance) ----
+  // Idempotent append (mirrors appendRemove): the enrich re-renders swap the facts panel but leave the
+  // fieldset in place, so guard on its id. The fieldset edits the SHARED per-base control state
+  // (OVERRIDE_CONTROLS), and Save assembles EVERY base's control into the {base: policy} map and POSTs
+  // it through the existing per-section edit flow (the hidden #coord-policy-form round-trips the rest of
+  // the access section; the server bumps the version, records the release note, and gates the validator).
+  function appendCoordPolicy(detail, cat) {
+    if (document.getElementById('coord-policy')) return;
+    detail.appendChild(coordinatePolicyFieldset(cat));
+  }
+  function coordinatePolicyFieldset(cat) {
+    var base = baseStationId(BASE_IDS, cat[C.ausmt_id], cat[C.id]);
+    var ctl = OVERRIDE_CONTROLS[base];
+    if (!ctl) {   // a station absent from the render-time build (defensive): its own lone control.
+      var has = Object.prototype.hasOwnProperty.call(COORD_OVERRIDES, base);
+      ctl = { control: has ? COORD_OVERRIDES[base] : 'inherit', explicit: has, members: [cat[C.id]] };
+      OVERRIDE_CONTROLS[base] = ctl;
+    }
+    var defLabel = COORD_DEFAULT || 'exact';
+    var wrap = el('div', null, 'panel'); wrap.id = 'coord-policy';
+    wrap.appendChild(el('h2', 'Coordinate access policy'));
+    var fs = document.createElement('fieldset');
+    fs.appendChild(el('legend', 'Served position for ' + base));
+    var labels = {
+      inherit: 'inherit (survey default: ' + defLabel + ')',
+      exact: 'exact — serve the recorded position',
+      generalised: 'generalised — round to a 0.1° (~11 km) cell',
+      withheld: 'withheld — serve no coordinates'
+    };
+    var state = el('p', null, 'sub');
+    function refreshState() {
+      if (ctl.control === 'inherit') {
+        state.textContent = 'Inheriting the survey default (' + defLabel + ') — no per-station '
+          + 'override is written for this site.';
+      } else {
+        state.textContent = 'Explicit override: ' + ctl.control + ' (pins this site regardless of the '
+          + 'survey default ' + defLabel + ').';
+      }
+    }
+    COORD_POSITIONS.forEach(function (pos) {
+      var lab = el('label'); lab.style.display = 'block';
+      var rb = document.createElement('input');
+      rb.type = 'radio'; rb.name = 'coordpol-position'; rb.value = pos;
+      rb.style.width = 'auto'; rb.style.marginRight = '.4rem';
+      if (ctl.control === pos) rb.checked = true;
+      rb.addEventListener('change', function () {
+        if (rb.checked) { ctl.control = pos; refreshState(); }
+      });
+      lab.appendChild(rb);
+      lab.appendChild(document.createTextNode(labels[pos]));
+      fs.appendChild(lab);
+    });
+    wrap.appendChild(fs);
+    refreshState();
+    wrap.appendChild(state);
+    // Sibling honesty: a variant site's siblings share this ONE control — say so, and name them.
+    if (ctl.members.length > 1) {
+      wrap.appendChild(el('p', 'One control for all processing variants of this site: '
+        + ctl.members.join(', ') + ' — an override on the base id covers every variant.', 'sub'));
+    }
+    // D4 honesty note: the workbench reads what the PUBLIC reads (the masked served position); the true
+    // position lives only in the package (surveys-live), never on any served surface this panel fetches.
+    var honesty = el('p', 'The facts above show the MASKED served position — what the public reads. '
+      + 'The true position lives only in the package (surveys-live), never on a served surface.', 'sub');
+    honesty.style.fontStyle = 'italic';
+    wrap.appendChild(honesty);
+    // Release note (required by the edit flow) + Save. Save assembles EVERY base's control (not just this
+    // station's), short-circuits an unchanged map (no phantom version bump), then POSTs via the hidden form.
+    var nlabel = el('label', 'Release note (required to save)', 'k');
+    var note = document.createElement('textarea');
+    note.id = 'coord-policy-note'; note.placeholder = 'What changed and why';
+    var save = el('button', 'Save coordinate policy'); save.type = 'button'; save.className = 'b-accent';
+    var msg = el('p', null, 'sub'); msg.id = 'coord-policy-msg';
+    save.addEventListener('click', function () {
+      var assembled = assembleOverrideMap(OVERRIDE_CONTROLS);
+      if (!overrideMapChanged(assembled, COORD_OVERRIDES)) {
+        msg.textContent = 'No change to the coordinate policy — nothing to save.'; return;
+      }
+      if (!note.value.trim()) { msg.textContent = 'A release note is required to save.'; return; }
+      var form = document.getElementById('coord-policy-form');
+      if (!form) { msg.textContent = 'Save is unavailable (the edit form did not render).'; return; }
+      form.elements['s_access_coordinate_overrides'].value = JSON.stringify(assembled);
+      form.elements['note'].value = note.value.trim();
+      form.submit();   // -> the normal preview page (YAML diff + validator verdict + Confirm)
+    });
+    wrap.appendChild(nlabel);
+    wrap.appendChild(note);
+    wrap.appendChild(save);
+    wrap.appendChild(msg);
+    return wrap;
+  }
 
   // ---- list + filter (C43 FR2-2: the site table is the LEFT column; the FACTS panel #station-facts
   // and the PLOTS column #station-plots-col are pre-rendered siblings in the middle/right columns).
@@ -1661,6 +1825,13 @@ STATIONS_JS = r"""
       list.appendChild(el('p', 'No stations for this survey in the served corpus (' + slug + ').', 'sub'));
       return;
     }
+    // C43 Stage-4: build the per-BASE override control state ONCE from EVERY served row (not just the
+    // drilled-into station), so Save assembles the full survey map and a variant site's siblings share
+    // one control. Keyed by base id via the base-id surface; prefilled explicit-vs-inherit from the
+    // current survey.yaml override map.
+    OVERRIDE_CONTROLS = buildOverrideControls(rows.map(function (r) {
+      return { ausmtId: r.cat[C.ausmt_id], catId: r.cat[C.id] };
+    }), BASE_IDS, COORD_OVERRIDES);
     var filterWrap = el('p', null, 'st-filter');
     var filter = document.createElement('input');
     filter.type = 'search'; filter.placeholder = 'filter stations by id…';
@@ -3936,15 +4107,29 @@ def _hub_overview_body(slug: str, *, citation_email: str | None = None) -> str:
     )
 
 
-def _hub_stations_body(slug: str, *, build_lag: dict | None = None) -> str:
+def _hub_stations_body(slug: str, *, fields: dict | None = None, csrf_token: str = "",
+                       build_lag: dict | None = None) -> str:
     """The Stations tab body (C43 S2a-1). Server renders ONLY the scaffold + loading placeholder; the
     filterable station table, drill-down facts panel, hand-built SVG plots, and quadrant verdicts are
     all populated BROWSER-side by stations.js from the served /data corpus (catalogue/sci/tf/build) —
     the serve-panel pattern, zero new gateway privileges. `build_lag` carries the server-rendered
     published HEAD for the [FC-2] lag label (data-published-head): the JS compares it against the
     served build's source_commit and, on drift, renders 'facts from build <id> — publish pending' on
-    the panel itself. Degrades: without JS the placeholder stays, the page never breaks."""
+    the panel itself. Degrades: without JS the placeholder stays, the page never breaks.
+
+    C43 Stage-4: the panel host also carries the CURRENT survey.yaml access section (the SAME `fields`
+    the #53 survey-level select prefills from) so the drill-down's interactive coordinate-policy
+    fieldset can prefill each site honestly (explicit override vs inherited default). Saving assembles
+    the full {BASE_station_id: policy} map and POSTs it through the hidden #coord-policy-form to the
+    NORMAL per-section edit flow (preview → validator gate → confirm), so there is no new publish path."""
     published = (build_lag or {}).get("published_head") or ""
+    access = fields.get("access") if isinstance((fields or {}).get("access"), dict) else {}
+    coord_default = access.get("coordinates")
+    coord_default = coord_default if isinstance(coord_default, str) else ""
+    coord_overrides = access.get("coordinate_overrides")
+    coord_overrides = coord_overrides if isinstance(coord_overrides, dict) else {}
+    import json as _json
+    overrides_attr = _esc(_json.dumps(coord_overrides, sort_keys=True))
     # C43 FR2-2 scaffold: THREE thirds (owner ruling round 2). The split container carries THREE slots
     # the JS fills: station FACTS (#station-facts, col 2), the PLOTS column (#station-plots-col, col 3),
     # and the site TABLE (#stations-list, col 1). DOM ORDER is FACTS then PLOTS then TABLE — so on a
@@ -3956,7 +4141,9 @@ def _hub_stations_body(slug: str, *, build_lag: dict | None = None) -> str:
     # Degrades: without JS the placeholders stay, the page never breaks.
     return (
         f'<div id="survey-stations" data-survey-slug="{_esc(slug)}" '
-        f'data-published-head="{_esc(published)}">'
+        f'data-published-head="{_esc(published)}" '
+        f'data-coord-default="{_esc(coord_default)}" '
+        f'data-coord-overrides="{overrides_attr}">'
         '<div class="stations-split">'
         '<div id="station-facts" class="st-facts">'
         '<p class="sub">Select a station from the table to view its facts.</p>'
@@ -3969,8 +4156,44 @@ def _hub_stations_body(slug: str, *, build_lag: dict | None = None) -> str:
         '</div>'
         '</div>'
         '</div>'
+        # C43 Stage-4: the hidden per-section edit form the drill-down's Save-coordinate-policy button
+        # submits. It round-trips the REST of the access section verbatim (o_access snapshot + the four
+        # modelled scalars) so the ONLY diff is coordinate_overrides; the JS fills s_access_coordinate_
+        # overrides (the assembled full map) + the release note, then submits to the NORMAL preview route
+        # (YAML diff + validator gate + confirm). bump defaults to patch (the C31 §0.3 content-edit default).
+        + _coord_policy_form(slug, access, csrf_token)
         # EXTERNAL same-origin script (strictPages CSP blocks inline JS). Degrades gracefully.
-        '<script src="/gateway/curator/stations.js" defer></script>'
+        + '<script src="/gateway/curator/stations.js" defer></script>'
+    )
+
+
+def _coord_policy_form(slug: str, access: dict, csrf_token: str) -> str:
+    """The hidden form the Stations drill-down's Save-coordinate-policy button submits (C43 Stage-4).
+    It carries EXACTLY the fields a per-section access submit carries (o_access round-trip anchor + the
+    four modelled access scalars + bump + note + csrf), plus the empty s_access_coordinate_overrides
+    the JS fills with the assembled {BASE_station_id: policy} map. Round-tripping the rest of the access
+    section means editor_form.assemble_section sees only coordinate_overrides change, so the diff is
+    minimal (the same round-trip anchor the Metadata tab's per-section access form relies on)."""
+    def _acc(key):
+        v = access.get(key)
+        return "" if v in (None, "") else str(v)
+    snapshot = ""
+    if access:
+        snapshot = (f'<input type="hidden" name="o_access" '
+                    f'value="{_esc(_canon_json(access))}">')
+    csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    return (
+        f'<form id="coord-policy-form" method="post" hidden '
+        f'action="/gateway/curator/edit/{_esc(slug)}/preview">'
+        f'{csrf}{snapshot}'
+        f'<input type="hidden" name="s_access_level" value="{_esc(_acc("level"))}">'
+        f'<input type="hidden" name="s_access_coordinates" value="{_esc(_acc("coordinates"))}">'
+        f'<input type="hidden" name="s_access_embargo_until" value="{_esc(_acc("embargo_until"))}">'
+        f'<input type="hidden" name="s_access_contact" value="{_esc(_acc("contact"))}">'
+        f'<input type="hidden" name="s_access_coordinate_overrides" value="">'
+        f'<input type="hidden" name="bump" value="patch">'
+        f'<input type="hidden" name="note" value="">'
+        f'</form>'
     )
 
 
@@ -4190,7 +4413,7 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
                                    field_errors=field_errors, submitted=submitted,
                                    active_section=active_section)
     elif tab == "stations":
-        inner = _hub_stations_body(slug, build_lag=build_lag)
+        inner = _hub_stations_body(slug, fields=fields, csrf_token=csrf_token, build_lag=build_lag)
     elif tab == "history":
         inner = _hub_history_body(slug=slug, commits=commits or [], error=history_error)
     else:
