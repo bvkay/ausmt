@@ -452,10 +452,8 @@ function openStation(i){
     `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
     `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
     `</div></details>`;
-  // Files — related products (incl. advanced-analysis placeholder), the AusMT-derived deliverables.
-  const filesHtml=`<div class="sechead">Related products ${roleChip("AusMT-derived")}</div>`+relatedProducts(s)+
-    `<div class="sechead">Advanced analysis <span style="text-transform:none;letter-spacing:0">· Tier 3, generated offline</span></div>`+
-    `<div class="dim">McNeice–Jones / Groom–Bailey decomposition, distortion parameters and Lilley Mohr circles are planned <i>AusMT</i> pipeline products; they will appear here once produced. <span style="color:var(--muted)">Not computed in the browser.</span></div>`;
+  // Files — related products, the AusMT-derived deliverables.
+  const filesHtml=`<div class="sechead">Related products ${roleChip("AusMT-derived")}</div>`+relatedProducts(s);
   // Provenance (X6/X7/X8) — three source-data rows visible (processing software · transfer function
   // source file+sha · source archive), then the Dataset-maturity block (X7 stars), then EVERYTHING ELSE
   // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
@@ -703,18 +701,15 @@ function surveySummary(ss,m){
   // is inferable from the phase tensor + skew). The per-station dim tally that fed it (dimCount/nClass/
   // dimPct) is gone with it; sc[SC.dim] itself is untouched (data products unchanged — display only).
   const typeCount={}, swCount={}; let tipper=0, rr=0, rrKnown=0, pmin=Infinity, pmax=-Infinity;
-  const qs=[];
   ss.forEach(s=>{ const sc=SCI[s.i]||[];
     if(s.type) typeCount[s.type]=(typeCount[s.type]||0)+1;
     if(sc[SC.sw]) swCount[sc[SC.sw]]=(swCount[sc[SC.sw]]||0)+1;
     if((s.comps||"").indexOf("T")>=0) tipper++;
     if(sc[SC.rr]!=null){ rrKnown++; if(sc[SC.rr]) rr++; }
     if(s.pmin!=null) pmin=Math.min(pmin,s.pmin);
-    if(s.pmax!=null) pmax=Math.max(pmax,s.pmax);
-    if(s.q!=null) qs.push(s.q); });
+    if(s.pmax!=null) pmax=Math.max(pmax,s.pmax); });
   const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"–";
   const software=m.software||Object.keys(swCount).sort((a,b)=>swCount[b]-swCount[a])[0]||"not recorded";
-  const qavg=qs.length?(qs.reduce((a,b)=>a+b,0)/qs.length).toFixed(1):"–";
   const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"—";
   return `<div class="sechead">Survey summary <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(10-second view)</span></div><table class="meta">`+
     `<tr><td>stations</td><td>${ss.length}</td></tr>`+
@@ -724,7 +719,6 @@ function surveySummary(ss,m){
     `<tr><td>remote reference</td><td>${rrKnown?`${rr} / ${rrKnown} stations`:"not recorded"}</td></tr>`+
     `<tr><td>instrumentation</td><td>${esc(m.instrument_model||"not recorded in source metadata")}</td></tr>`+
     `<tr><td>processing software</td><td>${esc(software)}</td></tr>`+
-    `<tr><td>Automated completeness/smoothness check</td><td>${qavg}/5 <span style="color:var(--muted)">(not a quality verdict)</span></td></tr>`+
     `<tr><td>acquisition</td><td>${esc(m.dates||"–")}</td></tr>`+
     `<tr><td>investigators</td><td>${investigatorsHtml(m.investigators)}</td></tr>`+
     `<tr><td>collection</td><td>${coll}</td></tr>`+
@@ -769,8 +763,8 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) investigators + funding,
   // (7) publications, (8) identifiers (E2 rollup), (9) release history. Content is unchanged from before —
   // only the order. Acquisition/processing/investigators are carried inside the survey-summary table
-  // (sections 3/5/6 share that one atomic block); the mean-check row keeps its "(not a quality verdict)"
-  // framing there. Downloads move up ahead of funding/publications/identifiers; release history moves last.
+  // (sections 3/5/6 share that one atomic block). Downloads move up ahead of funding/publications/
+  // identifiers; release history moves last.
   drawer.innerHTML=
    `<div class="dhead"><span class="sid" style="font-size:18px">${esc(sv)}</span><button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${esc(m.org||"custodian unknown")} · ${esc(m.country||"")} · ${esc(m.dates||"dates n/a")}</div>`+
