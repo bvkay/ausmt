@@ -132,6 +132,10 @@
 	# inside the container picks up an atomic host-side swap immediately, no restart needed.
 	handle_path /data/* {
 		root * /srv/data/current
+		# Public read-only data is world-readable: ACAO * lets any origin's browser JS fetch it (the
+		# same tailnet-side benefit as :8081 — browser tools fetch /data cross-origin). Scoped to
+		# /data ONLY by this handler — it must never reach /gateway or any other path.
+		header Access-Control-Allow-Origin "*"
 		# Force download (not inline-render) for the byte-payload families: original EDI files,
 		# derived EMTF-XML (browsers would inline-render XML), and the packaged bundles —
 		# everything else under /data (catalogue.json etc) is fetched by the portal's own JS and
@@ -218,6 +222,10 @@
 	# Generated data volume — identical to :8080 (force-download families included).
 	handle_path /data/* {
 		root * /srv/data/current
+		# Public read-only data is world-readable: ACAO * lets any origin's browser JS fetch it, and
+		# it rides through the front-door reverse_proxy to public clients exactly as the CSP does.
+		# Scoped to /data ONLY by this handler — it must never reach /gateway or any other path.
+		header Access-Control-Allow-Origin "*"
 		@download path /edi/* /xml/* /bundles/* /h5/*
 		header @download Content-Disposition "attachment"
 		file_server
