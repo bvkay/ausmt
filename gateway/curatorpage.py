@@ -972,6 +972,13 @@ STATIONS_JS = r"""
   if (!host) return;
   var slug = host.getAttribute('data-survey-slug') || '';
   var publishedHead = host.getAttribute('data-published-head') || '';
+  // C42/C43 Stage-4: the boot-loaded coordinate-access policy map (ausmt_id -> 'generalised' |
+  // 'withheld'), read same-origin from the OPTIONAL /data/coord_policy.json — the SAME boot artifact
+  // the portal drawer reads (A1). It lists ONLY non-exact stations and carries the ENGINE-RESOLVED
+  // effective policy (override-or-default already applied at the mask seam), never a coordinate, so
+  // 'absent => exact' is the honest effective policy with NO client-side precision re-derivation
+  // (forbidden by the record). Absent file (all-exact corpus) => empty => every station reads 'exact'.
+  var COORD_POLICY = {};
   var SVGNS = 'http://www.w3.org/2000/svg';
 
   // ---- column maps (single-sourced positional contract; mirror portal/src/contract.js) ----
@@ -1291,12 +1298,21 @@ STATIONS_JS = r"""
     return '/#/station/' + encodeURIComponent(String(ausmtId == null ? '' : ausmtId));
   }
   function latLonText(lat, lon) { return num(lat, 3) + ' / ' + num(lon, 3); }
-  // Position + the C42 policy marker. '(exact)' is STATIC TEXT today (the C42 per-station
-  // fieldset is Stage 4); the coordinate-PARSE QC flag (catalogue coord_flag) is a different
-  // fact and stays appended when set — the boolean form keeps the established 'coordinate flag
-  // set' wording (a bare 'true' says nothing), a string value renders verbatim.
-  function positionText(lat, lon, coordFlag) {
-    var t = num(lat, 4) + ', ' + num(lon, 4) + ' (exact)';
+  // The station's EFFECTIVE coordinate policy: its coord_policy.json override if present, else
+  // 'exact'. The engine stamps the RESOLVED policy (override-or-survey-default) on that boot artifact
+  // for non-exact stations only, so 'absent => exact' is honest for BOTH a default-exact station and
+  // an explicit exact override. Pure (map + id in) so the executable JS pin exercises it.
+  function effectivePolicy(policyMap, ausmtId) {
+    return (policyMap && policyMap[ausmtId]) || 'exact';
+  }
+  // Position + the C42 EFFECTIVE-policy marker (Stage-4): '(exact)' / '(generalised)' / '(withheld)'
+  // from effectivePolicy — the honest served state, not a static label. A withheld station's masked
+  // lat/lon are null (num renders '-'), a generalised station carries the 0.1deg cell VERBATIM (no
+  // client re-rounding). The coordinate-PARSE QC flag (catalogue coord_flag) is a DIFFERENT fact and
+  // stays appended when set — the boolean form keeps the established 'coordinate flag set' wording (a
+  // bare 'true' says nothing), a string value renders verbatim.
+  function positionText(lat, lon, coordFlag, policy) {
+    var t = num(lat, 4) + ', ' + num(lon, 4) + ' (' + (policy || 'exact') + ')';
     if (coordFlag === true) return t + ' · coordinate flag set';
     return coordFlag ? t + ' · coord QC: ' + String(coordFlag) : t;
   }
@@ -1467,8 +1483,8 @@ STATIONS_JS = r"""
   // ---- facts panel (C43-HUB H3: the mockup's information design — science before plumbing) ----
   // Panel header row: mono station id + status chip (derived from the SAME classify() results the
   // list chips use) + the portal deep-link (portal route '#/station/<ausmt_id>'). Facts as a
-  // dl.facts in EXACTLY the mockup's order: Position (+ the static '(exact)' policy marker — C42
-  // fieldset is Stage 4), Band on one line, Frame in words, Convention as a sentence with the
+  // dl.facts in EXACTLY the mockup's order: Position (+ the EFFECTIVE C42 policy marker — override
+  // or survey default, from coord_policy.json), Band on one line, Frame in words, Convention as a sentence with the
   // medians (warn-coloured when out), Dimensionality (+ skew β when sci carries it), Median rel.
   // error, Tipper, Source file + TRUNCATED sha (full hash in the title attr). The panel-only
   // catalogue plumbing rows the mockup dropped (Components/Type/Remote reference) are dropped
@@ -1508,7 +1524,8 @@ STATIONS_JS = r"""
       if (opts && opts.title) dd.setAttribute('title', opts.title);
       dl.appendChild(dd);
     }
-    fact('Position', positionText(cat[C.lat], cat[C.lon], cat[C.coord_flag]), { mono: true });
+    fact('Position', positionText(cat[C.lat], cat[C.lon], cat[C.coord_flag],
+                                  effectivePolicy(COORD_POLICY, cat[C.ausmt_id])), { mono: true });
     // Gate F2: the coordinate-QC detail as ONE terse line right under Position (warn-toned when
     // flagged) — the raw JSON lives only in the collapsed details below.
     if (station && !station.__missing && station.coordinate_qc) {
@@ -1690,9 +1707,15 @@ STATIONS_JS = r"""
     fetchJson(dataUrl('catalogue.json')).catch(function () { return { __err: true }; }),
     fetchJson(dataUrl('sci.json')).catch(function () { return { __err: true }; }),
     fetchJson(dataUrl('tf.json')).catch(function () { return { __err: true }; }),
-    fetchJson(dataUrl('build.json')).catch(function () { return { __err: true }; })
+    fetchJson(dataUrl('build.json')).catch(function () { return { __err: true }; }),
+    // coord_policy.json is OPTIONAL (absent for an all-exact corpus) — tolerate absence, same
+    // graceful-degrade posture as the portal (empty => every station reads 'exact').
+    fetchJson(dataUrl('coord_policy.json')).catch(function () { return {}; })
   ]).then(function (res) {
-    var cat = res[0], sci = res[1], tf = res[2], build = res[3];
+    var cat = res[0], sci = res[1], tf = res[2], build = res[3], cpol = res[4];
+    if (cpol && !cpol.__err && !cpol.__missing && typeof cpol === 'object' && !Array.isArray(cpol)) {
+      COORD_POLICY = cpol;
+    }
     if (!cat || cat.__err || cat.__missing || !Array.isArray(cat)) {
       host.textContent = '';
       host.appendChild(el('p', 'No served catalogue yet (data/catalogue.json). Stations appear once '
