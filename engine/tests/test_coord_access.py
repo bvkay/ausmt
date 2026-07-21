@@ -997,3 +997,81 @@ def test_unit_apply_mask_in_place_and_validates_override_ids():
     # bogus override id => fail closed
     with pytest.raises(coordacc.CoordinatePolicyError):
         coordacc.apply_coordinate_policy(stations, "exact", {"NOPE": "withheld"})
+
+
+# =====================================================================================================
+# A2 BASE-STATION-ID SURFACE PINS (base_ids.json — the boot artifact keyed by base id for the C43
+# stations-panel override fieldset; D2 fix-round-2 requires override keys to be BASE ids)
+# =====================================================================================================
+
+# One physical station processed by two codes: SAME DATAID (SITE1), two files -> the engine dedups to
+# SITE1.<variant> and stamps r["variant"]. Same distinctive coords on both (it is one site).
+_VAR_A = {"id": "SITE1", "file": "SITE1_LemiGraph.edi", "lat": -34.501234, "lon": 138.401234,
+          "elev": 210.31, "policy": "exact"}
+_VAR_B = {"id": "SITE1", "file": "SITE1_Ohmega.edi", "lat": -34.501234, "lon": 138.401234,
+          "elev": 210.31, "policy": "exact"}
+
+
+def test_base_id_surface_emitted_and_engine_true_for_variant_stations(tmp_path):
+    """A2 EMISSION + PARITY PIN. A survey with a processing-variant pair emits base_ids.json — a boot map
+    ausmt_id -> BASE station id — containing EXACTLY the variant records mapped to their shared base, and
+    NOT the non-variant station (whose base is its own catalogue id). The emitted base ids equal
+    base_station_id() over the REAL parsed records (engine truth, never a hand-typed map). FAILS IF the
+    surface is missing, a variant record is absent/mis-based, a non-variant station is listed, or the
+    emitted base diverges from the mask seam's own base_station_id derivation."""
+    out, r = _build(tmp_path, [EXACT, _VAR_A, _VAR_B], coordinates_default="exact", overrides={})
+    assert r.returncode == 0, r.stderr
+    bpath = out / "base_ids.json"
+    assert bpath.exists(), "base_ids.json must be emitted when the corpus has a variant station"
+    got = json.loads(bpath.read_text(encoding="utf-8"))
+    # ENGINE TRUTH: re-parse the SAME staged EDIs and compute the expected base map from each record's
+    # own id+variant via the SHARED base_station_id — no hand-typed ausmt_ids or bases (house rule).
+    edidir = tmp_path / "surveys" / "sweep-survey" / "transfer_functions" / "edi"
+    stations, _tf, _sci = build_portal.process_edis(
+        sorted(edidir.glob("*.edi")), "Coord Access Sweep Survey", "AusMT CI",
+        "sweep-survey", "mt_metadata", report={})
+    expected = {rec["ausmt_id"]: coordacc.base_station_id(rec.get("id"), rec.get("variant"))
+                for (_p, rec) in stations
+                if coordacc.base_station_id(rec.get("id"), rec.get("variant")) != rec.get("id")}
+    assert expected, "precondition: the fixture must yield at least one variant record"
+    assert got == expected, \
+        f"emitted base_ids.json must equal base_station_id() over the real records: {got} != {expected}"
+    # both variant records map to the shared base 'SITE1'; the plain EXACT station is absent.
+    assert sorted(set(got.values())) == ["SITE1"], f"variant records must map to their base id: {got}"
+    assert len(got) == 2, f"exactly the two variant records must be listed: {got}"
+    aid = _aid_by_id(out)
+    assert aid[EXACT["id"]] not in got, "a non-variant station is absent (its base is its own catalogue id)"
+
+
+def test_base_id_surface_absent_without_variant_stations(tmp_path):
+    """A2 DEFAULT-STABILITY PIN. A corpus with NO processing-variant station emits NO base_ids.json — the
+    surface is additive ONLY when it carries information (a variant station's base differs from its served
+    id), so a corpus of ordinary stations is byte-unchanged (no new file). Orthogonal to coord policy:
+    this build DOES exercise the non-exact mask (GEN/HID) yet still emits no base_ids.json. FAILS IF
+    base_ids.json is emitted for a variant-free corpus."""
+    out, r = _build(tmp_path, [EXACT, GEN, HID])   # three DISTINCT ids -> no variants
+    assert r.returncode == 0, r.stderr
+    assert not (out / "base_ids.json").exists(), \
+        "a corpus with no variant station must NOT emit base_ids.json (default-stability)"
+    # non-vacuous: the corpus really built.
+    assert (out / "catalogue.json").exists() and EXACT["id"] in (out / "catalogue.json").read_text(encoding="utf-8")
+
+
+def test_base_id_surface_is_leak_swept_and_carries_no_coordinate(tmp_path):
+    """A2 LEAK PIN. A build whose variant pair is ALSO withheld emits base_ids.json (variant present) AND
+    masks the physical site (withheld). The whole out/ tree — base_ids.json INCLUDED — is swept for the
+    site's true lat/lon/elev: the surface carries only ids already in the served catalogue, never a
+    coordinate, so a future emitter that tried to smuggle a position onto it is caught here. FAILS IF
+    base_ids.json is absent (dodging the sweep) or any true coordinate of the withheld site appears
+    anywhere in served output."""
+    va = {**_VAR_A, "policy": "withheld"}
+    vb = {**_VAR_B, "policy": "withheld"}
+    out, r = _build(tmp_path, [EXACT, va, vb], coordinates_default="exact", overrides={"SITE1": "withheld"})
+    assert r.returncode == 0, r.stderr
+    bpath = out / "base_ids.json"
+    assert bpath.exists(), "base_ids.json must be emitted (variant present) so the sweep audits it"
+    for field in ("lat", "lon", "elev"):
+        assert not _sweep_tree_for_value(out, va[field], label=f"SITE1.{field}"), \
+            f"the withheld site's true {field} leaked into served output (base_ids.json is in the sweep)"
+    # the surface itself maps to the base id and nothing coordinate-shaped.
+    assert "SITE1" in bpath.read_text(encoding="utf-8"), "base_ids.json must carry the base id"

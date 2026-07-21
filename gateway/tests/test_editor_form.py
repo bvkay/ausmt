@@ -218,6 +218,273 @@ def test_setting_coordinate_policy_adds_only_that_key():
     assert ef.assemble_section(form, "access") == {**original, "coordinates": "withheld"}
 
 
+# ---- access.coordinate_overrides (C43 Stage-4 per-station coordinate-access overrides) -----------
+#
+# The stations-panel fieldset (exact / generalised / withheld + inherit) assembles a
+# {BASE_station_id: policy} map and submits it as the ONE field s_access_coordinate_overrides
+# (canonical JSON, keys built ONLY from real served station records). A station left at INHERIT is
+# ABSENT from the map (it follows the survey default); an explicit policy is written verbatim (even if
+# equal to the current default — an explicit override pins intent against later default changes). An
+# EMPTY map writes NO coordinate_overrides key (the record's byte-unchanged promise). These pins feed
+# the editor-ASSEMBLED block through the REAL engine parser AND validator (engine-truth), so a
+# key/vocab drift can never pass silently.
+
+def _override_records():
+    """Realistic engine station records [(path, record), ...] the way build_portal's parsed +
+    _disambiguate'd records look — enough to exercise validate_overrides / station_policy honestly:
+      * a DATAID-differs-from-stem station (file stem 'ALPHA', station id 'CP1L04' from the DATAID);
+      * a processing-variant PAIR (one physical site 'MBV20' processed twice -> ids MBV20.a / MBV20.b
+        with variant tags 'a'/'b', base id 'MBV20');
+      * a plain station whose id equals its stem ('CP1L10')."""
+    return [
+        (Path("ALPHA.edi"), {"id": "CP1L04", "variant": None, "ausmt_id": "au.s.cp1l04"}),
+        (Path("MBV20_lemi.edi"), {"id": "MBV20.a", "variant": "a", "ausmt_id": "au.s.mbv20.a"}),
+        (Path("MBV20_ohmega.edi"), {"id": "MBV20.b", "variant": "b", "ausmt_id": "au.s.mbv20.b"}),
+        (Path("CP1L10.edi"), {"id": "CP1L10", "variant": None, "ausmt_id": "au.s.cp1l10"}),
+    ]
+
+
+def test_coordinate_overrides_key_parity_through_real_engine():
+    """KEY-PARITY PIN (load-bearing): the editor-assembled access block WITH per-station overrides
+    round-trips through the REAL parse_coordinate_policy AND validate_overrides — every written key is
+    accepted AND EFFECTIVE (changes at least one record's resolved policy; no silent no-op). A
+    base-id override (MBV20) covers ALL its variant records. FAILS IF a key/vocab drift makes an
+    override silently absent or a validated-but-inert no-op (matcher divergence)."""
+    coordacc = _load_engine_coordaccess()
+    records = _override_records()
+    overrides_in = {"CP1L04": "withheld", "MBV20": "generalised"}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps(overrides_in),
+        **_snap("access", {"level": "open"}),
+    }
+    assembled = ef.assemble_section(form, "access")
+    default, overrides = coordacc.parse_coordinate_policy(assembled)
+    assert default == "exact"
+    assert overrides == overrides_in, (
+        f"engine parsed overrides {overrides!r}, not the editor-assembled {overrides_in!r} "
+        f"— a key/spelling drift would make the per-station policy a silent no-op")
+    # every key validates against the REAL records (no raise) ...
+    coordacc.validate_overrides(overrides, records)
+    # ... and is EFFECTIVE: each key changes at least one record's resolved policy vs the bare default.
+    for key, pol in overrides.items():
+        hits = [r for (_p, r) in records
+                if coordacc.station_policy(default, overrides, r.get("id"), r.get("variant")) == pol
+                and coordacc.station_policy(default, {}, r.get("id"), r.get("variant")) != pol]
+        assert hits, (f"override {key!r}={pol!r} matched no record — a validated-but-inert key "
+                      f"(the matcher-divergence class)")
+
+
+def test_coordinate_overrides_bad_vocab_rejected_fail_closed():
+    """FAIL-CLOSED POST: an override VALUE outside COORDINATE_POLICIES is rejected at the editor
+    (mirrors the #53 survey-level select vocab check). FAILS IF the editor assembles an unknown policy
+    the engine would refuse to build."""
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps({"CP1L04": "fuzzy"}),
+        **_snap("access", {"level": "open"}),
+    }
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "access")
+
+
+def test_coordinate_overrides_unknown_key_rejected_by_engine():
+    """FAIL-CLOSED POST: an override key naming NO real base station id is rejected by the REAL engine
+    validator over the editor-assembled block (engine-truth; the gateway is content-blind so the
+    authoritative key gate is the engine/validator). FAILS IF a mis-keyed override validates."""
+    coordacc = _load_engine_coordaccess()
+    records = _override_records()
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps({"NOSUCH": "withheld"}),
+        **_snap("access", {"level": "open"}),
+    }
+    assembled = ef.assemble_section(form, "access")
+    _default, overrides = coordacc.parse_coordinate_policy(assembled)
+    assert overrides == {"NOSUCH": "withheld"}  # the editor assembled it; the ENGINE is the key gate
+    with pytest.raises(coordacc.CoordinatePolicyError):
+        coordacc.validate_overrides(overrides, records)
+
+
+def test_coordinate_overrides_variant_suffixed_key_rejected_by_engine():
+    """FAIL-CLOSED POST: a FULL variant-suffixed id (MBV20.a) is NOT a valid key — overrides key the
+    BASE id (MBV20), which covers all its processing variants. FAILS IF a sibling variant could be
+    keyed directly (the probe-e / variant class: a sibling serving the physical site's true position)."""
+    coordacc = _load_engine_coordaccess()
+    records = _override_records()
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps({"MBV20.a": "withheld"}),
+        **_snap("access", {"level": "open"}),
+    }
+    assembled = ef.assemble_section(form, "access")
+    _default, overrides = coordacc.parse_coordinate_policy(assembled)
+    assert overrides == {"MBV20.a": "withheld"}
+    with pytest.raises(coordacc.CoordinatePolicyError):
+        coordacc.validate_overrides(overrides, records)
+
+
+def test_coordinate_overrides_empty_and_inherit_omit_the_key():
+    """INHERIT / EMPTY-MAP: a station set to inherit is absent from the submitted map; an EMPTY map
+    (or the absent field) writes NO coordinate_overrides key — a survey that never used overrides stays
+    byte-unchanged. A NON-empty map ADDS exactly the keyed stations. FAILS IF an empty map introduces
+    the key, or the assembly path never emits it."""
+    # empty map on a survey that never had overrides -> the key is not written (and, nothing else
+    # changed, the whole section is a no-op).
+    form_empty = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps({}),
+        **_snap("access", {"level": "open"}),
+    }
+    assert ef.assemble_section(form_empty, "access") is ef._OMIT
+    # the absent field (no JS / never touched) behaves identically.
+    form_absent = {"s_access_level": "open", **_snap("access", {"level": "open"})}
+    assert ef.assemble_section(form_absent, "access") is ef._OMIT
+    # a NON-empty map ADDS exactly the keyed station (proves the assembly path emits the key).
+    form_add = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps({"CP1L04": "withheld"}),
+        **_snap("access", {"level": "open"}),
+    }
+    assert ef.assemble_section(form_add, "access") == {
+        "level": "open", "coordinate_overrides": {"CP1L04": "withheld"}}
+
+
+def test_coordinate_overrides_inherit_removes_a_present_key():
+    """INHERIT removes a previously-pinned station: original had {CP1L04: withheld}; resubmitting an
+    empty map yields an access block that no longer carries coordinate_overrides, so apply_patch's
+    surgical map-merge DELETES the key (byte-clean removal). FAILS IF a removed override lingers."""
+    original = {"level": "open", "coordinate_overrides": {"CP1L04": "withheld"}}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps({}),
+        **_snap("access", original),
+    }
+    # resubmitting the SAME override is a no-op (the assembly recognises the existing key).
+    same = {"s_access_level": "open",
+            "s_access_coordinate_overrides": json.dumps({"CP1L04": "withheld"}),
+            **_snap("access", original)}
+    assert ef.assemble_section(same, "access") is ef._OMIT
+    out = ef.assemble_section(form, "access")
+    assert out is not ef._OMIT
+    assert "coordinate_overrides" not in out
+
+
+def test_coordinate_overrides_unchanged_round_trips_to_omit():
+    """DIFF-MINIMALITY: an UNCHANGED overrides map (resubmitted identically) contributes nothing to
+    the patch. FAILS IF a no-op submit re-emits the section (a spurious diff on a policy-bearing
+    survey)."""
+    original = {"level": "open",
+                "coordinate_overrides": {"CP1L04": "withheld", "MBV20": "generalised"}}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinate_overrides": json.dumps(
+            {"CP1L04": "withheld", "MBV20": "generalised"}),
+        **_snap("access", original),
+    }
+    assert ef.assemble_section(form, "access") is ef._OMIT
+
+
+def test_coordinate_overrides_malformed_payload_rejected():
+    """FAIL-CLOSED: a malformed overrides payload (not a JSON object of str->str) fail-closes at the
+    editor rather than silently dropping the curator's intent. FAILS IF a non-mapping payload is
+    accepted."""
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section({"s_access_level": "open",
+                             "s_access_coordinate_overrides": "not json",
+                             **_snap("access", {"level": "open"})}, "access")
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section({"s_access_level": "open",
+                             "s_access_coordinate_overrides": json.dumps(["a", "b"]),
+                             **_snap("access", {"level": "open"})}, "access")
+
+
+# ---- C42 coordinate-privacy: an ordinary access edit must PRESERVE the overrides map --------------
+#
+# The Metadata-tab per-section access form models only the four access scalars (level / coordinates /
+# embargo_until / contact) — it does NOT render s_access_coordinate_overrides. So an ordinary access
+# edit (change embargo, contact, or level) submits WITHOUT that field. The assembler distinguishes the
+# ABSENT field (this form: PRESERVE the survey's existing overrides from the o_access snapshot) from an
+# explicit EMPTY map (the stations panel: DELETE the key — set-all-to-inherit). Before this fix an
+# absent field collapsed to {} exactly like an explicit clear, so apply_patch's surgical merge deleted
+# the whole coordinate_overrides map, silently reverting every withheld/generalised station to the
+# survey default (usually exact) — its TRUE coordinates served on the next build (a C42 leak).
+
+def test_ordinary_access_edit_preserves_existing_coordinate_overrides():
+    """C42 LEAK PIN (RED on pre-fix HEAD dfa5bab): a Metadata-tab access edit that changes ONLY
+    embargo_until — submitting NO s_access_coordinate_overrides field, exactly what that form posts —
+    must PRESERVE the survey's existing coordinate_overrides map. FAILS IF an unrelated access edit
+    drops a withheld/generalised station back to the survey default (the silent un-masking)."""
+    original = {"level": "open", "embargo_until": "2026-01-01", "contact": "data@example.org",
+                "coordinate_overrides": {"SITE1": "withheld", "SITE2": "generalised"}}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "",                 # the <select>'s default-blank, round-tripped
+        "s_access_embargo_until": "2027-06-30",     # the ONLY curator change
+        "s_access_contact": "data@example.org",
+        # NOTE: no s_access_coordinate_overrides — the Metadata-tab access form never renders it.
+        **_snap("access", original),
+    }
+    out = ef.assemble_section(form, "access")
+    assert out is not ef._OMIT
+    assert out["embargo_until"] == "2027-06-30"
+    assert out["coordinate_overrides"] == {"SITE1": "withheld", "SITE2": "generalised"}, \
+        "an embargo-only access edit dropped the coordinate_overrides map (C42 coordinate-privacy leak)"
+
+
+def test_access_edit_with_absent_overrides_and_no_original_stays_omit():
+    """The absent-field PRESERVE path must NOT introduce a key on a survey that never had overrides: an
+    unchanged access submit with no original map and no overrides field is still a no-op (_OMIT). FAILS
+    IF the fix fabricates an empty coordinate_overrides key (a spurious diff / broken byte-unchanged
+    promise)."""
+    original = {"level": "open", "embargo_until": "2026-01-01", "contact": "data@example.org"}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "",
+        "s_access_embargo_until": "2026-01-01",
+        "s_access_contact": "data@example.org",
+        **_snap("access", original),
+    }
+    assert ef.assemble_section(form, "access") is ef._OMIT
+
+
+def test_stations_panel_clear_all_removes_overrides_despite_original_map():
+    """OVER-PRESERVATION GUARD: field PRESENT + explicit EMPTY map (the stations-panel set-all-to-
+    inherit) must still DELETE the key even when the original carried a map and a sibling scalar also
+    changed. This is the OTHER side of the absent/present distinction — the fix must not over-preserve
+    a map the curator explicitly cleared. FAILS IF the clear-all no longer removes the key."""
+    original = {"level": "open", "contact": "old@example.org",
+                "coordinate_overrides": {"SITE1": "withheld"}}
+    form = {
+        "s_access_level": "open",
+        "s_access_contact": "new@example.org",      # a real sibling change (so the section is not _OMIT)
+        "s_access_coordinate_overrides": json.dumps({}),   # explicit clear-all (present, empty)
+        **_snap("access", original),
+    }
+    out = ef.assemble_section(form, "access")
+    assert out is not ef._OMIT
+    assert "coordinate_overrides" not in out, \
+        "an explicit clear-all did not remove the coordinate_overrides key (over-preservation regression)"
+
+
+def test_survey_level_coordinates_default_survives_sibling_scalar_edit():
+    """C42 sibling-scalar class (the survey-level policy, one level up from the per-station map): editing
+    a SIBLING access scalar (embargo) must not drop the survey-level `coordinates` policy. The Metadata
+    form round-trips the coordinates <select>, so it is re-posted verbatim and the assembler keeps it.
+    FAILS IF a sibling-only edit drops access.coordinates (the same silent un-mask, survey-granularity)."""
+    original = {"level": "open", "coordinates": "withheld", "embargo_until": "2026-01-01"}
+    form = {
+        "s_access_level": "open",
+        "s_access_coordinates": "withheld",         # round-tripped by the <select>
+        "s_access_embargo_until": "2027-06-30",     # the only change
+        **_snap("access", original),
+    }
+    out = ef.assemble_section(form, "access")
+    assert out is not ef._OMIT
+    assert out["coordinates"] == "withheld", \
+        "a sibling-scalar access edit dropped the survey-level coordinate policy"
+
+
 def test_changing_coordinate_policy_touches_only_that_key():
     """DIFF-MINIMALITY: changing an existing policy touches ONLY access.coordinates. FAILS IF another
     key moves (e.g. an absent embargo gets introduced as null)."""

@@ -322,6 +322,18 @@ def _assemble_map(form: dict, section: str):
             continue
         out[subkey] = value
 
+    # C43 Stage-4: the per-station coordinate-access overrides live inside the access section, beside
+    # the #53 survey-level `coordinates` select. Only ONE of the access-editing forms models the map:
+    # the stations-panel coord-policy-form POSTs s_access_coordinate_overrides; the Metadata-tab per-
+    # section access form does NOT render that field at all. So the field's ABSENCE and an explicit
+    # EMPTY map mean OPPOSITE things and are resolved apart (_resolve_coordinate_overrides) — else an
+    # ordinary access edit (change level/embargo/contact) silently drops a withheld/generalised station
+    # back to the survey default, serving its TRUE coordinates (a coordinate-privacy leak, C42).
+    if section == "access":
+        overrides = _resolve_coordinate_overrides(form, original)
+        if overrides:
+            out["coordinate_overrides"] = overrides
+
     # organisation bare-string round-trip: original was a string, curator left ror empty, name set.
     if section == "organisation" and original_is_str:
         ror = out.get("ror")
@@ -329,6 +341,67 @@ def _assemble_map(form: dict, section: str):
         if not ror and isinstance(name, str):
             return name  # re-emit the bare string exactly
     return out
+
+
+def _resolve_coordinate_overrides(form: dict, original) -> dict:
+    """The access.coordinate_overrides map to emit, distinguishing field-ABSENT from field-EMPTY —
+    the C42 coordinate-privacy contract (a withheld/generalised station must NEVER silently un-mask).
+
+      * field ABSENT (form.get is None): the submitting form does not model overrides (the Metadata-
+        tab per-section access form), so an unrelated access edit must PRESERVE the survey's existing
+        map. Re-emit it verbatim from the o_access snapshot (`original`); apply_patch's surgical merge
+        then leaves it byte-clean. Absent + no original map => {} (nothing to preserve; byte-unchanged).
+      * field PRESENT (the stations-panel coord-policy-form): assemble it. A non-empty map is written
+        verbatim; an empty / all-inherit map returns {} so apply_patch DELETES a previously-pinned key
+        (the intended set-all-to-inherit-removes-the-key — NO over-preservation regression).
+
+    The preserved values are NOT re-validated here: they came from the survey's own stored access
+    section (the same o_access anchor the four modelled scalars round-trip through), and the engine
+    validator runs on the merged result at preview time. The field-PRESENT branch fail-closes on vocab
+    exactly as before (_assemble_coordinate_overrides)."""
+    if form.get("s_access_coordinate_overrides") is None:
+        if isinstance(original, dict):
+            orig = original.get("coordinate_overrides")
+            if isinstance(orig, dict) and orig:
+                return dict(orig)
+        return {}
+    return _assemble_coordinate_overrides(form)
+
+
+def _assemble_coordinate_overrides(form: dict) -> dict:
+    """Assemble access.coordinate_overrides (C43 Stage-4) from the stations-panel fieldset. The panel
+    builds a {BASE_station_id: policy} map from REAL served station records — keys are NEVER free-text
+    — and submits it as ONE canonical-JSON field, s_access_coordinate_overrides; a station left at
+    INHERIT is simply ABSENT from the map (it follows the survey default). Returns {} for an absent or
+    empty payload (the caller then writes no key — the byte-unchanged promise).
+
+    Fail-closed like the #53 survey-level select: each VALUE must be a member of COORDINATE_POLICIES
+    (an unknown policy, a non-mapping payload, or malformed JSON is a SectionError — never silently
+    assembled or dropped). Override KEYS are NOT validated here: the gateway APP image is content-blind
+    (it never imports engine/ and has no authoritative station list), so it cannot derive a survey's
+    real BASE station ids — the authoritative key gate is the engine's validate_overrides at build time
+    (fail-closed, survey-granularity drop) plus the validator the merge runs. The KEY-PARITY pin feeds
+    THIS assembly through the real engine validator so a mis-keyed / variant-suffixed override is caught
+    engine-truth, not by a hand-typed expectation."""
+    raw = _form_get(form, "s_access_coordinate_overrides")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        raise SectionError("access",
+                           "coordinate overrides: the per-station policy map is not valid JSON")
+    if not isinstance(parsed, dict):
+        raise SectionError("access",
+                           "coordinate overrides: expected a {station id: policy} mapping")
+    overrides: dict = {}
+    for sid, pol in parsed.items():
+        policy = str(pol).strip().lower() if pol not in (None, "") else ""
+        if policy not in COORDINATE_POLICIES:
+            raise SectionError("access", f"coordinate override for '{sid}': '{pol}' is not one of "
+                                         f"{', '.join(COORDINATE_POLICIES)}")
+        overrides[str(sid)] = policy
+    return overrides
 
 
 def _collect_levels(form: dict, section: str, subkey: str, original) -> list[str]:
