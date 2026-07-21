@@ -1328,8 +1328,33 @@ def _write_station_products(job, prov):
     runs AFTER the coordinate mask: `r` is the SHARED station record, masked in place at the single seam,
     so `location` carries the post-mask value every other emitter reads — no per-emitter mask logic).
     `job` is the tuple captured in main()'s per-survey loop; `prov` is the build PROV block."""
-    (sdir, r, srow, label, org, meta, lic, slug, p, edi_served, conditioning_notes) = job
+    (sdir, r, srow, label, org, meta, lic, slug, p, edi_served, conditioning_notes, served) = job
     sdir.mkdir(parents=True, exist_ok=True)
+    # C1c: --products IS a served surface in deployment (deploy/Makefile writes products/ INSIDE the served
+    # build dir; D1). So it rides the SAME C1 access gate as tf.json/sci.json: for a NON-SERVED survey
+    # (embargoed with an active embargo, or metadata_only) the derived TF science IS the embargoed data —
+    # emitting median_relative_error / dimensionality / skew_beta / the completeness diagnostic / the frame
+    # phase medians here would publish exactly what the byte gate (C1) and the display gate (C1b) withhold.
+    # `served` is the survey's access_serve_state["served"] captured at the emit site (never re-derived). A
+    # non-served survey gets a WITHHELD station.json carrying ONLY the discovery-safe identity the public
+    # catalogue already exposes (id, survey, access state, edi_available=false) — NO TF-derived science, NO
+    # exact source position, NO input_sha256 — and NO dimensionality.json (a pure interpretation product).
+    if not served:
+        _wdoc = {
+            "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label,
+            "country": (meta or {}).get("country", "Australia"), "organisation": org,
+            "access": {"level": normalise_access_level((meta or {}).get("access", "open")),
+                       "embargo_until": (meta or {}).get("embargo_until"), "served": False},
+            "distribution": {"edi_available": False, "license": lic, "edi_path": None},
+            # discovery-universal flag: the survey is fully in the catalogue/surveys/mtcat; only the derived
+            # science products are withheld here (same posture as the withheld tf.json/sci.json rows).
+            "withheld": True,
+            "note": "This survey's access state withholds its derived science products (embargoed or "
+                    "metadata_only). Discovery metadata remains in the catalogue; the science is released "
+                    "when the survey's access.level is opened.",
+        }
+        (sdir / "station.json").write_text(_jdump(_wdoc, indent=1), encoding="utf-8")
+        return   # no dimensionality.json for a non-served survey (interpretation product = withheld science)
     _doc = {
         "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label,
         "country": (meta or {}).get("country", "Australia"), "organisation": org,
@@ -2365,8 +2390,11 @@ def main(argv=None):
         # C1 access gate (ORTHOGONAL to the licence gate): a survey must be access.level=open AND not under
         # an active embargo to have its bytes distributed. metadata_only/embargoed surveys stay fully in the
         # discovery surfaces (catalogue/tf/sci/surveys/mtcat) below — only the bytes are withheld here. The
-        # canonical store (--canonical-dir) and --products station.json are NOT distribution surfaces and are
-        # emitted regardless (they carry no served bytes/manifest rows). meta is SMETA (access + embargo_until).
+        # canonical store (--canonical-dir) is a curator-only artifact (not written into the served build) and
+        # is emitted regardless. The --products tree, HOWEVER, IS a distribution surface: deploy/Makefile
+        # writes products/ INSIDE the served build dir (D1), so its per-station station.json/dimensionality.json
+        # ride this SAME gate — C1c withholds the derived TF science for a non-served survey (see
+        # _write_station_products). meta is SMETA (access + embargo_until).
         _acc = access_serve_state((meta or {}).get("access", "open"), (meta or {}).get("embargo_until"))
         for _w in _acc["warnings"]:
             print(f"WARNING: survey '{label}': {_w}", file=sys.stderr)
@@ -2451,9 +2479,12 @@ def main(argv=None):
                 # state that changes after this iteration (conditioning_notes is this survey's own dict). The
                 # per-station coordinate byte-gate (_cserved) is captured too: even inside a served survey, a
                 # non-exact station's EDI is withheld, so station.json's distribution must not advertise it.
+                # C1c: the SURVEY access-serve state (_acc["served"], the SAME result the byte gate and the
+                # C1b tf/sci withholding use — never re-derived) is captured so the deferred emitter withholds
+                # the derived science products for a non-served survey, exactly as tf.json/sci.json are.
                 _station_product_jobs.append(
                     (prod / slug / r["id"], r, srow, label, org, meta, lic, slug, p,
-                     bool(can_serve and _cserved), conditioning_notes))
+                     bool(can_serve and _cserved), conditioning_notes, bool(_acc["served"])))
         # ---- per-survey bundles (served surveys only): pre-zipped EDIs + optional survey MTH5 ----
         if can_serve and served_edis:
             # C6: rights travel with the bytes — build a deterministic LICENSE.txt for the zip. Licensor =
