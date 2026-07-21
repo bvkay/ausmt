@@ -162,6 +162,40 @@ def _get(port: int, path: str, headers: dict | None = None) -> tuple[int, str]:
         return e.code, e.read().decode("utf-8", "replace")
 
 
+def _get_full(port: int, path: str, headers: dict | None = None) -> tuple[int, dict, str]:
+    """Like _get but also returns the response headers (case-insensitive dict) — needed to pin the
+    CORS Access-Control-Allow-Origin header on /data responses."""
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers or {})
+    try:
+        r = urllib.request.urlopen(req, timeout=5)
+        return r.status, dict(r.headers), r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers), e.read().decode("utf-8", "replace")
+
+
+def _box_reader_cfg(td: Path, port: int, *, strip_acao: bool = False) -> str:
+    """Compose a hermetic box reader-listener config from the SHIPPED :8081 site body: rebind to
+    :port with auto_https off, point root/data at temp dirs seeded with a reader page + a /data JSON,
+    and (optionally, for the red-proof) strip the /data ACAO header to reproduce the PRE-CHANGE config.
+    Used both standalone (a-runtime) and as the upstream behind the front door (c-runtime)."""
+    text = _BOX_CADDY.read_text(encoding="utf-8")
+    m = re.search(r"^:8081 \{", text, re.MULTILINE)
+    assert m, "the box Caddyfile must declare the :8081 reader-only listener"
+    body = _brace_match(text, m.start())[1:-1]
+    portal, data = td / "portal", td / "data"
+    portal.mkdir(exist_ok=True)
+    data.mkdir(exist_ok=True)
+    (portal / "index.html").write_text("<h1>reader</h1>", encoding="utf-8")
+    (data / "catalogue.json").write_text('{"ok":true}', encoding="utf-8")
+    body = body.replace("/srv/portal", portal.as_posix()).replace("/srv/data/current", data.as_posix())
+    if strip_acao:
+        # Reproduce the PRE-CHANGE Caddyfile: remove the single /data ACAO header DIRECTIVE line (the
+        # scoping comment above it is inert and may remain). red-proof for (a)/(c).
+        body, n = re.subn(r'[^\n]*header Access-Control-Allow-Origin "\*"\n', "", body, count=1)
+        assert n == 1, "expected exactly one /data ACAO header line to strip for the pre-change export"
+    return "{\n\tadmin off\n\tauto_https off\n}\n" + f":{port} {{\n{body}\n}}\n"
+
+
 def _stop(proc: subprocess.Popen) -> None:
     proc.terminate()
     try:
@@ -439,6 +473,110 @@ def test_box_reader_listener_serves_reader_no_gateway_at_runtime():
             assert st in (200, 404), f"a reader path must be served by file_server, got {st}"
         finally:
             _stop(proc)
+
+
+# ==================================================================================================
+# CORS on public data — runtime pins (feat/api-cors-geojson-honesty)
+# ==================================================================================================
+def _acao(headers: dict) -> str | None:
+    """The Access-Control-Allow-Origin response header value, case-insensitively (urllib's header dict
+    is case-insensitive, but be explicit)."""
+    for k, v in headers.items():
+        if k.lower() == "access-control-allow-origin":
+            return v
+    return None
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_reader_data_carries_cors_but_gateway_does_not_at_runtime():
+    """(a)+(b) RUNTIME. The SHIPPED :8081 reader listener serves a /data/*.json response WITH
+    Access-Control-Allow-Origin: * (public read-only data is world-readable to browser JS), while the
+    header is SCOPED to the /data handler only — a /gateway/* request (refused 404) and a non-/data
+    reader page do NOT carry it. FAILS IF /data lacks ACAO, or ACAO leaks onto /gateway or a reader
+    page (which would prove the header is not scoped to the /data handler)."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rp = _free_port()
+        proc = _run_caddy(_box_reader_cfg(td, rp), td, "reader-cors")
+        try:
+            _wait_port(rp)
+            # (a) /data/*.json carries ACAO: *
+            st, hdrs, _ = _get_full(rp, "/data/catalogue.json")
+            assert st == 200, f"/data/catalogue.json must be served, got {st}"
+            assert _acao(hdrs) == "*", f"/data must carry Access-Control-Allow-Origin: *, got {_acao(hdrs)!r}"
+            # (b) /gateway/* (refused) does NOT carry ACAO — the header is scoped to the /data handler.
+            st, hdrs, _ = _get_full(rp, "/gateway/curator/queue")
+            assert st == 404, f"/gateway/* must refuse, got {st}"
+            assert _acao(hdrs) is None, f"/gateway must NOT carry ACAO (scoped to /data), got {_acao(hdrs)!r}"
+            # (b, cont.) a non-/data reader page must not carry ACAO either — scoping is to /data ONLY.
+            st, hdrs, _ = _get_full(rp, "/index.html")
+            assert _acao(hdrs) is None, f"a reader page must NOT carry ACAO (scoped to /data), got {_acao(hdrs)!r}"
+        finally:
+            _stop(proc)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_reader_data_cors_redproof():
+    """(a) RED-PROOF. With the /data ACAO header STRIPPED from the shipped :8081 body (the PRE-CHANGE
+    Caddyfile), /data/catalogue.json no longer carries Access-Control-Allow-Origin — proving the added
+    header is what makes the data world-readable, not incidental. FAILS IF the pre-change config still
+    carries ACAO (which would mean the pin proves nothing)."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rp = _free_port()
+        proc = _run_caddy(_box_reader_cfg(td, rp, strip_acao=True), td, "reader-nocors")
+        try:
+            _wait_port(rp)
+            st, hdrs, _ = _get_full(rp, "/data/catalogue.json")
+            assert st == 200, f"/data/catalogue.json must still be served pre-change, got {st}"
+            assert _acao(hdrs) is None, \
+                f"red-proof failed: the pre-change config should NOT carry ACAO on /data, got {_acao(hdrs)!r}"
+        finally:
+            _stop(proc)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_data_cors_rides_through_the_frontdoor_at_runtime():
+    """(c) RUNTIME. Through the FULL front-door composition — the SHIPPED front-door site body reverse-
+    proxying to the SHIPPED :8081 reader listener as its upstream — a public /data/*.json request comes
+    back to the PUBLIC side carrying Access-Control-Allow-Origin: *, exactly as the CSP rides through.
+    FAILS IF the front-door reverse_proxy strips the upstream's ACAO before it reaches the public client."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        box_port, fd_port = _free_port(), _free_port()
+        box = _run_caddy(_box_reader_cfg(td, box_port), td, "box-reader")
+        cfg, _log = _frontdoor_cfg(td, fd_port, box_port)
+        fd = _run_caddy(cfg, td, "frontdoor-cors")
+        try:
+            _wait_port(box_port); _wait_port(fd_port)
+            st, hdrs, _ = _get_full(fd_port, "/data/catalogue.json")
+            assert st == 200, f"/data must be served through the front door, got {st}"
+            assert _acao(hdrs) == "*", \
+                f"the /data ACAO must ride through the front-door reverse_proxy to the public side, got {_acao(hdrs)!r}"
+        finally:
+            _stop(fd); _stop(box)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_data_cors_frontdoor_redproof():
+    """(c) RED-PROOF. With the PRE-CHANGE reader upstream (ACAO stripped from the :8081 /data handler)
+    behind the SHIPPED front door, the public-side /data response carries NO ACAO — proving the header
+    the public client receives originates at the box reader and rides through, not from the front door.
+    FAILS IF the public side still shows ACAO with a pre-change upstream (the pin would prove nothing)."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        box_port, fd_port = _free_port(), _free_port()
+        box = _run_caddy(_box_reader_cfg(td, box_port, strip_acao=True), td, "box-nocors")
+        cfg, _log = _frontdoor_cfg(td, fd_port, box_port)
+        fd = _run_caddy(cfg, td, "frontdoor-nocors")
+        try:
+            _wait_port(box_port); _wait_port(fd_port)
+            st, hdrs, _ = _get_full(fd_port, "/data/catalogue.json")
+            assert st == 200, f"/data must be served through the front door pre-change, got {st}"
+            assert _acao(hdrs) is None, \
+                f"red-proof failed: a pre-change upstream should yield NO public-side ACAO, got {_acao(hdrs)!r}"
+        finally:
+            _stop(fd); _stop(box)
 
 
 # ==================================================================================================

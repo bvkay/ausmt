@@ -233,3 +233,16 @@ def test_footer_version_chip_relocated_inside_about_this_build_across_pages():
         assert chips[0][1], (
             f"{path.name}: the version chip must be nested inside the About-this-build popover "
             f"(<details class='aboutbuild'>), not floating in the visible footer line")
+
+
+def test_about_api_card_makes_no_served_geojson_claim():
+    """API-access honesty (feat/api-cors-geojson-honesty). The About API card must NOT claim MTCAT is
+    "served alongside GeoJSON": no GeoJSON file is generated or served — the only GeoJSON is the portal's
+    in-browser export button (portal/src/exports.js, #dlGeo). FAILS if the false served-GeoJSON claim
+    reappears. Non-vacuous: the pre-fix card carried exactly that phrase."""
+    text = ABOUT.read_text(encoding="utf-8")
+    assert "served alongside GeoJSON" not in text, (
+        "about.html must not claim MTCAT is 'served alongside GeoJSON' — no GeoJSON is served; the only "
+        "GeoJSON is the portal's in-browser export (src/exports.js)")
+    # The card still tells the GIS/GeoJSON story, just truthfully (an in-browser export).
+    assert "GeoJSON" in text, "the API card should still mention GeoJSON (as the in-browser export for GIS)"
