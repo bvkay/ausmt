@@ -365,6 +365,24 @@ The Stage-4 binding (D4) shipped in two parts, plus a stop-and-report on the thi
      (`gateway/tests/test_c42_a2_base_id_js_parity.py`). The interactive fieldset — the thin follow-up —
      now has its authoritative surface; the assembly/validation/marker were already shipped (parts 1–2).
 
+   **Interactive fieldset — SHIPPED (2026-07-21), closing part 3.** The stations drill-down now renders
+   the 4-position radio (inherit (survey default: `<default>`) / exact / generalised / withheld),
+   prefilled from the CURRENT `survey.yaml` access section (the raw `access.coordinates` default +
+   `access.coordinate_overrides` map, rendered onto the panel host as `data-coord-default` /
+   `data-coord-overrides` — the SAME source the #53 survey-level select reads, NOT the engine-resolved
+   `coord_policy.json`, which cannot distinguish an explicit `exact` override from a default-exact
+   station). Keys are built strictly via `baseStationId` over `base_ids.json`, so a variant site's
+   siblings share ONE base-keyed control; Save assembles the full `{BASE_station_id: policy}` map,
+   short-circuits an unchanged map (no phantom bump), and POSTs it as `s_access_coordinate_overrides`
+   through the hidden per-section edit form — the NORMAL preview → validator-gate → confirm flow, no new
+   publish path. A D4 honesty note sits by the fieldset (the workbench shows the MASKED served position;
+   the true position lives only in the package). Pins (red-proven, node-driven per C43-S2a,
+   `gateway/tests/test_c43_stage4_coord_fieldset_js_parity.py`): key construction from the base-id
+   surface (variant → base key; DATAID-with-a-dot → own id, never stem), the sibling-shares-control
+   invariant, inherit-position round-trip (no key emitted), unchanged-map no-op, and an end-to-end
+   editor pin — the JS-assembled payload passes the REAL `parse_coordinate_policy` + `validate_overrides`
+   over the same records. The C43 Stage-4 coordinate lane is complete (D4).
+
 ## Provenance
 
 Owner ruling 2026-07-10 (A1: "we give the user the option to withhold coordinates, or a
