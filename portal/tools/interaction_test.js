@@ -950,6 +950,55 @@ async function bootFreshWindow(dataMap) {
   ok(drwC.querySelectorAll("svg path").length > 0, "C20: a no-tipper/no-error open station must still plot ρ/φ curves");
   drwC.classList.remove("open");
 
+  // T2. PT + INDUCTION ARROWS ALWAYS SHOWN (owner requirement). The phase tensor and induction arrows must
+  // ALWAYS be shown when the station carries that data — never collapsed by default and with NO
+  // collapse/minimise control the user could hide them with. Pre-change both were plotCollapsible() —
+  // <details class="plotcollapse"> panels, collapsed by default and user-hideable; now they are plotBlock()
+  // always-shown <div class="plot"> blocks. The empty-svg absence guard is preserved: an UNCOLLECTED panel
+  // stays ABSENT (no empty box). This section RED-proves the swap: on the old <details> markup the
+  // `div.plot[data-plot=...]` selectors below find nothing.
+  //   A1 (tipper + pt): both blocks shown, as divs, with no <details>; sublines + expand affordance kept.
+  //   A2 (pt, no tipper): pt block shown, arrow block ABSENT (empty-svg guard, no empty box).
+  //   D1 (embargoed — neither collected): neither block renders.
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  ok(drwC.classList.contains("open"), "PTIA: #/station/au.alpha.A1 did not open the drawer");
+  // (a) both panels are always-shown <div class="plot"> blocks, NOT <details>, and no collapse control survives.
+  ok(drwC.querySelector('div.plot[data-plot="pt"]'),
+    "PTIA a: the phase tensor must render as an always-shown div.plot block, not a collapsible");
+  ok(drwC.querySelector('div.plot[data-plot="arrow"]'),
+    "PTIA a: the induction arrows must render as an always-shown div.plot block, not a collapsible");
+  ok(drwC.querySelectorAll("details.plotcollapse").length === 0,
+    "PTIA a: no collapsible <details.plotcollapse> plot may remain (pt/arrow must not be hideable)");
+  ok(!drwC.querySelector('details[data-plot="pt"], details[data-plot="arrow"]'),
+    "PTIA a: neither the phase tensor nor the induction arrows may sit inside a <details> collapse control");
+  // convention sublines survive VISIBLY (they moved from the <summary> into the always-shown .psubline).
+  ok(drwC.innerHTML.indexOf("axis = azimuth, fill = skew β") >= 0,
+    "PTIA a: the phase-tensor convention subline must survive on the always-shown block");
+  ok(drwC.innerHTML.indexOf("Real arrows point toward conductors; imaginary unreversed.") >= 0,
+    "PTIA a: the induction-arrow convention subline must survive on the always-shown block");
+  // the expand-to-modal affordance is retained on both blocks.
+  ok(drwC.querySelector('div.plot[data-plot="pt"] .plotexp') &&
+     drwC.querySelector('div.plot[data-plot="arrow"] .plotexp'),
+    "PTIA a: the expand affordance must remain on the always-shown pt/arrow blocks");
+  // (d) the #pt_anchor scroll target still exists so the related-product quick-link scroll lands.
+  ok(drwC.querySelector("#pt_anchor"),
+    "PTIA d: the #pt_anchor scroll target must remain in the Response tab");
+  // (c) A2: pt present, NO tipper -> pt block shown, arrow block ABSENT (empty-svg guard, no empty box).
+  drwC.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A2"; A.routeFromHash();
+  ok(drwC.classList.contains("open"), "PTIA: #/station/au.alpha.A2 did not open the drawer");
+  ok(drwC.querySelector('div.plot[data-plot="pt"]'),
+    "PTIA c: A2 (pt present, no tipper) must still show the always-shown phase-tensor block");
+  ok(!drwC.querySelector('[data-plot="arrow"]'),
+    "PTIA c: A2 has no tipper -> the induction-arrow block must be ABSENT (empty-svg guard, no empty box)");
+  // (b) D1 (embargoed — collected NEITHER): neither block renders (curves are withheld; no empty box).
+  drwC.classList.remove("open");
+  win.location.hash = "#/station/au.delta.D1"; A.routeFromHash();
+  ok(drwC.classList.contains("open"), "PTIA: #/station/au.delta.D1 did not open the drawer");
+  ok(!drwC.querySelector('[data-plot="pt"]') && !drwC.querySelector('[data-plot="arrow"]'),
+    "PTIA b: a station that collected NEITHER pt nor tipper must render neither block (absent, no empty box)");
+  drwC.classList.remove("open");
+
   // U. C22 CITATION HONESTY (chief-architect ruling 2026-07-07; pre-release hostile-review finding
   // 2026-07-06 — state.js publisher placeholder). A NO-DOI survey's
   // generated .bib/.ris must carry NO placeholder text a reference manager would ingest as real: the

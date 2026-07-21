@@ -429,14 +429,15 @@ function openStation(i){
     `<div class="dactions">${headerDownloadBtn(s,m)}<button class="dl-cite" data-act="tab" data-tab="cite">Cite</button></div>`+
     tabStrip+`</div>`;
   // ---- Panel content -------------------------------------------------------------------------------
-  // Response (default) — the four plots FIRST (the centerpiece; rho + phase expanded, phase tensor +
-  // induction arrows collapsed), then the collapsible "Station summary" (the owner's four-group layout,
-  // stationSummaryDetails) which absorbs the former Overview facts. C1b: a non-open station shows the
+  // Response (default) — the four plots FIRST (the centerpiece; all four always shown — phase tensor +
+  // induction arrows are never collapsed and carry no minimise control), then the collapsible "Station
+  // summary" (the owner's four-group layout, stationSummaryDetails) which absorbs the former Overview
+  // facts. C1b: a non-open station shows the
   // access panel here INSTEAD of the plots (curves ARE the withheld data). #pt_anchor is kept so the
   // "Phase tensor" related-product scroll target never dangles; the frame line is populated lazily.
   const responseHtml=`<div class="sechead">Response functions ${roleChip("AusMT-derived")}</div>`+
     (isOpenAccess(m)
-      ? plotBlock("rho",t)+plotBlock("phase",t)+`<div id="pt_anchor"></div>`+plotCollapsible("pt",t,false)+plotCollapsible("arrow",t,false)
+      ? plotBlock("rho",t)+plotBlock("phase",t)+`<div id="pt_anchor"></div>`+plotBlock("pt",t)+plotBlock("arrow",t)
       : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
     `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
     stationSummaryDetails(s,m,sc);
@@ -922,11 +923,10 @@ function dispatchProd(d){
   else if(d.prod==="fetch"&&d.url){track("DownloadGenerated",{format:(d.name||"").split(".").pop()});downloadUrl(dataUrl(d.url),d.name);}
   else if(d.prod==="open"&&d.url)window.open(d.url,"_blank","noopener,noreferrer");
   else if(d.prod==="scroll"&&d.sel){const el=document.querySelector(d.sel);if(el){
-    // UX6 Wave C: the scroll target (#pt_anchor) now lives in the Response tab with the phase tensor in a
-    // collapsed <details> — activate its tab and open the plot collapsibles so the scroll actually reveals it.
+    // UX6 Wave C: the scroll target (#pt_anchor) lives in the Response tab, with the phase tensor + induction
+    // arrows now always-shown blocks — activate its tab so the scroll actually reveals it.
     const panel=el.closest?el.closest('[role="tabpanel"]'):null;
     if(panel&&panel.dataset&&panel.dataset.tab)selectDrawerTab(panel.dataset.tab);
-    if(panel&&panel.querySelectorAll)panel.querySelectorAll("details.plotcollapse").forEach(dt=>{dt.open=true;});
     if(el.scrollIntoView)el.scrollIntoView({behavior:"smooth"});}}
   else if(d.prod==="toast")toast(d.msg);}
 // UX6 Wave C: yield to an open plot-expand modal — its own Esc handler (plots.js) closes it, so the drawer
