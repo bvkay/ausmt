@@ -220,6 +220,9 @@ function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
     HOME_BOUNDS=pts;
     _fitWasDegenerate=_mapSizeDegenerate(typeof map.getSize==="function"?map.getSize():null);
     map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
+    // The primary fit above runs BEFORE the flex layout has settled, so it fits a wrong-but-nonzero box.
+    // Schedule an unconditional re-fit once layout settles — the real correction (see _mapDeferredHomeRefit).
+    _scheduleDeferredHomeRefit();
   }
 }
 // UX9 item 2: one-shot corrector, called from the setView("map") 60ms timer AFTER invalidateSize has
@@ -230,6 +233,27 @@ function _mapCorrectHomeFit(){
   if(!_mapRefitGate({userInteracted:_mapUserInteracted,fitDegenerate:_fitWasDegenerate}))return;
   if(HOME_BOUNDS)map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
   _fitWasDegenerate=false;   // one-shot: the boot repair fires once, then stands down
+}
+// The ACTUAL off-centre-on-load fix. The one-shot corrector above only re-fits when the primary fit was
+// DEGENERATE (0x0). But on a real page load the flex layout has not settled at fit time, so the container
+// size is NONZERO-BUT-WRONG: the fit lands off-centre yet the degenerate gate never trips, and the bad fit
+// STICKS. (Dispatching a window 'resize' — which triggers the app's unconditional invalidateSize + re-layout
+// — snaps it to correct framing every time; this is that same correction, done once, automatically.) This
+// deferred re-fit re-claims the true size and re-fits HOME_BOUNDS UNCONDITIONALLY — it is NOT gated on the
+// degenerate flag (that gate is the bug). It is gated ONLY on the user not having taken control, so it never
+// fights a deliberate pan/zoom. Because HOME_BOUNDS is remembered, the re-fit is idempotent when the fit was
+// already correct and corrective when it was wrong.
+function _mapDeferredHomeRefit(){
+  map.invalidateSize({animate:false,pan:false});
+  if(HOME_BOUNDS&&!_mapUserInteracted)map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
+}
+// Schedule the deferred re-fit AFTER layout settles. Double requestAnimationFrame: a single rAF can still
+// run before the browser has performed the final layout+paint, so we wait one more frame — by the second
+// frame the container is at its settled flex size and the re-fit measures the RIGHT box. Falls back to a
+// small timeout where rAF is absent (e.g. a non-visual headless host).
+function _scheduleDeferredHomeRefit(){
+  const raf=(typeof requestAnimationFrame==="function")?requestAnimationFrame:(cb=>setTimeout(cb,0));
+  raf(()=>raf(()=>_mapDeferredHomeRefit()));
 }
 // Mark that the USER has taken control of the map, so the corrector never fights a deliberate pan/zoom.
 // Gated on genuine user gestures ONLY: Leaflet's dragstart is user-initiated (a programmatic setView/
