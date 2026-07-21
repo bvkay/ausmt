@@ -16,7 +16,7 @@ let AUSLAMP_SET=new Set();
 // coordinate — positions are already masked in the catalogue (generalised => 0.1° cell, withheld => null).
 let COORD_POLICY={};
 
-// UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#E0782F), and GDS off the
+// UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#EF7256), and GDS off the
 // ok/status green (#5BAE6A), so a data-type marker can no longer be mistaken for the selection accent or a
 // "good" status. LPMT teal is pinned (interaction test).
 // UX8 (X1, owner-delegated): the four data-type hues are pulled further apart. BBMT #3F6FC4 -> #5E5ED6

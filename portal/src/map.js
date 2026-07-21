@@ -112,7 +112,7 @@ L.drawLocal.draw.toolbar.buttons.polygon="Draw polygon selection";
 L.drawLocal.draw.toolbar.buttons.rectangle="Draw rectangle selection";
 L.drawLocal.edit.toolbar.buttons.remove="Clear drawn shapes";
 map.addControl(new L.Control.Draw({draw:{polyline:false,circle:false,circlemarker:false,marker:false,
-  polygon:{shapeOptions:{color:"#E0782F",weight:2}},rectangle:{shapeOptions:{color:"#E0782F",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}}));
+  polygon:{shapeOptions:{color:"#EF7256",weight:2}},rectangle:{shapeOptions:{color:"#EF7256",weight:2}}},edit:{featureGroup:drawn,edit:false,remove:true}}));
 // UX6 Wave D (D3, #20): explicit aria-labels on the draw + zoom toolbar anchors, set AFTER the controls
 // are on the map (their DOM exists by then). leaflet.draw already writes the title from L.drawLocal above;
 // the aria-label makes the accessible name unambiguous for AT. No-op where the anchors aren't rendered
@@ -156,7 +156,7 @@ function restyleForZoom(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
 function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
-  s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#13202B",fillColor:markerColor(s),fillOpacity:.92});
+  s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
   s.marker._survey=s.survey;   // UX8 (X3): the per-survey cluster facade buckets markers by this stamp
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});

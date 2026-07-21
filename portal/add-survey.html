@@ -16,8 +16,8 @@
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
 <style>
   :root{
-    --ink:#13202B; --panel:#1B2C3A; --panel-2:#22394B; --line:#2E4254;
-    --text:#E8EDF1; --muted:#8FA3B0; --copper:#E0782F;
+    --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
+    --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
     /* UX6 Wave F (F2): --no lightened #A85454 -> #E2938B for WCAG AA as text (see index.html). */
     --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B; --unk:#5A6E7D;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -435,7 +435,7 @@
   <div id="confirmmap"></div>
   <div class="bar">
     <span class="readout" id="confHint"><b style="color:#5BAE6A">●</b> station (HEAD coordinate) &nbsp;
-      <b style="color:#E0782F">●</b> HEAD &nbsp; <b style="color:#4F9BE0">●</b> INFO — a HEAD/INFO conflict;
+      <b style="color:#EF7256">●</b> HEAD &nbsp; <b style="color:#4F9BE0">●</b> INFO — a HEAD/INFO conflict;
       choose which to trust under the map.</span>
     <span class="spacer"></span>
     <button type="button" class="act primary" id="confClose">Done</button>
@@ -1107,7 +1107,7 @@ if(typeof document!=="undefined"&&document.getElementById){
         if(corners.length>=2) clearPick();
         corners.push(ev.latlng);
         if(corners.length===2){ const b=L.latLngBounds(corners[0],corners[1]);
-          rect=L.rectangle(b,{color:"#E0782F",weight:2,fillOpacity:.08}).addTo(pmap);
+          rect=L.rectangle(b,{color:"#EF7256",weight:2,fillOpacity:.08}).addTo(pmap);
           setExtentFields(b); updateReadout(); $("pickHint").textContent="Footprint set. 'Use this footprint' to apply, or 'Clear' to redo."; }
         else $("pickHint").textContent="Now click the opposite corner.";
       });
@@ -1155,7 +1155,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     pf.forEach(e=>{ const p=e.parsed, head=[p.lat,p.lon];
       if(p.coord_flag==="dms_sign_ambiguous"&&p.info_lat!=null){ const info=[p.info_lat,p.info_lon];
         cmarkers.push(L.polyline([head,info],{color:"#8a8a8a",weight:1,dashArray:"4 4"}).addTo(cmap));
-        cmarkers.push(L.circleMarker(head,{radius:6,color:"#E0782F",weight:2,fillOpacity:.85}).bindTooltip(esc(e.name)+" — HEAD "+p.lat.toFixed(3)+", "+p.lon.toFixed(3)).addTo(cmap));
+        cmarkers.push(L.circleMarker(head,{radius:6,color:"#EF7256",weight:2,fillOpacity:.85}).bindTooltip(esc(e.name)+" — HEAD "+p.lat.toFixed(3)+", "+p.lon.toFixed(3)).addTo(cmap));
         cmarkers.push(L.circleMarker(info,{radius:6,color:"#4F9BE0",weight:2,fillOpacity:.85}).bindTooltip(esc(e.name)+" — INFO "+p.info_lat.toFixed(3)+", "+p.info_lon.toFixed(3)).addTo(cmap));
         all.push(head,info);
       } else {
