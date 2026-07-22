@@ -75,11 +75,14 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
   "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
-  // Settle re-layout (owner 2026-07-22): the drawer step opens a target that SLIDES IN, so the tour
-  // re-measures on the target's transitionend. tourSettleEl exposes which element carries that listener
-  // (drawer step -> "drawer"; null when detached) and tourLayoutRuns counts _tourLayout calls, so the
-  // pin can fire a synthetic transitionend and assert the re-layout ran without leaking the listener.
+  // Settle-until-stable re-layout (owner 2026-07-22): the drawer step opens a target that keeps reflowing
+  // after open (slide, then the async station.json frame-line inject, then a possible map re-fit), so the
+  // tour POLLS the target rect each frame and re-runs _tourLayout until it holds stable. tourSettleEl exposes
+  // which element the watcher tracks (drawer step -> "drawer"; null when detached) and tourLayoutRuns counts
+  // _tourLayout calls, so the pin can drive synthetic rect changes through the parked rAF queue and assert the
+  // re-run-until-stable-then-stop behaviour and clean detach without leaking the watcher onto a persistent element.
   "tourSettleEl:()=>_tourSettleEl&&_tourSettleEl.id,tourLayoutRuns:()=>_tourLayoutRuns," +
+  "tourSettling:()=>_tourSettleRAF!==0," +   // whether a poll frame is still pending (true=watching, false=stood down/detached)
   // UX7b U7 welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
   // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). UX9 (owner tour redesign): the
   // side-picking _tourPlace is retired for a CENTRED card + a LEADER to the spotlight. _tourCardBox is the
@@ -785,25 +788,59 @@ async function bootFreshWindow(dataMap) {
   ok(A.tourStep() === 4, "ArrowRight x4 did not reach the station-drawer step, at step " + A.tourStep());
   ok(doc.getElementById("drawer").classList.contains("open"), "the station-drawer step did not open the drawer");
   ok(findBox.value === "", "passing THROUGH the Find demo left residue in the find box");
-  // H2b. SETTLE RE-LAYOUT (owner 2026-07-22): the drawer SLIDES IN via a CSS transform transition, so the
-  // spotlight would sit over its mid-slide (off-screen) rect until a later re-layout unless the tour
-  // re-measures when the slide settles. The tour listens for the TARGET element's transitionend and re-runs
-  // _tourLayout. jsdom has no animation timing (the real proof is a browser run), so this pins the WIRING:
-  // the settle listener is attached to #drawer on this step, a synthetic transitionend re-runs _tourLayout,
-  // and stepping away detaches it (no leaked listener on a persistent app element). RED-proves against the
-  // pre-fix build (no listener -> tourSettleEl undefined and the count would not move on transitionend).
-  ok(A.tourSettleEl() === "drawer", "settle: the drawer step must attach its transitionend re-layout listener to #drawer, got " + JSON.stringify(A.tourSettleEl()));
-  const _runsBefore = A.tourLayoutRuns();
-  doc.getElementById("drawer").dispatchEvent(new win.Event("transitionend", { bubbles: true }));
-  ok(A.tourLayoutRuns() > _runsBefore, "settle: the drawer's transitionend did not re-run _tourLayout (spotlight would stay on the stale rect)");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));   // step BACK off the drawer step (-> tree, index 3)
-  ok(A.tourSettleEl() !== "drawer", "settle: stepping off the drawer step must RELEASE #drawer's transitionend listener (no leak), still on " + JSON.stringify(A.tourSettleEl()));
-  ok(A.tourSettleEl() === "tree", "settle: the listener must re-attach to the new step's target (#tree), got " + JSON.stringify(A.tourSettleEl()));
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));  // back to the drawer step for the close checks
+
+  // H2b. SETTLE-UNTIL-STABLE re-layout (owner 2026-07-22). The drawer step's target keeps reflowing AFTER open
+  // — it SLIDES in (transform transition, ~160ms; the box MOVES left), then an ASYNC station.json fetch injects
+  // the frame line and grows its HEIGHT, then a deferred map re-fit can nudge it again. A single transitionend
+  // re-measure fires after the slide only and leaves the spotlight on a stale early box (the owner-observed
+  // "highlight ends where the panel first appeared, now empty"). The tour now POLLS the target rect each frame,
+  // re-runs _tourLayout on ANY change (position OR size — a size-only ResizeObserver misses the slide's MOVE),
+  // and STOPS once the rect holds stable for a quiet window (or a hard cap). jsdom has no layout engine and its
+  // rAF is parked in rafQ, so this pins the WIRING deterministically with a controllable clock + rect: a
+  // changing box keeps re-running layout, a stable box stands the watcher down, and stepping away / closing
+  // detaches it with no leaked frame or listener. The sub-second visual proof is the instrumented browser run.
+  const _drawerEl = doc.getElementById("drawer");
+  const _origPerfNow = win.performance.now, _origGBCR = _drawerEl.getBoundingClientRect;
+  let _clock = 100000;                                     // controllable monotonic clock (ms); the watcher times via performance.now
+  win.performance.now = () => _clock;
+  let _dr = { left: 1260, top: 0, width: 420, height: 600, right: 1680, bottom: 600 };  // drawer OFF to the right (mid-slide)
+  _drawerEl.getBoundingClientRect = () => ({ ..._dr, x: _dr.left, y: _dr.top });
+  // Re-attach the watcher against the stubbed clock/rect: step off the drawer (-> tree) then back (-> drawer).
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
   ok(A.tourStep() === 4, "settle: could not return to the drawer step, at " + A.tourStep());
+  ok(A.tourSettleEl() === "drawer", "settle: the watcher must attach to #drawer on the drawer step, got " + JSON.stringify(A.tourSettleEl()));
+  ok(A.tourSettling() === true, "settle: a poll frame must be pending right after attach");
+  const _tick = rafQ[rafQ.length - 1];                     // the live poll frame (reschedules push the SAME fn to the tail)
+  ok(typeof _tick === "function", "settle: attach must schedule a poll frame into the rAF queue");
+  // (1) A MOVING/RESIZING box keeps re-running layout. Drive three reflow stages: slide -> final left -> height grow.
+  const _drive = (mut, dtMs) => { mut(); _clock += dtMs; const before = A.tourLayoutRuns(); _tick(); return A.tourLayoutRuns() - before; };
+  ok(_drive(() => { _dr.left = 840; _dr.right = 1260; }, 20) === 1, "settle: a slide-frame rect MOVE must re-run _tourLayout once");
+  ok(_drive(() => { _dr.left = 420; _dr.right = 840; }, 20) === 1, "settle: the box reaching its final left must re-run _tourLayout");
+  ok(_drive(() => { _dr.height = 660; _dr.bottom = 660; }, 40) === 1, "settle: the async frame-line HEIGHT growth must re-run _tourLayout (a MOVE-only watcher would miss it)");
+  ok(A.tourSettling() === true, "settle: the watcher must still be polling while the box is changing");
+  // (2) A STABLE box (no rect change) inside the quiet window keeps polling but does NOT re-run layout...
+  ok(_drive(() => {}, 60) === 0, "settle: an unchanged rect must NOT re-run _tourLayout");
+  ok(A.tourSettling() === true, "settle: still within the quiet window -> keep polling");
+  // ...and once the rect has held stable for the full quiet window, the watcher STANDS DOWN (no re-schedule).
+  ok(_drive(() => {}, 200) === 0, "settle: the settling frame must not re-run layout on an unchanged rect");
+  ok(A.tourSettling() === false, "settle: after the rect held stable for the quiet window the watcher must STOP polling");
+  // (3) Detach on step change: stepping off the drawer must RELEASE #drawer's watcher (no leak on a persistent element).
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));   // -> tree (index 3)
+  ok(A.tourSettleEl() !== "drawer", "settle: stepping off the drawer step must release #drawer's watcher, still on " + JSON.stringify(A.tourSettleEl()));
+  ok(A.tourSettleEl() === "tree", "settle: the watcher must re-attach to the new step's target (#tree), got " + JSON.stringify(A.tourSettleEl()));
+  const _runsAfterDetach = A.tourLayoutRuns();
+  _dr.left = 999;                                          // mutate the (now-detached) drawer rect...
+  _tick();                                                 // ...and fire the STALE drawer frame: the guard must make it a no-op
+  ok(A.tourLayoutRuns() === _runsAfterDetach, "settle: a STALE drawer frame must not re-run _tourLayout after the watcher detached from #drawer");
+  win.performance.now = _origPerfNow; _drawerEl.getBoundingClientRect = _origGBCR;   // restore stubs before the close checks
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));  // back to the drawer step for the close checks
+  ok(A.tourStep() === 4, "settle: could not return to the drawer step for the close checks, at " + A.tourStep());
+
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
   ok(A.tourStep() === -1, "Esc from the drawer step did not close the tour");
-  ok(A.tourSettleEl() === null, "settle: closing the tour must detach the drawer's transitionend listener (no leak), got " + JSON.stringify(A.tourSettleEl()));
+  ok(A.tourSettleEl() === null, "settle: closing the tour must detach the drawer's watcher (no leak), got " + JSON.stringify(A.tourSettleEl()));
+  ok(A.tourSettling() === false, "settle: closing the tour must leave no poll frame pending");
   ok(!doc.getElementById("drawer").classList.contains("open"), "Esc from the drawer step did not close the drawer it opened");
   ok(A.curView() === "map", "Esc from the drawer step did not restore the map view");
 
