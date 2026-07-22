@@ -3501,11 +3501,12 @@ _SECTION_TITLES = {
     "principal_investigators": "Principal investigators", "identifiers": "Identifiers",
     "publications": "Publications", "funding": "Funding", "instruments": "Instruments",
     "time_series": "Time series", "access": "Access", "attribution": "Attribution & rights",
-    "sources": "Source datasets", "processing": "Processing", "collection": "Collection",
+    "sources": "Source datasets", "related_identifiers": "Related identifiers",
+    "processing": "Processing", "collection": "Collection",
 }
 _SECTION_ORDER = ("organisation", "lead_investigator", "principal_investigators", "identifiers",
                   "publications", "funding", "instruments", "time_series", "access", "attribution",
-                  "sources", "processing", "collection")
+                  "sources", "related_identifiers", "processing", "collection")
 
 
 def _json_text(value) -> str:
@@ -3736,6 +3737,22 @@ def _profile_select_widget(name: str, label: str, value) -> str:
             f'<select name="{_esc(name)}">{"".join(opts)}</select></p>')
 
 
+def _typed_vocab_select_widget(name: str, label: str, value, options: tuple) -> str:
+    """§2a: a FAIL-CLOSED <select> for a typed related-identifiers preset — relation (RELATION_TYPES)
+    or identifier_type (IDENTIFIER_TYPES). Same C46 vocab-select discipline as _profile_select_widget:
+    a leading blank leaves it unset, and an out-of-vocab STORED value is shown as its own selected
+    option so the curator sees and can correct it (never silently coerced, never crashes). Server-
+    rendered, no JS (CSP unaffected). `options` is the ordered preset tuple from editor_form."""
+    cur = str(value) if value not in (None, "") else ""
+    opts = [f'<option value=""{" selected" if cur == "" else ""}>(none)</option>']
+    for opt in options:
+        opts.append(f'<option value="{_esc(opt)}"{" selected" if opt == cur else ""}>{_esc(opt)}</option>')
+    if cur and cur not in options:
+        opts.append(f'<option value="{_esc(cur)}" selected>{_esc(cur)} (stored value)</option>')
+    return (f'<p><label class="k">{_esc(label)}</label>'
+            f'<select name="{_esc(name)}">{"".join(opts)}</select></p>')
+
+
 def _bool_widget(name: str, label: str, value, submitted: dict | None) -> str:
     """A single checkbox for a boolean sub-field (C46 attribution.changes_made). After a validation
     error the CHECKED state comes from `submitted` (the name is present iff it was ticked) so an
@@ -3779,6 +3796,7 @@ def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | No
 def _list_row_html(section: str, index: int, subfields, values: dict | None) -> str:
     """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
     submit just leaves an empty row, which the server drops). `values` prefills an existing row."""
+    from . import editor_form
     cells = []
     for subkey, label, placeholder, kind in subfields:
         name = f"l_{section}_{index}_{subkey}"
@@ -3788,6 +3806,12 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None) -> 
             continue
         if kind == "profile":                       # C46 sources[].profile — ga|generic <select>
             cells.append(_profile_select_widget(name, label, val))
+            continue
+        if kind == "relation":                      # §2a related_identifiers[].relation — vocab <select>
+            cells.append(_typed_vocab_select_widget(name, label, val, editor_form.RELATION_TYPES))
+            continue
+        if kind == "identifier_type":               # §2a related_identifiers[].identifier_type — vocab <select>
+            cells.append(_typed_vocab_select_widget(name, label, val, editor_form.IDENTIFIER_TYPES))
             continue
         itype = "email" if kind == "email" else "text"
         extra = _ROR_HINT if kind == "ror" else ""

@@ -796,3 +796,101 @@ def test_sources_licence_and_profile_vocab_enforced():
     with pytest.raises(ef.SectionError):
         ef.assemble_section({"l_sources_0_title": "A", "l_sources_0_profile": "mystery",
                              **_snap("sources", [])}, "sources")
+
+
+# ---- §2a/§2b: related_identifiers (typed list) + identifiers.instrument_pid ----------------------
+
+def test_related_identifiers_vocab_matches_vendored_validator():
+    """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES equal the surveys validator's
+    frozen vocabularies (loaded from the VENDORED copy — the content-blind gateway cannot import the
+    sibling at runtime, so the test pins it). FAILS IF a vocab is extended in the validator but not
+    mirrored here — the exact drift the shared _check_typed_relation seam exists to prevent."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_relvocab")
+    assert set(ef.RELATION_TYPES) == set(vv.RELATION_TYPES), "editor RELATION_TYPES drifted from the validator"
+    assert set(ef.IDENTIFIER_TYPES) == set(vv.IDENTIFIER_TYPES), "editor IDENTIFIER_TYPES drifted from the validator"
+
+
+# The vulcan-2022 demo shape: the four keys the editor row models (identifier, identifier_type,
+# relation, AND custodian — custodian is modelled so a stored entry that carries it round-trips).
+_RELID_ROW = {
+    "l_related_identifiers_0_identifier": "10.25914/sv5r-zw68",
+    "l_related_identifiers_0_identifier_type": "DOI",
+    "l_related_identifiers_0_relation": "IsDerivedFrom",
+    "l_related_identifiers_0_custodian": "NCI",
+}
+_RELID_VALUE = [{"identifier": "10.25914/sv5r-zw68", "identifier_type": "DOI",
+                 "relation": "IsDerivedFrom", "custodian": "NCI"}]
+
+
+def test_related_identifiers_row_assembles_and_round_trips():
+    """A related_identifiers row assembles through the SAME per-section list flow, carrying the typed
+    trio PLUS custodian. A blank spare row is dropped; an unchanged submit round-trips to _OMIT. FAILS
+    IF the widget silently drops the custodian field (round-trip data loss) or emits a diff unchanged."""
+    form = {**_RELID_ROW,
+            "l_related_identifiers_1_identifier": "",   # blank spare row -> dropped
+            "l_related_identifiers_1_identifier_type": "",
+            "l_related_identifiers_1_relation": "",
+            "l_related_identifiers_1_custodian": "",
+            **_snap("related_identifiers", [])}
+    assert ef.assemble_section(form, "related_identifiers") == _RELID_VALUE
+    same = {**_RELID_ROW, **_snap("related_identifiers", _RELID_VALUE)}
+    assert ef.assemble_section(same, "related_identifiers") is ef._OMIT
+
+
+def test_related_identifiers_bad_relation_and_type_rejected():
+    """FAIL-CLOSED: an out-of-vocab relation or identifier_type is rejected at the form (SectionError),
+    the same posture as access.coordinates. FAILS IF the editor would accept a value the validator
+    hard-FAILs — a wrong/ambiguous provenance claim must never assemble."""
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
+                             "l_related_identifiers_0_relation": "IsBogusOf",
+                             **_snap("related_identifiers", [])}, "related_identifiers")
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
+                             "l_related_identifiers_0_identifier_type": "MAGNET",
+                             **_snap("related_identifiers", [])}, "related_identifiers")
+
+
+def test_related_identifiers_key_parity_through_real_validator(tmp_path):
+    """KEY-PARITY PIN: an editor-assembled related_identifiers patch, read back by the REAL vendored
+    validator, produces ZERO related_identifiers items (no unknown-key warning, no vocab FAIL) — the
+    row's keys are a subset of SOURCE_KEYS and its vocab values are accepted. The non-vacuous proof
+    below (a bogus relation -> a validator FAIL) keeps this meaningful."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_relid")
+    patch, errors = ef.build_section_patch({**_RELID_ROW, **_snap("related_identifiers", [])})
+    assert not errors, errors
+    assert patch == {"related_identifiers": _RELID_VALUE}, patch
+    folder = tmp_path / "relid"
+    _write_survey(folder, _survey_meta_with(patch))
+    rep = vv.validate(folder)
+    flagged = [i for i in rep.items if i["check"] == "related_identifiers"]
+    assert not flagged, f"validator flagged the editor-assembled related_identifiers: {flagged}"
+
+
+def test_related_identifiers_validator_fails_bad_relation_non_vacuous(tmp_path):
+    """NON-VACUOUS proof: a related_identifiers entry with an out-of-vocab relation is a HARD FAIL at
+    the real validator — so the vocab pin is not vacuous (the validator does not accept any relation)."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_relid_mut")
+    meta = _survey_meta_with({"related_identifiers": [
+        {"identifier": "10.25914/x", "identifier_type": "DOI", "relation": "IsBogusOf"}]})
+    folder = tmp_path / "relidmut"
+    _write_survey(folder, meta)
+    rep = vv.validate(folder)
+    assert any(i["check"] == "related_identifiers" and i["level"] == "FAIL" for i in rep.items), \
+        "validator did not FAIL a bogus relation — the vocab pin would be vacuous"
+
+
+def test_instrument_pid_persists_and_round_trips():
+    """identifiers.instrument_pid (§2b, wave-1 EXPAND) assembles from its input and round-trips to
+    _OMIT when unchanged. FAILS IF the new field is not read, or an unchanged submit emits a diff. It
+    is additive/WARNING-only at the validator, so the editor never blocks on its format (plain text)."""
+    form = {"s_identifiers_dataset_doi": "10.5281/zenodo.1",
+            "s_identifiers_instrument_pid": "10.82388/abc",
+            **_snap("identifiers", {"dataset_doi": "10.5281/zenodo.1"})}
+    out = ef.assemble_section(form, "identifiers")
+    assert out["instrument_pid"] == "10.82388/abc"
+    assert out["dataset_doi"] == "10.5281/zenodo.1"
+    same = {"s_identifiers_dataset_doi": "10.5281/zenodo.1",
+            "s_identifiers_instrument_pid": "10.82388/abc",
+            **_snap("identifiers", {"dataset_doi": "10.5281/zenodo.1", "instrument_pid": "10.82388/abc"})}
+    assert ef.assemble_section(same, "identifiers") is ef._OMIT

@@ -60,8 +60,18 @@ SCHEMA_VERSIONS = ("0.2", "0.3")
 ATTRIBUTION_KEYS = frozenset({"custodian", "custodian_ror", "statement", "changes_made",
                               "changes_summary", "declared_by", "declared_date"})
 SOURCE_KEYS = frozenset({"title", "custodian", "identifier", "licence", "retrieved", "statement",
-                         "profile"})
+                         "profile", "relation", "identifier_type"})
 SOURCE_PROFILES = frozenset({"ga", "generic"})
+# §2a (identifiers design — the related-identifiers model): the model TYPES the C46 sources[] object.
+# It adds a `relation` + an `identifier_type` to the untyped upstream-dataset identifier sources[]
+# already carries, rather than inventing a parallel structure ("C46 built the object; this types it").
+# Both vocabularies are FROZEN and FAIL-CLOSED — an out-of-vocab value is a hard FAIL, mirroring the
+# access.coordinates enum — because a mis-typed relation would publish a WRONG provenance claim, so it
+# must block rather than ship. RELATION_TYPES is the curated DataCite subset ratified as the editor
+# presets (design Decision 3); IDENTIFIER_TYPES is the small set AusMT records against (eCat/SARIG ids
+# normalise to URL/DOI). Same vocab-select discipline as SOURCE_PROFILES above.
+RELATION_TYPES = frozenset({"IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites"})
+IDENTIFIER_TYPES = frozenset({"DOI", "Handle", "URL", "RAiD"})
 # anti-masquerade: the BINARY TF types must start with their real signature. The text type (.edi) is
 # checked separately for binary content (a NUL byte ⇒ a renamed binary or a polyglot) in the loop below.
 MAGIC = {
@@ -159,6 +169,25 @@ def instrument_pid_format_ok(pid: str) -> bool:
     (no registry lookup), mirroring raid_format_ok: a curator hint, not a resolvability guarantee."""
     s = (pid or "").strip()
     return bool(_INSTRUMENT_PID_URL_RE.match(s) or _INSTRUMENT_PID_HANDLE_RE.match(s))
+
+
+def _check_typed_relation(r, container: str, idx: int, entry: dict) -> None:
+    """§2a: vocab-check the two TYPED fields the related-identifiers model adds to a source/relation
+    entry — `relation` (the curated DataCite subset) and `identifier_type` (the small mint set).
+    FAIL-CLOSED, byte-identically to the access.coordinates enum check: an out-of-vocab value would
+    publish a wrong/ambiguous provenance claim, so it blocks. Absent/blank values are silent — the
+    check validates the VALUE, not its presence (a typed source may legitimately omit either). Shared
+    by the sources[] and related_identifiers[] loops so the two can never drift."""
+    rel = entry.get("relation")
+    if rel not in (None, "") and str(rel).strip() not in RELATION_TYPES:
+        r.add("FAIL", container,
+              f"{container}[{idx}].relation '{rel}' is not one of {tuple(sorted(RELATION_TYPES))} — a "
+              f"typed provenance relation must use the ratified vocabulary (a mis-typed relation "
+              f"publishes a wrong claim; an out-of-enum value cannot ship)")
+    it = entry.get("identifier_type")
+    if it not in (None, "") and str(it).strip() not in IDENTIFIER_TYPES:
+        r.add("FAIL", container,
+              f"{container}[{idx}].identifier_type '{it}' is not one of {tuple(sorted(IDENTIFIER_TYPES))}")
 
 
 def parse_angle(tok: str):
@@ -585,6 +614,9 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
                           f"({', '.join(sorted(SOURCE_PROFILES))})")
                 if str(prof) == "ga":
                     any_ga = True
+                # §2a: a sources[] entry MAY carry the typed relation/identifier_type (it IS the object
+                # the related-identifiers model types) — vocab-check them fail-closed wherever they appear.
+                _check_typed_relation(r, "sources", idx, s)
     # A GA-profile source mandates the exact custodian wording — attribution.statement REQUIRED.
     if any_ga:
         stmt = attribution.get("statement") if isinstance(attribution, dict) else None
@@ -592,6 +624,56 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
             r.add("WARNING", "attribution",
                   "a sources[].profile is 'ga' (Geoscience Australia), which mandates exact attribution "
                   "wording, but attribution.statement is not set — fix it before publication; --strict FAILs this")
+    # §2a (identifiers design — the related-identifiers model): a repeatable list of TYPED provenance
+    # relations to identifiers AusMT does NOT own. It TYPES the C46 sources[] object — SAME key allow-list
+    # (SOURCE_KEYS), not a parallel structure — adding a `relation` and an `identifier_type`, both
+    # FAIL-CLOSED vocabs (like access.coordinates). This is the wave-1 EXPAND field: it lands ALONGSIDE the
+    # flat identifiers.dataset_doi + time_series.collection_pid, which keep being populated until a later
+    # wave switches consumers over. SILENT when absent (the existing corpus carries no related_identifiers).
+    related = meta.get("related_identifiers")
+    if related is not None:
+        if not isinstance(related, list):
+            r.add("WARNING", "related_identifiers",
+                  "related_identifiers must be a LIST of typed relation entries "
+                  "({identifier, identifier_type, relation, custodian})")
+        else:
+            for idx, ri in enumerate(related):
+                if not isinstance(ri, dict):
+                    r.add("WARNING", "related_identifiers",
+                          f"related_identifiers[{idx}] must be a mapping "
+                          f"(identifier/identifier_type/relation/custodian)")
+                    continue
+                for k in ri:
+                    if k not in SOURCE_KEYS:
+                        r.add("WARNING", "related_identifiers",
+                              f"related_identifiers[{idx}].{k} is not a recognised key (allowed: "
+                              f"{', '.join(sorted(SOURCE_KEYS))})")
+                _check_typed_relation(r, "related_identifiers", idx, ri)
+    # §2b (identifiers design): identifiers.instrument_pid — the ONE survey/platform-level instrument PID
+    # (PIDINST, e.g. 10.82388/<id>), the survey-layer counterpart to the deep per-serial EDI DOIs. Same
+    # light format posture as instruments[].pid / RAiD above: an https:// URL or a bare handle/DOI,
+    # WARNING-only (a curator hint, no registry lookup) — an additive/optional field must never BLOCK.
+    # Absent/blank/placeholder is silent.
+    ids = meta.get("identifiers") if isinstance(meta.get("identifiers"), dict) else {}
+    inst_pid = ids.get("instrument_pid")
+    if inst_pid not in (None, "", "TBD", "TODO") and not instrument_pid_format_ok(inst_pid):
+        r.add("WARNING", "metadata",
+              f"identifiers.instrument_pid '{inst_pid}' does not look like a survey/platform instrument "
+              f"PID (expected an https:// URL or a bare handle/DOI, e.g. 10.82388/<id>)")
+    # §2a (the AusLAMP-SA redundancy the inventory found): identifiers.dataset_doi and the raw-TS
+    # time_series.collection_pid carrying the BYTE-IDENTICAL value is the systematic pattern (all 7
+    # AusLAMP-SA surveys reuse one NCI collection DOI as both) — a symptom of an empty dataset-DOI slot
+    # papered over with the collection pointer. Surface it at curation time as a WARNING (never a FAIL —
+    # the data is publishable): the fix is to model the shared value as a single related_identifiers
+    # relation row, not to keep it in two roles. Trimmed-string compare (a stray space is not a real
+    # distinction).
+    ts = meta.get("time_series") if isinstance(meta.get("time_series"), dict) else {}
+    dd, cp = ids.get("dataset_doi"), ts.get("collection_pid")
+    if dd not in (None, "") and cp not in (None, "") and str(dd).strip() == str(cp).strip():
+        r.add("WARNING", "provenance",
+              f"identifiers.dataset_doi and time_series.collection_pid are byte-identical ('{dd}') — the "
+              f"systematic AusLAMP-SA redundancy (one NCI collection DOI reused as both the dataset DOI and "
+              f"the raw-TS pointer). Model it as a single related_identifiers relation row, not two roles")
     if not meta.get("identifiers", {}).get("dataset_doi") and not meta.get("identifiers", {}).get("survey_pid"):
         r.add("WARNING", "provenance", "no survey PID or dataset DOI — record will be badged 'provenance incomplete'")
     # C7: ORCID (ISO 7064 11-2 checksum) + ROR + RAiD format sanity — WARNING only (a curator hint;

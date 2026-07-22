@@ -351,5 +351,26 @@ ok(!/profile:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sou
    && !/injected:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [{ title: "A", profile: "evil\ninjected: true" }] })),
    "an out-of-vocab / injection profile is dropped, never emitted (bare-scalar injection guard)");
 
+// -- provenance-identifier completeness (owner decision #2): the OLD warning keyed off dataset_doi
+// ALONE, so it mis-fired on every survey whose provenance is recorded as a custodian/source identifier
+// instead of a minted dataset DOI (the systematic UofA / AusLAMP-SA case). The hint now fires only when
+// NEITHER a dataset DOI NOR a source-dataset identifier is present.
+const provItem = (res) => res.items.find(
+  (i) => i.check === "provenance" && /no dataset DOI or source-dataset identifier/.test(i.message));
+const provEdis = [{ name: "SA1.edi", parsed: M.parseEdi(CLEAN) }];
+ok(!!provItem(M.validateSurvey({ ...base, locations_confirmed: true }, provEdis, [])),
+   "no dataset DOI and no source identifier -> provenance completeness WARNING fires");
+// the mis-fire fix: a source-dataset identifier (a custodian identifier) satisfies the hint with NO dataset_doi
+ok(!provItem(M.validateSurvey(
+     { ...base, locations_confirmed: true, sources: [{ custodian: "NCI", identifier: "10.25914/x" }] }, provEdis, [])),
+   "a source-dataset identifier (no dataset_doi) -> NO provenance mis-fire (the UofA case owner #2 flagged)");
+// a source entry with a custodian but NO identifier does not satisfy the hint (identifier is the signal)
+ok(!!provItem(M.validateSurvey(
+     { ...base, locations_confirmed: true, sources: [{ custodian: "NCI" }] }, provEdis, [])),
+   "a source with a custodian but no identifier still warns (the completeness signal is the identifier)");
+// a minted dataset DOI still satisfies the hint
+ok(!provItem(M.validateSurvey({ ...base, locations_confirmed: true, dataset_doi: "10.5281/zenodo.1" }, provEdis, [])),
+   "a dataset DOI satisfies the provenance hint");
+
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
 process.exit(fail ? 1 : 0);

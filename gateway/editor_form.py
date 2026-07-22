@@ -58,6 +58,11 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("related_publication_doi", "Related publication DOI", "10.xxxx/xxxxx", "doi"),
         ("project", "Project / campaign", "campaign name", "text"),
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
+        # §2b (identifiers design): the ONE survey/platform-level instrument PID (PIDINST, e.g.
+        # 10.82388/<id>) — the survey-layer counterpart to the deep per-serial instruments[].pid. Wave-1
+        # EXPAND (additive); the surveys validator only WARNS on its format, so it is plain "text" here
+        # (a light hint, never a form block) — the same posture as project_raid above.
+        ("instrument_pid", "Instrument PID (survey/platform)", "10.82388/… or an https:// URL", "text"),
     ],
     # C46 (schema 0.3): the rights of THIS AusMT release. custodian may differ from organisation.name;
     # changes_made is the CC-BY §3(a) "indicate if changes were made" flag (a bool checkbox); statement
@@ -144,6 +149,20 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("statement", "Attribution statement", "verbatim required wording, if prescribed (optional)", "text"),
         ("profile", "Attribution profile", "", "profile"),
     ],
+    # §2a (identifiers design — the related-identifiers model): a repeatable list of TYPED provenance
+    # relations to identifiers AusMT does NOT own. It TYPES the C46 sources[] object (the SAME key
+    # allow-list, SOURCE_KEYS, at the validator — not a parallel structure), so the row mirrors a
+    # source's typed core: the identifier, its identifier_type, the relation, and the custodian. relation
+    # and identifier_type are FAIL-CLOSED <select> presets (the C46 vocab-select discipline). custodian is
+    # modelled here — not just the three typed fields — so a stored entry that carries it (the vulcan-2022
+    # demo does) round-trips WITHOUT the widget silently dropping it. Wave-1 EXPAND: this lands ALONGSIDE
+    # identifiers.dataset_doi + time_series.collection_pid, which keep being populated until a later wave.
+    "related_identifiers": [
+        ("identifier", "Identifier (DOI / handle / URL)", "10.25914/… or an https:// URL", "text"),
+        ("identifier_type", "Identifier type", "", "identifier_type"),
+        ("relation", "Relation", "", "relation"),
+        ("custodian", "Custodian", "e.g. NCI / AuScope", "text"),
+    ],
 }
 
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
@@ -179,6 +198,19 @@ LICENSE_REDISTRIBUTABLE = LICENSE_IDS[:13]
 # C46 custodian attribution-profile vocab (sources[].profile). "generic" is the default synthesis;
 # "ga" prescribes the Geoscience Australia form (and makes attribution.statement required at validate).
 SOURCE_PROFILES = ("ga", "generic")
+
+# §2a (identifiers design — the related-identifiers model): the two FROZEN, FAIL-CLOSED vocabularies the
+# typed relation adds. RELATION_TYPES is the curated DataCite subset ratified as the editor presets;
+# IDENTIFIER_TYPES is the small set AusMT records against. Both are BAKED copies — the gateway APP image
+# is content-blind (ships only gateway/, never the surveys validator — see gateway.Dockerfile), so a
+# runtime import of the sibling vocab is impossible; the copies are PINNED byte-for-byte to the surveys
+# validator's RELATION_TYPES / IDENTIFIER_TYPES by test_editor_form.py (the same parity-pin discipline
+# that guards LICENSE_IDS against the engine contract). Ordered tuples give the <select> a stable preset
+# order; the pin compares them as sets (the validator holds frozensets). An out-of-vocab value FAILs at
+# the form (SectionError) — byte-identical posture to access.coordinates, because a mis-typed relation
+# publishes a WRONG provenance claim and must block, not ship.
+RELATION_TYPES = ("IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites")
+IDENTIFIER_TYPES = ("DOI", "Handle", "URL", "RAiD")
 
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
 # — the checkboxes plus the advanced JSON fallback cover the rest.
@@ -247,6 +279,15 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "profile" and value not in SOURCE_PROFILES:
         raise SectionError(section, f"attribution profile '{value}' is not one of "
                                     f"{', '.join(SOURCE_PROFILES)}")
+    # §2a: the typed related-identifiers presets. Fail-closed like access.coordinates / profile — the
+    # <select> only offers vocab values, so a normal submit is always valid; this rejects a hand-crafted
+    # out-of-vocab POST (a mis-typed relation would publish a wrong provenance claim).
+    if kind == "relation" and value not in RELATION_TYPES:
+        raise SectionError(section, f"relation '{value}' is not one of "
+                                    f"{', '.join(RELATION_TYPES)}")
+    if kind == "identifier_type" and value not in IDENTIFIER_TYPES:
+        raise SectionError(section, f"identifier type '{value}' is not one of "
+                                    f"{', '.join(IDENTIFIER_TYPES)}")
 
 
 # ---- assembly -----------------------------------------------------------------------------------
