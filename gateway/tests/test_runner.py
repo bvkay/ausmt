@@ -622,6 +622,44 @@ def test_done_file_atomic_no_partial(tmp_path):
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_atomic_write_json_serialises_dates(tmp_path):
+    """Regression pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable`). A
+    survey.yaml with an unquoted ISO date (`embargo_until: 2027-02-01`) loads that field as a
+    datetime.date, which flows into an edit-job RESULT dict; the plain json.dump used to crash the
+    done-file write, crash-looping the runner and blocking every metadata read. The encoder ISO-formats
+    date/datetime (nested too — the real embargo lives under result['fields']['access']) and the result
+    round-trips as ISO strings."""
+    import datetime
+    from decimal import Decimal
+    result = {
+        "ok": True,
+        "version": "1.0.0",
+        "released": datetime.date(2027, 2, 1),                 # top-level date
+        "stamped": datetime.datetime(2027, 2, 1, 9, 30, 0),    # datetime (date subclass)
+        "fields": {"access": {"level": "open",
+                              "embargo_until": datetime.date(2027, 2, 1)}},  # nested, the embargo case
+        "amount": Decimal("12.34"),                            # Decimal safety
+    }
+    dest = tmp_path / "done.json"
+    jobs._atomic_write_json(dest, result)                      # must NOT raise
+    back = json.loads(dest.read_text(encoding="utf-8"))
+    assert back["released"] == "2027-02-01"
+    assert back["stamped"] == "2027-02-01T09:30:00"
+    assert back["fields"]["access"]["embargo_until"] == "2027-02-01"
+    assert back["amount"] == "12.34"
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_atomic_write_json_still_rejects_genuinely_unserialisable(tmp_path):
+    """The encoder is a precise date/Decimal handler, NOT a blind str() catch-all: a genuinely
+    unexpected object must still surface as a TypeError (a bug), never be silently coerced into a
+    persisted job file."""
+    class Weird:
+        pass
+    with pytest.raises(TypeError):
+        jobs._atomic_write_json(tmp_path / "d.json", {"x": Weird()})
+
+
 def test_read_done_rejects_unknown_outcome(tmp_path):
     p = tmp_path / "d.json"
     p.write_text(json.dumps({"submission_id": "x", "outcome": "approve"}), encoding="utf-8")
