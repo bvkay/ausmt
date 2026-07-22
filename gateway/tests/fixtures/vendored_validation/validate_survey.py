@@ -190,6 +190,20 @@ def _check_typed_relation(r, container: str, idx: int, entry: dict) -> None:
               f"{container}[{idx}].identifier_type '{it}' is not one of {tuple(sorted(IDENTIFIER_TYPES))}")
 
 
+def _is_typed_provenance_entry(entry) -> bool:
+    """§2a: does this sources[]/related_identifiers[] entry stand as a typed provenance CLAIM — i.e. does
+    it point at a real identifier WITH an in-vocab relation? AusMT is a curator, not the primary publisher,
+    so a survey may legitimately carry no dataset DOI; its provenance is instead a well-formed typed
+    relation. Deliberately strict, mirroring the fail-closed vocab posture: a bare identifier with no (or
+    an out-of-vocab) relation is not yet a claim, so it does not count toward provenance-completeness."""
+    if not isinstance(entry, dict):
+        return False
+    ident = entry.get("identifier")
+    rel = entry.get("relation")
+    return (ident not in (None, "", "TBD", "TODO")
+            and rel not in (None, "") and str(rel).strip() in RELATION_TYPES)
+
+
 def parse_angle(tok: str):
     tok = (tok or "").strip().strip('"')
     if not tok:
@@ -674,8 +688,20 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
               f"identifiers.dataset_doi and time_series.collection_pid are byte-identical ('{dd}') — the "
               f"systematic AusLAMP-SA redundancy (one NCI collection DOI reused as both the dataset DOI and "
               f"the raw-TS pointer). Model it as a single related_identifiers relation row, not two roles")
-    if not meta.get("identifiers", {}).get("dataset_doi") and not meta.get("identifiers", {}).get("survey_pid"):
-        r.add("WARNING", "provenance", "no survey PID or dataset DOI — record will be badged 'provenance incomplete'")
+    # C7 / §2a: a survey is provenance-incomplete ONLY when it carries NEITHER a flat identifier (dataset
+    # DOI or survey PID) NOR a typed provenance relation. Because AusMT curates records whose provenance
+    # lives in related identifiers rather than a minted DOI, a well-formed related_identifiers entry — or a
+    # typed sources[] entry, the SAME object (a non-blank identifier + an in-vocab relation) — satisfies it
+    # too. Crediting either route keeps this WARNING consistent with the add-survey badge fix, which already
+    # stopped treating 'no dataset DOI' as incomplete provenance. Absent both routes, it still warns.
+    has_flat_id = meta.get("identifiers", {}).get("dataset_doi") or meta.get("identifiers", {}).get("survey_pid")
+    typed_pool = (related if isinstance(related, list) else []) + (sources if isinstance(sources, list) else [])
+    has_typed_relation = any(_is_typed_provenance_entry(e) for e in typed_pool)
+    if not has_flat_id and not has_typed_relation:
+        r.add("WARNING", "provenance",
+              "no provenance identifier — record will be badged 'provenance incomplete'. Satisfy it either "
+              "with a flat identifier (identifiers.dataset_doi or identifiers.survey_pid) OR a typed "
+              "related_identifiers/sources entry (a non-blank identifier + an in-vocab relation)")
     # C7: ORCID (ISO 7064 11-2 checksum) + ROR + RAiD format sanity — WARNING only (a curator hint;
     # these federated identifiers have real external registries this dependency-light validator does
     # not query). Absent/blank values are silent — these fields are optional, not required.
