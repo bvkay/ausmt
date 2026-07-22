@@ -441,7 +441,7 @@ function openStation(i){
     TABS.map(([id,label],k)=>`<button role="tab" id="dt-${id}" data-act="tab" data-tab="${id}" aria-controls="dp-${id}" aria-selected="${k===0}" tabindex="${k===0?0:-1}"${k===0?' class="on"':""}>${esc(label)}</button>`).join("")+`</div>`;
   const header=`<div class="dtop">`+
     `<div class="dhead"><span class="sid">${esc(s.id)}</span>${typeChip}${collChip}<button class="close" aria-label="Close">✕</button></div>`+
-    `<div class="dsub">${esc(s.survey)} · ${esc(s.org)}${rorLogo(m.org_ror)} · ${esc(s.country)}</div>`+
+    `<div class="dsub">${esc(s.survey)} · ${orgNameLink(s.org,m.org_ror)} · ${esc(s.country)}</div>`+
     collLine(m)+
     `<div class="dchips">${yearChip}${licBadge}</div>`+
     `<div class="dactions">${headerDownloadBtn(s,m)}<button class="dl-cite" data-act="tab" data-tab="cite">Cite</button></div>`+
@@ -579,7 +579,7 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const pmin=Math.min(...ss.map(s=>s.pmin)),pmax=Math.max(...ss.map(s=>s.pmax));
   const mixbar=Object.entries(mix).map(([ty,n])=>`<div style="width:${100*n/ss.length}%;background:${TYPE_COL[ty]}" title="${esc(ty)}: ${n}"></div>`).join("");
   const yearTxt=acqYearText(m);
-  return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${esc(m.org||"custodian unknown")}${rorLogo(m.org_ror)} · ${esc(m.country||"")}</div>`+
+  return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}</div>`+
    `<div class="mixbar">${mixbar}</div>`+
    `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtP(pmin)}–${fmtP(pmax)}s</b></div>`+
    `<div class="badges">${badge(m.lic||"licence ?",licBadgeState(m.lic))}${badge("DOI",m.doi?"ok":"no")}</div>`+
@@ -600,11 +600,11 @@ function investigatorsHtml(invs){
 // C7: a ROR value may be a bare id (00892tw58) or a full https://ror.org/... URL — resolve either to
 // the canonical ror.org landing page link.
 function rorLink(r){if(!r)return null;const href=r.startsWith("http")?r:"https://ror.org/"+r;return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(r)}</a>`;}
-// A small ROR logo shown NEXT TO the organisation name when SMETA carries an org ROR. Self-hosted vendor
-// logo (CSP-safe, same-origin), linked to the canonical ror.org landing page. Returns "" when no ROR, so
-// callers can append it unconditionally and it simply renders nothing (mirrors orcidLink's absent case).
-function rorLogo(r){if(!r)return "";const href=r.startsWith("http")?r:"https://ror.org/"+r;
-  return ` <a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer" title="ROR: ${escAttr(r)}" class="ror-ico"><img src="vendor/ror-logo.png" alt="ROR" class="idlogo ror-logo"></a>`;}
+// owner 2026-07-22: when the organisation carries a ROR, its NAME is the link to the ror.org landing page
+// (replacing the separate ROR logo badge). No ROR -> plain escaped name. esc/escUrl keep a hostile org/ror value inert.
+function orgNameLink(name,r){const t=esc(name); if(!r) return t;
+  const href=r.startsWith("http")?r:"https://ror.org/"+r;
+  return `<a class="orglink" href="${escUrl(href)}" target="_blank" rel="noopener noreferrer" title="ROR: ${escAttr(r)}">${t}</a>`;}
 // C7: a RAiD identifier is already a resolvable https://raid.org/... URL (per the survey.yaml comment
 // and the validator's format check); a bare id falls back to that same host.
 function raidLink(r){if(!r)return null;const href=r.startsWith("http")?r:"https://raid.org/"+r;return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(r)}</a>`;}
@@ -793,7 +793,7 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   // identifiers; release history moves last.
   drawer.innerHTML=
    `<div class="dhead"><span class="sid" style="font-size:18px">${esc(sv)}</span><button class="close" aria-label="Close">✕</button></div>`+
-   `<div class="dsub">${esc(m.org||"custodian unknown")}${rorLogo(m.org_ror)} · ${esc(m.country||"")} · ${esc(m.dates||"dates n/a")}</div>`+
+   `<div class="dsub">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")} · ${esc(m.dates||"dates n/a")}</div>`+
    collLine(m)+
    `<div class="dim" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
    miniScatter(ss)+
