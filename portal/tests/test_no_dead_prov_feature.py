@@ -29,9 +29,18 @@ def test_no_m_prov_references():
 
 
 def test_doi_badge_is_ok_or_no_only():
-    # The DOI badge expression must be a plain presence check now (no three-way prov branch).
+    # The DOI badge must stay a TWO-STATE ok/no check — never the dead three-way "part" prov branch.
+    # §2a broadened the predicate from a bare m.doi to hasDatasetDoi(m) ("a persistent dataset identifier
+    # exists in this survey's provenance chain" — a minted dataset_doi OR a DOI-typed related_identifier),
+    # shared by both badge sites. That is still ok/no only; this pins the new expression and that the badge
+    # never regains a "part" state.
     src = (ROOT / "src" / "drawer.js").read_text(encoding="utf-8")
-    assert 'badge("DOI",m.doi?"ok":"no")' in src, "DOI badge should be ok-when-present / no-when-absent (no provisional branch)"
+    assert 'badge("DOI",hasDatasetDoi(m)?"ok":"no")' in src, \
+        "DOI badge should be ok/no via the shared hasDatasetDoi(m) predicate (no provisional/part branch)"
+    assert 'badge("DOI"' not in src.replace('badge("DOI",hasDatasetDoi(m)?"ok":"no")', ""), \
+        "a DOI badge site is not routed through the shared hasDatasetDoi(m) predicate"
+    assert 'badge("DOI",hasDatasetDoi(m)?"ok":"part"' not in src and '"part":"no"' not in src, \
+        "the DOI badge must never render a three-way 'part' state"
 
 
 def test_citation_and_lineage_no_longer_annotate_provisional():

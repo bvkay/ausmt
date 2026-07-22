@@ -504,7 +504,7 @@ function openStation(i){
     `<details class="prov-d"><summary>Lineage graph</summary><div class="prov-dbody">${provGraph(s)}</div></details>`+
     provenanceBox(s)+
     `<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`+
-    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",m.doi?"ok":"no")}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC — see this station's provenance and treat with caution."):""}</div></div></details>`+
+    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC — see this station's provenance and treat with caution."):""}</div></div></details>`+
     `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
     `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
   // Cite — the citation box. C46-W3b: a no-cite survey is EXPLICIT ("custodian citation not recorded — cite
@@ -586,7 +586,7 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   return `<div class="scard"><div class="scardhead"><h3 style="cursor:pointer" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</h3>`+(m.collection&&m.collection.id?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"")+`</div><div class="cust">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}</div>`+
    `<div class="mixbar">${mixbar}</div>`+
    `<div class="stats"><b>${ss.length}</b> station${ss.length===1?"":"s"}${yearTxt?` · acquired <b>${yearTxt}</b>`:""}<br>periods <b>${fmtP(pmin)}–${fmtP(pmax)}s</b></div>`+
-   `<div class="badges">${badge(m.lic||"licence ?",licBadgeState(m.lic))}${badge("DOI",m.doi?"ok":"no")}</div>`+
+   `<div class="badges">${badge(m.lic||"licence ?",licBadgeState(m.lic))}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}</div>`+
    cardDesc(m)+
    `<div class="cardbtns"><button data-act="story" data-survey="${escAttr(sv)}">View survey</button><button data-act="select" data-survey="${escAttr(sv)}">Download</button></div></div>`;}
 function pidLink(p){if(!p)return "<span class='prov'>not recorded</span>";if(p.startsWith("TODO"))return "<span class='prov'>not recorded</span>";
@@ -632,6 +632,42 @@ function instrumentPidsHtml(m){
     const link=instrumentPidLink(i.pid);
     return link?`${label} — ${link}`:`${label} <span class='prov'>(no PID)</span>`;}).join("<br>");
   return `Instrument PIDs:<br><span class="pidline">${rows}</span><br>`;}
+// §2a (identifiers design — the related-identifiers model): DataCite relation -> a human label. An
+// out-of-vocab relation (should never publish — the validator FAILs it) falls back to the escaped raw
+// value; a blank relation to a neutral "Related".
+const RELATION_LABELS={IsDerivedFrom:"Derived from",IsVariantFormOf:"Variant form of",
+  IsSupplementTo:"Supplement to",Cites:"Cites"};
+// §2a: a typed provenance identifier -> a link whose resolver host is chosen by identifier_type, ALWAYS
+// through the escUrl guard (a hostile identifier value can never become an executable/relative anchor —
+// same posture as pidLink/instrumentPidLink). DOI -> doi.org (unless already a URL); Handle ->
+// hdl.handle.net; URL -> itself. ANY OTHER type (RAiD, an unknown, or none) -> escaped PLAIN TEXT with NO
+// anchor: we will not invent a resolver for a type we do not model, and an unlinked value stays inert.
+function relatedIdLink(id,type){
+  const s=String(id==null?"":id); if(!s)return "<span class='prov'>not recorded</span>";
+  const t=String(type==null?"":type);
+  if(t==="DOI"){const href=s.startsWith("http")?s:"https://doi.org/"+s;
+    return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
+  if(t==="Handle"){const href=s.startsWith("http")?s:"https://hdl.handle.net/"+s;
+    return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
+  if(t==="URL"){return `<a href="${escUrl(s)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
+  return esc(s);}
+// §2a: the related-identifiers block — one line per typed relation (SMETA.related_identifiers, served by
+// the engine mapper as always-a-list). The relation prints as a human label, the identifier as a
+// type-linked value, the custodian (when present) in muted text. Empty list -> "" (the section simply
+// does not render, mirroring instrumentPidsHtml). Non-mapping entries are skipped defensively.
+function relatedIdentifiersHtml(m){
+  const list=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object");
+  if(!list.length)return "";
+  const rows=list.map(r=>{
+    const label=RELATION_LABELS[r.relation]||(r.relation?esc(r.relation):"Related");
+    const cust=r.custodian?` <span class='prov'>(${esc(r.custodian)})</span>`:"";
+    return `${label}: ${relatedIdLink(r.identifier,r.identifier_type)}${cust}`;}).join("<br>");
+  return `Related identifiers:<br><span class="pidline">${rows}</span><br>`;}
+// §2a: "a persistent dataset identifier exists in this survey's provenance chain" — the ratified reading
+// of the DOI maturity badge. TRUE when a minted dataset DOI is set OR any typed related_identifier is a
+// DOI, so a curator survey (dataset_doi null, the DOI living in the typed provenance list) still lights
+// the badge. Shared by BOTH badge sites (station format-availability + survey card) via this one predicate.
+function hasDatasetDoi(m){return !!(m&&(m.doi||(m.related_identifiers||[]).some(r=>r&&r.identifier_type==="DOI")));}
 function identifiersHtml(m){
   const fund=(m.funders||[]);
   const fundLine=fund.length?fund.map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:`${esc(f.name)} <span class='prov'>(no PID)</span>`).join(" · "):"<span class='prov'>none recorded</span>";
@@ -642,7 +678,9 @@ function identifiersHtml(m){
     `Dataset DOI: <span class="pidline">${m.doi?pidLink(m.doi):"<span class='prov'>not recorded</span>"}</span><br>`+
     `Organisation ROR: <span class="pidline">${ror||"<span class='prov'>not recorded</span>"}</span><br>`+
     `Project RAiD: <span class="pidline">${raid||"<span class='prov'>not recorded</span>"}</span><br>`+
+    relatedIdentifiersHtml(m)+
     `Instrument model: ${m.instrument_model?esc(m.instrument_model):"<span class='prov'>not recorded in source metadata</span>"}<br>`+
+    (m.instrument_pid?`Platform/instrument PID: <span class="pidline">${instrumentPidLink(m.instrument_pid)}</span><br>`:"")+
     instrumentPidsHtml(m)+
     `Funders: ${fundLine}</div>`;}
 function pubCite(p){return `${esc(p.a)} (${esc(p.y)}). ${esc(p.t)}. <i>${esc(p.j)}</i>.`+(p.doi?` <a href="${escUrl("https://doi.org/"+p.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(p.doi)}</a>`:"");}
