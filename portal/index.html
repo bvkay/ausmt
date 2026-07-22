@@ -426,8 +426,19 @@
   .tourleader{position:fixed;inset:0;width:100%;height:100%;z-index:3001;pointer-events:none}
   .tourleader line{stroke:var(--copper);stroke-width:2}
   .tourleader #tourLeaderHead path{fill:var(--copper)}
-  .tourcard{position:fixed;z-index:3002;max-width:340px;background:var(--panel);border:1px solid var(--copper);
+  /* Owner round 2 (2026-07-22): the card must be a CONSTANT SIZE and CONSTANT centred position on EVERY
+     step. It was max-width:340 with auto height, so short-text steps (7, 9) shrank narrower AND shorter —
+     and because _tourCardBox centres via (viewport - offsetWidth/offsetHeight)/2, a variable size also
+     SHIFTED the card off centre (and lagged the previous step's size). A FIXED width + a min-height sized to
+     the tallest step's content pins both: offsetWidth/offsetHeight are now constant, so the centre never
+     drifts and short steps no longer collapse. box-sizing:border-box so width:340 is the FULL rendered box
+     (matching the _tourCardBox 340 fallback). min-height fits the longest step; text may still grow the box
+     only if a step were ever longer, but every current step lands at exactly this size. */
+  .tourcard{position:fixed;z-index:3002;width:340px;box-sizing:border-box;min-height:170px;
+    display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--copper);
     border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+  /* push the button row to the bottom so the constant min-height reads as deliberate padding, not a gap */
+  .tourcard .tourbtns{margin-top:auto}
   .tourstep{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:8px}
   .tourtext{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:14px}
   .tourbtns{display:flex;justify-content:flex-end;gap:8px}
