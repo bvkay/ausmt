@@ -146,6 +146,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // read the recorded boot state; setMapInteracted flips the user-control flag; mapCorrectHomeFit invokes
   // the corrector so its one-shot re-fit + flag-clear are observable via the map stub's recorded calls.
   "mapSizeDegenerate:(s)=>_mapSizeDegenerate(s),mapRefitGate:(st)=>_mapRefitGate(st)," +
+  // Owner round 2: the home frame is now the FIXED Australia box (AU_HOME_BOUNDS), shared by the map-create
+  // fit and buildMarkers, NOT the tight positioned-station extent. homeBounds/auHomeBounds expose both so the
+  // driver can pin that they are the SAME object (cannot drift) and that HOME_BOUNDS is NOT the old pts array.
+  "homeBounds:()=>HOME_BOUNDS,auHomeBounds:()=>AU_HOME_BOUNDS," +
   "homeFitDegenerate:()=>_fitWasDegenerate,mapUserInteracted:()=>_mapUserInteracted," +
   "setMapInteracted:(v)=>{_mapUserInteracted=v;},mapCorrectHomeFit:()=>_mapCorrectHomeFit()," +
   // The DEFERRED unconditional re-fit is the actual off-centre-on-load fix: mapDeferredHomeRefit runs the
@@ -193,18 +197,25 @@ async function bootFreshWindow(dataMap) {
 
   // UX9 ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
   // degenerate (stale/0x0) container size, so the map framed at zoom 0 / off centre. The fix (a) invalidates
-  // size BEFORE the primary fit, (b) fits with a 24px padding, and (c) adds a ONE-SHOT corrector on the
-  // setView('map') 60ms timer that re-fits HOME_BOUNDS only when the fit was degenerate AND the user has not
-  // taken control. These run synchronously at boot (the timer hasn't fired yet), so mapCalls holds the
-  // primary invalidateSize+fit here.
-  // (a)+(b): the PRIMARY fit carries padding [24,24] and is IMMEDIATELY preceded by an invalidateSize
-  //          ({animate:false,pan:false}) — the size is reclaimed before the box is measured, not after.
-  const _fitIdx = mapCalls.findIndex(c => c.fn === "fitBounds" && c.args[1] && Array.isArray(c.args[1].padding)
-    && c.args[1].padding[0] === 24 && c.args[1].padding[1] === 24);
-  ok(_fitIdx > 0, "item2: buildMarkers must fit the home bounds with {padding:[24,24]}; no such fitBounds recorded");
-  ok(mapCalls[_fitIdx - 1].fn === "invalidateSize", "item2: invalidateSize must run IMMEDIATELY BEFORE the primary fit (fit-at-fresh-size), got " + mapCalls[_fitIdx - 1].fn);
-  const _invArg = mapCalls[_fitIdx - 1].args[0] || {};
-  ok(_invArg.animate === false && _invArg.pan === false, "item2: the pre-fit invalidateSize must pass {animate:false,pan:false}, got " + JSON.stringify(_invArg));
+  // size BEFORE the primary fit, and (c) adds a ONE-SHOT corrector on the setView('map') 60ms timer that
+  // re-fits HOME_BOUNDS only when the fit was degenerate AND the user has not taken control. These run
+  // synchronously at boot (the timer hasn't fired yet), so mapCalls holds the primary invalidateSize+fit here.
+  // Owner round 2 (2026-07-22): the home frame is now the FIXED Australia box (AU_HOME_BOUNDS), NOT the tight
+  // positioned-station extent (which dropped the view south and clipped northern Australia). buildMarkers no
+  // longer assigns the pts array to HOME_BOUNDS and no longer passes a {padding:[24,24]} inset — it fits the
+  // shared box directly so the post-load frame is byte-identical to the map-create fit the owner likes.
+  // HOME-FRAME IDENTITY: HOME_BOUNDS is the SAME object as the map-create AU_HOME_BOUNDS (cannot drift) and is
+  // NOT the old tight-extent pts array. This red-proves against the old `HOME_BOUNDS = pts` (an Array).
+  ok(A.homeBounds() === A.auHomeBounds(), "item2: HOME_BOUNDS must be the shared fixed Australia box (=== AU_HOME_BOUNDS), not the tight station extent");
+  ok(Array.isArray(A.homeBounds()) === false, "item2: HOME_BOUNDS must NOT be the tight positioned-station extent array (owner round 2: fixed Australia frame)");
+  // (a): the PRIMARY (buildMarkers) fit is IMMEDIATELY preceded by an invalidateSize ({animate:false,pan:false})
+  //      — the size is reclaimed before the box is measured, not after — and carries NO padding inset (the
+  //      home frame is the fixed AU box, whose margins are baked into the coordinates).
+  const _fitIdx = mapCalls.findIndex((c, i) => c.fn === "fitBounds" && i > 0
+    && mapCalls[i - 1].fn === "invalidateSize"
+    && (mapCalls[i - 1].args[0] || {}).animate === false && (mapCalls[i - 1].args[0] || {}).pan === false);
+  ok(_fitIdx > 0, "item2: buildMarkers must fit the home bounds immediately after an invalidateSize({animate:false,pan:false}); no such fit recorded");
+  ok(_fitIdx > 0 && mapCalls[_fitIdx].args[1] === undefined, "item2: the primary home fit must carry NO padding option (owner round 2: fit the fixed AU box directly), got " + JSON.stringify(mapCalls[_fitIdx].args[1]));
   // (c)-degeneracy: jsdom has no layout engine, so the headless map's size reads degenerate — exactly the
   //                 condition the corrector exists for. Recorded at boot.
   ok(A.homeFitDegenerate() === true, "item2: the boot fit must be recorded as degenerate under the headless (0x0) map");
@@ -674,6 +685,34 @@ async function bootFreshWindow(dataMap) {
   const tBack = doc.getElementById("tourBackdrop");
   ok(/0\.78/.test(tBack.style.background) && !/0?\.65/.test(tBack.style.background),
     "U10: the centred (no-target) backdrop must apply the 0.78 dim, got: " + JSON.stringify(tBack.style.background));
+
+  // G4b. OWNER ROUND 2 (2026-07-22): the card must be a CONSTANT SIZE and CONSTANT centred position on EVERY
+  // step — steps 1/10 (the map steps) sat differently from 2-9 and steps 7/9 (short copy) rendered a smaller
+  // box. FIXED SIZE: .tourcard carries an explicit width (not max-width) + a min-height sized to the tallest
+  // step, box-sizing:border-box — so offsetWidth/offsetHeight are constant and short-text steps can no longer
+  // shrink. jsdom resolves declared class CSS via getComputedStyle (no layout engine needed), so these pin the
+  // CSS contract directly and RED-PROVE against the pre-change max-width/auto-height rule (width would be "").
+  const _tcs = win.getComputedStyle(tCard);
+  ok(_tcs.width === "340px", "owner2/size: .tourcard must have a FIXED width:340px (not max-width), got width=" + JSON.stringify(_tcs.width));
+  ok(/^\d+px$/.test(_tcs.minHeight) && parseInt(_tcs.minHeight, 10) > 0,
+    "owner2/size: .tourcard must have a positive min-height (constant box; short steps 7/9 must not shrink), got minHeight=" + JSON.stringify(_tcs.minHeight));
+  ok(_tcs.boxSizing === "border-box", "owner2/size: .tourcard must be border-box so the fixed width is the full rendered box, got " + JSON.stringify(_tcs.boxSizing));
+  // CONSTANT CENTRED POSITION: step through ALL 10 steps and capture the card's applied left/top. Every step's
+  // position must be IDENTICAL (the map steps included) — the overlap-nudge is the ONLY documented exception,
+  // and under jsdom's zero rects no target overlaps, so all 10 land on the pure viewport centre. This guards
+  // the "same position on every step" contract the owner asked for (map steps 1/10 must match 2-9).
+  const _posSeen = [];
+  for (let _s = 0; _s < 10; _s++) {
+    const _c = doc.getElementById("tourCard");
+    _posSeen.push(_c.style.left + "|" + _c.style.top);
+    if (_s < 9) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  }
+  ok(A.tourStep() === 9, "owner2/pos: stepping ArrowRight x9 must reach the last step, at " + A.tourStep());
+  ok(_posSeen.every(p => p === _posSeen[0]),
+    "owner2/pos: the card's centred position must be IDENTICAL across all 10 steps (map steps included), got " + JSON.stringify(_posSeen));
+  ok(/px$/.test(_posSeen[0].split("|")[0]) && /px$/.test(_posSeen[0].split("|")[1]),
+    "owner2/pos: the constant position must be applied in px, got " + JSON.stringify(_posSeen[0]));
+
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
   ok(A.tourStep() === -1, "G4: could not close the tour after the positioning checks");
 

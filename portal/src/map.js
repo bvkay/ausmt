@@ -4,9 +4,16 @@
 // load time; the only cross-module reference is the marker click -> openStation (one-way).
 // UX feedback round 1: default to a fixed Australia extent on load (was an arbitrary centre/zoom pair
 // that didn't reliably frame the continent on typical viewport sizes). Bounds: [[south,west],[north,east]]
-// chosen to cover the AU mainland + Tasmania with a small margin. buildMarkers() below fits to the actual
-// marker bounds once data loads (>=1 station), superseding this — this fitBounds is the empty/pre-data view.
-const map=L.map("map",{preferCanvas:true}).fitBounds([[-44.5,111.5],[-10,155]]);
+// chosen to cover the AU mainland + Tasmania with a small margin.
+// Owner round 2 (2026-07-22): buildMarkers() USED to re-fit to the tight station-marker extent once data
+// loaded — but because no station sits north of ~-22.5 lat, that fit dropped the view SOUTH (centre ~-33.6)
+// and clipped northern Australia (the "off-centre after load" the owner saw). The owner LIKES this fixed
+// Australia framing, so the home view is now ALWAYS this box (below): every station (lon 115.85..148.17,
+// lat -43.44..-22.48) falls inside it, so it shows all dots AND frames the whole continent. Defined ONCE
+// here as AU_HOME_BOUNDS and shared by the initial fit and buildMarkers()'s HOME_BOUNDS so the two frames
+// cannot drift apart.
+const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
+const map=L.map("map",{preferCanvas:true}).fitBounds(AU_HOME_BOUNDS);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
 // Custom cluster icons (self-contained styling — no dependency on MarkerCluster.Default.css, whose
 // absence rendered clusters as bare squares). Sized by child count; national-scale spiderfy is disabled in
@@ -189,9 +196,10 @@ function weightForZoom(z){return z<=4?1.0:1.5;}
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
 function restyleForZoom(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
   ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
-// UX9 item 2: the positioned-station extent buildMarkers fits to, remembered module-level so the
-// setView("map") 60ms corrector can re-fit to it (null until data with positions is in). _fitWasDegenerate
-// records whether that primary fit landed at a degenerate container size (see buildMarkers).
+// UX9 item 2: the home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms
+// corrector can re-fit to it (null until data is in). Owner round 2: this is now the FIXED Australia frame
+// (AU_HOME_BOUNDS), NOT the tight station extent — see buildMarkers. _fitWasDegenerate records whether that
+// primary fit landed at a degenerate container size (see buildMarkers).
 let HOME_BOUNDS=null,_fitWasDegenerate=false;
 // PURE: a Leaflet map size is degenerate when it is missing or zero on either axis — the state that makes
 // fitBounds compute against a 0x0/stale box and land at zoom 0 / the wrong centre. Leaflet-free so the
@@ -207,8 +215,11 @@ function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
   s.marker._survey=s.survey;   // UX8 (X3): the per-survey cluster facade buckets markers by this stamp
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
-  // fit to the actual POSITIONED-station extent once data is in — supersedes the AU-bounds default set at
-  // map creation above. C42: null-coord (withheld) stations are excluded so the bounds never go NaN.
+  // Home frame once data is in. Owner round 2 (2026-07-22): re-fit to the FIXED Australia box
+  // (AU_HOME_BOUNDS), NOT the tight positioned-station extent. The tight extent dropped the view south and
+  // clipped northern Australia; every station falls inside AU_HOME_BOUNDS, so this frames the continent AND
+  // shows every dot. Guarded on there being at least one positioned station so an all-withheld catalogue
+  // simply keeps the map-create fit (identical box) rather than re-running the size/timing repair for nothing.
   const pts=ST.filter(hasPosition).map(s=>[s.lat,s.lon]);
   if(pts.length){
     // Reclaim the true container size BEFORE fitting: on first load the map's cached size can be stale/0x0
@@ -217,9 +228,9 @@ function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
     // PRIMARY attempt (the 60ms timer is only the corrector). We record whether the size was still degenerate
     // at fit time so the corrector runs exactly when it is needed.
     map.invalidateSize({animate:false,pan:false});
-    HOME_BOUNDS=pts;
+    HOME_BOUNDS=AU_HOME_BOUNDS;
     _fitWasDegenerate=_mapSizeDegenerate(typeof map.getSize==="function"?map.getSize():null);
-    map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
+    map.fitBounds(HOME_BOUNDS);
     // The primary fit above runs BEFORE the flex layout has settled, so it fits a wrong-but-nonzero box.
     // Schedule an unconditional re-fit once layout settles — the real correction (see _mapDeferredHomeRefit).
     _scheduleDeferredHomeRefit();
@@ -231,7 +242,7 @@ function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
 // a programmatic fit like E6, is never clobbered.
 function _mapCorrectHomeFit(){
   if(!_mapRefitGate({userInteracted:_mapUserInteracted,fitDegenerate:_fitWasDegenerate}))return;
-  if(HOME_BOUNDS)map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
+  if(HOME_BOUNDS)map.fitBounds(HOME_BOUNDS);
   _fitWasDegenerate=false;   // one-shot: the boot repair fires once, then stands down
 }
 // The ACTUAL off-centre-on-load fix. The one-shot corrector above only re-fits when the primary fit was
@@ -245,7 +256,7 @@ function _mapCorrectHomeFit(){
 // already correct and corrective when it was wrong.
 function _mapDeferredHomeRefit(){
   map.invalidateSize({animate:false,pan:false});
-  if(HOME_BOUNDS&&!_mapUserInteracted)map.fitBounds(HOME_BOUNDS,{padding:[24,24]});
+  if(HOME_BOUNDS&&!_mapUserInteracted)map.fitBounds(HOME_BOUNDS);
 }
 // Schedule the deferred re-fit AFTER layout settles. Double requestAnimationFrame: a single rAF can still
 // run before the browser has performed the final layout+paint, so we wait one more frame — by the second
