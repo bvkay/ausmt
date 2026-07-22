@@ -75,6 +75,11 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // (e.g. re-reading localStorage) as well as on the rendered DOM. maybeShowIntro lets the driver
   // simulate a genuine first visit (clear the key, re-run the first-visit show) for the welcome popup.
   "introSeen,maybeShowIntro,tourStep:()=>_tourStep," +
+  // Settle re-layout (owner 2026-07-22): the drawer step opens a target that SLIDES IN, so the tour
+  // re-measures on the target's transitionend. tourSettleEl exposes which element carries that listener
+  // (drawer step -> "drawer"; null when detached) and tourLayoutRuns counts _tourLayout calls, so the
+  // pin can fire a synthetic transitionend and assert the re-layout ran without leaking the listener.
+  "tourSettleEl:()=>_tourSettleEl&&_tourSettleEl.id,tourLayoutRuns:()=>_tourLayoutRuns," +
   // UX7b U7 welcome-popup helpers: showWelcome/closeWelcome drive the first-visit modal directly (the
   // checkbox-persistence matrix pokes #welcomeDismiss then closes each way). UX9 (owner tour redesign): the
   // side-picking _tourPlace is retired for a CENTRED card + a LEADER to the spotlight. _tourCardBox is the
@@ -780,8 +785,25 @@ async function bootFreshWindow(dataMap) {
   ok(A.tourStep() === 4, "ArrowRight x4 did not reach the station-drawer step, at step " + A.tourStep());
   ok(doc.getElementById("drawer").classList.contains("open"), "the station-drawer step did not open the drawer");
   ok(findBox.value === "", "passing THROUGH the Find demo left residue in the find box");
+  // H2b. SETTLE RE-LAYOUT (owner 2026-07-22): the drawer SLIDES IN via a CSS transform transition, so the
+  // spotlight would sit over its mid-slide (off-screen) rect until a later re-layout unless the tour
+  // re-measures when the slide settles. The tour listens for the TARGET element's transitionend and re-runs
+  // _tourLayout. jsdom has no animation timing (the real proof is a browser run), so this pins the WIRING:
+  // the settle listener is attached to #drawer on this step, a synthetic transitionend re-runs _tourLayout,
+  // and stepping away detaches it (no leaked listener on a persistent app element). RED-proves against the
+  // pre-fix build (no listener -> tourSettleEl undefined and the count would not move on transitionend).
+  ok(A.tourSettleEl() === "drawer", "settle: the drawer step must attach its transitionend re-layout listener to #drawer, got " + JSON.stringify(A.tourSettleEl()));
+  const _runsBefore = A.tourLayoutRuns();
+  doc.getElementById("drawer").dispatchEvent(new win.Event("transitionend", { bubbles: true }));
+  ok(A.tourLayoutRuns() > _runsBefore, "settle: the drawer's transitionend did not re-run _tourLayout (spotlight would stay on the stale rect)");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));   // step BACK off the drawer step (-> tree, index 3)
+  ok(A.tourSettleEl() !== "drawer", "settle: stepping off the drawer step must RELEASE #drawer's transitionend listener (no leak), still on " + JSON.stringify(A.tourSettleEl()));
+  ok(A.tourSettleEl() === "tree", "settle: the listener must re-attach to the new step's target (#tree), got " + JSON.stringify(A.tourSettleEl()));
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));  // back to the drawer step for the close checks
+  ok(A.tourStep() === 4, "settle: could not return to the drawer step, at " + A.tourStep());
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
   ok(A.tourStep() === -1, "Esc from the drawer step did not close the tour");
+  ok(A.tourSettleEl() === null, "settle: closing the tour must detach the drawer's transitionend listener (no leak), got " + JSON.stringify(A.tourSettleEl()));
   ok(!doc.getElementById("drawer").classList.contains("open"), "Esc from the drawer step did not close the drawer it opened");
   ok(A.curView() === "map", "Esc from the drawer step did not restore the map view");
 

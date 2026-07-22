@@ -212,6 +212,30 @@ function _tourBuild(){
 // the card re-centres and the leader is recomputed; the card never re-anchors (it is always centred).
 function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 
+// SETTLE re-layout (owner, 2026-07-22): some steps' enter hooks trigger an ANIMATED layout change on their
+// own target — the station-drawer step (index 4) opens #drawer, which SLIDES IN via a CSS transform
+// transition (index.html: transform translateX(102%) -> none, transition:transform .16s) that only settles
+// AFTER _tourLayout has already read getBoundingClientRect. The spotlight would then sit over the drawer's
+// mid-slide (still off-screen) rect — an empty bordered box off to the side — until the next re-layout (a
+// resize) snapped it across. Fix, general (not a step-5 special case): while a step is showing, listen for
+// the TARGET element's transitionend and re-run _tourLayout once it fires, so the spotlight re-measures
+// against the SETTLED rect. It is idempotent (the exact path a resize already takes) and self-limited —
+// attached on arrival, detached on departure/teardown — so no listener leaks and no other step regresses.
+// jsdom has no animation timing, so a synthetic transitionend drives the regression pin; the real proof is
+// a browser run. _tourLayoutRuns is bumped by _tourLayout purely so the pin can observe the re-run.
+let _tourSettleEl=null;                 // target element carrying the current step's transitionend listener; null=none
+let _tourLayoutRuns=0;                  // observability: total _tourLayout calls this session (settle-pin observable)
+function _tourOnSettle(){if(_tourStep>=0)_tourLayout();}   // re-measure once the target's slide-in transition settles
+function _tourAttachSettle(){
+  _tourDetachSettle();                  // never stack listeners across steps
+  const step=TOUR_STEPS[_tourStep];
+  const target=step&&step.sel?document.querySelector(step.sel):null;
+  if(target){_tourSettleEl=target;target.addEventListener("transitionend",_tourOnSettle);}
+}
+function _tourDetachSettle(){
+  if(_tourSettleEl){_tourSettleEl.removeEventListener("transitionend",_tourOnSettle);_tourSettleEl=null;}
+}
+
 function _tourKeydown(e){
   if(_tourStep<0)return;
   if(e.key==="Escape"){stopTour();}
@@ -268,8 +292,10 @@ function _tourPosition(){
   const step=TOUR_STEPS[_tourStep];
   if(typeof step.enter==="function")step.enter();
   _tourLayout();
+  _tourAttachSettle();   // re-measure this step against its target's SETTLED rect once any slide-in transition ends
 }
 function _tourLayout(){
+  _tourLayoutRuns++;
   const step=TOUR_STEPS[_tourStep];
   const target=step.sel?document.querySelector(step.sel):null;
   const rect=target?target.getBoundingClientRect():null;
@@ -322,6 +348,7 @@ function _tourLayout(){
 function _tourExitCurrent(){
   const s=TOUR_STEPS[_tourStep];
   if(s&&typeof s.exit==="function")s.exit();
+  _tourDetachSettle();   // drop this step's settle listener on every way out (Next/Back/close) — symmetric with attach
 }
 function _tourNext(){
   if(_tourStep>=TOUR_STEPS.length-1){stopTour();return;}   // stopTour runs the exit hook itself
