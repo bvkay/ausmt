@@ -636,7 +636,15 @@ function validateSurvey(meta, edis, mth5s){
   if(!isOrcid(meta.uploader_orcid)) add("WARNING","submitter","uploader ORCID not in 0000-0000-0000-0000 format");
   if(!isOrcid(meta.pi_orcid)) add("WARNING","attribution","lead-investigator ORCID not in 0000-0000-0000-0000 format");
   if(!meta.ror) add("WARNING","attribution","no organisation ROR (recommended)");
-  if(!meta.dataset_doi) add("WARNING","provenance","no dataset DOI — record will be badged 'provenance incomplete'");
+  // Provenance-identifier completeness: the OLD check keyed off dataset_doi ALONE, so it mis-fired on
+  // every survey that records its provenance as a custodian/source identifier instead of a minted
+  // dataset DOI (the systematic UofA/AusLAMP-SA case — the NCI collection DOI sits in a source, not the
+  // dataset_doi slot). Broaden the signal: warn only when NO provenance identifier is present in ANY
+  // slot — neither a dataset DOI nor a source-dataset identifier (a custodian identifier). A survey that
+  // carries either is complete for this hint. (related_identifiers is an editor-side field, not collected
+  // on this public form.)
+  var hasProvId=!!meta.dataset_doi||(meta.sources||[]).some(function(s){return s&&(s.identifier||"").toString().trim();});
+  if(!hasProvId) add("WARNING","provenance","no dataset DOI or source-dataset identifier recorded (recommended so the record has a citable provenance identifier)");
   if(meta.processing_software==="Unknown") add("WARNING","provenance","processing software is 'Unknown', recommended to identify it");
   if(!edis.length && !mth5s.length) add("FAIL","structure","no transfer-function files added (EDI or MTH5)");
   mth5s.forEach(f=>{
