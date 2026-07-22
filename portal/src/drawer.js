@@ -19,7 +19,11 @@ if(drawer&&drawer.setAttribute){drawer.setAttribute("role","dialog");drawer.setA
 let _drawerReturnFocus=null;
 function _rememberDrawerOpener(){_drawerReturnFocus=(typeof document!=="undefined"&&document)?document.activeElement:null;}
 function _focusDrawer(){if(!drawer||!drawer.querySelector)return;
-  const t=drawer.querySelector(".close")||drawer;if(t&&t.focus){try{t.focus();}catch(e){}}}
+  // preventScroll: on the FIRST open the drawer is still transform:translateX(102%) off-screen mid-slide,
+  // so focusing its .close button makes the browser scroll documentElement ~428px left to reveal the
+  // off-screen target, then snap back when the .16s slide settles — a visible page-wide bounce. preventScroll
+  // keeps focus (accessibility) without that scroll-into-view. Guarded fallback for engines lacking the option.
+  const t=drawer.querySelector(".close")||drawer;if(t&&t.focus){try{t.focus({preventScroll:true});}catch(e){}}}
 function _restoreDrawerFocus(){const f=_drawerReturnFocus;_drawerReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
 // UX6 Wave C: the currently-open station's TF row, stashed so the delegated [data-act="expand"] handler
 // can re-render the SAME plotter into the expand modal without re-deriving it from the DOM.
