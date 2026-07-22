@@ -36,7 +36,7 @@ const TOUR_STEPS=[
    enter:_tourEnterFindDemo,exit:_tourExitFindDemo},
   {sel:"#tree",text:"Browse by country, organisation or survey. Tick a level to show or hide it.",
    enter:_tourEnterTreeDemo,exit:_tourExitTreeDemo},
-  {sel:"#drawer",text:"The station drawer: response plots, screening checks and provenance, in tabs.",
+  {sel:"#drawer",text:"The station drawer: response plots and provenance, in tabs.",
    enter:_tourEnterStation},
   {sel:".selbox",text:"Download stations, surveys or selections. Licences and citations come with the files.",
    enter:_tourEnterSelbox,exit:_tourExitSelbox},
@@ -212,27 +212,65 @@ function _tourBuild(){
 // the card re-centres and the leader is recomputed; the card never re-anchors (it is always centred).
 function _tourOnResize(){if(_tourStep>=0)_tourLayout();}
 
-// SETTLE re-layout (owner, 2026-07-22): some steps' enter hooks trigger an ANIMATED layout change on their
-// own target — the station-drawer step (index 4) opens #drawer, which SLIDES IN via a CSS transform
-// transition (index.html: transform translateX(102%) -> none, transition:transform .16s) that only settles
-// AFTER _tourLayout has already read getBoundingClientRect. The spotlight would then sit over the drawer's
-// mid-slide (still off-screen) rect — an empty bordered box off to the side — until the next re-layout (a
-// resize) snapped it across. Fix, general (not a step-5 special case): while a step is showing, listen for
-// the TARGET element's transitionend and re-run _tourLayout once it fires, so the spotlight re-measures
-// against the SETTLED rect. It is idempotent (the exact path a resize already takes) and self-limited —
-// attached on arrival, detached on departure/teardown — so no listener leaks and no other step regresses.
-// jsdom has no animation timing, so a synthetic transitionend drives the regression pin; the real proof is
-// a browser run. _tourLayoutRuns is bumped by _tourLayout purely so the pin can observe the re-run.
-let _tourSettleEl=null;                 // target element carrying the current step's transitionend listener; null=none
+// SETTLE-UNTIL-STABLE re-layout (owner, 2026-07-22). Some steps' enter hooks trigger layout changes on their
+// OWN target that keep going AFTER _tourLayout first measures it. The station-drawer step (index 4) is the
+// worst case: openStation (a) renders the facts panel synchronously, then adds .open, which (b) SLIDES the
+// drawer in via a CSS transform transition (index.html: transform translateX(102%) -> none, .16s ease) so its
+// getBoundingClientRect().left travels leftward over ~160ms; then (c) an ASYNC station.json fetch injects the
+// frame line (drawer.js loadStationFrameLine) and reflows the drawer's HEIGHT; and (d) the deferred map home
+// re-fit can reflow the map column under it. The drawer box therefore MOVES and RESIZES several times across
+// ~1s. A single transitionend re-measure fires after the SLIDE only (stage b) and leaves the spotlight on a
+// stale early box (the owner-observed "highlight lands where the panel first appeared, now empty"). The robust
+// fix: after entering a step, POLL the target rect each animation frame; on ANY change — position OR size (a
+// size-only ResizeObserver misses the slide, which MOVES the box) — re-run _tourLayout so the spotlight tracks
+// the box; stop once the rect has held STABLE for _TOUR_SETTLE_STABLE_MS, or after a hard _TOUR_SETTLE_CAP_MS.
+// General, not a step-5 special case: a static target reads stable on the first frame and the watcher stands
+// down immediately; the map steps re-measure an unchanging box harmlessly. The transitionend hook is KEPT as
+// a cheap extra nudge (it re-lays-out the instant a transition ends) but is no longer relied on alone. The
+// watcher is ATTACHED on arrival and DETACHED on EVERY departure (Next/Back/close/teardown) — the rAF handle
+// is cancelled and the listener removed — so no poll loop or listener leaks past the step or the tour.
+// jsdom has no layout engine and its rAF is driver-controllable, so the pin drives synthetic rect changes +
+// a stubbed clock through the queue to prove the re-run/stop/detach wiring; the sub-second proof is a browser
+// run. _tourLayoutRuns is bumped by _tourLayout purely so the pin (and the browser probe) can observe re-runs.
+const _TOUR_SETTLE_STABLE_MS=200,_TOUR_SETTLE_CAP_MS=2000;   // quiet window the rect must hold; hard time cap
+let _tourSettleEl=null;                 // element the current step's settle watcher tracks; null = none attached
+let _tourSettleRAF=0;                   // pending animation-frame handle for the poll; 0 = none scheduled
 let _tourLayoutRuns=0;                  // observability: total _tourLayout calls this session (settle-pin observable)
-function _tourOnSettle(){if(_tourStep>=0)_tourLayout();}   // re-measure once the target's slide-in transition settles
+function _tourNow(){return (typeof performance!=="undefined"&&performance.now)?performance.now():Date.now();}
+// Compact position+size signature of an element's box; null when the element is gone. Captures BOTH the
+// slide's left travel and the frame-line inject's height growth, so any reflow that moves OR resizes shows up.
+function _tourRectKey(el){
+  if(!el)return null;
+  const r=el.getBoundingClientRect();
+  return r.left+"|"+r.top+"|"+r.width+"|"+r.height;
+}
+function _tourOnSettle(){if(_tourStep>=0)_tourLayout();}   // transitionend nudge — re-measure the instant a transition ends
 function _tourAttachSettle(){
-  _tourDetachSettle();                  // never stack listeners across steps
+  _tourDetachSettle();                  // never stack a watcher or listener across steps
   const step=TOUR_STEPS[_tourStep];
   const target=step&&step.sel?document.querySelector(step.sel):null;
-  if(target){_tourSettleEl=target;target.addEventListener("transitionend",_tourOnSettle);}
+  if(!target)return;                    // no-target step (absent element / centred fallback): nothing to track
+  _tourSettleEl=target;
+  target.addEventListener("transitionend",_tourOnSettle);
+  const start=_tourNow();
+  let lastKey=_tourRectKey(target),stableSince=start;
+  const tick=()=>{
+    if(_tourStep<0||_tourSettleEl!==target)return;   // stepped away / closed since this frame was queued — stand down, touch nothing
+    _tourSettleRAF=0;
+    const now=_tourNow();
+    const key=_tourRectKey(target);
+    if(key!==lastKey){                  // the box MOVED or RESIZED — re-measure the spotlight against the new box
+      lastKey=key;stableSince=now;
+      _tourLayout();
+    }
+    if(now-stableSince>=_TOUR_SETTLE_STABLE_MS)return;   // settled: the rect held for the quiet window -> stop watching
+    if(now-start>=_TOUR_SETTLE_CAP_MS)return;            // hard cap -> stop even if it is still twitching (never loop forever)
+    _tourSettleRAF=requestAnimationFrame(tick);
+  };
+  _tourSettleRAF=requestAnimationFrame(tick);
 }
 function _tourDetachSettle(){
+  if(_tourSettleRAF){cancelAnimationFrame(_tourSettleRAF);_tourSettleRAF=0;}
   if(_tourSettleEl){_tourSettleEl.removeEventListener("transitionend",_tourOnSettle);_tourSettleEl=null;}
 }
 
@@ -292,7 +330,7 @@ function _tourPosition(){
   const step=TOUR_STEPS[_tourStep];
   if(typeof step.enter==="function")step.enter();
   _tourLayout();
-  _tourAttachSettle();   // re-measure this step against its target's SETTLED rect once any slide-in transition ends
+  _tourAttachSettle();   // then WATCH the target's box: re-measure through the slide + async re-renders until it settles
 }
 function _tourLayout(){
   _tourLayoutRuns++;
@@ -348,7 +386,7 @@ function _tourLayout(){
 function _tourExitCurrent(){
   const s=TOUR_STEPS[_tourStep];
   if(s&&typeof s.exit==="function")s.exit();
-  _tourDetachSettle();   // drop this step's settle listener on every way out (Next/Back/close) — symmetric with attach
+  _tourDetachSettle();   // drop this step's settle watcher + listener on every way out (Next/Back/close) — symmetric with attach
 }
 function _tourNext(){
   if(_tourStep>=TOUR_STEPS.length-1){stopTour();return;}   // stopTour runs the exit hook itself
