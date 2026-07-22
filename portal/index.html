@@ -391,6 +391,10 @@
   .selbox .selnum{text-align:center;margin-bottom:2px}
   .selbox .biglab{font-size:12px;color:var(--muted)}
   .dsub a{color:var(--copper);text-decoration:none}            /* readable "Part of:" link */
+  /* owner 2026-07-22: org NAME is the ROR link now (logo badge gone). Accent colour so the <a> is readable
+     on the dark drawer panel instead of the UA-default dark blue (same fix as .meta td a in PR #80). */
+  .dsub a.orglink, .cust a.orglink{color:var(--copper);text-decoration:none}
+  .dsub a.orglink:hover, .cust a.orglink:hover{text-decoration:underline}
   .chip.collchip{background:var(--panel-2);color:var(--text);border:1px solid var(--copper);font-weight:600;cursor:pointer}
   .scard .scardhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .scard .scardhead h3{margin:0}
