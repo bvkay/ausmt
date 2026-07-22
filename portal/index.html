@@ -194,6 +194,13 @@
   .citebox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px;margin:6px 0;font-size:12px;line-height:1.5}
   .citebox .cb-row{display:flex;gap:6px;margin-top:8px}
   .meta td{font-size:12px;padding:2px 0;vertical-align:top}.meta td:first-child{color:var(--muted);padding-right:12px;white-space:nowrap}.meta td:last-child{font-family:var(--mono)}
+  /* Links inside .meta tables (the "survey collection"/"NCI collection" source-archive link, the survey-summary
+     collection link) had no colour set and fell back to the UA default dark blue — unreadable on the dark panel.
+     Give them the site accent (matches footer/.dsub/.surveymeta link treatment). Only <a>; body text unchanged. */
+  .meta td a{color:var(--copper);text-decoration:none}.meta td a:hover{text-decoration:underline}
+  /* Self-hosted identifier logos (ORCID next to an investigator, ROR next to an organisation) — small,
+     baseline-aligned, non-shrinking; vendor pngs are same-origin (CSP-safe). */
+  .idlogo{height:14px;width:auto;vertical-align:-2px;display:inline-block}
   .api{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 8px;margin-top:6px;word-break:break-all}
   .api b{color:var(--copper)}
 

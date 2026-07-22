@@ -93,8 +93,12 @@ def test_drawer_copy_removals(tmp_path):
     assert survey.count("Survey summary") == 1, "survey-summary heading missing"
     assert "processing software" in survey, "survey 'processing software' row missing"
     assert "tipper availability" in survey, "survey 'tipper availability' row missing"
-    assert "Screening indicators" in station, "station 'Screening indicators' section missing"
     assert "Related products" in station, "station 'Related products' section missing"
-    # SCOPE GUARD: the per-station completeness/smoothness line stays (it is NOT the removed survey row)
-    assert station.count("Automated completeness/smoothness check") == 1, \
-        "per-station completeness/smoothness line was wrongly removed (out of scope)"
+    # OWNER HIDE (2026-07-22): the screening SURFACE is hidden pending design review — the Screening tab +
+    # its panel body (the "Screening indicators" section AND the per-station "Automated completeness/smoothness
+    # check" line it carried) are reversibly commented out in drawer.js. These now assert ABSENCE (flipped from
+    # the prior presence pins). Restore both assertions to `in`/`== 1` when the screening surface is re-enabled.
+    assert "Screening indicators" not in station, \
+        "station still renders the (owner-hidden) 'Screening indicators' section"
+    assert station.count("Automated completeness/smoothness check") == 0, \
+        "station still renders the (owner-hidden) per-station completeness/smoothness line"

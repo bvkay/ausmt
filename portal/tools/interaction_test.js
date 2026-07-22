@@ -1046,13 +1046,16 @@ async function bootFreshWindow(dataMap) {
   // S. DIMENSIONALITY HIDDEN FROM SCREENING DISPLAYS (UX feedback round 3, item 7): removed from the
   // station-drawer screening grid (7a), the survey-card stats line (7b) and the survey-story table (7c) —
   // while the phase-tensor/skew and strike lines STAY (dimensionality is inferable from them).
-  // (a) station drawer: no "Dimensionality" cell, but the skew (|β|) + strike line remains.
+  // (a) station drawer: no "Dimensionality" cell. (OWNER HIDE 2026-07-22: the strike + mean-|β| lines lived
+  //     ONLY in the now-hidden Screening panel, so they are ABSENT too — flipped from the prior "KEPT" pins.
+  //     Restore the strike/|β| "KEPT" assertions when the Screening surface is re-enabled.)
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
   const drw = doc.getElementById("drawer");
   ok(drw.innerHTML.indexOf(">Dimensionality<") < 0, "station drawer still shows a 'Dimensionality' screening cell (item 7a)");
-  ok(drw.textContent.indexOf("phase-tensor strike") >= 0, "station drawer lost the strike line (must be KEPT)");
-  ok(drw.innerHTML.indexOf("mean |β|") >= 0 || drw.innerHTML.indexOf("|β|") >= 0,
-    "station drawer lost the mean |β| (skew) figure (must be KEPT)");
+  ok(drw.textContent.indexOf("phase-tensor strike") < 0,
+    "OWNER HIDE: the strike line must be absent while the Screening panel is owner-hidden");
+  ok(drw.innerHTML.indexOf("Screening indicators") < 0,
+    "OWNER HIDE: the Screening panel prose must be absent while screening is hidden");
   drw.classList.remove("open");
   // (b) survey card stats line: no "N×3-D / N×2-D / N×1-D" fragment.
   ok(A.cardHtml("Beta Survey").indexOf("×3-D") < 0 && A.cardHtml("Beta Survey").indexOf("x3-D") < 0,
@@ -1230,25 +1233,31 @@ async function bootFreshWindow(dataMap) {
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "WaveC: the A1 drawer did not open");
 
-  // (a) UX8 (X4): FIVE tabs (Overview folded into Response), each role=tab, in the mandated order.
+  // (a) UX8 (X4): FOUR tabs, each role=tab, in the mandated order. (OWNER HIDE 2026-07-22: the Screening tab is
+  //     reversibly commented out in drawer.js pending design review, so the count is 4, "screening" is absent
+  //     from the order AND the DOM. Restore the 5-tab order + the Screening click test below when re-enabled.)
   //     FAILS if a tab is missing, mis-roled, reordered, or if the retired Overview tab reappears.
   const tabsV = [...drwV.querySelectorAll('[role="tab"]')];
-  ok(tabsV.length === 5, "C1/X4: expected 5 role=tab buttons (Overview folded away), got " + tabsV.length);
-  const wantTabs = ["response", "screening", "files", "provenance", "cite"];
+  ok(tabsV.length === 4, "C1/X4: expected 4 role=tab buttons (Overview folded away, Screening owner-hidden), got " + tabsV.length);
+  const wantTabs = ["response", "files", "provenance", "cite"];
   ok(wantTabs.every((n, k) => tabsV[k] && tabsV[k].dataset.tab === n),
-    "C1/X4: tab order/ids drifted from Response/Screening/Files/Provenance/Cite, got " +
+    "C1/X4: tab order/ids drifted from Response/Files/Provenance/Cite, got " +
     JSON.stringify(tabsV.map(t => t.dataset.tab)));
+  ok(drwV.querySelector('#dt-screening') == null && drwV.querySelector('#dp-screening') == null,
+    "OWNER HIDE: the Screening tab/panel must be ABSENT (owner-hidden pending design review)");
   ok(drwV.querySelector('#dt-overview') == null && drwV.querySelector('#dp-overview') == null,
     "X4: the Overview tab/panel must be GONE (folded into the Response tab's Station summary)");
   ok(drwV.querySelector('[role="tablist"]') != null, "C1: no role=tablist container in the drawer");
 
   // (b) UX8 (X4): Response is DEFAULT-selected; its panel is visible, the others hidden. FAILS if another
   //     tab wins (e.g. a revert to the Overview-default).
-  const rsTab = drwV.querySelector('#dt-response'), scTab = drwV.querySelector('#dt-screening');
-  const rsPanel = drwV.querySelector('#dp-response'), scPanel = drwV.querySelector('#dp-screening');
+  // (OWNER HIDE 2026-07-22: the Screening tab is hidden, so the "non-Response hidden by default" check now
+  // rides the Files tab instead of Screening.)
+  const rsTab = drwV.querySelector('#dt-response'), filesTab = drwV.querySelector('#dt-files');
+  const rsPanel = drwV.querySelector('#dp-response'), filesPanel = drwV.querySelector('#dp-files');
   ok(rsTab.getAttribute("aria-selected") === "true", "X4: the Response tab must be aria-selected by default");
   ok(rsPanel && rsPanel.hidden === false, "X4: the Response panel must be visible by default");
-  ok(scPanel && scPanel.hidden === true, "X4: non-Response panels must be hidden by default");
+  ok(filesPanel && filesPanel.hidden === true, "X4: non-Response panels must be hidden by default");
 
   // (c) UX8 (X4): the Response tab leads with the plots (an OPEN station renders svg plot paths there), and
   //     the former Overview facts live in a collapsible "Station summary" <details> UNDER the plots — not a
@@ -1269,19 +1278,24 @@ async function bootFreshWindow(dataMap) {
   const citeAction = drwV.querySelector(".dtop .dl-cite");
   ok(citeAction != null && citeAction.dataset.tab === "cite", "C1: the sticky-header Cite action must target the Cite tab");
 
-  // (e) clicking Screening activates it (roving tabindex + hidden toggle); switching back restores Response.
-  fire(scTab, "click");
-  ok(scPanel.hidden === false && rsPanel.hidden === true,
-    "C1: clicking the Screening tab did not activate its panel / hide Response");
-  ok(scTab.getAttribute("aria-selected") === "true" && rsTab.getAttribute("aria-selected") === "false",
-    "C1: aria-selected did not move to Screening on click");
+  // (e) clicking a non-default tab activates it (roving tabindex + hidden toggle); switching back restores
+  //     Response. (OWNER HIDE 2026-07-22: this rode the Screening tab; it now rides Files while Screening is
+  //     hidden — restore the Screening target when the tab is re-enabled.)
+  fire(filesTab, "click");
+  ok(filesPanel.hidden === false && rsPanel.hidden === true,
+    "C1: clicking the Files tab did not activate its panel / hide Response");
+  ok(filesTab.getAttribute("aria-selected") === "true" && rsTab.getAttribute("aria-selected") === "false",
+    "C1: aria-selected did not move to Files on click");
   fire(rsTab, "click");   // restore Response default for later helpers
 
-  // (f) C2: section-role chips render with the engine taxonomy (muted, plain text).
+  // (f) C2: section-role chips render with the engine taxonomy (muted, plain text). (OWNER HIDE 2026-07-22:
+  //     the "Automated screening" role chip lived ONLY on the now-hidden Screening panel, so the drawer now
+  //     carries the two surviving labels; assert its ABSENCE and restore the third when the tab returns.)
   ok(drwV.querySelector(".rolechip") != null, "C2: no section-role chips (.rolechip) rendered");
-  ok(drwV.innerHTML.indexOf("Source data") >= 0 && drwV.innerHTML.indexOf("Automated screening") >= 0 &&
-     drwV.innerHTML.indexOf("AusMT-derived") >= 0,
-    "C2: the three role-chip taxonomy labels (Source data / Automated screening / AusMT-derived) are not all present");
+  ok(drwV.innerHTML.indexOf("Source data") >= 0 && drwV.innerHTML.indexOf("AusMT-derived") >= 0,
+    "C2: the surviving role-chip taxonomy labels (Source data / AusMT-derived) are not both present");
+  ok(drwV.innerHTML.indexOf("Automated screening") < 0,
+    "OWNER HIDE: the 'Automated screening' role chip must be absent (it rode the owner-hidden Screening panel)");
 
   // (g) C3: marker-shape differentiation — the yx series draws <rect> squares, the xy series keeps <circle>.
   //     FAILS if both series share a marker glyph again (colour-only differentiation). Colours stay frozen.
@@ -1677,12 +1691,15 @@ async function bootFreshWindow(dataMap) {
   const iNA = byKey(A.screeningIndicators({ q: null, azR: null, azN: 0, beta: null, phaseSplit: null, decades: null }));
   ok(KEYS.every(k => iNA[k].state === "na"), "X5: a not-computable input must render 'na' (not evaluated), never a fabricated green, got " + JSON.stringify(KEYS.map(k => k + ":" + iNA[k].state)));
   ok(iNA.smoothness.word === "not evaluated", "X5: an 'na' indicator must say 'not evaluated'");
-  // the RENDERED Screening tab: five indicator rows + a 'Show details' expander preserving the full prose.
+  // OWNER HIDE (2026-07-22): the Screening tab/panel is reversibly commented out in drawer.js pending design
+  // review, so the RENDERED panel is ABSENT. The pure screeningIndicators() model above is UNCHANGED (helpers
+  // left intact), so re-enabling the tab is uncommenting only. Restore the rendered-panel pins (five .indrow
+  // rows + 'Show details' expander + strike prose) when the Screening surface returns.
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   const scP = doc.getElementById("dp-screening");
-  ok(scP.querySelectorAll(".indrow").length === 5, "X5: the Screening tab must render five indicator rows, got " + scP.querySelectorAll(".indrow").length);
-  ok([...scP.querySelectorAll("details summary")].some(su => /Show details/.test(su.textContent)), "X5: the Screening tab must carry a 'Show details' expander");
-  ok(/phase-tensor strike/.test(scP.textContent), "X5: the full screening prose (strike line) must be preserved inside the 'Show details' expander");
+  ok(scP == null, "OWNER HIDE: the Screening panel (#dp-screening) must be ABSENT (owner-hidden pending design review)");
+  ok(doc.getElementById("drawer").innerHTML.indexOf("Screening indicators") < 0,
+    "OWNER HIDE: the 'Screening indicators' section must not render while the Screening surface is hidden");
   doc.getElementById("drawer").classList.remove("open");
 
   // X7. DATASET MATURITY — stars = achieved RECORD-STEWARDSHIP dimensions (NOT scientific quality). PURE
@@ -1774,13 +1791,15 @@ async function bootFreshWindow(dataMap) {
   ok(_monotone, "CVD: relative luminance must rise monotonically along the ramp (lightness IS the signal) — the old red→amber→green ramp fails this");
   ok(_relLum(A.qColor(5)) - _relLum(A.qColor(2)) > 0.5,
     "CVD: the ramp must span a LARGE lightness range (Y gap > 0.5), got " + (_relLum(A.qColor(5)) - _relLum(A.qColor(2))).toFixed(3));
-  // (d) drawer render: the Station summary's completeness row carries the .qvdot swatch, and no element
-  // in the drawer uses a qColor hex as a TEXT colour (the pre-amendment pattern was style="color:<ramp>").
+  // (d) drawer render: (OWNER HIDE 2026-07-22: the Station summary "completeness" row — the only .qvdot ramp
+  //     swatch in the drawer — is reversibly hidden pending design review, so the swatch is ABSENT. The pure
+  //     qColor ramp model above is UNCHANGED (helper intact); restore the .qvdot-present pin when the
+  //     completeness row is re-enabled.) The surviving invariant: no element uses a qColor hex as a TEXT
+  //     colour (the pre-amendment style="color:<ramp>" anti-pattern).
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   const rsPanelQ = doc.getElementById("dp-response");
-  const qdot = rsPanelQ.querySelector(".qvdot");
-  ok(qdot != null, "CVD: the Station summary completeness row must render a .qvdot ramp swatch");
-  ok(/background:\s*#/.test(qdot.getAttribute("style") || ""), "CVD: the .qvdot must carry the ramp colour as its background");
+  ok(rsPanelQ.querySelector(".qvdot") == null,
+    "OWNER HIDE: the .qvdot completeness swatch must be absent while the completeness row is owner-hidden");
   const _rampTextColours = [...doc.getElementById("drawer").querySelectorAll('[style*="color:#"]')]
     .filter(el => /color:\s*#(2a3b66|6e7f46|f2e27e)/i.test(el.getAttribute("style") || ""));
   ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (dark ends are unreadable on the dark panel)");
