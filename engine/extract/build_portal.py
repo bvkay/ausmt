@@ -572,6 +572,12 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         for k in ("attribution", "sources", "changes"):
             if m.get(k) is not None:
                 entry[k] = m[k]
+        # §2a (identifiers design): the typed provenance relations, PRESENT ONLY when the survey declares
+        # any — a survey without them keeps a byte-identical entry (mtcat.schema.json is additionalProperties
+        # :true). SMETA carries this as always-a-list ([] when absent); emit only the non-empty list so the
+        # posture matches the sources/attribution/changes blocks above rather than shipping empty arrays.
+        if m.get("related_identifiers"):
+            entry["related_identifiers"] = m["related_identifiers"]
         surveys.append(entry)
     stations = [{"station_id": r["ausmt_id"], "survey_id": slug_of.get(r["survey"], slugify(r["survey"])),
                  "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"]}
@@ -749,6 +755,32 @@ def _publications_of(y: dict) -> list:
     return out
 
 
+def _related_identifiers_of(y: dict) -> list:
+    """§2a (identifiers design — the related-identifiers model): the top-level related_identifiers list,
+    passed through carrying ONLY the typed-core keys the drawer renders — identifier, identifier_type,
+    relation, custodian. The stored entry may hold the wider SOURCE_KEYS allow-list (it TYPES the C46
+    sources[] object); the portal only needs the four that drive a labelled, typed link, so the rest are
+    dropped here rather than shipped to surveys.json. Non-mapping entries are skipped (never crash) —
+    mirroring _funders_of's tolerance. Like funders, this is always a list (possibly empty): an absent
+    list yields [], which the drawer treats as 'render nothing' (identifiersHtml checks emptiness)."""
+    out = []
+    for r in (y.get("related_identifiers") or []):
+        if not isinstance(r, dict):
+            continue
+        out.append({"identifier": r.get("identifier"), "identifier_type": r.get("identifier_type"),
+                    "relation": r.get("relation"), "custodian": r.get("custodian")})
+    return out
+
+
+def _instrument_pid_of(y: dict):
+    """§2b (identifiers design): identifiers.instrument_pid — the ONE survey/platform-level instrument
+    PID (the PIDINST platform DOI), verbatim or None. Distinct from the per-instrument `pid`s carried by
+    _instruments_of; this is the survey-wide platform identifier the editor added in wave 1."""
+    ids = y.get("identifiers", {}) or {}
+    v = ids.get("instrument_pid") if isinstance(ids, dict) else None
+    return (str(v).strip() or None) if v not in (None, "") else None
+
+
 def survey_meta_from_yaml(y: dict) -> dict:
     """Map a survey.yaml into the portal's surveys.json entry shape (SMETA), composing the per-facet
     mappers above. Tolerant of both the Prototype-20 structured schema and the older flat schema."""
@@ -781,6 +813,8 @@ def survey_meta_from_yaml(y: dict) -> dict:
         "doi": ids.get("dataset_doi"),
         "pid": ids.get("survey_pid"),
         "raid": _raid_of(y),                  # C7: identifiers.project_raid -> a RAiD link in identifiersHtml
+        "related_identifiers": _related_identifiers_of(y),  # §2a: typed provenance relations (always a list; [] => drawer renders nothing)
+        "instrument_pid": _instrument_pid_of(y),  # §2b: survey/platform-level instrument PID (PIDINST DOI) or None
         "instrument_model": _instrument_model_of(y),
         "dates": _date_range_of(y),
         "year_start": year_start, "year_end": year_end,   # S3: modeller year-range filter (ints|null)
