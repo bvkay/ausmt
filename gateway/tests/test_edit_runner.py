@@ -695,6 +695,31 @@ def test_process_edit_job_writes_done_result(tmp_path):
     assert result["ok"] is True and result["version"] == "1.0.0"
 
 
+def test_process_edit_job_read_with_unquoted_embargo_date_writes_iso(tmp_path):
+    """LIVE-crash pin (RED pre-fix: `TypeError: Object of type date is not JSON serializable` at
+    jobs._atomic_write_json). A published survey.yaml carrying an UNQUOTED ISO embargo
+    (`access.embargo_until: 2027-02-01`) loads that field as a datetime.date; the read job's
+    editable_subset carries it into the result dict, and writing the done-file crash-looped the runner
+    — the job never completed, was re-claimed on restart, and blocked ALL metadata reads. After the fix
+    the done-file writer ISO-formats the date, so the job completes and the date round-trips as a
+    string exactly as the pipeline (and the editor form) expect."""
+    survey = ("name: Demo survey\nversion: 1.2.0\naccess:\n  level: open\n"
+              "  embargo_until: 2027-02-01\n  contact: data@example.org\n"
+              "custom_local_note: keep\n")
+    _write_package(tmp_path / "surveys-live", yaml_text=survey)
+    cfg = _cfg(tmp_path)
+    dirs = edit.edit_dirs(cfg.jobs_dir)
+    (dirs["pending"] / "embargo1.json").write_text(
+        json.dumps({"kind": "read", "slug": "demo-survey-2026"}), encoding="utf-8")
+    claimed = edit.claim_edit_job(cfg.jobs_dir)
+    edit.process_edit_job(cfg, claimed)                 # must NOT raise / crash-loop
+    assert not claimed.exists()                          # job COMPLETED (running-file removed)
+    result = json.loads((dirs["done"] / "embargo1.json").read_text(encoding="utf-8"))
+    assert result["ok"] is True
+    # the unquoted date survived as an ISO string in the JSON-serialised result
+    assert result["fields"]["access"]["embargo_until"] == "2027-02-01"
+
+
 def test_process_edit_job_never_raises(tmp_path):
     # Refusals AND unexpected garbage both land as {ok:False} result files — an edit job is
     # request/response, so a missing result would strand the polling gateway until timeout.

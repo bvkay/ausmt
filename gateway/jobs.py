@@ -7,9 +7,11 @@ writes done. No PII crosses this boundary — a pending job carries only ids and
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 # done-file outcomes (design §5.4). Anything else is treated as a malformed done-file and ignored
@@ -24,12 +26,31 @@ def ensure_dirs(jobs_dir: Path) -> None:
         (jobs_dir / sub).mkdir(parents=True, exist_ok=True)
 
 
+def _json_default(obj):
+    """json.dump `default=` hook for the job protocol. A survey.yaml that carries an UNQUOTED ISO date
+    (e.g. `embargo_until: 2027-02-01`) is loaded by ruamel/PyYAML into a datetime.date, which then
+    flows through an edit-job RESULT dict (the read job's editable_subset, a merge/list_stations
+    result, ...). A plain json.dump could not serialise it and the runner CRASHED writing the done-file
+    — the job never completed, was re-claimed on restart, and blocked ALL metadata reads. Here any
+    date/datetime/time is ISO-formatted (datetime is a datetime.date subclass, so the one isinstance
+    covers both) and a Decimal is stringified to preserve exact precision. Anything else is a genuine
+    programming error, so we RAISE TypeError (json's own behaviour) rather than a blind str() catch-all
+    — a truly unexpected object must surface as a bug, not be silently coerced into a persisted file."""
+    if isinstance(obj, (datetime.date, datetime.time)):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def _atomic_write_json(path: Path, obj: dict) -> None:
     """tmp+fsync+rename so a partially-written job file is never visible to the peer. The tmp name
-    is peer-invisible (it is not <id>.json) so a claim/ingest scan never races a half-written file."""
+    is peer-invisible (it is not <id>.json) so a claim/ingest scan never races a half-written file.
+    `default=_json_default` ISO-formats any date/datetime a survey.yaml unquoted-date carried into the
+    result (the crash class that crash-looped the runner and blocked metadata reads)."""
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(obj, fh)
+        json.dump(obj, fh, default=_json_default)
         fh.flush()
         os.fsync(fh.fileno())
     tmp.replace(path)
