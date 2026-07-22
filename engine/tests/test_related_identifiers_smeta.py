@@ -8,8 +8,6 @@ no 'instrument_pid' key; a non-mapping entry crashes/leaks; mtcat surveys omit r
 import sys
 from pathlib import Path
 
-import pytest
-
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
