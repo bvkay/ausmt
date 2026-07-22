@@ -140,10 +140,17 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     # licence AS OBTAINED — a vocab-validated <select> (the SAME contract vocab as the top-level
     # licence, killing the free-text seam here too); profile is the custodian attribution-profile key.
     # Keys are the FROZEN sources allow-list — byte-identical to the surveys validator's SOURCE_KEYS.
+    # §2a FOLLOWUP: the related-identifiers model TYPES this SAME object (SOURCE_KEYS carries relation +
+    # identifier_type), so the row models them too — the identical FAIL-CLOSED <select> presets the
+    # related_identifiers row uses. Without them a hand-added typed key on a sources[] entry DROPS on any
+    # edit: the render prefills only the modelled sub-keys and the assembler reads back only those, so a
+    # stored relation/identifier_type never round-trips (proven RED in test_editor_sources_typed_roundtrip).
     "sources": [
         ("title", "Title", "e.g. AusLAMP SA – NCI/AuScope archive", "text"),
         ("custodian", "Custodian", "e.g. NCI / AuScope", "text"),
         ("identifier", "Identifier (DOI / eCat / SARIG / URL)", "10.25914/… or a URL", "text"),
+        ("identifier_type", "Identifier type", "", "identifier_type"),
+        ("relation", "Relation", "", "relation"),
         ("licence", "Licence (as obtained)", "", "license"),
         ("retrieved", "Retrieved (date or year)", "2016 or 2016-05-01", "text"),
         ("statement", "Attribution statement", "verbatim required wording, if prescribed (optional)", "text"),
