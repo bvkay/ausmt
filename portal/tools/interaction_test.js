@@ -1021,17 +1021,21 @@ async function bootFreshWindow(dataMap) {
   // P. PID LINKS (PID schema + goal-2 proof). Rendered PIDs must be REAL clickable <a href> anchors,
   //    not plain text, and a HOSTILE pid must render INERT (no executable href, no HTML injection).
   //
-  //    P1 — SURVEY drawer (openSurvey -> identifiersHtml): survey_pid (m.pid) and each instrument's
-  //    registry pid from the additive instruments[] list. The hostile instrument pid (javascript:alert(1))
-  //    must be neutralised by the escUrl guard (rewritten to the safe handle host — the SAME behaviour as
-  //    the already-tested survey_pid pidLink), so NO href carries a javascript: scheme.
+  //    P1 — SURVEY drawer (openSurvey -> identifiersHtml): each instrument's registry pid from the additive
+  //    instruments[] list renders as a REAL clickable <a href>, and the hostile instrument pid
+  //    (javascript:alert(1)) must be neutralised by the escUrl guard (rewritten to the safe handle host), so
+  //    NO href carries a javascript: scheme. IDCONS D2: the legacy "Survey PID" (m.pid) ROW is RETIRED from
+  //    display — never minted, it read "not recorded" on every real survey — so the drawer must NOT render a
+  //    "Survey PID" label nor the m.pid handle link (the field is still served; only the row is gone).
   const dpid = doc.getElementById("drawer");
   dpid.classList.remove("open");
   win.location.hash = "#/survey/alpha"; A.routeFromHash();
   ok(dpid.classList.contains("open"), "PID: #/survey/alpha did not open Alpha's drawer");
   let hrefs = [...dpid.querySelectorAll("a[href]")].map(a => a.getAttribute("href"));
-  ok(hrefs.some(h => h === "https://hdl.handle.net/survey/alpha-pid"),
-    "PID: survey_pid (m.pid) did not render as a clickable <a href> to its handle URL; hrefs=" + JSON.stringify(hrefs));
+  ok(!/Survey PID:/.test(dpid.innerHTML),
+    "IDCONS D2: the retired 'Survey PID' row must NOT render in the survey drawer");
+  ok(!hrefs.some(h => h === "https://hdl.handle.net/survey/alpha-pid"),
+    "IDCONS D2: the retired survey_pid (m.pid) must NOT render as a clickable handle link; hrefs=" + JSON.stringify(hrefs));
   ok(hrefs.some(h => h === "https://instruments.auscope.org.au/system/LEMI-423-007"),
     "PID: a good instruments[].pid did not render as a clickable <a href>; hrefs=" + JSON.stringify(hrefs));
   ok(!hrefs.some(h => /^javascript:/i.test((h || "").trim())),
@@ -1611,15 +1615,17 @@ async function bootFreshWindow(dataMap) {
   ok(drwE.classList.contains("open"), "E2/E4: #/survey/alpha did not open the survey detail");
   ok(drwE.getAttribute("role") === "dialog", "E7: the drawer must carry role=dialog");
   ok(/Alpha Survey/.test(drwE.getAttribute("aria-label") || ""), "E7: the survey drawer aria-label must name the survey, got: " + JSON.stringify(drwE.getAttribute("aria-label")));
-  // E2: the identifiers block is a collapsed <details> summarising 'N of M recorded' (Alpha: pid+doi = 2 of 4).
+  // E2: the identifiers block is a collapsed <details> summarising 'N of M recorded'. IDCONS D2: the retired
+  // Survey PID slot is dropped from the rollup (3 slots: dataset DOI / org ROR / project RAiD), so Alpha
+  // (doi only) reads 1 of 3.
   const idDetails = [...drwE.querySelectorAll("details")].find(d => /Persistent identifiers:/.test(d.querySelector("summary") ? d.querySelector("summary").textContent : ""));
   ok(idDetails, "E2: the survey detail must carry a <details> whose summary is the identifiers rollup");
-  ok(/Persistent identifiers: 2 of 4 recorded/.test(idDetails.querySelector("summary").textContent),
-    "E2: the rollup summary must read 'Persistent identifiers: 2 of 4 recorded' for Alpha (pid+doi), got: " + idDetails.querySelector("summary").textContent);
+  ok(/Persistent identifiers: 1 of 3 recorded/.test(idDetails.querySelector("summary").textContent),
+    "E2: the rollup summary must read 'Persistent identifiers: 1 of 3 recorded' for Alpha (doi only, pid slot retired), got: " + idDetails.querySelector("summary").textContent);
   // E2: the explicit per-row list (with its honest 'not recorded' rows) is COLLAPSED inside, never deleted.
   ok(/Organisation ROR/.test(idDetails.innerHTML) && /not recorded/.test(idDetails.innerHTML),
     "E2: the collapsed body must still contain the full identifier list incl. 'not recorded' rows");
-  ok(/hdl\.handle\.net\/survey\/alpha-pid/.test(idDetails.innerHTML), "E2: the collapsed body must still render the recorded Survey PID link");
+  ok(!/Survey PID:/.test(idDetails.innerHTML), "IDCONS D2: the retired 'Survey PID' row must be gone from the rollup body");
   // E4: section order. Description before footprint; downloads ahead of funding/publications/identifiers;
   // release history last (before the extra Related-surveys block).
   const H = drwE.innerHTML, at = s => H.indexOf(s);

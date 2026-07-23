@@ -3756,16 +3756,33 @@ def _profile_select_widget(name: str, label: str, value) -> str:
             f'<select name="{_esc(name)}">{"".join(opts)}</select></p>')
 
 
-def _typed_vocab_select_widget(name: str, label: str, value, options: tuple) -> str:
+# IDCONS D1 (SPEC §2.2) — plain-language display text for the relation <select>. The option VALUE stays
+# the exact DataCite vocab (RELATION_TYPES, POSTed byte-identically so the fail-closed validator sees the
+# same token); only the human-facing option TEXT is expanded so a geophysicist who never read the spec can
+# tell which relation to pick. Any vocab not mapped here falls back to its raw token.
+_RELATION_DISPLAY = {
+    "IsDerivedFrom": "Derived from (this data was processed from it)",
+    "IsVariantFormOf": "Variant form of (same dataset, another archive)",
+    "IsSupplementTo": "Supplement to (this record supplements another)",
+    "Cites": "Cites (this dataset cites it)",
+}
+
+
+def _typed_vocab_select_widget(name: str, label: str, value, options: tuple,
+                               display_labels: dict | None = None) -> str:
     """§2a: a FAIL-CLOSED <select> for a typed related-identifiers preset — relation (RELATION_TYPES)
     or identifier_type (IDENTIFIER_TYPES). Same C46 vocab-select discipline as _profile_select_widget:
     a leading blank leaves it unset, and an out-of-vocab STORED value is shown as its own selected
     option so the curator sees and can correct it (never silently coerced, never crashes). Server-
-    rendered, no JS (CSP unaffected). `options` is the ordered preset tuple from editor_form."""
+    rendered, no JS (CSP unaffected). `options` is the ordered preset tuple from editor_form.
+    `display_labels` (IDCONS D1) maps a vocab value to human-facing option TEXT — the option VALUE is
+    ALWAYS the raw vocab token, so the POST is byte-identical and the validator stays fail-closed."""
     cur = str(value) if value not in (None, "") else ""
+    labels = display_labels or {}
     opts = [f'<option value=""{" selected" if cur == "" else ""}>(none)</option>']
     for opt in options:
-        opts.append(f'<option value="{_esc(opt)}"{" selected" if opt == cur else ""}>{_esc(opt)}</option>')
+        text = labels.get(opt, opt)
+        opts.append(f'<option value="{_esc(opt)}"{" selected" if opt == cur else ""}>{_esc(text)}</option>')
     if cur and cur not in options:
         opts.append(f'<option value="{_esc(cur)}" selected>{_esc(cur)} (stored value)</option>')
     return (f'<p><label class="k">{_esc(label)}</label>'
@@ -3831,7 +3848,8 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
             cells.append(_profile_select_widget(name, label, val))
             continue
         if kind == "relation":                      # §2a related_identifiers[].relation — vocab <select>
-            cells.append(_typed_vocab_select_widget(name, label, val, editor_form.RELATION_TYPES))
+            cells.append(_typed_vocab_select_widget(name, label, val, editor_form.RELATION_TYPES,
+                                                    display_labels=_RELATION_DISPLAY))
             continue
         if kind == "identifier_type":               # §2a related_identifiers[].identifier_type — vocab <select>
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.IDENTIFIER_TYPES))
@@ -4004,10 +4022,16 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
                 '</template>')
     return (
         '<h3 class="k">This dataset elsewhere</h3>'
-        '<p class="sub">The ONE place a dataset-level DOI or PID is recorded — a typed relation to an '
-        'identifier AusMT does not own (e.g. the NCI collection DOI). Pick the relation and identifier type '
-        'from the lists; a mis-typed value is refused. Use the check button to see whether a DOI resolves '
-        'today (a freshly-reserved NCI DOI that 404s is normal and still saves).</p>'
+        '<p class="sub">Every DOI or PID this survey already has at another archive goes here — one row '
+        'each. This is the ONLY place a dataset-level DOI/PID is recorded; there is no separate "dataset '
+        'DOI" box any more.</p>'
+        # IDCONS D1 (SPEC §2.2) — the WHERE-DOES-IT-GO cheat line: the owner complaint is that a curator
+        # cannot tell which row a given identifier belongs in. This maps the three common cases to a relation.
+        '<p class="sub" style="border-left:3px solid #2E4254;padding-left:.6rem">'
+        '<b>Where does it go?</b><br>'
+        '&bull; Raw time-series collection at NCI &rarr; relation <b>Derived from</b>.<br>'
+        '&bull; The same dataset published at another archive &rarr; <b>Variant form of</b>.<br>'
+        '&bull; A paper or report about this survey &rarr; add it under <b>Publications</b>, not here.</p>'
         + _section_error_html(err_map.get(section))
         + f'<div data-editor-rows="{section}">{"".join(rendered)}</div>'
         + add_btn + template
@@ -4036,16 +4060,21 @@ def _sources_identifier_summary(fields: dict) -> str:
             'carry licence/attribution payload beyond the identifier.</p>')
 
 
-def _identifiers_and_pids_panel(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """IDCONS D1 (SPEC §2) — the ONE consolidated "Identifiers & PIDs" editor page, three groups:
+def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
+    """IDCONS D1 (SPEC §2) — the ONE consolidated "Identifiers & PIDs" editor content, three groups:
     (a) THIS SURVEY (read-only ausmt id + project RAiD), (b) THIS DATASET ELSEWHERE (the typed
     related_identifiers list — the sole dataset-PID editor), (c) INSTRUMENT (the survey/platform PID).
     Replaces the old five-section identifier scatter. The retired flat inputs (dataset_doi, collection_pid,
     related_publication(+doi), project, per-row instrument pid) are GONE from the UI; their schema keys stay
-    readable and round-trip via the editor_form carry-forward. The o_identifiers snapshot + advanced-JSON
-    ride this panel so the identifiers map section (project_raid/instrument_pid + any carried retired key)
-    still round-trips. ORCID stays with people; ROR with the organisation; per-publication DOIs in
-    Publications."""
+    readable and round-trip via the editor_form carry-forward.
+
+    Returns the INNER content only (no outer panel div): the full form wraps it via
+    _identifiers_and_pids_panel; the hub places it inside its own per-section <form> panel. Because the
+    content carries BOTH the identifiers map widgets (s_identifiers_*) + o_identifiers snapshot AND the
+    related_identifiers list rows (l_related_identifiers_*) + o_related_identifiers snapshot, a SINGLE
+    section post round-trips BOTH sections: build_section_patch iterates every widget section and picks up
+    whichever snapshots/widgets are present, so no combined-section shim is needed. ORCID stays with people;
+    ROR with the organisation; per-publication DOIs in Publications."""
     idmap = "identifiers"
     raid_val = _sub_value(idmap, "project_raid", fields, submitted)
     instr_val = _sub_value(idmap, "instrument_pid", fields, submitted)
@@ -4066,7 +4095,6 @@ def _identifiers_and_pids_panel(slug: str, fields: dict, submitted: dict | None,
     )
     errline = _section_error_html(err_map.get(idmap))
     return (
-        '<div class="panel" data-editor-section="related_identifiers">'
         '<h2>Identifiers &amp; PIDs</h2>'
         '<p class="sub">Every persistent identifier for this survey and dataset lives here. ORCID stays '
         'with people, ROR with the organisation, and per-publication DOIs in Publications.</p>'
@@ -4077,8 +4105,17 @@ def _identifiers_and_pids_panel(slug: str, fields: dict, submitted: dict | None,
         f'{_sources_identifier_summary(fields)}'
         f'{_snapshot_hidden(idmap, fields)}'
         f'{_advanced_json_details(idmap, fields)}'
-        '</div>'
     )
+
+
+def _identifiers_and_pids_panel(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
+    """The full-form (render_edit_form) wrapper — the consolidated inner content in a standalone panel.
+    The hub path renders the inner directly inside its own per-section form panel instead (so the panel
+    div is not doubled). data-editor-section stays "related_identifiers" so the JS row-add/remove
+    behaviour and the CSP sweep see the same hook the standalone panel exposed."""
+    return ('<div class="panel" data-editor-section="related_identifiers">'
+            + _identifiers_and_pids_inner(slug, fields, submitted, err_map)
+            + '</div>')
 
 
 def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token: str,
@@ -4471,6 +4508,18 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # (toc key, title, panel-inner-html)
     sections: list[tuple[str, str, str]] = [("_scalars", "Core fields", scalar_panel_inner)]
     for section in _SECTION_ORDER:
+        # IDCONS D1 (SPEC §2): the hub renders the SAME consolidated "Identifiers & PIDs" content the full
+        # form does — ONE section (keyed "identifiers", the map section's own key so its snapshot/patch
+        # scoping is unchanged) that folds in the typed related_identifiers list (group b). The standalone
+        # "Related identifiers" section is skipped so the sidebar shows ONE entry, not two. The single
+        # section post round-trips BOTH the identifiers map and the related_identifiers list rows because
+        # the content carries both groups' widgets + both o_<section> snapshots (see the inner's docstring).
+        if section == "identifiers":
+            inner = _identifiers_and_pids_inner(slug, fields, submitted, err_map)
+            sections.append(("identifiers", "Identifiers & PIDs", inner))
+            continue
+        if section == "related_identifiers":
+            continue  # folded into the consolidated Identifiers & PIDs section above
         if section in editor_form.MAP_SECTIONS:
             # H4 inline error: the flagged map section's name input goes red with the contract's
             # explanatory copy (the mockup's own example).

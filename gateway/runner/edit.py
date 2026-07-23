@@ -86,7 +86,14 @@ _EDI_SUBPATH = ("transfer_functions", "edi")
 EDITABLE_SCALARS = ("project_name", "name", "region", "abstract", "license")
 EDITABLE_MAPS = ("organisation", "identifiers", "collection", "processing", "access",
                  "time_series", "care", "lead_investigator")
-EDITABLE_LISTS = ("principal_investigators", "publications", "funding", "instruments")
+# IDCONS D1 (SPEC §2.2): related_identifiers is the SOLE dataset-PID editor — the consolidated
+# "Identifiers & PIDs" page writes dataset-level DOIs/PIDs here as typed rows. It is a modelled LIST_SECTION
+# widget (editor_form.LIST_SECTIONS), so a changed list MUST be patchable or the curator's edit is rejected
+# as non-editable. Added here so the widget round-trips end-to-end (an UNCHANGED list still assembles to
+# _OMIT and never reaches this allow-list; only a real change is patched, replacing the list wholesale like
+# the other editable lists). (sources[] is the sibling wave-2 widget with the same gap — tracked separately.)
+EDITABLE_LISTS = ("principal_investigators", "publications", "funding", "instruments",
+                  "related_identifiers")
 EDITABLE_KEYS = EDITABLE_SCALARS + EDITABLE_MAPS + EDITABLE_LISTS
 
 
