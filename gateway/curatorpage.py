@@ -371,6 +371,25 @@ EDITOR_UI_JS = """
     if (rem) {
       var r = rem.closest('[data-editor-row]');
       if (r) r.parentNode.removeChild(r);
+      return;
+    }
+    // IDCONS D5: the per-identifier resolution status chip. Read this row's identifier input, ask the
+    // gateway to HEAD doi.org server-side (same-origin, session cookie), and write the verdict into the
+    // chip. Advisory only — it never touches the form value and never blocks saving.
+    var chk = ev.target && ev.target.closest && ev.target.closest('[data-pid-check]');
+    if (chk) {
+      var row = chk.closest('[data-editor-row]');
+      if (!row) return;
+      var input = row.querySelector('input[name$="_identifier"]');
+      var chip = row.querySelector('[data-pid-chip]');
+      var id = input ? String(input.value || '').trim() : '';
+      if (!id) { if (chip) chip.textContent = 'enter an identifier first'; return; }
+      if (chip) chip.textContent = 'checking\\u2026';
+      fetch('/gateway/curator/pid-check?identifier=' + encodeURIComponent(id),
+            {credentials: 'same-origin', cache: 'no-store'})
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (j) { if (chip) chip.textContent = (j && (j.label || j.status)) || 'check failed'; })
+        .catch(function () { if (chip) chip.textContent = 'check failed'; });
     }
   });
 })();
@@ -3793,9 +3812,13 @@ def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | No
             'outside this list, use the advanced JSON below.</span></p>')
 
 
-def _list_row_html(section: str, index: int, subfields, values: dict | None) -> str:
+def _list_row_html(section: str, index: int, subfields, values: dict | None,
+                   row_suffix_html: str = "") -> str:
     """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
-    submit just leaves an empty row, which the server drops). `values` prefills an existing row."""
+    submit just leaves an empty row, which the server drops). `values` prefills an existing row.
+    `row_suffix_html` (IDCONS D5) is inserted before the remove button — used to attach the per-identifier
+    resolution status chip to related_identifiers rows; it rides the row template so a JS-added row carries
+    it too. Default empty, so every other list section renders byte-identically."""
     from . import editor_form
     cells = []
     for subkey, label, placeholder, kind in subfields:
@@ -3821,7 +3844,7 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None) -> 
               'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
               'Remove row</button></p>')
     return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
-            f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{remove}</div>')
+            f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{row_suffix_html}{remove}</div>')
 
 
 # Spare blank rows rendered when JS is unavailable so a curator can still add entries (deliverable 3).
@@ -3931,6 +3954,133 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
         f'<textarea name="j_{_esc(section)}" rows="4">{_esc(val)}</textarea></div>')
 
 
+# IDCONS D5 (SPEC §5.5): the per-identifier resolution status chip + check button attached to each
+# related_identifiers row. Advisory only — it NEVER blocks saving; a curator can save a survey whose DOI
+# is reserved-and-404ing (the correct state for a freshly-reserved NCI PID). The button rides the row
+# TEMPLATE (so a JS-added row carries it too); the click handler in EDITOR_UI_JS reads the row's identifier
+# input, GETs /gateway/curator/pid-check server-side (the gateway has egress; the build does not), and
+# writes the verdict into the chip via textContent. Without JS it is an inert button (degrades safely).
+_PID_CHIP_HTML = (
+    '<p style="margin:.15rem 0" class="pid-chip-wrap">'
+    '<button type="button" class="b-accent" data-pid-check '
+    'style="padding:.2rem .6rem;font-size:.75rem">Check DOI status</button>'
+    '<span class="sub" data-pid-chip style="margin-left:.5rem">not checked</span></p>'
+)
+
+
+def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
+    """IDCONS D1 group (b) — THIS DATASET ELSEWHERE: the single typed related_identifiers list, the ONLY
+    place a dataset-level DOI/PID is edited. Renders the SAME l_related_identifiers_* rows / template /
+    snapshot / advanced-JSON the standalone panel does (identical field names -> identical assembly), plus
+    a per-row resolution status chip (D5). Reuses _list_row_html so the fail-closed relation/identifier_type
+    <select>s and the round-trip anchor are byte-identical to the wave-1 widget."""
+    from . import editor_form
+    section = "related_identifiers"
+    subfields = editor_form.LIST_SECTIONS[section]
+    existing: list[dict | None] = []
+    if submitted is not None and any(k.startswith(f"l_{section}_") for k in submitted):
+        for i in _submitted_row_indices(submitted, section):
+            existing.append({sk: submitted.get(f"l_{section}_{i}_{sk}") for sk, *_ in subfields})
+    else:
+        orig = fields.get(section)
+        if isinstance(orig, list):
+            for item in orig:
+                existing.append({sk: item.get(sk) for sk, *_ in subfields}
+                                if isinstance(item, dict) else None)
+    rendered = []
+    idx = 0
+    for row in existing:
+        if row is None:
+            continue
+        rendered.append(_list_row_html(section, idx, subfields, row, row_suffix_html=_PID_CHIP_HTML))
+        idx += 1
+    for _ in range(_SPARE_BLANK_ROWS):
+        rendered.append(_list_row_html(section, idx, subfields, None, row_suffix_html=_PID_CHIP_HTML))
+        idx += 1
+    add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
+               f'data-editor-add-row="{section}">+ Add row</button></p>')
+    template = (f'<template data-editor-template="{section}">'
+                f'{_list_row_html(section, ROW_INDEX_TOKEN, subfields, None, row_suffix_html=_PID_CHIP_HTML)}'
+                '</template>')
+    return (
+        '<h3 class="k">This dataset elsewhere</h3>'
+        '<p class="sub">The ONE place a dataset-level DOI or PID is recorded — a typed relation to an '
+        'identifier AusMT does not own (e.g. the NCI collection DOI). Pick the relation and identifier type '
+        'from the lists; a mis-typed value is refused. Use the check button to see whether a DOI resolves '
+        'today (a freshly-reserved NCI DOI that 404s is normal and still saves).</p>'
+        + _section_error_html(err_map.get(section))
+        + f'<div data-editor-rows="{section}">{"".join(rendered)}</div>'
+        + add_btn + template
+        + _snapshot_hidden(section, fields)
+        + _advanced_json_details(section, fields))
+
+
+def _sources_identifier_summary(fields: dict) -> str:
+    """IDCONS D1 §2.6 — a READ-ONLY summary of identifiers also referenced as provenance in Source
+    datasets. sources[] rows keep their own rights/attribution editing (they anchor LICENSE.txt text a
+    related_identifiers row cannot); this line surfaces their identifiers on the new page so nothing is
+    hidden from the curator, without duplicating the edit surface."""
+    src = fields.get("sources")
+    ids: list[str] = []
+    if isinstance(src, list):
+        for row in src:
+            if isinstance(row, dict):
+                val = row.get("identifier")
+                if val not in (None, ""):
+                    ids.append(str(val))
+    if not ids:
+        return ""
+    items = ", ".join(_esc(i) for i in ids)
+    return ('<h3 class="k">Also referenced as provenance in Source datasets</h3>'
+            f'<p class="sub">{items}<br>Edit these in the <em>Source datasets</em> section below — they '
+            'carry licence/attribution payload beyond the identifier.</p>')
+
+
+def _identifiers_and_pids_panel(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
+    """IDCONS D1 (SPEC §2) — the ONE consolidated "Identifiers & PIDs" editor page, three groups:
+    (a) THIS SURVEY (read-only ausmt id + project RAiD), (b) THIS DATASET ELSEWHERE (the typed
+    related_identifiers list — the sole dataset-PID editor), (c) INSTRUMENT (the survey/platform PID).
+    Replaces the old five-section identifier scatter. The retired flat inputs (dataset_doi, collection_pid,
+    related_publication(+doi), project, per-row instrument pid) are GONE from the UI; their schema keys stay
+    readable and round-trip via the editor_form carry-forward. The o_identifiers snapshot + advanced-JSON
+    ride this panel so the identifiers map section (project_raid/instrument_pid + any carried retired key)
+    still round-trips. ORCID stays with people; ROR with the organisation; per-publication DOIs in
+    Publications."""
+    idmap = "identifiers"
+    raid_val = _sub_value(idmap, "project_raid", fields, submitted)
+    instr_val = _sub_value(idmap, "instrument_pid", fields, submitted)
+    group_a = (
+        '<h3 class="k">This survey</h3>'
+        '<p><label class="k">AusMT id</label>'
+        f'<input type="text" value="{_esc(slug or "")}" readonly disabled>'
+        '<br><span class="sub">Derived from the survey (the au.&lt;slug&gt;.&lt;station&gt; scheme, per '
+        'station). Read-only — shown for orientation.</span></p>'
+        '<p><label class="k">Project RAiD</label>'
+        f'{_text_input("s_identifiers_project_raid", raid_val, "https://raid.org/10.xxxx/xxxxx")}</p>'
+    )
+    group_c = (
+        '<h3 class="k">Instrument</h3>'
+        '<p><label class="k">Instrument PID (survey/platform)</label>'
+        f'{_text_input("s_identifiers_instrument_pid", instr_val, "10.82388/… or an https:// URL")}'
+        '<br><span class="sub">The one survey/platform-level PIDINST handle (not a per-serial pid).</span></p>'
+    )
+    errline = _section_error_html(err_map.get(idmap))
+    return (
+        '<div class="panel" data-editor-section="related_identifiers">'
+        '<h2>Identifiers &amp; PIDs</h2>'
+        '<p class="sub">Every persistent identifier for this survey and dataset lives here. ORCID stays '
+        'with people, ROR with the organisation, and per-publication DOIs in Publications.</p>'
+        f'{errline}'
+        f'{group_a}'
+        f'{_related_identifiers_group(fields, submitted, err_map)}'
+        f'{group_c}'
+        f'{_sources_identifier_summary(fields)}'
+        f'{_snapshot_hidden(idmap, fields)}'
+        f'{_advanced_json_details(idmap, fields)}'
+        '</div>'
+    )
+
+
 def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token: str,
                      error: str = "", field_errors=None, submitted: dict | None = None,
                      nav: "NavContext | None" = None) -> str:
@@ -3970,7 +4120,15 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 
     panels = []
     for section in _SECTION_ORDER:
-        if section in editor_form.MAP_SECTIONS:
+        # IDCONS D1: the identifiers surface is rendered as ONE consolidated "Identifiers & PIDs" panel
+        # (three groups) in place of the old standalone "Identifiers" panel; the typed related_identifiers
+        # list is folded into it (group b), so its standalone panel is skipped here. Field names are
+        # unchanged, so assembly is byte-identical.
+        if section == "identifiers":
+            panels.append(_identifiers_and_pids_panel(slug, fields, submitted, err_map))
+        elif section == "related_identifiers":
+            continue
+        elif section in editor_form.MAP_SECTIONS:
             panels.append(_map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
         elif section in editor_form.LIST_SECTIONS:
             panels.append(_list_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))

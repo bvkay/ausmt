@@ -544,15 +544,17 @@ def test_coordinate_and_level_selects_validate_independently():
 
 def test_time_series_levels_checkboxes():
     """levels_available assembles from the checked c_time_series_levels_available_* boxes in canonical
-    order. FAILS IF checkbox names are not read or order is not canonical."""
+    order. FAILS IF checkbox names are not read or order is not canonical. IDCONS D2: collection_pid is
+    RETIRED from the editor UI, so a stray s_time_series_collection_pid input is IGNORED (not assembled);
+    a stored collection_pid instead ROUND-TRIPS verbatim via the unmodelled-key carry-forward."""
     form = {
-        "s_time_series_collection_pid": "10.25914/abc",
+        "s_time_series_collection_pid": "10.25914/ignored",   # retired input — must NOT be assembled
         "c_time_series_levels_available_level1": "on",
         "c_time_series_levels_available_raw_packed": "on",
-        **_snap("time_series", {"collection_pid": None, "levels_available": []}),
+        **_snap("time_series", {"collection_pid": "10.25914/abc", "levels_available": []}),
     }
     out = ef.assemble_section(form, "time_series")
-    assert out["collection_pid"] == "10.25914/abc"
+    assert out["collection_pid"] == "10.25914/abc"  # carried from the snapshot, NOT the retired input
     assert out["levels_available"] == ["raw_packed", "level1"]  # canonical order, not form order
 
 
@@ -574,15 +576,16 @@ def test_list_rows_assemble_and_blank_rows_dropped():
 
 def test_list_partial_row_kept_with_nulls():
     """A partially-filled row is kept with the empty sub-fields as null. FAILS IF a partial row is
-    dropped (losing curator input)."""
+    dropped (losing curator input). IDCONS D2: instruments[].pid is RETIRED from the row widgets, so a
+    stray l_instruments_0_pid input is IGNORED — the assembled row carries only the modelled sub-keys."""
     form = {
         "l_instruments_0_manufacturer": "Phoenix",
         "l_instruments_0_model": "",
-        "l_instruments_0_pid": "",
+        "l_instruments_0_pid": "10.ignored/x",   # retired input — must NOT be assembled
         **_snap("instruments", []),
     }
     out = ef.assemble_section(form, "instruments")
-    assert out == [{"manufacturer": "Phoenix", "model": None, "pid": None}]
+    assert out == [{"manufacturer": "Phoenix", "model": None}]
 
 
 def test_list_bad_orcid_row_errors():

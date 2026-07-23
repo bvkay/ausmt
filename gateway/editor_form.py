@@ -52,11 +52,15 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("name", "Name", "Given Family", "text"),
         ("orcid", "ORCID", "0000-0002-1825-0097", "orcid"),
     ],
+    # IDCONS D2 (SPEC §3): the flat dataset-identifier inputs are RETIRED from the editor UI. The typed
+    # related_identifiers list (below, group (b) of the "Identifiers & PIDs" page) is now the ONLY place a
+    # dataset-level DOI/PID is edited; the legacy "Related publication (+DOI)" pair is superseded by
+    # publications[]; identifiers.project was a dead orphan. The schema KEYS stay readable (the engine keeps
+    # its flat-key fallback reads until the corpus migration + follow-up), so a survey that still carries
+    # them must ROUND-TRIP byte-clean through an unrelated edit — handled generically by the unmodelled-key
+    # carry-forward in _assemble_map (proven RED by test_retired_identifier_keys_survive_unrelated_edit).
+    # Only the two survey/project-level PIDs a curator legitimately sets stay modelled here.
     "identifiers": [
-        ("dataset_doi", "Dataset DOI", "10.xxxx/xxxxx", "doi"),
-        ("related_publication", "Related publication", "short citation or title", "text"),
-        ("related_publication_doi", "Related publication DOI", "10.xxxx/xxxxx", "doi"),
-        ("project", "Project / campaign", "campaign name", "text"),
         ("project_raid", "Project RAiD", "https://raid.org/10.xxxx/xxxxx", "text"),
         # §2b (identifiers design): the ONE survey/platform-level instrument PID (PIDINST, e.g.
         # 10.82388/<id>) — the survey-layer counterpart to the deep per-serial instruments[].pid. Wave-1
@@ -93,7 +97,9 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("contact", "Access contact", "email or role address", "email"),
     ],
     "time_series": [
-        ("collection_pid", "Collection PID", "10.25914/… or a handle", "text"),
+        # IDCONS D2 (SPEC §3): time_series.collection_pid is RETIRED from the editor UI — a dataset-level
+        # collection DOI/handle is now recorded as a typed related_identifiers row (relation IsDerivedFrom).
+        # The key stays readable (engine fallback + carry-forward round-trip); only levels_available is edited here.
         # levels_available is a checkbox set — rendered specially; listed here for order only.
         ("levels_available", "Levels available", "", "levels"),
     ],
@@ -131,10 +137,13 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("grant_title", "Grant title", "grant title", "text"),
         ("funding_doi", "Funding DOI", "10.xxxx/xxxxx", "doi"),
     ],
+    # IDCONS D2 (SPEC §3): the per-row instruments[].pid input is RETIRED from the editor UI. The
+    # survey/platform-level PID is recorded once as identifiers.instrument_pid (group (c) of the new page)
+    # or as a typed related_identifiers row; the per-serial key stays readable (engine fallback +
+    # per-row carry-forward round-trip) so an un-migrated instruments[].pid survives an unrelated edit.
     "instruments": [
         ("manufacturer", "Manufacturer", "Phoenix", "text"),
         ("model", "Model", "MTU-5C", "text"),
-        ("pid", "Instrument PID", "https://instruments.auscope.org.au/… or 10.xxxx/…", "text"),
     ],
     # C46 (schema 0.3): one entry per UPSTREAM dataset (absent = an original deposit). licence is the
     # licence AS OBTAINED — a vocab-validated <select> (the SAME contract vocab as the top-level
@@ -321,6 +330,13 @@ def _original_snapshot(form: dict, section: str):
 
 _ABSENT = object()  # the section had no original value (distinct from a real null)
 
+# IDCONS D2 (SPEC §3): keys a section's assembler MANAGES itself — so their absence from the assembled
+# value is INTENTIONAL and the unmodelled-key carry-forward must NOT resurrect them. access.coordinate_-
+# overrides is the one such key: _resolve_coordinate_overrides may deliberately DROP it (the C42 set-all-
+# to-inherit-removes-the-key path), so carrying it back from the snapshot would un-delete a curator's
+# removal. Every other section is fully covered by "modelled subfields ∪ nothing", so the map is sparse.
+_SPECIAL_MANAGED_KEYS: dict[str, set[str]] = {"access": {"coordinate_overrides"}}
+
 
 def _assemble_map(form: dict, section: str):
     """Build a MAP section dict from its s_<section>_<subkey> inputs. A sub-field left empty becomes
@@ -381,6 +397,19 @@ def _assemble_map(form: dict, section: str):
         overrides = _resolve_coordinate_overrides(form, original)
         if overrides:
             out["coordinate_overrides"] = overrides
+
+    # IDCONS D2 (SPEC §3) — carry forward UNMODELLED original keys verbatim. Any key the source section
+    # carried that the widget no longer models (the retired flat identifier keys dataset_doi / project /
+    # related_publication(_doi), OR any unknown/legacy key the editor never modelled) is re-emitted exactly
+    # as stored, so the assembled value still equals the o_<section> snapshot on an untouched section
+    # (-> _OMIT, byte-preserved) and, on a real edit elsewhere in the section, apply_patch's surgical merge
+    # leaves the carried key's line untouched. Managed keys (access.coordinate_overrides) are excluded so a
+    # deliberate removal is not undone. This is the "assembler keeps round-tripping unknown/legacy keys" rule.
+    if isinstance(original, dict):
+        managed = {sk for sk, *_ in subfields} | _SPECIAL_MANAGED_KEYS.get(section, set())
+        for k, v in original.items():
+            if k not in managed and k not in out:
+                out[k] = v
 
     # organisation bare-string round-trip: original was a string, curator left ror empty, name set.
     if section == "organisation" and original_is_str:
@@ -468,6 +497,8 @@ def _assemble_list(form: dict, section: str) -> list:
     empty is DROPPED (the spare-blank-row degradation: extra empty rows never pollute the yaml). A
     partially-filled row is kept and its known-format fields validated."""
     subfields = LIST_SECTIONS[section]
+    modelled = {sk for sk, *_ in subfields}
+    original = _original_snapshot(form, section)
     rows: list[dict] = []
     for i in _row_indices(form, section):
         row: dict = {}
@@ -478,6 +509,18 @@ def _assemble_list(form: dict, section: str) -> list:
                 _validate_scalar(section, subkey, kind, value)
                 any_value = True
             row[subkey] = value if value else None
+        # IDCONS D2 (SPEC §3) — carry forward UNMODELLED per-row keys from the correspondingly-indexed
+        # original row (the render assigns row index i to original[i]). The retired instruments[].pid — and
+        # any unknown/legacy per-row key — is re-emitted verbatim, so an untouched list reassembles equal to
+        # its o_<section> snapshot (-> _OMIT, byte-preserved) instead of the wholesale-replace dropping it.
+        # A carried non-empty value also keeps an otherwise-blank row alive. Guarded on a dict original row
+        # so a bare-string list item (e.g. a template publication) never misaligns.
+        if isinstance(original, list) and i < len(original) and isinstance(original[i], dict):
+            for k, v in original[i].items():
+                if k not in modelled and k not in row:
+                    row[k] = v
+                    if v not in (None, ""):
+                        any_value = True
         if any_value:
             rows.append(row)
     return rows

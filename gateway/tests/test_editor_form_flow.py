@@ -286,15 +286,50 @@ def test_empty_optional_sections_render_empty_widgets_with_placeholders(tmp_path
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             body = (await client.get("/gateway/curator/edit/demo-survey-2026")).text
-            # Absent sections still render their widgets (empty), with example placeholders:
-            assert 'name="s_identifiers_dataset_doi"' in body
-            assert 'placeholder="10.xxxx/xxxxx"' in body           # DOI example
+            # Absent sections still render their widgets (empty), with example placeholders. IDCONS D2:
+            # the flat dataset_doi input is RETIRED; the identifiers surface now renders project_raid +
+            # the survey/platform instrument PID, and a dataset-level DOI is a typed related_identifiers row.
+            assert 'name="s_identifiers_project_raid"' in body
+            assert 'name="s_identifiers_instrument_pid"' in body
+            assert 'name="s_identifiers_dataset_doi"' not in body   # retired from the UI
+            assert 'placeholder="10.xxxx/xxxxx"' in body           # DOI example (publications/funding DOI)
             assert 'name="l_instruments_0_manufacturer"' in body   # a spare blank row exists
+            assert 'name="l_instruments_0_pid"' not in body        # per-row instrument PID retired
             assert 'placeholder="Phoenix"' in body                 # instrument example
             # An absent section carries NO o_<section> snapshot (so it stays absent on submit):
             assert 'name="o_identifiers"' not in body
             # And it is NOT a pre-filled JSON skeleton of nulls in the primary textarea:
             assert '"dataset_doi": null' not in body.split("<details")[0]
+    run(_body())
+
+
+def test_identifiers_and_pids_consolidated_page(tmp_path):
+    """IDCONS D1 (SPEC §2): the identifier surface renders as ONE consolidated 'Identifiers & PIDs' panel
+    with three groups (This survey / This dataset elsewhere / Instrument), the typed related_identifiers
+    list folded in (group b, the sole dataset-PID editor), a read-only ausmt id, and the per-identifier
+    resolution chip (D5). The old standalone 'Related identifiers' panel is GONE (folded in). FAILS IF the
+    five-section scatter returns or the typed list is duplicated."""
+    async def _body():
+        surveys_live, _pkg = _rich_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            body = (await client.get("/gateway/curator/edit/rich-survey-2026")).text
+            # ONE consolidated panel, three group headings:
+            assert body.count("Identifiers &amp; PIDs") == 1
+            assert ">This survey</h3>" in body
+            assert ">This dataset elsewhere</h3>" in body
+            assert ">Instrument</h3>" in body
+            # The typed list is the sole dataset-PID editor, folded in (no standalone panel):
+            assert 'name="l_related_identifiers_0_identifier"' in body
+            assert ">Related identifiers</h2>" not in body
+            # The per-identifier resolution status chip + check button (D5):
+            assert "data-pid-check" in body and "data-pid-chip" in body
+            # The read-only ausmt id shows the slug for orientation:
+            assert 'value="rich-survey-2026" readonly' in body
+            # The identifiers round-trip anchor rides the consolidated panel (carries the retired keys):
+            assert 'name="o_identifiers"' in body
     run(_body())
 
 
@@ -328,8 +363,9 @@ def test_bad_orcid_renders_field_error_on_form(tmp_path):
 
 
 def test_bad_doi_renders_field_error_on_form(tmp_path):
-    """A dataset DOI without a '10.' prefix re-renders the form with a per-field error. FAILS IF a
-    non-DOI is accepted into a DOI field."""
+    """A publication DOI without a '10.' prefix re-renders the form with a per-field error. FAILS IF a
+    non-DOI is accepted into a DOI field. (IDCONS D2 retired the identifiers.dataset_doi input; the
+    per-field DOI validation is now exercised through a still-modelled DOI field — publications[].doi.)"""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -339,7 +375,7 @@ def test_bad_doi_renders_field_error_on_form(tmp_path):
             csrf = csrf_for_session(client)
             form_html = (await client.get("/gateway/curator/edit/rich-survey-2026")).text
             fields = _harvest_form_fields(form_html)
-            fields["s_identifiers_dataset_doi"] = "not-a-doi"
+            fields["l_publications_0_doi"] = "not-a-doi"
             fields["note"] = "x"
             fields["bump"] = "patch"
             fields["csrf_token"] = csrf
