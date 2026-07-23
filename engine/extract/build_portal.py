@@ -781,6 +781,65 @@ def _instrument_pid_of(y: dict):
     return (str(v).strip() or None) if v not in (None, "") else None
 
 
+# IDCONS D4 (SPEC §5.3): map a pid_status.json cache status to the served `resolution` facet. The cache
+# (written by scripts/refresh_pid_status.py, NEVER by the build) holds {identifier: {status, checked}} with
+# status resolved|unregistered|error. A DOI the cache says is `resolved` -> "ok"; `unregistered` (doi.org's
+# own 404 — reserved-but-not-yet-active) -> "reserved"; `error` OR no cache entry -> "unknown" (the portal
+# links it as today). We only ATTACH a facet for the ok/reserved cases: a survey whose identifiers have no
+# cache entry (the whole existing corpus when no cache is present) gets a byte-identical surveys.json entry.
+_RESOLUTION_BY_STATUS = {"resolved": "ok", "unregistered": "reserved"}
+
+
+def _resolution_of(identifier, status_map: dict | None):
+    """The resolution facet for one identifier, or None to attach nothing (unknown = link as today).
+    None/blank identifier or an absent/`error` cache entry -> None."""
+    if not status_map or identifier in (None, ""):
+        return None
+    entry = status_map.get(str(identifier).strip())
+    if not isinstance(entry, dict):
+        return None
+    return _RESOLUTION_BY_STATUS.get(entry.get("status"))
+
+
+def apply_pid_resolution(sm: dict, status_map: dict | None) -> dict:
+    """IDCONS D4 (SPEC §5.3): annotate a SMETA entry with resolution facets from the pid_status.json cache,
+    IN PLACE, and return it. Attaches `doi_resolution` / `ts_pid_resolution` (for the flat dataset DOI and
+    collection PID still read during migration) and a per-entry `resolution` on each related_identifiers
+    row — but ONLY when the cache actually knows the identifier (ok/reserved). No cache, or no entry, adds
+    nothing, so an un-cached corpus serves byte-identical bytes (the fully-backward-compatible contract).
+    Tolerant of a missing/None sm (the raw seed path may carry None)."""
+    if not isinstance(sm, dict) or not status_map:
+        return sm
+    doi_res = _resolution_of(sm.get("doi"), status_map)
+    if doi_res is not None:
+        sm["doi_resolution"] = doi_res
+    ts_res = _resolution_of(sm.get("ts_pid"), status_map)
+    if ts_res is not None:
+        sm["ts_pid_resolution"] = ts_res
+    for entry in (sm.get("related_identifiers") or []):
+        if isinstance(entry, dict):
+            res = _resolution_of(entry.get("identifier"), status_map)
+            if res is not None:
+                entry["resolution"] = res
+    return sm
+
+
+def load_pid_status(path) -> dict:
+    """Read a pid_status.json cache if it exists, returning {identifier: {status, checked}} (or {} when
+    absent/unreadable). The build NEVER writes or refreshes this — it only CONSUMES it (SPEC §5.2); a
+    missing or malformed file is silently treated as 'no cache' so the build stays offline and robust."""
+    if not path:
+        return {}
+    try:
+        p = Path(path)
+        if not p.is_file():
+            return {}
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def survey_meta_from_yaml(y: dict) -> dict:
     """Map a survey.yaml into the portal's surveys.json entry shape (SMETA), composing the per-facet
     mappers above. Tolerant of both the Prototype-20 structured schema and the older flat schema."""
@@ -2131,6 +2190,12 @@ def main(argv=None):
     ap.add_argument("--seed-meta", help="JSON of survey metadata (SMETA) for --raw mode -> surveys.json")
     ap.add_argument("--out", required=True, help="portal data dir to write {catalogue,tf,sci,surveys}.json")
     ap.add_argument("--products", default=None, help="optional dir for the product-contract JSON")
+    ap.add_argument("--pid-status", default=None,
+                    help="IDCONS D4: optional path to a pid_status.json cache (written by "
+                         "scripts/refresh_pid_status.py). When present, each served DOI-typed identifier "
+                         "gains a resolution facet (ok|reserved) so the portal renders a reserved-but-404 "
+                         "DOI as plain text, not a dead link. The build NEVER hits the network; absent => "
+                         "every identifier is 'unknown' (linked as today), byte-identical output.")
     ap.add_argument("--no-validate", action="store_true",
                     help="skip the survey validator gate. Since C8 this is the ONLY way to build "
                          "--surveys without a resolved validator (an unresolvable validator is "
@@ -2190,6 +2255,12 @@ def main(argv=None):
                     help="C18: rw (consult+populate) / ro (consult only, CI reproducibility) / "
                          "refresh (ignore hits, forced full rebuild that still repopulates).")
     a = ap.parse_args(argv)
+    # IDCONS D4 (SPEC §5.3): load the pid_status.json cache ONCE per build (or {} when absent). The build
+    # never refreshes it — it only annotates each served identifier's resolution facet from it.
+    pid_status = load_pid_status(a.pid_status)
+    if pid_status:
+        print(f"note: IDCONS resolve-gate active ({len(pid_status)} cached identifier statuses from "
+              f"{a.pid_status}).", file=sys.stderr)
     # sha256() memoises per PATH in the module-global _SHA_CACHE ("cached per build"). Reset it at the
     # start of every build so a rebuild in a REUSED process (tests, the C18 warm-vs-refresh harness)
     # re-hashes each file's CURRENT bytes — otherwise a stale memoised sha would HIDE an edited EDI
@@ -2405,6 +2476,8 @@ def main(argv=None):
         smeta_entry = meta or {"country": "Australia", "org": org, "edi": "ok",
                                "lic": "unknown", "cite": {"au": org, "ti": label, "yr": "", "ve": "", "pb": org}}
         smeta_entry["slug"] = slug  # authoritative survey slug; the portal reads this (no re-derivation)
+        # IDCONS D4: annotate the resolution facets from the pid_status cache (no-op when no cache).
+        apply_pid_resolution(smeta_entry, pid_status)
         surveys_meta[label] = smeta_entry
         lic = (meta or {}).get("lic", "unknown")
         # NCI storage tier (optional, per-survey): if the survey declares nci_base, its downloadable

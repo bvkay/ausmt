@@ -246,12 +246,12 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
     const lbl=esc((s0.title||"source dataset").toString().trim())+(srcs.length>1?` <span class="prov">(+${srcs.length-1} more)</span>`:"");
     nodes.push(["Source dataset",idv?`${lbl} · ${pidLink(idv)}`:lbl]);}
   nodes.push(
-   ["Raw time series",m.ts==="ok"?`<a href="${escUrl(tsUrlFor(m))}" target="_blank" rel="noopener noreferrer">${m.ts_pid?"survey collection":"NCI collection"}</a>`:"not located in source archives"],
+   ["Raw time series",m.ts==="ok"?tsCollectionCell(m):"not located in source archives"],
    ["Processing software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
    ["Method",sc[SC.alg]?esc(sc[SC.alg]):(sc[SC.rr]?"remote reference (stated)":"not stated")],
    ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
    ["Distributed formats",`EDI ✓ · EMTF XML (pipeline)${m.mth5==="ok"?" · MTH5 ✓":""}`],
-   ["Publication",m.doi?`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`:"none recorded"]
+   ["Publication",m.doi?resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`):"none recorded"]
   );
   return `<div class="lineage">`+nodes.map((n,k)=>`<div class="lrow"><span class="ldot"></span><div><div class="lt">${esc(n[0])}</div><div class="lv">${n[1]}</div></div></div>`+(k<nodes.length-1?`<div class="lconn"></div>`:"")).join("")+`</div>`;}
 
@@ -482,8 +482,8 @@ function openStation(i){
   // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
   // behind collapsed <details>. Nothing deleted — only demoted. The API box (X8) is the last, small expander.
   const _srcArchive=m.doi
-    ? `<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`
-    : (m.ts==="ok"?`<a href="${escUrl(tsUrlFor(m))}" target="_blank" rel="noopener noreferrer">${m.ts_pid?"survey collection":"NCI collection"}</a>`:"<span class='prov'>not recorded</span>");
+    ? resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`)
+    : (m.ts==="ok"?tsCollectionCell(m):"<span class='prov'>not recorded</span>");
   const provTop=`<table class="meta prov-top">`+
     `<tr><td>Processing software</td><td>${sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"}</td></tr>`+
     `<tr><td>Transfer function</td><td>${esc(s.file)}${s.sha?` · <code title="${escAttr(s.sha)}">${esc(s.sha.slice(0,16))}…</code>`:" · <span class='prov'>no checksum</span>"}</td></tr>`+
@@ -651,6 +651,20 @@ function relatedIdLink(id,type){
     return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
   if(t==="URL"){return `<a href="${escUrl(s)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
   return esc(s);}
+// IDCONS D4 (SPEC §5.4): render an identifier HONESTLY given its resolution facet from the pid_status
+// cache (attached by build_portal.apply_pid_resolution). "reserved" = doi.org's OWN 404, a reserved-but-
+// not-yet-active DOI (e.g. a freshly-minted NCI PID whose handle mapping is not live) -> plain escaped
+// text + a muted "(reserved — not yet active)" note, NEVER an anchor: we do not ship a dead link. "ok" /
+// "unknown" / absent (no cache) -> the caller's normal link, byte-for-byte as today (unknown = today).
+function reservedText(text){return `${esc(text)} <span class="prov reserved-note">(reserved — not yet active)</span>`;}
+function resolvedOr(resolution,text,linkHtml){return resolution==="reserved"?reservedText(text):linkHtml;}
+// IDCONS D4: the raw-TS collection cell — a link to the survey's OWN collection PID (or the NCI default),
+// rendered as plain text + reserved note when the survey's own ts_pid is reserved. The NCI default
+// collection is a known-live handle, so it is never gated (only the survey's own ts_pid carries a facet).
+function tsCollectionCell(m){
+  const label=m.ts_pid?"survey collection":"NCI collection";
+  if(m.ts_pid&&m.ts_pid_resolution==="reserved")return reservedText(tsPidRaw(m));
+  return `<a href="${escUrl(tsUrlFor(m))}" target="_blank" rel="noopener noreferrer">${label}</a>`;}
 // §2a: the related-identifiers block — one line per typed relation (SMETA.related_identifiers, served by
 // the engine mapper as always-a-list). The relation prints as a human label, the identifier as a
 // type-linked value, the custodian (when present) in muted text. Empty list -> "" (the section simply
@@ -661,7 +675,9 @@ function relatedIdentifiersHtml(m){
   const rows=list.map(r=>{
     const label=RELATION_LABELS[r.relation]||(r.relation?esc(r.relation):"Related");
     const cust=r.custodian?` <span class='prov'>(${esc(r.custodian)})</span>`:"";
-    return `${label}: ${relatedIdLink(r.identifier,r.identifier_type)}${cust}`;}).join("<br>");
+    // IDCONS D4: a reserved identifier renders as plain text + note, not an anchor (never a dead link).
+    const idCell=r.resolution==="reserved"?reservedText(r.identifier):relatedIdLink(r.identifier,r.identifier_type);
+    return `${label}: ${idCell}${cust}`;}).join("<br>");
   return `Related identifiers:<br><span class="pidline">${rows}</span><br>`;}
 // §2a: "a persistent dataset identifier exists in this survey's provenance chain" — the ratified reading
 // of the DOI maturity badge. TRUE when a minted dataset DOI is set OR any typed related_identifier is a
@@ -675,7 +691,7 @@ function identifiersHtml(m){
   const raid=raidLink(m.raid);
   return `<div class="surveymeta"><b>Persistent identifiers &amp; instruments</b><br>`+
     `Survey PID: <span class="pidline">${pidLink(m.pid)}</span><br>`+
-    `Dataset DOI: <span class="pidline">${m.doi?pidLink(m.doi):"<span class='prov'>not recorded</span>"}</span><br>`+
+    `Dataset DOI: <span class="pidline">${m.doi?resolvedOr(m.doi_resolution,m.doi,pidLink(m.doi)):"<span class='prov'>not recorded</span>"}</span><br>`+
     `Organisation ROR: <span class="pidline">${ror||"<span class='prov'>not recorded</span>"}</span><br>`+
     `Project RAiD: <span class="pidline">${raid||"<span class='prov'>not recorded</span>"}</span><br>`+
     relatedIdentifiersHtml(m)+

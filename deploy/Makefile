@@ -6,7 +6,7 @@
 # every compose invocation below is relative to this file's directory, matching the .env lookup
 # `docker compose` does by default (a sibling .env next to the compose file it's given).
 
-.PHONY: build up down rebuild-data smoke sync-surveys preflight reconcile
+.PHONY: build up down rebuild-data smoke sync-surveys preflight reconcile refresh-pid-status
 
 # C40: read deploy/.env so `make` targets see the SAME truth `docker compose` does (compose
 # auto-loads a sibling .env; make does not). `-include` => absent .env is not an error (portal-only /
@@ -87,6 +87,7 @@ rebuild-data:
 	if ! docker compose -f compose.yaml --profile jobs run --rm build-runner \
 	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi \
 	      --products /out/$$BUILD_REL/products \
+	      --pid-status /out/cache/pid_status.json \
 	      --incremental --cache-dir /out/cache --cache-mode $$CACHE_MODE; then \
 	  echo "rebuild-data: BUILD FAILED -- current left untouched. Inspect $$DATA_DIR/$$BUILD_REL" >&2; \
 	  exit 1; \
@@ -102,6 +103,22 @@ rebuild-data:
 	fi; \
 	echo "rebuild-data: current -> $$BUILD_REL"; \
 	echo "rebuild-data: done"
+
+# IDCONS D4 (SPEC §5.2): refresh the DOI resolution cache. This is the ONLY thing that HEADs doi.org —
+# the build itself stays OFFLINE and byte-reproducible, consuming /out/cache/pid_status.json if present.
+# Run it EXPLICITLY as part of the release ritual (SPEC §6 step 4), BEFORE `rebuild-data`, so a reserved-
+# but-404 DOI (e.g. a freshly-minted NCI PID whose handle mapping is not yet live) renders as plain text
+# rather than a dead link. Network-touching, so it runs OUTSIDE the deterministic build — a stale cache is
+# an accepted cost of an offline build (the curator status chip is the always-live check). Writes into
+# /out/cache (the SIBLING-of-/out/builds tier that survives the `current` swap and the build prune), so
+# the very next `rebuild-data` picks it up. Uses --entrypoint python (the image entrypoint is build_portal;
+# this runs a different engine script), same shape as the verify step above. As uid 10001 (owns /out).
+refresh-pid-status:
+	@set -e; \
+	echo "refresh-pid-status: HEADing doi.org for every corpus DOI -> /out/cache/pid_status.json"; \
+	docker compose -f compose.yaml --profile jobs run --rm --entrypoint python build-runner \
+	  scripts/refresh_pid_status.py --surveys /srv/surveys/surveys --out /out/cache/pid_status.json; \
+	echo "refresh-pid-status: done (the next rebuild-data consumes the cache)"
 
 # Post-deploy smoke check: the portal serves 200s for the app shell and the generated catalogue.
 smoke:

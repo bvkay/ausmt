@@ -28,7 +28,7 @@ from fastapi import FastAPI, Form, Header, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import checklist as checklist_mod
-from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, metaedit, publish,
+from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, metaedit, pidcheck, publish,
                serve_state, states, statuspage, totp, uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
@@ -1679,6 +1679,23 @@ class Gateway:
             slug=slug, version=result.get("version"), fields=result.get("fields") or {},
             csrf_token=csrf, error=error, field_errors=field_errors, submitted=submitted, nav=nav))
 
+    def handle_pid_check(self, request: Request) -> Response:
+        """IDCONS D5 (SPEC §5.5): the curator DOI resolution chip. Session-gated GET that HEADs doi.org
+        server-side (the gateway has egress; the build does not) under the alive-rule and returns
+        {status, label, identifier} as JSON. Read-only + advisory — no state change, so no CSRF; it NEVER
+        blocks saving (a reserved DOI that 404s is the expected state for a fresh NCI PID). Blocking
+        network I/O runs in the threadpool (this is a sync `def` route). A missing/blank identifier is a
+        400; the check itself never raises (a failure is reported as status=error)."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        identifier = (request.query_params.get("identifier") or "").strip()
+        if not identifier:
+            return JSONResponse({"detail": "identifier query param required"}, status_code=400,
+                                headers={"Cache-Control": "no-store"})
+        result = pidcheck.check(identifier)
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
     async def handle_edit_preview(self, request: Request, slug: str, form: dict) -> Response:
         """Submit the edit (C31 §1.3/§1.4): build the patch from the form, enqueue a `merge`
         edit-job, render the returned diff + validator verdict. Session + CSRF gated. The seam's
@@ -3017,6 +3034,12 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/edit/{slug}")
     def curator_edit_form(request: Request, slug: str):
         return gw.handle_edit_form(request, slug)
+
+    # IDCONS D5: the curator DOI-resolution status chip endpoint. Session-gated GET; HEADs doi.org
+    # server-side under the alive-rule and returns {status,label,identifier}. Advisory — never blocks save.
+    @app.get("/gateway/curator/pid-check")
+    def curator_pid_check(request: Request):
+        return gw.handle_pid_check(request)
 
     @app.post("/gateway/curator/edit/{slug}/preview")
     async def curator_edit_preview(request: Request, slug: str):

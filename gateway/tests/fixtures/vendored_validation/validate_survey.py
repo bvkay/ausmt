@@ -688,6 +688,39 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
               f"identifiers.dataset_doi and time_series.collection_pid are byte-identical ('{dd}') — the "
               f"systematic AusLAMP-SA redundancy (one NCI collection DOI reused as both the dataset DOI and "
               f"the raw-TS pointer). Model it as a single related_identifiers relation row, not two roles")
+    # Identifier consolidation (idcons lane, SPEC §3 / §4.4): the flat identifier keys below are RETIRED
+    # from the editor UI and are migrated into the typed related_identifiers list (+ publications[]) by
+    # _tools/migrate_identifiers.py. They stay READABLE by the engine this wave, so an un-migrated survey
+    # still PUBLISHES — hence WARNING, never FAIL (retiring the reader before the data is migrated would
+    # blank the DOI/collection facets). Value-based, matching the validator's blank-is-silent house
+    # posture: a deprecation WARNING fires only when a retired key carries a REAL value a curator must
+    # move, so the all-null shipped _example stays clean while a real un-migrated corpus survey surfaces.
+    _MIGRATE = "run _tools/migrate_identifiers.py to move it into the typed related_identifiers list"
+    if dd not in (None, "", "TBD", "TODO"):
+        r.add("WARNING", "deprecation",
+              f"identifiers.dataset_doi ('{dd}') is a RETIRED flat identifier key — {_MIGRATE} "
+              f"(still read this wave; retires after the corpus migration)")
+    if cp not in (None, "", "TBD", "TODO"):
+        r.add("WARNING", "deprecation",
+              f"time_series.collection_pid ('{cp}') is a RETIRED flat identifier key — {_MIGRATE} "
+              f"(still read this wave; retires after the corpus migration)")
+    if ids.get("related_publication") not in (None, "", "TBD", "TODO") \
+            or ids.get("related_publication_doi") not in (None, "", "TBD", "TODO"):
+        r.add("WARNING", "deprecation",
+              "identifiers.related_publication / related_publication_doi are RETIRED legacy keys "
+              "(superseded by publications[]) — move any DOI into publications[] and drop the free text "
+              "(run _tools/migrate_identifiers.py)")
+    if ids.get("project") not in (None, "", "TBD", "TODO"):
+        r.add("WARNING", "deprecation",
+              "identifiers.project is a RETIRED orphan key (read by nothing) — remove it "
+              "(run _tools/migrate_identifiers.py)")
+    for _inst in (meta.get("instruments") or []):
+        if isinstance(_inst, dict) and _inst.get("pid") not in (None, "", "TBD", "TODO"):
+            r.add("WARNING", "deprecation",
+                  "instruments[].pid (per-row instrument PID) is RETIRED from the editor — record the "
+                  "survey/platform PID as identifiers.instrument_pid or a typed related_identifiers row "
+                  "(run _tools/migrate_identifiers.py)")
+            break
     # C7 / §2a: a survey is provenance-incomplete ONLY when it carries NEITHER a flat identifier (dataset
     # DOI or survey PID) NOR a typed provenance relation. Because AusMT curates records whose provenance
     # lives in related identifiers rather than a minted DOI, a well-formed related_identifiers entry — or a
