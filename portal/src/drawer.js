@@ -191,13 +191,31 @@ function accessPanel(m,sv){
 // archived, licensed and reproducible, NOT its scientific quality (said in the block's subline). Stars =
 // achieved count. PURE so the star count is unit-testable: flip m.doi / m.ts and the count changes.
 // "not recorded" / "not available" phrasing per the honesty rules (never "pending").
+// IDCONS D4 (SPEC §5): the resolution state of the survey's dataset DOI, across BOTH the flat dataset_doi
+// (engine fallback, m.doi_resolution) and the typed related_identifiers DOI rows. Returns "ok" when at
+// least one DOI-typed identifier is live-or-uncached (ok / unknown / absent — anything not "reserved");
+// "reserved" ONLY when a DOI-typed identifier exists and EVERY one is reserved (doi.org's own 404); null
+// when none is recorded. A reserved DOI is not a working identifier, so it must NOT light the DOI star.
+function datasetDoiResolution(m){m=m||{};
+  const res=[];
+  if(m.doi)res.push(m.doi_resolution);
+  for(const r of (m.related_identifiers||[]))if(r&&r.identifier_type==="DOI")res.push(r.resolution);
+  if(!res.length)return null;
+  return res.some(x=>x!=="reserved")?"ok":"reserved";}
+// IDCONS D1: "the raw time series is linked" now reads off a typed IsDerivedFrom relation (the new home of
+// the collection PID) OR the still-readable flat ts_pid (engine fallback) OR the pipeline availability flag.
+function tsLinked(m){m=m||{};
+  return (m.related_identifiers||[]).some(r=>r&&r.relation==="IsDerivedFrom")||!!m.ts_pid||m.ts==="ok";}
 function maturityModel(m,sc){m=m||{};sc=sc||[];
+  const doiRes=datasetDoiResolution(m),tsOn=tsLinked(m);
   const dims=[
     {key:"curated",label:"Curated archive",achieved:true,note:""},
     {key:"repro",label:"Reproducible",achieved:!!(sc[SC.sw]&&m.ts==="ok"),note:""},
     {key:"licence",label:"Licence verified",achieved:licBadgeState(m.lic)!=="unk",note:""},
-    {key:"doi",label:"DOI",achieved:!!m.doi,note:m.doi?"minted":"not recorded"},
-    {key:"ts",label:"Time series",achieved:m.ts==="ok",note:m.ts==="ok"?"linked":"not available"},
+    // IDCONS D4: the DOI star lights only for a RESOLVED (ok/unknown) dataset DOI. A reserved DOI shows a
+    // hollow star with honest wording — never a green "minted" off a DOI that 404s at doi.org today.
+    {key:"doi",label:"DOI",achieved:doiRes==="ok",note:doiRes==="ok"?"minted":doiRes==="reserved"?"reserved (not yet active)":"not recorded"},
+    {key:"ts",label:"Time series",achieved:tsOn,note:tsOn?"linked":"not available"},
   ];
   return {dims,stars:dims.filter(d=>d.achieved).length,total:dims.length};}
 function maturityBlock(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];const mod=maturityModel(m,sc);
@@ -214,6 +232,10 @@ function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
 function relatedProducts(s){const m=SMETA[s.survey]||{};
   const tsDoi=tsUrlFor(m);
+  // IDCONS D4: a reserved collection PID / dataset DOI must not open a dead doi.org link from a product tile.
+  // When reserved, the tile is left inert (no open action) rather than routing a click to a 404.
+  const tsReserved=!!(m.ts_pid&&m.ts_pid_resolution==="reserved"),tsOpen=tsReserved?null:{prod:"open",url:tsDoi};
+  const doiReserved=!!(m.doi&&m.doi_resolution==="reserved");
   // EDI + EMTF XML: real downloads driven by the manifest (which carries the authoritative, slug-
   // namespaced url + size). Fall back to the legacy flat-path EDI fetch / pipeline note for data sets
   // built before the manifest (or non-redistributable surveys, which aren't served).
@@ -230,10 +252,10 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const items=[
    ediTile,
    xmlTile,
-   {n:"MTH5",sub:m.mth5==="ok"?"available":m.mth5==="part"?"partial":"product not currently available (not located in source archives)",st:m.mth5||"unk",d:m.mth5==="no"?null:{prod:"open",url:tsDoi}},
-   {n:"Raw time series",sub:m.ts==="ok"?"NCI THREDDS":"not located in source archives",st:m.ts||"unk",d:m.ts==="ok"?{prod:"open",url:tsDoi}:null},
+   {n:"MTH5",sub:m.mth5==="ok"?"available":m.mth5==="part"?"partial":"product not currently available (not located in source archives)",st:m.mth5||"unk",d:m.mth5==="no"?null:tsOpen},
+   {n:"Raw time series",sub:m.ts==="ok"?"NCI THREDDS":"not located in source archives",st:m.ts||"unk",d:m.ts==="ok"?tsOpen:null},
    {n:"Phase tensor",sub:"computed",st:"ok",d:{prod:"scroll",sel:"#pt_anchor"}},
-   {n:"Publication",sub:m.doi?"DOI":"none recorded",st:m.doi?"ok":"no",d:m.doi?{prod:"open",url:"https://doi.org/"+m.doi}:null}
+   {n:"Publication",sub:m.doi?(doiReserved?"reserved (not yet active)":"DOI"):"none recorded",st:m.doi?(doiReserved?"part":"ok"):"no",d:(m.doi&&!doiReserved)?{prod:"open",url:"https://doi.org/"+m.doi}:null}
   ];
   const attrs=d=>d?Object.entries(d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
   return `<div class="prodgrid">`+items.map(it=>`<div class="prod ${it.d?"":"dis"}" ${attrs(it.d)}><span class="pdot" style="background:var(--${it.st==="ok"?"ok":it.st==="part"?"part":it.st==="no"?"no":"unk"})"></span><div>${esc(it.n)}<small>${esc(it.sub)}</small></div></div>`).join("")+`</div>`;}
@@ -690,8 +712,13 @@ function identifiersHtml(m){
   const ror=rorLink(m.org_ror);
   const raid=raidLink(m.raid);
   return `<div class="surveymeta"><b>Persistent identifiers &amp; instruments</b><br>`+
-    `Survey PID: <span class="pidline">${pidLink(m.pid)}</span><br>`+
-    `Dataset DOI: <span class="pidline">${m.doi?resolvedOr(m.doi_resolution,m.doi,pidLink(m.doi)):"<span class='prov'>not recorded</span>"}</span><br>`+
+    // IDCONS D2: the legacy "Survey PID" (m.pid) row is retired from display — the field is never minted, so
+    // it read "not recorded" on every survey (pure noise). The key is still SERVED (engine fallback); only
+    // the row is dropped. The dataset DOI is no longer its own required row either: the typed Related
+    // identifiers rows below ARE the dataset DOIs now. m.doi renders ONLY when a survey still serves the
+    // flat key (engine fallback), through the resolution-honesty renderer; without it there is no duplicate
+    // "not recorded" line.
+    (m.doi?`Dataset DOI: <span class="pidline">${resolvedOr(m.doi_resolution,m.doi,pidLink(m.doi))}</span><br>`:"")+
     `Organisation ROR: <span class="pidline">${ror||"<span class='prov'>not recorded</span>"}</span><br>`+
     `Project RAiD: <span class="pidline">${raid||"<span class='prov'>not recorded</span>"}</span><br>`+
     relatedIdentifiersHtml(m)+
@@ -832,13 +859,14 @@ function surveyBundleTiles(slug){
       `<span class="pdot" style="background:var(--ok)"></span><div>${esc(L[0])}<small>${esc(L[1])}${r.size?" · "+esc(fmtBytes(r.size)):""}</small></div></div>`;
   }).join("");
 }
-// UX6 Wave E (E2): persistent-identifier rollup count for the survey detail. Counts the four canonical
-// PID slots that identifiersHtml renders (Survey PID, Dataset DOI, Organisation ROR, Project RAiD); a slot
-// counts as recorded when it is truthy and not a "TODO…" placeholder (the same not-recorded convention
-// pidLink uses). Drives the "Persistent identifiers: N of M recorded" summary; the explicit per-row list
-// (with its honest "not recorded" rows) is collapsed inside the <details>, never deleted.
+// UX6 Wave E (E2): persistent-identifier rollup count for the survey detail. IDCONS D2: the retired "Survey
+// PID" (m.pid) slot is dropped — it is no longer a displayed row, so counting it would tally a slot the
+// curator cannot see. The count now tracks the three single-value slots identifiersHtml still renders
+// (dataset DOI, organisation ROR, project RAiD); a slot counts as recorded when it is truthy and not a
+// "TODO…" placeholder (the same convention pidLink uses). The typed Related identifiers rows have their own
+// visible block below. Drives the "Persistent identifiers: N of M recorded" summary.
 function pidRollup(m){const has=v=>!!(v&&!String(v).startsWith("TODO"));
-  const fields=[(m||{}).pid,(m||{}).doi,(m||{}).org_ror,(m||{}).raid];
+  const fields=[(m||{}).doi,(m||{}).org_ror,(m||{}).raid];
   return {have:fields.filter(has).length,total:fields.length};}
 function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const rel=relatedSurveys(sv),pr=pidRollup(m);
@@ -864,7 +892,11 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
      surveyBundleTiles(m.slug)+
      `<div class="prod" data-act="select" data-survey="${escAttr(sv)}"><span class="pdot" style="background:var(--ok)"></span><div>All EDIs<small>select & download</small></div></div>`+
      `<div class="prod" data-act="focus" data-survey="${escAttr(sv)}"><span class="pdot" style="background:var(--lpmt)"></span><div>View on map<small>zoom to extent</small></div></div>`+
-     (m.doi?`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`:"")+
+     // IDCONS D4: a reserved dataset DOI is shown as an inert, honestly-labelled chip — never a green
+     // "source archive" tile that opens a doi.org 404.
+     (m.doi?(m.doi_resolution==="reserved"
+       ?`<div class="prod dis"><span class="pdot" style="background:var(--part)"></span><div>Dataset DOI<small>reserved (not yet active)</small></div></div>`
+       :`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`):"")+
    `</div>`+
    `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:`${esc(f.name)} <span class='prov'>(no PID)</span>`).join(" · ")||"—"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+

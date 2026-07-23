@@ -52,6 +52,40 @@ def _hub_client(tmp_path):
     return surveys_live
 
 
+# IDCONS: a survey that already carries an identifiers map (project_raid) AND a typed related_identifiers
+# row, so the consolidated hub section renders BOTH groups' o_<section> snapshots and prefills the existing
+# values — the shape a curator round-trips through the folded section.
+HUB_SURVEY_IDS = """\
+schema_version: "0.2"
+slug: hub-ids-2026
+project_name: Hub IDs Survey
+version: 1.0.0
+region: South Australia
+
+identifiers:
+  project_raid: https://raid.org/10.1234/OLDRAID   # the one project PID a curator sets here
+
+related_identifiers:
+  - identifier: "10.25914/existing-doi"            # the dataset's DOI at NCI (typed provenance)
+    identifier_type: DOI
+    relation: IsVariantFormOf
+    custodian: NCI
+
+organisation:
+  name: University of Example
+
+lead_investigator:
+  name: Ada Lovelace
+  orcid: "0000-0002-1825-0097"
+"""
+
+
+def _hub_ids_client(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    write_survey_live(surveys_live, slug="hub-ids-2026", yaml_text=HUB_SURVEY_IDS)
+    return surveys_live
+
+
 def _assert_csp_clean(name: str, html: str) -> None:
     """No inline <script> without src=; no on*= handlers — all dead under the strictPages CSP."""
     for m in re.finditer(r"<script\b[^>]*>", html):
@@ -237,6 +271,87 @@ def test_hub_overview_tab_scaffold_and_real_stations_history_tabs(tmp_path):
             assert '?tab=history">History' in r.text
             # The Stage-1 Stations link-out to the removal page is GONE from the tab strip.
             assert 'stations">Stations (remove EDIs)' not in r.text
+    run(_body())
+
+
+def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
+    """IDCONS D1 (SPEC §2) — the HUB Metadata tab (the sidebar editor the curator actually uses) renders
+    the identifier surface as ONE consolidated 'Identifiers & PIDs' section, exactly like the full form.
+    The sidebar/TOC shows a SINGLE entry (no standalone 'Related identifiers' section), the consolidated
+    form carries BOTH the identifiers map widgets (project_raid) AND the typed related_identifiers list
+    rows, and the plain-language guidance copy is present. FAILS RED against the pre-fix hub, which
+    rendered the plain 'Identifiers' map panel AND a separate 'Related identifiers' list panel."""
+    async def _body():
+        surveys_live = _hub_ids_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            r = await client.get("/gateway/curator/survey/hub-ids-2026?tab=metadata")
+            assert r.status_code == 200
+            body = r.text
+            forms = re.findall(r'data-hub-section-form="([^"]+)"', body)
+            # ONE consolidated identifiers section; the standalone related_identifiers section is GONE.
+            assert "identifiers" in forms, forms
+            assert "related_identifiers" not in forms, \
+                "the hub still renders a standalone 'related_identifiers' section form: " + repr(forms)
+            # The sidebar/TOC has ONE 'Identifiers & PIDs' entry and NO 'Related identifiers' entry.
+            toc = re.findall(r'data-hub-section="([^"]+)"', body)
+            assert toc.count("identifiers") == 1 and "related_identifiers" not in toc, toc
+            assert body.count('data-hub-section="identifiers">Identifiers &amp; PIDs') == 1
+            # The consolidated FORM carries BOTH groups' widgets + BOTH round-trip snapshots — the identifiers
+            # map (project_raid) and the typed related_identifiers list rows — so one section post round-trips
+            # both. The existing stored values are prefilled.
+            form_html = body.split('data-hub-section-form="identifiers"', 1)[1].split("</form>", 1)[0]
+            assert 'name="s_identifiers_project_raid"' in form_html
+            assert "10.1234/OLDRAID" in form_html                                # existing map value prefilled
+            assert 'name="l_related_identifiers_0_identifier"' in form_html
+            assert "10.25914/existing-doi" in form_html                          # existing typed row prefilled
+            assert 'name="o_identifiers"' in form_html and 'name="o_related_identifiers"' in form_html
+            # Plain-language guidance (the heart of the owner complaint) is present in the panel.
+            assert "Where does it go?" in form_html
+            assert "Derived from (this data was processed from it)" in form_html  # human relation label
+            assert 'value="IsDerivedFrom"' in form_html                          # exact vocab still POSTed
+            assert ">Related identifiers</h2>" not in body                       # no duplicate list panel
+    run(_body())
+
+
+def test_hub_consolidated_section_round_trips_both_groups(tmp_path):
+    """IDCONS D1 — a SINGLE post of the consolidated 'Identifiers & PIDs' hub section round-trips BOTH the
+    identifiers MAP fields (project_raid) AND the related_identifiers LIST rows: build_section_patch
+    iterates every widget section and assembles whichever widgets are present, so one form carrying both
+    groups produces a patch touching both keys. FAILS IF the combined section post drops either group."""
+    async def _body():
+        surveys_live = _hub_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            # The consolidated section form's payload: an identifiers MAP widget (project_raid) AND a typed
+            # related_identifiers LIST row — the exact widgets the one folded section carries. No o_ snapshots
+            # (the fixture has neither key) so both assemble as fresh additions from ONE post.
+            data = {
+                "s_identifiers_project_raid": "https://raid.org/10.5555/HUBRAID",
+                "l_related_identifiers_0_identifier": "10.25914/hub-newrow",
+                "l_related_identifiers_0_identifier_type": "DOI",
+                "l_related_identifiers_0_relation": "IsDerivedFrom",
+                "l_related_identifiers_0_custodian": "NCI",
+                "note": "record dataset provenance", "bump": "patch", "csrf_token": csrf,
+            }
+            r = await client.post("/gateway/curator/edit/hub-survey-2026/preview",
+                                  data=data, follow_redirects=False)
+            assert r.status_code == 200
+            pre = re.search(r"<pre>(.*?)</pre>", r.text, re.S)
+            assert pre, "no diff panel rendered:\n" + r.text
+            import html as _html
+            added = [ln for ln in _html.unescape(pre.group(1)).splitlines()
+                     if ln.startswith("+") and not ln.startswith("+++")]
+            blob = "\n".join(added)
+            assert "10.5555/HUBRAID" in blob, \
+                "the identifiers MAP field (project_raid) did not round-trip through the combined post:\n" + blob
+            assert "10.25914/hub-newrow" in blob, \
+                "the related_identifiers LIST row did not round-trip through the combined post:\n" + blob
     run(_body())
 
 
