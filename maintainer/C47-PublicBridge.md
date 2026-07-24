@@ -52,28 +52,38 @@ tailnet-only exactly as today.
 
 ## D3. The two walls (the load-bearing security design)
 
-The public name must serve ONLY the reader; every curator/admin surface must be refused. Because the
-box serves the reader and the gateway from the **same** port (D1) and a tailnet ACL is **port-granular**,
-one control is not enough — a single mis-scoped front-door path rule would otherwise reach the gateway.
-So the bridge stands up **two independent walls**:
+**Owner amendment (2026-07-24):** the Add Survey contribution flow is PUBLIC. An MT user who clicks
+Add Survey must be able to reach the page and lodge a survey, so the public name must serve a small,
+explicit PUBLIC SUBSET, not the reader alone. The subset is the reader + `/data`, `GET /add-survey.html`
+(both slash forms), and the four public gateway routes the page uses: `POST /gateway/submit`,
+`POST /gateway/request-key`, `GET /gateway/healthz`, `GET /gateway/status/*` (read gateway/app.py). The
+ENTIRE curator/admin workbench (`/gateway/curator/*`, and every other `/gateway` path) must still be
+refused. Because the box serves the reader and the whole gateway surface from the **same** port (D1)
+and a tailnet ACL is **port-granular**, one control is not enough, so the bridge stands up **two
+independent walls, each an allowlist of the same subset**:
 
-* **Wall 1 — path refusal at the front door.** The VPS Caddyfile carries an explicit `@nonpublic`
-  deny — `@nonpublic path /gateway /gateway/* /add-survey.html /add-survey.html/` handled with a
-  `respond 404`, ordered before the reader reverse-proxy — so a public caller is refused by an
-  intentional deny, never by accidental routing. Each class is listed in BOTH slash forms so wall 1 is
-  SELF-COMPLETE: the bare `/gateway` is enumerated explicitly because `/gateway/*` does not match a
-  path with no trailing slash, and the add-survey page is refused with and without a trailing slash.
-  No member of a non-public class slips past wall 1 to the reverse-proxy on a slash technicality.
-* **Wall 2 — a gateway-less box listener behind a port-scoped ACL.** The box gains a small, dedicated
-  **reader-only** Caddy listener (`:8081`, published loopback `127.0.0.1:8445`, fronted onto the tailnet
-  by `tailscale serve --tcp=8445`). It serves the reader + `/data` and has **no `/gateway/*` route at
-  all** (and refuses the non-public classes itself). The tailnet ACL grants `tag:ausmt-frontdoor` reach
-  to **`ausmt-box:8445` and nothing else**. Even if the front-door config were mis-scoped, the ACL
-  cannot reach the gateway's port and the reader listener has no gateway route to reach.
+* **Wall 1 -- the front-door allowlist.** The VPS Caddyfile carries the five public entry points as
+  METHOD-SCOPED allow `handle`s (each gateway route matches only the verb its FastAPI route serves;
+  add-survey.html is GET-only) that reverse-proxy to the box, followed by a deny-by-default
+  `@nonpublic path /gateway /gateway/* /add-survey.html /add-survey.html/` handled with a `respond 404`.
+  `handle` blocks are mutually exclusive and evaluated in SOURCE ORDER, so a public route is proxied and
+  every other `/gateway` path (plus any wrong-method public route, and any non-GET add-survey) falls
+  through to the explicit 404. The deny is SELF-COMPLETE in both slash forms: the bare `/gateway` is
+  enumerated because `/gateway/*` does not match a path with no trailing slash. So no curator/admin path
+  slips past wall 1, and a wrong verb on a public route refuses like any non-public path.
+* **Wall 2 -- the box `:8081` listener behind a port-scoped ACL.** The box gains a small, dedicated
+  Caddy listener (`:8081`, published loopback `127.0.0.1:8445`, fronted onto the tailnet by
+  `tailscale serve --tcp=8445`) that is an INDEPENDENT allowlist of the SAME subset: it serves the
+  reader + `/data` + the Add Survey page, proxies ONLY the four public gateway routes to the gateway
+  container (a narrow passthrough, NOT `:8080`'s blanket `handle /gateway/*`), and refuses every other
+  `/gateway` path itself. The tailnet ACL grants `tag:ausmt-frontdoor` reach to **`ausmt-box:8445` and
+  nothing else** (never the `:8080` workbench port). Even if the front-door config were mis-scoped, the
+  ACL cannot reach the workbench port and this listener has no route to the workbench.
 
-The reader listener is a deliberate near-duplicate of the `:8080` header/CSP/data/root directives, not
-a snippet refactor: the `:8080` block is security-proven and this lane does not touch it. Drift between
-the two is caught by a config pin (D6).
+The `:8081` reader/CSP/data/root directives are a deliberate near-duplicate of `:8080`, not a snippet
+refactor: the `:8080` block is security-proven and this lane does not touch it. The `:8081` gateway
+passthrough is deliberately narrower than `:8080`'s. Drift is caught by a config pin (D6/D7). A breach
+now needs BOTH allowlists to widen simultaneously.
 
 ## D4. Analytics feed moves to the front door
 
@@ -106,10 +116,14 @@ already-masked bytes and never sees a full client IP. The units ship in the fron
 
 ## D6. Invariants
 
-a. **The public name serves ONLY the reader + `/data`, via the front door.** No other route class is
-   reachable at the public name.
-b. **Every non-public route class is REFUSED at the front door (explicit deny) AND unreachable through
-   the ACL fence** — the two walls of D3. A breach requires BOTH walls to fail simultaneously.
+a. **The public name serves ONLY the public subset, via the front door.** The subset is the reader +
+   `/data`, `GET /add-survey.html`, and the four public gateway routes (submit, request-key, healthz,
+   status). No other route class -- and no wrong-method hit on a public route -- is reachable at the
+   public name.
+b. **Every non-public route class is REFUSED at the front door (deny-by-default) AND unreachable through
+   the ACL fence** -- the two allowlist walls of D3. The `:8081` listener proxies only the four public
+   gateway routes to the gateway container and refuses the rest itself; the ACL cannot reach the
+   `:8080` workbench port. A breach requires BOTH allowlists to widen simultaneously.
 c. **The C45 masked logging runs AT THE FRONT DOOR on public traffic**, with the same at-edge masking
    guarantees (client address truncated at write time, address/credential headers deleted). That log
    is the analytics feed.
@@ -128,27 +142,31 @@ directives against a stub upstream (the PR #48 harness pattern), red-proven wher
 fail. Caddy legs run in CI (`gateway-ci.yml` installs Caddy); they skip only on a dev box without
 caddy, never in CI, so they cannot silently no-op.
 
-* **Reader served + non-public refused (runtime, i+ii):** a reader request reaches the stub (200);
-  every non-public class refuses at the front door (404) and never reaches the stub — in BOTH slash
-  forms (`/gateway/*`, a bare `/gateway`, `/add-survey.html`, and `/add-survey.html/`), so wall 1 is
-  self-complete. *Fails if* the reader is not served or any non-public form is proxied through.
-  **Red-proofs (two):** (a) with the whole `@nonpublic` deny removed, `/gateway/*` leaks to the stub
-  (200) — the deny is load-bearing; (b) with the matcher narrowed back to the PRE-FIX classes (exact
-  `/gateway/*` + exact `/add-survey.html` only), the bare `/gateway` and `/add-survey.html/` leak to
-  the stub — proving the widened, both-slash-forms matcher is what closes the gap at wall 1.
-* **Masked-at-edge on public traffic (runtime, iii):** a request whose peer is masked to `…0` and which
+* **Public subset traverses end-to-end (runtime, i+ii):** through the whole bridge (frontdoor -> the
+  shipped `:8081` listener -> a GATEWAY stub) each of the four public gateway routes reaches the gateway
+  stub with its correct verb (200, echoed path) and `GET /add-survey.html` is served by the reader.
+  *Fails if* a public route does not traverse, or add-survey.html is not served. **Red-proofs:** (a) with
+  the `method POST` scope dropped from the submit allow, `GET /gateway/submit` LEAKS to the stub -- the
+  method scope is load-bearing; (b) with the `:8081` narrow submit allow widened to the whole `/gateway`
+  subtree, a curator path LEAKS to the gateway stub -- the narrow allowlist is load-bearing.
+* **Non-public refused at BOTH walls, independently (runtime, iii):** every curator/admin class AND every
+  wrong-method public route (enumerated from gateway/app.py) refuses (404) at wall 1 (front door, with a
+  fully permissive echo stub standing in for the box, so a slip would REACH it) AND, independently, at
+  wall 2 (the `:8081` listener alone). A non-GET `/add-survey.html` refuses too. *Fails if* any
+  non-public request reaches the upstream at either wall. **Red-proof:** with the `@nonpublic`
+  deny-by-default removed, a curator path leaks to the stub -- the deny is load-bearing.
+* **Masked-at-edge on public traffic (runtime, iv):** a request whose peer is masked to `…0` and which
   sends `X-Forwarded-For: 203.0.113.7` yields a log line whose `remote_ip`/`client_ip` fields are the
   /24-masked form and in which the sent XFF appears **nowhere**. *Fails if* the full peer IP or the
   sent XFF survives. **Red-proof:** with the `filter` encoder replaced by a bare `json` encoder, both
-  the full peer IP and the XFF leak — proving the filter is what keeps the promise.
-* **Box wall-2 (runtime + config, iv):** the shipped `:8081` reader body run under a real Caddy serves
-  the reader and REFUSES `/gateway/*`; a config pin asserts the listener has no gateway routing
-  directive and no `log` block, and that the compose bind is loopback-only. *Fails if* a gateway route
-  or a widened bind appears on the reader listener.
-* **Front-door config pins:** the masked-log filter + masks + header-deletes are present; **no**
-  `trusted_proxies` directive (the edge must not trust forwarded addresses); the non-public denies are
-  explicit 404s; automatic HTTPS is not disabled and HSTS is set (invariant d at config level — live
-  cert issuance is verified in the runbook, which needs real DNS + public IP).
+  the full peer IP and the XFF leak -- proving the filter is what keeps the promise.
+* **Config pins (both walls):** wall 1 is an allowlist of exactly the five method-scoped public entry
+  points with a self-complete both-slash-forms `@nonpublic` 404 deny and no curator path in any allow;
+  wall 2 (`:8081`) proxies only the four public gateway routes to the gateway container (no blanket
+  `handle /gateway/*`), refuses the rest with an explicit 404, refuses non-GET add-survey, keeps the
+  reader/data/root/CSP directives, and carries no `log` block; the compose bind is loopback-only; the
+  front door sets **no** `trusted_proxies`; automatic HTTPS is not disabled and HSTS is set (invariant d
+  at config level -- live cert issuance is verified in the runbook, which needs real DNS + public IP).
 * **Log-shipping unit pins:** the service is a oneshot on the operator uid with the
   `__DEPLOY_DIR__`/`__ENV_FILE__` placeholder idiom and a `Documentation=` that resolves to this
   subtree's runbook; the timer is daily, Persistent, and fires strictly **before** the 03:35 fold.

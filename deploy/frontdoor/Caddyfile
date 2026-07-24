@@ -3,8 +3,11 @@
 # TOPOLOGY (maintainer/C47-PublicBridge.md): internet -> THIS Caddy on a small Sydney VPS (public IP,
 # DNS A/AAAA at the registrar) -> over the tailnet (WireGuard) -> the box's dedicated READER-ONLY
 # listener (Caddyfile :8081, published loopback 127.0.0.1:8445, fronted by `tailscale serve --tcp`).
-# The box gets NO inbound internet exposure and NO firewall changes. Curator/admin surfaces stay
-# tailnet-only exactly as before; this file NEVER routes to a /gateway/* surface.
+# The box gets NO inbound internet exposure and NO firewall changes. The curator/admin workbench stays
+# tailnet-only exactly as before; this file routes ONLY the PUBLIC submission subset of /gateway (submit,
+# request-key, healthz, status) plus the public Add Survey page, and refuses every other /gateway surface
+# (owner ruling 2026-07-24: an MT user who clicks Add Survey must be able to reach the page and lodge a
+# survey, so the contribution flow is public while the workbench stays walled — see WALL 1 below).
 #
 # This Caddy is the TRUE edge: nothing sits in front of it (no Cloudflare — a rejected alternative,
 # see the record). So the direct peer IS the real client, and this file deliberately sets NO
@@ -82,29 +85,80 @@
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	}
 
-	# ---- WALL 1: explicit path refusal of every non-public route class -------------------------------
-	# The `@nonpublic` matcher + its `handle` run BEFORE the catch-all reverse_proxy, so a public caller
-	# can NEVER reach a curator/admin or contribution surface through the front door. This is an EXPLICIT
-	# DENY (an intentional 404), not accidental routing. Each class is matched in BOTH slash forms so
-	# wall 1 is SELF-COMPLETE — no member slips past to the reverse_proxy on a bare vs trailing slash:
-	#   * /gateway AND /gateway/*        — the entire submission + curator workbench surface (login,
-	#                        queue, publish, serve control, passkey enrolment, analytics screen). The
-	#                        bare form is listed explicitly because `/gateway/*` alone does NOT match a
-	#                        bare `/gateway` (no trailing slash). NEVER public.
-	#   * /add-survey.html AND /add-survey.html/  — the contribution page in both slash forms (inert
-	#                        without a reachable gateway, refused anyway).
-	# The second wall is the box side: the reader listener (:8081) has no /gateway/* route and the
-	# tailnet ACL grants this VPS reach ONLY to that reader port (C47 invariant b — two independent
-	# walls). Wall 1 is now self-complete for these classes; wall 2 remains the independent backstop.
+	# ---- WALL 1: explicit PUBLIC-SUBSET allowlist, deny-by-default for the gateway surface -----------
+	# Wall 1 is no longer a blanket "refuse the whole gateway" deny. The Add Survey contribution flow is
+	# now PUBLIC (owner ruling 2026-07-24), so wall 1 is an ALLOWLIST of the exact FIVE public entry
+	# points, with a deny-by-default 404 for everything else under /gateway. The allow `handle`s run
+	# BEFORE the deny `handle`, and `handle` blocks are mutually exclusive and evaluated in SOURCE ORDER,
+	# so a public route is proxied and every other /gateway path falls through to the explicit 404. Every
+	# matcher is METHOD-SCOPED: each gateway route matches only the verb its FastAPI route serves, and
+	# add-survey.html is GET-only — a wrong-method hit (e.g. GET /gateway/submit) matches no allow and is
+	# refused like any other non-public path.
+	#
+	# THE PUBLIC SUBSET (read gateway/app.py — these are the ONLY routes reachable at the public name):
+	#   * GET  /add-survey.html (+ trailing slash) — the contribution page (map, ROR autocomplete, the
+	#                        C13 Submit-to-AusMT button). Static; served by the box reader.
+	#   * POST /gateway/submit          — the direct-upload endpoint the Submit button POSTs to.
+	#   * POST /gateway/request-key     — self-serve email key issuance (K1).
+	#   * GET  /gateway/healthz         — the liveness probe the page uses to reveal the Submit button.
+	#   * GET  /gateway/status/*        — the capability-token submission-status page (design §3).
+	# Everything else under /gateway — the ENTIRE curator/admin workbench (login, queue, publish, serve
+	# control, passkey enrolment, analytics, uploader-key management) — is an EXPLICIT 404. The bare
+	# `/gateway` is enumerated alongside `/gateway/*` because `/gateway/*` does not match a path with no
+	# trailing slash, so wall 1 stays SELF-COMPLETE in both slash forms; a non-GET /add-survey.html is
+	# refused there too (only the GET is carved out above).
+	#
+	# Wall 2 (the box reader listener, deploy/docker/caddy/Caddyfile :8081) is an INDEPENDENT allowlist
+	# of the SAME subset behind the port-scoped tailnet ACL: it proxies only these four gateway routes to
+	# the gateway container and serves add-survey.html itself, refusing every other /gateway path on its
+	# own (C47 invariant b). Two independent allowlists of one subset — a breach needs BOTH to widen.
+	@public_add_survey {
+		method GET
+		path /add-survey.html /add-survey.html/
+	}
+	@public_gw_submit {
+		method POST
+		path /gateway/submit
+	}
+	@public_gw_request_key {
+		method POST
+		path /gateway/request-key
+	}
+	@public_gw_healthz {
+		method GET
+		path /gateway/healthz
+	}
+	@public_gw_status {
+		method GET
+		path /gateway/status/*
+	}
+	handle @public_add_survey {
+		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+	}
+	handle @public_gw_submit {
+		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+	}
+	handle @public_gw_request_key {
+		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+	}
+	handle @public_gw_healthz {
+		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+	}
+	handle @public_gw_status {
+		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+	}
+
+	# Deny-by-default: every other /gateway path (both slash forms) AND any non-GET /add-survey.html is
+	# an explicit 404, never proxied. Listed AFTER the allow handles so the public subset wins; a
+	# curator/admin path, a bare /gateway, or a wrong-method public route lands here.
 	@nonpublic path /gateway /gateway/* /add-survey.html /add-survey.html/
 	handle @nonpublic {
 		respond "not found" 404
 	}
 
-	# ---- The public reader: everything else proxies to the box reader-only listener over the tailnet.
-	# {$AUSMT_BOX_READER_UPSTREAM} is e.g. http://ausmt-box:8445 (the box's MagicDNS name + the
-	# tailscale-serve reader port) — config-side name, supplied from .env. This upstream serves ONLY the
-	# reader (portal static + /data); it has no gateway route (wall 2).
+	# ---- The public reader: everything else (portal static index/about + /data) proxies to the box
+	# public-subset listener over the tailnet. {$AUSMT_BOX_READER_UPSTREAM} is e.g. http://ausmt-box:8445
+	# (the box's MagicDNS name + the tailscale-serve reader port) — config-side name, supplied from .env.
 	handle {
 		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
 	}

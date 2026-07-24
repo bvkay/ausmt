@@ -175,24 +175,30 @@
 }
 
 # =================================================================================================
-# C47 public bridge — dedicated READER-ONLY listener (the box-side "second wall").
+# C47 public bridge — dedicated PUBLIC-SUBSET listener (the box-side "second wall").
 # =================================================================================================
 # The VPS public front door (deploy/frontdoor/) reverse-proxies PUBLIC internet traffic to THIS
-# listener over the tailnet — never to :8080. :8080 serves BOTH the reader AND the /gateway/* curator
-# surface on ONE port; the tailnet ACL fence is port-granular, so if the public edge could reach :8080
-# a mis-scoped front-door config might route to a /gateway/* surface. This listener serves ONLY the
-# reader (portal static + /data) and carries NO /gateway/* route at all, so the ACL — which grants the
-# front-door tag reach to THIS port and nothing else — genuinely cannot touch any gateway surface even
-# if the front door were mis-scoped. Two independent walls: path-refusal at the front door (wall 1) +
-# this gateway-less listener behind a port-scoped ACL (wall 2). See maintainer/C47-PublicBridge.md.
+# listener over the tailnet — never to :8080. :8080 serves the reader AND the WHOLE /gateway/* surface
+# (reader + submission + the entire curator workbench) on ONE port; the tailnet ACL fence is
+# port-granular, so if the public edge could reach :8080 a mis-scoped front-door config might route to
+# a curator/admin surface. This listener is an INDEPENDENT allowlist of the SAME public subset as wall
+# 1 (owner ruling 2026-07-24: the Add Survey contribution flow is public, the workbench stays walled):
+# it serves the reader (portal static + /data) and the Add Survey page, and proxies ONLY the four
+# public gateway routes (submit, request-key, healthz, status) to the gateway container — every OTHER
+# /gateway path is refused here on its own. So the ACL — which grants the front-door tag reach to THIS
+# port and nothing else — cannot touch the curator/admin surface even if the front door were
+# mis-scoped: this listener has no route to it. Two independent allowlists of one subset: the front
+# door (wall 1) + this listener behind a port-scoped ACL (wall 2). See maintainer/C47-PublicBridge.md.
 #
 # NO `log` block here BY DESIGN: the C45 masked access log runs AT THE FRONT DOOR on the real public
 # client (C47 invariant c). Every request to this listener arrives from the VPS tailnet peer, so a log
 # here would record only the proxy address — useless for analytics and a needless second copy.
 #
-# This is a deliberate near-duplicate of the :8080 header/CSP/data/root directives (NOT a snippet
+# The reader header/CSP/data/root directives are a deliberate near-duplicate of :8080 (NOT a snippet
 # import): the :8080 block is security-proven and is not refactored by this lane; any drift between the
-# two is caught by the C47 reader-listener config pin (deploy/tests/test_frontdoor_bridge.py).
+# two is caught by the C47 reader-listener config pin (deploy/tests/test_frontdoor_bridge.py). The
+# gateway passthrough below is DELIBERATELY NARROWER than :8080's blanket `handle /gateway/*` — only
+# the four public routes traverse, never the workbench.
 :8081 {
 	encode gzip
 
@@ -203,16 +209,67 @@
 		X-Frame-Options DENY
 	}
 
-	# Box-side refusal of BOTH non-public route classes. Even though the reader has no /gateway/*
-	# route below, an explicit deny here makes the wall self-standing: it does not depend on the front
-	# door being correctly scoped, and add-survey.html (inert without a reachable gateway) is refused
-	# too, so this listener is genuinely reader + /data ONLY (C47 invariant a, box side).
-	@nonpublic path /add-survey.html /gateway /gateway/*
-	respond @nonpublic "not found" 404
+	# ---- WALL 2: the box-side INDEPENDENT allowlist of the SAME public subset (C47 invariant b) ------
+	# This listener carries its OWN allowlist of the public submission subset — it does not depend on the
+	# front door being correctly scoped. The four PUBLIC gateway routes (method-scoped, identical to wall
+	# 1 in deploy/frontdoor/Caddyfile) proxy to the gateway container; EVERY OTHER /gateway path (both
+	# slash forms) is refused with an explicit 404; the Add Survey page is served locally by file_server
+	# (GET only — a non-GET /add-survey.html is refused). The allow + deny are all `handle` blocks
+	# (mutually exclusive, evaluated in SOURCE ORDER), so a public route is proxied and everything else
+	# under /gateway falls through to the 404 — a wrong-method public route (e.g. GET /gateway/submit)
+	# refuses like any other non-public path. See the wall-1 commentary for the full subset + rationale.
+	#
+	# `handle` (NOT `handle_path`): the /gateway prefix is PRESERVED to the gateway container exactly as
+	# the :8080 gateway route does, so the app's FastAPI routes (which all start /gateway) match. This is
+	# DELIBERATELY narrower than :8080's blanket `handle /gateway/*` — only these four routes traverse.
+	@public_gw_submit {
+		method POST
+		path /gateway/submit
+	}
+	@public_gw_request_key {
+		method POST
+		path /gateway/request-key
+	}
+	@public_gw_healthz {
+		method GET
+		path /gateway/healthz
+	}
+	@public_gw_status {
+		method GET
+		path /gateway/status/*
+	}
+	handle @public_gw_submit {
+		reverse_proxy gateway:8000
+	}
+	handle @public_gw_request_key {
+		reverse_proxy gateway:8000
+	}
+	handle @public_gw_healthz {
+		reverse_proxy gateway:8000
+	}
+	handle @public_gw_status {
+		reverse_proxy gateway:8000
+	}
 
-	# CSP mirrors :8080 exactly (strict everywhere except add-survey.html). add-survey.html is refused
-	# above, but its matcher is kept so the two blocks do not drift and a direct tailnet fetch still
-	# gets the right policy.
+	# Deny-by-default: every OTHER /gateway path (both slash forms) is an explicit 404, and so is any
+	# NON-GET /add-survey.html. GET /add-survey.html is NOT listed — it falls through to the file_server
+	# below (the page is now public, owner ruling 2026-07-24). Listed AFTER the allow handles so the
+	# public subset wins.
+	@nonpublic_gateway path /gateway /gateway/*
+	handle @nonpublic_gateway {
+		respond "not found" 404
+	}
+	@nonpublic_add_survey {
+		path /add-survey.html /add-survey.html/
+		not method GET
+	}
+	handle @nonpublic_add_survey {
+		respond "not found" 404
+	}
+
+	# CSP mirrors :8080 exactly (strict everywhere except add-survey.html). add-survey.html is served by
+	# the file_server below; its matcher gives it the same relaxed policy :8080 uses so a public GET (via
+	# the front door) and a direct tailnet fetch both get the right policy.
 	@strictPages not path /add-survey.html
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 
@@ -231,10 +288,13 @@
 		file_server
 	}
 
-	# NO `handle /gateway/*` here — BY DESIGN. This is the box-side wall: the gateway surface does not
-	# exist on this listener. Do NOT add a gateway route here.
+	# NO blanket `handle /gateway/*` here — BY DESIGN. Only the four PUBLIC gateway routes above traverse
+	# to the gateway container; the curator/admin workbench has NO route on this listener. Do NOT widen
+	# the gateway passthrough here — that would breach wall 2.
 
-	# Static portal (reader pages + vendor/src/config/version), same image content as :8080.
+	# Static portal (reader pages + add-survey.html + vendor/src/config/version), same image content as
+	# :8080. GET /add-survey.html lands here (it is public now); non-GET add-survey and every non-public
+	# /gateway path were refused above.
 	root * /srv/portal
 	file_server
 }

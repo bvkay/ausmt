@@ -1,19 +1,33 @@
-"""C47 public bridge — front-door runtime pins + box-side two-walls pins + log-shipping pins.
+"""C47 public bridge — front-door + box-side two-walls pins + log-shipping pins.
 
-The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader to
-the box's dedicated reader-only listener over the tailnet. The load-bearing properties are public
-(privacy) and security properties, so — per the standing rule — each is proven with a RUNTIME pin
-against a REAL Caddy driving the SHIPPED directives (the PR #48 real-caddy harness pattern), not a
-config-syntax assertion alone. Where a property can be made to FAIL, a red-proof composes a
-deliberately mis-scoped config and asserts the pin catches it.
+The bridge fronts the PUBLIC demo name from a VPS edge (deploy/frontdoor/) and proxies the reader — and,
+since the 2026-07-24 owner ruling, the PUBLIC submission subset — to the box's dedicated public-subset
+listener over the tailnet. The Add Survey contribution flow is public (an MT user who clicks Add Survey
+must reach the page and lodge a survey); the curator/admin workbench stays refused. The load-bearing
+properties are public (privacy) and security properties, so — per the standing rule — each is proven
+with a RUNTIME pin against a REAL Caddy driving the SHIPPED directives (the PR #48 real-caddy harness
+pattern), not a config-syntax assertion alone. Where a property can be made to FAIL, a red-proof
+composes a deliberately mis-scoped config and asserts the pin catches it.
 
-Runtime legs run a real Caddy against a STUB upstream (C47 deliverable 4):
-  (i)   the public vhost serves the reader path-space (a request reaches the stub reader);
-  (ii)  the refused route classes (/gateway/*, /add-survey.html) REFUSE at the front door at runtime
-        (404, never reach the stub) — red-proven against a config with the deny removed;
-  (iii) the masked access log applies to public-vhost traffic (the peer IP is /24-masked and a
-        client-sent X-Forwarded-For is deleted) — red-proven against an unfiltered log block;
-  (iv)  the box-side reader listener (:8081) serves the reader and has NO /gateway route (wall 2).
+THE PUBLIC SUBSET (both walls are INDEPENDENT allowlists of exactly this set — read gateway/app.py):
+  * GET  /add-survey.html (+ trailing slash) — the contribution page (served by the box reader).
+  * POST /gateway/submit          — the direct-upload endpoint.
+  * POST /gateway/request-key     — self-serve email key issuance.
+  * GET  /gateway/healthz         — the liveness probe the page uses to reveal the Submit button.
+  * GET  /gateway/status/*        — the capability-token submission-status page.
+Every OTHER /gateway path (the entire curator/admin workbench) and any wrong-method hit on a public
+route is refused — at wall 1 (front door) AND, independently, at wall 2 (the box listener behind the
+port-scoped ACL). A breach needs BOTH walls to widen simultaneously.
+
+Runtime legs run a real Caddy against stub upstreams (C47 deliverable 4):
+  (i)    the public reader path-space reaches the box reader (a request reaches the reader stub);
+  (ii)   the four public GATEWAY routes traverse frontdoor -> reader -> a GATEWAY stub end-to-end, and
+         GET /add-survey.html is served by the reader — method-scoped, red-proven;
+  (iii)  every non-public route class (and every wrong-method public route) REFUSES at wall 1 (404,
+         never reaching the upstream) AND, independently, at wall 2 — red-proven both ways;
+  (iv)   the masked access log applies to public-vhost traffic (peer /24-masked, sent XFF deleted) —
+         red-proven against an unfiltered log block;
+  (v)    /data carries CORS through the bridge, scoped to the /data handler.
 
 Caddy legs skip where no caddy binary is on PATH (this dev box); CI installs caddy (gateway-ci.yml),
 so they RUN there and never trip the skip tripwire — same gating as test_caddy_log_masking.py.
@@ -43,6 +57,24 @@ _DEPLOY_DIR = _REPO / "deploy"
 
 _HAS_CADDY = shutil.which("caddy") is not None
 _SH = shutil.which("sh") or shutil.which("bash")
+
+# Representative NON-PUBLIC route classes enumerated from gateway/app.py: the bare /gateway, a curator
+# GET page, a curator POST, a curator external-script asset, and a curator deep path — none may traverse
+# either wall. (GET-form probes; the POST-only classes still 404 as a GET here, which is all we assert.)
+_CURATOR_CLASSES = (
+    "/gateway",
+    "/gateway/curator/queue",
+    "/gateway/curator/uploaders",
+    "/gateway/curator/serve-state.js",
+    "/gateway/curator/serve/build/deadbeef",
+)
+# The four public gateway routes hit with the WRONG verb — each must refuse (method-aware), (method,path).
+_WRONG_METHOD_PUBLIC = (
+    ("GET", "/gateway/submit"),
+    ("GET", "/gateway/request-key"),
+    ("POST", "/gateway/healthz"),
+    ("POST", "/gateway/status/tok"),
+)
 
 
 # ==================================================================================================
@@ -106,13 +138,15 @@ def _run_caddy(cfg_text: str, td: Path, name: str) -> subprocess.Popen:
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
-def _stub_cfg(port: int) -> str:
-    # A stand-in reader upstream: echoes the path so a test can prove a request REACHED it.
-    return "{\n\tadmin off\n\tauto_https off\n}\n" + f":{port} {{\n\trespond \"STUB {{http.request.uri}}\" 200\n}}\n"
+def _stub_cfg(port: int, tag: str = "STUB") -> str:
+    # A stand-in upstream: echoes the path so a test can prove a request REACHED it. `tag` distinguishes
+    # the READER stub (STUB) from the GATEWAY-container stub (GWSTUB) in the end-to-end compositions.
+    return ("{\n\tadmin off\n\tauto_https off\n}\n"
+            + f":{port} {{\n\trespond \"{tag} {{http.request.uri}}\" 200\n}}\n")
 
 
 def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
-                   drop_gateway_deny: bool = False, narrow_matchers: bool = False,
+                   drop_gateway_deny: bool = False, unscope_submit_method: bool = False,
                    unfiltered_log: bool = False) -> tuple[str, Path]:
     """Compose a hermetic front-door config from the SHIPPED site body: rebind to :listen_port with
     auto_https off (no ACME), point the reverse_proxy at the local stub, and write the access log to a
@@ -122,28 +156,27 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     body = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", body)
     body = body.replace("{$AUSMT_BOX_READER_UPSTREAM}", f"127.0.0.1:{stub_port}")
     if drop_gateway_deny:
-        # Remove the whole wall-1 deny: the `@nonpublic path ...` matcher line AND its `handle @nonpublic
-        # { respond ... }` block — red-proof for (ii). Both must go together or caddy validate rejects an
-        # undefined matcher reference.
+        # Remove the whole wall-1 deny-by-default: the `@nonpublic path ...` matcher line AND its
+        # `handle @nonpublic { respond ... }` block — red-proof for (iii). Both must go together or
+        # caddy validate rejects an undefined matcher reference. With it gone, a curator path falls
+        # through the allow handles to the reader catch-all and REACHES the stub.
         m = re.search(r"\t@nonpublic path .*\n", body)
-        assert m, "expected a `@nonpublic path` matcher line to remove"
+        assert m, "expected a `@nonpublic path` deny matcher line to remove"
         body = body[:m.start()] + body[m.end():]
         m2 = re.search(r"\thandle @nonpublic \{", body)
         assert m2, "expected a `handle @nonpublic` deny block to remove"
         bstart = body.index("{", m2.start())
         end = bstart + len(_brace_match(body, bstart))
         body = body[:m2.start()] + body[end:]
-    if narrow_matchers:
-        # Narrow the wall-1 matcher back to the PRE-FIX classes (exact /gateway/* and exact
-        # /add-survey.html only — no bare /gateway, no trailing-slash add-survey) while keeping the
-        # `handle @nonpublic` deny — red-proof for the WIDENED matcher (ii-widen). Bare /gateway and
-        # /add-survey.html/ then slip past wall 1 to the stub, proving the widening is load-bearing.
-        body, n = re.subn(r"\t@nonpublic path .*\n",
-                          "\t@nonpublic path /gateway/* /add-survey.html\n", body, count=1)
-        assert n == 1, "expected a `@nonpublic path` matcher line to narrow"
+    if unscope_submit_method:
+        # Drop the `method POST` scope from the @public_gw_submit allow matcher (leaving `path
+        # /gateway/submit` any-method) — red-proof for the METHOD scope. A GET /gateway/submit then
+        # matches the allow and LEAKS to the stub instead of refusing at the @nonpublic deny.
+        body, n = re.subn(r"(@public_gw_submit \{\n)\t\tmethod POST\n", r"\1", body, count=1)
+        assert n == 1, "expected the @public_gw_submit `method POST` line to unscope"
     if unfiltered_log:
         # Replace the `format filter { ... }` with a bare `format json` (no ip_mask, no header deletes)
-        # — red-proof for (iii).
+        # — red-proof for (iv).
         m = re.search(r"\tformat filter \{", body)
         assert m, "expected a `format filter` block to replace"
         bstart = body.index("{", m.start())
@@ -153,13 +186,19 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     return cfg, logpath
 
 
-def _get(port: int, path: str, headers: dict | None = None) -> tuple[int, str]:
-    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers or {})
+def _req(port: int, path: str, *, method: str = "GET", headers: dict | None = None) -> tuple[int, str]:
+    data = b"" if method in ("POST", "PUT", "PATCH") else None
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data,
+                                 headers=headers or {}, method=method)
     try:
         r = urllib.request.urlopen(req, timeout=5)
         return r.status, r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")
+
+
+def _get(port: int, path: str, headers: dict | None = None) -> tuple[int, str]:
+    return _req(port, path, headers=headers)
 
 
 def _get_full(port: int, path: str, headers: dict | None = None) -> tuple[int, dict, str]:
@@ -173,24 +212,35 @@ def _get_full(port: int, path: str, headers: dict | None = None) -> tuple[int, d
         return e.code, dict(e.headers), e.read().decode("utf-8", "replace")
 
 
-def _box_reader_cfg(td: Path, port: int, *, strip_acao: bool = False) -> str:
-    """Compose a hermetic box reader-listener config from the SHIPPED :8081 site body: rebind to
-    :port with auto_https off, point root/data at temp dirs seeded with a reader page + a /data JSON,
-    and (optionally, for the red-proof) strip the /data ACAO header to reproduce the PRE-CHANGE config.
-    Used both standalone (a-runtime) and as the upstream behind the front door (c-runtime)."""
+def _box_reader_cfg(td: Path, port: int, *, gw_stub_port: int | None = None,
+                    strip_acao: bool = False, widen_gateway: bool = False) -> str:
+    """Compose a hermetic box public-subset-listener config from the SHIPPED :8081 site body: rebind to
+    :port with auto_https off, point root/data at temp dirs seeded with a reader page + add-survey.html +
+    a /data JSON, and (when gw_stub_port is given) point the four public gateway routes at a local
+    GATEWAY stub instead of the unresolvable `gateway:8000`. Optional mutations power the red-proofs."""
     text = _BOX_CADDY.read_text(encoding="utf-8")
     m = re.search(r"^:8081 \{", text, re.MULTILINE)
-    assert m, "the box Caddyfile must declare the :8081 reader-only listener"
+    assert m, "the box Caddyfile must declare the :8081 public-subset listener"
     body = _brace_match(text, m.start())[1:-1]
     portal, data = td / "portal", td / "data"
     portal.mkdir(exist_ok=True)
     data.mkdir(exist_ok=True)
     (portal / "index.html").write_text("<h1>reader</h1>", encoding="utf-8")
+    (portal / "add-survey.html").write_text("<h1>ADD SURVEY PAGE</h1>", encoding="utf-8")
     (data / "catalogue.json").write_text('{"ok":true}', encoding="utf-8")
     body = body.replace("/srv/portal", portal.as_posix()).replace("/srv/data/current", data.as_posix())
+    if gw_stub_port is not None:
+        body = body.replace("gateway:8000", f"127.0.0.1:{gw_stub_port}")
+    if widen_gateway:
+        # WIDEN the narrow @public_gw_submit allow to the whole /gateway subtree, any method — red-proof
+        # for wall 2's narrow allowlist. A curator path then matches it and LEAKS to the gateway stub,
+        # proving the exact-path + method scope is what keeps the workbench off this listener.
+        body, n = re.subn(r"\t@public_gw_submit \{\n\t\tmethod POST\n\t\tpath /gateway/submit\n\t\}",
+                          "\t@public_gw_submit {\n\t\tpath /gateway/*\n\t}", body, count=1)
+        assert n == 1, "expected the @public_gw_submit matcher block to widen"
     if strip_acao:
         # Reproduce the PRE-CHANGE Caddyfile: remove the single /data ACAO header DIRECTIVE line (the
-        # scoping comment above it is inert and may remain). red-proof for (a)/(c).
+        # scoping comment above it is inert and may remain). red-proof for the CORS pins.
         body, n = re.subn(r'[^\n]*header Access-Control-Allow-Origin "\*"\n', "", body, count=1)
         assert n == 1, "expected exactly one /data ACAO header line to strip for the pre-change export"
     return "{\n\tadmin off\n\tauto_https off\n}\n" + f":{port} {{\n{body}\n}}\n"
@@ -205,7 +255,7 @@ def _stop(proc: subprocess.Popen) -> None:
 
 
 # ==================================================================================================
-# Config pins (always run — no caddy needed)
+# Front-door config pins (always run — no caddy needed)
 # ==================================================================================================
 def test_frontdoor_masked_log_at_the_edge():
     """The front-door access log masks the client address at write time (ip_mask /24 + /48) and deletes
@@ -232,23 +282,44 @@ def test_frontdoor_does_not_trust_forwarded_addresses():
         "the front door must NOT trust forwarded addresses (it is the true edge; XFF would be spoofable)"
 
 
-def test_frontdoor_refuses_nonpublic_route_classes_explicitly():
-    """WALL 1 (config level): the front door carries an EXPLICIT deny (a 404 respond) via a `@nonpublic`
-    matcher that is SELF-COMPLETE — it lists every non-public class in BOTH slash forms so none slips
-    past on a bare vs trailing slash: /gateway AND /gateway/* (a bare /gateway is NOT covered by
-    /gateway/*), and /add-survey.html AND /add-survey.html/. The `handle @nonpublic` runs before the
-    reader reverse_proxy. FAILS IF a class or a slash form is missing, or the deny is not an explicit
-    404 refusal."""
+def test_frontdoor_allows_only_the_public_subset_explicitly():
+    """WALL 1 (config level): the front door is an ALLOWLIST of exactly the five public entry points,
+    each METHOD-SCOPED, with a deny-by-default `@nonpublic` 404 for everything else under /gateway (both
+    slash forms) and non-GET add-survey. FAILS IF a public route's method scope is missing, an extra
+    gateway route is allowed, the deny is not self-complete in both slash forms, or it is not a 404."""
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
+
+    def _matcher(name: str) -> str:
+        return _brace_match(body, body.index(f"\t@{name} {{"))
+
+    # The five public allow matchers exist, each scoped to the SHIPPED verb + path (read gateway/app.py).
+    assert re.search(r"method GET", _matcher("public_add_survey")) and \
+        re.search(r"path /add-survey\.html /add-survey\.html/", _matcher("public_add_survey")), \
+        "add-survey.html must be a GET-only allow in both slash forms"
+    assert re.search(r"method POST", _matcher("public_gw_submit")) and \
+        re.search(r"path /gateway/submit\b", _matcher("public_gw_submit")), "submit must be POST-only"
+    assert re.search(r"method POST", _matcher("public_gw_request_key")) and \
+        re.search(r"path /gateway/request-key\b", _matcher("public_gw_request_key")), \
+        "request-key must be POST-only"
+    assert re.search(r"method GET", _matcher("public_gw_healthz")) and \
+        re.search(r"path /gateway/healthz\b", _matcher("public_gw_healthz")), "healthz must be GET-only"
+    assert re.search(r"method GET", _matcher("public_gw_status")) and \
+        re.search(r"path /gateway/status/\*", _matcher("public_gw_status")), "status must be GET-only"
+
+    # No OTHER gateway route is allowed: the only /gateway paths in an allow matcher are the four public
+    # routes. Any `/gateway/curator` in an allow matcher would be a breach.
+    for name in ("public_add_survey", "public_gw_submit", "public_gw_request_key",
+                 "public_gw_healthz", "public_gw_status"):
+        assert "/gateway/curator" not in _matcher(name), f"@{name} must not allow a curator path"
+
+    # Deny-by-default is self-complete in both slash forms and is an explicit 404.
     m = re.search(r"@nonpublic path (.+)", body)
-    assert m, "wall 1 must carry a `@nonpublic path` matcher listing the non-public classes"
+    assert m, "wall 1 must carry a `@nonpublic path` deny matcher"
     classes = m.group(1).split()
     for cls in ("/gateway", "/gateway/*", "/add-survey.html", "/add-survey.html/"):
-        assert cls in classes, \
-            f"wall 1 matcher must be self-complete: {cls!r} (both slash forms) missing; got {classes}"
+        assert cls in classes, f"the deny matcher must be self-complete: {cls!r} missing; got {classes}"
     handle = _brace_match(body, body.index("\thandle @nonpublic {"))
     assert re.search(r"respond\b.*\b404", handle), "the @nonpublic handle must explicitly respond 404"
-    # The reader catch-all proxies to the box upstream placeholder (config-side name, nothing in git).
     assert "reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}" in body, \
         "the reader must proxy to the box upstream env placeholder"
 
@@ -270,32 +341,54 @@ def test_frontdoor_tls_and_hsts_configured():
 # ==================================================================================================
 # Box-side wall-2 config pins (always run)
 # ==================================================================================================
-def test_box_reader_listener_has_no_gateway_route():
-    """WALL 2 (config level): the box's dedicated reader listener (:8081) serves the reader + /data and
-    has NO /gateway route at all, and it refuses the non-public classes itself. FAILS IF a gateway
-    reverse_proxy leaks into the reader listener, or the refusal/data/root directives are missing."""
+def test_box_reader_listener_allows_only_the_public_gateway_subset():
+    """WALL 2 (config level): the box's :8081 listener is an INDEPENDENT allowlist of the SAME subset —
+    it proxies ONLY the four public gateway routes to the gateway container (a narrow passthrough, NOT
+    :8080's blanket `handle /gateway/*`), refuses every other /gateway path with an explicit 404, and
+    serves the reader + /data + add-survey.html. FAILS IF a blanket gateway route leaks in, a public
+    route loses its method scope, the deny is absent, or a reader/data/root/CSP directive is missing."""
     text = _BOX_CADDY.read_text(encoding="utf-8")
     m = re.search(r"^:8081 \{", text, re.MULTILINE)
-    assert m, "the box Caddyfile must declare the :8081 reader-only listener (C47 wall 2)"
+    assert m, "the box Caddyfile must declare the :8081 public-subset listener (C47 wall 2)"
     block = _brace_match(text, m.start())
-    assert "reverse_proxy gateway" not in block, \
-        "the reader listener must NOT reverse_proxy to the gateway — that is the whole point of wall 2"
-    # A gateway ROUTING DIRECTIVE (a `handle /gateway...` line), not a comment mentioning one. Comment
-    # lines begin with '#', so a real directive is `handle` at the start of the (whitespace-stripped)
-    # line — the "NO handle /gateway/* here" comment must NOT trip this.
+
+    # NO blanket gateway routing directive — only the four narrow, method-scoped public matchers proxy.
+    # A `handle /gateway/*` (or `/gateway/curator`) reverse-proxy would breach wall 2.
     assert not re.search(r"^\s*handle\s+/gateway", block, re.MULTILINE), \
-        "the reader listener must carry no /gateway routing directive"
-    assert re.search(r"@nonpublic path .*?/gateway", block), \
-        "the reader listener must explicitly refuse the non-public classes (self-standing wall)"
-    assert "handle_path /data/*" in block, "the reader listener must serve /data"
-    assert "root * /srv/portal" in block, "the reader listener must serve the static portal (the reader)"
-    assert "Content-Security-Policy" in block, "the reader listener must carry the portal CSP"
-    # No `log` block on the reader listener — the masked log runs at the front door (invariant c).
-    assert "\n\tlog {" not in block, "the reader listener must NOT log (the masked log is at the front door)"
+        "the listener must carry no blanket /gateway routing directive (only the narrow public routes)"
+    assert "reverse_proxy gateway:8000" in block, \
+        "the four public routes must proxy to the gateway container"
+
+    def _matcher(name: str) -> str:
+        return _brace_match(block, block.index(f"@{name} {{"))
+
+    for name, verb, path in (("public_gw_submit", "POST", r"/gateway/submit\b"),
+                             ("public_gw_request_key", "POST", r"/gateway/request-key\b"),
+                             ("public_gw_healthz", "GET", r"/gateway/healthz\b"),
+                             ("public_gw_status", "GET", r"/gateway/status/\*")):
+        mb = _matcher(name)
+        assert re.search(rf"method {verb}", mb) and re.search(rf"path {path}", mb), \
+            f"@{name} must be {verb}-scoped on its exact path"
+        assert "/gateway/curator" not in mb, f"@{name} must not allow a curator path"
+
+    # Deny-by-default for every OTHER gateway path (both slash forms) + non-GET add-survey.
+    dm = re.search(r"@nonpublic_gateway path (.+)", block)
+    assert dm, "the listener must explicitly refuse the non-public gateway classes (self-standing wall)"
+    for cls in ("/gateway", "/gateway/*"):
+        assert cls in dm.group(1).split(), f"the gateway deny must be self-complete: {cls!r} missing"
+    add_deny = _brace_match(block, block.index("@nonpublic_add_survey {"))
+    assert "not method GET" in add_deny and "/add-survey.html" in add_deny, \
+        "a non-GET /add-survey.html must be refused (GET falls through to file_server)"
+
+    assert "handle_path /data/*" in block, "the listener must serve /data"
+    assert "root * /srv/portal" in block, "the listener must serve the static portal (the reader)"
+    assert "Content-Security-Policy" in block, "the listener must carry the portal CSP"
+    # No `log` block on the listener — the masked log runs at the front door (invariant c).
+    assert "\n\tlog {" not in block, "the listener must NOT log (the masked log is at the front door)"
 
 
 def test_box_compose_publishes_reader_listener_loopback_only():
-    """The reader listener is published LOOPBACK ONLY (127.0.0.1:8445:8081), fronted onto the tailnet by
+    """The :8081 listener is published LOOPBACK ONLY (127.0.0.1:8445:8081), fronted onto the tailnet by
     tailscale serve — never a bare/0.0.0.0 port. FAILS IF the bind widens beyond loopback."""
     compose = (_REPO / "deploy" / "compose.yaml").read_text(encoding="utf-8")
     assert re.search(r'"127\.0\.0\.1:8445:8081"', compose), \
@@ -303,88 +396,173 @@ def test_box_compose_publishes_reader_listener_loopback_only():
 
 
 # ==================================================================================================
-# Runtime pins — real Caddy against a stub upstream (C47 deliverable 4)
+# Runtime pins — real Caddy against stub upstreams (C47 deliverable 4)
 # ==================================================================================================
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
-def test_frontdoor_serves_reader_and_refuses_gateway_at_runtime():
-    """(i)+(ii) RUNTIME. Through a REAL front-door Caddy driving the SHIPPED site body against a stub
-    reader: a reader request REACHES the stub (200, echoed path), while /gateway/* and /add-survey.html
-    REFUSE at the front door (404) and NEVER reach the stub. FAILS IF the reader is not served, or a
-    non-public class is proxied through."""
+def test_public_subset_traverses_frontdoor_reader_gateway_end_to_end():
+    """(i)+(ii) RUNTIME, the whole bridge. frontdoor -> SHIPPED :8081 reader -> a GATEWAY stub: each of
+    the four public gateway routes reaches the GATEWAY stub (200, echoed path) with its correct verb, and
+    GET /add-survey.html is served by the reader's file_server (200). A general reader path also reaches
+    the reader. FAILS IF any public route does not traverse end-to-end, or add-survey.html is not served."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        gw_port, box_port, fd_port = _free_port(), _free_port(), _free_port()
+        gw = _run_caddy(_stub_cfg(gw_port, tag="GWSTUB"), td, "gwstub")
+        box = _run_caddy(_box_reader_cfg(td, box_port, gw_stub_port=gw_port), td, "box-reader")
+        cfg, _log = _frontdoor_cfg(td, fd_port, box_port)
+        fd = _run_caddy(cfg, td, "frontdoor")
+        try:
+            _wait_port(gw_port); _wait_port(box_port); _wait_port(fd_port)
+            # (i) a general reader path traverses to the reader (its file_server 404s a missing file —
+            # proving it is reader static, not a gateway proxy).
+            st, _ = _get(fd_port, "/some/reader/path")
+            assert st in (200, 404), f"a reader path must be served by the reader, got {st}"
+            # (ii) GET /add-survey.html served by the reader.
+            st, body = _get(fd_port, "/add-survey.html")
+            assert st == 200 and "ADD SURVEY PAGE" in body, f"add-survey.html not served: {st} {body!r}"
+            # (ii) the four public gateway routes traverse end-to-end to the GATEWAY stub, each verb-correct.
+            for method, path in (("POST", "/gateway/submit"), ("POST", "/gateway/request-key"),
+                                 ("GET", "/gateway/healthz"), ("GET", "/gateway/status/abc123")):
+                st, body = _req(fd_port, path, method=method)
+                assert st == 200 and f"GWSTUB {path}" in body, \
+                    f"{method} {path} must reach the gateway stub end-to-end, got {st} {body!r}"
+        finally:
+            _stop(fd); _stop(box); _stop(gw)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_wall1_refuses_nonpublic_independently_at_runtime():
+    """(iii) RUNTIME, WALL 1 in isolation. The front door reverse-proxies to a FULLY PERMISSIVE echo
+    stub (standing in for a box that would serve ANYTHING — i.e. wall 2 effectively removed), so any
+    request that slips past wall 1 REACHES the stub. Every curator/admin class AND every wrong-method
+    public route must still refuse at the front door (404, STUB never seen) — wall 1 holds on its own.
+    FAILS IF any non-public request reaches the stub."""
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         stub_port, fd_port = _free_port(), _free_port()
-        stub = _run_caddy(_stub_cfg(stub_port), td, "stub")
+        stub = _run_caddy(_stub_cfg(stub_port), td, "permissive-stub")
         cfg, _log = _frontdoor_cfg(td, fd_port, stub_port)
         fd = _run_caddy(cfg, td, "frontdoor")
         try:
             _wait_port(stub_port); _wait_port(fd_port)
-            # (i) reader served
-            st, body = _get(fd_port, "/some/reader/path")
-            assert st == 200 and "STUB /some/reader/path" in body, f"reader not served: {st} {body!r}"
-            st, body = _get(fd_port, "/data/catalogue.json")
-            assert st == 200 and "STUB /data/catalogue.json" in body, f"/data not served: {st} {body!r}"
-            # (ii) non-public classes refuse at the front door, never reaching the stub — in BOTH slash
-            # forms, so wall 1 is self-complete (a bare /gateway and a trailing-slash /add-survey.html/
-            # must refuse too, not just the canonical forms).
-            for path in ("/gateway/curator/queue", "/gateway", "/add-survey.html", "/add-survey.html/"):
+            for path in _CURATOR_CLASSES:
                 st, body = _get(fd_port, path)
-                assert st == 404, f"{path} must refuse at the front door, got {st}"
-                assert "STUB" not in body, f"{path} must NOT reach the reader stub"
+                assert st == 404, f"{path} must refuse at wall 1, got {st}"
+                assert "STUB" not in body, f"{path} must NOT reach the upstream through wall 1"
+            for method, path in _WRONG_METHOD_PUBLIC + (("POST", "/add-survey.html"),):
+                st, body = _req(fd_port, path, method=method)
+                assert st == 404, f"{method} {path} (wrong verb) must refuse at wall 1, got {st}"
+                assert "STUB" not in body, f"{method} {path} must NOT reach the upstream through wall 1"
+            # Both slash forms of the PUBLIC add-survey GET traverse (they are the allowlisted subset).
+            for path in ("/add-survey.html", "/add-survey.html/"):
+                st, body = _get(fd_port, path)
+                assert st == 200 and f"STUB {path}" in body, \
+                    f"GET {path} is public and must traverse wall 1, got {st} {body!r}"
         finally:
             _stop(fd); _stop(stub)
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
-def test_frontdoor_widened_matcher_redproof():
-    """(ii-widen) RED-PROOF for the WIDENED wall-1 matcher. With wall 1 narrowed back to the PRE-FIX
-    classes (exact /gateway/* and exact /add-survey.html only), a bare /gateway and a trailing-slash
-    /add-survey.html/ now slip past wall 1 and REACH the stub (200) — proving the widened matcher (bare
-    + subtree /gateway, add-survey in both slash forms) is load-bearing at wall 1, not decoration. Wall
-    2 is stubbed out (the permissive echo stub stands in for the box), so this isolates wall 1: the leak
-    is caught HERE or not at all. FAILS IF narrowing does NOT leak (the widening would prove nothing)."""
+def test_wall2_refuses_nonpublic_independently_at_runtime():
+    """(iii) RUNTIME, WALL 2 in isolation. The SHIPPED :8081 listener run against a GATEWAY stub, with NO
+    front door in front (wall 1 absent): the four public routes proxy to the gateway stub, but every
+    curator/admin class AND every wrong-method public route refuses (404, GWSTUB never seen) — wall 2
+    holds on its own. FAILS IF a non-public request reaches the gateway stub, or a public route does not."""
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
-        stub_port, fd_port = _free_port(), _free_port()
-        stub = _run_caddy(_stub_cfg(stub_port), td, "stub")
-        cfg, _log = _frontdoor_cfg(td, fd_port, stub_port, narrow_matchers=True)
-        fd = _run_caddy(cfg, td, "frontdoor-narrow")
+        gw_port, box_port = _free_port(), _free_port()
+        gw = _run_caddy(_stub_cfg(gw_port, tag="GWSTUB"), td, "gwstub")
+        box = _run_caddy(_box_reader_cfg(td, box_port, gw_stub_port=gw_port), td, "box-reader")
         try:
-            _wait_port(stub_port); _wait_port(fd_port)
-            st, body = _get(fd_port, "/gateway")
-            assert st == 200 and "STUB /gateway" in body, \
-                "red-proof failed: pre-fix narrow wall 1 should LEAK bare /gateway to the stub"
-            st, body = _get(fd_port, "/add-survey.html/")
-            assert st == 200 and "STUB /add-survey.html/" in body, \
-                "red-proof failed: pre-fix narrow wall 1 should LEAK /add-survey.html/ to the stub"
+            _wait_port(gw_port); _wait_port(box_port)
+            # public routes proxy through wall 2 to the gateway stub
+            for method, path in (("POST", "/gateway/submit"), ("GET", "/gateway/healthz"),
+                                 ("GET", "/gateway/status/xyz")):
+                st, body = _req(box_port, path, method=method)
+                assert st == 200 and f"GWSTUB {path}" in body, \
+                    f"{method} {path} must proxy through wall 2, got {st} {body!r}"
+            # curator classes + wrong-method public routes refuse, never reaching the gateway stub
+            for path in _CURATOR_CLASSES:
+                st, body = _get(box_port, path)
+                assert st == 404, f"{path} must refuse at wall 2, got {st}"
+                assert "GWSTUB" not in body, f"{path} must NOT reach the gateway through wall 2"
+            for method, path in _WRONG_METHOD_PUBLIC:
+                st, body = _req(box_port, path, method=method)
+                assert st == 404, f"{method} {path} (wrong verb) must refuse at wall 2, got {st}"
+                assert "GWSTUB" not in body, f"{method} {path} must NOT reach the gateway through wall 2"
+            # add-survey.html served locally by the reader; a non-GET add-survey refuses.
+            st, body = _get(box_port, "/add-survey.html")
+            assert st == 200 and "ADD SURVEY PAGE" in body, f"add-survey.html must be served, got {st}"
+            st, _ = _req(box_port, "/add-survey.html", method="POST")
+            assert st == 404, f"a non-GET /add-survey.html must refuse at wall 2, got {st}"
         finally:
-            _stop(fd); _stop(stub)
+            _stop(box); _stop(gw)
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
-def test_frontdoor_refusal_redproof():
-    """(ii) RED-PROOF. With the /gateway/* deny REMOVED from the shipped config, /gateway/* now reaches
-    the stub (200) — proving the refusal pin genuinely discriminates (the deny is load-bearing, not
-    decoration). FAILS IF removing the deny does NOT change behaviour (which would mean the pin proves
-    nothing)."""
+def test_wall1_deny_redproof():
+    """(iii) RED-PROOF, wall 1. With the `@nonpublic` deny-by-default REMOVED from the shipped config, a
+    curator path falls through the allow handles to the reader catch-all and REACHES the permissive stub
+    (200) — proving the deny is load-bearing, not decoration. FAILS IF removing it does NOT leak."""
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         stub_port, fd_port = _free_port(), _free_port()
-        stub = _run_caddy(_stub_cfg(stub_port), td, "stub")
+        stub = _run_caddy(_stub_cfg(stub_port), td, "permissive-stub")
         cfg, _log = _frontdoor_cfg(td, fd_port, stub_port, drop_gateway_deny=True)
-        fd = _run_caddy(cfg, td, "frontdoor-misscoped")
+        fd = _run_caddy(cfg, td, "frontdoor-nodeny")
         try:
             _wait_port(stub_port); _wait_port(fd_port)
             st, body = _get(fd_port, "/gateway/curator/queue")
             assert st == 200 and "STUB /gateway/curator/queue" in body, \
-                "red-proof failed: a mis-scoped front door should LEAK /gateway/* to the stub"
+                "red-proof failed: a wall 1 with the deny removed should LEAK a curator path to the stub"
         finally:
             _stop(fd); _stop(stub)
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_wall1_method_scope_redproof():
+    """(iii) RED-PROOF, wall 1 method scope. With `method POST` dropped from the @public_gw_submit allow,
+    a GET /gateway/submit now matches the allow and LEAKS to the stub (200) instead of refusing at the
+    deny — proving the method scope is load-bearing. FAILS IF unscoping the verb does NOT leak."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        stub_port, fd_port = _free_port(), _free_port()
+        stub = _run_caddy(_stub_cfg(stub_port), td, "permissive-stub")
+        cfg, _log = _frontdoor_cfg(td, fd_port, stub_port, unscope_submit_method=True)
+        fd = _run_caddy(cfg, td, "frontdoor-unscoped")
+        try:
+            _wait_port(stub_port); _wait_port(fd_port)
+            st, body = _get(fd_port, "/gateway/submit")
+            assert st == 200 and "STUB /gateway/submit" in body, \
+                "red-proof failed: an unscoped submit allow should LEAK GET /gateway/submit to the stub"
+        finally:
+            _stop(fd); _stop(stub)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
+def test_wall2_narrow_scope_redproof():
+    """(iii) RED-PROOF, wall 2. With the narrow @public_gw_submit allow WIDENED to the whole /gateway
+    subtree (any method), a curator path now matches it and LEAKS to the gateway stub (200) — proving the
+    exact-path + method scope is what keeps the workbench off this listener. FAILS IF widening does NOT
+    leak (the narrow scope would then prove nothing)."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        gw_port, box_port = _free_port(), _free_port()
+        gw = _run_caddy(_stub_cfg(gw_port, tag="GWSTUB"), td, "gwstub")
+        box = _run_caddy(_box_reader_cfg(td, box_port, gw_stub_port=gw_port, widen_gateway=True),
+                         td, "box-widened")
+        try:
+            _wait_port(gw_port); _wait_port(box_port)
+            st, body = _get(box_port, "/gateway/curator/queue")
+            assert st == 200 and "GWSTUB /gateway/curator/queue" in body, \
+                "red-proof failed: a widened wall 2 passthrough should LEAK a curator path to the gateway"
+        finally:
+            _stop(box); _stop(gw)
+
+
+@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
 def test_frontdoor_masks_public_traffic_at_runtime():
-    """(iii) RUNTIME. A public request whose peer is 127.0.0.1 and which SENDS X-Forwarded-For:
+    """(iv) RUNTIME. A public request whose peer is 127.0.0.1 and which SENDS X-Forwarded-For:
     203.0.113.7 produces a front-door log line in which the peer is /24-masked (127.0.0.0) and the
     sent XFF appears NOWHERE (deleted). FAILS IF the full peer IP or the sent XFF survives in the log.
     This is the public privacy promise applied to the front-door analytics feed."""
@@ -417,7 +595,7 @@ def test_frontdoor_masks_public_traffic_at_runtime():
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
 def test_frontdoor_masking_redproof():
-    """(iii) RED-PROOF. With the `format filter` (ip_mask + header deletes) replaced by a bare
+    """(iv) RED-PROOF. With the `format filter` (ip_mask + header deletes) replaced by a bare
     `format json`, the SAME request leaks the full peer IP (127.0.0.1) AND the sent XFF (203.0.113.7)
     into the log — proving the masking filter is what keeps the promise, not the JSON encoder. FAILS IF
     an unfiltered log does NOT leak (which would mean the filter proves nothing)."""
@@ -442,39 +620,6 @@ def test_frontdoor_masking_redproof():
             _stop(fd); _stop(stub)
 
 
-@pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
-def test_box_reader_listener_serves_reader_no_gateway_at_runtime():
-    """(iv) RUNTIME (wall 2, box side). The SHIPPED :8081 reader-listener body, run against nothing but
-    itself, serves a reader path (its own file_server 404s on a missing file — proving the route is
-    reader static, not a gateway proxy) and REFUSES /gateway/* with the explicit 404. The key property:
-    a /gateway/* request is REFUSED, never proxied. FAILS IF /gateway/* is anything but a refusal."""
-    text = _BOX_CADDY.read_text(encoding="utf-8")
-    m = re.search(r"^:8081 \{", text, re.MULTILINE)
-    body = _brace_match(text, m.start())[1:-1]
-    # Point root/data at an empty temp dir so file_server has a valid (if empty) root; we only assert
-    # ROUTING (refuse vs serve), not file contents.
-    with tempfile.TemporaryDirectory() as td:
-        td = Path(td)
-        (td / "portal").mkdir(); (td / "data").mkdir()
-        rp = _free_port()
-        body2 = body.replace("/srv/portal", (td / "portal").as_posix()).replace(
-            "/srv/data/current", (td / "data").as_posix())
-        cfg = "{\n\tadmin off\n\tauto_https off\n}\n" + f":{rp} {{\n{body2}\n}}\n"
-        proc = _run_caddy(cfg, td, "reader")
-        try:
-            _wait_port(rp)
-            st, _ = _get(rp, "/gateway/curator/queue")
-            assert st == 404, f"the reader listener must REFUSE /gateway/*, got {st}"
-            st, _ = _get(rp, "/add-survey.html")
-            assert st == 404, f"the reader listener must refuse /add-survey.html, got {st}"
-            # A reader path resolves through file_server (404 on a missing file is fine — it proves the
-            # route is static serving, NOT a gateway proxy that would 502/connect out).
-            st, _ = _get(rp, "/index.html")
-            assert st in (200, 404), f"a reader path must be served by file_server, got {st}"
-        finally:
-            _stop(proc)
-
-
 # ==================================================================================================
 # CORS on public data — runtime pins (feat/api-cors-geojson-honesty)
 # ==================================================================================================
@@ -489,7 +634,7 @@ def _acao(headers: dict) -> str | None:
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
 def test_reader_data_carries_cors_but_gateway_does_not_at_runtime():
-    """(a)+(b) RUNTIME. The SHIPPED :8081 reader listener serves a /data/*.json response WITH
+    """(a)+(b) RUNTIME. The SHIPPED :8081 listener serves a /data/*.json response WITH
     Access-Control-Allow-Origin: * (public read-only data is world-readable to browser JS), while the
     header is SCOPED to the /data handler only — a /gateway/* request (refused 404) and a non-/data
     reader page do NOT carry it. FAILS IF /data lacks ACAO, or ACAO leaks onto /gateway or a reader
@@ -538,7 +683,7 @@ def test_reader_data_cors_redproof():
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH — runtime pins run in CI (gateway-ci)")
 def test_data_cors_rides_through_the_frontdoor_at_runtime():
     """(c) RUNTIME. Through the FULL front-door composition — the SHIPPED front-door site body reverse-
-    proxying to the SHIPPED :8081 reader listener as its upstream — a public /data/*.json request comes
+    proxying to the SHIPPED :8081 listener as its upstream — a public /data/*.json request comes
     back to the PUBLIC side carrying Access-Control-Allow-Origin: *, exactly as the CSP rides through.
     FAILS IF the front-door reverse_proxy strips the upstream's ACAO before it reaches the public client."""
     with tempfile.TemporaryDirectory() as td:
