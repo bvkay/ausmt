@@ -73,6 +73,17 @@ function overviewDownload(s,m){const e=ediDescriptor(s,m);
   return `<div class="prodgrid"><div class="prod ${e.d?"":"dis"}" ${attrs}><span class="pdot" style="background:var(--${st})"></span><div>Transfer function<small>${esc(e.sub)}</small></div></div></div>`;}
 
 function apa(m,doi){return `${esc(m.au)} (${esc(m.yr||"n.d.")}). ${esc(m.ti)}${m.ve?" ("+esc(m.ve)+")":""} [Data set]. ${esc(m.pb)}.`+(doi?` https://doi.org/${esc(doi)}`:"");}
+// R3: the DISPLAY-ONLY APA citation rendered inside the Cite box. Identical to apa() except the trailing
+// DOI is a resolution-aware HYPERLINK: ok/unknown/absent (uncached) -> a doi.org anchor; reserved -> plain
+// text (never a dead link, honouring the r2 reserved-sweep posture). The COPY/EXPORT path stays apa()
+// (plain text) — a citation string that lands on a clipboard must remain text, not markup.
+function apaCiteDisplay(m,doi,doiRes){const base=apa(m,null);   // the APA sentence WITHOUT the DOI suffix
+  if(!doi)return base;
+  const url="https://doi.org/"+doi;
+  const doiHtml=doiRes==="reserved"
+    ? esc(url)
+    : `<a href="${escUrl(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`;
+  return base+" "+doiHtml;}
 function bibtex(k,m,doi){return `@misc{${k},\n  author    = {${m.au.replace(/;/g," and")}},\n  title     = {${m.ti}},\n  year      = {${m.yr||"n.d."}},\n  publisher = {${m.pb}},\n${doi?`  doi       = {${doi}},\n`:""}  note      = {Accessed via the AusMT portal}\n}`;}
 function ris(m,doi){return `TY  - DATA\nAU  - ${m.au.replace(/; /g,"\nAU  - ")}\nTI  - ${m.ti}\nPY  - ${m.yr||""}\nPB  - ${m.pb}\n${doi?`DO  - ${doi}\nUR  - https://doi.org/${doi}\n`:""}ER  -`;}
 
@@ -176,7 +187,7 @@ function accessPanel(m,sv){
   let title,body;
   if(lvl==="metadata_only"){
     title="Metadata only";
-    body="This survey is listed metadata-only. "+stance+"; transfer functions are available from the custodian — see the survey's contact and identifiers.";
+    body="This survey is listed metadata-only. "+stance+"; transfer functions are available from the custodian; see the survey's contact and identifiers.";
   }else if(when){
     title="Embargoed until "+when;
     body="This survey is embargoed until "+when+". "+stance+"; transfer functions and downloads are withheld until the embargo lifts.";
@@ -222,7 +233,7 @@ function maturityBlock(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];const mod=
   const stars="★".repeat(mod.stars)+"☆".repeat(mod.total-mod.stars);
   const rows=mod.dims.map(d=>`<li class="matdim ${d.achieved?"on":"off"}"><span class="matglyph">${d.achieved?"★":"☆"}</span><span>${esc(d.label)}${d.note?": "+esc(d.note):""}</span></li>`).join("");
   return `<div class="matblock"><div class="mat-h">Dataset maturity <span class="mat-stars" title="${mod.stars} of ${mod.total} stewardship dimensions achieved">${stars}</span></div>`+
-    `<div class="mat-sub">Record-stewardship maturity — how completely this record is archived, licensed and reproducible. Not a measure of scientific quality.</div>`+
+    `<div class="mat-sub">Record-stewardship maturity: how completely this record is archived, licensed and reproducible. Not a measure of scientific quality.</div>`+
     `<ul class="matdims">${rows}</ul></div>`;}
 // C7: the raw-TS pointer. A survey's OWN time_series.collection_pid (SMETA.ts_pid) is authoritative
 // when declared; TS_COLLECTION (the AusLAMP/NCI collection DOI) is only the DEPLOYMENT-WIDE default for
@@ -230,35 +241,55 @@ function maturityBlock(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];const mod=
 // stand-in for a survey's dataset DOI (see tsUrlFor's caller sites vs. fetchEdi/exports.js source-citation).
 function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
+// R5: the Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows
+// (Packed raw / Level 0 / Level 1 time series -> Level 2 derived processed data with EDI/EMTF-XML/MTH5
+// sub-rows -> Level 3 models, when ever served -> Publication). Each row carries an explicit ORIGIN tag
+// ("AusMT-derived" vs "source archive") so there is zero ambiguity about what AusMT computed vs what came
+// from the source. The Phase tensor tile is gone (it is a visual product; it lives in the Response tab).
 function relatedProducts(s){const m=SMETA[s.survey]||{};
   const tsDoi=tsUrlFor(m);
-  // IDCONS D4: a reserved collection PID / dataset DOI must not open a dead doi.org link from a product tile.
-  // When reserved, the tile is left inert (no open action) rather than routing a click to a 404.
+  // IDCONS D4 / r2 posture: a reserved collection PID / dataset DOI must not open a dead doi.org link.
+  // When reserved, the row is left inert (no action) with an honest note rather than routing to a 404.
   const tsReserved=!!(m.ts_pid&&m.ts_pid_resolution==="reserved"),tsOpen=tsReserved?null:{prod:"open",url:tsDoi};
   const doiReserved=!!(m.doi&&m.doi_resolution==="reserved");
-  // EDI + EMTF XML: real downloads driven by the manifest (which carries the authoritative, slug-
-  // namespaced url + size). Fall back to the legacy flat-path EDI fetch / pipeline note for data sets
-  // built before the manifest (or non-redistributable surveys, which aren't served).
   const arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   const xml=arts.find(a=>a.format==="emtfxml");
-  // C1b: a non-open survey has no served TF here (bytes withheld by the C1 gate, curves withheld by C1b),
-  // so the TF tile must NOT offer the "via source archive" EDI fetch — it says "embargoed"/"metadata only"
-  // (no action) instead, matching the access panel that replaced the plots above. Shared gate logic lives
-  // in ediDescriptor (also feeds the sticky-header Download action + the Overview primary-download tile).
-  const ediTile={n:"Transfer function",...ediDescriptor(s,m)};
-  const xmlTile=xml
-    ? {n:"EMTF XML",sub:"download"+(xml.size?" · "+fmtBytes(xml.size):""),st:"ok",d:{prod:"fetch",url:xml.url,name:xml.url.split("/").pop()}}
-    : {n:"EMTF XML",sub:"via pipeline",st:"part",d:{prod:"toast",msg:"EMTF XML is produced in the build pipeline (mt_metadata); served on the hosted site for redistributable surveys."}};
-  const items=[
-   ediTile,
-   xmlTile,
-   {n:"MTH5",sub:m.mth5==="ok"?"available":m.mth5==="part"?"partial":"product not currently available (not located in source archives)",st:m.mth5||"unk",d:m.mth5==="no"?null:tsOpen},
-   {n:"Raw time series",sub:m.ts==="ok"?"NCI THREDDS":"not located in source archives",st:m.ts||"unk",d:m.ts==="ok"?tsOpen:null},
-   {n:"Phase tensor",sub:"computed",st:"ok",d:{prod:"scroll",sel:"#pt_anchor"}},
-   {n:"Publication",sub:m.doi?(doiReserved?"reserved (not yet active)":"DOI"):"none recorded",st:m.doi?(doiReserved?"part":"ok"):"no",d:(m.doi&&!doiReserved)?{prod:"open",url:"https://doi.org/"+m.doi}:null}
-  ];
+  // Time-series level availability comes from the survey time_series levels metadata (m.ts_levels; vocab
+  // raw_packed / level0 / level1). A present level links to the source time-series collection (reserved
+  // honesty); an absent level shows the honest muted not-available state (levels 0-2 are never omitted).
+  const levels=(m.ts_levels||[]);
+  const hasLevel=v=>levels.indexOf(v)>=0;
+  const tsLevelRow=(label,gloss,vocab)=>{
+    if(!hasLevel(vocab))return {n:label,sub:gloss+" · not available",origin:"source archive",st:"unk",d:null};
+    if(tsReserved)return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
+    return {n:label,sub:gloss+" · "+(m.ts_pid?"survey collection":"NCI collection"),origin:"source archive",st:"ok",d:tsOpen};
+  };
+  // Level 2 sub-rows (the impedance tensors): the source EDI (the custodian's processed transfer function,
+  // gated by C1b for non-open surveys — it says "embargoed"/"metadata only", never "via source archive"),
+  // then the AusMT-derived EMTF XML (build pipeline, mt_metadata) and MTH5.
+  const ediSub={n:"EDI",...ediDescriptor(s,m),origin:"source archive"};
+  const xmlSub=xml
+    ? {n:"EMTF XML",sub:"download"+(xml.size?" · "+fmtBytes(xml.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:xml.url,name:xml.url.split("/").pop()}}
+    : {n:"EMTF XML",sub:"via pipeline",origin:"AusMT-derived",st:"part",d:{prod:"toast",msg:"EMTF XML is produced in the build pipeline (mt_metadata); served on the hosted site for redistributable surveys."}};
+  const mth5Sub={n:"MTH5",sub:m.mth5==="ok"?"available":m.mth5==="part"?"partial":"product not currently available (not located in source archives)",origin:"AusMT-derived",st:m.mth5||"unk",d:m.mth5==="no"?null:tsOpen};
+  const level2Subs=[ediSub,xmlSub,mth5Sub];
+  // Publication (interpretation) — the parenthetical separates the dataset citation from an interpretation
+  // publication. Reserved-DOI honesty applies (inert + note).
+  const pubRow={n:"Publication (interpretation)",sub:m.doi?(doiReserved?"reserved, not yet active":"DOI"):"none recorded",origin:"source archive",st:m.doi?(doiReserved?"part":"ok"):"no",d:(m.doi&&!doiReserved)?{prod:"open",url:"https://doi.org/"+m.doi}:null};
   const attrs=d=>d?Object.entries(d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
-  return `<div class="prodgrid">`+items.map(it=>`<div class="prod ${it.d?"":"dis"}" ${attrs(it.d)}><span class="pdot" style="background:var(--${it.st==="ok"?"ok":it.st==="part"?"part":it.st==="no"?"no":"unk"})"></span><div>${esc(it.n)}<small>${esc(it.sub)}</small></div></div>`).join("")+`</div>`;}
+  const dot=st=>`<span class="pdot" style="background:var(--${st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"unk"})"></span>`;
+  const row=it=>`<div class="prod ${it.d?"":"dis"}" ${attrs(it.d)}>${dot(it.st)}<div>${esc(it.n)} ${it.origin?roleChip(it.origin):""}<small>${esc(it.sub)}</small></div></div>`;
+  const tsRows=[
+    tsLevelRow("Raw time series","packed raw time series","raw_packed"),
+    tsLevelRow("Level 0 edited time series","instrument-recorded, full resolution","level0"),
+    tsLevelRow("Level 1 transformed time series","calibrated, resampled, filtered","level1"),
+  ].map(row).join("");
+  const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 derived processed data <small>impedance tensors</small></div>`+
+    `<div class="fl-sub">${level2Subs.map(row).join("")}</div></div>`;
+  // R5: Level 3 models render ONLY when a model DOI is served in the survey metadata. No such field exists
+  // today, so the slot stays here as a comment and simply does not render yet. When one lands, e.g.:
+  //   if(m.model_doi) level3 = row({n:"Level 3 models",sub:...,origin:"source archive",st:"ok",d:{prod:"open",url:"https://doi.org/"+m.model_doi}});
+  return `<div class="filelist">${tsRows}${level2}${row(pubRow)}</div>`;}
 function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
   const nodes=[];
   // C46-W3b: an upstream "source dataset" node when the survey declares sources[] — the lineage's origin,
@@ -303,7 +334,7 @@ function provenanceBox(s){
     // dropped alongside the hidden screening-parameters row above — restore the commented clause when the row returns.
     `</table><div class="prov" style="margin-top:6px">Every product traces to its input file, the extractor and version`+
     /* ", and the screening parameters above" */
-    ` — reproducible offline by <i>AusMT</i>.</div></details>`;
+    `. Reproducible offline by <i>AusMT</i>.</div></details>`;
 }
 // C25-V3 (frame policy v3, owner ruling 2026-07-11): the engine serves impedances AS STORED in the
 // source's declared acquisition frame and NEVER de-rotates. When that frame is non-trivial we report
@@ -327,7 +358,7 @@ function frameLineText(frame){
   if(!hasAngle&&!hasTip&&!mixed) return "";
   const fmt=v=>{const a=Math.round(v*10)/10;return (a>0?"+":"")+a+"°";};   // at most 1 dp, terse
   const parts=[];
-  if(hasAngle) parts.push("Impedances served in the source's declared "+fmt(az)+" acquisition frame (as stored — not rotated to geographic north).");
+  if(hasAngle) parts.push("Impedances served in the source's declared "+fmt(az)+" acquisition frame (as stored, not rotated to geographic north).");
   if(hasTip) parts.push("Tipper served in its own declared "+fmt(taz)+" frame"+(hasAngle?"":" while impedances are in the declared-zero reference")+" (as stored).");
   if(mixed) parts.push(parts.length
     ? "This survey mixes declared frames across stations."
@@ -388,7 +419,7 @@ function screeningIndicators(d){
   ];
 }
 function _indGlyph(st){return st==="green"?"✔":st==="amber"?"◐":st==="red"?"✗":"◌";}
-function _indWord(st){return st==="green"?"Green":st==="amber"?"Amber":st==="red"?"Red":"—";}
+function _indWord(st){return st==="green"?"Green":st==="amber"?"Amber":st==="red"?"Red":"–";}
 function screeningIndicatorList(inds){
   return `<ul class="indlist">`+inds.map(it=>{
     const cls=it.state==="green"?"ok":it.state==="amber"?"part":it.state==="red"?"no":"na";
@@ -404,24 +435,30 @@ function _ssGroup(title,rows,extra){
   return `<div class="ssgroup"><div class="ssg-h">${esc(title)}</div><table class="meta">`+
     rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")+`</table>${extra||""}</div>`;}
 function stationSummaryDetails(s,m,sc){
-  const mre=sc[SC.mre];
-  const station=_ssGroup("Station",[["coordinates",coordCellHtml(s)]],overviewDownload(s,m));
+  // R4: the Station group. Rows APPEND after coordinates (never reorder): the source station/site name
+  // (only when it differs from the displayed, sanitised id — the SA28_2B -> SA282B case), the data type,
+  // the ausmt_id, and the collection title (row omitted entirely when the survey is in no collection).
+  const stationRows=[["coordinates",coordCellHtml(s)]];
+  if(s.site_name&&s.site_name!==s.id)stationRows.push(["site name",esc(s.site_name)]);
+  stationRows.push(["data type",esc(s.type||"–")]);   // no long-form gloss exists in the corpus yet; show the code
+  stationRows.push(["ausmt_id",esc(s.ausmt_id)]);
+  if(m.collection&&m.collection.id)stationRows.push(["collection",esc(m.collection.title||m.collection.id)]);
+  const station=_ssGroup("Station",stationRows,overviewDownload(s,m));
   const tf=_ssGroup("Transfer function",[
     ["periods",`${fmtP(s.pmin)}–${fmtP(s.pmax)} s`],
     ["components",(esc(s.comps.split("").join(" + "))||"–")],
     ["tipper",s.comps.includes("T")?"yes":"no"],
     ["remote reference",sc[SC.rr]?"yes":"not recorded"]]);
+  // R4: the "Data checks" group (the TF error row) is REMOVED per owner ruling — reversibly commented per
+  // house style for hidden-not-deleted surfaces. mre / DATA_CHECKS_LABEL / _ssGroup are left intact so
+  // re-enabling is uncommenting only.
+  /* const mre=sc[SC.mre];
   const checks=_ssGroup(DATA_CHECKS_LABEL,[
-    // CVD amendment: the ramp colour rides a .qvdot swatch (the sequential ramp's dark low end is
-    // unreadable as text on the dark panel); the value itself stays plain readable text — meaning never
-    // rode on the colour alone (the number is printed).
-    // HIDDEN pending design review (owner 2026-07-22): screening surface not public-ready — restore by uncommenting the "completeness" row below. sc[SC.q]/qColor left intact so re-enabling is uncommenting only.
-    /* ["completeness",sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> <span class="prov">(shape/coverage screen — not a verdict)</span>`:"n/a"], */
-    ["TF error",mre!=null?Math.round(mre*100)+"%":"n/a"]]);
+    ["TF error",mre!=null?Math.round(mre*100)+"%":"n/a"]]); */
   const proc=_ssGroup("Processing",[
     ["software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
     ["source",esc(s.file)]]);
-  return `<details class="prov-d ssdetails"><summary>Station summary</summary><div class="prov-dbody ssbody">${station}${tf}${checks}${proc}</div></details>`;
+  return `<details class="prov-d ssdetails"><summary>Station summary</summary><div class="prov-dbody ssbody">${station}${tf}${proc}</div></details>`;
 }
 function openStation(i){
   _rememberDrawerOpener();                            // E7: capture the invoking element before the rewrite
@@ -470,7 +507,9 @@ function openStation(i){
     `<div class="dsub">${esc(s.survey)} · ${orgNameLink(s.org,m.org_ror)} · ${esc(s.country)}</div>`+
     collLine(m)+
     `<div class="dchips">${yearChip}${licBadge}</div>`+
-    `<div class="dactions">${headerDownloadBtn(s,m)}<button class="dl-cite" data-act="tab" data-tab="cite">Cite</button></div>`+
+    // R1: the header "Cite" tab-jump button (.dl-cite) is removed as redundant — the Cite TAB already
+    // reaches the same panel; the header keeps only the Download EDI primary action.
+    `<div class="dactions">${headerDownloadBtn(s,m)}</div>`+
     tabStrip+`</div>`;
   // ---- Panel content -------------------------------------------------------------------------------
   // Response (default) — the four plots FIRST (the centerpiece; all four always shown — phase tensor +
@@ -497,8 +536,10 @@ function openStation(i){
     `${gd?"⚠ <b>Galvanic/static-shift</b> signature detected (ρ modes offset by a near-constant factor with coincident phases). ":""}`+
     `<span style="color:var(--muted)">Automated completeness/smoothness check: ${sc[SC.q]!=null?`<span class="qvdot" style="background:${qColor(sc[SC.q])}"></span><b>${sc[SC.q].toFixed(1)}/5</b> — ${sc[SC.qb]==="e"?"median error + coverage + smoothness":"shape-based; no error bars in EDI"}; <i>not a quality or geological-value judgement</i>`:"n/a"}.</span></div>`+
     `</div></details>`; */
-  // Files — related products, the AusMT-derived deliverables.
-  const filesHtml=`<div class="sechead">Related products ${roleChip("AusMT-derived")}</div>`+relatedProducts(s);
+  // Files — the NCI data-level product list. R5: the section-level role chip is dropped; each product row
+  // now carries its OWN origin tag (AusMT-derived vs source archive), so a single section chip would be
+  // wrong (the list spans both source-archive time series and AusMT-derived deliverables).
+  const filesHtml=`<div class="sechead">Related products</div>`+relatedProducts(s);
   // Provenance (X6/X7/X8) — three source-data rows visible (processing software · transfer function
   // source file+sha · source archive), then the Dataset-maturity block (X7 stars), then EVERYTHING ELSE
   // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
@@ -506,6 +547,9 @@ function openStation(i){
   const _srcArchive=m.doi
     ? resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`)
     : (m.ts==="ok"?tsCollectionCell(m):"<span class='prov'>not recorded</span>");
+  // R8: whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
+  // ok when served, else part — produced via the build pipeline for redistributable surveys).
+  const _fmtXmlArt=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).some(a=>a.format==="emtfxml");
   const provTop=`<table class="meta prov-top">`+
     `<tr><td>Processing software</td><td>${sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"}</td></tr>`+
     `<tr><td>Transfer function</td><td>${esc(s.file)}${s.sha?` · <code title="${escAttr(s.sha)}">${esc(s.sha.slice(0,16))}…</code>`:" · <span class='prov'>no checksum</span>"}</td></tr>`+
@@ -521,21 +565,27 @@ function openStation(i){
     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
   // X8: the Metadata & API box collapses to a single small "API" expander at the tab's foot (Wave A's
   // honest "planned" link text kept inside).
-  const apiBlock=`<div class="api">Read API (planned) — static JSON on the hosted site:<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
+  const apiBlock=`<div class="api">Read API (planned), static JSON on the hosted site:<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
   const provenanceHtml=`<div class="sechead">Provenance ${roleChip("Source data")}</div>`+provTop+maturityBlock(s)+
     `<details class="prov-d"><summary>Lineage graph</summary><div class="prov-dbody">${provGraph(s)}</div></details>`+
     provenanceBox(s)+
     `<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`+
-    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("time series",m.ts||"unk")}${badge("MTH5",m.mth5||"unk")}${badge("DOI",hasDatasetDoi(m)?"ok":"no")}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC — see this station's provenance and treat with caution."):""}</div></div></details>`+
+    // R8: the badge set tells the DISTRIBUTED-FORMATS story — EDI, EMTF XML (via pipeline), MTH5, time
+    // series (from the levels metadata) and the licence badge. The bare "DOI" badge is dropped (it failed
+    // as communication; dataset-DOI presence is already conveyed by the maturity star and the identifiers
+    // block). States stay honest (ok/unknown/no). EMTF XML is ok when a served artifact exists, else part.
+    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",m.mth5||"unk")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div></div></details>`+
     `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
     `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
   // Cite — the citation box. C46-W3b: a no-cite survey is EXPLICIT ("custodian citation not recorded — cite
   // the survey package") rather than a silent AUSMT_SELF masquerade, and the captured attribution statement
   // (verbatim, else org(year) synthesis) renders alongside. The copy buttons keep their assembly helpers.
   const _attn=attributionText(m);
+  // R3: the citation box renders the DOI as a resolution-aware hyperlink (apaCiteDisplay); the copy buttons
+  // below still assemble plain-text apa()/bibtex()/ris() strings via the [data-cite] handler.
   const citeBody=m.cite
-    ? apa(m.cite,m.doi)
-    : `<div class="prov" style="margin-bottom:6px">Custodian citation not recorded — cite the survey package:</div>${apa(AUSMT_SELF,m.doi)}`;
+    ? apaCiteDisplay(m.cite,m.doi,m.doi_resolution)
+    : `<div class="prov" style="margin-bottom:6px">Custodian citation not recorded, cite the survey package:</div>${apaCiteDisplay(AUSMT_SELF,m.doi,m.doi_resolution)}`;
   const citeHtml=`<div class="sechead">Cite this station's source</div><div class="citebox">${citeBody}`+
     (_attn?`<div class="attn"><b>Attribution:</b> ${esc(_attn)}</div>`:"")+
     `<div class="cb-row"><button data-cite="apa" data-survey="${escAttr(s.survey)}">APA</button>`+
@@ -576,7 +626,7 @@ async function downloadUrl(url,filename){
   try{const r=await fetch(url);if(!r.ok)throw 0;const b=await r.blob();
     const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=filename||url.split("/").pop();a.click();URL.revokeObjectURL(a.href);}
   catch(e){toast("Download works when served over HTTP next to the data files; can't fetch over file://.");}}
-function copyTxt(t){navigator.clipboard?.writeText(t).then(()=>toast("Copied.")).catch(()=>toast("Copy failed — select manually."));}
+function copyTxt(t){navigator.clipboard?.writeText(t).then(()=>toast("Copied.")).catch(()=>toast("Copy failed; select manually."));}
 
 // UX3 item 6: the survey card description comes from the survey.yaml abstract, which the engine already
 // carries into SMETA as m.blurb (build_portal.py). Render the escaped abstract when present and non-empty;
@@ -586,7 +636,7 @@ function cardDesc(m){
   const blurb=(m&&typeof m.blurb==="string")?m.blurb.trim():"";
   return blurb
     ? `<div class="desc">${esc(blurb)}</div>`
-    : `<div class="desc desc-empty">No survey description provided — add an <code>abstract</code> to survey.yaml.</div>`;
+    : `<div class="desc desc-empty">No survey description provided; add an <code>abstract</code> to survey.yaml.</div>`;
 }
 // UX6 Wave E: a survey's declared acquisition window as display text — the dates string when present,
 // else the year_start(-end) range; "" when neither is declared (caller omits the field). Shared by the
@@ -650,10 +700,11 @@ function instrumentPidLink(p){if(!p)return null;const s=String(p);
 function instrumentPidsHtml(m){
   const list=(m.instruments||[]);
   if(!list.length)return "";
+  // R7: an instrument with a model but no PID shows JUST the model (no "(no PID)" suffix).
   const rows=list.map(i=>{const label=[i.manufacturer,i.model].filter(Boolean).map(esc).join(" ")||"instrument";
     const link=instrumentPidLink(i.pid);
-    return link?`${label} — ${link}`:`${label} <span class='prov'>(no PID)</span>`;}).join("<br>");
-  return `Instrument PIDs:<br><span class="pidline">${rows}</span><br>`;}
+    return link?`${label}: ${link}`:label;}).join("<br>");
+  return `Instrument PIDs:<br><span class="pidline">${rows}</span>`;}
 // §2a (identifiers design — the related-identifiers model): DataCite relation -> a human label. An
 // out-of-vocab relation (should never publish — the validator FAILs it) falls back to the escaped raw
 // value; a blank relation to a neutral "Related".
@@ -678,7 +729,7 @@ function relatedIdLink(id,type){
 // not-yet-active DOI (e.g. a freshly-minted NCI PID whose handle mapping is not live) -> plain escaped
 // text + a muted "(reserved — not yet active)" note, NEVER an anchor: we do not ship a dead link. "ok" /
 // "unknown" / absent (no cache) -> the caller's normal link, byte-for-byte as today (unknown = today).
-function reservedText(text){return `${esc(text)} <span class="prov reserved-note">(reserved — not yet active)</span>`;}
+function reservedText(text){return `${esc(text)} <span class="prov reserved-note">(reserved, not yet active)</span>`;}
 function resolvedOr(resolution,text,linkHtml){return resolution==="reserved"?reservedText(text):linkHtml;}
 // IDCONS D4: the raw-TS collection cell — a link to the survey's OWN collection PID (or the NCI default),
 // rendered as plain text + reserved note when the survey's own ts_pid is reserved. The NCI default
@@ -700,35 +751,33 @@ function relatedIdentifiersHtml(m){
     // IDCONS D4: a reserved identifier renders as plain text + note, not an anchor (never a dead link).
     const idCell=r.resolution==="reserved"?reservedText(r.identifier):relatedIdLink(r.identifier,r.identifier_type);
     return `${label}: ${idCell}${cust}`;}).join("<br>");
-  return `Related identifiers:<br><span class="pidline">${rows}</span><br>`;}
+  return `Related identifiers:<br><span class="pidline">${rows}</span>`;}
 // §2a: "a persistent dataset identifier exists in this survey's provenance chain" — the ratified reading
 // of the DOI maturity badge. TRUE when a minted dataset DOI is set OR any typed related_identifier is a
 // DOI, so a curator survey (dataset_doi null, the DOI living in the typed provenance list) still lights
 // the badge. Shared by BOTH badge sites (station format-availability + survey card) via this one predicate.
 function hasDatasetDoi(m){return !!(m&&(m.doi||(m.related_identifiers||[]).some(r=>r&&r.identifier_type==="DOI")));}
+// R7 (owner ruling — reverses the earlier explicit-absence posture): the rollup renders ONLY the rows that
+// carry a value. No "not recorded", no "(no PID)", no "not recorded in source metadata" noise; an instrument
+// with a model but no PID shows just the model; a group with no content is omitted (heading included). The
+// underlying keys are still SERVED — only the empty ROWS are dropped. IDCONS D2's retired Survey-PID row
+// stays gone.
 function identifiersHtml(m){
-  const fund=(m.funders||[]);
-  const fundLine=fund.length?fund.map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:`${esc(f.name)} <span class='prov'>(no PID)</span>`).join(" · "):"<span class='prov'>none recorded</span>";
-  const ror=rorLink(m.org_ror);
-  const raid=raidLink(m.raid);
-  return `<div class="surveymeta"><b>Persistent identifiers &amp; instruments</b><br>`+
-    // IDCONS D2: the legacy "Survey PID" (m.pid) row is retired from display — the field is never minted, so
-    // it read "not recorded" on every survey (pure noise). The key is still SERVED (engine fallback); only
-    // the row is dropped. The dataset DOI is no longer its own required row either: the typed Related
-    // identifiers rows below ARE the dataset DOIs now. m.doi renders ONLY when a survey still serves the
-    // flat key (engine fallback), through the resolution-honesty renderer; without it there is no duplicate
-    // "not recorded" line.
-    (m.doi?`Dataset DOI: <span class="pidline">${resolvedOr(m.doi_resolution,m.doi,pidLink(m.doi))}</span><br>`:"")+
-    `Organisation ROR: <span class="pidline">${ror||"<span class='prov'>not recorded</span>"}</span><br>`+
-    `Project RAiD: <span class="pidline">${raid||"<span class='prov'>not recorded</span>"}</span><br>`+
-    relatedIdentifiersHtml(m)+
-    `Instrument model: ${m.instrument_model?esc(m.instrument_model):"<span class='prov'>not recorded in source metadata</span>"}<br>`+
-    (m.instrument_pid?`Platform/instrument PID: <span class="pidline">${instrumentPidLink(m.instrument_pid)}</span><br>`:"")+
-    instrumentPidsHtml(m)+
-    `Funders: ${fundLine}</div>`;}
+  const rows=[];
+  if(m.doi)rows.push(`Dataset DOI: <span class="pidline">${resolvedOr(m.doi_resolution,m.doi,pidLink(m.doi))}</span>`);
+  const ror=rorLink(m.org_ror); if(ror)rows.push(`Organisation ROR: <span class="pidline">${ror}</span>`);
+  const raid=raidLink(m.raid); if(raid)rows.push(`Project RAiD: <span class="pidline">${raid}</span>`);
+  const rel=relatedIdentifiersHtml(m); if(rel)rows.push(rel);
+  if(m.instrument_model)rows.push(`Instrument model: ${esc(m.instrument_model)}`);
+  if(m.instrument_pid)rows.push(`Platform/instrument PID: <span class="pidline">${instrumentPidLink(m.instrument_pid)}</span>`);
+  const instr=instrumentPidsHtml(m); if(instr)rows.push(instr);
+  const fund=(m.funders||[]).filter(f=>f&&f.name);
+  if(fund.length)rows.push(`Funders: ${fund.map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:esc(f.name)).join(" · ")}`);
+  if(!rows.length)return "";
+  return `<div class="surveymeta"><b>Persistent identifiers &amp; instruments</b><br>${rows.join("<br>")}</div>`;}
 function pubCite(p){return `${esc(p.a)} (${esc(p.y)}). ${esc(p.t)}. <i>${esc(p.j)}</i>.`+(p.doi?` <a href="${escUrl("https://doi.org/"+p.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(p.doi)}</a>`:"");}
 function pubsHtml(m){const ps=(m.pubs||[]);
-  if(!ps.length)return `<div class="surveymeta"><span class='prov'>No related publications recorded yet — the science pipeline can auto-suggest these from DOIs that cite the dataset.</span></div>`;
+  if(!ps.length)return `<div class="surveymeta"><span class='prov'>No related publications recorded yet; the science pipeline can auto-suggest these from DOIs that cite the dataset.</span></div>`;
   return `<div class="surveymeta">`+ps.map(p=>"• "+pubCite(p)).join("<br><br>")+`</div>`;}
 // UX6 Wave E (E3): discovery controls for the Surveys view. State lives in this module (the controls are
 // static in index.html; the coordinator/rail filters are untouched). FORBIDDEN by contract: sorting or
@@ -756,8 +805,8 @@ function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
 // Compact/list layout row (E3): a single line — title, org, acquisition year, station count, licence badge.
 function surveyRow(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};const yearTxt=acqYearText(m);
   return `<div class="srow"><button class="srow-title" data-act="story" data-survey="${escAttr(sv)}" title="Open survey">${esc(sv)}</button>`+
-    `<span class="srow-org">${esc(m.org||"—")}</span>`+
-    `<span class="srow-year">${yearTxt||"—"}</span>`+
+    `<span class="srow-org">${esc(m.org||"–")}</span>`+
+    `<span class="srow-year">${yearTxt||"–"}</span>`+
     `<span class="srow-stn">${ss.length} station${ss.length===1?"":"s"}</span>`+
     `<span class="srow-lic">${badge(m.lic||"licence ?",licBadgeState(m.lic))}</span></div>`;}
 function renderDiscovery(n){
@@ -788,7 +837,7 @@ function focusSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.chec
   const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15));}
 function selectSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
   selected=new Set(ST.filter(s=>s.survey===sv).map(s=>s.i));updateSel();
-  const _sb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_sb.length)map.fitBounds(L.latLngBounds(_sb).pad(0.15));toast(`Selected all ${selected.size} ${sv} stations — use the download buttons in the left panel.`);}
+  const _sb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_sb.length)map.fitBounds(L.latLngBounds(_sb).pad(0.15));toast(`Selected all ${selected.size} ${sv} stations; use the download buttons in the left panel.`);}
 
 // C42: bbox over POSITIONED stations only — a withheld-coord station (null lat/lon) would poison Math.min/max
 // with NaN. Empty (all-withheld survey) => a degenerate 0° box so callers never crash on b.e/b.w.
@@ -821,7 +870,7 @@ function surveySummary(ss,m){
     if(s.pmax!=null) pmax=Math.max(pmax,s.pmax); });
   const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"–";
   const software=m.software||Object.keys(swCount).sort((a,b)=>swCount[b]-swCount[a])[0]||"not recorded";
-  const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"—";
+  const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"–";
   return `<div class="sechead">Survey summary <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(10-second view)</span></div><table class="meta">`+
     `<tr><td>stations</td><td>${ss.length}</td></tr>`+
     `<tr><td>data types</td><td>${esc(types)}</td></tr>`+
@@ -841,7 +890,7 @@ function surveySummary(ss,m){
 function releaseNotesHtml(m){
   const rn=m.release_notes;
   if(!Array.isArray(rn)||!rn.length) return "";
-  const rows=rn.map(e=>`<tr><td>${esc(e.version||"–")}</td><td>${esc(e.date||"")}${e.date&&e.note?" — ":""}${esc(e.note||"")}</td></tr>`).join("");
+  const rows=rn.map(e=>`<tr><td>${esc(e.version||"–")}</td><td>${esc(e.date||"")}${e.date&&e.note?": ":""}${esc(e.note||"")}</td></tr>`).join("");
   return `<div class="sechead">Release notes</div><table class="meta">${rows}</table>`;
 }
 // Pre-built per-survey download bundles from the manifest (EDI zip + EMTF-XML zip always when served;
@@ -898,13 +947,13 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
        ?`<div class="prod dis"><span class="pdot" style="background:var(--part)"></span><div>Dataset DOI<small>reserved (not yet active)</small></div></div>`
        :`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`):"")+
    `</div>`+
-   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:`${esc(f.name)} <span class='prov'>(no PID)</span>`).join(" · ")||"—"}</div>`+
+   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:esc(f.name)).join(" · ")||"–"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
    `<details class="prov-d survey-ids"><summary>Persistent identifiers: ${pr.have} of ${pr.total} recorded</summary><div class="prov-dbody">`+identifiersHtml(m)+`</div></details>`+
    releaseNotesHtml(m)+
    `<div class="sechead">Related surveys</div><div class="surveymeta">`+
      (rel.length?rel.map(o=>`<a href="#" data-act="story" data-survey="${escAttr(o)}">${esc(o)}</a>`).join(" · "):"<span class='prov'>none nearby</span>")+`</div>`;
-  drawer.setAttribute("aria-label",sv+" — survey details");
+  drawer.setAttribute("aria-label",sv+", survey details");
   drawer.classList.add("open");drawer.scrollTop=0;
   _focusDrawer();}                                    // E7: move focus into the dialog
 
@@ -926,11 +975,11 @@ function collectionCard(cid){const c=COLL[cid];
     `<div class="cust">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""}</div>`+
     `<div class="stats"><b>${c.n_surveys}</b> survey${c.n_surveys===1?"":"s"} · <b>${c.n_stations}</b> station${c.n_stations===1?"":"s"}${c.start_year?" · since <b>"+esc(c.start_year)+"</b>":""}</div>`+
     (c.description?`<div class="desc">${esc(c.description)}</div>`:"")+
-    `<div class="stats" style="color:var(--muted);font-size:11px">${(c.surveys||[]).map(esc).join(" · ")||"—"}</div>`+
+    `<div class="stats" style="color:var(--muted);font-size:11px">${(c.surveys||[]).map(esc).join(" · ")||"–"}</div>`+
     `<div class="cardbtns"><button data-act="collection" data-coll="${escAttr(cid)}">Explore collection →</button></div></div>`;
 }
 // UX6 Wave E (E5): the plain, truthful landing intro above the collections grid.
-function collectionsIntroHtml(){return `<p class="coll-intro">Collections group related surveys acquired under one programme — such as the national <b>AusLAMP</b> long-period array. A collection holds no transfer functions of its own; every dataset and its provenance stay with the member surveys it links to. A collection appears here automatically once surveys share a <code>collection.id</code>.</p>`;}
+function collectionsIntroHtml(){return `<p class="coll-intro">Collections group related surveys acquired under one programme, such as the national <b>AusLAMP</b> long-period array. A collection holds no transfer functions of its own; every dataset and its provenance stay with the member surveys it links to. A collection appears here automatically once surveys share a <code>collection.id</code>.</p>`;}
 // E5: the participating organisations of a collection, derived from its member surveys' SMETA (deduped, sorted).
 function collOrgs(c){const set=new Set();((c&&c.surveys)||[]).forEach(sv=>{const o=(SMETA[sv]||{}).org;if(o)set.add(o);});return [...set].sort();}
 // E5: full-width FEATURE card, shown when there are ≤2 collections (grid layout takes over above 2). Name,
@@ -955,7 +1004,7 @@ function collFeatureCard(cid){const c=COLL[cid];const members=(c.surveys||[]);co
 function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&COLL)||{}).sort();
   const intro=document.getElementById("collectionsIntro"),grid=document.getElementById("collectionsGrid");
   if(intro)intro.innerHTML=ids.length?collectionsIntroHtml():"";
-  if(!ids.length){if(grid){grid.className="cardgrid";grid.innerHTML=`<div class="emptynote">No collections yet — a collection appears automatically when surveys share a <code>collection.id</code> in their survey.yaml (e.g. AusLAMP).</div>`;}return;}
+  if(!ids.length){if(grid){grid.className="cardgrid";grid.innerHTML=`<div class="emptynote">No collections yet; a collection appears automatically when surveys share a <code>collection.id</code> in their survey.yaml (e.g. AusLAMP).</div>`;}return;}
   const feature=ids.length<=2;                                    // ≤2 => full-width feature cards; grid above 2
   if(grid){grid.className=feature?"collfeature-grid":"cardgrid";
     grid.innerHTML=(feature?ids.map(collFeatureCard):ids.map(collectionCard)).join("");}
@@ -1003,7 +1052,7 @@ function openCollectionPage(cid){
     const tc={};sub.forEach(s=>{if(s.type)tc[s.type]=(tc[s.type]||0)+1;});
     const pmn=Math.min(...sub.map(s=>s.pmin).filter(v=>v!=null)),pmx=Math.max(...sub.map(s=>s.pmax).filter(v=>v!=null));
     const types=Object.keys(tc).sort().map(t=>`${esc(t)} ${tc[t]}`).join(" · ")||"–";
-    return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"—")}</div></td>`+
+    return `<tr><td><a href="#" data-act="story" data-survey="${escAttr(sv)}">${esc(sv)}</a><div class="csub">${esc(m.org||"–")}</div></td>`+
       `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtP(pmn)+"–"+fmtP(pmx)+"s":"–"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
@@ -1013,7 +1062,7 @@ function openCollectionPage(cid){
    `<h1 class="colltitle">${esc(c.title||cid)}</h1>`+
    `<div class="collsub">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""} · ${c.n_surveys} survey${c.n_surveys===1?"":"s"} · ${c.n_stations} station${c.n_stations===1?"":"s"}${c.start_year?" · since "+esc(c.start_year):""}${c.last_updated?" · updated "+esc(c.last_updated):""}</div>`+
    (c.description?`<div class="colldesc">${esc(c.description)}</div>`:"")+
-   `<div class="collnote">A collection groups related surveys (e.g. a national programme such as AusLAMP). It holds <b>no transfer functions of its own</b> — all data and provenance live with the member surveys below.</div>`+
+   `<div class="collnote">A collection groups related surveys (e.g. a national programme such as AusLAMP). It holds <b>no transfer functions of its own</b>; all data and provenance live with the member surveys below.</div>`+
    `<div class="cstats">`+stat("surveys",c.n_surveys)+stat("stations",c.n_stations)+
      stat("period coverage",isFinite(pmin)?fmtP(pmin)+"–"+fmtP(pmax)+"s":"–")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
    (ss.length?`<div class="csechead">Station map</div>`+collScatter(ss):"")+

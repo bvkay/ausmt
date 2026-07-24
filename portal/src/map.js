@@ -298,7 +298,7 @@ function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false
       L.geoJSON(gj,{style:{color,weight:1.3,fillOpacity:.03},interactive:false}).addTo(grp);
       const src=gj.source||(gj.features&&gj.features[0]&&gj.features[0].properties&&gj.features[0].properties.source);
       if(src)map.attributionControl.addAttribution(name+": "+src);grp._loaded=true;}
-    catch(e){toast(`Layer "${name}" not found — place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
+    catch(e){toast(`Layer "${name}" not found; place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
 // layer control hidden pending owner revisit (2026-07-12) — overlay definitions (footprints + the user
 // GeoJSON layers) are kept and still constructed; the control is simply NOT added to the map.

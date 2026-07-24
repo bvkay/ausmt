@@ -46,7 +46,7 @@ declared in the survey package and recorded in provenance.
 | `qc_report.json` | `build_portal.qc_pass` | curator-facing; not read by the portal runtime |
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
 
-## `catalogue.json` — one array per station, `r[0..14]`
+## `catalogue.json` — one array per station, `r[0..15]`
 
 Source of truth: `CATALOGUE_COLUMNS` in `extract/build_portal.py`.
 
@@ -67,6 +67,7 @@ Source of truth: `CATALOGUE_COLUMNS` in `extract/build_portal.py`.
 | `r[12]` | `ausmt_id` | string | globally unique id `au.<slug>.<station>` — keys URLs, exports, products |
 | `r[13]` | `edi_available` | 0\|1 | 1 if the EDI is redistributably licensed and bundled for download |
 | `r[14]` | `sha256` | string | SHA-256 of the source file (provenance/anti-tamper) |
+| `r[15]` | `site_name` | string\|null | original pre-sanitisation station/site name, emitted only when it differs from `r[0]` (`id`); null otherwise. Lets the drawer show the source station/site name for sanitised-id cases (e.g. `SA28_2B` → `SA282B`) |
 
 ## `sci.json` — one array per station (aligned to `catalogue.json` order), `sc[0..11]`
 

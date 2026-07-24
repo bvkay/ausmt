@@ -5,7 +5,7 @@ EDI/EMTF-XML, per-survey EDI-zip/MTH5 bundles) with size + sha256 + a tier-resol
 
 NON-VACUOUS (Invariant 10): every row's size/sha256 is RECOMPUTED from the artifact on disk — the
 independent observable — not trusted from the manifest's own bytes; every manifested file must
-satisfy the redistribution license gate; and the positional catalogue must stay 15 columns (the
+satisfy the redistribution license gate; and the positional catalogue must stay 16 columns (the
 manifest is additive, not a contract change). Requires the mt_metadata/mth5 stack (the build engine).
 """
 import hashlib
@@ -85,9 +85,9 @@ def test_manifest_integrity_and_license_gate(tmp_path):
     assert urls_by_fmt["mth5"].endswith("-tf.h5"), f"MTH5 bundle must be <slug>-tf.h5: {urls_by_fmt['mth5']}"
     assert urls_by_fmt["mth5"].startswith("bundles/"), "the survey MTH5 now lives under bundles/, not h5/"
 
-    # contract non-disturbance: the manifest is additive; the positional catalogue stays 15 columns
+    # contract non-disturbance: the manifest is additive; the positional catalogue stays 16 columns
     cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
-    assert cat and all(len(row) == 15 for row in cat), "catalogue width must remain 15 (positional contract)"
+    assert cat and all(len(row) == 16 for row in cat), "catalogue width must remain 16 (positional contract)"
 
 
 def test_manifest_survey_h5_off_by_default(tmp_path):
