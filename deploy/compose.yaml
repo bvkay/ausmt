@@ -171,6 +171,18 @@ services:
       AUSMT_SESSION_TTL_S: ${AUSMT_SESSION_TTL_S:-43200}    # curator session absolute expiry (12 h)
       AUSMT_LOGIN_MAX_ATTEMPTS: ${AUSMT_LOGIN_MAX_ATTEMPTS:-5}  # failed-login attempts before throttling
       AUSMT_LOGIN_WINDOW_S: ${AUSMT_LOGIN_WINDOW_S:-300}    # login-throttle window (s)
+      # SELF-SERVE KEY MAIL (deploy/.env.example "SELF-SERVE SUBMISSION KEYS" block) — forwarded as
+      # ${VAR:-} (empty) like everything above: unset means gateway/config.py sees no SMTP config and
+      # key issuance stays INERT (neutral 202, "issuance disabled" logged) — the app-layer fail-closed
+      # posture, so no compose-level guard. Real incident (2026-07-24): these were MISSING from this
+      # list, so the operator set them in .env, the container never saw them, and request-key silently
+      # issued nothing — env forwarded here is the only bridge from .env to the app.
+      AUSMT_SMTP_HOST: ${AUSMT_SMTP_HOST:-}                 # SMTP submission host (e.g. smtp-relay.brevo.com)
+      AUSMT_SMTP_PORT: ${AUSMT_SMTP_PORT:-587}              # 465 implicit TLS; 587/25 STARTTLS
+      AUSMT_SMTP_USER: ${AUSMT_SMTP_USER:-}                 # SMTP auth login
+      AUSMT_SMTP_PASS: ${AUSMT_SMTP_PASS:-}                 # SECRET — redacted from the config dump
+      AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # From + Reply-To on issued-key email
+      AUSMT_SUBMIT_PAGE_URL: ${AUSMT_SUBMIT_PAGE_URL:-}     # woven into the email; omit for no link line
       # git identity for the container's git invocations. The commit AUTHOR is set per-commit in code
       # (AusMT Gateway <gateway@ausmt.local>, design §5.3); these HOME/config envs just give git a
       # writable config location on the read-only rootfs (pointed at the tmpfs) so it does not try to
