@@ -60,7 +60,7 @@ SCHEMA_VERSIONS = ("0.2", "0.3")
 ATTRIBUTION_KEYS = frozenset({"custodian", "custodian_ror", "statement", "changes_made",
                               "changes_summary", "declared_by", "declared_date"})
 SOURCE_KEYS = frozenset({"title", "custodian", "identifier", "licence", "retrieved", "statement",
-                         "profile", "relation", "identifier_type"})
+                         "profile", "relation", "identifier_type", "identifies"})
 SOURCE_PROFILES = frozenset({"ga", "generic"})
 # §2a (identifiers design — the related-identifiers model): the model TYPES the C46 sources[] object.
 # It adds a `relation` + an `identifier_type` to the untyped upstream-dataset identifier sources[]
@@ -70,8 +70,36 @@ SOURCE_PROFILES = frozenset({"ga", "generic"})
 # must block rather than ship. RELATION_TYPES is the curated DataCite subset ratified as the editor
 # presets (design Decision 3); IDENTIFIER_TYPES is the small set AusMT records against (eCat/SARIG ids
 # normalise to URL/DOI). Same vocab-select discipline as SOURCE_PROFILES above.
-RELATION_TYPES = frozenset({"IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites"})
+RELATION_TYPES = frozenset({"IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites",
+                            "IsPartOf", "IsSourceOf"})
 IDENTIFIER_TYPES = frozenset({"DOI", "Handle", "URL", "RAiD"})
+# "Identifiers by data level" (owner-ratified 2026-07-23). A related_identifiers row gains an
+# `identifies` key stating WHAT the identifier points at, expressed in NCI Table 1 data-level terms
+# (reusing the time_series level names). IDENTIFIES_LEVELS is the ORDERED vocab (Table 1 order); the
+# frozenset is the fail-closed membership set (an out-of-vocab value publishes a wrong level claim, so
+# it blocks exactly like relation/identifier_type). IDENTIFIES_RELATION derives the DataCite relation
+# from the level, so `relation` is no longer curator-facing: a row states the level and the relation
+# follows. A row MAY still carry an explicit relation (hand-edited YAML); when both are present and
+# disagree the validator WARNs (never blocks) and the explicit value stands.
+IDENTIFIES_LEVELS = ("collection", "raw_packed", "level0", "level1", "level2", "level3", "entire")
+IDENTIFIES_TYPES = frozenset(IDENTIFIES_LEVELS)
+IDENTIFIES_RELATION = {
+    "collection": "IsPartOf",       # the parent record (e.g. an NCI parent collection)
+    "raw_packed": "IsDerivedFrom",  # raw/packed time series
+    "level0": "IsDerivedFrom",      # edited time series
+    "level1": "IsDerivedFrom",      # transformed time series
+    "level2": "IsVariantFormOf",    # derived frequency-domain processed data (EDI/TF)
+    "level3": "IsSourceOf",         # models (the model derives FROM this dataset)
+    "entire": "IsVariantFormOf",    # a single record covering all levels (a GA eCAT / state landing page)
+}
+
+
+def derived_relation(identifies) -> str | None:
+    """The DataCite relation a given `identifies` level auto-derives to (owner ruling, D-L2). None when
+    the level is absent/blank/out-of-vocab (nothing to derive)."""
+    if identifies in (None, ""):
+        return None
+    return IDENTIFIES_RELATION.get(str(identifies).strip())
 # anti-masquerade: the BINARY TF types must start with their real signature. The text type (.edi) is
 # checked separately for binary content (a NUL byte ⇒ a renamed binary or a polyglot) in the loop below.
 MAGIC = {
@@ -188,6 +216,27 @@ def _check_typed_relation(r, container: str, idx: int, entry: dict) -> None:
     if it not in (None, "") and str(it).strip() not in IDENTIFIER_TYPES:
         r.add("FAIL", container,
               f"{container}[{idx}].identifier_type '{it}' is not one of {tuple(sorted(IDENTIFIER_TYPES))}")
+    # "Identifiers by data level" (D-L1/D-L2): `identifies` states WHAT the identifier points at, in
+    # NCI Table 1 level terms. FAIL-CLOSED like relation/identifier_type above: an out-of-vocab level
+    # would auto-derive a wrong (or no) relation, so a mis-typed value publishes a wrong provenance
+    # claim and must block rather than ship. Absent/blank is silent (a legacy row without `identifies`
+    # keeps its standalone relation, fully backward compatible).
+    idf = entry.get("identifies")
+    if idf not in (None, "") and str(idf).strip() not in IDENTIFIES_TYPES:
+        r.add("FAIL", container,
+              f"{container}[{idx}].identifies '{idf}' is not one of {IDENTIFIES_LEVELS}; the level a "
+              f"related identifier points at (NCI Table 1 order) drives the DataCite relation, so an "
+              f"out-of-vocab level cannot ship")
+    else:
+        # When BOTH `identifies` and an explicit `relation` are present and disagree, WARN (never block):
+        # the row is hand-edited, the relation now derives from the level, and the two should agree.
+        derived = derived_relation(idf)
+        if (derived is not None and rel not in (None, "")
+                and str(rel).strip() in RELATION_TYPES and str(rel).strip() != derived):
+            r.add("WARNING", container,
+                  f"{container}[{idx}].relation '{str(rel).strip()}' does not match the relation "
+                  f"'{derived}' that identifies '{str(idf).strip()}' derives to; the explicit relation "
+                  f"stands, but confirm the row (relation now follows identifies)")
 
 
 def _is_typed_provenance_entry(entry) -> bool:
@@ -721,6 +770,18 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
                   "survey/platform PID as identifiers.instrument_pid or a typed related_identifiers row "
                   "(run _tools/migrate_identifiers.py)")
             break
+    # "Identifiers by data level" (D-L3): sources[] is DEPRECATED. Its acquisition fields (title,
+    # licence, retrieved, statement, profile, custodian) are now OPTIONAL keys on a related_identifiers
+    # row (identifies: entire), so the two provenance lists merge into ONE typed carrier. WARNING, never
+    # FAIL (same posture as the flat keys): a survey still carrying sources[] PUBLISHES until migrated.
+    # Value-based: fires only when sources[] actually carries an entry, so the all-null example stays
+    # clean. The row-level checks above still run over sources[] entries so nothing goes unvalidated.
+    if isinstance(sources, list) and sources:
+        r.add("WARNING", "deprecation",
+              "sources[] is DEPRECATED (identifiers-by-level): its acquisition fields (licence, "
+              "retrieved, statement, profile, title, custodian) are now optional keys on a "
+              "related_identifiers row with identifies: entire. Run _tools/migrate_identifies.py to "
+              "merge each source into the typed list; sources[] is still read this wave")
     # C7 / §2a: a survey is provenance-incomplete ONLY when it carries NEITHER a flat identifier (dataset
     # DOI or survey PID) NOR a typed provenance relation. Because AusMT curates records whose provenance
     # lives in related identifiers rather than a minted DOI, a well-formed related_identifiers entry — or a

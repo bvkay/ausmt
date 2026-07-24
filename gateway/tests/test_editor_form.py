@@ -708,6 +708,9 @@ def _write_survey(folder: Path, meta: dict) -> None:
     (folder / "LICENSE.md").write_text("# Licence\n\n**CC-BY-4.0**\n", encoding="utf-8")
 
 
+# D-L3 (SPEC §9.3): the acquisition fields (title/licence/retrieved/statement/profile) that used to live
+# on a sources[] row now ride a related_identifiers row (identifies: entire). Same SOURCE_KEYS allow-list
+# at the validator, so the key-parity pin now feeds the merged row.
 _C46_FORM = {
     "s_attribution_custodian": "Geological Survey of South Australia",
     "s_attribution_custodian_ror": "https://ror.org/04y8k6r48",
@@ -716,35 +719,40 @@ _C46_FORM = {
     "s_attribution_changes_summary": "EMTF XML + MTH5 regenerated from custodian EDIs",
     "s_attribution_declared_by": "A. Curator",
     "s_attribution_declared_date": "2026-07-13",
-    "l_sources_0_title": "AusLAMP SA – NCI/AuScope archive",
-    "l_sources_0_custodian": "NCI / AuScope",
-    "l_sources_0_identifier": "10.25914/abc",
-    "l_sources_0_licence": "CC-BY-3.0-AU",
-    "l_sources_0_retrieved": "2016",
-    "l_sources_0_statement": "Cite the AusLAMP SA archive",
-    "l_sources_0_profile": "generic",
+    "l_related_identifiers_0_identifies": "entire",
+    "l_related_identifiers_0_identifier": "10.25914/abc",
+    "l_related_identifiers_0_identifier_type": "DOI",
+    "l_related_identifiers_0_custodian": "NCI / AuScope",
+    "l_related_identifiers_0_title": "AusLAMP SA – NCI/AuScope archive",
+    "l_related_identifiers_0_licence": "CC-BY-3.0-AU",
+    "l_related_identifiers_0_retrieved": "2016",
+    "l_related_identifiers_0_statement": "Cite the AusLAMP SA archive",
 }
 
 
 def test_key_parity_editor_patch_through_real_validator(tmp_path):
-    """KEY-PARITY PIN (the important one): an editor-assembled attribution+sources patch, written to a
-    survey.yaml and read back by the REAL vendored surveys validator, produces ZERO unknown-key
-    warnings — the editor's FROZEN section keys equal the validator's ATTRIBUTION_KEYS / SOURCE_KEYS
-    (the C42-editor key-parity lesson, cross-repo). MUTATION-PROOF below (rename one key -> red)."""
+    """KEY-PARITY PIN (the important one): an editor-assembled attribution + related_identifiers patch
+    (the row carrying the MERGED acquisition fields, D-L3), written to a survey.yaml and read back by the
+    REAL vendored surveys validator, produces ZERO unknown-key warnings — the editor's FROZEN section keys
+    equal the validator's ATTRIBUTION_KEYS / SOURCE_KEYS (the C42-editor key-parity lesson, cross-repo).
+    MUTATION-PROOF below (rename one key -> red)."""
     vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_validate")
     patch, errors = ef.build_section_patch(_C46_FORM)
     assert not errors, errors
-    assert set(patch) == {"attribution", "sources"}, patch
+    assert set(patch) == {"attribution", "related_identifiers"}, patch
+    # the relation DERIVED from identifies: entire (D-L2) and the acquisition fields round-tripped onto the row
+    assert patch["related_identifiers"][0]["relation"] == "IsVariantFormOf"
+    assert patch["related_identifiers"][0]["title"] == "AusLAMP SA – NCI/AuScope archive"
 
     folder = tmp_path / "paritytest"
     _write_survey(folder, _survey_meta_with(patch))
     rep = vv.validate(folder)
-    unknown = [i for i in rep.items if i["check"] in ("attribution", "sources")
+    unknown = [i for i in rep.items if i["check"] in ("attribution", "related_identifiers")
                and "not a recognised" in i["message"]]
     assert not unknown, f"editor keys the validator does not recognise: {unknown}"
-    # and the values the editor emits are accepted (a recognised source licence PASSES, no source WARNs)
-    assert any(i["check"] == "sources" and i["level"] == "PASS" for i in rep.items)
-    assert not [i for i in rep.items if i["check"] == "sources" and i["level"] == "WARNING"]
+    # the merged acquisition keys + derived relation are accepted (no related_identifiers WARN/FAIL)
+    assert not [i for i in rep.items if i["check"] == "related_identifiers"
+                and i["level"] in ("WARNING", "FAIL")]
 
 
 def test_key_parity_mutation_proof(tmp_path):
@@ -785,32 +793,49 @@ def test_attribution_bad_declared_date_errors():
         ef.assemble_section(form, "attribution")
 
 
-def test_sources_licence_and_profile_vocab_enforced():
-    """sources[].licence is vocab-validated against the SAME contract vocab (killing the free-text
-    seam); profile against ga|generic. A valid pair assembles; an out-of-vocab value fail-closes at the
-    form. FAILS IF the editor would accept a value the validator/engine would reject."""
-    ok = {"l_sources_0_title": "A", "l_sources_0_licence": "CC-BY-4.0",
-          "l_sources_0_profile": "ga", **_snap("sources", [])}
-    out = ef.assemble_section(ok, "sources")
+def test_related_identifiers_acquisition_licence_and_profile_vocab_enforced():
+    """D-L3: the acquisition fields merged onto a related_identifiers row keep the fail-closed vocab
+    discipline the retired sources[] row had — licence against the contract vocab, profile against
+    ga|generic. A valid pair assembles; an out-of-vocab value fail-closes at the form. FAILS IF the merged
+    row would accept a value the validator/engine would reject."""
+    ok = {"l_related_identifiers_0_identifies": "entire", "l_related_identifiers_0_identifier": "10.1/x",
+          "l_related_identifiers_0_licence": "CC-BY-4.0", "l_related_identifiers_0_profile": "ga",
+          **_snap("related_identifiers", [])}
+    out = ef.assemble_section(ok, "related_identifiers")
     assert out[0]["licence"] == "CC-BY-4.0" and out[0]["profile"] == "ga"
     with pytest.raises(ef.SectionError):
-        ef.assemble_section({"l_sources_0_title": "A", "l_sources_0_licence": "NOT-A-LICENCE",
-                             **_snap("sources", [])}, "sources")
+        ef.assemble_section({"l_related_identifiers_0_identifier": "10.1/x",
+                             "l_related_identifiers_0_licence": "NOT-A-LICENCE",
+                             **_snap("related_identifiers", [])}, "related_identifiers")
     with pytest.raises(ef.SectionError):
-        ef.assemble_section({"l_sources_0_title": "A", "l_sources_0_profile": "mystery",
-                             **_snap("sources", [])}, "sources")
+        ef.assemble_section({"l_related_identifiers_0_identifier": "10.1/x",
+                             "l_related_identifiers_0_profile": "mystery",
+                             **_snap("related_identifiers", [])}, "related_identifiers")
 
 
 # ---- §2a/§2b: related_identifiers (typed list) + identifiers.instrument_pid ----------------------
 
 def test_related_identifiers_vocab_matches_vendored_validator():
-    """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES equal the surveys validator's
-    frozen vocabularies (loaded from the VENDORED copy — the content-blind gateway cannot import the
-    sibling at runtime, so the test pins it). FAILS IF a vocab is extended in the validator but not
-    mirrored here — the exact drift the shared _check_typed_relation seam exists to prevent."""
+    """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES / identifies vocab equal the surveys
+    validator's frozen vocabularies (loaded from the VENDORED copy — the content-blind gateway cannot import
+    the sibling at runtime, so the test pins it). FAILS IF a vocab is extended in the validator but not
+    mirrored here — the exact drift the shared _check_typed_relation seam exists to prevent.
+
+    The identifies pin is the load-bearing one for D-L: an editor level token that drifts from the
+    validator would auto-derive a WRONG DataCite relation (or fail-close a level the validator accepts).
+    Pins the level set, the IDENTIFIES_RELATION mapping byte-for-byte, and per-level derived_relation
+    parity so the editor and validator can never disagree on what a level derives to."""
     vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_relvocab")
     assert set(ef.RELATION_TYPES) == set(vv.RELATION_TYPES), "editor RELATION_TYPES drifted from the validator"
     assert set(ef.IDENTIFIER_TYPES) == set(vv.IDENTIFIER_TYPES), "editor IDENTIFIER_TYPES drifted from the validator"
+    # the identifies vocab (validator exports the membership set as IDENTIFIES_TYPES = frozenset(IDENTIFIES_LEVELS))
+    assert set(ef.IDENTIFIES_LEVELS) == set(vv.IDENTIFIES_TYPES), "editor IDENTIFIES_LEVELS drifted from the validator"
+    # the level -> DataCite relation mapping is identical byte-for-byte
+    assert ef.IDENTIFIES_RELATION == vv.IDENTIFIES_RELATION, "editor IDENTIFIES_RELATION drifted from the validator"
+    # and every level derives the SAME relation through both derived_relation implementations
+    for lvl in ef.IDENTIFIES_LEVELS:
+        assert ef.derived_relation(lvl) == vv.derived_relation(lvl), \
+            f"editor/validator derived_relation disagree for identifies={lvl!r}"
 
 
 # The vulcan-2022 demo shape: the four keys the editor row models (identifier, identifier_type,
@@ -881,6 +906,65 @@ def test_related_identifiers_validator_fails_bad_relation_non_vacuous(tmp_path):
     rep = vv.validate(folder)
     assert any(i["check"] == "related_identifiers" and i["level"] == "FAIL" for i in rep.items), \
         "validator did not FAIL a bogus relation — the vocab pin would be vacuous"
+
+
+def test_identifies_out_of_vocab_is_fail_closed():
+    """D-L1: `identifies` is a fail-closed vocab (like relation/identifier_type) — an out-of-vocab level
+    is a SectionError, because a mis-typed level auto-derives a WRONG relation and must block, not ship."""
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
+                             "l_related_identifiers_0_identifies": "level9",
+                             **_snap("related_identifiers", [])}, "related_identifiers")
+    # every ratified level is accepted
+    for lvl in ef.IDENTIFIES_LEVELS:
+        out = ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
+                                   "l_related_identifiers_0_identifier_type": "DOI",
+                                   "l_related_identifiers_0_identifies": lvl,
+                                   **_snap("related_identifiers", [])}, "related_identifiers")
+        assert out[0]["identifies"] == lvl
+
+
+def test_relation_auto_derives_from_identifies_server_side():
+    """D-L2: when a row states `identifies`, the DataCite relation DERIVES from it server-side — the form
+    carries NO explicit relation (the control is hidden on an identifies row), and the assembler writes the
+    derived value. Every level maps to its ratified relation. FAILS IF a level does not derive its relation."""
+    expected = {"collection": "IsPartOf", "raw_packed": "IsDerivedFrom", "level0": "IsDerivedFrom",
+                "level1": "IsDerivedFrom", "level2": "IsVariantFormOf", "level3": "IsSourceOf",
+                "entire": "IsVariantFormOf"}
+    for lvl, rel in expected.items():
+        out = ef.assemble_section({"l_related_identifiers_0_identifier": "10.25914/x",
+                                   "l_related_identifiers_0_identifier_type": "DOI",
+                                   "l_related_identifiers_0_identifies": lvl,
+                                   # NO l_related_identifiers_0_relation posted (the control is hidden)
+                                   **_snap("related_identifiers", [])}, "related_identifiers")
+        assert out[0]["relation"] == rel, f"{lvl} did not derive {rel}: {out}"
+
+
+def test_legacy_relation_row_without_identifies_is_preserved():
+    """D-L2 back-compat: a legacy row that carries an explicit relation but NO identifies keeps its relation
+    exactly (no derivation, no identifies key introduced) — an unchanged submit round-trips to _OMIT. FAILS
+    IF the merge clobbers a legacy relation or sprays a null identifies onto the row."""
+    legacy = [{"identifier": "10.25914/legacy", "identifier_type": "DOI", "relation": "Cites",
+               "custodian": "GA"}]
+    form: dict = {"o_related_identifiers": json.dumps(legacy)}
+    for subkey, *_ in ef.LIST_SECTIONS["related_identifiers"]:
+        val = legacy[0].get(subkey)
+        form[f"l_related_identifiers_0_{subkey}"] = "" if val is None else str(val)
+    assert ef.assemble_section(form, "related_identifiers") is ef._OMIT
+
+
+def test_identifies_row_derives_even_when_no_explicit_relation_field_present():
+    """The exact render shape of an identifies row (the relation <select> is OMITTED, so the form has no
+    relation field at all): the derived relation is still written. FAILS IF the assembler needs an explicit
+    (empty) relation input to fire the derivation."""
+    stored = [{"identifier": "10.25914/coll", "identifies": "raw_packed", "identifier_type": "DOI",
+               "relation": "IsDerivedFrom", "custodian": "NCI"}]
+    form = {"o_related_identifiers": json.dumps(stored),
+            "l_related_identifiers_0_identifier": "10.25914/coll",
+            "l_related_identifiers_0_identifies": "raw_packed",
+            "l_related_identifiers_0_identifier_type": "DOI",
+            "l_related_identifiers_0_custodian": "NCI"}   # NO _relation key (control hidden)
+    assert ef.assemble_section(form, "related_identifiers") is ef._OMIT
 
 
 def test_instrument_pid_persists_and_round_trips():

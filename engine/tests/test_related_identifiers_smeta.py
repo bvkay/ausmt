@@ -34,6 +34,27 @@ def test_related_identifiers_of_serves_typed_core_only():
                     "relation": "IsDerivedFrom", "custodian": "NCI"}], got
 
 
+def test_related_identifiers_of_emits_identifies_verbatim_when_present():
+    """D-L1 (SPEC §9): a row's `identifies` (WHAT it points at, NCI Table 1 level) is emitted VERBATIM
+    into SMETA alongside the four typed-core keys — the drawer/files-tab key off it. FAILS IF the
+    recognised-key allowlist was not extended and identifies is dropped."""
+    y = {**_MIN, "related_identifiers": [
+        {"identifier": "10.25914/sv5r-zw68", "identifies": "raw_packed", "identifier_type": "DOI",
+         "relation": "IsDerivedFrom", "custodian": "NCI",
+         # acquisition keys still dropped (the drawer does not render them):
+         "title": "AusLAMP SA archive", "licence": "CC-BY-4.0"}]}
+    assert bp._related_identifiers_of(y) == [
+        {"identifier": "10.25914/sv5r-zw68", "identifier_type": "DOI", "relation": "IsDerivedFrom",
+         "custodian": "NCI", "identifies": "raw_packed"}]
+
+
+def test_related_identifiers_of_omits_identifies_when_absent():
+    """Back-compat: a legacy row without identifies yields the byte-identical four-key dict — no null
+    identifies key is introduced (absent -> omitted per entry)."""
+    got = bp._related_identifiers_of(_RI_SURVEY)
+    assert "identifies" not in got[0]
+
+
 def test_related_identifiers_of_absent_is_empty_list():
     """Funders convention: always a list, [] when the survey declares none (the drawer treats [] as
     'render nothing')."""
@@ -100,6 +121,16 @@ def test_mtcat_emits_related_identifiers_when_present():
     s = doc["surveys"][0]
     assert s["related_identifiers"] == [{"identifier": "10.25914/sv5r-zw68", "identifier_type": "DOI",
                                          "relation": "IsDerivedFrom", "custodian": "NCI"}], s
+
+
+def test_mtcat_carries_identifies_when_present():
+    """mtcat federates the SMETA related_identifiers verbatim, so D-L1's identifies rides along."""
+    y = {**_MIN, "related_identifiers": [
+        {"identifier": "10.25914/sv5r-zw68", "identifies": "raw_packed", "identifier_type": "DOI",
+         "relation": "IsDerivedFrom", "custodian": "NCI"}]}
+    meta = {"S": bp.survey_meta_from_yaml(y)}
+    doc = bp.mtcat_document(meta, _stations("S"), generated_at="2026-01-01T00:00:00Z")
+    assert doc["surveys"][0]["related_identifiers"][0]["identifies"] == "raw_packed"
 
 
 def test_mtcat_omits_related_identifiers_when_absent():

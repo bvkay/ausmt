@@ -757,18 +757,23 @@ def _publications_of(y: dict) -> list:
 
 def _related_identifiers_of(y: dict) -> list:
     """§2a (identifiers design — the related-identifiers model): the top-level related_identifiers list,
-    passed through carrying ONLY the typed-core keys the drawer renders — identifier, identifier_type,
-    relation, custodian. The stored entry may hold the wider SOURCE_KEYS allow-list (it TYPES the C46
-    sources[] object); the portal only needs the four that drive a labelled, typed link, so the rest are
-    dropped here rather than shipped to surveys.json. Non-mapping entries are skipped (never crash) —
-    mirroring _funders_of's tolerance. Like funders, this is always a list (possibly empty): an absent
+    passed through carrying the typed-core keys the drawer renders — identifier, identifier_type,
+    relation, custodian — plus D-L1's `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
+    terms). The stored entry may hold the wider SOURCE_KEYS allow-list (it TYPES the C46 sources[] object);
+    the portal only needs the level-labelled, typed link, so the acquisition keys are dropped here rather
+    than shipped to surveys.json. `identifies` is emitted VERBATIM when present and OMITTED per-entry when
+    absent, so a legacy row yields the byte-identical four-key dict (back-compat). Non-mapping entries are
+    skipped (never crash) — mirroring _funders_of's tolerance. Always a list (possibly empty): an absent
     list yields [], which the drawer treats as 'render nothing' (identifiersHtml checks emptiness)."""
     out = []
     for r in (y.get("related_identifiers") or []):
         if not isinstance(r, dict):
             continue
-        out.append({"identifier": r.get("identifier"), "identifier_type": r.get("identifier_type"),
-                    "relation": r.get("relation"), "custodian": r.get("custodian")})
+        entry = {"identifier": r.get("identifier"), "identifier_type": r.get("identifier_type"),
+                 "relation": r.get("relation"), "custodian": r.get("custodian")}
+        if r.get("identifies") not in (None, ""):
+            entry["identifies"] = r.get("identifies")   # D-L1: level label the drawer/files-tab key off
+        out.append(entry)
     return out
 
 

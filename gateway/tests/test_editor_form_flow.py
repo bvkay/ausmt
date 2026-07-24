@@ -334,6 +334,99 @@ def test_identifiers_and_pids_consolidated_page(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
+# D-L (identifiers by data level, SPEC §9): the editor identifies-first surface + Source datasets retired
+# --------------------------------------------------------------------------------------------------
+# A survey carrying BOTH an identifies-tagged related_identifiers row and a LEGACY relation-only row (no
+# identifies), plus a sources[] list the engine still reads (must be byte-preserved on disk).
+DL_SURVEY = RICH_SURVEY + """\
+related_identifiers:
+  - identifier: "10.25914/sv5r-zw68"
+    identifies: raw_packed
+    identifier_type: DOI
+    relation: IsDerivedFrom
+    custodian: NCI
+  - identifier: "10.1000/legacy-rel"
+    identifier_type: DOI
+    relation: Cites
+    custodian: GA
+
+sources:
+  - title: AusLAMP SA archive
+    custodian: NCI
+    identifier: "10.25914/keep-me"
+    identifier_type: DOI
+    licence: CC-BY-4.0
+    retrieved: "2016"
+"""
+
+
+def _dl_client(tmp_path):
+    surveys_live = tmp_path / "surveys-live"
+    pkg = write_survey_live(surveys_live, slug="rich-survey-2026", yaml_text=DL_SURVEY)
+    return surveys_live, pkg
+
+
+def test_identifies_first_relation_hidden_and_sources_retired(tmp_path):
+    """D-L (SPEC §9): the related_identifiers row leads with the 'What does this identifier point at?'
+    level <select> (identifies FIRST); on an identifies row the DataCite relation control is HIDDEN (it
+    derives), while a LEGACY relation-only row still renders its relation <select>. The acquisition fields
+    sit behind a collapsed disclosure. The 'Source datasets' section/sidebar entry is GONE. FAILS IF the
+    level control is missing, a relation control renders on an identifies row, or Source datasets returns."""
+    async def _body():
+        surveys_live, _pkg = _dl_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            body = (await client.get("/gateway/curator/edit/rich-survey-2026")).text
+            # the level <select> renders FIRST on the row (before the identifier input) with human labels
+            assert 'name="l_related_identifiers_0_identifies"' in body
+            assert "What does this identifier point at?" in body
+            assert "Raw time series (packed)" in body and "Entire dataset (single record, all levels)" in body
+            i_ident = body.index('name="l_related_identifiers_0_identifies"')
+            i_id = body.index('name="l_related_identifiers_0_identifier"')
+            assert i_ident < i_id, "the identifies level select must render BEFORE the identifier input"
+            # row 0 states a level -> NO relation control; row 1 is legacy (relation, no identifies) -> relation shown
+            assert 'name="l_related_identifiers_0_relation"' not in body, \
+                "the relation control must be hidden on an identifies row (the relation derives)"
+            assert 'name="l_related_identifiers_1_relation"' in body, \
+                "a legacy relation-only row must still render its relation select (backward compatible)"
+            # acquisition disclosure present, collapsed
+            assert "Acquisition details" in body
+            # Source datasets retired: no panel heading, no sidebar/TOC entry
+            assert ">Source datasets</h2>" not in body
+            assert 'name="l_sources_0_identifier"' not in body
+            assert "data-hub-section=\"sources\"" not in body
+    run(_body())
+
+
+def test_dl_survey_unchanged_submit_is_noop_and_sources_preserved(tmp_path):
+    """The round-trip with D-L rows: harvest the rendered form (identifies rows + a legacy row) and submit
+    UNCHANGED — the derived relation matches, the acquisition/identifies optional keys round-trip, and the
+    retired sources[] is byte-preserved (never in the patch). FAILS IF the derivation or optional-key
+    handling produces a spurious diff, or an unrelated save blanks sources[]."""
+    async def _body():
+        surveys_live, _pkg = _dl_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            form_html = (await client.get("/gateway/curator/edit/rich-survey-2026")).text
+            fields = _harvest_form_fields(form_html)
+            fields["note"] = "no-op test"
+            fields["bump"] = "patch"
+            fields["csrf_token"] = csrf
+            r = await client.post("/gateway/curator/edit/rich-survey-2026/preview",
+                                  data=fields, follow_redirects=False)
+            assert r.status_code == 200
+            assert "no changes" in r.text.lower(), (
+                "an unchanged D-L form submit must be a no-op — a diff means an identifies row, the "
+                "derived relation, or the byte-preserved sources[] did not round-trip:\n" + r.text[:2000])
+    run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
 # per-field validation errors render on the form
 # --------------------------------------------------------------------------------------------------
 def test_bad_orcid_renders_field_error_on_form(tmp_path):
