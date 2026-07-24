@@ -2923,14 +2923,33 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
         # Liveness only; no auth, no data — used by compose/operator. Deliberately reveals nothing.
         return JSONResponse({"ok": True})
 
-    # K1 self-serve key issuance. PUBLIC (no submit key), sync `def` so the blocking DB rate-limit +
-    # blocking smtplib send run in Starlette's threadpool (matching the status route's rationale — a
-    # burst must not stall the event-loop poll task). ALWAYS returns the same neutral 202; the handler
-    # is the single place the mint/mail side effects live. Accepts the email as a form field (the
-    # companion portal form POSTs urlencoded, matching the curator-login POST shape).
+    # K1 self-serve key issuance. PUBLIC (no submit key). ALWAYS returns the same neutral 202; the
+    # handler is the single place the mint/mail side effects live. The route is async ONLY to read
+    # the request body (both encodings); the blocking DB rate-limit + smtplib send still run in the
+    # threadpool via asyncio.to_thread (the burst-must-not-stall-the-event-loop rationale).
     @app.post("/gateway/request-key")
-    def request_key(request: Request, email: str = Form(default="")):
-        return gw.handle_request_key(request, email)
+    async def request_key(request: Request):
+        # Accept BOTH body encodings. The portal form posts JSON ({"email": ...}); a Form(...)
+        # parameter silently reads "" from a JSON body, so every real request failed the syntactic
+        # gate and the neutral 202 hid it (found live 2026-07-24 — the two halves were built against
+        # an encoding-ambiguous contract). A public endpoint parses defensively: JSON when declared,
+        # urlencoded/multipart otherwise, and any parse failure degrades to "" (the neutral path).
+        email = ""
+        try:
+            ctype = (request.headers.get("content-type") or "").lower()
+            if "json" in ctype:
+                data = await request.json()
+                if isinstance(data, dict):
+                    email = str(data.get("email") or "")
+            else:
+                form = await request.form()
+                email = str(form.get("email") or "")
+        except Exception:  # noqa: BLE001 -- ANY body-parse failure on this public endpoint degrades to the neutral path
+            email = ""
+        # handle_request_key does blocking DB + SMTP work; this route went async to read the body,
+        # so hop to the threadpool exactly like the other async handlers (the burst-must-not-stall-
+        # the-event-loop rationale above still holds).
+        return await asyncio.to_thread(gw.handle_request_key, request, email)
 
     # ---- curator routes (C11 §3). All session-gated except login; every state-changing POST is
     # CSRF-checked inside the handler. The GET pages that do blocking sqlite/file reads are declared
