@@ -940,6 +940,61 @@ local or LAN-internal deploy.
 
 ---
 
+## Public bridge redeploy (VPS front door + box reader listener)
+
+The public demo name (`ausmt.au`) is served through the C47 public bridge: a VPS **front door** on the
+tailnet in front of the box's dedicated `:8081` reader/public-subset listener. The full go-live,
+verification, and rollback procedure is **`deploy/frontdoor/RUNBOOK.md`**; design record and rationale
+are `maintainer/C47-PublicBridge.md`. This section is the short **redeploy after a wall change** (for
+example, opening or closing a public route, per the 2026-07-24 owner ruling that made the Add Survey
+contribution flow public while the curator workbench stays walled).
+
+**Both walls are independent allowlists of the same public subset.** The reader, `/data`, the Add
+Survey page (`GET /add-survey.html`), and the four public gateway routes (`POST /gateway/submit`,
+`POST /gateway/request-key`, `GET /gateway/healthz`, `GET /gateway/status/*`) are public; every other
+`/gateway` path (the whole curator/admin workbench) is refused. Wall 1 is the front-door Caddyfile;
+wall 2 is the box `:8081` listener behind the port-scoped tailnet ACL. When the subset changes you
+redeploy **both** by hand (either order); a change to one wall alone is not enough.
+
+**1. Box reader listener (`:8081`).** The wall lives in the portal image's Caddyfile, so a reload means
+rebuild the portal image and recreate the container (the same operation as C47 RUNBOOK step 1):
+
+```sh
+cd "$AUSMT_CODE_DIR"
+git pull                                   # or check out the release carrying the wall change
+docker compose build portal                # bake the new :8081 Caddyfile into the portal image
+docker compose up -d portal                # recreate the container on the new image
+# confirm the subset from loopback (127.0.0.1:8445 -> container :8081):
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/                          # 200 reader
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/add-survey.html           # 200 (public)
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/gateway/healthz           # 200 (public)
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/gateway/curator/queue     # 404 (walled)
+```
+
+The `200`s on the public routes with a `404` on `/gateway/curator/*` are wall 2 proving itself: it
+proxies only the four public gateway routes to the gateway container and refuses the workbench.
+
+**2. VPS front door.** Re-apply with the documented install script, which validates the Caddyfile
+against a real Caddy (failing loudly on any slip) before it brings the one-service stack up:
+
+```sh
+# on the VPS, in the deploy/frontdoor/ subtree (its own .env already filled -- see RUNBOOK step 6):
+cd deploy/frontdoor
+git pull
+./install-frontdoor.sh
+# confirm from OUTSIDE (the public wall), with DNS + TLS already live:
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html            # 200 (public)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/healthz            # 200 (public)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/submit             # 404 (GET is the wrong verb)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue      # 404 (walled)
+```
+
+`install-frontdoor.sh` is idempotent and reversible; rollback (withdraw public exposure entirely) is
+unchanged, in `deploy/frontdoor/RUNBOOK.md` section 10. The runtime pins for both walls live in
+`deploy/tests/test_frontdoor_bridge.py` and run in CI (`gateway-ci.yml` installs Caddy).
+
+---
+
 ## Appendix: the original EliteDesk deployment
 
 The first production target was an HP EliteDesk on a tailnet, `AUSMT_DATA_DIR=/srv/ausmt`, exposed

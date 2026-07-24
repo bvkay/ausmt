@@ -11,9 +11,14 @@ internet ──▶ VPS front door (public TLS, masked log) ──tailnet(WireGua
                                                                               (box: no inbound, no fw change)
 ```
 
-Two independent walls keep every curator/admin surface private: (1) the front door explicitly refuses
-`/gateway/*` and `/add-survey.html`; (2) the box reader listener has no gateway route AND the tailnet
-ACL lets the VPS reach only the reader port.
+Two independent walls keep the curator/admin workbench private while the public submission subset is
+served. Both walls are allowlists of the SAME subset (the reader, `/data`, `GET /add-survey.html`, and
+the four public gateway routes `POST /gateway/submit`, `POST /gateway/request-key`,
+`GET /gateway/healthz`, `GET /gateway/status/*`): (1) the front door allows only that subset and refuses
+every other `/gateway` path; (2) the box `:8081` listener proxies only the four public gateway routes to
+the gateway container, refuses every other `/gateway` path itself, AND the tailnet ACL lets the VPS
+reach only that listener's port (never the `:8080` workbench port). The Add Survey contribution flow is
+public since the 2026-07-24 owner ruling; the curator workbench is not.
 
 ---
 
@@ -30,7 +35,9 @@ ACL lets the VPS reach only the reader port.
 
 ## 1. Pull the box-side change and rebuild the portal image
 
-The bridge adds a dedicated **reader-only listener** (`:8081`) to the box's Caddy (the second wall).
+The bridge adds a dedicated **public-subset listener** (`:8081`) to the box's Caddy (the second wall):
+it serves the reader plus the Add Survey page, proxies only the four public gateway routes to the
+gateway container, and refuses the rest of `/gateway`.
 
 1.1  On the box, update the checkout to the branch/release carrying C47 and rebuild + restart the
      portal image so `:8081` is live:
@@ -41,12 +48,19 @@ docker compose build portal                # bake the new Caddyfile into the por
 mkdir -p "$AUSMT_DATA_DIR/logs/caddy"       # (already exists if C45 logging is on)
 docker compose up -d portal
 ```
-1.2  Confirm the reader listener answers locally (loopback publish 127.0.0.1:8445 → container :8081):
+1.2  Confirm the `:8081` listener serves the public subset and refuses the workbench locally (loopback
+     publish 127.0.0.1:8445 → container :8081):
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/            # expect 200
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/gateway/curator/queue  # expect 404
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/                        # expect 200 (reader)
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/add-survey.html         # expect 200 (public page)
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/gateway/curator/queue   # expect 404 (walled)
+# the four public gateway routes proxy to the gateway container -- with the gateway profile up:
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/gateway/healthz         # expect 200 (public)
 ```
-The `404` on `/gateway/*` is wall 2 proving itself: the reader listener has no gateway route.
+The `404` on `/gateway/curator/*` is wall 2 proving itself: the listener refuses the workbench (it has
+no route to it), while it proxies only the four public routes to the gateway container. If the gateway
+profile is not up, `/gateway/healthz` returns `502` instead of `200` (the listener has the route, but
+nothing is listening behind it yet); the `404` on the workbench is independent of the gateway state.
 
 1.3  Expose the reader listener onto the tailnet on a dedicated port (raw TCP; TLS is the VPS's job,
      the tailnet hop is already WireGuard-encrypted):
@@ -249,16 +263,23 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/data/catalogue.json  
 curl -s https://ausmt.au/data/catalogue.json | grep -i capricorn                 # re-confirm the fix serves publicly
 ```
 
-9.3  **Refuse checks from OUTSIDE (the public wall).**
+9.3  **Wall checks from OUTSIDE (the public wall).** The public subset must be served; every other
+     `/gateway` path (the curator workbench) must refuse.
 ```sh
+# PUBLIC subset -- must be served:
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html          # expect 200 (public page)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html/         # expect 200 (trailing slash)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/healthz          # expect 200 (public, gateway up)
+# WALLED -- must refuse (the whole curator/admin workbench, in both slash forms):
 curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway                  # expect 404 (bare)
 curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue    # expect 404
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/healthz          # expect 404
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html          # expect 404
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html/         # expect 404 (trailing slash)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/         # expect 404
+# method-aware: a public route hit with the WRONG verb still refuses:
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/submit           # expect 404 (GET is wrong verb)
 ```
-     Every curator/admin/contribution surface must refuse — in both slash forms. If any returns 200,
-     STOP and roll back (section 10) — a wall is breached.
+     If a WALLED path returns anything but `404`, or the wrong-verb `/gateway/submit` is served, STOP
+     and roll back (section 10): a wall is breached. If a PUBLIC path does not return `200`, the
+     contribution flow is down (check the gateway profile is up and both walls are redeployed).
 
 9.4  **Masked logs flowing + the fold picks them up.**
 ```sh
