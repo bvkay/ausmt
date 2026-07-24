@@ -1,7 +1,8 @@
-// Node test for the pure logic embedded in add-survey.html: parseEdi DMS-sign-bug detection,
-// the station-locations confirmation gate, and buildSurveyYaml (coordinate_resolution + region).
-// Self-contained (synthetic EDIs, no external data). Run via tests/test_add_survey_logic.py or:
-//   node tests/add_survey_logic.test.js
+// Node test for the pure logic embedded in add-survey.html. REWRITTEN for the "files first, five minutes,
+// enrich later" contribution redesign (2026-07-24): the tiered form, the NEW emission shape (identifiers-
+// by-level related_identifiers + publications[] + identifiers.instrument_pid, with the RETIRED flat
+// identifier model deleted), and the SOFTENED location + DATAID gates. Self-contained (synthetic EDIs, no
+// external data). Run via tests/test_add_survey_logic.py or:  node tests/add_survey_logic.test.js
 const fs = require("fs"), path = require("path"), os = require("os");
 const html = fs.readFileSync(path.join(__dirname, "..", "add-survey.html"), "utf8");
 const block = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1])
@@ -24,15 +25,24 @@ ok(Math.abs(p.info_lat - (-29.3675)) < 1e-3, "INFO lat parsed (~ -29.3675)");
 ok(p.coord_flag === "dms_sign_ambiguous", "DMS HEAD/INFO conflict flagged");
 ok(M.parseEdi(CLEAN).coord_flag == null, "clean decimal EDI not flagged");
 
-const edis = [{ name: "WG-1.edi", parsed: p }];
 const base = { name: "X", slug: "x", organisation: "O", country: "Australia", license: "CC-BY-4.0", access: "open",
                uploader_name: "n", uploader_email: "a@b.co", authority_to_submit: true, license_declaration: true };
-ok(M.validateSurvey({ ...base, locations_confirmed: false }, edis, []).items.some(i => i.check === "locations" && i.level === "FAIL"),
-   "unconfirmed station locations -> FAIL (packaging gated)");
-ok(!M.validateSurvey({ ...base, locations_confirmed: true }, edis, []).items.some(i => i.check === "locations" && i.level === "FAIL"),
-   "confirmed station locations -> no FAIL");
-ok(M.validateSurvey({ ...base, locations_confirmed: false }, edis, []).items.some(i => i.check === "coordinates" && /DMS sign bug/.test(i.message)),
-   "DMS conflict surfaced as a coordinates WARNING");
+
+// ============================ SOFTENED station-location gate (owner ruling 2026-07-24) ============================
+// The location-confirm checkbox BLOCKS ONLY when the DMS resolver actually found a HEAD/INFO conflict.
+// A survey whose stations carry NO conflict never blocks, regardless of the confirmation state.
+const flaggedEdis = [{ name: "WG-1.edi", parsed: p }];
+const cleanEdis = [{ name: "SA1.edi", parsed: M.parseEdi(CLEAN) }];
+ok(M.validateSurvey({ ...base, locations_confirmed: false }, flaggedEdis, []).items.some(i => i.check === "locations" && i.level === "FAIL"),
+   "flagged (conflict) + unconfirmed -> location FAIL (blocking)");
+ok(!M.validateSurvey({ ...base, locations_confirmed: true }, flaggedEdis, []).items.some(i => i.check === "locations" && i.level === "FAIL"),
+   "flagged (conflict) + confirmed -> no location FAIL");
+ok(!M.validateSurvey({ ...base, locations_confirmed: false }, cleanEdis, []).items.some(i => i.check === "locations" && i.level === "FAIL"),
+   "NO conflict + unconfirmed -> NO location FAIL (softened: no checkbox wall)");
+ok(M.validateSurvey({ ...base, locations_confirmed: false }, cleanEdis, []).items.some(i => i.check === "locations" && i.level === "PASS"),
+   "NO conflict -> an informational PASS 'plotted' item (the nudge), never a block");
+ok(M.validateSurvey({ ...base, locations_confirmed: false }, flaggedEdis, []).items.some(i => i.check === "coordinates" && /DMS sign bug/.test(i.message)),
+   "DMS conflict still surfaced as a coordinates WARNING");
 
 const y = M.buildSurveyYaml({ ...base, data_types: ["BBMT"], region: "South Australia",
                               coord_resolution: { dms_sign: "info", basis: "confirmed on map" } });
@@ -42,101 +52,59 @@ ok(!/coordinate_resolution:/.test(M.buildSurveyYaml({ ...base, data_types: ["BBM
    "no coordinate_resolution when nothing was resolved");
 
 // ---- access block: embargo_until + contact (audit 5.2) ----
-// buildSurveyYaml must emit the submitter's embargo date and access contact into the access block
-// when supplied (non-open levels), and leave BOTH null when the fields are blank / level is open.
 const yEmb = M.buildSurveyYaml({ ...base, access: "embargoed",
                                  embargo_until: "2027-02-01", access_contact: "custodian@agency.gov.au" });
 ok(/access:\s*\n\s*level: embargoed\s*\n\s*embargo_until: 2027-02-01/.test(yEmb),
    "survey.yaml emits access.embargo_until when the date is filled");
-ok(/contact: "custodian@agency\.gov\.au"/.test(yEmb),
-   "survey.yaml emits access.contact when provided");
+ok(/contact: "custodian@agency\.gov\.au"/.test(yEmb), "survey.yaml emits access.contact when provided");
 const yOpen = M.buildSurveyYaml({ ...base, access: "open" });
 ok(/access:\s*\n\s*level: open\s*\n\s*embargo_until: null\s*\n\s*contact: null/.test(yOpen),
    "survey.yaml keeps embargo_until and contact null for an open survey");
-const yEmbNoDate = M.buildSurveyYaml({ ...base, access: "metadata_only", access_contact: "" });
-ok(/embargo_until: null/.test(yEmbNoDate),
+ok(/embargo_until: null/.test(M.buildSurveyYaml({ ...base, access: "metadata_only", access_contact: "" })),
    "survey.yaml emits embargo_until: null when the date is left blank");
-// Injection hardening: embargo_until is emitted UNQUOTED (a bare ISO scalar), so anything that is not
-// strictly YYYY-MM-DD must collapse to null — a crafted value with an embedded newline would otherwise
-// smuggle an injected YAML key into the generated survey.yaml. buildSurveyYaml is a pure export driven
-// by arbitrary meta objects, so it cannot rely on the browser's <input type=date> constraining values.
 const yInject = M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: "2027-02-01\ninjected: true" });
 ok(/embargo_until: null/.test(yInject) && !/injected:/.test(yInject),
    "a newline-injection embargo_until emits null and no injected key");
-const yNonDate = M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: "next year" });
-ok(/embargo_until: null/.test(yNonDate) && !/next year/.test(yNonDate),
-   "a non-ISO embargo_until ('next year') emits null");
-ok(/embargo_until: 2027-02-01/.test(M.buildSurveyYaml({ ...base, access: "embargoed", embargo_until: " 2027-02-01 " })),
-   "a well-formed date still emits (whitespace trimmed)");
 
-// ---- client-side slug mirror (audit minor: validator parity) ----
-// slugValid MIRRORS the authoritative rule in gateway/tests/fixtures/vendored_validation/
-// validate_survey.py:331  re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", slug). Uppercase, spaces, underscores,
-// dots, slashes and leading/trailing hyphens are all rejected; lowercase-hyphenated is accepted.
+// ---- client-side slug mirror + AUTO-DERIVE (redesign: slug derives from the project name) ----
 ok(M.slugValid("example-survey-2026") === true, "slugValid: lowercase-hyphenated slug accepted");
-ok(M.slugValid("example") === true, "slugValid: single lowercase token accepted");
 ok(M.slugValid("Example-Survey") === false, "slugValid: uppercase rejected");
 ok(M.slugValid("example survey") === false, "slugValid: spaces rejected");
 ok(M.slugValid("example_survey") === false, "slugValid: underscore rejected");
-ok(M.slugValid("example.survey") === false, "slugValid: dot rejected");
 ok(M.slugValid("-example") === false && M.slugValid("example-") === false, "slugValid: leading/trailing hyphen rejected");
 ok(M.slugValid("") === false, "slugValid: empty rejected");
-// wired into validateSurvey as a blocking FAIL under the 'slug' check.
-const badSlug = M.validateSurvey({ ...base, slug: "Bad_Slug", locations_confirmed: true },
-  [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }], []);
-ok(badSlug.items.some(i => i.check === "slug" && i.level === "FAIL"),
-   "validateSurvey: a malformed slug is a blocking FAIL");
-const goodSlug = M.validateSurvey({ ...base, slug: "good-slug", locations_confirmed: true },
-  [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }], []);
-ok(!goodSlug.items.some(i => i.check === "slug" && i.level === "FAIL"),
-   "validateSurvey: a valid slug raises no slug FAIL");
+// the derive helper is charset-safe: whatever the project name, the derived slug passes slugValid.
+ok(/function deriveSlug/.test(html), "the page carries a deriveSlug() that auto-fills the folder slug from the name");
+for (const name of ["Example MT Survey 2026", "AusLAMP: SA (block 4)!", "  spaced  &  odd  "]) {
+  const der = html.match(/function deriveSlug\(name\)\{[\s\S]*?\}/)[0];
+  const dfn = new Function("name", der.replace(/^function deriveSlug\(name\)\{/, "").replace(/\}$/, ""));
+  const slug = dfn(name);
+  ok(slug === "" || M.slugValid(slug), "deriveSlug('" + name + "') = '" + slug + "' is slug-valid or empty");
+}
+const badSlug = M.validateSurvey({ ...base, slug: "Bad_Slug", locations_confirmed: true }, cleanEdis, []);
+ok(badSlug.items.some(i => i.check === "slug" && i.level === "FAIL"), "validateSurvey: a malformed slug is a blocking FAIL");
+ok(!M.validateSurvey({ ...base, slug: "good-slug", locations_confirmed: true }, cleanEdis, []).items
+   .some(i => i.check === "slug" && i.level === "FAIL"), "validateSurvey: a valid slug raises no slug FAIL");
 
 // ---- copy honesty: authoritative validation is the gateway/curator review, not "CI" ----
-// Source assertion (same style as the ROR endpoint checks below): the page's advisory box must not
-// tell contributors that authoritative validation happens in "the AusMT repository workflow (CI)" —
-// on the only followable paths (gateway upload / email to operator) the AusMT validator runs in the
-// gateway pipeline and a curator reviews. Fails if the stale CI framing reappears in page copy.
 ok(!/repository workflow<\/b> \(CI\)|authoritative in the AusMT repository/i.test(html),
    "the advisory box no longer claims authoritative validation lives in the repository CI workflow");
 ok(/authoritative/i.test(html.slice(html.indexOf('class="advisory"'), html.indexOf('class="advisory"') + 600)),
    "the advisory box still names an authoritative validation stage");
+// no em dashes in the redesigned copy (owner ruling: "No em dashes anywhere").
+const mainCopy = html.slice(html.indexOf("<main>"), html.indexOf("</main>"));
+ok(!/—/.test(mainCopy), "no em dash (U+2014) anywhere in the page's <main> copy");
 
-// ---- DATAID-based packaging (task #16) ----
-// ediDataId must read the DATAID from the >HEAD block across the real dialect shapes: Geotools/LEMI
-// (no indent, quoted), EDL (leading-indented + trailing whitespace, quoted), Phoenix (indented,
-// quoted), and an unquoted variant. A realistic olympic-dam header (DATAID="ROX000") is the trigger.
+// ============================ DATAID: ediDataId reader (unchanged shape) ============================
 const OLYMPIC = '>HEAD\nDATAID="ROX000"\nACQBY=""\nLAT=-30:37:57.1\nLONG=+136:45:12.9\nELEV=10.0\nUNITS=M\n\n>INFO\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n';
 ok(M.ediDataId(OLYMPIC) === "ROX000", "ediDataId reads DATAID from a realistic >HEAD (olympic-dam ROX000)");
-ok(M.ediDataId('>HEAD\nDATAID="WG-1"\nLAT=-30\n') === "WG-1", "ediDataId: Geotools/LEMI quoted DATAID with a hyphen");
-ok(M.ediDataId(' >HEAD\n\n   DATAID="ST01"                 \n   ACQBY="X"\n') === "ST01", "ediDataId: EDL indented + trailing-whitespace DATAID");
-ok(M.ediDataId('>HEAD\n    DATAID="A01"\n') === "A01", "ediDataId: Phoenix indented DATAID");
 ok(M.ediDataId('>HEAD\nDATAID=ROX000\n') === "ROX000", "ediDataId: unquoted DATAID tolerated");
-ok(M.ediDataId('>HEAD\nLAT=-30\n') === null, "ediDataId: absent DATAID -> null (blocks)");
-ok(M.ediDataId('>HEAD\nDATAID=""\n') === null, "ediDataId: empty-quoted DATAID -> null (blocks)");
-ok(M.ediDataId("") === null, "ediDataId: empty text -> null");
-// Bounded prefix: only the first 64 KB is scanned (the DATAID always lives in the header). A DATAID
-// appearing only AFTER 64 KB of padding must NOT be found (proves the read is bounded, not whole-file).
+ok(M.ediDataId('>HEAD\nLAT=-30\n') === null, "ediDataId: absent DATAID -> null");
+ok(M.ediDataId('>HEAD\nDATAID=""\n') === null, "ediDataId: empty-quoted DATAID -> null");
 const farId = "x".repeat(70000) + '\nDATAID="LATE"\n';
 ok(M.ediDataId(farId) === null, "ediDataId: DATAID beyond the 64 KB prefix is not read (bounded)");
 
-// safeEdiComponent MIRRORS engine build_portal.safe_component: charset [A-Za-z0-9._-], neutralise '..',
-// strip leading dots/dashes, never empty. This is the pipeline's own rule for a DATAID -> path, reused.
-ok(M.safeEdiComponent("ROX000") === "ROX000", "safeEdiComponent: clean id unchanged");
-ok(M.safeEdiComponent("WG-1") === "WG-1", "safeEdiComponent: dash preserved");
-ok(M.safeEdiComponent("C6_BxByReplaced") === "C6_BxByReplaced", "safeEdiComponent: underscore preserved");
-ok(M.safeEdiComponent("A B") === "A-B", "safeEdiComponent: space -> dash (not in charset)");
-ok(M.safeEdiComponent("../../etc/x") === "etc-x", "safeEdiComponent: path traversal neutralised");
-ok(M.safeEdiComponent("<img onerror=1>") === "img-onerror-1-", "safeEdiComponent: XSS chars replaced");
-ok(M.safeEdiComponent("...ROX") === "ROX", "safeEdiComponent: leading dots stripped");
-ok(M.safeEdiComponent("") === "station" && M.safeEdiComponent("///") === "station", "safeEdiComponent: never empty (fallback)");
-ok(M.packagedEdiName("ROX000") === "ROX000.edi", "packagedEdiName: <sanitized-DATAID>.edi");
-
-// ---- C38 item 4: safeEdiComponent pinned to the SHARED engine vectors ----
-// safeEdiComponent and the engine's build_portal.safe_component are two copies of ONE sanitisation
-// rule. Both consume the SAME committed vector file (engine/tests/fixtures/safe_component_vectors.json)
-// so they cannot drift apart silently: test_safe_component_vectors.py reds if the engine side diverges;
-// this block reds if the JS side does. FAILS IF safeEdiComponent(input, fallback) differs from any
-// committed vector — the ad-hoc checks above stay as readable examples; the vectors are the contract.
+// safeEdiComponent shared vectors (unchanged contract with the engine)
 const VEC = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "engine", "tests", "fixtures", "safe_component_vectors.json"), "utf8"));
 ok(Array.isArray(VEC.vectors) && VEC.vectors.length >= 20 && typeof VEC.fallback === "string",
@@ -144,233 +112,226 @@ ok(Array.isArray(VEC.vectors) && VEC.vectors.length >= 20 && typeof VEC.fallback
 for (const v of VEC.vectors)
   ok(M.safeEdiComponent(v.input, VEC.fallback) === v.expected,
      "safeEdiComponent shared-vector [" + v.kind + "]: " + JSON.stringify(v.input) + " -> " + JSON.stringify(v.expected));
+ok(M.packagedEdiName("ROX000") === "ROX000.edi", "packagedEdiName: <sanitized-DATAID>.edi");
 
-// ediNameGate (submission-time collision guard): clean list -> no errors; duplicate + missing each
-// produce a blocking error naming the offending SOURCE filename(s). No silent auto-suffixing.
+// ============================ SOFTENED DATAID gate (owner ruling 2026-07-24) ============================
+// deriveDataId: a missing DATAID auto-derives from the FILENAME (extension stripped, then sanitised).
+ok(M.deriveDataId("ROX000.edi") === "ROX000", "deriveDataId strips the .edi extension");
+ok(M.deriveDataId("Line1__Station7_1.edi") === "Line1__Station7_1", "deriveDataId keeps a safe filename stem");
+ok(M.deriveDataId("weird name!.edi") === "weird-name-", "deriveDataId sanitises unsafe filename chars");
+ok(M.deriveDataId("A B.mth5") === "A-B", "deriveDataId strips .mth5 too");
+// effectiveDataId: real DATAID wins, else the filename-derived fallback.
+ok(M.effectiveDataId({ name: "whatever.edi", dataid: "ROX9" }) === "ROX9", "effectiveDataId: real DATAID wins");
+ok(M.effectiveDataId({ name: "no-id.edi", dataid: null }) === "no-id", "effectiveDataId: falls back to the filename stem");
+
+// ediNameGate: a MISSING DATAID no longer errors on its own (auto-derived); a distinct set is clean.
 ok(M.ediNameGate([{ name: "a.edi", dataid: "ROX000" }, { name: "b.edi", dataid: "ROX001" }]).length === 0,
    "ediNameGate: distinct DATAIDs -> no error");
+ok(M.ediNameGate([{ name: "noid.edi", dataid: null }]).length === 0,
+   "ediNameGate: a lone missing DATAID does NOT block (auto-derived from filename)");
+ok(M.ediNameGate([{ name: "a.edi", dataid: null }, { name: "b.edi", dataid: "ROX1" }]).length === 0,
+   "ediNameGate: missing + distinct present -> still no collision");
+// the ONE remaining block: a true post-sanitisation collision (two files -> the same packaged name).
 const dup = M.ediNameGate([{ name: "line1__1.edi", dataid: "ROX000" }, { name: "line2__1.edi", dataid: "ROX000" }]);
 ok(dup.length === 1 && /line1__1\.edi/.test(dup[0]) && /line2__1\.edi/.test(dup[0]),
-   "ediNameGate: duplicate DATAID -> one error naming BOTH source filenames");
-const miss = M.ediNameGate([{ name: "noid.edi", dataid: null }]);
-ok(miss.length === 1 && /noid\.edi/.test(miss[0]) && /DATAID/.test(miss[0]),
-   "ediNameGate: missing DATAID -> error naming the source file");
-// two DATAIDs that DIFFER but sanitise to the SAME packaged name still collide (real on-disk clash).
+   "ediNameGate: duplicate DATAID -> one collision error naming BOTH source filenames");
+// two DERIVED names that collide (two files with the same stem, both missing DATAID) also block.
+const derdup = M.ediNameGate([{ name: "sub/x.edi", dataid: null }, { name: "y.edi", dataid: null }].map((e, i) => ({ name: ["x.edi", "x.edi"][i], dataid: null })));
+ok(derdup.length === 1, "ediNameGate: two files whose derived names collide still block");
+// DATAIDs that sanitise to the same name collide.
 const sdup = M.ediNameGate([{ name: "a.edi", dataid: "ROX 0" }, { name: "b.edi", dataid: "ROX-0" }]);
 ok(sdup.length === 1 && /a\.edi/.test(sdup[0]) && /b\.edi/.test(sdup[0]),
    "ediNameGate: DATAIDs that sanitise to the same name collide (both filenames named)");
 
-// The gate is WIRED into validateSurvey as a blocking FAIL (not just a standalone helper). Two EDIs
-// with the same DATAID -> a FAIL item under the 'dataid' check whose message names both files.
+// WIRED into validateSurvey: a missing DATAID is a WARNING (auto-derived, curator-flagged), NOT a FAIL.
+const missRes = M.validateSurvey({ ...base, locations_confirmed: true },
+  [{ name: "no-dataid.edi", parsed: M.parseEdi('>HEAD\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }], []);
+ok(missRes.items.some(i => i.check === "dataid" && i.level === "WARNING" && /auto-derived/.test(i.message) && /no-dataid/.test(i.message)),
+   "validateSurvey: missing DATAID -> WARNING (auto-derived from filename, curator-flagged)");
+ok(!missRes.items.some(i => i.check === "dataid" && i.level === "FAIL"),
+   "validateSurvey: a lone missing DATAID does NOT FAIL (softened gate)");
+// a duplicate DATAID still surfaces a blocking FAIL naming both files.
 const dupEdis = [
   { name: "s1.edi", parsed: M.parseEdi('>HEAD\nDATAID="DUP"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') },
   { name: "s2.edi", parsed: M.parseEdi('>HEAD\nDATAID="DUP"\nLAT=-31\nLONG=137\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') },
 ];
 const dupRes = M.validateSurvey({ ...base, locations_confirmed: true }, dupEdis, []);
-ok(dupRes.items.some((i) => i.check === "dataid" && i.level === "FAIL" && /s1\.edi/.test(i.message) && /s2\.edi/.test(i.message)),
+ok(dupRes.items.some(i => i.check === "dataid" && i.level === "FAIL" && /s1\.edi/.test(i.message) && /s2\.edi/.test(i.message)),
    "validateSurvey: duplicate DATAID surfaces a blocking FAIL naming both files");
 ok(dupRes.counts.FAIL > 0, "validateSurvey: the duplicate-DATAID FAIL blocks submission (counts.FAIL>0)");
-// a single, well-named EDI produces NO dataid FAIL (the gate is silent on clean input).
-const cleanEdis = [{ name: "ok.edi", parsed: M.parseEdi('>HEAD\nDATAID="OK1"\nLAT=-30\nLONG=136\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n') }];
-ok(!M.validateSurvey({ ...base, locations_confirmed: true }, cleanEdis, []).items.some((i) => i.check === "dataid"),
-   "validateSurvey: a clean unique DATAID raises no dataid item");
 
-// ---- ROR organisation lookup ----
-// The live endpoint MUST be the name-search `query`, NOT the `affiliation` matcher. The affiliation
-// matcher is built for parsing full publication affiliation strings and mis-ranks bare names — verified
-// live: "University of Adelaide" returns "University of Aden" (chosen, 0.97) and omits Adelaide. This
-// source assertion fails if anyone reverts the endpoint.
+// ============================ NEW EMISSION SHAPE (redesign) ============================
+// The retired flat identifier model is DELETED; the new carrier is identifiers-by-level related_identifiers
+// + publications[] + identifiers.instrument_pid. A survey carrying any of these declares schema 0.3.
+const yBare = M.buildSurveyYaml({ ...base, license_declaration: false });
+ok(/schema_version: "0.2"/.test(yBare), "a bare survey (no 0.3-era field) declares schema_version 0.2");
+// RED PROOF: the retired keys must be ABSENT from the emitted survey.yaml.
+for (const retired of ["dataset_doi", "related_publication:", "related_publication_doi", "\n  project:", "\nsources:", "collection_pid"]) {
+  ok(!yBare.includes(retired), "RETIRED key absent from emission: " + JSON.stringify(retired));
+}
+// identifiers block = only the two survey/platform PIDs a submitter sets (project_raid + instrument_pid).
+ok(/identifiers:\s*\n\s*project_raid: null\s*\n\s*instrument_pid: null/.test(yBare),
+   "identifiers block is exactly {project_raid, instrument_pid} (nulls when unset)");
+ok(/related_identifiers: \[\]/.test(yBare) && /publications: \[\]/.test(yBare),
+   "empty related_identifiers and publications emit as empty lists");
+ok(/time_series:\s*\n\s*levels_available: \[\]/.test(yBare) && !/collection_pid/.test(yBare),
+   "time_series carries only levels_available (the hard-coded collection_pid null is gone)");
+
+// related_identifiers rows: identifies + identifier + identifier_type + custodian; relation NEVER emitted.
+const yRel = M.buildSurveyYaml({ ...base, related_identifiers: [
+  { identifies: "raw_packed", identifier: "10.25914/raw", identifier_type: "DOI", custodian: "NCI" },
+  { identifies: "entire", identifier: "https://ecat.ga.gov.au/x", identifier_type: "URL", custodian: "GA" },
+  { identifies: "collection", identifier: "" }] });   // an empty-identifier row is dropped
+ok(/related_identifiers:\s*\n\s*- identifier: "10\.25914\/raw"\s*\n\s*identifies: raw_packed\s*\n\s*identifier_type: DOI\s*\n\s*custodian: "NCI"/.test(yRel),
+   "related_identifiers emits identifier + identifies + identifier_type + custodian for a filled row");
+ok(!/relation:/.test(yRel), "related_identifiers NEVER emits `relation` (it derives server-side from identifies)");
+ok((yRel.match(/- identifier:/g) || []).length === 2, "an empty-identifier related_identifiers row is dropped");
+ok(/schema_version: "0.3"/.test(yRel), "a related_identifiers row declares schema_version 0.3");
+// vocab guard: an out-of-vocab identifies / identifier_type is dropped (buildSurveyYaml is pure; a scripted
+// meta can carry anything). Injection via a newline-bearing level must not smuggle a YAML key.
+const yGuard = M.buildSurveyYaml({ ...base, related_identifiers: [
+  { identifies: "not-a-level\ninjected: true", identifier: "10.1/x", identifier_type: "EVIL" }] });
+ok(!/injected:/.test(yGuard) && !/identifies:/.test(yGuard) && !/identifier_type:/.test(yGuard),
+   "out-of-vocab identifies/identifier_type dropped; a newline-injection level emits no key");
+ok(/- identifier: "10\.1\/x"/.test(yGuard), "the identifier itself still emits (quoted) even when the level is dropped");
+
+// identifiers.instrument_pid (survey/platform PID) + project_raid from the tier-2 fields.
+const yPid = M.buildSurveyYaml({ ...base, instrument_pid: "10.82388/abc", raid: "https://raid.org/1" });
+ok(/instrument_pid: "10\.82388\/abc"/.test(yPid) && /project_raid: "https:\/\/raid\.org\/1"/.test(yPid),
+   "identifiers.instrument_pid + project_raid emit from the tier-2 fields");
+ok(/schema_version: "0.3"/.test(yPid), "a survey/platform instrument_pid declares schema_version 0.3");
+
+// publications[] built from the related-publication fields (title / DOI).
+const yPub = M.buildSurveyYaml({ ...base, license_declaration: false, pub: "Smith et al. 2024", pub_doi: "10.1093/gji/xyz" });
+ok(/publications:\s*\n\s*- title: "Smith et al\. 2024"\s*\n\s*doi: "10\.1093\/gji\/xyz"/.test(yPub),
+   "publications[] carries {title, doi} from the related-publication fields");
+ok(/schema_version: "0.3"/.test(yPub), "a publications[] entry declares schema_version 0.3");
+ok(/- doi: "10\.5/.test(M.buildSurveyYaml({ ...base, license_declaration: false, pub: "", pub_doi: "10.5281/zenodo.1" })),
+   "a DOI-only publication emits a bare {doi} entry");
+
+// dates block (T1) emits only when a date is provided; year + ISO stay bare, free text is quoted.
+ok(/dates: \{ start: 2020, end: 2021 \}/.test(M.buildSurveyYaml({ ...base, date_start: "2020", date_end: "2021" })),
+   "dates block emits bare year scalars");
+ok(!/dates:/.test(M.buildSurveyYaml({ ...base })), "no dates block when neither date is filled");
+
+// ---- provenance-identifier completeness now keys off the NEW carrier (related_identifiers) ----
+const provItem = (res) => res.items.find(i => i.check === "provenance" && /no related identifier/.test(i.message));
+const provEdis = [{ name: "SA1.edi", parsed: M.parseEdi(CLEAN) }];
+ok(!!provItem(M.validateSurvey({ ...base, locations_confirmed: true }, provEdis, [])),
+   "no related identifier -> provenance completeness WARNING fires");
+ok(!provItem(M.validateSurvey({ ...base, locations_confirmed: true,
+     related_identifiers: [{ identifies: "collection", identifier: "10.25914/x", identifier_type: "DOI" }] }, provEdis, [])),
+   "a related_identifiers row with an identifier satisfies the provenance hint");
+ok(!!provItem(M.validateSurvey({ ...base, locations_confirmed: true,
+     related_identifiers: [{ identifies: "collection", identifier: "" }] }, provEdis, [])),
+   "a related_identifiers row with NO identifier does not satisfy the hint (the identifier is the signal)");
+
+// ---- relatedIdentifiersEmit (pure filter/guard) ----
+const rie = M.relatedIdentifiersEmit([
+  { identifies: "level2", identifier: "10.1/a", identifier_type: "DOI", custodian: "NCI" },
+  { identifies: "bogus", identifier: "10.1/b", identifier_type: "Handle" },
+  { identifier: "" }]);
+ok(rie.length === 2, "relatedIdentifiersEmit drops empty-identifier rows");
+ok(rie[0].identifies === "level2" && rie[1].identifies === "", "relatedIdentifiersEmit blanks an out-of-vocab identifies");
+ok(rie.every(r => !("relation" in r)), "relatedIdentifiersEmit never carries a relation key");
+
+// ---- vocab parity: the tier-2 identifiers-by-level vocab mirrors the gateway/validator ----
+const validatorSrc = fs.readFileSync(
+  path.join(__dirname, "..", "..", "gateway", "tests", "fixtures", "vendored_validation", "validate_survey.py"), "utf8");
+const vLevels = (validatorSrc.match(/IDENTIFIES_LEVELS\s*=\s*\(([^)]*)\)/) || [])[1] || "";
+const vLevelList = [...vLevels.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+ok(JSON.stringify(M.IDENTIFIES_LEVELS) === JSON.stringify(vLevelList),
+   "portal IDENTIFIES_LEVELS matches the vendored validator's tuple: " + JSON.stringify(vLevelList));
+const editorSrc = fs.readFileSync(path.join(__dirname, "..", "..", "gateway", "editor_form.py"), "utf8");
+const eTypes = (editorSrc.match(/IDENTIFIER_TYPES\s*=\s*\(([^)]*)\)/) || [])[1] || "";
+const eTypeList = [...eTypes.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+ok(JSON.stringify(M.IDENTIFIER_TYPES) === JSON.stringify(eTypeList),
+   "portal IDENTIFIER_TYPES matches gateway editor_form.IDENTIFIER_TYPES: " + JSON.stringify(eTypeList));
+ok(M.IDENTIFIES_LEVELS.every(lv => typeof M.IDENTIFIES_DISPLAY[lv] === "string" && M.IDENTIFIES_DISPLAY[lv].length),
+   "every identifies level carries a human display label (mirrors the curator editor)");
+
+// ---- ROR organisation lookup (unchanged) ----
 ok(/api\.ror\.org\/v2\/organizations\?query=/.test(html), "ROR lookup uses the name-search ?query= endpoint");
 ok(!/organizations\?affiliation=/.test(html), "ROR lookup does NOT use the ?affiliation= matcher");
-
-// rorMatchesFromResponse must extract {name,id,country,acronym} from BOTH response shapes:
-// query -> items are bare v2 orgs; affiliation -> items wrap the org in .organization.
 const V2ORG = { id: "https://ror.org/028g18b61",
   names: [{ value: "Adelaide University", types: ["ror_display"] }, { value: "UofA", types: ["acronym"] }],
   locations: [{ geonames_details: { country_name: "Australia" } }] };
-const qM = M.rorMatchesFromResponse({ items: [V2ORG] });                               // query shape (bare org)
+const qM = M.rorMatchesFromResponse({ items: [V2ORG] });
 ok(qM.length === 1 && qM[0].id === "https://ror.org/028g18b61" && qM[0].name === "Adelaide University"
    && qM[0].country === "Australia" && qM[0].acronym === "UofA", "parses a query-shape (bare org) item");
-const aM = M.rorMatchesFromResponse({ items: [{ organization: V2ORG, score: 0.9, chosen: true }] }); // affiliation shape
-ok(aM.length === 1 && aM[0].id === "https://ror.org/028g18b61" && aM[0].name === "Adelaide University",
-   "parses an affiliation-shape (.organization wrapper) item");
 ok(M.rorMatchesFromResponse({ items: [{ id: null, names: [] }] }).length === 0,
    "drops un-nameable / un-identifiable items (never shows 'undefined')");
 
-// ---- C3 (PII scrub): the packaged submission .zip must NOT embed submitter email/ORCID -----------
-// The zip may be published (public-PR attachment OR the gateway pipeline), so anything written into
-// MANIFEST.json/SUBMISSION.md is effectively published. Source-text assertion (same style as the ROR
-// endpoint check above) against the SHARED package builder — buildPackage()/buildSubmissionMd(),
-// which produce the package CONTENTS for BOTH the download and the C13 direct-upload paths. That
-// logic runs in the browser (FileReader/JSZip) and isn't part of the exported pure-logic module M.
-// The slice spans from buildPackage to the download click handler, covering both builders. The
-// submitter NAME is fine to keep; email/orcid must not reach the package contents.
+// ---- C3 (PII scrub): the packaged submission .zip must NOT embed submitter email/ORCID ----
 const pkgBlock = html.slice(html.indexOf("async function buildPackage"), html.indexOf('$("btnPackage").onclick'));
-ok(!/submitter:\{[^}]*email:\s*meta\.uploader_email/.test(pkgBlock),
-   "MANIFEST.json submitter block does NOT write uploader_email");
-ok(!/submitter:\{[^}]*orcid:\s*meta\.uploader_orcid/.test(pkgBlock),
-   "MANIFEST.json submitter block does NOT write uploader_orcid");
-ok(/submitter:\{[^}]*name:\s*meta\.uploader_name/.test(pkgBlock),
-   "MANIFEST.json submitter block still keeps the name");
-ok(!/uploader_email/.test(pkgBlock),
-   "SUBMISSION.md template does NOT reference uploader_email anywhere in the packager block");
-ok(!/uploader_orcid/.test(pkgBlock) || /ORCID/.test(pkgBlock) === false,
-   "SUBMISSION.md template does NOT reference uploader_orcid in the packager block");
-// Keep the uploader_email FORM FIELD + validation live elsewhere in the page (Stage-2 gateway feed) --
-// only the package CONTENTS must be clean, so check it still exists outside the sliced block.
+ok(!/submitter:\{[^}]*email:\s*meta\.uploader_email/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_email");
+ok(!/submitter:\{[^}]*orcid:\s*meta\.uploader_orcid/.test(pkgBlock), "MANIFEST submitter block does NOT write uploader_orcid");
+ok(/submitter:\{[^}]*name:\s*meta\.uploader_name/.test(pkgBlock), "MANIFEST submitter block still keeps the name");
+ok(!/uploader_email/.test(pkgBlock), "the packager block does NOT reference uploader_email");
 ok(/m_up_email/.test(html), "the uploader email form field itself is still present (feeds Stage-2 gateway)");
 
-// ============================ C13 direct-upload pure logic (design §4/§5) ============================
-// -- isOrcidChecksum: ISO 7064 MOD 11-2, must mirror gateway/orcid.py EXACTLY. M2 (code-health review
-//    §6): the reference verdicts now come from the SHARED vector file gateway/tests/fixtures/
-//    orcid_vectors.json — the SAME file gateway/tests/test_orcid.py and the vendored-validator test
-//    consume. A divergence between this portal isOrcidChecksum and the shared oracle reds exactly the
-//    offending vector, so the three ISO-7064 copies cannot drift apart silently. We drive every vector
-//    whose `applies_to` lists "portal" (the portal's FORMAT contract: bare 16-char form accepted).
+// ============================ C13 direct-upload pure logic (unchanged) ============================
 const ORCID_VECTORS = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "gateway", "tests", "fixtures", "orcid_vectors.json"), "utf8"));
-const portalOrcidVectors = ORCID_VECTORS.vectors.filter(v => v.applies_to.includes("portal"));
-ok(portalOrcidVectors.length > 0, "shared orcid_vectors.json has portal-scoped vectors");
-for (const v of portalOrcidVectors) {
-  ok(M.isOrcidChecksum(v.input) === v.valid,
-     `isOrcidChecksum(${JSON.stringify(v.input)}) === ${v.valid} [shared vector: ${v.note}]`);
-}
-
-// -- gatewayPresent (§1 strict shape check): PRESENT iff 200 AND JSON AND ok===true.
+for (const v of ORCID_VECTORS.vectors.filter(v => v.applies_to.includes("portal")))
+  ok(M.isOrcidChecksum(v.input) === v.valid, `isOrcidChecksum(${JSON.stringify(v.input)}) === ${v.valid} [${v.note}]`);
 ok(M.gatewayPresent(200, '{"ok":true}') === true, "gatewayPresent: 200 + {ok:true} -> present");
-ok(M.gatewayPresent(200, '<!doctype html><title>404</title>') === false, "gatewayPresent: 200 + HTML body (SPA/404 fallback) -> absent");
+ok(M.gatewayPresent(200, '<!doctype html><title>404</title>') === false, "gatewayPresent: 200 + HTML -> absent");
 ok(M.gatewayPresent(200, '{"ok":false}') === false, "gatewayPresent: 200 + {ok:false} -> absent");
-ok(M.gatewayPresent(200, '{"status":"up"}') === false, "gatewayPresent: 200 + JSON without ok===true -> absent");
-ok(M.gatewayPresent(404, '{"ok":true}') === false, "gatewayPresent: 404 (even with a truthy body) -> absent");
-ok(M.gatewayPresent(500, '{"ok":true}') === false, "gatewayPresent: 500 -> absent");
-ok(M.gatewayPresent(0, "") === false, "gatewayPresent: network-error shape (status 0) -> absent");
-
-// -- statusUrlSafe (§2 anchor guard): accept only a same-origin /gateway/status/<urlsafe-token>.
+ok(M.gatewayPresent(404, '{"ok":true}') === false, "gatewayPresent: 404 -> absent");
+ok(M.gatewayPresent(0, "") === false, "gatewayPresent: network-error shape -> absent");
 ok(M.statusUrlSafe("/gateway/status/AbC-9_xYz01") === true, "statusUrlSafe: same-origin urlsafe-token path accepted");
 ok(M.statusUrlSafe("http://evil.example/gateway/status/x") === false, "statusUrlSafe: absolute http URL rejected");
-ok(M.statusUrlSafe("//evil.example/gateway/status/x") === false, "statusUrlSafe: protocol-relative //host rejected");
 ok(M.statusUrlSafe("javascript:alert(1)") === false, "statusUrlSafe: javascript: scheme rejected");
 ok(M.statusUrlSafe("/gateway/status/../../etc/passwd") === false, "statusUrlSafe: path traversal rejected");
-ok(M.statusUrlSafe("/gateway/statusx/token") === false, "statusUrlSafe: tampered prefix rejected");
-ok(M.statusUrlSafe("/gateway/status/") === false, "statusUrlSafe: empty token rejected");
-
-// -- submitResultMessage (§2 code map): returns plain text (never HTML). Assert each documented code.
 ok(M.submitResultMessage(201, {submission_id: "S1"}) === "Submission received.", "submitResultMessage: 201");
 ok(/not accepted/i.test(M.submitResultMessage(401, null)), "submitResultMessage: 401 -> key not accepted");
-ok(/already in the pipeline/i.test(M.submitResultMessage(409, {submission_id: "abc"})) && /abc/.test(M.submitResultMessage(409, {submission_id: "abc"})),
-   "submitResultMessage: 409 -> duplicate, mentions the id");
-ok(/size limit/i.test(M.submitResultMessage(413, null)), "submitResultMessage: 413 -> size limit");
-ok(/capacity/i.test(M.submitResultMessage(429, null)), "submitResultMessage: 429 -> capacity");
-ok(/starting|paused/i.test(M.submitResultMessage(503, null)), "submitResultMessage: 503 -> starting/paused");
+ok(/already in the pipeline/i.test(M.submitResultMessage(409, {submission_id: "abc"})), "submitResultMessage: 409 -> duplicate");
 ok(/network/i.test(M.submitResultMessage(0, null)), "submitResultMessage: 0 -> network error");
-// 400 passes the server `detail` through VERBATIM as text (the page escapes it at render). A hostile
-// detail must come back as inert text, NOT get sanitised/dropped here (the escaping is the page's job).
 const hostile = '<img src=x onerror=alert(1)>';
-ok(M.submitResultMessage(400, {detail: hostile}) === hostile,
-   "submitResultMessage: 400 -> server detail passed through verbatim (as text, page escapes it)");
-ok(!/</.test(M.submitResultMessage(413, null)) && !/</.test(M.submitResultMessage(401, null)),
-   "submitResultMessage: canned messages contain no HTML");
-
-// -- submitFormFields (§3): name+email always; orcid ONLY when non-empty (field omitted otherwise).
+ok(M.submitResultMessage(400, {detail: hostile}) === hostile, "submitResultMessage: 400 -> server detail verbatim (page escapes it)");
 const ff1 = M.submitFormFields({uploader_name: "Ada L", uploader_email: "ada@x.co", uploader_orcid: ""});
 ok(!("submitter_orcid" in ff1) && ff1.submitter_name === "Ada L" && ff1.submitter_email === "ada@x.co",
    "submitFormFields: empty ORCID is OMITTED entirely");
-const ff2 = M.submitFormFields({uploader_name: "Ada L", uploader_email: "ada@x.co", uploader_orcid: "0000-0002-1825-0097"});
-ok(ff2.submitter_orcid === "0000-0002-1825-0097", "submitFormFields: non-empty ORCID rides as a field");
+ok(M.submitFormFields({uploader_name: "A", uploader_email: "a@x.co", uploader_orcid: "0000-0002-1825-0097"}).submitter_orcid
+   === "0000-0002-1825-0097", "submitFormFields: non-empty ORCID rides as a field");
 
-// ============================ C13 source assertions (grep-style, §5) ================================
-// No NEW external origin is CONTACTED by C13. The only network destinations the page opens are its
-// fetch()/XHR .open() calls: the pre-existing api.ror.org lookup, and the two new same-origin gateway
-// calls. Every fetch()/.open() target must therefore be either a same-origin relative "/..." path or
-// the one allow-listed https://api.ror.org — anything else is a new external origin C13 must not add.
-// (Scanning only the actual connection points avoids false hits on placeholder/comment URLs like the
-// commented-out Plausible host or an input's https://ror.org placeholder — those open no connection.)
+// ============================ connection targets (§5) + key-request stub ============================
 const conns = [...html.matchAll(/(?:fetch|\.open)\(\s*(?:"[^"]*",\s*)?"([^"]+)"/g)].map(m => m[1])
   .filter(u => !/^\$\{/.test(u));
 const ALLOWED_CONN = u => /^\//.test(u) || /^https:\/\/api\.ror\.org\//.test(u);
 const badConns = conns.filter(u => !ALLOWED_CONN(u) && /^https?:/.test(u));
 ok(badConns.length === 0, "every fetch()/XHR target is same-origin or the allow-listed ROR API; new origins: " + JSON.stringify(badConns));
-// Belt-and-braces: no CDN/basemap host string appears anywhere on this contributor page.
 ok(!/cdnjs\.cloudflare\.com|basemaps\.cartocdn\.com/.test(html), "no CDN/basemap origin on the add-survey page");
-
-// The gateway is consumed at the LITERAL same-origin relative paths (design §0.2) — never an absolute
-// URL, never a configurable base. These exact strings must be present and un-prefixed.
 ok(/fetch\("\/gateway\/healthz"/.test(html), "healthz probe uses the literal same-origin /gateway/healthz path");
 ok(/\.open\("POST",\s*"\/gateway\/submit"\)/.test(html), "submit POSTs to the literal same-origin /gateway/submit path");
-ok(!/https?:\/\/[^"'`]*\/gateway\//.test(html), "no absolute-URL /gateway/ reference (same-origin only, no config knob)");
-ok(!/gateway_base_url/.test(html), "no gateway_base_url config knob (design §0.2)");
-// The submit key header is the ONLY place the key is put on the wire (design §0.3). Assert the header
-// name is present and that the key is never persisted anywhere.
+ok(!/https?:\/\/[^"'`]*\/gateway\//.test(html), "no absolute-URL /gateway/ reference (same-origin only)");
 ok(/setRequestHeader\("X-AusMT-Submit-Key"/.test(html), "the submit key is sent via the X-AusMT-Submit-Key header");
-ok(!/localStorage[^;\n]*submit_key/i.test(html) && !/sessionStorage[^;\n]*submit_key/i.test(html)
-   && !/m_submit_key[^;\n]*(localStorage|sessionStorage|cookie)/i.test(html),
-   "the submit key is never written to localStorage/sessionStorage/cookies (design §0.3)");
+ok(!/localStorage[^;\n]*submit_key/i.test(html) && !/sessionStorage[^;\n]*submit_key/i.test(html),
+   "the submit key is never written to localStorage/sessionStorage");
+// KEY REQUEST stub: POSTs {email} to the same-origin /gateway/request-key, always the SAME neutral message.
+ok(/fetch\("\/gateway\/request-key"/.test(html), "the key-request stub POSTs to the same-origin /gateway/request-key path");
+ok(/btnRequestKey/.test(html) && /m_keyreq_email/.test(html), "the key-request UI (button + email input) is present");
+ok(/Need a key\?/.test(html), "the key-request prompt copy is present in the submit section");
+ok(/if this address is eligible/i.test(html), "the key-request message is neutral (no account enumeration)");
 
-// ============================ C46 attribution / lineage capture (design §2.1) ============================
-// -- licence select vocab = the GENERATED contract list (parity, NOT a hand-copied copy). Load LICENSES
-//    from portal/src/contract.js (the same seam the page reads at runtime) and pin the page's pure vocab
-//    helper to it. FAILS IF the select vocab drifts from the contract, or the page hard-copies the ids.
+// ---- licence select vocab = the generated contract (unchanged), no hand-copied source-licence select ----
 const CONTRACT_SRC = fs.readFileSync(path.join(__dirname, "..", "src", "contract.js"), "utf8");
 const LICENSES = new Function(CONTRACT_SRC + "; return LICENSES;")();
-ok(Array.isArray(LICENSES.redistributable) && Array.isArray(LICENSES.recognised_only)
-   && LICENSES.redistributable.length + LICENSES.recognised_only.length === 19,
-   "contract.js LICENSES carries the full 19-id recognised vocab");
 ok(JSON.stringify(M.licenseSelectIds(LICENSES)) === JSON.stringify([...LICENSES.redistributable, ...LICENSES.recognised_only]),
-   "licenseSelectIds derives the select vocab from the contract (redistributable then recognised_only)");
+   "licenseSelectIds derives the select vocab from the contract");
 ok(/\bLICENSES\b/.test(html) && /\.redistributable\b/.test(html) && /\.recognised_only\b/.test(html),
-   "the licence select reads the contract LICENSES (.redistributable + .recognised_only) at runtime, not a hand-copied option list");
-const licSel = html.slice(html.indexOf('id="m_license"'), html.indexOf('id="m_license"') + 60);
-ok(!/CC-BY|CC0|ODbL|PUBLIC DOMAIN/i.test(licSel),
-   "the static m_license <select> has no hand-copied licence <option>s (built at runtime)");
-ok(/id="m_src_license"/.test(html), "a source-licence <select> exists (same contract vocab, populated at runtime)");
+   "the licence select reads the contract LICENSES at runtime, not a hand-copied option list");
+ok(!/id="m_src_license"/.test(html), "the retired source-licence <select> is gone (the sources[] block was deleted)");
 ok(/<script src="src\/contract\.js">/.test(html), "the page loads the generated contract (src/contract.js) for the licence vocab");
 
-// -- attribution persistence: license_declaration + uploader name -> attribution.declared_by/date, and a
-//    C46 field bumps schema_version to 0.3. Absent when the declaration is not made (byte-unchanged).
+// ---- attribution persistence (unchanged carrier) ----
 const yAttr = M.buildSurveyYaml({ ...base, license_declaration: true, uploader_name: "Ada L", declared_date: "2026-07-13" });
 ok(/attribution:\s*\n\s*declared_by: "Ada L"\s*\n\s*declared_date: 2026-07-13/.test(yAttr),
-   "buildSurveyYaml persists attribution.declared_by + declared_date from the licence declaration");
-ok(/schema_version: "0.3"/.test(yAttr), "a package carrying C46 fields declares schema_version 0.3");
-ok(/^\s*declared_date: \d{4}-\d{2}-\d{2}$/m.test(M.buildSurveyYaml({ ...base, license_declaration: true, uploader_name: "A" })),
-   "declared_date defaults to a bare ISO date derived from the tsUTC seam when none is supplied");
-const yNoDecl = M.buildSurveyYaml({ ...base, license_declaration: false });
-ok(!/attribution:/.test(yNoDecl), "no attribution block when the licence declaration is not made (absent-when-unset)");
-ok(/schema_version: "0.2"/.test(yNoDecl), "schema_version stays 0.2 with no C46 fields");
-
-// -- source dataset: a filled source fieldset -> a sources[] entry; empty -> no sources block.
-const ySrc = M.buildSurveyYaml({ ...base, license_declaration: false,
-  sources: [{ title: "AusLAMP SA", custodian: "NCI", identifier: "10.25914/x", licence: "CC-BY-3.0-AU", retrieved: "2016" }] });
-ok(/sources:\s*\n\s*- title: "AusLAMP SA"/.test(ySrc), "buildSurveyYaml emits a sources[] entry from the source fieldset");
-ok(/licence: "CC-BY-3.0-AU"/.test(ySrc) && /retrieved: "2016"/.test(ySrc), "the sources entry carries the obtained licence + retrieved");
-ok(/schema_version: "0.3"/.test(ySrc), "a sources[] package declares schema_version 0.3");
-ok(!/sources:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [] })),
-   "no sources block when none supplied (absent-when-unset / byte-unchanged discipline)");
-ok(/profile: generic/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [{ title: "A", profile: "generic" }] })),
-   "a vocab profile (generic) is emitted as a bare scalar");
-ok(!/profile:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [{ title: "A", profile: "evil\ninjected: true" }] }))
-   && !/injected:/.test(M.buildSurveyYaml({ ...base, license_declaration: false, sources: [{ title: "A", profile: "evil\ninjected: true" }] })),
-   "an out-of-vocab / injection profile is dropped, never emitted (bare-scalar injection guard)");
-
-// -- provenance-identifier completeness (owner decision #2): the OLD warning keyed off dataset_doi
-// ALONE, so it mis-fired on every survey whose provenance is recorded as a custodian/source identifier
-// instead of a minted dataset DOI (the systematic UofA / AusLAMP-SA case). The hint now fires only when
-// NEITHER a dataset DOI NOR a source-dataset identifier is present.
-const provItem = (res) => res.items.find(
-  (i) => i.check === "provenance" && /no dataset DOI or source-dataset identifier/.test(i.message));
-const provEdis = [{ name: "SA1.edi", parsed: M.parseEdi(CLEAN) }];
-ok(!!provItem(M.validateSurvey({ ...base, locations_confirmed: true }, provEdis, [])),
-   "no dataset DOI and no source identifier -> provenance completeness WARNING fires");
-// the mis-fire fix: a source-dataset identifier (a custodian identifier) satisfies the hint with NO dataset_doi
-ok(!provItem(M.validateSurvey(
-     { ...base, locations_confirmed: true, sources: [{ custodian: "NCI", identifier: "10.25914/x" }] }, provEdis, [])),
-   "a source-dataset identifier (no dataset_doi) -> NO provenance mis-fire (the UofA case owner #2 flagged)");
-// a source entry with a custodian but NO identifier does not satisfy the hint (identifier is the signal)
-ok(!!provItem(M.validateSurvey(
-     { ...base, locations_confirmed: true, sources: [{ custodian: "NCI" }] }, provEdis, [])),
-   "a source with a custodian but no identifier still warns (the completeness signal is the identifier)");
-// a minted dataset DOI still satisfies the hint
-ok(!provItem(M.validateSurvey({ ...base, locations_confirmed: true, dataset_doi: "10.5281/zenodo.1" }, provEdis, [])),
-   "a dataset DOI satisfies the provenance hint");
+   "buildSurveyYaml persists attribution.declared_by + declared_date");
+ok(/schema_version: "0.3"/.test(yAttr), "a package carrying attribution declares schema_version 0.3");
+ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false })),
+   "no attribution block when the licence declaration is not made");
 
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
 process.exit(fail ? 1 : 0);

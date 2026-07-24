@@ -606,23 +606,56 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       ok(/validation FAIL/i.test(e.doc.getElementById("pkBody").textContent), "packaging is blocked with a FAIL message");
     }
 
-    // (7d) UNREADABLE / ABSENT DATAID blocks submission: an EDI with no DATAID line cannot be named.
+    // (7d) SOFTENED DATAID GATE (owner ruling 2026-07-24): an EDI with no DATAID line NO LONGER blocks.
+    //      The station id auto-derives from the filename (extension stripped, sanitised), the file list
+    //      shows the derived name flagged for the curator, validation surfaces a WARNING (not a FAIL), and
+    //      packaging SUCCEEDS with the derived name + a curator flag recorded in MANIFEST.json.
     {
       const NOID = '\x3eHEAD\nLAT=-30.10\nLONG=136.60\n\n\x3eFREQ\n1 10 100\n\x3eZXYR\n1 2 3\n';
       const e = await boot({ probe: probeAbsent });
       fillValidMeta(e.win);
       await addEdi(e.win, "no-dataid.edi", NOID);
-      // the file list flags it (red "no DATAID") before any submit attempt.
-      ok(/no DATAID/i.test(e.doc.getElementById("filelist").textContent),
-        "the file list flags a missing DATAID before submission");
+      // the file list shows the auto-derived packaged name + the curator flag (amber, not a red block).
+      const fltext = e.doc.getElementById("filelist").textContent.replace(/\s+/g, " ");
+      ok(/no-dataid\.edi/.test(fltext) && /auto from filename/i.test(fltext) && /curator/i.test(fltext),
+        "the file list shows the auto-derived name + curator flag; got: " + fltext.trim());
       e.doc.getElementById("btnValidate").onclick();
-      const vtext = e.doc.getElementById("vList").textContent;
-      ok(/FAIL/.test(e.doc.getElementById("vSummary").textContent), "a missing DATAID makes validation FAIL");
-      ok(/no-dataid\.edi/.test(vtext) && /DATAID/.test(vtext),
-        "the missing-DATAID error names the source file; got: " + vtext.replace(/\s+/g, " ").trim());
+      const vtext = e.doc.getElementById("vList").textContent.replace(/\s+/g, " ");
+      const vsum = e.doc.getElementById("vSummary").textContent;
+      ok(/OK to submit/i.test(vsum) && !/fix FAILs/i.test(vsum), "a lone missing DATAID does NOT block validation (softened)");
+      ok(/auto-derived/i.test(vtext) && /no-dataid\.edi/.test(vtext),
+        "the missing DATAID surfaces a WARNING naming the source file + its auto-derived id; got: " + vtext.trim());
       await e.doc.getElementById("btnPackage").onclick();
       await new Promise((res) => setTimeout(res, 0));
-      ok(e.record.blobs.length === 0, "a missing DATAID blocks packaging (no zip produced)");
+      ok(e.record.blobs.length === 1, "a missing DATAID no longer blocks packaging (one zip produced)");
+      const zip = Buffer.from(await e.record.blobs[0].arrayBuffer());
+      const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
+      const z = await JSZipNode.loadAsync(zip);
+      const ediPaths = Object.keys(z.files).filter((p) => /transfer_functions\/edi\/.+\.edi$/.test(p));
+      ok(ediPaths.length === 1 && /\/no-dataid\.edi$/.test(ediPaths[0]),
+        "the EDI is packaged under its filename-derived id (no-dataid.edi); entries: " + JSON.stringify(ediPaths));
+      const man = JSON.parse(await z.file(/MANIFEST\.json$/)[0].async("string"));
+      ok(man.transfer_functions[0].dataid_source === "filename-derived",
+        "MANIFEST records dataid_source=filename-derived for the auto-derived station");
+      ok(man.curator_flags && Array.isArray(man.curator_flags.derived_station_ids)
+        && man.curator_flags.derived_station_ids.length === 1
+        && man.curator_flags.derived_station_ids[0].source_filename === "no-dataid.edi",
+        "MANIFEST.curator_flags flags the auto-derived station id for curator review");
+    }
+
+    // (7e) a real DATAID still records dataid_source=edi (the auto-derive is only the fallback).
+    {
+      const e = await boot({ probe: probeAbsent });
+      fillValidMeta(e.win);
+      await addEdi(e.win, "1__1_1.edi", ROX0);
+      await e.doc.getElementById("btnPackage").onclick();
+      await new Promise((res) => setTimeout(res, 0));
+      const zip = Buffer.from(await e.record.blobs[0].arrayBuffer());
+      const JSZipNode = require(path.join(PORTAL, "vendor", "jszip.min.js"));
+      const z = await JSZipNode.loadAsync(zip);
+      const man = JSON.parse(await z.file(/MANIFEST\.json$/)[0].async("string"));
+      ok(man.transfer_functions[0].dataid_source === "edi", "a real DATAID records dataid_source=edi");
+      ok(!man.curator_flags, "no curator_flags block when every DATAID is real");
     }
   }
 
