@@ -4134,19 +4134,44 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
         + _advanced_json_details(section, fields))
 
 
+def _time_series_levels_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
+    """SIDEBARMERGE M1 group (d) — TIME SERIES LEVELS AVAILABLE, folded onto the Identifiers & PIDs page
+    from the retired standalone "Time series" sidebar entry. The one field group that remained there
+    (time_series.levels_available checkboxes + its advanced-JSON escape hatch) moves here, placed after
+    the related_identifiers list. The one-line hint distinguishes the two facts a curator confuses: the
+    checkboxes say which levels EXIST in the archives; a DOI or PID for a level is a row in the list above.
+
+    Returns UNWRAPPED content carrying the c_time_series_* checkboxes + o_time_series snapshot + the
+    time_series advanced-JSON box, so a single Identifiers & PIDs post round-trips the time_series map
+    too (build_section_patch is section-agnostic — it assembles whichever widgets + o_ snapshots a form
+    carries)."""
+    section = "time_series"
+    return (
+        '<h3 class="k">Time series levels available</h3>'
+        '<p class="sub">Tick which processing levels EXIST in the archives. A DOI or PID for a level is '
+        'not recorded here; add it as a row in the list above.</p>'
+        + _section_error_html(err_map.get(section))
+        + _levels_widget(section, "levels_available", fields, submitted)
+        + _snapshot_hidden(section, fields)
+        + _advanced_json_details(section, fields))
+
+
 def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
     """IDCONS D1 (SPEC §2) — the ONE consolidated "Identifiers & PIDs" editor content, three groups:
     (a) THIS SURVEY (read-only ausmt id + project RAiD), (b) THIS DATASET ELSEWHERE (the typed
     related_identifiers list — the sole dataset-PID editor), (c) INSTRUMENT (the survey/platform PID).
+    SIDEBARMERGE M1 folds a fourth group (d) TIME SERIES LEVELS AVAILABLE here from the retired
+    standalone "Time series" entry (see _time_series_levels_group).
     Replaces the old five-section identifier scatter. The retired flat inputs (dataset_doi, collection_pid,
     related_publication(+doi), project, per-row instrument pid) are GONE from the UI; their schema keys stay
     readable and round-trip via the editor_form carry-forward.
 
     Returns the INNER content only (no outer panel div): the full form wraps it via
     _identifiers_and_pids_panel; the hub places it inside its own per-section <form> panel. Because the
-    content carries BOTH the identifiers map widgets (s_identifiers_*) + o_identifiers snapshot AND the
-    related_identifiers list rows (l_related_identifiers_*) + o_related_identifiers snapshot, a SINGLE
-    section post round-trips BOTH sections: build_section_patch iterates every widget section and picks up
+    content carries the identifiers map widgets (s_identifiers_*) + o_identifiers snapshot, the
+    related_identifiers list rows (l_related_identifiers_*) + o_related_identifiers snapshot, AND the
+    time_series levels checkboxes (c_time_series_*) + o_time_series snapshot, a SINGLE section post
+    round-trips ALL THREE sections: build_section_patch iterates every widget section and picks up
     whichever snapshots/widgets are present, so no combined-section shim is needed. ORCID stays with people;
     ROR with the organisation; per-publication DOIs in Publications."""
     idmap = "identifiers"
@@ -4178,6 +4203,7 @@ def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None,
         f'{group_c}'
         f'{_snapshot_hidden(idmap, fields)}'
         f'{_advanced_json_details(idmap, fields)}'
+        f'{_time_series_levels_group(fields, submitted, err_map)}'
     )
 
 
@@ -4229,15 +4255,20 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     scalar_panel = f'<div class="panel">{"".join(scalar_rows)}</div>'
 
     panels = []
-    for section in _SECTION_ORDER:
-        # IDCONS D1: the identifiers surface is rendered as ONE consolidated "Identifiers & PIDs" panel
-        # (three groups) in place of the old standalone "Identifiers" panel; the typed related_identifiers
-        # list is folded into it (group b), so its standalone panel is skipped here. Field names are
-        # unchanged, so assembly is byte-identical.
+    # SIDEBARMERGE (owner ruling 2026-07-24): the full form MIRRORS the hub's merged IA order. It is ONE
+    # submit, so no form-merge is needed for round-trip (every section already posts together); the mirror
+    # is the panel ORDER + folds so the two edit surfaces present the same sections in the same sequence.
+    # organisation/instruments sit contiguously (the merged Core fields group, after the scalar panel);
+    # lead_investigator/principal_investigators sit contiguously (the merged Investigators group);
+    # time_series is folded into the Identifiers & PIDs panel (group d) and related_identifiers into
+    # group b, so both are skipped as standalone panels. Field names are unchanged -> assembly is byte-
+    # identical; the mirror is presentation-only.
+    _FULL_FORM_ORDER = ("organisation", "instruments", "lead_investigator", "principal_investigators",
+                        "identifiers", "publications", "funding", "access", "attribution",
+                        "processing", "collection")
+    for section in _FULL_FORM_ORDER:
         if section == "identifiers":
             panels.append(_identifiers_and_pids_panel(slug, fields, submitted, err_map))
-        elif section == "related_identifiers":
-            continue
         elif section in editor_form.MAP_SECTIONS:
             panels.append(_map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
         elif section in editor_form.LIST_SECTIONS:
@@ -4578,35 +4609,61 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
                            f'<textarea name="f_{key}">{_esc(_scalar_val(key))}</textarea></p>')
     scalar_panel_inner = "".join(scalar_rows)
 
-    # (toc key, title, panel-inner-html)
-    sections: list[tuple[str, str, str]] = [("_scalars", "Core fields", scalar_panel_inner)]
+    # SIDEBARMERGE (owner ruling 2026-07-24) — three merged sidebar entries built on the same section-
+    # agnostic combined-post machinery the identifiers round proved (build_section_patch iterates EVERY
+    # widget section and assembles whichever widgets + o_<section> snapshots a form carries, so one form
+    # carrying several sections' fields round-trips them all in ONE submit; the sections a form does NOT
+    # carry contribute nothing, so per-section scope and the no-clobber promise are preserved):
+    #   M3 CORE FIELDS  = scalars (_scalars) + organisation + instruments, three grouped headings.
+    #   M2 INVESTIGATORS = lead_investigator (map) + principal_investigators (list), lead first.
+    #   M1 IDENTIFIERS & PIDS folds time_series levels (group d) — done inside _identifiers_and_pids_inner.
+    # The merged forms keep their per-section keys so each constituent's o_ snapshot / patch scoping is
+    # unchanged; the merged sidebar ENTRY carries a human title while the FORM key stays a real section key.
+    def _map_inner(section: str, derrs: dict | None = None) -> str:
+        return _map_section_panel(section, _SECTION_TITLES[section], fields, submitted,
+                                  err_map, display_errs=derrs)
+
+    def _list_inner(section: str, derr: str | None = None) -> str:
+        return _list_section_panel(section, _SECTION_TITLES[section], fields, submitted,
+                                   err_map, display_error=derr)
+
+    # H4 inline error: the flagged investigator's name input/section goes red with the contract copy —
+    # the flag can land on EITHER group (engine _investigators_of precedence), both now inside Investigators.
+    lead_derrs = {"name": _CITATION_EMAIL_ERROR} if flagged_section == "lead_investigator" else None
+    pi_derr = _CITATION_EMAIL_ERROR if flagged_section == "principal_investigators" else None
+    core_inner = (scalar_panel_inner + _map_inner("organisation") + _list_inner("instruments"))
+    investigators_hint = (
+        '<p class="sub">When a lead investigator is set the portal credits the lead; otherwise the '
+        'principal investigators list is credited (the served-citation precedence, stated not changed).</p>')
+    investigators_inner = (investigators_hint
+                           + _map_inner("lead_investigator", lead_derrs)
+                           + _list_inner("principal_investigators", pi_derr))
+
+    # (toc key, title, panel-inner-html). Order = the owner-ruled merged sidebar order.
+    sections: list[tuple[str, str, str]] = [
+        ("_scalars", "Core fields", core_inner),
+        ("lead_investigator", "Investigators", investigators_inner),
+    ]
+    # The sections already folded into a merged entry above are skipped in the document-order sweep below.
+    _merged_away = {"organisation", "instruments", "lead_investigator", "principal_investigators",
+                    "related_identifiers", "time_series"}
     for section in _SECTION_ORDER:
-        # IDCONS D1 (SPEC §2): the hub renders the SAME consolidated "Identifiers & PIDs" content the full
-        # form does — ONE section (keyed "identifiers", the map section's own key so its snapshot/patch
-        # scoping is unchanged) that folds in the typed related_identifiers list (group b). The standalone
-        # "Related identifiers" section is skipped so the sidebar shows ONE entry, not two. The single
-        # section post round-trips BOTH the identifiers map and the related_identifiers list rows because
-        # the content carries both groups' widgets + both o_<section> snapshots (see the inner's docstring).
+        if section in _merged_away:
+            continue
+        # IDCONS D1 + M1: the hub renders the SAME consolidated "Identifiers & PIDs" content the full form
+        # does — ONE section (keyed "identifiers") that folds the typed related_identifiers list (group b)
+        # AND the time_series levels checkboxes (group d). One post round-trips all three because the content
+        # carries all three groups' widgets + o_<section> snapshots (see _identifiers_and_pids_inner).
         if section == "identifiers":
             inner = _identifiers_and_pids_inner(slug, fields, submitted, err_map)
             sections.append(("identifiers", "Identifiers & PIDs", inner))
             continue
-        if section == "related_identifiers":
-            continue  # folded into the consolidated Identifiers & PIDs section above
         if section in editor_form.MAP_SECTIONS:
-            # H4 inline error: the flagged map section's name input goes red with the contract's
-            # explanatory copy (the mockup's own example).
-            derrs = ({"name": _CITATION_EMAIL_ERROR}
-                     if flagged_section == section else None)
-            inner = _map_section_panel(section, _SECTION_TITLES[section], fields, submitted,
-                                       err_map, display_errs=derrs)
+            derrs = {"name": _CITATION_EMAIL_ERROR} if flagged_section == section else None
+            sections.append((section, _SECTION_TITLES[section], _map_inner(section, derrs)))
         elif section in editor_form.LIST_SECTIONS:
             derr = _CITATION_EMAIL_ERROR if flagged_section == section else None
-            inner = _list_section_panel(section, _SECTION_TITLES[section], fields, submitted,
-                                        err_map, display_error=derr)
-        else:
-            continue
-        sections.append((section, _SECTION_TITLES[section], inner))
+            sections.append((section, _SECTION_TITLES[section], _list_inner(section, derr)))
     for section, title, hint in _EDIT_JSON_ONLY:
         sections.append((section, title, _json_only_panel(section, title, hint, fields, err_map)))
 
@@ -4639,7 +4696,11 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     for key, title, inner in sections:
         sec_id = f"sec-{_esc(key)}"
         on = " on" if key == default_key else ""
-        hint = _toc_state_hint(key, fields, flagged_section)
+        # SIDEBARMERGE M2: the merged Investigators entry (keyed lead_investigator) owns BOTH investigator
+        # groups, so a flagged principal still lights its TOC issue chip — map that flag onto this key.
+        eff_flag = ("lead_investigator" if key == "lead_investigator"
+                    and flagged_section == "principal_investigators" else flagged_section)
+        hint = _toc_state_hint(key, fields, eff_flag)
         toc_links.append(f'<a class="tocitem{on}" href="#{sec_id}" data-hub-section="{_esc(key)}">'
                          f'{_esc(title)}{hint}</a>')
         forms.append(

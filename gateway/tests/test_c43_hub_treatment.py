@@ -283,7 +283,9 @@ def test_metadata_toc_state_hints(tmp_path):
             r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
             assert r.status_code == 200
             toc = re.search(r'<nav class="toc"[^>]*>(.*?)</nav>', r.text, re.DOTALL).group(1)
-            assert ('data-hub-section="lead_investigator">Lead investigator'
+            # SIDEBARMERGE M2: lead + principal investigators are merged into ONE "Investigators" entry
+            # (keyed lead_investigator); the citation-email flag on either group lights its issue chip.
+            assert ('data-hub-section="lead_investigator">Investigators'
                     '<span class="state issue">1 issue</span>') in toc
             assert ('data-hub-section="publications">Publications'
                     '<span class="state">2</span>') in toc
