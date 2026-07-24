@@ -219,8 +219,45 @@ where the curator has no backend access. Each issued key (`ausmt_up_…`) is sho
 **once** at creation and stored only as a sha256 hash; a lost key is revoked and re-created, never
 retrieved. A submit is authorised by EITHER the env `AUSMT_SUBMIT_KEY` (bootstrap/CI, unchanged) OR
 an active DB uploader key; a revoked or unknown key gets the same 401 as a wrong key. The gateway's
-SQLite index now carries **schema v2** (the `uploader_keys` table); an existing v1 DB is migrated in
-place on the next start (the migration is guarded — a DB from a newer build is refused, not opened).
+SQLite index now carries **schema v5**; an existing older DB is migrated in place on the next start
+(the migration is guarded — a DB from a newer build is refused, not opened).
+
+### Self-serve submission keys (email issuance)
+
+Beyond the operator-issued keys above, contributors can **request a key themselves** so they are not
+blocked on out-of-band contact. `POST /gateway/request-key` takes an email; the gateway mails back a
+**self-serve** key. A self-serve key differs from an operator key in three enforced ways:
+
+- **Bound to the requesting email** — it authorises a submit ONLY when the submitter email matches
+  (case-insensitive). Operator keys are not bound.
+- **Expires** (default 14 days) and carries a **submission allowance** (default 5). An expired or
+  exhausted key is rejected with the same 401 as an invalid key. Operator keys never expire.
+- Minted by the public endpoint (no curator action), stored hashed like every other key, and listed
+  in the curator **Uploader keys** page (as `selfserve:<email>:…`) where a curator can revoke it.
+
+The endpoint **always returns the same neutral `202`** — for a valid request, an unknown/invalid
+email, a rate-limited request, or an unconfigured mailer alike — so it never reveals whether an
+address exists or that a limit was hit. Daily rate limits (per-email, per-IP, global) are
+**fail-closed and persisted in the gateway DB**, so bouncing the process does not reset them.
+
+**This feature is inert until SMTP is configured.** Set the `AUSMT_SMTP_*` / `AUSMT_MAIL_FROM` block
+in `deploy/.env` (see `.env.example`) — for AusMT this is a **VentraIP mailbox**, e.g.
+`submissions@ausmt.au`:
+
+```sh
+# In deploy/.env — point at your VentraIP mailbox. Port 587 uses STARTTLS; 465 uses implicit TLS.
+AUSMT_SMTP_HOST=mail.ausmt.au
+AUSMT_SMTP_PORT=587
+AUSMT_SMTP_USER=submissions@ausmt.au
+AUSMT_SMTP_PASS=your-mailbox-password        # SECRET — dropped from the startup config dump, never logged
+AUSMT_MAIL_FROM=submissions@ausmt.au
+AUSMT_SUBMIT_PAGE_URL=https://ausmt.au/submit
+```
+
+With `AUSMT_SMTP_HOST` or `AUSMT_MAIL_FROM` unset the endpoint still `202`s but mints nothing and
+logs `issuance disabled`. The mail is plain text (the key, its expiry and allowance, the submit-page
+link, and a one-line what-happens-next), sent stdlib `smtplib` only — no new dependency. A mail
+failure is logged **without the key** and the endpoint still returns its `202`.
 
 ### Curator publish = commit + push only; the rebuild is automatic (C40) — or manual
 

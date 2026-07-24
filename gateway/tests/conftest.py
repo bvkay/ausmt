@@ -414,14 +414,17 @@ def _git_verb(args) -> str:
 
 @contextlib.asynccontextmanager
 async def app_client(tmp_path: Path, *, scanner=None, run_poll: bool = False,
-                     git_runner=None, edit_runner=None, **cfg_overrides):
+                     git_runner=None, edit_runner=None, mailer=None, **cfg_overrides):
     """In-process app + httpx client. When run_poll is False the poll-loop task is NOT started (the
     tests drive gw.poll_once() explicitly for determinism); the app object is still returned so a
     test can reach gw = app.state.gw. git_runner injects the publish seam (there is no rebuild seam
     in the v2 commit-and-push model); edit_runner injects the C31 metadata-editor seam (an in-process
-    call to the runner edit bodies, so no subprocess/yaml enters the gateway process during tests)."""
+    call to the runner edit bodies, so no subprocess/yaml enters the gateway process during tests);
+    mailer injects the K3 mail seam (a fake sender so smtplib never touches the network — when
+    provided, self-serve issuance is ENABLED regardless of SMTP config)."""
     cfg = make_config(tmp_path, **cfg_overrides)
-    app = create_app(cfg=cfg, scanner=scanner, git_runner=git_runner, edit_runner=edit_runner)
+    app = create_app(cfg=cfg, scanner=scanner, git_runner=git_runner, edit_runner=edit_runner,
+                     mailer=mailer)
     gw = app.state.gw
     # https base_url so the client's cookie jar retains the Secure session cookie (design §2 sets
     # Secure; over a plain-http base httpx drops it). The ASGI app is scheme-agnostic; in production

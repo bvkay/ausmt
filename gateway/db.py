@@ -72,10 +72,25 @@ class UploaderKey:
     revoked_by: str | None
     last_used_utc: str | None
     note: str | None = None
+    # v5 (feat/selfserve-submit-keys): key PROVENANCE and the email_verified extras. `provenance` is
+    # 'operator' for every key the env-bootstrap OR a curator issues (the pre-v5 behaviour, and the
+    # backfilled DEFAULT for existing rows) and 'email_verified' for a self-serve key minted by the
+    # public request-key endpoint. `expires_utc`/`allowance_remaining` are NULL for operator keys (no
+    # expiry, no per-key allowance — they behave exactly as before) and SET for email_verified keys
+    # (a 14-day expiry and a decrementing submission allowance enforced on the submit path). An
+    # email_verified key is BOUND to `email`: it authorises a submit only when the submitter_email
+    # matches (case-insensitive).
+    provenance: str = "operator"
+    expires_utc: str | None = None
+    allowance_remaining: int | None = None
 
     @property
     def active(self) -> bool:
         return self.revoked_utc is None
+
+    @property
+    def is_email_verified(self) -> bool:
+        return self.provenance == "email_verified"
 
 
 @dataclass(frozen=True)
@@ -197,11 +212,61 @@ def _migrate_v3_uploader_key_note(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE uploader_keys ADD COLUMN note TEXT")
 
 
-SCHEMA_VERSION = 4
+def _migrate_v5_selfserve_keys(conn: sqlite3.Connection) -> None:
+    """v5 (feat/selfserve-submit-keys): a SECOND, self-serve key-issuance path alongside the existing
+    operator-issued keys. Two additive changes, both the C43 lane invariant (no existing column
+    touched, no data migrated):
+
+    1. uploader_keys gains three columns for key PROVENANCE + the email_verified extras:
+         * provenance          — NOT NULL DEFAULT 'operator', so EVERY existing row (env-bootstrap and
+                                 curator-issued keys alike) is backfilled to 'operator' and keeps its
+                                 exact prior behaviour (no expiry, no binding, no allowance). A
+                                 self-serve key is 'email_verified'.
+         * expires_utc         — NULL for operator keys; an ISO stamp for email_verified keys (a 401 on
+                                 the submit path once passed, same UX as an invalid key).
+         * allowance_remaining — NULL for operator keys; a decrementing submission budget for
+                                 email_verified keys (0 => rejected, same 401).
+       ADD COLUMN has no IF NOT EXISTS form, so each is guarded by a PRAGMA table_info probe (mirrors
+       v3's rationale) — belt-and-braces for a partial-migration re-run. The DEFAULT on `provenance`
+       is the load-bearing bit: an ALTER ... ADD COLUMN NOT NULL is only legal WITH a constant
+       default, and that default is exactly the honest backfill (existing keys ARE operator keys).
+
+    2. key_request_log — the PERSISTENT store for the self-serve request-key rate limits (per-email,
+       per-ip, global daily). One row per ALLOWED (issued) request; the limits are computed from
+       COUNTs over the current UTC day. It lives in this same sqlite DB (the store the submissions
+       table uses) so the limits survive a gateway restart — an attacker cannot reset a per-email cap
+       by bouncing the process. No PII beyond the lower-cased email + the connecting ip (the same
+       confinement class as submitter_email — this DB is the only PII home, never a git-bound path)."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(uploader_keys)").fetchall()}
+    if "provenance" not in cols:
+        conn.execute(
+            "ALTER TABLE uploader_keys ADD COLUMN provenance TEXT NOT NULL DEFAULT 'operator'")
+    if "expires_utc" not in cols:
+        conn.execute("ALTER TABLE uploader_keys ADD COLUMN expires_utc TEXT")
+    if "allowance_remaining" not in cols:
+        conn.execute("ALTER TABLE uploader_keys ADD COLUMN allowance_remaining INTEGER")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS key_request_log (
+            id INTEGER PRIMARY KEY,
+            email_lower TEXT NOT NULL,
+            ip TEXT NOT NULL,
+            created_utc TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_keyreq_email ON key_request_log(email_lower, created_utc)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_keyreq_ip ON key_request_log(ip, created_utc)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_keyreq_created ON key_request_log(created_utc)")
+
+
+SCHEMA_VERSION = 5
 _MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = [
     (2, _migrate_v2_uploader_keys),
     (3, _migrate_v3_uploader_key_note),
     (4, _migrate_v4_curator_totp),
+    (5, _migrate_v5_selfserve_keys),
 ]
 
 
@@ -467,6 +532,80 @@ class Database:
             self._conn.execute(
                 "UPDATE uploader_keys SET last_used_utc = ? WHERE id = ?", (_utc_now(), key_id))
 
+    def create_email_verified_key(self, *, email: str, key_sha256: str, expires_utc: str,
+                                  allowance: int) -> tuple[str, int]:
+        """Insert one SELF-SERVE (provenance='email_verified') uploader key and return (name, id). The
+        key is BOUND to `email` (the submit path enforces a case-insensitive match on submitter_email),
+        carries `expires_utc` and an `allowance` submission budget, and is attributed to a synthetic
+        created_by of 'self-serve' (it was minted by the public endpoint, not a named curator).
+
+        The `name` column is UNIQUE NOT NULL (the curator-issued keys use it as a human label); a
+        self-serve key has no curator label, so a unique synthetic name is generated as
+        `selfserve:<email>:<8-hex>`. The 4-byte random suffix makes repeat requests for the same email
+        collision-free while keeping the row recognisable in the curator list. Stores ONLY the sha256
+        of the key (the plaintext is mailed once by the caller and never persisted)."""
+        name = f"selfserve:{email}:{secrets.token_hex(4)}"
+        now = _utc_now()
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO uploader_keys (name, email, key_sha256, created_utc, created_by, "
+                "provenance, expires_utc, allowance_remaining) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (name, email, key_sha256, now, "self-serve", "email_verified", expires_utc,
+                 int(allowance)),
+            )
+            return name, int(cur.lastrowid)
+
+    def decrement_uploader_key_allowance(self, key_id: int) -> bool:
+        """Atomically spend one submission from an email_verified key's allowance: decrement
+        allowance_remaining by 1 ONLY when it is currently > 0. Returns True if a submission was
+        spent, False if the key was unknown, is an operator key (allowance_remaining IS NULL), or was
+        already exhausted. The whole check-and-decrement is one UPDATE under the lock, so two
+        concurrent submits on the same key cannot both spend the same last submission (mirrors
+        consume_totp_step's race-free-at-the-DB-layer rationale)."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE uploader_keys SET allowance_remaining = allowance_remaining - 1 "
+                "WHERE id = ? AND allowance_remaining IS NOT NULL AND allowance_remaining > 0",
+                (key_id,))
+            return cur.rowcount > 0
+
+    def try_record_key_request(self, *, email_lower: str, ip: str, day_prefix: str,
+                               per_email_max: int, per_ip_max: int, global_max: int) -> bool:
+        """The PERSISTENT, fail-closed rate-limit gate for the self-serve request-key endpoint. Under
+        ONE lock: count today's ALREADY-RECORDED (allowed) requests for this email, this ip, and
+        globally; if EVERY count is strictly under its cap, INSERT this request's row and return True
+        (allowed); otherwise return False and record nothing. Doing the three COUNTs and the INSERT in
+        a single locked/committed transaction makes the cap race-free — a burst of concurrent requests
+        cannot all read 'under cap' before any of them records (mirrors LoginRateLimiter.evaluate and
+        db.transition's lock-across-check-then-write rationale, but here the state is in the DB so it
+        survives a restart).
+
+        Only ALLOWED requests are recorded, so a per-email cap of N means 'at most N keys issued to
+        this address per UTC day'; an over-cap request adds nothing and the endpoint silently returns
+        the neutral 202. A cap <= 0 blocks that dimension entirely (the strict `< cap` never passes)."""
+        like = day_prefix + "%"
+        with self._lock, self._conn:
+            email_n = int(self._conn.execute(
+                "SELECT COUNT(*) AS n FROM key_request_log WHERE email_lower = ? AND created_utc LIKE ?",
+                (email_lower, like)).fetchone()["n"])
+            if email_n >= per_email_max:
+                return False
+            ip_n = int(self._conn.execute(
+                "SELECT COUNT(*) AS n FROM key_request_log WHERE ip = ? AND created_utc LIKE ?",
+                (ip, like)).fetchone()["n"])
+            if ip_n >= per_ip_max:
+                return False
+            global_n = int(self._conn.execute(
+                "SELECT COUNT(*) AS n FROM key_request_log WHERE created_utc LIKE ?",
+                (like,)).fetchone()["n"])
+            if global_n >= global_max:
+                return False
+            self._conn.execute(
+                "INSERT INTO key_request_log (email_lower, ip, created_utc) VALUES (?,?,?)",
+                (email_lower, ip, _utc_now()))
+            return True
+
     def list_uploader_keys(self) -> list[UploaderKey]:
         """All uploader keys, active and revoked, newest first — the curator list page (revoked rows
         stay for the audit trail; there is no delete)."""
@@ -543,8 +682,10 @@ class Database:
 
     @staticmethod
     def _row_to_uploader_key(row: sqlite3.Row) -> UploaderKey:
-        # `note` is a v3 column: guard the key access so a pre-migration row (or a test fixture built
-        # against an older schema) degrades to None rather than raising a KeyError.
+        # `note` is a v3 column and provenance/expires_utc/allowance_remaining are v5 columns: guard
+        # each key access so a pre-migration row (or a test fixture built against an older schema)
+        # degrades to its default rather than raising a KeyError. A missing `provenance` degrades to
+        # 'operator' — the honest reading of a row that predates the self-serve path.
         keys = row.keys()
         return UploaderKey(
             id=row["id"], name=row["name"], email=row["email"], key_sha256=row["key_sha256"],
@@ -552,6 +693,10 @@ class Database:
             revoked_utc=row["revoked_utc"], revoked_by=row["revoked_by"],
             last_used_utc=row["last_used_utc"],
             note=row["note"] if "note" in keys else None,
+            provenance=row["provenance"] if "provenance" in keys else "operator",
+            expires_utc=row["expires_utc"] if "expires_utc" in keys else None,
+            allowance_remaining=(
+                row["allowance_remaining"] if "allowance_remaining" in keys else None),
         )
 
     # ---- curator TOTP (schema v4 — destructive-op second factor, C41 D2) ------------------------
