@@ -28,8 +28,9 @@ from fastapi import FastAPI, Form, Header, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import checklist as checklist_mod
-from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, metaedit, pidcheck, publish,
-               serve_state, states, statuspage, totp, uploader_keys as uploader_keys_mod, zipsafety)
+from . import (clamd, curator_auth, curatorpage, db, editor_form, jobs, mailer as mailer_mod,
+               metaedit, pidcheck, publish, serve_state, states, statuspage, totp,
+               uploader_keys as uploader_keys_mod, zipsafety)
 from . import upload as upload_intake
 from .config import Config, fail_closed_startup, load_config
 from .orcid import is_valid_orcid
@@ -66,6 +67,17 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _utc_now_iso() -> str:
+    """The canonical fixed-width UTC stamp (matches db._utc_now) used for expiry comparisons on the
+    submit path. Fixed width so a lexicographic <= compare is a chronological compare."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _utc_plus_days_iso(days: int) -> str:
+    """The canonical UTC stamp `days` days from now — the email_verified key expiry."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + days * 86400))
+
+
 def _free_bytes(path: Path) -> int:
     return shutil.disk_usage(path).free
 
@@ -74,12 +86,24 @@ class Gateway:
     """Holds the app's mutable seams (config, DB, a scanner callable) so tests can inject a fake
     clamd and a temp data dir without monkeypatching module globals."""
 
-    def __init__(self, cfg: Config, scanner=None, git_runner=None, edit_runner=None):
+    def __init__(self, cfg: Config, scanner=None, git_runner=None, edit_runner=None, mailer=None):
         self.cfg = cfg
         for d in (cfg.incoming_dir, cfg.quarantine_dir, cfg.jobs_dir, cfg.state_dir):
             d.mkdir(parents=True, exist_ok=True)
         jobs.ensure_dirs(cfg.jobs_dir)
         self.db = db.Database(cfg.db_path)
+        # K3 mail seam (same injected-callable pattern as the scanner/git/edit seams). A test injects a
+        # fake sender so smtplib never touches the network; production uses the real stdlib sender.
+        # `mailer` is a callable(*, to_email, key, expires_utc, allowance) -> bool. When it is injected
+        # mail is ENABLED regardless of SMTP config (the test controls delivery); when it is None mail
+        # is enabled iff cfg.mail_configured and the real sender is bound. The request-key endpoint
+        # consults _mail_enabled for its "issuance disabled" branch.
+        if mailer is not None:
+            self._mail_enabled = True
+            self._send_key_email = mailer
+        else:
+            self._mail_enabled = cfg.mail_configured
+            self._send_key_email = lambda **kw: mailer_mod.send_key_email(self.cfg, **kw)
         # scanner(data:bytes) -> awaitable[clamd.ScanResult]; default hits the real clamd. Injected
         # in tests so no real daemon is needed and the fail-closed path is exercisable.
         self._scan_bytes = scanner or self._real_scan
@@ -187,6 +211,17 @@ class Gateway:
         if orcid and not is_valid_orcid(orcid):
             return JSONResponse({"detail": "submitter_orcid failed checksum"}, status_code=400)
 
+        # EMAIL BINDING (v5): an email_verified (self-serve) key authorises a submit ONLY when the
+        # submitter_email matches the address the key was issued to (case-insensitive). A mismatch is
+        # the SAME 401 as an invalid key — no detail leakage, and no oracle for whether the key or the
+        # binding was wrong. Checked HERE (not in _resolve_submit_auth) because submitter_email is not
+        # known until the multipart fields are parsed; done BEFORE spooling the file so a mismatched
+        # binding never writes upload bytes. Operator keys (provenance 'operator') skip this entirely.
+        if auth.provenance == "email_verified":
+            bound = (auth.bound_email or "").strip().lower()
+            if not bound or email.strip().lower() != bound:
+                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+
         # Copy the parsed file part to the .part file, re-enforcing the cap as the AUTHORITATIVE
         # per-file bound (the parse cap above allows framing overhead; this bounds the file alone).
         sha = hashlib.sha256()
@@ -244,6 +279,14 @@ class Gateway:
         # uploader is the only one with a per-key usage signal). The env-bootstrap key has no row.
         if auth.uploader_key_id is not None:
             self.db.stamp_uploader_key_used(auth.uploader_key_id)
+            # Spend one submission from an email_verified key's allowance (operator keys have none —
+            # allowance_remaining IS NULL, so the atomic decrement is a no-op for them). Best-effort:
+            # a failure here must not fail an already-accepted submit, so it is not raised on.
+            if auth.provenance == "email_verified":
+                try:
+                    self.db.decrement_uploader_key_allowance(auth.uploader_key_id)
+                except Exception:  # noqa: BLE001 -- an allowance-decrement slip must not fail a submit
+                    logger.warning("allowance decrement failed for an email_verified key submit")
 
         # clamd scan of the raw zip (design §4.5). Fail closed: on ScanError the row STAYS RECEIVED
         # and the poll loop retries; only a definite clean advances to SCANNED + queues the job.
@@ -2563,6 +2606,82 @@ class Gateway:
         return JSONResponse({"detail": "unauthorized"}, status_code=401,
                             headers={"Cache-Control": "no-store"})
 
+    # ---- self-serve key issuance (K1) --------------------------------------------------------
+
+    @staticmethod
+    def _client_ip(request: Request) -> str:
+        """The connecting peer's IP for the per-IP rate limit, or 'unknown' when unavailable. NOTE:
+        behind a reverse proxy (Caddy, the production front door) this is the PROXY hop, not the true
+        client — so the per-IP limit there augments the global daily cap rather than isolating one
+        real client. We deliberately do NOT trust an X-Forwarded-For header (it is client-spoofable,
+        which would let an attacker evade the per-IP cap); the global + per-email caps are the real
+        backstops. An unknown IP still counts under the shared 'unknown' bucket (fail-closed-leaning:
+        it can only tighten, never loosen, the limit)."""
+        client = request.client
+        return client.host if client and client.host else "unknown"
+
+    def handle_request_key(self, request: Request, email_field: str | None) -> Response:
+        """POST /gateway/request-key {email}: mint a self-serve email_verified key and mail it (K1).
+
+        ALWAYS returns the SAME neutral 202 — for a valid+issued request, an invalid email, a
+        rate-limited request, an unconfigured-SMTP deploy, or a mail failure alike. No branch leaks
+        which case occurred (no account/email enumeration, no rate-limit disclosure). The side effects
+        (mint + mail) happen silently behind that uniform response.
+
+        Order: syntactic email gate -> issuance-enabled gate -> PERSISTENT fail-closed rate limit
+        (per-email + per-ip + global daily, in the DB so it survives a restart) -> mint + store +
+        mail. A disallowed or failed step simply does nothing and returns the neutral 202. The key
+        material is NEVER logged (a mail failure logs the recipient + error, never the key)."""
+        neutral = JSONResponse(
+            {"status": "accepted"}, status_code=202, headers={"Cache-Control": "no-store"})
+
+        email = (email_field or "").strip()
+        if not mailer_mod.is_syntactic_email(email):
+            # Malformed address: do nothing, same neutral 202 (format is not account existence).
+            return neutral
+        if not self._mail_enabled:
+            # SMTP unconfigured: issuance is disabled. Mint nothing, log it, return the neutral 202.
+            logger.info("request-key: issuance disabled (SMTP not configured) — returning neutral 202")
+            return neutral
+
+        ip = self._client_ip(request)
+        day = time.strftime("%Y-%m-%d", time.gmtime())
+        email_lower = email.lower()
+        try:
+            allowed = self.db.try_record_key_request(
+                email_lower=email_lower, ip=ip, day_prefix=day,
+                per_email_max=self.cfg.key_request_per_email_daily,
+                per_ip_max=self.cfg.key_request_per_ip_daily,
+                global_max=self.cfg.key_request_global_daily)
+        except Exception:  # noqa: BLE001 -- a rate-limit-store error fails CLOSED (issue nothing)
+            logger.warning("request-key: rate-limit check failed — failing closed, no key issued")
+            return neutral
+        if not allowed:
+            # Over a daily cap: silently do nothing (no rate-limit disclosure).
+            return neutral
+
+        # Allowed: mint an email_verified key, store ONLY its hash, and mail the plaintext once.
+        key = uploader_keys_mod.mint_key()
+        expires_utc = _utc_plus_days_iso(self.cfg.email_verified_key_expiry_days)
+        allowance = self.cfg.email_verified_key_allowance
+        try:
+            self.db.create_email_verified_key(
+                email=email, key_sha256=uploader_keys_mod.key_hash(key),
+                expires_utc=expires_utc, allowance=allowance)
+        except Exception:  # noqa: BLE001 -- a persistence failure must not break the neutral 202
+            logger.warning("request-key: key persistence failed — no key issued")
+            return neutral
+
+        try:
+            sent = self._send_key_email(
+                to_email=email, key=key, expires_utc=expires_utc, allowance=allowance)
+        except Exception:  # noqa: BLE001 -- never let a mail failure break the 202; log sans key
+            logger.warning("request-key: mail send raised — key minted but delivery failed (no key logged)")
+            sent = False
+        if not sent:
+            logger.warning("request-key: mail delivery reported failure (no key logged)")
+        return neutral
+
     # ---- auth --------------------------------------------------------------------------------
 
     def _resolve_submit_auth(self, submit_key: str | None) -> "_SubmitAuth | None":
@@ -2575,6 +2694,14 @@ class Gateway:
         timing leaks nothing usable about the plaintext (and it is a hash lookup, not a per-key scan).
         A revoked/unknown key resolves to None — the SAME 401 as a wrong env key, no oracle for which
         case it was.
+
+        PROVENANCE (v5): an OPERATOR key (env, or a curator-issued DB key) authorises unconditionally
+        as before — no expiry, no binding, no allowance. An EMAIL_VERIFIED (self-serve) key carries an
+        expiry and a submission allowance, BOTH enforced here: an expired key OR one whose allowance is
+        exhausted resolves to None (the SAME 401 as an invalid key — no detail leakage). Its EMAIL
+        BINDING is enforced later (in the submit handler, once submitter_email is parsed) because the
+        submitter email is not known at this point; the auth object carries the bound email for that
+        check.
 
         FAIL-CLOSED: if the DB lookup raises (DB unavailable mid-auth), we REJECT rather than fall back
         to env-only or accept — an auth error is never an auth bypass. The env path is tried FIRST and
@@ -2590,16 +2717,31 @@ class Gateway:
             return None
         if row is None:
             return None
-        return _SubmitAuth(uploader_name=row.name, uploader_key_id=row.id)
+        if row.is_email_verified:
+            # Expired or exhausted email_verified keys resolve to None -> the same 401 as an invalid
+            # key (no oracle for WHICH condition failed). Expiry is a lexicographic compare on the
+            # fixed-width ISO stamps (matches curator_auth.is_session_expired's rationale).
+            now = _utc_now_iso()
+            if not row.expires_utc or row.expires_utc <= now:
+                return None
+            if row.allowance_remaining is None or row.allowance_remaining <= 0:
+                return None
+        return _SubmitAuth(
+            uploader_name=row.name, uploader_key_id=row.id, provenance=row.provenance,
+            bound_email=row.email)
 
 
 @dataclass(frozen=True)
 class _SubmitAuth:
     """The authenticated submit identity. uploader_name/uploader_key_id are None for the env key
     (bootstrap/CI); set for a DB uploader key so the handler can attribute the upload and stamp
-    last_used."""
+    last_used. `provenance` is 'operator' (env or curator key — no binding/allowance) or
+    'email_verified' (self-serve key — bound to `bound_email`, allowance decremented on a successful
+    submit). `bound_email` is the address an email_verified key's submitter_email must match."""
     uploader_name: str | None
     uploader_key_id: int | None
+    provenance: str = "operator"
+    bound_email: str | None = None
 
 
 class _Oversize(Exception):
@@ -2736,10 +2878,11 @@ def _preview_media_type(path: Path) -> str | None:
     return _PREVIEW_MEDIA_TYPES.get(path.suffix.lower())
 
 
-def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_runner=None) -> FastAPI:
+def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_runner=None,
+               mailer=None) -> FastAPI:
     cfg = cfg or load_config()
     fail_closed_startup(cfg)
-    gw = Gateway(cfg, scanner=scanner, git_runner=git_runner, edit_runner=edit_runner)
+    gw = Gateway(cfg, scanner=scanner, git_runner=git_runner, edit_runner=edit_runner, mailer=mailer)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -2779,6 +2922,15 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     async def healthz():
         # Liveness only; no auth, no data — used by compose/operator. Deliberately reveals nothing.
         return JSONResponse({"ok": True})
+
+    # K1 self-serve key issuance. PUBLIC (no submit key), sync `def` so the blocking DB rate-limit +
+    # blocking smtplib send run in Starlette's threadpool (matching the status route's rationale — a
+    # burst must not stall the event-loop poll task). ALWAYS returns the same neutral 202; the handler
+    # is the single place the mint/mail side effects live. Accepts the email as a form field (the
+    # companion portal form POSTs urlencoded, matching the curator-login POST shape).
+    @app.post("/gateway/request-key")
+    def request_key(request: Request, email: str = Form(default="")):
+        return gw.handle_request_key(request, email)
 
     # ---- curator routes (C11 §3). All session-gated except login; every state-changing POST is
     # CSRF-checked inside the handler. The GET pages that do blocking sqlite/file reads are declared

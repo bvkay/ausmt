@@ -46,10 +46,46 @@ class Config:
     # result before surfacing a retryable error to the curator. Bounded by design — the gw-runner may
     # be mid-validation of a long submission job (its loop is single-threaded).
     edit_timeout_s: int = 120
+    # Self-serve key issuance (K1-K3). The public POST /gateway/request-key mints an email_verified
+    # uploader key and mails it. These are all SECONDARY to the operator-issued path (which stays the
+    # env AUSMT_SUBMIT_KEY + curator-issued DB keys); every value has a working default so a deploy
+    # that does not configure SMTP simply runs with issuance disabled (the endpoint still 202s).
+    #
+    # SMTP: smtp_pass is a SECRET (dropped from redacted_items, never logged). An unset smtp_host OR
+    # mail_from means mail is NOT configured — mail_configured is False and the endpoint logs
+    # "issuance disabled" and mints nothing.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_pass: str = ""
+    mail_from: str = ""
+    # The public submit-page URL woven into the issued-key email so the contributor knows where to go.
+    # Empty => the email omits the link line rather than printing a broken one.
+    submit_page_url: str = ""
+    # Daily issuance rate limits (fail-closed, persisted in the gateway DB so they survive a restart).
+    # Counts are per UTC day of ALLOWED (recorded) requests: an over-cap request silently does nothing
+    # and returns the same neutral 202 (no rate-limit disclosure). per-email caps issuance to one
+    # address; per-ip is defence-in-depth (behind a reverse proxy it is the proxy hop — see the
+    # request-key handler note); global is the absolute daily backstop.
+    key_request_per_email_daily: int = 3
+    key_request_per_ip_daily: int = 20
+    key_request_global_daily: int = 200
+    # email_verified key shape: default 14-day expiry and a 5-submission allowance (both enforced on
+    # the submit path; an expired or exhausted key is rejected with the SAME 401 as an invalid key).
+    email_verified_key_expiry_days: int = 14
+    email_verified_key_allowance: int = 5
 
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def mail_configured(self) -> bool:
+        """True only when BOTH the SMTP host and the From address are set — the minimum to reach a
+        mailbox. When False the self-serve request-key endpoint mints nothing and logs that issuance
+        is disabled (it still returns the neutral 202). User/pass may be empty (an unauthenticated
+        relay or a localhost submission port is legitimate)."""
+        return bool(self.smtp_host.strip() and self.mail_from.strip())
 
     # Directory layout under data_dir (design §1 host tree). These are the gateway's view; the
     # runner sees incoming ro / quarantine rw / jobs rw under its own mount at the same relative
@@ -93,8 +129,14 @@ class Config:
             ("AUSMT_SESSION_TTL_S", str(self.session_ttl_s)),
             ("AUSMT_EDIT_TIMEOUT_S", str(self.edit_timeout_s)),
             ("AUSMT_CURATORS_CONFIGURED", str(curators_configured)),
+            ("AUSMT_SMTP_HOST", self.smtp_host or "<unset>"),
+            ("AUSMT_SMTP_PORT", str(self.smtp_port)),
+            ("AUSMT_SMTP_USER", self.smtp_user or "<unset>"),
+            ("AUSMT_MAIL_FROM", self.mail_from or "<unset>"),
+            ("AUSMT_MAIL_CONFIGURED", str(self.mail_configured)),
             ("AUSMT_SUBMIT_KEY", "<redacted>"),
             ("AUSMT_CURATOR_KEYS", "<redacted>"),
+            ("AUSMT_SMTP_PASS", "<redacted>"),
         ]
 
 
@@ -124,6 +166,17 @@ def load_config(environ: dict[str, str] | None = None) -> Config:
         login_max_attempts=_i("AUSMT_LOGIN_MAX_ATTEMPTS", 5),
         login_window_s=_i("AUSMT_LOGIN_WINDOW_S", 300),
         edit_timeout_s=_i("AUSMT_EDIT_TIMEOUT_S", 120),
+        smtp_host=env.get("AUSMT_SMTP_HOST", ""),
+        smtp_port=_i("AUSMT_SMTP_PORT", 587),
+        smtp_user=env.get("AUSMT_SMTP_USER", ""),
+        smtp_pass=env.get("AUSMT_SMTP_PASS", ""),
+        mail_from=env.get("AUSMT_MAIL_FROM", ""),
+        submit_page_url=env.get("AUSMT_SUBMIT_PAGE_URL", ""),
+        key_request_per_email_daily=_i("AUSMT_KEYREQ_PER_EMAIL_DAILY", 3),
+        key_request_per_ip_daily=_i("AUSMT_KEYREQ_PER_IP_DAILY", 20),
+        key_request_global_daily=_i("AUSMT_KEYREQ_GLOBAL_DAILY", 200),
+        email_verified_key_expiry_days=_i("AUSMT_SELFSERVE_KEY_EXPIRY_DAYS", 14),
+        email_verified_key_allowance=_i("AUSMT_SELFSERVE_KEY_ALLOWANCE", 5),
     )
 
 

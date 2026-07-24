@@ -83,15 +83,87 @@ def _table_columns(path, table: str) -> set[str]:
 
 def test_fresh_db_lands_at_v2_with_uploader_keys(tmp_path):
     """A fresh DB is stamped at the current SCHEMA_VERSION (>= 2) and carries the uploader_keys table
-    (the feat/uploader-key-management migration), INCLUDING the v3 `note` column (C43 D7). Fails if the
+    (the feat/uploader-key-management migration), INCLUDING the v3 `note` column (C43 D7) and the v5
+    provenance/expires_utc/allowance_remaining columns (feat/selfserve-submit-keys). Fails if a
     migration never ran on a fresh DB, or a schema change dropped/renamed a column."""
     path = tmp_path / "gateway.sqlite"
     db.Database(path).close()
-    assert db.SCHEMA_VERSION >= 3
+    assert db.SCHEMA_VERSION >= 5
     assert _user_version(path) == db.SCHEMA_VERSION
     cols = _table_columns(path, "uploader_keys")
     assert cols == {"id", "name", "email", "key_sha256", "created_utc", "created_by",
-                    "revoked_utc", "revoked_by", "last_used_utc", "note"}
+                    "revoked_utc", "revoked_by", "last_used_utc", "note",
+                    "provenance", "expires_utc", "allowance_remaining"}
+
+
+def test_fresh_db_lands_at_v5_with_key_request_log(tmp_path):
+    """A fresh DB is stamped at SCHEMA_VERSION (>= 5) and carries the key_request_log table (the
+    self-serve rate-limit store) with exactly its four columns, and a fresh operator-issued key
+    backfills provenance='operator'. Fails if the v5 migration never ran on a fresh DB, or the
+    provenance default is wrong."""
+    path = tmp_path / "gateway.sqlite"
+    database = db.Database(path)
+    try:
+        assert db.SCHEMA_VERSION >= 5
+        assert _user_version(path) == db.SCHEMA_VERSION
+        assert _table_columns(path, "key_request_log") == {"id", "email_lower", "ip", "created_utc"}
+        # A curator-issued key defaults to provenance 'operator' with no expiry/allowance.
+        kid = database.create_uploader_key(
+            name="op-key", email=None, key_sha256="e" * 64, created_by="curator-a")
+        row = [k for k in database.list_uploader_keys() if k.id == kid][0]
+        assert row.provenance == "operator"
+        assert row.expires_utc is None and row.allowance_remaining is None
+    finally:
+        database.close()
+
+
+def test_v4_db_with_data_upgrades_to_v5(tmp_path):
+    """A v4 DB (uploader_keys WITHOUT the v5 columns, NO key_request_log, stamped 4) with an existing
+    key row upgrades to v5 cleanly: the migration ADDS the three columns (backfilling the existing row
+    to provenance='operator') and creates key_request_log, and the existing row survives. Fails if the
+    v5 migration drops data, does not add the columns/table, or backfills the wrong provenance.
+    NON-VACUOUS: the pre-fix state genuinely lacks the columns and table, so a no-op migration would
+    leave user_version at 4 and the assertions would fail."""
+    path = tmp_path / "gateway.sqlite"
+    seeded = db.Database(path)
+    kid = seeded.create_uploader_key(
+        name="field-team-1", email="t@example.org", key_sha256="f" * 64, created_by="curator-a")
+    seeded.close()
+    # Force the on-disk state back to a real v4: rebuild uploader_keys WITHOUT the v5 columns, drop
+    # key_request_log, and reset the stamp so the v5 migration has genuine work to do.
+    raw = sqlite3.connect(str(path))
+    raw.executescript(
+        """
+        CREATE TABLE uploader_keys_v4 (
+            id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, email TEXT,
+            key_sha256 TEXT NOT NULL UNIQUE, created_utc TEXT NOT NULL, created_by TEXT NOT NULL,
+            revoked_utc TEXT, revoked_by TEXT, last_used_utc TEXT, note TEXT);
+        INSERT INTO uploader_keys_v4 (id, name, email, key_sha256, created_utc, created_by,
+            revoked_utc, revoked_by, last_used_utc, note)
+          SELECT id, name, email, key_sha256, created_utc, created_by,
+            revoked_utc, revoked_by, last_used_utc, note FROM uploader_keys;
+        DROP TABLE uploader_keys;
+        ALTER TABLE uploader_keys_v4 RENAME TO uploader_keys;
+        DROP TABLE IF EXISTS key_request_log;
+        PRAGMA user_version=4;
+        """
+    )
+    raw.commit()
+    raw.close()
+    assert _user_version(path) == 4
+    assert "provenance" not in _table_columns(path, "uploader_keys")
+
+    reopened = db.Database(path)
+    try:
+        assert _user_version(path) == db.SCHEMA_VERSION
+        cols = _table_columns(path, "uploader_keys")
+        assert {"provenance", "expires_utc", "allowance_remaining"} <= cols
+        assert _table_columns(path, "key_request_log") == {"id", "email_lower", "ip", "created_utc"}
+        row = [k for k in reopened.list_uploader_keys() if k.id == kid][0]
+        assert row.provenance == "operator", "an existing key backfills to provenance 'operator'"
+        assert row.name == "field-team-1" and row.created_by == "curator-a", "other fields survive"
+    finally:
+        reopened.close()
 
 
 def test_v2_db_with_data_upgrades_to_v3_adding_note(tmp_path):
