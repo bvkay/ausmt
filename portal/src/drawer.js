@@ -269,8 +269,12 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     const idRow=idRowFor(vocab);
     if(idRow&&idRow.identifier){
       if(idRow.resolution==="reserved")return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
+      // Scheme guard: only an http(s) href becomes a product-tile open action (its data-url reaches
+      // window.open). A URL-typed identifier is relatedIdHref's raw value, so a javascript:/data: value
+      // would otherwise route straight into window.open — gate it here and fall through to the reserved /
+      // tsOpen branches (escUrl still guards the block anchor edge).
       const href=relatedIdHref(idRow.identifier,idRow.identifier_type);
-      if(href)return {n:label,sub:gloss+" · "+(idRow.custodian||"source collection"),origin:"source archive",st:"ok",d:{prod:"open",url:href}};
+      if(href&&/^https?:/i.test(href))return {n:label,sub:gloss+" · "+(idRow.custodian||"source collection"),origin:"source archive",st:"ok",d:{prod:"open",url:href}};
     }
     if(tsReserved)return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
     return {n:label,sub:gloss+" · "+(m.ts_pid?"survey collection":"NCI collection"),origin:"source archive",st:"ok",d:tsOpen};

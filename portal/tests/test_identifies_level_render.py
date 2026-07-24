@@ -77,6 +77,32 @@ def test_files_tab_reserved_level_doi_is_inert(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
+def test_files_tab_hostile_url_level_doi_is_never_an_open_action(tmp_path):
+    """SCHEME GUARD (D-L4 files tab): a URL-typed related_identifier is relatedIdHref's RAW value, so a
+    javascript: identifier that matches a served level would otherwise ride the level row straight into a
+    product-tile open action (data-url -> window.open). The tsLevelRow scheme guard admits ONLY http(s),
+    so the hostile level DOI yields NO open action on the files-tab level row; it falls through to the
+    collection PID. The related-identifiers block still renders the value inert (escUrl -> href '#').
+    FAILS (RED on the unguarded tsLevelRow) IF the javascript: value reaches a data-url on the level row."""
+    extra = {"ts": "ok", "ts_levels": ["raw_packed"],
+             "related_identifiers": [
+                 {"identifier": "javascript:alert(1)", "identifier_type": "URL",
+                  "relation": "IsDerivedFrom", "custodian": "NCI", "identifies": "raw_packed"}]}
+    station, story, _card = _render(tmp_path, extra)
+    # the files-tab level row must NOT carry the hostile value as an open action's data-url (the sink
+    # is window.open on a product tile's data-url — see drawer.js prod==="open") ...
+    assert 'data-url="javascript:' not in station, \
+        "a javascript: level identifier reached a files-tab product-tile open action:\n" + station
+    # ... nor as an executable anchor anywhere in the station drawer (the identifiers block also renders here).
+    assert 'href="javascript:' not in station, "a hostile identifier became an executable anchor:\n" + station
+    # the level row still renders (falls through to the survey/NCI collection PID), not dropped
+    assert "Raw time series" in station
+    # and the related-identifiers block collapses the URL-typed hostile value to an inert href '#'
+    assert 'href="javascript:' not in story, "a hostile identifier became an executable anchor:\n" + story
+    assert 'href="#"' in story, "the URL-typed hostile value did not collapse to href '#':\n" + story
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_zero_identifier_survey_omits_the_identifiers_expander(tmp_path):
     """Card-lane polish: a survey with no identifiers shows NO 'Identifiers & instruments' expander in the
     station drawer (the disclosure is omitted, not rendered empty). FAILS IF the empty expander returns."""

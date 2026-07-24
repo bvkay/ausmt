@@ -239,9 +239,10 @@ IDENTIFIER_TYPES = ("DOI", "Handle", "URL", "RAiD")
 # the level, so `relation` is no longer a curator-facing control on an identifies row. IDENTIFIES_LEVELS
 # is the ORDERED vocab (Table 1 order) baked for the <select>; it is a fail-closed preset like relation /
 # identifier_type — an out-of-vocab level publishes a WRONG provenance claim, so it FAILs at the form
-# (SectionError). BAKED copies, PINNED byte-for-byte (as a set) to the surveys validator's IDENTIFIES_-
-# LEVELS / IDENTIFIES_RELATION by test_editor_form.py — the RELATION_TYPES gain (IsPartOf + IsSourceOf)
-# is exactly the derived-relation range this map introduces, so the two vocabularies stay consistent.
+# (SectionError). BAKED copies, PINNED to the surveys validator's IDENTIFIES_TYPES / IDENTIFIES_RELATION
+# (and per-level derived_relation) by test_editor_form.py::test_related_identifiers_vocab_matches_vendored_-
+# validator — the RELATION_TYPES gain (IsPartOf + IsSourceOf) is exactly the derived-relation range this
+# map introduces, so the two vocabularies stay consistent.
 IDENTIFIES_LEVELS = ("collection", "raw_packed", "level0", "level1", "level2", "level3", "entire")
 IDENTIFIES_RELATION = {
     "collection": "IsPartOf",       # the parent record (e.g. an NCI parent collection)

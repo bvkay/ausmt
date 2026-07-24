@@ -816,13 +816,26 @@ def test_related_identifiers_acquisition_licence_and_profile_vocab_enforced():
 # ---- §2a/§2b: related_identifiers (typed list) + identifiers.instrument_pid ----------------------
 
 def test_related_identifiers_vocab_matches_vendored_validator():
-    """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES equal the surveys validator's
-    frozen vocabularies (loaded from the VENDORED copy — the content-blind gateway cannot import the
-    sibling at runtime, so the test pins it). FAILS IF a vocab is extended in the validator but not
-    mirrored here — the exact drift the shared _check_typed_relation seam exists to prevent."""
+    """PARITY PIN: the editor's baked RELATION_TYPES / IDENTIFIER_TYPES / identifies vocab equal the surveys
+    validator's frozen vocabularies (loaded from the VENDORED copy — the content-blind gateway cannot import
+    the sibling at runtime, so the test pins it). FAILS IF a vocab is extended in the validator but not
+    mirrored here — the exact drift the shared _check_typed_relation seam exists to prevent.
+
+    The identifies pin is the load-bearing one for D-L: an editor level token that drifts from the
+    validator would auto-derive a WRONG DataCite relation (or fail-close a level the validator accepts).
+    Pins the level set, the IDENTIFIES_RELATION mapping byte-for-byte, and per-level derived_relation
+    parity so the editor and validator can never disagree on what a level derives to."""
     vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_relvocab")
     assert set(ef.RELATION_TYPES) == set(vv.RELATION_TYPES), "editor RELATION_TYPES drifted from the validator"
     assert set(ef.IDENTIFIER_TYPES) == set(vv.IDENTIFIER_TYPES), "editor IDENTIFIER_TYPES drifted from the validator"
+    # the identifies vocab (validator exports the membership set as IDENTIFIES_TYPES = frozenset(IDENTIFIES_LEVELS))
+    assert set(ef.IDENTIFIES_LEVELS) == set(vv.IDENTIFIES_TYPES), "editor IDENTIFIES_LEVELS drifted from the validator"
+    # the level -> DataCite relation mapping is identical byte-for-byte
+    assert ef.IDENTIFIES_RELATION == vv.IDENTIFIES_RELATION, "editor IDENTIFIES_RELATION drifted from the validator"
+    # and every level derives the SAME relation through both derived_relation implementations
+    for lvl in ef.IDENTIFIES_LEVELS:
+        assert ef.derived_relation(lvl) == vv.derived_relation(lvl), \
+            f"editor/validator derived_relation disagree for identifies={lvl!r}"
 
 
 # The vulcan-2022 demo shape: the four keys the editor row models (identifier, identifier_type,
