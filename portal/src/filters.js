@@ -156,7 +156,7 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
       const row=document.createElement("label");row.className="coll";
       const inp=document.createElement("input");inp.type="checkbox";inp.checked=true;inp.dataset.coll=cid;
       row.appendChild(inp);
-      row.appendChild(document.createTextNode(`${c.title||cid} — ${members.length} survey${members.length===1?"":"s"} · ${nSt} station${nSt===1?"":"s"}`));
+      row.appendChild(document.createTextNode(`${c.title||cid}: ${members.length} survey${members.length===1?"":"s"} · ${nSt} station${nSt===1?"":"s"}`));
       collGroup.appendChild(row);
       inp.addEventListener("change",()=>{
         tree.querySelectorAll('input[value]').forEach(s=>{if(members.indexOf(s.value)>=0)s.checked=inp.checked;});

@@ -160,7 +160,7 @@
   .dhead .sid{font-family:var(--mono);font-weight:800;font-size:22px}
   .dhead .close{margin-left:auto;font-size:16px;padding:4px 10px}
   .dsub{font-size:12.5px;color:var(--muted);margin-top:2px}
-  .chip{display:inline-block;font-size:12px;font-weight:700;padding:1px 7px;border-radius:9px;color:#16110b;vertical-align:2px}
+  .chip{display:inline-block;font-size:13px;font-weight:700;padding:2px 9px;border-radius:9px;color:#16110b;vertical-align:2px}
   /* (UX8 X4/X7: the .sci science-summary strip and the .maturity/.step legacy-maturity bar were retired —
      their facts now live in the Response "Station summary" fold and the "Dataset maturity" star block.) */
   .qbar{height:5px;border-radius:3px;background:var(--line);margin-top:5px;overflow:hidden}
@@ -184,6 +184,13 @@
   .prod.dis{opacity:.45;cursor:default}.prod.dis:hover{border-color:var(--line)}
   .prod .pdot{width:8px;height:8px;border-radius:50%;flex:none}
   .prod small{display:block;color:var(--muted);font-size:12px}
+  /* R5: the Files tab NCI-level list — single column of full-width rows (not the 2-col tile grid). */
+  .filelist{display:flex;flex-direction:column;gap:6px}
+  .filelist .prod{width:100%}
+  .fl-group{display:flex;flex-direction:column;gap:6px}
+  .fl-ghead{font-size:12px;font-weight:600;color:var(--text);margin-top:2px}
+  .fl-ghead small{font-weight:400;color:var(--muted);margin-left:6px}
+  .fl-sub{display:flex;flex-direction:column;gap:6px;margin-left:14px;border-left:1px solid var(--line);padding-left:10px}
   .lineage{display:flex;flex-direction:column;gap:0;margin:6px 0}
   .lrow{display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:8px 10px}
   .lrow .ldot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--copper)}
@@ -590,7 +597,7 @@
 <body>
 <header>
   <div class="hzone hleft">
-    <a class="logolink" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope — Australia's Earth science research infrastructure"><img class="auscope-logo" src="vendor/auscope-icon-white.png" alt="AuScope"></a>
+    <a class="logolink" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope, Australia's Earth science research infrastructure"><img class="auscope-logo" src="vendor/auscope-icon-white.png" alt="AuScope"></a>
     <div class="wordmark">AusMT</div>
     <div class="tagline">Australia's Magnetotelluric Data Portal</div>
   </div>
@@ -629,10 +636,10 @@
   <section data-views="both">
     <h2>Data type</h2>
     <fieldset class="typegrid" id="typeBoxes">
-      <label title="Long-period MT — longer periods, deeper structure (e.g. AusLAMP-style fluxgate deployments)"><input type="checkbox" value="LPMT" checked><span class="dot" style="background:var(--lpmt)"></span>Long period</label>
-      <label title="Broadband MT — induction-coil recordings, crustal-scale targets"><input type="checkbox" value="BBMT" checked><span class="dot" style="background:var(--bbmt)"></span>Broadband</label>
-      <label title="Audio-frequency MT — high frequencies, shallow/near-surface targets"><input type="checkbox" value="AMT" checked><span class="dot" style="background:var(--amt)"></span>AMT</label>
-      <label title="Geomagnetic depth sounding — vertical-field (tipper) transfer functions only"><input type="checkbox" value="GDS" checked><span class="dot" style="background:var(--gds)"></span>GDS (tipper)</label>
+      <label title="Long-period MT: longer periods, deeper structure (e.g. AusLAMP-style fluxgate deployments)"><input type="checkbox" value="LPMT" checked><span class="dot" style="background:var(--lpmt)"></span>Long period</label>
+      <label title="Broadband MT: induction-coil recordings, crustal-scale targets"><input type="checkbox" value="BBMT" checked><span class="dot" style="background:var(--bbmt)"></span>Broadband</label>
+      <label title="Audio-frequency MT: high frequencies, shallow/near-surface targets"><input type="checkbox" value="AMT" checked><span class="dot" style="background:var(--amt)"></span>AMT</label>
+      <label title="Geomagnetic depth sounding: vertical-field (tipper) transfer functions only"><input type="checkbox" value="GDS" checked><span class="dot" style="background:var(--gds)"></span>GDS (tipper)</label>
     </fieldset>
   </section>
   <section data-views="map" id="recentSideSection" class="hidden">
@@ -767,7 +774,7 @@
         </button>
         <button type="button" class="introtile" id="tileIntegrate">
           <h3>API access</h3>
-          <p>Machine-readable catalogue — MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
+          <p>Machine-readable catalogue: MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
         </button>
       </div>
       <button type="button" class="introtour" id="introTakeTour">Take the tour</button>

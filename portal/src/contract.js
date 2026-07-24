@@ -2,10 +2,10 @@
 // Positional column contract for catalogue / sci / tf. Reference columns by the NAMED index
 // maps (C / SC / T) — e.g. r[C.ausmt_id], sc[SC.dim], t[T.pt_az] — so a reorder in
 // contract/columns.json can't silently mis-align a consumer. See docs/docs/developer/data-files.md.
-var CAT_COLUMNS = ["id", "survey", "lat", "lon", "period_min_s", "period_max_s", "n_periods", "comps", "type", "region", "file", "coord_flag", "ausmt_id", "edi_available", "sha256"];
+var CAT_COLUMNS = ["id", "survey", "lat", "lon", "period_min_s", "period_max_s", "n_periods", "comps", "type", "region", "file", "coord_flag", "ausmt_id", "edi_available", "sha256", "site_name"];
 var SCI_COLUMNS = ["q", "qb", "rr", "sw", "alg", "dim", "p3d", "gd", "ellip", "skew", "mre", "decades"];
 var TF_COLUMNS  = ["periods", "rho_xy", "rho_yx", "phs_xy", "phs_yx_adj", "tip_mag", "pt_min", "pt_max", "pt_az", "pt_beta", "rho_xy_err", "rho_yx_err", "phs_xy_err", "phs_yx_err", "tzx_re", "tzx_im", "tzy_re", "tzy_im"];
-var C  = { id: 0, survey: 1, lat: 2, lon: 3, period_min_s: 4, period_max_s: 5, n_periods: 6, comps: 7, type: 8, region: 9, file: 10, coord_flag: 11, ausmt_id: 12, edi_available: 13, sha256: 14 };
+var C  = { id: 0, survey: 1, lat: 2, lon: 3, period_min_s: 4, period_max_s: 5, n_periods: 6, comps: 7, type: 8, region: 9, file: 10, coord_flag: 11, ausmt_id: 12, edi_available: 13, sha256: 14, site_name: 15 };
 var SC = { q: 0, qb: 1, rr: 2, sw: 3, alg: 4, dim: 5, p3d: 6, gd: 7, ellip: 8, skew: 9, mre: 10, decades: 11 };
 var T  = { periods: 0, rho_xy: 1, rho_yx: 2, phs_xy: 3, phs_yx_adj: 4, tip_mag: 5, pt_min: 6, pt_max: 7, pt_az: 8, pt_beta: 9, rho_xy_err: 10, rho_yx_err: 11, phs_xy_err: 12, phs_yx_err: 13, tzx_re: 14, tzx_im: 15, tzy_re: 16, tzy_im: 17 };
 // C6 licence instrument (single-sourced in contract/licenses.json): allow-list + aliases + deed

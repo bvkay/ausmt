@@ -8,7 +8,7 @@
 // reads columns through contract.js's NAMED index maps — r[C.*], sc[SC.*], t[T.*] — so a reorder in
 // columns.json regenerates the indices and no consumer can silently lag. Legend (index -> name):
 //   CAT[i]  r[]  = [0 id,1 survey,2 lat,3 lon,4 pmin,5 pmax,6 nper,7 comps,8 type,9 region,
-//                   10 file,11 coord_flag,12 ausmt_id,13 edi_available,14 sha256]
+//                   10 file,11 coord_flag,12 ausmt_id,13 edi_available,14 sha256,15 site_name]
 //   SCI[i]  sc[] = [0 q,1 qb,2 rr,3 sw,4 alg,5 dim,6 p3d,7 gd,8 ellip,9 skew,10 mre,11 decades]
 //   TFD[i]  t[]  = [0 periods,1 rho_xy,2 rho_yx,3 phs_xy,4 phs_yx_adj,5 tip_mag,6 pt_min,7 pt_max,
 //                   8 pt_az,9 pt_beta,10 rho_xy_err,11 rho_yx_err,12 phs_xy_err,13 phs_yx_err,

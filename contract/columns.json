@@ -1,6 +1,6 @@
 {
   "_comment": "SINGLE SOURCE OF TRUTH for the AusMT positional column contract. Edit ONLY here, then run `python contract/generate.py` to regenerate engine/extract/_contract.py and portal/src/contract.js. catalogue.json/sci.json/tf.json are bare arrays decoded BY POSITION across the engine and the portal, so column ORDER is a published interface — APPEND, never reorder (a same-width reorder silently corrupts every consumer). Authoritative human doc: docs/docs/developer/data-files.md.",
-  "catalogue": ["id", "survey", "lat", "lon", "period_min_s", "period_max_s", "n_periods", "comps", "type", "region", "file", "coord_flag", "ausmt_id", "edi_available", "sha256"],
+  "catalogue": ["id", "survey", "lat", "lon", "period_min_s", "period_max_s", "n_periods", "comps", "type", "region", "file", "coord_flag", "ausmt_id", "edi_available", "sha256", "site_name"],
   "sci": ["q", "qb", "rr", "sw", "alg", "dim", "p3d", "gd", "ellip", "skew", "mre", "decades"],
   "tf": ["periods", "rho_xy", "rho_yx", "phs_xy", "phs_yx_adj", "tip_mag", "pt_min", "pt_max", "pt_az", "pt_beta", "rho_xy_err", "rho_yx_err", "phs_xy_err", "phs_yx_err", "tzx_re", "tzx_im", "tzy_re", "tzy_im"]
 }

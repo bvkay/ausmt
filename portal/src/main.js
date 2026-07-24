@@ -4,6 +4,9 @@
 function buildState(){
   ST=CAT.map((r,i)=>({i,id:r[C.id],survey:r[C.survey],lat:r[C.lat],lon:r[C.lon],pmin:r[C.period_min_s],pmax:r[C.period_max_s],nper:r[C.n_periods],comps:r[C.comps],type:r[C.type],region:r[C.region],file:r[C.file],fixed:r[C.coord_flag],
     ediAvail:r[C.edi_available]===1, sha:r[C.sha256]||null,
+    // R4: original pre-sanitisation station/site name (engine emits it only when it differs from id);
+    // null for the common clean-id case, so the drawer's Station summary shows the row only when it differs.
+    site_name:r[C.site_name]||null,
     org:(SMETA[r[C.survey]]||{}).org||"Unknown",country:(SMETA[r[C.survey]]||{}).country||"Australia",
     slug:(SMETA[r[C.survey]]||{}).slug||null,
     // S3: the survey's declared year range (ints|null), read straight off SMETA (engine-parsed —
@@ -234,7 +237,7 @@ function showLoadError(){
   var overFile=(location.protocol==="file:");
   document.getElementById("content").innerHTML = overFile
     ? "<p style=\"padding:24px;color:#E8EDF1\">Could not load data/*.json: pages opened from disk cannot fetch data. Serve over HTTP (e.g. <code>python3 -m http.server</code>).</p>"
-    : "<p style=\"padding:24px;color:#E8EDF1\">The catalogue data isn't available yet (data/*.json not found on this server). If you operate this deployment: no data build is published — run the build pipeline (<code>make rebuild-data</code>) to publish one.</p>";
+    : "<p style=\"padding:24px;color:#E8EDF1\">The catalogue data isn't available yet (data/*.json not found on this server). If you operate this deployment: no data build is published; run the build pipeline (<code>make rebuild-data</code>) to publish one.</p>";
 }
 function portalIsEmpty(){return !Array.isArray(CAT)||CAT.length===0;}
 function showEmptyState(){

@@ -48,7 +48,7 @@ def test_drawer_copy_removals(tmp_path):
     cat = {"id": "ST1", "survey": "Demo Survey", "lat": -30.5, "lon": 135.25, "period_min_s": 0.01,
            "period_max_s": 1000.0, "n_periods": 42, "comps": "ZT", "type": "BBMT", "region": "SA",
            "file": "ST1.edi", "coord_flag": False, "ausmt_id": "au.demo.ST1", "edi_available": 1,
-           "sha256": "a" * 64}
+           "sha256": "a" * 64, "site_name": None}
     sci = {"q": 4.2, "qb": "e", "rr": 1, "sw": "BIRRP", "alg": "robust", "dim": "2-D", "p3d": 10,
            "gd": 0, "ellip": 0.15, "skew": 3.1, "mre": 0.02, "decades": 5.0}
     tf = {"periods": [0.01, 1000.0], "rho_xy": [1.0, 2.0], "rho_yx": [3.0, 4.0], "phs_xy": [10.0, 20.0],

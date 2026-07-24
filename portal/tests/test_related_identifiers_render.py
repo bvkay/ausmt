@@ -45,7 +45,7 @@ def _render(tmp_path, survey_extra):
     cat = {"id": "ST1", "survey": "Demo Survey", "lat": -30.5, "lon": 135.25, "period_min_s": 0.01,
            "period_max_s": 1000.0, "n_periods": 42, "comps": "ZT", "type": "BBMT", "region": "SA",
            "file": "ST1.edi", "coord_flag": False, "ausmt_id": "au.demo.ST1", "edi_available": 1,
-           "sha256": "a" * 64}
+           "sha256": "a" * 64, "site_name": None}
     sci = {"q": 4.2, "qb": "e", "rr": 1, "sw": "BIRRP", "alg": "robust", "dim": "2-D", "p3d": 10,
            "gd": 0, "ellip": 0.15, "skew": 3.1, "mre": 0.02, "decades": 5.0}
     tf = {"periods": [0.01, 1000.0], "rho_xy": [1.0, 2.0], "rho_yx": [3.0, 4.0], "phs_xy": [10.0, 20.0],
@@ -96,11 +96,13 @@ def test_curator_survey_related_block_and_doi_badge(tmp_path):
     assert "Platform/instrument PID:" in story, "the survey-level instrument PID line is missing:\n" + story
     assert 'href="https://doi.org/10.82388/bt6orvhn"' in story, \
         "the instrument PID is not a doi.org anchor:\n" + story
-    # DOI maturity badge lights "ok" at BOTH sites (station format-availability + survey card) despite
-    # dataset_doi being absent.
-    assert "✓ DOI" in station, "station DOI badge is not 'ok' for a typed-DOI-only survey:\n" + station
+    # R8: the station format-availability DOI badge is dropped (dataset-DOI presence is conveyed by the
+    # maturity star + identifiers block). The survey-card DOI badge remains and lights "ok" for a
+    # typed-DOI-only survey (the typed DOI satisfies the provenance-chain reading).
     assert "✓ DOI" in card, "survey-card DOI badge is not 'ok' for a typed-DOI-only survey:\n" + card
-    assert "✗ DOI" not in station and "✗ DOI" not in card, "a DOI badge still reads 'no'"
+    assert "✗ DOI" not in card, "a DOI badge still reads 'no' on the card"
+    assert "✓ DOI" not in station and "✗ DOI" not in station, \
+        "R8: the station Format availability block must no longer carry a DOI badge:\n" + station
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
@@ -123,5 +125,7 @@ def test_no_identifier_survey_no_block_no_doi(tmp_path):
     station, story, card = _render(tmp_path, {})   # no dataset_doi, no related_identifiers
     assert "Related identifiers:" not in story, "the block rendered for a survey with no typed relations:\n" + story
     assert "Platform/instrument PID:" not in story, "the instrument PID line rendered when absent:\n" + story
-    assert "✗ DOI" in station, "station DOI badge is not 'no' for a survey with no DOI anywhere:\n" + station
+    # R8: no station DOI badge at all; the survey-card DOI badge still reads "no" for a DOI-less survey.
     assert "✗ DOI" in card, "survey-card DOI badge is not 'no' for a survey with no DOI anywhere:\n" + card
+    assert "✓ DOI" not in station and "✗ DOI" not in station, \
+        "R8: the station Format availability block must no longer carry a DOI badge:\n" + station

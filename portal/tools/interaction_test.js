@@ -433,8 +433,8 @@ async function bootFreshWindow(dataMap) {
   //     compareDocumentPosition sets DOCUMENT_POSITION_FOLLOWING (4) when treeEl FOLLOWS collGroupEl.
   ok((collGroupEl.compareDocumentPosition(treeEl) & 4) !== 0,
     "A3: the #collGroup block must appear BEFORE #tree in document order (collections above the tree)");
-  ok(/AusLAMP — 2 surveys · 3 stations/.test(collRow.textContent),
-    "A3: collection row label must read '<name> — <n> surveys · <m> stations' (Alpha 2 + Beta 1 = 3), got: " + collRow.textContent);
+  ok(/AusLAMP: 2 surveys · 3 stations/.test(collRow.textContent),
+    "A3: collection row label must read '<name>: <n> surveys · <m> stations' (Alpha 2 + Beta 1 = 3), got: " + collRow.textContent);
   // O1 (owner, 2026-07-12): the collection row carries NO nested member-survey list any more — just the
   // name + survey count + station count. Members stay reachable via the org/country tree + collection page.
   ok(collGroupEl.querySelectorAll(".collmember").length === 0,
@@ -1332,14 +1332,48 @@ async function bootFreshWindow(dataMap) {
   const firstPlot = rsPanel.querySelector(".plot");
   ok(firstPlot && (firstPlot.compareDocumentPosition(ssDetails) & win.Node.DOCUMENT_POSITION_FOLLOWING),
     "X4: the Station summary fold must come AFTER the plots (plots are the centerpiece)");
-  ["Station", "Transfer function", "Data checks", "Processing"].forEach(g =>
+  // R4: the "Data checks" group (the TF error row) is removed; the Station summary now carries three groups.
+  ["Station", "Transfer function", "Processing"].forEach(g =>
     ok([...ssDetails.querySelectorAll(".ssg-h")].some(h => h.textContent === g),
       "X4: the Station summary is missing the '" + g + "' group header"));
+  ok([...ssDetails.querySelectorAll(".ssg-h")].every(h => h.textContent !== "Data checks"),
+    "R4: the Station summary must NOT carry the removed 'Data checks' group");
+  ok(ssDetails.innerHTML.indexOf("TF error") < 0, "R4: the removed 'TF error' row must be gone");
+  // R4: the Station group ADDS rows — data type, ausmt_id, and (A1 carries site_name 'A_1' != id 'A1')
+  // the "site name" row. The collection row is omitted here (Alpha is in the AusLAMP collection, so it
+  // renders); ausmt_id is always present.
+  const ssRows = [...ssDetails.querySelectorAll("tr")].map(tr => tr.textContent);
+  ok(ssRows.some(t => /site name/.test(t) && /A_1/.test(t)),
+    "R4: A1 (site_name 'A_1' != id) must render the 'site name' row, got rows: " + JSON.stringify(ssRows));
+  ok(ssRows.some(t => /data type/.test(t) && /BBMT/.test(t)), "R4: the Station summary must carry the 'data type' row");
+  ok(ssRows.some(t => /ausmt_id/.test(t) && /au\.alpha\.A1/.test(t)), "R4: the Station summary must carry the 'ausmt_id' row");
+  ok(ssRows.some(t => /collection/.test(t) && /AusLAMP/.test(t)), "R4: an in-collection station must carry the 'collection' row");
 
-  // (d) the sticky-header primary actions: Download EDI (open station) + Cite (jumps to the Cite tab).
+  // R5: the Files tab is restructured to the NCI data-level standard as a SINGLE COLUMN (.filelist, not the
+  // 2-col .prodgrid), ordered raw -> Level 0 -> Level 1 -> Level 2 (EDI/EMTF XML/MTH5 sub-rows) ->
+  // Publication (interpretation); the Phase tensor tile is gone; each product row carries an origin tag.
+  const filesHtmlV = filesPanel.innerHTML;
+  ok(filesPanel.querySelector(".filelist") != null && filesPanel.querySelector(".prodgrid") == null,
+    "R5: the Files tab must be a single-column .filelist, not the 2-col .prodgrid");
+  ["Raw time series", "Level 0 edited time series", "Level 1 transformed time series",
+   "Level 2 derived processed data", "EDI", "EMTF XML", "MTH5", "Publication (interpretation)"].forEach(lbl =>
+    ok(filesHtmlV.indexOf(lbl) >= 0, "R5: the Files tab is missing the '" + lbl + "' row"));
+  ok(filesHtmlV.indexOf("Phase tensor") < 0, "R5: the Phase tensor tile must be removed from the Files tab");
+  ok(filesHtmlV.indexOf("source archive") >= 0 && filesHtmlV.indexOf("AusMT-derived") >= 0,
+    "R5: each Files row must carry an origin tag (source archive / AusMT-derived)");
+
+  // R7: no "(no PID)" / "not recorded" noise anywhere in the station drawer.
+  ok(drwV.innerHTML.indexOf("(no PID)") < 0, "R7: the station drawer must not render any '(no PID)' suffix");
+  // R6: em-dash sweep on the station drawer's rendered text (all panels render at open, so hidden ones are
+  // swept too). A full-document textContent sweep runs at the end of this test.
+  ok(drwV.textContent.indexOf("—") < 0,
+    "R6: an em dash (—) rendered in the station drawer text: " +
+    JSON.stringify((drwV.textContent.match(/.{0,24}—.{0,24}/) || [""])[0]));
+
+  // (d) the sticky-header primary action: Download EDI (open station). R1: the redundant header Cite
+  //     tab-jump button (.dl-cite) is removed — the Cite TAB reaches the same panel.
   ok(drwV.querySelector(".dtop .dl-edi") != null, "C1: an open station must offer a Download EDI action in the sticky header");
-  const citeAction = drwV.querySelector(".dtop .dl-cite");
-  ok(citeAction != null && citeAction.dataset.tab === "cite", "C1: the sticky-header Cite action must target the Cite tab");
+  ok(drwV.querySelector(".dtop .dl-cite") == null, "R1: the redundant header Cite button (.dl-cite) must be removed");
 
   // (e) clicking a non-default tab activates it (roving tabindex + hidden toggle); switching back restores
   //     Response. (OWNER HIDE 2026-07-22: this rode the Screening tab; it now rides Files while Screening is
@@ -1622,9 +1656,13 @@ async function bootFreshWindow(dataMap) {
   ok(idDetails, "E2: the survey detail must carry a <details> whose summary is the identifiers rollup");
   ok(/Persistent identifiers: 1 of 3 recorded/.test(idDetails.querySelector("summary").textContent),
     "E2: the rollup summary must read 'Persistent identifiers: 1 of 3 recorded' for Alpha (doi only, pid slot retired), got: " + idDetails.querySelector("summary").textContent);
-  // E2: the explicit per-row list (with its honest 'not recorded' rows) is COLLAPSED inside, never deleted.
-  ok(/Organisation ROR/.test(idDetails.innerHTML) && /not recorded/.test(idDetails.innerHTML),
-    "E2: the collapsed body must still contain the full identifier list incl. 'not recorded' rows");
+  // E2/R7 (owner ruling): the rollup now renders ONLY rows that carry a value — the honest 'not recorded'
+  // and '(no PID)' noise is gone. Alpha declares a DOI (+ instruments) but no ROR/RAiD, so those empty rows
+  // are OMITTED. The collapsed body still carries the present rows (Dataset DOI); the empty ones are absent.
+  ok(/Dataset DOI/.test(idDetails.innerHTML),
+    "E2: the collapsed body must still contain the present identifier rows (Dataset DOI)");
+  ok(!/not recorded/.test(idDetails.innerHTML) && !/Organisation ROR/.test(idDetails.innerHTML),
+    "R7: empty identifier rows (Organisation ROR / 'not recorded') must be omitted, got: " + idDetails.innerHTML);
   ok(!/Survey PID:/.test(idDetails.innerHTML), "IDCONS D2: the retired 'Survey PID' row must be gone from the rollup body");
   // E4: section order. Description before footprint; downloads ahead of funding/publications/identifiers;
   // release history last (before the extra Related-surveys block).
@@ -1827,7 +1865,7 @@ async function bootFreshWindow(dataMap) {
   drwN.classList.remove("open");
   win.location.hash = "#/station/au.beta.B1"; A.routeFromHash();
   ok(/custodian citation not recorded/i.test(doc.getElementById("dp-cite").textContent),
-    "W3b: a no-cite survey's Cite tab must explicitly say 'custodian citation not recorded — cite the survey package', not a silent AUSMT_SELF masquerade");
+    "W3b: a no-cite survey's Cite tab must explicitly say 'custodian citation not recorded, cite the survey package', not a silent AUSMT_SELF masquerade");
   drwN.classList.remove("open");
 
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
@@ -1868,6 +1906,17 @@ async function bootFreshWindow(dataMap) {
   const _rampTextColours = [...doc.getElementById("drawer").querySelectorAll('[style*="color:#"]')]
     .filter(el => /color:\s*#(2a3b66|6e7f46|f2e27e)/i.test(el.getAttribute("style") || ""));
   ok(_rampTextColours.length === 0, "CVD: no drawer element may take a ramp hex as its TEXT colour (dark ends are unreadable on the dark panel)");
+  doc.getElementById("drawer").classList.remove("open");
+
+  // R6: FINAL em-dash DOM sweep. Render the two rich drawer surfaces (station + survey story) and sweep the
+  // whole document's rendered textContent — no em dash (U+2014) may appear in any rendered UI text. (The
+  // en dash U+2013 is the house range/placeholder glyph and is intentionally NOT swept.)
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  A.openSurvey("Alpha Survey");
+  const _emSweep = (doc.body.textContent || "") + doc.getElementById("drawer").textContent;
+  ok(_emSweep.indexOf("—") < 0,
+    "R6: an em dash (—) rendered somewhere in the app: " +
+    JSON.stringify((_emSweep.match(/.{0,30}—.{0,30}/) || [""])[0]));
   doc.getElementById("drawer").classList.remove("open");
 
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +

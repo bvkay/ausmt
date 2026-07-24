@@ -43,8 +43,8 @@ def test_canonical_store_is_additive(tmp_path):
     # the portal products are still produced and non-empty (the flag is additive, not the source)
     cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
     assert len(cat) >= 1
-    # row width still the contract (15 cols) — the additive feature didn't disturb the projection
-    assert all(len(row) == 15 for row in cat)
+    # row width still the contract (16 cols after the site_name append) — the additive feature didn't disturb the projection
+    assert all(len(row) == 16 for row in cat)
 
 
 def test_canonical_store_same_dataid_no_overwrite(tmp_path):

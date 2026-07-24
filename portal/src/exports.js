@@ -124,7 +124,7 @@ document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"
       stations:arr.map(s=>({ausmt_id:s.ausmt_id,station:s.id,survey:s.survey,survey_version:(SMETA[s.survey]||{}).version||null,lat:s.lat,lon:s.lon}))}))
   };
   save("ausmt-archive-pointers-"+tsUTC()+".json",JSON.stringify(doc,null,2),"application/json");
-  toast("Wrote pointers to where the raw time series live — AusMT does not host or fetch them itself.");};
+  toast("Wrote pointers to where the raw time series live; AusMT does not host or fetch them itself.");};
 // C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
 // pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
 // ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
@@ -221,5 +221,5 @@ document.getElementById("strike").onclick=()=>{
   const svg=`<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg"><circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#2B3557"/><line x1="${cx}" y1="${cy-R}" x2="${cx}" y2="${cy+R}" stroke="#2B3557"/><line x1="${cx-R}" y1="${cy}" x2="${cx+R}" y2="${cy}" stroke="#2B3557"/><text x="${cx}" y="18" fill="#8FA3B0" font-size="11" text-anchor="middle" font-family="monospace">N</text>${wed}</svg>`;
   drawer.innerHTML=`<div class="dhead"><span class="sid">Strike rose</span><button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${sel().length} stations · ${az.length} low-skew (|β|&lt;5°) PT azimuths · 180° ambiguous</div><div style="display:flex;justify-content:center;margin-top:14px">${svg}</div>`+
-   `<div class="dim" style="margin-top:12px">Automated screening estimate — geoelectric strike estimated from phase-tensor major-axis azimuths where skew is small. The 90° ambiguity inherent to strike is not resolved here; combine with tipper induction arrows to break it. Not a structural interpretation.</div>`;
+   `<div class="dim" style="margin-top:12px">Automated screening estimate: geoelectric strike estimated from phase-tensor major-axis azimuths where skew is small. The 90° ambiguity inherent to strike is not resolved here; combine with tipper induction arrows to break it. Not a structural interpretation.</div>`;
   drawer.classList.add("open");};

@@ -52,7 +52,7 @@ from _contract import CATALOGUE_COLUMNS  # noqa: E402  (single-source positional
 # so a reorder of contract/columns.json moves these in lockstep too.
 _SC = {_n: _i for _i, _n in enumerate(sci.SCI_COLUMNS)}
 
-# Authoritative catalogue.json column order (r[0..14]) — now SINGLE-SOURCED in contract/columns.json
+# Authoritative catalogue.json column order (r[0..15]) — now SINGLE-SOURCED in contract/columns.json
 # and imported above as CATALOGUE_COLUMNS (regenerate with `python contract/generate.py`). The portal
 # reads these BY POSITION via portal/src/contract.js (the C.* index map), as do engine scripts/verify.py
 # and the separate ausmt-surveys/_validation/contribute.py. APPEND, never reorder; the build asserts
@@ -916,6 +916,13 @@ def survey_meta_from_yaml(y: dict) -> dict:
     if isinstance(attribution, dict) and attribution.get("changes_made") is not None:
         sm["changes"] = {"made": bool(attribution.get("changes_made")),
                          "summary": str(attribution.get("changes_summary") or "").strip()}
+    # NCI data-level standard: the ORDERED list of time-series levels this survey declares
+    # (time_series.levels_available; vocab raw_packed/level0/level1 per gateway/editor_form.py). The `ts`
+    # flag above only says ok/unk; the portal Files tab renders per-level availability off THIS list.
+    # ADDITIVE + absent -> absent: a survey without a levels list yields a byte-identical surveys.json entry.
+    levels = (y.get("time_series", {}) or {}).get("levels_available")
+    if isinstance(levels, list) and levels:
+        sm["ts_levels"] = [str(x) for x in levels]
     return sm
 
 
@@ -1142,8 +1149,16 @@ def _parse_one_edi(p):
         # The DATAID (HEAD) is authoritative for the station id. parse_dataid also unpacks the
         # Phoenix remote-reference compound id 'P=<station> R=<remote> (H)' -> the real station.
         _station, _ = cat.parse_dataid(_did)
+        # R4 site_name: r["id"] here still holds the ORIGINAL tf station/site name (record_from_tf ->
+        # tf.station). The next line overwrites it with the parsed DATAID that becomes the DISPLAYED id.
+        # Capture the pre-overwrite name (the same value the source_id_preserved_in_site_name notice tracks)
+        # and carry it as site_name ONLY when the overwrite actually changes it (a sanitised id such as
+        # SA28_2B -> SA282B); identical -> absent, so the catalogue keeps its zero-change convention.
+        _orig_site_name = r.get("id")
         if _station:
             r["id"] = _station
+        if _orig_site_name and _orig_site_name != r["id"]:
+            r["site_name"] = _orig_site_name
         _ila, _ilo = cat.info_coords(_raw)
         r["coord_flag"], r["coord_candidates"], r["coord_conflict_deg"] = \
             cat.detect_coord_issue(r.get("lat"), r.get("lon"), _ila, _ilo,
@@ -2752,7 +2767,9 @@ def main(argv=None):
                  "n_periods": r.get("n_periods"), "comps": r.get("comps", ""), "type": r.get("type"),
                  "region": (r.get("region") or r.get("state") or "?"),   # survey-driven region facet
                  "file": p.name, "coord_flag": bool(r.get("coord_flag")), "ausmt_id": r["ausmt_id"],
-                 "edi_available": 1 if r["ausmt_id"] in available_ids else 0, "sha256": sha256(p)}
+                 "edi_available": 1 if r["ausmt_id"] in available_ids else 0, "sha256": sha256(p),
+                 # R4: original pre-sanitisation station/site name, present only when it differs from id.
+                 "site_name": r.get("site_name")}
         compact.append([_vals[c] for c in CATALOGUE_COLUMNS])
         # Catalogue row is UNCHANGED for a withheld survey — locations/band/nper/sha256 stay public because
         # DISCOVERY IS UNIVERSAL. Only the DERIVED DISPLAY products (tf curves + science sci fields) are

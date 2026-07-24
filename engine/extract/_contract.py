@@ -3,7 +3,7 @@
 # POSITION across the engine and the portal (see docs/docs/developer/data-files.md). APPEND,
 # never reorder. To change: edit contract/columns.json, then `python contract/generate.py`.
 
-CATALOGUE_COLUMNS = ['id', 'survey', 'lat', 'lon', 'period_min_s', 'period_max_s', 'n_periods', 'comps', 'type', 'region', 'file', 'coord_flag', 'ausmt_id', 'edi_available', 'sha256']
+CATALOGUE_COLUMNS = ['id', 'survey', 'lat', 'lon', 'period_min_s', 'period_max_s', 'n_periods', 'comps', 'type', 'region', 'file', 'coord_flag', 'ausmt_id', 'edi_available', 'sha256', 'site_name']
 SCI_COLUMNS = ['q', 'qb', 'rr', 'sw', 'alg', 'dim', 'p3d', 'gd', 'ellip', 'skew', 'mre', 'decades']
 TF_COLUMNS = ['periods', 'rho_xy', 'rho_yx', 'phs_xy', 'phs_yx_adj', 'tip_mag', 'pt_min', 'pt_max', 'pt_az', 'pt_beta', 'rho_xy_err', 'rho_yx_err', 'phs_xy_err', 'phs_yx_err', 'tzx_re', 'tzx_im', 'tzy_re', 'tzy_im']
 
