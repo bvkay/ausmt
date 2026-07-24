@@ -145,40 +145,45 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("manufacturer", "Manufacturer", "Phoenix", "text"),
         ("model", "Model", "MTU-5C", "text"),
     ],
-    # C46 (schema 0.3): one entry per UPSTREAM dataset (absent = an original deposit). licence is the
-    # licence AS OBTAINED — a vocab-validated <select> (the SAME contract vocab as the top-level
-    # licence, killing the free-text seam here too); profile is the custodian attribution-profile key.
-    # Keys are the FROZEN sources allow-list — byte-identical to the surveys validator's SOURCE_KEYS.
-    # §2a FOLLOWUP: the related-identifiers model TYPES this SAME object (SOURCE_KEYS carries relation +
-    # identifier_type), so the row models them too — the identical FAIL-CLOSED <select> presets the
-    # related_identifiers row uses. Without them a hand-added typed key on a sources[] entry DROPS on any
-    # edit: the render prefills only the modelled sub-keys and the assembler reads back only those, so a
-    # stored relation/identifier_type never round-trips (proven RED in test_editor_sources_typed_roundtrip).
-    "sources": [
-        ("title", "Title", "e.g. AusLAMP SA – NCI/AuScope archive", "text"),
-        ("custodian", "Custodian", "e.g. NCI / AuScope", "text"),
-        ("identifier", "Identifier (DOI / eCat / SARIG / URL)", "10.25914/… or a URL", "text"),
+    # D-L3 (SPEC §9.3): the "Source datasets" section is RETIRED from the editor UI. Its acquisition
+    # fields (title, licence-as-obtained, retrieved, attribution statement, attribution profile) are now
+    # OPTIONAL keys on a related_identifiers row (an upstream dataset AusMT obtained is just another typed
+    # row, identifies: entire). The `sources` LIST_SECTIONS registration is GONE, so build_section_patch
+    # never assembles the key — a legacy sources[] on disk is byte-preserved (never entered into any
+    # patch; proven RED by test_editor_sources_section_retired_byte_preserved). The engine keeps reading
+    # sources[] until the ausmt follow-up (§9.3 note), so nothing served changes this wave.
+    #
+    # §2a + D-L (SPEC §9): the single typed list of provenance relations to identifiers AusMT does NOT own.
+    # The primary per-row control is `identifies` (WHAT the identifier points at, in NCI Table 1 data-level
+    # terms) — FIRST on the row and FAIL-CLOSED like relation/identifier_type. The DataCite `relation`
+    # DERIVES from `identifies` server-side (D-L2), so it is no longer a curator control on an identifies
+    # row; a legacy row that carries an explicit relation but no identifies still edits its relation
+    # (backward compatible). The acquisition fields are the ex-sources[] payload, OPTIONAL (only written
+    # back when non-empty or already present) so a corpus row without them round-trips to _OMIT.
+    "related_identifiers": [
+        ("identifies", "What does this identifier point at?", "", "identifies"),
+        ("identifier", "Identifier (DOI / handle / URL)", "10.25914/… or an https:// URL", "text"),
         ("identifier_type", "Identifier type", "", "identifier_type"),
         ("relation", "Relation", "", "relation"),
+        ("custodian", "Custodian", "e.g. NCI / AuScope", "text"),
+        ("title", "Title", "e.g. AusLAMP SA – NCI/AuScope archive", "text"),
         ("licence", "Licence (as obtained)", "", "license"),
         ("retrieved", "Retrieved (date or year)", "2016 or 2016-05-01", "text"),
         ("statement", "Attribution statement", "verbatim required wording, if prescribed (optional)", "text"),
         ("profile", "Attribution profile", "", "profile"),
     ],
-    # §2a (identifiers design — the related-identifiers model): a repeatable list of TYPED provenance
-    # relations to identifiers AusMT does NOT own. It TYPES the C46 sources[] object (the SAME key
-    # allow-list, SOURCE_KEYS, at the validator — not a parallel structure), so the row mirrors a
-    # source's typed core: the identifier, its identifier_type, the relation, and the custodian. relation
-    # and identifier_type are FAIL-CLOSED <select> presets (the C46 vocab-select discipline). custodian is
-    # modelled here — not just the three typed fields — so a stored entry that carries it (the vulcan-2022
-    # demo does) round-trips WITHOUT the widget silently dropping it. Wave-1 EXPAND: this lands ALONGSIDE
-    # identifiers.dataset_doi + time_series.collection_pid, which keep being populated until a later wave.
-    "related_identifiers": [
-        ("identifier", "Identifier (DOI / handle / URL)", "10.25914/… or an https:// URL", "text"),
-        ("identifier_type", "Identifier type", "", "identifier_type"),
-        ("relation", "Relation", "", "relation"),
-        ("custodian", "Custodian", "e.g. NCI / AuScope", "text"),
-    ],
+}
+
+# D-L (SPEC §9): the related_identifiers row sub-keys that are OPTIONAL — `identifies` (absent on a legacy
+# row) plus the acquisition fields merged from the retired sources[] list. Unlike the always-emitted typed
+# core (identifier / identifier_type / relation / custodian), an empty optional key is written back ONLY
+# when the ORIGINAL row already carried it, so a corpus row that has no acquisition fields (and a legacy
+# row that has no identifies) reassembles to its snapshot -> _OMIT, instead of gaining a spray of null
+# keys that would break the round-trip and strip the row's INFERRED-REVIEW comment. Keyed by section, so
+# no other list section changes behaviour.
+_OPTIONAL_LIST_KEYS: dict[str, frozenset] = {
+    "related_identifiers": frozenset({"identifies", "title", "licence", "retrieved", "statement",
+                                      "profile"}),
 }
 
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
@@ -225,8 +230,36 @@ SOURCE_PROFILES = ("ga", "generic")
 # order; the pin compares them as sets (the validator holds frozensets). An out-of-vocab value FAILs at
 # the form (SectionError) — byte-identical posture to access.coordinates, because a mis-typed relation
 # publishes a WRONG provenance claim and must block, not ship.
-RELATION_TYPES = ("IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites")
+RELATION_TYPES = ("IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites",
+                  "IsPartOf", "IsSourceOf")
 IDENTIFIER_TYPES = ("DOI", "Handle", "URL", "RAiD")
+
+# "Identifiers by data level" (D-L1/D-L2, owner-ratified 2026-07-23; SPEC §9). Every related_identifiers
+# row states WHAT it points at in NCI Table 1 data-level terms; the DataCite relation then DERIVES from
+# the level, so `relation` is no longer a curator-facing control on an identifies row. IDENTIFIES_LEVELS
+# is the ORDERED vocab (Table 1 order) baked for the <select>; it is a fail-closed preset like relation /
+# identifier_type — an out-of-vocab level publishes a WRONG provenance claim, so it FAILs at the form
+# (SectionError). BAKED copies, PINNED byte-for-byte (as a set) to the surveys validator's IDENTIFIES_-
+# LEVELS / IDENTIFIES_RELATION by test_editor_form.py — the RELATION_TYPES gain (IsPartOf + IsSourceOf)
+# is exactly the derived-relation range this map introduces, so the two vocabularies stay consistent.
+IDENTIFIES_LEVELS = ("collection", "raw_packed", "level0", "level1", "level2", "level3", "entire")
+IDENTIFIES_RELATION = {
+    "collection": "IsPartOf",       # the parent record (e.g. an NCI parent collection)
+    "raw_packed": "IsDerivedFrom",  # raw/packed time series
+    "level0": "IsDerivedFrom",      # edited time series
+    "level1": "IsDerivedFrom",      # transformed time series
+    "level2": "IsVariantFormOf",    # derived frequency-domain processed data (EDI/TF)
+    "level3": "IsSourceOf",         # models (the model derives FROM this dataset)
+    "entire": "IsVariantFormOf",    # a single record covering all levels (a GA eCAT / state landing page)
+}
+
+
+def derived_relation(identifies) -> str | None:
+    """The DataCite relation a given `identifies` level auto-derives to (D-L2). None when the level is
+    absent/blank/out-of-vocab (nothing to derive). Pinned to the surveys validator's derived_relation."""
+    if identifies in (None, ""):
+        return None
+    return IDENTIFIES_RELATION.get(str(identifies).strip())
 
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
 # — the checkboxes plus the advanced JSON fallback cover the rest.
@@ -304,6 +337,11 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "identifier_type" and value not in IDENTIFIER_TYPES:
         raise SectionError(section, f"identifier type '{value}' is not one of "
                                     f"{', '.join(IDENTIFIER_TYPES)}")
+    # D-L1: the data level a related_identifiers row points at. Fail-closed like relation/identifier_type
+    # — an out-of-vocab level auto-derives a wrong relation, so it must block, not ship.
+    if kind == "identifies" and value not in IDENTIFIES_LEVELS:
+        raise SectionError(section, f"data level '{value}' is not one of "
+                                    f"{', '.join(IDENTIFIES_LEVELS)}")
 
 
 # ---- assembly -----------------------------------------------------------------------------------
@@ -498,17 +536,36 @@ def _assemble_list(form: dict, section: str) -> list:
     partially-filled row is kept and its known-format fields validated."""
     subfields = LIST_SECTIONS[section]
     modelled = {sk for sk, *_ in subfields}
+    optional = _OPTIONAL_LIST_KEYS.get(section, frozenset())
     original = _original_snapshot(form, section)
     rows: list[dict] = []
     for i in _row_indices(form, section):
         row: dict = {}
         any_value = False
+        # The correspondingly-indexed original row (the render assigns row index i to original[i]) — used
+        # to decide whether an EMPTY optional key was already present (keep it null) or is being newly
+        # introduced (skip it), so an unchanged row round-trips to its snapshot rather than gaining nulls.
+        orig_row = (original[i] if isinstance(original, list) and i < len(original)
+                    and isinstance(original[i], dict) else {})
         for subkey, _label, _ph, kind in subfields:
             value = _form_get(form, f"l_{section}_{i}_{subkey}")
             if value:
                 _validate_scalar(section, subkey, kind, value)
                 any_value = True
+            # D-L (SPEC §9): an OPTIONAL sub-key (identifies + the acquisition fields) is written back only
+            # when it has a value OR the original row already carried it — never introduce an empty one the
+            # source row lacked (mirrors the map scalar rule; keeps a corpus row's round-trip byte-clean).
+            if subkey in optional and not value and subkey not in orig_row:
+                continue
             row[subkey] = value if value else None
+        # D-L2 (SPEC §9.2): when the row states a data LEVEL, the DataCite relation DERIVES from it — the
+        # relation control is not shown on an identifies row, so the form carries no explicit relation and
+        # the server writes the derived value. A legacy row (no identifies) keeps whatever relation it
+        # posted, untouched (backward compatible). An out-of-vocab identifies already FAILed above.
+        idf = row.get("identifies")
+        if idf and str(idf).strip() in IDENTIFIES_LEVELS:
+            row["relation"] = derived_relation(idf)
+            any_value = True
         # IDCONS D2 (SPEC §3) — carry forward UNMODELLED per-row keys from the correspondingly-indexed
         # original row (the render assigns row index i to original[i]). The retired instruments[].pid — and
         # any unknown/legacy per-row key — is re-emitted verbatim, so an untouched list reassembles equal to

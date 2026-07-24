@@ -259,8 +259,19 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   // honesty); an absent level shows the honest muted not-available state (levels 0-2 are never omitted).
   const levels=(m.ts_levels||[]);
   const hasLevel=v=>levels.indexOf(v)>=0;
+  // D-L4 (SPEC §9.6): the related_identifiers row whose `identifies` matches this level (its own DOI), so
+  // a user on the files tab jumps straight to the DOI for the data level they are looking at.
+  const idRowFor=lvl=>(m.related_identifiers||[]).find(r=>r&&r.identifies===lvl);
   const tsLevelRow=(label,gloss,vocab)=>{
     if(!hasLevel(vocab))return {n:label,sub:gloss+" · not available",origin:"source archive",st:"unk",d:null};
+    // Prefer the level's OWN identifier when a matching identifies row exists (reserved honesty applies:
+    // a reserved level DOI is left inert with an honest note, never a dead link).
+    const idRow=idRowFor(vocab);
+    if(idRow&&idRow.identifier){
+      if(idRow.resolution==="reserved")return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
+      const href=relatedIdHref(idRow.identifier,idRow.identifier_type);
+      if(href)return {n:label,sub:gloss+" · "+(idRow.custodian||"source collection"),origin:"source archive",st:"ok",d:{prod:"open",url:href}};
+    }
     if(tsReserved)return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
     return {n:label,sub:gloss+" · "+(m.ts_pid?"survey collection":"NCI collection"),origin:"source archive",st:"ok",d:tsOpen};
   };
@@ -569,7 +580,9 @@ function openStation(i){
   const provenanceHtml=`<div class="sechead">Provenance ${roleChip("Source data")}</div>`+provTop+maturityBlock(s)+
     `<details class="prov-d"><summary>Lineage graph</summary><div class="prov-dbody">${provGraph(s)}</div></details>`+
     provenanceBox(s)+
-    `<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`+
+    // Card-lane polish: OMIT the Identifiers & instruments expander entirely when there is nothing to show
+    // (a zero-identifier survey), rather than rendering an empty disclosure.
+    (identifiersHtml(m)?`<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`:"")+
     // R8: the badge set tells the DISTRIBUTED-FORMATS story — EDI, EMTF XML (via pipeline), MTH5, time
     // series (from the levels metadata) and the licence badge. The bare "DOI" badge is dropped (it failed
     // as communication; dataset-DOI presence is already conveyed by the maturity star and the identifiers
@@ -709,21 +722,33 @@ function instrumentPidsHtml(m){
 // out-of-vocab relation (should never publish — the validator FAILs it) falls back to the escaped raw
 // value; a blank relation to a neutral "Related".
 const RELATION_LABELS={IsDerivedFrom:"Derived from",IsVariantFormOf:"Variant form of",
-  IsSupplementTo:"Supplement to",Cites:"Cites"};
+  IsSupplementTo:"Supplement to",Cites:"Cites",IsPartOf:"Part of",IsSourceOf:"Source of"};
+// D-L1/D-L4 (SPEC §9): `identifies` states WHAT the identifier points at, in NCI Table 1 data-level terms.
+// When present it labels the row by LEVEL (e.g. "Raw time series", "Collection", "Entire dataset"),
+// falling back to the DataCite relation label for a legacy row that carries no identifies. Table 1 order.
+const IDENTIFIES_LABELS={collection:"Collection",raw_packed:"Raw time series",level0:"Level 0, edited time series",
+  level1:"Level 1, transformed time series",level2:"Level 2, processed data",level3:"Level 3, models",
+  entire:"Entire dataset"};
 // §2a: a typed provenance identifier -> a link whose resolver host is chosen by identifier_type, ALWAYS
 // through the escUrl guard (a hostile identifier value can never become an executable/relative anchor —
 // same posture as pidLink/instrumentPidLink). DOI -> doi.org (unless already a URL); Handle ->
 // hdl.handle.net; URL -> itself. ANY OTHER type (RAiD, an unknown, or none) -> escaped PLAIN TEXT with NO
 // anchor: we will not invent a resolver for a type we do not model, and an unlinked value stays inert.
-function relatedIdLink(id,type){
-  const s=String(id==null?"":id); if(!s)return "<span class='prov'>not recorded</span>";
+// §2a: the resolver URL for a typed identifier, chosen by identifier_type. DOI -> doi.org (unless already
+// a URL); Handle -> hdl.handle.net; URL -> itself. ANY OTHER type (RAiD, unknown, none) -> null: we do not
+// invent a resolver for a type we do not model. Shared by relatedIdLink (the block anchor) and the files
+// tab (which needs the raw URL for a product tile's data-url). escUrl still guards at the anchor/attr edge.
+function relatedIdHref(id,type){
+  const s=String(id==null?"":id).trim(); if(!s)return null;
   const t=String(type==null?"":type);
-  if(t==="DOI"){const href=s.startsWith("http")?s:"https://doi.org/"+s;
-    return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
-  if(t==="Handle"){const href=s.startsWith("http")?s:"https://hdl.handle.net/"+s;
-    return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
-  if(t==="URL"){return `<a href="${escUrl(s)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>`;}
-  return esc(s);}
+  if(t==="DOI")return s.startsWith("http")?s:"https://doi.org/"+s;
+  if(t==="Handle")return s.startsWith("http")?s:"https://hdl.handle.net/"+s;
+  if(t==="URL")return s;
+  return null;}
+function relatedIdLink(id,type){
+  const s=String(id==null?"":id); if(!s.trim())return "<span class='prov'>not recorded</span>";
+  const href=relatedIdHref(id,type);
+  return href?`<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(s.trim())}</a>`:esc(s);}
 // IDCONS D4 (SPEC §5.4): render an identifier HONESTLY given its resolution facet from the pid_status
 // cache (attached by build_portal.apply_pid_resolution). "reserved" = doi.org's OWN 404, a reserved-but-
 // not-yet-active DOI (e.g. a freshly-minted NCI PID whose handle mapping is not live) -> plain escaped
@@ -746,7 +771,8 @@ function relatedIdentifiersHtml(m){
   const list=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object");
   if(!list.length)return "";
   const rows=list.map(r=>{
-    const label=RELATION_LABELS[r.relation]||(r.relation?esc(r.relation):"Related");
+    // D-L1: label by the data LEVEL when identifies is present; else fall back to the relation label.
+    const label=(r.identifies&&IDENTIFIES_LABELS[r.identifies])||RELATION_LABELS[r.relation]||(r.relation?esc(r.relation):"Related");
     const cust=r.custodian?` <span class='prov'>(${esc(r.custodian)})</span>`:"";
     // IDCONS D4: a reserved identifier renders as plain text + note, not an anchor (never a dead link).
     const idCell=r.resolution==="reserved"?reservedText(r.identifier):relatedIdLink(r.identifier,r.identifier_type);

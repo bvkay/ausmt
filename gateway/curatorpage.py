@@ -3515,17 +3515,21 @@ _EDIT_JSON_ONLY = (
 # The structured-section titles + document order (matches survey-yaml.md), shared by the single-form
 # edit page and the C43 survey-hub Metadata tab (which splits each into its own per-section form) so
 # rendering order never drifts between them.
+# D-L3 (SPEC §9.3): "Source datasets" (sources) is RETIRED from the editor — its acquisition fields are
+# now optional keys on a related_identifiers row, and the standalone sidebar entry + panel are gone. The
+# sources[] schema key stays byte-preserved on disk (never entered into any patch — it is no longer a
+# widget section, so build_section_patch never assembles it); the engine keeps reading it this wave.
 _SECTION_TITLES = {
     "organisation": "Organisation", "lead_investigator": "Lead investigator",
     "principal_investigators": "Principal investigators", "identifiers": "Identifiers",
     "publications": "Publications", "funding": "Funding", "instruments": "Instruments",
     "time_series": "Time series", "access": "Access", "attribution": "Attribution & rights",
-    "sources": "Source datasets", "related_identifiers": "Related identifiers",
+    "related_identifiers": "Related identifiers",
     "processing": "Processing", "collection": "Collection",
 }
 _SECTION_ORDER = ("organisation", "lead_investigator", "principal_investigators", "identifiers",
                   "publications", "funding", "instruments", "time_series", "access", "attribution",
-                  "sources", "related_identifiers", "processing", "collection")
+                  "related_identifiers", "processing", "collection")
 
 
 def _json_text(value) -> str:
@@ -3765,6 +3769,21 @@ _RELATION_DISPLAY = {
     "IsVariantFormOf": "Variant form of (same dataset, another archive)",
     "IsSupplementTo": "Supplement to (this record supplements another)",
     "Cites": "Cites (this dataset cites it)",
+    "IsPartOf": "Part of (a parent collection record)",
+    "IsSourceOf": "Source of (a model derives from this dataset)",
+}
+
+# D-L1 (SPEC §9.1) — plain-language display text for the `identifies` <select>, in NCI Table 1 ORDER.
+# The option VALUE stays the exact vocab token (POSTed byte-identically so the fail-closed validator sees
+# the same token); only the human-facing option TEXT is expanded so a geophysicist can pick the level.
+_IDENTIFIES_DISPLAY = {
+    "collection": "Collection (parent record)",
+    "raw_packed": "Raw time series (packed)",
+    "level0": "Level 0, edited time series",
+    "level1": "Level 1, transformed time series",
+    "level2": "Level 2, processed data (EDI, TF)",
+    "level3": "Level 3, models",
+    "entire": "Entire dataset (single record, all levels)",
 }
 
 
@@ -3986,12 +4005,88 @@ _PID_CHIP_HTML = (
 )
 
 
+def _identifies_select_widget(name: str, value) -> str:
+    """D-L1 (SPEC §9.1): the "What does this identifier point at?" <select> — the seven NCI Table 1 data
+    levels in order, with human-facing labels. Fail-closed (an out-of-vocab STORED value is shown as its
+    own option so the curator can fix it, never silently coerced). Reuses _typed_vocab_select_widget so the
+    option VALUE stays the exact vocab token and the POST is byte-identical to what the validator expects."""
+    from . import editor_form
+    return _typed_vocab_select_widget(name, "What does this identifier point at?", value,
+                                      editor_form.IDENTIFIES_LEVELS, display_labels=_IDENTIFIES_DISPLAY)
+
+
+# D-L (SPEC §9.6): the acquisition sub-keys folded onto a related_identifiers row from the retired
+# sources[] list — rendered behind a COLLAPSED "acquisition details" disclosure, shown only when the
+# curator opens it (an upstream dataset AusMT obtained). (subkey, label, kind) — the field NAMES match
+# editor_form.LIST_SECTIONS["related_identifiers"] so the assembler reads them back.
+_ACQUISITION_ROW_FIELDS = (
+    ("title", "Title", "text"),
+    ("licence", "Licence (as obtained)", "license"),
+    ("retrieved", "Retrieved (date or year)", "text"),
+    ("statement", "Attribution statement", "text"),
+    ("profile", "Attribution profile", "profile"),
+)
+
+
+def _related_identifier_row_html(index, values: dict | None) -> str:
+    """D-L (SPEC §9.6): one related_identifiers row. The `identifies` level <select> is FIRST; the DataCite
+    relation is HIDDEN-OR-DERIVED — the relation control renders ONLY for a legacy row (an explicit relation
+    but no identifies, backward compatible), because on an identifies row the relation derives server-side
+    (editor_form._assemble_list) and is not curator-facing. The acquisition fields sit behind a COLLAPSED
+    disclosure. The per-row resolution chip (D5) + the remove button ride the row like the shared template."""
+    from . import editor_form
+    v = values or {}
+    idf_val = v.get("identifies")
+    rel_val = v.get("relation")
+    # Legacy row = an explicit relation with NO identifies. Only then does the relation <select> render;
+    # on an identifies row (or a fresh blank row) the relation control is omitted and the value derives.
+    show_relation = bool(rel_val) and idf_val in (None, "")
+
+    def n(sk: str) -> str:
+        return f"l_related_identifiers_{index}_{sk}"
+
+    cells = [
+        _identifies_select_widget(n("identifies"), idf_val),
+        f'<p style="margin:.15rem 0"><label class="k">Identifier (DOI / handle / URL)</label>'
+        f'{_text_input(n("identifier"), v.get("identifier"), "10.25914/… or an https:// URL")}</p>',
+        _typed_vocab_select_widget(n("identifier_type"), "Identifier type", v.get("identifier_type"),
+                                   editor_form.IDENTIFIER_TYPES),
+    ]
+    if show_relation:
+        cells.append(_typed_vocab_select_widget(n("relation"), "Relation", rel_val,
+                                                editor_form.RELATION_TYPES, display_labels=_RELATION_DISPLAY))
+    cells.append(
+        f'<p style="margin:.15rem 0"><label class="k">Custodian</label>'
+        f'{_text_input(n("custodian"), v.get("custodian"), "e.g. NCI / AuScope")}</p>')
+    # Collapsed "acquisition details" disclosure (the ex-sources[] payload) — shown only when the curator
+    # opens it. Pre-opened when the row already carries any acquisition value so nothing hides on edit.
+    acq_open = any(v.get(sk) not in (None, "") for sk, *_ in _ACQUISITION_ROW_FIELDS)
+    acq_cells = []
+    for sk, label, kind in _ACQUISITION_ROW_FIELDS:
+        if kind == "license":
+            acq_cells.append(_license_select_widget(n(sk), label, v.get(sk)))
+        elif kind == "profile":
+            acq_cells.append(_profile_select_widget(n(sk), label, v.get(sk)))
+        else:
+            acq_cells.append(f'<p style="margin:.15rem 0"><label class="k">{_esc(label)}</label>'
+                             f'{_text_input(n(sk), v.get(sk), "")}</p>')
+    cells.append(
+        f'<details class="acq-details"{" open" if acq_open else ""} style="margin:.3rem 0">'
+        '<summary class="sub">Acquisition details (licence as obtained, retrieved, attribution)</summary>'
+        f'{"".join(acq_cells)}</details>')
+    remove = ('<p style="margin:.15rem 0"><button type="button" class="b-bad" '
+              'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
+              'Remove row</button></p>')
+    return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
+            f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{_PID_CHIP_HTML}{remove}</div>')
+
+
 def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: dict) -> str:
-    """IDCONS D1 group (b) — THIS DATASET ELSEWHERE: the single typed related_identifiers list, the ONLY
-    place a dataset-level DOI/PID is edited. Renders the SAME l_related_identifiers_* rows / template /
-    snapshot / advanced-JSON the standalone panel does (identical field names -> identical assembly), plus
-    a per-row resolution status chip (D5). Reuses _list_row_html so the fail-closed relation/identifier_type
-    <select>s and the round-trip anchor are byte-identical to the wave-1 widget."""
+    """IDCONS D1 group (b) + D-L (SPEC §9) — THIS DATASET ELSEWHERE: the single typed related_identifiers
+    list, the ONLY place a dataset-level DOI/PID is edited. Each row leads with the `identifies` level
+    <select>; the relation derives from it and is hidden (a legacy relation-only row still edits its
+    relation). Acquisition fields sit behind a collapsed per-row disclosure. Field names are identical to
+    editor_form.LIST_SECTIONS["related_identifiers"] -> identical assembly + round-trip anchor."""
     from . import editor_form
     section = "related_identifiers"
     subfields = editor_form.LIST_SECTIONS[section]
@@ -4010,54 +4105,33 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
     for row in existing:
         if row is None:
             continue
-        rendered.append(_list_row_html(section, idx, subfields, row, row_suffix_html=_PID_CHIP_HTML))
+        rendered.append(_related_identifier_row_html(idx, row))
         idx += 1
     for _ in range(_SPARE_BLANK_ROWS):
-        rendered.append(_list_row_html(section, idx, subfields, None, row_suffix_html=_PID_CHIP_HTML))
+        rendered.append(_related_identifier_row_html(idx, None))
         idx += 1
     add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
                f'data-editor-add-row="{section}">+ Add row</button></p>')
     template = (f'<template data-editor-template="{section}">'
-                f'{_list_row_html(section, ROW_INDEX_TOKEN, subfields, None, row_suffix_html=_PID_CHIP_HTML)}'
+                f'{_related_identifier_row_html(ROW_INDEX_TOKEN, None)}'
                 '</template>')
     return (
         '<h3 class="k">This dataset elsewhere</h3>'
         '<p class="sub">Every DOI or PID this survey already has at another archive goes here — one row '
-        'each. This is the ONLY place a dataset-level DOI/PID is recorded; there is no separate "dataset '
-        'DOI" box any more.</p>'
-        # IDCONS D1 (SPEC §2.2) — the WHERE-DOES-IT-GO cheat line: the owner complaint is that a curator
-        # cannot tell which row a given identifier belongs in. This maps the three common cases to a relation.
+        'each. Start by picking WHAT the identifier points at; the DataCite relation is set for you. This '
+        'is the ONLY place a dataset-level DOI/PID is recorded; there is no separate "dataset DOI" box.</p>'
+        # D-L (SPEC §9.6) — the WHERE-DOES-IT-GO cheat line, now in data-LEVEL language (the curator thinks
+        # in NCI Table 1 levels, not DataCite relations).
         '<p class="sub" style="border-left:3px solid #2E4254;padding-left:.6rem">'
         '<b>Where does it go?</b><br>'
-        '&bull; Raw time-series collection at NCI &rarr; relation <b>Derived from</b>.<br>'
-        '&bull; The same dataset published at another archive &rarr; <b>Variant form of</b>.<br>'
+        '&bull; The raw time-series collection at NCI &rarr; <b>Raw time series (packed)</b>.<br>'
+        '&bull; A GA eCAT record or a state-survey landing page (e.g. MAGIX) &rarr; <b>Entire dataset</b>.<br>'
         '&bull; A paper or report about this survey &rarr; add it under <b>Publications</b>, not here.</p>'
         + _section_error_html(err_map.get(section))
         + f'<div data-editor-rows="{section}">{"".join(rendered)}</div>'
         + add_btn + template
         + _snapshot_hidden(section, fields)
         + _advanced_json_details(section, fields))
-
-
-def _sources_identifier_summary(fields: dict) -> str:
-    """IDCONS D1 §2.6 — a READ-ONLY summary of identifiers also referenced as provenance in Source
-    datasets. sources[] rows keep their own rights/attribution editing (they anchor LICENSE.txt text a
-    related_identifiers row cannot); this line surfaces their identifiers on the new page so nothing is
-    hidden from the curator, without duplicating the edit surface."""
-    src = fields.get("sources")
-    ids: list[str] = []
-    if isinstance(src, list):
-        for row in src:
-            if isinstance(row, dict):
-                val = row.get("identifier")
-                if val not in (None, ""):
-                    ids.append(str(val))
-    if not ids:
-        return ""
-    items = ", ".join(_esc(i) for i in ids)
-    return ('<h3 class="k">Also referenced as provenance in Source datasets</h3>'
-            f'<p class="sub">{items}<br>Edit these in the <em>Source datasets</em> section below — they '
-            'carry licence/attribution payload beyond the identifier.</p>')
 
 
 def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict) -> str:
@@ -4102,7 +4176,6 @@ def _identifiers_and_pids_inner(slug: str, fields: dict, submitted: dict | None,
         f'{group_a}'
         f'{_related_identifiers_group(fields, submitted, err_map)}'
         f'{group_c}'
-        f'{_sources_identifier_summary(fields)}'
         f'{_snapshot_hidden(idmap, fields)}'
         f'{_advanced_json_details(idmap, fields)}'
     )
