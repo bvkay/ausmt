@@ -514,3 +514,43 @@ def test_smtp_pass_redacted_from_config_dump(tmp_path):
     assert items["AUSMT_SMTP_PASS"] == "<redacted>"
     assert items["AUSMT_SMTP_HOST"] == "smtp.example.org"
     assert items["AUSMT_MAIL_FROM"] == "submissions@ausmt.au"
+
+
+# --------------------------------------------------------------------------------------------------
+# K1 integration seam: the PORTAL FORM posts JSON, not urlencoded (found live 2026-07-24)
+# --------------------------------------------------------------------------------------------------
+def test_request_key_accepts_the_portal_forms_json_body(tmp_path):
+    """add-survey.html posts {"email": ...} as application/json. The original route read a
+    Form(...) parameter, silently saw "" from a JSON body, and every real browser request died at
+    the syntactic gate behind the neutral 202 - zero keys, zero log rows, zero mail (the live
+    2026-07-24 incident). RED against that route shape: a JSON post must mint exactly like an
+    urlencoded one."""
+    async def _body():
+        mailer = FakeMailer()
+        async with app_client(tmp_path, mailer=mailer) as (client, _app, gw, _cfg):
+            r = await client.post("/gateway/request-key",
+                                  json={"email": "browser@example.org"})
+            assert r.status_code == 202
+            keys = gw.db.list_uploader_keys()
+            assert len(keys) == 1 and keys[0].email == "browser@example.org"
+            assert len(mailer.calls) == 1
+    run(_body())
+
+
+def test_request_key_still_accepts_urlencoded_and_survives_garbage_bodies(tmp_path):
+    """Both encodings mint; an unparseable body (wrong declared type, binary junk, JSON non-object)
+    degrades to the neutral 202 with no mint - the defensive-parse posture for a public endpoint."""
+    async def _body():
+        mailer = FakeMailer()
+        async with app_client(tmp_path, mailer=mailer) as (client, _app, gw, _cfg):
+            ok = await client.post("/gateway/request-key", data={"email": "form@example.org"})
+            assert ok.status_code == 202
+            assert len(gw.db.list_uploader_keys()) == 1
+            for content, ctype in ((b"\x00\x01\x02", "application/json"),
+                                   (b'["not","an","object"]', "application/json"),
+                                   (b"email=", "application/x-www-form-urlencoded")):
+                r = await client.post("/gateway/request-key", content=content,
+                                      headers={"Content-Type": ctype})
+                assert r.status_code == 202
+            assert len(gw.db.list_uploader_keys()) == 1, "garbage bodies must not mint"
+    run(_body())
