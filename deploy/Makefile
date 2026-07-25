@@ -86,6 +86,9 @@ down:
 # current image and the cache fires). Losing the cache dir costs one slow rebuild, nothing more.
 # C18b (Amendment A3): the verify step passes --surveys (same root the build used) to ARM the
 # cache-staleness digest gate -- served-product digest stamps vs live survey.yaml, cache-independent.
+# --survey-h5: tier-2 survey MTH5 bundles, owner-enabled 2026-07-25 (A6). The engine image
+# deliberately excludes portal/, so the portal.config.yaml flag cannot reach a box build;
+# the CLI flag is the production enable and this line is its single source of truth.
 rebuild-data:
 	@set -e; \
 	DATA_DIR=$${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}/site-data; \
@@ -94,7 +97,7 @@ rebuild-data:
 	CACHE_MODE=$${AUSMT_BUILD_CACHE_MODE:-rw}; \
 	echo "rebuild-data: building into $$DATA_DIR/$$BUILD_REL (cache-mode=$$CACHE_MODE)"; \
 	if ! docker compose -f compose.yaml --profile jobs run --rm build-runner \
-	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi \
+	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi --survey-h5 \
 	      --products /out/$$BUILD_REL/products \
 	      --pid-status /out/cache/pid_status.json \
 	      --incremental --cache-dir /out/cache --cache-mode $$CACHE_MODE; then \
