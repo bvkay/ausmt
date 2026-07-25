@@ -905,7 +905,13 @@ function buildSurveyYaml(m){
   if(emitAttribution){
     L.push("attribution:");
     if(declaredBy) L.push("  declared_by: "+q(declaredBy));
-    L.push("  declared_date: "+declaredDate);   // bare ISO scalar (validated shape / tsUTC-derived)
+    // QUOTED ISO string (validated shape / tsUTC-derived). The engine threads attribution VERBATIM into
+    // SMETA and never parses declared_date as a real date, so an UNQUOTED value here was implicit-typed by
+    // PyYAML safe_load into a datetime.date and crashed the build's json.dumps (surveys.json/mtcat). Quoting
+    // it makes it round-trip as a plain string everywhere, matching the curator-yaml convention. (embargo_until
+    // above is left UNQUOTED on purpose: the engine DELIBERATELY parses it as a calendar date for the access
+    // gate and str()-normalises it in SMETA, so it is date-typed by design and never a serialisation hazard.)
+    L.push("  declared_date: "+q(declaredDate));
   }
   // time_series: pointers only. The hard-coded collection_pid null is retired, a collection DOI/PID is a
   // related_identifiers row (identifies: collection). Only levels_available is emitted here.

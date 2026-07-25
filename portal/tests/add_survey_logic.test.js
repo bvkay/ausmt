@@ -327,8 +327,12 @@ ok(/<script src="src\/contract\.js">/.test(html), "the page loads the generated 
 
 // ---- attribution persistence (unchanged carrier) ----
 const yAttr = M.buildSurveyYaml({ ...base, license_declaration: true, uploader_name: "Ada L", declared_date: "2026-07-13" });
-ok(/attribution:\s*\n\s*declared_by: "Ada L"\s*\n\s*declared_date: 2026-07-13/.test(yAttr),
-   "buildSurveyYaml persists attribution.declared_by + declared_date");
+// declared_date is emitted as a QUOTED string so PyYAML safe_load keeps it a str (not a datetime.date the
+// engine's json.dumps then chokes on at the surveys.json/mtcat emit). Round-trips as a string everywhere.
+ok(/attribution:\s*\n\s*declared_by: "Ada L"\s*\n\s*declared_date: "2026-07-13"/.test(yAttr),
+   "buildSurveyYaml persists attribution.declared_by + a QUOTED declared_date");
+ok(!/declared_date: \d{4}-\d{2}-\d{2}\b/.test(yAttr),
+   "declared_date is never emitted as a BARE ISO scalar (that implicit-typed to date and crashed the engine)");
 ok(/schema_version: "0.3"/.test(yAttr), "a package carrying attribution declares schema_version 0.3");
 ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false })),
    "no attribution block when the licence declaration is not made");

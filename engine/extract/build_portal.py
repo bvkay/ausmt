@@ -128,13 +128,36 @@ def lib_versions() -> dict:
     return out
 
 
+def _json_default(obj):
+    """json.dumps `default=` hook for EVERY product emit (surveys.json, mtcat, catalogue, products,
+    ...). A survey.yaml that carries an UNQUOTED ISO date (e.g. `attribution.declared_date: 2026-07-25`)
+    is implicit-typed by PyYAML safe_load into a datetime.date, which survey_meta_from_yaml threads
+    VERBATIM into SMETA — plain json.dumps could not serialise it and the whole build CRASHED at the
+    first emit site (Object of type date is not JSON serializable), quarantining every survey with it.
+    Here any date/datetime/time is ISO-formatted (datetime subclasses date, so the one isinstance covers
+    both) and a Decimal is stringified to preserve exact precision. This MIRRORS the gateway's
+    gateway/jobs.py:_json_default so the two dumpers agree. Anything else is a genuine programming error,
+    so we RAISE TypeError (json's own behaviour) rather than blind-str() a truly unexpected object into a
+    served product — LAYER 2 (main()'s per-survey dry-run) then withholds just that survey."""
+    import datetime  # noqa: PLC0415 (house style: local import where used)
+    from decimal import Decimal  # noqa: PLC0415
+    if isinstance(obj, (datetime.date, datetime.time)):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def _jdump(obj, **kw) -> str:
     # ensure_ascii=False: catalogue text (survey/custodian names, the mtcat portal_name em-dash)
     # is emitted as real UTF-8, not \uXXXX escapes — byte-identical semantics for every JSON
     # parser, readable for humans. REQUIRES the paired write_text(..., encoding="utf-8") at
     # every product-emit site below: pathlib defaults to the locale encoding, which is cp1252
     # on the Windows dev box and unpinned in slim containers.
-    return json.dumps(obj, ensure_ascii=False, **kw)
+    # default=_json_default: an unquoted-ISO-date a survey.yaml carried into SMETA (date/datetime/time)
+    # is ISO-formatted rather than crashing the build (mirrors gateway/jobs.py); a genuinely alien type
+    # still raises TypeError, which LAYER 2's per-survey dry-run turns into a single-survey withhold.
+    return json.dumps(obj, ensure_ascii=False, default=_json_default, **kw)
 
 
 def sha256(p: Path) -> str:
@@ -2333,7 +2356,9 @@ def main(argv=None):
     all_stations, all_tf, all_sci = [], [], []
     # manifest: per-station artifacts (files) + per-survey bundles (bundles). Key-based, NOT positional.
     surveys_meta, manifest = {}, {"files": [], "bundles": []}
-    dropped_surveys = []   # surveys that validated but yielded 0 stations (never silently vanish)
+    dropped_surveys = []   # (label, n_inputs, reason|None): a survey that validated but yielded 0
+                           # stations (reason None), or LAYER 2 dropped for an unserialisable SMETA
+                           # (reason set) — either way it never silently vanishes from the build log.
     # build_report.json accumulator: {slug: {stations_built, stations_dropped, warnings, conditioning,
     # cache, duration_seconds}}. Populated per survey in the loop; assembled + written alongside
     # build_provenance.json below. Public build metadata for the (planned) curator serve-state UI.
@@ -2452,7 +2477,7 @@ def main(argv=None):
                   f"was DROPPED from the portal. (Check that mt_metadata could read these EDIs — "
                   f"malformed headers or missing coordinates yield no usable station.)",
                   file=sys.stderr)
-            dropped_surveys.append((label, n_in))
+            dropped_surveys.append((label, n_in, None))
             continue
         # C42 (fix round 2): validate override ids NOW — at the exact point the REAL station ids
         # exist (the parsed, disambiguated records above, EDI and MTH5 inputs alike) and BEFORE any
@@ -2491,13 +2516,38 @@ def main(argv=None):
         _region = (meta or {}).get("region") or (meta or {}).get("country") or ""
         for (_p, _r) in stations:
             _r["region"] = _region or _r.get("state", "")
-        input_formats.add(kind)
-        all_stations += stations; all_tf += tf_rows; all_sci += sci_rows
+        # Assemble this survey's SMETA entry (the surveys.json/mtcat payload) BEFORE aggregating any of
+        # its data into the corpus, so LAYER 2's dry-run can withhold the WHOLE survey cleanly on failure.
         smeta_entry = meta or {"country": "Australia", "org": org, "edi": "ok",
                                "lic": "unknown", "cite": {"au": org, "ti": label, "yr": "", "ve": "", "pb": org}}
         smeta_entry["slug"] = slug  # authoritative survey slug; the portal reads this (no re-derivation)
         # IDCONS D4: annotate the resolution facets from the pid_status cache (no-op when no cache).
         apply_pid_resolution(smeta_entry, pid_status)
+        # LAYER 2 (withhold-not-crash at survey granularity): dry-run the EXACT dump the surveys.json /
+        # mtcat / collections emit sites do (LAYER 1's _jdump ISO-formats dates, so only a genuinely alien
+        # SMETA value reaches this raise). A single survey's un-serialisable metadata must NEVER abort the
+        # whole corpus build (the C42 CP3B21 per-station drop precedent, lifted to survey scope): drop
+        # THIS survey loudly + record it, and keep building the rest. Done here — before all_stations/tf/sci
+        # and surveys_meta gain this survey — so a dropped survey leaves no half-served trace (its catalogue
+        # rows never ship without a surveys.json entry, and its per-station station.json jobs are never queued).
+        try:
+            _jdump(smeta_entry)
+        except TypeError as _smeta_exc:
+            print(f"SKIP {slug}: survey metadata is not JSON-serializable ({_smeta_exc}) -- survey DROPPED "
+                  f"from the portal so the rest of the corpus still builds", file=sys.stderr)
+            build_report_surveys[slug] = {
+                "stations_built": 0,
+                "stations_dropped": [],
+                "warnings": [f"survey DROPPED: metadata is not JSON-serializable ({_smeta_exc})"],
+                "conditioning": [],
+                "frame": [],
+                "cache": {"digest": (_survey_digest or "")[:12], "hits": 0, "misses": 0, "writes": 0},
+                "duration_seconds": round(_time.perf_counter() - _survey_t0, 3),
+            }
+            dropped_surveys.append((label, len(inputs), f"metadata not JSON-serializable ({_smeta_exc})"))
+            continue
+        input_formats.add(kind)
+        all_stations += stations; all_tf += tf_rows; all_sci += sci_rows
         surveys_meta[label] = smeta_entry
         lic = (meta or {}).get("lic", "unknown")
         # NCI storage tier (optional, per-survey): if the survey declares nci_base, its downloadable
@@ -2991,8 +3041,11 @@ def main(argv=None):
     print(f"built {len(all_stations)} stations across {len(surveys_meta)} surveys")
     print(f"  surveys: {', '.join(sorted(surveys_meta))}")
     if dropped_surveys:
-        print(f"  DROPPED {len(dropped_surveys)} survey(s) with 0 stations: "
-              + ", ".join(f"{lbl} ({n} files)" for lbl, n in dropped_surveys))
+        # reason is None for the 0-station drop (the original case) and a short cause for a survey
+        # dropped by the LAYER 2 SMETA-serialisability guard; render each honestly.
+        print(f"  DROPPED {len(dropped_surveys)} survey(s): "
+              + ", ".join(f"{lbl} ({n} files{'' if reason is None else '; ' + reason})"
+                          for lbl, n, reason in dropped_surveys))
     if cdir is not None:
         (cdir / "provenance.json").write_text(_jdump(
             {"pipeline": "ausmt_science.ingest.normalize", "format": "emtfxml",
