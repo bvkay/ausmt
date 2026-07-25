@@ -96,6 +96,9 @@
   .orcidok{font-size:12px;margin-top:3px;display:block;font-family:var(--mono)}
   .orcidok.good{color:var(--ok)}
   .orcidok.bad{color:var(--part)}
+  /* R1 slug collision: a non-blocking "slug already served" context warning, distinct from valid/invalid.
+     Amber like a WARNING chip, allowed to wrap (the message carries the existing survey name + guidance). */
+  .orcidok.warn{color:var(--part);white-space:normal;line-height:1.45}
   .kv{font-family:var(--mono);font-size:13px;line-height:1.7}
   .kv b{color:var(--text);font-weight:700}
   .note{color:var(--muted);font-size:12px;margin-top:8px;line-height:1.5}
@@ -308,9 +311,13 @@
 
       <div><label>Lead investigator (name)</label><input id="m_pi" placeholder="Full name"></div>
       <div><label>Lead investigator ORCID</label><input id="m_pi_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="piOrcidOk"></span></div>
-      <div class="full"><div class="hint">The lead investigator is optional. If you list one here it takes serving
-        precedence; otherwise the portal serves the organisation as the attributable party, the same
-        precedence the curator hub applies.</div></div>
+
+      <div class="full"><label>Principal investigators <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(the science team; add a row per person, ORCID optional)</span></label>
+        <div id="piRows"></div>
+        <button type="button" class="act" id="addPi" style="margin-top:2px">+ Add principal investigator</button></div>
+      <div class="full"><div class="hint">When a lead investigator is set the portal credits the lead;
+        otherwise the principal investigators list is credited (the served-citation precedence, stated not
+        changed).</div></div>
 
       <div><label>Related publication</label><input id="m_pub" placeholder="short citation or title"></div>
       <div><label>Publication DOI</label><input id="m_pubdoi" placeholder="10.1093/gji/…"><span class="hint" style="display:block">Recorded under <code>publications</code>.</span></div>
@@ -318,20 +325,6 @@
       <div class="full"><label>Funding sources <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(organisation / ROR / grant / DOI)</span></label>
         <div id="fundRows"></div>
         <button type="button" class="act" id="addFund" style="margin-top:2px">+ Add funding source</button></div>
-
-      <div class="full"><label>Collection / program <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(links this survey to a national program such as AusLAMP)</span></label>
-        <div class="grid">
-          <div><label>Collection id</label><input id="m_coll_id" placeholder="auslamp" list="collDatalist" autocomplete="off"><datalist id="collDatalist"></datalist></div>
-          <div><label>Collection type</label><input id="m_coll_type" placeholder="programme"></div>
-          <div class="full"><label>Collection title</label><input id="m_coll_title" placeholder="Australian Lithospheric Architecture Magnetotelluric Project"></div>
-          <div><label>Collection status</label><select id="m_coll_status"><option value="">(none)</option><option>active</option><option>completed</option><option>archived</option></select></div>
-          <div><label>Collection start year</label><input id="m_coll_year" placeholder="2003"></div>
-          <div class="full"><label>Collection description</label><textarea id="m_coll_desc" placeholder="One-line description of the programme."></textarea></div>
-        </div>
-        <div id="collHint" class="hint" style="margin-top:6px"></div>
-        <div class="hint">Surveys sharing a collection are grouped in the portal and MTCAT. Collections describe programmes or
-          campaigns (for example, AusLAMP) and hold no transfer functions themselves, all data, metadata, and provenance remain
-           with the individual surveys. Use the same collection identifier and title across all member surveys.</div></div>
 
       <div class="full"><label>Survey footprint <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(approximate bounding box, metadata only)</span></label>
         <div class="loc">
@@ -354,9 +347,30 @@
     </div>
   </div>
 
+  <!-- ==================== CARD 4, "Collection / program" (R3: own card, collapsed by default) ==========
+       Moved out of tier 1 into its own tier-style disclosure so the common single-survey submission is not
+       slowed by programme fields. Same IDs (m_coll_*) so the collections.json autofill IIFE is unchanged. -->
+  <details class="tier" id="tierCollection">
+    <summary><div class="tlead"><h2>4. Was this survey part of a collection / program (eg AusLAMP)?</h2><span class="tk">optional</span></div></summary>
+    <p class="tsub">Only if this survey belongs to a national programme or campaign (for example, AusLAMP).
+      Leave collapsed if it is a standalone survey.</p>
+    <div class="grid">
+      <div><label>Collection id</label><input id="m_coll_id" placeholder="auslamp" list="collDatalist" autocomplete="off"><datalist id="collDatalist"></datalist></div>
+      <div><label>Collection type</label><input id="m_coll_type" placeholder="programme"></div>
+      <div class="full"><label>Collection title</label><input id="m_coll_title" placeholder="Australian Lithospheric Architecture Magnetotelluric Project"></div>
+      <div><label>Collection status</label><select id="m_coll_status"><option value="">(none)</option><option>active</option><option>completed</option><option>archived</option></select></div>
+      <div><label>Collection start year</label><input id="m_coll_year" placeholder="2003"></div>
+      <div class="full"><label>Collection description</label><textarea id="m_coll_desc" placeholder="One-line description of the programme."></textarea></div>
+    </div>
+    <div id="collHint" class="hint" style="margin-top:6px"></div>
+    <div class="hint">Surveys sharing a collection are grouped in the portal and MTCAT. Collections describe programmes or
+      campaigns (for example, AusLAMP) and hold no transfer functions themselves, all data, metadata, and provenance remain
+       with the individual surveys. Use the same collection identifier and title across all member surveys.</div>
+  </details>
+
   <!-- ==================== TIER 2, "I know my metadata" (collapsed disclosure) ==================== -->
   <details class="tier" id="tier2">
-    <summary><div class="tlead"><h2>4. I know my metadata</h2><span class="tk">advanced</span></div></summary>
+    <summary><div class="tlead"><h2>5. I know my metadata</h2><span class="tk">advanced</span></div></summary>
     <p class="tsub">Provenance identifiers, instruments, processing and data types. Leave these to the curator
       if you are unsure, server validation and curator review fill any gaps.</p>
 
@@ -404,7 +418,7 @@
 
   <!-- 7. VALIDATE / PREVIEW / PACKAGE -->
   <div class="tier">
-    <div class="tlead"><h2>5. Check and package</h2></div>
+    <div class="tlead"><h2>6. Check and package</h2></div>
     <p class="tsub"><b>What happens next:</b> package your submission here, then either upload it directly with
       a submit key (when a gateway is available on this site) or email the packaged <code>.zip</code> to the
       AusMT operator (contact on the <a href="about.html">About page</a>). The pipeline runs a ClamAV virus
@@ -833,6 +847,19 @@ function buildSurveyYaml(m){
   L.push("lead_investigator:");
   L.push("  name: "+(m.pi?q(m.pi):"null"));
   L.push("  orcid: "+(m.pi_orcid?q(m.pi_orcid):"null"));
+  // R4: principal_investigators[] (the science team). Emission shape mirrors the validator/editor
+  // (gateway/editor_form.LIST_SECTIONS "principal_investigators" = [name, orcid]) and the engine's
+  // build_portal._investigators_of ([{name, orcid}]). A row needs a name to count; orcid is optional
+  // (null when blank). Absent -> absent (no empty list) so a survey without PIs stays byte-lean; the
+  // served-citation precedence (lead first, else this list) is stated in the form, not changed here.
+  const pis=(m.principal_investigators||[]).map(p=>p||{}).filter(p=>String(p.name==null?"":p.name).trim());
+  if(pis.length){
+    L.push("principal_investigators:");
+    pis.forEach(p=>{
+      L.push("  - name: "+q(String(p.name).trim()));
+      L.push("    orcid: "+(String(p.orcid==null?"":p.orcid).trim()?q(String(p.orcid).trim()):"null"));
+    });
+  }
   L.push(m.abstract?("abstract: >\n  "+String(m.abstract).replace(/\n/g," ")):"abstract: >\n  REPLACE with a short survey description.");
   L.push("geographic_extent: "+ext);
   if(m.coord_resolution){   // submitter resolved a HEAD/INFO DMS conflict on the confirmation map
@@ -974,8 +1001,46 @@ function rorMatchesFromResponse(data){
   }).filter(Boolean).slice(0,3);
 }
 
+// R5 DOI normalisation: fold a pasted resolver URL down to the bare DOI the validator records. The live
+// validator warned "publication DOI looks malformed: https:/..." on the owner's first real submission
+// because the full https://doi.org/... URL went into the doi slot. Strips an http/https doi.org or
+// dx.doi.org (optional www.) resolver prefix and returns the bare 10.x/y suffix; a bare DOI (no resolver
+// prefix) and any non-DOI string are returned UNCHANGED. Pure, so the field-blur wiring is unit-tested
+// without a DOM. NOTE: only doi.org resolver URLs are folded, a URL-typed identifier row keeps its URL.
+function normalizeDoi(s){
+  const v=String(s==null?"":s).trim();
+  const m=/^https?:\/\/(?:www\.)?(?:dx\.)?doi\.org\/(.+)$/i.exec(v);
+  return m?m[1].trim():v;
+}
+// R1 slug-collision awareness: the served surveys.json is {surveyName: SMETA}, each entry carrying its
+// published `slug`. servedSlugMap folds that into {slug: surveyName} so a derived slug can be checked
+// against the ALREADY-PUBLISHED set. Tolerant of the empty portal ({}), a non-object, or a missing slug.
+// Pure, so the collision states are unit-tested without a fetch/DOM.
+function servedSlugMap(surveysJson){
+  const out={};
+  if(surveysJson&&typeof surveysJson==="object"&&!Array.isArray(surveysJson)){
+    Object.keys(surveysJson).forEach(name=>{
+      const e=surveysJson[name]||{}; const s=String(e.slug==null?"":e.slug).trim();
+      if(s&&!(s in out)) out[s]=name;   // first published slug wins (survey names are unique keys anyway)
+    });
+  }
+  return out;
+}
+// R1 station-count context: surveys.json carries no per-survey station count, so the "(N stations)" the
+// collision warning shows is derived from the served catalogue.json (an array of station rows whose index
+// 1 is the survey NAME). Counts rows per survey name; the warning joins slug -> name -> count. Best-effort:
+// an unreachable/absent catalogue simply yields no counts and the warning drops the parenthetical.
+function stationCountsByName(catalogue){
+  const out={};
+  (Array.isArray(catalogue)?catalogue:[]).forEach(row=>{
+    const name=row&&row[1];
+    if(typeof name==="string"&&name) out[name]=(out[name]||0)+1;
+  });
+  return out;
+}
+
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,relatedIdentifiersEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,relatedIdentifiersEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -1021,6 +1086,8 @@ if(typeof document!=="undefined"&&document.getElementById){
       '<div style="display:flex;align-items:flex-end"><button type="button" class="act ri-rm">Remove</button></div>'+
       '</div>';
     wrap.querySelector(".ri-rm").onclick=()=>wrap.remove();
+    // R5: normalise a pasted DOI resolver URL ONLY when this row's type is DOI; a URL-typed row keeps its URL.
+    wireConditionalDoiBlur(wrap.querySelector(".ri-identifier"), wrap.querySelector(".ri-type"));
     return wrap;
   }
   function readRelatedIdentifiers(){
@@ -1085,6 +1152,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     wrap.querySelector(".f-rm").onclick=()=>wrap.remove();
     // reuse ROR lookup for the funding organisation field
     wireRor(wrap.querySelector(".f-org"), wrap.querySelector(".f-rormatches"), wrap.querySelector(".f-ror"));
+    wireDoiBlur(wrap.querySelector(".f-doi"));   // R5: normalise a pasted resolver URL in the funding DOI slot
     return wrap;
   }
   function readFunding(){
@@ -1098,6 +1166,36 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addFund").onclick=()=>$("fundRows").appendChild(fundRow());
 
+  // ----- R4: principal investigators rows (name + optional ORCID). Repeatable, add/remove, matching the
+  // curator model where the PIs are the science team. Emitted as principal_investigators[] {name, orcid}
+  // by readMeta -> buildSurveyYaml (the schema shape the validator/editor use). Starts empty (the lead
+  // investigator above is the primary credit; PIs are the fallback list), a row is added on demand.
+  function piRow(){
+    const wrap=document.createElement("div"); wrap.className="pirow";
+    wrap.innerHTML=
+      '<div class="grid">'+
+      '<div><label>Name</label><input class="pi-name" placeholder="Given Family"></div>'+
+      '<div><label>ORCID <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>'+
+        '<input class="pi-orcid" placeholder="0000-0002-1825-0097"><span class="orcidok pi-orcidok"></span></div>'+
+      '<div style="display:flex;align-items:flex-end"><button type="button" class="act pi-rm">Remove</button></div>'+
+      '</div>';
+    wrap.querySelector(".pi-rm").onclick=()=>wrap.remove();
+    // format-only ORCID cue (no API/auth), same posture as wireOrcid on the lead/uploader fields.
+    const inp=wrap.querySelector(".pi-orcid"), okEl=wrap.querySelector(".pi-orcidok");
+    inp.addEventListener("input",()=>{ const v=inp.value.trim();
+      if(!v){ okEl.textContent=""; okEl.className="orcidok pi-orcidok"; }
+      else if(isOrcid(v)){ okEl.textContent="✓ valid format"; okEl.className="orcidok pi-orcidok good"; }
+      else { okEl.textContent="✗ expected 0000-0000-0000-0000"; okEl.className="orcidok pi-orcidok bad"; } });
+    return wrap;
+  }
+  function readPrincipalInvestigators(){
+    return Array.from(document.querySelectorAll("#piRows .pirow")).map(r=>({
+      name:(r.querySelector(".pi-name").value||"").trim(),
+      orcid:(r.querySelector(".pi-orcid").value||"").trim()
+    })).filter(x=>x.name);   // a row needs a name to count (orcid alone is not an investigator)
+  }
+  $("addPi").onclick=()=>$("piRows").appendChild(piRow());
+
   // ----- ORCID format check (format only; no API/auth) -----
   function wireOrcid(inputId, okId){
     const inp=$(inputId), ok=$(okId);
@@ -1108,6 +1206,20 @@ if(typeof document!=="undefined"&&document.getElementById){
     inp.addEventListener("change",()=>{ if(inp.value.trim()) track("ORCIDFormatChecked",{result:isOrcid(inp.value.trim())?"valid":"invalid"}); }); // PII-free
   }
   wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_pi_orcid","piOrcidOk");
+
+  // ----- R5: DOI normalisation on blur. A contributor who pastes a full resolver URL (https://doi.org/
+  // 10.x/y, dx.doi.org, http variants) into a DOI slot triggered the live validator's "publication DOI
+  // looks malformed" warning. wireDoiBlur folds the field down to the bare DOI on blur and SHOWS the
+  // normalised value, so the contributor sees exactly what will be recorded. A bare DOI and any non-DOI
+  // string are left untouched. wireConditionalDoiBlur only folds when a sibling type <select> reads "DOI"
+  // (a URL-typed identifier row keeps its URL, the URL is the value there).
+  function wireDoiBlur(input){ if(!input) return;
+    input.addEventListener("blur",()=>{ const n=normalizeDoi(input.value); if(n!==input.value) input.value=n; }); }
+  function wireConditionalDoiBlur(input, typeSelect){ if(!input) return;
+    input.addEventListener("blur",()=>{
+      if(typeSelect && String(typeSelect.value||"").trim()!=="DOI") return;   // URL/Handle/RAiD row: leave as-is
+      const n=normalizeDoi(input.value); if(n!==input.value) input.value=n; }); }
+  wireDoiBlur($("m_pubdoi"));
 
   // ----- slug: AUTO-DERIVED from the project name (charset-safe, so it always passes slugValid), shown as
   // an editable chip. The derived value is a live convenience; the moment the submitter edits the slug
@@ -1121,13 +1233,30 @@ if(typeof document!=="undefined"&&document.getElementById){
     const nameInp=$("m_name"), inp=$("m_slug"), ok=$("slugOk");
     if(!inp||!ok) return;
     let slugTouched=false;
+    // R1 slug-collision awareness: the derived slug can already match a PUBLISHED survey (e.g. "vulcan
+    // 2022" -> vulcan-2022, already served). Lazily fetch the same-origin data/surveys.json (slug set) +
+    // data/catalogue.json (station counts, for the "(N stations)" context) on first name/slug input, and
+    // WARN with context on a match without ever BLOCKING (a custodian updating an existing survey is
+    // legitimate). Both fetches degrade silently (opened as file://, empty portal, or no data yet).
+    let SERVED_SLUGS={}, STATION_COUNTS={}, servedLoaded=false;
+    function ensureServed(){
+      if(servedLoaded||typeof fetch!=="function") return; servedLoaded=true;
+      fetch("data/surveys.json").then(r=>r.ok?r.json():null).then(d=>{ SERVED_SLUGS=servedSlugMap(d); render(); }).catch(()=>{});
+      fetch("data/catalogue.json").then(r=>r.ok?r.json():null).then(d=>{ STATION_COUNTS=stationCountsByName(d); render(); }).catch(()=>{});
+    }
     const render=()=>{ const v=inp.value.trim();
-      if(!v){ ok.textContent=""; ok.className="orcidok"; }
-      else if(slugValid(v)){ ok.textContent="✓ valid slug"; ok.className="orcidok good"; }
-      else { ok.textContent="✗ lowercase letters, digits and single hyphens only (no spaces, _ or uppercase)"; ok.className="orcidok bad"; } };
-    if(nameInp) nameInp.addEventListener("input",()=>{
+      if(!v){ ok.textContent=""; ok.className="orcidok"; return; }
+      if(!slugValid(v)){ ok.textContent="✗ lowercase letters, digits and single hyphens only (no spaces, _ or uppercase)"; ok.className="orcidok bad"; return; }
+      // charset-valid: check the collision set (exists-with-context). Never blocks, only informs.
+      const hit=SERVED_SLUGS[v];
+      if(hit){ const n=STATION_COUNTS[hit];
+        const stationsFrag=(typeof n==="number"&&n>0)?" ("+n+" station"+(n===1?"":"s")+")":"";
+        ok.textContent="⚠ matches the existing survey "+hit+stationsFrag+". Continue if you are updating that survey; choose a different name if this is a new one.";
+        ok.className="orcidok warn"; return; }
+      ok.textContent="✓ valid slug"; ok.className="orcidok good"; };
+    if(nameInp) nameInp.addEventListener("input",()=>{ ensureServed();
       if(!slugTouched){ inp.value=deriveSlug(nameInp.value); render(); } });
-    inp.addEventListener("input",()=>{ slugTouched=true; render(); });
+    inp.addEventListener("input",()=>{ ensureServed(); slugTouched=true; render(); });
   })();
 
   // ----- ROR organisation lookup (live, debounced; suggestions only; name shown first) -----
@@ -1182,6 +1311,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     data_types:Array.from(document.querySelectorAll(".dtype:checked")).map(c=>c.value),
     west:$("m_w").value, east:$("m_e").value, south:$("m_s").value, north:$("m_n").value,
     pi:$("m_pi").value.trim(), pi_orcid:$("m_pi_orcid").value.trim(), ror:$("m_ror").value.trim(),
+    principal_investigators:readPrincipalInvestigators(),
     pub:$("m_pub").value.trim(), pub_doi:$("m_pubdoi").value.trim(), raid:$("m_raid").value.trim(),
     instrument_pid:$("m_instrument_pid").value.trim(),
     related_identifiers:readRelatedIdentifiers(),
@@ -1539,8 +1669,11 @@ if(typeof document!=="undefined"&&document.getElementById){
     gatewayReady=true;
     $("gatewayBlock").classList.add("show");
     setKeyReqEnabled(true);
-    // Reword the download button as the explicit fallback now that direct upload is the primary path.
-    const bp=$("btnPackage"); if(bp) bp.textContent="Package .zip to email (fallback path)";
+    // R2: with a live gateway the primary public flow is validate -> submit directly, so the package-and-
+    // download-zip path (the email-the-operator fallback) is HIDDEN. It is shown ONLY in the degraded
+    // no-gateway state (its default). All zip code stays intact (owner: keep it just in case); this is
+    // visibility wiring only. Hiding is visual (display:none) - the packager still works if invoked.
+    const bp=$("btnPackage"); if(bp) bp.style.display="none";
     track("GatewayDetected");   // PII-free, no ids
   }
   (function probeGateway(){

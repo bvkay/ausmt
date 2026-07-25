@@ -659,10 +659,157 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     }
   }
 
+  // --------------------------------------------------------------------------------------------------
+  // 8. ROUND 2 (owner-ruled 2026-07-24): slug-collision awareness, zip-path visibility, the collection
+  //    card, principal_investigators emission, DOI normalisation. Live-DOM behaviours the pure tests
+  //    (add_survey_logic.test.js) cannot cover.
+  const JSON_OK_BODY = { status: 200, text: () => Promise.resolve('{"ok":true}') };
+  // A fetch router: routes the gateway healthz probe, data/surveys.json, and data/catalogue.json. A null
+  // surveys/catalogue means that fetch REJECTS (models an unreachable file -> the collision loader degrades).
+  function makeFetch({ gateway = false, surveys = null, catalogue = null } = {}) {
+    return (url) => {
+      if (/\/gateway\/healthz/.test(url)) return gateway ? Promise.resolve(JSON_OK_BODY) : Promise.reject(new Error("network"));
+      if (/surveys\.json/.test(url)) return surveys != null ? Promise.resolve({ ok: true, json: () => Promise.resolve(surveys) }) : Promise.reject(new Error("network"));
+      if (/catalogue\.json/.test(url)) return catalogue != null ? Promise.resolve({ ok: true, json: () => Promise.resolve(catalogue) }) : Promise.reject(new Error("network"));
+      return Promise.reject(new Error("unrouted"));   // collections.json/request-key -> silently caught
+    };
+  }
+  const settle = () => new Promise((res) => setTimeout(res, 15));   // let the two lazy fetch chains + re-render run
+
+  // (8a) R1 SLUG COLLISION: typing "Vulcan 2022" derives vulcan-2022, which matches a served survey ->
+  //      the amber 'warn' chip names the survey + station count, and NEVER blocks (packaging still works).
+  {
+    const surveys = { "Vulcan 2022": { slug: "vulcan-2022" }, "Otway 2019": { slug: "otway-2019" } };
+    const catalogue = Array.from({ length: 100 }, (_, i) =>
+      ["S" + i, "Vulcan 2022", -30, 135, 0, 0, 0, "Z", "BBMT", "AU", "x.edi", false, "au.vulcan-2022.S" + i, 0, "h"]);
+    const e = await boot({ probe: makeFetch({ gateway: false, surveys, catalogue }) });
+    const name = e.doc.getElementById("m_name");
+    name.value = "Vulcan 2022";
+    name.dispatchEvent(new e.win.Event("input", { bubbles: true }));
+    await settle();
+    ok(e.doc.getElementById("m_slug").value === "vulcan-2022", "R1: the slug auto-derives to vulcan-2022");
+    const chip = e.doc.getElementById("slugOk");
+    ok(chip.className.indexOf("warn") >= 0 && chip.className.indexOf("bad") < 0,
+      "R1: a slug collision shows the amber 'warn' chip (not the red invalid state); got: " + JSON.stringify(chip.className));
+    ok(/matches the existing survey Vulcan 2022/.test(chip.textContent) && /100 stations/.test(chip.textContent),
+      "R1: the collision warning names the served survey + its station count; got: " + JSON.stringify(chip.textContent));
+    ok(/Continue if you are updating that survey/.test(chip.textContent), "R1: the warning informs (update vs new), it never walls");
+    // NON-BLOCKING: the collision is a WARNING only, packaging a colliding slug still succeeds (custodian update).
+    fillValidMeta(e.win); e.doc.getElementById("m_name").value = "Vulcan 2022"; e.doc.getElementById("m_slug").value = "vulcan-2022";
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    ok(e.record.blobs.length === 1, "R1: a colliding slug does NOT block packaging (the warning never walls)");
+    // a brand-new, non-colliding slug shows the plain green 'valid slug' cue.
+    const n2 = e.doc.getElementById("m_name"); n2.value = "Glenelg Deep 2027";
+    n2.dispatchEvent(new e.win.Event("input", { bubbles: true }));
+    await settle();
+    ok(e.doc.getElementById("slugOk").className.indexOf("good") >= 0, "R1: a non-colliding slug shows the plain green valid cue");
+  }
+  // (8a-ii) R1 FETCH-FAILURE DEGRADE: surveys.json unreachable -> no served set -> a valid slug shows the
+  //         plain green cue (no false collision), and the page never blocks on the missing data.
+  {
+    const e = await boot({ probe: makeFetch({ gateway: false, surveys: null, catalogue: null }) });
+    const name = e.doc.getElementById("m_name");
+    name.value = "Vulcan 2022";
+    name.dispatchEvent(new e.win.Event("input", { bubbles: true }));
+    await settle();
+    const chip = e.doc.getElementById("slugOk");
+    ok(chip.className.indexOf("good") >= 0 && /valid slug/.test(chip.textContent),
+      "R1: fetch-failure degrade - an unreachable surveys.json yields a plain green cue (no false collision); got: " + JSON.stringify(chip.textContent));
+  }
+
+  // (8b) R2 ZIP-PATH VISIBILITY: the package .zip (download/email fallback) button is VISIBLE with no
+  //      gateway and HIDDEN when the gateway probe passes. Checked in both probe states.
+  {
+    const eAbsent = await boot({ probe: probeAbsent });
+    ok(eAbsent.doc.getElementById("btnPackage").style.display !== "none",
+      "R2: no gateway -> the package .zip button is visible (the primary fallback path)");
+    const ePresent = await boot({ probe: probePresent });
+    ok(ePresent.doc.getElementById("btnPackage").style.display === "none",
+      "R2: live gateway -> the package .zip button is hidden (validate -> submit directly is primary)");
+    // the button element still exists (hidden, not removed) - all zip code stays intact.
+    ok(ePresent.doc.getElementById("btnPackage") !== null, "R2: the package button is hidden, not removed (zip code intact)");
+  }
+
+  // (8c) R3 COLLECTION CARD: its own collapsed <details> with the exact heading; emission is unchanged.
+  {
+    const e = await boot({ probe: probeAbsent });
+    const card = e.doc.getElementById("tierCollection");
+    ok(card && card.tagName.toLowerCase() === "details", "R3: the collection block is its own <details> card");
+    ok(card.open === false, "R3: the collection card is collapsed (minimised) by default");
+    const h2 = card.querySelector("summary h2");
+    ok(h2 && h2.textContent.trim() === "4. Was this survey part of a collection / program (eg AusLAMP)?",
+      "R3: the collection card heading is exact; got: " + JSON.stringify(h2 && h2.textContent.trim()));
+    // emission unchanged: set a collection id/title in the new card, package, and read survey.yaml.
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    e.doc.getElementById("m_coll_id").value = "auslamp";
+    e.doc.getElementById("m_coll_title").value = "AusLAMP";
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const y = await packagedSurveyYaml(e.win, e.record);
+    ok(/collection:\s*\n\s*id: "auslamp"\s*\n\s*title: "AusLAMP"/.test(y),
+      "R3: the collection still emits from the new card (id/title unchanged by the move)");
+  }
+
+  // (8d) R4 PRINCIPAL INVESTIGATORS: add two rows, package, and inspect the survey.yaml principal_
+  //      investigators[] block (name + orcid; a blank orcid -> null). Remove drops a row.
+  {
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    e.doc.getElementById("addPi").onclick();
+    e.doc.getElementById("addPi").onclick();
+    const rows = e.doc.querySelectorAll("#piRows .pirow");
+    ok(rows.length === 2, "R4: two principal-investigator rows added; got " + rows.length);
+    rows[0].querySelector(".pi-name").value = "Ada Lovelace";
+    rows[0].querySelector(".pi-orcid").value = "0000-0002-1825-0097";
+    rows[1].querySelector(".pi-name").value = "Grace Hopper";   // no ORCID -> null
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const y = await packagedSurveyYaml(e.win, e.record);
+    ok(/principal_investigators:\s*\n\s*- name: "Ada Lovelace"\s*\n\s*orcid: "0000-0002-1825-0097"\s*\n\s*- name: "Grace Hopper"\s*\n\s*orcid: null/.test(y),
+      "R4: the packaged survey.yaml carries both PIs (blank ORCID -> null); got: " + (y.match(/principal_investigators:[\s\S]*?(?=\n\w)/) || [""])[0]);
+    // remove the second row -> it drops out.
+    rows[1].querySelector(".pi-rm").onclick();
+    ok(e.doc.querySelectorAll("#piRows .pirow").length === 1, "R4: removing a PI row drops it (repeatable add/remove)");
+  }
+
+  // (8e) R5 DOI NORMALISATION on blur: a pasted resolver URL folds to the bare DOI in the publication DOI
+  //      field; a bare DOI is untouched; a related-identifier row folds ONLY when its type is DOI (a
+  //      URL-typed row keeps its URL).
+  {
+    const e = await boot({ probe: probeAbsent });
+    const pub = e.doc.getElementById("m_pubdoi");
+    pub.value = "https://doi.org/10.1093/gji/xyz";
+    pub.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
+    ok(pub.value === "10.1093/gji/xyz", "R5: a publication DOI resolver URL folds to the bare DOI on blur; got: " + JSON.stringify(pub.value));
+    pub.value = "10.5281/zenodo.9";
+    pub.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
+    ok(pub.value === "10.5281/zenodo.9", "R5: a bare publication DOI is left untouched on blur");
+    // related-identifier rows (there is one by default; add a second).
+    e.doc.getElementById("addRelId").onclick();
+    const rrows = e.doc.querySelectorAll("#relidRows .relidrow");
+    ok(rrows.length >= 2, "R5: at least two related-identifier rows available");
+    rrows[0].querySelector(".ri-type").value = "DOI";
+    const id0 = rrows[0].querySelector(".ri-identifier");
+    id0.value = "https://dx.doi.org/10.9/a";
+    id0.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
+    ok(id0.value === "10.9/a", "R5: a DOI-typed related-identifier row normalises its identifier on blur; got: " + JSON.stringify(id0.value));
+    rrows[1].querySelector(".ri-type").value = "URL";
+    const id1 = rrows[1].querySelector(".ri-identifier");
+    id1.value = "https://doi.org/10.9/b";
+    id1.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
+    ok(id1.value === "https://doi.org/10.9/b", "R5: a URL-typed related-identifier row keeps its URL (no normalisation)");
+  }
+
   console.log("SUBMIT-TEST PASSED (probe gating, double-submit guard, key-hygiene: header-only, " +
     "escaped 201 link, XSS-inert hostile detail/status_url, fail-fast empty-key + bad-ORCID gates, " +
     "SUBMISSION.md sequential numbering both branches, per-row file remove: list + DMS conflict count + " +
     "removed file absent from packaged zip bytes, DATAID packaging: rename preview + DATAID-named zip entry + " +
-    "MANIFEST source_filename + duplicate/missing DATAID blocks naming both filenames)");
+    "MANIFEST source_filename + duplicate/missing DATAID blocks naming both filenames; round-2: slug-collision " +
+    "warn+degrade, zip-path visibility both probe states, collection card collapse + emission, principal_investigators " +
+    "emission, DOI normalisation matrix)");
   process.exit(0);
 })().catch((e) => die((e && e.stack) || String(e)));
