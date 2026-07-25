@@ -17,7 +17,7 @@ window.AUSMT_CONFIG = {
     "plausible_domain": ""
   },
   "flags": {
-    "survey_h5_enabled": false,
+    "survey_h5_enabled": true,
     "collection_download_enabled": false
   }
 };
