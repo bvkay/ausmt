@@ -987,8 +987,27 @@ def _mini_yaml(text: str) -> dict:
     import re
 
     def _strip_comment(v: str) -> str:
-        if not v or v[0] in "\"'":
-            return v.strip()
+        v = v.strip()
+        if not v:
+            return v
+        if v[0] in "\"'":
+            # A quoted scalar may carry a trailing comment AFTER its closing quote
+            # ('name: "Stephan Thiel"  # note'). Walk to the closing quote (honouring
+            # backslash escapes inside double quotes) and drop a trailing comment; a hash
+            # INSIDE the quotes is data and survives. Found live 2026-07-25: the credit
+            # migration's inline review note read as part of the value on the no-PyYAML path.
+            q, i = v[0], 1
+            while i < len(v):
+                if q == '"' and v[i] == "\\":
+                    i += 2
+                    continue
+                if v[i] == q:
+                    break
+                i += 1
+            rest = v[i + 1:].lstrip()
+            if rest == "" or rest.startswith("#"):
+                return v[:i + 1]
+            return v
         i = v.find(" #")
         return (v[:i] if i >= 0 else v).strip()
 
