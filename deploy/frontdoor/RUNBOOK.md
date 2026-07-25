@@ -200,6 +200,15 @@ AUSMT_ACME_EMAIL=you@example.org
 cd deploy/frontdoor
 ./install-frontdoor.sh
 ```
+The installer is safe to re-run for a config change (ops-hardening O1): if the edge is ALREADY running
+it reloads the running container in place (`caddy reload`) so a Caddyfile edit takes effect immediately,
+instead of leaving the old config serving (the 2026-07 stale-wall incident). The reload uses the admin
+API on a unix socket in the container (no network port is opened). If the reload cannot run (the admin
+socket is disabled, or the container cannot fork), the installer prints a LOUD warning and falls back to
+`docker compose restart frontdoor`, which applies the config with a roughly one-second bounce (the ACME
+certificate persists in the `caddy_data` volume, so no re-issue). Either way the running edge ends up on
+the shipped Caddyfile. A first install (nothing running yet) just starts clean, no reload needed.
+
 **Do not create the DNS record yet** — the content-clean gate (step 7) must pass FIRST, so DNS is only
 created once the served corpus is proven clean (invariant f: content-clean BEFORE the DNS cutover). The
 certificate also cannot issue until DNS points at the VPS, so the gate is verified against the box's
@@ -317,3 +326,96 @@ sudo tailscale serve --tcp=8445 off
 ```
      The `:8081` listener may stay (it is loopback-only and harmless) or be removed by reverting the
      C47 portal-image change. Curator/admin access over the tailnet is unaffected throughout.
+
+---
+
+## 11. Boot ordering and the 502 recovery (ops-hardening O2)
+
+**The incident.** After a VPS reboot the Docker daemon (and the `restart: unless-stopped` frontdoor
+container) started BEFORE `tailscaled`. Caddy tried to resolve the box's tailnet MagicDNS upstream while
+the tailnet resolver did not yet exist, the resolve failed and stuck, and the edge served 502 everywhere
+until a manual `docker compose restart frontdoor`.
+
+**The fix (install once).** A systemd drop-in orders the Docker daemon after `tailscaled`, so the
+container never starts before the tailnet resolver is present:
+```sh
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo cp deploy/frontdoor/docker-after-tailscaled.conf /etc/systemd/system/docker.service.d/
+sudo systemctl daemon-reload
+systemctl show docker.service -p After | tr ' ' '\n' | grep tailscaled
+```
+The last line should print `tailscaled.service`, confirming the ordering. This removes the boot RACE at
+its root. It does not make tailscaled a hard requirement (a box with no tailnet still boots), and a very
+fast boot can still catch a brief resolve window, which is what the manual recovery below covers.
+
+**Manual recovery (any time the edge is stuck on 502 from a dead upstream resolve):**
+```sh
+docker compose -f deploy/frontdoor/compose.yaml restart frontdoor
+```
+That one command re-resolves the upstream and clears the stuck state. Confirm with
+`curl -sSI https://<public-name>/ | head -1` (expect `HTTP/2 200`) or `./doctor.sh` (section 12).
+
+---
+
+## 12. Doctor commands (ops-hardening O4) - troubleshooting on one screen
+
+Two read-only doctors print one labelled `PASS` / `WARN` / `FAIL` line per check and a final summary,
+and exit NON-ZERO if any check FAILs (so either can gate a script or a cron alert; a WARN alone does not
+fail the exit). Neither mutates anything.
+
+**On the VPS (the public edge):**
+```sh
+cd deploy/frontdoor
+./doctor.sh
+```
+Covers: the frontdoor container is up; the RUNNING config matches the repo Caddyfile (it hashes the
+container-mounted `/etc/caddy/Caddyfile` against the repo file, catching the O1 stale-config trap and any
+uncommitted hand-edit); the box reader upstream answers over the tailnet; the public TLS certificate is
+present with days-to-expiry (WARN inside the renewal window); tailscale is up and the box peer is visible;
+the zombie count is under threshold (section 13); disk headroom; and the public DNS A record still
+resolves to this host (set `AUSMT_DOCTOR_EXPECT_IP` to the VPS public IP to verify the target, otherwise
+that check WARNs). Every external command and path is overridable by an `AUSMT_DOCTOR_*` env var (see the
+script header).
+
+**On the box (the builder/server):**
+```sh
+make -C deploy doctor                 # portal profile
+make -C deploy doctor PROFILE=gateway  # also checks the gateway container + healthz
+```
+Covers: containers up for the active profile; gateway healthz (gateway profile); the box reader wall on
+loopback `:8445` serves the public subset (200) and refuses the curator workbench (404); surveys-live is a
+clean git checkout, group-writable, with a default group ACL (the recurring perms trap); the
+serve-reconcile timer is installed, enabled, and has a recent last-run (its absence is a live suspect when
+a publish did not get served); disk headroom; and the served build's `source_commit` versus surveys-live
+HEAD (a staleness hint that a publish has not been served yet).
+
+---
+
+## 13. Zombie-process diagnosis kit (ops-hardening O3)
+
+**The incident.** 1047 zombie (defunct) processes exhausted the VPS process table; a reboot cleared them
+but the leaking parent was never identified, so they may re-accumulate. Reaped zombies vanish, so a
+nonzero count means some PARENT process is not `wait()`ing for its dead children, and the fix belongs at
+that parent.
+
+**Run the kit on the VPS (read-only):**
+```sh
+cd deploy/frontdoor
+./doctor.sh zombies
+```
+It counts Z-state processes, GROUPS them by parent PID (heaviest first, so the top line NAMES the leaker),
+prints each parent's command line, and lists the likely fixes. To inspect one parent's defunct children
+directly: `ps --ppid <ppid> -o pid,stat,comm`.
+
+**Likely fixes, matched to the named parent:**
+- If the parent is a CONTAINER PID-1 that does not reap (a shell or app running as pid 1 inside a
+  container), add `init: true` to that service in the compose file so Docker inserts a reaping init (tini)
+  as pid 1. This is the usual front-door / gateway zombie source.
+- If the parent is the log-shipping chain (`ship-frontdoor-logs.sh` or an `ssh`/`rsync` it spawned via the
+  timer), a wedged transfer can leave defunct children. Check the `ausmt-frontdoor-logs` timer for
+  overlapping or stuck runs and bound it with a timeout.
+- If the parent is a short-lived cron/timer helper, ensure it `wait()`s for its children or runs under a
+  supervisor that reaps.
+
+The default `./doctor.sh` report also carries a zombie count line and WARNs once the count crosses the
+threshold (`AUSMT_DOCTOR_ZOMBIE_WARN`, default 50), pointing you back at `./doctor.sh zombies`.
