@@ -6,7 +6,7 @@
 # every compose invocation below is relative to this file's directory, matching the .env lookup
 # `docker compose` does by default (a sibling .env next to the compose file it's given).
 
-.PHONY: build up down rebuild-data smoke sync-surveys preflight reconcile refresh-pid-status
+.PHONY: build up down rebuild-data smoke sync-surveys preflight reconcile refresh-pid-status doctor
 
 # C40: read deploy/.env so `make` targets see the SAME truth `docker compose` does (compose
 # auto-loads a sibling .env; make does not). `-include` => absent .env is not an error (portal-only /
@@ -18,6 +18,15 @@
 # value, so this widens where the vars COME FROM without weakening the fail-closed checks.
 -include .env
 export
+
+# Ops-hardening O4: one-screen box health. Runs scripts/doctor-box.sh, which prints a labelled
+# PASS/WARN/FAIL line per check (containers, gateway healthz, the reader wall on loopback, surveys-live
+# git/perms/ACL, the reconcile timer, disk, served-vs-published staleness) and EXITS NON-ZERO if any
+# check FAILs, so `make doctor` can gate a script or an alert. Select the gateway checks with
+# `make doctor PROFILE=gateway` (default portal). Read-only; it never mutates anything. The VPS edge has
+# its own doctor: deploy/frontdoor/doctor.sh (run on the VPS).
+doctor:
+	PROFILE=$${PROFILE:-portal} sh scripts/doctor-box.sh
 
 # C33: read-only host preflight. Checks docker/compose, required vars for the profile, dir
 # ownership (10001/10002), images, surveys-live-is-a-git-checkout, and code-checkout freshness —

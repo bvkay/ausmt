@@ -22,8 +22,17 @@
 	# only — no personal hostname. Supplied from .env.
 	email {$AUSMT_ACME_EMAIL}
 
-	# Disable the admin API — a static edge needs no extra listening port.
-	admin off
+	# Admin API on a UNIX SOCKET, not a TCP port (ops-hardening O1, 2026-07-25). The original rationale
+	# for `admin off` was "a static edge needs no extra LISTENING PORT" — a unix socket honours that
+	# exactly: it opens NO network port (the socket lives in the container's own /run, not on the host,
+	# even under network_mode: host), so there is no new internet- or host-reachable surface. What it
+	# buys is a working `caddy reload`: install-frontdoor.sh reloads the running edge in place after a
+	# Caddyfile change instead of leaving it serving the OLD wall (the 2026-07 stale-config incident).
+	# `caddy reload --config /etc/caddy/Caddyfile` reads this admin address from the file. If you would
+	# rather forgo in-place reload entirely, set `admin off` here again: the installer detects the reload
+	# failure and falls back to `docker compose restart frontdoor` (a ~1s bounce; certs persist in the
+	# caddy_data volume), so the deploy is still correct, just not graceful.
+	admin unix//run/caddy-admin.sock
 
 	# NOTE: NO `servers { trusted_proxies ... }` here — see the header comment. This edge trusts no
 	# forwarded address; client_ip == the real remote peer, which the log block masks at write time.
