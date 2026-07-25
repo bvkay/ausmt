@@ -2032,15 +2032,197 @@ def _emit_survey_xml_zip(xml_paths, slug, out, license_txt=None):
     return f"bundles/{slug}-xml.zip", zpath
 
 
-def emit_survey_mth5(stations, slug, label, out):
+def _sanitise_station_id(raw_id: str) -> str:
+    """mt_metadata's Site.id is alphanumeric-only; a disambiguated id like 'MBV20.lemigraph' would be
+    rejected and the station silently dropped (SPEC §3.2 / caveat 5). Strip to alnum so it is kept. The
+    survey and collection producers MUST share this one rule so their station ids never diverge."""
+    return _re.sub(r"[^A-Za-z0-9]", "", str(raw_id)) or str(raw_id)
+
+
+def _mth5_doi_url(d):
+    """Normalise a DOI to the https://doi.org/… URL mt_metadata's citation_*.doi (a pydantic HttpUrl)
+    accepts. A bare '10.1234/x' would be REJECTED and the injection silently lost, so bare/doi:-prefixed
+    forms are lifted to a resolvable URL; an already-http value passes through; junk returns None."""
+    if not d:
+        return None
+    s = str(d).strip()
+    if s.lower().startswith(("http://", "https://")):
+        return s
+    if s.lower().startswith("doi:"):
+        s = s[4:].strip()
+    if s.startswith("10."):
+        return "https://doi.org/" + s
+    return None
+
+
+def _apply_mth5_survey_metadata(sm, smeta, slug, label):
+    """Map survey.yaml/SMETA scholarly + identifier fields onto an mth5 TF's survey_metadata at write
+    time (SPEC §3.3 mapping table, A5 ruling). The grouping key id=slug ALWAYS overrides the raw EDI
+    '0' so stations do not collapse into one survey group. The DATASET DOI is INJECTED because it is the
+    one scholarly field genuinely absent from every EDI (raw AND enriched read citation_dataset.doi=None,
+    SPEC §9.1); the journal citation is single-sourced from SMETA too (belt-and-braces, it also survives
+    the enriched-EDI round-trip). Every set is best-effort: mt_metadata 1.0.9 rejects some hand-authored
+    values (unit strings, unknown attributes — SPEC caveat 7), so a field that will not coerce is skipped
+    with NO effect on the TF payload (the §6 round-trip stays lossless). smeta None => only the slug is
+    seeded (raw/CSV-only surveys build metadata-thin but valid, SPEC caveat 2)."""
+    def _set(path, value):
+        if value in (None, "", []):
+            return
+        try:
+            obj = sm
+            *parents, leaf = path.split(".")
+            for pnm in parents:
+                obj = getattr(obj, pnm)
+            setattr(obj, leaf, value)
+        except Exception as ex:  # noqa: BLE001  (a rejected hand-authored value must not touch the payload)
+            print(f"  [h5] note {slug} survey_metadata.{path}: {type(ex).__name__}: {str(ex)[:80]}",
+                  file=sys.stderr)
+    sm.id = slug   # the grouping key — always seeded, even without SMETA
+    if not smeta:
+        return
+    _cite = smeta.get("cite") or {}
+    _name = _cite.get("ti") or label
+    _set("name", _name)
+    _set("project", _name)
+    _set("summary", smeta.get("blurb"))
+    # A5: the one genuinely-absent scholarly field. Inject the dataset DOI from SMETA (survey.yaml).
+    _set("citation_dataset.doi", _mth5_doi_url(smeta.get("doi")))
+    # Journal citation: single-source from the first publication (SMETA), best-effort.
+    _pubs = smeta.get("pubs") or []
+    if _pubs:
+        _p0 = _pubs[0] or {}
+        _set("citation_journal.doi", _mth5_doi_url(_p0.get("doi")))
+        _set("citation_journal.title", _p0.get("t"))
+        _set("citation_journal.journal", _p0.get("j"))
+        _set("citation_journal.year", str(_p0.get("y")) if _p0.get("y") not in (None, "") else None)
+    _set("acquired_by.organization", smeta.get("org"))
+    _set("release_license", smeta.get("lic"))
+    _invs = smeta.get("investigators") or []
+    if _invs:
+        _i0 = _invs[0] or {}
+        _set("project_lead.author", _i0.get("name"))
+        _set("project_lead.id", _i0.get("orcid"))
+    _fund = smeta.get("funders") or []
+    if _fund:
+        _f0 = _fund[0] or {}
+        _set("funding_source.organization", _f0.get("name") if isinstance(_f0, dict) else _f0)
+        if isinstance(_f0, dict):
+            _set("funding_source.grant_id", _f0.get("grant_id") or _f0.get("id"))
+
+
+def _tensor_max_abs_diff(a, b):
+    """Max absolute element diff between two impedance/tipper tensors (xarray DataArrays or arrays),
+    NaN-aware. Returns None on a SHAPE mismatch and inf on a NaN-pattern mismatch (both hard fails for
+    the §6 gate); a 0.0 means the storage round-trip was lossless (the measured Tumby result)."""
+    import numpy as np  # noqa: PLC0415
+    av = np.asarray(getattr(a, "values", a))
+    bv = np.asarray(getattr(b, "values", b))
+    if av.shape != bv.shape:
+        return None
+    if not np.array_equal(np.isnan(av), np.isnan(bv)):
+        return float("inf")   # a value present in one and NaN in the other is a mismatch, not 0
+    diff = np.abs(av - bv)
+    return float(np.nanmax(diff)) if diff.size else 0.0
+
+
+def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
+    """SPEC §6 BLOCKING gate. Reopen a built survey MTH5 and compare every stored TF's impedance tensor
+    (and tipper) + coordinates to a FRESH parse of its source EDI, exact-or-tolerance. Also asserts the
+    payload is TF-ONLY (transfer-function groups present, no time-series samples — a TF's placeholder
+    channels carry n_samples<=1; real time series would be far larger). Returns (ok: bool, report: dict).
+    The caller WITHHOLDS the survey h5 on ok=False (the survey, not the corpus — the CP3B21-at-survey
+    -scope pattern), so a silently-wrong TF is never shipped. Never raises: an unexpected failure returns
+    ok=False with the reason recorded, matching the producer's withhold-not-crash contract."""
+    from mth5.mth5 import MTH5  # noqa: PLC0415
+    from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
+    # Key each source EDI by (survey, sanitised-station-id). A collection file holds the SAME station id
+    # under different survey groups (that non-collision is the whole point of tier 3), so a survey-agnostic
+    # key would compare a station against the wrong survey's EDI. `_survey` is tagged by the collection
+    # producer; the survey producer omits it and matches via the (None, sid) fallback below.
+    by_key = {}
+    for (p, r) in stations:
+        sid = _sanitise_station_id(r["id"])
+        by_key[(r.get("_survey"), sid)] = p
+        by_key.setdefault((None, sid), p)   # survey-agnostic fallback (single-survey files, unique sids)
+    report = {"checked": 0, "z_max_abs_diff": 0.0, "coord_max_abs_diff": 0.0,
+              "tf_only": True, "mismatches": []}
+    try:
+        m = MTH5()
+        m.open_mth5(str(hpath), mode="r")
+    except Exception as ex:  # noqa: BLE001
+        report["mismatches"].append({"station": "*", "reason": f"reopen failed: {type(ex).__name__}"})
+        return False, report
+    try:
+        tfs = m.tf_summary.to_dataframe()
+        # TF-only payload gate (SPEC §6): a TF write leaves placeholder channels (n_samples==1); any
+        # channel carrying real samples means the file is not TF-only and the honest label is falsified.
+        try:
+            cs = m.channel_summary.to_dataframe()
+            _max_samples = int(cs["n_samples"].max()) if len(cs) and "n_samples" in cs.columns else 0
+        except Exception:  # noqa: BLE001
+            _max_samples = 0
+        if _max_samples > 1:
+            report["tf_only"] = False
+            report["mismatches"].append({"station": "*",
+                                         "reason": f"time-series samples present (n_samples={_max_samples})"})
+        for _, row in tfs.iterrows():
+            sid = row["station"]
+            src = by_key.get((row.get("survey"), sid)) or by_key.get((None, sid))
+            if src is None:
+                report["mismatches"].append({"station": sid, "reason": "no source EDI mapped"})
+                continue
+            tf_h5 = m.get_transfer_function(sid, row.get("tf_id", sid), survey=row.get("survey"))
+            tf_ed = TF(fn=str(src)); tf_ed.read()
+            report["checked"] += 1
+            for a, b in ((tf_ed.latitude, tf_h5.latitude), (tf_ed.longitude, tf_h5.longitude),
+                         (tf_ed.elevation, tf_h5.elevation)):
+                if a is None or b is None:
+                    if (a is None) != (b is None):
+                        report["mismatches"].append({"station": sid, "reason": "coordinate presence differs"})
+                    continue
+                d = abs(float(a) - float(b))
+                report["coord_max_abs_diff"] = max(report["coord_max_abs_diff"], d)
+                if d > coord_tol:
+                    report["mismatches"].append({"station": sid, "reason": f"coord diff {d:.3g} > {coord_tol}"})
+            for kind, present, ea, ha in (("impedance", tf_ed.has_impedance(),
+                                           lambda: tf_ed.impedance, lambda: tf_h5.impedance),
+                                          ("tipper", tf_ed.has_tipper(),
+                                           lambda: tf_ed.tipper, lambda: tf_h5.tipper)):
+                h5_present = tf_h5.has_impedance() if kind == "impedance" else tf_h5.has_tipper()
+                if bool(present) != bool(h5_present):
+                    report["mismatches"].append({"station": sid, "reason": f"{kind} presence differs"})
+                    continue
+                if not present:
+                    continue
+                d = _tensor_max_abs_diff(ea(), ha())
+                if d is None:
+                    report["mismatches"].append({"station": sid, "reason": f"{kind} shape differs"})
+                elif kind == "impedance":
+                    report["z_max_abs_diff"] = max(report["z_max_abs_diff"], d)
+                    if d > z_tol:
+                        report["mismatches"].append({"station": sid, "reason": f"impedance diff {d:.3g} > {z_tol}"})
+                elif d > z_tol:
+                    report["mismatches"].append({"station": sid, "reason": f"tipper diff {d:.3g} > {z_tol}"})
+    except Exception as ex:  # noqa: BLE001  (gate never crashes the build; a failure withholds the survey)
+        report["mismatches"].append({"station": "*", "reason": f"{type(ex).__name__}: {str(ex)[:80]}"})
+    finally:
+        m.close_mth5()
+    ok = report["tf_only"] and not report["mismatches"]
+    return ok, report
+
+
+def emit_survey_mth5(stations, slug, label, out, smeta=None):
     """C32 §1.2: write ONE survey-aggregated MTH5 (out/bundles/<slug>-tf.h5) holding every served
     station's TRANSFER FUNCTION via mth5.add_transfer_function — the idiomatic MTCollection working unit
     for mtpy-v2/ModEM. It contains transfer functions ONLY (never time series); the -tf filename says so.
-    FLAG-GATED by the caller (survey_h5_enabled, default OFF — D4 keeps MTH5 off pending the storage/
-    management call). Each station is grouped under one named survey (survey_metadata.id = slug). A
-    per-station TF write failure is logged (WARN) and SKIPPED — never a build failure — and n_written is
-    the ACTUAL count included, so the manifest row's n_stations reflects reality (design §1.4).
-    Returns (rel_url, h5_path, n_written) or (None, None, 0).
+    FLAG-GATED by the caller (survey_h5_enabled). Each station is grouped under one named survey
+    (survey_metadata.id = slug), with the survey.yaml scholarly fields + the injected dataset DOI mapped
+    on at write time (SPEC §3.3). A per-station TF write failure is logged (WARN) and SKIPPED — never a
+    build failure — and n_written is the ACTUAL count included, so the manifest row's n_stations reflects
+    reality (design §1.4). Before returning, the built file passes the SPEC §6 round-trip gate (reopen,
+    compare each TF impedance+coords to the source EDI, assert TF-only); a survey that FAILS the gate is
+    WITHHELD (deleted, returns no bundle) rather than shipping a silently-wrong TF — the survey is
+    withheld, not the corpus. Returns (rel_url, h5_path, n_written) or (None, None, 0).
     NOTE: HDF5 embeds creation timestamps/uuids, so this file is NOT byte-reproducible across builds; its
     manifest sha256 is a download-integrity hash for THIS build's bytes, not a cross-build invariant."""
     from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
@@ -2065,10 +2247,8 @@ def emit_survey_mth5(stations, slug, label, out):
             try:
                 tf = TF(fn=str(p))
                 tf.read()
-                tf.survey_metadata.id = slug        # group all stations under one named survey
-                # mt_metadata's Site.id is alphanumeric-only; a disambiguated id like 'MBV20.lemigraph'
-                # would be rejected and the station silently dropped. Strip to alnum so it is kept.
-                tf.station_metadata.id = _re.sub(r"[^A-Za-z0-9]", "", r["id"]) or r["id"]
+                _apply_mth5_survey_metadata(tf.survey_metadata, smeta, slug, label)
+                tf.station_metadata.id = _sanitise_station_id(r["id"])
                 m.add_transfer_function(tf)
                 n += 1
             except Exception as ex:  # noqa: BLE001
@@ -2078,7 +2258,99 @@ def emit_survey_mth5(stations, slug, label, out):
     if not n:
         hpath.unlink(missing_ok=True)
         return None, None, 0
+    # SPEC §6 blocking round-trip gate: withhold the survey (not the corpus) on any mismatch.
+    ok, rep = mth5_survey_roundtrip_ok(hpath, stations)
+    if not ok:
+        print(f"  [h5] WITHHOLD {hpath.name}: round-trip gate FAILED "
+              f"(checked={rep['checked']}, z_maxdiff={rep['z_max_abs_diff']:.3g}, "
+              f"coord_maxdiff={rep['coord_max_abs_diff']:.3g}, tf_only={rep['tf_only']}); "
+              f"first: {rep['mismatches'][0] if rep['mismatches'] else 'n/a'}", file=sys.stderr)
+        hpath.unlink(missing_ok=True)
+        return None, None, 0
     return f"bundles/{slug}-tf.h5", hpath, n
+
+
+# ---- Tier 3 (collection): DESIGNED, DISABLED BY CONSTRUCTION (SPEC §2.3 / A4). The producer exists so
+# the code path is present and unit-testable, but no live build calls it unless collection_h5_enabled is
+# flipped AND the station count clears max_collection_stations (default ~600) — SPEC §7.2 shows a single
+# AusLAMP-national file peaks ~6 GiB of build RAM and would OOM a small runner, so the guard is mandatory.
+def collection_h5_allowed(flags, n_stations):
+    """Tier-3 producer guard (SPEC A4). True only when collection_h5_enabled is ON and n_stations does
+    not exceed max_collection_stations (the RAM ceiling — a naive single-file build holds every TF
+    resident at ~4.2 MB/station, SPEC §7.2). Returns (allowed: bool, reason: str)."""
+    if not flags.get("collection_h5_enabled", False):
+        return False, "collection_h5_enabled OFF (designed-but-disabled, SPEC A4)"
+    cap = int(flags.get("max_collection_stations", 600) or 600)
+    if n_stations > cap:
+        return False, f"n_stations {n_stations} exceeds max_collection_stations {cap} (RAM gate, SPEC §7.2)"
+    return True, "ok"
+
+
+def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
+    """Tier 3 (SPEC §2.3): write ONE MTH5 concatenating several surveys, EACH under its own survey group
+    keyed by its slug so cross-survey duplicate station ids never collide. `members` is an ordered list of
+    (slug, label, stations) where stations is the same [(edi_path, record)] list tier 2 takes. Reuses the
+    tier-2 station-id sanitisation and metadata mapping so a station's id/metadata are identical whether it
+    rides a survey or a collection file. Best-effort per station (WARN + skip); the whole file passes the
+    §6 round-trip + grouping gate (each member under a DISTINCT survey_metadata.id) before it is returned,
+    else the collection is WITHHELD. Returns (rel_url, h5_path, n_written) or (None, None, 0).
+    DISABLED BY CONSTRUCTION: gate callers on collection_h5_allowed(flags, n_stations) first."""
+    from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
+    from mth5.mth5 import MTH5  # noqa: PLC0415
+    smeta_by_slug = smeta_by_slug or {}
+    hdir = out / "bundles"; hdir.mkdir(parents=True, exist_ok=True)
+    hpath = hdir / f"{collection_id}-tf.h5"
+    if hpath.exists():
+        hpath.unlink()
+    try:
+        m = MTH5()
+        m.open_mth5(str(hpath), mode="w")
+    except Exception as ex:  # noqa: BLE001
+        print(f"  [h5] WARN open {hpath.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+        hpath.unlink(missing_ok=True)
+        return None, None, 0
+    n = 0
+    all_stations = []
+    try:
+        for (slug, label, stations) in members:
+            for (p, r) in stations:
+                try:
+                    tf = TF(fn=str(p))
+                    tf.read()
+                    _apply_mth5_survey_metadata(tf.survey_metadata, smeta_by_slug.get(slug), slug, label)
+                    tf.station_metadata.id = _sanitise_station_id(r["id"])
+                    m.add_transfer_function(tf)
+                    n += 1
+                    # tag the survey so the round-trip gate keys (survey, sid) — cross-survey duplicate
+                    # station ids must compare against the RIGHT member EDI, not the first one seen.
+                    all_stations.append((p, {**r, "_survey": slug}))
+                except Exception as ex:  # noqa: BLE001
+                    print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+    finally:
+        m.close_mth5()
+    if not n:
+        hpath.unlink(missing_ok=True)
+        return None, None, 0
+    ok, rep = mth5_survey_roundtrip_ok(hpath, all_stations)
+    # Grouping gate (SPEC §6, tier 3): every member slug must land as a DISTINCT survey group.
+    grouping_ok, groups = True, set()
+    try:
+        _m = MTH5(); _m.open_mth5(str(hpath), mode="r")
+        try:
+            groups = set(_m.tf_summary.to_dataframe()["survey"].unique())
+        finally:
+            _m.close_mth5()
+        want = {s for (s, _l, st) in members if st}
+        grouping_ok = want.issubset(groups)
+    except Exception as ex:  # noqa: BLE001
+        grouping_ok = False
+        rep["mismatches"].append({"station": "*", "reason": f"grouping check: {type(ex).__name__}"})
+    if not ok or not grouping_ok:
+        print(f"  [h5] WITHHOLD {hpath.name}: collection gate FAILED "
+              f"(roundtrip_ok={ok}, grouping_ok={grouping_ok}, groups={sorted(groups)})", file=sys.stderr)
+        hpath.unlink(missing_ok=True)
+        return None, None, 0
+    return f"bundles/{collection_id}-tf.h5", hpath, n
 
 
 def load_flags(path) -> dict:
@@ -2086,7 +2358,13 @@ def load_flags(path) -> dict:
     config seam, mirrored to the portal via tools/gen_config.py -> config.js. survey_h5_enabled gates the
     survey-aggregated MTH5 producer (D4: MTH5 off pending management sign-off); collection_download_enabled
     reserves the future collection-level bundle. CLI --survey-h5 / --collection-download OR on top."""
-    flags = {"survey_h5_enabled": False, "collection_download_enabled": False}
+    # Boolean distribution flags default OFF. collection_h5_enabled gates the tier-3 collection PRODUCER
+    # (SPEC A4, designed-but-disabled); collection_download_enabled reserves the portal-side download.
+    flags = {"survey_h5_enabled": False, "collection_download_enabled": False,
+             "collection_h5_enabled": False}
+    # max_collection_stations is the tier-3 RAM ceiling (SPEC §7.2): an INT, not a bool — kept out of the
+    # bool-coercion loop below. Default ~600 (A4) so an AusLAMP-national-sized build cannot OOM the host.
+    flags["max_collection_stations"] = 600
     if not path:
         return flags
     try:
@@ -2107,8 +2385,13 @@ def load_flags(path) -> dict:
     f = (cfg or {}).get("flags", {}) if isinstance(cfg, dict) else {}
     if not isinstance(f, dict):
         f = {}   # a non-mapping flags: block must not crash f.get below
-    for k in list(flags):
+    for k in ("survey_h5_enabled", "collection_download_enabled", "collection_h5_enabled"):
         flags[k] = bool(f.get(k, flags[k]))
+    _cap = f.get("max_collection_stations", flags["max_collection_stations"])
+    try:
+        flags["max_collection_stations"] = int(_cap)
+    except (TypeError, ValueError):
+        pass   # a non-integer cap in config is ignored; the ~600 default stands (fail-safe, not fail-open)
     return flags
 
 
@@ -2730,7 +3013,7 @@ def main(argv=None):
                 _h5_stations = [(p, r) for (p, r) in stations
                                 if coordacc.coordinates_served(coordacc.station_policy(
                                     _coord_default, _coord_overrides, r.get("id"), r.get("variant")))]
-                _hrel, _hpath, _hn = emit_survey_mth5(_h5_stations, slug, label, out)
+                _hrel, _hpath, _hn = emit_survey_mth5(_h5_stations, slug, label, out, smeta=meta)
                 if _hpath:
                     manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
                                                            lic, _hn, nci_base=nci_base, base_url=base_url,
@@ -2995,7 +3278,14 @@ def main(argv=None):
     # integrity (size/sha256) and tier-resolved URL. Written to BOTH the portal data dir (consumed by
     # the portal's resolver) and --products (curator). Empty build => a valid empty manifest.
     manifest_doc = {"generated_count": len(manifest["files"]) + len(manifest["bundles"]),
-                    "base_url": base_url, "files": manifest["files"], "bundles": manifest["bundles"]}
+                    "base_url": base_url,
+                    # SPEC A2: the download manifest self-declares the MTH5/mt_metadata pin its served
+                    # bundles were written with, so a consumer of a <slug>-tf.h5 can read the exact library
+                    # version from the same index that carries the artifact's size/sha256 (additive keys;
+                    # None when the library was not importable in the build env — an EDI-only build).
+                    "mth5_version": LIB_VERSIONS.get("mth5"),
+                    "mt_metadata_version": LIB_VERSIONS.get("mt_metadata"),
+                    "files": manifest["files"], "bundles": manifest["bundles"]}
     (out / "manifest.json").write_text(_jdump(manifest_doc, separators=(",", ":")), encoding="utf-8")
 
     # ---- MTCAT v1.0 discovery/federation document (portal owns data; shared minimal metadata) ----

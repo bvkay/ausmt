@@ -41,8 +41,14 @@ def test_empty_build_generates_valid_json(tmp_path):
     assert catalogue == []
     assert surveys == {}
     assert collections == {}
-    # the download manifest has a valid empty shape (no downloadable artifacts yet)
-    assert manifest == {"generated_count": 0, "base_url": "", "files": [], "bundles": []}
+    # the download manifest has a valid empty shape (no downloadable artifacts yet). SPEC A2 adds the
+    # document-level mth5/mt_metadata version pin (additive keys, present even on an empty build so the
+    # manifest self-declares the library it was written with — mirroring mtcat/build_provenance); the
+    # values are the installed versions, or None when the stack is absent (an EDI-only build env).
+    assert {k: manifest[k] for k in ("generated_count", "base_url", "files", "bundles")} == \
+        {"generated_count": 0, "base_url": "", "files": [], "bundles": []}
+    assert "mth5_version" in manifest and "mt_metadata_version" in manifest
+    assert manifest["mth5_version"] == mtcat["mth5_version"], "manifest + mtcat pin the same mth5 version"
     assert mtcat["surveys"] == []
     assert mtcat["stations"] == []
     assert mtcat["collections"] == []
