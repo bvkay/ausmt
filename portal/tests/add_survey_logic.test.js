@@ -333,5 +333,97 @@ ok(/schema_version: "0.3"/.test(yAttr), "a package carrying attribution declares
 ok(!/attribution:/.test(M.buildSurveyYaml({ ...base, license_declaration: false })),
    "no attribution block when the licence declaration is not made");
 
+// ============================ ROUND 2 (owner-ruled 2026-07-24) ============================
+
+// ---- R1: slug-collision awareness. servedSlugMap folds surveys.json {name: SMETA} -> {slug: name};
+//      stationCountsByName counts catalogue.json rows (index 1 = survey name) per survey. The chip warns
+//      (never blocks) when a charset-valid slug matches a served slug.
+const SURVEYS_FIXTURE = { "Vulcan 2022": { slug: "vulcan-2022", org: "GA" },
+                          "Otway 2019": { slug: "otway-2019", org: "UniMelb" },
+                          "No Slug Survey": { org: "X" } };   // a malformed/absent slug is skipped
+const smap = M.servedSlugMap(SURVEYS_FIXTURE);
+ok(smap["vulcan-2022"] === "Vulcan 2022" && smap["otway-2019"] === "Otway 2019",
+   "servedSlugMap maps each published slug to its survey name");
+ok(!("undefined" in smap) && Object.keys(smap).length === 2, "servedSlugMap skips an entry with no slug");
+ok(Object.keys(M.servedSlugMap({})).length === 0, "servedSlugMap on the empty portal ({}) is empty (degrade)");
+ok(Object.keys(M.servedSlugMap(null)).length === 0 && Object.keys(M.servedSlugMap([1, 2])).length === 0,
+   "servedSlugMap tolerates null / a non-object (fetch-failure degrade)");
+ok(M.servedSlugMap(SURVEYS_FIXTURE)["glenelg-2025"] === undefined, "a brand-new slug is NOT in the served set (no false collision)");
+const CATALOGUE_FIXTURE = [
+  ["ST1", "Vulcan 2022", -30, 135, 0.005, 6000, 62, "Z", "BBMT", "AU", "ST1.edi", false, "au.vulcan-2022.ST1", 1, "h"],
+  ["ST2", "Vulcan 2022", -31, 136, 0.005, 6000, 62, "Z", "BBMT", "AU", "ST2.edi", false, "au.vulcan-2022.ST2", 0, "h"],
+  ["ST3", "Otway 2019", -38, 143, 0.005, 6000, 62, "Z", "BBMT", "AU", "ST3.edi", false, "au.otway-2019.ST3", 0, "h"]];
+const counts = M.stationCountsByName(CATALOGUE_FIXTURE);
+ok(counts["Vulcan 2022"] === 2 && counts["Otway 2019"] === 1, "stationCountsByName counts catalogue rows per survey name");
+ok(Object.keys(M.stationCountsByName(null)).length === 0 && Object.keys(M.stationCountsByName({})).length === 0,
+   "stationCountsByName tolerates null / a non-array (fetch-failure degrade)");
+// the render logic lives in the DOM closure; assert the page carries the collision loader + the non-blocking copy.
+ok(/servedSlugMap\(/.test(html) && /stationCountsByName\(/.test(html), "the page uses servedSlugMap + stationCountsByName for collision awareness");
+ok(/fetch\("data\/surveys\.json"\)/.test(html), "the collision check fetches the same-origin data/surveys.json");
+ok(/matches the existing survey /.test(html) && /Continue if you are updating that survey/.test(html),
+   "the collision warning copy informs (non-blocking), it does not wall");
+ok(/orcidok warn/.test(html), "the collision state uses a distinct 'warn' chip class (not the valid/invalid states)");
+
+// ---- R4: principal_investigators[] emission (schema shape {name, orcid}, mirrors the validator/editor). ----
+const yPI = M.buildSurveyYaml({ ...base, principal_investigators: [
+  { name: "Ada Lovelace", orcid: "0000-0002-1825-0097" },
+  { name: "Grace Hopper", orcid: "" },
+  { name: "", orcid: "0000-0001-0000-0000" }] });   // a nameless row is dropped
+ok(/principal_investigators:\s*\n\s*- name: "Ada Lovelace"\s*\n\s*orcid: "0000-0002-1825-0097"\s*\n\s*- name: "Grace Hopper"\s*\n\s*orcid: null/.test(yPI),
+   "principal_investigators emits {name, orcid} rows; a blank ORCID -> null");
+ok((yPI.match(/- name:/g) || []).length === 2, "a nameless principal_investigators row is dropped (name is the signal)");
+ok(!/principal_investigators:/.test(M.buildSurveyYaml({ ...base })), "no principal_investigators key when the list is empty (absent -> absent)");
+ok(!/principal_investigators:/.test(M.buildSurveyYaml({ ...base, principal_investigators: [{ name: "" }] })),
+   "an all-nameless principal_investigators list emits no key");
+// the lead-investigator block still precedes it (served-citation precedence: lead first, else this list).
+ok(yPI.indexOf("lead_investigator:") >= 0 && yPI.indexOf("lead_investigator:") < yPI.indexOf("principal_investigators:"),
+   "lead_investigator is emitted before principal_investigators");
+// the form carries the repeatable UI + the honest serving-precedence hint (mirrors the curator hub copy).
+ok(/id="piRows"/.test(html) && /id="addPi"/.test(html) && /readPrincipalInvestigators\(/.test(html),
+   "the form carries the repeatable principal-investigators UI (piRows + addPi) wired into readMeta");
+ok(/When a lead investigator is set the portal credits the lead; otherwise the principal investigators list is credited/
+   .test(html.replace(/\s+/g, " ")), "the serving-precedence hint mirrors the curator hub copy");
+// parity: the emitted PI keys match the vendored editor's principal_investigators row spec (name, orcid).
+ok(/"principal_investigators":\s*\[\s*\n\s*\("name"[\s\S]*?\("orcid"/.test(editorSrc),
+   "the editor's principal_investigators row spec is (name, orcid) - the emission shape mirrors it");
+
+// ---- R5: DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). ----
+ok(M.normalizeDoi("https://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an https://doi.org/ URL to the bare DOI");
+ok(M.normalizeDoi("http://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an http:// resolver URL");
+ok(M.normalizeDoi("https://dx.doi.org/10.5281/zenodo.1") === "10.5281/zenodo.1", "normalizeDoi folds a dx.doi.org URL");
+ok(M.normalizeDoi("https://www.doi.org/10.1/x") === "10.1/x", "normalizeDoi tolerates a www. resolver host");
+ok(M.normalizeDoi("HTTPS://DOI.ORG/10.1/X") === "10.1/X", "normalizeDoi is case-insensitive on the resolver prefix (suffix preserved)");
+ok(M.normalizeDoi("  https://doi.org/10.1/y  ") === "10.1/y", "normalizeDoi trims surrounding whitespace");
+ok(M.normalizeDoi("10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi leaves a BARE DOI untouched");
+ok(M.normalizeDoi("not a doi at all") === "not a doi at all", "normalizeDoi leaves a non-DOI string untouched");
+ok(M.normalizeDoi("https://example.org/paper") === "https://example.org/paper", "normalizeDoi leaves a NON-doi.org URL untouched (it is not a DOI resolver)");
+ok(M.normalizeDoi("") === "" && M.normalizeDoi(null) === "", "normalizeDoi handles empty / null");
+// wiring: the page normalises the publication DOI + funding DOI unconditionally, and a related-identifier
+// row ONLY when its type is DOI (a URL-typed row keeps its URL).
+ok(/wireDoiBlur\(\$\("m_pubdoi"\)\)/.test(html), "the publication DOI field is wired for DOI normalisation on blur");
+ok(/wireDoiBlur\(wrap\.querySelector\("\.f-doi"\)\)/.test(html), "the funding DOI field is wired for DOI normalisation on blur");
+ok(/wireConditionalDoiBlur\(wrap\.querySelector\("\.ri-identifier"\), wrap\.querySelector\("\.ri-type"\)\)/.test(html),
+   "a related-identifier row normalises its identifier ONLY when the type is DOI (URL-typed rows untouched)");
+
+// ---- R3: the collection block is its own collapsed card (own <details>, exact heading), renumbered. ----
+ok(/<details class="tier" id="tierCollection">/.test(html), "the collection block is its own tier-style <details> card");
+ok(/<h2>4\. Was this survey part of a collection \/ program \(eg AusLAMP\)\?<\/h2>/.test(html),
+   "the collection card carries the exact owner-ruled heading (numbered 4)");
+ok(/<h2>5\. I know my metadata<\/h2>/.test(html) && /<h2>6\. Check and package<\/h2>/.test(html),
+   "the following sections are renumbered consistently (5. metadata, 6. check and package)");
+// the collection FIELDS (and the collections.json autofill IDs) are intact inside the new card, so emission is unchanged.
+for (const id of ["m_coll_id", "m_coll_title", "m_coll_type", "m_coll_status", "m_coll_year", "m_coll_desc", "collDatalist", "collHint"])
+  ok(new RegExp('id="' + id + '"').test(html), "collection field/autofill id preserved in the new card: " + id);
+const yColl = M.buildSurveyYaml({ ...base, collection_id: "auslamp", collection_title: "AusLAMP", collection_type: "programme" });
+ok(/collection:\s*\n\s*id: "auslamp"\s*\n\s*title: "AusLAMP"\s*\n\s*type: "programme"/.test(yColl),
+   "collection emission is unchanged by the card move (id/title/type still emitted)");
+
+// ---- R2: the download-zip path is hidden on a live gateway (visibility wiring only; zip code intact). ----
+ok(/const bp=\$\("btnPackage"\); if\(bp\) bp\.style\.display="none";/.test(html),
+   "showGatewayUI hides the package .zip button when the gateway probe passes");
+ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of the package button is gone (it is hidden, not reworded)");
+ok(/async function buildPackage/.test(html) && /function buildSubmissionMd/.test(html),
+   "R2 is visibility-only: the zip packager code is kept intact");
+
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
 process.exit(fail ? 1 : 0);
