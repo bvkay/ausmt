@@ -286,7 +286,16 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const xmlSub=xml
     ? {n:"EMTF XML",sub:"download"+(xml.size?" · "+fmtBytes(xml.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:xml.url,name:xml.url.split("/").pop()}}
     : {n:"EMTF XML",sub:"via pipeline",origin:"AusMT-derived",st:"part",d:{prod:"toast",msg:"EMTF XML is produced in the build pipeline (mt_metadata); served on the hosted site for redistributable surveys."}};
-  const mth5Sub={n:"MTH5",sub:m.mth5==="ok"?"available":m.mth5==="part"?"partial":"product not currently available (not located in source archives)",origin:"AusMT-derived",st:m.mth5||"unk",d:m.mth5==="no"?null:tsOpen};
+  // C32 tier 2: the Level 2 MTH5 sub-row LIGHTS from the actual per-survey <slug>-tf.h5 bundle in the
+  // manifest (the same rows the Downloads grid uses), NOT a static SMETA flag — so it is true to what the
+  // build served. An embargoed/withheld survey produces NO bundle (the h5 is suppressed byte-for-byte like
+  // the EDI), so the row falls back to the honest not-available state. Download is wired exactly like the
+  // EMTF XML row ({prod:"fetch"}), so the pull is counted by the same masked front-door analytics. The
+  // label stays TF-only honest ("transfer functions").
+  const mth5Bundle=(typeof bundlesForSlug==="function"?bundlesForSlug(m.slug):[]).find(r=>r&&r.format==="mth5");
+  const mth5Sub=mth5Bundle
+    ? {n:"MTH5",sub:"transfer functions · TFs only · mtpy-v2 / ModEM"+(mth5Bundle.size?" · "+fmtBytes(mth5Bundle.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5Bundle.url,name:mth5Bundle.url.split("/").pop()}}
+    : {n:"MTH5",sub:"TFs only · not currently available",origin:"AusMT-derived",st:"unk",d:null};
   const level2Subs=[ediSub,xmlSub,mth5Sub];
   // Publication (interpretation) — the parenthetical separates the dataset citation from an interpretation
   // publication. Reserved-DOI honesty applies (inert + note).
