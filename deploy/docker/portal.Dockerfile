@@ -13,9 +13,11 @@
 #     self-host Plausible, script-src in the Caddyfile will need a matching addition then.
 #   - ROR/RAiD placeholder text in <input placeholder="https://ror.org/…"> etc — not a resource
 #     load, just placeholder text.
-#   - add-survey.html's real live external calls: `fetch("https://api.ror.org/...")` and two
-#     `L.tileLayer("https://{s}.tile.openstreetmap.org/...")` calls — both allow-listed explicitly
-#     in the Caddyfile's per-page CSP (connect-src / img-src on the add-survey page block).
+#   - add-survey.html's real live external calls: `fetch("https://api.ror.org/...")`, the R3
+#     publication-DOI harvest `fetch("https://api.crossref.org/...")` / `fetch("https://api.datacite.org/...")`,
+#     and two `L.tileLayer("https://{s}.tile.openstreetmap.org/...")` calls — all allow-listed
+#     explicitly in the Caddyfile's per-page CSP (connect-src for the fetches / img-src for the tiles
+#     on the add-survey page block).
 #   - index.html's map (portal/src/map.js) loads tiles from basemaps.cartocdn.com — allow-listed in
 #     the default/index CSP img-src.
 #   - the header AuScope logo <a href="https://www.auscope.org.au"> (all three pages) is a NAVIGATION

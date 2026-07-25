@@ -123,8 +123,13 @@
 	# fetch/XHR destinations are not covered by img-src). Since C13 the page ALSO fetch()es
 	# /gateway/healthz and XHR-POSTs /gateway/submit — both SAME-ORIGIN relative paths already covered
 	# by the connect-src 'self' below, so no directive change is needed for the direct-upload flow.
+	# R3 (publication DOI harvest): connect-src ALSO allows exactly TWO more hosts,
+	# https://api.crossref.org and https://api.datacite.org — the citation-metadata registries the
+	# DOI-first publications block harvests from (Crossref for journal papers, DataCite for dataset
+	# DOIs). Deliberate two-host allowlist; no other directive is touched, and the page degrades
+	# silently to its manual publication fields if the fetch is blocked (older cached CSP, offline).
 	@addSurveyPage path /add-survey.html
-	header @addSurveyPage Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://api.ror.org; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+	header @addSurveyPage Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://api.ror.org https://api.crossref.org https://api.datacite.org; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
 
 	# Generated data volume. compose.yaml mounts the WHOLE site-data tree at /srv/data (mounting
 	# the `current` symlink itself would freeze it at container start — bind mounts resolve
@@ -269,12 +274,13 @@
 
 	# CSP mirrors :8080 exactly (strict everywhere except add-survey.html). add-survey.html is served by
 	# the file_server below; its matcher gives it the same relaxed policy :8080 uses so a public GET (via
-	# the front door) and a direct tailnet fetch both get the right policy.
+	# the front door) and a direct tailnet fetch both get the right policy. That relaxed policy includes
+	# the R3 two-host citation-harvest allowlist (api.crossref.org + api.datacite.org) in connect-src.
 	@strictPages not path /add-survey.html
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 
 	@addSurveyPage path /add-survey.html
-	header @addSurveyPage Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://api.ror.org; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+	header @addSurveyPage Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://api.ror.org https://api.crossref.org https://api.datacite.org; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
 
 	# Generated data volume — identical to :8080 (force-download families included).
 	handle_path /data/* {

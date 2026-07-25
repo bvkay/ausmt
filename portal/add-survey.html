@@ -319,8 +319,11 @@
         otherwise the principal investigators list is credited (the served-citation precedence, stated not
         changed).</div></div>
 
-      <div><label>Related publication</label><input id="m_pub" placeholder="short citation or title"></div>
-      <div><label>Publication DOI</label><input id="m_pubdoi" placeholder="10.1093/gji/…"><span class="hint" style="display:block">Recorded under <code>publications</code>.</span></div>
+      <div class="full"><label>Related publications <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(one DOI per publication; we look up the citation for you)</span></label>
+        <div id="pubRows"></div>
+        <button type="button" class="act" id="addPub" style="margin-top:2px">+ Add publication</button>
+        <div class="hint" style="margin-top:4px">Paste a DOI and we fetch the author, year, title and journal from the registry.
+          No DOI, or the lookup cannot reach it? Enter the details by hand. Recorded under <code>publications</code>.</div></div>
 
       <div class="full"><label>Funding sources <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(organisation / ROR / grant / DOI)</span></label>
         <div id="fundRows"></div>
@@ -827,8 +830,7 @@ function buildSurveyYaml(m){
   // emitted only when it carries an identifier/DOI; empty tiers stay empty lists.
   const relIds=relatedIdentifiersEmit(m.related_identifiers);
   const instrPid=String(m.instrument_pid==null?"":m.instrument_pid).trim();
-  const pubTitle=String(m.pub==null?"":m.pub).trim(), pubDoi=String(m.pub_doi==null?"":m.pub_doi).trim();
-  const pubs=(pubTitle||pubDoi)?[{title:pubTitle,doi:pubDoi}]:[];
+  const pubs=pubRowsOf(m);
   // schema 0.3 is declared whenever a 0.3-era field is carried (attribution, related_identifiers,
   // survey instrument PID, or publications); a bare survey stays 0.2 (validator reads both).
   const emit03=emitAttribution||relIds.length>0||!!instrPid||pubs.length>0;
@@ -944,12 +946,24 @@ function buildSurveyYaml(m){
   // related_identifiers row (identifies: collection). Only levels_available is emitted here.
   L.push("time_series:");
   L.push("  levels_available: []");
-  // publications: built from the T1 related-publication fields (title / DOI). Empty -> [].
+  // publications: built from the R3 DOI-first publication rows (each {author,year,title,journal,doi},
+  // harvested from Crossref/DataCite or hand-entered). The engine's _publications_of reads all five keys.
+  // Emitted key order is author, year, title, journal, doi; only NON-EMPTY descriptive keys are written,
+  // and doi is always emitted last (null when blank) whenever the row has any descriptive field, so the
+  // legacy title-only / DOI-only shapes stay byte-identical. A DOI-only row emits the bare `- doi:` form.
+  // Empty -> [].
   if(pubs.length){
     L.push("publications:");
     pubs.forEach(p=>{
-      if(p.title){ L.push("  - title: "+q(p.title)); L.push("    doi: "+(p.doi?q(p.doi):"null")); }
-      else L.push("  - doi: "+(p.doi?q(p.doi):"null"));
+      const seq=[];
+      if(p.author)  seq.push(["author",  p.author]);
+      if(p.year)    seq.push(["year",    p.year]);
+      if(p.title)   seq.push(["title",   p.title]);
+      if(p.journal) seq.push(["journal", p.journal]);
+      if(seq.length){
+        seq.forEach((kv,i)=>L.push((i===0?"  - ":"    ")+kv[0]+": "+q(kv[1])));
+        L.push("    doi: "+(p.doi?q(p.doi):"null"));
+      } else { L.push("  - doi: "+(p.doi?q(p.doi):"null")); }
     });
   } else { L.push("publications: []"); }
   L.push("processing:");
@@ -1018,6 +1032,133 @@ function normalizeDoi(s){
   const m=/^https?:\/\/(?:www\.)?(?:dx\.)?doi\.org\/(.+)$/i.exec(v);
   return m?m[1].trim():v;
 }
+// R3 DOI-first publications: the T1 publications block is a repeatable list whose PRIMARY input is one DOI
+// per row; on a valid-looking DOI the page harvests the citation from a registry (Crossref for journal
+// papers, DataCite for dataset DOIs) so the contributor does not hand-type author/year/title/journal. The
+// PARSING is pure (no DOM, no live network) so H4 can drive it with a stubbed fetch; only the wiring below
+// touches the network. looksLikeDoi mirrors the validator's DOI shape (10.NNNN/suffix) AFTER folding a
+// resolver URL, so a pasted https://doi.org/10.x/y still triggers a harvest.
+function looksLikeDoi(s){ return /^10\.\d{4,9}\/\S+$/.test(normalizeDoi(String(s==null?"":s).trim())); }
+// First non-empty string of an array-or-scalar registry field (Crossref wraps title/container-title in
+// arrays; DataCite nests them). Never throws; returns "" when nothing usable.
+function firstRegStr(v){
+  if(Array.isArray(v)){ for(const x of v){ const s=String(x==null?"":x).trim(); if(s) return s; } return ""; }
+  return String(v==null?"":v).trim();
+}
+// Fold a registry author/creator record ([{family|familyName, given|givenName, name}]) into a compact
+// "Family I, Family I" string (family name + given initials). An organisation author (no family/given, a
+// bare `name`) rides through verbatim. The FULL author list is kept (no data loss); formatCitation does the
+// "et al." truncation for the compact preview only.
+function foldRegAuthors(list){
+  return (Array.isArray(list)?list:[]).map(a=>{
+    a=a||{};
+    const fam=String(a.family!=null?a.family:(a.familyName!=null?a.familyName:"")).trim();
+    const giv=String(a.given!=null?a.given:(a.givenName!=null?a.givenName:"")).trim();
+    if(!fam&&!giv) return String(a.name==null?"":a.name).trim();   // corporate/organisation author
+    const ini=giv.split(/[\s.\-]+/).filter(Boolean).map(w=>w[0].toUpperCase()).join("");
+    return (fam+(ini?" "+ini:"")).trim();
+  }).filter(Boolean).join(", ");
+}
+// Parse a Crossref /works/<doi> payload ({message:{...}}) to the emission shape {author,year,title,journal,
+// doi}. Best-effort and total: a missing key yields "" for that field, a non-object payload yields null (a
+// miss, not a crash). Journal is container-title; year is issued.date-parts[0][0]. Guards every access so a
+// MALFORMED payload (missing authors, empty titles) degrades to a partial object rather than throwing.
+function parseCrossref(data, doi){
+  try{
+    const m=data&&data.message;
+    if(!m||typeof m!=="object") return null;
+    const title=firstRegStr(m.title);
+    const journal=firstRegStr(m["container-title"]);
+    let year="";
+    const dp=m.issued&&m.issued["date-parts"];
+    if(Array.isArray(dp)&&Array.isArray(dp[0])&&dp[0][0]!=null) year=String(dp[0][0]).trim();
+    const author=foldRegAuthors(m.author);
+    const d=normalizeDoi(String(m.DOI!=null?m.DOI:(doi||"")).trim());
+    if(!title&&!author&&!d) return null;   // nothing usable -> treat as a miss
+    return {author:author, year:year, title:title, journal:journal, doi:d};
+  }catch(e){ return null; }
+}
+// Parse a DataCite /dois/<doi> payload ({data:{attributes:{...}}}) to the same emission shape. titles[].title
+// -> title, creators[] -> author, publicationYear -> year, container.title or publisher -> journal (dataset
+// DOIs carry a publisher, not a journal). Same total/guarded posture as parseCrossref.
+function parseDatacite(data, doi){
+  try{
+    const a=data&&data.data&&data.data.attributes;
+    if(!a||typeof a!=="object") return null;
+    const title=firstRegStr((Array.isArray(a.titles)?a.titles:[]).map(t=>t&&t.title));
+    const author=foldRegAuthors(a.creators);
+    const year=a.publicationYear!=null?String(a.publicationYear).trim():"";
+    const container=a.container&&typeof a.container==="object"?a.container.title:a.container;
+    const publisher=a.publisher&&typeof a.publisher==="object"?a.publisher.name:a.publisher;
+    const journal=String(firstRegStr(container)||firstRegStr(publisher)||"").trim();
+    const d=normalizeDoi(String(a.doi!=null?a.doi:(doi||"")).trim());
+    if(!title&&!author&&!d) return null;
+    return {author:author, year:year, title:title, journal:journal, doi:d};
+  }catch(e){ return null; }
+}
+// Compact human citation for the read-only preview line: "Kay B, Heinson G, et al. (2023). Title. Journal."
+// Three or more authors collapse to the first two + "et al." (the stored author field keeps the full list).
+// Omits any empty segment cleanly; falls back to the bare DOI when there is nothing else to show.
+function formatCitation(p){
+  p=p||{};
+  const full=String(p.author==null?"":p.author).trim();
+  let authors="";
+  if(full){ const parts=full.split(",").map(s=>s.trim()).filter(Boolean);
+    authors=parts.length>2?(parts.slice(0,2).join(", ")+", et al."):parts.join(", "); }
+  const year=String(p.year==null?"":p.year).trim();
+  const title=String(p.title==null?"":p.title).trim();
+  const journal=String(p.journal==null?"":p.journal).trim();
+  let s="";
+  if(authors) s+=authors+" ";
+  if(year) s+="("+year+"). ";
+  if(title) s+=title+(/[.?!]$/.test(title)?"":".")+" ";
+  if(journal) s+=journal+(/[.?!]$/.test(journal)?"":".");
+  s=s.trim();
+  return s||String(p.doi==null?"":p.doi).trim();
+}
+// Harvest one DOI's metadata: Crossref first (journal papers), DataCite on any Crossref miss/404 (dataset
+// DOIs). Async and PURE of the DOM; the fetch implementation is INJECTED so H4 stubs it and the tests never
+// touch the real network. Returns {ok:true, source, pub} when a registry yields a record WITH A TITLE (the
+// citation's human anchor -> a confident preview). A thin record (no title) or a total miss returns
+// {ok:false, reason, pub}, where pub carries whatever partial data exists (at least the DOI) so the row can
+// expand the manual fields PREFILLED. A non-DOI string never fetches. Every fetch is try/caught so a network
+// error, a non-JSON body, or a blocked request (older cached CSP, offline) degrades to a graceful miss.
+async function harvestDoi(doi, fetchImpl){
+  const d=normalizeDoi(String(doi==null?"":doi).trim());
+  if(!looksLikeDoi(d)) return {ok:false, reason:"not-a-doi", doi:d, pub:{author:"",year:"",title:"",journal:"",doi:d}};
+  const enc=encodeURIComponent(d);
+  const tryJson=async url=>{ try{ const r=await fetchImpl(url); if(!r||!r.ok) return null; return await r.json(); }catch(e){ return null; } };
+  let partial=null;
+  const cj=await tryJson("https://api.crossref.org/works/"+enc);
+  if(cj){ const p=parseCrossref(cj, d); if(p&&p.title) return {ok:true, source:"crossref", pub:p}; if(p) partial=partial||p; }
+  const dj=await tryJson("https://api.datacite.org/dois/"+enc);
+  if(dj){ const p=parseDatacite(dj, d); if(p&&p.title) return {ok:true, source:"datacite", pub:p}; if(p) partial=partial||p; }
+  return {ok:false, reason:partial?"thin":"miss", doi:d, pub:partial||{author:"",year:"",title:"",journal:"",doi:d}};
+}
+// Fold the repeatable publication rows (each {author,year,title,journal,doi}, harvested or hand-entered) into
+// the emission list buildSurveyYaml writes. Trims + DOI-normalises every field; a row counts when it carries
+// ANY content. LEGACY back-compat: when no publications[] array is supplied, the retired single-field
+// {pub, pub_doi} pair is folded into one row, so a caller (or an old test) built before R3 still emits the
+// same publications[] shape. Pure; the emission is byte-identical whether the row was harvested or typed.
+function pubRowsOf(m){
+  const rows=[];
+  const norm=p=>({
+    author:String((p&&p.author)==null?"":p.author).trim(),
+    year:String((p&&p.year)==null?"":p.year).trim(),
+    title:String((p&&p.title)==null?"":p.title).trim(),
+    journal:String((p&&p.journal)==null?"":p.journal).trim(),
+    doi:normalizeDoi(String((p&&p.doi)==null?"":p.doi).trim())
+  });
+  const nonEmpty=r=>r.author||r.year||r.title||r.journal||r.doi;
+  if(Array.isArray(m&&m.publications)){
+    m.publications.forEach(p=>{ const r=norm(p||{}); if(nonEmpty(r)) rows.push(r); });
+  }
+  if(!rows.length){   // legacy single-field fallback (round-2 pub/pub_doi)
+    const r=norm({title:m&&m.pub, doi:m&&m.pub_doi});
+    if(nonEmpty(r)) rows.push(r);
+  }
+  return rows;
+}
 // R1 slug-collision awareness: the served surveys.json is {surveyName: SMETA}, each entry carrying its
 // published `slug`. servedSlugMap folds that into {slug: surveyName} so a derived slug can be checked
 // against the ALREADY-PUBLISHED set. Tolerant of the empty portal ({}), a non-object, or a missing slug.
@@ -1046,7 +1187,7 @@ function stationCountsByName(catalogue){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,relatedIdentifiersEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,relatedIdentifiersEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -1172,6 +1313,92 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addFund").onclick=()=>$("fundRows").appendChild(fundRow());
 
+  // ----- R3: DOI-first publication rows. Each row's PRIMARY input is one DOI; on a valid-looking DOI the
+  // page harvests the citation (Crossref for journal papers, DataCite for dataset DOIs, via the pure
+  // harvestDoi) and fills the row's HIDDEN manual fields, showing a compact read-only preview. The manual
+  // fields (author/year/title/journal) are the SINGLE source of truth readPublications reads, so the
+  // emission is byte-identical whether a row was harvested or hand-typed. Harvest failure (network, unknown
+  // DOI, a no-DOI report) expands those fields prefilled with whatever partial data exists; the "Edit"
+  // affordance on a good preview opens the same fields prefilled with the harvested values (registry
+  // formatting is sometimes ugly, the contributor stays in charge). PUB_CACHE harvests each DOI at most
+  // once per page load; a per-row `token` keeps ONE in-flight fetch per row (a newer edit voids an older
+  // reply); the fetch DEGRADES SILENTLY to the manual fields if it is blocked (older cached CSP, offline).
+  const PUB_CACHE=new Map();
+  function pubRow(){
+    const wrap=document.createElement("div"); wrap.className="pubrow"; wrap.style.marginBottom="10px";
+    wrap.innerHTML=
+      '<div class="grid">'+
+      '<div class="full" style="display:flex;gap:8px;align-items:flex-end">'+
+        '<div style="flex:1"><label>Publication DOI</label><input class="p-doi" placeholder="paste a DOI, e.g. 10.1038/xyz; we fetch the citation"></div>'+
+        '<button type="button" class="act p-rm">Remove</button></div>'+
+      '<div class="full p-status hint" style="display:none"></div>'+
+      '<div class="full p-preview" style="display:none"></div>'+
+      '<div class="full p-manual" style="display:none"><div class="grid">'+
+        '<div><label>Author(s)</label><input class="p-author" placeholder="Kay B, Heinson G"></div>'+
+        '<div><label>Year</label><input class="p-year" placeholder="2023"></div>'+
+        '<div class="full"><label>Title</label><input class="p-title" placeholder="Publication title"></div>'+
+        '<div class="full"><label>Journal / publisher</label><input class="p-journal" placeholder="e.g. Scientific Reports"></div>'+
+      '</div></div>'+
+      '</div>';
+    const doiInp=wrap.querySelector(".p-doi"), statusEl=wrap.querySelector(".p-status");
+    const previewEl=wrap.querySelector(".p-preview"), manualEl=wrap.querySelector(".p-manual");
+    const f={author:wrap.querySelector(".p-author"), year:wrap.querySelector(".p-year"),
+             title:wrap.querySelector(".p-title"), journal:wrap.querySelector(".p-journal")};
+    wrap.querySelector(".p-rm").onclick=()=>wrap.remove();
+    let token=0;
+    function setPreview(pub, source){
+      previewEl.innerHTML=
+        '<div style="border-left:3px solid var(--line);padding:.45rem .6rem;border-radius:4px">'+
+          '<div style="font-size:.92rem">'+esc(formatCitation(pub))+'</div>'+
+          '<div class="hint" style="margin-top:3px;display:flex;gap:10px;align-items:center">'+
+            '<span>Harvested from '+esc(source==="datacite"?"DataCite":"Crossref")+'</span>'+
+            '<button type="button" class="act p-edit" style="padding:2px 9px">Edit</button></div>'+
+        '</div>';
+      previewEl.style.display="block";
+      previewEl.querySelector(".p-edit").onclick=()=>{ previewEl.style.display="none"; manualEl.style.display="block"; };
+    }
+    async function runHarvest(){
+      const d=normalizeDoi(doiInp.value); if(d!==doiInp.value) doiInp.value=d;
+      previewEl.style.display="none";
+      if(!looksLikeDoi(d)){ statusEl.style.display="none"; return; }   // not a complete DOI yet, stay quiet
+      const mine=++token;
+      statusEl.style.display="block"; statusEl.textContent="Looking up citation…";
+      let res;
+      if(PUB_CACHE.has(d)){ res=PUB_CACHE.get(d); }
+      else { res=await harvestDoi(d, u=>fetch(u)); PUB_CACHE.set(d,res); }   // harvestDoi is total (never throws)
+      if(mine!==token) return;   // a newer edit in THIS row superseded this reply
+      if(res.ok){
+        f.author.value=res.pub.author||""; f.year.value=res.pub.year||"";
+        f.title.value=res.pub.title||""; f.journal.value=res.pub.journal||"";
+        doiInp.value=res.pub.doi||d; manualEl.style.display="none"; statusEl.style.display="none";
+        setPreview(res.pub, res.source); track("PubDoiHarvested",{source:res.source});   // PII-free
+      } else {   // degrade to manual, PREFILL partial without clobbering anything the contributor already typed
+        const pub=res.pub||{doi:d};
+        if(!f.author.value.trim()&&pub.author) f.author.value=pub.author;
+        if(!f.year.value.trim()&&pub.year) f.year.value=pub.year;
+        if(!f.title.value.trim()&&pub.title) f.title.value=pub.title;
+        if(!f.journal.value.trim()&&pub.journal) f.journal.value=pub.journal;
+        statusEl.style.display="block"; statusEl.textContent="Could not look up this DOI. Enter the details below.";
+        manualEl.style.display="block"; track("PubDoiHarvestMiss",{reason:res.reason});   // PII-free
+      }
+    }
+    let timer=null;
+    doiInp.addEventListener("input",()=>{ clearTimeout(timer); timer=setTimeout(runHarvest,500); });   // debounce
+    doiInp.addEventListener("blur",()=>{ const n=normalizeDoi(doiInp.value); if(n!==doiInp.value) doiInp.value=n; });
+    return wrap;
+  }
+  function readPublications(){
+    return Array.from(document.querySelectorAll("#pubRows .pubrow")).map(r=>({
+      author:(r.querySelector(".p-author").value||"").trim(),
+      year:(r.querySelector(".p-year").value||"").trim(),
+      title:(r.querySelector(".p-title").value||"").trim(),
+      journal:(r.querySelector(".p-journal").value||"").trim(),
+      doi:(r.querySelector(".p-doi").value||"").trim()
+    })).filter(p=>p.author||p.year||p.title||p.journal||p.doi);
+  }
+  $("addPub").onclick=()=>$("pubRows").appendChild(pubRow());
+  $("pubRows").appendChild(pubRow());   // one publication row present by default
+
   // ----- R4: principal investigators rows (name + optional ORCID). Repeatable, add/remove, matching the
   // curator model where the PIs are the science team. Emitted as principal_investigators[] {name, orcid}
   // by readMeta -> buildSurveyYaml (the schema shape the validator/editor use). Starts empty (the lead
@@ -1225,7 +1452,6 @@ if(typeof document!=="undefined"&&document.getElementById){
     input.addEventListener("blur",()=>{
       if(typeSelect && String(typeSelect.value||"").trim()!=="DOI") return;   // URL/Handle/RAiD row: leave as-is
       const n=normalizeDoi(input.value); if(n!==input.value) input.value=n; }); }
-  wireDoiBlur($("m_pubdoi"));
 
   // ----- slug: AUTO-DERIVED from the project name (charset-safe, so it always passes slugValid), shown as
   // an editable chip. The derived value is a live convenience; the moment the submitter edits the slug
@@ -1318,7 +1544,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     west:$("m_w").value, east:$("m_e").value, south:$("m_s").value, north:$("m_n").value,
     pi:$("m_pi").value.trim(), pi_orcid:$("m_pi_orcid").value.trim(), ror:$("m_ror").value.trim(),
     principal_investigators:readPrincipalInvestigators(),
-    pub:$("m_pub").value.trim(), pub_doi:$("m_pubdoi").value.trim(), raid:$("m_raid").value.trim(),
+    publications:readPublications(), raid:$("m_raid").value.trim(),
     instrument_pid:$("m_instrument_pid").value.trim(),
     related_identifiers:readRelatedIdentifiers(),
     funding:readFunding(),

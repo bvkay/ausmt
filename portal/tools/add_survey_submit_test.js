@@ -781,7 +781,10 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
   //      URL-typed row keeps its URL).
   {
     const e = await boot({ probe: probeAbsent });
-    const pub = e.doc.getElementById("m_pubdoi");
+    // Round 3 replaced the single m_pubdoi field with repeatable #pubRows rows (one present by default);
+    // the normalisation now rides each row's .p-doi input.
+    const pub = e.doc.querySelector("#pubRows .pubrow .p-doi");
+    ok(pub, "R5: a default publication row with a .p-doi input exists at boot");
     pub.value = "https://doi.org/10.1093/gji/xyz";
     pub.dispatchEvent(new e.win.Event("blur", { bubbles: true }));
     ok(pub.value === "10.1093/gji/xyz", "R5: a publication DOI resolver URL folds to the bare DOI on blur; got: " + JSON.stringify(pub.value));

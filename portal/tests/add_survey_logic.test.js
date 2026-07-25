@@ -201,13 +201,131 @@ ok(/instrument_pid: "10\.82388\/abc"/.test(yPid) && /project_raid: "https:\/\/ra
    "identifiers.instrument_pid + project_raid emit from the tier-2 fields");
 ok(/schema_version: "0.3"/.test(yPid), "a survey/platform instrument_pid declares schema_version 0.3");
 
-// publications[] built from the related-publication fields (title / DOI).
+// publications[] LEGACY back-compat: the retired single-field {pub, pub_doi} pair still folds into one row.
 const yPub = M.buildSurveyYaml({ ...base, license_declaration: false, pub: "Smith et al. 2024", pub_doi: "10.1093/gji/xyz" });
 ok(/publications:\s*\n\s*- title: "Smith et al\. 2024"\s*\n\s*doi: "10\.1093\/gji\/xyz"/.test(yPub),
-   "publications[] carries {title, doi} from the related-publication fields");
+   "publications[] carries {title, doi} from the legacy single publication fields");
 ok(/schema_version: "0.3"/.test(yPub), "a publications[] entry declares schema_version 0.3");
 ok(/- doi: "10\.5/.test(M.buildSurveyYaml({ ...base, license_declaration: false, pub: "", pub_doi: "10.5281/zenodo.1" })),
    "a DOI-only publication emits a bare {doi} entry");
+
+// ============================ R3: DOI-first publications + citation harvest (H1/H2/H4) ============================
+// The publications block is a repeatable list of rows whose PRIMARY input is one DOI. A valid-looking DOI is
+// harvested client-side (Crossref first, DataCite on a miss) into {author,year,title,journal,doi}; harvest
+// failure OR a thin record degrades to the manual fields prefilled with whatever partial data exists. The
+// EMISSION is identical whether a row was harvested or hand-typed. These tests NEVER hit the network — every
+// harvestDoi call is driven by a stubbed fetch (per the standing rule).
+
+// full 5-field emission (author/year/title/journal/doi, in that order, doi last).
+const yFull = M.buildSurveyYaml({ ...base, license_declaration: false, publications: [
+  { author: "Kay B, Heinson G", year: "2023", title: "MT of the Gawler Craton", journal: "Scientific Reports", doi: "10.1038/s41598-023-32403-z" }] });
+ok(/publications:\s*\n\s*- author: "Kay B, Heinson G"\s*\n\s*year: "2023"\s*\n\s*title: "MT of the Gawler Craton"\s*\n\s*journal: "Scientific Reports"\s*\n\s*doi: "10\.1038\/s41598-023-32403-z"/.test(yFull),
+   "a full publication row emits author/year/title/journal/doi in order");
+
+// multiple rows + per-row independence in the emission (one DOI-only, one titled).
+const yMulti = M.buildSurveyYaml({ ...base, license_declaration: false, publications: [
+  { doi: "10.1/aaa" }, { title: "Second paper", journal: "GJI", doi: "10.2/bbb" }] });
+const pubBlock = (yMulti.match(/publications:\n([\s\S]*?)\nprocessing:/) || [,""])[1];
+ok((pubBlock.match(/^  - /gm) || []).length === 2, "two publication rows emit two independent list entries");
+ok(/- doi: "10\.1\/aaa"/.test(yMulti) && /- title: "Second paper"\s*\n\s*journal: "GJI"\s*\n\s*doi: "10\.2\/bbb"/.test(yMulti),
+   "each row emits only its own fields (DOI-only stays bare; titled row carries its journal)");
+
+// a resolver URL pasted into the doi slot is folded, and an empty publications[] is still [].
+ok(/- doi: "10\.9\/z"/.test(M.buildSurveyYaml({ ...base, license_declaration: false, publications: [{ doi: "https://doi.org/10.9/z" }] })),
+   "pubRowsOf normalises a resolver-URL DOI down to the bare DOI");
+ok(/publications: \[\]/.test(M.buildSurveyYaml({ ...base, license_declaration: false, publications: [{}, { doi: "" }] })),
+   "all-empty publication rows are dropped (publications: [])");
+
+// ---- pure parse + citation formatting ----
+const CR_BODY = { message: { DOI: "10.1038/s41598-023-32403-z", title: ["MT of the Gawler Craton"],
+  "container-title": ["Scientific Reports"], issued: { "date-parts": [[2023, 4, 1]] },
+  author: [{ given: "Ben", family: "Kay" }, { given: "Graham", family: "Heinson" }, { given: "Kate", family: "Robertson" }] } };
+const cp = M.parseCrossref(CR_BODY, "10.1038/s41598-023-32403-z");
+ok(cp && cp.title === "MT of the Gawler Craton" && cp.journal === "Scientific Reports" && cp.year === "2023",
+   "parseCrossref reads title, container-title (journal) and issued year");
+ok(cp.author === "Kay B, Heinson G, Robertson K", "parseCrossref folds authors to 'Family Initials'");
+ok(M.parseCrossref({}, "x") === null && M.parseCrossref(null, "x") === null, "parseCrossref returns null on a non-payload");
+ok(M.formatCitation(cp) === "Kay B, Heinson G, et al. (2023). MT of the Gawler Craton. Scientific Reports.",
+   "formatCitation renders the compact 'first two + et al.' citation line");
+
+const DC_BODY = { data: { attributes: { doi: "10.25914/abc", titles: [{ title: "AusLAMP SA MT dataset" }],
+  creators: [{ givenName: "Ben", familyName: "Kay" }, { name: "AuScope" }], publisher: "AuScope",
+  container: { title: "AuScope Data Repository" }, publicationYear: 2022 } } };
+const dp = M.parseDatacite(DC_BODY, "10.25914/abc");
+ok(dp && dp.title === "AusLAMP SA MT dataset" && dp.year === "2022", "parseDatacite reads titles[].title and publicationYear");
+ok(dp.author === "Kay B, AuScope", "parseDatacite folds creators (personal + organisation) to author string");
+ok(dp.journal === "AuScope Data Repository", "parseDatacite prefers container.title for the journal/container slot");
+ok(M.parseDatacite({ data: { attributes: { publisher: "NCI", titles: [], creators: [] } } }, "10.1/y").journal === "NCI",
+   "parseDatacite falls back to publisher when no container is present");
+
+ok(M.looksLikeDoi("10.1038/s41598-023-32403-z") && M.looksLikeDoi("https://doi.org/10.1234/x"),
+   "looksLikeDoi accepts a bare DOI and a resolver-URL DOI");
+ok(!M.looksLikeDoi("not a doi") && !M.looksLikeDoi("10.1234") && !M.looksLikeDoi("10.12/x") && !M.looksLikeDoi(""),
+   "looksLikeDoi rejects non-DOI text, a suffix-less prefix, a too-short registrant, and empty");
+
+// ---- harvestDoi with a STUBBED fetch (never the network) ----
+const CRU = d => "https://api.crossref.org/works/" + encodeURIComponent(d);
+const DCU = d => "https://api.datacite.org/dois/" + encodeURIComponent(d);
+function stub(table) {   // url -> body (200), "throw" (network error), or absent (404)
+  return async (url) => {
+    const hit = table[url];
+    if (hit === undefined) return { ok: false, status: 404, json: async () => ({}) };
+    if (hit === "throw") throw new Error("network down");
+    return { ok: true, status: 200, json: async () => hit };
+  };
+}
+
+async function r3HarvestTests() {
+  const DOI = "10.1038/s41598-023-32403-z";
+  // (1) Crossref hit.
+  const h1 = await M.harvestDoi(DOI, stub({ [CRU(DOI)]: CR_BODY }));
+  ok(h1.ok && h1.source === "crossref" && h1.pub.title === "MT of the Gawler Craton" && h1.pub.doi === DOI,
+     "harvestDoi: Crossref hit -> ok, full pub, source crossref");
+
+  // (2) Crossref 404 -> DataCite hit.
+  const DOI2 = "10.25914/abc";
+  const h2 = await M.harvestDoi(DOI2, stub({ [DCU(DOI2)]: DC_BODY }));   // CRU(DOI2) absent -> 404
+  ok(h2.ok && h2.source === "datacite" && h2.pub.title === "AusLAMP SA MT dataset",
+     "harvestDoi: Crossref 404 -> DataCite hit -> ok, source datacite");
+
+  // (3) Both miss -> manual expand (ok:false), pub prefilled with at least the DOI.
+  const h3 = await M.harvestDoi(DOI, stub({}));
+  ok(!h3.ok && h3.reason === "miss" && h3.pub.doi === DOI,
+     "harvestDoi: both registries miss -> ok:false (manual), DOI preserved for prefill");
+
+  // (4a) Malformed Crossref (empty title, no authors) then DataCite miss -> graceful ok:false 'thin', no throw.
+  const THIN = "10.7777/thin";
+  const h4a = await M.harvestDoi(THIN, stub({ [CRU(THIN)]: { message: { DOI: THIN, title: [], author: undefined } } }));
+  ok(!h4a.ok && h4a.reason === "thin" && h4a.pub.doi === THIN && h4a.pub.author === "",
+     "harvestDoi: a title-less Crossref record degrades gracefully to manual (thin), DOI kept");
+  // (4b) Crossref with a title but MISSING authors -> still a confident preview (author empty, title present).
+  const TITLED = "10.7777/titled";
+  const h4b = await M.harvestDoi(TITLED, stub({ [CRU(TITLED)]: { message: { DOI: TITLED, title: ["Only a title"] } } }));
+  ok(h4b.ok && h4b.pub.title === "Only a title" && h4b.pub.author === "",
+     "harvestDoi: a Crossref record missing authors still previews (title present, author blank)");
+
+  // (5) Emission identical: the harvested pub and a hand-typed row with the same values emit byte-identically.
+  const yH = M.buildSurveyYaml({ ...base, license_declaration: false, publications: [h1.pub] });
+  const yM = M.buildSurveyYaml({ ...base, license_declaration: false, publications: [
+    { author: h1.pub.author, year: h1.pub.year, title: h1.pub.title, journal: h1.pub.journal, doi: h1.pub.doi }] });
+  ok(yH === yM, "emission is byte-identical for a harvested vs a hand-entered publication row");
+  ok(/- author: "Kay B, Heinson G, Robertson K"\s*\n\s*year: "2023"\s*\n\s*title: "MT of the Gawler Craton"/.test(yH),
+     "the harvested row emits the full 5-field publications[] shape");
+
+  // (6) A non-DOI never fetches; the stub records whether it was called.
+  let called = 0;
+  const spy = async () => { called++; return { ok: false, status: 404, json: async () => ({}) }; };
+  const h6 = await M.harvestDoi("not a doi at all", spy);
+  ok(!h6.ok && h6.reason === "not-a-doi" && called === 0, "harvestDoi: a non-DOI input never touches the network");
+
+  // (7) Per-row independence: two DOIs harvested through independent stubs don't cross-contaminate; a network
+  // throw on one degrades only that one.
+  const A = "10.3333/aaa", B = "10.3333/bbb";
+  const hA = await M.harvestDoi(A, stub({ [CRU(A)]: { message: { DOI: A, title: ["Paper A"] } } }));
+  const hB = await M.harvestDoi(B, stub({ [CRU(B)]: "throw", [DCU(B)]: "throw" }));
+  ok(hA.ok && hA.pub.title === "Paper A", "harvestDoi row A resolves independently");
+  ok(!hB.ok && hB.pub.doi === B, "harvestDoi row B (both hosts throw) degrades independently to manual, DOI kept");
+}
 
 // dates block (T1) emits only when a date is provided; year + ISO stay bare, free text is quoted.
 ok(/dates: \{ start: 2020, end: 2021 \}/.test(M.buildSurveyYaml({ ...base, date_start: "2020", date_end: "2021" })),
@@ -299,9 +417,12 @@ ok(M.submitFormFields({uploader_name: "A", uploader_email: "a@x.co", uploader_or
 // ============================ connection targets (§5) + key-request stub ============================
 const conns = [...html.matchAll(/(?:fetch|\.open)\(\s*(?:"[^"]*",\s*)?"([^"]+)"/g)].map(m => m[1])
   .filter(u => !/^\$\{/.test(u));
-const ALLOWED_CONN = u => /^\//.test(u) || /^https:\/\/api\.ror\.org\//.test(u);
+// same-origin, the ROR API, or the R3 citation-harvest registries (Crossref + DataCite). These three
+// external hosts are the ONLY connect-src additions the add-survey CSP allows; a NEW origin fails here.
+const ALLOWED_CONN = u => /^\//.test(u) || /^https:\/\/api\.ror\.org\//.test(u)
+  || /^https:\/\/api\.crossref\.org\//.test(u) || /^https:\/\/api\.datacite\.org\//.test(u);
 const badConns = conns.filter(u => !ALLOWED_CONN(u) && /^https?:/.test(u));
-ok(badConns.length === 0, "every fetch()/XHR target is same-origin or the allow-listed ROR API; new origins: " + JSON.stringify(badConns));
+ok(badConns.length === 0, "every fetch()/XHR target is same-origin or an allow-listed API (ROR / Crossref / DataCite); new origins: " + JSON.stringify(badConns));
 ok(!/cdnjs\.cloudflare\.com|basemaps\.cartocdn\.com/.test(html), "no CDN/basemap origin on the add-survey page");
 ok(/fetch\("\/gateway\/healthz"/.test(html), "healthz probe uses the literal same-origin /gateway/healthz path");
 ok(/\.open\("POST",\s*"\/gateway\/submit"\)/.test(html), "submit POSTs to the literal same-origin /gateway/submit path");
@@ -402,9 +523,12 @@ ok(M.normalizeDoi("10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi leaves
 ok(M.normalizeDoi("not a doi at all") === "not a doi at all", "normalizeDoi leaves a non-DOI string untouched");
 ok(M.normalizeDoi("https://example.org/paper") === "https://example.org/paper", "normalizeDoi leaves a NON-doi.org URL untouched (it is not a DOI resolver)");
 ok(M.normalizeDoi("") === "" && M.normalizeDoi(null) === "", "normalizeDoi handles empty / null");
-// wiring: the page normalises the publication DOI + funding DOI unconditionally, and a related-identifier
-// row ONLY when its type is DOI (a URL-typed row keeps its URL).
-ok(/wireDoiBlur\(\$\("m_pubdoi"\)\)/.test(html), "the publication DOI field is wired for DOI normalisation on blur");
+// wiring: R3 folded the single publication DOI into per-row publication rows whose .p-doi input normalises
+// on blur (via normalizeDoi directly); the funding DOI still uses wireDoiBlur; a related-identifier row
+// normalises ONLY when its type is DOI (a URL-typed row keeps its URL).
+ok(/class="p-doi"/.test(html) && /doiInp\.addEventListener\("blur"/.test(html),
+   "the per-row publication DOI field normalises on blur");
+ok(!/id="m_pubdoi"/.test(html) && !/id="m_pub"/.test(html), "the retired single publication fields (m_pub/m_pubdoi) are gone");
 ok(/wireDoiBlur\(wrap\.querySelector\("\.f-doi"\)\)/.test(html), "the funding DOI field is wired for DOI normalisation on blur");
 ok(/wireConditionalDoiBlur\(wrap\.querySelector\("\.ri-identifier"\), wrap\.querySelector\("\.ri-type"\)\)/.test(html),
    "a related-identifier row normalises its identifier ONLY when the type is DOI (URL-typed rows untouched)");
@@ -429,5 +553,8 @@ ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of
 ok(/async function buildPackage/.test(html) && /function buildSubmissionMd/.test(html),
    "R2 is visibility-only: the zip packager code is kept intact");
 
-console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
-process.exit(fail ? 1 : 0);
+// R3 harvest tests are async (harvestDoi returns a Promise); run them, THEN report + exit.
+r3HarvestTests().then(() => {
+  console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");
+  process.exit(fail ? 1 : 0);
+}).catch(e => { console.error("FAIL: async R3 harvest tests threw", e); process.exit(1); });
