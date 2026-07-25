@@ -64,3 +64,18 @@ def test_survey_meta_never_crashes_on_bad_shapes():
     sm = bp.survey_meta_from_yaml(bad)
     assert any(f.get("name") == "AuScope" for f in sm["funders"])  # dict kept, string dropped
     assert "Phoenix MTU-5C" in (sm["instrument_model"] or "")
+
+
+def test_parity_comment_after_quoted_scalar():
+    """2026-07-25: an inline comment after a QUOTED scalar must strip like PyYAML strips it; a hash
+    inside the quotes is data. The credit migration's review notes exposed the divergence."""
+    import yaml
+    from extract.build_portal import _mini_yaml
+    text = ('name: "Stephan Thiel"  # a trailing note\n'
+            "single: 'a value'  # note\n"
+            'inside: "keep # this"\n')
+    assert _mini_yaml(text) == yaml.safe_load(text)
+    # Escaped inner quotes: only pin that the trailing comment is gone (the mini unquoter's
+    # lack of backslash UNescaping is a pre-existing, separate limitation).
+    esc = _mini_yaml('escaped: "say \\"hi\\""  # note\n')["escaped"]
+    assert "note" not in esc
