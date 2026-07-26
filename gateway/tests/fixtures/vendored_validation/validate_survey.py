@@ -100,6 +100,86 @@ def derived_relation(identifies) -> str | None:
     if identifies in (None, ""):
         return None
     return IDENTIFIES_RELATION.get(str(identifies).strip())
+
+
+# Contributor credit model (owner-ratified 2026-07-25; CONTRIBUTOR-CREDIT-SPEC C1-C3). Three concepts
+# replace the tangled lead/principal-investigator fields: creators[] (who the citation names),
+# contributors[] (who did what), and the retirement of lead_investigator + principal_investigators.
+# NAME_TYPES classifies an actor (a DataCollector is often a contractor ORGANISATION, a Distributor is
+# a state survey, a ProjectLeader is usually a person). CONTRIBUTOR_ROLES is the DataCite contributorType
+# subset ratified for the real-world chains (state release = Distributor, miner paid = Sponsor, owned
+# through embargo = RightsHolder, contractor collected = DataCollector, university = ProjectLeader/
+# ProjectMember/ContactPerson/DataCurator). Both are FROZEN and FAIL-CLOSED, byte-identically to the
+# access.coordinates enum and the relation/identifier_type/identifies vocabs: an out-of-vocab name_type
+# or role mis-states who did what, so it blocks rather than ships. CREATOR_KEYS / CONTRIBUTOR_KEYS are
+# the frozen row allow-lists (unknown keys WARN, the ATTRIBUTION_KEYS/SOURCE_KEYS drift-lesson pattern).
+NAME_TYPES = frozenset({"person", "organisation"})
+CONTRIBUTOR_ROLES_ORDERED = ("ProjectLeader", "ProjectMember", "DataCollector", "ContactPerson",
+                             "DataCurator", "Sponsor", "RightsHolder", "Distributor")
+CONTRIBUTOR_ROLES = frozenset(CONTRIBUTOR_ROLES_ORDERED)
+CREATOR_KEYS = frozenset({"name", "name_type", "orcid", "ror"})
+CONTRIBUTOR_KEYS = frozenset({"name", "name_type", "role", "orcid", "ror"})
+# The template/example ship the retired fields with the « REPLACE » sentinel (not null); a value-based
+# deprecation (and the migration) must treat that sentinel as a placeholder so the shipped reference
+# stays clean, exactly as the identifier-lane deprecation keeps the all-null example silent.
+_PLACEHOLDER_MARK = "«"   # the opening guillemet of the « REPLACE » template sentinel
+
+
+def _has_real_value(v) -> bool:
+    """True when a field carries a curator value worth acting on: not blank/placeholder. Mirrors the
+    validator's blank-is-silent posture (None/""/TBD/TODO) and also treats the template's « REPLACE »
+    sentinel as a placeholder, so a deprecation WARNING fires only on a REAL retired value."""
+    if v in (None, "", "TBD", "TODO"):
+        return False
+    return _PLACEHOLDER_MARK not in str(v)
+
+
+def _check_credit_row(r, container: str, idx: int, entry, *, roled: bool) -> None:
+    """Vocab- and structure-check one creators[]/contributors[] row (CONTRIBUTOR-CREDIT-SPEC §2/§3).
+    FAIL-CLOSED on the VALUES (an out-of-vocab name_type or role blocks); WARNING on STRUCTURE (a
+    non-mapping row, an unknown key, a missing name/name_type/role). ORCID/ROR reuse the existing
+    helpers as WARNING-only hints. Shared shape for both lists so creators and contributors cannot
+    drift; `roled` adds the fail-closed role check for contributors."""
+    allowed = CONTRIBUTOR_KEYS if roled else CREATOR_KEYS
+    if not isinstance(entry, dict):
+        r.add("WARNING", container,
+              f"{container}[{idx}] must be a mapping (name/name_type" + ("/role" if roled else "") + "/…)")
+        return
+    for k in entry:
+        if k not in allowed:
+            r.add("WARNING", container,
+                  f"{container}[{idx}].{k} is not a recognised key (allowed: {', '.join(sorted(allowed))})")
+    if not _has_real_value(entry.get("name")):
+        r.add("WARNING", container, f"{container}[{idx}] has no name - a credited party needs a name")
+    nt = entry.get("name_type")
+    if nt in (None, ""):
+        r.add("WARNING", container,
+              f"{container}[{idx}] has no name_type - state person or organisation")
+    elif str(nt).strip() not in NAME_TYPES:
+        r.add("FAIL", container,
+              f"{container}[{idx}].name_type '{nt}' is not one of {tuple(sorted(NAME_TYPES))} - the "
+              f"actor type drives citation rendering, so an out-of-vocab value cannot ship")
+    if roled:
+        role = entry.get("role")
+        if role in (None, ""):
+            r.add("WARNING", container,
+                  f"{container}[{idx}] has no role - state what this contributor did "
+                  f"({', '.join(CONTRIBUTOR_ROLES_ORDERED)})")
+        elif str(role).strip() not in CONTRIBUTOR_ROLES:
+            r.add("FAIL", container,
+                  f"{container}[{idx}].role '{role}' is not one of {CONTRIBUTOR_ROLES_ORDERED}; a "
+                  f"contributor role is a fail-closed vocab (a mis-typed role publishes a wrong claim "
+                  f"about who did what)")
+    orcid = entry.get("orcid")
+    if orcid not in (None, "", "TBD", "TODO") and not orcid_checksum_ok(orcid):
+        r.add("WARNING", container,
+              f"{container}[{idx}].orcid '{orcid}' is not a valid ORCID (bad format or failed ISO "
+              f"7064 11-2 checksum) - e.g. https://orcid.org/0000-0002-1825-0097")
+    ror = entry.get("ror")
+    if ror not in (None, "", "TBD", "TODO") and not ror_format_ok(ror):
+        r.add("WARNING", container,
+              f"{container}[{idx}].ror '{ror}' does not look like a ROR id (expected a bare 9-char id "
+              f"or https://ror.org/<id>)")
 # anti-masquerade: the BINARY TF types must start with their real signature. The text type (.edi) is
 # checked separately for binary content (a NUL byte ⇒ a renamed binary or a polyglot) in the loop below.
 MAGIC = {
@@ -311,8 +391,27 @@ def _mini_yaml(text: str) -> dict:
     import re
 
     def _strip_comment(v: str) -> str:
-        if not v or v[0] in "\"'":
-            return v.strip()
+        v = v.strip()
+        if not v:
+            return v
+        if v[0] in "\"'":
+            # A quoted scalar may carry a trailing comment AFTER its closing quote
+            # ('name: "Stephan Thiel"  # note'). Walk to the closing quote (honouring
+            # backslash escapes inside double quotes) and drop a trailing comment; a hash
+            # INSIDE the quotes is data and survives. Found live 2026-07-25: the credit
+            # migration's inline review note read as part of the value on the no-PyYAML path.
+            q, i = v[0], 1
+            while i < len(v):
+                if q == '"' and v[i] == "\\":
+                    i += 2
+                    continue
+                if v[i] == q:
+                    break
+                i += 1
+            rest = v[i + 1:].lstrip()
+            if rest == "" or rest.startswith("#"):
+                return v[:i + 1]
+            return v
         i = v.find(" #")
         return (v[:i] if i >= 0 else v).strip()
 
@@ -712,6 +811,27 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
                               f"related_identifiers[{idx}].{k} is not a recognised key (allowed: "
                               f"{', '.join(sorted(SOURCE_KEYS))})")
                 _check_typed_relation(r, "related_identifiers", idx, ri)
+    # Contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2): creators[] (who the citation names, an
+    # ORDERED editorial list) and contributors[] (who did what, repeatable). Both are NEW additive lists;
+    # SILENT when absent (the existing corpus carries neither). name_type is FAIL-CLOSED for both; role is
+    # FAIL-CLOSED for contributors; structure warns; ORCID/ROR reuse the existing helpers. creators empty/
+    # absent leaves the org-year citation synthesis as the fallback (owner ruling: honest for state data).
+    creators = meta.get("creators")
+    if creators is not None:
+        if not isinstance(creators, list):
+            r.add("WARNING", "creators",
+                  "creators must be a LIST of ordered citation-name entries ({name, name_type, orcid?/ror?})")
+        else:
+            for idx, c in enumerate(creators):
+                _check_credit_row(r, "creators", idx, c, roled=False)
+    contributors = meta.get("contributors")
+    if contributors is not None:
+        if not isinstance(contributors, list):
+            r.add("WARNING", "contributors",
+                  "contributors must be a LIST of role entries ({name, name_type, role, orcid?/ror?})")
+        else:
+            for idx, c in enumerate(contributors):
+                _check_credit_row(r, "contributors", idx, c, roled=True)
     # §2b (identifiers design): identifiers.instrument_pid — the ONE survey/platform-level instrument PID
     # (PIDINST, e.g. 10.82388/<id>), the survey-layer counterpart to the deep per-serial EDI DOIs. Same
     # light format posture as instruments[].pid / RAiD above: an https:// URL or a bare handle/DOI,
@@ -782,6 +902,25 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
               "retrieved, statement, profile, title, custodian) are now optional keys on a "
               "related_identifiers row with identifies: entire. Run _tools/migrate_identifies.py to "
               "merge each source into the typed list; sources[] is still read this wave")
+    # Contributor credit model (CONTRIBUTOR-CREDIT-SPEC C3): lead_investigator and principal_investigators
+    # are RETIRED. lead_investigator's meaning moves to a contributors row (role: ProjectLeader);
+    # principal_investigators seeds creators[]. WARNING, never FAIL (the flat-key pattern): the engine
+    # still reads both until the ausmt follow-up, so an un-migrated survey PUBLISHES. Value-based, and the
+    # « REPLACE » template sentinel counts as a placeholder, so the shipped example/template stay silent
+    # while a real name (or a real PI list) surfaces.
+    _CREDIT_MIGRATE = "run _tools/migrate_credit.py to seed creators[]/contributors[] and retire it"
+    li_dep = meta.get("lead_investigator")
+    if isinstance(li_dep, dict) and _has_real_value(li_dep.get("name")):
+        r.add("WARNING", "deprecation",
+              f"lead_investigator ('{str(li_dep.get('name')).strip()}') is a RETIRED field - its meaning "
+              f"moves to a contributors row with role: ProjectLeader; {_CREDIT_MIGRATE} "
+              f"(still read this wave; retires after the corpus migration)")
+    pis_dep = meta.get("principal_investigators")
+    if isinstance(pis_dep, list) and any(
+            isinstance(p, dict) and _has_real_value(p.get("name")) for p in pis_dep):
+        r.add("WARNING", "deprecation",
+              f"principal_investigators is a RETIRED field - it seeds the ordered creators[] citation "
+              f"list; {_CREDIT_MIGRATE} (still read this wave; retires after the corpus migration)")
     # C7 / §2a: a survey is provenance-incomplete ONLY when it carries NEITHER a flat identifier (dataset
     # DOI or survey PID) NOR a typed provenance relation. Because AusMT curates records whose provenance
     # lives in related identifiers rather than a minted DOI, a well-formed related_identifiers entry — or a
