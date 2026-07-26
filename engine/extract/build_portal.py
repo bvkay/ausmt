@@ -601,6 +601,15 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         # posture matches the sources/attribution/changes blocks above rather than shipping empty arrays.
         if m.get("related_identifiers"):
             entry["related_identifiers"] = m["related_identifiers"]
+        # CONTRIBUTOR-CREDIT-SPEC C1/§4: the credit surface for the DataCite/federation export. creators[]
+        # rides through verbatim when the survey declares it (omitted otherwise, byte-identical for the
+        # pre-migration corpus). contributors[] is the EXPORT form: the survey's own contributors PLUS
+        # AusMT as the HostingInstitution, added automatically on export only (never a curator field, never
+        # in survey.yaml). Emitted for every record because AusMT hosts them all (mtcat.schema.json's
+        # surveys.items is additionalProperties:true, so these additive keys need no schema-version bump).
+        if m.get("creators"):
+            entry["creators"] = m["creators"]
+        entry["contributors"] = _export_contributors_of(m)
         surveys.append(entry)
     stations = [{"station_id": r["ausmt_id"], "survey_id": slug_of.get(r["survey"], slugify(r["survey"])),
                  "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"]}
@@ -650,23 +659,118 @@ def _org_of(y: dict):
 
 
 def _investigators_of(y: dict) -> list:
-    """[{name, orcid}] from a single lead_investigator {name, orcid}, else the principal_investigators
-    list. C7: the ORCID solicited by the schema used to be discarded here (bare name strings only);
-    now it rides alongside the name so the portal can render it as a PID link. orcid is None when the
-    field is absent/blank (both the '« REPLACE »' template default and legacy surveys predate it)."""
+    """[{name, orcid}] combined NON-SUPPRESSIVELY from lead_investigator + principal_investigators.
+    CONTRIBUTOR-CREDIT-SPEC C3: the lead-hides-PIs suppression is DEAD - a survey that carries both a
+    lead AND principal_investigators now surfaces the lead AND every PI (lead first, then PIs in order,
+    deduped by name), where the pre-credit-model reader returned ONLY the lead and never read the PIs.
+    The retired lead/PI keys are read here purely as a graceful legacy fallback for this back-compat
+    'who' facet; creators[]/contributors[] are the primary credit surface (served separately). orcid is
+    None when a row omits it (both the '« REPLACE »' template default and pre-C7 surveys predate it)."""
+    rows = []
     li = y.get("lead_investigator")
     if isinstance(li, dict) and li.get("name"):
-        return [{"name": li["name"], "orcid": (li.get("orcid") or None)}]
-    return [{"name": pi["name"], "orcid": (pi.get("orcid") or None)}
-            for pi in (y.get("principal_investigators") or [])
-            if isinstance(pi, dict) and pi.get("name")]
+        rows.append(li)
+    rows.extend(pi for pi in (y.get("principal_investigators") or [])
+                if isinstance(pi, dict) and pi.get("name"))
+    out, seen = [], set()
+    for r in rows:
+        nm = r["name"]
+        if nm in seen:
+            continue
+        seen.add(nm)
+        out.append({"name": nm, "orcid": (r.get("orcid") or None)})
+    return out
+
+
+# CONTRIBUTOR-CREDIT-SPEC C1/C2: the two typed credit lists passed through to SMETA VERBATIM from
+# survey.yaml (after validation). creators[] is the ORDERED citation-author list; contributors[] is the
+# roled who-did-what list. Only the validated keys ride through, in canonical order; a key is OMITTED
+# when the source row omits it (an ORCID-less row serves no orcid key, not a null), so a survey without
+# these lists serves no such key (the pinned drawer/engine seam: absent -> absent). Non-mapping rows and
+# rows without a real name are dropped (mirrors _funders_of / _related_identifiers_of tolerance).
+_CREATOR_KEYS = ("name", "name_type", "orcid", "ror")
+_CONTRIBUTOR_KEYS = ("name", "name_type", "role", "orcid", "ror")
+
+
+def _credit_rows(seq, keys) -> list:
+    out = []
+    for c in (seq or []):
+        if not isinstance(c, dict) or c.get("name") in (None, ""):
+            continue
+        out.append({k: c[k] for k in keys if c.get(k) not in (None, "")})
+    return out
+
+
+def _creators_of(y: dict) -> list:
+    """The ORDERED creators[] list, verbatim (order IS the citation author order); [] when absent."""
+    return _credit_rows(y.get("creators"), _CREATOR_KEYS)
+
+
+def _contributors_of(y: dict) -> list:
+    """The contributors[] list (each carries a fail-closed role), verbatim; [] when absent."""
+    return _credit_rows(y.get("contributors"), _CONTRIBUTOR_KEYS)
+
+
+def _citation_authors_of(y: dict):
+    """CONTRIBUTOR-CREDIT-SPEC §2.1 citation-author assembly for the cite.au line: the creators[] names
+    in order (joined '; ' so a 'Last, First' name stays unambiguous) when creators are present; else a
+    hand-authored verbatim cite.au string when the survey carries a cite block with one; else None so the
+    caller keeps the org-year synthesis (the existing default). No field suppresses another and the
+    retired lead_investigator/principal_investigators keys are NOT read here - the citation reads
+    creators, never the retired fields (C3)."""
+    creators = _creators_of(y)
+    if creators:
+        return "; ".join(c["name"] for c in creators)
+    cite = y.get("cite")
+    if isinstance(cite, dict):
+        au = str(cite.get("au") or "").strip()
+        if au:
+            return au
+    return None
 
 
 def _funders_of(y: dict) -> list:
-    """[{name, pid}] from funding/funders; tolerates odd shapes (non-dicts dropped), never crashes."""
-    raw = [f for f in (y.get("funding") or y.get("funders") or []) if isinstance(f, dict)]
-    return [{"name": f.get("organisation") or f.get("name"),
-             "pid": f.get("organisation_ror") or f.get("pid")} for f in raw]
+    """[{name, pid, grant_id?}] from funding/funders; tolerates odd shapes (non-dicts dropped), never
+    crashes. grant_id rides through ONLY when the survey funding row declares a real one (the corpus
+    carries grant_id: null, so it stays omitted - the mth5 producer emits no placeholder grant id)."""
+    out = []
+    for f in (y.get("funding") or y.get("funders") or []):
+        if not isinstance(f, dict):
+            continue
+        row = {"name": f.get("organisation") or f.get("name"),
+               "pid": f.get("organisation_ror") or f.get("pid")}
+        gid = f.get("grant_id") or f.get("id")
+        if gid not in (None, ""):
+            row["grant_id"] = gid
+        out.append(row)
+    return out
+
+
+# CONTRIBUTOR-CREDIT-SPEC §4: AusMT is added as the DataCite HostingInstitution on EXPORT ONLY (the
+# mtcat federation document) - it is never a curator field and is never written into survey.yaml.
+_AUSMT_HOSTING_CONTRIBUTOR = {"name": "AusMT", "name_type": "organisation", "role": "HostingInstitution"}
+
+
+def _export_contributors_of(smeta: dict) -> list:
+    """The DataCite-export contributor list for one survey (mtcat, §4): the survey's own contributors[]
+    verbatim, with AusMT appended as the HostingInstitution. AusMT is added AUTOMATICALLY for every
+    exported record (AusMT hosts them all) and appears ONLY here, never in survey.yaml and never in the
+    surveys.json seam (which stays the verbatim curator surface)."""
+    rows = [dict(c) for c in (smeta.get("contributors") or []) if isinstance(c, dict)]
+    rows.append(dict(_AUSMT_HOSTING_CONTRIBUTOR))
+    return rows
+
+
+_ORCID_URL_RE = _re.compile(r"^(?:https?://orcid\.org/)?(\d{4}-\d{4}-\d{4}-\d{3}[\dX])$", _re.IGNORECASE)
+
+
+def _orcid_url(orcid):
+    """A full https://orcid.org/<id> URL from a bare id or an already-URL ORCID, or None when the value
+    is absent or not ORCID-shaped. Never fabricates: an unparseable value yields no URL. The checksum is
+    not re-verified here (the surveys validator already warns on a bad ORCID); this only canonicalises
+    the shape the mth5 project_lead.url field wants."""
+    m = _ORCID_URL_RE.match(str(orcid or "").strip())
+    return "https://orcid.org/" + m.group(1).upper() if m else None
 
 
 def _instrument_model_of(y: dict):
@@ -918,7 +1022,10 @@ def survey_meta_from_yaml(y: dict) -> dict:
         # C7: yr/ve were always '' (every citation rendered "(n.d.)" regardless of a declared date/version);
         # yr = year of dates.end, else dates.start, else '' (genuinely no date -> honest "(n.d.)"); ve = the
         # declared survey version, else '' (no version -> the apa()/bibtex()/ris() helpers already omit it).
-        "cite": {"au": org_name, "yr": _citation_year_of(y),
+        # au: CONTRIBUTOR-CREDIT-SPEC §2.1 - the creators[] names in order when present, else a hand-authored
+        # verbatim cite.au, else the org-year synthesis (org_name, the unchanged default for the whole
+        # existing corpus). The retired lead/PI keys never drive the citation line (C3, no suppression).
+        "cite": {"au": _citation_authors_of(y) or org_name, "yr": _citation_year_of(y),
                  "ti": name, "ve": (y.get("version") or ""), "pb": org_name},
     }
     # PID-schema (ADDITIVE, optional): only attach the structured instruments list when a survey actually
@@ -951,6 +1058,16 @@ def survey_meta_from_yaml(y: dict) -> dict:
     levels = (y.get("time_series", {}) or {}).get("levels_available")
     if isinstance(levels, list) and levels:
         sm["ts_levels"] = [str(x) for x in levels]
+    # CONTRIBUTOR-CREDIT-SPEC C1/C2: the typed credit lists, served VERBATIM per the pinned drawer/engine
+    # seam (order preserved, keys omitted when absent). ADDITIVE + absent -> absent: a survey without them
+    # yields a byte-identical surveys.json entry (the whole pre-migration corpus). creators[] is the
+    # citation-author order; contributors[] carries the fail-closed roles the drawer renders.
+    creators = _creators_of(y)
+    if creators:
+        sm["creators"] = creators
+    contributors = _contributors_of(y)
+    if contributors:
+        sm["contributors"] = contributors
     return sm
 
 
@@ -2055,6 +2172,22 @@ def _mth5_doi_url(d):
     return None
 
 
+def _mth5_project_lead(smeta: dict):
+    """The lead-most credited party for mth5 survey_metadata.project_lead (CONTRIBUTOR-CREDIT-SPEC): the
+    first contributor whose role is ProjectLeader, else the lead-most creator (creators[0], the citation
+    lead), else the legacy investigators[0] fallback. Returns {name, orcid} or None. A project_lead may be
+    a person or an organisation (name_type is not consulted); only a person carries an ORCID, so an org
+    lead yields no url downstream."""
+    for c in (smeta.get("contributors") or []):
+        if isinstance(c, dict) and c.get("name") and str(c.get("role") or "").strip() == "ProjectLeader":
+            return {"name": c["name"], "orcid": c.get("orcid")}
+    for group in ("creators", "investigators"):
+        for c in (smeta.get(group) or []):
+            if isinstance(c, dict) and c.get("name"):
+                return {"name": c["name"], "orcid": c.get("orcid")}
+    return None
+
+
 def _apply_mth5_survey_metadata(sm, smeta, slug, label):
     """Map survey.yaml/SMETA scholarly + identifier fields onto an mth5 TF's survey_metadata at write
     time (SPEC §3.3 mapping table, A5 ruling). The grouping key id=slug ALWAYS overrides the raw EDI
@@ -2097,11 +2230,14 @@ def _apply_mth5_survey_metadata(sm, smeta, slug, label):
         _set("citation_journal.year", str(_p0.get("y")) if _p0.get("y") not in (None, "") else None)
     _set("acquired_by.organization", smeta.get("org"))
     _set("release_license", smeta.get("lic"))
-    _invs = smeta.get("investigators") or []
-    if _invs:
-        _i0 = _invs[0] or {}
-        _set("project_lead.author", _i0.get("name"))
-        _set("project_lead.id", _i0.get("orcid"))
+    # CONTRIBUTOR-CREDIT-SPEC: project_lead is the lead-most credited party (a ProjectLeader contributor,
+    # else the lead creator, else the legacy investigator). Its ORCID goes into project_lead.url as a full
+    # https://orcid.org/<id> URL - the AuthorPerson model has no serialised `id` field, so the URL is the
+    # field that actually survives the write; a non-person/ORCID-less lead simply gets no url (no fabrication).
+    _lead = _mth5_project_lead(smeta)
+    if _lead:
+        _set("project_lead.author", _lead.get("name"))
+        _set("project_lead.url", _orcid_url(_lead.get("orcid")))
     _fund = smeta.get("funders") or []
     if _fund:
         _f0 = _fund[0] or {}
