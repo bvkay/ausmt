@@ -3974,8 +3974,9 @@ def _reorder_controls_html() -> str:
 
 # CONTRIBUTOR-CREDIT-SPEC (§6): the "needs review" chip on a migration-seeded credit row awaiting curator
 # adjudication (the INFERRED-REVIEW marker the runner detected). Advisory only - it never blocks saving;
-# saving the list rewrites it WITHOUT the marker, which IS the adjudication (the wholesale-replace in
-# apply_patch drops the inline comment; verified by test_editor_credit_roundtrip).
+# saving the list rewrites it WITHOUT the marker, which IS the adjudication (apply_patch replaces the list
+# wholesale AND explicitly strips row 0's comment-above marker off the parent key, which a replace alone
+# leaves behind; verified by test_editor_credit_roundtrip).
 _REVIEW_CHIP_HTML = (
     '<p style="margin:.15rem 0" class="review-chip-wrap">'
     '<span class="sub" data-review-chip '
