@@ -1009,6 +1009,20 @@ class Gateway:
                         media_type="application/javascript; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
 
+    def handle_doi_harvest_js(self, request: Request) -> Response:
+        """GET /gateway/curator/doi-harvest.js - the DOI citation-harvest core (window.AusmtDoiHarvest)
+        the publications "Look up DOI" button uses (CONTRIBUTOR-CREDIT-SPEC §6). It is the SAME code the
+        public Add Survey form loads; the gateway serves the byte-identical bundled copy under
+        gateway/static/ because the app image is content-blind (a parity test pins it == portal/src/).
+        Session-gated for consistency with the edit page; the content is a public-repo constant.
+        DEGRADES: without it the button reports 'DOI lookup unavailable' and the manual fields still work."""
+        name = self._require_session(request)
+        if not isinstance(name, str):
+            return name
+        return Response(curatorpage.DOI_HARVEST_JS,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
     def handle_collections_js(self, request: Request) -> Response:
         """GET /gateway/curator/collections.js — the C43 Stage-3b collections editor's ONLY browser
         script: the candidate-picker filter (record A3). Same CSP reason as the other external scripts
@@ -1328,6 +1342,7 @@ class Gateway:
                                       f'<b>{curatorpage._esc(slug)}</b>')  # noqa: SLF001
         version = None
         fields: dict = {}
+        review_flags: dict = {}
         commits: list = []
         history_error = ""
         if tab == "metadata":
@@ -1340,6 +1355,7 @@ class Gateway:
                 return self.handle_edit_list(request)
             version = result.get("version")
             fields = result.get("fields") or {}
+            review_flags = result.get("review_flags") or {}
         else:
             # C43-HUB H1: every tab renders the mockup's header (title + slug chip + orientation
             # line from version/licence/access/collection), so the read-job runs hub-wide. On the
@@ -1372,7 +1388,8 @@ class Gateway:
         build_lag = self._build_lag_hint() if tab == "stations" else None
         return self._html(curatorpage.render_survey_hub(
             slug=slug, tab=tab, version=version, fields=fields, csrf_token=csrf, nav=nav,
-            commits=commits, history_error=history_error, build_lag=build_lag))
+            commits=commits, history_error=history_error, build_lag=build_lag,
+            review_flags=review_flags))
 
     def handle_collections_index(self, request: Request) -> Response:
         """GET /gateway/curator/collections (C43 Stage 3a, record D5-A). Enqueue the whole-corpus
@@ -1720,7 +1737,8 @@ class Gateway:
                   f'{curatorpage._esc(slug)}</a> › <b>edit metadata</b>')  # noqa: SLF001
         return self._html(curatorpage.render_edit_form(
             slug=slug, version=result.get("version"), fields=result.get("fields") or {},
-            csrf_token=csrf, error=error, field_errors=field_errors, submitted=submitted, nav=nav))
+            csrf_token=csrf, error=error, field_errors=field_errors, submitted=submitted, nav=nav,
+            review_flags=result.get("review_flags")))
 
     def handle_pid_check(self, request: Request) -> Response:
         """IDCONS D5 (SPEC §5.5): the curator DOI resolution chip. Session-gated GET that HEADs doi.org
@@ -1865,6 +1883,17 @@ class Gateway:
                                slug, exc.phase, exc.message)
                 # Fail-closed: surveys-live was rolled back byte-for-byte inside commit_metadata_edit.
                 return JSONResponse({"detail": f"publish failed: {exc.message}"}, status_code=409)
+            except OSError as exc:
+                # A filesystem/OS failure below the PublishError layer (a disk write, a git working-tree
+                # file operation, surveys-live gone read-only) would otherwise escape as an uncaught 500
+                # with a raw stack trace. Catch it and return a clean, actionable 500 instead: the commit
+                # did not land, and the curator can retry once the underlying condition clears. The detail
+                # names the errno kind (e.g. ENOSPC/EACCES) without leaking a filesystem path or traceback.
+                logger.exception("metadata edit commit hit an OS error for %s", slug)
+                return JSONResponse(
+                    {"detail": f"the edit could not be written to surveys-live ({type(exc).__name__}); "
+                               "nothing was committed. Check the surveys-live volume and retry."},
+                    status_code=500)
         return self._html(
             curatorpage._page(  # noqa: SLF001 -- reuse the page chrome for the terminal confirmation
                 f"AusMT edit committed {slug}",
@@ -3122,6 +3151,12 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/editor.js")
     def curator_editor_js(request: Request):
         return gw.handle_editor_ui_js(request)
+
+    # The shared DOI citation-harvest core (window.AusmtDoiHarvest) the publications "Look up DOI" button
+    # uses - EXTERNAL for the same CSP reason. Byte-identical to the public form's src/doi_harvest.js.
+    @app.get("/gateway/curator/doi-harvest.js")
+    def curator_doi_harvest_js(request: Request):
+        return gw.handle_doi_harvest_js(request)
 
     # The C43 nav-shell context bar's drift chip served-build half — EXTERNAL for the same CSP reason;
     # every shelled curator page loads it via a same-origin external script URL. Degrades gracefully.

@@ -43,6 +43,7 @@ from pathlib import Path
 from ruamel.yaml import YAML, YAMLError
 from ruamel.yaml.representer import RoundTripRepresenter
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
+from ruamel.yaml.tokens import CommentToken
 
 # PyYAML is the reader the DOWNSTREAM pipeline uses (the validator's _load_yaml and the engine's
 # build_portal both yaml.safe_load survey.yaml). It decides which patched strings must be quoted
@@ -93,7 +94,14 @@ EDITABLE_MAPS = ("organisation", "identifiers", "collection", "processing", "acc
 # _OMIT and never reaches this allow-list; only a real change is patched, replacing the list wholesale like
 # the other editable lists). (sources[] is the sibling wave-2 widget with the same gap — tracked separately.)
 EDITABLE_LISTS = ("principal_investigators", "publications", "funding", "instruments",
-                  "related_identifiers")
+                  "related_identifiers", "creators", "contributors")
+# CONTRIBUTOR-CREDIT-SPEC (§6 editor typed rows): creators[] and contributors[] are modelled LIST_SECTION
+# widgets (editor_form.LIST_SECTIONS), so a changed list MUST be patchable here or the curator's edit is
+# REJECTED on save as a non-editable field ("patch contains non-editable field(s): creators"). This is the
+# EXACT gap the related_identifiers lane shipped with: the widget assembled a patch the runner then refused,
+# because the key was missing from this allow-list. An UNCHANGED list still assembles to _OMIT and never
+# reaches this allow-list; only a real change is patched, replacing the list wholesale like the other
+# editable lists (proven RED by test_editor_credit_roundtrip.py against this allow-list being absent).
 EDITABLE_KEYS = EDITABLE_SCALARS + EDITABLE_MAPS + EDITABLE_LISTS
 
 
@@ -397,6 +405,12 @@ def apply_patch(data, patch: dict) -> list[str]:
                 changed.append(key)
             continue
         data[key] = quote_ambiguous(new_val)
+        # Adjudication (CONTRIBUTOR-CREDIT-SPEC §6): a credit list replaced wholesale loses its per-row
+        # inline markers with the old items, but row 0's comment-ABOVE marker rides the PARENT key's ca and
+        # would survive, so drop it explicitly. Editing the list IS the curator's confirmation; a stale
+        # marker here would re-emit AND re-flag the row on the next read.
+        if key in _CREDIT_LIST_KEYS:
+            _strip_inferred_review_comment(data, key)
         changed.append(key)
     return changed
 
@@ -508,8 +522,132 @@ def report_has_fail(report: dict) -> bool:
 
 # ---- job bodies ----
 
+# CONTRIBUTOR-CREDIT-SPEC (§6 INFERRED-REVIEW surfacing): the credit migration (_tools/migrate_credit.py)
+# marks each SEEDED creators[]/contributors[] row as needing curator adjudication with an INFERRED-REVIEW
+# note. GROUND-TRUTH VERIFIED against the RATIFIED migration output at surveys origin/main
+# (migrate_credit._creator_lines/_contributor_lines, hardened 2026-07-25): the note rides its OWN comment
+# line ABOVE the `- name:` row (`  # INFERRED-REVIEW: ...` then `  - name: ...`); an inline comment after a
+# quoted scalar tripped the vendored mini parser, so comment-ABOVE is the ratified format. ruamel does NOT
+# attach that above-comment to the row it visually precedes; it re-homes it onto a NEIGHBOUR:
+#   * row 0's marker  -> the PARENT map's post-key comment for the list key (data.ca.items['creators']);
+#   * row i>0's marker -> a TRAILING own-line comment on row i-1 (in item[i-1]'s ca);
+# so a naive "scan each row's own comments" reads the WRONG rows (it flags i-1 for row i's marker and never
+# sees row 0's / a single row's marker at all: the silent-zero failure this detector was rebuilt to fix).
+# It ALSO stays tolerant of a hand-edited INLINE marker (`- name: "..."  # INFERRED-REVIEW: ...`, the shape
+# the already-live `identifies:` markers use), which ruamel DOES store on the annotated row's own ca. The
+# row indices drive the editor's "needs review" chip (curatorpage), computed RUNNER-side because the gateway
+# never parses survey content (C31 §0.1) and editable_subset returns plain values that carry no comments.
+_INFERRED_REVIEW_MARK = "INFERRED-REVIEW"
+
+# The migration-seeded lists whose INFERRED-REVIEW markers are surfaced for adjudication AND stripped when
+# the curator saves an edit to them. (identifies-style inline markers on related_identifiers rows are NOT
+# surfaced here and are dropped naturally when that list is replaced; only these two carry the parent-key
+# comment-above marker that survives a wholesale replace.)
+_CREDIT_LIST_KEYS = ("creators", "contributors")
+
+
+def _iter_comment_tokens(slot):
+    """Yield every ruamel CommentToken nested anywhere inside a ca slot value: a None, a bare
+    CommentToken, a list of them, or a whole ca.items MAPPING (row maps store their comments keyed by
+    sub-key). Flattening here lets the detector treat the parent-key post-comment, a seq pre-comment, and
+    a row's own comments uniformly."""
+    stack = [slot]
+    while stack:
+        node = stack.pop()
+        if node is None:
+            continue
+        if isinstance(node, CommentToken):
+            yield node
+            continue
+        if isinstance(node, dict):
+            stack.extend(node.values())
+            continue
+        if isinstance(node, (list, tuple)):
+            stack.extend(node)
+
+
+def _marker_is_own_line(text: str) -> bool:
+    """True iff the INFERRED-REVIEW marker in `text` sits on its OWN line (a comment-ABOVE marker), False
+    for an INLINE marker sharing a line with scalar content. The discriminator is whether a newline
+    precedes the marker WITHIN the token: ruamel stores a comment-above row marker as a trailing token on
+    the PREVIOUS node whose text begins with the line break ('\\n  # INFERRED-REVIEW ...'), whereas an
+    inline marker's text is '  # INFERRED-REVIEW ...' on the same physical line as the scalar."""
+    i = text.find(_INFERRED_REVIEW_MARK)
+    return i >= 0 and "\n" in text[:i]
+
+
+def inferred_review_indices(seq, parent_comment=None) -> list[int]:
+    """The 0-based indices of rows in a loaded creators[]/contributors[] CommentedSeq that carry an
+    INFERRED-REVIEW marker, tolerant of BOTH the migration's comment-ABOVE placement (the ratified
+    origin/main format) AND a hand-edited INLINE marker. Empty for a plain list, a non-sequence, or a list
+    with no markers.
+
+    `parent_comment` is the parent map's comment association for THIS list key (data.ca.items.get(key)):
+    where ruamel parks row 0's comment-above marker; run_read_job passes it. Attribution per token:
+      * a marker in `parent_comment`           -> row 0 (its comment-above marker);
+      * a seq-level pre-comment for index i     -> row i;
+      * a row's OWN-LINE (comment-above) marker -> the NEXT row (it precedes row i+1, not row i);
+      * a row's INLINE (same-line) marker       -> that row.
+    """
+    out: set[int] = set()
+    if not isinstance(seq, list):
+        return []
+    n = len(seq)
+    if n and parent_comment is not None:
+        for tok in _iter_comment_tokens(parent_comment):
+            if _INFERRED_REVIEW_MARK in (tok.value or ""):
+                out.add(0)
+                break
+    seq_ca = getattr(getattr(seq, "ca", None), "items", None) or {}
+    for idx, item in enumerate(seq):
+        for tok in _iter_comment_tokens(seq_ca.get(idx)):
+            if _INFERRED_REVIEW_MARK in (tok.value or ""):
+                out.add(idx)
+        item_ca = getattr(getattr(item, "ca", None), "items", None) or {}
+        for tok in _iter_comment_tokens(item_ca):
+            value = tok.value or ""
+            if _INFERRED_REVIEW_MARK not in value:
+                continue
+            if _marker_is_own_line(value):
+                # an own-line trailing comment on this row is the comment-ABOVE marker for the NEXT row.
+                if idx + 1 < n:
+                    out.add(idx + 1)
+            else:
+                out.add(idx)   # an inline (same-line) marker annotates THIS row.
+    return sorted(out)
+
+
+def _strip_inferred_review_comment(node, key) -> None:
+    """Drop any INFERRED-REVIEW marker comment ruamel attached to `key` on the mapping `node`'s comment
+    association. The migration's row-0 marker rides the PARENT key's post-key comment slot (not the list
+    node), so a wholesale list replace does NOT carry it away; an adjudicated (edited) credit list would
+    otherwise re-emit its stale 'needs review' marker AND be re-flagged on the next read. Surgical: only
+    comment tokens whose text carries the marker are removed; any unrelated comment on the key is left
+    intact, and an emptied comment entry is dropped so ruamel emits nothing."""
+    ca_items = getattr(getattr(node, "ca", None), "items", None)
+    if not ca_items or key not in ca_items:
+        return
+    slot = ca_items[key]
+    changed = False
+    for i, sub in enumerate(slot):
+        if isinstance(sub, CommentToken):
+            if _INFERRED_REVIEW_MARK in (sub.value or ""):
+                slot[i] = None
+                changed = True
+        elif isinstance(sub, list):
+            kept = [t for t in sub
+                    if not (isinstance(t, CommentToken) and _INFERRED_REVIEW_MARK in (t.value or ""))]
+            if len(kept) != len(sub):
+                slot[i] = kept or None
+                changed = True
+    if changed and not any(slot):
+        del ca_items[key]
+
+
 def run_read_job(package_root: Path) -> dict:
-    """Handle a `read` edit-job: load the survey.yaml and return the editable subset + version."""
+    """Handle a `read` edit-job: load the survey.yaml and return the editable subset + version. Also
+    returns `review_flags` (CONTRIBUTOR-CREDIT-SPEC §6): the creators[]/contributors[] row indices the
+    credit migration marked INFERRED-REVIEW, so the editor can chip them for curator adjudication."""
     survey_yaml = package_root / "survey.yaml"
     if not survey_yaml.is_file():
         raise EditError(f"survey.yaml not found under {package_root.name}")
@@ -517,10 +655,17 @@ def run_read_job(package_root: Path) -> dict:
     if not hasattr(data, "get"):
         raise EditError("survey.yaml is not a mapping")
     version = data.get("version")
+    review_flags = {}
+    parent_ca = getattr(getattr(data, "ca", None), "items", None) or {}
+    for key in ("creators", "contributors"):
+        idxs = inferred_review_indices(data.get(key), parent_comment=parent_ca.get(key))
+        if idxs:
+            review_flags[key] = idxs
     return {
         "ok": True,
         "fields": editable_subset(data),
         "version": version if isinstance(version, str) else None,
+        "review_flags": review_flags,
     }
 
 

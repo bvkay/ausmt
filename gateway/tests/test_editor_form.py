@@ -838,6 +838,46 @@ def test_related_identifiers_vocab_matches_vendored_validator():
             f"editor/validator derived_relation disagree for identifies={lvl!r}"
 
 
+def _load_credit_validator():
+    """The surveys validator that carries the credit vocab, from the first candidate that HAS it: the
+    vendored copy (once the surveys-merge sequencing refreshes it - then this runs unconditionally in CI),
+    else the live sibling checkout at either monorepo layout. None when only a pre-credit snapshot exists
+    (the two-clones caveat: the credit vocab is not yet in any reachable validator)."""
+    from gateway.tests.conftest import SIBLING_VALIDATOR_DIR
+    repo_root = Path(__file__).resolve().parents[2]
+    candidates = [
+        _VENDORED_VALIDATOR_PY,
+        SIBLING_VALIDATOR_DIR / "validate_survey.py",
+        repo_root.parent / "ausmt-surveys" / "_validation" / "validate_survey.py",
+    ]
+    for i, path in enumerate(candidates):
+        if path.is_file():
+            vv = _load_by_path(path, f"_ausmt_creditvocab_{i}")
+            if hasattr(vv, "NAME_TYPES") and hasattr(vv, "CONTRIBUTOR_ROLES"):
+                return vv
+    return None
+
+
+def test_credit_vocab_matches_surveys_validator():
+    """PARITY PIN (CONTRIBUTOR-CREDIT-SPEC §6): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES equal the
+    surveys validator's FROZEN credit vocabularies. Resolved from the first validator that carries the
+    credit vocab (the vendored copy once refreshed, else the live sibling). Skipped only when NO reachable
+    validator has the vocab yet (the two-clones caveat - the vendored copy is a pre-credit snapshot,
+    refreshed by the surveys-merge sequencing, not this lane). Where it runs it FAILS IF the editor vocab
+    drifts from the ratified validator vocab - a mis-typed name_type/role would mis-classify an actor or
+    publish a wrong provenance claim, so the two must never disagree."""
+    vv = _load_credit_validator()
+    if vv is None:
+        pytest.skip("no reachable surveys validator carries the credit vocab yet (two-clones caveat)")
+    assert set(ef.NAME_TYPES) == set(vv.NAME_TYPES), "editor NAME_TYPES drifted from the validator"
+    assert set(ef.CONTRIBUTOR_ROLES) == set(vv.CONTRIBUTOR_ROLES), \
+        "editor CONTRIBUTOR_ROLES drifted from the validator"
+    # the ordered tuple must match the validator's ratified order too (creators/contributors selects
+    # present the roles in the spec's §3.1 order).
+    assert tuple(ef.CONTRIBUTOR_ROLES) == tuple(vv.CONTRIBUTOR_ROLES_ORDERED), \
+        "editor CONTRIBUTOR_ROLES order drifted from the validator's ratified order"
+
+
 # The vulcan-2022 demo shape: the four keys the editor row models (identifier, identifier_type,
 # relation, AND custodian — custodian is modelled so a stored entry that carries it round-trips).
 _RELID_ROW = {

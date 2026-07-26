@@ -106,9 +106,13 @@ async function boot({ probe, xhrScript }) {
   // We wrap track() to record every event+props so the key-hygiene assertion can scan payloads.
   const security = fs.readFileSync(path.join(SRC, "security.js"), "utf8");
   const shim = fs.readFileSync(path.join(SRC, "analytics-shim.js"), "utf8");
+  // The inline block aliases the DOI-harvest core from window.AusmtDoiHarvest - the shared src/doi_harvest.js
+  // the page loads via <script src> before the inline block. Run it here in the same source order so the
+  // aliases resolve (the page would break otherwise, so the driver must mirror the real load order).
+  const doiHarvest = fs.readFileSync(path.join(SRC, "doi_harvest.js"), "utf8");
   const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((b) => b.includes("function buildSurveyYaml"));
   ok(!!inline, "could not extract the inline pure-logic+UI script block");
-  let code = security + "\n" + shim + "\n" +
+  let code = security + "\n" + shim + "\n" + doiHarvest + "\n" +
     // record every track() call (name + props) so we can prove the key never rides in analytics.
     "(function(){var _t=window.track;window.track=function(n,p){window.__trackCalls.push({name:n,props:p});return _t&&_t(n,p);};})();\n" +
     inline;

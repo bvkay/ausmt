@@ -18,6 +18,7 @@ from __future__ import annotations
 import html
 import json as _json
 import re
+from pathlib import Path
 from string import Template
 
 from . import checklist as checklist_mod
@@ -352,6 +353,22 @@ EDITOR_UI_JS = """
     }
     return counters[section]++;
   }
+  // Rewrite every l_<section>_<i>_<subkey> field name so the row index equals the row's DOM position.
+  // The index is the leading digits after the prefix; the remainder is the subkey (which may itself
+  // contain underscores, e.g. name_type), so only the leading numeric segment is replaced.
+  function renumberRows(rowsHost, section) {
+    var pfx = 'l_' + section + '_';
+    var rows = rowsHost.querySelectorAll('[data-editor-row]');
+    rows.forEach(function (row, newIdx) {
+      row.querySelectorAll('[name^="' + pfx + '"]').forEach(function (el) {
+        var rest = el.getAttribute('name').slice(pfx.length);   // "<oldIdx>_<subkey>"
+        var us = rest.indexOf('_');
+        if (us < 0) return;
+        el.setAttribute('name', pfx + newIdx + '_' + rest.slice(us + 1));
+      });
+    });
+    counters[section] = null;   // force nextIndex to recompute above the new contiguous max
+  }
   document.addEventListener('click', function (ev) {
     var add = ev.target && ev.target.closest && ev.target.closest('[data-editor-add-row]');
     if (add) {
@@ -373,6 +390,27 @@ EDITOR_UI_JS = """
       if (r) r.parentNode.removeChild(r);
       return;
     }
+    // CONTRIBUTOR-CREDIT-SPEC (§6): reorder an ORDERED list (creators) by moving the row's DOM node
+    // and RENUMBERING the section's row indices so the assembled order (the server reads rows in
+    // numeric-index order) matches the visual order - the reorder therefore persists through save. The
+    // INFERRED-REVIEW chip and every field value ride the moved DOM node, so both travel with the row.
+    var mv = ev.target && ev.target.closest && ev.target.closest('[data-editor-move-row]');
+    if (mv) {
+      var mrow = mv.closest('[data-editor-row]');
+      if (!mrow) return;
+      var host = mrow.parentNode;
+      var dir = mv.getAttribute('data-editor-move-row');
+      if (dir === 'up' && mrow.previousElementSibling) {
+        host.insertBefore(mrow, mrow.previousElementSibling);
+      } else if (dir === 'down' && mrow.nextElementSibling) {
+        host.insertBefore(mrow.nextElementSibling, mrow);
+      } else {
+        return;  // already at the end in that direction
+      }
+      var section = host.getAttribute('data-editor-rows');
+      if (section) renumberRows(host, section);
+      return;
+    }
     // IDCONS D5: the per-identifier resolution status chip. Read this row's identifier input, ask the
     // gateway to HEAD doi.org server-side (same-origin, session cookie), and write the verdict into the
     // chip. Advisory only — it never touches the form value and never blocks saving.
@@ -391,9 +429,59 @@ EDITOR_UI_JS = """
         .then(function (j) { if (chip) chip.textContent = (j && (j.label || j.status)) || 'check failed'; })
         .catch(function () { if (chip) chip.textContent = 'check failed'; });
     }
+    // CONTRIBUTOR-CREDIT-SPEC (§6 curator DOI harvest): the publications-row "Look up DOI" button. Reads
+    // the row's DOI, runs the SHARED client-side harvest (window.AusmtDoiHarvest from doi-harvest.js - the
+    // SAME code the public Add Survey form uses), and fills the author/year/title/journal inputs. Degrades:
+    // no harvester / a blocked fetch / a miss leaves the fields for hand entry, and the button never blocks
+    // saving. Field values are set via .value only (never innerHTML), so a registry string cannot inject.
+    var hv = ev.target && ev.target.closest && ev.target.closest('[data-editor-harvest-doi]');
+    if (hv) {
+      var hrow = hv.closest('[data-editor-row]');
+      if (!hrow) return;
+      var doiInp = hrow.querySelector('input[name$="_doi"]');
+      var hstatus = hrow.querySelector('[data-harvest-status]');
+      var H = window.AusmtDoiHarvest;
+      var doi = doiInp ? String(doiInp.value || '').trim() : '';
+      if (!doi) { if (hstatus) hstatus.textContent = 'paste a DOI first'; return; }
+      if (!H || !H.harvestDoi) { if (hstatus) hstatus.textContent = 'DOI lookup unavailable'; return; }
+      if (hstatus) hstatus.textContent = 'looking up\\u2026';
+      var setField = function (sub, val) {
+        var el = hrow.querySelector('input[name$="_' + sub + '"]');
+        if (el && val) el.value = String(val);
+      };
+      H.harvestDoi(doi, function (u) { return fetch(u, {cache: 'no-store'}); }).then(function (res) {
+        if (doiInp && res.pub && res.pub.doi) doiInp.value = res.pub.doi;   // normalised bare DOI
+        setField('author', res.pub && res.pub.author); setField('year', res.pub && res.pub.year);
+        setField('title', res.pub && res.pub.title); setField('journal', res.pub && res.pub.journal);
+        if (res.ok) { if (hstatus) hstatus.textContent = 'filled from ' + res.source; }
+        else if (res.reason === 'not-a-doi') { if (hstatus) hstatus.textContent = 'not a valid DOI'; }
+        else { if (hstatus) hstatus.textContent = 'no citation found - enter the details by hand'; }
+      }).catch(function () { if (hstatus) hstatus.textContent = 'lookup failed'; });
+      return;
+    }
   });
 })();
 """
+
+
+# CONTRIBUTOR-CREDIT-SPEC (§6 curator DOI harvest): the DOI citation-harvest core, served to the curator
+# editor as an external same-origin script (the strictPages script-src 'self' CSP blocks inline). It is the
+# SAME code the public Add Survey form uses, delivered as the BYTE-IDENTICAL bundled copy under
+# gateway/static/ (the gateway app image is content-blind: it ships only gateway/ and cannot read portal/ at
+# runtime). test_doi_harvest_parity.py pins gateway/static/doi_harvest.js == portal/src/doi_harvest.js so the
+# two served copies can never drift. Read once at import; the file ships inside the gateway image.
+DOI_HARVEST_JS = (Path(__file__).resolve().parent / "static" / "doi_harvest.js").read_text(encoding="utf-8")
+
+
+# The publications-row "Look up DOI" button + status line (CONTRIBUTOR-CREDIT-SPEC §6). Rides the row like
+# the related_identifiers PID chip (as row_suffix_html), so a JS-added row carries it too. Without JS it is
+# an inert button - the manual author/year/title/journal fields still work (degrades safely).
+_DOI_HARVEST_BUTTON_HTML = (
+    '<p style="margin:.15rem 0" class="doi-harvest-wrap">'
+    '<button type="button" class="b-accent" data-editor-harvest-doi '
+    'style="padding:.2rem .6rem;font-size:.75rem">Look up DOI</button>'
+    '<span class="sub" data-harvest-status style="margin-left:.5rem"></span></p>'
+)
 
 
 # The context-bar drift chip's served-build half: fetch /data/build.json SAME-ORIGIN (Caddy serves
@@ -3522,12 +3610,14 @@ _EDIT_JSON_ONLY = (
 _SECTION_TITLES = {
     "organisation": "Organisation", "lead_investigator": "Lead investigator",
     "principal_investigators": "Principal investigators", "identifiers": "Identifiers",
+    "creators": "Creators (citation authors)", "contributors": "Contributors (roles)",
     "publications": "Publications", "funding": "Funding", "instruments": "Instruments",
     "time_series": "Time series", "access": "Access", "attribution": "Attribution & rights",
     "related_identifiers": "Related identifiers",
     "processing": "Processing", "collection": "Collection",
 }
-_SECTION_ORDER = ("organisation", "lead_investigator", "principal_investigators", "identifiers",
+_SECTION_ORDER = ("organisation", "lead_investigator", "principal_investigators",
+                  "creators", "contributors", "identifiers",
                   "publications", "funding", "instruments", "time_series", "access", "attribution",
                   "related_identifiers", "processing", "collection")
 
@@ -3786,6 +3876,25 @@ _IDENTIFIES_DISPLAY = {
     "entire": "Entire dataset (single record, all levels)",
 }
 
+# CONTRIBUTOR-CREDIT-SPEC (§6) - plain-language option TEXT for the credit-row selects. As with the other
+# typed selects the option VALUE stays the exact vocab token (POSTed byte-identically so the fail-closed
+# validator sees the same token); only the human-facing TEXT is expanded so a geophysicist can pick without
+# reading the spec. Any vocab not mapped here falls back to its raw token.
+_NAME_TYPE_DISPLAY = {
+    "person": "Person",
+    "organisation": "Organisation",
+}
+_ROLE_DISPLAY = {
+    "ProjectLeader": "Project leader (led the survey)",
+    "ProjectMember": "Project member (on the team)",
+    "DataCollector": "Data collector (acquired in the field)",
+    "ContactPerson": "Contact person (point of contact)",
+    "DataCurator": "Data curator (prepared the release)",
+    "Sponsor": "Sponsor (funded the release)",
+    "RightsHolder": "Rights holder (owns the data)",
+    "Distributor": "Distributor (releases the data)",
+}
+
 
 def _typed_vocab_select_widget(name: str, label: str, value, options: tuple,
                                display_labels: dict | None = None) -> str:
@@ -3848,15 +3957,48 @@ def _levels_widget(section: str, subkey: str, fields: dict, submitted: dict | No
             'outside this list, use the advanced JSON below.</span></p>')
 
 
+def _reorder_controls_html() -> str:
+    """CONTRIBUTOR-CREDIT-SPEC (§6, creators are an ORDERED list): the per-row move up/down buttons. The
+    delegated handler in EDITOR_UI_JS moves the row's DOM node AND renumbers the section's row indices so
+    the assembled order (editor_form._assemble_list reads rows in numeric index order) matches the visual
+    order - the reorder therefore persists through save. Degrades to inert buttons without JS (the server
+    already renders rows in citation order, so no-JS reorder is a rename-then-PR escape)."""
+    return ('<p style="margin:.15rem 0" class="reorder-wrap">'
+            '<button type="button" class="b-accent" data-editor-move-row="up" '
+            'style="padding:.2rem .5rem;font-size:.75rem" title="Move up (earlier in the citation)">'
+            '&uarr; up</button> '
+            '<button type="button" class="b-accent" data-editor-move-row="down" '
+            'style="padding:.2rem .5rem;font-size:.75rem" title="Move down (later in the citation)">'
+            '&darr; down</button></p>')
+
+
+# CONTRIBUTOR-CREDIT-SPEC (§6): the "needs review" chip on a migration-seeded credit row awaiting curator
+# adjudication (the INFERRED-REVIEW marker the runner detected). Advisory only - it never blocks saving;
+# saving the list rewrites it WITHOUT the marker, which IS the adjudication (apply_patch replaces the list
+# wholesale AND explicitly strips row 0's comment-above marker off the parent key, which a replace alone
+# leaves behind; verified by test_editor_credit_roundtrip).
+_REVIEW_CHIP_HTML = (
+    '<p style="margin:.15rem 0" class="review-chip-wrap">'
+    '<span class="sub" data-review-chip '
+    'style="color:#E0B341;border:1px solid #E0B341;border-radius:4px;padding:.1rem .4rem;'
+    'font-size:.75rem">needs review - seeded by migration; confirm and save to clear</span></p>'
+)
+
+
 def _list_row_html(section: str, index: int, subfields, values: dict | None,
-                   row_suffix_html: str = "") -> str:
+                   row_suffix_html: str = "", *, reorderable: bool = False,
+                   needs_review: bool = False) -> str:
     """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
     submit just leaves an empty row, which the server drops). `values` prefills an existing row.
     `row_suffix_html` (IDCONS D5) is inserted before the remove button — used to attach the per-identifier
     resolution status chip to related_identifiers rows; it rides the row template so a JS-added row carries
-    it too. Default empty, so every other list section renders byte-identically."""
+    it too. Default empty, so every other list section renders byte-identically.
+    `reorderable` (CONTRIBUTOR-CREDIT-SPEC §6) adds up/down move buttons (creators). `needs_review` adds the
+    INFERRED-REVIEW chip to a migration-seeded row."""
     from . import editor_form
     cells = []
+    if needs_review:
+        cells.append(_REVIEW_CHIP_HTML)
     for subkey, label, placeholder, kind in subfields:
         name = f"l_{section}_{index}_{subkey}"
         val = (values or {}).get(subkey)
@@ -3873,15 +4015,25 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
         if kind == "identifier_type":               # §2a related_identifiers[].identifier_type — vocab <select>
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.IDENTIFIER_TYPES))
             continue
+        if kind == "name_type":                     # §6 creators/contributors - person|organisation <select>
+            cells.append(_typed_vocab_select_widget(name, label, val, editor_form.NAME_TYPES,
+                                                    display_labels=_NAME_TYPE_DISPLAY))
+            continue
+        if kind == "role":                          # §6 contributors[].role - 8-token vocab <select>
+            cells.append(_typed_vocab_select_widget(name, label, val, editor_form.CONTRIBUTOR_ROLES,
+                                                    display_labels=_ROLE_DISPLAY))
+            continue
         itype = "email" if kind == "email" else "text"
         extra = _ROR_HINT if kind == "ror" else ""
         cells.append(f'<p style="margin:.15rem 0"><label class="k">{_esc(label)}</label>'
                      f'{_text_input(name, val, placeholder, input_type=itype, extra_hint=extra)}</p>')
+    reorder = _reorder_controls_html() if reorderable else ""
     remove = ('<p style="margin:.15rem 0"><button type="button" class="b-bad" '
               'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
               'Remove row</button></p>')
     return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
-            f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{row_suffix_html}{remove}</div>')
+            f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{row_suffix_html}'
+            f'{reorder}{remove}</div>')
 
 
 # Spare blank rows rendered when JS is unavailable so a curator can still add entries (deliverable 3).
@@ -3892,18 +4044,30 @@ _SPARE_BLANK_ROWS = 2
 # so no real index or field text can collide with it, and the surrounding underscores survive.
 ROW_INDEX_TOKEN = "ROWIDX"
 
+# CONTRIBUTOR-CREDIT-SPEC (§6): sections whose ORDER is meaningful get per-row up/down reorder controls.
+# creators[] is the citation author order (C1); contributors[] is not ordered, so it does not.
+_REORDERABLE_SECTIONS = frozenset({"creators"})
+
 
 def _list_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
-                        err_map: dict, display_error: str | None = None) -> str:
+                        err_map: dict, display_error: str | None = None,
+                        review_indices: list | None = None) -> str:
     """`display_error` (C43-HUB H4): a DISPLAY-LAYER section-level error line (list rows have no
     single offending input to redden, so the message renders under the heading). Rendering only —
-    the server validator and POST path are untouched."""
+    the server validator and POST path are untouched. `review_indices` (CONTRIBUTOR-CREDIT-SPEC §6):
+    the ORIGINAL row indices the migration marked INFERRED-REVIEW, chipped only on the first render (not
+    after a submit, when the rows may have been reordered/edited)."""
     from . import editor_form
     subfields = editor_form.LIST_SECTIONS[section]
+    reorderable = section in _REORDERABLE_SECTIONS
+    # CONTRIBUTOR-CREDIT-SPEC (§6): publications rows carry the "Look up DOI" harvest button (like the
+    # related_identifiers PID chip); it rides every row + the template so a JS-added row gets it too.
+    row_suffix = _DOI_HARVEST_BUTTON_HTML if section == "publications" else ""
     # Prefill existing rows: resubmitted rows win (preserve typed values on a validation error),
     # else the original list from the read-job.
     existing: list[dict] = []
-    if submitted is not None and any(k.startswith(f"l_{section}_") for k in submitted):
+    from_submitted = submitted is not None and any(k.startswith(f"l_{section}_") for k in submitted)
+    if from_submitted:
         for i in _submitted_row_indices(submitted, section):
             existing.append({sk: submitted.get(f"l_{section}_{i}_{sk}") for sk, *_ in subfields})
     else:
@@ -3916,16 +4080,20 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
                     # A non-dict list item (e.g. a bare-DOI publication string) can't map to the row
                     # widgets — leave it to the advanced JSON, and note it. Render no widget row for it.
                     existing.append(None)  # placeholder marker; skipped below
+    # The INFERRED-REVIEW chip rides the ORIGINAL row order (only meaningful on the first render).
+    review_set = set(review_indices or ()) if not from_submitted else set()
     rendered = []
     idx = 0
-    for row in existing:
+    for orig_pos, row in enumerate(existing):
         if row is None:
             continue  # non-dict item handled via advanced JSON
-        rendered.append(_list_row_html(section, idx, subfields, row))
+        rendered.append(_list_row_html(section, idx, subfields, row, row_suffix_html=row_suffix,
+                                       reorderable=reorderable, needs_review=orig_pos in review_set))
         idx += 1
     # Spare blank rows so add-without-JS works.
     for _ in range(_SPARE_BLANK_ROWS):
-        rendered.append(_list_row_html(section, idx, subfields, None))
+        rendered.append(_list_row_html(section, idx, subfields, None, row_suffix_html=row_suffix,
+                                       reorderable=reorderable))
         idx += 1
     add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
                f'data-editor-add-row="{_esc(section)}">+ Add row</button></p>')
@@ -3936,7 +4104,7 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
     # the surrounding underscores intact (a "_0_"->placeholder replace ate them, giving malformed
     # names like l_instruments3manufacturer; caught by the jsdom harness).
     template = (f'<template data-editor-template="{_esc(section)}">'
-                f'{_list_row_html(section, ROW_INDEX_TOKEN, subfields, None)}'
+                f'{_list_row_html(section, ROW_INDEX_TOKEN, subfields, None, row_suffix_html=row_suffix, reorderable=reorderable)}'
                 '</template>')
     heading = [f'<h2>{_esc(title)}</h2>', _section_error_html(err_map.get(section))]
     if display_error:
@@ -4219,7 +4387,7 @@ def _identifiers_and_pids_panel(slug: str, fields: dict, submitted: dict | None,
 
 def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token: str,
                      error: str = "", field_errors=None, submitted: dict | None = None,
-                     nav: "NavContext | None" = None) -> str:
+                     nav: "NavContext | None" = None, review_flags: dict | None = None) -> str:
     """The seed form (C31 §1.2): server-rendered, escaped, prefilled from the runner's editable
     subset. Top-level scalars are inputs/textarea; the structured sections are per-section WIDGETS
     (labelled inputs, an access-level <select>, levels checkboxes, repeatable rows) with a collapsed
@@ -4263,16 +4431,21 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     # time_series is folded into the Identifiers & PIDs panel (group d) and related_identifiers into
     # group b, so both are skipped as standalone panels. Field names are unchanged -> assembly is byte-
     # identical; the mirror is presentation-only.
+    # CONTRIBUTOR-CREDIT-SPEC (§6): creators/contributors sit contiguously after the investigators they
+    # supersede (creators <- principal_investigators citation; contributors <- lead_investigator roles).
     _FULL_FORM_ORDER = ("organisation", "instruments", "lead_investigator", "principal_investigators",
+                        "creators", "contributors",
                         "identifiers", "publications", "funding", "access", "attribution",
                         "processing", "collection")
+    rflags = review_flags or {}
     for section in _FULL_FORM_ORDER:
         if section == "identifiers":
             panels.append(_identifiers_and_pids_panel(slug, fields, submitted, err_map))
         elif section in editor_form.MAP_SECTIONS:
             panels.append(_map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
         elif section in editor_form.LIST_SECTIONS:
-            panels.append(_list_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
+            panels.append(_list_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map,
+                                              review_indices=rflags.get(section)))
     for section, title, hint in _EDIT_JSON_ONLY:
         panels.append(_json_only_panel(section, title, hint, fields, err_map))
 
@@ -4303,8 +4476,10 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
         f'{csrf}'
         '<p><button class="b-accent" type="submit">Preview change</button></p>'
         '</div></form>'
-        # EXTERNAL same-origin script for the repeatable-row add/remove (strictPages CSP blocks
-        # inline JS; the behaviour degrades to the server-rendered spare rows without it).
+        # EXTERNAL same-origin scripts (strictPages CSP blocks inline JS). doi-harvest.js publishes the
+        # shared window.AusmtDoiHarvest the publications "Look up DOI" button uses; editor.js is the
+        # repeatable-row add/remove/reorder behaviour. Both DEGRADE (spare rows + manual fields) without JS.
+        '<script src="/gateway/curator/doi-harvest.js" defer></script>'
         '<script src="/gateway/curator/editor.js" defer></script>'
     )
     if nav is not None:
@@ -4576,7 +4751,7 @@ def _toc_state_hint(section: str, fields: dict, flagged_section: str | None) -> 
 
 def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_token: str,
                        field_errors=None, submitted: dict | None = None,
-                       active_section: str | None = None) -> str:
+                       active_section: str | None = None, review_flags: dict | None = None) -> str:
     """The Metadata tab body: a sticky section TOC + one per-section form per section, each with its
     OWN commit tray (bump + required note + Preview) so "only this section is submitted" is literally
     true — the form carries only that section's widgets, and the merge seam scopes the patch to them.
@@ -4623,9 +4798,12 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         return _map_section_panel(section, _SECTION_TITLES[section], fields, submitted,
                                   err_map, display_errs=derrs)
 
+    rflags = review_flags or {}
+
     def _list_inner(section: str, derr: str | None = None) -> str:
         return _list_section_panel(section, _SECTION_TITLES[section], fields, submitted,
-                                   err_map, display_error=derr)
+                                   err_map, display_error=derr,
+                                   review_indices=rflags.get(section))
 
     # H4 inline error: the flagged investigator's name input/section goes red with the contract copy —
     # the flag can land on EITHER group (engine _investigators_of precedence), both now inside Investigators.
@@ -4635,9 +4813,23 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     investigators_hint = (
         '<p class="sub">When a lead investigator is set the portal credits the lead; otherwise the '
         'principal investigators list is credited (the served-citation precedence, stated not changed).</p>')
+    # CONTRIBUTOR-CREDIT-SPEC (§6): creators[]/contributors[] fold INTO the Investigators group - they are
+    # the typed credit model that SUPERSEDES the lead/principal fields above them (creators <- the citation
+    # author line; contributors <- who-did-what roles). One entry per group keeps the merged IA; one submit
+    # round-trips all four sections (build_section_patch is section-agnostic). A short hint frames the
+    # transition so the curator sees the old fields and the new typed lists together.
+    credit_hint = (
+        '<p class="sub" style="border-left:3px solid #2E4254;padding-left:.6rem">'
+        '<b>Credit model.</b> <b>Creators</b> are exactly who the citation names, in order (drag with the '
+        'up/down buttons); <b>Contributors</b> record who did what (led, collected, distributed, funded). '
+        'These typed lists supersede the lead/principal fields above; a row seeded by the migration shows a '
+        '"needs review" chip until you confirm and save it.</p>')
     investigators_inner = (investigators_hint
                            + _map_inner("lead_investigator", lead_derrs)
-                           + _list_inner("principal_investigators", pi_derr))
+                           + _list_inner("principal_investigators", pi_derr)
+                           + credit_hint
+                           + _list_inner("creators")
+                           + _list_inner("contributors"))
 
     # (toc key, title, panel-inner-html). Order = the owner-ruled merged sidebar order.
     sections: list[tuple[str, str, str]] = [
@@ -4646,7 +4838,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     ]
     # The sections already folded into a merged entry above are skipped in the document-order sweep below.
     _merged_away = {"organisation", "instruments", "lead_investigator", "principal_investigators",
-                    "related_identifiers", "time_series"}
+                    "creators", "contributors", "related_identifiers", "time_series"}
     for section in _SECTION_ORDER:
         if section in _merged_away:
             continue
@@ -4728,8 +4920,10 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         # C41 D2: the danger zone lives at the BOTTOM of the Metadata tab (destructive ops beside the
         # editing surface; History stays read-only), collapsed + visually separated.
         + _hub_danger_zone(slug)
-        # editor.js only — survey-hub.js is included ONCE by render_survey_hub for every tab
-        # (C43-HUB: the header counts + Stations chip need it hub-wide).
+        # doi-harvest.js (shared window.AusmtDoiHarvest for the publications "Look up DOI" button) +
+        # editor.js; survey-hub.js is included ONCE by render_survey_hub for every tab (C43-HUB: the
+        # header counts + Stations chip need it hub-wide).
+        + '<script src="/gateway/curator/doi-harvest.js" defer></script>'
         + '<script src="/gateway/curator/editor.js" defer></script>'
     )
 
@@ -4757,7 +4951,8 @@ def _hub_danger_zone(slug: str) -> str:
 def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict, csrf_token: str,
                       nav: "NavContext", field_errors=None, submitted: dict | None = None,
                       active_section: str | None = None, commits: list | None = None,
-                      history_error: str = "", build_lag: dict | None = None) -> str:
+                      history_error: str = "", build_lag: dict | None = None,
+                      review_flags: dict | None = None) -> str:
     """The per-survey hub (C43 Stage 1 S1-2 + Stage 2a + the C43-HUB mockup treatment). `tab`
     selects Overview & QA (default) / Stations / Metadata / History. Rendered inside the nav shell
     under ONE mockup-shaped header for every tab — the survey title + slug chip + orientation line
@@ -4776,7 +4971,7 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     if tab == "metadata":
         inner = _hub_metadata_body(slug=slug, version=version, fields=fields, csrf_token=csrf_token,
                                    field_errors=field_errors, submitted=submitted,
-                                   active_section=active_section)
+                                   active_section=active_section, review_flags=review_flags)
     elif tab == "stations":
         inner = _hub_stations_body(slug, fields=fields, csrf_token=csrf_token, build_lag=build_lag)
     elif tab == "history":

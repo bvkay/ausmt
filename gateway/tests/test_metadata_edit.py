@@ -283,6 +283,37 @@ def test_preflight_dirty_tree_refuses(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------------
+# graceful 500 (this lane): an OSError below the PublishError layer inside _commit_edit returns a clean,
+# actionable 500 instead of an uncaught exception / raw stack trace, and nothing commits.
+# --------------------------------------------------------------------------------------------------
+def test_commit_edit_oserror_returns_clean_500(tmp_path):
+    """RED before _commit_edit adds `except OSError`: a filesystem/OS failure below the PublishError
+    layer (a disk write, surveys-live gone read-only) ESCAPES _commit_edit uncaught, becoming a raw 500.
+    GREEN after: a clean JSON 500 with an actionable message, no traceback leaked, nothing committed."""
+    async def _body():
+        import json as _json
+
+        surveys_live = tmp_path / "surveys-live"
+        write_survey_live(surveys_live)
+        async with app_client(tmp_path, git_runner=FakeGit(), edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (_client, _app, gw, _cfg):
+            # Force the blocking commit to hit an OS error (e.g. ENOSPC) below publish's own guards.
+            def _boom(*_a, **_k):
+                raise OSError(28, "No space left on device")
+            gw._commit_edit_blocking = _boom  # noqa: SLF001
+
+            resp = await gw._commit_edit("demo-survey-2026", b"name: x\n", "sha", "curator1", "note")
+            assert resp.status_code == 500
+            detail = _json.loads(bytes(resp.body).decode("utf-8"))["detail"]
+            assert "could not be written to surveys-live" in detail
+            # actionable + no leak: names the errno kind, no raw traceback / filesystem path
+            assert "OSError" in detail
+            assert "Traceback" not in detail
+            assert "No space left on device" not in detail
+    run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
 # §3.7 hostile field values render inert
 # --------------------------------------------------------------------------------------------------
 def test_xss_in_edit_renders_inert(tmp_path):

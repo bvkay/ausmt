@@ -8,6 +8,13 @@ const html = fs.readFileSync(path.join(__dirname, "..", "add-survey.html"), "utf
 const block = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1])
   .find(b => b.includes("function buildSurveyYaml"));
 if (!block) { console.error("FAIL: pure-logic <script> not found in add-survey.html"); process.exit(1); }
+// The inline block aliases the DOI-harvest core from window.AusmtDoiHarvest (the shared src/doi_harvest.js,
+// loaded via <script src> in the browser). Provide the same global here before requiring the block so the
+// aliased normalizeDoi/looksLikeDoi/parseCrossref/parseDatacite/formatCitation/harvestDoi resolve, exactly
+// as they do on the page. This is the SINGLE source both the public form and the curator editor consume.
+global.window = global.window || {};
+global.window.AusmtDoiHarvest = require(path.join(__dirname, "..", "src", "doi_harvest.js"));
+
 const tmp = path.join(os.tmpdir(), "ausmt_addsurvey_logic.js");
 fs.writeFileSync(tmp, block);
 const M = require(tmp);
