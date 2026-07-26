@@ -123,6 +123,28 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("name", "Name", "Given Family", "text"),
         ("orcid", "ORCID", "0000-0002-1825-0097", "orcid"),
     ],
+    # CONTRIBUTOR-CREDIT-SPEC C1 (§6 editor typed rows): creators[] - who the citation names, an ORDERED
+    # editorial list (order IS the citation author order, so the row renders with up/down reorder controls
+    # in curatorpage). name_type is FAIL-CLOSED (person|organisation); orcid is people-only and ror
+    # organisations-only, both OPTIONAL curator hints (WARNING-only at the validator). orcid/ror sit in
+    # _OPTIONAL_LIST_KEYS so an org creator (no orcid) / person creator (no ror) round-trips to _OMIT
+    # rather than gaining a spray of null keys.
+    "creators": [
+        ("name", "Name", "Family, Given  or  Organisation name", "text"),
+        ("name_type", "Person or organisation", "", "name_type"),
+        ("orcid", "ORCID (people)", "0000-0002-1825-0097", "orcid"),
+        ("ror", "ROR id (organisations)", "https://ror.org/03yghzc09", "ror"),
+    ],
+    # CONTRIBUTOR-CREDIT-SPEC C2 (§6): contributors[] - who did what, repeatable. name_type AND role are
+    # both FAIL-CLOSED (role over the 8-token DataCite contributorType subset, §3.1); orcid/ror optional as
+    # for creators. NOT ordered (no reorder controls), unlike creators.
+    "contributors": [
+        ("name", "Name", "Family, Given  or  Organisation name", "text"),
+        ("name_type", "Person or organisation", "", "name_type"),
+        ("role", "Role (what they did)", "", "role"),
+        ("orcid", "ORCID (people)", "0000-0002-1825-0097", "orcid"),
+        ("ror", "ROR id (organisations)", "https://ror.org/03yghzc09", "ror"),
+    ],
     "publications": [
         ("author", "Author", "Family, G.", "text"),
         ("year", "Year", "2026", "text"),
@@ -184,6 +206,13 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
 _OPTIONAL_LIST_KEYS: dict[str, frozenset] = {
     "related_identifiers": frozenset({"identifies", "title", "licence", "retrieved", "statement",
                                       "profile"}),
+    # CONTRIBUTOR-CREDIT-SPEC (§6): orcid is people-only and ror organisations-only, so on any given credit
+    # row one of them is legitimately absent. Marked OPTIONAL so an empty orcid/ror is written back ONLY
+    # when the original row already carried it - an org creator {name, name_type: organisation, ror} and a
+    # person creator {name, name_type: person, orcid} each round-trip to their snapshot (-> _OMIT) instead
+    # of gaining null orcid/ror keys that would break the byte-clean round-trip.
+    "creators": frozenset({"orcid", "ror"}),
+    "contributors": frozenset({"orcid", "ror"}),
 }
 
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
@@ -261,6 +290,19 @@ def derived_relation(identifies) -> str | None:
     if identifies in (None, ""):
         return None
     return IDENTIFIES_RELATION.get(str(identifies).strip())
+
+# Contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2/§6, owner-ratified 2026-07-25). The typed
+# creators[]/contributors[] editor rows. Both are FROZEN, FAIL-CLOSED vocabs - BAKED copies (the gateway
+# APP image is content-blind: it ships only gateway/, never the surveys validator), PINNED to the surveys
+# validator's NAME_TYPES / CONTRIBUTOR_ROLES by test_editor_form.py (the same parity-pin discipline that
+# guards RELATION_TYPES / IDENTIFIER_TYPES). Ordered tuples give the <select> a stable preset order; the
+# pin compares them as sets (the validator holds frozensets). An out-of-vocab value FAILs at the form
+# (SectionError) - byte-identical posture to access.coordinates / relation, because a mis-typed name_type
+# mis-classifies the actor (wrong citation rendering) and a mis-typed role publishes a wrong provenance
+# claim about who did what, so both must block rather than ship.
+NAME_TYPES = ("person", "organisation")
+CONTRIBUTOR_ROLES = ("ProjectLeader", "ProjectMember", "DataCollector", "ContactPerson",
+                     "DataCurator", "Sponsor", "RightsHolder", "Distributor")
 
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
 # — the checkboxes plus the advanced JSON fallback cover the rest.
@@ -343,6 +385,15 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
     if kind == "identifies" and value not in IDENTIFIES_LEVELS:
         raise SectionError(section, f"data level '{value}' is not one of "
                                     f"{', '.join(IDENTIFIES_LEVELS)}")
+    # CONTRIBUTOR-CREDIT-SPEC (§6) - the typed credit-row presets. Fail-closed like the vocabs above: the
+    # <select> only offers vocab values, so a normal submit is always valid; this rejects a hand-crafted
+    # out-of-vocab POST. A mis-typed name_type mis-classifies the actor (wrong citation rendering) and a
+    # mis-typed role publishes a wrong provenance claim about who did what, so each must block, not ship.
+    if kind == "name_type" and value not in NAME_TYPES:
+        raise SectionError(section, f"'{value}' is not one of {', '.join(NAME_TYPES)} "
+                                    "(person or organisation)")
+    if kind == "role" and value not in CONTRIBUTOR_ROLES:
+        raise SectionError(section, f"role '{value}' is not one of {', '.join(CONTRIBUTOR_ROLES)}")
 
 
 # ---- assembly -----------------------------------------------------------------------------------

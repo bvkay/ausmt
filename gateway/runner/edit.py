@@ -93,7 +93,14 @@ EDITABLE_MAPS = ("organisation", "identifiers", "collection", "processing", "acc
 # _OMIT and never reaches this allow-list; only a real change is patched, replacing the list wholesale like
 # the other editable lists). (sources[] is the sibling wave-2 widget with the same gap — tracked separately.)
 EDITABLE_LISTS = ("principal_investigators", "publications", "funding", "instruments",
-                  "related_identifiers")
+                  "related_identifiers", "creators", "contributors")
+# CONTRIBUTOR-CREDIT-SPEC (§6 editor typed rows): creators[] and contributors[] are modelled LIST_SECTION
+# widgets (editor_form.LIST_SECTIONS), so a changed list MUST be patchable here or the curator's edit is
+# REJECTED on save as a non-editable field ("patch contains non-editable field(s): creators"). This is the
+# EXACT gap the related_identifiers lane shipped with: the widget assembled a patch the runner then refused,
+# because the key was missing from this allow-list. An UNCHANGED list still assembles to _OMIT and never
+# reaches this allow-list; only a real change is patched, replacing the list wholesale like the other
+# editable lists (proven RED by test_editor_credit_roundtrip.py against this allow-list being absent).
 EDITABLE_KEYS = EDITABLE_SCALARS + EDITABLE_MAPS + EDITABLE_LISTS
 
 
@@ -508,8 +515,53 @@ def report_has_fail(report: dict) -> bool:
 
 # ---- job bodies ----
 
+# CONTRIBUTOR-CREDIT-SPEC (§6 INFERRED-REVIEW surfacing): the credit migration (_tools/migrate_credit.py)
+# marks each SEEDED creators[]/contributors[] row as needing curator adjudication with an INFERRED-REVIEW
+# note. VERIFIED against the actual migration output (migrate_credit._creator_lines/_contributor_lines):
+# the note is an INLINE comment on the row's `- name: "..."  # INFERRED-REVIEW: ...` line, NOT a standalone
+# line above the row. ruamel stores that inline comment on the row-MAP's ca.items (keyed by the `name`
+# sub-key). This detector is robust to either placement: it scans both the row map's own comment tokens and
+# the parent sequence's per-index pre-comments. The row indices it returns drive the "needs review" chip in
+# the editor (curatorpage), computed on the RUNNER side because the gateway never parses survey content
+# (C31 §0.1) and editable_subset returns plain values that carry no comments.
+_INFERRED_REVIEW_MARK = "INFERRED-REVIEW"
+
+
+def _comment_text(token) -> str:
+    """Flatten a ruamel comment slot (None, a CommentToken, or a list of them) to its joined text."""
+    if token is None:
+        return ""
+    if isinstance(token, (list, tuple)):
+        return " ".join(_comment_text(t) for t in token)
+    return str(getattr(token, "value", "") or "")
+
+
+def inferred_review_indices(seq) -> list[int]:
+    """The 0-based indices of rows in a loaded creators[]/contributors[] CommentedSeq that carry an
+    INFERRED-REVIEW marker (an inline comment on the row, or a pre-comment above it). Empty for a plain
+    list, a non-sequence, or a list with no markers."""
+    out: list[int] = []
+    if not isinstance(seq, list):
+        return out
+    seq_ca = getattr(getattr(seq, "ca", None), "items", None) or {}
+    for idx, item in enumerate(seq):
+        marked = False
+        item_ca = getattr(getattr(item, "ca", None), "items", None) or {}
+        for slot in item_ca.values():
+            if _INFERRED_REVIEW_MARK in _comment_text(slot):
+                marked = True
+                break
+        if not marked and _INFERRED_REVIEW_MARK in _comment_text(seq_ca.get(idx)):
+            marked = True
+        if marked:
+            out.append(idx)
+    return out
+
+
 def run_read_job(package_root: Path) -> dict:
-    """Handle a `read` edit-job: load the survey.yaml and return the editable subset + version."""
+    """Handle a `read` edit-job: load the survey.yaml and return the editable subset + version. Also
+    returns `review_flags` (CONTRIBUTOR-CREDIT-SPEC §6): the creators[]/contributors[] row indices the
+    credit migration marked INFERRED-REVIEW, so the editor can chip them for curator adjudication."""
     survey_yaml = package_root / "survey.yaml"
     if not survey_yaml.is_file():
         raise EditError(f"survey.yaml not found under {package_root.name}")
@@ -517,10 +569,16 @@ def run_read_job(package_root: Path) -> dict:
     if not hasattr(data, "get"):
         raise EditError("survey.yaml is not a mapping")
     version = data.get("version")
+    review_flags = {}
+    for key in ("creators", "contributors"):
+        idxs = inferred_review_indices(data.get(key))
+        if idxs:
+            review_flags[key] = idxs
     return {
         "ok": True,
         "fields": editable_subset(data),
         "version": version if isinstance(version, str) else None,
+        "review_flags": review_flags,
     }
 
 
