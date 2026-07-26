@@ -1868,6 +1868,42 @@ async function bootFreshWindow(dataMap) {
     "W3b: a no-cite survey's Cite tab must explicitly say 'custodian citation not recorded, cite the survey package', not a silent AUSMT_SELF masquerade");
   drwN.classList.remove("open");
 
+  // CR. CONTRIBUTOR CREDIT MODEL (CONTRIBUTOR-CREDIT-SPEC §3/§6): the survey drawer renders contributors[]
+  // with human role phrases, and the stale lead/principal-investigator display (the survey-summary
+  // 'investigators' row served from the retired keys) is gone. Poke Gamma (base fixture carries no credit
+  // lists) with the pinned seam shape: a person ProjectLeader with an ORCID, an org DataCollector with no
+  // ROR, a person DataCurator with an ORCID, an org Distributor with a real ROR, and a person ContactPerson
+  // with no ORCID, using real corpus names/RORs. RED-proven: on pre-change drawer.js none of the role-phrase
+  // spans render AND the 'investigators' summary row is still present, so each pin below flips.
+  A.setSMETA("Gamma Survey", { contributors: [
+    { name: "Stephan Thiel", name_type: "person", role: "ProjectLeader", orcid: "0000-0002-8678-412X" },
+    { name: "Zonge Engineering", name_type: "organisation", role: "DataCollector" },
+    { name: "Ben Kay", name_type: "person", role: "DataCurator", orcid: "0000-0002-9738-7277" },
+    { name: "Geological Survey of South Australia", name_type: "organisation", role: "Distributor", ror: "https://ror.org/028g18b61" },
+    { name: "Graham Heinson", name_type: "person", role: "ContactPerson" },
+  ] });
+  A.openSurvey("Gamma Survey");
+  const drwCr = doc.getElementById("drawer"), crH = drwCr.innerHTML;
+  ok(/>Contributors</.test(crH), "CREDIT: a Contributors section heading must render when contributors[] is present");
+  ok(/<span class="prov">led<\/span>/.test(crH), "CREDIT: a ProjectLeader must render the 'led' role phrase");
+  ok(/<span class="prov">collected the data<\/span>/.test(crH), "CREDIT: a DataCollector must render 'collected the data'");
+  ok(/<span class="prov">curated<\/span>/.test(crH), "CREDIT: a DataCurator must render 'curated'");
+  ok(/<span class="prov">distributed<\/span>/.test(crH), "CREDIT: a Distributor must render 'distributed'");
+  ok(/<span class="prov">contact<\/span>/.test(crH), "CREDIT: a ContactPerson must render 'contact'");
+  ok(/Stephan Thiel/.test(crH) && /orcid\.org\/0000-0002-8678-412X/.test(crH),
+    "CREDIT: a person contributor renders their name plus the ORCID icon-link when an ORCID is present");
+  ok(/Geological Survey of South Australia/.test(crH) && /ror\.org\/028g18b61/.test(crH),
+    "CREDIT: an organisation contributor's name links to its ROR when present");
+  ok(/Zonge Engineering/.test(crH), "CREDIT: an organisation contributor with no ROR renders its plain name (no '(no PID)' suffix)");
+  ok(!/>investigators</.test(crH),
+    "CREDIT retirement: the stale survey-summary 'investigators' row (served from the retired lead/principal-investigator keys) must be gone");
+  drwCr.classList.remove("open");
+  // Graceful absence: Beta carries no contributors[] -> NO Contributors section renders (no empty heading, no placeholder).
+  A.openSurvey("Beta Survey");
+  ok(!/>Contributors</.test(doc.getElementById("drawer").innerHTML),
+    "CREDIT: a survey with no contributors[] must render NO Contributors section (render nothing when the array is absent)");
+  doc.getElementById("drawer").classList.remove("open");
+
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
   // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
   // now a SEQUENTIAL dark→light progression whose SIGNAL IS LIGHTNESS (viridis principle): dark slate-blue

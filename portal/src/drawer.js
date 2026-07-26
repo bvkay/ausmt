@@ -689,16 +689,29 @@ function surveyCard(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    `<div class="cardbtns"><button data-act="story" data-survey="${escAttr(sv)}">View survey</button><button data-act="select" data-survey="${escAttr(sv)}">Download</button></div></div>`;}
 function pidLink(p){if(!p)return "<span class='prov'>not recorded</span>";if(p.startsWith("TODO"))return "<span class='prov'>not recorded</span>";
   const href=p.startsWith("http")?p:(p.startsWith("10.")?"https://doi.org/"+p:"https://hdl.handle.net/"+p);return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(p)}</a>`;}
-// C7: SMETA.investigators is [{name, orcid}, ...] (ORCID solicited by the schema, previously discarded).
-// Each name renders with a small ORCID icon-link when present; tolerates the legacy bare-string shape
-// (a plain name, no ORCID) so old/hand-built surveys.json still renders instead of crashing.
+// A person's ORCID as a small icon-link (self-hosted vendor logo, CSP-safe same-origin); "" when absent,
+// so callers append it directly after the escaped name.
 function orcidLink(o){if(!o)return "";const href="https://orcid.org/"+o;
-  // Self-hosted vendor logo (CSP-safe, same-origin); renders nothing when orcid is absent (guard above).
   return ` <a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer" title="ORCID: ${escAttr(o)}" class="orcid-ico"><img src="vendor/ORCID_iD.png" alt="ORCID" class="idlogo orcid-logo"></a>`;}
-function investigatorsHtml(invs){
-  const list=(invs||[]);
-  if(!list.length)return "–";
-  return list.map(i=>typeof i==="string"?esc(i):esc(i.name||"–")+orcidLink(i.orcid)).join(", ");}
+// Credit model (SPEC §3.1): the DataCite contributorType subset -> a human role phrase. Fail-closed vocab;
+// an absent or out-of-vocab role adds no phrase (the validator blocks a bad token upstream, so this never
+// echoes a raw token).
+const CONTRIBUTOR_ROLE_LABELS={ProjectLeader:"led",ProjectMember:"project member",DataCollector:"collected the data",
+  ContactPerson:"contact",DataCurator:"curated",Sponsor:"sponsored",RightsHolder:"rights holder",Distributor:"distributed"};
+// Credit model (SPEC §3/§6): the survey's contributors[] as a single-column "who did what" list; each row a
+// name (an organisation links to its ROR; a person carries an ORCID icon when present) followed by the role
+// phrase. Reads the pinned seam field verbatim; returns "" (no heading, no placeholder row) when the list is
+// absent or empty, matching sourcesListHtml/instrumentPidsHtml.
+function contributorRow(c){
+  const name=((c&&c.name)||"").toString().trim();
+  if(!name)return "";
+  const nameHtml=c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);
+  const label=CONTRIBUTOR_ROLE_LABELS[c.role];
+  return label?`${nameHtml} <span class="prov">${esc(label)}</span>`:nameHtml;}
+function contributorsHtml(m){
+  const rows=((m&&m.contributors)||[]).filter(c=>c&&typeof c==="object").map(contributorRow).filter(Boolean);
+  if(!rows.length)return "";
+  return `<div class="sechead">Contributors</div><div class="surveymeta"><span class="pidline">${rows.join("<br>")}</span></div>`;}
 // C7: a ROR value may be a bare id (00892tw58) or a full https://ror.org/... URL — resolve either to
 // the canonical ror.org landing page link.
 function rorLink(r){if(!r)return null;const href=r.startsWith("http")?r:"https://ror.org/"+r;return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(r)}</a>`;}
@@ -919,7 +932,6 @@ function surveySummary(ss,m){
     `<tr><td>instrumentation</td><td>${esc(m.instrument_model||"not recorded in source metadata")}</td></tr>`+
     `<tr><td>processing software</td><td>${esc(software)}</td></tr>`+
     `<tr><td>acquisition</td><td>${esc(m.dates||"–")}</td></tr>`+
-    `<tr><td>investigators</td><td>${investigatorsHtml(m.investigators)}</td></tr>`+
     `<tr><td>collection</td><td>${coll}</td></tr>`+
     `<tr><td>licence / access</td><td>${esc(m.lic||"?")} · ${esc(m.access||"open")}</td></tr>`+
     `<tr><td>version</td><td>${esc(m.version||"–")}</td></tr>`+
@@ -960,11 +972,11 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const rel=relatedSurveys(sv),pr=pidRollup(m);
   _rememberDrawerOpener();                            // E7: capture the invoking element before the rewrite
   // UX6 Wave E (E4): section order — (1) title+description, (2) geographic footprint, (3) station count +
-  // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) investigators + funding,
+  // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
   // (7) publications, (8) identifiers (E2 rollup), (9) release history. Content is unchanged from before —
-  // only the order. Acquisition/processing/investigators are carried inside the survey-summary table
-  // (sections 3/5/6 share that one atomic block). Downloads move up ahead of funding/publications/
-  // identifiers; release history moves last.
+  // only the order. Acquisition/processing are carried inside the survey-summary table (sections 3/5 share
+  // that atomic block); contributors (credit model, SPEC §3) render as their own section ahead of funding.
+  // Downloads move up ahead of funding/publications/identifiers; release history moves last.
   drawer.innerHTML=
    `<div class="dhead"><span class="sid" style="font-size:18px">${esc(sv)}</span><button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")} · ${esc(m.dates||"dates n/a")}</div>`+
@@ -986,6 +998,7 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
        ?`<div class="prod dis"><span class="pdot" style="background:var(--part)"></span><div>Dataset DOI<small>reserved (not yet active)</small></div></div>`
        :`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`):"")+
    `</div>`+
+   contributorsHtml(m)+
    `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:esc(f.name)).join(" · ")||"–"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
    `<details class="prov-d survey-ids"><summary>Persistent identifiers: ${pr.have} of ${pr.total} recorded</summary><div class="prov-dbody">`+identifiersHtml(m)+`</div></details>`+
