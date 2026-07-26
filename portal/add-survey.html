@@ -319,6 +319,18 @@
         otherwise the principal investigators list is credited (the served-citation precedence, stated not
         changed).</div></div>
 
+      <!-- Credit C1: the plain-language "who should be credited?" question -> creators[] (an ORDERED
+           citation list). Basic tier: just a name per row, with an Organisation checkbox that sets
+           name_type; ORCID/ROR is optional. Typed contributors (who did what) live in the advanced tier. -->
+      <div class="full"><label>Who should be credited?</label>
+        <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">The people
+          or organisations named in this survey's citation, <b>in the order they should appear</b>. Add a row
+          each; tick <b>Organisation</b> for a body such as a state survey or company. ORCID or ROR is optional.</p>
+        <div id="creatorRows"></div>
+        <button type="button" class="act" id="addCreator" style="margin-top:2px">+ Add creator</button>
+        <div class="hint" style="margin-top:4px">Recorded as <code>creators</code>, the citation author line.
+          Leave blank to let AusMT credit the organisation and year, or the lead / principal investigators above.</div></div>
+
       <div class="full"><label>Related publications <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(one DOI per publication; we look up the citation for you)</span></label>
         <div id="pubRows"></div>
         <button type="button" class="act" id="addPub" style="margin-top:2px">+ Add publication</button>
@@ -376,6 +388,17 @@
     <summary><div class="tlead"><h2>5. I know my metadata</h2><span class="tk">advanced</span></div></summary>
     <p class="tsub">Provenance identifiers, instruments, processing and data types. Leave these to the curator
       if you are unsure, server validation and curator review fill any gaps.</p>
+
+    <!-- Credit C2: contributors[] (who did what) - the ADVANCED typed rows. name_type and role are
+         FAIL-CLOSED vocab; the <select>s only ever offer the ratified tokens (NAME_TYPES /
+         CONTRIBUTOR_ROLES), so the form cannot author a value the server validator would block. -->
+    <label>Contributors <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(who did what; a role per person or organisation)</span></label>
+    <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Optional, and
+      separate from the citation credit above. Record who led, who collected in the field, who to contact,
+      who curated, who sponsored, who holds rights, or who distributes the data.</p>
+    <div id="contributorRows"></div>
+    <button type="button" class="act" id="addContributor" style="margin-top:2px">+ Add contributor</button>
+    <div class="hint" style="margin-top:4px">Recorded as <code>contributors</code>, each with a DataCite role.</div>
 
     <!-- Identifiers by data level (mirrors the curator "This dataset elsewhere" editor). Each row states
          WHAT the identifier points at in NCI Table 1 data-level terms; the DataCite relation is DERIVED
@@ -645,6 +668,37 @@ function relatedIdentifiersEmit(list){
       identifier_type:IDENTIFIER_TYPES.indexOf(String(r.identifier_type||"").trim())>=0?String(r.identifier_type).trim():"",
       custodian:String(r.custodian==null?"":r.custodian).trim()}));
 }
+// ---------- contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2). creators[] is the ORDERED "who
+// should be credited?" citation list; contributors[] is the typed who-did-what list. NAME_TYPES and
+// CONTRIBUTOR_ROLES are kept byte-in-step with the surveys validator (validate_survey.NAME_TYPES /
+// CONTRIBUTOR_ROLES_ORDERED) so the form only ever offers the fail-closed vocab the server accepts;
+// CONTRIBUTOR_ROLES is the DataCite contributorType subset in ratified order (it feeds the role <select>
+// AND the emit-time vocab guard). CONTRIBUTOR_ROLE_DISPLAY is the human label per token (curator-facing;
+// the DataCite tokens are jargon). ----------
+const NAME_TYPES=["person","organisation"];
+const CONTRIBUTOR_ROLES=["ProjectLeader","ProjectMember","DataCollector","ContactPerson","DataCurator",
+  "Sponsor","RightsHolder","Distributor"];
+const CONTRIBUTOR_ROLE_DISPLAY={ProjectLeader:"Project leader (led the survey)",
+  ProjectMember:"Project member (team member)",DataCollector:"Data collector (field acquisition)",
+  ContactPerson:"Contact person (point of contact)",DataCurator:"Data curator (prepared the release)",
+  Sponsor:"Sponsor (funded the release)",RightsHolder:"Rights holder (owns the data)",
+  Distributor:"Distributor (releases the data)"};
+// creditRowsEmit: filter a creators/contributors list to the rows worth writing (a name is the signal)
+// and vocab-guard name_type (both lists) + role (contributors) so a hand-crafted out-of-vocab value
+// (buildSurveyYaml is a pure export callable with arbitrary meta) is DROPPED, never emitted, exactly as
+// relatedIdentifiersEmit guards identifies/identifier_type. ORDER is preserved: it is the citation order.
+function creditRowsEmit(list, roled){
+  return (list||[]).map(r=>r||{}).filter(r=>String(r.name==null?"":r.name).trim()).map(r=>{
+    const nt=String(r.name_type==null?"":r.name_type).trim();
+    const out={name:String(r.name).trim(),
+      name_type:NAME_TYPES.indexOf(nt)>=0?nt:"",
+      orcid:String(r.orcid==null?"":r.orcid).trim(),
+      ror:String(r.ror==null?"":r.ror).trim()};
+    if(roled){ const role=String(r.role==null?"":r.role).trim();
+      out.role=CONTRIBUTOR_ROLES.indexOf(role)>=0?role:""; }
+    return out;
+  });
+}
 // Required (browser/full submission): small set; everything else is a warning at most.
 const REQUIRED=["name","slug","organisation","country","license","access"];
 function isEmail(s){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s||"")); }
@@ -860,6 +914,34 @@ function buildSurveyYaml(m){
     pis.forEach(p=>{
       L.push("  - name: "+q(String(p.name).trim()));
       L.push("    orcid: "+(String(p.orcid==null?"":p.orcid).trim()?q(String(p.orcid).trim()):"null"));
+    });
+  }
+  // Contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2): creators[] (ORDERED citation names, the
+  // "who should be credited?" question) then contributors[] (the typed who-did-what rows). A row is
+  // emitted only when it carries a name; absent -> absent (no empty list) so a bare survey stays lean, and
+  // DOM order is preserved as the citation order. name is QUOTED (free text: a bare "2020" / "No" /
+  // "Sponsor, Inc" would be mis-typed unquoted, the declared_date lesson), as are orcid/ror; name_type and
+  // role are vocab-GUARDED bare scalars (only an in-vocab token survives creditRowsEmit), the same
+  // bare-vocab discipline as the identifies / identifier_type rows above.
+  const creators=creditRowsEmit(m.creators,false);
+  if(creators.length){
+    L.push("creators:");
+    creators.forEach(c=>{
+      L.push("  - name: "+q(c.name));
+      if(c.name_type) L.push("    name_type: "+c.name_type);
+      if(c.orcid) L.push("    orcid: "+q(c.orcid));
+      if(c.ror) L.push("    ror: "+q(c.ror));
+    });
+  }
+  const contributors=creditRowsEmit(m.contributors,true);
+  if(contributors.length){
+    L.push("contributors:");
+    contributors.forEach(c=>{
+      L.push("  - name: "+q(c.name));
+      if(c.name_type) L.push("    name_type: "+c.name_type);
+      if(c.role) L.push("    role: "+c.role);
+      if(c.orcid) L.push("    orcid: "+q(c.orcid));
+      if(c.ror) L.push("    ror: "+q(c.ror));
     });
   }
   L.push(m.abstract?("abstract: >\n  "+String(m.abstract).replace(/\n/g," ")):"abstract: >\n  REPLACE with a short survey description.");
@@ -1187,7 +1269,7 @@ function stationCountsByName(catalogue){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,relatedIdentifiersEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,relatedIdentifiersEmit,creditRowsEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES,NAME_TYPES,CONTRIBUTOR_ROLES};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -1429,6 +1511,70 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addPi").onclick=()=>$("piRows").appendChild(piRow());
 
+  // ----- Credit C1: creators[] (the plain-language "who should be credited?" question). Basic tier: an
+  // ordered list of citation names, each a person or (org checkbox) an organisation, ORCID/ROR optional.
+  // DOM order IS the citation order. Emitted as creators[] {name, name_type, orcid?/ror?} by readMeta ->
+  // buildSurveyYaml. One empty row shows by default so the question is visible; a nameless row is dropped
+  // at emit time (name is the signal), and the org toggle switches both name_type and the id hint.
+  function creatorRow(){
+    const wrap=document.createElement("div"); wrap.className="creatorrow"; wrap.style.marginBottom="8px";
+    wrap.innerHTML=
+      '<div class="grid">'+
+      '<div><label>Name</label><input class="cr-name" placeholder="Family, Given or an organisation name"></div>'+
+      '<div><label>ORCID / ROR <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>'+
+        '<input class="cr-id" placeholder="0000-0002-1825-0097"></div>'+
+      '<div style="display:flex;align-items:flex-end;gap:14px">'+
+        '<label class="check" style="margin:0;text-transform:none;letter-spacing:0"><input type="checkbox" class="cr-org"><span>Organisation</span></label>'+
+        '<button type="button" class="act cr-rm">Remove</button></div>'+
+      '</div>';
+    wrap.querySelector(".cr-rm").onclick=()=>wrap.remove();
+    const org=wrap.querySelector(".cr-org"), id=wrap.querySelector(".cr-id");
+    org.addEventListener("change",()=>{ id.placeholder=org.checked?"https://ror.org/…":"0000-0002-1825-0097"; });
+    return wrap;
+  }
+  function readCreators(){
+    return Array.from(document.querySelectorAll("#creatorRows .creatorrow")).map(r=>{
+      const org=r.querySelector(".cr-org").checked, idv=(r.querySelector(".cr-id").value||"").trim();
+      return {name:(r.querySelector(".cr-name").value||"").trim(),
+        name_type:org?"organisation":"person",
+        orcid:org?"":idv, ror:org?idv:""};    // ORCID for a person, ROR for an organisation
+    }).filter(c=>c.name);                       // a credited party needs a name; order = citation order
+  }
+  $("addCreator").onclick=()=>$("creatorRows").appendChild(creatorRow());
+  $("creatorRows").appendChild(creatorRow());   // one creator row visible by default (the primary credit question)
+
+  // ----- Credit C2: contributors[] (who did what). Advanced tier: typed rows adding a name_type <select>
+  // and the fail-closed role <select> (the 8 DataCite tokens, CONTRIBUTOR_ROLES). The <select>s only ever
+  // offer the ratified vocab, so the form cannot author a value the server would block. Emitted as
+  // contributors[] {name, name_type, role, orcid?/ror?}. Starts empty (added on demand, like the PIs).
+  function contributorRow(){
+    const wrap=document.createElement("div"); wrap.className="contribrow"; wrap.style.marginBottom="8px";
+    const ntOpts=NAME_TYPES.map(t=>`<option value="${escAttr(t)}">${esc(t==="person"?"Person":"Organisation")}</option>`).join("");
+    const roleOpts='<option value="">Role…</option>'+
+      CONTRIBUTOR_ROLES.map(t=>`<option value="${escAttr(t)}">${esc(CONTRIBUTOR_ROLE_DISPLAY[t]||t)}</option>`).join("");
+    wrap.innerHTML=
+      '<div class="grid">'+
+      '<div><label>Name</label><input class="co-name" placeholder="Family, Given or an organisation name"></div>'+
+      '<div><label>Type</label><select class="co-nametype">'+ntOpts+'</select></div>'+
+      '<div><label>Role</label><select class="co-role">'+roleOpts+'</select></div>'+
+      '<div><label>ORCID / ROR <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input class="co-id" placeholder="0000-0002-1825-0097"></div>'+
+      '<div style="display:flex;align-items:flex-end"><button type="button" class="act co-rm">Remove</button></div>'+
+      '</div>';
+    wrap.querySelector(".co-rm").onclick=()=>wrap.remove();
+    const nt=wrap.querySelector(".co-nametype"), id=wrap.querySelector(".co-id");
+    nt.addEventListener("change",()=>{ id.placeholder=nt.value==="organisation"?"https://ror.org/…":"0000-0002-1825-0097"; });
+    return wrap;
+  }
+  function readContributors(){
+    return Array.from(document.querySelectorAll("#contributorRows .contribrow")).map(r=>{
+      const nt=(r.querySelector(".co-nametype").value||"").trim(), idv=(r.querySelector(".co-id").value||"").trim();
+      return {name:(r.querySelector(".co-name").value||"").trim(), name_type:nt,
+        role:(r.querySelector(".co-role").value||"").trim(),
+        orcid:nt==="organisation"?"":idv, ror:nt==="organisation"?idv:""};
+    }).filter(c=>c.name);
+  }
+  $("addContributor").onclick=()=>$("contributorRows").appendChild(contributorRow());
+
   // ----- ORCID format check (format only; no API/auth) -----
   function wireOrcid(inputId, okId){
     const inp=$(inputId), ok=$(okId);
@@ -1544,6 +1690,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     west:$("m_w").value, east:$("m_e").value, south:$("m_s").value, north:$("m_n").value,
     pi:$("m_pi").value.trim(), pi_orcid:$("m_pi_orcid").value.trim(), ror:$("m_ror").value.trim(),
     principal_investigators:readPrincipalInvestigators(),
+    creators:readCreators(), contributors:readContributors(),
     publications:readPublications(), raid:$("m_raid").value.trim(),
     instrument_pid:$("m_instrument_pid").value.trim(),
     related_identifiers:readRelatedIdentifiers(),
