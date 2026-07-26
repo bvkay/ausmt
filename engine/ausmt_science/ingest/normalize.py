@@ -103,22 +103,32 @@ def source_station_id_from_geographic_name(geographic_name: Optional[str]) -> Op
 
 
 def _survey_meta_get(survey_meta: Optional[dict]):
-    """Extract (authors, title_prefix, doi) intent from a survey SMETA dict, honestly. authors prefers
-    named investigators over the custodian organisation; NEVER the portal brand. Returns (None,None,None)
-    when survey_meta is absent so the caller can fall back to an explicit-unknown, not a fabricated value.
+    """Extract (authors, title_prefix, doi) intent from a survey SMETA dict, honestly. The EDI/EMTF-XML
+    export attribution author line follows CONTRIBUTOR-CREDIT-SPEC §2.1: the creators[] names in order
+    when present, else the legacy named investigators (the retired lead/PI facet, tolerated as a graceful
+    fallback), else the custodian organisation; NEVER the portal brand. Returns (None,None,None) when
+    survey_meta is absent so the caller can fall back to an explicit-unknown, not a fabricated value.
 
-    C7: SMETA.investigators is [{name, orcid}, ...] (build_portal._investigators_of no longer discards
-    the ORCID); only the name feeds the citation-author string here. Still tolerates the PRE-C7 shape
-    (bare name strings) so a stale/hand-built survey_meta degrades to the same author string instead of
-    a stringified-dict repr."""
+    creators are joined with '; ' (a creator name may be 'Last, First', so a comma join would be
+    ambiguous); the legacy investigator fallback keeps its ', ' join. Both tolerate the PRE-C7 bare-string
+    investigator shape so a stale/hand-built survey_meta degrades to an author string, not a dict repr."""
     if not survey_meta:
         return None, None, None
+    creators = survey_meta.get("creators")
+    creator_names = ([str((c or {}).get("name") or "").strip() for c in creators if isinstance(c, dict)]
+                     if isinstance(creators, list) else [])
+    creator_names = [n for n in creator_names if n]
     invs_raw = survey_meta.get("investigators") or []
     invs = [str(x.get("name") or "").strip() if isinstance(x, dict) else str(x).strip()
             for x in invs_raw]
     invs = [x for x in invs if x]
     org = (survey_meta.get("org") or "").strip() or None
-    authors = ", ".join(invs) if invs else org           # investigator names > custodian org
+    if creator_names:
+        authors = "; ".join(creator_names)               # §2.1: creators[] are the citation authors
+    elif invs:
+        authors = ", ".join(invs)                        # legacy fallback: named lead/PI investigators
+    else:
+        authors = org                                    # else the custodian org (never the portal brand)
     cite = survey_meta.get("cite") if isinstance(survey_meta.get("cite"), dict) else {}
     title = (cite.get("ti") or survey_meta.get("title") or "").strip() or None
     doi = (survey_meta.get("doi") or "").strip() or None

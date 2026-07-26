@@ -77,6 +77,44 @@ def test_survey_metadata_and_dataset_doi_injected(tmp_path):
         m.close_mth5()
 
 
+# CONTRIBUTOR-CREDIT-SPEC (mth5 follow-up): a SMETA carrying the typed credit lists + a real grant id.
+# project_lead is the lead-most credited party (the ProjectLeader contributor here, ahead of the lead
+# creator), its ORCID belongs in project_lead.url (a full https URL - AuthorPerson has no serialised id),
+# and the grant id rides through funders when the survey declares one.
+_CREDIT_SMETA = {
+    "cite": {"ti": "Credit MT Survey"},
+    "org": "Example Organisation",
+    "lic": "CC-BY-4.0",
+    "creators": [{"name": "Robertson, Kate", "name_type": "person"}],
+    "contributors": [{"name": "Thiel, Stephan", "name_type": "person", "role": "ProjectLeader",
+                      "orcid": "0000-0002-1825-0097"}],
+    "funders": [{"name": "Australian Research Council", "grant_id": "DP123456"}],
+}
+
+
+def test_project_lead_url_and_grant_id_round_trip(tmp_path):
+    """CONTRIBUTOR-CREDIT-SPEC: the mth5 survey_metadata carries the lead-most credited party as
+    project_lead (the ProjectLeader contributor, ahead of the lead creator), its ORCID as a full
+    https://orcid.org/<id> project_lead.url, and the grant id in funding_source.grant_id. RED against the
+    pre-change producer: it seeded project_lead from investigators[0] and wrote the ORCID to a non-
+    serialised .id (so no url survived), and _funders_of never carried a grant id at all."""
+    rel, hp, n = bp.emit_survey_mth5(_stations(), "credit-survey", "Credit", tmp_path, smeta=_CREDIT_SMETA)
+    assert n == 2 and hp and hp.exists()
+    m = _open(hp)
+    try:
+        df = m.tf_summary.to_dataframe()
+        r0 = df.iloc[0]
+        tf = m.get_transfer_function(r0["station"], r0.get("tf_id", r0["station"]), survey=r0.get("survey"))
+        sm = tf.survey_metadata
+        assert sm.project_lead.author == "Thiel, Stephan", sm.project_lead.author
+        assert str(sm.project_lead.url).rstrip("/") == "https://orcid.org/0000-0002-1825-0097", \
+            str(sm.project_lead.url)
+        # mt_metadata stores grant_id as a list; the point is the survey's declared id landed (no placeholder).
+        assert "DP123456" in str(sm.funding_source.grant_id), sm.funding_source.grant_id
+    finally:
+        m.close_mth5()
+
+
 def test_metadata_thin_survey_still_builds_and_groups(tmp_path):
     """SPEC caveat 2: a raw/CSV-only survey with no SMETA still builds a valid TF payload; the slug is
     seeded so stations do NOT collapse into one survey group '0'."""
