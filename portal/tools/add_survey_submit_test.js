@@ -811,12 +811,122 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     ok(id1.value === "https://doi.org/10.9/b", "R5: a URL-typed related-identifier row keeps its URL (no normalisation)");
   }
 
+  // --------------------------------------------------------------------------------------------------
+  // 8f. CONTRIBUTOR CREDIT MODEL (CONTRIBUTOR-CREDIT-SPEC C1/C2). The "who should be credited?" question
+  //     -> creators[] (basic tier: name + Organisation checkbox, ORDER preserved) and the advanced typed
+  //     contributors[] rows (name_type + the 8-token fail-closed role <select>). Drives every new field
+  //     for real, then reads the REAL packaged survey.yaml and asserts the emitted shape the validator
+  //     expects: ORDERED creators, name_type person/organisation from the org toggle, ORCID vs ROR routed
+  //     by type, comma-bearing names QUOTED (the declared_date YAML-trap lesson), and the role tokens.
+  {
+    const e = await boot({ probe: probeAbsent });
+    const doc = e.doc;
+    // (i) the basic-tier creators UI is present, with one row visible by default (the primary question).
+    ok(doc.getElementById("addCreator"), "8f: the 'who should be credited?' creators UI is present (addCreator)");
+    ok(doc.querySelectorAll("#creatorRows .creatorrow").length === 1,
+      "8f: one creator row is visible by default so the credit question is discoverable");
+    // (ii) the advanced-tier contributors UI is present, and the role <select> offers EXACTLY the 8
+    //      fail-closed DataCite tokens (no more, no less) plus the blank prompt; name_type offers 2.
+    ok(doc.getElementById("addContributor"), "8f: the advanced contributors UI is present (addContributor)");
+    doc.getElementById("addContributor").onclick();
+    const crow = doc.querySelector("#contributorRows .contribrow");
+    ok(crow, "8f: adding a contributor appends a typed row");
+    const roleOpts = Array.from(crow.querySelector(".co-role").options).map((o) => o.value);
+    const EXPECT_ROLES = ["ProjectLeader", "ProjectMember", "DataCollector", "ContactPerson",
+      "DataCurator", "Sponsor", "RightsHolder", "Distributor"];
+    ok(roleOpts[0] === "" && roleOpts.slice(1).join(",") === EXPECT_ROLES.join(","),
+      "8f: the role <select> is the 8-token fail-closed vocab in ratified order; got: " + JSON.stringify(roleOpts));
+    const ntOpts = Array.from(crow.querySelector(".co-nametype").options).map((o) => o.value);
+    ok(ntOpts.join(",") === "person,organisation",
+      "8f: the name_type <select> offers exactly person/organisation; got: " + JSON.stringify(ntOpts));
+
+    // (iii) drive a full submission. Metadata + one EDI, then three ORDERED creators and two contributors.
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    // creators: default row + two more = three, in citation order.
+    doc.getElementById("addCreator").onclick();
+    doc.getElementById("addCreator").onclick();
+    const cr = doc.querySelectorAll("#creatorRows .creatorrow");
+    ok(cr.length === 3, "8f: three creator rows present; got " + cr.length);
+    // row 0: a PERSON with an ORCID (comma in the name exercises the YAML-quote path).
+    cr[0].querySelector(".cr-name").value = "Thiel, Stephan";
+    cr[0].querySelector(".cr-id").value = "0000-0002-8678-412X";
+    // row 1: an ORGANISATION (tick the box) with a ROR; the change listener must switch the id hint.
+    const org1 = cr[1].querySelector(".cr-org");
+    org1.checked = true;
+    org1.dispatchEvent(new e.win.Event("change", { bubbles: true }));
+    ok(/ror\.org/i.test(cr[1].querySelector(".cr-id").placeholder),
+      "8f: ticking Organisation switches the creator id hint to ROR; got: " + JSON.stringify(cr[1].querySelector(".cr-id").placeholder));
+    cr[1].querySelector(".cr-name").value = "Geological Survey of South Australia";
+    cr[1].querySelector(".cr-id").value = "https://ror.org/04s1m4564";
+    // row 2: a PERSON, no identifier (proves an id is optional, name-only still emits name + name_type).
+    cr[2].querySelector(".cr-name").value = "Heinson, Graham";
+    // contributors: the row already added above (person/ProjectLeader) + one organisation/DataCollector.
+    crow.querySelector(".co-name").value = "Thiel, Stephan";
+    crow.querySelector(".co-nametype").value = "person";
+    crow.querySelector(".co-role").value = "ProjectLeader";
+    crow.querySelector(".co-id").value = "0000-0002-8678-412X";
+    doc.getElementById("addContributor").onclick();
+    const crow2 = doc.querySelectorAll("#contributorRows .contribrow")[1];
+    const nt2 = crow2.querySelector(".co-nametype");
+    nt2.value = "organisation";
+    nt2.dispatchEvent(new e.win.Event("change", { bubbles: true }));
+    ok(/ror\.org/i.test(crow2.querySelector(".co-id").placeholder),
+      "8f: setting the contributor type to organisation switches the id hint to ROR");
+    crow2.querySelector(".co-name").value = "Zonge Engineering";
+    crow2.querySelector(".co-role").value = "DataCollector";
+    crow2.querySelector(".co-id").value = "https://ror.org/05fq5w259";
+
+    await doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const y = await packagedSurveyYaml(e.win, e.record);
+
+    // (iv) creators[] emitted in ORDER, name_type from the org toggle, ORCID vs ROR routed by type, the
+    //      comma-bearing name QUOTED, and the id-less person emitting name + name_type only.
+    ok(/creators:\s*\n\s*- name: "Thiel, Stephan"\s*\n\s*name_type: person\s*\n\s*orcid: "0000-0002-8678-412X"\s*\n\s*- name: "Geological Survey of South Australia"\s*\n\s*name_type: organisation\s*\n\s*ror: "https:\/\/ror\.org\/04s1m4564"\s*\n\s*- name: "Heinson, Graham"\s*\n\s*name_type: person/.test(y),
+      "8f: creators[] emit in citation order with name_type + routed ORCID/ROR; got: " +
+      (y.match(/creators:[\s\S]*?(?=\ncontributors:|\nabstract:)/) || [""])[0]);
+    // a comma in a creator name MUST be quoted (the unquoted-scalar YAML-trap the declared_date fix set).
+    ok(/- name: "Thiel, Stephan"/.test(y), "8f: a comma-bearing creator name is quoted (YAML-trap guard)");
+    // ORDER is load-bearing (citation order): Thiel before GSSA before Heinson in the emitted bytes.
+    ok(y.indexOf('"Thiel, Stephan"') < y.indexOf("Geological Survey") &&
+      y.indexOf("Geological Survey") < y.indexOf('"Heinson, Graham"'),
+      "8f: creator ORDER is preserved as the citation order");
+    // the id-less person carries no orcid/ror line (name + name_type only).
+    ok(!/- name: "Heinson, Graham"\s*\n\s*name_type: person\s*\n\s*(orcid|ror):/.test(y),
+      "8f: an id-less creator emits name + name_type only (no empty orcid/ror line)");
+
+    // (v) contributors[] carry the fail-closed role token + name_type, ORCID vs ROR routed by type.
+    ok(/contributors:\s*\n\s*- name: "Thiel, Stephan"\s*\n\s*name_type: person\s*\n\s*role: ProjectLeader\s*\n\s*orcid: "0000-0002-8678-412X"\s*\n\s*- name: "Zonge Engineering"\s*\n\s*name_type: organisation\s*\n\s*role: DataCollector\s*\n\s*ror: "https:\/\/ror\.org\/05fq5w259"/.test(y),
+      "8f: contributors[] emit name_type + the fail-closed role token + routed ORCID/ROR; got: " +
+      (y.match(/contributors:[\s\S]*?(?=\nabstract:)/) || [""])[0]);
+
+  }
+  // (8f-ii) a nameless creator row is DROPPED (name is the signal). Fresh boot (packagedSurveyYaml asserts
+  //         exactly one blob): one named creator plus a blank second row emits a single creators entry.
+  {
+    const e = await boot({ probe: probeAbsent });
+    fillValidMeta(e.win);
+    await addEdi(e.win, "S01.edi", EDI_TEXT);
+    const cr = e.doc.querySelectorAll("#creatorRows .creatorrow");   // the default row
+    cr[0].querySelector(".cr-name").value = "Solo, Person";
+    e.doc.getElementById("addCreator").onclick();                    // a 2nd row, left blank
+    await e.doc.getElementById("btnPackage").onclick();
+    await new Promise((res) => setTimeout(res, 0));
+    const y = await packagedSurveyYaml(e.win, e.record);
+    const block = (y.match(/creators:[\s\S]*?(?=\n\w)/) || [""])[0];
+    ok((block.match(/- name:/g) || []).length === 1,
+      "8f: a nameless creator row is dropped at emit time (name is the signal); got: " + block);
+    ok(/- name: "Solo, Person"/.test(y), "8f: the one named creator survives the nameless-row filter");
+  }
+
   console.log("SUBMIT-TEST PASSED (probe gating, double-submit guard, key-hygiene: header-only, " +
     "escaped 201 link, XSS-inert hostile detail/status_url, fail-fast empty-key + bad-ORCID gates, " +
     "SUBMISSION.md sequential numbering both branches, per-row file remove: list + DMS conflict count + " +
     "removed file absent from packaged zip bytes, DATAID packaging: rename preview + DATAID-named zip entry + " +
     "MANIFEST source_filename + duplicate/missing DATAID blocks naming both filenames; round-2: slug-collision " +
     "warn+degrade, zip-path visibility both probe states, collection card collapse + emission, principal_investigators " +
-    "emission, DOI normalisation matrix)");
+    "emission, DOI normalisation matrix; credit: creators order + name_type + ORCID/ROR routing + quoted names, " +
+    "contributors 8-token fail-closed role select, nameless-row drop)");
   process.exit(0);
 })().catch((e) => die((e && e.stack) || String(e)));
