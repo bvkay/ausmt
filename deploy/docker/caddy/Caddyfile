@@ -123,15 +123,17 @@
 	header @strictPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
 
 	# CONTRIBUTOR-CREDIT-SPEC (§6): the curator metadata editor + survey hub. IDENTICAL to strictPages
-	# EXCEPT connect-src ALSO allows exactly the SAME two citation registries the public Add Survey page
-	# uses - https://api.crossref.org and https://api.datacite.org - for the publications "Look up DOI"
-	# harvest (the shared window.AusmtDoiHarvest core). script-src STAYS 'self' (no inline, no injection
-	# vector), so widening connect-src on the authenticated workbench adds no exfiltration path: a GET to
-	# two read-only registries cannot leak curator data, and there is no script-injection route to abuse
-	# it. Deliberate two-host allowlist, scoped to the edit/hub paths ONLY; the harvest degrades silently
-	# to the manual publication fields if a fetch is blocked (older cached CSP, offline).
+	# EXCEPT connect-src ALSO allows exactly FOUR read-only registries: the SAME two citation registries
+	# the public Add Survey page uses - https://api.crossref.org and https://api.datacite.org - for the
+	# publications "Look up DOI" harvest (the shared window.AusmtDoiHarvest core), PLUS https://pub.orcid.org
+	# and https://api.ror.org for the People & credit panel's per-row "Look up" (fill a name from an ORCID /
+	# ROR, client-side, no gateway proxying - the SAME scoped-widening pattern as the DOI harvest). script-src
+	# STAYS 'self' (no inline, no injection vector), so widening connect-src on the authenticated workbench
+	# adds no exfiltration path: a GET to four read-only registries cannot leak curator data, and there is no
+	# script-injection route to abuse it. Deliberate allowlist, scoped to the edit/hub paths ONLY; every
+	# lookup/harvest degrades silently to the manual fields if a fetch is blocked (older cached CSP, offline).
 	@curatorHarvestPages path /gateway/curator/edit/* /gateway/curator/survey/*
-	header @curatorHarvestPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.crossref.org https://api.datacite.org"
+	header @curatorHarvestPages Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.cartocdn.com; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.crossref.org https://api.datacite.org https://pub.orcid.org https://api.ror.org"
 
 	# add-survey.html only: its APPLICATION code is one intentional inline <script> (the shim was
 	# extracted like index's) + OpenStreetMap tiles (NOT CartoDB — its own two Leaflet maps call

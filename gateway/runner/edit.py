@@ -104,6 +104,15 @@ EDITABLE_LISTS = ("principal_investigators", "publications", "funding", "instrum
 # editable lists (proven RED by test_editor_credit_roundtrip.py against this allow-list being absent).
 EDITABLE_KEYS = EDITABLE_SCALARS + EDITABLE_MAPS + EDITABLE_LISTS
 
+# CONTRIBUTOR-CREDIT-SPEC (§4/C3, the unified People & credit panel's legacy Convert): a patch may carry
+# the DELETE_DIRECTIVE key ("_delete_keys") whose value is a list of top-level keys to REMOVE (not null,
+# but delete the line entirely). It is NOT an editable field (it is a directive), so the merge's
+# non-editable-key gate skips it - but every key it names must be one of these legacy credit keys, so a
+# hand-crafted patch can only ever direct the retirement of a legacy flat field, never a delete of a live
+# editable key. lead_investigator/principal_investigators are the two retired flat credit fields (C3).
+DELETE_DIRECTIVE = "_delete_keys"
+_DELETABLE_LEGACY_KEYS = ("lead_investigator", "principal_investigators")
+
 
 class EditError(Exception):
     """A recoverable, curator-facing failure (bad slug, missing file, semver/no-op refusal). The
@@ -390,7 +399,10 @@ def apply_patch(data, patch: dict) -> list[str]:
     list has no stable per-element identity to merge against; a list edit re-emitting its own block is
     acceptable and matches the pre-C43 contract)."""
     changed = []
+    delete_keys = patch.get(DELETE_DIRECTIVE)
     for key, new_val in patch.items():
+        if key == DELETE_DIRECTIVE:
+            continue  # a directive, not a field - applied after the field loop below
         had = key in data
         old_val = data.get(key) if had else None
         # Compare on plain values so a CommentedMap old vs plain-dict new compares by data, not identity.
@@ -412,6 +424,14 @@ def apply_patch(data, patch: dict) -> list[str]:
         if key in _CREDIT_LIST_KEYS:
             _strip_inferred_review_comment(data, key)
         changed.append(key)
+    # LEGACY RETIREMENT (§4/C3): delete the converted flat credit key ENTIRELY (line and all), so the
+    # value-based deprecation WARNING stops firing and the served facet no longer reads it. Only a key
+    # that is actually present is deleted (an already-absent key is a silent no-op, so a re-run of a
+    # convert never errors); the caller (run_merge_job) has already gated the key set to legacy keys.
+    for key in (delete_keys or []):
+        if key in data:
+            del data[key]
+            changed.append(key)
     return changed
 
 
@@ -1160,9 +1180,17 @@ def run_merge_job(package_root: Path, *, patch: dict, bump: str, note: str, toda
     if not hasattr(data, "get"):
         raise EditError("survey.yaml is not a mapping")
 
-    unknown = [k for k in patch if k not in EDITABLE_KEYS]
+    unknown = [k for k in patch if k not in EDITABLE_KEYS and k != DELETE_DIRECTIVE]
     if unknown:
         raise EditError(f"patch contains non-editable field(s): {', '.join(sorted(unknown))}")
+    # The DELETE_DIRECTIVE may only name legacy credit keys (C3 retirement) - never a delete of a live
+    # editable field. Fail closed on anything else so the delete surface stays scoped to retirement.
+    del_keys = patch.get(DELETE_DIRECTIVE) or []
+    if not isinstance(del_keys, list):
+        raise EditError(f"{DELETE_DIRECTIVE} must be a list of keys")
+    bad_del = [k for k in del_keys if k not in _DELETABLE_LEGACY_KEYS]
+    if bad_del:
+        raise EditError(f"refusing to delete non-legacy key(s): {', '.join(sorted(map(str, bad_del)))}")
 
     old_version = data.get("version")
     changed = apply_patch(data, patch)

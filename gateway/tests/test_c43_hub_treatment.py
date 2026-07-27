@@ -283,9 +283,9 @@ def test_metadata_toc_state_hints(tmp_path):
             r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
             assert r.status_code == 200
             toc = re.search(r'<nav class="toc"[^>]*>(.*?)</nav>', r.text, re.DOTALL).group(1)
-            # SIDEBARMERGE M2: lead + principal investigators are merged into ONE "Investigators" entry
-            # (keyed lead_investigator); the citation-email flag on either group lights its issue chip.
-            assert ('data-hub-section="lead_investigator">Investigators'
+            # CONTRIBUTOR-CREDIT-SPEC §6: the citation-email heuristic (still read from the retired-in-UI
+            # lead/principal fields) lights the People & credit entry, which now owns citation authorship.
+            assert ('data-hub-section="people">People &amp; credit'
                     '<span class="state issue">1 issue</span>') in toc
             assert ('data-hub-section="publications">Publications'
                     '<span class="state">2</span>') in toc
@@ -309,10 +309,10 @@ def test_metadata_toc_state_hints(tmp_path):
 
 
 def test_metadata_inline_email_field_error(tmp_path):
-    """H4 INLINE-ERROR PIN (the mockup's own example). With an email as the citation author, the
-    Lead investigator NAME input renders red (class badinput) and carries the contract's
-    explanatory copy in a .fielderr line; a clean survey renders NEITHER. FAILS IF the error
-    misses the email case, fires on a name, attaches to the wrong input, or the copy drifts."""
+    """H4 INLINE-ERROR PIN, adapted for the retired lead panel (CONTRIBUTOR-CREDIT-SPEC §6). With an
+    email as the citation author, the People & credit panel carries the contract's explanatory copy in
+    a .fielderr line (the retired lead-name input no longer exists to redden); a clean survey renders
+    NEITHER. FAILS IF the error misses the email case, fires on a name, or the copy drifts."""
     async def _body():
         surveys_live = _live(tmp_path, yaml_text=HUB_YAML_EMAIL_AUTHOR)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -320,13 +320,12 @@ def test_metadata_inline_email_field_error(tmp_path):
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
-            assert ('<input type="text" name="s_lead_investigator_name" class="badinput" '
-                    'value="graham.heinson@adelaide.edu.au"') in r.text
-            assert ('<span class="fielderr">This looks like an email address — citation authors '
-                    'are published verbatim in every station&#x27;s XML. Use a name; keep the '
-                    'email in Contact.</span>') in r.text
-            # ONLY the flagged input reddens.
-            assert r.text.count('class="badinput"') == 1
+            # The retired lead-name input is gone; the flag surfaces inside the People & credit form.
+            assert 'name="s_lead_investigator_name"' not in r.text
+            people = r.text.split('data-hub-section-form="people"', 1)[1].split("</form>", 1)[0]
+            # Assert against the SOURCE contract copy (avoids re-typing its em dash + guards copy drift).
+            expected = f'<p class="fielderr">{curatorpage._esc(curatorpage._CITATION_EMAIL_ERROR)}</p>'
+            assert expected in people, people
     run(_body())
 
     async def _clean(tmp2):

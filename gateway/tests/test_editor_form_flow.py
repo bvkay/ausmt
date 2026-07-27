@@ -254,16 +254,27 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             # Structured widgets present:
             assert 'name="s_organisation_name"' in body
             assert 'name="s_organisation_ror"' in body
-            assert 'name="s_lead_investigator_orcid"' in body
             assert 'name="s_access_level"' in body and "<select" in body
             assert 'name="s_access_coordinates"' in body  # C42 coordinate-access <select>
             assert 'name="s_access_embargo_until"' in body and 'type="date"' in body
-            assert 'name="l_principal_investigators_0_name"' in body      # repeatable row
             assert 'name="c_time_series_levels_available_raw_packed"' in body  # checkbox
-            # The prefilled values landed in the widgets:
+            # CONTRIBUTOR-CREDIT-SPEC (§6): the unified People & credit panel replaces the four
+            # investigator/creator/contributor panels. Its widgets (a spare row, the name_type select,
+            # the Cited-author checkbox, a role checkbox) are present.
+            assert 'data-editor-rows="people"' in body
+            assert 'name="l_people_0_name"' in body
+            assert "data-people-nametype" in body
+            assert 'name="l_people_0_cited"' in body
+            assert 'name="l_people_0_role_ProjectLeader"' in body
+            # The retired panels are GONE.
+            assert 'name="s_lead_investigator_orcid"' not in body
+            assert 'name="l_principal_investigators_0_name"' not in body
+            # The legacy fields the rich survey still carries surface as a Convert notice (not inputs).
+            assert "Legacy field" in body and "lead_investigator" in body
+            assert "Ada Lovelace" in body and "Grace Hopper" in body
+            assert 'name="people_convert" value="lead_investigator"' in body
+            # The prefilled values landed in the still-modelled widgets:
             assert 'value="University of Example"' in body
-            assert 'value="Ada Lovelace"' in body
-            assert 'value="Grace Hopper"' in body
             # The advanced <details> JSON box exists but is the FALLBACK, not the primary input:
             assert "<details" in body and 'name="j_organisation"' in body
             # The ROR hint links to ror.org (no api.ror.org fetch — CSP has no connect-src for it):
@@ -430,8 +441,8 @@ def test_dl_survey_unchanged_submit_is_noop_and_sources_preserved(tmp_path):
 # per-field validation errors render on the form
 # --------------------------------------------------------------------------------------------------
 def test_bad_orcid_renders_field_error_on_form(tmp_path):
-    """A bad lead-investigator ORCID re-renders the FORM with a per-field error (not a blanket
-    failure, not a commit). FAILS IF a malformed ORCID is accepted or produces only a generic error."""
+    """A bad People & credit ORCID re-renders the FORM with a per-field error (not a blanket failure,
+    not a commit). FAILS IF a malformed ORCID is accepted or produces only a generic error."""
     async def _body():
         surveys_live, _pkg = _rich_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -441,7 +452,8 @@ def test_bad_orcid_renders_field_error_on_form(tmp_path):
             csrf = csrf_for_session(client)
             form_html = (await client.get("/gateway/curator/edit/rich-survey-2026")).text
             fields = _harvest_form_fields(form_html)
-            fields["s_lead_investigator_orcid"] = "0000-0000-0000-0000"  # bad checksum
+            fields["l_people_0_name"] = "Someone Cited"
+            fields["l_people_0_orcid"] = "0000-0000-0000-0000"  # bad checksum
             fields["note"] = "x"
             fields["bump"] = "patch"
             fields["csrf_token"] = csrf

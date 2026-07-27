@@ -42,10 +42,23 @@ def test_curator_edit_and_hub_paths_are_the_harvest_scope():
 
 
 def test_harvest_pages_allow_the_two_citation_registries():
-    """RED before the CSP change: connect-src must allow exactly api.crossref.org + api.datacite.org (the
-    same two hosts the public Add Survey page uses), else the curator harvest fetch is blocked in prod."""
+    """connect-src must allow api.crossref.org + api.datacite.org (the same two hosts the public Add
+    Survey page uses) for the publications DOI harvest, else the curator harvest fetch is blocked in prod."""
     csp = _curator_harvest_csp()
-    assert "connect-src 'self' https://api.crossref.org https://api.datacite.org" in csp, csp
+    assert "https://api.crossref.org" in csp and "https://api.datacite.org" in csp, csp
+
+
+def test_harvest_pages_allow_the_orcid_and_ror_lookup_hosts():
+    """RED before the CONTRIBUTOR-CREDIT-SPEC §6 CSP change: the People & credit panel's per-row "Look
+    up" fetches pub.orcid.org (ORCID -> name) and api.ror.org (ROR -> org name) CLIENT-SIDE, so both must
+    be in the curator-harvest connect-src, else the lookup is blocked in prod (it then degrades to a quiet
+    note - but the allow-list is the intended path). The four-host allowlist is exactly these registries."""
+    csp = _curator_harvest_csp()
+    connect = csp.split("connect-src", 1)[1]
+    assert "https://pub.orcid.org" in connect, csp
+    assert "https://api.ror.org" in connect, csp
+    assert ("connect-src 'self' https://api.crossref.org https://api.datacite.org "
+            "https://pub.orcid.org https://api.ror.org") in csp, csp
 
 
 def test_harvest_pages_keep_script_src_self():
@@ -74,5 +87,5 @@ def test_strict_pages_csp_still_has_no_registry_connect_src():
     text = _text()
     m = re.search(r'header @strictPages Content-Security-Policy "([^"]*)"', text)
     assert m is not None
-    assert "api.crossref.org" not in m.group(1)
-    assert "api.datacite.org" not in m.group(1)
+    for host in ("api.crossref.org", "api.datacite.org", "pub.orcid.org", "api.ror.org"):
+        assert host not in m.group(1), f"{host} must not widen the blanket strictPages CSP"

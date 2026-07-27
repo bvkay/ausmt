@@ -304,6 +304,22 @@ NAME_TYPES = ("person", "organisation")
 CONTRIBUTOR_ROLES = ("ProjectLeader", "ProjectMember", "DataCollector", "ContactPerson",
                      "DataCurator", "Sponsor", "RightsHolder", "Distributor")
 
+# CONTRIBUTOR-CREDIT-SPEC (§6, the unified People & credit panel, owner ruling 2026-07-26 "one huge
+# list which makes no sense"): the served schema keeps creators[] (citation authors) and contributors[]
+# (who-did-what roles) as TWO ratified lists, but the editor presents them as ONE panel of unified rows
+# (one row per person/org). The panel is the `people` section: its rows POST as l_people_<i>_<subkey>
+# (name / name_type / orcid / ror), a cited-author checkbox l_people_<i>_cited, and one checkbox per role
+# l_people_<i>_role_<Token>. assemble_people() DECOMPOSES those rows back into the two ratified lists, so
+# the served creators[]/contributors[] shape is byte-for-byte unchanged (UI/assembly only). The two lists
+# stay registered as LIST_SECTIONS above for the per-list advanced-JSON escape and the vocab pins; they
+# are NOT assembled by the generic build_section_patch loop (they are decomposed here instead).
+PEOPLE_SECTION = "people"
+_PEOPLE_DECOMPOSED = ("creators", "contributors")
+# The legacy flat credit keys the panel RETIRES (a notice + a Convert action seeds a unified row and
+# deletes the key on the same save). Both are value-based deprecations (never a FAIL); the migration and
+# the engine still read them until the follow-up wave, so an un-converted survey round-trips byte-clean.
+_LEGACY_CREDIT_KEYS = ("lead_investigator", "principal_investigators")
+
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
 # — the checkboxes plus the advanced JSON fallback cover the rest.
 TIME_SERIES_LEVELS = ("raw_packed", "level0", "level1")
@@ -651,6 +667,220 @@ def _row_indices(form: dict, section: str) -> list[int]:
     return sorted(idx)
 
 
+# ---- unified People & credit assembly (CONTRIBUTOR-CREDIT-SPEC §6) ------------------------------
+
+def normalize_orcid(value) -> str:
+    """The merge-key form of an ORCID: lower-cased, with any URL wrapper (https://orcid.org/...) and
+    surrounding slashes stripped, so `0000-0002-1825-0097` and `https://orcid.org/0000-0002-1825-0097`
+    key to the SAME person (the case/URL-form-insensitive rule). Empty when absent. This is used ONLY
+    for keying/dedupe; the row still STORES the curator's exact typed ORCID verbatim (byte-stable)."""
+    s = str(value or "").strip().lower()
+    for pfx in ("https://orcid.org/", "http://orcid.org/", "orcid.org/"):
+        if s.startswith(pfx):
+            s = s[len(pfx):]
+            break
+    return s.strip("/")
+
+
+def _people_key(name, name_type, orcid):
+    """The unified-row merge key: an ORCID (normalised) when present, else the EXACT trimmed
+    name + name_type (an organisation and a person sharing a spelling never collide)."""
+    o = normalize_orcid(orcid)
+    if o:
+        return ("orcid", o)
+    return ("name", str(name or "").strip(), str(name_type or "person").strip())
+
+
+def _new_people_row(name, name_type, orcid, ror):
+    return {"name": str(name or "").strip(),
+            "name_type": (str(name_type).strip() if name_type else "person") or "person",
+            "orcid": str(orcid or "").strip(), "ror": str(ror or "").strip(),
+            "cited": False, "roles": [],
+            "creator_idx": None, "contrib_idxs": []}
+
+
+def merge_people(creators, contributors) -> list[dict]:
+    """LOAD: merge the two ratified lists into ordered unified rows (one per person/org). Keyed by
+    normalised ORCID else exact name+name_type. A creators[] row sets cited=True (and records its
+    creators index for chip attribution); each contributors[] row ticks that role (and records its
+    contributors index). Creators are added FIRST so the cited rows keep the citation author order,
+    then contributor-only people are appended in their list order - the display order that
+    _decompose_people reproduces byte-for-byte on an unchanged save."""
+    rows: list[dict] = []
+    index: dict = {}
+
+    def get_row(name, name_type, orcid, ror):
+        key = _people_key(name, name_type, orcid)
+        row = index.get(key)
+        if row is None:
+            row = _new_people_row(name, name_type, orcid, ror)
+            rows.append(row)
+            index[key] = row
+        else:
+            # Fill an ORCID/ROR the first-seen occurrence lacked (a later list may carry it).
+            if not row["orcid"] and orcid:
+                row["orcid"] = str(orcid).strip()
+            if not row["ror"] and ror:
+                row["ror"] = str(ror).strip()
+        return row
+
+    for i, c in enumerate(creators or []):
+        if not isinstance(c, dict) or not str(c.get("name") or "").strip():
+            continue
+        row = get_row(c.get("name"), c.get("name_type"), c.get("orcid"), c.get("ror"))
+        row["cited"] = True
+        row["creator_idx"] = i
+    for j, ct in enumerate(contributors or []):
+        if not isinstance(ct, dict) or not str(ct.get("name") or "").strip():
+            continue
+        row = get_row(ct.get("name"), ct.get("name_type"), ct.get("orcid"), ct.get("ror"))
+        role = ct.get("role")
+        if role and role not in row["roles"]:
+            row["roles"].append(str(role))
+        row["contrib_idxs"].append(j)
+    return rows
+
+
+def _credit_dict(row: dict, role: str | None) -> dict:
+    """One decomposed creators[]/contributors[] entry from a unified row, in the ratified key order
+    (name, name_type, [role], orcid?, ror?). ORCID/ROR are emitted only when non-empty, so a person
+    row (no ror) and an organisation row (no orcid) reproduce their stored shape - the byte-clean
+    round-trip. The name is emitted VERBATIM as the curator typed it."""
+    out: dict = {"name": row["name"], "name_type": row["name_type"] or "person"}
+    if role is not None:
+        out["role"] = role
+    if row.get("orcid"):
+        out["orcid"] = row["orcid"]
+    if row.get("ror"):
+        out["ror"] = row["ror"]
+    return out
+
+
+def _decompose_people(rows: list[dict]) -> tuple[list, list]:
+    """SAVE: decompose the unified rows back into (creators[], contributors[]). creators[] = the cited
+    rows in DISPLAY order (so the citation order is the order among the cited rows only). contributors[]
+    = one entry per (row, ticked role), stable-ordered by ROW order then the ratified role order, with
+    exact duplicates dropped. The two ratified served lists come straight out of here."""
+    creators = [_credit_dict(r, None) for r in rows if r["cited"]]
+    contributors: list = []
+    seen: set = set()
+    for r in rows:
+        for role in CONTRIBUTOR_ROLES:
+            if role in r["roles"]:
+                entry = _credit_dict(r, role)
+                sig = tuple(sorted(entry.items()))
+                if sig in seen:
+                    continue
+                seen.add(sig)
+                contributors.append(entry)
+    return creators, contributors
+
+
+def _people_rows_from_form(form: dict) -> list[dict]:
+    """Read the unified rows the curator submitted (l_people_<i>_*, the cited checkbox, the role
+    checkboxes). A row with no name is dropped (the spare-blank-row degradation). name_type FAIL-CLOSES
+    and defaults to person; a non-empty ORCID/ROR is format-checked (a WARNING-grade curator hint,
+    SectionError-at-the-form like the other typed rows)."""
+    rows: list[dict] = []
+    for i in _row_indices(form, PEOPLE_SECTION):
+        name = _form_get(form, f"l_{PEOPLE_SECTION}_{i}_name")
+        if not name:
+            continue
+        name_type = _form_get(form, f"l_{PEOPLE_SECTION}_{i}_name_type") or "person"
+        _validate_scalar("people", "name_type", "name_type", name_type)
+        orcid = _form_get(form, f"l_{PEOPLE_SECTION}_{i}_orcid")
+        ror = _form_get(form, f"l_{PEOPLE_SECTION}_{i}_ror")
+        _validate_scalar("people", "orcid", "orcid", orcid)
+        _validate_scalar("people", "ror", "ror", ror)
+        row = _new_people_row(name, name_type, orcid, ror)
+        row["cited"] = form.get(f"l_{PEOPLE_SECTION}_{i}_cited") is not None
+        row["roles"] = [r for r in CONTRIBUTOR_ROLES
+                        if form.get(f"l_{PEOPLE_SECTION}_{i}_role_{r}") is not None]
+        rows.append(row)
+    return rows
+
+
+def convert_requested(form: dict) -> str:
+    """The legacy key the curator asked to CONVERT this save (people_convert), or "" for none. Only a
+    value in _LEGACY_CREDIT_KEYS is honoured, so a hand-crafted POST cannot direct a delete of anything
+    else (the delete surface is scoped to legacy credit retirement)."""
+    conv = _form_get(form, "people_convert")
+    return conv if conv in _LEGACY_CREDIT_KEYS else ""
+
+
+def _apply_legacy_convert(form: dict, rows: list[dict]) -> None:
+    """Seed the unified rows from the legacy field the curator chose to convert (the migration's own
+    transform, done in the editor): lead_investigator -> ONE row with the ProjectLeader (Led) role
+    ticked, cited only when no cited row exists yet; principal_investigators -> one CITED creator row
+    per person. The legacy payload rides hidden form fields (the render carries them from the survey).
+    Deleting the flat key is done by the caller via the _delete_keys directive on the SAME save."""
+    conv = convert_requested(form)
+    if not conv:
+        return
+    if conv == "lead_investigator":
+        name = _form_get(form, "people_legacy_lead_name")
+        if not name:
+            return
+        any_cited = any(r["cited"] for r in rows)
+        row = _new_people_row(name, "person", _form_get(form, "people_legacy_lead_orcid"), "")
+        row["roles"] = ["ProjectLeader"]
+        row["cited"] = not any_cited
+        rows.append(row)
+    elif conv == "principal_investigators":
+        raw = _form_get(form, "people_legacy_principal")
+        try:
+            people = json.loads(raw) if raw else []
+        except ValueError:
+            people = []
+        for pi in people if isinstance(people, list) else []:
+            if not isinstance(pi, dict):
+                continue
+            name = str(pi.get("name") or "").strip()
+            if not name:
+                continue
+            row = _new_people_row(name, "person", pi.get("orcid"), "")
+            row["cited"] = True
+            rows.append(row)
+
+
+def assemble_people(form: dict) -> tuple:
+    """Assemble the unified People & credit panel into (creators_value, contributors_value), each the
+    assembled value or the _OMIT sentinel. Precedence per underlying list: a non-empty j_<list> advanced
+    JSON OVERRIDES the panel for THAT list; otherwise the panel's unified rows are decomposed. Each list
+    is then snapshot-compared against its o_<list> anchor -> _OMIT when unchanged (the byte-clean
+    round-trip). Raises SectionError on a bad name_type/orcid/ror or malformed advanced JSON.
+
+    A form that does NOT carry the panel (no l_people_* rows, no o_/j_ credit fields, no convert) yields
+    (_OMIT, _OMIT): the per-section hub posts one section at a time, so a non-people form must contribute
+    nothing to creators/contributors (the no-clobber promise)."""
+    decomposed: dict = {}
+    for key in _PEOPLE_DECOMPOSED:
+        adv = _form_get(form, f"j_{key}")
+        if adv:
+            try:
+                decomposed[key] = json.loads(adv)
+            except ValueError:
+                raise SectionError(key, f"the advanced JSON for {key} is not valid JSON")
+    if len(decomposed) < len(_PEOPLE_DECOMPOSED):
+        rows = _people_rows_from_form(form)
+        _apply_legacy_convert(form, rows)
+        creators_asm, contributors_asm = _decompose_people(rows)
+        decomposed.setdefault("creators", creators_asm)
+        decomposed.setdefault("contributors", contributors_asm)
+
+    out = []
+    for key in _PEOPLE_DECOMPOSED:
+        value = decomposed[key]
+        original = _original_snapshot(form, key)
+        if original is not _ABSENT and value == original:
+            out.append(_OMIT)
+        elif original is _ABSENT and value in (None, "", [], {}):
+            out.append(_OMIT)
+        else:
+            out.append(value)
+    return tuple(out)
+
+
 def assemble_section(form: dict, section: str):
     """Assemble ONE section's value, applying the precedence:
       1. j_<section> non-empty  -> legacy JSON path (overrides the widgets).
@@ -683,13 +913,25 @@ def assemble_section(form: dict, section: str):
 _OMIT = object()  # assemble_section: this section contributes nothing to the patch
 
 
+# The patch directive that deletes top-level keys (used by the legacy-credit Convert action). Kept out
+# of the merge patch's normal editable-key gate; the runner validates that every listed key is a legacy
+# credit key it is allowed to retire. A JSON-representable list so it survives the file-queue transport.
+DELETE_DIRECTIVE = "_delete_keys"
+
+
 def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
     """Assemble every widget section into a patch fragment, collecting per-section errors instead of
     failing on the first. Returns (patch_fragment, errors). The caller (app._build_patch) merges this
-    with the scalar fields and, if errors is non-empty, re-renders the form with them."""
+    with the scalar fields and, if errors is non-empty, re-renders the form with them.
+
+    creators[]/contributors[] are NOT assembled in the generic loop: the unified People & credit panel
+    (assemble_people) owns them, decomposing its unified rows back into the two ratified served lists.
+    A legacy Convert also emits the DELETE_DIRECTIVE for the flat key it converted (scoped, per save)."""
     patch: dict = {}
     errors: list[SectionError] = []
     for section in WIDGET_SECTIONS:
+        if section in _PEOPLE_DECOMPOSED:
+            continue  # owned by the unified People & credit panel (assemble_people), assembled below
         try:
             value = assemble_section(form, section)
         except SectionError as exc:
@@ -697,4 +939,18 @@ def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
             continue
         if value is not _OMIT:
             patch[section] = value
+    try:
+        creators_val, contributors_val = assemble_people(form)
+        if creators_val is not _OMIT:
+            patch["creators"] = creators_val
+        if contributors_val is not _OMIT:
+            patch["contributors"] = contributors_val
+    except SectionError as exc:
+        errors.append(exc)
+    # LEGACY RETIREMENT (§4/C3): a Convert deletes the flat key on the SAME save. Only when the curator
+    # explicitly asked (people_convert) - an unrelated save never carries the directive, so lead_-
+    # investigator/principal_investigators are byte-preserved (absent-preserve semantics).
+    conv = convert_requested(form)
+    if conv:
+        patch[DELETE_DIRECTIVE] = [conv]
     return patch, errors
