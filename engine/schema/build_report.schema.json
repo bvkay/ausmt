@@ -49,6 +49,19 @@
           }
         },
         "warnings": {"type": "array", "items": {"type": "string"}},
+        "xml_failures": {
+          "type": "array",
+          "description": "per-station EMTF-XML emission failures (station served as EDI-only, no XML download): the station id and the exception class raised by normalize(). Empty when every served station's XML emitted; also surfaced as a counted `warnings` entry so a green build cannot hide the gap. Optional for pre-fix reports.",
+          "items": {
+            "type": "object",
+            "required": ["station", "error"],
+            "additionalProperties": false,
+            "properties": {
+              "station": {"type": "string"},
+              "error": {"type": "string", "description": "the exception class name raised by normalize() for this station"}
+            }
+          }
+        },
         "conditioning": {
           "type": "array",
           "items": {"$ref": "#/definitions/conditioning_entry"},

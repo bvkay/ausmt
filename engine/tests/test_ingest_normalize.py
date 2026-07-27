@@ -279,6 +279,88 @@ def test_clean_station_id_does_not_pollute_site_name(tmp_path):
     assert not any("source_id_preserved" in n for n in res.conditioned), res.conditioned
 
 
+# --- Issue #8: legacy `fieldnotes.*` >INFO comments block the EMTF-XML write. -----------------------
+# mt_metadata 1.0.9's EMTF-XML writer aborts on ANY station-comment key containing "fieldnotes":
+# emtfxml._parse_comments does `len(self.field_notes.run_list)` but the FieldNotes model exposes only
+# `_run_list` (an upstream attribute-name defect; aliasing it only relocates the crash to an IndexError
+# in _parse_comments_electric). The legacy MTpy AusLAMP-SA `>INFO` field-note dump (datalogger /
+# electrode_* / magnetometer_* / dataquality) lands in station_metadata.comments and hits exactly this,
+# so ~380 stations across eight AusLAMP-SA surveys served ZERO EMTF-XML. The fix drops ONLY those keys
+# before the write (nothing fabricated; the source EDI keeps the field notes). Reproduced by splicing a
+# real-shaped fieldnotes INFO block into the in-repo STANDARD fixture (the same programmatic-fixture
+# recipe test_normalize_masks_impedance_fill uses for the 1e32 case).
+_FIELDNOTES_INFO = (
+    ">INFO\n"
+    "    fieldnotes.datalogger.manufacturer = Earth Data Logger\n"
+    "    fieldnotes.dataquality.author = S. Thiel,  K. Robertson\n"
+    "    fieldnotes.electrode_ex.id = 1004.0\n"
+    "    fieldnotes.electrode_ex.manufacturer = SDEX France\n"
+    "    fieldnotes.electrode_ey.id = 1005.0\n"
+    "    fieldnotes.magnetometer_hx.manufacturer = Lemi\n"
+    "    processing.software.name = Birrp 5.0\n\n")
+
+
+def _inject_fieldnotes_info(edi_text: str) -> str:
+    """Return a copy of `edi_text` whose `>INFO ...` header block is replaced by a legacy AusLAMP-SA
+    MTpy field-notes dump (the shape mt_metadata 1.0.9's EMTF-XML writer crashes on)."""
+    return re.sub(r">INFO.*?(?=>=DEFINEMEAS)", _FIELDNOTES_INFO, edi_text, flags=re.DOTALL)
+
+
+def test_legacy_fieldnotes_comments_do_not_block_xml_emission(tmp_path):
+    """RED-PROOF (Issue #8). FAILS IF: an EDI carrying legacy `fieldnotes.*` >INFO comments cannot
+    produce a canonical EMTF-XML, i.e. normalize() raises the mt_metadata AttributeError
+    ('FieldNotes' object has no attribute 'run_list') the way all ~380 AusLAMP-SA legacy stations did.
+    Post-fix the un-writable keys are dropped, the write succeeds, and the impedance round-trip is
+    clean. Pre-fix (revert normalize.py) this raises inside tf.write(..., file_type='emtfxml')."""
+    poisoned = _inject_fieldnotes_info(STANDARD.read_text(encoding="utf-8"))
+    # keep the source EDI OUT of out_dir so it cannot collide with the derived EDI (both would be
+    # <dir>/FN01.edi); this mirrors the build, where src is the survey EDI and out_dir is out/xml/<slug>/,
+    # and lets the 'source never mutated' assertion below be meaningful.
+    srcdir = tmp_path / "src"
+    srcdir.mkdir()
+    out = tmp_path / "out"
+    src = srcdir / "FN01.edi"
+    src.write_text(poisoned, encoding="utf-8")
+    # sanity: the fixture really carries the crash trigger (otherwise the test is vacuous)
+    assert "fieldnotes" in poisoned and poisoned != STANDARD.read_text(encoding="utf-8")
+
+    res = normalize(src, out, survey_id="auslamp-sa-north-flinders-2013", station_id="FN01")
+    assert res.canonical_xml.exists() and res.canonical_xml.stat().st_size > 0
+    assert res.n_periods > 0
+    assert res.roundtrip_maxdiff < 1e-3, res.roundtrip_maxdiff
+    # the drop is recorded honestly (machine-readable conditioning note), not silent
+    drop_notes = [n for n in res.conditioned if "fieldnotes" in n and "dropped" in n]
+    assert drop_notes, f"no fieldnotes-drop note in conditioned: {res.conditioned}"
+    # the un-writable comment KEYS did not survive into the served artifact (they cannot in this build):
+    # the re-read station comments carry none of the dropped `fieldnotes.*` keys.
+    rt_comments = str(getattr(_read_back(res).station_metadata.comments, "value", "") or "")
+    assert "fieldnotes.datalogger" not in rt_comments and "fieldnotes.electrode" not in rt_comments
+    # ...but the SOURCE EDI is never mutated; it remains the citable record of the field notes.
+    assert "fieldnotes.datalogger" in src.read_text(encoding="utf-8")
+
+
+def test_fieldnotes_drop_is_targeted_not_wholesale(tmp_path):
+    """ANTI-OVER-STRIP COMPANION. FAILS IF: the Issue #8 strip removes MORE than the `fieldnotes.*`
+    keys: a station with no fieldnotes comments must be untouched (no drop note), and a value that
+    merely mentions the word must not be dropped (the strip keys on the part before '=', as
+    mt_metadata does). Guards against a broad strip that would silently shed real metadata."""
+    from ausmt_science.ingest.normalize import _drop_unwritable_fieldnotes_comments  # noqa: PLC0415
+
+    class _C:
+        def __init__(self, v):
+            self.value = v
+
+    # no fieldnotes keys at all -> nothing removed, value unchanged
+    c = _C("processing.software.name=Birrp\n\ncopyright.release_status=open")
+    assert _drop_unwritable_fieldnotes_comments(c) == 0
+    assert c.value == "processing.software.name=Birrp\n\ncopyright.release_status=open"
+    # 'fieldnotes' only in a VALUE (not the key) -> kept (matches mt_metadata's per-key trigger)
+    c2 = _C("note.about=see fieldnotes for details\n\nfieldnotes.datalogger.id=7")
+    assert _drop_unwritable_fieldnotes_comments(c2) == 1
+    assert "note.about=see fieldnotes for details" in c2.value
+    assert "fieldnotes.datalogger.id" not in c2.value
+
+
 # --- Final-audit 4.2: library-default metadata the XML asserts must carry conditioning notes. ------
 def test_edi_library_defaults_are_noted_not_silently_asserted(tmp_path):
     """FAILS IF: normalize() writes a canonical XML that asserts a sign convention, a declination

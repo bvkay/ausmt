@@ -1996,10 +1996,13 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     simply has no XML download). Keyed by the station's FINAL r["id"] (post-disambiguation) so the XML
     filename matches the manifest/catalogue id. `survey_meta` (the survey SMETA) sources an HONEST
     citation (custodian org, not the portal brand). Engine-guarded by the caller (mt_metadata is a core
-    build dep). Returns (written, notes, stamped): written={station_id: xml_path},
+    build dep). Returns (written, notes, stamped, failures): written={station_id: xml_path},
     notes={station_id:[note,...]} for conditioned stations (rotation unknown / source-id preserved /
     citation provenance) — the caller persists notes into that station's station.json
-    (canonical_conditioning) and emits a NOTICE — and stamped={station_id: survey_digest} recording,
+    (canonical_conditioning) and emits a NOTICE; failures={station_id: exception-class-name} for
+    every station whose XML emission RAISED (logged+skipped: served EDI-only, no XML download), so the
+    caller can surface the gap in build_report.json instead of it vanishing into a printed WARN, and
+    stamped={station_id: survey_digest} recording,
     per served station, the survey.yaml digest the served XML was KEYED/PRODUCED under (C18b,
     Amendment A3). On the FRESH path that is the digest this call was invoked with; on a cache HIT it is
     the digest carried in the entry's own meta blob (a stale entry surfaces its stale digest here). The
@@ -2016,6 +2019,7 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     written = {}
     notes = {}
     stamped = {}   # C18b (A3): {station_id: survey_digest the served XML was keyed/produced under}
+    failures = {}  # {station_id: exception-class-name} for stations whose XML emission RAISED (skipped)
     _use_cache = cache is not None and getattr(cache, "enabled", False)
     for (p, r) in stations:
         # C42 byte gate: a non-exact (generalised/withheld) station's EMTF-XML — a full elevation +
@@ -2082,8 +2086,12 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                 cache.put_json(_ck, {"conditioned": res.conditioned, "survey_digest": survey_digest},
                                ext="meta")
         except Exception as ex:  # noqa: BLE001
+            # Record the failure (station id + exception class) so the caller can COUNT it into
+            # build_report.json; a per-station XML gap must never again be invisible in a green build,
+            # only a printed WARN. The station still serves its EDI; it just has no XML download.
+            failures[r["id"]] = type(ex).__name__
             print(f"  [xml] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
-    return written, notes, stamped
+    return written, notes, stamped, failures
 
 
 def _emit_survey_edi_zip(served_edis, slug, out, license_txt=None):
@@ -3022,6 +3030,7 @@ def main(argv=None):
             withheld_ids.update(r["ausmt_id"] for (_p, r) in stations)
         can_serve = a.bundle_edi and redistributable(lic) and kind == "edi" and _acc["served"]  # only EDI is byte-copied
         xml_written = {}
+        _xml_failures = {}   # {station_id: exception-class} per-station EMTF-XML emission failures (report)
         # Per-survey EDI dir, NAMESPACED by slug (like out/xml/<slug>/ and out/bundles/) so two surveys
         # that reuse an EDI basename (e.g. both ship 01.edi) cannot overwrite each other in a flat tree —
         # which would also corrupt the path-keyed sha256 cache. ausmt_id is unique but basenames are not.
@@ -3030,7 +3039,7 @@ def main(argv=None):
             sedir.mkdir(parents=True, exist_ok=True)
             # Derived EMTF XML is the SAME redistribution as the EDI (same TF data), so it rides the
             # same license gate; served into out/xml/<slug>/ as a downloadable format.
-            xml_written, _xnotes, _xstamped = _emit_served_xml(
+            xml_written, _xnotes, _xstamped, _xml_failures = _emit_served_xml(
                 stations, slug, out / "xml" / slug, survey_meta=meta,
                 cache=build_cache, survey_digest=_survey_digest,
                 coord_default=_coord_default, coord_overrides=_coord_overrides)
@@ -3179,12 +3188,27 @@ def main(argv=None):
             if _fe["note"].startswith("convention:") and "outside its expected quadrant" in _fe["note"]:
                 _survey_warnings.append(f"{_fe['note']} — {_fe['count']} station(s): "
                                         f"{_fe['stations'] or _fe['except'] or _fe['count']}")
+        # Per-station EMTF-XML emission failures: served as EDI-only, no XML download. A structured
+        # xml_failures list (station + exception class) PLUS a counted survey warning, so an otherwise
+        # green build can never hide this class of gap (the 8-survey/~380-station regression that shipped
+        # 1182 EDI rows but only 732 EMTF-XML rows, invisible behind a printed '[xml] WARN'). Aggregated
+        # by exception class for the warning; the full station->class map rides the xml_failures field.
+        _xml_fail_rows = [{"station": _sid, "error": _cls} for _sid, _cls in sorted(_xml_failures.items())]
+        if _xml_fail_rows:
+            _fail_by_cls: dict = {}
+            for _row in _xml_fail_rows:
+                _fail_by_cls.setdefault(_row["error"], []).append(_row["station"])
+            _cls_summary = ", ".join(f"{_c} x{len(_ids)}" for _c, _ids in sorted(_fail_by_cls.items()))
+            _survey_warnings.append(f"EMTF-XML emission failed for {len(_xml_fail_rows)} station(s) "
+                                    f"[{_cls_summary}]; served as EDI-only (no XML download)")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
             # C25: convention-gate skips are STRUCTURED drops ({station, reason}); the legacy
             # unusable-EDI print+continue path still records nothing here (per the original brief).
             "stations_dropped": list(_gate_report.get("stations_dropped", [])),
             "warnings": list(_survey_warnings),
+            # Per-station EMTF-XML emission failures (empty when every served station's XML emitted).
+            "xml_failures": _xml_fail_rows,
             # Same shared aggregation as the log lines above: [{note,count,stations|null,except|null}].
             "conditioning": conditioning_report(conditioning_notes),
             # C25: frame/convention notes, same aggregation shape as `conditioning`.
