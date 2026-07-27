@@ -1095,6 +1095,10 @@ async function bootFreshWindow(dataMap) {
   A.selectSurvey("Gamma Survey");
   ok(A.selCount() === 1, "select-by-survey did not count G1 after it moved to the AusLAMP layer, got " + A.selCount());
   A.buildAuslampSet();   // restore the boot-built set
+  // Stage B (selection-state isolation): selectSurvey now ENTERS Select & export mode and scopes the tree
+  // as a temporary lens. Return to Browse here so the following sections start from the default mode and an
+  // un-scoped tree (the restore hook puts the tree back); mirrors the section-CC tree reset below.
+  A.setSidebarMode("browse");
 
   // R. CARD DESCRIPTION FROM survey.yaml (UX feedback round 3, item 6): the survey card's .desc renders
   // the escaped survey.yaml abstract (m.blurb) when present; a hostile abstract must render INERT; and an
@@ -2028,7 +2032,10 @@ async function bootFreshWindow(dataMap) {
   ] });
   A.openSurvey("Gamma Survey");
   const drwCr = doc.getElementById("drawer"), crH = drwCr.innerHTML;
-  ok(/>Contributors</.test(crH), "CREDIT: a Contributors section heading must render when contributors[] is present");
+  // Card-credit rework: contributors are a COLLAPSED <details> grouped by person; the summary reads
+  // "Contributors (N)" where N is the distinct people/orgs (here 5 single-role people).
+  ok(/>Contributors \(5\)</.test(crH),
+    "CREDIT: a Contributors <details> summary reads 'Contributors (N)' (N = distinct people) when contributors[] is present, got: " + (crH.match(/Contributors \([^)]*\)/) || ["<none>"])[0]);
   ok(/<span class="prov">led<\/span>/.test(crH), "CREDIT: a ProjectLeader must render the 'led' role phrase");
   ok(/<span class="prov">collected the data<\/span>/.test(crH), "CREDIT: a DataCollector must render 'collected the data'");
   ok(/<span class="prov">curated<\/span>/.test(crH), "CREDIT: a DataCurator must render 'curated'");
@@ -2039,13 +2046,21 @@ async function bootFreshWindow(dataMap) {
   ok(/Geological Survey of South Australia/.test(crH) && /ror\.org\/028g18b61/.test(crH),
     "CREDIT: an organisation contributor's name links to its ROR when present");
   ok(/Zonge Engineering/.test(crH), "CREDIT: an organisation contributor with no ROR renders its plain name (no '(no PID)' suffix)");
+  ok(/<details class="prov-d survey-contributors">/.test(crH),
+    "CREDIT: contributors render inside a <details class='prov-d ...'> collapsed like the Persistent identifiers rollup");
   ok(!/>investigators</.test(crH),
     "CREDIT retirement: the stale survey-summary 'investigators' row (served from the retired lead/principal-investigator keys) must be gone");
   drwCr.classList.remove("open");
-  // Graceful absence: Beta carries no contributors[] -> NO Contributors section renders (no empty heading, no placeholder).
+  // Graceful absence: Beta carries no contributors[] and no creators[] -> NO Contributors <details> AND the
+  // Attribution block renders exactly as before (no attribution names line, no label, no gloss).
   A.openSurvey("Beta Survey");
-  ok(!/>Contributors</.test(doc.getElementById("drawer").innerHTML),
-    "CREDIT: a survey with no contributors[] must render NO Contributors section (render nothing when the array is absent)");
+  const betaH = doc.getElementById("drawer").innerHTML;
+  ok(!/Contributors \(/.test(betaH),
+    "CREDIT: a survey with no contributors[] must render NO Contributors <details> (no summary, no placeholder)");
+  ok(/>Attribution/.test(betaH) && !/attribution-authors/.test(betaH),
+    "CREDIT: a survey with no creators[] renders the Attribution block unchanged (no attribution names line)");
+  ok(!/Cited authors/.test(betaH) && !/credited whenever this dataset is cited/.test(betaH),
+    "CREDIT: no 'Cited authors' label and no citation gloss ever render");
   doc.getElementById("drawer").classList.remove("open");
 
   // PC. PORTAL-CLEANUP WAVE (stage 1). Three cleanups, poked onto Gamma (the base fixture carries none of
@@ -2069,18 +2084,26 @@ async function bootFreshWindow(dataMap) {
       { t: "An untitled note on the Gamma survey", doi: "10.5555/gamma-note" },
     ],
   });
-  // (1) CREATORS: a Creators section renders with the two credit rows, in declared order; a person carries the
-  //     ORCID icon-link and an organisation's name links to its ROR. RED on origin/main (no Creators section).
+  // (1) ATTRIBUTION AUTHORS: card-credit rework - the ordered creators[] render as an unlabelled names line
+  //     INSIDE the Attribution block (no standalone Creators section), in declared order; a person carries the
+  //     ORCID icon-link, an organisation's name links to its ROR. AusMT mints no DOIs, so the line makes no
+  //     citation claim: no "Cited authors" label and no gloss.
   A.openSurvey("Gamma Survey");
   const drwPC = doc.getElementById("drawer"), pcH = drwPC.innerHTML;
-  ok(/>Creators</.test(pcH), "PC: a Creators section must render when creators[] is present");
+  ok(!/>Creators</.test(pcH),
+    "PC: no standalone Creators section/heading remains (creators fold into the Attribution block)");
+  ok(/attribution-authors/.test(pcH),
+    "PC: creators[] render as the unlabelled attribution names line inside the Attribution block when creators[] is present");
   ok(/Kate Robertson/.test(pcH) && /orcid\.org\/0000-0002-1111-2222/.test(pcH),
     "PC: a person creator renders their name plus the ORCID icon-link");
   ok(/Geological Survey of South Australia/.test(pcH) && /ror\.org\/028g18b61/.test(pcH),
     "PC: an organisation creator's name links to its ROR");
   ok(pcH.indexOf("Kate Robertson") < pcH.indexOf("Geological Survey of South Australia"),
     "PC: creators must render in their declared citation order (person before org here)");
-  ok(pcH.indexOf(">Creators<") < pcH.indexOf(">Downloads<"), "PC: the Creators section must sit ahead of Downloads (adjacent to Attribution)");
+  ok(pcH.indexOf(">Attribution") < pcH.indexOf("Kate Robertson") && pcH.indexOf("Kate Robertson") < pcH.indexOf(">Downloads<"),
+    "PC: the attribution names line sits INSIDE the Attribution block (after the Attribution heading, ahead of Downloads)");
+  ok(!/Cited authors/.test(pcH) && !/credited whenever this dataset is cited/.test(pcH),
+    "PC: the attribution names line carries NO 'Cited authors' label and NO citation gloss (attribution, not citation)");
   // (2) FUNDING grant id: the funder's grant_id is appended to the Funding section (2 live rows in the corpus).
   const _fundBlock = (pcH.split(">Funding<")[1] || "").split(">Related publications<")[0];
   ok(/Australian Research Council/.test(_fundBlock) && /ADI RD02-260/.test(_fundBlock),
@@ -2107,6 +2130,66 @@ async function bootFreshWindow(dataMap) {
   ok(_srcRow.innerHTML.indexOf("not recorded") < 0,
     "PC: the Source archive must not read 'not recorded' when a level identifier exists");
   doc.getElementById("drawer").classList.remove("open");
+
+  // GC. GROUPED CONTRIBUTORS (card-credit rework). The per-(person, role) list is replaced by a collapsed
+  // <details> GROUPED by person: 7 distinct people/orgs across 15 declared (person, role) rows must render as
+  // ONE line each with roles comma-joined in the RATIFIED order (ProjectLeader, ProjectMember, DataCollector,
+  // ContactPerson, DataCurator, Sponsor, RightsHolder, Distributor), deduping by ORCID (case / URL-form
+  // insensitive) else name + name_type, dropping a nameless row and an out-of-vocab role SILENTLY. RED-proven
+  // (tools/../scratchpad red-proof + these pins flip on origin/main drawer.js): the pre-change contributorsHtml
+  // renders one <br>-joined line PER ROW with no "Contributors (7)" summary, never the grouped "led, curated"
+  // phrase, and no survey-contributors <details> at all. Poked onto Delta (embargoed, but the survey drawer
+  // renders contributors regardless of access; no earlier/later pin asserts Delta's contributors).
+  A.setSMETA("Delta Survey", { contributors: [
+    { name: "Alice Anderson",    name_type: "person",       role: "DataCurator",   orcid: "0000-0001-0000-0001" },
+    { name: "Alice Anderson",    name_type: "person",       role: "ProjectLeader", orcid: "0000-0001-0000-0001" },
+    { name: "Bob Brown",         name_type: "person",       role: "DataCollector", orcid: "0000-0001-0000-0002" },
+    { name: "Bob Brown",         name_type: "person",       role: "ProjectMember", orcid: "0000-0001-0000-0002" },
+    { name: "Carol Chen",        name_type: "person",       role: "ContactPerson" },
+    { name: "Carol Chen",        name_type: "person",       role: "Editor" },                                    // out-of-vocab -> no phrase, no new person
+    { name: "Zonge Engineering", name_type: "organisation", role: "DataCollector" },
+    { name: "Zonge Engineering", name_type: "organisation", role: "Distributor" },
+    { name: "Geological Survey of South Australia", name_type: "organisation", role: "RightsHolder", ror: "https://ror.org/028g18b61" },
+    { name: "Geological Survey of South Australia", name_type: "organisation", role: "Distributor",  ror: "https://ror.org/028g18b61" },
+    { name: "Geological Survey of South Australia", name_type: "organisation", role: "Sponsor",      ror: "https://ror.org/028g18b61" },
+    { name: "David Davies",      name_type: "person",       role: "ProjectMember", orcid: "0000-0003-1234-5678" },
+    { name: "D. Davies",         name_type: "person",       role: "ProjectLeader", orcid: "https://orcid.org/0000-0003-1234-5678" }, // SAME ORCID, URL-form -> same person
+    { name: "Eve Evans",         name_type: "person",       role: "Sponsor",       orcid: "0000-0005-0000-0005" },
+    { name: "",                  name_type: "person",       role: "ProjectMember", orcid: "0000-0009-0000-0009" }, // nameless -> dropped, uncounted
+  ] });
+  A.openSurvey("Delta Survey");
+  const drwGC = doc.getElementById("drawer"), gcH = drwGC.innerHTML;
+  const gcBlock = (gcH.split("survey-contributors")[1] || "").split("</details>")[0];   // the contributors <details> only ("" on pre-change)
+  // Distinct count = 7 (the two Davies rows collapse by ORCID URL-form; the nameless row is dropped). One number
+  // proves BOTH the URL-form ORCID dedup and the nameless-row drop. RED: pre-change renders no "Contributors (N)".
+  ok(/>Contributors \(7\)</.test(gcH),
+    "GROUP: the Contributors summary counts DISTINCT people/orgs (7 from 15 rows), got: " + (gcH.match(/Contributors \([^)]*\)/) || ["<none>"])[0]);
+  // 7 distinct people => 7 lines => 6 <br> separators inside the collapsed <details>. RED: no such block exists.
+  ok((gcBlock.match(/<br>/g) || []).length === 6,
+    "GROUP: 7 distinct people render as 7 lines (6 <br> separators) inside the collapsed details, got sep count: " + (gcBlock.match(/<br>/g) || []).length);
+  ok(/<details class="prov-d survey-contributors">/.test(gcH),
+    "GROUP: contributors render inside a <details class='prov-d survey-contributors'> collapsed like the Persistent identifiers rollup");
+  // Roles join in the RATIFIED order regardless of declared order: Alice declared DataCurator BEFORE
+  // ProjectLeader -> "led, curated"; and she appears exactly once (grouped). RED: pre-change never joins.
+  ok(/led, curated/.test(gcH) && (gcH.match(/Alice Anderson/g) || []).length === 1,
+    "GROUP: a multi-role person groups to ONE line with roles in the ratified order (led, curated)");
+  ok(/project member, collected the data/.test(gcH),
+    "GROUP: role phrases sort into the ratified order regardless of declared order (ProjectMember before DataCollector)");
+  ok(/sponsored, rights holder, distributed/.test(gcH),
+    "GROUP: an org's three roles join in the ratified order (Sponsor, RightsHolder, Distributor)");
+  ok(/collected the data, distributed/.test(gcH),
+    "GROUP: an org with two roles joins them in ratified order (DataCollector before Distributor)");
+  // ORCID URL-form-insensitive dedup: bare "0000-..." and "https://orcid.org/0000-..." collapse to ONE person,
+  // first-appearance name ("David Davies") wins, the second-form name ("D. Davies") never renders.
+  ok((gcH.match(/David Davies/g) || []).length === 1 && !/D\. Davies/.test(gcH) && /led, project member/.test(gcH),
+    "GROUP: two rows sharing an ORCID (bare vs https://orcid.org/ URL form) collapse to ONE person; first-appearance name wins");
+  // Out-of-vocab role adds no phrase and is never echoed as a raw token; the person still renders once.
+  ok((gcH.match(/Carol Chen/g) || []).length === 1 && gcH.indexOf("Editor") < 0,
+    "GROUP: an out-of-vocab role adds no phrase and is never echoed as a raw token; the person still renders once");
+  // Nameless row dropped silently: neither its name nor its ORCID render, and it is not counted (7, not 8).
+  ok(gcH.indexOf("0000-0009-0000-0009") < 0,
+    "GROUP: a nameless contributor row is dropped silently (its ORCID never renders, uncounted)");
+  drwGC.classList.remove("open");
 
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
   // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
@@ -2178,6 +2261,65 @@ async function bootFreshWindow(dataMap) {
   scrim.click();
   ok(!doc.getElementById("drawer").classList.contains("open"), "D: clicking the scrim must close the drawer");
   ok(scrim.classList.contains("hidden"), "D: closing via the scrim must hide the scrim");
+
+  // XX. STAGE B - SELECTION-STATE ISOLATION. Owner bug: the survey drawer's "All EDIs (select & download)"
+  // tile scoped the shared rail tree to its one survey, which (a) emptied the Surveys catalogue with the
+  // rail (the only undo) hidden on that view, and (b) left the map tree stuck scoped. Fix: the catalogue is
+  // decoupled from the rail tree, and the tile's map scoping is a temporary lens restored on exit.
+  // Clean baseline: drawer closed, all surveys checked, map view, Browse mode.
+  doc.getElementById("drawer").classList.remove("open");
+  [...doc.querySelectorAll("#tree input")].forEach(c => { c.checked = true; });
+  A.setView("map"); A.setSidebarMode("browse"); A.refresh();
+  const treeChecked = () => [...doc.querySelectorAll('#tree input[value]')].filter(c => c.checked).map(c => c.value).sort();
+  ok(A.visIds().length === 5, "StageB setup: expected the clean 5-station baseline, got " + A.visIds().length);
+  ok(treeChecked().length === 4, "StageB setup: all 4 survey boxes must start checked, got " + JSON.stringify(treeChecked()));
+
+  // (1) DECOUPLE (RED-proof). Drive the REAL All-EDIs tile from the survey drawer. It scopes the map tree to
+  // its one survey (checks only that box). With the tree scoped, and WITHOUT leaving the map, the Surveys
+  // catalogue must STILL render every survey card: it is filtered ONLY by its own discovery controls, never
+  // by the rail tree. Pre-change renderCards read passesCore and rendered a single card.
+  A.openSurvey("Alpha Survey");
+  const ediTile = doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]');
+  ok(ediTile, "StageB: the All-EDIs tile is missing from the Alpha survey drawer");
+  ediTile.click();
+  ok(treeChecked().length === 1 && treeChecked()[0] === "Alpha Survey",
+    "StageB: the All-EDIs tile must scope the map tree to its one survey, got " + JSON.stringify(treeChecked()));
+  A.renderCards();
+  ok(doc.querySelectorAll("#cardGrid .scard").length === 4,
+    "StageB DECOUPLE: the Surveys catalogue must show ALL 4 cards while the rail tree is scoped to one survey, got " + doc.querySelectorAll("#cardGrid .scard").length);
+
+  // (2) LENS RESTORE ON BROWSE (RED-proof). The tile enters Select & export (its exports live in that pane),
+  // and returning to Browse restores the scoped tree. Pre-change the tile stayed in Browse and never
+  // restored the tree, so the map stayed stuck on the single survey.
+  ok(A.sidebarMode() === "select", "StageB: the All-EDIs tile must enter Select & export mode, got " + A.sidebarMode());
+  const browseBtn = [...doc.getElementById("modeSeg").children].find(b => b.dataset.mode === "browse");
+  browseBtn.click();
+  ok(A.sidebarMode() === "browse", "StageB: could not return to Browse mode");
+  ok(treeChecked().length === 4, "StageB RESTORE (Browse): returning to Browse must restore the scoped map tree (all 4 checked), got " + JSON.stringify(treeChecked()));
+  ok(A.visIds().length === 5, "StageB RESTORE (Browse): the restored tree must put every station back on the map, got " + A.visIds().length);
+
+  // (3) COHERENCE + VIEW-SWITCH EXIT PATH. Re-scope the map via the tile, then navigate to the Surveys view
+  // (the exact step in the owner's repro). The catalogue count is coherent - both #surveyCount and #nVis read
+  // the discovery-filtered set of 4, never the scoped tree - AND leaving the map releases the lens so the map
+  // tree is restored.
+  A.openSurvey("Alpha Survey");
+  doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]').click();
+  ok(treeChecked().length === 1, "StageB: re-scope setup failed, got " + JSON.stringify(treeChecked()));
+  A.setView("surveys");
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys" && doc.getElementById("nVis").textContent === "4 surveys",
+    "StageB COHERENCE: #surveyCount and #nVis must both read '4 surveys' regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("nVis").textContent]));
+  ok(treeChecked().length === 4, "StageB RESTORE (view switch): navigating off the map must restore the scoped tree, got " + JSON.stringify(treeChecked()));
+  A.setView("map"); A.setSidebarMode("browse");
+
+  // (4) GUARD. A visitor's OWN Browse-mode tree edit must NOT be clobbered by an unrelated drawer open/close
+  // (openSurvey/closeDrawer touch neither the tree nor the lens, and take no snapshot to restore).
+  const sbBetaBox = [...doc.querySelectorAll('#tree input[value]')].find(c => c.value === "Beta Survey");
+  sbBetaBox.checked = false; fire(sbBetaBox, "change");
+  A.openSurvey("Gamma Survey");
+  doc.querySelector("#drawer .close").click();
+  ok(treeChecked().length === 3 && !treeChecked().includes("Beta Survey"),
+    "StageB GUARD: a hand-unchecked Browse-mode tree box must survive an unrelated drawer open/close, got " + JSON.stringify(treeChecked()));
+  sbBetaBox.checked = true; A.refresh();   // restore the baseline
 
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +

@@ -128,7 +128,15 @@ function renderRecentlyAdded(){
   if(strip){strip.innerHTML=entries.length?`<h2>Recently added</h2>${recentlyAddedHtml(entries)}`:"";
     strip.classList.toggle("hidden",!entries.length);}
 }
-function setView(v){curView=v;
+function setView(v){
+  // Stage B (selection-state isolation): navigating OFF the map ends any All-EDIs selection lens - the lens
+  // is a map-scoped view and its rail is hidden on other views, so it must not persist. Restore BEFORE
+  // curView flips so restoreSelectLens's refresh() runs against the outgoing view. Entering the map
+  // (v==="map") is deliberately excluded, so selectSurvey's own setView("map") never undoes the scoping it
+  // just applied. (The only mode-exit path, the Browse button, is covered in setSidebarMode; Escape and the
+  // export / done actions change neither the mode nor the view, so there is nothing to restore for them.)
+  if(v!=="map"&&typeof restoreSelectLens==="function")restoreSelectLens();
+  curView=v;
   document.body.classList.toggle("tree-tall",v==="surveys");   // give the country→org→survey tree more height on the Surveys view
   document.getElementById("navMap").classList.toggle("active",v==="map");
   document.getElementById("navSurveys").classList.toggle("active",v==="surveys");
