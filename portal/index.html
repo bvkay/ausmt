@@ -156,6 +156,10 @@
   /* drawer */
   #drawer{position:absolute;top:0;right:0;bottom:0;width:420px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);transform:translateX(102%);transition:transform .16s ease;z-index:1100;overflow-y:auto;padding:16px 18px}
   #drawer.open{transform:none}
+  /* Cleanup wave (D): dim backdrop behind the drawer on the Surveys/Collections/collection views (the
+     .plotmodal rgba pattern). z-index sits BELOW the drawer (1100) and its left-edge resize handle
+     (#drawerResizer, 1101), so the resizer keeps working; the map view never shows it (side-by-side). */
+  .drawerscrim{position:absolute;inset:0;z-index:1050;background:rgba(11,15,18,.5);cursor:pointer}
   .dhead{display:flex;align-items:baseline;gap:10px}
   .dhead .sid{font-family:var(--mono);font-weight:800;font-size:22px}
   .dhead .close{margin-left:auto;font-size:16px;padding:4px 10px}
@@ -246,17 +250,27 @@
   details.plotcollapse .plotbody{position:relative;margin-top:4px}
   details.plotcollapse .plotbody .plotexp{position:absolute;top:0;right:0;z-index:1}
   .prov-dbody{padding:8px 10px}
-  /* C3 — expand modal: re-renders the SAME plotter at 2.5× in a dialog; closes on Esc / click-out */
+  /* C3 (evolved): full-station RESPONSE modal. A station-identity header plus ALL response panels
+     re-rendered at large scale, stacked and scrollable; closes on Esc, click-out, or the close button.
+     The stacked panels reuse the .plot / .ptitle / .psubline / .paxis styling. */
   .plotmodal{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;
     background:rgba(11,15,18,.72);padding:24px}
   .plotmodal-box{background:var(--panel);border:1px solid var(--copper);border-radius:10px;padding:14px 16px;
-    max-width:min(96vw,1000px);max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55)}
-  .plotmodal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
-  .plotmodal-head .ptitle{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
-  .plotmodal-head .psubline{display:block}
+    max-width:min(96vw,860px);max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+  .plotmodal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+  .plotmodal-ident{min-width:0}
+  .plotmodal-ident .pm-id{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}
+  .plotmodal-ident .pm-id .sid{font-family:var(--mono);font-weight:800;font-size:20px}
+  .plotmodal-ident .pm-site{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  .plotmodal-ident .pm-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .plotmodal-ident .pm-sub a.orglink{color:var(--copper);text-decoration:none}
+  .plotmodal-ident .pm-sub a.orglink:hover{text-decoration:underline}
+  .plotmodal-ident .pm-coord{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
   .plotmodal-close{font-size:15px;line-height:1;padding:4px 10px;flex:none}
   .plotmodal-svg{overflow:auto}
   .plotmodal-svg svg{max-width:100%;height:auto;display:block}
+  .plotmodal-svg .plot{margin:6px 0 16px}   /* vertical rhythm between the large stacked panels */
 
   /* ===== UX8 (X4/X5/X6/X7/X9) — drawer density + Station summary + Screening indicators + maturity ===== */
   /* X9 density: extra whitespace around the plots and the indicator list (drawer region only). */
@@ -312,15 +326,16 @@
   .collback:hover{border-color:var(--copper)}
   .colltitle{font-size:24px;margin:12px 0 2px;letter-spacing:-.3px}
   .collsub{color:var(--muted);font-size:13px;font-family:var(--mono)}
-  .colldesc{font-size:14px;line-height:1.55;margin:12px 0;max-width:920px}
-  .collnote{font-size:12.5px;color:var(--muted);line-height:1.5;margin:8px 0 16px;max-width:920px}
+  /* Cleanup wave (E): the 920px cap is dropped so the abstract flows within the two-column hero; the
+     .collnote explainer (and its rule) are deleted along with the list-page intro. */
+  .colldesc{font-size:14px;line-height:1.55;margin:12px 0}
   .cstats{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 8px}
   .cstat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 18px;min-width:118px}
   .cstat .cnum{font-size:21px;font-weight:600;color:var(--copper);font-family:var(--mono)}
   .cstat .clab{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px}
   .csechead{font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:20px 0 9px;border-bottom:1px solid var(--line);padding-bottom:5px}
   .cmixrow{font-size:13px;line-height:1.95;margin:10px 0 4px}
-  .colltable{width:100%;border-collapse:collapse;font-size:13px;max-width:1100px}
+  .colltable{width:100%;border-collapse:collapse;font-size:13px}   /* cleanup wave (E): cap lifted, fluid within the page padding */
   .colltable th{text-align:left;color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);padding:7px 9px}
   .colltable td{border-bottom:1px solid var(--line);padding:8px 9px;vertical-align:top}
   .colltable tbody tr:hover{background:var(--panel)}
@@ -478,8 +493,6 @@
   .recentlist a{color:var(--text);text-decoration:none}
   .recentlist a:hover{color:var(--copper);text-decoration:underline}
   .recentlist .ra-date{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
-  .recentlist.compact{gap:4px}
-  .recentlist.compact li{font-size:12px}
   #recentStrip{margin-bottom:16px}
   #recentStrip h2{margin-bottom:8px}
   /* Screening (advanced) — collapsed-by-default details wrapping the Min-TF-diagnostic slider +
@@ -552,6 +565,11 @@
   .disc-sort{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
   .disc-sort select{width:auto;min-width:150px}
   .disc-count{font-family:var(--mono);font-size:13px;color:var(--text);white-space:nowrap}
+  /* Cleanup wave (B): the surveys-view search input in the discovery bar (replaces the rail #find as the
+     Surveys search; matches name/org/region/blurb; see filters.js surveyMatchesSearch). */
+  .disc-search{flex:1 1 220px;min-width:160px;max-width:340px;width:auto;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:5px;color:var(--text);font-size:13px;padding:7px 10px}
+  .disc-search:focus{outline:none;border-color:var(--copper)}
   .disc-facets{display:flex;flex-wrap:wrap;gap:6px}
   .disc-spacer{flex:1 1 auto;min-width:0}
   .facet{font-size:12px;padding:5px 10px;border-radius:14px;border:1px solid var(--line);background:var(--panel-2);
@@ -574,16 +592,21 @@
   .srow-stn{flex:0 0 92px;font-family:var(--mono);font-size:12px;color:var(--muted)}
   .srow-lic{flex:0 0 auto}
   @media(max-width:620px){.srow-org,.srow-year{display:none}}
-  /* E5: collections landing — intro paragraph + feature-card (single wide column for ≤2 collections). */
-  .coll-intro{font-size:13.5px;line-height:1.6;color:var(--text);max-width:920px;margin-bottom:16px}
-  .coll-intro code{font-family:var(--mono);font-size:12px;color:var(--copper)}
-  .collfeature-grid{display:flex;flex-direction:column;gap:16px;max-width:1000px}
+  /* Cleanup wave (E): collections landing: ONE rich card style at any count in a responsive auto-fit grid
+     (the earlier intro paragraph + feature/compact split are gone). ~480px min so a card holds its
+     footprint + stats comfortably, growing to fill wide screens. */
+  .collfeature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:16px;max-width:1500px}
+  @media(max-width:520px){.collfeature-grid{grid-template-columns:1fr}}
   .scard.collfeature{padding:20px 22px}
   .scard.collfeature h3{font-size:22px}
   .collfeat-desc{font-style:normal}
-  .cf-expand{background:none;border:0;padding:0;color:var(--copper);font-size:12px;cursor:pointer}
-  .cf-expand:hover{text-decoration:underline;border:0}
   .coll-orgs{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  /* Cleanup wave (E): collection DETAIL two-column hero: abstract (+ subline) left, fluid footprint
+     scatter right on wide screens; single column on narrow. Stat tiles + member table sit full-width below. */
+  .collhero{display:grid;grid-template-columns:1fr;gap:20px;margin:14px 0 10px;align-items:start}
+  @media(min-width:820px){.collhero{grid-template-columns:minmax(0,1fr) minmax(0,360px)}}
+  .collhero-main{min-width:0}
+  .collhero-aside{min-width:0}
   /* E6: collection footprint scatter — svg backdrop + per-survey legend. */
   .collscatter{margin:10px 0 4px}
   .collscatter-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px}
@@ -642,10 +665,9 @@
       <label title="Geomagnetic depth sounding: vertical-field (tipper) transfer functions only"><input type="checkbox" value="GDS" checked><span class="dot" style="background:var(--gds)"></span>GDS (tipper)</label>
     </fieldset>
   </section>
-  <section data-views="map" id="recentSideSection" class="hidden">
-    <h2>Recently added</h2>
-    <div id="recentSide"></div>
-  </section>
+  <!-- Cleanup wave: the map-rail "Recently added" section (#recentSideSection/#recentSide) was deleted.
+       The single surface is the surveys-view #recentStrip; rendering this rail copy un-hid it on every
+       view (leaking onto Surveys/Collections). See main.js renderRecentlyAdded. -->
   <!-- UX7a (A3): the Collections group renders here as its OWN block, ABOVE the tree header (was
        first-within the tree). buildTree() (filters.js) fills #collGroup when the boot data has
        collections; #collGroup:empty hides it otherwise. Element ids and the group-toggle behaviour are
@@ -734,10 +756,12 @@
 <div class="content" id="content">
   <div id="map"></div>
   <div id="surveysview"><div id="recentStrip" class="hidden"></div>
-    <!-- UX6 Wave E (E3): discovery controls — sort, live result count, facet chips (licence / DOI /
-         tipper), a compact/list toggle and clear-filters. Wired in drawer.js; state lives there. There is
+    <!-- Discovery controls: a surveys-view search (name/org/region/blurb; cleanup wave B, replaces the
+         rail #find here), sort, live result count, facet chips (Open licence + data-type BBMT/LPMT/AMT/GDS),
+         a compact/list toggle and clear-filters. Wired in drawer.js; state lives there. There is
          deliberately NO sort or facet for the automated completeness/smoothness check (never a ranking). -->
     <div class="discovery" id="discoveryControls">
+      <input type="text" id="surveySearch" class="disc-search" placeholder="Search surveys…" aria-label="Search surveys by name, organisation, region or description" autocomplete="off">
       <label class="disc-sort">Sort
         <select id="sortSel">
           <option value="name">Name</option>
@@ -756,8 +780,11 @@
       <button type="button" id="clearFilters" class="disc-clear">Clear filters</button>
     </div>
     <div class="cardgrid" id="cardGrid"></div></div>
-  <div id="collectionsview"><div id="collectionsIntro"></div><div class="cardgrid" id="collectionsGrid"></div></div>
+  <div id="collectionsview"><div class="cardgrid" id="collectionsGrid"></div></div>
   <div id="collectionview"></div>
+  <!-- Cleanup wave (D): dim backdrop behind the drawer on the Surveys/Collections/collection views (never
+       the map view). Click-closes the drawer; sits beneath the drawer + its resize handle (z-index). -->
+  <div id="drawerScrim" class="drawerscrim hidden"></div>
   <div id="drawer" aria-label="Station details"></div>
   <div id="introOverlay" class="introoverlay hidden">
     <div class="intropanel" id="introPanel" role="region" aria-label="Welcome to AusMT">

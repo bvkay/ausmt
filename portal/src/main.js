@@ -68,41 +68,65 @@ function applyYearRangeHints(){
   if(toEl){toEl.placeholder=dated?String(hi):"to";if(dated)toEl.min=lo,toEl.max=hi;}
   if(head)head.textContent="Year range"+(dated?` (${lo}–${hi})`:"");   // suffix hidden when no survey is dated
 }
-// ---- "Recently added" (S3): same date logic as the engine's feed.xml (build_portal.py
-// _survey_latest_date/feed_entries) — latest release_notes[].date, else dates end/start year
-// (falls back to Dec 31 of that year so it still sorts correctly against day-precision dates).
-// Kept in lockstep with the engine deliberately (comment, not shared code — Python vs JS) so the
-// portal strip and the Atom feed can never show a different "latest" survey.
+// ---- "Recently added" (S3) --------------------------------------------------------------------
+// LOCKSTEP RULE (keep identical to the engine's _survey_latest_date at
+// engine/extract/build_portal.py:467-489): a survey's "latest date" is the max well-formed
+// YYYY-MM-DD among all release_notes[].date PLUS attribution.declared_date when present; else
+// Dec-31 of (year_end||year_start); else null. Expressed here in JS, not shared code (Python vs
+// JS), so the portal strip and the Atom feed can never name a different "latest" survey; when the
+// rule changes on either side, change BOTH. The 30-day window and 3-item cap below are PORTAL-ONLY
+// display rules for the strip; feed.xml keeps every dated survey.
 function surveyLatestDate(m){
-  const rn=(m&&m.release_notes)||[];
+  const cands=[];
+  const rn=(m&&m.release_notes);
+  if(Array.isArray(rn))rn.forEach(e=>{if(e&&e.date)cands.push(String(e.date).slice(0,10));});
+  const dd=m&&m.attribution&&m.attribution.declared_date;   // schema 1.1 attribution.declared_date
+  if(dd)cands.push(String(dd).slice(0,10));
   let best=null;
-  if(Array.isArray(rn))rn.forEach(e=>{const d=(e&&e.date)?String(e.date).slice(0,10):"";
-    if(/^\d{4}-\d{2}-\d{2}$/.test(d)&&(!best||d>best))best=d;});
+  cands.forEach(d=>{if(/^\d{4}-\d{2}-\d{2}$/.test(d)&&(!best||d>best))best=d;});
   if(best)return best;
   const yr=(m&&(m.year_end||m.year_start))||null;
   return yr?`${yr}-12-31`:null;
 }
-function recentlyAdded(limit){
-  const out=surveys.map(sv=>{const m=SMETA[sv]||{};return {sv,slug:m.slug||null,date:surveyLatestDate(m)};})
-    .filter(e=>e.date&&e.slug);
-  out.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.sv<b.sv?1:-1));
-  return out.slice(0,limit||5);
+// The strip's reference "today": the build timestamp (BUILDID.generated) so the strip is
+// DETERMINISTIC per build (two loads of the same data show the same three items); falls back to the
+// client clock only when no build.json resolved (older/empty builds, browser context only).
+function recentBuildDay(){
+  const g=(typeof BUILDID!=="undefined"&&BUILDID&&BUILDID.generated)?String(BUILDID.generated).slice(0,10):"";
+  if(/^\d{4}-\d{2}-\d{2}$/.test(g))return g;
+  return new Date().toISOString().slice(0,10);
 }
-function recentlyAddedHtml(entries,compact){
+// The window's lower bound: 30 days before the build day, as YYYY-MM-DD. UTC arithmetic so the
+// boundary never drifts by a local timezone offset.
+function recentWindowStart(buildDay){
+  const d=new Date(buildDay+"T00:00:00Z");d.setUTCDate(d.getUTCDate()-30);
+  return d.toISOString().slice(0,10);
+}
+// The strip surface: dated surveys whose latest date falls within the 30 days ENDING at the build
+// day, newest first, capped at 3. Window + cap are the strip's own display rules (see the lockstep
+// note above); the feed is unaffected.
+function recentlyAdded(limit){
+  const build=recentBuildDay(),start=recentWindowStart(build);
+  const out=surveys.map(sv=>{const m=SMETA[sv]||{};return {sv,slug:m.slug||null,date:surveyLatestDate(m)};})
+    .filter(e=>e.date&&e.slug&&e.date>=start&&e.date<=build);
+  out.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.sv<b.sv?1:-1));
+  return out.slice(0,limit||3);
+}
+function recentlyAddedHtml(entries){
   if(!entries.length)return"";
   const items=entries.map(e=>`<li><a href="#/survey/${encodeURIComponent(e.slug)}">${esc(e.sv)}</a>`+
-    (compact?"":`<span class="ra-date">${esc(e.date)}</span>`)+`</li>`).join("");
-  return `<ul class="recentlist${compact?" compact":""}">${items}</ul>`;
+    `<span class="ra-date">${esc(e.date)}</span></li>`).join("");
+  return `<ul class="recentlist">${items}</ul>`;
 }
+// ONE surface only (the surveys-view #recentStrip). The map-rail #recentSideSection/#recentSide was
+// deleted: rendering it here un-hid its section on EVERY view whenever any survey was dated (the
+// data-views toggle in setView un-hid it for the map view, and this render then un-hid it wholesale),
+// which leaked the section onto the Surveys/Collections views. Hidden entirely when empty.
 function renderRecentlyAdded(){
-  const entries=recentlyAdded(5);
+  const entries=recentlyAdded(3);
   const strip=document.getElementById("recentStrip");
-  if(strip){strip.innerHTML=entries.length?`<h2>Recently added</h2>${recentlyAddedHtml(entries,false)}`:"";
+  if(strip){strip.innerHTML=entries.length?`<h2>Recently added</h2>${recentlyAddedHtml(entries)}`:"";
     strip.classList.toggle("hidden",!entries.length);}
-  const side=document.getElementById("recentSide");
-  if(side){const sec=side.closest("section");
-    side.innerHTML=recentlyAddedHtml(entries,true);
-    if(sec)sec.classList.toggle("hidden",!entries.length);}
 }
 function setView(v){curView=v;
   document.body.classList.toggle("tree-tall",v==="surveys");   // give the country→org→survey tree more height on the Surveys view
@@ -121,14 +145,19 @@ function setView(v){curView=v;
   // UX6 Wave D (D6): the map legend sits over the map, so it belongs to the map view only. (The UX7b
   // first-visit welcome popup is a modal dismissed by user action, not tied to the view — no toggle here.)
   const _leg=document.getElementById("mapLegend");if(_leg)_leg.classList.toggle("hidden",v!=="map");
+  // Cleanup wave (C): the left filter rail (+ its resize handle) belong to the MAP view. On Surveys and
+  // Collections the rail's controls don't apply (search + facet chips live in the discovery bar there),
+  // so hide both and let the content span the width. The map view restores them, and the invalidateSize
+  // on its setTimeout below reclaims the space. openCollectionPage mirrors this on its manual path.
+  const _showRail=(v==="map");
+  const _fp=document.getElementById("filterPane");if(_fp)_fp.classList.toggle("hidden",!_showRail);
+  const _rz=document.getElementById("resizer");if(_rz)_rz.classList.toggle("hidden",!_showRail);
   if(v==="surveys"){closeDrawer();renderCards();}
   else if(v==="collections"){closeDrawer();renderCollections();}
   else setTimeout(()=>{map.invalidateSize();
     // UX9 item 2: after the size is reclaimed, run the one-shot home-fit corrector (map.js) — it repairs the
     // off-centre-on-load case (a degenerate primary fit) and stands down without fighting a user's own view.
     if(typeof _mapCorrectHomeFit==="function")_mapCorrectHomeFit();},60);
-  // re-apply the "hidden when no dated surveys" state — the data-views toggle above just unconditionally
-  // unhid #recentSideSection for the map view, which would flash an empty section when there are none.
   if(typeof ST!=="undefined"&&ST.length)renderRecentlyAdded();
   updateCounts();
 }

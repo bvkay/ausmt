@@ -132,8 +132,15 @@ def test_portal_interactions(tmp_path):
                          "year_start": None, "year_end": None,
                          "access": "embargoed", "embargo_until": None},
     }
+    # A LONG (>240 char) description so the cleanup-wave collections redesign is proven to render the FULL
+    # abstract with NO 240-char truncation / "Show more" (the old feature card cut it).
+    auslamp_desc = ("The Australian Lithospheric Architecture Magnetotelluric Project (AusLAMP) is a "
+                    "national long-period magnetotelluric array acquired on a nominal half-degree grid to "
+                    "image the electrical conductivity of the crust and upper mantle across the continent, "
+                    "run jointly by state and federal geoscience agencies.")
     collections = {"auslamp": {"title": "AusLAMP", "type": "programme", "status": "active",
                                "surveys": ["Alpha Survey", "Beta Survey"], "n_surveys": 2, "n_stations": 3,
+                               "description": auslamp_desc,
                                "bbox": {"west": 134, "east": 138, "south": -32, "north": -28}}}
 
     data = tmp_path / "data"
@@ -143,6 +150,11 @@ def test_portal_interactions(tmp_path):
     (data / "tf.json").write_text(json.dumps(tf))
     (data / "surveys.json").write_text(json.dumps(surveys))
     (data / "collections.json").write_text(json.dumps(collections))
+    # build.json fixes the recently-added window's reference day so the strip is DETERMINISTIC: with
+    # generated 2020-01-15, only Beta (latest 2019-12-31) falls inside the 30-day window; Alpha
+    # (2012-05-01) is outside it and undated Gamma/Delta are excluded outright.
+    (data / "build.json").write_text(json.dumps({"build_id": "eng-src-2020", "engine_commit": "eng",
+                                                 "source_commit": "src", "generated": "2020-01-15T00:00:00+00:00"}))
 
     r = subprocess.run(["node", str(DRIVER), str(data)], capture_output=True, text=True, cwd=str(ROOT))
     out = r.stdout + r.stderr

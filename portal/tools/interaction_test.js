@@ -101,8 +101,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "armDraw,setArmedDraw,drawModeHandler,armedDrawMode:()=>armedDrawMode," +
   // S3 hooks: recentlyAdded() for the strip-content assertion; renderRecentlyAdded so the driver
   // can force a re-render after directly poking SMETA (not needed in the current fixture path, but
-  // keeps parity with runInit()'s own call sites).
-  "recentlyAdded,renderRecentlyAdded," +
+  // keeps parity with runInit()'s own call sites); surveyLatestDate so the pinned cross-lane date
+  // rule (attribution.declared_date folded into the release_notes candidate set) is asserted
+  // directly, without a full re-render.
+  "recentlyAdded,renderRecentlyAdded,surveyLatestDate," +
   // UX4 (D1-A1/D2/D4): the PURE map helpers, exposed so the AusLAMP partition / colour / tooltip /
   // zoom-scaling are unit-testable without Leaflet (jsdom can't load it). partitionMarkers(list) ->
   // {unclustered, clustered} splits on AusLAMP membership; isAuslampSurvey(slug,set) is the predicate;
@@ -978,19 +980,40 @@ async function bootFreshWindow(dataMap) {
   ok(advDetails.querySelector("#qSeg"), "#qSeg (Min-TF-diagnostic) is not inside the Screening (advanced) details");
   ok(advDetails.querySelector("#colorSeg"), "#colorSeg (colour-by) is not inside the Screening (advanced) details");
 
-  // N. RECENTLY ADDED (S3): sorted newest-first by the same date logic as the engine's feed.xml
-  // (latest release_notes date, else the year_end/year_start fallback). Assert the observed order
-  // rather than hard-coding which of Alpha/Beta wins, so this stays correct if fixture dates change.
+  // N. RECENTLY ADDED (cleanup wave A): ONE surface (the surveys-view #recentStrip; the map-rail
+  // #recentSide is deleted). The strip's DISPLAY rule is a 30-day window ending at the BUILD day
+  // (build.json generated=2020-01-15) capped at 3, so of the fixture's dated surveys only Beta
+  // (latest 2019-12-31, inside the window) qualifies; Alpha (2012-05-01) is outside it and
+  // Gamma/Delta are undated. surveyLatestDate itself stays lockstep with the engine's feed rule.
   const recents = A.recentlyAdded();
-  ok(recents.length === 2, "expected 2 dated surveys (Alpha, Beta) in recentlyAdded(), got " + recents.length + ": " + JSON.stringify(recents));
-  ok(!recents.some(e => e.sv === "Gamma Survey"), "recentlyAdded() must omit the undated Gamma Survey");
-  ok(recents[0].date >= recents[1].date, "recentlyAdded() is not sorted newest-first: " + JSON.stringify(recents));
+  ok(recents.length === 1 && recents[0].sv === "Beta Survey",
+    "recentlyAdded() must apply the 30-day build-window: only Beta qualifies, got " + JSON.stringify(recents));
+  ok(!recents.some(e => e.sv === "Alpha Survey"), "recentlyAdded() must EXCLUDE Alpha (2012-05-01, outside the 30-day window)");
+  ok(!recents.some(e => e.sv === "Gamma Survey" || e.sv === "Delta Survey"), "recentlyAdded() must omit the undated Gamma/Delta surveys");
   const recentStrip = doc.getElementById("recentStrip");
   ok(recentStrip && /Recently added/.test(recentStrip.innerHTML), "#recentStrip did not render a 'Recently added' heading");
-  ok(new RegExp(recents[0].slug).test(recentStrip.innerHTML) || recentStrip.innerHTML.indexOf("#/survey/" + recents[0].slug) >= 0,
-    "#recentStrip did not link the newest survey by its #/survey/<slug> route");
-  const recentSide = doc.getElementById("recentSide");
-  ok(recentSide && recentSide.innerHTML.indexOf("#/survey/") >= 0, "the compact map-sidebar recently-added variant (#recentSide) did not render links");
+  ok(recentStrip.innerHTML.indexOf("#/survey/" + recents[0].slug) >= 0,
+    "#recentStrip did not link the recent survey by its #/survey/<slug> route");
+  ok(!recentStrip.classList.contains("hidden"), "#recentStrip must be shown when the window has a survey");
+  // The map-rail recently-added section is GONE (deleted, not merely hidden): the leak was that section
+  // un-hiding on every view. Neither the element nor its old wrapper must exist.
+  ok(doc.getElementById("recentSide") == null && doc.getElementById("recentSideSection") == null,
+    "the map-rail recently-added section (#recentSide/#recentSideSection) must be deleted (single-surface strip only)");
+
+  // N2. PINNED CROSS-LANE DATE RULE (LOCKSTEP with engine build_portal.py _survey_latest_date):
+  // attribution.declared_date is a first-class candidate date sharing ONE candidate set with
+  // release_notes[].date; the MAX well-formed YYYY-MM-DD wins, and a survey carrying a declared_date
+  // but no release_notes dates by that declared_date, NOT the bare-year Dec-31 fallback. These are
+  // pure surveyLatestDate() checks (the fixture path above exercises the 30-day window, but never the
+  // declared_date candidate), so the shared date rule is pinned directly without a full re-render.
+  ok(A.surveyLatestDate({ year_end: 2019, attribution: { declared_date: "2026-07-25" } }) === "2026-07-25",
+    "surveyLatestDate must date by attribution.declared_date, not the year_end Dec-31 fallback");
+  ok(A.surveyLatestDate({ attribution: { declared_date: "2026-07-25" }, release_notes: [{ date: "2020-01-01" }] }) === "2026-07-25",
+    "surveyLatestDate must let a newer declared_date win over an older release note");
+  ok(A.surveyLatestDate({ attribution: { declared_date: "2019-01-01" }, release_notes: [{ date: "2023-05-10" }] }) === "2023-05-10",
+    "surveyLatestDate must let a newer release note win over an older declared_date");
+  ok(A.surveyLatestDate({ year_end: 2020, attribution: { declared_date: "2026-07" } }) === "2020-12-31",
+    "surveyLatestDate must skip a malformed (non-YYYY-MM-DD) declared_date and fall back to the year");
 
   // O. C1b DISPLAY-PRODUCT GATE: opening an EMBARGOED survey's station must replace the four TF plots with
   //    an access panel carrying the verbatim embargo copy, and render NO svg plot paths (the response
@@ -1402,26 +1425,87 @@ async function bootFreshWindow(dataMap) {
   ok(/<circle [^>]*fill="#EF7256"/.test(rspHtml),
     "C3: the xy (copper #EF7256) series must keep <circle> markers");
 
-  // (h) C3: EXPAND MODAL. Clicking a plot's expand button opens a #plotmodal that re-renders the SAME
-  //     plotter at 2.5× (rho design width 372 -> 930, viewBox unchanged); Esc closes it WITHOUT closing the
-  //     drawer, and focus returns to the button that opened it.
+  // (h) C3 (evolved): FULL-STATION RESPONSE MODAL. Clicking ANY plot's expand button opens ONE #plotmodal
+  //     that shows a station-identity header (id / site name / survey / organisation / data-type chip /
+  //     honest coordinate line) plus ALL response panels re-rendered at LARGE scale: apparent resistivity,
+  //     phase, phase tensor, and (A1 carries tipper) the induction arrows. Esc / click-out / the close
+  //     button close it WITHOUT closing the drawer, and focus returns to the opener. Pre-change the expand
+  //     opened a SINGLE-plot popup (rho only, no station context and no .plot wrapper), so the all-panels +
+  //     header-fields assertions below RED-prove the swap against stage-1 HEAD.
   ok(doc.getElementById("plotmodal") == null, "C3: no plot modal should be open before the expand click");
   const rhoExpand = drwV.querySelector('.plot[data-plot="rho"] .plotexp');
   ok(rhoExpand != null, "C3: no per-plot expand affordance on the rho plot");
   if (rhoExpand.focus) rhoExpand.focus();
   fire(rhoExpand, "click");
   const modal = doc.getElementById("plotmodal");
-  ok(modal != null, "C3: clicking the expand button did not open the plot modal");
-  const modalSvg = modal.querySelector("svg");
-  ok(modalSvg != null, "C3: the expand modal did not re-render an SVG");
-  ok(modalSvg.getAttribute("width") === "930",
-    "C3: the modal must re-render at 2.5× (rho width 372→930), got width=" + modalSvg.getAttribute("width"));
+  ok(modal != null, "C3: clicking the expand button did not open the full-station response modal");
+  // ALL FOUR response panels are present as scaled .plot blocks (A1 carries tipper, so the arrow panel too).
+  ["rho", "phase", "pt", "arrow"].forEach(k =>
+    ok(modal.querySelector('.plot[data-plot="' + k + '"]') != null,
+      "C3: the full-station modal is missing the '" + k + "' response panel (was a single-plot popup?)"));
+  // ...each with its panel TITLE (the convention text is rendered VISIBLY, not hover-only).
+  ["apparent resistivity", "phase φ", "phase tensor", "Induction arrows (Parkinson)"].forEach(title =>
+    ok(modal.innerHTML.indexOf(title) >= 0,
+      "C3: the full-station modal is missing the '" + title + "' panel title"));
+  // Each panel re-renders at LARGE scale: the rho svg design width 372 -> 744 (2x), viewBox unchanged.
+  const modalSvg = modal.querySelector('.plot[data-plot="rho"] svg');
+  ok(modalSvg != null, "C3: the modal rho panel did not re-render an SVG");
+  ok(modalSvg.getAttribute("width") === "744",
+    "C3: the modal rho panel must re-render at 2x (design width 372 -> 744), got width=" + modalSvg.getAttribute("width"));
   ok(modalSvg.getAttribute("viewBox") === "0 0 372 118",
-    "C3: the modal SVG must keep the design viewBox (scale is display-only), got " + modalSvg.getAttribute("viewBox"));
+    "C3: the modal rho svg must keep the design viewBox (scale is display-only), got " + modalSvg.getAttribute("viewBox"));
+  // HEADER FIELDS: station id, its differing site name, survey, organisation, the data-type chip, and the
+  // HONEST coordinate line (coordCellHtml). A1 is an EXACT station, so its 6-dp position renders verbatim.
+  const modalHead = modal.querySelector(".plotmodal-head");
+  ok(modalHead != null, "C3: the full-station modal has no identity header (.plotmodal-head)");
+  const sidEl = modalHead.querySelector(".pm-id .sid");
+  ok(sidEl != null && sidEl.textContent === "A1",
+    "C3: the modal header must carry the station id (A1) in .sid, got: " + JSON.stringify(sidEl && sidEl.textContent));
+  const siteEl = modalHead.querySelector(".pm-site");
+  ok(siteEl != null && siteEl.textContent === "A_1",
+    "C3: the modal header must carry A1's differing site name (A_1) in .pm-site, got: " + JSON.stringify(siteEl && siteEl.textContent));
+  ok(modalHead.textContent.indexOf("Alpha Survey") >= 0, "C3: the modal header must carry the survey name");
+  ok(modalHead.textContent.indexOf("OrgX") >= 0, "C3: the modal header must carry the organisation");
+  ok(modalHead.querySelector(".chip") != null, "C3: the modal header must carry the data-type chip");
+  ok(modalHead.textContent.indexOf("-30.000000, 136.000000") >= 0,
+    "C3: the modal header must carry the honest coordinate line (A1 exact 6-dp position), got: " + JSON.stringify(modalHead.textContent));
+  // Esc closes the modal WITHOUT closing the drawer; focus returns to the opener.
   doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the plot modal");
+  ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the full-station modal");
   ok(drwV.classList.contains("open"), "C3: Esc on the modal must NOT also close the drawer underneath it");
   ok(doc.activeElement === rhoExpand, "C3: focus did not return to the expand button after closing the modal");
+  // Click-out on the overlay backdrop ALSO closes it (any expand button opens the SAME full-station modal,
+  // so open via the phase-tensor button this time to prove the affordance is not rho-specific).
+  const ptExpand = drwV.querySelector('.plot[data-plot="pt"] .plotexp');
+  ok(ptExpand != null, "C3: no expand affordance on the phase-tensor plot");
+  fire(ptExpand, "click");
+  const modal2 = doc.getElementById("plotmodal");
+  ok(modal2 != null, "C3: the phase-tensor expand button did not open the full-station modal");
+  ok(modal2.querySelector('.plot[data-plot="rho"]') != null,
+    "C3: expanding from the pt plot must still open the WHOLE station (rho panel present), not just pt");
+  fire(modal2, "click");   // the overlay itself is the click target -> close
+  ok(doc.getElementById("plotmodal") == null, "C3: clicking the overlay backdrop did not close the modal");
+  // NON-TIPPER STATION: A2 has no tipper -> its modal shows rho / phase / pt but NO induction-arrow panel.
+  drwV.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A2"; A.routeFromHash();
+  ok(drwV.classList.contains("open"), "C3: #/station/au.alpha.A2 did not open the drawer");
+  const a2Expand = drwV.querySelector('.plot[data-plot="rho"] .plotexp');
+  ok(a2Expand != null, "C3: no expand affordance on the A2 rho plot");
+  fire(a2Expand, "click");
+  const a2Modal = doc.getElementById("plotmodal");
+  ok(a2Modal != null, "C3: expand did not open the modal for the non-tipper station A2");
+  ["rho", "phase", "pt"].forEach(k =>
+    ok(a2Modal.querySelector('.plot[data-plot="' + k + '"]') != null,
+      "C3: a non-tipper station's modal must still carry the '" + k + "' panel"));
+  ok(a2Modal.querySelector('[data-plot="arrow"]') == null &&
+     a2Modal.innerHTML.indexOf("Induction arrows (Parkinson)") < 0,
+    "C3: a non-tipper station's modal must have NO induction-arrow panel (arrowSvg empty -> panel absent)");
+  doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the A2 modal");
+  // restore the A1 drawer for the sections that follow (they assume it is the open station).
+  drwV.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  ok(drwV.classList.contains("open"), "C3: could not restore the A1 drawer after the modal checks");
 
   // (i) C1b FENCE under tabs: an embargoed station shows the access panel INSIDE the Response tab, renders
   //     no plot paths there, never offers 'EDI (via source archive)' in Files, and gives the sticky header
@@ -1617,21 +1701,56 @@ async function bootFreshWindow(dataMap) {
   // (d) FORBIDDEN: no completeness/smoothness option in the sort control (the screen must never rank).
   ok([...sortSel.options].every(o => !/completeness|smoothness|quality/i.test(o.value + o.textContent)),
     "E3 FENCE: the sort control must NOT offer a completeness/quality ranking");
-  // (e) facet chips: exactly three (licence / DOI / tipper) and none is the completeness check.
-  const facetBtns = [...facetChips.querySelectorAll("[data-facet]")];
-  ok(facetBtns.length === 3, "E3: expected 3 facet chips (licence/DOI/tipper), got " + facetBtns.length);
-  ok(facetBtns.every(b => b.dataset.facet !== "q" && !/completeness|smoothness/i.test(b.textContent)),
+  // (e) FACET SWAP (cleanup wave B): the "Has DOI" / "Has tipper" chips are REMOVED; "Open licence" is
+  // kept; data-type chips (BBMT/LPMT/AMT/GDS, only corpus-present ones) are added. None is the completeness
+  // check. (This is a RED-proof target for the facet swap; old code renders a [data-facet="doi"] chip.)
+  ok(facetChips.querySelector('[data-facet="doi"]') == null && facetChips.querySelector('[data-facet="tipper"]') == null,
+    "E3: the 'Has DOI' and 'Has tipper' facet chips must be removed");
+  ok(facetChips.querySelector('[data-facet="lic"]') != null, "E3: the 'Open licence' facet chip must be kept");
+  const facetBtns = [...facetChips.querySelectorAll(".facet")];
+  ok(facetBtns.every(b => b.dataset.facet !== "q" && !/completeness|smoothness|quality/i.test(b.textContent)),
     "E3 FENCE: no facet may filter by the completeness/smoothness check");
-  // (f) DOI facet narrows to the one survey with a DOI (Alpha); toggling off restores the count.
-  const doiFacet = facetChips.querySelector('[data-facet="doi"]');
-  doiFacet.click();
-  ok(surveyCount.textContent === "1 survey", "E3: the 'Has DOI' facet must narrow to 1 survey (Alpha), got: " + JSON.stringify(surveyCount.textContent));
-  ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey", "E3: the DOI facet must leave only Alpha, got: " + JSON.stringify(surveyOrder()));
-  ok(facetChips.querySelector('[data-facet="doi"]').classList.contains("on"), "E3: the active facet chip must get the .on state");
-  // (g) CLEAR resets the facets (count back to 4).
+  // the kept 'Open licence' chip toggles its .on state (re-queried after each click; the chip innerHTML re-renders).
+  facetChips.querySelector('[data-facet="lic"]').click();
+  ok(facetChips.querySelector('[data-facet="lic"]').classList.contains("on"), "E3: clicking 'Open licence' must set its .on state");
+  facetChips.querySelector('[data-facet="lic"]').click();
+  ok(!facetChips.querySelector('[data-facet="lic"]').classList.contains("on"), "E3: a second click must clear the 'Open licence' chip");
+  // (f) TYPE CHIPS: the all-BBMT baseline renders ONLY the BBMT type chip (only corpus-present types get one).
+  ok(facetChips.querySelector('[data-type-facet="BBMT"]') != null, "E3: a BBMT type chip must render (BBMT is present in the corpus)");
+  ok(facetChips.querySelector('[data-type-facet="LPMT"]') == null && facetChips.querySelector('[data-type-facet="GDS"]') == null,
+    "E3: only corpus-present data types may get a chip (no LPMT/GDS chip in the all-BBMT baseline)");
+  // reclassify Gamma's one station to AMT: a second type chip (AMT) now appears, in canonical order after BBMT.
+  A.setType("G1", "AMT"); A.renderCards();
+  const typeChips = [...facetChips.querySelectorAll("[data-type-facet]")].map(b => b.dataset.typeFacet);
+  ok(typeChips.join(",") === "BBMT,AMT", "E3: type chips must render only present types in canonical order (BBMT,AMT), got: " + JSON.stringify(typeChips));
+  // selecting AMT narrows to the single AMT survey (Gamma); multi-select adding BBMT restores all four (AMT OR BBMT).
+  facetChips.querySelector('[data-type-facet="AMT"]').click();
+  ok(surveyCount.textContent === "1 survey" && surveyOrder()[0] === "Gamma Survey",
+    "E3: the AMT type chip must narrow to the single AMT survey (Gamma), got: " + JSON.stringify([surveyCount.textContent, surveyOrder()]));
+  ok(facetChips.querySelector('[data-type-facet="AMT"]').classList.contains("on"), "E3: an active type chip must get the .on state");
+  facetChips.querySelector('[data-type-facet="BBMT"]').click();
+  ok(surveyCount.textContent === "4 surveys", "E3: type chips are multi-select (AMT OR BBMT -> all four surveys), got: " + JSON.stringify(surveyCount.textContent));
+  // (g) SEARCH (cleanup wave B): reset the type facets first, then case-insensitive substring over
+  // name/org/region/blurb, live-updating the grid + count. This REPLACES the rail #find as the Surveys search.
   clearFilters.click();
-  ok(surveyCount.textContent === "4 surveys", "E3: 'Clear filters' did not reset the facets (count back to 4), got: " + JSON.stringify(surveyCount.textContent));
-  ok(!facetChips.querySelector('[data-facet="doi"]').classList.contains("on"), "E3: 'Clear filters' left a facet chip active");
+  const searchInput = doc.getElementById("surveySearch");
+  ok(searchInput, "E3: the discovery search input (#surveySearch) is missing from the discovery bar");
+  searchInput.value = "beta"; fire(searchInput, "input");
+  ok(surveyCount.textContent === "1 survey" && surveyOrder()[0] === "Beta Survey",
+    "E3: the search must narrow by survey NAME (beta -> Beta Survey), got: " + JSON.stringify([surveyCount.textContent, surveyOrder()]));
+  searchInput.value = "ORGX"; fire(searchInput, "input");   // Alpha's org, matched case-insensitively
+  ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey",
+    "E3: the search must match the ORG field case-insensitively (ORGX -> Alpha/OrgX), got: " + JSON.stringify(surveyOrder()));
+  // the header #nVis stays coherent on the Surveys view; the search handler re-runs updateCounts().
+  ok(doc.getElementById("nVis").textContent === "1 survey",
+    "E3: the header #nVis count must track the search on the Surveys view (1 survey), got: " + JSON.stringify(doc.getElementById("nVis").textContent));
+  // (h) CLEAR resets the type facets AND clears the search (count back to 4).
+  clearFilters.click();
+  ok(surveyCount.textContent === "4 surveys" && searchInput.value === "",
+    "E3: 'Clear filters' must reset the type facets AND clear the search (count back to 4), got: " + JSON.stringify([surveyCount.textContent, searchInput.value]));
+  ok(facetChips.querySelector('[data-type-facet="AMT"]') == null || !facetChips.querySelector('[data-type-facet="AMT"]').classList.contains("on"),
+    "E3: 'Clear filters' left a type chip active");
+  A.setType("G1", "BBMT"); A.renderCards();   // restore the all-BBMT baseline for the sections that follow
   // (h) COMPACT toggle: single-line rows replace the card grid; toggling back restores cards.
   const cardGridEl = doc.getElementById("cardGrid");
   layoutSeg.querySelector('[data-layout="compact"]').click();
@@ -1680,22 +1799,34 @@ async function bootFreshWindow(dataMap) {
   ok(oRel < oRelated, "E4: Release history (9) must precede the trailing Related-surveys block");
   drwE.classList.remove("open");
 
-  // DD. E5 COLLECTIONS LANDING — intro paragraph + full-width feature card (1 collection => feature mode).
+  // DD. E5 COLLECTIONS LANDING (cleanup wave E): the intro paragraph is DELETED; ONE rich card style at
+  // any count in the responsive grid; the FULL abstract renders with no 240-char truncation / "Show more".
   A.setView("collections");
-  const collIntro = doc.getElementById("collectionsIntro"), collGrid = doc.getElementById("collectionsGrid");
-  ok(collIntro && /Collections group related surveys/.test(collIntro.textContent),
-    "E5: the collections landing must show the plain intro paragraph above the grid");
-  ok(collGrid.className === "collfeature-grid", "E5: with ≤2 collections the grid must use the full-width feature layout, got: " + collGrid.className);
+  const collGrid = doc.getElementById("collectionsGrid");
+  ok(doc.getElementById("collectionsIntro") == null, "E5: the collections landing intro (#collectionsIntro) must be deleted");
+  ok(!/Collections group related surveys/.test(doc.getElementById("collectionsview").innerHTML),
+    "E5: the deleted landing intro copy must not render anywhere on the collections view");
+  ok(collGrid.className === "collfeature-grid", "E5: the collections grid must use the responsive rich-card grid, got: " + collGrid.className);
   const feat = collGrid.querySelector(".scard.collfeature");
-  ok(feat, "E5: a full-width feature card must render for the single collection");
-  ok(/AusLAMP/.test(feat.textContent), "E5: the feature card must name the collection");
-  ok(/Explore collection/.test(feat.textContent), "E5: the feature card must carry a prominent Explore action");
-  ok(/2 surveys/.test(feat.textContent) && /3 stations/.test(feat.textContent), "E5: the feature card must show the rollup stats (2 surveys · 3 stations)");
+  ok(feat, "E5: a rich collection card must render for the single collection");
+  ok(/AusLAMP/.test(feat.textContent), "E5: the card must name the collection");
+  ok(/Explore collection/.test(feat.textContent), "E5: the card must carry a prominent Explore action");
+  ok(/2 surveys/.test(feat.textContent) && /3 stations/.test(feat.textContent), "E5: the card must show the rollup stats (2 surveys · 3 stations)");
+  // FULL abstract, no truncation: the whole fixture description (incl. its tail) renders and there is no "Show more".
+  ok(/run jointly by state and federal geoscience agencies\./.test(feat.textContent),
+    "E5: the card must render the FULL abstract (its tail is present -> not truncated), got: " + JSON.stringify(feat.textContent));
+  ok(!/Show more/.test(feat.innerHTML) && feat.innerHTML.indexOf("cf-expand") < 0,
+    "E5: the 240-char truncation + 'Show more' expander must be gone");
   // participating organisations derived from member surveys' SMETA (Alpha=OrgX, Beta=OrgY).
   ok(/Participating organisations/.test(feat.textContent) && /OrgX/.test(feat.textContent) && /OrgY/.test(feat.textContent),
-    "E5: the feature card must list participating organisations derived from member SMETA");
-  // the footprint scatter is embedded in the feature card.
-  ok(feat.querySelector(".collscatter svg"), "E6: the feature card must embed the collection footprint scatter");
+    "E5: the card must list participating organisations derived from member SMETA");
+  // the footprint scatter is embedded in the card.
+  ok(feat.querySelector(".collscatter svg"), "E6: the card must embed the collection footprint scatter");
+  // C (leak fix / rail hide): the left rail + its resize handle are HIDDEN on the Collections view. RED-proof
+  // target: pre-change the rail stays visible here, and the old map-rail recently-added section leaked
+  // visible on every view via renderRecentlyAdded's unconditional un-hide.
+  ok(doc.getElementById("filterPane").classList.contains("hidden"), "C: the left rail (#filterPane) must be hidden on the Collections view");
+  ok(doc.getElementById("resizer").classList.contains("hidden"), "C: the rail resize handle (#resizer) must be hidden on the Collections view");
 
   // EE. E6 FOOTPRINT — AU outline present + dots coloured by member survey. collScatter reads the vendored
   // AU_OUTLINE global; the harness doesn't load vendor/au-outline.js, so inject a small stub and assert the
@@ -1727,6 +1858,19 @@ async function bootFreshWindow(dataMap) {
   ok(A.curView() === "collection", "E6: #/collection/auslamp did not open the collection page");
   const collMapBtn = doc.querySelector('#collectionview [data-act="collmap"]');
   ok(collMapBtn && /View all stations on main map/.test(collMapBtn.textContent), "E6: the collection page must offer 'View all stations on main map'");
+  // cleanup wave (E): the detail page uses a two-column HERO (abstract in the main column, fluid scatter in
+  // the aside), the .collnote explainer is deleted, and the member table renders (its width cap is lifted).
+  const cv = doc.getElementById("collectionview");
+  ok(cv.querySelector(".collhero .collhero-main .colldesc") != null,
+    "E: the collection detail must render the abstract in the two-column hero's main column");
+  ok(cv.querySelector(".collhero .collhero-aside .collscatter svg") != null,
+    "E: the hero's aside column must hold the fluid footprint scatter");
+  ok(cv.querySelector(".collnote") == null && cv.innerHTML.indexOf("no transfer functions of its own") < 0,
+    "E: the detail-page .collnote explainer must be deleted");
+  ok(cv.querySelector(".colltable") != null, "E: the member-survey table must still render on the detail page");
+  // C: the rail (+ resize handle) are hidden on the full-width collection detail page too.
+  ok(doc.getElementById("filterPane").classList.contains("hidden") && doc.getElementById("resizer").classList.contains("hidden"),
+    "C: the rail + resize handle must be hidden on the collection detail page");
   const fbBefore = mapCalls.filter(c => c.fn === "fitBounds").length;
   collMapBtn.click();
   ok(A.curView() === "map", "E6: 'View all on main map' did not switch to the map view (setView)");
@@ -1904,6 +2048,66 @@ async function bootFreshWindow(dataMap) {
     "CREDIT: a survey with no contributors[] must render NO Contributors section (render nothing when the array is absent)");
   doc.getElementById("drawer").classList.remove("open");
 
+  // PC. PORTAL-CLEANUP WAVE (stage 1). Three cleanups, poked onto Gamma (the base fixture carries none of
+  // these, so nothing earlier is perturbed): the survey-card CREATORS section (ordered citation authors with
+  // ORCID/ROR links, adjacent to Attribution); the pubCite DOI-URL NORMALISATION + null-field grace; and the
+  // Provenance-tab SOURCE ARCHIVE derived from the typed related_identifiers by data level. RED-proven against
+  // origin/main drawer.js: no Creators section renders, a URL-form pub DOI double-prefixes the resolver, and
+  // the Source archive shows the dataset-DOI / "not recorded" rather than the raw_packed level identifier.
+  A.setSMETA("Gamma Survey", {
+    creators: [
+      { name: "Kate Robertson", name_type: "person", orcid: "0000-0002-1111-2222" },
+      { name: "Geological Survey of South Australia", name_type: "organisation", ror: "https://ror.org/028g18b61" },
+    ],
+    related_identifiers: [
+      { identifier: "10.25914/gamma-raw", identifier_type: "DOI", relation: "IsDerivedFrom", custodian: "NCI", identifies: "raw_packed" },
+      { identifier: "10.25914/gamma-coll", identifier_type: "DOI", relation: "IsPartOf", custodian: "NCI", identifies: "collection" },
+    ],
+    funders: [{ name: "Australian Research Council", pid: "https://ror.org/05mmh0f86", grant_id: "ADI RD02-260" }],
+    pubs: [
+      { a: "Robertson, K.", y: "2023", t: "Deep conductors beneath Gamma", j: "Geophys. J. Int.", doi: "https://doi.org/10.1093/gji/ggad999" },
+      { t: "An untitled note on the Gamma survey", doi: "10.5555/gamma-note" },
+    ],
+  });
+  // (1) CREATORS: a Creators section renders with the two credit rows, in declared order; a person carries the
+  //     ORCID icon-link and an organisation's name links to its ROR. RED on origin/main (no Creators section).
+  A.openSurvey("Gamma Survey");
+  const drwPC = doc.getElementById("drawer"), pcH = drwPC.innerHTML;
+  ok(/>Creators</.test(pcH), "PC: a Creators section must render when creators[] is present");
+  ok(/Kate Robertson/.test(pcH) && /orcid\.org\/0000-0002-1111-2222/.test(pcH),
+    "PC: a person creator renders their name plus the ORCID icon-link");
+  ok(/Geological Survey of South Australia/.test(pcH) && /ror\.org\/028g18b61/.test(pcH),
+    "PC: an organisation creator's name links to its ROR");
+  ok(pcH.indexOf("Kate Robertson") < pcH.indexOf("Geological Survey of South Australia"),
+    "PC: creators must render in their declared citation order (person before org here)");
+  ok(pcH.indexOf(">Creators<") < pcH.indexOf(">Downloads<"), "PC: the Creators section must sit ahead of Downloads (adjacent to Attribution)");
+  // (2) FUNDING grant id: the funder's grant_id is appended to the Funding section (2 live rows in the corpus).
+  const _fundBlock = (pcH.split(">Funding<")[1] || "").split(">Related publications<")[0];
+  ok(/Australian Research Council/.test(_fundBlock) && /ADI RD02-260/.test(_fundBlock),
+    "PC: a funder's grant_id must be appended in the Funding section, got: " + _fundBlock);
+  // (3) pubCite: a URL-form DOI must resolve to a SINGLE doi.org prefix (no double prefix), and a pub missing
+  //     author/year/journal must still render its title + link with no empty "(). ." citation skeleton.
+  ok(pcH.indexOf('href="https://doi.org/10.1093/gji/ggad999"') >= 0,
+    "PC: a URL-form pub DOI must normalise to a single doi.org prefix, got: " + (pcH.match(/href="[^"]*gji[^"]*"/) || [""])[0]);
+  ok(pcH.indexOf("doi.org/https") < 0, "PC: a URL-form pub DOI must not double-prefix the resolver");
+  ok(/An untitled note on the Gamma survey/.test(pcH) && pcH.indexOf('href="https://doi.org/10.5555/gamma-note"') >= 0,
+    "PC: a pub with null author/year/journal must still render its title + DOI link");
+  ok((pcH.split(">Related publications<")[1] || "").indexOf("(). ") < 0,
+    "PC: a null-field pub must not render the empty '(). .' citation skeleton");
+  drwPC.classList.remove("open");
+  // (4) SOURCE ARCHIVE (station Provenance tab): derived from related_identifiers by level, raw_packed
+  //     preferred over collection, rendered as that level's own DOI link. RED on origin/main (the row shows
+  //     the dataset DOI / "not recorded", never the raw_packed identifier).
+  win.location.hash = "#/station/nz.gamma.G1"; A.routeFromHash();
+  const pcProv = doc.getElementById("dp-provenance");
+  const _srcRow = [...pcProv.querySelectorAll("tr")].find(tr => /Source archive/.test(tr.textContent));
+  ok(_srcRow, "PC: the Provenance tab must carry a 'Source archive' row");
+  ok(/href="https:\/\/doi\.org\/10\.25914\/gamma-raw"/.test(_srcRow.innerHTML),
+    "PC: the Source archive must derive from the raw_packed related_identifier (preferred over collection), got: " + _srcRow.innerHTML);
+  ok(_srcRow.innerHTML.indexOf("not recorded") < 0,
+    "PC: the Source archive must not read 'not recorded' when a level identifier exists");
+  doc.getElementById("drawer").classList.remove("open");
+
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
   // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
   // now a SEQUENTIAL dark→light progression whose SIGNAL IS LIGHTNESS (viridis principle): dark slate-blue
@@ -1955,13 +2159,34 @@ async function bootFreshWindow(dataMap) {
     JSON.stringify((_emSweep.match(/.{0,30}—.{0,30}/) || [""])[0]));
   doc.getElementById("drawer").classList.remove("open");
 
+  // QQ. DRAWER SCRIM (cleanup wave D): a dim backdrop behind the drawer on the Surveys / Collections views
+  // (NEVER the map view, where the drawer sits side-by-side with the map). Clicking it closes the drawer.
+  const scrim = doc.getElementById("drawerScrim");
+  ok(scrim, "D: the drawer scrim element (#drawerScrim) is missing");
+  // MAP view: NO scrim.
+  A.setView("map");
+  A.openStationById("au.alpha.A1");
+  ok(doc.getElementById("drawer").classList.contains("open"), "D: setup, the station drawer did not open on the map view");
+  ok(scrim.classList.contains("hidden"), "D: the scrim must STAY hidden when the drawer opens on the map view (side-by-side)");
+  doc.querySelector("#drawer .close").click();
+  ok(scrim.classList.contains("hidden"), "D: the scrim stays hidden after closing on the map view");
+  // SURVEYS view: the scrim SHOWS behind the drawer, and clicking it closes the drawer.
+  A.setView("surveys");
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  ok(doc.getElementById("drawer").classList.contains("open"), "D: setup, the survey drawer did not open on the surveys view");
+  ok(!scrim.classList.contains("hidden"), "D: the scrim must SHOW when the drawer opens on the Surveys view");
+  scrim.click();
+  ok(!doc.getElementById("drawer").classList.contains("open"), "D: clicking the scrim must close the drawer");
+  ok(scrim.classList.contains("hidden"), "D: closing via the scrim must hide the scrim");
+
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
-    "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
+    "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, Draw-buttons in-SELECTION-panel reuse-toolbar-handler + shared-armedDrawMode(button/icon parity) + complete/cancel-clears-both, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
-    "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/facets/clear/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E5 collections-intro+feature-card+participating-orgs + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore)");
+    "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore, " +
+    "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted))");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

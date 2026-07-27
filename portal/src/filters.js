@@ -40,8 +40,18 @@ function passes(s){if(!passesCore(s))return false;
   // survey's stations on the map instead of blanking it; the dropdown still offers the collection/survey jumps.
   if(q&&!(s.id.toLowerCase().includes(q)||s.file.toLowerCase().includes(q)||s.survey.toLowerCase().includes(q)))return false;
   return true;}
-function surveyVisible(sv){const qs=document.getElementById("find").value.trim().toLowerCase();
-  if(qs&&!sv.toLowerCase().includes(qs))return false;
+// Surveys-view search (cleanup wave B): a case-insensitive substring across the survey name, org,
+// region and blurb. Reads the discovery-bar #surveySearch input (NOT the rail #find; the rail is
+// hidden on the Surveys view, so the discovery search REPLACES #find as that view's search). Empty
+// query (or no input present, e.g. a bare fixture) matches everything.
+function surveyMatchesSearch(sv){
+  const el=document.getElementById("surveySearch");
+  const q=el&&el.value?el.value.trim().toLowerCase():"";
+  if(!q)return true;
+  const m=(typeof SMETA!=="undefined"&&SMETA[sv])||{};
+  return [sv,m.org,m.region,m.blurb].some(x=>String(x||"").toLowerCase().includes(q));}
+function surveyVisible(sv){
+  if(!surveyMatchesSearch(sv))return false;
   return ST.some(s=>s.survey===sv&&passesCore(s));}
 // Unified Find: a live dropdown of matching collections / surveys / stations. Collections + surveys are
 // JUMP targets (collection page / focus on the map); stations open, and the text also live-filters the map.

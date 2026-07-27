@@ -25,9 +25,21 @@ function _focusDrawer(){if(!drawer||!drawer.querySelector)return;
   // keeps focus (accessibility) without that scroll-into-view. Guarded fallback for engines lacking the option.
   const t=drawer.querySelector(".close")||drawer;if(t&&t.focus){try{t.focus({preventScroll:true});}catch(e){}}}
 function _restoreDrawerFocus(){const f=_drawerReturnFocus;_drawerReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
+// Cleanup wave (D): a dim backdrop shown behind the drawer while it is open on the Surveys /
+// Collections / collection-detail views (where the drawer floats over full-width content). NOT on the
+// map view: there the drawer sits side-by-side with the map, so no scrim. Clicking the backdrop closes
+// the drawer. It lives in #content BENEATH the drawer and the drawer's left-edge resize handle
+// (both higher z-index in index.html), so the resizer keeps working. Guarded for the headless harness.
+const _drawerScrim=document.getElementById("drawerScrim");
+function showDrawerScrim(){if(_drawerScrim)_drawerScrim.classList.toggle("hidden",(typeof curView!=="undefined"&&curView==="map"));}
+function hideDrawerScrim(){if(_drawerScrim)_drawerScrim.classList.add("hidden");}
+if(_drawerScrim&&_drawerScrim.addEventListener)_drawerScrim.addEventListener("click",()=>closeDrawer());
 // UX6 Wave C: the currently-open station's TF row, stashed so the delegated [data-act="expand"] handler
-// can re-render the SAME plotter into the expand modal without re-deriving it from the DOM.
+// can re-render the plotters into the full-station response modal without re-deriving them from the DOM.
 let _curTf=null;
+// UX6 Wave C (evolved): the currently-open station object, stashed alongside _curTf so the expand handler
+// can build the response modal's identity header (id / site / survey / org / type / honest coords).
+let _curStation=null;
 // UX6 Wave C (C2): a small section-role chip using the engine README taxonomy — "Source data",
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
@@ -55,9 +67,9 @@ function selectDrawerTab(name){
 function ediDescriptor(s,m){
   const arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   const ediArt=arts.find(a=>a.format==="edi");
-  if(ediArt) return {sub:"EDI (download)"+(ediArt.size?" · "+fmtBytes(ediArt.size):""),st:"ok",d:{prod:"fetch",url:ediArt.url,name:ediArt.url.split("/").pop()}};
+  if(ediArt) return {sub:"Download"+(ediArt.size?" · "+fmtBytes(ediArt.size):""),st:"ok",d:{prod:"fetch",url:ediArt.url,name:ediArt.url.split("/").pop()}};
   if(!isOpenAccess(m)) return {sub:accessLevelOf(m)==="metadata_only"?"metadata only":"embargoed",st:"no",d:null};
-  return {sub:s.ediAvail?"EDI (download)":"EDI (via source archive)",st:s.ediAvail?"ok":"unk",d:{prod:"edi",file:s.file,avail:s.ediAvail?"1":"0",survey:s.survey}};
+  return {sub:s.ediAvail?"Download":"EDI (via source archive)",st:s.ediAvail?"ok":"unk",d:{prod:"edi",file:s.file,avail:s.ediAvail?"1":"0",survey:s.survey}};
 }
 // C1b: the sticky-header Download EDI action. Renders NOTHING where the gate refuses (no download
 // affordance for an embargoed/metadata-only station) — otherwise a primary button routed through the
@@ -172,6 +184,18 @@ function coordCellHtml(s){
     ? `${coords}<br><span style="color:var(--muted)">position generalised to ~0.1° (custodian policy)</span>`
     : coords;
 }
+// UX6 Wave C (evolved): the identity header for the full-station RESPONSE modal (the expand affordance).
+// Station id, the source site name when it differs from the displayed id, and the data-type chip on the
+// first line; survey · organisation on the second; the honest coordinate line on the third. Reuses
+// coordCellHtml VERBATIM so a masked position is never printed raw here (custodian policy holds inside the
+// modal exactly as in the drawer), and orgNameLink so the ROR link treatment matches the drawer header.
+function stationModalHeader(s,m){
+  const site=(s.site_name&&s.site_name!==s.id)?`<span class="pm-site">${esc(s.site_name)}</span>`:"";
+  const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`;
+  return `<div class="pm-id"><span class="sid">${esc(s.id)}</span>${site}${typeChip}</div>`+
+    `<div class="pm-sub">${esc(s.survey)} · ${orgNameLink(s.org,(m||{}).org_ror)}</div>`+
+    `<div class="pm-coord">${coordCellHtml(s)}</div>`;
+}
 // The access panel replacing the plots area for a non-open survey. Verbatim copy (esc()'d) per level:
 // embargoed(+date) / embargoed(no date) / metadata_only; any other non-open value falls back to the
 // no-date embargo wording (fail-closed: an unknown level is treated as withheld, never as open).
@@ -241,6 +265,11 @@ function maturityBlock(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];const mod=
 // stand-in for a survey's dataset DOI (see tsUrlFor's caller sites vs. fetchEdi/exports.js source-citation).
 function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
+// The served MTH5 bundle for a survey (the per-survey <slug>-tf.h5 the Downloads grid + Files tab use).
+// SINGLE SOURCE of MTH5 presence: the format-availability badge and the provenance lineage line derive
+// MTH5 from THIS (not the stale SMETA.mth5, which the engine always emits as "unk"), so all three agree
+// with the Downloads tile (19/21 surveys live). Guarded like the other bundlesForSlug callers.
+function mth5BundleFor(m){return (typeof bundlesForSlug==="function"?bundlesForSlug(m&&m.slug):[]).find(r=>r&&r.format==="mth5");}
 // R5: the Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows
 // (Packed raw / Level 0 / Level 1 time series -> Level 2 derived processed data with EDI/EMTF-XML/MTH5
 // sub-rows -> Level 3 models, when ever served -> Publication). Each row carries an explicit ORIGIN tag
@@ -284,18 +313,21 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   // then the AusMT-derived EMTF XML (build pipeline, mt_metadata) and MTH5.
   const ediSub={n:"EDI",...ediDescriptor(s,m),origin:"source archive"};
   const xmlSub=xml
-    ? {n:"EMTF XML",sub:"download"+(xml.size?" · "+fmtBytes(xml.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:xml.url,name:xml.url.split("/").pop()}}
-    : {n:"EMTF XML",sub:"via pipeline",origin:"AusMT-derived",st:"part",d:{prod:"toast",msg:"EMTF XML is produced in the build pipeline (mt_metadata); served on the hosted site for redistributable surveys."}};
+    ? {n:"EMTF XML",sub:"Download"+(xml.size?" · "+fmtBytes(xml.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:xml.url,name:xml.url.split("/").pop()}}
+    // Honesty fix: the 8 surveys with zero served XML ARE redistributable (the build pipeline failed on
+    // them), so the old "via pipeline / served for redistributable surveys" toast was FALSE. Show the same
+    // honest inert not-available sub-line the MTH5 row uses, with no toast overclaim.
+    : {n:"EMTF XML",sub:"not currently available",origin:"AusMT-derived",st:"unk",d:null};
   // C32 tier 2: the Level 2 MTH5 sub-row LIGHTS from the actual per-survey <slug>-tf.h5 bundle in the
   // manifest (the same rows the Downloads grid uses), NOT a static SMETA flag — so it is true to what the
   // build served. An embargoed/withheld survey produces NO bundle (the h5 is suppressed byte-for-byte like
   // the EDI), so the row falls back to the honest not-available state. Download is wired exactly like the
   // EMTF XML row ({prod:"fetch"}), so the pull is counted by the same masked front-door analytics. The
   // label stays TF-only honest ("transfer functions").
-  const mth5Bundle=(typeof bundlesForSlug==="function"?bundlesForSlug(m.slug):[]).find(r=>r&&r.format==="mth5");
+  const mth5Bundle=mth5BundleFor(m);
   const mth5Sub=mth5Bundle
-    ? {n:"MTH5",sub:"transfer functions · TFs only · mtpy-v2 / ModEM"+(mth5Bundle.size?" · "+fmtBytes(mth5Bundle.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5Bundle.url,name:mth5Bundle.url.split("/").pop()}}
-    : {n:"MTH5",sub:"TFs only · not currently available",origin:"AusMT-derived",st:"unk",d:null};
+    ? {n:"MTH5",sub:"Transfer functions only · Download"+(mth5Bundle.size?" · "+fmtBytes(mth5Bundle.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5Bundle.url,name:mth5Bundle.url.split("/").pop()}}
+    : {n:"MTH5",sub:"Transfer functions only · not currently available",origin:"AusMT-derived",st:"unk",d:null};
   const level2Subs=[ediSub,xmlSub,mth5Sub];
   // Publication (interpretation) — the parenthetical separates the dataset citation from an interpretation
   // publication. Reserved-DOI honesty applies (inert + note).
@@ -308,7 +340,7 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     tsLevelRow("Level 0 edited time series","instrument-recorded, full resolution","level0"),
     tsLevelRow("Level 1 transformed time series","calibrated, resampled, filtered","level1"),
   ].map(row).join("");
-  const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 derived processed data <small>impedance tensors</small></div>`+
+  const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 derived processed data <small>transfer functions</small></div>`+
     `<div class="fl-sub">${level2Subs.map(row).join("")}</div></div>`;
   // R5: Level 3 models render ONLY when a model DOI is served in the survey metadata. No such field exists
   // today, so the slot stays here as a comment and simply does not render yet. When one lands, e.g.:
@@ -327,7 +359,7 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
    ["Processing software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
    ["Method",sc[SC.alg]?esc(sc[SC.alg]):(sc[SC.rr]?"remote reference (stated)":"not stated")],
    ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
-   ["Distributed formats",`EDI ✓ · EMTF XML (pipeline)${m.mth5==="ok"?" · MTH5 ✓":""}`],
+   ["Distributed formats",`EDI ✓ · EMTF XML (pipeline)${mth5BundleFor(m)?" · MTH5 ✓":""}`],
    ["Publication",m.doi?resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`):"none recorded"]
   );
   return `<div class="lineage">`+nodes.map((n,k)=>`<div class="lrow"><span class="ldot"></span><div><div class="lt">${esc(n[0])}</div><div class="lv">${n[1]}</div></div></div>`+(k<nodes.length-1?`<div class="lconn"></div>`:"")).join("")+`</div>`;}
@@ -568,9 +600,7 @@ function openStation(i){
   // source file+sha · source archive), then the Dataset-maturity block (X7 stars), then EVERYTHING ELSE
   // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
   // behind collapsed <details>. Nothing deleted — only demoted. The API box (X8) is the last, small expander.
-  const _srcArchive=m.doi
-    ? resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`)
-    : (m.ts==="ok"?tsCollectionCell(m):"<span class='prov'>not recorded</span>");
+  const _srcArchive=sourceArchiveCell(m);
   // R8: whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
   // ok when served, else part — produced via the build pipeline for redistributable surveys).
   const _fmtXmlArt=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).some(a=>a.format==="emtfxml");
@@ -600,7 +630,7 @@ function openStation(i){
     // series (from the levels metadata) and the licence badge. The bare "DOI" badge is dropped (it failed
     // as communication; dataset-DOI presence is already conveyed by the maturity star and the identifiers
     // block). States stay honest (ok/unknown/no). EMTF XML is ok when a served artifact exists, else part.
-    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",m.mth5||"unk")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div></div></details>`+
+    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",mth5BundleFor(m)?"ok":"unk")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div></div></details>`+
     `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
     `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
   // Cite — the citation box. C46-W3b: a no-cite survey is EXPLICIT ("custodian citation not recorded — cite
@@ -625,14 +655,16 @@ function openStation(i){
     drawerPanel("provenance",provenanceHtml,false)+
     drawerPanel("cite",citeHtml,false);
   _curTf=t;                                        // stash for the expand-modal handler
+  _curStation=s;                                   // stash the station for the response modal's identity header
   drawer.setAttribute("aria-label","Station "+s.id+" details");   // E7: refine the dialog label per subject
-  drawer.classList.add("open");drawer.scrollTop=0;
+  drawer.classList.add("open");drawer.scrollTop=0;showDrawerScrim();   // D: dim backdrop on non-map views
   selectDrawerTab("response");                     // UX8 (X4): Response default-selected
   _focusDrawer();                                  // E7: move focus into the dialog
   if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
 }
 function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList.contains("open");
-  drawer.classList.remove("open");if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);
+  drawer.classList.remove("open");hideDrawerScrim();   // D: drop the dim backdrop
+  if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);
   if(wasOpen)_restoreDrawerFocus();}               // E7: return focus to the invoking element (only if it was open)
 async function fetchEdi(file,avail,survey){
   // C7: this EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the
@@ -712,6 +744,26 @@ function contributorsHtml(m){
   const rows=((m&&m.contributors)||[]).filter(c=>c&&typeof c==="object").map(contributorRow).filter(Boolean);
   if(!rows.length)return "";
   return `<div class="sechead">Contributors</div><div class="surveymeta"><span class="pidline">${rows.join("<br>")}</span></div>`;}
+// Credit model (SPEC §2.1): the survey's ORDERED creators[], the citation-author list. Order IS the
+// citation order; a person carries the ORCID icon-link, an organisation's name links to its ROR. No role
+// phrase (that is the contributors[] surface). Reads the pinned seam field verbatim; a creator row is the
+// same {name, name_type, orcid, ror} shape as a contributor minus the role. "" (no heading, no placeholder)
+// when the list is absent or empty, matching contributorsHtml / sourcesListHtml.
+function creatorRow(c){
+  const name=((c&&c.name)||"").toString().trim();
+  if(!name)return "";
+  return c&&c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
+function creatorsHtml(m){
+  const rows=((m&&m.creators)||[]).filter(c=>c&&typeof c==="object").map(creatorRow).filter(Boolean);
+  if(!rows.length)return "";
+  return `<div class="sechead">Creators</div><div class="surveymeta"><span class="pidline">${rows.join("<br>")}</span></div>`;}
+// One funder rendered as its (ROR/pid-linked) name with the grant id appended in muted text when the
+// funding row carries one (the engine emits grant_id only for a real declared grant; absent -> just the
+// name). The Funding section owns this display; the identifiers rollup no longer duplicates the funders line.
+function funderHtml(f){f=f||{};
+  const name=esc(f.name||"");
+  const nm=f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${name}</a>`:name;
+  return nm+(f.grant_id?` <span class="prov">(${esc(f.grant_id)})</span>`:"");}
 // C7: a ROR value may be a bare id (00892tw58) or a full https://ror.org/... URL — resolve either to
 // the canonical ror.org landing page link.
 function rorLink(r){if(!r)return null;const href=r.startsWith("http")?r:"https://ror.org/"+r;return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(r)}</a>`;}
@@ -789,6 +841,20 @@ function tsCollectionCell(m){
   const label=m.ts_pid?"survey collection":"NCI collection";
   if(m.ts_pid&&m.ts_pid_resolution==="reserved")return reservedText(tsPidRaw(m));
   return `<a href="${escUrl(tsUrlFor(m))}" target="_blank" rel="noopener noreferrer">${label}</a>`;}
+// The Provenance-tab "Source archive" cell. Preference: the related_identifier that IDENTIFIES the source
+// data by NCI data level (raw_packed, then collection, then entire), rendered with the SAME resolution
+// honesty the Files tab / identifiers block use (reserved -> plain text + note, else a typed link); then
+// the flat dataset DOI; then the raw-TS collection cell; else the honest "not recorded". Derives from the
+// same typed provenance the Files tab keys off, so an identifier-bearing survey shows its real archive
+// instead of "not recorded". Pure (reads m only) so the derivation is unit-testable.
+function sourceArchiveCell(m){m=m||{};
+  const rels=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object");
+  for(const lvl of ["raw_packed","collection","entire"]){
+    const r=rels.find(x=>x.identifies===lvl&&x.identifier);
+    if(r)return r.resolution==="reserved"?reservedText(r.identifier):relatedIdLink(r.identifier,r.identifier_type);
+  }
+  if(m.doi)return resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`);
+  return m.ts==="ok"?tsCollectionCell(m):"<span class='prov'>not recorded</span>";}
 // §2a: the related-identifiers block — one line per typed relation (SMETA.related_identifiers, served by
 // the engine mapper as always-a-list). The relation prints as a human label, the identifier as a
 // type-linked value, the custodian (when present) in muted text. Empty list -> "" (the section simply
@@ -823,11 +889,23 @@ function identifiersHtml(m){
   if(m.instrument_model)rows.push(`Instrument model: ${esc(m.instrument_model)}`);
   if(m.instrument_pid)rows.push(`Platform/instrument PID: <span class="pidline">${instrumentPidLink(m.instrument_pid)}</span>`);
   const instr=instrumentPidsHtml(m); if(instr)rows.push(instr);
-  const fund=(m.funders||[]).filter(f=>f&&f.name);
-  if(fund.length)rows.push(`Funders: ${fund.map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:esc(f.name)).join(" · ")}`);
+  // Funders are shown (with grant ids) by the survey card's own Funding section; the identifiers rollup no
+  // longer duplicates them here.
   if(!rows.length)return "";
   return `<div class="surveymeta"><b>Persistent identifiers &amp; instruments</b><br>${rows.join("<br>")}</div>`;}
-function pubCite(p){return `${esc(p.a)} (${esc(p.y)}). ${esc(p.t)}. <i>${esc(p.j)}</i>.`+(p.doi?` <a href="${escUrl("https://doi.org/"+p.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(p.doi)}</a>`:"");}
+// One related-publication citation. Robust to two real-corpus shapes: (1) a DOI value that is already a
+// full https://doi.org/ URL (the NVP harvester emits URL-form DOIs); the prefix is stripped before the
+// href/label so the resolver gets a single prefix (no doi.org/https://doi.org/ double-prefix) and the
+// label reads doi:<id>; (2) a row missing author/year/journal, the empty "(). ." skeleton is skipped and
+// only the present pieces (title + link) render.
+function pubCite(p){p=p||{};
+  const doi=String(p.doi==null?"":p.doi).trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");
+  const a=String(p.a==null?"":p.a).trim(),y=String(p.y==null?"":p.y).trim(),
+        t=String(p.t==null?"":p.t).trim(),j=String(p.j==null?"":p.j).trim();
+  const head=[a?esc(a):"",y?"("+esc(y)+")":""].filter(Boolean).join(" ");
+  const seg=[head?head+".":"",t?esc(t)+".":"",j?"<i>"+esc(j)+"</i>.":""].filter(Boolean).join(" ");
+  const link=doi?` <a href="${escUrl("https://doi.org/"+doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(doi)}</a>`:"";
+  return seg+link;}
 function pubsHtml(m){const ps=(m.pubs||[]);
   if(!ps.length)return `<div class="surveymeta"><span class='prov'>No related publications recorded yet; the science pipeline can auto-suggest these from DOIs that cite the dataset.</span></div>`;
   return `<div class="surveymeta">`+ps.map(p=>"• "+pubCite(p)).join("<br><br>")+`</div>`;}
@@ -836,14 +914,21 @@ function pubsHtml(m){const ps=(m.pubs||[]);
 // faceting by the automated completeness/smoothness check — the screen must never become a ranking, so
 // none of the sort modes or facets below reference s.q / the check.
 let _sortMode="name",_cardLayout="cards";
-const _facets={lic:false,doi:false,tipper:false};   // boolean presence facets, AND-combined when active
+const _facets={lic:false};                          // presence facets (currently just "Open licence")
+const _typeFacets=new Set();                        // selected data-type chips, OR-combined within the group
+const _TYPE_ORDER=["BBMT","LPMT","AMT","GDS"];      // canonical chip order; only corpus-present types render
 function _stationCount(sv){return ST.filter(s=>s.survey===sv).length;}
-function _surveyHasTipper(sv){return ST.some(s=>s.survey===sv&&(s.comps||"").includes("T"));}
+// The survey's catalogue data-type set, derived the way the card mixbar does (per-station s.type).
+function _surveyTypeSet(sv){const t=new Set();ST.forEach(s=>{if(s.survey===sv&&s.type)t.add(s.type);});return t;}
+// The data types actually present in the corpus, in canonical order, the type chips to render.
+function _presentTypes(){const have=new Set(ST.map(s=>s.type));return _TYPE_ORDER.filter(t=>have.has(t));}
 function _yearKey(m){return m.year_start!=null?m.year_start:(m.year_end!=null?m.year_end:-Infinity);}
 function surveyPassesFacets(sv){const m=SMETA[sv]||{};
   if(_facets.lic&&!licIsOpen(m.lic))return false;   // "Open licence": an openly-licensed (redistributable) id per the canon tables
-  if(_facets.doi&&!m.doi)return false;
-  if(_facets.tipper&&!_surveyHasTipper(sv))return false;
+  if(_typeFacets.size){                             // type chips: a survey passes if ANY of its stations' type is selected
+    const types=_surveyTypeSet(sv);let any=false;
+    _typeFacets.forEach(t=>{if(types.has(t))any=true;});
+    if(!any)return false;}
   return true;}
 function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
   if(_sortMode==="stations")arr.sort((a,b)=>_stationCount(b)-_stationCount(a)||a.localeCompare(b));
@@ -865,25 +950,31 @@ function renderDiscovery(n){
   const cnt=document.getElementById("surveyCount");
   if(cnt)cnt.textContent=n+" survey"+(n===1?"":"s");
   const fc=document.getElementById("facetChips");
-  if(fc)fc.innerHTML=[["lic","Open licence"],["doi","Has DOI"],["tipper","Has tipper"]]
-    .map(([k,l])=>`<button type="button" class="facet${_facets[k]?" on":""}" data-facet="${k}" aria-pressed="${_facets[k]?"true":"false"}">${l}</button>`).join("");}
+  if(!fc)return;
+  // "Open licence" (presence) + one chip per corpus-present data type (BBMT/LPMT/AMT/GDS), multi-select.
+  const chips=[`<button type="button" class="facet${_facets.lic?" on":""}" data-facet="lic" aria-pressed="${_facets.lic?"true":"false"}">Open licence</button>`];
+  _presentTypes().forEach(t=>{const on=_typeFacets.has(t);
+    chips.push(`<button type="button" class="facet${on?" on":""}" data-type-facet="${escAttr(t)}" aria-pressed="${on?"true":"false"}">${esc(t)}</button>`);});
+  fc.innerHTML=chips.join("");}
 function renderCards(){
   const vis=sortSurveys(surveys.filter(surveyVisible).filter(surveyPassesFacets));
   const grid=document.getElementById("cardGrid");
   if(grid)grid.className=_cardLayout==="compact"?"cardlist":"cardgrid";
   if(grid)grid.innerHTML = vis.length
     ? (_cardLayout==="compact"?vis.map(surveyRow).join(""):vis.map(surveyCard).join(""))
-    : `<div class="emptynote">No surveys match the current filters. Loosen the data-type, period, quality, country/survey or survey-search filters on the left, or clear the discovery facets above.</div>`;
+    : `<div class="emptynote">No surveys match the current search and filters. Clear the search box or the licence/type chips above to widen the results.</div>`;
   renderDiscovery(vis.length);}
-// "Clear filters" (E3): drop the discovery facets and the Find text query (the two view-level narrowings
-// this bar owns), then re-render. The left-rail structural filters (data type, tree, year, period) keep
-// their own controls — this action never silently reaches across into them.
+// "Clear filters" (cleanup wave B): drop the discovery facets (licence + data-type chips) and the
+// discovery search query, the view-level narrowings this bar owns, then re-render the grid and the
+// header count. The map's own rail search (#find) and structural filters are a separate surface; this
+// never reaches across into them.
 function clearDiscoveryFilters(){
   Object.keys(_facets).forEach(k=>_facets[k]=false);
-  const f=document.getElementById("find");
-  if(f&&f.value){f.value="";if(typeof renderFind==="function")renderFind();
-    if(typeof refresh==="function")refresh();else renderCards();}   // refresh() re-renders cards for the surveys view
-  else renderCards();}
+  _typeFacets.clear();
+  const s=document.getElementById("surveySearch");
+  if(s&&s.value)s.value="";
+  renderCards();
+  if(typeof updateCounts==="function")updateCounts();}
 function focusSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
   // C42: fit only POSITIONED stations — a withheld-coord station has no [lat,lon] to bound (avoids NaN bounds).
   const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15));}
@@ -895,12 +986,29 @@ function selectSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.che
 // with NaN. Empty (all-withheld survey) => a degenerate 0° box so callers never crash on b.e/b.w.
 function bbox(ss){const p=(ss||[]).filter(hasPosition),xs=p.map(s=>s.lon),ys=p.map(s=>s.lat);
   return xs.length?{w:Math.min(...xs),e:Math.max(...xs),so:Math.min(...ys),no:Math.max(...ys)}:{w:0,e:0,so:0,no:0};}
-function miniScatter(ss){const W2=372,H2=200,pad=12;const pp=(ss||[]).filter(hasPosition);const b=bbox(pp);
-  const dx=(b.e-b.w)||1,dy=(b.no-b.so)||1,sc=Math.min((W2-2*pad)/dx,(H2-2*pad)/dy);
-  const ox=(W2-dx*sc)/2,oy=(H2-dy*sc)/2;
-  const d=pp.map(s=>`<circle cx="${(ox+(s.lon-b.w)*sc).toFixed(1)}" cy="${(H2-oy-(s.lat-b.so)*sc).toFixed(1)}" r="2.6" fill="${TYPE_COL[s.type]||"#999"}" fill-opacity=".85"/>`).join("");
-  return `<svg width="${W2}" height="${H2}" role="img" style="background:#16242f;border:1px solid var(--line);border-radius:6px">`+
-    `<text x="${pad}" y="14" fill="#8FA3B0" font-size="9" font-family="monospace">${b.no.toFixed(1)}°,${b.w.toFixed(1)}° → ${b.so.toFixed(1)}°,${b.e.toFixed(1)}°</text>${d}</svg>`;}
+// Survey footprint mini-scatter. The in-plot corner label is gone; instead the plot box carries OUTSIDE
+// axis ticks: 3 latitude labels down the left margin, 3 longitude labels along the bottom (1 dp, degree
+// suffix, monospace 9px), with a small tick mark on the box edge at each. The SVG is responsive (viewBox +
+// width:100%) so it scales inside the resizable drawer. A degenerate/withheld-coords bbox (0° box) draws
+// no dots and repeated 0.0° labels but never crashes (dx/dy carry the ||1 guard; bbox is empty-safe).
+function miniScatter(ss){
+  const W2=372,H2=210,mL=38,mR=10,mT=10,mB=20;
+  const bx0=mL,bx1=W2-mR,by0=mT,by1=H2-mB,bw=bx1-bx0,bh=by1-by0;
+  const pp=(ss||[]).filter(hasPosition),b=bbox(pp);
+  const dx=(b.e-b.w)||1,dy=(b.no-b.so)||1,sc=Math.min(bw/dx,bh/dy);
+  const ox=(bw-dx*sc)/2,oy=(bh-dy*sc)/2;                 // letterbox offset inside the plot box
+  const px=lon=>bx0+ox+(lon-b.w)*sc,py=lat=>by1-oy-(lat-b.so)*sc;
+  const dots=pp.map(s=>`<circle cx="${px(s.lon).toFixed(1)}" cy="${py(s.lat).toFixed(1)}" r="2.6" fill="${TYPE_COL[s.type]||"#999"}" fill-opacity=".85"/>`).join("");
+  const fmtd=v=>v.toFixed(1)+"°";
+  const latTicks=[b.no,(b.no+b.so)/2,b.so].map(v=>{const y=py(v).toFixed(1);
+    return `<line x1="${bx0-3}" y1="${y}" x2="${bx0}" y2="${y}" stroke="#8FA3B0" stroke-width="1"/>`+
+      `<text x="${bx0-5}" y="${(py(v)+3).toFixed(1)}" fill="#8FA3B0" font-size="9" font-family="monospace" text-anchor="end">${fmtd(v)}</text>`;}).join("");
+  const lonTicks=[b.w,(b.w+b.e)/2,b.e].map(v=>{const x=px(v).toFixed(1);
+    return `<line x1="${x}" y1="${by1}" x2="${x}" y2="${by1+3}" stroke="#8FA3B0" stroke-width="1"/>`+
+      `<text x="${x}" y="${by1+13}" fill="#8FA3B0" font-size="9" font-family="monospace" text-anchor="middle">${fmtd(v)}</text>`;}).join("");
+  const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
+  return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
+    box+latTicks+lonTicks+dots+`</svg>`;}
 function relatedSurveys(sv){const m=SMETA[sv]||{},b=bbox(ST.filter(s=>s.survey===sv));
   return surveys.filter(o=>o!==sv).map(o=>{const os=ST.filter(s=>s.survey===o),ob=bbox(os);
     const sameOrg=(SMETA[o]||{}).org===m.org;
@@ -923,6 +1031,10 @@ function surveySummary(ss,m){
   const types=Object.keys(typeCount).sort().map(t=>`${t} ${typeCount[t]}`).join(" · ")||"–";
   const software=m.software||Object.keys(swCount).sort((a,b)=>swCount[b]-swCount[a])[0]||"not recorded";
   const coll=m.collection&&m.collection.id?`<a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`:"–";
+  // Embargoed surveys append the embargo date to the access cell ("embargoed until 2027-02-01"); any other
+  // access state (or an embargo with no date) renders the bare level as before.
+  const _acc=m.access||"open";
+  const _accTxt=(_acc==="embargoed"&&m.embargo_until)?"embargoed until "+esc(String(m.embargo_until)):esc(_acc);
   return `<div class="sechead">Survey summary <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(10-second view)</span></div><table class="meta">`+
     `<tr><td>stations</td><td>${ss.length}</td></tr>`+
     `<tr><td>data types</td><td>${esc(types)}</td></tr>`+
@@ -933,7 +1045,7 @@ function surveySummary(ss,m){
     `<tr><td>processing software</td><td>${esc(software)}</td></tr>`+
     `<tr><td>acquisition</td><td>${esc(m.dates||"–")}</td></tr>`+
     `<tr><td>collection</td><td>${coll}</td></tr>`+
-    `<tr><td>licence / access</td><td>${esc(m.lic||"?")} · ${esc(m.access||"open")}</td></tr>`+
+    `<tr><td>licence / access</td><td>${esc(m.lic||"?")} · ${_accTxt}</td></tr>`+
     `<tr><td>version</td><td>${esc(m.version||"–")}</td></tr>`+
     `</table>`;
 }
@@ -953,7 +1065,7 @@ function surveyBundleTiles(slug){
   if(!b.length)return"";
   const label={"edi-zip":["EDI bundle (.zip)","whole survey"],
                "xml-zip":["EMTF-XML bundle (.zip)","whole survey"],
-               "mth5":["Survey MTH5 (transfer functions)","TFs only · mtpy-v2 / ModEM"]};
+               "mth5":["Survey MTH5 (transfer functions)","TFs only · whole survey"]};
   return b.map(r=>{const L=label[r.format]||[r.format,""];
     return `<div class="prod" data-prod="fetch" data-url="${escAttr(r.url)}" data-name="${escAttr(r.url.split("/").pop())}">`+
       `<span class="pdot" style="background:var(--ok)"></span><div>${esc(L[0])}<small>${esc(L[1])}${r.size?" · "+esc(fmtBytes(r.size)):""}</small></div></div>`;
@@ -979,7 +1091,7 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   // Downloads move up ahead of funding/publications/identifiers; release history moves last.
   drawer.innerHTML=
    `<div class="dhead"><span class="sid" style="font-size:18px">${esc(sv)}</span><button class="close" aria-label="Close">✕</button></div>`+
-   `<div class="dsub">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")} · ${esc(m.dates||"dates n/a")}</div>`+
+   `<div class="dsub">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}${m.region?" · "+esc(m.region):""} · ${esc(m.dates||"dates n/a")}</div>`+
    collLine(m)+
    `<div class="dim" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
    miniScatter(ss)+
@@ -987,6 +1099,9 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    // C46-W3b: the captured attribution statement rendered where the survey's citation lives (verbatim
    // custodian statement, else the org(year) synthesis), and the upstream "Source datasets" list.
    (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div><div class="attn">${esc(attributionText(m))}</div>`:"")+
+   // Credit model (SPEC §2.1): the ordered creators[] (citation-author order) render adjacent to Attribution;
+   // absent -> nothing.
+   creatorsHtml(m)+
    sourcesListHtml(m)+
    `<div class="sechead">Downloads</div><div class="prodgrid">`+
      surveyBundleTiles(m.slug)+
@@ -999,14 +1114,14 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
        :`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`):"")+
    `</div>`+
    contributorsHtml(m)+
-   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(f=>f.pid?`<a href="${escUrl(f.pid)}" target="_blank" rel="noopener noreferrer">${esc(f.name)}</a>`:esc(f.name)).join(" · ")||"–"}</div>`+
+   `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"–"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
    `<details class="prov-d survey-ids"><summary>Persistent identifiers: ${pr.have} of ${pr.total} recorded</summary><div class="prov-dbody">`+identifiersHtml(m)+`</div></details>`+
    releaseNotesHtml(m)+
    `<div class="sechead">Related surveys</div><div class="surveymeta">`+
      (rel.length?rel.map(o=>`<a href="#" data-act="story" data-survey="${escAttr(o)}">${esc(o)}</a>`).join(" · "):"<span class='prov'>none nearby</span>")+`</div>`;
   drawer.setAttribute("aria-label",sv+", survey details");
-  drawer.classList.add("open");drawer.scrollTop=0;
+  drawer.classList.add("open");drawer.scrollTop=0;showDrawerScrim();   // D: dim backdrop on non-map views
   _focusDrawer();}                                    // E7: move focus into the dialog
 
 // ---- single delegated click handler (no inline onclick anywhere) ----
@@ -1016,34 +1131,18 @@ function collLine(m){
   if(m.collection&&m.collection.id) parts.push(`Part of: <a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`);
   return parts.length?`<div class="dsub" style="margin-top:3px">${parts.join(" · ")}</div>`:"";
 }
-// Full-width collection page (#collectionview). A collection aggregates MANY surveys, so it gets the
-// whole content area, not the narrow drawer: member-survey rollup (total sites, period coverage,
-// type/dimensionality mix), an all-stations scatter, and a per-survey table. Reached via #/collection/<id>
-// (main.js routeFromHash); collections hold no TFs of their own — everything rolls up from member surveys.
-// Collections INDEX (the "Collections" tab): one card per collection in COLL, each opening the
+// Collections INDEX (the "Collections" tab): one rich card per collection in COLL, opening the
 // full-width collection page. A collection appears automatically when surveys share a collection.id.
-function collectionCard(cid){const c=COLL[cid];
-  return `<div class="scard"><h3 style="cursor:pointer" data-act="collection" data-coll="${escAttr(cid)}" title="Explore collection">${esc(c.title||cid)}</h3>`+
-    `<div class="cust">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""}</div>`+
-    `<div class="stats"><b>${c.n_surveys}</b> survey${c.n_surveys===1?"":"s"} · <b>${c.n_stations}</b> station${c.n_stations===1?"":"s"}${c.start_year?" · since <b>"+esc(c.start_year)+"</b>":""}</div>`+
-    (c.description?`<div class="desc">${esc(c.description)}</div>`:"")+
-    `<div class="stats" style="color:var(--muted);font-size:11px">${(c.surveys||[]).map(esc).join(" · ")||"–"}</div>`+
-    `<div class="cardbtns"><button data-act="collection" data-coll="${escAttr(cid)}">Explore collection →</button></div></div>`;
-}
-// UX6 Wave E (E5): the plain, truthful landing intro above the collections grid.
-function collectionsIntroHtml(){return `<p class="coll-intro">Collections group related surveys acquired under one programme, such as the national <b>AusLAMP</b> long-period array. A collection holds no transfer functions of its own; every dataset and its provenance stay with the member surveys it links to. A collection appears here automatically once surveys share a <code>collection.id</code>.</p>`;}
 // E5: the participating organisations of a collection, derived from its member surveys' SMETA (deduped, sorted).
 function collOrgs(c){const set=new Set();((c&&c.surveys)||[]).forEach(sv=>{const o=(SMETA[sv]||{}).org;if(o)set.add(o);});return [...set].sort();}
-// E5: full-width FEATURE card, shown when there are ≤2 collections (grid layout takes over above 2). Name,
-// description (truncated with an expand), footprint scatter, the existing rollup stats, participating
-// organisations, and a prominent Explore action.
-function collFeatureCard(cid){const c=COLL[cid];const members=(c.surveys||[]);const ss=ST.filter(s=>members.indexOf(s.survey)>=0);
-  const orgs=collOrgs(c);const desc=c.description||"";const cut=desc.length>240;
-  const descHtml=desc
-    ? `<div class="desc collfeat-desc">`+(cut
-        ? `<span class="cf-short">${esc(desc.slice(0,240))}… <button type="button" class="cf-expand" data-act="cf-expand">Show more</button></span><span class="cf-full" hidden>${esc(desc)}</span>`
-        : esc(desc))+`</div>`
-    : "";
+// Cleanup wave (E): ONE rich collection card at ANY count; the earlier feature/compact two-branch split
+// is gone. Title + type/status, the FULL abstract (no 240-char truncation, no Show more), the footprint
+// scatter, rollup stats, participating organisations, and a prominent Explore action. Rendered into a
+// responsive auto-fit grid (index.html .collfeature-grid) so it reads from one collection today to
+// several (WA-MT, Vulcan) soon. Keeps the .scard.collfeature class the styling + tests key off.
+function collectionCard(cid){const c=COLL[cid];const members=(c.surveys||[]);const ss=ST.filter(s=>members.indexOf(s.survey)>=0);
+  const orgs=collOrgs(c);const desc=c.description||"";
+  const descHtml=desc?`<div class="desc collfeat-desc">${esc(desc)}</div>`:"";
   return `<div class="scard collfeature">`+
     `<div class="scardhead"><h3 style="cursor:pointer" data-act="collection" data-coll="${escAttr(cid)}" title="Explore collection">${esc(c.title||cid)}</h3></div>`+
     `<div class="cust">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""}</div>`+
@@ -1054,12 +1153,11 @@ function collFeatureCard(cid){const c=COLL[cid];const members=(c.surveys||[]);co
     `<div class="cardbtns"><button class="primary" data-act="collection" data-coll="${escAttr(cid)}">Explore collection →</button></div>`+
   `</div>`;}
 function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&COLL)||{}).sort();
-  const intro=document.getElementById("collectionsIntro"),grid=document.getElementById("collectionsGrid");
-  if(intro)intro.innerHTML=ids.length?collectionsIntroHtml():"";
-  if(!ids.length){if(grid){grid.className="cardgrid";grid.innerHTML=`<div class="emptynote">No collections yet; a collection appears automatically when surveys share a <code>collection.id</code> in their survey.yaml (e.g. AusLAMP).</div>`;}return;}
-  const feature=ids.length<=2;                                    // ≤2 => full-width feature cards; grid above 2
-  if(grid){grid.className=feature?"collfeature-grid":"cardgrid";
-    grid.innerHTML=(feature?ids.map(collFeatureCard):ids.map(collectionCard)).join("");}
+  const grid=document.getElementById("collectionsGrid");
+  if(!grid)return;
+  if(!ids.length){grid.className="cardgrid";grid.innerHTML=`<div class="emptynote">No collections yet; a collection appears automatically when surveys share a <code>collection.id</code> in their survey.yaml (e.g. AusLAMP).</div>`;return;}
+  grid.className="collfeature-grid";                              // ONE responsive grid at any count (index.html)
+  grid.innerHTML=ids.map(collectionCard).join("");
 }
 // UX6 Wave E (E6): collection footprint. Fixed-Australia extent with a simplified coastline + state-
 // boundary outline (vendor/au-outline.js — public-domain Natural Earth, see that file's header) drawn
@@ -1069,9 +1167,13 @@ function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&C
 // stay registered; the canvas aspect matches the box to avoid squashing.
 const AU_EXTENT={w:112,e:154,so:-44,no:-9};
 const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
-function collScatter(ss){
+// Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
+// cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
+// the geometry is identical regardless of rendered size. Both call sites pass just `ss` or `(ss,maxW)`.
+function collScatter(ss,maxW){
   if(!ss.length) return "";
   const W=560,H=Math.round(W*(AU_EXTENT.no-AU_EXTENT.so)/(AU_EXTENT.e-AU_EXTENT.w)),pad=22;
+  const cap=(typeof maxW==="number"&&maxW>0)?maxW:W;
   const proj=(lon,lat)=>[pad+(lon-AU_EXTENT.w)/(AU_EXTENT.e-AU_EXTENT.w)*(W-2*pad),
                          pad+(AU_EXTENT.no-lat)/(AU_EXTENT.no-AU_EXTENT.so)*(H-2*pad)];
   // Outline beneath the dots (guarded; absent asset => no backdrop, dots still plot).
@@ -1086,7 +1188,7 @@ function collScatter(ss){
   const col=sv=>COLL_PAL[members.indexOf(sv)%COLL_PAL.length];
   const dots=ss.filter(hasPosition).map(s=>{const p=proj(s.lon,s.lat);
     return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
-  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
   const legend=`<div class="collscatter-legend">`+members.map(sv=>`<span class="csl-item"><span class="csl-dot" style="background:${col(sv)}"></span>${esc(sv)}</span>`).join("")+`</div>`;
   return `<div class="collscatter">${svg}${legend}</div>`;
 }
@@ -1108,21 +1210,32 @@ function openCollectionPage(cid){
       `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtP(pmn)+"–"+fmtP(pmx)+"s":"–"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
+  // Cleanup wave (E): a two-column HERO on wide screens; the abstract (+ the type/status/counts subline)
+  // on the left, the fluid footprint scatter on the right; the stat tiles span full-width below; the member
+  // table breathes to full width. The .collnote explainer is deleted (it duplicated the list-page intro,
+  // itself deleted). Single column on narrow screens (index.html .collhero).
   v.innerHTML=
    `<div class="collpagenav"><button class="collback" data-act="collidx">← All collections</button>`+
    `<button class="collback collmapbtn" data-act="collmap" data-coll="${escAttr(cid)}">View all stations on main map</button></div>`+
    `<h1 class="colltitle">${esc(c.title||cid)}</h1>`+
-   `<div class="collsub">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""} · ${c.n_surveys} survey${c.n_surveys===1?"":"s"} · ${c.n_stations} station${c.n_stations===1?"":"s"}${c.start_year?" · since "+esc(c.start_year):""}${c.last_updated?" · updated "+esc(c.last_updated):""}</div>`+
-   (c.description?`<div class="colldesc">${esc(c.description)}</div>`:"")+
-   `<div class="collnote">A collection groups related surveys (e.g. a national programme such as AusLAMP). It holds <b>no transfer functions of its own</b>; all data and provenance live with the member surveys below.</div>`+
+   `<div class="collhero">`+
+     `<div class="collhero-main">`+
+       `<div class="collsub">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""} · ${c.n_surveys} survey${c.n_surveys===1?"":"s"} · ${c.n_stations} station${c.n_stations===1?"":"s"}${c.start_year?" · since "+esc(c.start_year):""}${c.last_updated?" · updated "+esc(c.last_updated):""}</div>`+
+       (c.description?`<div class="colldesc">${esc(c.description)}</div>`:"")+
+     `</div>`+
+     (ss.length?`<div class="collhero-aside">${collScatter(ss,720)}</div>`:"")+
+   `</div>`+
    `<div class="cstats">`+stat("surveys",c.n_surveys)+stat("stations",c.n_stations)+
      stat("period coverage",isFinite(pmin)?fmtP(pmin)+"–"+fmtP(pmax)+"s":"–")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
-   (ss.length?`<div class="csechead">Station map</div>`+collScatter(ss):"")+
    `<div class="csechead">Member surveys (${members.length})</div>`+
    `<table class="colltable"><thead><tr><th>Survey</th><th>Stations</th><th>Data&nbsp;types</th><th>Period&nbsp;range</th></tr></thead><tbody>${rows}</tbody></table>`;
   document.getElementById("map").style.display="none";
   document.getElementById("surveysview").style.display="none";
   const _ci=document.getElementById("collectionsview");if(_ci)_ci.style.display="none";
+  // C: the collection-detail page also spans full width, so hide the rail + resize handle (setView's map
+  // path restores them). This is the manual view switch openCollectionPage owns instead of setView.
+  const _fp=document.getElementById("filterPane");if(_fp)_fp.classList.add("hidden");
+  const _rz=document.getElementById("resizer");if(_rz)_rz.classList.add("hidden");
   document.getElementById("navMap").classList.remove("active");
   document.getElementById("navSurveys").classList.remove("active");
   const _nc=document.getElementById("navCollections");if(_nc)_nc.classList.add("active");
@@ -1165,12 +1278,11 @@ document.addEventListener("click",e=>{
   const el=e.target.closest("[data-act]");if(!el)return;
   const act=el.dataset.act,sv=el.dataset.survey,doi=el.dataset.doi;
   if(act==="tab"){e.preventDefault();selectDrawerTab(el.dataset.tab);}
-  else if(act==="expand"){e.preventDefault();const kind=el.dataset.plot;if(kind&&typeof openPlotModal==="function"&&_curTf)openPlotModal(kind,_curTf);}
+  else if(act==="expand"){e.preventDefault();if(typeof openStationModal==="function"&&_curTf&&_curStation)openStationModal(stationModalHeader(_curStation,SMETA[_curStation.survey]||{}),_curTf);}
   else if(act==="story"){e.preventDefault();openSurvey(sv);}
   else if(act==="collection"){e.preventDefault();location.hash="#/collection/"+encodeURIComponent(el.dataset.coll);}
   else if(act==="collidx"){e.preventDefault();if(location.hash.indexOf("#/collection/")===0)history.replaceState(null,"",location.pathname+location.search);setView("collections");}
   else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // E6: switch to map + fitBounds to the collection
-  else if(act==="cf-expand"){e.preventDefault();const box=el.closest(".collfeat-desc");if(box){const sh=box.querySelector(".cf-short"),fu=box.querySelector(".cf-full");if(sh)sh.hidden=true;if(fu)fu.hidden=false;}}   // E5: expand a truncated feature description
   else if(act==="focus")focusSurvey(sv);
   else if(act==="select")selectSurvey(sv);
   else if(act==="doi"&&doi)window.open(escUrl("https://doi.org/"+doi),"_blank","noopener,noreferrer");   // NOT encodeURIComponent — it %2F-escapes the DOI slash -> doi.org 404; escUrl still blocks scheme injection
@@ -1188,7 +1300,15 @@ document.addEventListener("click",e=>{
     _cardLayout=b.dataset.layout;[...(layoutSeg.children||[])].forEach(x=>x.classList&&x.classList.toggle("on",x===b));renderCards();});
   const clearBtn=document.getElementById("clearFilters");
   if(clearBtn&&clearBtn.addEventListener)clearBtn.addEventListener("click",clearDiscoveryFilters);
+  // Live surveys-view search (cleanup wave B): case-insensitive substring over name/org/region/blurb
+  // (surveyMatchesSearch in filters.js reads this input). Live-updates the grid + #surveyCount and the
+  // header #nVis count.
+  const search=document.getElementById("surveySearch");
+  if(search&&search.addEventListener)search.addEventListener("input",()=>{renderCards();if(typeof updateCounts==="function")updateCounts();});
   const fc=document.getElementById("facetChips");
-  if(fc&&fc.addEventListener)fc.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-facet]");if(!b)return;
-    const k=b.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];renderCards();}});
+  if(fc&&fc.addEventListener)fc.addEventListener("click",e=>{
+    const lf=e.target.closest&&e.target.closest("[data-facet]");
+    if(lf){const k=lf.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];renderCards();}return;}
+    const tf=e.target.closest&&e.target.closest("[data-type-facet]");
+    if(tf){const t=tf.dataset.typeFacet;if(_typeFacets.has(t))_typeFacets.delete(t);else _typeFacets.add(t);renderCards();}});
 })();

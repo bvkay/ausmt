@@ -130,22 +130,38 @@ function plotCollapsible(kind,t,open){const m=PLOT_META[kind];if(!m)return"";con
     `<summary><span class="ptitle">${m.title}</span>${m.sub?`<span class="psubline">${m.sub}</span>`:""}</summary>`+
     `<div class="plotbody">${expandBtn(kind)}${svg}${_paxis}</div></details>`;}
 
-// UX6 Wave C — expand-to-modal. Re-renders the SAME plotter at 2.5× in a dialog appended to <body>;
-// closes on Esc or click-out; focus returns to the control that opened it. The drawer's own Esc handler
-// yields while this modal is open (it checks for #plotmodal) so Esc closes the modal, not the drawer.
+// UX6 Wave C (evolved): the expand affordance opens ONE full-station RESPONSE modal, not a single-plot
+// popup. It carries a station-identity header (built by the drawer, which owns the honest coordCellHtml /
+// orgNameLink) plus ALL response panels re-rendered at LARGE scale: apparent resistivity, phase, phase
+// tensor, and the induction arrows ONLY when the station carries tipper (arrowSvg returns "" otherwise, so
+// that panel is simply absent, exactly as in the drawer). The overlay is appended to <body>, scrolls, and
+// closes on Esc, click-out, or the close button, with focus returned to the opener. The drawer's own Esc
+// handler yields while the modal is open (it checks for #plotmodal) so Esc closes the modal, not the
+// drawer. All data is already client-side (the stashed TF row); no fetches.
+const STATION_MODAL_SCALE=2;                       // large stacked panels; the modal box itself scrolls
+const MODAL_PANELS=["rho","phase","pt","arrow"];   // stacked in this order (arrow absent for a non-tipper station)
+// One large modal panel: title + optional convention subline + scaled svg + axis unit. An empty svg
+// (arrowSvg for a non-tipper station, or any uncollected panel) yields "" so the panel is ABSENT, no empty
+// box, mirroring plotBlock's guard. No per-plot expand button here (the modal IS the expansion).
+function modalPanel(kind,t,k){const m=PLOT_META[kind];if(!m)return"";const svg=m.svg(t,k);if(!svg)return"";
+  return `<div class="plot" data-plot="${kind}"><div class="ptitle">${m.title}</div>`+
+    (m.sub?`<div class="psubline">${m.sub}</div>`:"")+svg+_paxis+`</div>`;}
 let _plotModalReturnFocus=null;
 function closePlotModal(){const ov=document.getElementById("plotmodal");if(ov)ov.remove();
   document.removeEventListener("keydown",_plotModalKey);
   const f=_plotModalReturnFocus;_plotModalReturnFocus=null;if(f&&typeof f.focus==="function"){try{f.focus();}catch(e){}}}
 function _plotModalKey(e){if(e.key==="Escape")closePlotModal();}
-function openPlotModal(kind,t){const m=PLOT_META[kind];if(!m)return;const svg=m.svg(t,2.5);if(!svg)return;
+// headerHtml is the station-identity block the drawer builds (stationModalHeader); t is the stashed TF row.
+function openStationModal(headerHtml,t){
+  const panels=MODAL_PANELS.map(k=>modalPanel(k,t,STATION_MODAL_SCALE)).join("");
+  if(!panels)return;                               // nothing plottable (withheld curves); open no empty modal
   closePlotModal();
   _plotModalReturnFocus=(typeof document!=="undefined")?document.activeElement:null;
   const ov=document.createElement("div");ov.id="plotmodal";ov.className="plotmodal";
-  ov.setAttribute("role","dialog");ov.setAttribute("aria-modal","true");ov.setAttribute("aria-label",m.title);
-  ov.innerHTML=`<div class="plotmodal-box" data-scale="2.5"><div class="plotmodal-head"><div><span class="ptitle">${m.title}</span>`+
-    (m.sub?`<span class="psubline">${m.sub}</span>`:"")+`</div><button class="plotmodal-close" type="button" aria-label="Close">✕</button></div>`+
-    `<div class="plotmodal-svg">${svg}${_paxis}</div></div>`;
+  ov.setAttribute("role","dialog");ov.setAttribute("aria-modal","true");ov.setAttribute("aria-label","Station response functions");
+  ov.innerHTML=`<div class="plotmodal-box"><div class="plotmodal-head"><div class="plotmodal-ident">${headerHtml||""}</div>`+
+    `<button class="plotmodal-close" type="button" aria-label="Close">✕</button></div>`+
+    `<div class="plotmodal-svg">${panels}</div></div>`;
   ov.addEventListener("click",e=>{if(e.target===ov||(e.target.closest&&e.target.closest(".plotmodal-close")))closePlotModal();});
   document.body.appendChild(ov);
   document.addEventListener("keydown",_plotModalKey);
