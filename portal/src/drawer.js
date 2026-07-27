@@ -730,33 +730,63 @@ function orcidLink(o){if(!o)return "";const href="https://orcid.org/"+o;
 // echoes a raw token).
 const CONTRIBUTOR_ROLE_LABELS={ProjectLeader:"led",ProjectMember:"project member",DataCollector:"collected the data",
   ContactPerson:"contact",DataCurator:"curated",Sponsor:"sponsored",RightsHolder:"rights holder",Distributor:"distributed"};
-// Credit model (SPEC §3/§6): the survey's contributors[] as a single-column "who did what" list; each row a
-// name (an organisation links to its ROR; a person carries an ORCID icon when present) followed by the role
-// phrase. Reads the pinned seam field verbatim; returns "" (no heading, no placeholder row) when the list is
-// absent or empty, matching sourcesListHtml/instrumentPidsHtml.
-function contributorRow(c){
+// The RATIFIED display order for a person's role phrases when they hold several (SPEC §3.1). Pinned
+// explicitly (not left to object-key order) so a grouped person's phrases read in ONE stable sequence
+// regardless of the order their contributor rows were declared in. Keyed against CONTRIBUTOR_ROLE_LABELS.
+const CONTRIBUTOR_ROLE_ORDER=["ProjectLeader","ProjectMember","DataCollector","ContactPerson","DataCurator","Sponsor","RightsHolder","Distributor"];
+// An ORCID grouping key: lower-cased, resolver-prefix stripped, trailing slashes dropped, so the bare id
+// and the full https://orcid.org/<id> URL form collapse to the SAME person. "" when no ORCID (the caller
+// then dedupes on name + name_type instead).
+function orcidKey(o){return o?String(o).trim().toLowerCase().replace(/^https?:\/\/orcid\.org\//,"").replace(/\/+$/,""):"";}
+// One contributor's NAME cell (no role phrase): an organisation links to its ROR, a person carries the
+// ORCID icon-link. Shared by the grouped Contributors list. "" for a nameless row (blank-over-placeholder,
+// so the caller drops it silently rather than printing an empty placeholder).
+function contributorName(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
-  const nameHtml=c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);
-  const label=CONTRIBUTOR_ROLE_LABELS[c.role];
-  return label?`${nameHtml} <span class="prov">${esc(label)}</span>`:nameHtml;}
+  return c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
+// Credit model (SPEC §3/§6): the survey's contributors[] as a COLLAPSED <details> (styled like the
+// Persistent-identifiers rollup), GROUPED by person. The old surface printed one line per (person, role)
+// row; a survey with 7 people across 15 role rows printed 15 lines. Now rows dedupe by ORCID (case /
+// URL-form-insensitive) else by exact name + name_type, preserving first-appearance order, and each distinct
+// person renders ONE line: the name (ORCID/ROR link as before) then their role phrases comma-joined in the
+// RATIFIED role order. An unknown/absent role adds no phrase (never a raw token); a nameless row is dropped
+// silently and never counted. The summary counts the DISTINCT people/orgs. Returns "" (no section, no
+// placeholder) when the list is absent or empty, matching sourcesListHtml/instrumentPidsHtml.
 function contributorsHtml(m){
-  const rows=((m&&m.contributors)||[]).filter(c=>c&&typeof c==="object").map(contributorRow).filter(Boolean);
-  if(!rows.length)return "";
-  return `<div class="sechead">Contributors</div><div class="surveymeta"><span class="pidline">${rows.join("<br>")}</span></div>`;}
-// Credit model (SPEC §2.1): the survey's ORDERED creators[], the citation-author list. Order IS the
-// citation order; a person carries the ORCID icon-link, an organisation's name links to its ROR. No role
+  const list=((m&&m.contributors)||[]).filter(c=>c&&typeof c==="object");
+  const groups=[],byKey=Object.create(null);
+  list.forEach(c=>{
+    const name=((c&&c.name)||"").toString().trim();
+    if(!name)return;                                             // nameless row: dropped, uncounted
+    const key=c.orcid?"o:"+orcidKey(c.orcid):"n:"+(c.name_type||"")+":"+name;
+    let g=byKey[key];
+    if(!g){g={c:c,roles:[]};byKey[key]=g;groups.push(g);}        // first appearance owns the name/link
+    if(c.role&&CONTRIBUTOR_ROLE_LABELS[c.role]&&g.roles.indexOf(c.role)<0)g.roles.push(c.role);});
+  if(!groups.length)return "";
+  const rows=groups.map(g=>{
+    const phrases=CONTRIBUTOR_ROLE_ORDER.filter(r=>g.roles.indexOf(r)>=0).map(r=>CONTRIBUTOR_ROLE_LABELS[r]);
+    return phrases.length?`${contributorName(g.c)} <span class="prov">${phrases.map(esc).join(", ")}</span>`:contributorName(g.c);});
+  return `<details class="prov-d survey-contributors"><summary>Contributors (${groups.length})</summary>`+
+    `<div class="prov-dbody"><div class="surveymeta">${rows.join("<br>")}</div></div></details>`;}
+// Credit model (SPEC §2.1): the survey's ORDERED creators[], the attribution-author list. Order IS the
+// attribution order; a person carries the ORCID icon-link, an organisation's name links to its ROR. No role
 // phrase (that is the contributors[] surface). Reads the pinned seam field verbatim; a creator row is the
-// same {name, name_type, orcid, ror} shape as a contributor minus the role. "" (no heading, no placeholder)
-// when the list is absent or empty, matching contributorsHtml / sourcesListHtml.
+// same {name, name_type, orcid, ror} shape as a contributor minus the role. "" for a nameless row.
 function creatorRow(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
   return c&&c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
-function creatorsHtml(m){
+// Card-credit rework: the ordered creators[] rendered INSIDE the Attribution block, on their own line beneath
+// the attribution sentence (which is their context), replacing the former standalone Creators section (which
+// duplicated the attribution names under an unclear heading). AusMT mints no DOIs today, so the display says
+// ATTRIBUTION, not citation: the line carries no label and no gloss, just the linked names in declared order
+// joined by " · ". Returns "" (no line) when creators[] is absent or empty, so the Attribution block renders
+// exactly as before.
+function attributionAuthorsHtml(m){
   const rows=((m&&m.creators)||[]).filter(c=>c&&typeof c==="object").map(creatorRow).filter(Boolean);
   if(!rows.length)return "";
-  return `<div class="sechead">Creators</div><div class="surveymeta"><span class="pidline">${rows.join("<br>")}</span></div>`;}
+  return `<div class="attn attribution-authors">${rows.join(" · ")}</div>`;}
 // One funder rendered as its (ROR/pid-linked) name with the grant id appended in muted text when the
 // funding row carries one (the engine emits grant_id only for a real declared grant; absent -> just the
 // name). The Funding section owns this display; the identifiers rollup no longer duplicates the funders line.
@@ -1096,12 +1126,12 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    `<div class="dim" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
    miniScatter(ss)+
    surveySummary(ss,m)+
-   // C46-W3b: the captured attribution statement rendered where the survey's citation lives (verbatim
-   // custodian statement, else the org(year) synthesis), and the upstream "Source datasets" list.
-   (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div><div class="attn">${esc(attributionText(m))}</div>`:"")+
-   // Credit model (SPEC §2.1): the ordered creators[] (citation-author order) render adjacent to Attribution;
-   // absent -> nothing.
-   creatorsHtml(m)+
+   // C46-W3b: the captured attribution statement rendered where the survey's attribution lives (verbatim
+   // custodian statement, else the org(year) synthesis). Card-credit rework: the ordered creators[] (SPEC
+   // §2.1, attribution order) now render INSIDE this block on their own unlabelled line beneath the sentence
+   // (attributionAuthorsHtml); absent creators -> the block is byte-identical to before. The upstream
+   // "Source datasets" list follows.
+   (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div><div class="attn">${esc(attributionText(m))}</div>`+attributionAuthorsHtml(m):"")+
    sourcesListHtml(m)+
    `<div class="sechead">Downloads</div><div class="prodgrid">`+
      surveyBundleTiles(m.slug)+

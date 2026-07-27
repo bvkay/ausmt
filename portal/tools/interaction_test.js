@@ -2028,7 +2028,10 @@ async function bootFreshWindow(dataMap) {
   ] });
   A.openSurvey("Gamma Survey");
   const drwCr = doc.getElementById("drawer"), crH = drwCr.innerHTML;
-  ok(/>Contributors</.test(crH), "CREDIT: a Contributors section heading must render when contributors[] is present");
+  // Card-credit rework: contributors are a COLLAPSED <details> grouped by person; the summary reads
+  // "Contributors (N)" where N is the distinct people/orgs (here 5 single-role people).
+  ok(/>Contributors \(5\)</.test(crH),
+    "CREDIT: a Contributors <details> summary reads 'Contributors (N)' (N = distinct people) when contributors[] is present, got: " + (crH.match(/Contributors \([^)]*\)/) || ["<none>"])[0]);
   ok(/<span class="prov">led<\/span>/.test(crH), "CREDIT: a ProjectLeader must render the 'led' role phrase");
   ok(/<span class="prov">collected the data<\/span>/.test(crH), "CREDIT: a DataCollector must render 'collected the data'");
   ok(/<span class="prov">curated<\/span>/.test(crH), "CREDIT: a DataCurator must render 'curated'");
@@ -2039,13 +2042,21 @@ async function bootFreshWindow(dataMap) {
   ok(/Geological Survey of South Australia/.test(crH) && /ror\.org\/028g18b61/.test(crH),
     "CREDIT: an organisation contributor's name links to its ROR when present");
   ok(/Zonge Engineering/.test(crH), "CREDIT: an organisation contributor with no ROR renders its plain name (no '(no PID)' suffix)");
+  ok(/<details class="prov-d survey-contributors">/.test(crH),
+    "CREDIT: contributors render inside a <details class='prov-d ...'> collapsed like the Persistent identifiers rollup");
   ok(!/>investigators</.test(crH),
     "CREDIT retirement: the stale survey-summary 'investigators' row (served from the retired lead/principal-investigator keys) must be gone");
   drwCr.classList.remove("open");
-  // Graceful absence: Beta carries no contributors[] -> NO Contributors section renders (no empty heading, no placeholder).
+  // Graceful absence: Beta carries no contributors[] and no creators[] -> NO Contributors <details> AND the
+  // Attribution block renders exactly as before (no attribution names line, no label, no gloss).
   A.openSurvey("Beta Survey");
-  ok(!/>Contributors</.test(doc.getElementById("drawer").innerHTML),
-    "CREDIT: a survey with no contributors[] must render NO Contributors section (render nothing when the array is absent)");
+  const betaH = doc.getElementById("drawer").innerHTML;
+  ok(!/Contributors \(/.test(betaH),
+    "CREDIT: a survey with no contributors[] must render NO Contributors <details> (no summary, no placeholder)");
+  ok(/>Attribution/.test(betaH) && !/attribution-authors/.test(betaH),
+    "CREDIT: a survey with no creators[] renders the Attribution block unchanged (no attribution names line)");
+  ok(!/Cited authors/.test(betaH) && !/credited whenever this dataset is cited/.test(betaH),
+    "CREDIT: no 'Cited authors' label and no citation gloss ever render");
   doc.getElementById("drawer").classList.remove("open");
 
   // PC. PORTAL-CLEANUP WAVE (stage 1). Three cleanups, poked onto Gamma (the base fixture carries none of
@@ -2069,18 +2080,26 @@ async function bootFreshWindow(dataMap) {
       { t: "An untitled note on the Gamma survey", doi: "10.5555/gamma-note" },
     ],
   });
-  // (1) CREATORS: a Creators section renders with the two credit rows, in declared order; a person carries the
-  //     ORCID icon-link and an organisation's name links to its ROR. RED on origin/main (no Creators section).
+  // (1) ATTRIBUTION AUTHORS: card-credit rework - the ordered creators[] render as an unlabelled names line
+  //     INSIDE the Attribution block (no standalone Creators section), in declared order; a person carries the
+  //     ORCID icon-link, an organisation's name links to its ROR. AusMT mints no DOIs, so the line makes no
+  //     citation claim: no "Cited authors" label and no gloss.
   A.openSurvey("Gamma Survey");
   const drwPC = doc.getElementById("drawer"), pcH = drwPC.innerHTML;
-  ok(/>Creators</.test(pcH), "PC: a Creators section must render when creators[] is present");
+  ok(!/>Creators</.test(pcH),
+    "PC: no standalone Creators section/heading remains (creators fold into the Attribution block)");
+  ok(/attribution-authors/.test(pcH),
+    "PC: creators[] render as the unlabelled attribution names line inside the Attribution block when creators[] is present");
   ok(/Kate Robertson/.test(pcH) && /orcid\.org\/0000-0002-1111-2222/.test(pcH),
     "PC: a person creator renders their name plus the ORCID icon-link");
   ok(/Geological Survey of South Australia/.test(pcH) && /ror\.org\/028g18b61/.test(pcH),
     "PC: an organisation creator's name links to its ROR");
   ok(pcH.indexOf("Kate Robertson") < pcH.indexOf("Geological Survey of South Australia"),
     "PC: creators must render in their declared citation order (person before org here)");
-  ok(pcH.indexOf(">Creators<") < pcH.indexOf(">Downloads<"), "PC: the Creators section must sit ahead of Downloads (adjacent to Attribution)");
+  ok(pcH.indexOf(">Attribution") < pcH.indexOf("Kate Robertson") && pcH.indexOf("Kate Robertson") < pcH.indexOf(">Downloads<"),
+    "PC: the attribution names line sits INSIDE the Attribution block (after the Attribution heading, ahead of Downloads)");
+  ok(!/Cited authors/.test(pcH) && !/credited whenever this dataset is cited/.test(pcH),
+    "PC: the attribution names line carries NO 'Cited authors' label and NO citation gloss (attribution, not citation)");
   // (2) FUNDING grant id: the funder's grant_id is appended to the Funding section (2 live rows in the corpus).
   const _fundBlock = (pcH.split(">Funding<")[1] || "").split(">Related publications<")[0];
   ok(/Australian Research Council/.test(_fundBlock) && /ADI RD02-260/.test(_fundBlock),
@@ -2107,6 +2126,66 @@ async function bootFreshWindow(dataMap) {
   ok(_srcRow.innerHTML.indexOf("not recorded") < 0,
     "PC: the Source archive must not read 'not recorded' when a level identifier exists");
   doc.getElementById("drawer").classList.remove("open");
+
+  // GC. GROUPED CONTRIBUTORS (card-credit rework). The per-(person, role) list is replaced by a collapsed
+  // <details> GROUPED by person: 7 distinct people/orgs across 15 declared (person, role) rows must render as
+  // ONE line each with roles comma-joined in the RATIFIED order (ProjectLeader, ProjectMember, DataCollector,
+  // ContactPerson, DataCurator, Sponsor, RightsHolder, Distributor), deduping by ORCID (case / URL-form
+  // insensitive) else name + name_type, dropping a nameless row and an out-of-vocab role SILENTLY. RED-proven
+  // (tools/../scratchpad red-proof + these pins flip on origin/main drawer.js): the pre-change contributorsHtml
+  // renders one <br>-joined line PER ROW with no "Contributors (7)" summary, never the grouped "led, curated"
+  // phrase, and no survey-contributors <details> at all. Poked onto Delta (embargoed, but the survey drawer
+  // renders contributors regardless of access; no earlier/later pin asserts Delta's contributors).
+  A.setSMETA("Delta Survey", { contributors: [
+    { name: "Alice Anderson",    name_type: "person",       role: "DataCurator",   orcid: "0000-0001-0000-0001" },
+    { name: "Alice Anderson",    name_type: "person",       role: "ProjectLeader", orcid: "0000-0001-0000-0001" },
+    { name: "Bob Brown",         name_type: "person",       role: "DataCollector", orcid: "0000-0001-0000-0002" },
+    { name: "Bob Brown",         name_type: "person",       role: "ProjectMember", orcid: "0000-0001-0000-0002" },
+    { name: "Carol Chen",        name_type: "person",       role: "ContactPerson" },
+    { name: "Carol Chen",        name_type: "person",       role: "Editor" },                                    // out-of-vocab -> no phrase, no new person
+    { name: "Zonge Engineering", name_type: "organisation", role: "DataCollector" },
+    { name: "Zonge Engineering", name_type: "organisation", role: "Distributor" },
+    { name: "Geological Survey of South Australia", name_type: "organisation", role: "RightsHolder", ror: "https://ror.org/028g18b61" },
+    { name: "Geological Survey of South Australia", name_type: "organisation", role: "Distributor",  ror: "https://ror.org/028g18b61" },
+    { name: "Geological Survey of South Australia", name_type: "organisation", role: "Sponsor",      ror: "https://ror.org/028g18b61" },
+    { name: "David Davies",      name_type: "person",       role: "ProjectMember", orcid: "0000-0003-1234-5678" },
+    { name: "D. Davies",         name_type: "person",       role: "ProjectLeader", orcid: "https://orcid.org/0000-0003-1234-5678" }, // SAME ORCID, URL-form -> same person
+    { name: "Eve Evans",         name_type: "person",       role: "Sponsor",       orcid: "0000-0005-0000-0005" },
+    { name: "",                  name_type: "person",       role: "ProjectMember", orcid: "0000-0009-0000-0009" }, // nameless -> dropped, uncounted
+  ] });
+  A.openSurvey("Delta Survey");
+  const drwGC = doc.getElementById("drawer"), gcH = drwGC.innerHTML;
+  const gcBlock = (gcH.split("survey-contributors")[1] || "").split("</details>")[0];   // the contributors <details> only ("" on pre-change)
+  // Distinct count = 7 (the two Davies rows collapse by ORCID URL-form; the nameless row is dropped). One number
+  // proves BOTH the URL-form ORCID dedup and the nameless-row drop. RED: pre-change renders no "Contributors (N)".
+  ok(/>Contributors \(7\)</.test(gcH),
+    "GROUP: the Contributors summary counts DISTINCT people/orgs (7 from 15 rows), got: " + (gcH.match(/Contributors \([^)]*\)/) || ["<none>"])[0]);
+  // 7 distinct people => 7 lines => 6 <br> separators inside the collapsed <details>. RED: no such block exists.
+  ok((gcBlock.match(/<br>/g) || []).length === 6,
+    "GROUP: 7 distinct people render as 7 lines (6 <br> separators) inside the collapsed details, got sep count: " + (gcBlock.match(/<br>/g) || []).length);
+  ok(/<details class="prov-d survey-contributors">/.test(gcH),
+    "GROUP: contributors render inside a <details class='prov-d survey-contributors'> collapsed like the Persistent identifiers rollup");
+  // Roles join in the RATIFIED order regardless of declared order: Alice declared DataCurator BEFORE
+  // ProjectLeader -> "led, curated"; and she appears exactly once (grouped). RED: pre-change never joins.
+  ok(/led, curated/.test(gcH) && (gcH.match(/Alice Anderson/g) || []).length === 1,
+    "GROUP: a multi-role person groups to ONE line with roles in the ratified order (led, curated)");
+  ok(/project member, collected the data/.test(gcH),
+    "GROUP: role phrases sort into the ratified order regardless of declared order (ProjectMember before DataCollector)");
+  ok(/sponsored, rights holder, distributed/.test(gcH),
+    "GROUP: an org's three roles join in the ratified order (Sponsor, RightsHolder, Distributor)");
+  ok(/collected the data, distributed/.test(gcH),
+    "GROUP: an org with two roles joins them in ratified order (DataCollector before Distributor)");
+  // ORCID URL-form-insensitive dedup: bare "0000-..." and "https://orcid.org/0000-..." collapse to ONE person,
+  // first-appearance name ("David Davies") wins, the second-form name ("D. Davies") never renders.
+  ok((gcH.match(/David Davies/g) || []).length === 1 && !/D\. Davies/.test(gcH) && /led, project member/.test(gcH),
+    "GROUP: two rows sharing an ORCID (bare vs https://orcid.org/ URL form) collapse to ONE person; first-appearance name wins");
+  // Out-of-vocab role adds no phrase and is never echoed as a raw token; the person still renders once.
+  ok((gcH.match(/Carol Chen/g) || []).length === 1 && gcH.indexOf("Editor") < 0,
+    "GROUP: an out-of-vocab role adds no phrase and is never echoed as a raw token; the person still renders once");
+  // Nameless row dropped silently: neither its name nor its ORCID render, and it is not counted (7, not 8).
+  ok(gcH.indexOf("0000-0009-0000-0009") < 0,
+    "GROUP: a nameless contributor row is dropped silently (its ORCID never renders, uncounted)");
+  drwGC.classList.remove("open");
 
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
   // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
