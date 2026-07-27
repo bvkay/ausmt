@@ -212,6 +212,34 @@ def _set_copyright_comments(sm, fields: dict) -> None:
     sm.comments.value = "; ".join(kept + packed)
 
 
+# Issue #8: mt_metadata 1.0.9's EMTF-XML writer crashes on any STATION-comment key containing
+# "fieldnotes". emtfxml._parse_comments does `len(self.field_notes.run_list)` while the FieldNotes
+# model exposes only `_run_list` (an upstream attribute-name defect); aliasing run_list -> _run_list
+# does NOT rescue it, it only relocates the crash to an IndexError inside _parse_comments_electric
+# (self.field_notes.run_list[0].dipole[index], verified against 1.0.9). So this comment key set cannot
+# be serialised into EMTF-XML by this build at all.
+_UNWRITABLE_COMMENT_KEY = "fieldnotes"
+
+
+def _drop_unwritable_fieldnotes_comments(comments_obj) -> int:
+    """Strip the legacy `fieldnotes.*` keys from an mt_metadata comments holder IN PLACE (Issue #8),
+    matching how _parse_comments keys each entry (split on the FIRST '='), so a value that merely
+    mentions the word is never dropped by accident. Returns the count removed (0 = nothing to strip)."""
+    raw = getattr(comments_obj, "value", None)
+    if not raw or _UNWRITABLE_COMMENT_KEY not in str(raw):
+        return 0
+    kept: list[str] = []
+    removed = 0
+    for line in str(raw).split("\n"):
+        if _UNWRITABLE_COMMENT_KEY in line.split("=", 1)[0].lower():
+            removed += 1
+            continue
+        kept.append(line)
+    if removed:
+        comments_obj.value = "\n".join(kept)
+    return removed
+
+
 def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
                  survey_meta: Optional[dict] = None,
                  source_format: Optional[str] = None) -> list[str]:
@@ -343,6 +371,20 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
                     break
         except Exception:  # noqa: BLE001
             pass
+
+    # Issue #8: mt_metadata 1.0.9's EMTF-XML writer aborts on legacy `fieldnotes.*` station comments
+    # (emtfxml._parse_comments -> the missing FieldNotes.run_list; see _drop_unwritable_fieldnotes_comments
+    # for why aliasing it does not help). The legacy MTpy AusLAMP-SA `>INFO` field-note dump
+    # (datalogger / electrode_* / magnetometer_* / dataquality) is parsed into station_metadata.comments
+    # and hits exactly this, so ~380 stations across eight AusLAMP-SA surveys (Central Delamerian 2020,
+    # Eyre Peninsula & KI 2014, Flinders Ranges 2013, Gawler 2014, Musgraves APY 2016, North East SA 2014,
+    # North Flinders 2013, South East SA 2014) served ZERO EMTF-XML. Drop ONLY those keys so the write
+    # succeeds; nothing is fabricated, the other comments (processing / copyright / provenance) are kept,
+    # and the SOURCE EDI (never mutated) remains the record of the field notes.
+    _dropped_fn = _drop_unwritable_fieldnotes_comments(getattr(tf.station_metadata, "comments", None))
+    if _dropped_fn:
+        notes.append(f"station.comments: dropped {_dropped_fn} legacy fieldnotes.* key(s) that "
+                     "mt_metadata 1.0.9 cannot serialise into EMTF-XML; source EDI retains them")
 
     # Issue #2: a None Copyright.citation is written but rejected on read. Populate it HONESTLY from the
     # survey SMETA (authors = named investigators, else the custodian organisation; title = survey

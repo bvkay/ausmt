@@ -165,3 +165,74 @@ def test_report_does_not_disturb_canonical_provenance(tmp_path):
                 assert isinstance(doc["canonical_conditioning"], list)
                 any_station = True
     assert any_station, "at least one station.json must carry its per-station canonical_conditioning list"
+
+
+def test_per_station_xml_emission_failures_surface_in_build_report(tmp_path, monkeypatch):
+    """RED-PROOF: a per-station EMTF-XML emission failure must be COUNTED in build_report.json (a
+    structured xml_failures row with the exception class PLUS a counted survey warning), never left
+    invisible behind a printed '[xml] WARN'. This is the gap the 8-survey/~380-station regression hid
+    (1182 EDI rows served, only 732 EMTF-XML rows, a green build). We force ONE station's XML emission
+    to raise (the others emit normally) and assert the report surfaces it.
+
+    Pre-fix (revert build_portal.py + schema): _emit_served_xml returns no failures, no xml_failures
+    field is written, and this test fails on the missing field (and on the un-incremented warning count).
+
+    Runs the build IN-PROCESS (like test_report_does_not_disturb_canonical_provenance) so the module
+    attribute _emit_served_xml re-imports can see the monkeypatched normalize."""
+    import ausmt_science.ingest.normalize as _ni  # noqa: PLC0415
+
+    real_normalize = _ni.normalize
+    victim = "A2"  # sample survey station id (DATAID A2); the sibling A1 emits normally
+
+    def _fake_normalize(src, out_dir, *, survey_id, station_id=None, **kw):
+        if station_id and victim in str(station_id):
+            raise RuntimeError("simulated EMTF-XML emission failure")
+        return real_normalize(src, out_dir, survey_id=survey_id, station_id=station_id, **kw)
+
+    # _emit_served_xml does `from ausmt_science.ingest.normalize import normalize` at call time, so
+    # patching the module attribute is picked up on the next call.
+    monkeypatch.setattr(_ni, "normalize", _fake_normalize)
+
+    out = tmp_path / "data"
+    prod = tmp_path / "products"
+    rc = bp.main(["--surveys", str(SURVEYS), "--out", str(out), "--products", str(prod),
+                  "--bundle-edi", "--no-validate"])
+    assert rc == 0, "a per-station XML failure must not abort the build (EDI-only serve)"
+
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    jsonschema = pytest.importorskip("jsonschema")
+    jsonschema.validate(rep, SCHEMA)  # the new xml_failures field must be schema-valid
+
+    # exactly one survey carries the forced failure; find its structured row
+    surveys_with_fail = {slug: s for slug, s in rep["surveys"].items() if s.get("xml_failures")}
+    assert len(surveys_with_fail) == 1, f"expected one survey with xml_failures, got {surveys_with_fail}"
+    slug, survey = next(iter(surveys_with_fail.items()))
+    rows = survey["xml_failures"]
+    assert len(rows) == 1, rows
+    assert victim in rows[0]["station"], rows[0]
+    assert rows[0]["error"] == "RuntimeError", rows[0]  # the exception CLASS is recorded
+
+    # it is ALSO a counted survey warning, so a green build cannot hide it
+    xml_warns = [w for w in survey["warnings"] if "EMTF-XML emission failed" in w]
+    assert xml_warns, f"xml failure must appear as a counted warning: {survey['warnings']}"
+    assert "RuntimeError" in xml_warns[0], xml_warns[0]
+    assert rep["totals"]["warnings"] >= 1
+
+    # the victim still served its EDI (EDI-only), but has NO emtfxml manifest row
+    man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    edi_ids = {r["station"] for r in man["files"] if r["format"] == "edi"}
+    xml_ids = {r["station"] for r in man["files"] if r["format"] == "emtfxml"}
+    assert any(victim in s for s in edi_ids), "victim station should still serve its EDI"
+    assert not any(victim in s for s in xml_ids), "victim station must have no EMTF-XML manifest row"
+
+
+def test_xml_failures_empty_on_clean_build(tmp_path):
+    """ANTI-VACUOUS COMPANION: on a clean build (no forced failure) every served station's XML emits,
+    so xml_failures is empty for every survey and no 'EMTF-XML emission failed' warning is raised. Guards
+    against the field being populated by accident (which would make the RED-proof test above vacuous)."""
+    out, _prod, _r = _build(tmp_path)
+    rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    for slug, survey in rep["surveys"].items():
+        assert survey.get("xml_failures", []) == [], f"{slug}: clean build must have no xml_failures"
+        assert not [w for w in survey["warnings"] if "EMTF-XML emission failed" in w], \
+            f"{slug}: clean build must raise no xml-emission-failed warning"
