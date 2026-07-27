@@ -161,6 +161,44 @@ def test_build_id_never_contains_literal_none_string(tmp_path, monkeypatch):
     assert "unknown" in doc["build_id"], f"expected 'unknown' placeholder in build_id: {doc['build_id']!r}"
 
 
+# --- U2: build_provenance.json git_commit env fallback, HONEST about "unavailable" ----------------
+# _build_prov's git_commit gets the SAME AUSMT_ENGINE_COMMIT fallback build_identity has (the engine
+# image ships engine/ WITHOUT .git, so _git_commit_at(HERE) is always None in a container), but where
+# build_identity's opaque build_id renders the terminal string "unknown", provenance stays HONEST: an
+# unresolvable commit is None (a genuine "unavailable"), NEVER a fabricated "unknown" that would read
+# as a real commit in the reproducibility record. git is monkeypatched to None (the container case).
+
+def test_build_prov_git_commit_env_fallback_when_git_unavailable(monkeypatch):
+    # FAILS PRE-FIX: _build_prov's nested _git_commit only called _git_commit_at(HERE), so with git
+    # forced to None the provenance git_commit stayed None even when CI had baked the real commit into
+    # AUSMT_ENGINE_COMMIT -- the identical containerised gap build_identity's env fallback closed.
+    monkeypatch.setattr(bp, "_git_commit_at", lambda cwd: None)
+    monkeypatch.setenv("AUSMT_ENGINE_COMMIT", "cafef00d")
+    assert bp._build_prov("mt_metadata")["git_commit"] == "cafef00d", "env fallback not applied"
+
+
+def test_build_prov_git_commit_is_none_for_unknown_or_empty_env(monkeypatch):
+    # The Dockerfile's ARG GIT_SHA default is the literal "unknown" (a bare `docker build` with no
+    # --build-arg); an empty build-arg yields "". BOTH must resolve to None here -- honest
+    # "unavailable" -- so a local bare build's provenance never carries a fake commit. FAILS if the
+    # guard is dropped and the raw "unknown"/"" env value leaks into git_commit.
+    monkeypatch.setattr(bp, "_git_commit_at", lambda cwd: None)
+    monkeypatch.setenv("AUSMT_ENGINE_COMMIT", "unknown")
+    assert bp._build_prov("mt_metadata")["git_commit"] is None, "'unknown' must record as None, not a fake commit"
+    monkeypatch.setenv("AUSMT_ENGINE_COMMIT", "")
+    assert bp._build_prov("mt_metadata")["git_commit"] is None, "empty env must record as None"
+    monkeypatch.delenv("AUSMT_ENGINE_COMMIT", raising=False)
+    assert bp._build_prov("mt_metadata")["git_commit"] is None, "absent env must record as None"
+
+
+def test_build_prov_git_commit_prefers_real_git_over_env(monkeypatch):
+    # Precedence: a resolvable real git commit wins over the env var (the env is only a container
+    # fallback). A bare-pip/no-.git checkout is the None-then-env case the tests above cover.
+    monkeypatch.setattr(bp, "_git_commit_at", lambda cwd: "deadbeef")
+    monkeypatch.setenv("AUSMT_ENGINE_COMMIT", "cafef00d")
+    assert bp._build_prov("mt_metadata")["git_commit"] == "deadbeef", "real git must win over the env fallback"
+
+
 # --- C32 §2: lib_versions() is the ONE source of truth for served tool versions --------------------
 
 def test_lib_versions_is_single_source_reused_by_cache_salt():

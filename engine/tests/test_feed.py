@@ -46,6 +46,41 @@ def test_feed_entries_uses_latest_release_note_not_first():
     assert entries[0]["date"] == "2022-06-01"
 
 
+def test_feed_entries_uses_attribution_declared_date_when_no_release_notes():
+    """PINNED CROSS-LANE DATE RULE: attribution.declared_date (C46) is a first-class candidate date.
+    A survey with NO release_notes but a declared_date must date its feed entry BY that declared_date,
+    NOT the bare-year Dec-31 fallback. FAILS PRE-FIX: _survey_latest_date ignored attribution entirely,
+    so this survey dated to 2019-12-31 (year_end)."""
+    smeta = {"Declared Only": {"slug": "declared", "year_end": 2019,
+                               "attribution": {"declared_date": "2026-07-25"}}}
+    entries = bp.feed_entries(smeta)
+    assert len(entries) == 1
+    assert entries[0]["date"] == "2026-07-25", entries   # declared_date, NOT 2019-12-31
+
+
+def test_feed_entries_declared_date_joins_release_note_candidate_set():
+    """declared_date and release_notes[].date share ONE candidate set; the MAX wins either way (the
+    lockstep with portal/src/main.js surveyLatestDate). FAILS PRE-FIX: attribution was never consulted,
+    so case (a) dated to the older release note instead of the newer declared_date."""
+    # (a) declared_date newer than every release note -> declared_date wins.
+    a = bp.feed_entries({"S": {"slug": "s", "attribution": {"declared_date": "2026-07-25"},
+                               "release_notes": [{"date": "2020-01-01"}]}})
+    assert a[0]["date"] == "2026-07-25", a
+    # (b) a release note newer than declared_date -> the release note wins (declared_date does not cap it).
+    b = bp.feed_entries({"S": {"slug": "s", "attribution": {"declared_date": "2019-01-01"},
+                               "release_notes": [{"date": "2023-05-10"}]}})
+    assert b[0]["date"] == "2023-05-10", b
+
+
+def test_feed_entries_ignores_malformed_declared_date():
+    """A non-ISO / partial declared_date is not a well-formed candidate: it is skipped and the survey
+    falls back to its year (never a fabricated or truncated date)."""
+    smeta = {"Bad Declared": {"slug": "bad", "year_end": 2020,
+                              "attribution": {"declared_date": "2026-07"}}}   # not YYYY-MM-DD
+    entries = bp.feed_entries(smeta)
+    assert entries[0]["date"] == "2020-12-31", entries
+
+
 def test_feed_entries_omits_surveys_with_no_date():
     """FAILS IF: an undated survey is included (e.g. with a fabricated/blank date) rather than omitted."""
     smeta = {"Dated": {"slug": "dated", "year_end": 2020}, "Undated": {"slug": "undated"}}
