@@ -1402,26 +1402,87 @@ async function bootFreshWindow(dataMap) {
   ok(/<circle [^>]*fill="#EF7256"/.test(rspHtml),
     "C3: the xy (copper #EF7256) series must keep <circle> markers");
 
-  // (h) C3: EXPAND MODAL. Clicking a plot's expand button opens a #plotmodal that re-renders the SAME
-  //     plotter at 2.5× (rho design width 372 -> 930, viewBox unchanged); Esc closes it WITHOUT closing the
-  //     drawer, and focus returns to the button that opened it.
+  // (h) C3 (evolved): FULL-STATION RESPONSE MODAL. Clicking ANY plot's expand button opens ONE #plotmodal
+  //     that shows a station-identity header (id / site name / survey / organisation / data-type chip /
+  //     honest coordinate line) plus ALL response panels re-rendered at LARGE scale: apparent resistivity,
+  //     phase, phase tensor, and (A1 carries tipper) the induction arrows. Esc / click-out / the close
+  //     button close it WITHOUT closing the drawer, and focus returns to the opener. Pre-change the expand
+  //     opened a SINGLE-plot popup (rho only, no station context and no .plot wrapper), so the all-panels +
+  //     header-fields assertions below RED-prove the swap against stage-1 HEAD.
   ok(doc.getElementById("plotmodal") == null, "C3: no plot modal should be open before the expand click");
   const rhoExpand = drwV.querySelector('.plot[data-plot="rho"] .plotexp');
   ok(rhoExpand != null, "C3: no per-plot expand affordance on the rho plot");
   if (rhoExpand.focus) rhoExpand.focus();
   fire(rhoExpand, "click");
   const modal = doc.getElementById("plotmodal");
-  ok(modal != null, "C3: clicking the expand button did not open the plot modal");
-  const modalSvg = modal.querySelector("svg");
-  ok(modalSvg != null, "C3: the expand modal did not re-render an SVG");
-  ok(modalSvg.getAttribute("width") === "930",
-    "C3: the modal must re-render at 2.5× (rho width 372→930), got width=" + modalSvg.getAttribute("width"));
+  ok(modal != null, "C3: clicking the expand button did not open the full-station response modal");
+  // ALL FOUR response panels are present as scaled .plot blocks (A1 carries tipper, so the arrow panel too).
+  ["rho", "phase", "pt", "arrow"].forEach(k =>
+    ok(modal.querySelector('.plot[data-plot="' + k + '"]') != null,
+      "C3: the full-station modal is missing the '" + k + "' response panel (was a single-plot popup?)"));
+  // ...each with its panel TITLE (the convention text is rendered VISIBLY, not hover-only).
+  ["apparent resistivity", "phase φ", "phase tensor", "Induction arrows (Parkinson)"].forEach(title =>
+    ok(modal.innerHTML.indexOf(title) >= 0,
+      "C3: the full-station modal is missing the '" + title + "' panel title"));
+  // Each panel re-renders at LARGE scale: the rho svg design width 372 -> 744 (2x), viewBox unchanged.
+  const modalSvg = modal.querySelector('.plot[data-plot="rho"] svg');
+  ok(modalSvg != null, "C3: the modal rho panel did not re-render an SVG");
+  ok(modalSvg.getAttribute("width") === "744",
+    "C3: the modal rho panel must re-render at 2x (design width 372 -> 744), got width=" + modalSvg.getAttribute("width"));
   ok(modalSvg.getAttribute("viewBox") === "0 0 372 118",
-    "C3: the modal SVG must keep the design viewBox (scale is display-only), got " + modalSvg.getAttribute("viewBox"));
+    "C3: the modal rho svg must keep the design viewBox (scale is display-only), got " + modalSvg.getAttribute("viewBox"));
+  // HEADER FIELDS: station id, its differing site name, survey, organisation, the data-type chip, and the
+  // HONEST coordinate line (coordCellHtml). A1 is an EXACT station, so its 6-dp position renders verbatim.
+  const modalHead = modal.querySelector(".plotmodal-head");
+  ok(modalHead != null, "C3: the full-station modal has no identity header (.plotmodal-head)");
+  const sidEl = modalHead.querySelector(".pm-id .sid");
+  ok(sidEl != null && sidEl.textContent === "A1",
+    "C3: the modal header must carry the station id (A1) in .sid, got: " + JSON.stringify(sidEl && sidEl.textContent));
+  const siteEl = modalHead.querySelector(".pm-site");
+  ok(siteEl != null && siteEl.textContent === "A_1",
+    "C3: the modal header must carry A1's differing site name (A_1) in .pm-site, got: " + JSON.stringify(siteEl && siteEl.textContent));
+  ok(modalHead.textContent.indexOf("Alpha Survey") >= 0, "C3: the modal header must carry the survey name");
+  ok(modalHead.textContent.indexOf("OrgX") >= 0, "C3: the modal header must carry the organisation");
+  ok(modalHead.querySelector(".chip") != null, "C3: the modal header must carry the data-type chip");
+  ok(modalHead.textContent.indexOf("-30.000000, 136.000000") >= 0,
+    "C3: the modal header must carry the honest coordinate line (A1 exact 6-dp position), got: " + JSON.stringify(modalHead.textContent));
+  // Esc closes the modal WITHOUT closing the drawer; focus returns to the opener.
   doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the plot modal");
+  ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the full-station modal");
   ok(drwV.classList.contains("open"), "C3: Esc on the modal must NOT also close the drawer underneath it");
   ok(doc.activeElement === rhoExpand, "C3: focus did not return to the expand button after closing the modal");
+  // Click-out on the overlay backdrop ALSO closes it (any expand button opens the SAME full-station modal,
+  // so open via the phase-tensor button this time to prove the affordance is not rho-specific).
+  const ptExpand = drwV.querySelector('.plot[data-plot="pt"] .plotexp');
+  ok(ptExpand != null, "C3: no expand affordance on the phase-tensor plot");
+  fire(ptExpand, "click");
+  const modal2 = doc.getElementById("plotmodal");
+  ok(modal2 != null, "C3: the phase-tensor expand button did not open the full-station modal");
+  ok(modal2.querySelector('.plot[data-plot="rho"]') != null,
+    "C3: expanding from the pt plot must still open the WHOLE station (rho panel present), not just pt");
+  fire(modal2, "click");   // the overlay itself is the click target -> close
+  ok(doc.getElementById("plotmodal") == null, "C3: clicking the overlay backdrop did not close the modal");
+  // NON-TIPPER STATION: A2 has no tipper -> its modal shows rho / phase / pt but NO induction-arrow panel.
+  drwV.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A2"; A.routeFromHash();
+  ok(drwV.classList.contains("open"), "C3: #/station/au.alpha.A2 did not open the drawer");
+  const a2Expand = drwV.querySelector('.plot[data-plot="rho"] .plotexp');
+  ok(a2Expand != null, "C3: no expand affordance on the A2 rho plot");
+  fire(a2Expand, "click");
+  const a2Modal = doc.getElementById("plotmodal");
+  ok(a2Modal != null, "C3: expand did not open the modal for the non-tipper station A2");
+  ["rho", "phase", "pt"].forEach(k =>
+    ok(a2Modal.querySelector('.plot[data-plot="' + k + '"]') != null,
+      "C3: a non-tipper station's modal must still carry the '" + k + "' panel"));
+  ok(a2Modal.querySelector('[data-plot="arrow"]') == null &&
+     a2Modal.innerHTML.indexOf("Induction arrows (Parkinson)") < 0,
+    "C3: a non-tipper station's modal must have NO induction-arrow panel (arrowSvg empty -> panel absent)");
+  doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the A2 modal");
+  // restore the A1 drawer for the sections that follow (they assume it is the open station).
+  drwV.classList.remove("open");
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  ok(drwV.classList.contains("open"), "C3: could not restore the A1 drawer after the modal checks");
 
   // (i) C1b FENCE under tabs: an embargoed station shows the access panel INSIDE the Response tab, renders
   //     no plot paths there, never offers 'EDI (via source archive)' in Files, and gives the sticky header
@@ -2016,7 +2077,7 @@ async function bootFreshWindow(dataMap) {
   doc.getElementById("drawer").classList.remove("open");
 
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
-    "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + expand-modal-2.5x+Esc+focus-return + C1b-fence-under-tabs, " +
+    "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +

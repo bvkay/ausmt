@@ -26,8 +26,11 @@ function _focusDrawer(){if(!drawer||!drawer.querySelector)return;
   const t=drawer.querySelector(".close")||drawer;if(t&&t.focus){try{t.focus({preventScroll:true});}catch(e){}}}
 function _restoreDrawerFocus(){const f=_drawerReturnFocus;_drawerReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
 // UX6 Wave C: the currently-open station's TF row, stashed so the delegated [data-act="expand"] handler
-// can re-render the SAME plotter into the expand modal without re-deriving it from the DOM.
+// can re-render the plotters into the full-station response modal without re-deriving them from the DOM.
 let _curTf=null;
+// UX6 Wave C (evolved): the currently-open station object, stashed alongside _curTf so the expand handler
+// can build the response modal's identity header (id / site / survey / org / type / honest coords).
+let _curStation=null;
 // UX6 Wave C (C2): a small section-role chip using the engine README taxonomy — "Source data",
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
@@ -171,6 +174,18 @@ function coordCellHtml(s){
   return coordPolicyOf(s)==="generalised"
     ? `${coords}<br><span style="color:var(--muted)">position generalised to ~0.1° (custodian policy)</span>`
     : coords;
+}
+// UX6 Wave C (evolved): the identity header for the full-station RESPONSE modal (the expand affordance).
+// Station id, the source site name when it differs from the displayed id, and the data-type chip on the
+// first line; survey · organisation on the second; the honest coordinate line on the third. Reuses
+// coordCellHtml VERBATIM so a masked position is never printed raw here (custodian policy holds inside the
+// modal exactly as in the drawer), and orgNameLink so the ROR link treatment matches the drawer header.
+function stationModalHeader(s,m){
+  const site=(s.site_name&&s.site_name!==s.id)?`<span class="pm-site">${esc(s.site_name)}</span>`:"";
+  const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`;
+  return `<div class="pm-id"><span class="sid">${esc(s.id)}</span>${site}${typeChip}</div>`+
+    `<div class="pm-sub">${esc(s.survey)} · ${orgNameLink(s.org,(m||{}).org_ror)}</div>`+
+    `<div class="pm-coord">${coordCellHtml(s)}</div>`;
 }
 // The access panel replacing the plots area for a non-open survey. Verbatim copy (esc()'d) per level:
 // embargoed(+date) / embargoed(no date) / metadata_only; any other non-open value falls back to the
@@ -631,6 +646,7 @@ function openStation(i){
     drawerPanel("provenance",provenanceHtml,false)+
     drawerPanel("cite",citeHtml,false);
   _curTf=t;                                        // stash for the expand-modal handler
+  _curStation=s;                                   // stash the station for the response modal's identity header
   drawer.setAttribute("aria-label","Station "+s.id+" details");   // E7: refine the dialog label per subject
   drawer.classList.add("open");drawer.scrollTop=0;
   selectDrawerTab("response");                     // UX8 (X4): Response default-selected
@@ -1241,7 +1257,7 @@ document.addEventListener("click",e=>{
   const el=e.target.closest("[data-act]");if(!el)return;
   const act=el.dataset.act,sv=el.dataset.survey,doi=el.dataset.doi;
   if(act==="tab"){e.preventDefault();selectDrawerTab(el.dataset.tab);}
-  else if(act==="expand"){e.preventDefault();const kind=el.dataset.plot;if(kind&&typeof openPlotModal==="function"&&_curTf)openPlotModal(kind,_curTf);}
+  else if(act==="expand"){e.preventDefault();if(typeof openStationModal==="function"&&_curTf&&_curStation)openStationModal(stationModalHeader(_curStation,SMETA[_curStation.survey]||{}),_curTf);}
   else if(act==="story"){e.preventDefault();openSurvey(sv);}
   else if(act==="collection"){e.preventDefault();location.hash="#/collection/"+encodeURIComponent(el.dataset.coll);}
   else if(act==="collidx"){e.preventDefault();if(location.hash.indexOf("#/collection/")===0)history.replaceState(null,"",location.pathname+location.search);setView("collections");}

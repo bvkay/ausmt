@@ -246,17 +246,27 @@
   details.plotcollapse .plotbody{position:relative;margin-top:4px}
   details.plotcollapse .plotbody .plotexp{position:absolute;top:0;right:0;z-index:1}
   .prov-dbody{padding:8px 10px}
-  /* C3 — expand modal: re-renders the SAME plotter at 2.5× in a dialog; closes on Esc / click-out */
+  /* C3 (evolved): full-station RESPONSE modal. A station-identity header plus ALL response panels
+     re-rendered at large scale, stacked and scrollable; closes on Esc, click-out, or the close button.
+     The stacked panels reuse the .plot / .ptitle / .psubline / .paxis styling. */
   .plotmodal{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;
     background:rgba(11,15,18,.72);padding:24px}
   .plotmodal-box{background:var(--panel);border:1px solid var(--copper);border-radius:10px;padding:14px 16px;
-    max-width:min(96vw,1000px);max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55)}
-  .plotmodal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
-  .plotmodal-head .ptitle{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
-  .plotmodal-head .psubline{display:block}
+    max-width:min(96vw,860px);max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+  .plotmodal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+  .plotmodal-ident{min-width:0}
+  .plotmodal-ident .pm-id{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}
+  .plotmodal-ident .pm-id .sid{font-family:var(--mono);font-weight:800;font-size:20px}
+  .plotmodal-ident .pm-site{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  .plotmodal-ident .pm-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .plotmodal-ident .pm-sub a.orglink{color:var(--copper);text-decoration:none}
+  .plotmodal-ident .pm-sub a.orglink:hover{text-decoration:underline}
+  .plotmodal-ident .pm-coord{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
   .plotmodal-close{font-size:15px;line-height:1;padding:4px 10px;flex:none}
   .plotmodal-svg{overflow:auto}
   .plotmodal-svg svg{max-width:100%;height:auto;display:block}
+  .plotmodal-svg .plot{margin:6px 0 16px}   /* vertical rhythm between the large stacked panels */
 
   /* ===== UX8 (X4/X5/X6/X7/X9) — drawer density + Station summary + Screening indicators + maturity ===== */
   /* X9 density: extra whitespace around the plots and the indicator list (drawer region only). */
