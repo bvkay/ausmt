@@ -25,6 +25,15 @@ function _focusDrawer(){if(!drawer||!drawer.querySelector)return;
   // keeps focus (accessibility) without that scroll-into-view. Guarded fallback for engines lacking the option.
   const t=drawer.querySelector(".close")||drawer;if(t&&t.focus){try{t.focus({preventScroll:true});}catch(e){}}}
 function _restoreDrawerFocus(){const f=_drawerReturnFocus;_drawerReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
+// Cleanup wave (D): a dim backdrop shown behind the drawer while it is open on the Surveys /
+// Collections / collection-detail views (where the drawer floats over full-width content). NOT on the
+// map view: there the drawer sits side-by-side with the map, so no scrim. Clicking the backdrop closes
+// the drawer. It lives in #content BENEATH the drawer and the drawer's left-edge resize handle
+// (both higher z-index in index.html), so the resizer keeps working. Guarded for the headless harness.
+const _drawerScrim=document.getElementById("drawerScrim");
+function showDrawerScrim(){if(_drawerScrim)_drawerScrim.classList.toggle("hidden",(typeof curView!=="undefined"&&curView==="map"));}
+function hideDrawerScrim(){if(_drawerScrim)_drawerScrim.classList.add("hidden");}
+if(_drawerScrim&&_drawerScrim.addEventListener)_drawerScrim.addEventListener("click",()=>closeDrawer());
 // UX6 Wave C: the currently-open station's TF row, stashed so the delegated [data-act="expand"] handler
 // can re-render the plotters into the full-station response modal without re-deriving them from the DOM.
 let _curTf=null;
@@ -648,13 +657,14 @@ function openStation(i){
   _curTf=t;                                        // stash for the expand-modal handler
   _curStation=s;                                   // stash the station for the response modal's identity header
   drawer.setAttribute("aria-label","Station "+s.id+" details");   // E7: refine the dialog label per subject
-  drawer.classList.add("open");drawer.scrollTop=0;
+  drawer.classList.add("open");drawer.scrollTop=0;showDrawerScrim();   // D: dim backdrop on non-map views
   selectDrawerTab("response");                     // UX8 (X4): Response default-selected
   _focusDrawer();                                  // E7: move focus into the dialog
   if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
 }
 function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList.contains("open");
-  drawer.classList.remove("open");if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);
+  drawer.classList.remove("open");hideDrawerScrim();   // D: drop the dim backdrop
+  if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);
   if(wasOpen)_restoreDrawerFocus();}               // E7: return focus to the invoking element (only if it was open)
 async function fetchEdi(file,avail,survey){
   // C7: this EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the
@@ -904,14 +914,21 @@ function pubsHtml(m){const ps=(m.pubs||[]);
 // faceting by the automated completeness/smoothness check — the screen must never become a ranking, so
 // none of the sort modes or facets below reference s.q / the check.
 let _sortMode="name",_cardLayout="cards";
-const _facets={lic:false,doi:false,tipper:false};   // boolean presence facets, AND-combined when active
+const _facets={lic:false};                          // presence facets (currently just "Open licence")
+const _typeFacets=new Set();                        // selected data-type chips, OR-combined within the group
+const _TYPE_ORDER=["BBMT","LPMT","AMT","GDS"];      // canonical chip order; only corpus-present types render
 function _stationCount(sv){return ST.filter(s=>s.survey===sv).length;}
-function _surveyHasTipper(sv){return ST.some(s=>s.survey===sv&&(s.comps||"").includes("T"));}
+// The survey's catalogue data-type set, derived the way the card mixbar does (per-station s.type).
+function _surveyTypeSet(sv){const t=new Set();ST.forEach(s=>{if(s.survey===sv&&s.type)t.add(s.type);});return t;}
+// The data types actually present in the corpus, in canonical order, the type chips to render.
+function _presentTypes(){const have=new Set(ST.map(s=>s.type));return _TYPE_ORDER.filter(t=>have.has(t));}
 function _yearKey(m){return m.year_start!=null?m.year_start:(m.year_end!=null?m.year_end:-Infinity);}
 function surveyPassesFacets(sv){const m=SMETA[sv]||{};
   if(_facets.lic&&!licIsOpen(m.lic))return false;   // "Open licence": an openly-licensed (redistributable) id per the canon tables
-  if(_facets.doi&&!m.doi)return false;
-  if(_facets.tipper&&!_surveyHasTipper(sv))return false;
+  if(_typeFacets.size){                             // type chips: a survey passes if ANY of its stations' type is selected
+    const types=_surveyTypeSet(sv);let any=false;
+    _typeFacets.forEach(t=>{if(types.has(t))any=true;});
+    if(!any)return false;}
   return true;}
 function sortSurveys(list){const arr=[...list],m=sv=>SMETA[sv]||{};
   if(_sortMode==="stations")arr.sort((a,b)=>_stationCount(b)-_stationCount(a)||a.localeCompare(b));
@@ -933,25 +950,31 @@ function renderDiscovery(n){
   const cnt=document.getElementById("surveyCount");
   if(cnt)cnt.textContent=n+" survey"+(n===1?"":"s");
   const fc=document.getElementById("facetChips");
-  if(fc)fc.innerHTML=[["lic","Open licence"],["doi","Has DOI"],["tipper","Has tipper"]]
-    .map(([k,l])=>`<button type="button" class="facet${_facets[k]?" on":""}" data-facet="${k}" aria-pressed="${_facets[k]?"true":"false"}">${l}</button>`).join("");}
+  if(!fc)return;
+  // "Open licence" (presence) + one chip per corpus-present data type (BBMT/LPMT/AMT/GDS), multi-select.
+  const chips=[`<button type="button" class="facet${_facets.lic?" on":""}" data-facet="lic" aria-pressed="${_facets.lic?"true":"false"}">Open licence</button>`];
+  _presentTypes().forEach(t=>{const on=_typeFacets.has(t);
+    chips.push(`<button type="button" class="facet${on?" on":""}" data-type-facet="${escAttr(t)}" aria-pressed="${on?"true":"false"}">${esc(t)}</button>`);});
+  fc.innerHTML=chips.join("");}
 function renderCards(){
   const vis=sortSurveys(surveys.filter(surveyVisible).filter(surveyPassesFacets));
   const grid=document.getElementById("cardGrid");
   if(grid)grid.className=_cardLayout==="compact"?"cardlist":"cardgrid";
   if(grid)grid.innerHTML = vis.length
     ? (_cardLayout==="compact"?vis.map(surveyRow).join(""):vis.map(surveyCard).join(""))
-    : `<div class="emptynote">No surveys match the current filters. Loosen the data-type, period, quality, country/survey or survey-search filters on the left, or clear the discovery facets above.</div>`;
+    : `<div class="emptynote">No surveys match the current search and filters. Clear the search box or the licence/type chips above to widen the results.</div>`;
   renderDiscovery(vis.length);}
-// "Clear filters" (E3): drop the discovery facets and the Find text query (the two view-level narrowings
-// this bar owns), then re-render. The left-rail structural filters (data type, tree, year, period) keep
-// their own controls — this action never silently reaches across into them.
+// "Clear filters" (cleanup wave B): drop the discovery facets (licence + data-type chips) and the
+// discovery search query, the view-level narrowings this bar owns, then re-render the grid and the
+// header count. The map's own rail search (#find) and structural filters are a separate surface; this
+// never reaches across into them.
 function clearDiscoveryFilters(){
   Object.keys(_facets).forEach(k=>_facets[k]=false);
-  const f=document.getElementById("find");
-  if(f&&f.value){f.value="";if(typeof renderFind==="function")renderFind();
-    if(typeof refresh==="function")refresh();else renderCards();}   // refresh() re-renders cards for the surveys view
-  else renderCards();}
+  _typeFacets.clear();
+  const s=document.getElementById("surveySearch");
+  if(s&&s.value)s.value="";
+  renderCards();
+  if(typeof updateCounts==="function")updateCounts();}
 function focusSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
   // C42: fit only POSITIONED stations — a withheld-coord station has no [lat,lon] to bound (avoids NaN bounds).
   const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15));}
@@ -1098,7 +1121,7 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    `<div class="sechead">Related surveys</div><div class="surveymeta">`+
      (rel.length?rel.map(o=>`<a href="#" data-act="story" data-survey="${escAttr(o)}">${esc(o)}</a>`).join(" · "):"<span class='prov'>none nearby</span>")+`</div>`;
   drawer.setAttribute("aria-label",sv+", survey details");
-  drawer.classList.add("open");drawer.scrollTop=0;
+  drawer.classList.add("open");drawer.scrollTop=0;showDrawerScrim();   // D: dim backdrop on non-map views
   _focusDrawer();}                                    // E7: move focus into the dialog
 
 // ---- single delegated click handler (no inline onclick anywhere) ----
@@ -1108,34 +1131,18 @@ function collLine(m){
   if(m.collection&&m.collection.id) parts.push(`Part of: <a href="#" data-act="collection" data-coll="${escAttr(m.collection.id)}">${esc(m.collection.title||m.collection.id)}</a>`);
   return parts.length?`<div class="dsub" style="margin-top:3px">${parts.join(" · ")}</div>`:"";
 }
-// Full-width collection page (#collectionview). A collection aggregates MANY surveys, so it gets the
-// whole content area, not the narrow drawer: member-survey rollup (total sites, period coverage,
-// type/dimensionality mix), an all-stations scatter, and a per-survey table. Reached via #/collection/<id>
-// (main.js routeFromHash); collections hold no TFs of their own — everything rolls up from member surveys.
-// Collections INDEX (the "Collections" tab): one card per collection in COLL, each opening the
+// Collections INDEX (the "Collections" tab): one rich card per collection in COLL, opening the
 // full-width collection page. A collection appears automatically when surveys share a collection.id.
-function collectionCard(cid){const c=COLL[cid];
-  return `<div class="scard"><h3 style="cursor:pointer" data-act="collection" data-coll="${escAttr(cid)}" title="Explore collection">${esc(c.title||cid)}</h3>`+
-    `<div class="cust">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""}</div>`+
-    `<div class="stats"><b>${c.n_surveys}</b> survey${c.n_surveys===1?"":"s"} · <b>${c.n_stations}</b> station${c.n_stations===1?"":"s"}${c.start_year?" · since <b>"+esc(c.start_year)+"</b>":""}</div>`+
-    (c.description?`<div class="desc">${esc(c.description)}</div>`:"")+
-    `<div class="stats" style="color:var(--muted);font-size:11px">${(c.surveys||[]).map(esc).join(" · ")||"–"}</div>`+
-    `<div class="cardbtns"><button data-act="collection" data-coll="${escAttr(cid)}">Explore collection →</button></div></div>`;
-}
-// UX6 Wave E (E5): the plain, truthful landing intro above the collections grid.
-function collectionsIntroHtml(){return `<p class="coll-intro">Collections group related surveys acquired under one programme, such as the national <b>AusLAMP</b> long-period array. A collection holds no transfer functions of its own; every dataset and its provenance stay with the member surveys it links to. A collection appears here automatically once surveys share a <code>collection.id</code>.</p>`;}
 // E5: the participating organisations of a collection, derived from its member surveys' SMETA (deduped, sorted).
 function collOrgs(c){const set=new Set();((c&&c.surveys)||[]).forEach(sv=>{const o=(SMETA[sv]||{}).org;if(o)set.add(o);});return [...set].sort();}
-// E5: full-width FEATURE card, shown when there are ≤2 collections (grid layout takes over above 2). Name,
-// description (truncated with an expand), footprint scatter, the existing rollup stats, participating
-// organisations, and a prominent Explore action.
-function collFeatureCard(cid){const c=COLL[cid];const members=(c.surveys||[]);const ss=ST.filter(s=>members.indexOf(s.survey)>=0);
-  const orgs=collOrgs(c);const desc=c.description||"";const cut=desc.length>240;
-  const descHtml=desc
-    ? `<div class="desc collfeat-desc">`+(cut
-        ? `<span class="cf-short">${esc(desc.slice(0,240))}… <button type="button" class="cf-expand" data-act="cf-expand">Show more</button></span><span class="cf-full" hidden>${esc(desc)}</span>`
-        : esc(desc))+`</div>`
-    : "";
+// Cleanup wave (E): ONE rich collection card at ANY count; the earlier feature/compact two-branch split
+// is gone. Title + type/status, the FULL abstract (no 240-char truncation, no Show more), the footprint
+// scatter, rollup stats, participating organisations, and a prominent Explore action. Rendered into a
+// responsive auto-fit grid (index.html .collfeature-grid) so it reads from one collection today to
+// several (WA-MT, Vulcan) soon. Keeps the .scard.collfeature class the styling + tests key off.
+function collectionCard(cid){const c=COLL[cid];const members=(c.surveys||[]);const ss=ST.filter(s=>members.indexOf(s.survey)>=0);
+  const orgs=collOrgs(c);const desc=c.description||"";
+  const descHtml=desc?`<div class="desc collfeat-desc">${esc(desc)}</div>`:"";
   return `<div class="scard collfeature">`+
     `<div class="scardhead"><h3 style="cursor:pointer" data-act="collection" data-coll="${escAttr(cid)}" title="Explore collection">${esc(c.title||cid)}</h3></div>`+
     `<div class="cust">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""}</div>`+
@@ -1146,12 +1153,11 @@ function collFeatureCard(cid){const c=COLL[cid];const members=(c.surveys||[]);co
     `<div class="cardbtns"><button class="primary" data-act="collection" data-coll="${escAttr(cid)}">Explore collection →</button></div>`+
   `</div>`;}
 function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&COLL)||{}).sort();
-  const intro=document.getElementById("collectionsIntro"),grid=document.getElementById("collectionsGrid");
-  if(intro)intro.innerHTML=ids.length?collectionsIntroHtml():"";
-  if(!ids.length){if(grid){grid.className="cardgrid";grid.innerHTML=`<div class="emptynote">No collections yet; a collection appears automatically when surveys share a <code>collection.id</code> in their survey.yaml (e.g. AusLAMP).</div>`;}return;}
-  const feature=ids.length<=2;                                    // ≤2 => full-width feature cards; grid above 2
-  if(grid){grid.className=feature?"collfeature-grid":"cardgrid";
-    grid.innerHTML=(feature?ids.map(collFeatureCard):ids.map(collectionCard)).join("");}
+  const grid=document.getElementById("collectionsGrid");
+  if(!grid)return;
+  if(!ids.length){grid.className="cardgrid";grid.innerHTML=`<div class="emptynote">No collections yet; a collection appears automatically when surveys share a <code>collection.id</code> in their survey.yaml (e.g. AusLAMP).</div>`;return;}
+  grid.className="collfeature-grid";                              // ONE responsive grid at any count (index.html)
+  grid.innerHTML=ids.map(collectionCard).join("");
 }
 // UX6 Wave E (E6): collection footprint. Fixed-Australia extent with a simplified coastline + state-
 // boundary outline (vendor/au-outline.js — public-domain Natural Earth, see that file's header) drawn
@@ -1161,9 +1167,13 @@ function renderCollections(){const ids=Object.keys((typeof COLL!=="undefined"&&C
 // stay registered; the canvas aspect matches the box to avoid squashing.
 const AU_EXTENT={w:112,e:154,so:-44,no:-9};
 const COLL_PAL=["#2E8FA3","#EF7256","#8A5FC0","#5BAE6A","#3F6FC4","#C255A0","#D9A23B","#A85454"];
-function collScatter(ss){
+// Fluid (viewBox + width:100%) so it scales inside its container; `maxW` optionally raises the max-width
+// cap (the detail-page hero gives it more room than a list card). W stays the viewBox coordinate space so
+// the geometry is identical regardless of rendered size. Both call sites pass just `ss` or `(ss,maxW)`.
+function collScatter(ss,maxW){
   if(!ss.length) return "";
   const W=560,H=Math.round(W*(AU_EXTENT.no-AU_EXTENT.so)/(AU_EXTENT.e-AU_EXTENT.w)),pad=22;
+  const cap=(typeof maxW==="number"&&maxW>0)?maxW:W;
   const proj=(lon,lat)=>[pad+(lon-AU_EXTENT.w)/(AU_EXTENT.e-AU_EXTENT.w)*(W-2*pad),
                          pad+(AU_EXTENT.no-lat)/(AU_EXTENT.no-AU_EXTENT.so)*(H-2*pad)];
   // Outline beneath the dots (guarded; absent asset => no backdrop, dots still plot).
@@ -1178,7 +1188,7 @@ function collScatter(ss){
   const col=sv=>COLL_PAL[members.indexOf(sv)%COLL_PAL.length];
   const dots=ss.filter(hasPosition).map(s=>{const p=proj(s.lon,s.lat);
     return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${col(s.survey)}" fill-opacity=".9"><title>${esc(s.id)} · ${esc(s.survey)}</title></circle>`;}).join("");
-  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${cap}px;background:#16242f;border:1px solid var(--line);border-radius:8px" role="img" aria-label="Member stations over Australia">${outline}${dots}</svg>`;
   const legend=`<div class="collscatter-legend">`+members.map(sv=>`<span class="csl-item"><span class="csl-dot" style="background:${col(sv)}"></span>${esc(sv)}</span>`).join("")+`</div>`;
   return `<div class="collscatter">${svg}${legend}</div>`;
 }
@@ -1200,21 +1210,32 @@ function openCollectionPage(cid){
       `<td>${sub.length}</td><td>${types}</td><td>${isFinite(pmn)?fmtP(pmn)+"–"+fmtP(pmx)+"s":"–"}</td></tr>`;
   }).join("");
   const v=document.getElementById("collectionview");
+  // Cleanup wave (E): a two-column HERO on wide screens; the abstract (+ the type/status/counts subline)
+  // on the left, the fluid footprint scatter on the right; the stat tiles span full-width below; the member
+  // table breathes to full width. The .collnote explainer is deleted (it duplicated the list-page intro,
+  // itself deleted). Single column on narrow screens (index.html .collhero).
   v.innerHTML=
    `<div class="collpagenav"><button class="collback" data-act="collidx">← All collections</button>`+
    `<button class="collback collmapbtn" data-act="collmap" data-coll="${escAttr(cid)}">View all stations on main map</button></div>`+
    `<h1 class="colltitle">${esc(c.title||cid)}</h1>`+
-   `<div class="collsub">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""} · ${c.n_surveys} survey${c.n_surveys===1?"":"s"} · ${c.n_stations} station${c.n_stations===1?"":"s"}${c.start_year?" · since "+esc(c.start_year):""}${c.last_updated?" · updated "+esc(c.last_updated):""}</div>`+
-   (c.description?`<div class="colldesc">${esc(c.description)}</div>`:"")+
-   `<div class="collnote">A collection groups related surveys (e.g. a national programme such as AusLAMP). It holds <b>no transfer functions of its own</b>; all data and provenance live with the member surveys below.</div>`+
+   `<div class="collhero">`+
+     `<div class="collhero-main">`+
+       `<div class="collsub">${esc(c.type||"collection")}${c.status?" · "+esc(c.status):""} · ${c.n_surveys} survey${c.n_surveys===1?"":"s"} · ${c.n_stations} station${c.n_stations===1?"":"s"}${c.start_year?" · since "+esc(c.start_year):""}${c.last_updated?" · updated "+esc(c.last_updated):""}</div>`+
+       (c.description?`<div class="colldesc">${esc(c.description)}</div>`:"")+
+     `</div>`+
+     (ss.length?`<div class="collhero-aside">${collScatter(ss,720)}</div>`:"")+
+   `</div>`+
    `<div class="cstats">`+stat("surveys",c.n_surveys)+stat("stations",c.n_stations)+
      stat("period coverage",isFinite(pmin)?fmtP(pmin)+"–"+fmtP(pmax)+"s":"–")+stat("tipper stations",tip+" / "+ss.length)+stat("extent",ext)+`</div>`+
-   (ss.length?`<div class="csechead">Station map</div>`+collScatter(ss):"")+
    `<div class="csechead">Member surveys (${members.length})</div>`+
    `<table class="colltable"><thead><tr><th>Survey</th><th>Stations</th><th>Data&nbsp;types</th><th>Period&nbsp;range</th></tr></thead><tbody>${rows}</tbody></table>`;
   document.getElementById("map").style.display="none";
   document.getElementById("surveysview").style.display="none";
   const _ci=document.getElementById("collectionsview");if(_ci)_ci.style.display="none";
+  // C: the collection-detail page also spans full width, so hide the rail + resize handle (setView's map
+  // path restores them). This is the manual view switch openCollectionPage owns instead of setView.
+  const _fp=document.getElementById("filterPane");if(_fp)_fp.classList.add("hidden");
+  const _rz=document.getElementById("resizer");if(_rz)_rz.classList.add("hidden");
   document.getElementById("navMap").classList.remove("active");
   document.getElementById("navSurveys").classList.remove("active");
   const _nc=document.getElementById("navCollections");if(_nc)_nc.classList.add("active");
@@ -1262,7 +1283,6 @@ document.addEventListener("click",e=>{
   else if(act==="collection"){e.preventDefault();location.hash="#/collection/"+encodeURIComponent(el.dataset.coll);}
   else if(act==="collidx"){e.preventDefault();if(location.hash.indexOf("#/collection/")===0)history.replaceState(null,"",location.pathname+location.search);setView("collections");}
   else if(act==="collmap"){e.preventDefault();if(typeof viewCollectionOnMap==="function")viewCollectionOnMap(el.dataset.coll);}   // E6: switch to map + fitBounds to the collection
-  else if(act==="cf-expand"){e.preventDefault();const box=el.closest(".collfeat-desc");if(box){const sh=box.querySelector(".cf-short"),fu=box.querySelector(".cf-full");if(sh)sh.hidden=true;if(fu)fu.hidden=false;}}   // E5: expand a truncated feature description
   else if(act==="focus")focusSurvey(sv);
   else if(act==="select")selectSurvey(sv);
   else if(act==="doi"&&doi)window.open(escUrl("https://doi.org/"+doi),"_blank","noopener,noreferrer");   // NOT encodeURIComponent — it %2F-escapes the DOI slash -> doi.org 404; escUrl still blocks scheme injection
@@ -1280,7 +1300,15 @@ document.addEventListener("click",e=>{
     _cardLayout=b.dataset.layout;[...(layoutSeg.children||[])].forEach(x=>x.classList&&x.classList.toggle("on",x===b));renderCards();});
   const clearBtn=document.getElementById("clearFilters");
   if(clearBtn&&clearBtn.addEventListener)clearBtn.addEventListener("click",clearDiscoveryFilters);
+  // Live surveys-view search (cleanup wave B): case-insensitive substring over name/org/region/blurb
+  // (surveyMatchesSearch in filters.js reads this input). Live-updates the grid + #surveyCount and the
+  // header #nVis count.
+  const search=document.getElementById("surveySearch");
+  if(search&&search.addEventListener)search.addEventListener("input",()=>{renderCards();if(typeof updateCounts==="function")updateCounts();});
   const fc=document.getElementById("facetChips");
-  if(fc&&fc.addEventListener)fc.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-facet]");if(!b)return;
-    const k=b.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];renderCards();}});
+  if(fc&&fc.addEventListener)fc.addEventListener("click",e=>{
+    const lf=e.target.closest&&e.target.closest("[data-facet]");
+    if(lf){const k=lf.dataset.facet;if(k in _facets){_facets[k]=!_facets[k];renderCards();}return;}
+    const tf=e.target.closest&&e.target.closest("[data-type-facet]");
+    if(tf){const t=tf.dataset.typeFacet;if(_typeFacets.has(t))_typeFacets.delete(t);else _typeFacets.add(t);renderCards();}});
 })();

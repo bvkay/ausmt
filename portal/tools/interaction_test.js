@@ -978,19 +978,25 @@ async function bootFreshWindow(dataMap) {
   ok(advDetails.querySelector("#qSeg"), "#qSeg (Min-TF-diagnostic) is not inside the Screening (advanced) details");
   ok(advDetails.querySelector("#colorSeg"), "#colorSeg (colour-by) is not inside the Screening (advanced) details");
 
-  // N. RECENTLY ADDED (S3): sorted newest-first by the same date logic as the engine's feed.xml
-  // (latest release_notes date, else the year_end/year_start fallback). Assert the observed order
-  // rather than hard-coding which of Alpha/Beta wins, so this stays correct if fixture dates change.
+  // N. RECENTLY ADDED (cleanup wave A): ONE surface (the surveys-view #recentStrip; the map-rail
+  // #recentSide is deleted). The strip's DISPLAY rule is a 30-day window ending at the BUILD day
+  // (build.json generated=2020-01-15) capped at 3, so of the fixture's dated surveys only Beta
+  // (latest 2019-12-31, inside the window) qualifies; Alpha (2012-05-01) is outside it and
+  // Gamma/Delta are undated. surveyLatestDate itself stays lockstep with the engine's feed rule.
   const recents = A.recentlyAdded();
-  ok(recents.length === 2, "expected 2 dated surveys (Alpha, Beta) in recentlyAdded(), got " + recents.length + ": " + JSON.stringify(recents));
-  ok(!recents.some(e => e.sv === "Gamma Survey"), "recentlyAdded() must omit the undated Gamma Survey");
-  ok(recents[0].date >= recents[1].date, "recentlyAdded() is not sorted newest-first: " + JSON.stringify(recents));
+  ok(recents.length === 1 && recents[0].sv === "Beta Survey",
+    "recentlyAdded() must apply the 30-day build-window: only Beta qualifies, got " + JSON.stringify(recents));
+  ok(!recents.some(e => e.sv === "Alpha Survey"), "recentlyAdded() must EXCLUDE Alpha (2012-05-01, outside the 30-day window)");
+  ok(!recents.some(e => e.sv === "Gamma Survey" || e.sv === "Delta Survey"), "recentlyAdded() must omit the undated Gamma/Delta surveys");
   const recentStrip = doc.getElementById("recentStrip");
   ok(recentStrip && /Recently added/.test(recentStrip.innerHTML), "#recentStrip did not render a 'Recently added' heading");
-  ok(new RegExp(recents[0].slug).test(recentStrip.innerHTML) || recentStrip.innerHTML.indexOf("#/survey/" + recents[0].slug) >= 0,
-    "#recentStrip did not link the newest survey by its #/survey/<slug> route");
-  const recentSide = doc.getElementById("recentSide");
-  ok(recentSide && recentSide.innerHTML.indexOf("#/survey/") >= 0, "the compact map-sidebar recently-added variant (#recentSide) did not render links");
+  ok(recentStrip.innerHTML.indexOf("#/survey/" + recents[0].slug) >= 0,
+    "#recentStrip did not link the recent survey by its #/survey/<slug> route");
+  ok(!recentStrip.classList.contains("hidden"), "#recentStrip must be shown when the window has a survey");
+  // The map-rail recently-added section is GONE (deleted, not merely hidden): the leak was that section
+  // un-hiding on every view. Neither the element nor its old wrapper must exist.
+  ok(doc.getElementById("recentSide") == null && doc.getElementById("recentSideSection") == null,
+    "the map-rail recently-added section (#recentSide/#recentSideSection) must be deleted (single-surface strip only)");
 
   // O. C1b DISPLAY-PRODUCT GATE: opening an EMBARGOED survey's station must replace the four TF plots with
   //    an access panel carrying the verbatim embargo copy, and render NO svg plot paths (the response
@@ -1678,21 +1684,56 @@ async function bootFreshWindow(dataMap) {
   // (d) FORBIDDEN: no completeness/smoothness option in the sort control (the screen must never rank).
   ok([...sortSel.options].every(o => !/completeness|smoothness|quality/i.test(o.value + o.textContent)),
     "E3 FENCE: the sort control must NOT offer a completeness/quality ranking");
-  // (e) facet chips: exactly three (licence / DOI / tipper) and none is the completeness check.
-  const facetBtns = [...facetChips.querySelectorAll("[data-facet]")];
-  ok(facetBtns.length === 3, "E3: expected 3 facet chips (licence/DOI/tipper), got " + facetBtns.length);
-  ok(facetBtns.every(b => b.dataset.facet !== "q" && !/completeness|smoothness/i.test(b.textContent)),
+  // (e) FACET SWAP (cleanup wave B): the "Has DOI" / "Has tipper" chips are REMOVED; "Open licence" is
+  // kept; data-type chips (BBMT/LPMT/AMT/GDS, only corpus-present ones) are added. None is the completeness
+  // check. (This is a RED-proof target for the facet swap; old code renders a [data-facet="doi"] chip.)
+  ok(facetChips.querySelector('[data-facet="doi"]') == null && facetChips.querySelector('[data-facet="tipper"]') == null,
+    "E3: the 'Has DOI' and 'Has tipper' facet chips must be removed");
+  ok(facetChips.querySelector('[data-facet="lic"]') != null, "E3: the 'Open licence' facet chip must be kept");
+  const facetBtns = [...facetChips.querySelectorAll(".facet")];
+  ok(facetBtns.every(b => b.dataset.facet !== "q" && !/completeness|smoothness|quality/i.test(b.textContent)),
     "E3 FENCE: no facet may filter by the completeness/smoothness check");
-  // (f) DOI facet narrows to the one survey with a DOI (Alpha); toggling off restores the count.
-  const doiFacet = facetChips.querySelector('[data-facet="doi"]');
-  doiFacet.click();
-  ok(surveyCount.textContent === "1 survey", "E3: the 'Has DOI' facet must narrow to 1 survey (Alpha), got: " + JSON.stringify(surveyCount.textContent));
-  ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey", "E3: the DOI facet must leave only Alpha, got: " + JSON.stringify(surveyOrder()));
-  ok(facetChips.querySelector('[data-facet="doi"]').classList.contains("on"), "E3: the active facet chip must get the .on state");
-  // (g) CLEAR resets the facets (count back to 4).
+  // the kept 'Open licence' chip toggles its .on state (re-queried after each click; the chip innerHTML re-renders).
+  facetChips.querySelector('[data-facet="lic"]').click();
+  ok(facetChips.querySelector('[data-facet="lic"]').classList.contains("on"), "E3: clicking 'Open licence' must set its .on state");
+  facetChips.querySelector('[data-facet="lic"]').click();
+  ok(!facetChips.querySelector('[data-facet="lic"]').classList.contains("on"), "E3: a second click must clear the 'Open licence' chip");
+  // (f) TYPE CHIPS: the all-BBMT baseline renders ONLY the BBMT type chip (only corpus-present types get one).
+  ok(facetChips.querySelector('[data-type-facet="BBMT"]') != null, "E3: a BBMT type chip must render (BBMT is present in the corpus)");
+  ok(facetChips.querySelector('[data-type-facet="LPMT"]') == null && facetChips.querySelector('[data-type-facet="GDS"]') == null,
+    "E3: only corpus-present data types may get a chip (no LPMT/GDS chip in the all-BBMT baseline)");
+  // reclassify Gamma's one station to AMT: a second type chip (AMT) now appears, in canonical order after BBMT.
+  A.setType("G1", "AMT"); A.renderCards();
+  const typeChips = [...facetChips.querySelectorAll("[data-type-facet]")].map(b => b.dataset.typeFacet);
+  ok(typeChips.join(",") === "BBMT,AMT", "E3: type chips must render only present types in canonical order (BBMT,AMT), got: " + JSON.stringify(typeChips));
+  // selecting AMT narrows to the single AMT survey (Gamma); multi-select adding BBMT restores all four (AMT OR BBMT).
+  facetChips.querySelector('[data-type-facet="AMT"]').click();
+  ok(surveyCount.textContent === "1 survey" && surveyOrder()[0] === "Gamma Survey",
+    "E3: the AMT type chip must narrow to the single AMT survey (Gamma), got: " + JSON.stringify([surveyCount.textContent, surveyOrder()]));
+  ok(facetChips.querySelector('[data-type-facet="AMT"]').classList.contains("on"), "E3: an active type chip must get the .on state");
+  facetChips.querySelector('[data-type-facet="BBMT"]').click();
+  ok(surveyCount.textContent === "4 surveys", "E3: type chips are multi-select (AMT OR BBMT -> all four surveys), got: " + JSON.stringify(surveyCount.textContent));
+  // (g) SEARCH (cleanup wave B): reset the type facets first, then case-insensitive substring over
+  // name/org/region/blurb, live-updating the grid + count. This REPLACES the rail #find as the Surveys search.
   clearFilters.click();
-  ok(surveyCount.textContent === "4 surveys", "E3: 'Clear filters' did not reset the facets (count back to 4), got: " + JSON.stringify(surveyCount.textContent));
-  ok(!facetChips.querySelector('[data-facet="doi"]').classList.contains("on"), "E3: 'Clear filters' left a facet chip active");
+  const searchInput = doc.getElementById("surveySearch");
+  ok(searchInput, "E3: the discovery search input (#surveySearch) is missing from the discovery bar");
+  searchInput.value = "beta"; fire(searchInput, "input");
+  ok(surveyCount.textContent === "1 survey" && surveyOrder()[0] === "Beta Survey",
+    "E3: the search must narrow by survey NAME (beta -> Beta Survey), got: " + JSON.stringify([surveyCount.textContent, surveyOrder()]));
+  searchInput.value = "ORGX"; fire(searchInput, "input");   // Alpha's org, matched case-insensitively
+  ok(surveyOrder().length === 1 && surveyOrder()[0] === "Alpha Survey",
+    "E3: the search must match the ORG field case-insensitively (ORGX -> Alpha/OrgX), got: " + JSON.stringify(surveyOrder()));
+  // the header #nVis stays coherent on the Surveys view; the search handler re-runs updateCounts().
+  ok(doc.getElementById("nVis").textContent === "1 survey",
+    "E3: the header #nVis count must track the search on the Surveys view (1 survey), got: " + JSON.stringify(doc.getElementById("nVis").textContent));
+  // (h) CLEAR resets the type facets AND clears the search (count back to 4).
+  clearFilters.click();
+  ok(surveyCount.textContent === "4 surveys" && searchInput.value === "",
+    "E3: 'Clear filters' must reset the type facets AND clear the search (count back to 4), got: " + JSON.stringify([surveyCount.textContent, searchInput.value]));
+  ok(facetChips.querySelector('[data-type-facet="AMT"]') == null || !facetChips.querySelector('[data-type-facet="AMT"]').classList.contains("on"),
+    "E3: 'Clear filters' left a type chip active");
+  A.setType("G1", "BBMT"); A.renderCards();   // restore the all-BBMT baseline for the sections that follow
   // (h) COMPACT toggle: single-line rows replace the card grid; toggling back restores cards.
   const cardGridEl = doc.getElementById("cardGrid");
   layoutSeg.querySelector('[data-layout="compact"]').click();
@@ -1741,22 +1782,34 @@ async function bootFreshWindow(dataMap) {
   ok(oRel < oRelated, "E4: Release history (9) must precede the trailing Related-surveys block");
   drwE.classList.remove("open");
 
-  // DD. E5 COLLECTIONS LANDING — intro paragraph + full-width feature card (1 collection => feature mode).
+  // DD. E5 COLLECTIONS LANDING (cleanup wave E): the intro paragraph is DELETED; ONE rich card style at
+  // any count in the responsive grid; the FULL abstract renders with no 240-char truncation / "Show more".
   A.setView("collections");
-  const collIntro = doc.getElementById("collectionsIntro"), collGrid = doc.getElementById("collectionsGrid");
-  ok(collIntro && /Collections group related surveys/.test(collIntro.textContent),
-    "E5: the collections landing must show the plain intro paragraph above the grid");
-  ok(collGrid.className === "collfeature-grid", "E5: with ≤2 collections the grid must use the full-width feature layout, got: " + collGrid.className);
+  const collGrid = doc.getElementById("collectionsGrid");
+  ok(doc.getElementById("collectionsIntro") == null, "E5: the collections landing intro (#collectionsIntro) must be deleted");
+  ok(!/Collections group related surveys/.test(doc.getElementById("collectionsview").innerHTML),
+    "E5: the deleted landing intro copy must not render anywhere on the collections view");
+  ok(collGrid.className === "collfeature-grid", "E5: the collections grid must use the responsive rich-card grid, got: " + collGrid.className);
   const feat = collGrid.querySelector(".scard.collfeature");
-  ok(feat, "E5: a full-width feature card must render for the single collection");
-  ok(/AusLAMP/.test(feat.textContent), "E5: the feature card must name the collection");
-  ok(/Explore collection/.test(feat.textContent), "E5: the feature card must carry a prominent Explore action");
-  ok(/2 surveys/.test(feat.textContent) && /3 stations/.test(feat.textContent), "E5: the feature card must show the rollup stats (2 surveys · 3 stations)");
+  ok(feat, "E5: a rich collection card must render for the single collection");
+  ok(/AusLAMP/.test(feat.textContent), "E5: the card must name the collection");
+  ok(/Explore collection/.test(feat.textContent), "E5: the card must carry a prominent Explore action");
+  ok(/2 surveys/.test(feat.textContent) && /3 stations/.test(feat.textContent), "E5: the card must show the rollup stats (2 surveys · 3 stations)");
+  // FULL abstract, no truncation: the whole fixture description (incl. its tail) renders and there is no "Show more".
+  ok(/run jointly by state and federal geoscience agencies\./.test(feat.textContent),
+    "E5: the card must render the FULL abstract (its tail is present -> not truncated), got: " + JSON.stringify(feat.textContent));
+  ok(!/Show more/.test(feat.innerHTML) && feat.innerHTML.indexOf("cf-expand") < 0,
+    "E5: the 240-char truncation + 'Show more' expander must be gone");
   // participating organisations derived from member surveys' SMETA (Alpha=OrgX, Beta=OrgY).
   ok(/Participating organisations/.test(feat.textContent) && /OrgX/.test(feat.textContent) && /OrgY/.test(feat.textContent),
-    "E5: the feature card must list participating organisations derived from member SMETA");
-  // the footprint scatter is embedded in the feature card.
-  ok(feat.querySelector(".collscatter svg"), "E6: the feature card must embed the collection footprint scatter");
+    "E5: the card must list participating organisations derived from member SMETA");
+  // the footprint scatter is embedded in the card.
+  ok(feat.querySelector(".collscatter svg"), "E6: the card must embed the collection footprint scatter");
+  // C (leak fix / rail hide): the left rail + its resize handle are HIDDEN on the Collections view. RED-proof
+  // target: pre-change the rail stays visible here, and the old map-rail recently-added section leaked
+  // visible on every view via renderRecentlyAdded's unconditional un-hide.
+  ok(doc.getElementById("filterPane").classList.contains("hidden"), "C: the left rail (#filterPane) must be hidden on the Collections view");
+  ok(doc.getElementById("resizer").classList.contains("hidden"), "C: the rail resize handle (#resizer) must be hidden on the Collections view");
 
   // EE. E6 FOOTPRINT — AU outline present + dots coloured by member survey. collScatter reads the vendored
   // AU_OUTLINE global; the harness doesn't load vendor/au-outline.js, so inject a small stub and assert the
@@ -1788,6 +1841,19 @@ async function bootFreshWindow(dataMap) {
   ok(A.curView() === "collection", "E6: #/collection/auslamp did not open the collection page");
   const collMapBtn = doc.querySelector('#collectionview [data-act="collmap"]');
   ok(collMapBtn && /View all stations on main map/.test(collMapBtn.textContent), "E6: the collection page must offer 'View all stations on main map'");
+  // cleanup wave (E): the detail page uses a two-column HERO (abstract in the main column, fluid scatter in
+  // the aside), the .collnote explainer is deleted, and the member table renders (its width cap is lifted).
+  const cv = doc.getElementById("collectionview");
+  ok(cv.querySelector(".collhero .collhero-main .colldesc") != null,
+    "E: the collection detail must render the abstract in the two-column hero's main column");
+  ok(cv.querySelector(".collhero .collhero-aside .collscatter svg") != null,
+    "E: the hero's aside column must hold the fluid footprint scatter");
+  ok(cv.querySelector(".collnote") == null && cv.innerHTML.indexOf("no transfer functions of its own") < 0,
+    "E: the detail-page .collnote explainer must be deleted");
+  ok(cv.querySelector(".colltable") != null, "E: the member-survey table must still render on the detail page");
+  // C: the rail (+ resize handle) are hidden on the full-width collection detail page too.
+  ok(doc.getElementById("filterPane").classList.contains("hidden") && doc.getElementById("resizer").classList.contains("hidden"),
+    "C: the rail + resize handle must be hidden on the collection detail page");
   const fbBefore = mapCalls.filter(c => c.fn === "fitBounds").length;
   collMapBtn.click();
   ok(A.curView() === "map", "E6: 'View all on main map' did not switch to the map view (setView)");
@@ -2076,6 +2142,26 @@ async function bootFreshWindow(dataMap) {
     JSON.stringify((_emSweep.match(/.{0,30}—.{0,30}/) || [""])[0]));
   doc.getElementById("drawer").classList.remove("open");
 
+  // QQ. DRAWER SCRIM (cleanup wave D): a dim backdrop behind the drawer on the Surveys / Collections views
+  // (NEVER the map view, where the drawer sits side-by-side with the map). Clicking it closes the drawer.
+  const scrim = doc.getElementById("drawerScrim");
+  ok(scrim, "D: the drawer scrim element (#drawerScrim) is missing");
+  // MAP view: NO scrim.
+  A.setView("map");
+  A.openStationById("au.alpha.A1");
+  ok(doc.getElementById("drawer").classList.contains("open"), "D: setup, the station drawer did not open on the map view");
+  ok(scrim.classList.contains("hidden"), "D: the scrim must STAY hidden when the drawer opens on the map view (side-by-side)");
+  doc.querySelector("#drawer .close").click();
+  ok(scrim.classList.contains("hidden"), "D: the scrim stays hidden after closing on the map view");
+  // SURVEYS view: the scrim SHOWS behind the drawer, and clicking it closes the drawer.
+  A.setView("surveys");
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  ok(doc.getElementById("drawer").classList.contains("open"), "D: setup, the survey drawer did not open on the surveys view");
+  ok(!scrim.classList.contains("hidden"), "D: the scrim must SHOW when the drawer opens on the Surveys view");
+  scrim.click();
+  ok(!doc.getElementById("drawer").classList.contains("open"), "D: clicking the scrim must close the drawer");
+  ok(scrim.classList.contains("hidden"), "D: closing via the scrim must hide the scrim");
+
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
@@ -2083,6 +2169,7 @@ async function bootFreshWindow(dataMap) {
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, Draw-buttons in-SELECTION-panel reuse-toolbar-handler + shared-armedDrawMode(button/icon parity) + complete/cancel-clears-both, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
-    "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/facets/clear/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E5 collections-intro+feature-card+participating-orgs + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore)");
+    "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore, " +
+    "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted))");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
