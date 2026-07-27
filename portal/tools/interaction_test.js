@@ -101,8 +101,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "armDraw,setArmedDraw,drawModeHandler,armedDrawMode:()=>armedDrawMode," +
   // S3 hooks: recentlyAdded() for the strip-content assertion; renderRecentlyAdded so the driver
   // can force a re-render after directly poking SMETA (not needed in the current fixture path, but
-  // keeps parity with runInit()'s own call sites).
-  "recentlyAdded,renderRecentlyAdded," +
+  // keeps parity with runInit()'s own call sites); surveyLatestDate so the pinned cross-lane date
+  // rule (attribution.declared_date folded into the release_notes candidate set) is asserted
+  // directly, without a full re-render.
+  "recentlyAdded,renderRecentlyAdded,surveyLatestDate," +
   // UX4 (D1-A1/D2/D4): the PURE map helpers, exposed so the AusLAMP partition / colour / tooltip /
   // zoom-scaling are unit-testable without Leaflet (jsdom can't load it). partitionMarkers(list) ->
   // {unclustered, clustered} splits on AusLAMP membership; isAuslampSurvey(slug,set) is the predicate;
@@ -997,6 +999,21 @@ async function bootFreshWindow(dataMap) {
   // un-hiding on every view. Neither the element nor its old wrapper must exist.
   ok(doc.getElementById("recentSide") == null && doc.getElementById("recentSideSection") == null,
     "the map-rail recently-added section (#recentSide/#recentSideSection) must be deleted (single-surface strip only)");
+
+  // N2. PINNED CROSS-LANE DATE RULE (LOCKSTEP with engine build_portal.py _survey_latest_date):
+  // attribution.declared_date is a first-class candidate date sharing ONE candidate set with
+  // release_notes[].date; the MAX well-formed YYYY-MM-DD wins, and a survey carrying a declared_date
+  // but no release_notes dates by that declared_date, NOT the bare-year Dec-31 fallback. These are
+  // pure surveyLatestDate() checks (the fixture path above exercises the 30-day window, but never the
+  // declared_date candidate), so the shared date rule is pinned directly without a full re-render.
+  ok(A.surveyLatestDate({ year_end: 2019, attribution: { declared_date: "2026-07-25" } }) === "2026-07-25",
+    "surveyLatestDate must date by attribution.declared_date, not the year_end Dec-31 fallback");
+  ok(A.surveyLatestDate({ attribution: { declared_date: "2026-07-25" }, release_notes: [{ date: "2020-01-01" }] }) === "2026-07-25",
+    "surveyLatestDate must let a newer declared_date win over an older release note");
+  ok(A.surveyLatestDate({ attribution: { declared_date: "2019-01-01" }, release_notes: [{ date: "2023-05-10" }] }) === "2023-05-10",
+    "surveyLatestDate must let a newer release note win over an older declared_date");
+  ok(A.surveyLatestDate({ year_end: 2020, attribution: { declared_date: "2026-07" } }) === "2020-12-31",
+    "surveyLatestDate must skip a malformed (non-YYYY-MM-DD) declared_date and fall back to the year");
 
   // O. C1b DISPLAY-PRODUCT GATE: opening an EMBARGOED survey's station must replace the four TF plots with
   //    an access panel carrying the verbatim embargo copy, and render NO svg plot paths (the response
