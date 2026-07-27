@@ -1904,6 +1904,66 @@ async function bootFreshWindow(dataMap) {
     "CREDIT: a survey with no contributors[] must render NO Contributors section (render nothing when the array is absent)");
   doc.getElementById("drawer").classList.remove("open");
 
+  // PC. PORTAL-CLEANUP WAVE (stage 1). Three cleanups, poked onto Gamma (the base fixture carries none of
+  // these, so nothing earlier is perturbed): the survey-card CREATORS section (ordered citation authors with
+  // ORCID/ROR links, adjacent to Attribution); the pubCite DOI-URL NORMALISATION + null-field grace; and the
+  // Provenance-tab SOURCE ARCHIVE derived from the typed related_identifiers by data level. RED-proven against
+  // origin/main drawer.js: no Creators section renders, a URL-form pub DOI double-prefixes the resolver, and
+  // the Source archive shows the dataset-DOI / "not recorded" rather than the raw_packed level identifier.
+  A.setSMETA("Gamma Survey", {
+    creators: [
+      { name: "Kate Robertson", name_type: "person", orcid: "0000-0002-1111-2222" },
+      { name: "Geological Survey of South Australia", name_type: "organisation", ror: "https://ror.org/028g18b61" },
+    ],
+    related_identifiers: [
+      { identifier: "10.25914/gamma-raw", identifier_type: "DOI", relation: "IsDerivedFrom", custodian: "NCI", identifies: "raw_packed" },
+      { identifier: "10.25914/gamma-coll", identifier_type: "DOI", relation: "IsPartOf", custodian: "NCI", identifies: "collection" },
+    ],
+    funders: [{ name: "Australian Research Council", pid: "https://ror.org/05mmh0f86", grant_id: "ADI RD02-260" }],
+    pubs: [
+      { a: "Robertson, K.", y: "2023", t: "Deep conductors beneath Gamma", j: "Geophys. J. Int.", doi: "https://doi.org/10.1093/gji/ggad999" },
+      { t: "An untitled note on the Gamma survey", doi: "10.5555/gamma-note" },
+    ],
+  });
+  // (1) CREATORS: a Creators section renders with the two credit rows, in declared order; a person carries the
+  //     ORCID icon-link and an organisation's name links to its ROR. RED on origin/main (no Creators section).
+  A.openSurvey("Gamma Survey");
+  const drwPC = doc.getElementById("drawer"), pcH = drwPC.innerHTML;
+  ok(/>Creators</.test(pcH), "PC: a Creators section must render when creators[] is present");
+  ok(/Kate Robertson/.test(pcH) && /orcid\.org\/0000-0002-1111-2222/.test(pcH),
+    "PC: a person creator renders their name plus the ORCID icon-link");
+  ok(/Geological Survey of South Australia/.test(pcH) && /ror\.org\/028g18b61/.test(pcH),
+    "PC: an organisation creator's name links to its ROR");
+  ok(pcH.indexOf("Kate Robertson") < pcH.indexOf("Geological Survey of South Australia"),
+    "PC: creators must render in their declared citation order (person before org here)");
+  ok(pcH.indexOf(">Creators<") < pcH.indexOf(">Downloads<"), "PC: the Creators section must sit ahead of Downloads (adjacent to Attribution)");
+  // (2) FUNDING grant id: the funder's grant_id is appended to the Funding section (2 live rows in the corpus).
+  const _fundBlock = (pcH.split(">Funding<")[1] || "").split(">Related publications<")[0];
+  ok(/Australian Research Council/.test(_fundBlock) && /ADI RD02-260/.test(_fundBlock),
+    "PC: a funder's grant_id must be appended in the Funding section, got: " + _fundBlock);
+  // (3) pubCite: a URL-form DOI must resolve to a SINGLE doi.org prefix (no double prefix), and a pub missing
+  //     author/year/journal must still render its title + link with no empty "(). ." citation skeleton.
+  ok(pcH.indexOf('href="https://doi.org/10.1093/gji/ggad999"') >= 0,
+    "PC: a URL-form pub DOI must normalise to a single doi.org prefix, got: " + (pcH.match(/href="[^"]*gji[^"]*"/) || [""])[0]);
+  ok(pcH.indexOf("doi.org/https") < 0, "PC: a URL-form pub DOI must not double-prefix the resolver");
+  ok(/An untitled note on the Gamma survey/.test(pcH) && pcH.indexOf('href="https://doi.org/10.5555/gamma-note"') >= 0,
+    "PC: a pub with null author/year/journal must still render its title + DOI link");
+  ok((pcH.split(">Related publications<")[1] || "").indexOf("(). ") < 0,
+    "PC: a null-field pub must not render the empty '(). .' citation skeleton");
+  drwPC.classList.remove("open");
+  // (4) SOURCE ARCHIVE (station Provenance tab): derived from related_identifiers by level, raw_packed
+  //     preferred over collection, rendered as that level's own DOI link. RED on origin/main (the row shows
+  //     the dataset DOI / "not recorded", never the raw_packed identifier).
+  win.location.hash = "#/station/nz.gamma.G1"; A.routeFromHash();
+  const pcProv = doc.getElementById("dp-provenance");
+  const _srcRow = [...pcProv.querySelectorAll("tr")].find(tr => /Source archive/.test(tr.textContent));
+  ok(_srcRow, "PC: the Provenance tab must carry a 'Source archive' row");
+  ok(/href="https:\/\/doi\.org\/10\.25914\/gamma-raw"/.test(_srcRow.innerHTML),
+    "PC: the Source archive must derive from the raw_packed related_identifier (preferred over collection), got: " + _srcRow.innerHTML);
+  ok(_srcRow.innerHTML.indexOf("not recorded") < 0,
+    "PC: the Source archive must not read 'not recorded' when a level identifier exists");
+  doc.getElementById("drawer").classList.remove("open");
+
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
   // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
   // now a SEQUENTIAL dark→light progression whose SIGNAL IS LIGHTNESS (viridis principle): dark slate-blue
