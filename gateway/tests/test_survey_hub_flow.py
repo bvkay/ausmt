@@ -439,10 +439,12 @@ def test_hub_metadata_tab_per_section_forms(tmp_path):
             forms = re.findall(r'data-hub-section-form="([^"]+)"', r.text)
             # Scalars + each (possibly merged) sidebar section is its own form. SIDEBARMERGE: organisation
             # and instruments are folded into the "Core fields" (_scalars) form and are NOT standalone;
-            # the merged "Investigators" form keeps the lead_investigator key.
-            assert "_scalars" in forms and "lead_investigator" in forms
+            # CONTRIBUTOR-CREDIT-SPEC §6: the unified "People & credit" form is keyed "people".
+            assert "_scalars" in forms and "people" in forms
             assert "organisation" not in forms, \
                 "organisation must be folded into the merged Core fields form, not a standalone form"
+            assert "lead_investigator" not in forms and "creators" not in forms, \
+                "the retired investigator/creator panels must be folded into the People & credit form"
             assert len(forms) >= 6, forms
             assert 'class="toc"' in r.text                       # sticky section TOC
             assert "Only this section is submitted" in r.text     # commit-tray copy
@@ -509,18 +511,20 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             r = await client.get("/gateway/curator/survey/merge-survey-2026?tab=metadata")
             assert r.status_code == 200
             body = r.text
-            # The sidebar/TOC is exactly the merged order, one entry per merged group.
+            # The sidebar/TOC is exactly the merged order, one entry per merged group. CONTRIBUTOR-
+            # CREDIT-SPEC §6: the four investigator/creator/contributor panels collapse to ONE
+            # "People & credit" entry.
             toc = re.findall(r'data-hub-section="[^"]+">([^<]+)', body)
-            assert toc == ["Core fields", "Investigators", "Identifiers &amp; PIDs", "Publications",
-                           "Funding", "Access", "Attribution &amp; rights", "Processing",
-                           "Collection", "CARE governance"], toc
-            # No standalone entry/form for a merged-away section.
+            assert toc == ["Core fields", "People &amp; credit", "Identifiers &amp; PIDs",
+                           "Publications", "Funding", "Access", "Attribution &amp; rights",
+                           "Processing", "Collection", "CARE governance"], toc
+            # No standalone entry/form for a merged-away or retired section.
             forms = re.findall(r'data-hub-section-form="([^"]+)"', body)
-            for gone in ("organisation", "instruments", "principal_investigators",
-                         "time_series", "related_identifiers"):
+            for gone in ("organisation", "instruments", "lead_investigator", "principal_investigators",
+                         "creators", "contributors", "time_series", "related_identifiers"):
                 assert gone not in forms, f"{gone} must be folded into a merged form, not standalone"
-            # ONE Core fields, ONE Investigators, ONE Identifiers & PIDs sidebar entry.
-            assert forms.count("_scalars") == 1 and forms.count("lead_investigator") == 1
+            # ONE Core fields, ONE People & credit, ONE Identifiers & PIDs sidebar entry.
+            assert forms.count("_scalars") == 1 and forms.count("people") == 1
             assert forms.count("identifiers") == 1
 
             def _form(key):
@@ -533,15 +537,23 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
                            'name="l_instruments_0_manufacturer"', 'name="o_instruments"'):
                 assert needle in core, f"Core fields form missing {needle}"
 
-            # M2 Investigators: lead first then principals, both groups' widgets + snapshots + honest hint.
-            inv = _form("lead_investigator")
-            for needle in ("<h2>Lead investigator</h2>", "<h2>Principal investigators</h2>",
-                           'name="s_lead_investigator_name"', 'name="o_lead_investigator"',
-                           'name="l_principal_investigators_0_name"', 'name="o_principal_investigators"'):
-                assert needle in inv, f"Investigators form missing {needle}"
-            assert inv.index("<h2>Lead investigator</h2>") < inv.index("<h2>Principal investigators</h2>")
-            assert ("When a lead investigator is set the portal credits the lead; otherwise the "
-                    "principal investigators list is credited") in inv
+            # §6 People & credit: ONE panel of unified rows + the ratified widgets, the short credit
+            # explainer (NOT the retired precedence sentence), and the legacy Convert notices for the
+            # survey's lead_investigator (Ada) + principal_investigators (Grace). (The o_creators/
+            # o_contributors round-trip anchors render only when the survey CARRIES those lists; this
+            # survey has neither, so their absence is correct - it keeps an empty panel absent -> _OMIT.)
+            people = _form("people")
+            for needle in ('<h2>People &amp; credit</h2>', 'data-editor-rows="people"',
+                           'name="l_people_0_name"', "data-people-nametype", 'name="l_people_0_cited"',
+                           'name="l_people_0_role_ProjectLeader"', "Cited authors form the citation"):
+                assert needle in people, f"People & credit form missing {needle}"
+            assert ("When a lead investigator is set the portal credits the lead") not in people
+            # Legacy Convert notices for both retired flat keys the survey still carries.
+            assert 'name="people_convert" value="lead_investigator"' in people
+            assert 'name="people_convert" value="principal_investigators"' in people
+            assert "Ada Lovelace" in people and "Grace Hopper" in people
+            # ONE advanced-JSON escape per underlying list.
+            assert 'name="j_creators"' in people and 'name="j_contributors"' in people
 
             # M1 Identifiers & PIDs: the folded Time series levels group (d) + its widgets/snapshot/hint.
             ids = _form("identifiers")

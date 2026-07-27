@@ -464,6 +464,203 @@ EDITOR_UI_JS = """
 """
 
 
+# CONTRIBUTOR-CREDIT-SPEC (§6): the unified People & credit panel enhancements, appended to editor.js (the
+# script both the full editor form and the hub Metadata tab already load). RAW string (JS-native
+# backslashes). ALL progressive - the panel is fully usable without JS (both id fields + every control
+# show, manual entry + the +Add person spare rows work, and the server already renders cited rows in
+# citation order):
+#   (a) show ORCID for a person / ROR for an organisation (by name_type), and show the up/down citation-
+#       order controls only on a cited row;
+#   (b) the per-row "Look up" fills the name from pub.orcid.org (people) / api.ror.org (orgs), NEVER
+#       overwriting a non-empty name silently (it offers a "use it" button instead) and degrading to a
+#       quiet inline note on any failure - client-side only, no gateway proxying (the curator-page CSP
+#       connect-src allows the two hosts, scoped, per the Caddyfile @curatorHarvestPages matcher);
+#   (c) the "Reuse someone" typeahead: a directory built CLIENT-SIDE from the same-origin
+#       /data/surveys.json (aggregate every creators+contributors+investigators entry corpus-wide, dedupe
+#       by ORCID else name, sort by frequency then name); selecting fills a fresh row. It stays HIDDEN
+#       until the directory loads, so a failed/absent fetch leaves manual entry intact (graceful).
+_PEOPLE_CREDIT_JS = r"""
+(function () {
+  function rowsHost() { return document.querySelector('[data-editor-rows="people"]'); }
+  function syncRow(row) {
+    if (!row) return;
+    var nt = row.querySelector('[data-people-nametype]');
+    var isOrg = nt && nt.value === 'organisation';
+    var orcidWrap = row.querySelector('[data-people-orcid]');
+    var rorWrap = row.querySelector('[data-people-ror]');
+    if (orcidWrap) orcidWrap.style.display = isOrg ? 'none' : '';
+    if (rorWrap) rorWrap.style.display = isOrg ? '' : 'none';
+    var cited = row.querySelector('[data-people-cited]');
+    var order = row.querySelector('[data-people-order]');
+    if (order) order.style.display = (cited && cited.checked) ? '' : 'none';
+  }
+  function syncAll() {
+    var host = rowsHost();
+    if (!host) return;
+    Array.prototype.forEach.call(host.querySelectorAll('[data-editor-row]'), syncRow);
+  }
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (t && t.matches && (t.matches('[data-people-nametype]') || t.matches('[data-people-cited]'))) {
+      syncRow(t.closest('[data-editor-row]'));
+    }
+  });
+
+  function bareOrcid(v) {
+    var m = String(v || '').trim().match(/(\d{4}-\d{4}-\d{4}-\d{3}[\dxX])/);
+    return m ? m[1].toUpperCase() : '';
+  }
+  function bareRor(v) {
+    var m = String(v || '').trim().match(/([0-9a-z]{9})\/?$/);
+    return m ? m[1] : '';
+  }
+  function orcidName(j) {
+    var n = (j && j.person && j.person.name) || (j && j.name);
+    if (!n) return '';
+    var fam = n['family-name'] && n['family-name'].value;
+    var giv = n['given-names'] && n['given-names'].value;
+    if (fam && giv) return fam + ', ' + giv;
+    return fam || giv || '';
+  }
+  function rorName(j) {
+    var names = j && j.names;
+    if (!Array.isArray(names)) return (j && j.name) || '';
+    var disp = names.filter(function (x) { return x.types && x.types.indexOf('ror_display') >= 0; })[0];
+    return (disp && disp.value) || (names[0] && names[0].value) || '';
+  }
+  function offerName(row, status, value) {
+    var nameInp = row.querySelector('input[name$="_name"]');
+    if (!nameInp || !status) return;
+    if (!String(nameInp.value || '').trim()) {
+      nameInp.value = value; status.textContent = 'filled the name'; return;
+    }
+    status.textContent = 'found “' + value + '” ';
+    var use = document.createElement('button');
+    use.type = 'button'; use.className = 'b-accent';
+    use.setAttribute('data-people-lookup-use', '');
+    use.style.cssText = 'padding:.1rem .5rem;font-size:.75rem';
+    use.textContent = 'use it';
+    use.__value = value; use.__target = nameInp;
+    status.appendChild(use);
+  }
+  document.addEventListener('click', function (ev) {
+    var use = ev.target && ev.target.closest && ev.target.closest('[data-people-lookup-use]');
+    if (use && use.__target) { use.__target.value = use.__value; use.textContent = 'done'; return; }
+    var btn = ev.target && ev.target.closest && ev.target.closest('[data-people-lookup]');
+    if (!btn) return;
+    var row = btn.closest('[data-editor-row]');
+    if (!row) return;
+    var status = row.querySelector('[data-people-lookup-status]');
+    var nt = row.querySelector('[data-people-nametype]');
+    if (nt && nt.value === 'organisation') {
+      var rorInp = row.querySelector('[data-people-ror] input');
+      var rid = bareRor(rorInp ? rorInp.value : '');
+      if (!rid) { if (status) status.textContent = 'enter a ROR id first'; return; }
+      if (status) status.textContent = 'looking up…';
+      fetch('https://api.ror.org/v2/organizations/' + encodeURIComponent(rid), {cache: 'no-store'})
+        .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+        .then(function (j) { var v = rorName(j); if (v) { offerName(row, status, v); } else if (status) { status.textContent = 'no name found'; } })
+        .catch(function () { if (status) status.textContent = 'lookup failed - enter the name by hand'; });
+      return;
+    }
+    var orcidInp = row.querySelector('[data-people-orcid] input');
+    var oid = bareOrcid(orcidInp ? orcidInp.value : '');
+    if (!oid) { if (status) status.textContent = 'enter an ORCID first'; return; }
+    if (status) status.textContent = 'looking up…';
+    fetch('https://pub.orcid.org/v3.0/' + encodeURIComponent(oid), {headers: {Accept: 'application/json'}, cache: 'no-store'})
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function (j) { var v = orcidName(j); if (v) { offerName(row, status, v); } else if (status) { status.textContent = 'no name found'; } })
+      .catch(function () { if (status) status.textContent = 'lookup failed - enter the name by hand'; });
+  });
+
+  var DIR = null;
+  function buildDirectory(data) {
+    var byKey = {};
+    Object.keys(data || {}).forEach(function (label) {
+      var rec = data[label] || {};
+      ['creators', 'contributors', 'investigators'].forEach(function (fld) {
+        (Array.isArray(rec[fld]) ? rec[fld] : []).forEach(function (p) {
+          if (!p || !p.name) return;
+          var orcid = bareOrcid(p.orcid);
+          var key = orcid ? ('o:' + orcid) : ('n:' + String(p.name).trim().toLowerCase());
+          var e = byKey[key];
+          if (!e) { e = byKey[key] = {name: String(p.name).trim(), name_type: p.name_type || 'person', orcid: p.orcid || '', ror: p.ror || '', n: 0}; }
+          e.n++;
+          if (!e.orcid && p.orcid) e.orcid = p.orcid;
+          if (!e.ror && p.ror) e.ror = p.ror;
+        });
+      });
+    });
+    var arr = Object.keys(byKey).map(function (k) { return byKey[k]; });
+    arr.sort(function (a, b) { return b.n - a.n || a.name.localeCompare(b.name); });
+    return arr;
+  }
+  function addPersonRow(entry) {
+    var tpl = document.querySelector('[data-editor-template="people"]');
+    var host = rowsHost();
+    if (!tpl || !host) return;
+    var max = -1;
+    host.querySelectorAll('[name^="l_people_"]').forEach(function (el) {
+      var n = parseInt(el.getAttribute('name').slice('l_people_'.length).split('_')[0], 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    var wrap = document.createElement('div');
+    wrap.innerHTML = tpl.innerHTML.split('ROWIDX').join(String(max + 1));
+    var row = wrap.firstElementChild;
+    if (!row) return;
+    host.appendChild(row);
+    var set = function (sel, val) { var el = row.querySelector(sel); if (el && val != null && val !== '') el.value = val; };
+    set('input[name$="_name"]', entry.name);
+    var nt = row.querySelector('[data-people-nametype]');
+    if (nt && entry.name_type) nt.value = entry.name_type;
+    set('[data-people-orcid] input', entry.orcid);
+    set('[data-people-ror] input', entry.ror);
+    syncRow(row);
+  }
+  function wireTypeahead() {
+    var box = document.querySelector('[data-people-typeahead]');
+    if (!box || !DIR || !DIR.length) return;
+    var input = box.querySelector('[data-people-typeahead-input]');
+    var menu = box.querySelector('[data-people-typeahead-menu]');
+    if (!input || !menu) return;
+    box.style.display = '';
+    function render() {
+      var q = String(input.value || '').trim().toLowerCase();
+      menu.innerHTML = '';
+      if (!q) { menu.style.display = 'none'; return; }
+      var hits = DIR.filter(function (e) { return e.name.toLowerCase().indexOf(q) >= 0; }).slice(0, 8);
+      if (!hits.length) { menu.style.display = 'none'; return; }
+      hits.forEach(function (e) {
+        var it = document.createElement('div');
+        it.setAttribute('role', 'option');
+        it.style.cssText = 'padding:.35rem .6rem;cursor:pointer';
+        it.textContent = e.name + (e.orcid ? '  (' + e.orcid + ')' : '');
+        it.addEventListener('mousedown', function (ev) { ev.preventDefault(); addPersonRow(e); input.value = ''; menu.style.display = 'none'; });
+        menu.appendChild(it);
+      });
+      menu.style.display = 'block';
+    }
+    input.addEventListener('input', render);
+    input.addEventListener('blur', function () { setTimeout(function () { menu.style.display = 'none'; }, 150); });
+  }
+  function init() {
+    if (!rowsHost()) return;
+    syncAll();
+    var host = rowsHost();
+    if (window.MutationObserver && host) { new MutationObserver(syncAll).observe(host, {childList: true}); }
+    fetch('/data/surveys.json', {credentials: 'same-origin', cache: 'no-store'})
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function (d) { DIR = buildDirectory(d); wireTypeahead(); })
+      .catch(function () { /* typeahead stays hidden; manual entry still works */ });
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
+})();
+"""
+
+# Append the People & credit enhancements to the served editor.js so both edit surfaces get them.
+EDITOR_UI_JS = EDITOR_UI_JS + _PEOPLE_CREDIT_JS
+
+
 # CONTRIBUTOR-CREDIT-SPEC (§6 curator DOI harvest): the DOI citation-harvest core, served to the curator
 # editor as an external same-origin script (the strictPages script-src 'self' CSP blocks inline). It is the
 # SAME code the public Add Survey form uses, delivered as the BYTE-IDENTICAL bundled copy under
@@ -4159,6 +4356,268 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
         f'<textarea name="j_{_esc(section)}" rows="4">{_esc(val)}</textarea></div>')
 
 
+# ==================================================================================================
+# CONTRIBUTOR-CREDIT-SPEC (§6): the unified "People & credit" panel (owner ruling 2026-07-26, replacing
+# the four-panel Investigators hub group with "one huge list which makes no sense"). ONE row per person
+# or organisation: name, name_type, ORCID (people) / ROR (orgs), a Cited-author checkbox, and the eight
+# ratified role checkboxes. The panel DECOMPOSES to the two ratified served lists on save
+# (editor_form.assemble_people); the served creators[]/contributors[] shape is byte-for-byte unchanged.
+# ==================================================================================================
+_PEOPLE_SECTION = "people"
+
+# Placeholder hygiene (§6.6): every example value is prefixed "e.g." so a bare sample ORCID/ROR on an
+# empty row never reads as recorded data.
+_PEOPLE_NAME_PH = "e.g. Family, Given  or  Organisation name"
+_PEOPLE_ORCID_PH = "e.g. 0000-0002-1825-0097"
+_PEOPLE_ROR_PH = "e.g. https://ror.org/03yghzc09"
+
+# §6.7 explainer - ONE short paragraph replacing the retired lead-suppresses-PIs precedence sentence and
+# the old credit-model paragraph.
+_PEOPLE_EXPLAINER = (
+    '<p class="sub">Cited authors form the citation, in order (use the up/down controls on a cited row); '
+    'the role ticks record who did what. Both feed the served credit model.</p>')
+
+
+def _people_name_type_select(name: str, value) -> str:
+    """The person|organisation <select> for a credit row. FAIL-CLOSED vocab, but DEFAULTS to person on a
+    fresh row (no "(none)" state, §6.6). An out-of-vocab STORED value stays visible + selected so the
+    curator can fix it. data-people-nametype drives the ORCID/ROR show-hide enhancement (degrades to both
+    shown without JS)."""
+    from . import editor_form
+    cur = str(value).strip() if value not in (None, "") else "person"
+    opts = []
+    for opt in editor_form.NAME_TYPES:
+        text = _NAME_TYPE_DISPLAY.get(opt, opt)
+        opts.append(f'<option value="{_esc(opt)}"{" selected" if opt == cur else ""}>{_esc(text)}</option>')
+    if cur not in editor_form.NAME_TYPES:
+        opts.append(f'<option value="{_esc(cur)}" selected>{_esc(cur)} (stored value)</option>')
+    return (f'<p style="margin:.15rem 0"><label class="k">Person or organisation</label>'
+            f'<select name="{_esc(name)}" data-people-nametype>{"".join(opts)}</select></p>')
+
+
+def _people_role_checkboxes(index, roles: set) -> str:
+    """The eight ratified role checkboxes (l_people_<i>_role_<Token>) with the human glosses. The option
+    NAME carries the exact vocab token so the decomposed contributors[] role is byte-identical."""
+    from . import editor_form
+    boxes = []
+    for role in editor_form.CONTRIBUTOR_ROLES:
+        mark = " checked" if role in roles else ""
+        gloss = _ROLE_DISPLAY.get(role, role)
+        boxes.append(
+            '<label style="display:inline-block;margin:.1rem 1rem .1rem 0">'
+            f'<input type="checkbox" name="l_{_PEOPLE_SECTION}_{index}_role_{_esc(role)}" value="1" '
+            f'style="width:auto"{mark}> {_esc(gloss)}</label>')
+    return ('<div class="people-roles" style="margin:.25rem 0">'
+            '<span class="k">Roles (what they did)</span><br>' + "".join(boxes) + '</div>')
+
+
+# §6.2: the "needs review" chip on a unified row seeded by the migration (the INFERRED-REVIEW marker the
+# runner detected on the underlying creators/contributors row). Labelled which list seeded it. Advisory
+# only; saving the row rewrites the underlying list WITHOUT the marker (the adjudication, cleared via the
+# runner's existing _strip_inferred_review_comment path).
+def _people_review_chip(label: str) -> str:
+    seeded = f" (seeded from the migrated {label} list)" if label else ""
+    return ('<p style="margin:.15rem 0" class="review-chip-wrap">'
+            '<span class="sub" data-review-chip '
+            'style="color:#E0B341;border:1px solid #E0B341;border-radius:4px;padding:.1rem .4rem;'
+            f'font-size:.75rem">needs review{_esc(seeded)}; confirm and save to clear</span></p>')
+
+
+def _people_row_html(index, row: dict | None, *, needs_review: bool = False,
+                     review_label: str = "") -> str:
+    """ONE unified People & credit row. `row` prefills an existing/merged row; None is a spare/template
+    row (name_type defaults to person). Reuses the delegated add/remove/reorder JS (data-editor-row /
+    data-editor-move-row) so a JS-added row and a reorder both work. ORCID (people) / ROR (orgs) are
+    wrapped so the enhancement can show the relevant one; the Look up button fills the name from
+    ORCID/ROR (client-side). Degrades: without JS both id fields and all controls show, manual entry
+    works, and the server already renders rows in citation order."""
+    r = row or {}
+    name = r.get("name")
+    cited = bool(r.get("cited"))
+    roles = set(r.get("roles") or [])
+    idx = index
+    cells = []
+    if needs_review:
+        cells.append(_people_review_chip(review_label))
+    cells.append(
+        f'<p style="margin:.15rem 0"><label class="k">Name</label>'
+        f'{_text_input(f"l_{_PEOPLE_SECTION}_{idx}_name", name, _PEOPLE_NAME_PH)}</p>')
+    cells.append(_people_name_type_select(f"l_{_PEOPLE_SECTION}_{idx}_name_type", r.get("name_type")))
+    cells.append(
+        f'<span data-people-orcid><p style="margin:.15rem 0"><label class="k">ORCID (people)</label>'
+        f'{_text_input(f"l_{_PEOPLE_SECTION}_{idx}_orcid", r.get("orcid"), _PEOPLE_ORCID_PH)}</p></span>')
+    cells.append(
+        f'<span data-people-ror><p style="margin:.15rem 0"><label class="k">ROR id (organisations)'
+        f'</label>{_text_input(f"l_{_PEOPLE_SECTION}_{idx}_ror", r.get("ror"), _PEOPLE_ROR_PH)} '
+        f'{_ROR_HINT}</p></span>')
+    cells.append(
+        '<p style="margin:.15rem 0" class="people-lookup-wrap">'
+        '<button type="button" class="b-accent" data-people-lookup '
+        'style="padding:.2rem .6rem;font-size:.75rem" title="Fill the name from ORCID/ROR">'
+        'Look up</button>'
+        '<span class="sub" data-people-lookup-status style="margin-left:.5rem"></span></p>')
+    cited_mark = " checked" if cited else ""
+    cells.append(
+        '<p style="margin:.25rem 0"><label style="display:inline-block">'
+        f'<input type="checkbox" name="l_{_PEOPLE_SECTION}_{idx}_cited" value="1" data-people-cited '
+        f'style="width:auto"{cited_mark}> <b>Cited author</b> (names the citation)</label></p>')
+    # The reorder controls (citation order) ride a wrapper the enhancement shows only for cited rows;
+    # visible by default so no-JS reorder degrades to a rename-then-PR escape (server renders in order).
+    cells.append(f'<span data-people-order>{_reorder_controls_html()}</span>')
+    cells.append(_people_role_checkboxes(idx, roles))
+    remove = ('<p style="margin:.15rem 0"><button type="button" class="b-bad" '
+              'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
+              'Remove person</button></p>')
+    return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
+            f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{remove}</div>')
+
+
+def _people_rows_for_render(fields: dict, submitted: dict | None,
+                            review_flags: dict | None) -> list[tuple]:
+    """The unified rows to render, each (row_dict, needs_review, review_label). After a validation error
+    the rows come from the resubmitted l_people_* fields (typed values survive, no chips); otherwise from
+    merging the stored creators[]+contributors[] (editor_form.merge_people) with the migration's
+    INFERRED-REVIEW flags mapped onto the merged rows (chip labelled which underlying list seeded it)."""
+    from . import editor_form
+    from_submitted = submitted is not None and any(
+        k.startswith(f"l_{_PEOPLE_SECTION}_") for k in submitted)
+    if from_submitted:
+        out = []
+        for i in _submitted_row_indices(submitted, _PEOPLE_SECTION):
+            out.append(({
+                "name": submitted.get(f"l_{_PEOPLE_SECTION}_{i}_name"),
+                "name_type": submitted.get(f"l_{_PEOPLE_SECTION}_{i}_name_type"),
+                "orcid": submitted.get(f"l_{_PEOPLE_SECTION}_{i}_orcid"),
+                "ror": submitted.get(f"l_{_PEOPLE_SECTION}_{i}_ror"),
+                "cited": f"l_{_PEOPLE_SECTION}_{i}_cited" in submitted,
+                "roles": [r for r in editor_form.CONTRIBUTOR_ROLES
+                          if f"l_{_PEOPLE_SECTION}_{i}_role_{r}" in submitted],
+            }, False, ""))
+        return out
+    creators = fields.get("creators") if isinstance(fields.get("creators"), list) else []
+    contributors = fields.get("contributors") if isinstance(fields.get("contributors"), list) else []
+    rows = editor_form.merge_people(creators, contributors)
+    rflags = review_flags or {}
+    cflags = set(rflags.get("creators") or ())
+    ctflags = set(rflags.get("contributors") or ())
+    out = []
+    for r in rows:
+        seeded = []
+        if r.get("creator_idx") is not None and r["creator_idx"] in cflags:
+            seeded.append("Creators")
+        if any(j in ctflags for j in (r.get("contrib_idxs") or [])):
+            seeded.append("Contributors")
+        out.append((r, bool(seeded), " and ".join(seeded)))
+    return out
+
+
+def _legacy_credit_notice(fields: dict) -> str:
+    """§6.3 LEGACY RETIREMENT. When a survey still carries lead_investigator (or the extinct
+    principal_investigators), render a single-line notice + a Convert action. Convert seeds a unified row
+    (lead -> Led role, cited when no cited author exists yet; each principal -> a cited creator) AND
+    deletes the flat key on the SAME save (via editor_form's people_convert directive + the runner's
+    _delete_keys). The legacy payload rides hidden fields so the convert is a plain server round-trip (no
+    JS required). Nothing renders when neither legacy key carries a real value."""
+    import json as _json
+    blocks = []
+    li = fields.get("lead_investigator")
+    if isinstance(li, dict) and str(li.get("name") or "").strip():
+        name = str(li["name"]).strip()
+        orcid = str(li.get("orcid") or "").strip()
+        blocks.append(
+            '<div class="people-legacy" style="border-left:3px solid #D9A23B;padding:.4rem .6rem;'
+            'margin:.4rem 0">'
+            f'<p class="sub">Legacy field: <code>lead_investigator</code> '
+            f'‘{_esc(name)}’. Convert it to a typed credit row (adds the Led role, cited when '
+            'no cited author is set yet) and remove the retired key on save.</p>'
+            f'<input type="hidden" name="people_legacy_lead_name" value="{_esc(name)}">'
+            f'<input type="hidden" name="people_legacy_lead_orcid" value="{_esc(orcid)}">'
+            '<p style="margin:.15rem 0"><button type="submit" name="people_convert" '
+            'value="lead_investigator" class="b-accent" style="padding:.3rem .8rem">'
+            'Convert lead_investigator</button></p></div>')
+    pis = fields.get("principal_investigators")
+    if isinstance(pis, list):
+        people = [{"name": str(p["name"]).strip(), "orcid": str(p.get("orcid") or "").strip()}
+                  for p in pis if isinstance(p, dict) and str(p.get("name") or "").strip()]
+        if people:
+            names = ", ".join(p["name"] for p in people)
+            blocks.append(
+                '<div class="people-legacy" style="border-left:3px solid #D9A23B;padding:.4rem .6rem;'
+                'margin:.4rem 0">'
+                f'<p class="sub">Legacy field: <code>principal_investigators</code> ({len(people)}): '
+                f'{_esc(names)}. Convert to cited creator rows and remove the retired key on save.</p>'
+                '<input type="hidden" name="people_legacy_principal" '
+                f'value="{_esc(_json.dumps(people))}">'
+                '<p style="margin:.15rem 0"><button type="submit" name="people_convert" '
+                'value="principal_investigators" class="b-accent" style="padding:.3rem .8rem">'
+                'Convert principal_investigators</button></p></div>')
+    return "".join(blocks)
+
+
+def _people_typeahead_html() -> str:
+    """§6.4 REUSE DIRECTORY. An "Add person" typeahead whose directory is built CLIENT-SIDE from the
+    same-origin /data/surveys.json (aggregate every creators+contributors entry corpus-wide, dedupe by
+    ORCID else name, sort by frequency then name). Selecting an entry adds a prefilled row. Hidden by
+    default; the enhancement reveals it only once the directory loads, so a failed/absent fetch leaves it
+    invisible and manual entry (+ Add person) still works (graceful degradation)."""
+    return (
+        '<div class="people-typeahead" data-people-typeahead style="display:none;position:relative;'
+        'margin:.4rem 0">'
+        '<label class="k">Reuse someone already in the corpus</label>'
+        '<input type="text" data-people-typeahead-input autocomplete="off" '
+        'placeholder="e.g. start typing a name">'
+        '<div data-people-typeahead-menu role="listbox" '
+        'style="display:none;position:absolute;z-index:20;left:0;right:0;max-height:14rem;'
+        'overflow:auto;background:#1B2C3A;border:1px solid #2E4254;border-radius:6px"></div></div>')
+
+
+def _people_credit_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict,
+                         review_flags: dict | None = None, *, flagged_email: str | None = None) -> str:
+    """The unified People & credit panel content (used by both the full editor form and the hub Metadata
+    tab). Renders the explainer, the legacy-retirement notice(s), the reuse typeahead, the merged unified
+    rows (+ spare rows + the JS-add template), and ONE collapsed advanced raw-JSON escape per underlying
+    list (creators, contributors) plus their o_<list> round-trip anchors. `flagged_email` is the display-
+    layer citation-email heuristic surface (§ retained from the retired lead panel): an explanatory line."""
+    heading = ['<h2>People &amp; credit</h2>']
+    # A per-field error from the panel is keyed "people" (a bad name_type/orcid/ror); an advanced-JSON
+    # override error is keyed by its underlying list. Surface all three so the message is never orphaned.
+    for section in (_PEOPLE_SECTION, "creators", "contributors"):
+        heading.append(_section_error_html(err_map.get(section)))
+    if flagged_email:
+        heading.append(f'<p class="fielderr">{_esc(_CITATION_EMAIL_ERROR)}</p>')
+    heading.append(_PEOPLE_EXPLAINER)
+    heading.append(_legacy_credit_notice(fields))
+    heading.append(_people_typeahead_html())
+
+    rows_meta = _people_rows_for_render(fields, submitted, review_flags)
+    rendered = []
+    idx = 0
+    for row, needs_review, label in rows_meta:
+        rendered.append(_people_row_html(idx, row, needs_review=needs_review, review_label=label))
+        idx += 1
+    for _ in range(_SPARE_BLANK_ROWS):
+        rendered.append(_people_row_html(idx, None))
+        idx += 1
+    add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
+               f'data-editor-add-row="{_PEOPLE_SECTION}">+ Add person</button></p>')
+    template = (f'<template data-editor-template="{_PEOPLE_SECTION}">'
+                f'{_people_row_html(ROW_INDEX_TOKEN, None)}</template>')
+    advanced = ('<details style="margin-top:.5rem"><summary class="sub">Advanced: edit the underlying '
+                'creators / contributors lists as raw JSON (each overrides this panel when filled)'
+                '</summary>'
+                + _advanced_json_details("creators", fields)
+                + _advanced_json_details("contributors", fields)
+                + '</details>')
+    return (f'<div class="panel" data-editor-section="{_PEOPLE_SECTION}">'
+            + "".join(heading)
+            + f'<div data-editor-rows="{_PEOPLE_SECTION}">{"".join(rendered)}</div>'
+            + add_btn + template
+            + _snapshot_hidden("creators", fields)
+            + _snapshot_hidden("contributors", fields)
+            + advanced
+            + '</div>')
+
+
 # IDCONS D5 (SPEC §5.5): the per-identifier resolution status chip + check button attached to each
 # related_identifiers row. Advisory only — it NEVER blocks saving; a curator can save a survey whose DOI
 # is reserved-and-404ing (the correct state for a freshly-reserved NCI PID). The button rides the row
@@ -4431,15 +4890,20 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     # time_series is folded into the Identifiers & PIDs panel (group d) and related_identifiers into
     # group b, so both are skipped as standalone panels. Field names are unchanged -> assembly is byte-
     # identical; the mirror is presentation-only.
-    # CONTRIBUTOR-CREDIT-SPEC (§6): creators/contributors sit contiguously after the investigators they
-    # supersede (creators <- principal_investigators citation; contributors <- lead_investigator roles).
-    _FULL_FORM_ORDER = ("organisation", "instruments", "lead_investigator", "principal_investigators",
-                        "creators", "contributors",
+    # CONTRIBUTOR-CREDIT-SPEC (§6, owner ruling 2026-07-26): the retired Lead/Principal investigator and
+    # the separate Creators/Contributors panels are REPLACED by ONE unified "People & credit" panel
+    # (keyword "people") that decomposes to the two ratified served lists on save.
+    _FULL_FORM_ORDER = ("organisation", "instruments", "people",
                         "identifiers", "publications", "funding", "access", "attribution",
                         "processing", "collection")
     rflags = review_flags or {}
+    flag = citation_author_email(fields)
+    flagged_email = flag[1] if flag else None
     for section in _FULL_FORM_ORDER:
-        if section == "identifiers":
+        if section == "people":
+            panels.append(_people_credit_inner(slug, fields, submitted, err_map, review_flags=rflags,
+                                                flagged_email=flagged_email))
+        elif section == "identifiers":
             panels.append(_identifiers_and_pids_panel(slug, fields, submitted, err_map))
         elif section in editor_form.MAP_SECTIONS:
             panels.append(_map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
@@ -4805,36 +5269,21 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
                                    err_map, display_error=derr,
                                    review_indices=rflags.get(section))
 
-    # H4 inline error: the flagged investigator's name input/section goes red with the contract copy —
-    # the flag can land on EITHER group (engine _investigators_of precedence), both now inside Investigators.
-    lead_derrs = {"name": _CITATION_EMAIL_ERROR} if flagged_section == "lead_investigator" else None
-    pi_derr = _CITATION_EMAIL_ERROR if flagged_section == "principal_investigators" else None
     core_inner = (scalar_panel_inner + _map_inner("organisation") + _list_inner("instruments"))
-    investigators_hint = (
-        '<p class="sub">When a lead investigator is set the portal credits the lead; otherwise the '
-        'principal investigators list is credited (the served-citation precedence, stated not changed).</p>')
-    # CONTRIBUTOR-CREDIT-SPEC (§6): creators[]/contributors[] fold INTO the Investigators group - they are
-    # the typed credit model that SUPERSEDES the lead/principal fields above them (creators <- the citation
-    # author line; contributors <- who-did-what roles). One entry per group keeps the merged IA; one submit
-    # round-trips all four sections (build_section_patch is section-agnostic). A short hint frames the
-    # transition so the curator sees the old fields and the new typed lists together.
-    credit_hint = (
-        '<p class="sub" style="border-left:3px solid #2E4254;padding-left:.6rem">'
-        '<b>Credit model.</b> <b>Creators</b> are exactly who the citation names, in order (drag with the '
-        'up/down buttons); <b>Contributors</b> record who did what (led, collected, distributed, funded). '
-        'These typed lists supersede the lead/principal fields above; a row seeded by the migration shows a '
-        '"needs review" chip until you confirm and save it.</p>')
-    investigators_inner = (investigators_hint
-                           + _map_inner("lead_investigator", lead_derrs)
-                           + _list_inner("principal_investigators", pi_derr)
-                           + credit_hint
-                           + _list_inner("creators")
-                           + _list_inner("contributors"))
+    # CONTRIBUTOR-CREDIT-SPEC (§6, owner ruling 2026-07-26): ONE "People & credit" panel REPLACES the
+    # retired Lead/Principal investigator + separate Creators/Contributors panels. It merges the two
+    # served lists into unified rows and decomposes them back on save (build_section_patch owns the
+    # creators[]/contributors[] keys via assemble_people). The display-layer citation-email flag (still
+    # read from lead/principal by citation_author_email) surfaces here as an explanatory line + the
+    # People & credit TOC issue chip.
+    flagged_email = flag[1] if flag else None
+    people_inner = _people_credit_inner(slug, fields, submitted, err_map, review_flags=rflags,
+                                        flagged_email=flagged_email)
 
     # (toc key, title, panel-inner-html). Order = the owner-ruled merged sidebar order.
     sections: list[tuple[str, str, str]] = [
         ("_scalars", "Core fields", core_inner),
-        ("lead_investigator", "Investigators", investigators_inner),
+        (_PEOPLE_SECTION, "People & credit", people_inner),
     ]
     # The sections already folded into a merged entry above are skipped in the document-order sweep below.
     _merged_away = {"organisation", "instruments", "lead_investigator", "principal_investigators",
@@ -4888,10 +5337,12 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     for key, title, inner in sections:
         sec_id = f"sec-{_esc(key)}"
         on = " on" if key == default_key else ""
-        # SIDEBARMERGE M2: the merged Investigators entry (keyed lead_investigator) owns BOTH investigator
-        # groups, so a flagged principal still lights its TOC issue chip — map that flag onto this key.
-        eff_flag = ("lead_investigator" if key == "lead_investigator"
-                    and flagged_section == "principal_investigators" else flagged_section)
+        # CONTRIBUTOR-CREDIT-SPEC (§6): the citation-email heuristic still reads the (retired-in-UI)
+        # lead/principal fields; its issue chip lights the People & credit entry, which now owns the
+        # citation-author surface. Map either legacy flag onto this key so the chip is never orphaned.
+        eff_flag = (_PEOPLE_SECTION if key == _PEOPLE_SECTION
+                    and flagged_section in ("lead_investigator", "principal_investigators")
+                    else flagged_section)
         hint = _toc_state_hint(key, fields, eff_flag)
         toc_links.append(f'<a class="tocitem{on}" href="#{sec_id}" data-hub-section="{_esc(key)}">'
                          f'{_esc(title)}{hint}</a>')
