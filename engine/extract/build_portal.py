@@ -467,19 +467,29 @@ def _near_duplicate_collection_ids(cids):
 def _survey_latest_date(meta: dict):
     """S3: the single 'best' date for a survey, as (date_str YYYY-MM-DD, is_exact) — used for BOTH
     the Atom feed <updated> and the portal's recently-added sort, so the two never disagree.
-    Preference order: the most recent release_notes[].date (a real release event, day-precision) ->
-    else dates.year_end/year_start (a bare year, so falls back to Dec 31 / midnight UTC per RFC3339
-    when only a year is known) -> else None (no date at all -> excluded from feed/recently-added,
-    per the "dated data" comment on the year filter above)."""
+
+    PINNED CROSS-LANE DATE RULE (LOCKSTEP with portal/src/main.js surveyLatestDate, the two MUST
+    implement this identically so the feed and the portal strip can never show a different "latest"
+    survey): the latest date = the MAX well-formed YYYY-MM-DD among ALL release_notes[].date PLUS
+    attribution.declared_date when present (each a real dated event, day-precision) -> else Dec 31 of
+    year_end||year_start (a bare year, so falls back to Dec 31 / midnight UTC per RFC3339 when only a
+    year is known) -> else None (no date at all -> excluded from feed/recently-added, per the "dated
+    data" comment on the year filter above). NOTE: the 30-day window / item limit on "recently added"
+    is a PORTAL-ONLY display rule; feed.xml keeps EVERY dated survey."""
+    # Candidate day-precision dates: every release_notes entry's date + the C46 attribution.declared_date
+    # (stored on SMETA as a string by _survey_smeta; verified corpus key path attribution.declared_date).
+    cands = []
     rn = meta.get("release_notes")
-    best = None
     if isinstance(rn, list):
-        for e in rn:
-            if not isinstance(e, dict):
-                continue
-            d = str(e.get("date") or "").strip()[:10]
-            if len(d) == 10 and d[4] == "-" and d[7] == "-" and (best is None or d > best):
-                best = d
+        cands.extend(e.get("date") for e in rn if isinstance(e, dict))
+    attr = meta.get("attribution")
+    if isinstance(attr, dict):
+        cands.append(attr.get("declared_date"))
+    best = None
+    for c in cands:
+        d = str(c or "").strip()[:10]
+        if len(d) == 10 and d[4] == "-" and d[7] == "-" and (best is None or d > best):
+            best = d
     if best:
         return best, True
     yr = meta.get("year_end") or meta.get("year_start")
@@ -1785,7 +1795,19 @@ def _build_prov(extractor):
     import platform as _pf
 
     def _git_commit():
-        return _git_commit_at(HERE)
+        # U2: the engine image COPYs engine/ WITHOUT .git (deploy/docker/engine.Dockerfile), so
+        # _git_commit_at(HERE) is ALWAYS None in a container -- fall back to AUSMT_ENGINE_COMMIT, the
+        # real commit CI bakes in at image-build time (deploy-images.yml's GIT_SHA build-arg -> ENV;
+        # the SAME env build_identity() consumes). Provenance stays HONEST where build_identity()'s
+        # opaque build_id renders "unknown": the Dockerfile's ARG default "unknown" (a bare `docker
+        # build` with no --build-arg) AND an empty env var both resolve to None ("unavailable"), never
+        # a fabricated commit string. So a real container build records the real commit; a local bare
+        # build records null, not a made-up "unknown".
+        got = _git_commit_at(HERE)
+        if got:
+            return got
+        env = (os.environ.get("AUSMT_ENGINE_COMMIT") or "").strip()
+        return env if env and env != "unknown" else None
 
     # The dimensionality decision boundary actually used in science_from_components. These values are
     # READ from the single source of truth (_edi_science constants + _ediparse.PT_MIN_REZ_ROW_SINE),
