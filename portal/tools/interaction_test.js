@@ -1095,6 +1095,10 @@ async function bootFreshWindow(dataMap) {
   A.selectSurvey("Gamma Survey");
   ok(A.selCount() === 1, "select-by-survey did not count G1 after it moved to the AusLAMP layer, got " + A.selCount());
   A.buildAuslampSet();   // restore the boot-built set
+  // Stage B (selection-state isolation): selectSurvey now ENTERS Select & export mode and scopes the tree
+  // as a temporary lens. Return to Browse here so the following sections start from the default mode and an
+  // un-scoped tree (the restore hook puts the tree back); mirrors the section-CC tree reset below.
+  A.setSidebarMode("browse");
 
   // R. CARD DESCRIPTION FROM survey.yaml (UX feedback round 3, item 6): the survey card's .desc renders
   // the escaped survey.yaml abstract (m.blurb) when present; a hostile abstract must render INERT; and an
@@ -2257,6 +2261,65 @@ async function bootFreshWindow(dataMap) {
   scrim.click();
   ok(!doc.getElementById("drawer").classList.contains("open"), "D: clicking the scrim must close the drawer");
   ok(scrim.classList.contains("hidden"), "D: closing via the scrim must hide the scrim");
+
+  // XX. STAGE B - SELECTION-STATE ISOLATION. Owner bug: the survey drawer's "All EDIs (select & download)"
+  // tile scoped the shared rail tree to its one survey, which (a) emptied the Surveys catalogue with the
+  // rail (the only undo) hidden on that view, and (b) left the map tree stuck scoped. Fix: the catalogue is
+  // decoupled from the rail tree, and the tile's map scoping is a temporary lens restored on exit.
+  // Clean baseline: drawer closed, all surveys checked, map view, Browse mode.
+  doc.getElementById("drawer").classList.remove("open");
+  [...doc.querySelectorAll("#tree input")].forEach(c => { c.checked = true; });
+  A.setView("map"); A.setSidebarMode("browse"); A.refresh();
+  const treeChecked = () => [...doc.querySelectorAll('#tree input[value]')].filter(c => c.checked).map(c => c.value).sort();
+  ok(A.visIds().length === 5, "StageB setup: expected the clean 5-station baseline, got " + A.visIds().length);
+  ok(treeChecked().length === 4, "StageB setup: all 4 survey boxes must start checked, got " + JSON.stringify(treeChecked()));
+
+  // (1) DECOUPLE (RED-proof). Drive the REAL All-EDIs tile from the survey drawer. It scopes the map tree to
+  // its one survey (checks only that box). With the tree scoped, and WITHOUT leaving the map, the Surveys
+  // catalogue must STILL render every survey card: it is filtered ONLY by its own discovery controls, never
+  // by the rail tree. Pre-change renderCards read passesCore and rendered a single card.
+  A.openSurvey("Alpha Survey");
+  const ediTile = doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]');
+  ok(ediTile, "StageB: the All-EDIs tile is missing from the Alpha survey drawer");
+  ediTile.click();
+  ok(treeChecked().length === 1 && treeChecked()[0] === "Alpha Survey",
+    "StageB: the All-EDIs tile must scope the map tree to its one survey, got " + JSON.stringify(treeChecked()));
+  A.renderCards();
+  ok(doc.querySelectorAll("#cardGrid .scard").length === 4,
+    "StageB DECOUPLE: the Surveys catalogue must show ALL 4 cards while the rail tree is scoped to one survey, got " + doc.querySelectorAll("#cardGrid .scard").length);
+
+  // (2) LENS RESTORE ON BROWSE (RED-proof). The tile enters Select & export (its exports live in that pane),
+  // and returning to Browse restores the scoped tree. Pre-change the tile stayed in Browse and never
+  // restored the tree, so the map stayed stuck on the single survey.
+  ok(A.sidebarMode() === "select", "StageB: the All-EDIs tile must enter Select & export mode, got " + A.sidebarMode());
+  const browseBtn = [...doc.getElementById("modeSeg").children].find(b => b.dataset.mode === "browse");
+  browseBtn.click();
+  ok(A.sidebarMode() === "browse", "StageB: could not return to Browse mode");
+  ok(treeChecked().length === 4, "StageB RESTORE (Browse): returning to Browse must restore the scoped map tree (all 4 checked), got " + JSON.stringify(treeChecked()));
+  ok(A.visIds().length === 5, "StageB RESTORE (Browse): the restored tree must put every station back on the map, got " + A.visIds().length);
+
+  // (3) COHERENCE + VIEW-SWITCH EXIT PATH. Re-scope the map via the tile, then navigate to the Surveys view
+  // (the exact step in the owner's repro). The catalogue count is coherent - both #surveyCount and #nVis read
+  // the discovery-filtered set of 4, never the scoped tree - AND leaving the map releases the lens so the map
+  // tree is restored.
+  A.openSurvey("Alpha Survey");
+  doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]').click();
+  ok(treeChecked().length === 1, "StageB: re-scope setup failed, got " + JSON.stringify(treeChecked()));
+  A.setView("surveys");
+  ok(doc.getElementById("surveyCount").textContent === "4 surveys" && doc.getElementById("nVis").textContent === "4 surveys",
+    "StageB COHERENCE: #surveyCount and #nVis must both read '4 surveys' regardless of tile scoping, got " + JSON.stringify([doc.getElementById("surveyCount").textContent, doc.getElementById("nVis").textContent]));
+  ok(treeChecked().length === 4, "StageB RESTORE (view switch): navigating off the map must restore the scoped tree, got " + JSON.stringify(treeChecked()));
+  A.setView("map"); A.setSidebarMode("browse");
+
+  // (4) GUARD. A visitor's OWN Browse-mode tree edit must NOT be clobbered by an unrelated drawer open/close
+  // (openSurvey/closeDrawer touch neither the tree nor the lens, and take no snapshot to restore).
+  const sbBetaBox = [...doc.querySelectorAll('#tree input[value]')].find(c => c.value === "Beta Survey");
+  sbBetaBox.checked = false; fire(sbBetaBox, "change");
+  A.openSurvey("Gamma Survey");
+  doc.querySelector("#drawer .close").click();
+  ok(treeChecked().length === 3 && !treeChecked().includes("Beta Survey"),
+    "StageB GUARD: a hand-unchecked Browse-mode tree box must survive an unrelated drawer open/close, got " + JSON.stringify(treeChecked()));
+  sbBetaBox.checked = true; A.refresh();   // restore the baseline
 
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +

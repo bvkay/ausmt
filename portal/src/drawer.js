@@ -993,7 +993,10 @@ function renderCards(){
   if(grid)grid.innerHTML = vis.length
     ? (_cardLayout==="compact"?vis.map(surveyRow).join(""):vis.map(surveyCard).join(""))
     : `<div class="emptynote">No surveys match the current search and filters. Clear the search box or the licence/type chips above to widen the results.</div>`;
-  renderDiscovery(vis.length);}
+  renderDiscovery(vis.length);
+  // Stage B: keep the header #nVis coherent with #surveyCount (both the discovery-filtered set) on every
+  // grid re-render - e.g. a facet toggle, which re-renders here but has no other updateCounts path.
+  if(curView==="surveys"&&typeof updateCounts==="function")updateCounts();}
 // "Clear filters" (cleanup wave B): drop the discovery facets (licence + data-type chips) and the
 // discovery search query, the view-level narrowings this bar owns, then re-render the grid and the
 // header count. The map's own rail search (#find) and structural filters are a separate surface; this
@@ -1008,7 +1011,16 @@ function clearDiscoveryFilters(){
 function focusSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
   // C42: fit only POSITIONED stations — a withheld-coord station has no [lat,lon] to bound (avoids NaN bounds).
   const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15));}
-function selectSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
+function selectSurvey(sv){
+  // Stage B (selection-state isolation): scoping the map to one survey is a TEMPORARY LENS. Snapshot the
+  // tree BEFORE mutating it (enterSelectLens, filters.js) and enter Select & export so the exports this
+  // selection enables are visible (they live in the Select pane). The lens is restored when the visitor
+  // returns to Browse or leaves the map. The Surveys catalogue no longer reads this tree state at all
+  // (surveyVisible), so the scoping can never empty it; the snapshot keeps the MAP tree honest too.
+  if(typeof enterSelectLens==="function")enterSelectLens();
+  tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");
+  if(typeof setSidebarMode==="function")setSidebarMode("select");
+  refresh();
   selected=new Set(ST.filter(s=>s.survey===sv).map(s=>s.i));updateSel();
   const _sb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_sb.length)map.fitBounds(L.latLngBounds(_sb).pad(0.15));toast(`Selected all ${selected.size} ${sv} stations; use the download buttons in the left panel.`);}
 

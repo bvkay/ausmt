@@ -50,9 +50,14 @@ function surveyMatchesSearch(sv){
   if(!q)return true;
   const m=(typeof SMETA!=="undefined"&&SMETA[sv])||{};
   return [sv,m.org,m.region,m.blurb].some(x=>String(x||"").toLowerCase().includes(q));}
-function surveyVisible(sv){
-  if(!surveyMatchesSearch(sv))return false;
-  return ST.some(s=>s.survey===sv&&passesCore(s));}
+// Stage B (selection-state isolation): the Surveys CATALOGUE is filtered ONLY by its own discovery
+// controls, the #surveySearch box (surveyMatchesSearch) plus the discovery facets (surveyPassesFacets,
+// applied by renderCards / updateCounts). It no longer reads passesCore, so the map rail's tree / type /
+// period / year / selection state can never hide a card. Coupling passesCore here let the All-EDIs tile,
+// which checks a single tree box to scope the MAP, empty the whole catalogue with the rail (its only undo)
+// hidden on this view. The MAP still filters on passesCore via passes() / `visible`; only the catalogue is
+// cut loose.
+function surveyVisible(sv){return surveyMatchesSearch(sv);}
 // Unified Find: a live dropdown of matching collections / surveys / stations. Collections + surveys are
 // JUMP targets (collection page / focus on the map); stations open, and the text also live-filters the map.
 function renderFind(){const box=document.getElementById("findResults");
@@ -85,7 +90,11 @@ function inShapes(s){if(!hasPosition(s))return false;
   for(let a=0,b=ring.length-1;a<ring.length;b=a++){const yi=ring[a].lat,xi=ring[a].lng,yj=ring[b].lat,xj=ring[b].lng;
     if(((yi>s.lat)!==(yj>s.lat))&&(s.lon<(xj-xi)*(s.lat-yi)/(yj-yi)+xi))inn=!inn;}if(inn)inside=true;});return inside;}
 function updateCounts(){const nv=document.getElementById("nVis");
-  if(curView==="surveys"){const shown=surveys.filter(surveyVisible).length;nv.textContent=shown+" survey"+(shown===1?"":"s");}
+  if(curView==="surveys"){
+    // Stage B: the Surveys header count mirrors the discovery-filtered catalogue (#surveyCount) - the
+    // search box AND the discovery facets - never the map rail's tree / type / period / year / selection.
+    const _fac=(typeof surveyPassesFacets==="function")?surveyPassesFacets:(()=>true);
+    const shown=surveys.filter(surveyVisible).filter(_fac).length;nv.textContent=shown+" survey"+(shown===1?"":"s");}
   else nv.textContent=visible.length;
   document.getElementById("nTot").textContent=ST.length;}
 function refresh(){paintSlider();visible=ST.filter(passes);
@@ -258,7 +267,31 @@ document.getElementById("qSeg").addEventListener("click",e=>{const b=e.target.cl
 // (advanced). It is a pure show/hide of the two mode panes — it never touches data-views (view/mode are
 // orthogonal: a section is visible iff its mode pane is shown AND its own data-views allows the view).
 let sidebarMode="browse";
-function setSidebarMode(mode){sidebarMode=mode;
+// Stage B (selection-state isolation): the All-EDIs / survey "Download" tile (selectSurvey, drawer.js)
+// enters Select & export mode and scopes the MAP by checking ONLY its own survey in the tree. That map
+// scoping is a TEMPORARY LENS, not a durable filter: snapshot the survey checkboxes it is about to mutate
+// on entry (enterSelectLens) and put them back when the visitor leaves the lens - returns to Browse
+// (setSidebarMode below) or navigates off the map (setView, main.js). The snapshot is taken ONLY by the
+// tile flow, so a visitor hand-toggling tree boxes in Browse mode is NEVER captured or restored (their
+// state stands). Scope is tight: only the `input[value]` survey checkboxes selectSurvey touches are
+// captured / restored; country / org parents and every other control are left exactly as they are.
+let _selLens=null;                 // Array<[surveyValue, wasChecked]> awaiting restore; null = no lens live
+function enterSelectLens(){
+  if(_selLens!==null)return;        // re-entrant tile click while a lens is live: keep the ORIGINAL snapshot
+  _selLens=[...tree.querySelectorAll('input[value]')].map(c=>[c.value,c.checked]);}
+function restoreSelectLens(){
+  if(_selLens===null)return;
+  const snap=_selLens;_selLens=null;
+  const want={};snap.forEach(([v,ch])=>{want[v]=ch;});
+  tree.querySelectorAll('input[value]').forEach(c=>{if(c.value in want)c.checked=want[c.value];});
+  refresh();}
+function setSidebarMode(mode){
+  // Stage B: leaving Select & export for Browse ends any All-EDIs lens - restore the survey checkboxes the
+  // tile scoped so the Browse pane shows the visitor's own tree again, never the single-survey scoping the
+  // tile applied. Guarded on the select->browse transition so repeated setSidebarMode("browse") calls and a
+  // visitor's plain Browse use are untouched.
+  if(mode==="browse"&&sidebarMode==="select")restoreSelectLens();
+  sidebarMode=mode;
   const bp=document.getElementById("browseMode"),sp=document.getElementById("selectMode"),seg=document.getElementById("modeSeg");
   if(bp)bp.classList.toggle("hidden",mode!=="browse");
   if(sp)sp.classList.toggle("hidden",mode!=="select");
