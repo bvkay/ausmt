@@ -90,6 +90,10 @@ State is the finest grain that is *both* defensible from a /24 *and* non-identif
 community's scale. There is no city dimension anywhere in the pipeline: the city and coordinate
 columns of the source dataset are read only to be discarded.
 
+For the same reason, state counts are recorded at the **monthly and cumulative grains only**. A state
+count for a single named day would be the finest-grained cell in the file, small enough to point at a
+particular group in a community this size, so daily-by-state is deliberately not recorded at all.
+
 Two further honesty properties hold, and are visible on the screen:
 
 - **The breakdown always reconciles with its parent.** An Australian request whose prefix the state
