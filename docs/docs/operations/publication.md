@@ -141,8 +141,8 @@ This allows the survey package to be discovered through:
 
 - Collection pages
 - Search interfaces
-- MTCAT records (the machine-readable interface that exists today; a REST API is planned but not
-  yet implemented — see [API Overview](../interoperability/api-overview.md))
+- MTCAT records, the machine-readable discovery document, served as static JSON alongside the
+  portal's other data files (see [How AusMT serves data](../interoperability/api-overview.md))
 
 Discovery metadata are generated from the survey package rather than maintained separately.
 

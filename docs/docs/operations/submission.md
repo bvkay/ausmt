@@ -228,8 +228,8 @@ Publication typically includes:
 - Generation of derived products
 - Catalogue registration
 - Portal indexing
-- Machine-readable discovery via the static MTCAT document (`mtcat.json`) and portal `data/*.json`
-  — a REST API is planned but not yet implemented (see [API Overview](../interoperability/api-overview.md))
+- Machine-readable discovery via the static MTCAT document (`mtcat.json`) and the portal's other
+  `data/*.json` files (see [How AusMT serves data](../interoperability/api-overview.md))
 
 Once published, the survey package becomes part of the curated AusMT record.
 

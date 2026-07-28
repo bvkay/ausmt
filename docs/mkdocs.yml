@@ -38,8 +38,9 @@ nav:
   - Interoperability:
       - Overview: interoperability/overview.md
       - Metadata Exchange: interoperability/metadata-exchange.md
-      - API Overview: interoperability/api-overview.md
-      - API Reference: interoperability/api-reference.md
+      - How AusMT serves data: interoperability/api-overview.md
+      - Data reference: interoperability/api-reference.md
+      - Tool integration: interoperability/tool-integration.md
       - External Archives: interoperability/external-archives.md
   - Reference:
       - MTCAT Schema: reference/mtcat-schema.md
