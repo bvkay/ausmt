@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Releases - AusMT</title>
+<link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<style>
+  /* Treatment D+ palette, the same five surface/accent tokens declared verbatim on index.html,
+     about.html and add-survey.html (portal/tests/test_theme_tokens.py pins those three against each
+     other; test_releases_page.py pins this page against about.html for the same reason). */
+  :root{
+    --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
+    --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
+    --ok:#5BAE6A; --part:#D9A23B; --no:#E2938B;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6}
+  /* Uniform chrome: the three-zone header below is the same one about.html carries (left = brand,
+     centre = nav + page links, right = the corpus-totals stats block), including the api-docs lane's
+     right-zone alignment, which is on origin/main as of a568b55 (PR #117). Copied rather than shared
+     because the portal ships as classic static pages with no template step; the header-parity pin in
+     tests/test_releases_page.py fails if the two ever drift apart. */
+  header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
+  .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+  .hleft{flex:1 1 auto}
+  .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
+  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px}
+  .logolink{display:flex;align-items:center;flex:none}
+  .auscope-logo{height:30px;width:auto;display:block}
+  .tagline{color:var(--muted);font-size:12.5px}
+  nav{display:flex;gap:6px}
+  nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
+    padding:0 16px;border-radius:5px;text-decoration:none;cursor:pointer}
+  nav a:hover{border-color:var(--copper)}
+  nav a.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
+  .contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
+  .contribute:hover{border-color:var(--copper)}
+  .about{color:var(--muted);font-size:13px;text-decoration:none;padding:6px 11px;border-radius:4px}
+  .about:hover{color:var(--text)}
+  .about.active{color:var(--text);background:var(--panel-2)}
+  .ver{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
+  .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
+  .apilink:hover{color:var(--copper)}
+  .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .counts b{color:var(--text)}
+  @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
+  main{max-width:820px;margin:0 auto;padding:30px 20px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--muted);font-size:15px;margin:0 0 26px}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.1em;color:var(--copper);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  p{margin:0 0 12px;color:#D4DCE2}
+  a.link{color:var(--copper)}
+  code{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);padding:1px 5px;border-radius:3px}
+
+  /* Page states. Exactly one of #relLoading / #relEmpty / #relError / #relList is visible at a time,
+     and releases.js is the only thing that switches them. #relLoading is the shipped-visible one, so a
+     reader whose fetch never resolves is told the page is still reading rather than being shown a
+     claim ("no releases") the page cannot yet support. */
+  .state{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;color:var(--muted);font-size:14.5px}
+  .state b{color:var(--text)}
+  .state.err{border-left:3px solid var(--part)}
+  .state .probe{margin-top:8px;font-size:12.5px}
+
+  /* One release. The card is deliberately dense: a citing reader wants the tag, the date, what is in
+     it, what built it, how to cite it and where the bytes are, without leaving the page. */
+  .rel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:0 0 18px}
+  .rel-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin:0 0 10px}
+  .rel-tag{font-size:20px;font-weight:800;letter-spacing:-.3px}
+  .rel-cut{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  .rel-corpus{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .rel-corpus b{color:var(--text)}
+  .rel-note{font-size:14px;color:#D4DCE2;margin:0 0 10px}
+  .rel-ids{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.8}
+  .rel-ids span.k{display:inline-block;min-width:104px;color:var(--muted)}
+  .rel-ids span.v{color:var(--text);background:var(--panel-2);padding:1px 6px;border-radius:3px;word-break:break-all}
+
+  /* Citation box. The reference line is built from the release's own fields; the identifier line under
+     it is either a resolvable DOI link or the plain-text pending marker, never a link that would 404
+     at a resolver. */
+  .cite{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--copper);
+    border-radius:6px;padding:12px 14px;margin:0 0 14px}
+  .cite-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 6px}
+  .cite-text{font-size:14.5px;color:var(--text);line-height:1.65}
+  .cite-doi{font-family:var(--mono);font-size:12.5px;margin-top:8px}
+  .cite-doi a{color:var(--copper);word-break:break-all}
+  .cite-doi .pending{color:var(--muted)}
+
+  .files-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 6px}
+  .filelinks{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+  .filelinks a{font-family:var(--mono);font-size:12.5px;color:var(--copper);text-decoration:none;
+    border:1px solid var(--line);border-radius:4px;padding:4px 9px;background:var(--panel-2)}
+  .filelinks a:hover{border-color:var(--copper)}
+  details.bundles>summary{cursor:pointer;color:var(--copper);font-size:13.5px}
+  details.bundles ul{list-style:none;margin:8px 0 0;padding:0;max-height:320px;overflow-y:auto}
+  details.bundles li{font-family:var(--mono);font-size:12.5px;margin:2px 0;display:flex;gap:10px;
+    justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding:3px 0}
+  details.bundles a{color:var(--copper);text-decoration:none;word-break:break-all}
+  details.bundles a:hover{text-decoration:underline}
+  .size{color:var(--muted);white-space:nowrap}
+  .detail-warn{font-size:13px;color:var(--part)}
+
+  /* Footer chrome matches index.html and about.html: the machine-readable MTCAT link pinned bottom-left,
+     the copyright line + "About this build" popover centred, the single version chip inside the popover. */
+  footer{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;margin-top:30px}
+  footer a{color:var(--copper);text-decoration:none}
+  footer .foot-main{flex:1 1 auto;text-align:center;min-width:0}
+  footer details.aboutbuild{display:inline-block;position:relative}
+  footer details.aboutbuild>summary{display:inline;cursor:pointer;color:var(--copper);list-style:none}
+  footer details.aboutbuild>summary::-webkit-details-marker{display:none}
+  footer details.aboutbuild>summary::marker{content:""}
+  footer details.aboutbuild>summary:hover{text-decoration:underline}
+  footer .aboutbuild-body{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+    width:min(440px,90vw);background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.5);text-align:left;font-size:12px;color:var(--muted);
+    line-height:1.5;z-index:50}
+  footer .aboutbuild-body .ver{margin-top:8px;display:inline-block}
+</style>
+</head>
+<body>
+<header>
+  <div class="hzone hleft">
+    <a class="logolink" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope, Australia's Earth science research infrastructure"><img class="auscope-logo" src="vendor/auscope-icon-white.png" alt="AuScope"></a>
+    <div class="wordmark">AusMT</div>
+    <div class="tagline">Australia's Magnetotelluric Data Portal</div>
+  </div>
+  <div class="hzone hcenter">
+    <nav>
+      <!-- Same three primary items, same ids and same order as index.html and about.html, so the
+           header is comparable element-for-element (the header-parity pin). They are links here
+           because this is a static page; on index they are <button>s that switch app views in place.
+           None is active: no map/surveys/collections view is the current page. -->
+      <a id="navMap" href="index.html">Map</a>
+      <a id="navSurveys" href="index.html">Surveys</a>
+      <a id="navCollections" href="index.html">Collections</a>
+    </nav>
+    <a class="about" href="about.html">About</a>
+    <!-- about.html's copy of this item jumps to its own in-body #howto section; from here it has to
+         cross to that page, so the href carries the fragment. -->
+    <a class="about" href="about.html#howto">How to use AusMT</a>
+    <a class="contribute" href="add-survey.html">Contribute a survey &rarr;</a>
+  </div>
+  <div class="hzone hright">
+    <!-- The corpus-totals block about.html carries, filled by the same corpus-stats.js from the same
+         served catalogue. It ships hidden and is revealed only once both documents resolve to a
+         non-empty corpus, so a file:// page or an unpublished deployment shows nothing at all rather
+         than a fabricated total. Index's live map-state ids (nVis/nSel/nTot) stay off this page: there
+         is no map, no filter and no selection here for them to describe. -->
+    <div class="counts corpus" id="corpusCounts" hidden
+         title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations &middot;
+      <b id="corpusSurveys"></b> surveys</div>
+  </div>
+</header>
+<main>
+  <h1>Releases</h1>
+  <p class="sub">Quarterly citable snapshots of the AusMT corpus. Each release freezes one build's
+  catalogue and its survey bundles at a fixed path, so a citation resolves to the same bytes years
+  later even though the live portal keeps moving.</p>
+
+  <!-- The four page states. Everything below is written by releases.js from the served release index;
+       nothing about any release is hard-coded here, so this page cannot go stale or claim a release
+       that was never cut. #relLoading is the only one that ships visible. -->
+  <div class="state" id="relLoading">Reading the release index&hellip;</div>
+
+  <div class="state" id="relEmpty" hidden>
+    <span id="relEmptyMsg">No releases cut yet; releases are quarterly snapshots of the corpus.</span>
+    <!-- The probe line names the exact document that came back empty or absent, filled in by
+         releases.js from the URL it actually requested. It exists because a missing index has two very
+         different causes: no release has been cut, or the release tier is not published at this path
+         on this deployment. The sentence above cannot tell them apart, so the page shows its working
+         rather than leaving a reader (or an operator) to guess which one they are looking at. -->
+    <div class="probe" id="relEmptyProbe" hidden>Looked for <code id="relEmptyPath"></code>.</div>
+  </div>
+
+  <!-- Distinct from the empty state on purpose. "Absent or empty index" is a fact about the corpus;
+       "the index could not be read" is a fact about this request. Collapsing the two would let a
+       routing problem or an offline reader be reported as "no releases have ever been cut". -->
+  <div class="state err" id="relError" hidden>The release index could not be read from this deployment,
+    so this page cannot say which releases exist. Releases are quarterly snapshots of the corpus.
+    <div class="probe" id="relErrorProbe" hidden>Tried <code id="relErrorPath"></code>.</div>
+  </div>
+
+  <div id="relList" hidden></div>
+
+  <noscript>
+    <div class="state">This page lists releases by reading the release index in your browser, so it
+      needs JavaScript. The index itself is a plain JSON document you can fetch directly:
+      <code>data/releases/releases.json</code>.</div>
+  </noscript>
+
+  <footer>
+    <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) &#8599;</a>
+    <span class="foot-main">&copy; 2026 AuScope and the AusMT contributors &middot; Data licences vary by survey &middot;
+      <details class="aboutbuild">
+        <summary>About this build</summary>
+        <div class="aboutbuild-body">
+          Releases are cut from a build of this portal; the version chip below describes the build you
+          are looking at now, not any release listed above. The portal software is licensed under
+          Apache-2.0; survey data remains licensed by its custodians.
+          <span class="ver" data-ver-chip></span>
+        </div>
+      </details>
+    </span>
+  </footer>
+</main>
+<script src="config.js"></script>
+<script src="version.js"></script>
+<!-- Separate files, not inline blocks: the deployed CSP for every page except add-survey.html is
+     script-src 'self' with no 'unsafe-inline' (deploy/docker/caddy/Caddyfile, @strictPages), which a
+     new page picks up automatically because that matcher is a `not path /add-survey.html`. -->
+<script src="corpus-stats.js"></script>
+<script src="releases.js"></script>
+</body>
+</html>
