@@ -29,6 +29,7 @@ in test_mtcat.py covers the no-jsonschema case.
 """
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -453,6 +454,83 @@ def test_formats_are_read_off_the_manifest_and_are_empty_for_a_withheld_survey()
     assert by_id["held"]["embargo_until"] == "2027-01-01"
     assert by_id["open"]["n_stations"] == 1, "discovery stays universal even where bytes are withheld"
     assert "embargo_until" not in by_id["open"]
+
+
+def test_formats_absence_is_documented_as_a_foreign_producer_case_not_an_ausmt_one():
+    """The `formats` key has TWO honest states and the schema must not confuse them.
+
+      * EMPTY  = this build distributes nothing for this survey. True of a withheld survey, and equally
+        true of a build run with no distribution flags, where the manifest is written but carries zero
+        rows. It is a statement about the build, never 'unknown'.
+      * ABSENT = the producer had no manifest at all, so it cannot say (proved separately by
+        test_formats_key_is_omitted_when_there_is_no_manifest_to_derive_from). Reachable through the
+        public mtcat_document() signature, whose manifest_doc defaults to None, but NOT through AusMT's
+        own build: main() writes the manifest first and always passes it, so an AusMT document always
+        carries the key. The schema now says exactly that, rather than implying AusMT ever omits it.
+
+    Fix round. The description previously said only 'absent when the producer had no manifest', which read
+    as a state an AusMT consumer might meet. It cannot: a build with every distribution flag off emits
+    `formats: []` for all 21 surveys, and a consumer must read that as 'nothing distributed', not 'unknown'."""
+    bp = _bp()
+    stations = [_station("S", "A1", -30.0, 137.0, "BBMT", 0.01, 100.0, "ZT")]
+    meta = {"S": {"org": "Org", "access": "open"}}
+    # a manifest that exists but distributes nothing: a build run with no --bundle-edi / --survey-h5,
+    # which is what main() hands over when every distribution flag is off. The key must still be there.
+    e = bp.mtcat_document(meta, stations, generated_at="2026-01-01T00:00:00Z",
+                          manifest_doc={"generated_count": 0, "files": [], "bundles": []})["surveys"][0]
+    assert e["formats"] == [], "an empty manifest means nothing distributed, and the key stays present"
+    desc = SCHEMA["properties"]["surveys"]["items"]["properties"]["formats"]["description"]
+    assert "ALWAYS PRESENT" in desc, (
+        "the schema must state that an AusMT document always carries formats, so a consumer does not "
+        "write an absence branch it will never reach")
+    assert "never means 'unknown'" in desc, (
+        "the schema must state that an EMPTY list is a fact about the build, not a missing value")
+
+
+def test_access_description_names_no_phantom_level():
+    """The schema is SERVED, so a wrong sentence in it is a published wrong claim.
+
+    Its description of surveys[].access used to say AusMT emits "open, metadata_only, embargoed or
+    legacy". There is no `legacy` level and there never was: ACCESS_LEVELS is a three-value tuple, shared
+    by the emitter, gateway/editor_form.py and the surveys validator, and a value outside it fails closed.
+    The phantom also survived in two stale comments (build_portal.py's SMETA line and drawer.js's C1b
+    note), which is where the schema text came from.
+
+    Two halves. The first is SET-FOR-SET against the producer, in both directions, so an added level that
+    goes undocumented fails here just as loudly as a documented one that does not exist. The second scans
+    EVERY description in the schema for the phantom token, because the wrong claim survived in three
+    separate places at once and the next one will too."""
+    bp = _bp()
+    real = set(bp.ACCESS_LEVELS)
+    assert real == {"open", "metadata_only", "embargoed"}, f"ACCESS_LEVELS moved: {sorted(real)}"
+
+    desc = SCHEMA["properties"]["surveys"]["items"]["properties"]["access"]["description"]
+    m = re.search(r"AusMT emits exactly one of ([^.(]+)", desc)
+    assert m, ("the access description must enumerate what the producer emits in the form "
+               f"'AusMT emits exactly one of ...', so this test can compare it. Got: {desc}")
+    named = {t.strip() for t in re.split(r",|\bor\b", m.group(1)) if t.strip()}
+    assert named == real, (
+        "the documented access levels must equal the producer's ACCESS_LEVELS exactly.\n"
+        f"  documented not emitted: {sorted(named - real)}\n"
+        f"  emitted not documented: {sorted(real - named)}")
+
+    def _descriptions(node):
+        if isinstance(node, dict):
+            d = node.get("description")
+            if isinstance(d, str):
+                yield d
+            for v in node.values():
+                yield from _descriptions(v)
+        elif isinstance(node, list):
+            for v in node:
+                yield from _descriptions(v)
+
+    for d in _descriptions(SCHEMA):
+        if "access level" not in d and "ACCESS_LEVELS" not in d:
+            continue
+        assert "legacy" not in d, (
+            "a schema description names a 'legacy' access level; no such level exists and a value "
+            f"outside ACCESS_LEVELS fails closed.\n  in: {d}")
 
 
 def test_formats_key_is_omitted_when_there_is_no_manifest_to_derive_from():

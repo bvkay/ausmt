@@ -15,15 +15,16 @@ every assertion checks that a statement on the page is still TRUE of the artifac
     writes an importer against the page, which is the whole point of publishing it.
 
 RED-proven, per assertion, by mutating the page: dropping `Sponsor` from the role list, adding a
-plausible-looking `level4` to the NCI levels, restoring the "or legacy" access level the schema's own
-description still carries (see below), and pointing the link at a versioned schema filename all fail here.
+plausible-looking `level4` to the NCI levels, adding a phantom `legacy` access level, and pointing the
+link at a versioned schema filename all fail here.
 
-ONE KNOWN DISAGREEMENT, deliberately resolved in the page's favour: engine/schema/mtcat.schema.json's
-description of `surveys[].access` says AusMT emits "open, metadata_only, embargoed or legacy", and the
-same fourth value appears in two older engine/portal comments. No such level exists: ACCESS_LEVELS in the
-emitter (and in gateway/editor_form.py, and in the surveys validator) is the three-value tuple this test
-reads. The page documents the three, and test_access_levels_match_the_producer FAILS if the page ever
-grows the fourth. The schema description is the thing that needs fixing, not the page.
+RESOLVED (fix round): the schema's own description of `surveys[].access` used to claim AusMT emits
+"open, metadata_only, embargoed or legacy", and the same phantom fourth value survived in two older
+engine/portal comments. No such level has ever existed: ACCESS_LEVELS in the emitter (and in
+gateway/editor_form.py, and in the surveys validator) is the three-value tuple this module reads. All
+three sites now name the three real levels, and the claim is gated from both ends: this module's
+test_access_levels_match_the_producer fails if the PAGE grows a fourth, and the engine's
+test_access_description_names_no_phantom_level fails if the SCHEMA DESCRIPTION does.
 """
 import json
 import re
@@ -170,6 +171,26 @@ def test_the_documented_schema_path_is_the_one_the_build_serves():
     for href in _hrefs(_contract_block()):
         assert not re.search(r"mtcat-\d", href), (
             f"the entry must link the ONE unversioned served schema, not a versioned filename: {href}")
+
+
+def test_committed_placeholder_document_declares_the_current_schema_version():
+    """portal/data/ ships an EMPTY placeholder set so the static portal boots before any build has run,
+    and mtcat.json is the only file in it that makes a versioned claim. It sat at `"version": "1.0"`
+    from the initial public release through 1.1 and 1.2, which made the one file a reader is most
+    likely to open as reference output the one file advertising a retired schema version.
+
+    Pinned to portal.config.yaml rather than to a literal, so a future bump fails here until the
+    placeholder is regenerated. It is emitter-produced, not hand-typed, so it stays a truthful example
+    of an empty document rather than a hand-maintained approximation of one."""
+    doc = json.loads((ROOT / "data" / "mtcat.json").read_text(encoding="utf-8"))
+    version = _config_schema_version()
+    assert doc["portal"]["version"] == version, (
+        f'portal/data/mtcat.json declares MTCAT {doc["portal"]["version"]}, but the current schema '
+        f"version is {version}; regenerate the placeholder rather than leaving a stale one committed")
+    assert doc["portal"]["schema"] == _schema()["properties"]["portal"]["properties"]["schema"]["const"]
+    assert doc["surveys"] == [] and doc["stations"] == [], (
+        "this file is the EMPTY boot placeholder; real catalogue data belongs in a build output, "
+        "not in the repository")
 
 
 def test_stated_schema_name_version_and_licence_track_their_single_sources():

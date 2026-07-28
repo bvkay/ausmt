@@ -256,9 +256,11 @@
       <li><b>Roadmap</b> — where AusMT is headed (broader validation, catalogue expansion, MTCAT as an open
       standard, federation between portals):
       <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/roadmap/">Roadmap</a>.</li>
-      <li><b>MTCAT</b> — the machine-readable catalogue format; the <code>MTCAT v1.0</code> specification:
+      <li><b>MTCAT</b>: the machine-readable catalogue format. The prose walkthrough of the
+      <code>MTCAT</code> specification:
       <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/mtcat/">MTCAT</a>, or fetch the
-      live <a class="link" href="data/mtcat.json">mtcat.json</a> discovery document.</li>
+      live <a class="link" href="data/mtcat.json">mtcat.json</a> discovery document. The schema itself is
+      the normative artifact and states its own version; see Machine contract below.</li>
       <li><b>Machine contract</b>: the JSON Schema the catalogue document is validated against, served
       beside it as <a class="link" href="data/mtcat.schema.json">mtcat.schema.json</a>. Schema
       <code>mtcat</code>, version <code>1.2</code>, catalogue metadata <code>CC0-1.0</code>. Field guide
@@ -438,7 +440,7 @@ for row in man["files"]:
        loaded on this static page, so a #buildId span would stay permanently empty here; it is
        intentionally omitted. -->
   <footer>
-    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
+    <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
     <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
       <details class="aboutbuild">
         <summary>About this build</summary>

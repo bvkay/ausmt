@@ -148,7 +148,8 @@ function sourcesListHtml(m){const srcs=(m&&m.sources)||[];
   }).join("");
   return `<div class="sechead">Source datasets ${roleChip("Source data")}</div><div class="srclist">${rows}</div>`;}
 // C1b: a survey's access.level is authoritative for whether the portal has its DISPLAY data. "open" (or
-// absent/legacy) => served, curves present. Anything else (embargoed | metadata_only | an unknown value)
+// absent, which this reader defaults to open) => served, curves present. The producer emits only the three
+// ACCESS_LEVELS values. Anything else (embargoed | metadata_only | an unknown value)
 // => NON-OPEN: the engine emits EMPTY tf series for these stations (the response curves ARE the embargoed
 // data), so the drawer must render an ACCESS PANEL in place of the four plots rather than four blank frames.
 function accessLevelOf(m){return (m&&m.access)?String(m.access):"open";}

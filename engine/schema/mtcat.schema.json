@@ -99,7 +99,7 @@
               "string",
               "null"
             ],
-            "description": "normalised access level of this survey. AusMT emits open, metadata_only, embargoed or legacy. NOT enum-pinned on purpose: the producer normalises but does not coerce an unrecognised level, and anything other than 'open' fails closed at serve time (the bytes are withheld), so an unexpected token here means a withheld survey, not a broken document."
+            "description": "normalised access level of this survey. AusMT emits exactly one of open, metadata_only or embargoed (the three-value ACCESS_LEVELS tuple the emitter, the curator editor and the survey validator all share). NOT enum-pinned on purpose: the producer normalises but does not coerce an unrecognised level, and anything other than 'open' fails closed at serve time (the bytes are withheld), so an unexpected token here means a withheld survey, not a broken document."
           },
           "embargo_until": {
             "type": [
@@ -203,7 +203,7 @@
           },
           "formats": {
             "type": "array",
-            "description": "MTCAT 1.2: the distribution formats actually served for this survey, DERIVED from the build's download manifest and therefore honest by construction: a survey whose bytes are withheld (embargoed or metadata-only) has no manifest rows and so serves an empty array. Sorted for stability, and a set rather than a tally: a format appears once however many files carry it. Absent (rather than empty) when the producer had no manifest to derive from, which means 'not known', not 'nothing served'.",
+            "description": "MTCAT 1.2: the distribution formats actually served for this survey, DERIVED from the build's download manifest and therefore honest by construction: a survey whose bytes are withheld (embargoed or metadata-only) has no manifest rows and so serves an empty array. Sorted for stability, and a set rather than a tally: a format appears once however many files carry it. EMPTY means 'this build distributes nothing for this survey', which covers a withheld survey and equally a metadata-only build that produced no download artifacts at all; it never means 'unknown'. AusMT's own build always derives from the manifest it has just written, so the key is ALWAYS PRESENT in an AusMT document. Absence is reserved for a producer that has no manifest to derive from, and there means 'not known' rather than 'nothing served'.",
             "uniqueItems": true,
             "items": {
               "type": "string",

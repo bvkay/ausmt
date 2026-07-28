@@ -1104,7 +1104,7 @@ def survey_meta_from_yaml(y: dict) -> dict:
         "ts_pid": _ts_pid_of(y),              # C7: survey-specific raw-TS collection PID (None => deployment default)
         "edi": "ok",
         "mth5": "unk",
-        "access": acc,                       # normalised level (open|metadata_only|embargoed|legacy) — SMETA key
+        "access": acc,                       # SMETA key; normalised ACCESS_LEVELS: open|metadata_only|embargoed
         "embargo_until": embargo_until,       # C1: ISO date or None; the portal badges withholding from these
         # C7: yr/ve were always '' (every citation rendered "(n.d.)" regardless of a declared date/version);
         # yr = year of dates.end, else dates.start, else '' (genuinely no date -> honest "(n.d.)"); ve = the

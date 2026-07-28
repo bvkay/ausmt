@@ -25,6 +25,7 @@ Each assertion states its failure criterion:
   * one version chip — FAILS if the number of real elements carrying data-ver-chip is not exactly 1
     (must survive the reverse case too: zero chips, or a duplicated chip, both fail).
 """
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -162,20 +163,29 @@ def test_about_references_no_nonexistent_federation_doc():
     exists anywhere in the repository (verified repo-wide before this test was written), so the pre-C22
     line 236 ("see the MTCAT v1.0 specification and FEDERATION.md in the project repositories") pointed
     readers at a fabricated document. Chief-architect ruling: REMOVE the claim, do not repoint (federation
-    is documented as a property of MTCAT itself — docs/docs/developer/data-files.md calls mtcat.json "the
-    MTCAT v1.0 discovery/federation document"). UX6 Wave F (#17): the restructured About now DOES link
+    is documented as a property of MTCAT itself, and docs/docs/developer/data-files.md describes
+    mtcat.json as the discovery/federation document). UX6 Wave F (#17): the restructured About now DOES link
     docs-site pages (the "Detailed documentation" answer points at real mkdocs pages, incl. the MTCAT page),
     but the fabricated FEDERATION.md filename must still never reappear here — that is what this guards.
 
     Raw-text check ON PURPOSE (unlike this module's parsed-DOM tests): even a commented-out reference is
     a stale claim waiting to be resurrected, and the parser drops comments. The companion assertion pins
-    the HONEST half of the sentence — the MTCAT v1.0 spec reference must SURVIVE the removal, so an
-    over-deletion also fails here."""
+    the HONEST half of the sentence: the spec reference must SURVIVE the removal, so an over-deletion also
+    fails here.
+
+    MTCAT 1.2 fix round: the over-deletion pin used to be the literal string "MTCAT v1.0". That was a
+    VERSION NUMBER doing a link's job, and it went stale the moment the served schema moved past 1.0 (it
+    was already wrong at 1.1). It is now pinned to the docs-site URL the bullet actually links, which is
+    what a reader needs and which does not rot on a schema bump. The version a consumer should trust is
+    the one the document declares about itself, never a number typed into this page."""
     raw = ABOUT.read_text(encoding="utf-8")
     assert "FEDERATION.md" not in raw, (
         "about.html must not reference FEDERATION.md — that file does not exist in the repository")
-    assert "MTCAT v1.0" in raw, (
-        "the honest MTCAT v1.0 spec reference must survive the FEDERATION.md removal (over-deletion)")
+    assert "https://ausmt.readthedocs.io/en/latest/data-model/mtcat/" in raw, (
+        "the honest MTCAT specification reference must survive the FEDERATION.md removal (over-deletion)")
+    assert "MTCAT v1.0" not in raw, (
+        "about.html must not hard-code an MTCAT version that the served schema has moved past; the "
+        "document declares its own version and version.js renders it from config")
 
 
 def test_mtcat_link_in_footer_not_header_across_pages():
@@ -192,7 +202,14 @@ def test_mtcat_link_in_footer_not_header_across_pages():
 
     Parsed-DOM (not raw text): about.html also links data/mtcat.json from its <main> body with class 'link'
     (not 'apilink'), which lives in neither <header> nor <footer>, so neither collector counts it — the
-    class match ('apilink') is deliberately specific so that body link cannot smuggle a false positive."""
+    class match ('apilink') is deliberately specific so that body link cannot smuggle a false positive.
+
+    MTCAT 1.2 fix round: the title pin was "MTCAT v1.0 discovery document (JSON)" on all three pages, for
+    a document that had already been 1.1 and is now 1.2. Pinning it "verbatim" made this test the thing
+    KEEPING the wrong number on the page. The title is now version-free on all three, and the pin also
+    asserts NO version number appears in it, so nobody re-introduces a hard-coded one. The version a
+    reader needs is already on screen: version.js renders the data-ver-chip from config.js, whose
+    schema_version is generated from portal.config.yaml."""
     for path in (INDEX, ABOUT, ADD):
         header_hits = [a for (tag, a, inh) in _parse(path)
                        if tag == "a" and inh and "apilink" in _classes(a)]
@@ -206,8 +223,12 @@ def test_mtcat_link_in_footer_not_header_across_pages():
         # The honest Wave-A link target + title + visible text must survive the move verbatim.
         assert footer_hits[0].get("href") == "data/mtcat.json", (
             f"{path.name}: the footer MTCAT link must point at data/mtcat.json, got {footer_hits[0].get('href')}")
-        assert footer_hits[0].get("title") == "MTCAT v1.0 discovery document (JSON)", (
-            f"{path.name}: the footer MTCAT link title must be kept verbatim, got {footer_hits[0].get('title')}")
+        title = footer_hits[0].get("title") or ""
+        assert title == "MTCAT discovery document (JSON)", (
+            f"{path.name}: the footer MTCAT link title must be kept verbatim, got {title!r}")
+        assert not re.search(r"\bv?\d+\.\d+\b", title), (
+            f"{path.name}: the footer MTCAT link title must not hard-code a schema version (it goes stale "
+            f"on every bump; the data-ver-chip already renders the live one), got {title!r}")
         assert "Machine-readable record (MTCAT JSON) ↗" in path.read_text(encoding="utf-8"), (
             f"{path.name}: the verbatim MTCAT link text must be preserved")
 
