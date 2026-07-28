@@ -12,7 +12,10 @@ function buildState(){
     // S3: the survey's declared year range (ints|null), read straight off SMETA (engine-parsed —
     // the portal never re-parses date strings). null when the survey.yaml declares no dates.
     yearStart:(SMETA[r[C.survey]]||{}).year_start??null,yearEnd:(SMETA[r[C.survey]]||{}).year_end??null,
-    q:(SCI[i]||[])[SC.q], dim:(SCI[i]||[])[SC.dim],
+    // Two-phase boot: sci.json is a PHASE 2 product, so at first paint these are undefined and are folded
+    // on again by applySciToStations() when SCI_READY settles. sciRow() is the shared not-yet-loaded-safe
+    // deref, so this is the same expression at both call sites (one derivation, two moments).
+    q:sciRow(i)[SC.q], dim:sciRow(i)[SC.dim],
     // Use the authoritative ausmt_id the engine wrote into catalogue column r[C.ausmt_id]
     // (au.<survey-slug>.<station>). Fall back to the legacy survey-name slugification only for
     // older data that predates r[C.ausmt_id], so the id shown/exported matches the product + MTCAT.
@@ -37,6 +40,14 @@ function buildState(){
     if(derived)SLUG_TO_SURVEY[derived]=s.survey;}});
   buildAuslampSet();
   applyYearRangeHints();
+}
+// Two-phase boot: the ONLY two station fields that come from sci.json. buildState() runs at first paint,
+// before sci.json has landed, so it derives them from an empty row; this re-folds them from the real data
+// the moment SCI_READY settles. Identical expressions to buildState's own (sciRow keeps the deref shared),
+// so a hydrated station is byte-for-byte what a single-phase boot produced.
+function applySciToStations(){
+  if(!Array.isArray(ST))return;
+  ST.forEach(s=>{const sc=sciRow(s.i);s.q=sc[SC.q];s.dim=sc[SC.dim];});
 }
 // UX4 (D1/D2): build AUSLAMP_SET (survey SLUGS in the `auslamp` collection) from the boot data. The
 // collections.json member list (COLL.auslamp.surveys) holds survey LABELS, not slugs (the engine keys
@@ -405,9 +416,53 @@ function renderBuildId(){
   el.textContent=buildIdText();
   if(BUILDID&&BUILDID.build_id)el.title="build "+String(BUILDID.build_id);
 }
+// ---- two-phase boot ------------------------------------------------------------------------------
+// HYDRATION_DONE settles once every phase-2 product has landed AND its late-render work has run. It is not
+// on any user-facing path (nothing awaits it to paint); it exists so a headless driver can say "now the app
+// is in the state a single-phase boot would have produced" without racing the continuations.
+let HYDRATION_DONE=Promise.resolve();
+// Late hydration must never leave a stale render standing. Each gate re-runs EXACTLY the surfaces that read
+// its product, and nothing else:
+//   sci      -> re-folds s.q/s.dim (applySciToStations), re-enables the sci-driven rail controls, then
+//               refresh() so the map/counts/cards reflect a quality filter that was inert until now.
+//   tf       -> the open station drawer (its response plots and the sci/tf-derived summary rows).
+//   manifest -> the open drawer again (Files rows, format badges, download tiles), station OR survey.
+// Re-rendering the open drawer is the deliberate simplest correct answer: it is one innerHTML rewrite of a
+// panel the user is already looking at, and rehydrateOpenDrawer preserves scroll position and the selected
+// tab so the only visible change is the section that was showing a loading state.
+function wireHydration(){
+  const tf=TF_READY.then(()=>{rehydrateOpenDrawer();});
+  const sci=SCI_READY.then(()=>{
+    applySciToStations();
+    // SCI_READY settles on FAILURE too (phase 2 records the failure rather than rejecting), so the gate is
+    // hydrUsable, not the bare fact that the promise resolved. Re-enabling the completeness filter and the
+    // completeness/dimensionality colour modes after a 404 would hand the reader live controls over values
+    // that will never arrive: the filter would empty the map and the colour modes would paint every station
+    // the "not evaluated" grey. They stay disabled, with a title that says which wait this is.
+    if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
+    if(typeof recolor==="function")recolor();
+    if(ST.length&&typeof refresh==="function")refresh();
+    rehydrateOpenDrawer();
+  });
+  const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();});
+  HYDRATION_DONE=Promise.all([tf,sci,man]);
+}
 async function boot(){
-  if(typeof CAT==="undefined"||CAT===null){try{[CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID,COORD_POLICY]=await loadData();}catch(e){showLoadError();return;}}
+  if(typeof CAT==="undefined"||CAT===null){
+    // Both phases are issued HERE, together: phase 2 does not wait for phase 1 to resolve (the heavy
+    // products are independent of the catalogue), and the first paint below does not wait for phase 2.
+    const p1=loadPhase1();
+    startHydration();
+    // Phase 1 is the only fatal set: no catalogue or no surveys means there is nothing honest to draw.
+    // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
+    try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
+  }
+  // The sci-driven rail controls (completeness filter, completeness/dimensionality colour modes) are inert
+  // and disabled until sci.json is USABLE (see setSciControlsEnabled). Applied BEFORE the first render so
+  // they are never briefly live over data that has not arrived.
+  if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
   renderBuildId();
   runInit();
+  wireHydration();
 }
 document.addEventListener("DOMContentLoaded",boot);

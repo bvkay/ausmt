@@ -8,7 +8,11 @@
 //   * frameLineText() NEVER emits markup (it interpolates only a validated number + fixed strings), so
 //     even a hostile survey_frame_note cannot inject a tag;
 //   * loadStationFrameLine() fetches the per-station station.json, injects the line via textContent,
-//     and GUARDS against a stale async write (only writes if #frameline still targets this station).
+//     and GUARDS against a stale async write (only writes if #frameline still targets this station);
+//   * the resolved line is CACHED per ausmt_id, so a two-phase-boot hydration re-render (which rewrites the
+//     drawer and blanks the #frameline placeholder up to three times, once per settling gate) re-injects it
+//     without re-issuing the request. Each station.json case below therefore uses its OWN station id: a
+//     given station's station.json does not change within a session, and the cache reads it that way.
 // Mirrors tools/bundle_tiles_test.js: load modules in order, stub Leaflet/JSZip, run in the window scope.
 const fs = require("fs");
 const path = require("path");
@@ -30,10 +34,14 @@ win.AUSMT_CONFIG = { short_name: "AusMT" };
 // Default fetch: the fixture station.json the loadStationFrameLine() integration expects. A specific
 // test overrides win.__fetchDoc to change the served frame; an unresolvable url yields {ok:false}.
 win.__fetchDoc = { frame: { declared_azimuth_deg: -60, frame_served: "declared-azimuth" } };
-win.fetch = (url) => Promise.resolve(
-  /station\.json$/.test(String(url)) && win.__fetchDoc
-    ? { ok: true, json: () => Promise.resolve(win.__fetchDoc) }
-    : { ok: false });
+win.__fetches = [];
+win.fetch = (url) => {
+  win.__fetches.push(String(url));
+  return Promise.resolve(
+    /station\.json$/.test(String(url)) && win.__fetchDoc
+      ? { ok: true, json: () => Promise.resolve(win.__fetchDoc) }
+      : { ok: false });
+};
 
 // Only the modules the frame line transitively needs (security -> esc/escAttr, state -> SMETA,
 // data -> dataUrl, drawer -> frameLineText/loadStationFrameLine). Match bundle_tiles_test's subset.
@@ -127,12 +135,36 @@ A.load(s).then(function () {
     const fl = win.document.getElementById("frameline");
     ok(fl.textContent === "", "a stale async fetch overwrote the current drawer's frame line: '" + fl.textContent + "'");
 
-    // a withheld / missing station.json (fetch !ok) yields no line, no throw
+    // a withheld / missing station.json (fetch !ok) yields no line, no throw. Its OWN station id, so it
+    // exercises the not-ok path rather than reading back the -60° line cached for A01 above.
     win.__fetchDoc = null;
-    const el3 = makeFrameline(s.ausmt_id);
-    A.load(s).then(function () {
+    const missing = { i: 2, id: "C03", survey: "Demo Survey", slug: "demo", ausmt_id: "au.demo.C03" };
+    const el3 = makeFrameline(missing.ausmt_id);
+    A.load(missing).then(function () {
       ok(el3.textContent === "", "a missing station.json must leave the frame line empty");
-      console.log("FRAME LINE OK");
+
+      // Two-phase boot: a hydration re-render calls this again for the SAME station after blanking the
+      // placeholder. The line must come BACK (the reader must not lose it) with NO second request.
+      win.__fetchDoc = { frame: { declared_azimuth_deg: 99 } };   // would be visible if it re-fetched
+      const el4 = makeFrameline(s.ausmt_id);
+      const before = win.__fetches.length;
+      A.load(s).then(function () {
+        ok(/-60°/.test(el4.textContent),
+          "a re-render must re-inject the resolved frame line, got: '" + el4.textContent + "'");
+        ok(win.__fetches.length === before,
+          "a re-render must not re-issue station.json; issued " + (win.__fetches.length - before) + " extra");
+        // and a station whose station.json was MISSING is not re-requested either (the no-line outcome is
+        // cached too, so three settling gates cannot become three 404s).
+        const before2 = win.__fetches.length;
+        const el5 = makeFrameline(missing.ausmt_id);
+        A.load(missing).then(function () {
+          ok(el5.textContent === "", "the cached no-line outcome must stay a no-line outcome");
+          ok(win.__fetches.length === before2,
+            "a station with no station.json must not be re-requested on a re-render; issued " +
+            (win.__fetches.length - before2) + " extra");
+          console.log("FRAME LINE OK");
+        }).catch(function (e) { die("cached-missing path threw: " + e); });
+      }).catch(function (e) { die("re-render path threw: " + e); });
     }).catch(function (e) { die("missing-station.json path threw: " + e); });
   });
 }).catch(function (e) { die("loadStationFrameLine threw: " + e); });

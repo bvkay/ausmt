@@ -111,9 +111,29 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
 }
 document.getElementById("dlCsv").onclick=()=>{track("DownloadGenerated",{format:"csv",n:sel().length});
   save("ausmt-stations-"+tsUTC()+".csv",csvRows(sel()).map(csvRow).join("\r\n"),"text/csv");};
-document.getElementById("dlGeo").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});const fc={type:"FeatureCollection",features:sel().map(s=>{const sc=SCI[s.i]||[];return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // C42: a withheld-coord station is an unlocated feature (spec-legal null geometry) — never a (0,0)/[null,null] phantom point
-  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:!!sc[SC.rr],source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // C6/C46: licence + deed URL + attribution ride each GeoJSON feature
-  save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(fc,null,1),"application/geo+json");};
+// Two-phase boot: quality/dimensionality/remote_ref ride each GeoJSON feature and come from sci.json, a
+// PHASE 2 product. An export is a FILE that outlives the page, so it must never carry a value the portal
+// simply had not received yet. AWAIT the gate (already-resolved in the normal case, so the click is
+// unchanged once hydration is done) rather than degrade.
+// If sci.json FAILED, awaiting settles on nothing: sciRow returns [], which writes remote_ref:false, a
+// POSITIVE CLAIM that these stations were not remote-referenced, while quality/dimensionality vanish as
+// undefined keys (JSON.stringify drops them) with no trace of why. So when the product is not usable the
+// three screening properties are omitted DELIBERATELY and the FILE ITSELF carries the reason: a toast does
+// not travel with the download, and whoever opens this file next has no other way to learn the difference
+// between "not screened" and "the screening data never loaded".
+const GEO_SCI_UNAVAILABLE="quality, dimensionality and remote_ref are OMITTED from every feature in this file: the screening product (sci.json) could not be loaded in the session that generated it. Their absence records a load failure, NOT a screening outcome.";
+// Extracted from the click handler for the same reason csvRows was (see above): the honesty rule now has a
+// branch here, and a branch that only exists inside an onclick is a branch no test can reach.
+function geoFeatureCollection(stations,sciOk){
+  return {type:"FeatureCollection",...(sciOk?{}:{note:GEO_SCI_UNAVAILABLE}),features:stations.map(s=>{const sc=sciRow(s.i);return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // C42: a withheld-coord station is an unlocated feature (spec-legal null geometry), never a (0,0)/[null,null] phantom point
+  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,...(sciOk?{quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:!!sc[SC.rr]}:{}),source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // C6/C46: licence + deed URL + attribution ride each GeoJSON feature
+}
+document.getElementById("dlGeo").onclick=async()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
+  if(hydrating("sci")){toast("Waiting for the screening data before writing the GeoJSON…");}
+  await SCI_READY;
+  const sciOk=hydrUsable("sci");
+  if(!sciOk)toast("The screening data could not be loaded, so quality, dimensionality and remote reference are left out of this GeoJSON; the file says so.");
+  save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(geoFeatureCollection(sel(),sciOk),null,1),"application/geo+json");};
 document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
   const byColl={};sel().forEach(s=>{const doi=(SMETA[s.survey]||{}).doi||TS_COLLECTION.doi;(byColl[doi]=byColl[doi]||[]).push(s);});
   const doc={
@@ -179,7 +199,13 @@ document.getElementById("dlCite").onclick=async()=>{track("DownloadGenerated",{f
   txt.push(...ack);
   const z=new JSZip();z.file("CITATIONS.txt",txt.join("\n"));z.file("citations.bib",bib);z.file("citations.ris",risT);
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);};
-document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{format:"zip",n:sel().length});const z=new JSZip(),f=z.folder("ausmt_edis");
+document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{format:"zip",n:sel().length});
+  // Two-phase boot: each EDI is fetched at its MANIFEST url when there is one (the legacy flat path is only
+  // the fallback), so packaging before the manifest lands would silently take the fallback route for every
+  // station and could write a zip missing files that are in fact served. Await the gate.
+  if(hydrating("manifest")){toast("Waiting for the download index…");}
+  await MANIFEST_READY;
+  const z=new JSZip(),f=z.folder("ausmt_edis");
   const chosen=sel(),avail=chosen.filter(s=>s.ediAvail),unavail=chosen.filter(s=>!s.ediAvail);
   let ok=0;const included={};toast("Packaging "+avail.length+" redistributable EDI(s)…");   // included: survey -> zip subdir
   for(const s of avail){try{const ea=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).find(a=>a.format==="edi");
@@ -210,8 +236,18 @@ document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{fo
   if(ok===0){z.file("README.txt","No EDIs were redistributable in this selection; see the archive pointers file.");}
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-selection-edis-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
   toast(`Zipped ${ok} EDI(s)`+(unavail.length?`; ${unavail.length} not redistributable (archive pointers included).`:"."));};
-document.getElementById("strike").onclick=()=>{
-  const az=[];sel().forEach(s=>{const pt=TFD[s.i];if(!pt||!pt[T.pt_az])return;pt[T.pt_az].forEach((a,k)=>{if(a!=null&&pt[T.pt_beta][k]!=null&&Math.abs(pt[T.pt_beta][k])<5)az.push(((a%180)+180)%180);});});
+document.getElementById("strike").onclick=async()=>{
+  // Two-phase boot: the rose is built entirely from phase-tensor azimuths in tf.json (PHASE 2). Its
+  // not-enough-data message is a STATEMENT ABOUT THE SELECTION, so it must never fire because the transfer
+  // functions are not here. Await the gate (already resolved in the normal case).
+  if(hydrating("tf")){toast("Waiting for the transfer functions…");}
+  await TF_READY;
+  // TF_READY settles on FAILURE too, and a failed tf.json leaves an EMPTY row for every station, so the
+  // await alone is not the guard: the azimuth loop would collect nothing and the toast below would report
+  // "not enough low-skew azimuths in the selection", the exact statement-about-the-selection this block
+  // exists to prevent. Say what actually happened and estimate nothing.
+  if(!hydrUsable("tf")){toast("The transfer functions could not be loaded, so no strike estimate can be made from this selection.");return;}
+  const az=[];sel().forEach(s=>{const pt=tfRow(s.i);if(!pt||!pt[T.pt_az])return;pt[T.pt_az].forEach((a,k)=>{if(a!=null&&pt[T.pt_beta][k]!=null&&Math.abs(pt[T.pt_beta][k])<5)az.push(((a%180)+180)%180);});});
   if(az.length<5){toast("Not enough low-skew phase-tensor azimuths in the selection for a strike estimate.");return;}
   const bins=18,counts=new Array(bins).fill(0);az.forEach(a=>counts[Math.min(bins-1,Math.floor(a/(180/bins)))]++);
   const mx=Math.max(...counts),R=120,cx=150,cy=150;let wed="";
@@ -219,6 +255,9 @@ document.getElementById("strike").onclick=()=>{
     const x0=cx+r*Math.sin(a0),y0=cy-r*Math.cos(a0),x1=cx+r*Math.sin(a1),y1=cy-r*Math.cos(a1);
     wed+=`<path d="M${cx},${cy} L${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 0 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z" fill="#EF7256" fill-opacity=".55" stroke="#11182D" stroke-width=".5"/>`;}}
   const svg=`<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg"><circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#2B3557"/><line x1="${cx}" y1="${cy-R}" x2="${cx}" y2="${cy+R}" stroke="#2B3557"/><line x1="${cx-R}" y1="${cy}" x2="${cx+R}" y2="${cy}" stroke="#2B3557"/><text x="${cx}" y="18" fill="#8FA3B0" font-size="11" text-anchor="middle" font-family="monospace">N</text>${wed}</svg>`;
+  // The rose OWNS the drawer body from here (it builds its own markup, not a station/survey render), so it
+  // clears the rehydration subject: a later phase-2 gate must not replace the rose with a station drawer.
+  _drawerSubject=null;
   drawer.innerHTML=`<div class="dhead"><span class="sid">Strike rose</span><button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${sel().length} stations · ${az.length} low-skew (|β|&lt;5°) PT azimuths · 180° ambiguous</div><div style="display:flex;justify-content:center;margin-top:14px">${svg}</div>`+
    `<div class="dim" style="margin-top:12px">Automated screening estimate: geoelectric strike estimated from phase-tensor major-axis azimuths where skew is small. The 90° ambiguity inherent to strike is not resolved here; combine with tipper induction arrows to break it. Not a structural interpretation.</div>`;

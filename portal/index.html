@@ -374,6 +374,16 @@
   /* UX6 Wave B (B2): "not recorded"/absence markers use neutral --muted, not amber --part — absence is
      ordinary, amber is reserved for genuine attention. Size raised to the 12px floor (was 10px). */
   .prov{font-size:12px;color:var(--muted)}
+  /* Two-phase boot: the LOADING state a section shows while its heavy product (tf.json / sci.json /
+     manifest.json) is still in flight. Deliberately quiet and NOT an absence marker: absence copy is the
+     ordinary muted --prov styling above, and this must not be mistaken for it. The italic + the pulse
+     say "still filling", the trailing dot-less phrasing is set by the JS. .hydrfail is the honest
+     could-not-be-loaded twin (an error, not an absence), tinted with the attention colour. */
+  .hydrating{font-size:12px;color:var(--muted);font-style:italic;padding:6px 0;animation:hydrpulse 1.4s ease-in-out infinite}
+  .hydr-inline{display:inline;padding:0}
+  .hydrfail{color:var(--part);font-style:normal;animation:none}
+  @keyframes hydrpulse{0%,100%{opacity:.55}50%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){.hydrating{animation:none;opacity:.8}}
   .scard .cardbtns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
   /* UX6 Wave B (B3): footer trimmed to a single line; the developer-status detail (software licence,
      data-build id + date, version chip) moves INTACT into an "About this build" popover. The #buildId
