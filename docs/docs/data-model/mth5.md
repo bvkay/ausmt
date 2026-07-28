@@ -116,8 +116,9 @@ transfer_functions/
 
 A survey package may contain one, two or all three representations, but only `edi/` and `mth5/` are accepted as submitted input today. The build pipeline derives all portal products from the EDIs.
 
-Separately from submitted files, the build can generate a per-survey transfer-function-only
-MTH5 bundle as a download product; this is gated by a deployment flag and is off by default.
+Separately from submitted files, the build generates a per-survey transfer-function-only MTH5
+bundle as a download product. It is gated by `flags.survey_h5_enabled` in `portal.config.yaml`,
+which the repository ships set to `true`; a deployment can turn it off.
 
 Where multiple formats exist, they should describe the same underlying transfer-function products.
 

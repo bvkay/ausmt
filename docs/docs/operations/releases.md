@@ -25,9 +25,9 @@ survey_v1.0.0_emtfxml.zip
 
 ## Portal Downloads
 
-The build already pre-generates per-survey EDI and EMTF-XML zips (and a transfer-function-only
-MTH5 bundle behind a deployment flag) — but for the **current** state of the survey, not as
-frozen per-version artefacts.
+The build already pre-generates per-survey EDI and EMTF-XML zips, and a transfer-function-only
+MTH5 bundle behind `flags.survey_h5_enabled` (which ships on). All of them describe the
+**current** state of the survey, not a frozen per-version artefact.
 
 Custom downloads from station selections are created on demand in the browser.
 

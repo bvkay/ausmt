@@ -115,13 +115,14 @@ Examples include:
 - Survey title
 - Survey identifier
 - Abstract
-- Principal investigators
+- Creators, the ordered list of parties the citation names
+- Contributors and the role each one played
 - Organisations
 - Funding sources
 - Acquisition dates
 - Geographic extent
-- Licence information
-- Related publications
+- Licence information, and the access level and coordinate-access policy
+- Related identifiers and publications
 
 Survey metadata provide the primary discovery and citation information used within AusMT.
 
@@ -183,12 +184,16 @@ AusMT encourages the use of persistent identifiers wherever practical.
 
 Persistent identifiers improve discoverability and reduce ambiguity.
 
-> **Implementation status (current).** AusMT records DOIs supplied by the submitter (e.g. a
-> Zenodo or institutional DOI minted externally) — it does not mint or register identifiers
-> itself. Integrated DataCite DOI minting via ARDC is planned for a future slice, not implemented.
-> ORCID (investigators), ROR (organisations), instrument PIDs and RAiD (projects) have fields in
-> `survey.yaml`; how much of each propagates into the portal's served products is still partial
-> and being completed field by field.
+> **Implementation status (current).** AusMT is a curator of identifiers, not a minter. It does
+> not mint or register anything; integrated DataCite minting via ARDC is planned, not implemented.
+> Dataset-level identifiers are recorded as typed `related_identifiers[]` rows, each stating what
+> the identifier points at in NCI data-level terms, and the DataCite relation is derived from that
+> level. ORCID rides on people and ROR on organisations in `creators[]`/`contributors[]`; RAiD and
+> the survey and instrument PIDs sit under `identifiers`. All of these reach the portal's served
+> products. A separate refresh script resolves recorded identifiers and caches the outcome, and the
+> build stamps that outcome onto the served rows, so the portal can say whether a DOI resolves or
+> is registered but not yet active. An identifier the cache does not know gets no facet and is
+> linked as before. See [survey.yaml Reference](../reference/survey-yaml.md).
 
 Examples include:
 

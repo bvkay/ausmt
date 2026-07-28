@@ -236,9 +236,17 @@ the three enum values (a hard failure otherwise), `embargo_until` must be an ISO
 present, any non-`open` level raises a curator-attention warning, and a past-dated embargo raises the
 stale-embargo warning.
 
-> Note: the canonical EMTF-XML store (`--canonical-dir`) and the per-station `station.json` products are
-> preservation/curation artifacts, not distribution surfaces, and are emitted for all surveys regardless of
-> access level — they carry no served download bytes or manifest rows.
+The access level is not the only serving control. A survey can also declare `access.coordinates`,
+which decides whether station positions are served exactly, generalised to about 11 km, or withheld
+entirely. It is the custodian's call, the engine applies it at a single seam before anything is
+emitted, and a station whose position is not exact has its source bytes withheld too. See
+[Why coordinates have an access policy](../rationale/coordinate-access.md).
+
+> Note: the canonical EMTF-XML store (`--canonical-dir`) is a preservation artifact and carries no
+> served download bytes or manifest rows. The per-station `products/` files are different: in a
+> deployment they are written inside the served build directory, so they ride the same access gate
+> as the rest. A station in a non-served survey gets a withheld `station.json` with no derived
+> science, no exact position and no dimensionality file.
 
 ---
 
@@ -256,6 +264,12 @@ Examples include:
 Where possible, withdrawn packages should remain discoverable with an explanation of their status.
 
 Maintaining a visible publication history is generally preferable to removing records entirely.
+
+When a package genuinely has to go, retirement is a curator action rather than an operator
+recipe. The workbench has a Retire survey path that shows how many station files will be removed,
+requires the slug typed back plus a release note, and takes a second factor before it commits the
+removal to the survey repository. It refuses to retire the last remaining survey, because an empty
+corpus fails the next build and would leave the retired survey serving off the previous one.
 
 ---
 

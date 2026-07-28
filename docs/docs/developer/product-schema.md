@@ -18,11 +18,27 @@ files are defined separately in [Portal Data Files](data-files.md).
                    "tipper_available": false, "dimensionality": "2-D", "skew_beta_median_deg": 0.0,
                    "completeness_smoothness_diagnostic": { "value": 0.0, "basis": "e",
                      "note": "not a quality or geological-value judgement" } },
+  "processing": { "software": "...", "algorithm": "...", "remote_reference": false,
+                  "remote_site": null, "note": null },
   "distribution": { "edi_available": false, "license": "...", "edi_path": null },
   "provenance": { "...PROV...": "...", "input_file": "...", "input_sha256": "..." },
-  "coordinate_qc": { "flag": "...", "head_info_conflict_deg": null, "resolution": {} }
+  "coordinate_qc": { "flag": "...", "head_info_conflict_deg": null, "resolution": {} },
+  "canonical_conditioning": null,
+  "frame": { "...C25 frame facts and the sign-convention verdict...": "..." },
+  "coordinate_policy": "generalised"
 }
 ```
+
+`coordinate_qc` and `canonical_conditioning` are `null` unless the parse actually flagged
+something, so an unflagged station is never implied to have been touched. `coordinate_policy` is
+present only when the station's C42 policy is not `exact`, which keeps an exact station's file
+byte-unchanged.
+
+`--products` **is** a served surface in a deployment, so it rides the same access gate as
+`tf.json`/`sci.json`. A station in a non-served survey (embargoed with an active embargo, or
+`metadata_only`) gets a withheld record carrying only the discovery-safe identity the public
+catalogue already exposes, with `"withheld": true` and no derived science, and no
+`dimensionality.json` at all.
 
 **`dimensionality.json`** — `{ classification, skew_beta_median_deg, pct_periods_3d, method,
 screening_diagnostic, note }`.

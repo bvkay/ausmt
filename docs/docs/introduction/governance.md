@@ -44,8 +44,9 @@ stated licence:
 
 AusMT is built so that no data or capability is locked to the current operator:
 
-- The framework is open source (**Apache-2.0**), with a maintainer knowledge base covering
-  architecture, conventions, risks, and operations.
+- The framework is open source (**Apache-2.0**), and its design records live in the repository
+  itself, under `maintainer/`: the architecture decision record plus the numbered C-series
+  documents that froze each subsystem's design and security decisions before it was built.
 - The catalogue and all served packages are **rebuildable from the survey source repository**
   by any operator with one documented command.
 - Survey packages are plain files (EDI + `survey.yaml`) under version control; heavyweight
@@ -54,8 +55,10 @@ AusMT is built so that no data or capability is locked to the current operator:
 
 ## Status of this arrangement
 
-This is a **pre-institutional** operating arrangement, appropriate to the current
-demonstration phase: the framework code is public, while the portal deployment and the
-survey-data repository are not. Before full public operation, AusMT is intended to move to an
-organisational repository home with at least two maintainers, a tagged and DOI'd release,
-and formal data-contribution agreements with custodian agencies.
+This is a **pre-institutional** operating arrangement, appropriate to the current demonstration
+phase. The framework code is public and the portal's public reader is served at
+<https://ausmt.au>, including the catalogue and the machine-readable products under `/data/`.
+The curator and administrative surfaces are not exposed there, and the survey-data repository
+stays private because it holds embargoed material. Before full public operation, AusMT is
+intended to move to an organisational repository home with at least two maintainers, a tagged
+and DOI'd release, and formal data-contribution agreements with custodian agencies.

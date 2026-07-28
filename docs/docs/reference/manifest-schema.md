@@ -88,11 +88,12 @@ All fields are required.
 - **The manifest lists only what AusMT serves.** Only redistributably-licensed surveys appear; a
   non-served station has no row and the portal routes it to the source DOI archive (via the catalogue's
   `edi_available` bit). So the manifest answers "what can I download here, and is it intact?".
-- **Feature flags** (`portal.config.yaml` → `flags:`, default OFF) gate optional bundles:
-  `survey_h5_enabled` produces the per-survey transfer-function MTH5 `bundles/<slug>-tf.h5` (decision D4
-  keeps MTH5 off pending a storage/management decision); `collection_download_enabled` is reserved. The
-  EDI zip and EMTF-XML zip are unconditional for a served survey. Flags are recorded in
-  `build_provenance.json` under `distribution_flags`.
+- **Feature flags** (`portal.config.yaml` → `flags:`) gate the optional bundles.
+  `survey_h5_enabled` produces the per-survey transfer-function MTH5 `bundles/<slug>-tf.h5`; the
+  repository ships it `true`. `collection_h5_enabled` gates the collection-level producer and
+  `collection_download_enabled` gates its portal tile; both ship `false`. The EDI zip and EMTF-XML
+  zip are unconditional for a served survey. Flags are recorded in `build_provenance.json` under
+  `distribution_flags`.
 
 ---
 

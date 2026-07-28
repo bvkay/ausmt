@@ -1,6 +1,6 @@
 # AusMT developer runbook
 
-Orientation for anyone working on this repository. Facts below were verified 2026-07-07.
+Orientation for anyone working on this repository. Facts below were verified 2026-07-29.
 If a count or command here disagrees with reality, fix this file in the same pull request.
 
 ## What this system is
@@ -15,17 +15,34 @@ follow `docs/docs/developer/extending.md` recipes exactly.
 
 ## Running the test suites
 
-Any Python 3.12 env with the pinned requirements works; the known-good dev env is the
-`ausmt` conda env. Counts as of 2026-07-07: **444 total** (including the surveys repository gate).
+Any Python 3.12 env with the pinned requirements works. The maintainer's known-good env is the
+`ausmt` conda env, so the commands below are written for it; drop the `conda run -n ausmt`
+prefix if your interpreter is already the right one.
 
-| Suite | cwd | Command | Notes |
-|-------|-----|---------|-------|
-| engine (190) | `engine/` | `conda run -n ausmt python -m pytest -q tests` | ~3 min; needs mt_metadata/mth5 (pinned in `engine/environments/`) |
-| gateway (194) | **repo root** | `conda run -n ausmt python -m pytest -q gateway/tests` | ~10 s; deps in `gateway/requirements-dev.txt`; cwd must be repo root so `gateway` imports |
-| portal (22) | `portal/` | `conda run -n ausmt python -m pytest -q tests` | jsdom drivers need node + `npm install` in `portal/` (see `portal-ci.yml`) |
-| surveys gate (38) | `../ausmt-surveys/` | `conda run -n ausmt python -m pytest -q tests` | validates the validator + contribute tooling |
+Counts re-measured 2026-07-29 by collecting and running each suite: **1,370 tests in this
+repository**, plus **118** in the surveys repository gate.
 
-Lint: `ruff check` runs per-package in CI; run it on whatever you touched.
+| Suite | cwd | Command | Collected | Notes |
+|-------|-----|---------|-----------|-------|
+| engine | `engine/` | `conda run -n ausmt python -m pytest -q tests` | 438 | 433 pass, 5 skip. Several minutes; needs mt_metadata/mth5 (pinned in `engine/environments/`) |
+| gateway | **repo root** | `conda run -n ausmt python -m pytest -q gateway/tests` | 678 | under a minute; deps in `gateway/requirements-dev.txt`; cwd must be repo root so `gateway` imports |
+| deploy | **repo root** | `conda run -n ausmt python -m pytest -q deploy/tests` | 158 | shell, compose and Caddy config gates. Two tests shell out to host tools and skip when they are absent: `caddy validate` and `flock(1)`. The Caddy one needs to be able to create the log dir the Caddyfile names, so it can fail on a dev box where CI is green |
+| portal | `portal/` | `conda run -n ausmt python -m pytest -q tests` | 96 | jsdom drivers need node + `npm ci` in `portal/` (see `portal-ci.yml`) |
+| surveys gate | `../ausmt-surveys/` | `conda run -n ausmt python -m pytest -q tests` | 118 | validates the validator + contribute tooling |
+
+CI runs gateway and deploy together from the repo root
+(`python -m pytest -q -rs gateway/tests deploy/tests`, `gateway-ci.yml`), so run them that way
+when you are reproducing a CI failure.
+
+Lint, exactly as CI runs it:
+
+```
+cd engine && ruff check --config pyproject.toml . ../contract ../portal/tools
+ruff check --config engine/pyproject.toml gateway/          # from the repo root
+```
+
+Generated-file drift guards: `python contract/generate.py --check` and
+`python portal/tools/gen_config.py --check`.
 
 Quick engine smoke without any data: `python -m extract.build_portal --surveys <empty-dir>
 --allow-empty --no-validate --out /tmp/out` (from `engine/`). The docs site has no CI; run
@@ -73,8 +90,15 @@ immediately; download tiles (EDI/XML/bundles) need one engine build first
 | Positional data contract | `docs/docs/developer/data-files.md` |
 | "How do I add/change X" recipes | `docs/docs/developer/extending.md` |
 | System map | `docs/docs/developer/architecture.md` |
+| `survey.yaml` fields, credit model, identifiers, coordinate access | `docs/docs/reference/survey-yaml.md` |
+| Why a model is shaped the way it is | `docs/docs/rationale/` |
 | Design records (ADRs + C-series) | `maintainer/README.md` |
-| Frozen subsystem designs (**C-series**) | `maintainer/C<NN>-*.md` — numbered implementation contracts; each freezes the security/design decisions for one subsystem before it was built. Gateway=C10, curator=C11/C11b, upload button=C13, build cache=C18, metadata editor=C31, bundles=C32, operator docs=C33 |
+
+The **C-series** files (`maintainer/C<NN>-*.md`) are numbered implementation contracts. Each
+freezes the security and design decisions for one subsystem before it was built, and the index in
+`maintainer/README.md` says which record covers what. Read the relevant one before changing
+behaviour it froze.
+
 ## Pitfalls
 
 1. **Positional contract**: adding a catalogue column touches engine emit + `contract/columns.json`
@@ -84,8 +108,9 @@ immediately; download tiles (EDI/XML/bundles) need one engine build first
    working directory. If it raises `ModuleNotFoundError`, refresh the editable install:
    `pip install -e engine --no-deps`.
 3. **Fail-closed behaviour is deliberate.** Gateway states, validator resolution, embargo
-   gates and licence allow-lists refuse rather than guess. Before weakening a refusal, read
-   the design record that froze it (a `maintainer/C*.md` file or `deploy/README.md`).
+   gates, coordinate-access policies and licence allow-lists refuse rather than guess. Before
+   weakening a refusal, read the design record that froze it (a `maintainer/C*.md` file or
+   `deploy/README.md`).
 4. **Development on Windows, CI on Linux.** Sort any glob whose order you rely on, keep to
    the CI Python version's syntax, and pass `encoding="utf-8"` on file I/O.
 5. **Automation never pushes.** Merges and releases are performed by the maintainer.

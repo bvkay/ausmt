@@ -47,6 +47,10 @@ nav:
       - Survey Package Specification: reference/survey-yaml.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
+  - Design rationale:
+      - Credit model: rationale/credit-model.md
+      - Identifiers by data level: rationale/identifiers-by-level.md
+      - Coordinate access: rationale/coordinate-access.md
   - Developer:
       - Architecture (start here): developer/architecture.md
       - Build lifecycle: developer/build-lifecycle.md

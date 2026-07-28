@@ -16,9 +16,10 @@ request without needing prior contact.
 
 ## The PR bar
 
-- **All four test suites green** (commands in `RUNBOOK-DEV.md`), plus `ruff check` on what you
-  touched. If you add behaviour, add a test that **fails without your change** — tests that
-  cannot fail are not tests, and reviews here check for that specifically.
+- **Every test suite green** (the table in `RUNBOOK-DEV.md` lists them: engine, gateway, deploy,
+  portal, and the surveys-repo gate), plus `ruff check` on what you touched. If you add behaviour,
+  add a test that **fails without your change**. Tests that cannot fail are not tests, and reviews
+  here check for that specifically.
 - Follow the [code and data conventions](docs/docs/developer/conventions.md).
 - Match the local style of the file you're editing (this repo intentionally has more than one
   style; consistency is judged per-file, not repo-wide).

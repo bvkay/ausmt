@@ -5,11 +5,20 @@ is declared per survey in `survey.yaml`:
 
 ```yaml
 collection:
-  id: auslamp          # the collection id (see policy below)
+  id: auslamp                 # the collection id (see policy below)
   title: AusLAMP
-  type: programme      # programme | release | institutional | other
-  status: completed    # active | completed | archived
+  type: programme             # programme | release | institutional | other
+  status: completed           # active | completed | archived
+  start_year: 2013            # programme start, rolled up to the collection page
+  last_updated: "2026-01-01"  # date of the most recent member release
+  description: >-             # one paragraph shown on the collection card and page
+    What the programme is, who runs it, and what the coverage looks like.
 ```
+
+`id` does the grouping. `start_year`, `last_updated` and `description` are optional presentation
+fields for the collection card and page. The roll-up takes each programme-level field from the
+first member that declares it, so keeping the whole block identical across members is what stops
+one survey's stale wording becoming the collection's.
 
 The build rolls members up into `collections.json` and the MTCAT `collections` section
 (`build_portal._group_collections`).

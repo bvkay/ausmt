@@ -1,7 +1,10 @@
 # decomposition/ — Tier 3
 
+**Status: not implemented.** `write()` raises `NotImplementedError` and the shipping pipeline
+never calls this module. What follows is the design note for when it is built.
+
 Galvanic distortion decomposition: Groom–Bailey, McNeice–Jones (multi-site/multi-freq),
-Garcia–Jones, and Lilley Mohr circles. **Generated offline only.**
+Garcia–Jones, and Lilley Mohr circles. Generated offline only, never at request time.
 
 ## Engine decision: depend on the fork, don't re-implement
 
