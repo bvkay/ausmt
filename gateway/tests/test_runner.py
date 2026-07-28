@@ -8,6 +8,7 @@ Proven-failing-first evidence per test.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -83,7 +84,7 @@ def test_preview_failure_summary_carries_build_diagnostics(tmp_path, monkeypatch
     pkg.mkdir(parents=True)
     (pkg / "survey.yaml").write_text("slug: olympic-dam-2004\n", encoding="utf-8")
 
-    def fake_engine(cmd, *, cwd, deadline):
+    def fake_engine(cmd, *, cwd, deadline, env=None):
         # The EXACT failure shape observed from the real build over the real zip.
         return subprocess.CompletedProcess(
             cmd, 2,
@@ -123,7 +124,7 @@ def test_preview_refuses_package_without_survey_folder(tmp_path, monkeypatch):
 
     spawned = []
 
-    def spy_engine(cmd, *, cwd, deadline):
+    def spy_engine(cmd, *, cwd, deadline, env=None):
         spawned.append(cmd)
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom")
 
@@ -155,7 +156,7 @@ def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatc
 
     seen_cwd = []
 
-    def spy_engine(cmd, *, cwd, deadline):
+    def spy_engine(cmd, *, cwd, deadline, env=None):
         seen_cwd.append(cwd)
         out_idx = cmd.index("--out") + 1
         Path(cmd[out_idx]).mkdir(parents=True, exist_ok=True)
@@ -168,6 +169,53 @@ def test_preview_spawns_engine_with_explicit_engine_dir_cwd(tmp_path, monkeypatc
     assert ok is True
     assert seen_cwd == [engine_dir], f"engine spawned with cwd {seen_cwd}, expected [{engine_dir}]"
     assert seen_cwd[0] is not None  # never inherit the runner's cwd (the F8 regression)
+
+
+def test_preview_spawns_engine_with_the_configured_validator_path(tmp_path, monkeypatch):
+    # The preview build runs the SAME validator gate again in-process (build_portal._load_validator),
+    # which reads AUSMT_VALIDATOR_PATH and otherwise walks upward for a sibling ausmt-surveys
+    # checkout, exiting rc=2 when neither resolves. The runner used to spawn it with the ambient
+    # environment only, so the validator the runner was CONFIGURED with (cfg.validator_path, the same
+    # value _run_validator hands the validator subprocess) was never communicated: the two gates
+    # agreed only where the box happened to export the same env var. Captures the env handed to
+    # _run_subprocess for the engine module and pins AUSMT_VALIDATOR_PATH to cfg.validator_path.
+    # FAILS IF the spawn goes back to inheriting the ambient environment: with no such var set here,
+    # env would be None (or carry someone else's value) and the assertion below reds. That is the
+    # unit-level shape of the pristine-checkout red the no-mocks e2e below showed as
+    # 'preview build failed / survey validator not found'.
+    monkeypatch.delenv("AUSMT_VALIDATOR_PATH", raising=False)
+    validator_dir = tmp_path / "some" / "validator"
+    validator_dir.mkdir(parents=True)
+    cfg = RunnerConfig(
+        incoming_dir=tmp_path / "incoming", quarantine_dir=tmp_path / "quarantine",
+        jobs_dir=tmp_path / "jobs", validator_path=str(validator_dir), timeout_s=900,
+        engine_dir=tmp_path)
+    pkg_root = tmp_path / "package"
+    (pkg_root / "e2e-slug").mkdir(parents=True)
+    (pkg_root / "e2e-slug" / "survey.yaml").write_text("slug: e2e-slug\n", encoding="utf-8")
+
+    seen_env = []
+
+    def spy_engine(cmd, *, cwd, deadline, env=None):
+        seen_env.append(env)
+        out_idx = cmd.index("--out") + 1
+        Path(cmd[out_idx]).mkdir(parents=True, exist_ok=True)
+        (Path(cmd[out_idx]) / "catalogue.json").write_text("[]", encoding="utf-8")
+        # The build takes NO --no-validate: the gate must stay on, only its path is supplied.
+        assert "--no-validate" not in cmd, f"the preview build must not opt out of validation: {cmd}"
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner, "_run_subprocess", spy_engine)
+    assert runner._run_preview(cfg, pkg_root, tmp_path / "preview",
+                               tmp_path / "preview-summary.json", deadline=10**12) is True
+    assert len(seen_env) == 1, seen_env
+    env = seen_env[0]
+    assert env is not None, "the engine spawn inherited the ambient environment instead of pinning one"
+    assert env.get("AUSMT_VALIDATOR_PATH") == str(validator_dir), (
+        "the preview build was not told which validator the runner gates on: "
+        f"{env.get('AUSMT_VALIDATOR_PATH')!r} != {str(validator_dir)!r}")
+    # A COMPLETE environment, not a one-entry dict: PATH etc must still reach the child.
+    assert "PATH" in env or not os.environ.get("PATH"), "the child environment dropped the inherited vars"
 
 
 def test_from_env_reads_engine_dir_knob():
@@ -505,7 +553,7 @@ def test_process_job_validator_fail_quarantines(tmp_path, monkeypatch):
         "submission_id": sid, "zip_path": str(zpath), "quarantine_dir": str(quarantine),
     }), encoding="utf-8")
 
-    def fake_sub(cmd, *, cwd, deadline):
+    def fake_sub(cmd, *, cwd, deadline, env=None):
         # validator invocation -> FAIL report in the --json FILE + exit 1, exactly like the real
         # validator on a failing package (argv shape asserted inside the helper).
         if any("validate_survey.py" in c for c in cmd):
@@ -538,7 +586,7 @@ def test_process_job_full_success(tmp_path, monkeypatch):
         "submission_id": sid, "zip_path": str(zpath), "quarantine_dir": str(quarantine),
     }), encoding="utf-8")
 
-    def fake_sub(cmd, *, cwd, deadline):
+    def fake_sub(cmd, *, cwd, deadline, env=None):
         if any("validate_survey.py" in c for c in cmd):
             # PASS report in the --json FILE, human lines on stdout — the real contract.
             _emulate_real_validator(cmd, {"counts": {"PASS": 1, "WARNING": 0, "FAIL": 0},
@@ -588,7 +636,7 @@ def test_process_job_validator_items_fail_quarantines(tmp_path, monkeypatch):
         "submission_id": sid, "zip_path": str(zpath), "quarantine_dir": str(quarantine),
     }), encoding="utf-8")
 
-    def fake_sub(cmd, *, cwd, deadline):
+    def fake_sub(cmd, *, cwd, deadline, env=None):
         if any("validate_survey.py" in c for c in cmd):
             # rc=0 but the report FILE carries a FAIL item — the items are authoritative.
             _emulate_real_validator(cmd, {"items": [{"level": "FAIL", "name": "licence"}]})
@@ -690,7 +738,7 @@ def test_gateway_runner_engine_invocation_is_never_incremental(tmp_path, monkeyp
 
     engine_cmds = []
 
-    def capture_sub(cmd, *, cwd, deadline):
+    def capture_sub(cmd, *, cwd, deadline, env=None):
         if any("validate_survey.py" in c for c in cmd):
             _emulate_real_validator(cmd, {"items": [{"level": "PASS", "check": "metadata",
                                                      "message": "ok"}]})
