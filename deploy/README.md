@@ -869,6 +869,38 @@ daily series — **never an address (masked or not) and never a user-agent**.
 daily and the raw lines are **not** the database: once a day is folded into `stats.json` the log is no
 longer needed, and the aggregator tolerates an already-rotated / absent log without error.
 
+#### What the screen reports (funding detail)
+
+Everything below is derived from what the fold already reads: the request **path**, the **masked**
+network, and the response **size**. No beacon exists, no user-agent is inspected for reporting, and no
+per-page view is countable (see the caveat above).
+
+| Breakdown | How it is derived |
+| --- | --- |
+| Downloads **by survey**, count + volume | The manifest reverse map. A whole-survey bundle is credited to its own survey, so the figure is everything served for that survey however it was fetched. |
+| **Format** split (`edi` / `emtfxml` / `mth5` / the bundle zips) | The manifest row's `format`, counted cumulatively, per day and per month. |
+| **Single-station file vs whole-survey bundle** | The manifest row's kind (`files[]` vs `bundles[]`). |
+| **API requests** | Fetches of the two documented machine-readable entry points the portal's own JavaScript never fetches: `/data/products/manifest.json` and `/data/mtcat.json`. A **path class**, not a user-agent test. It is an **upper bound**: the mtcat link is in every page footer, so a human click lands here too. `/data/catalogue.json` stays the visit proxy and `/data/manifest.json` (the SPA's own boot fetch) is deliberately excluded. |
+| **Distinct networks** per day | The count of distinct masked networks (the /24 or /48 the edge already wrote) seen that day. The addresses live in memory for the one run that folds the day; only the integer is written. One network can be a whole institution, so read it as reach, not as people. |
+| **Monthly rollups** | Each calendar month is accumulated as its days fold, never recomputed from the daily tail. |
+
+**Aggregate retention (separate from the raw log).** Daily rows are a rolling **92-day** window
+(`AUSMT_STATS_DAILY_KEEP`, in days). Monthly rollup rows are kept **indefinitely**: they are tiny
+pure-count records with no address, path or identity in them, and they are what makes year-over-year
+funding reporting possible. Pruning a day never loses the month it belonged to.
+
+**Export.** The Analytics screen offers *Download report data*: `analytics.csv` (one row per retained
+month) and `analytics-surveys.csv` (one row per month and survey, with volume). Both are read-only,
+session-gated, and generated from the same `stats.json` the screen renders.
+
+**Upgrading an existing box.** The aggregator reads an older `stats.json` tolerantly and upgrades it in
+place on the next fold; there is no migration step and nothing to run by hand. Every existing total,
+format count and dataset row carries forward; the new dimensions simply begin accruing. Monthly
+rollups are seeded from the daily rows already present (downloads and visits only, marked as such),
+and `detail_since` records the day the detailed breakdown actually begins so the screen can say which
+months carry partial detail rather than showing a partial figure as if it were complete. **No earlier
+month is invented.**
+
 #### Country resolution — the db-ip CSV (operator chore)
 
 Country is resolved from the masked address with the **db-ip.com "IP to Country Lite"** dataset —
@@ -921,6 +953,9 @@ running) rather than presenting old figures as live.
 | Analytics screen shows a **STALE** banner | The timer stopped, or no complete day has been folded since. Check `systemctl list-timers ausmt-stats.timer` and the service journal. |
 | Every country shows as `unknown` | The db-ip CSV is missing/unreadable at `$AUSMT_DATA_DIR/geoip/dbip-country-lite.csv` (or `AUSMT_STATS_DBIP_CSV`). Place/refresh it (above). Counts are still correct; only the country split degrades. |
 | Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. |
+| Quarterly view says "No monthly rollups yet" | The box has not folded a day since the detailed aggregator was installed. Rollups begin at the next daily fold and fill in one month at a time; earlier months are deliberately **not** backfilled. |
+| A month shows downloads but little or no volume | Some of its days were folded before per-month detail existed. The screen flags exactly those months; the counts are complete, the breakdown covers only the later days. |
+| Per-day "distinct networks" is blank for older days | Those days were folded before the reach proxy existed. It is absent, not zero, and is never backfilled (that would need raw logs which are long gone). |
 
 ---
 

@@ -291,3 +291,243 @@ def test_main_never_raises_on_broken_env(monkeypatch, tmp_path):
     # And with AUSMT_DATA_DIR entirely unset.
     monkeypatch.delenv("AUSMT_DATA_DIR", raising=False)
     assert AGG.main([]) == 0
+
+
+# ==================================================================================================
+# Funding-detail lane (schema 2): per-survey volume, format/kind split over time, the API-consumer
+# path class, distinct masked networks, permanent monthly rollups, and the split retention window.
+# Every dimension below is derived from what the fold ALREADY reads (path + masked address + size);
+# nothing new is collected and no beacon exists.
+# ==================================================================================================
+
+def _v1_stats(**over) -> dict:
+    """A LIVE-SHAPE schema-1 stats.json: bare-int by_survey, no by_kind, no api_requests, no monthly,
+    daily rows carrying only date/downloads/visits. This is exactly what is on the box today."""
+    doc = {
+        "schema": 1, "timer_period_min": 1440, "generated_at": "2026-07-10T03:30:00Z",
+        "since": "2026-07-06", "last_folded_date": "2026-07-09",
+        "totals": {"downloads": 9, "visits": 20, "download_bytes": 4096, "unattributed": 1},
+        "downloads": {
+            "by_format": {"edi": 8, "unattributed": 1},
+            "by_survey": {"CI Sample Survey": 8},
+            "by_dataset": {"edi/sample-survey/Vulcan_A1.edi": {
+                "survey": "CI Sample Survey", "station": "A1", "slug": None,
+                "format": "edi", "downloads": 8}},
+        },
+        "countries": {"AU": 25, "unknown": 4},
+        "daily": [{"date": "2026-07-06", "downloads": 4, "visits": 9},
+                  {"date": "2026-07-09", "downloads": 5, "visits": 11}],
+    }
+    doc.update(over)
+    return doc
+
+
+def test_per_survey_rows_carry_downloads_and_volume_bundles_credited_to_their_survey():
+    """PER-SURVEY PIN (a). The fold must emit per-survey rows carrying BOTH a download count and a byte
+    volume, with a whole-survey BUNDLE credited to its own survey exactly like a per-station file. FAILS
+    IF by_survey stays a bare count, if the volume is not accumulated, or if a bundle download is not
+    attributed to its survey."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", size=1000),
+        _line("/data/edi/sample-survey/Vulcan_A2.edi", "203.0.113.5", size=2000),
+        _line("/data/bundles/sample-survey-edi.zip", "1.2.3.0", size=20500),   # the survey package
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    row = stats["downloads"]["by_survey"]["CI Sample Survey"]
+    assert row["downloads"] == 3, "the bundle must be credited to its survey alongside the two files"
+    assert row["bytes"] == 23500, row
+    # Per-dataset volume too (the top-datasets table's funding column).
+    assert stats["downloads"]["by_dataset"]["bundles/sample-survey-edi.zip"]["bytes"] == 20500
+
+
+def test_station_file_vs_survey_bundle_split_and_format_split_over_time():
+    """FORMAT/KIND PIN (b). The fold must split downloads by FORMAT and by KIND (a single-station file
+    vs a whole-survey bundle) both cumulatively and PER DAY, so the split can be reported over time.
+    FAILS IF the kind split is absent, if a bundle is counted as a station file, or if the daily rows
+    carry no per-format detail."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-09"),
+        _line("/data/xml/sample-survey/A1.xml", "203.0.113.5", date="2026-07-09"),
+        _line("/data/bundles/sample-survey-edi.zip", "1.2.3.0", date="2026-07-10"),
+        _line("/data/bundles/sample-survey-tf.h5", "1.2.3.0", date="2026-07-10"),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["downloads"]["by_kind"] == {"file": 2, "bundle": 2}
+    assert stats["downloads"]["by_format"] == {"edi": 1, "emtfxml": 1, "edi-zip": 1, "mth5": 1}
+    daily = {d["date"]: d for d in stats["daily"]}
+    assert daily["2026-07-09"]["formats"] == {"edi": 1, "emtfxml": 1}
+    assert daily["2026-07-09"]["kinds"] == {"file": 2}
+    assert daily["2026-07-10"]["formats"] == {"edi-zip": 1, "mth5": 1}
+    assert daily["2026-07-10"]["kinds"] == {"bundle": 2}
+    assert daily["2026-07-10"]["download_bytes"] == 2000
+
+
+def test_api_consumer_paths_are_classified_from_the_path_alone():
+    """API-CONSUMER PIN (c). The two DOCUMENTED machine-readable entry points must classify as `api`
+    and count on their own line, while every path the portal's own JS fetches on boot must NOT: the
+    catalogue is a VISIT, and /data/manifest.json (the SPA's own copy) is neither. Classification is by
+    PATH ONLY -- no user-agent is consulted. FAILS IF an SPA-boot fetch is credited as an API consumer,
+    if an API fetch inflates the visit count, or if the API line is missing."""
+    assert AGG.classify("/data/products/manifest.json") == ("api", None)
+    assert AGG.classify("/data/mtcat.json") == ("api", None)
+    assert AGG.classify("/data/catalogue.json") == ("visit", None)
+    assert AGG.classify("/data/manifest.json") == ("ignore", None)   # the SPA's own boot fetch
+    assert AGG.classify("/data/surveys.json") == ("ignore", None)
+
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/products/manifest.json", "8.8.8.0"),
+        _line("/data/mtcat.json", "8.8.8.0"),
+        _line("/data/manifest.json", "203.0.113.5"),      # SPA boot: not an API consumer
+        _line("/data/catalogue.json", "203.0.113.5"),     # SPA boot: a visit
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["api_requests"] == 2
+    assert stats["totals"]["visits"] == 1, "an API fetch must not inflate portal visits"
+    assert stats["totals"]["downloads"] == 0
+    day = stats["daily"][0]
+    assert day["api_requests"] == 2
+    assert stats["monthly"][0]["api_requests"] == 2
+
+
+def test_distinct_masked_networks_counted_per_day_without_retaining_any_address():
+    """REACH PIN (d). Each folded day must record the COUNT of distinct masked networks seen on it (the
+    /24 or /48 Caddy already truncated to), and stats.json must still contain no address. FAILS IF the
+    count is wrong, if repeat requests from one network inflate it, or if any address survives the fold."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/catalogue.json", "203.0.113.0", date="2026-07-09"),
+        _line("/data/catalogue.json", "203.0.113.0", date="2026-07-09"),   # same network, again
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "1.2.3.0", date="2026-07-09"),
+        _line("/data/catalogue.json", "2001:db8::", date="2026-07-10"),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    daily = {d["date"]: d for d in stats["daily"]}
+    assert daily["2026-07-09"]["networks"] == 2, "two distinct networks, four requests"
+    assert daily["2026-07-10"]["networks"] == 1
+    assert _sweep_ip_or_ua(json.dumps(stats)) == [], "a network COUNT must not become a stored address"
+
+
+def test_monthly_rollups_accumulate_and_survive_daily_pruning():
+    """MONTHLY + RETENTION PIN (e). Calendar-month rollups must accumulate as days fold, and a daily
+    prune must expire OLD DAILY rows while leaving every monthly row intact -- including months whose
+    days are entirely gone from the daily window. FAILS IF the monthly arithmetic is wrong, if monthlies
+    are recomputed from the (pruned) daily tail, or if a monthly row is pruned."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    # May: two days. June: one day. Folded with a generous window first.
+    may = [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-05-04", size=100),
+           _line("/data/catalogue.json", "203.0.113.5", date="2026-05-04"),
+           _line("/data/edi/sample-survey/Vulcan_A2.edi", "1.2.3.0", date="2026-05-30", size=200)]
+    jun = [_line("/data/bundles/sample-survey-tf.h5", "1.2.3.0", date="2026-06-02", size=900)]
+    run_may = dt.datetime(2026, 6, 1, 3, 30, tzinfo=dt.timezone.utc)
+    run_jun = dt.datetime(2026, 6, 3, 3, 30, tzinfo=dt.timezone.utc)
+    s1 = AGG.aggregate(None, may, rmap, geoip, run_may, daily_keep=92)
+    s2 = AGG.aggregate(s1, jun, rmap, geoip, run_jun, daily_keep=92)
+    months = {m["month"]: m for m in s2["monthly"]}
+    assert months["2026-05"]["downloads"] == 2 and months["2026-05"]["download_bytes"] == 300
+    assert months["2026-05"]["visits"] == 1 and months["2026-05"]["days"] == 2
+    assert months["2026-05"]["surveys"]["CI Sample Survey"] == {"downloads": 2, "bytes": 300}
+    assert months["2026-06"]["downloads"] == 1 and months["2026-06"]["kinds"] == {"bundle": 1}
+    assert months["2026-06"]["countries"] == {"NZ": 1}
+
+    # Now a run far in the future with a 92-day window: every May/June daily row falls out of the
+    # window, but BOTH monthly rows must survive with their arithmetic untouched.
+    run_far = dt.datetime(2026, 11, 1, 3, 30, tzinfo=dt.timezone.utc)
+    s3 = AGG.aggregate(s2, [], rmap, geoip, run_far, daily_keep=92)
+    assert s3["daily"] == [], "daily rows older than the 92-day window must be pruned"
+    months3 = {m["month"]: m for m in s3["monthly"]}
+    assert set(months3) == {"2026-05", "2026-06"}, "monthly rollups are kept indefinitely"
+    assert months3["2026-05"]["downloads"] == 2 and months3["2026-05"]["download_bytes"] == 300
+    assert months3["2026-06"]["downloads"] == 1
+    assert s3["totals"]["downloads"] == 3, "cumulative totals are unaffected by daily pruning"
+
+
+def test_daily_window_keeps_92_days_and_drops_the_93rd():
+    """RETENTION BOUNDARY PIN. The daily window is a rolling span of days ending at the fold watermark:
+    the oldest day inside it is kept and the day one older is dropped. FAILS IF the window is measured
+    in rows rather than days, or is off by one."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    run = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)      # watermark 2026-07-11
+    inside = (dt.date(2026, 7, 11) - dt.timedelta(days=91)).isoformat()   # exactly 92 days inclusive
+    outside = (dt.date(2026, 7, 11) - dt.timedelta(days=92)).isoformat()  # one day too old
+    lines = [_line("/data/catalogue.json", "203.0.113.5", date=outside),
+             _line("/data/catalogue.json", "203.0.113.5", date=inside)]
+    stats = AGG.aggregate(None, lines, rmap, geoip, run, daily_keep=92)
+    dates = [d["date"] for d in stats["daily"]]
+    assert inside in dates and outside not in dates, dates
+    # The pruned day is still fully represented in its month rollup (and in the totals).
+    assert stats["totals"]["visits"] == 2
+    assert sum(m["visits"] for m in stats["monthly"]) == 2
+
+
+def test_v1_stats_file_upgrades_in_place_without_losing_or_inventing_anything():
+    """MIGRATION PIN. A LIVE schema-1 stats.json must be read tolerantly and upgraded in place: every v1
+    total/format/dataset carries forward, by_survey grows a volume field WITHOUT inventing historical
+    bytes, monthly rollups are SEEDED from the days already folded (marked seeded_days), and
+    detail_since marks where the new dimensions actually begin. FAILS IF a v1 field is lost, if a month
+    absent from the daily tail is invented, or if a seeded month claims byte/format detail it lacks."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    run = dt.datetime(2026, 7, 11, 3, 30, tzinfo=dt.timezone.utc)   # folds 2026-07-10
+    lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-10", size=50)]
+    stats = AGG.aggregate(_v1_stats(), lines, rmap, geoip, run)
+
+    assert stats["schema"] == 2
+    # v1 cumulative counts survive and keep accruing.
+    assert stats["totals"]["downloads"] == 10 and stats["totals"]["visits"] == 20
+    assert stats["totals"]["api_requests"] == 0
+    assert stats["downloads"]["by_format"]["edi"] == 9
+    # by_survey migrates int -> {downloads, bytes}; the historical volume is NOT fabricated.
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 9, "bytes": 50}
+    assert stats["downloads"]["by_dataset"]["edi/sample-survey/Vulcan_A1.edi"]["downloads"] == 9
+    # detail_since is the day after the v1 watermark: everything before it predates the new dimensions.
+    assert stats["detail_since"] == "2026-07-10"
+    # Monthly rollups seeded ONLY from the days the v1 file actually held -- no earlier month invented.
+    months = {m["month"]: m for m in stats["monthly"]}
+    assert set(months) == {"2026-07"}
+    assert months["2026-07"]["seeded_days"] == 2, "both v1 daily rows are marked as seeded"
+    assert months["2026-07"]["days"] == 3, "two seeded days plus the day folded now"
+    assert months["2026-07"]["downloads"] == 4 + 5 + 1
+    assert months["2026-07"]["visits"] == 9 + 11
+    # The seeded portion carried no volume, so the month's byte figure covers ONLY the folded day.
+    assert months["2026-07"]["download_bytes"] == 50
+
+
+def test_upgrade_is_stable_and_does_not_reseed_or_restamp_on_later_runs():
+    """MIGRATION IDEMPOTENCY PIN. Folding again over an already-upgraded file must NOT re-seed the
+    monthly rows (double counting) nor re-stamp detail_since, and a FRESH install (no prior file) must
+    never claim a detail_since at all. FAILS IF a second run doubles a month or moves the caveat line."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    run1 = dt.datetime(2026, 7, 11, 3, 30, tzinfo=dt.timezone.utc)
+    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)
+    once = AGG.aggregate(_v1_stats(), [], rmap, geoip, run1)
+    twice = AGG.aggregate(once, [], rmap, geoip, run2)
+    assert twice["monthly"] == once["monthly"], "a later run must not re-seed the rollups"
+    assert twice["detail_since"] == once["detail_since"] == "2026-07-10"
+    # A fresh install: nothing predates the detail, so there is no caveat to raise.
+    fresh = AGG.aggregate(None, [], rmap, geoip, run1)
+    assert fresh["detail_since"] is None and fresh["monthly"] == []
+    assert fresh["schema"] == 2
+
+
+def test_v2_fold_still_leaks_nothing():
+    """LEAK PIN (schema 2). The richer aggregate must still contain no address and no user-agent: the
+    network reach proxy is an integer, the API line is a path-class count, and the per-survey volume is
+    a byte sum. FAILS IF any new dimension smuggles an identifier into stats.json."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [_line("/data/products/manifest.json", "203.0.113.5"),
+             _line("/data/mtcat.json", "2001:db8:1234::"),
+             _line("/data/bundles/sample-survey-tf.h5", "198.51.100.0"),
+             _line("/data/catalogue.json", "1.2.3.0")]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert _sweep_ip_or_ua(json.dumps(stats, indent=1)) == []

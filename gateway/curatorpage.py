@@ -15,7 +15,9 @@ never on /gateway/status/*.
 """
 from __future__ import annotations
 
+import csv as _csv
 import html
+import io as _io
 import json as _json
 import re
 from pathlib import Path
@@ -3328,19 +3330,74 @@ def _num_card(value, label) -> str:
     return f'<div class="card"><div class="n">{_esc(value)}</div><div class="l">{_esc(label)}</div></div>'
 
 
+def _as_int(v, default: int = 0) -> int:
+    """A tolerant int for aggregate fields. stats.json is host-written and may be an OLDER SCHEMA, so
+    every numeric read here must survive a missing key or a non-numeric value without raising."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _survey_rows(stats_or_month: dict) -> list[dict]:
+    """The by_survey map as [{survey, downloads, bytes}], sorted by downloads desc.
+
+    TOLERANT READ of both aggregate schemas: v1 wrote `{survey: count}` (a bare int, no volume), v2
+    writes `{survey: {downloads, bytes}}`. A v1 int renders with a zero volume rather than failing, and
+    the detail caveat below tells the reader from when the volume column is real."""
+    raw = stats_or_month if isinstance(stats_or_month, dict) else {}
+    out: list[dict] = []
+    for name, val in raw.items():
+        if not isinstance(name, str):
+            continue
+        if isinstance(val, dict):
+            out.append({"survey": name, "downloads": _as_int(val.get("downloads")),
+                        "bytes": _as_int(val.get("bytes"))})
+        else:
+            out.append({"survey": name, "downloads": _as_int(val), "bytes": 0})
+    out.sort(key=lambda r: (-r["downloads"], r["survey"]))
+    return out
+
+
+def _monthly_rows(stats: dict) -> list[dict]:
+    """Well-formed monthly rollup rows, oldest first. Empty for a v1 stats.json (which has no monthly
+    block at all) -- the screen then says so rather than inventing months."""
+    rows = stats.get("monthly") if isinstance(stats, dict) else None
+    if not isinstance(rows, list):
+        return []
+    out = [r for r in rows if isinstance(r, dict) and isinstance(r.get("month"), str)]
+    out.sort(key=lambda r: r["month"])
+    return out
+
+
+def _month_label(month: str) -> str:
+    """'2026-07' -> 'Jul 2026'. An unparseable value renders verbatim (escaped), never a crash."""
+    try:
+        y, m = month.split("-")
+        names = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        return f"{names[int(m) - 1]} {y}"
+    except (ValueError, IndexError):
+        return month
+
+
 def _analytics_cards(stats: dict) -> str:
     totals = stats.get("totals") or {}
     downloads = totals.get("downloads") or 0
     visits = totals.get("visits") or 0
+    api = _as_int(totals.get("api_requests"))
     unattributed = totals.get("unattributed") or 0
     volume = _human_bytes(totals.get("download_bytes"))
     countries = stats.get("countries") or {}
     n_countries = len([c for c in countries if c and c != "unknown"])
     by_dataset = (stats.get("downloads") or {}).get("by_dataset") or {}
+    surveys = _survey_rows((stats.get("downloads") or {}).get("by_survey") or {})
     cards = (
         _num_card(downloads, "Downloads")
         + _num_card(visits, "Portal visits")
+        + _num_card(api, "API requests")
         + _num_card(n_countries, "Countries")
+        + _num_card(len(surveys), "Surveys downloaded")
         + _num_card(len(by_dataset), "Datasets downloaded")
         + _num_card(volume, "Download volume")
         + _num_card(unattributed, "Unattributed")
@@ -3348,13 +3405,137 @@ def _analytics_cards(stats: dict) -> str:
     return f'<div class="cards">{cards}</div>'
 
 
+def _counter_line(counter: dict, *, limit: int = 12) -> str:
+    """'edi: 80, mth5: 13' for a {key: count} aggregate, biggest first. Empty -> ''."""
+    items = [(str(k), _as_int(v)) for k, v in (counter or {}).items()]
+    items.sort(key=lambda kv: (-kv[1], kv[0]))
+    return ", ".join(f"{_esc(k)}: <b>{_esc(v)}</b>" for k, v in items[:limit])
+
+
 def _format_breakdown(stats: dict) -> str:
-    by_format = (stats.get("downloads") or {}).get("by_format") or {}
-    if not by_format:
+    dl = stats.get("downloads") or {}
+    by_format = dl.get("by_format") or {}
+    by_kind = dl.get("by_kind") or {}
+    out = ""
+    if by_format:
+        out += f'<p class="opsnote">Downloads by format &mdash; {_counter_line(by_format)}.</p>'
+    if by_kind:
+        files = _as_int(by_kind.get("file"))
+        bundles = _as_int(by_kind.get("bundle"))
+        other = sum(_as_int(v) for k, v in by_kind.items() if k not in ("file", "bundle"))
+        tail = f', unattributed paths: <b>{_esc(other)}</b>' if other else ""
+        out += (f'<p class="opsnote">Single-station files: <b>{_esc(files)}</b> &nbsp;·&nbsp; '
+                f'whole-survey bundles: <b>{_esc(bundles)}</b>{tail}.</p>')
+    return out
+
+
+def _detail_caveat(stats: dict) -> str:
+    """The honesty line for a box that was folding BEFORE the detailed dimensions existed. `detail_since`
+    is stamped by the aggregator when it upgrades an older stats.json in place; downloads before that day
+    are counted in the headline totals but were never broken down by volume, format family, kind, network
+    or API class. Absent detail_since (a box that has only ever run the detailed fold) renders nothing."""
+    since = stats.get("detail_since")
+    if not isinstance(since, str) or not since:
         return ""
-    parts = ", ".join(f"{_esc(k)}: <b>{_esc(v)}</b>"
-                      for k, v in sorted(by_format.items(), key=lambda kv: (-kv[1], kv[0])))
-    return f'<p class="opsnote">Downloads by format — {parts}.</p>'
+    return (f'<p class="opsnote">Per-survey volume, the format and station/bundle split, the API line '
+            f'and the network reach proxy are counted from <b>{_esc(since)}</b> onward. Earlier '
+            f'downloads and visits are in the headline totals but carry no such breakdown, so months '
+            f'spanning that date are marked below.</p>')
+
+
+def _by_survey_table(stats: dict, *, n: int = 25) -> str:
+    """Downloads BY SURVEY (count + volume) -- the funding-report unit. A whole-survey bundle is credited
+    to its survey by the fold, so this is every byte served for that survey however it was fetched."""
+    rows = _survey_rows((stats.get("downloads") or {}).get("by_survey") or {})
+    if not rows:
+        return '<p class="sub">No attributed downloads yet.</p>'
+    trs = "".join(
+        "<tr>"
+        f'<td>{_esc(r["survey"])}</td>'
+        f'<td class="num">{_esc(r["downloads"])}</td>'
+        f'<td class="num">{_esc(_human_bytes(r["bytes"]))}</td>'
+        "</tr>" for r in rows[:n])
+    more = ("" if len(rows) <= n else
+            f'<p class="opsnote">Showing the top {n} of {len(rows)} surveys by downloads.</p>')
+    return ('<table><thead><tr><th>Survey</th><th class="num">Downloads</th>'
+            '<th class="num">Volume</th></tr></thead><tbody>' + trs + "</tbody></table>" + more)
+
+
+def _monthly_table(stats: dict, *, months: int = 3) -> str:
+    """The quarterly view: the last `months` CALENDAR months SIDE BY SIDE, metrics down the left. Only
+    months the aggregator actually folded appear -- no earlier month is fabricated to fill the quarter,
+    and a month whose days were folded before the detailed dimensions existed is flagged in its own row
+    rather than silently showing a partial volume as if it were complete."""
+    rows = _monthly_rows(stats)
+    if not rows:
+        return ('<p class="sub">No monthly rollups yet. They begin at the next daily fold and fill in '
+                'one month at a time; nothing earlier is backfilled.</p>')
+    cols = rows[-months:]
+    heads = "".join(f'<th class="num">{_esc(_month_label(c["month"]))}</th>' for c in cols)
+
+    def _row(label, fn, *, note: str = "") -> str:
+        cells = "".join(f'<td class="num">{fn(c)}</td>' for c in cols)
+        hint = f' <span class="k">{note}</span>' if note else ""
+        return f"<tr><td>{label}{hint}</td>{cells}</tr>"
+
+    def _countries(c):
+        cc = c.get("countries") or {}
+        return _esc(len([k for k in cc if k and k != "unknown"]))
+
+    body = (
+        _row("Downloads", lambda c: _esc(_as_int(c.get("downloads"))))
+        + _row("Download volume", lambda c: _esc(_human_bytes(_as_int(c.get("download_bytes")))))
+        + _row("Portal visits", lambda c: _esc(_as_int(c.get("visits"))))
+        + _row("API requests", lambda c: _esc(_as_int(c.get("api_requests"))))
+        + _row("Countries", _countries)
+        + _row("Unattributed", lambda c: _esc(_as_int(c.get("unattributed"))))
+        + _row("Active days folded", lambda c: _esc(_as_int(c.get("days"))))
+        + _row("Formats", lambda c: (_counter_line(c.get("formats") or {}, limit=6) or "&mdash;"))
+        + _row("Station files / bundles",
+               lambda c: (f'{_esc(_as_int((c.get("kinds") or {}).get("file")))}'
+                          f' / {_esc(_as_int((c.get("kinds") or {}).get("bundle")))}'))
+        + _row("Top survey", lambda c: (_esc(_survey_rows(c.get("surveys") or {})[0]["survey"])
+                                        if (c.get("surveys") or {}) else "&mdash;"))
+    )
+    partial = [c for c in cols if _as_int(c.get("seeded_days")) > 0]
+    note = ""
+    if partial:
+        names = ", ".join(_esc(_month_label(c["month"])) for c in partial)
+        note = (f'<p class="opsnote">{names}: some days were folded before the detailed breakdown '
+                f'existed. Their downloads and visits are counted in full; their volume, format, '
+                f'station/bundle and per-survey figures cover only the later days of the month.</p>')
+    table = ('<div style="overflow-x:auto"><table><thead><tr><th>Metric</th>' + heads
+             + "</tr></thead><tbody>" + body + "</tbody></table></div>" + note)
+    if len(rows) > len(cols):
+        table += (f'<p class="opsnote">{len(rows)} month(s) of rollups are retained in full; the '
+                  f'export below carries every one.</p>')
+    return table
+
+
+def _export_links() -> str:
+    """The 'download report data' affordance: the monthly aggregates as CSV, straight into a funding
+    report. Plain links (no JS), served by the gateway from the same stats.json this screen renders."""
+    return ('<p class="opsnote">Download report data &mdash; '
+            '<a href="/gateway/curator/analytics.csv">monthly totals (CSV)</a> &nbsp;·&nbsp; '
+            '<a href="/gateway/curator/analytics-surveys.csv">monthly by survey (CSV)</a>. '
+            'Every retained month is included, not just the three shown.</p>')
+
+
+def _reach_note(daily: list) -> str:
+    """The privacy-safe reach proxy: distinct MASKED networks per day (the /24 or /48 the edge already
+    truncated to). Days folded before this was counted carry no value at all, so they are excluded
+    rather than read as zero."""
+    vals = [(d.get("date"), _as_int(d.get("networks"))) for d in (daily or [])
+            if isinstance(d, dict) and isinstance(d.get("networks"), int)]
+    if not vals:
+        return ""
+    peak = max(v for _, v in vals)
+    last_date, last_val = vals[-1]
+    return (f'<p class="opsnote">Distinct networks &mdash; most recent folded day '
+            f'(<span class="k">{_esc(last_date)}</span>): <b>{_esc(last_val)}</b> &nbsp;·&nbsp; '
+            f'peak over the window: <b>{_esc(peak)}</b> &nbsp;·&nbsp; counted over '
+            f'{_esc(len(vals))} day(s). A reach proxy from the masked network the edge already wrote '
+            f'(IPv4 /24, IPv6 /48); no address is stored, and one network can be a whole institution.</p>')
 
 
 def _dataset_label(row: dict) -> str:
@@ -3377,15 +3558,16 @@ def _top_datasets_table(stats: dict, *, n: int = 20) -> str:
     for r in rows[:n]:
         trs.append(
             "<tr>"
-            f'<td>{_esc(r.get("survey") or "—")}</td>'
+            f'<td>{_esc(r.get("survey")) if r.get("survey") else "&mdash;"}</td>'
             f'<td>{_dataset_label(r)}</td>'
-            f'<td>{_esc(r.get("format") or "—")}</td>'
+            f'<td>{_esc(r.get("format")) if r.get("format") else "&mdash;"}</td>'
             f'<td class="num">{_esc(r.get("downloads") or 0)}</td>'
+            f'<td class="num">{_esc(_human_bytes(_as_int(r.get("bytes"))))}</td>'
             "</tr>")
     more = ("" if len(rows) <= n else
             f'<p class="opsnote">Showing the top {n} of {len(rows)} datasets by downloads.</p>')
     return ('<table><thead><tr><th>Survey</th><th>Station / package</th><th>Format</th>'
-            '<th class="num">Downloads</th></tr></thead><tbody>'
+            '<th class="num">Downloads</th><th class="num">Volume</th></tr></thead><tbody>'
             + "".join(trs) + "</tbody></table>" + more)
 
 
@@ -3471,7 +3653,14 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
              '(masked-at-edge IPs, aggregates only — no addresses or user-agents are stored). '
              'Per-station and per-survey <em>views</em> are not server-countable — the portal renders '
              'them client-side with no per-navigation request (record D3), so this screen reports '
-             'downloads and whole-portal visits, honestly, not page views.</p>')
+             'downloads and whole-portal visits, honestly, not page views.</p>'
+             '<p class="sub">Every figure below is derived from request paths, the masked network and '
+             'the response size the access log already records. Nothing here is a beacon and nothing '
+             'new is collected. <b>API requests</b> counts fetches of the two documented '
+             'machine-readable entry points the portal never fetches for itself '
+             '(<code>/data/products/manifest.json</code>, <code>/data/mtcat.json</code>): it is a '
+             'path-class signal, not a user-agent test, and it is an upper bound because the mtcat '
+             'link also sits in the page footer where a person can click it.</p>')
     if not isinstance(stats, dict):
         body = (intro
                 + '<div class="opsband" style="background:' + _PALETTE["panel"] + '">'
@@ -3491,19 +3680,88 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
         chip = (f'<p class="sub" style="margin-top:-.5rem">Updated '
                 f'<span class="dt" title="{_esc(generated_at)}">{_esc(short_utc(generated_at or ""))}</span>'
                 f' · aggregated daily.</p>')
+    daily = stats.get("daily") or []
     body = (
         intro
         + chip
         + _analytics_cards(stats)
         + _format_breakdown(stats)
+        + _detail_caveat(stats)
+        + '<h2>Quarterly breakdown</h2>'
+        + '<p class="sub">The last three calendar months side by side. Monthly rollups are kept '
+          'permanently (they are pure counts); the daily rows behind them roll off after 92 days.</p>'
+        + _monthly_table(stats)
+        + _export_links()
+        + '<h2>Downloads by survey</h2>'
+        + _by_survey_table(stats)
         + '<h2>Daily downloads &amp; visits</h2>'
-        + _daily_sparkline(stats.get("daily") or [])
+        + _daily_sparkline(daily)
+        + _reach_note(daily)
         + '<h2>Top datasets</h2>'
         + _top_datasets_table(stats)
         + '<h2>By country</h2>'
         + _country_table(stats)
     )
     return _shell("AusMT usage analytics", body, nav=nav)
+
+
+# ---- CSV export of the monthly aggregates (the funding-report affordance) -------------------------
+# Server-rendered text/csv over the SAME stats.json the screen reads: no new data, no new privilege,
+# just the retained monthly rollups in a shape that pastes into a report. Every cell is a count, a byte
+# figure, a month, or a survey name -- never an address, never a path.
+
+def _csv_safe(value) -> str:
+    """Neutralise spreadsheet formula injection. A survey name is curator-authored, but a cell that
+    STARTS with =, +, -, @, tab or CR is executed as a formula by Excel/Sheets on open, so it is
+    prefixed with a quote. Everything else passes through verbatim."""
+    s = "" if value is None else str(value)
+    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+def _csv_document(header: list, rows: list) -> str:
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(header)
+    for row in rows:
+        w.writerow([_csv_safe(c) for c in row])
+    return buf.getvalue()
+
+
+def analytics_monthly_csv(stats) -> str:
+    """Every retained calendar month as one CSV row: the headline counts, then one column per download
+    format and per kind seen across the whole history (so the columns are stable down the file).
+
+    A missing/older stats.json yields the HEADER ROW ALONE -- an honest empty export, never a fabricated
+    month and never an error page in place of a download."""
+    rows = _monthly_rows(stats) if isinstance(stats, dict) else []
+    formats = sorted({str(k) for r in rows for k in (r.get("formats") or {})})
+    kinds = sorted({str(k) for r in rows for k in (r.get("kinds") or {})})
+    header = (["month", "downloads", "download_bytes", "visits", "api_requests", "unattributed",
+               "countries", "active_days", "days_without_detail"]
+              + [f"format_{f}" for f in formats] + [f"kind_{k}" for k in kinds])
+    out = []
+    for r in rows:
+        cc = r.get("countries") or {}
+        out.append([r["month"], _as_int(r.get("downloads")), _as_int(r.get("download_bytes")),
+                    _as_int(r.get("visits")), _as_int(r.get("api_requests")),
+                    _as_int(r.get("unattributed")),
+                    len([k for k in cc if k and k != "unknown"]),
+                    _as_int(r.get("days")), _as_int(r.get("seeded_days"))]
+                   + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
+                   + [_as_int((r.get("kinds") or {}).get(k)) for k in kinds])
+    return _csv_document(header, out)
+
+
+def analytics_survey_csv(stats) -> str:
+    """One CSV row per (month, survey): downloads and byte volume, oldest month first and biggest survey
+    first within a month. This is the per-survey funding line -- a whole-survey bundle is credited to its
+    survey by the fold, so the volume is everything served for that survey however it was fetched."""
+    rows = _monthly_rows(stats) if isinstance(stats, dict) else []
+    out = []
+    for r in rows:
+        for s in _survey_rows(r.get("surveys") or {}):
+            out.append([r["month"], s["survey"], s["downloads"], s["bytes"]])
+    return _csv_document(["month", "survey", "downloads", "download_bytes"], out)
 
 
 # ---- C43 S2b-ii: rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------

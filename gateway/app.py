@@ -637,6 +637,32 @@ class Gateway:
         return self._html(curatorpage.render_analytics_page(
             stats=stats, stats_stale=stats_stale, nav=nav))
 
+    def handle_analytics_csv(self, request: Request, view: str) -> Response:
+        """GET /gateway/curator/analytics.csv | analytics-surveys.csv -- the funding-report export.
+        READ-ONLY and session-gated exactly like the screen, over the SAME stats.json read server-side:
+        it renders the retained MONTHLY rollups (totals, or one row per month and survey) as text/csv so
+        the numbers paste straight into a report. No new data, no new privilege, no new mount.
+
+        Fail-closed the same way the screen does: a missing or older-schema stats.json yields the header
+        row alone (an honest empty export), never a 500 and never a fabricated month. Served as an
+        attachment with nosniff + no-store so a browser downloads it rather than rendering it."""
+        name = self._require_session(request)
+        if isinstance(name, Response):
+            return name
+        stats = serve_state.read_stats(self.cfg.state_dir)
+        if view == "surveys":
+            body = curatorpage.analytics_survey_csv(stats)
+            filename = "ausmt-usage-by-survey-monthly.csv"
+        else:
+            body = curatorpage.analytics_monthly_csv(stats)
+            filename = "ausmt-usage-monthly.csv"
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        }
+        return Response(content=body, media_type="text/csv; charset=utf-8", headers=headers)
+
     def handle_serve_build_detail(self, request: Request, build_ref: str) -> Response:
         """GET /gateway/curator/serve/build/{build_ref} — read-only build forensics (S2b-i B4). Matches
         build_ref against the ops-status.json inventory SERVER-side (serve_state.read_ops_status +
@@ -3090,6 +3116,16 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/analytics")
     def curator_analytics(request: Request):
         return gw.handle_analytics(request)
+
+    # The funding-report export: the retained monthly rollups as CSV (totals, and one row per month and
+    # survey). Same session gate and same read-only stats.json seam as the screen above.
+    @app.get("/gateway/curator/analytics.csv")
+    def curator_analytics_csv(request: Request):
+        return gw.handle_analytics_csv(request, "monthly")
+
+    @app.get("/gateway/curator/analytics-surveys.csv")
+    def curator_analytics_surveys_csv(request: Request):
+        return gw.handle_analytics_csv(request, "surveys")
 
     # ---- C43 S2b-ii: privileged serve-state actions. Session + CSRF checked in the handlers; each
     # writes an intent the host actions agent executes (the gateway gains no shell). The destructive

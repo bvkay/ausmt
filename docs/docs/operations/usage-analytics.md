@@ -12,9 +12,14 @@ identity. Only aggregate counts are ever stored.
 | Metric | Source |
 | --- | --- |
 | Downloads by survey / station / format | Server access-log paths (`/data/edi`, `/data/xml`, `/data/bundles`) resolved through the build's `manifest.json` reverse map. |
+| Download **volume** by survey and dataset | The response size the access log already records, summed per survey and per artifact. A whole-survey bundle counts toward its own survey. |
+| Single-station file vs whole-survey bundle | Whether the manifest resolved the path to a per-station artifact or a survey package. |
 | Portal visits | One `catalogue.json` fetch per single-page-app boot — the only server-observable visit signal. |
+| API requests | Fetches of the two documented machine-readable entry points the portal itself never fetches (`/data/products/manifest.json`, `/data/mtcat.json`). This is a **path class**, not a user-agent test, and it is an upper bound: the discovery-document link sits in the page footer, so a person can click it. |
+| Distinct networks per day | How many distinct **masked** networks (a /24 or /48) were seen that day. A privacy-safe reach proxy: the addresses exist only in memory while the day is folded, and only the count is stored. One network can be an entire institution, so it is reach, not people. |
 | Downloads & visits by country | The **masked** client address resolved to a country (see below). |
-| Daily time series | Downloads and visits folded per calendar day (UTC). |
+| Daily time series | Downloads, volume, formats, visits, API requests and networks folded per calendar day (UTC). |
+| Calendar-month rollups | The same figures accumulated per month as each day folds, for quarterly and year-over-year reporting. |
 
 ### What is *not* measured — honestly
 
@@ -37,7 +42,28 @@ obstacle to it. Research-infrastructure analytics need aggregates, never identit
   published `stats.json` contains **no address** (masked or otherwise) and **no user-agent string** —
   only counts and a daily series.
 - **Raw logs are short-lived.** The access log is rotated with a ~7-day retention; the tail exists
-  only for debugging and is not the database.
+  only for debugging and is not the database. Nothing about that rotation changed when the reporting
+  detail grew: every breakdown is derived from the log the server already wrote.
+
+## Retention of the aggregates
+
+Retention applies to *counts*, never to the log. Two different lifetimes, deliberately:
+
+| Record | Kept for | Why |
+| --- | --- | --- |
+| Raw access log (masked) | ~7 days | Debugging only. It is not the database. |
+| Daily aggregate rows | 92 days (one quarter) | Enough for a rolling operational view without accumulating fine-grained history. |
+| Monthly rollup rows | Indefinitely | Tiny pure-count records with no address, path or identity in them. They are what makes quarterly and year-over-year reporting possible. |
+
+Each calendar month is accumulated *as its days fold*, so expiring a daily row never loses the month
+it belonged to. Reports can be exported as CSV: monthly totals, and one row per month and survey.
+
+### No backfill
+
+Only days that were actually folded exist. When the detailed breakdown was added, existing months were
+seeded from the daily rows already held (downloads and visits, marked as partial) and nothing earlier
+was invented. A month whose days predate a given breakdown is flagged on screen rather than shown as a
+complete figure, and older days carry no network count at all: absent, not zero.
 
 ## Country data attribution
 

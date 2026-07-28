@@ -10,6 +10,8 @@ Each pin states its failure criterion (Invariant 10). Pure gateway stack — no 
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import re
 import time
@@ -187,3 +189,242 @@ def test_human_bytes_scales():
     assert curatorpage._human_bytes(512) == "512 B"           # noqa: SLF001
     assert curatorpage._human_bytes(5_242_880) == "5.0 MB"     # noqa: SLF001
     assert curatorpage._human_bytes(None) == "—"               # noqa: SLF001
+
+
+# ==================================================================================================
+# Funding-detail lane: the richer screen (per-survey volume, station/bundle split, API line, the
+# quarterly view) + the CSV export, over BOTH aggregate schemas.
+# ==================================================================================================
+
+def _v2_stats(**over) -> dict:
+    """A schema-2 stats.json: the v1 blocks plus per-survey volume, by_kind, the API line, per-day
+    detail, and the permanent monthly rollups spanning three calendar months."""
+    doc = _fresh_stats()
+    doc["schema"] = 2
+    doc["detail_since"] = "2026-05-01"
+    doc["totals"]["api_requests"] = 61
+    doc["downloads"]["by_survey"] = {"CI Sample Survey": {"downloads": 120, "bytes": 4_194_304},
+                                     "Burra 2017": {"downloads": 13, "bytes": 1_048_576}}
+    doc["downloads"]["by_kind"] = {"file": 100, "bundle": 33}
+    doc["downloads"]["by_dataset"]["edi/sample-survey/Vulcan_A1.edi"]["bytes"] = 1_310_720
+    doc["daily"] = [{"date": "2026-07-08", "downloads": 10, "visits": 40, "download_bytes": 1024,
+                     "api_requests": 2, "networks": 7, "formats": {"edi": 10}, "kinds": {"file": 10}},
+                    {"date": "2026-07-11", "downloads": 42, "visits": 152, "download_bytes": 4096,
+                     "api_requests": 9, "networks": 19, "formats": {"edi": 30, "mth5": 12},
+                     "kinds": {"file": 30, "bundle": 12}}]
+    doc["monthly"] = [
+        {"month": "2026-05", "downloads": 30, "visits": 90, "download_bytes": 1_048_576,
+         "unattributed": 1, "api_requests": 12, "days": 20, "seeded_days": 0,
+         "formats": {"edi": 25, "mth5": 5}, "kinds": {"file": 25, "bundle": 5},
+         "surveys": {"CI Sample Survey": {"downloads": 30, "bytes": 1_048_576}},
+         "countries": {"AU": 60, "unknown": 3}},
+        {"month": "2026-06", "downloads": 55, "visits": 210, "download_bytes": 2_097_152,
+         "unattributed": 2, "api_requests": 27, "days": 29, "seeded_days": 0,
+         "formats": {"edi": 40, "emtfxml": 10, "mth5": 5}, "kinds": {"file": 50, "bundle": 5},
+         "surveys": {"CI Sample Survey": {"downloads": 40, "bytes": 1_500_000},
+                     "Burra 2017": {"downloads": 15, "bytes": 597_152}},
+         "countries": {"AU": 150, "US": 60}},
+        {"month": "2026-07", "downloads": 52, "visits": 212, "download_bytes": 2_097_152,
+         "unattributed": 1, "api_requests": 22, "days": 4, "seeded_days": 0,
+         "formats": {"edi": 40, "mth5": 12}, "kinds": {"file": 40, "bundle": 12},
+         "surveys": {"CI Sample Survey": {"downloads": 52, "bytes": 2_097_152}},
+         "countries": {"AU": 200, "NZ": 12}},
+    ]
+    doc.update(over)
+    return doc
+
+
+def test_analytics_renders_survey_volume_kind_split_api_line_and_reach(tmp_path):
+    """FUNDING-DETAIL RENDER PIN. The screen must surface the funding-grade breakdowns: downloads BY
+    SURVEY with a volume column, the single-station vs whole-survey-bundle split, the API-consumer line
+    (distinct from visits), and the distinct-network reach proxy. FAILS IF any of those is missing from
+    the rendered page."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            html = r.text
+            assert "API requests" in html and ">61<" in html, "the API-consumer line must render"
+            assert "Downloads by survey" in html
+            assert "Burra 2017" in html and "1.0 MB" in html, "per-survey volume must render"
+            assert "Single-station files" in html and ">100<" in html and ">33<" in html
+            assert "Distinct networks" in html and ">19<" in html, "the reach proxy must render"
+            assert "/24" in html, "the reach proxy must say what a network is"
+    run(_body())
+
+
+def test_analytics_renders_last_three_calendar_months_side_by_side(tmp_path):
+    """QUARTERLY PIN. The screen must show the last THREE calendar months side by side with the funding
+    metrics down the left, and must not invent a month that was never folded. FAILS IF fewer than the
+    retained months render, if a fourth month appears, or if the per-month metrics are absent."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            doc = _v2_stats()
+            doc["monthly"].insert(0, {"month": "2026-04", "downloads": 9, "visits": 9,
+                                      "download_bytes": 10, "unattributed": 0, "api_requests": 0,
+                                      "days": 3, "seeded_days": 0, "formats": {}, "kinds": {},
+                                      "surveys": {}, "countries": {}})
+            _write_stats(cfg, doc)
+            r = await client.get("/gateway/curator/analytics")
+            html = r.text
+            assert "Quarterly breakdown" in html
+            for label in ("May 2026", "Jun 2026", "Jul 2026"):
+                assert label in html, f"the quarterly view must show {label}"
+            assert "Apr 2026" not in html, "only the last three calendar months sit side by side"
+            assert "Active days folded" in html and "Station files / bundles" in html
+            assert "4 month(s) of rollups are retained" in html
+    run(_body())
+
+
+def test_analytics_does_not_fabricate_months_before_the_fold(tmp_path):
+    """BACKFILL-HONESTY PIN. With no monthly rollups yet (a box that has only ever run the older fold),
+    the quarterly section must say the rollups have not started rather than render empty or invented
+    months, and a month carrying pre-detail days must be flagged as partial. FAILS IF the screen shows a
+    month it never folded, or presents a partial month's volume as complete."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _fresh_stats())                     # schema 1: no monthly block at all
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            assert "No monthly rollups yet" in r.text
+            assert "nothing earlier is backfilled" in r.text
+
+            partial = _v2_stats()
+            partial["monthly"][-1]["seeded_days"] = 3
+            _write_stats(cfg, partial)
+            r2 = await client.get("/gateway/curator/analytics")
+            assert "folded before the detailed breakdown" in r2.text
+            assert "Jul 2026" in r2.text
+    run(_body())
+
+
+def test_analytics_renders_v1_stats_without_breaking(tmp_path):
+    """SCHEMA-TOLERANCE PIN. The screen must render a LIVE schema-1 stats.json (by_survey as bare ints,
+    no monthly, no by_kind, no api_requests, daily rows without detail) without a 500 and without
+    inventing figures: the survey table still lists surveys, the API card reads zero, and no reach line
+    is claimed for days that never counted networks. FAILS IF the older file 500s or fabricates data."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _fresh_stats())          # by_survey = {"CI Sample Survey": 120, ...}
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            html = r.text
+            assert "Downloads by survey" in html and "CI Sample Survey" in html
+            assert "Distinct networks" not in html, "no reach figure may be claimed for older days"
+            assert "Single-station files" not in html, "no kind split may be claimed for older days"
+    run(_body())
+
+
+def test_analytics_detail_caveat_names_the_date_detail_began(tmp_path):
+    """HONESTY PIN. When the aggregator upgraded an existing stats.json in place, the screen must name
+    the date from which the detailed dimensions are real, so an older download counted in the headline
+    total is not read as having a volume/format breakdown it never had. FAILS IF the caveat is missing
+    when detail_since is set, or is shown when it is not."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            r = await client.get("/gateway/curator/analytics")
+            assert "2026-05-01" in r.text and "onward" in r.text
+            _write_stats(cfg, _v2_stats(detail_since=None))
+            r2 = await client.get("/gateway/curator/analytics")
+            assert "onward. Earlier" not in r2.text
+    run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# CSV export: the "download report data" affordance.
+# --------------------------------------------------------------------------------------------------
+def test_analytics_monthly_csv_export_downloads_every_retained_month(tmp_path):
+    """EXPORT PIN. GET /gateway/curator/analytics.csv must return a text/csv ATTACHMENT carrying EVERY
+    retained month (not just the three on screen) with the funding columns and per-format columns.
+    FAILS IF the export is not an attachment, omits a retained month, or drops a metric."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            r = await client.get("/gateway/curator/analytics.csv")
+            assert r.status_code == 200
+            assert r.headers["content-type"].startswith("text/csv")
+            assert "attachment" in r.headers["content-disposition"]
+            assert "ausmt-usage-monthly.csv" in r.headers["content-disposition"]
+            rows = list(csv.reader(io.StringIO(r.text)))
+            header, data = rows[0], rows[1:]
+            assert header[:6] == ["month", "downloads", "download_bytes", "visits",
+                                  "api_requests", "unattributed"]
+            assert "format_mth5" in header and "kind_bundle" in header
+            assert [d[0] for d in data] == ["2026-05", "2026-06", "2026-07"]
+            june = dict(zip(header, data[1]))
+            assert june["downloads"] == "55" and june["download_bytes"] == "2097152"
+            assert june["api_requests"] == "27" and june["format_emtfxml"] == "10"
+            assert june["countries"] == "2"
+    run(_body())
+
+
+def test_analytics_survey_csv_export_has_one_row_per_month_and_survey(tmp_path):
+    """PER-SURVEY EXPORT PIN. The by-survey export must emit one row per (month, survey) with downloads
+    and byte volume, so a funding report can quote a named survey's usage for a named month. FAILS IF
+    the rows are collapsed across months or the volume is missing."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            r = await client.get("/gateway/curator/analytics-surveys.csv")
+            assert r.status_code == 200
+            rows = list(csv.reader(io.StringIO(r.text)))
+            assert rows[0] == ["month", "survey", "downloads", "download_bytes"]
+            body = [tuple(x) for x in rows[1:]]
+            assert ("2026-06", "CI Sample Survey", "40", "1500000") in body
+            assert ("2026-06", "Burra 2017", "15", "597152") in body
+            assert ("2026-05", "CI Sample Survey", "30", "1048576") in body
+    run(_body())
+
+
+def test_analytics_csv_export_is_session_gated_and_empty_safe(tmp_path):
+    """EXPORT SAFETY PIN. The export sits behind the SAME curator session gate as the screen, and with
+    NO stats.json it returns the header row alone rather than a 500 or a fabricated month. FAILS IF an
+    unauthenticated request is served the numbers, or a missing aggregate errors instead of exporting
+    an honest empty file."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            anon = await client.get("/gateway/curator/analytics.csv")
+            assert anon.status_code != 200, "the export must not serve numbers without a session"
+            await curator_login(client)
+            r = await client.get("/gateway/curator/analytics.csv")
+            assert r.status_code == 200
+            rows = list(csv.reader(io.StringIO(r.text)))
+            assert len(rows) == 1 and rows[0][0] == "month", rows
+    run(_body())
+
+
+def test_analytics_csv_neutralises_spreadsheet_formula_injection():
+    """CSV-SAFETY PIN. A cell whose text starts with =, +, -, or @ is executed as a formula when the
+    file is opened in Excel or Sheets, so the export must neutralise it. FAILS IF a survey name
+    beginning with one of those characters reaches the file unquoted. NEGATIVE CONTROL: an ordinary
+    name must pass through untouched (a blanket quote would corrupt every report)."""
+    stats = {"monthly": [{"month": "2026-06", "surveys": {
+        "=cmd|'/c calc'!A1": {"downloads": 3, "bytes": 9},
+        "Burra 2017": {"downloads": 1, "bytes": 4}}}]}
+    out = curatorpage.analytics_survey_csv(stats)
+    rows = {r[1] for r in csv.reader(io.StringIO(out))}
+    assert "'=cmd|'/c calc'!A1" in rows, "a formula-leading cell must be quoted"
+    assert "Burra 2017" in rows, "an ordinary name must NOT be mangled"
+
+
+def test_analytics_export_links_are_on_the_screen(tmp_path):
+    """AFFORDANCE PIN. The screen must offer the 'download report data' links, else the export is
+    unreachable for the owner it exists for. FAILS IF either export link is missing."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            r = await client.get("/gateway/curator/analytics")
+            assert 'href="/gateway/curator/analytics.csv"' in r.text
+            assert 'href="/gateway/curator/analytics-surveys.csv"' in r.text
+            assert "Download report data" in r.text
+    run(_body())
