@@ -40,7 +40,7 @@ fallback would serve the exact position the curator asked to protect, at a green
 survey's typo fails that survey and leaves the rest of the corpus building.
 
 Coordinate access is a separate concern from `coordinate_resolution`, which corrects a DMS sign bug
-in EDI headers. The two are easy to confuse and must not be conflated: one is a rights decision,
+in EDI headers. The two are easy to confuse and must not be conflated. One is a rights decision,
 the other is a data-quality fix.
 
 ## Where the depth is

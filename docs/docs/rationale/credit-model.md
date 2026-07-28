@@ -24,7 +24,7 @@ appear once as a creator and three times as a contributor without either list be
 Two design choices are worth calling out.
 
 The vocabularies are fail-closed. An unrecognised `name_type` or `role` blocks validation instead
-of passing through. A wrong role is not a cosmetic defect: it publishes a false statement about who
+of passing through. A wrong role is not a cosmetic defect. It publishes a false statement about who
 collected or owned a dataset, and that is worse than refusing the package.
 
 Credit is optional. Omit `creators[]` and the citation falls back to an organisation-and-year

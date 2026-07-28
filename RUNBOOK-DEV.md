@@ -19,15 +19,18 @@ Any Python 3.12 env with the pinned requirements works. The maintainer's known-g
 `ausmt` conda env, so the commands below are written for it; drop the `conda run -n ausmt`
 prefix if your interpreter is already the right one.
 
-Counts re-measured 2026-07-29 by collecting and running each suite: **1,393 tests in this
-repository**, plus **118** in the surveys repository gate.
+Counts below are per-suite collection figures, plus **118** in the surveys repository gate. The
+portal and deploy rows were re-measured on 2026-07-29 after `main` brought in the release machinery
+and the C45 analytics work. The engine and gateway rows predate that merge and are known to be low;
+both need a re-count in the `ausmt` env, so this file states no repository-wide total until they
+have one.
 
 | Suite | cwd | Command | Collected | Notes |
 |-------|-----|---------|-----------|-------|
 | engine | `engine/` | `conda run -n ausmt python -m pytest -q tests` | 438 | 433 pass, 5 skip. Several minutes; needs mt_metadata/mth5 (pinned in `engine/environments/`) |
 | gateway | **repo root** | `conda run -n ausmt python -m pytest -q gateway/tests` | 678 | under a minute; deps in `gateway/requirements-dev.txt`; cwd must be repo root so `gateway` imports |
-| deploy | **repo root** | `conda run -n ausmt python -m pytest -q deploy/tests` | 158 | shell, compose and Caddy config gates. Two tests shell out to host tools and skip when they are absent: `caddy validate` and `flock(1)`. The Caddy one needs to be able to create the log dir the Caddyfile names, so it can fail on a dev box where CI is green |
-| portal | `portal/` | `conda run -n ausmt python -m pytest -q tests` | 119 | jsdom drivers need node + `npm ci` in `portal/` (see `portal-ci.yml`) |
+| deploy | **repo root** | `conda run -n ausmt python -m pytest -q deploy/tests` | 183 | shell, compose and Caddy config gates. Two tests shell out to host tools and skip when they are absent: `caddy validate` and `flock(1)`. The Caddy one needs to be able to create the log dir the Caddyfile names, so it can fail on a dev box where CI is green |
+| portal | `portal/` | `conda run -n ausmt python -m pytest -q tests` | 135 | jsdom drivers need node + `npm ci` in `portal/` (see `portal-ci.yml`) |
 | surveys gate | `../ausmt-surveys/` | `conda run -n ausmt python -m pytest -q tests` | 118 | validates the validator + contribute tooling |
 
 CI runs gateway and deploy together from the repo root

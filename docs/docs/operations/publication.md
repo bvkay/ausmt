@@ -226,7 +226,7 @@ Embargoes are common for active research projects, industry collaborations and f
 requirements. Metadata **remains discoverable throughout** an embargo — only the bytes are withheld.
 
 The access level is the **state of record**. A lapsed `embargo_until` date does **not** auto-publish the
-survey: releasing data is a deliberate act, so the build keeps an embargoed survey withheld even past its
+survey. Releasing data is a deliberate act, so the build keeps an embargoed survey withheld even past its
 date and raises a stale-embargo warning for the curator. To release the data, a curator changes
 `level` to `open` and re-runs the build. Conversely, an `embargoed` level with no `embargo_until`, or with
 an unparseable date, is treated as embargoed indefinitely (fail-closed) with a loud warning.

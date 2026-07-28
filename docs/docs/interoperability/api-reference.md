@@ -91,7 +91,7 @@ long as it treats an absent key as absent rather than as empty.
 anything off-site. `portal.metadata_license` is `CC0-1.0` and covers the catalogue metadata only; a
 survey's data licence is the separate `license` field on its own record and varies by survey.
 
-Survey records are keyed by `survey_id`, which is the slug. Required on every record are `survey_id`,
+Survey records are identified by `survey_id` (the survey's slug). Required on every record are `survey_id`,
 `title`, `organisation` and `country`. Beyond those, v1.2 adds six facets derived from the document's
 own `stations[]` and from the build's download manifest, so a harvester can size and band-filter a
 survey without walking the station list:
@@ -498,6 +498,7 @@ conditional request so an unchanged document costs a `304` instead of a download
 
 ```python
 import json, urllib.request
+known_etag = None                               # persist this between polls; None on the first one
 req = urllib.request.Request("https://ausmt.au/data/build.json")
 if known_etag:                                  # from the previous poll
     req.add_header("If-None-Match", known_etag)

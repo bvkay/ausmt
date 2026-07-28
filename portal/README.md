@@ -105,11 +105,11 @@ retains stewardship of its own holdings.
 
 ## Development
 
-The portal is a static JavaScript application. There is no module system and no build step: the
+The portal is a static JavaScript application. There is no module system and no build step. The
 files under `src/` are plain scripts loaded in dependency order by the HTML pages, communicating
 through globals. No server-side processing is required.
 
-The test suite runs with `pytest -q tests` (119 tests as of 2026-07-29). The jsdom-driven
+The test suite runs with `pytest -q tests` (135 tests as of 2026-07-29). The jsdom-driven
 interaction tests need node and `npm ci` in this directory first; CI does exactly that, in
 `.github/workflows/portal-ci.yml`. For architecture and contributor guidance, see `docs`.
 
