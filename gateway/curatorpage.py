@@ -3584,6 +3584,88 @@ def _country_table(stats: dict) -> str:
             '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>")
 
 
+# ---- Australia by state: the sub-country breakdown beneath the AU country row --------------------
+# WHY STATE, AND WHY NOT CITY -- a ratified design decision, recorded here (and in the aggregator, and
+# in docs/docs/operations/usage-analytics.md) so it is not casually "improved" into a city breakdown:
+#   * the address behind these counts was ALREADY TRUNCATED at the edge (IPv4 /24, IPv6 /48). A /24
+#     prefix does not place a request in a city reliably -- mobile carrier and CGNAT pools routinely
+#     serve a whole state from one prefix -- so a city figure would be confidently wrong;
+#   * the Australian magnetotelluric research community is small. A city cell is QUASI-IDENTIFYING:
+#     "3 downloads from Hobart" names a research group. A state cell is not.
+# State is the finest grain that is BOTH defensible from a /24 and non-identifying at this community's
+# scale. Do not add a city dimension to this screen.
+_AU_STATE_NAMES = (
+    ("NSW", "New South Wales"),
+    ("VIC", "Victoria"),
+    ("QLD", "Queensland"),
+    ("SA", "South Australia"),
+    ("WA", "Western Australia"),
+    ("TAS", "Tasmania"),
+    ("NT", "Northern Territory"),
+    ("ACT", "Australian Capital Territory"),
+)
+_AU_STATE_ORDER = [code for code, _name in _AU_STATE_NAMES]
+_AU_STATE_LABELS = dict(_AU_STATE_NAMES)
+
+
+def _au_requests(stats_or_month: dict) -> int:
+    """The AU figure this breakdown sits beneath: that scope's own country count for AU."""
+    countries = (stats_or_month or {}).get("countries")
+    return _as_int(countries.get("AU")) if isinstance(countries, dict) else 0
+
+
+def _au_state_rows(by_state: dict, au_requests: int) -> list[tuple[str, str, int]]:
+    """[(code, label, count)] for the state breakdown, biggest state first, ALWAYS summing to
+    `au_requests` -- the AU country row this table sits beneath.
+
+    Three kinds of row, and the last two are the honesty of the thing:
+      * one per state the fold actually saw;
+      * `unattributed` -- AU traffic whose masked prefix the state table does not cover. It is counted
+        by the fold, never dropped, precisely so this table cannot be quietly smaller than its parent;
+      * `not_counted` -- the arithmetic remainder: AU requests folded on days BEFORE the state table
+        was in place. It is derived, not stored, and it is omitted when it is zero. Those days carry no
+        state data and never will (the raw logs that could tell us are long gone), so the row says so
+        rather than letting the reader assume the states account for every Australian request."""
+    counts = {str(k): _as_int(v) for k, v in (by_state or {}).items() if _as_int(v) > 0}
+    rows = [(code, _AU_STATE_LABELS.get(code, code), counts[code])
+            for code in _AU_STATE_ORDER if code in counts]
+    rows.sort(key=lambda r: (-r[2], _AU_STATE_ORDER.index(r[0])))
+    if counts.get("unattributed"):
+        rows.append(("unattributed", "Not in the state table", counts["unattributed"]))
+    remainder = _as_int(au_requests) - sum(n for _c, _l, n in rows)
+    if remainder > 0:
+        rows.append(("not_counted", "Counted before state data existed", remainder))
+    return rows
+
+
+def _au_state_table(stats: dict) -> str:
+    """The 'Australia by state' table -- rendered ONLY when the fold actually produced a breakdown. A
+    box with no state table installed sees nothing here: eight zeroes would read as 'no traffic from
+    Victoria' when the truth is 'not measured', and this screen omits rather than fabricates."""
+    by_state = stats.get("by_state") if isinstance(stats, dict) else None
+    if not isinstance(by_state, dict) or not any(_as_int(v) > 0 for v in by_state.values()):
+        return ""
+    rows = _au_state_rows(by_state, _au_requests(stats))
+    trs = "".join(
+        f'<tr><td>{_esc(label)}'
+        + (f' <span class="k">{_esc(code)}</span>' if code in _AU_STATE_LABELS else "")
+        + f'</td><td class="num">{_esc(n)}</td></tr>'
+        for code, label, n in rows)
+    total = sum(n for _c, _l, n in rows)
+    trs += (f'<tr><td><b>Australia (all)</b></td>'
+            f'<td class="num"><b>{_esc(total)}</b></td></tr>')
+    return (
+        '<h2>Australia by state</h2>'
+        '<p class="sub">A breakdown beneath the AU row of the country table: the rows below add up to '
+        'the Australian figure exactly. <b>State is the finest grain reported.</b> The address these '
+        'counts come from is masked to a /24 (IPv4) or /48 (IPv6) before it is ever written, which '
+        'does not place a request in a city reliably, and a city-level count in a research community '
+        'this small could identify a single group. There is deliberately no city breakdown.</p>'
+        '<table><thead><tr><th>State or territory</th>'
+        '<th class="num">Requests (downloads + visits)</th></tr></thead><tbody>'
+        + trs + '</tbody></table>')
+
+
 def _daily_sparkline(daily: list) -> str:
     """A SERVER-RENDERED inline SVG sparkline of the daily downloads (accent) and visits (info) series.
     NO JS — pure SVG, so it is inert under the strictPages CSP. Empty/one-point series degrade to a
@@ -3701,6 +3783,7 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
         + _top_datasets_table(stats)
         + '<h2>By country</h2>'
         + _country_table(stats)
+        + _au_state_table(stats)
     )
     return _shell("AusMT usage analytics", body, nav=nav)
 
@@ -3727,28 +3810,54 @@ def _csv_document(header: list, rows: list) -> str:
     return buf.getvalue()
 
 
+def _state_columns(rows: list) -> list[str]:
+    """The state codes any retained month actually carries, in the canonical state order. EMPTY when no
+    month carries a state breakdown -- a box that never folded a state exports exactly the columns it
+    exports today, rather than a wall of zeroes that would read as measured absence."""
+    seen = {str(k) for r in rows for k, v in (r.get("by_state") or {}).items() if _as_int(v) > 0}
+    return [c for c in _AU_STATE_ORDER if c in seen]
+
+
 def analytics_monthly_csv(stats) -> str:
     """Every retained calendar month as one CSV row: the headline counts, then one column per download
     format and per kind seen across the whole history (so the columns are stable down the file).
+
+    When any month carries the AU state breakdown the row also gains `au_requests` (that month's AU
+    country figure) and one column per state seen, plus `state_unattributed` (AU traffic the state
+    table did not cover) and `state_not_counted` (AU traffic folded before the state table existed).
+    Those two make every row RECONCILE: the state_* columns always sum to au_requests, so a funding
+    report built from this file can never carry a silent Australian undercount.
 
     A missing/older stats.json yields the HEADER ROW ALONE -- an honest empty export, never a fabricated
     month and never an error page in place of a download."""
     rows = _monthly_rows(stats) if isinstance(stats, dict) else []
     formats = sorted({str(k) for r in rows for k in (r.get("formats") or {})})
     kinds = sorted({str(k) for r in rows for k in (r.get("kinds") or {})})
+    states = _state_columns(rows)
     header = (["month", "downloads", "download_bytes", "visits", "api_requests", "unattributed",
                "countries", "active_days", "days_without_detail"]
               + [f"format_{f}" for f in formats] + [f"kind_{k}" for k in kinds])
+    if states:
+        header += (["au_requests"] + [f"state_{c}" for c in states]
+                   + ["state_unattributed", "state_not_counted"])
     out = []
     for r in rows:
         cc = r.get("countries") or {}
-        out.append([r["month"], _as_int(r.get("downloads")), _as_int(r.get("download_bytes")),
-                    _as_int(r.get("visits")), _as_int(r.get("api_requests")),
-                    _as_int(r.get("unattributed")),
-                    len([k for k in cc if k and k != "unknown"]),
-                    _as_int(r.get("days")), _as_int(r.get("seeded_days"))]
-                   + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
-                   + [_as_int((r.get("kinds") or {}).get(k)) for k in kinds])
+        row = ([r["month"], _as_int(r.get("downloads")), _as_int(r.get("download_bytes")),
+                _as_int(r.get("visits")), _as_int(r.get("api_requests")),
+                _as_int(r.get("unattributed")),
+                len([k for k in cc if k and k != "unknown"]),
+                _as_int(r.get("days")), _as_int(r.get("seeded_days"))]
+               + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
+               + [_as_int((r.get("kinds") or {}).get(k)) for k in kinds])
+        if states:
+            au = _au_requests(r)
+            counts = r.get("by_state") or {}
+            cells = [_as_int(counts.get(c)) for c in states]
+            unattributed = _as_int(counts.get("unattributed"))
+            not_counted = max(au - sum(cells) - unattributed, 0)
+            row += [au] + cells + [unattributed, not_counted]
+        out.append(row)
     return _csv_document(header, out)
 
 

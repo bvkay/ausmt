@@ -1,0 +1,14 @@
+1.0.0.0,1.0.0.255,OC,AU,Queensland,South Brisbane,-27.4748,153.0170
+1.0.1.0,1.0.1.255,AS,CN,Fujian,Fuzhou,26.0614,119.3061
+192.0.2.0,192.0.2.127,OC,AU,Victoria,Melbourne,-37.8140,144.9633
+192.0.2.128,192.0.2.255,OC,AU,Victoria,Geelong,-38.1499,144.3617
+198.51.100.0,198.51.100.255,NA,US,California,San Jose,37.3394,-121.8950
+203.0.113.128,203.0.113.255,OC,AU,New South Wales,Newcastle,-32.9283,151.7817
+203.0.113.0,203.0.113.127,OC,AU,New South Wales,Sydney,-33.8678,151.2073
+210.10.0.0,210.10.0.255,OC,AU,South Australia,Adelaide,-34.9287,138.5986
+210.10.1.0,210.10.1.255,OC,AU,Western Australia,Perth,-31.9522,115.8614
+210.10.2.0,210.10.2.255,OC,AU,AU-TAS,Hobart,-42.8794,147.3294
+210.10.3.0,210.10.3.255,OC,AU,Jervis Bay Territory,Jervis Bay,-35.1400,150.7000
+100.64.0.0,100.127.255.255,OC,AU,,,0.0000,0.0000
+2400:cb00::,2400:cb00:ffff:ffff:ffff:ffff:ffff:ffff,OC,AU,Western Australia,Perth,-31.9522,115.8614
+2001:db8::,2001:db8:ffff:ffff:ffff:ffff:ffff:ffff,EU,DE,Berlin,Berlin,52.5200,13.4050

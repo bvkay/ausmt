@@ -27,6 +27,11 @@ WHAT IT DOES, once a day:
   * resolves each request's MASKED client address (IPv4 /24, IPv6 /48 — already truncated at the
     edge by Caddy, record D2) to a country via the db-ip "IP to Country Lite" CSV using a stdlib
     bisect. A missing/unreadable CSV degrades every lookup to `unknown` — it never crashes;
+  * for a request that resolves to AUSTRALIA, and ONLY when the compact AU state table is present,
+    takes a second-level lookup to a STATE/TERRITORY code and counts it beneath the AU country row.
+    STATE, NOT CITY, deliberately: see the AuStates class for the full rationale. An AU prefix the
+    table does not cover is counted in an explicit `unattributed` bucket so the state rows always
+    reconcile with the AU country figure. No table => no state buckets at all, silently;
   * FOLDS each complete day into a cumulative stats.json (running totals + a bounded daily tail + a
     permanent per-calendar-month rollup). The raw log lines are NOT the database: once a day is folded
     it is never re-read, so losing a rotated log loses nothing already folded. Idempotent: only days
@@ -49,6 +54,8 @@ Config (env; every path derives from AUSMT_DATA_DIR, each overridable for tests)
   AUSMT_STATS_LOG_DIR       Caddy access-log dir           [default $AUSMT_DATA_DIR/logs/caddy]
   AUSMT_STATS_MANIFEST      served download manifest       [default $AUSMT_DATA_DIR/site-data/current/manifest.json]
   AUSMT_STATS_DBIP_CSV      db-ip IP-to-Country Lite CSV   [default $AUSMT_DATA_DIR/geoip/dbip-country-lite.csv]
+  AUSMT_STATS_AU_STATES_CSV compact AU state table         [default $AUSMT_DATA_DIR/geoip/dbip-au-states.csv]
+                            (produced by deploy/scripts/prep_au_states.py; absent => country only)
   AUSMT_STATS_FILE          the cumulative stats.json      [default $AUSMT_DATA_DIR/gateway/state/stats.json]
   AUSMT_STATS_DAILY_KEEP    daily-row retention, in DAYS   [default 92; monthly rollups are never pruned]
   AUSMT_STATS_NOW           run instant (ISO %Y-%m-%dT%H:%M:%SZ or %Y-%m-%d) — TEST hook for determinism
@@ -76,6 +83,11 @@ TIMER_PERIOD_MIN = 1440
 # survey-bundle split, an API-consumer request class, per-day volume/format/kind/network detail, and the
 # permanent monthly rollups. v1 files are UPGRADED IN PLACE by _coerce_prev (tolerant read, no migration
 # script): every v1 field is carried forward, the new dimensions simply start accruing from the next fold.
+#
+# The AU state breakdown (`by_state`, and `states` on a day row) is an ADDITIVE v2 dimension and does
+# NOT bump this number: like every other optional input in this file it is detected by KEY PRESENCE,
+# never by version, and a v2 file written before it existed reads back cleanly with the maps empty.
+# Bumping the version would gate nothing and would only invite a migration step that is not needed.
 SCHEMA_VERSION = 2
 
 # The rolling window (in DAYS) of daily rows kept in stats.json. 92 days is one quarter, which is what
@@ -132,25 +144,37 @@ def _run_datetime() -> dt.datetime:
 
 
 # --------------------------------------------------------------------------------------------------
-# GeoIP: a stdlib bisect over the db-ip "IP to Country Lite" CSV (record D2 — no maxminddb, no
-# geoipupdate, no MaxMind EULA custody). The CSV is a flat list of ranges `start,end,CC` covering
-# BOTH IPv4 and IPv6; we split it into two sorted range tables and bisect the right one per address.
+# Geo lookup: a stdlib bisect over a flat `start,end,VALUE` range CSV (record D2: no maxminddb, no
+# geoipupdate, no MaxMind EULA custody). Two tables ride this one shape:
+#   * GeoIP     - the db-ip "IP to Country Lite" CSV (start,end,CC), covering the whole internet;
+#   * AuStates  - the compact AU-only state table deploy/scripts/prep_au_states.py distils from the
+#                 db-ip "IP to City Lite" CSV (start,end,STATE).
+# Each CSV covers BOTH IPv4 and IPv6, so it is split into two sorted range tables and the right one is
+# bisected per address. Both tables are OPTIONAL inputs: absent or unreadable, every lookup misses and
+# the fold completes with that dimension simply unavailable.
 # --------------------------------------------------------------------------------------------------
-class GeoIP:
-    """Country lookup for a (masked) address. Construct via `GeoIP.load(path)`; an absent, unreadable,
-    empty, or malformed CSV yields an EMPTY table whose every lookup returns 'unknown' — the aggregator
-    still completes (record D6 country pin). Ranges are stored per IP-version as parallel sorted lists
-    (starts[] for the bisect, plus (start,end,cc) records) so a lookup is one bisect + one bounds check."""
+class _RangeTable:
+    """A sorted per-IP-version range table over a `start,end,VALUE` CSV. Construct via `load(path)`; an
+    absent, unreadable, empty or malformed CSV yields an EMPTY table whose every lookup misses; the
+    aggregator still completes (record D6 country pin). Ranges are stored per IP-version as parallel
+    sorted lists (starts[] for the bisect, plus (start,end,value) records) so a lookup is one bisect +
+    one bounds check. Comment rows (a leading '#') and short rows are skipped."""
 
     def __init__(self) -> None:
-        # version -> (sorted_start_ints, [(start_int, end_int, cc), ...] aligned to sorted_start_ints)
+        # version -> (sorted_start_ints, [(start_int, end_int, value), ...] aligned to sorted_start_ints)
         self._starts: dict[int, list[int]] = {4: [], 6: []}
         self._ranges: dict[int, list[tuple[int, int, str]]] = {4: [], 6: []}
         self.loaded = False
         self.row_count = 0
 
+    @staticmethod
+    def _coerce_value(raw: str) -> str | None:
+        """The third column as this table's value, or None to skip the row. Subclasses narrow it."""
+        v = raw.strip().upper()
+        return v or None
+
     @classmethod
-    def load(cls, path) -> "GeoIP":
+    def load(cls, path) -> "_RangeTable":
         g = cls()
         if not path:
             return g
@@ -162,10 +186,11 @@ class GeoIP:
         try:
             with open(p, encoding="utf-8", newline="") as fh:
                 for row in csv.reader(fh):
-                    if len(row) < 3:
+                    if len(row) < 3 or row[0].lstrip().startswith("#"):
                         continue
-                    start_s, end_s, cc = row[0].strip(), row[1].strip(), row[2].strip().upper()
-                    if not start_s or not end_s or not cc:
+                    start_s, end_s = row[0].strip(), row[1].strip()
+                    value = cls._coerce_value(row[2])
+                    if not start_s or not end_s or value is None:
                         continue
                     try:
                         start = ipaddress.ip_address(start_s)
@@ -174,9 +199,9 @@ class GeoIP:
                         continue
                     if start.version != end.version:
                         continue
-                    (raw4 if start.version == 4 else raw6).append((int(start), int(end), cc))
+                    (raw4 if start.version == 4 else raw6).append((int(start), int(end), value))
         except OSError:
-            return g            # unreadable mid-stream => degrade to an empty (unknown) table
+            return g            # unreadable mid-stream => degrade to an empty (miss-everything) table
         for ver, raw in ((4, raw4), (6, raw6)):
             raw.sort(key=lambda r: r[0])
             g._ranges[ver] = raw
@@ -185,25 +210,71 @@ class GeoIP:
         g.loaded = g.row_count > 0
         return g
 
-    def country(self, address: str | None) -> str:
-        """The 2-letter country code for `address` (a masked IPv4/IPv6 string), or 'unknown' — for an
-        empty table, an unparseable address, or an address that falls in no range."""
+    def lookup(self, address: str | None) -> str | None:
+        """The value whose range contains `address` (a masked IPv4/IPv6 string), or None, for an empty
+        table, an unparseable address, or an address that falls in no range."""
         if not address:
-            return "unknown"
+            return None
         try:
             ip = ipaddress.ip_address(address.strip())
         except ValueError:
-            return "unknown"
+            return None
         ver = ip.version
         starts = self._starts.get(ver) or []
         if not starts:
-            return "unknown"
+            return None
         n = int(ip)
         idx = bisect.bisect_right(starts, n) - 1
         if idx < 0:
-            return "unknown"
-        start, end, cc = self._ranges[ver][idx]
-        return cc if start <= n <= end else "unknown"
+            return None
+        start, end, value = self._ranges[ver][idx]
+        return value if start <= n <= end else None
+
+
+class GeoIP(_RangeTable):
+    """Country lookup for a (masked) address, over the db-ip "IP to Country Lite" CSV."""
+
+    def country(self, address: str | None) -> str:
+        """The 2-letter country code for `address`, or 'unknown' when nothing resolves."""
+        return self.lookup(address) or "unknown"
+
+
+# The eight Australian states and territories, in the conventional listing order. This tuple is the
+# WHOLE vocabulary the fold will accept from the state table, so a hand-edited or mangled table cannot
+# push an arbitrary label onto the analytics screen.
+AU_STATE_CODES = ("NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT")
+
+# The bucket an AU request lands in when the state table IS present but its prefix resolves to no
+# state. It is counted, never dropped: the state rows plus this bucket must reconcile with the AU
+# country row, or the screen's breakdown would quietly under-report its own parent figure.
+AU_STATE_UNATTRIBUTED = "unattributed"
+
+
+class AuStates(_RangeTable):
+    """AU STATE lookup for a (masked) address, over the compact table deploy/scripts/prep_au_states.py
+    distils from the db-ip "IP to City Lite" CSV.
+
+    WHY STATE, AND WHY NOT CITY -- a ratified design decision, recorded here so it is not casually
+    "improved" into a city breakdown later:
+      * the address resolved here was ALREADY TRUNCATED at the edge (IPv4 /24, IPv6 /48). A /24 prefix
+        does not place a request in a city reliably -- mobile carrier and CGNAT pools routinely serve a
+        whole state from one prefix -- so a city figure would be confidently wrong;
+      * the Australian magnetotelluric research community is small. A city cell is QUASI-IDENTIFYING:
+        "3 downloads from Hobart" names a research group. A state cell is not.
+    State is the finest grain that is BOTH defensible from a /24 and non-identifying at this
+    community's scale. Do not add a city dimension here.
+
+    Like the country CSV this is an OPTIONAL input: absent, unreadable or empty, every lookup misses,
+    no state buckets are written at all, and the fold is country-only exactly as it was before."""
+
+    @staticmethod
+    def _coerce_value(raw: str) -> str | None:
+        code = raw.strip().upper()
+        return code if code in AU_STATE_CODES else None
+
+    def state(self, address: str | None) -> str | None:
+        """The state/territory code for `address`, or None when the table does not cover it."""
+        return self.lookup(address)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -355,7 +426,7 @@ def _empty_stats() -> dict:
             "totals": {"downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
                        "api_requests": 0},
             "downloads": {"by_format": {}, "by_survey": {}, "by_dataset": {}, "by_kind": {}},
-            "countries": {}, "daily": [], "monthly": []}
+            "countries": {}, "by_state": {}, "daily": [], "monthly": []}
 
 
 def _empty_month(month: str) -> dict:
@@ -364,7 +435,7 @@ def _empty_month(month: str) -> dict:
     only), so the screen can say which months carry partial detail instead of implying a real zero."""
     return {"month": month, "downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
             "api_requests": 0, "days": 0, "seeded_days": 0,
-            "formats": {}, "kinds": {}, "surveys": {}, "countries": {}}
+            "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_state": {}}
 
 
 def _as_int(v, default: int = 0) -> int:
@@ -432,7 +503,7 @@ def _coerce_month_rows(raw) -> list[dict]:
         for k in ("downloads", "visits", "download_bytes", "unattributed", "api_requests",
                   "days", "seeded_days"):
             m[k] = _as_int(row.get(k))
-        for k in ("formats", "kinds", "countries"):
+        for k in ("formats", "kinds", "countries", "by_state"):
             if isinstance(row.get(k), dict):
                 m[k] = {str(kk): _as_int(vv) for kk, vv in row[k].items()}
         m["surveys"] = _coerce_survey_map(row.get("surveys"))
@@ -495,6 +566,11 @@ def _coerce_prev(prev: dict | None) -> dict:
         s["downloads"]["by_dataset"] = _coerce_dataset_map(pd.get("by_dataset"))
     if isinstance(prev.get("countries"), dict):
         s["countries"] = dict(prev["countries"])
+    # The AU state breakdown, carried forward whole. A file written before it existed simply has no
+    # such key and starts empty: state counts are FORWARD-ONLY and no earlier day is ever backfilled
+    # (that would need raw logs that have long since rotated away).
+    if isinstance(prev.get("by_state"), dict):
+        s["by_state"] = {str(k): _as_int(v) for k, v in prev["by_state"].items()}
     if isinstance(prev.get("daily"), list):
         s["daily"] = [d for d in prev["daily"] if isinstance(d, dict) and isinstance(d.get("date"), str)]
     # The v1 -> v2 hinge. Key on the PRESENCE of `monthly`, never on its emptiness: a genuinely fresh v2
@@ -511,7 +587,8 @@ def _coerce_prev(prev: dict | None) -> dict:
 
 
 def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: GeoIP,
-              run_dt: dt.datetime, *, daily_keep: int = DEFAULT_DAILY_KEEP_DAYS) -> dict:
+              run_dt: dt.datetime, *, daily_keep: int = DEFAULT_DAILY_KEEP_DAYS,
+              au_states: "AuStates | None" = None) -> dict:
     """Fold every COMPLETE day in `lines` into `prev`, returning the new cumulative stats dict.
 
     Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
@@ -522,7 +599,11 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     Each counted request lands in THREE places at once: the cumulative totals, its day row, and its
     calendar-month rollup. Accumulating the month AS THE DAY FOLDS (rather than summing the daily tail
     later) is what lets the daily window be pruned to `daily_keep` days while the monthly history stays
-    complete and permanent."""
+    complete and permanent.
+
+    `au_states` is the OPTIONAL AU state table. When it is present, a request that classifies as AU also
+    lands in a state bucket (at all three grains); when it is absent the fold is country-only and writes
+    no state buckets at all: absent, never a zero (see AuStates for why state and not city)."""
     stats = _coerce_prev(prev)
     prev_folded = stats.get("last_folded_date")
     cutoff_date = (run_dt.date() - dt.timedelta(days=1))  # last complete day
@@ -534,6 +615,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     by_dataset = stats["downloads"]["by_dataset"]
     by_kind = stats["downloads"]["by_kind"]
     countries = stats["countries"]
+    by_state = stats["by_state"]
     daily_index = {d["date"]: d for d in stats["daily"]}
     month_index = {m["month"]: m for m in stats["monthly"]}
     # date -> set of MASKED networks seen on it, for THIS run only. Caddy already truncated the address
@@ -575,7 +657,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             totals["visits"] += 1
             day["visits"] += 1
             month["visits"] += 1
-            _count_country(geoip, rec["address"], countries, month["countries"])
+            _count_geo(geoip, au_states, rec["address"], countries, by_state, month, day)
         elif kind == "api":
             totals["api_requests"] += 1
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
@@ -619,7 +701,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             if survey:
                 _bump_survey(by_survey, survey, size)
                 _bump_survey(month["surveys"], survey, size)
-            _count_country(geoip, rec["address"], countries, month["countries"])
+            _count_geo(geoip, au_states, rec["address"], countries, by_state, month, day)
 
     # Distinct-network counts for the days folded in THIS run. Only the SIZE of each set is written --
     # the masked addresses themselves never leave memory (record D2/D6).
@@ -667,12 +749,30 @@ def _bump_survey(index: dict, survey: str, size: int) -> None:
     row["bytes"] = _as_int(row.get("bytes")) + size
 
 
-def _count_country(geoip: GeoIP, address, countries: dict, month_countries: dict) -> None:
-    """Resolve the masked address to a country and count it in BOTH the cumulative and the month map.
-    The address itself is discarded immediately -- only the country code is ever counted."""
+def _count_geo(geoip: GeoIP, au_states, address, countries: dict, by_state: dict,
+               month: dict, day: dict) -> None:
+    """Resolve the masked address to a country (and, for AU, to a state) and count it. The address
+    itself is discarded immediately -- only the country code and the state code are ever counted.
+
+    The state half is entirely conditional on the OPTIONAL state table being loaded. When it is:
+      * every AU request lands in exactly ONE bucket -- its state, or the explicit `unattributed`
+        bucket when the table does not cover that prefix. Nothing is dropped, so the state rows plus
+        `unattributed` reconcile exactly with the AU country row they sit beneath;
+      * the count goes to the cumulative map, the calendar-month rollup, and the day row.
+    When it is NOT loaded, nothing at all is written: no bucket, no zero, no key on the day row.
+    Days folded before the table was installed are therefore ABSENT from the breakdown rather than
+    reading as a measured zero, and they are never backfilled (the raw logs are long gone)."""
     cc = geoip.country(address)
     _bump(countries, cc)
-    _bump(month_countries, cc)
+    _bump(month["countries"], cc)
+    if cc != "AU" or au_states is None or not au_states.loaded:
+        return
+    code = au_states.state(address) or AU_STATE_UNATTRIBUTED
+    _bump(by_state, code)
+    _bump(month.setdefault("by_state", {}), code)
+    # setdefault, never a skeleton field: a daily row folded before state counting existed is left
+    # exactly as it was written (the forward-only pin).
+    _bump(day.setdefault("states", {}), code)
 
 
 def _note_network(seen: dict[str, set], date: str, address) -> None:
@@ -782,6 +882,8 @@ def main(argv=None) -> int:
     log_dir = _cfg("AUSMT_STATS_LOG_DIR", str(Path(data_dir) / "logs" / "caddy"))
     manifest_path = _cfg("AUSMT_STATS_MANIFEST", str(Path(data_dir) / "site-data" / "current" / "manifest.json"))
     dbip_csv = _cfg("AUSMT_STATS_DBIP_CSV", str(Path(data_dir) / "geoip" / "dbip-country-lite.csv"))
+    au_states_csv = _cfg("AUSMT_STATS_AU_STATES_CSV",
+                         str(Path(data_dir) / "geoip" / "dbip-au-states.csv"))
     stats_file = _cfg("AUSMT_STATS_FILE", str(Path(data_dir) / "gateway" / "state" / "stats.json"))
     try:
         daily_keep = int(_cfg("AUSMT_STATS_DAILY_KEEP", str(DEFAULT_DAILY_KEEP_DAYS)))
@@ -792,9 +894,13 @@ def main(argv=None) -> int:
         run_dt = _run_datetime()
         reverse_map = build_reverse_map(_load_json(manifest_path))
         geoip = GeoIP.load(dbip_csv)
+        # The AU state table is OPTIONAL in exactly the way the country CSV is: absent, the fold is
+        # country-only and silent about it (deploy/scripts/prep_au_states.py is what produces it).
+        au_states = AuStates.load(au_states_csv)
         prev = _load_json(stats_file)
         lines = read_log_lines(log_dir)
-        stats = aggregate(prev, lines, reverse_map, geoip, run_dt, daily_keep=daily_keep)
+        stats = aggregate(prev, lines, reverse_map, geoip, run_dt, daily_keep=daily_keep,
+                          au_states=au_states)
         dest_dir = Path(stats_file).parent
         if not dest_dir.is_dir():
             print(f"aggregate_stats: state dir {dest_dir} does not exist -- not writing stats.json "
@@ -806,6 +912,7 @@ def main(argv=None) -> int:
               f"api={stats['totals']['api_requests']} months={len(stats['monthly'])} "
               f"days_kept={len(stats['daily'])} "
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
+              f"au_state_rows={au_states.row_count} "
               f"log_lines={len(lines)} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)

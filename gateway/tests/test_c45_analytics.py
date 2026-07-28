@@ -428,3 +428,128 @@ def test_analytics_export_links_are_on_the_screen(tmp_path):
             assert 'href="/gateway/curator/analytics-surveys.csv"' in r.text
             assert "Download report data" in r.text
     run(_body())
+
+
+# ==================================================================================================
+# Australian STATE lane: a breakdown BENEATH the AU country row, rendered only when the fold actually
+# produced it. State is the finest grain by design (a /24-masked prefix does not place a request in a
+# city, and a city cell in a community this small is quasi-identifying) -- these pins hold that line.
+# ==================================================================================================
+
+def _v3_stats(**over) -> dict:
+    """A schema-2 stats.json that ALSO carries the AU state breakdown, cumulatively and per month.
+    The cumulative states sum to 260 against an AU country row of 300: the 40-request difference is
+    real (those days folded before the state table existed) and the screen must name it, not hide it."""
+    doc = _v2_stats()
+    doc["by_state"] = {"NSW": 120, "VIC": 60, "QLD": 40, "WA": 20, "ACT": 10, "unattributed": 10}
+    doc["monthly"][0]["by_state"] = {}                                        # May: before the table
+    doc["monthly"][1]["by_state"] = {"NSW": 100, "VIC": 40, "unattributed": 10}   # June: exact (150)
+    doc["monthly"][2]["by_state"] = {"NSW": 20, "VIC": 20, "QLD": 40, "WA": 20, "ACT": 10}   # 110/200
+    doc.update(over)
+    return doc
+
+
+def test_analytics_renders_australia_by_state_beneath_the_country_row(tmp_path):
+    """STATE RENDER PIN. When the fold produced a state breakdown the screen must show an 'Australia by
+    state' table with the full state names and counts, and it must reconcile with the AU country row it
+    sits beneath: the states plus the unattributed bucket plus the pre-table remainder equal AU. FAILS
+    IF the table is missing, a state is unlabelled, or the rows do not add up to the country figure."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v3_stats())
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            html = r.text
+            assert "Australia by state" in html
+            assert "New South Wales" in html and ">120<" in html
+            assert "Australian Capital Territory" in html and "Northern Territory" not in html, \
+                "only states the fold actually saw may appear"
+            assert "Not in the state table" in html, "the uncovered-prefix bucket must be shown"
+            assert "Counted before state data existed" in html, \
+                "the pre-table remainder must be named, not hidden"
+            assert "<b>300</b>" in html, "the table must total to the AU country figure"
+            # The AU country row itself is untouched -- the states are a breakdown BENEATH it.
+            assert "By country" in html and ">300<" in html
+    run(_body())
+
+
+def test_analytics_state_table_reconciles_with_the_au_country_figure(tmp_path):
+    """STATE RECONCILIATION PIN. Whatever the fold produced, the numbers the state table renders must
+    sum to the AU country count exactly -- so a reader can never find the breakdown quietly smaller than
+    its parent. FAILS IF the rendered rows do not add up to AU (checked directly on the row builder, so
+    the arithmetic is pinned rather than the prose around it)."""
+    for by_state, au, remainder in (
+        ({"NSW": 120, "VIC": 60, "QLD": 40, "WA": 20, "ACT": 10, "unattributed": 10}, 300, 40),
+        ({"NSW": 200, "unattributed": 100}, 300, 0),          # exactly attributed: no remainder row
+        ({"TAS": 3}, 3, 0),
+    ):
+        rows = curatorpage._au_state_rows(by_state, au)       # noqa: SLF001
+        assert sum(n for _code, _label, n in rows) == au, (rows, au)
+        tail = [n for code, _label, n in rows if code == "not_counted"]
+        assert tail == ([remainder] if remainder else []), (rows, remainder)
+
+
+def test_analytics_omits_the_state_table_when_the_fold_produced_none(tmp_path):
+    """STATE ABSENCE PIN. A box with no state table installed (or one that has not folded a day since)
+    must see NO state section at all -- the screen omits rather than showing eight zeroes, which would
+    read as 'no traffic from Victoria' instead of 'not measured'. FAILS IF an empty breakdown renders a
+    table, a zero, or a state name."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())          # schema 2, no by_state anywhere
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            html = r.text
+            assert "Australia by state" not in html
+            for name in ("New South Wales", "Queensland", "Tasmania"):
+                assert name not in html, f"{name} must not appear when no state data exists"
+            assert "By country" in html, "the country table is unaffected"
+    run(_body())
+
+
+def test_analytics_state_table_says_why_it_is_state_and_not_city(tmp_path):
+    """RATIONALE PIN. The screen must carry the reason the breakdown stops at state, so the next person
+    reading it does not file 'add cities' as an obvious improvement. FAILS IF the note loses either
+    limb of the reason: the masked /24 cannot place a request in a city, and a city cell in a community
+    this small identifies a group."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v3_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "/24" in html
+            low = html.lower()
+            assert "city" in low and "state is the finest" in low
+    run(_body())
+
+
+def test_analytics_monthly_csv_gains_state_columns_that_reconcile_per_row(tmp_path):
+    """STATE CSV PIN. The monthly export must gain one column per state seen, plus the unattributed
+    bucket, plus the pre-table remainder, and every row must reconcile: the state columns sum to that
+    month's AU figure. FAILS IF a state column is missing, if the columns are not in the canonical
+    state order, or if a row does not add up (a funding report would then carry a silent undercount)."""
+    body = curatorpage.analytics_monthly_csv(_v3_stats())
+    rows = list(csv.DictReader(io.StringIO(body)))
+    header = list(rows[0].keys())
+    assert [h for h in header if h.startswith("state_") or h == "au_requests"] == [
+        "au_requests", "state_NSW", "state_VIC", "state_QLD", "state_WA", "state_ACT",
+        "state_unattributed", "state_not_counted"], header
+    by_month = {r["month"]: r for r in rows}
+    assert by_month["2026-06"]["state_NSW"] == "100" and by_month["2026-06"]["state_not_counted"] == "0"
+    assert by_month["2026-05"]["state_not_counted"] == "60", "a pre-table month is all remainder"
+    assert by_month["2026-07"]["state_QLD"] == "40" and by_month["2026-07"]["state_not_counted"] == "90"
+    for r in rows:
+        cols = sum(int(r[h]) for h in header if h.startswith("state_"))
+        assert cols == int(r["au_requests"]), r
+
+
+def test_analytics_monthly_csv_has_no_state_columns_without_state_data():
+    """CSV ABSENCE PIN. A box that never folded a state must export the SAME columns it exports today --
+    no empty state columns implying a measured zero. FAILS IF the state columns appear unconditionally."""
+    header = curatorpage.analytics_monthly_csv(_v2_stats()).splitlines()[0]
+    assert "state_" not in header and "au_requests" not in header
+    assert "countries" in header, "the existing columns are untouched"
+    # And an entirely absent stats.json still yields a header row alone, not an error.
+    assert curatorpage.analytics_monthly_csv(None).strip().splitlines()[0].startswith("month,")
