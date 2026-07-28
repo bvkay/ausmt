@@ -112,6 +112,10 @@ function licBadgeState(lic){if(!lic)return "unk";const c=licCanon(lic);
   if((LICENSES.redistributable||[]).indexOf(c)>=0)return "ok";
   if((LICENSES.recognised_only||[]).indexOf(c)>=0)return "part";
   return "unk";}
+// The attribution synthesis year: the LAST 4-digit year in the survey's declared dates string, "" when
+// undeclared. Factored out (behaviour unchanged) so the ONE attribution box (attributionBoxHtml) rebuilds
+// the same "(year)" tail around linked creator names without re-deriving it, and so the two cannot drift.
+function attributionYear(m){return ((m&&m.dates)?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";}
 // C46-W3b: the survey-level attribution line — the custodian's verbatim attribution.statement when
 // declared, else the org(year) synthesis. MIRRORS exports.attributionLine byte-for-byte so the drawer, the
 // station Cite tab, the exported CSV and the citation pack all render the SAME attribution string.
@@ -119,7 +123,7 @@ function attributionText(m){m=m||{};
   const st=((m.attribution||{}).statement||"").toString().trim();
   if(st)return st;
   const who=((m.cite&&m.cite.au)||m.org||"").toString().trim();
-  const yr=(m.dates?(String(m.dates).match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
+  const yr=attributionYear(m);
   return [who,yr?"("+yr+")":""].filter(Boolean).join(" ").trim();}
 // C46-W3b: a source's required attribution when it carries no verbatim statement — the profile-rendered
 // form via the generated PROFILES table (exports.renderProfile, present at render time), else custodian(year).
@@ -346,6 +350,59 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   // today, so the slot stays here as a comment and simply does not render yet. When one lands, e.g.:
   //   if(m.model_doi) level3 = row({n:"Level 3 models",sub:...,origin:"source archive",st:"ok",d:{prod:"open",url:"https://doi.org/"+m.model_doi}});
   return `<div class="filelist">${tsRows}${level2}${row(pubRow)}</div>`;}
+// Card-lane polish (owner): the MOST SPECIFIC processing-software string available for a station. The
+// station-level string the source EDI carried (sc[SC.sw], e.g. "Geotools 4.0.5.12583") wins because it
+// is the one that names a VERSION; the survey-level declared software field (m.software, often the bare
+// product name) is the fallback; with neither, the honest "not stated in EDI" stands. No version is ever
+// synthesised. SINGLE SOURCE for the Provenance tab's own row AND the lineage graph node, so the two
+// surfaces in one tab cannot disagree about what processed this station.
+function processingSoftwareText(m,sc){
+  const st=(((sc||[])[SC.sw])||"").toString().trim();
+  if(st)return st;
+  const sv=((m&&m.software)||"").toString().trim();
+  return sv||"not stated in EDI";}
+// Card-lane polish (owner): the formats AusMT actually distributes for this station/survey, dot-separated
+// with no ticks and no "(pipeline)" qualifier. Availability comes from the SAME sources the Files tab
+// reads: ediDescriptor for the EDI (its manifest artifact first, then the served-here fallback, and "no"
+// for an embargoed/metadata-only station, so a withheld EDI is never listed), the manifest artifact row
+// for the EMTF XML, and the per-survey bundle helper for MTH5. A format that is not served is simply
+// ABSENT from the list; the old line asserted "EDI ✓ · EMTF XML (pipeline)" unconditionally, claiming an
+// XML for the 8 surveys the build pipeline never produced one for and an EDI for embargoed stations.
+function distributedFormatsText(s,m){
+  const arts=(typeof artifactsFor==="function"?artifactsFor(s&&s.ausmt_id):[]);
+  const out=[];
+  if(ediDescriptor(s,m).st==="ok")out.push("EDI");
+  if(arts.some(a=>a&&a.format==="emtfxml"))out.push("EMTF XML");
+  if(mth5BundleFor(m))out.push("MTH5");
+  return out.length?out.join(" · "):"none currently served";}
+// Card-lane polish (owner): a publication reduced to a short lineage cite, "FirstAuthor et al. (Year)".
+// Never fabricates a co-author: names split on "; " when the row uses that separator, else on "," where
+// THREE or more parts prove a real list (a single "Last, First" name splits into exactly two, so it is
+// kept verbatim, as does a two-name comma list). Falls back to the title, then the bare DOI, so a row
+// with no author still says something true. Mirrors doi_harvest.formatCitation's ">2 parts" convention.
+function pubShortCite(p){p=p||{};
+  const a=String(p.a==null?"":p.a).trim(),y=String(p.y==null?"":p.y).trim(),t=String(p.t==null?"":p.t).trim();
+  const doi=String(p.doi==null?"":p.doi).trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");
+  let who="";
+  if(a){const sep=a.indexOf(";")>=0?";":",";
+    const parts=a.split(sep).map(x=>x.trim()).filter(Boolean);
+    who=(sep===";"?parts.length>1:parts.length>2)?parts[0]+" et al.":a;}
+  const head=[who||t,y?"("+y+")":""].filter(Boolean).join(" ").trim();
+  return head||(doi?"doi:"+doi:"");}
+// Card-lane polish (owner): the lineage PUBLICATION cell, read from the survey's related publications
+// (pubs[], the same list the survey card renders). It used to read the dataset DOI (m.doi), which is the
+// identifier of the DATA, not an interpretation publication, so a survey with a real paper in pubs[] and
+// no dataset DOI still read "none recorded" (live: Newer Volcanic Province 2019 and its 2023 paper). The
+// first publication renders as a short cite, DOI-linked when it carries one, with a "+N more" tail.
+function publicationCell(m){
+  const ps=(((m||{}).pubs)||[]).filter(p=>p&&typeof p==="object");
+  if(!ps.length)return "none recorded";
+  const p0=ps[0];
+  const cite=pubShortCite(p0);
+  if(!cite)return "none recorded";
+  const doi=String(p0.doi==null?"":p0.doi).trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");
+  const cell=doi?`<a href="${escUrl("https://doi.org/"+doi)}" target="_blank" rel="noopener noreferrer">${esc(cite)}</a>`:esc(cite);
+  return cell+(ps.length>1?` <span class="prov">(+${ps.length-1} more)</span>`:"");}
 function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
   const nodes=[];
   // C46-W3b: an upstream "source dataset" node when the survey declares sources[] — the lineage's origin,
@@ -356,11 +413,11 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
     nodes.push(["Source dataset",idv?`${lbl} · ${pidLink(idv)}`:lbl]);}
   nodes.push(
    ["Raw time series",m.ts==="ok"?tsCollectionCell(m):"not located in source archives"],
-   ["Processing software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
+   ["Processing software",esc(processingSoftwareText(m,sc))],
    ["Method",sc[SC.alg]?esc(sc[SC.alg]):(sc[SC.rr]?"remote reference (stated)":"not stated")],
    ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
-   ["Distributed formats",`EDI ✓ · EMTF XML (pipeline)${mth5BundleFor(m)?" · MTH5 ✓":""}`],
-   ["Publication",m.doi?resolvedOr(m.doi_resolution,"doi:"+m.doi,`<a href="${escUrl("https://doi.org/"+m.doi)}" target="_blank" rel="noopener noreferrer">doi:${esc(m.doi)}</a>`):"none recorded"]
+   ["Distributed formats",esc(distributedFormatsText(s,m))],
+   ["Publication (interpretation)",publicationCell(m)]
   );
   return `<div class="lineage">`+nodes.map((n,k)=>`<div class="lrow"><span class="ldot"></span><div><div class="lt">${esc(n[0])}</div><div class="lv">${n[1]}</div></div></div>`+(k<nodes.length-1?`<div class="lconn"></div>`:"")).join("")+`</div>`;}
 
@@ -384,7 +441,11 @@ function provenanceBox(s){
     ["build date (UTC)", esc(P.generated?P.generated.replace("T"," ").slice(0,19):"n/a")],
     ["Build commit", P.git_commit?`<code>${esc(P.git_commit)}</code>`:"<span class='prov'>unavailable</span>"]
   ];
-  return `<details class="prov-d"><summary>Processing provenance</summary><table class="meta">`+
+  // Owner ruling: titled "AusMT Provenance", not "Processing provenance". Every row below is about the
+  // AUSMT PIPELINE's own run (extractor, pipeline version, build date, build commit), not the custodian's
+  // MT data processing, and readers took the old title to mean the latter. The MT processing software the
+  // custodian used has its own row at the top of this tab (and its own lineage node).
+  return `<details class="prov-d"><summary>AusMT Provenance</summary><table class="meta">`+
     rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")+
     // HIDDEN pending design review (owner 2026-07-22): the ", and the screening parameters above" clause is
     // dropped alongside the hidden screening-parameters row above — restore the commented clause when the row returns.
@@ -605,7 +666,7 @@ function openStation(i){
   // ok when served, else part — produced via the build pipeline for redistributable surveys).
   const _fmtXmlArt=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).some(a=>a.format==="emtfxml");
   const provTop=`<table class="meta prov-top">`+
-    `<tr><td>Processing software</td><td>${sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"}</td></tr>`+
+    `<tr><td>Processing software</td><td>${esc(processingSoftwareText(m,sc))}</td></tr>`+
     `<tr><td>Transfer function</td><td>${esc(s.file)}${s.sha?` · <code title="${escAttr(s.sha)}">${esc(s.sha.slice(0,16))}…</code>`:" · <span class='prov'>no checksum</span>"}</td></tr>`+
     `<tr><td>Source archive</td><td>${_srcArchive}</td></tr></table>`;
   const metaTable=`<table class="meta">`+
@@ -777,16 +838,30 @@ function creatorRow(c){
   const name=((c&&c.name)||"").toString().trim();
   if(!name)return "";
   return c&&c.name_type==="organisation"?orgNameLink(name,c.ror):esc(name)+orcidLink(c.orcid);}
-// Card-credit rework: the ordered creators[] rendered INSIDE the Attribution block, on their own line beneath
-// the attribution sentence (which is their context), replacing the former standalone Creators section (which
-// duplicated the attribution names under an unclear heading). AusMT mints no DOIs today, so the display says
-// ATTRIBUTION, not citation: the line carries no label and no gloss, just the linked names in declared order
-// joined by " · ". Returns "" (no line) when creators[] is absent or empty, so the Attribution block renders
-// exactly as before.
-function attributionAuthorsHtml(m){
-  const rows=((m&&m.creators)||[]).filter(c=>c&&typeof c==="object").map(creatorRow).filter(Boolean);
-  if(!rows.length)return "";
-  return `<div class="attn attribution-authors">${rows.join(" · ")}</div>`;}
+// Card-lane polish (owner ruling): ONE attribution box, never two. The Attribution section used to render
+// the sentence and the creator names as two separate, visually identical .attn boxes, and because the
+// engine builds cite.au from creators[] (CONTRIBUTOR-CREDIT-SPEC §2.1, names joined "; "), those two boxes
+// carried the SAME names twice. They merge here: the single box renders the ONE attribution sentence with
+// each creator name ORCID/ROR-linked IN PLACE (creatorRow, the same per-name link rendering as before),
+// keeping the "; " separators and the "(year)" tail of the plain sentence.
+// The links are substituted ONLY when the creators reconstruct the sentence's own name string (the §2.1
+// guarantee: cite.au IS the "; "-joined creators). A verbatim custodian attribution.statement is never
+// rewritten, and a survey whose recorded citation names someone else keeps that recorded string: in both
+// cases the flat escaped sentence renders exactly as today, in the SAME single box. That keeps the drawer
+// byte-identical in TEXT to exports.attributionLine (the CSV / citation-pack / Cite-tab attribution).
+// Returns "" when the survey has no attribution sentence at all, so the caller omits the whole section.
+function attributionBoxHtml(m){m=m||{};
+  const text=attributionText(m);
+  if(!text)return "";
+  const norm=v=>String(v==null?"":v).replace(/\s+/g," ").trim();
+  const rows=((m.creators)||[]).filter(c=>c&&typeof c==="object");
+  const names=rows.map(c=>norm(c.name)).filter(Boolean);
+  const stmt=((m.attribution||{}).statement||"").toString().trim();
+  const who=norm((m.cite&&m.cite.au)||m.org||"");
+  if(stmt||!names.length||names.join("; ")!==who)return `<div class="attn">${esc(text)}</div>`;
+  const linked=rows.map(creatorRow).filter(Boolean);
+  const yr=attributionYear(m);
+  return `<div class="attn">${linked.join("; ")}${yr?" ("+esc(yr)+")":""}</div>`;}
 // One funder rendered as its (ROR/pid-linked) name with the grant id appended in muted text when the
 // funding row carries one (the engine emits grant_id only for a real declared grant; absent -> just the
 // name). The Funding section owns this display; the identifiers rollup no longer duplicates the funders line.
@@ -1129,7 +1204,8 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
   // (7) publications, (8) identifiers (E2 rollup), (9) release history. Content is unchanged from before —
   // only the order. Acquisition/processing are carried inside the survey-summary table (sections 3/5 share
-  // that atomic block); contributors (credit model, SPEC §3) render as their own section ahead of funding.
+  // that atomic block). Card-lane polish (owner): contributors (credit model, SPEC §3) no longer trail
+  // below Downloads, they sit inside the ATTRIBUTION block directly beneath the attribution box.
   // Downloads move up ahead of funding/publications/identifiers; release history moves last.
   drawer.innerHTML=
    `<div class="dhead"><span class="sid" style="font-size:18px">${esc(sv)}</span><button class="close" aria-label="Close">✕</button></div>`+
@@ -1139,11 +1215,13 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    miniScatter(ss)+
    surveySummary(ss,m)+
    // C46-W3b: the captured attribution statement rendered where the survey's attribution lives (verbatim
-   // custodian statement, else the org(year) synthesis). Card-credit rework: the ordered creators[] (SPEC
-   // §2.1, attribution order) now render INSIDE this block on their own unlabelled line beneath the sentence
-   // (attributionAuthorsHtml); absent creators -> the block is byte-identical to before. The upstream
+   // custodian statement, else the org(year) synthesis). Card-lane polish: that sentence is now ONE box
+   // (attributionBoxHtml) carrying the creator names ORCID/ROR-linked in place, never a second names box,
+   // and the collapsed "Contributors (N)" details moves UP to sit directly beneath it (credit reads as one
+   // block: who to attribute, then who did what) instead of trailing below Downloads. The upstream
    // "Source datasets" list follows.
-   (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div><div class="attn">${esc(attributionText(m))}</div>`+attributionAuthorsHtml(m):"")+
+   (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div>`+attributionBoxHtml(m):"")+
+   contributorsHtml(m)+
    sourcesListHtml(m)+
    `<div class="sechead">Downloads</div><div class="prodgrid">`+
      surveyBundleTiles(m.slug)+
@@ -1155,7 +1233,6 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
        ?`<div class="prod dis"><span class="pdot" style="background:var(--part)"></span><div>Dataset DOI<small>reserved (not yet active)</small></div></div>`
        :`<div class="prod" data-act="doi" data-doi="${escAttr(m.doi)}"><span class="pdot" style="background:var(--ok)"></span><div>Dataset DOI<small>source archive</small></div></div>`):"")+
    `</div>`+
-   contributorsHtml(m)+
    `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"–"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
    `<details class="prov-d survey-ids"><summary>Persistent identifiers: ${pr.have} of ${pr.total} recorded</summary><div class="prov-dbody">`+identifiersHtml(m)+`</div></details>`+
