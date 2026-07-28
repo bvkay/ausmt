@@ -186,7 +186,15 @@ CORPUS_SHAPED = {
 def test_schema_self_identifies_as_v12_at_its_served_url():
     """The $id is the URL the schema is ACTUALLY served from. v1.1 pointed $id at ausmt.org, a domain
     AusMT does not own, so the canonical identifier of the published schema was unresolvable by anyone
-    who tried to dereference it. Owner ruling: the identifier is the served location."""
+    who tried to dereference it. Owner ruling: the identifier is the served location.
+
+    The "1.2" literals here are DELIBERATE and are not the hardcoded-default class that
+    test_mtcat_version_parity.py eliminates: this module is the v1.2 acceptance suite (its corpus
+    document, its 45 RED mutations and these assertions are all written against that release), so it
+    pins its own subject and is meant to fail loudly at the next bump so somebody decides what happens
+    to it. The MOVING version, the one every emitter and config derives, lives in the schema title and
+    is pinned across every surface by test_mtcat_version_parity.py. Do not "fix" these into a read of
+    the title: a suite that reads its subject's version from its subject asserts nothing."""
     assert SCHEMA["$id"] == "https://ausmt.au/data/mtcat.schema.json"
     assert SCHEMA["title"].startswith("MTCAT v1.2:")
     assert "1.2" in SCHEMA["description"]

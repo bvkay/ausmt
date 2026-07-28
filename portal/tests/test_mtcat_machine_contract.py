@@ -8,7 +8,8 @@ every assertion checks that a statement on the page is still TRUE of the artifac
   * the schema the entry links must be the one the build actually copies beside the data (a documented
     path nobody serves is the failure mode this whole lane exists to avoid);
   * the version and the metadata licence the entry states must equal the values their single sources
-    produce (portal.config.yaml's schema_version and the emitter's defaults), not values typed by hand;
+    produce (the schema's own self-identifying title, which portal.config.yaml must match, and the
+    emitter's metadata_license default), not values typed by hand;
   * every vocabulary the entry lists must match the schema's enum SET-FOR-SET, in both directions. A
     missing token would send a consumer looking for a level or a role that exists in the data and is not
     documented; an extra token would document one the build hard-fails on. Both are silent until someone
@@ -129,10 +130,27 @@ def _access_levels() -> tuple:
 
 
 def _emitter_default(key: str) -> str:
-    """A `p.get("<key>", "<default>")` default from mtcat_document's portal block."""
+    """A `p.get("<key>", "<default>")` LITERAL default from mtcat_document's portal block.
+
+    schema_version is deliberately NOT one of these any more, and asking for it here now fails: it is
+    read from the schema (see _schema_version) because a literal default is exactly the defect this
+    lane kept re-finding. schema_url and metadata_license stay literals because neither is derived from
+    anything, so a literal is where they honestly live."""
     m = re.search(rf'p\.get\(\s*"{re.escape(key)}"\s*,\s*"([^"]+)"\s*\)',
                   BUILDER.read_text(encoding="utf-8"))
     assert m, f'could not find the mtcat_document default for "{key}" in build_portal.py'
+    return m.group(1)
+
+
+def _schema_version() -> str:
+    """The MTCAT schema version as its SINGLE SOURCE declares it: the schema's own self-identifying
+    title. The engine's emitter, load_portal_config and gen_config all derive from this file (via the
+    generated MTCAT_SCHEMA_VERSION constant), so pinning the page to the same place pins it to what a
+    harvester will actually be served. engine/tests/test_mtcat_version_parity.py holds the full
+    cross-surface pin, including a real build; this is the half that guards the PAGE."""
+    title = _schema()["title"]
+    m = re.match(r"^MTCAT v(\d+\.\d+):", title)
+    assert m, f"the schema must declare its version in its title as 'MTCAT v<MAJOR>.<MINOR>: ...'; got {title!r}"
     return m.group(1)
 
 
@@ -203,9 +221,9 @@ def test_stated_schema_name_version_and_licence_track_their_single_sources():
         "the entry must name the schema by the value the document actually carries in portal.schema")
 
     version = _config_schema_version()
-    assert version == _emitter_default("schema_version"), (
-        f"portal.config.yaml says schema_version {version} but the emitter defaults to "
-        f"{_emitter_default('schema_version')}; the page cannot be right about both")
+    assert version == _schema_version(), (
+        f"portal.config.yaml says schema_version {version} but the schema declares {_schema_version()}; "
+        "the page cannot be right about both")
     assert version in codes, (
         f"the entry states the MTCAT version, which is {version} per portal.config.yaml; "
         f"the code spans in the block were {sorted(codes)}")

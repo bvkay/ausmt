@@ -7,14 +7,28 @@ config.js is the browser-side reflection the static pages load. Run this after e
     python3 tools/gen_config.py
 
 Requires PyYAML (a declared engine dependency, installed in CI); the stdlib fallback parser was retired.
+
+The branding/deployment defaults below are AusMT literals because AusMT is what this repo brands. The
+MTCAT schema version is NOT a branding choice and NOT a deployment knob: it is a property of the schema
+this tree ships, so the default for a config that OMITS portal.schema_version is read from the schema
+itself via contract/generate.py's mtcat_schema_version(). A re-used portal (NZMT, CanadaMT, ...) that
+drops the key therefore renders the version it actually serves, not a stale literal parked here.
 """
 import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+REPO = ROOT.parent
 YAML = ROOT / "portal.config.yaml"
 OUT = ROOT / "config.js"
+
+# The MTCAT schema version has exactly ONE parser, in the contract package next door (the same
+# sys.path-then-import sibling pattern engine/tests/test_contract_generated_in_sync.py uses). Importing
+# it rather than re-implementing the read is the point: two parsers of one file are two things that can
+# disagree about it.
+sys.path.insert(0, str(REPO / "contract"))
+from generate import mtcat_schema_version  # noqa: E402  (sibling contract package; stdlib-only)
 
 
 def _load_yaml(text):
@@ -37,7 +51,7 @@ def build_config(cfg):
         "short_name": p.get("short_name", "AusMT"),
         "region": p.get("region", ""),
         "schema": p.get("schema", "MTCAT"),
-        "schema_version": str(p.get("schema_version", "1.0")),
+        "schema_version": str(p.get("schema_version", mtcat_schema_version())),
         "version": str(p.get("version", "0.0.0")),
         "pages_base_url": d.get("pages_base_url", "") or "",
         "mtcat_url": d.get("mtcat_url", "") or "",

@@ -8,7 +8,7 @@ name: portal-ci
 #
 # PATH-SCOPED (ADR-001 monorepo): only runs when the portal/ subtree (or this workflow) changes.
 #
-# ...PLUS the two engine artifacts the portal's own tests read as SINGLE SOURCES (MTCAT 1.2). About's
+# ...PLUS the two engine artifacts the portal's own tests read as SINGLE SOURCES. About's
 # machine-contract field guide documents the served schema's vocabularies in prose, and
 # portal/tests/test_mtcat_machine_contract.py pins that prose set-for-set against
 # engine/schema/mtcat.schema.json's enums and against engine/extract/build_portal.py's ACCESS_LEVELS /

@@ -45,7 +45,7 @@ import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_par
 import _conventions as conv         # noqa: E402  (C25 convention gates: frame guard + quadrant check)
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
-from _contract import CATALOGUE_COLUMNS  # noqa: E402  (single-source positional column contract)
+from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + MTCAT schema version)
 
 # Named sci-column access for the consumer side (mirrors the portal's contract.js SC map) so the product
 # writers below read sci fields BY NAME, not raw integer index. Built from the same generated SCI_COLUMNS,
@@ -591,7 +591,7 @@ def _formats_by_survey(manifest_doc):
 def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = None,
                    portal: dict = None, coll_by_id: dict = None, lib_vers: dict = None,
                    manifest_doc: dict = None) -> dict:
-    """Build an MTCAT v1.2 discovery/federation document (see docs/docs/reference/mtcat-schema.md and
+    """Build an MTCAT discovery/federation document (see docs/docs/reference/mtcat-schema.md and
     schema/mtcat.schema.json; the old docs/MTCAT_v1.0.md pointer this docstring carried does not exist).
     Portal owns its data; MTCAT is the shared, minimal metadata other
     portals could harvest. Derived purely from already-computed catalogue data — no new science.
@@ -713,7 +713,10 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     doc = {
         "portal": {"portal_id": p.get("portal_id", "ausmt"),
                    "portal_name": p.get("portal_name", "AusMT — Australia's Magnetotelluric Data Portal"),
-                   "schema": "mtcat", "version": str(p.get("schema_version", "1.2")),
+                   # The version is NEVER a literal here: MTCAT_SCHEMA_VERSION is generated from the
+                   # schema's OWN title (contract/generate.py), so this document cannot claim a version
+                   # the schema served beside it does not declare.
+                   "schema": "mtcat", "version": str(p.get("schema_version", MTCAT_SCHEMA_VERSION)),
                    # FAIR-I: point harvesters at the schema served BESIDE this document (relative to the
                    # data dir — the build copies schema/mtcat.schema.json to out/mtcat.schema.json), so a
                    # second implementation can validate mtcat.json without resolving the canonical $id.
@@ -1611,10 +1614,15 @@ def process_mth5(h5_paths, survey_label, org, slug):
 def load_portal_config(path) -> dict:
     """Read the portal's branding/version config (portal.config.yaml) for the MTCAT portal block, so a
     re-used portal (NZMT, CanadaMT, …) is configured in one place. Falls back to AusMT defaults when no
-    config is given or it cannot be read. Uses PyYAML if present, else the stdlib mini-parser."""
+    config is given or it cannot be read. Uses PyYAML if present, else the stdlib mini-parser.
+
+    The branding defaults are AusMT literals because AusMT is what this repo brands. The schema version
+    is NOT: it comes from MTCAT_SCHEMA_VERSION, generated from the schema's own title, so a re-used
+    portal that ships no config (or an unreadable one, or one omitting the key) publishes the version
+    the schema in this tree actually declares instead of whatever was last typed here."""
     default = {"portal_id": "ausmt",
                "portal_name": "AusMT — Australia's Magnetotelluric Data Portal",
-               "schema_version": "1.2"}
+               "schema_version": MTCAT_SCHEMA_VERSION}
     if not path:
         return default
     try:
@@ -1639,7 +1647,7 @@ def load_portal_config(path) -> dict:
     portal_name = name
     return {"portal_id": p.get("id", "ausmt"),
             "portal_name": portal_name,
-            "schema_version": str(p.get("schema_version", "1.2"))}
+            "schema_version": str(p.get("schema_version", MTCAT_SCHEMA_VERSION))}
 
 
 def _extent_of(y: dict):
@@ -3561,7 +3569,7 @@ def main(argv=None):
                     "files": manifest["files"], "bundles": manifest["bundles"]}
     (out / "manifest.json").write_text(_jdump(manifest_doc, separators=(",", ":")), encoding="utf-8")
 
-    # ---- MTCAT v1.2 discovery/federation document (portal owns data; shared minimal metadata) ----
+    # ---- MTCAT discovery/federation document (portal owns data; shared minimal metadata) ----
     # MTCAT 1.2 reads the manifest assembled just above so each survey entry can state the formats
     # ACTUALLY distributed for it. The manifest is already complete at this point (both writers below and
     # the file above consume the same object), so this costs one dict pass and no new derivation.

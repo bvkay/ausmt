@@ -45,8 +45,10 @@ and in the [Data Model](../data-model/metadata-model.md).
 
 ## Interoperability between portals
 
-For interoperability between portals, AusMT emits an **MTCAT** discovery document — the **MTCAT
-v1.0** specification. MTCAT is AusMT's machine-readable catalogue format: one JSON file describing
-every survey, so that another repository can discover AusMT's holdings without exchanging the
-scientific data itself. See [Data Model → MTCAT](../data-model/mtcat.md) and the
+For interoperability between portals, AusMT emits an **MTCAT** discovery document. MTCAT is AusMT's
+machine-readable catalogue format: one JSON file describing every survey, so that another repository
+can discover AusMT's holdings without exchanging the scientific data itself. This page names no MTCAT
+version on purpose: the schema declares its own in its `title` and every document declares the one it
+was written against in `portal.version`, which are the two places worth reading it from. See
+[Data Model → MTCAT](../data-model/mtcat.md) and the
 [MTCAT Schema reference](../reference/mtcat-schema.md).

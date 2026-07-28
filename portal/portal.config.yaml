@@ -10,7 +10,12 @@ portal:
   short_name: AusMT         # shown in the wordmark / header chip
   region: Australia
   schema: MTCAT             # discovery-document schema name (do not change)
-  schema_version: "1.2"     # MTCAT schema version (changes only when the schema changes)
+  # MTCAT schema version. NOT a deployment knob: it must equal the version
+  # engine/schema/mtcat.schema.json declares in its own title, which is the single source every other
+  # site derives from. Stated here so the config stays self-describing, and gated by
+  # engine/tests/test_mtcat_version_parity.py, which fails if this disagrees with the schema. A portal
+  # that DELETES this key is fine and gets the right answer: the default is read from the schema too.
+  schema_version: "1.2"
   version: "0.2.1"          # AusMT release version — keep in step with engine/pyproject.toml; shown as "AusMT v0.2.1"
 
 deployment:
