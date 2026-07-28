@@ -83,8 +83,9 @@ What the derivation had to change is worth knowing, because some of it is visibl
   Recover it with `source_station_id_from_geographic_name()` in the same module, or by matching
   `ausmt_src_id:(\S+)`.
 - **`Site/Survey` and `Site/Project` carry the source file's own naming, not the AusMT slug.** For an
-  AusLAMP station they read `AusLAMP South Australia`; for a Vulcan station `Site/Survey` reads `A1`,
-  which came from the EDI. Get survey membership from the manifest row or from `mtcat.json`, never from
+  AusLAMP station `Site/Survey` reads `AusLAMP South Australia` while `Site/Project` reads
+  `AusLAMP_South_Australia` (underscored, because the `Site.project` pattern forbids spaces); for a
+  Vulcan station `Site/Survey` reads `A1`, which came from the EDI. Get survey membership from the manifest row or from `mtcat.json`, never from
   the XML.
 - **Some values in the file are library defaults the source never stated.** For EDI-sourced stations
   that covers the sign convention, the declination epoch and model, and degenerate-geometry channel

@@ -1,4 +1,5 @@
 # Read-the-Docs / local docs build dependencies.
-# mkdocs.yml declares no theme, plugins, or markdown_extensions, so the bundled default theme is all
-# that is needed. Pinned to the 1.x line for reproducible builds (bump deliberately).
+# mkdocs.yml uses the readthedocs theme, which ships inside mkdocs itself; no plugins or
+# markdown_extensions are declared, so mkdocs is the only dependency. Pinned to the 1.x line for
+# reproducible builds (bump deliberately).
 mkdocs>=1.5,<2

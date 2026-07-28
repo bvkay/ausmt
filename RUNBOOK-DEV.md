@@ -1,6 +1,6 @@
 # AusMT developer runbook
 
-Orientation for anyone working on this repository. Facts below were verified 2026-07-29.
+Orientation for anyone working on this repository. Facts below were verified 2026-07-29, except where a row's Notes say otherwise.
 If a count or command here disagrees with reality, fix this file in the same pull request.
 
 ## What this system is
@@ -27,8 +27,8 @@ have one.
 
 | Suite | cwd | Command | Collected | Notes |
 |-------|-----|---------|-----------|-------|
-| engine | `engine/` | `conda run -n ausmt python -m pytest -q tests` | 438 | 433 pass, 5 skip. Several minutes; needs mt_metadata/mth5 (pinned in `engine/environments/`) |
-| gateway | **repo root** | `conda run -n ausmt python -m pytest -q gateway/tests` | 678 | under a minute; deps in `gateway/requirements-dev.txt`; cwd must be repo root so `gateway` imports |
+| engine | `engine/` | `conda run -n ausmt python -m pytest -q tests` | 438 | 433 pass, 5 skip. Counted 2026-07-29 before that day's merge; known low, re-measure on next edit. Several minutes; needs mt_metadata/mth5 (pinned in `engine/environments/`) |
+| gateway | **repo root** | `conda run -n ausmt python -m pytest -q gateway/tests` | 678 | Counted 2026-07-29 before that day's merge; known low, re-measure on next edit. Under a minute; deps in `gateway/requirements-dev.txt`; cwd must be repo root so `gateway` imports |
 | deploy | **repo root** | `conda run -n ausmt python -m pytest -q deploy/tests` | 183 | shell, compose and Caddy config gates. Two tests shell out to host tools and skip when they are absent: `caddy validate` and `flock(1)`. The Caddy one needs to be able to create the log dir the Caddyfile names, so it can fail on a dev box where CI is green |
 | portal | `portal/` | `conda run -n ausmt python -m pytest -q tests` | 135 | jsdom drivers need node + `npm ci` in `portal/` (see `portal-ci.yml`) |
 | surveys gate | `../ausmt-surveys/` | `conda run -n ausmt python -m pytest -q tests` | 118 | validates the validator + contribute tooling |

@@ -288,7 +288,7 @@ hand. No corpus survey carries one today, so nothing is outstanding.
 | `lead_investigator` | a `contributors[]` row with `role: ProjectLeader` | `migrate_credit.py` |
 | `principal_investigators` | `creators[]` | `migrate_credit.py` |
 | `identifiers.dataset_doi` | a `related_identifiers[]` row | `migrate_identifiers.py` |
-| `time_series.collection_pid` | a `related_identifiers[]` row with `identifies: raw_packed` | `migrate_identifiers.py` |
+| `time_series.collection_pid` | a `related_identifiers[]` row with `identifies: raw_packed` | `migrate_identifiers.py` moves the value; `migrate_identifies.py` then adds the `identifies` level |
 | `identifiers.related_publication` and `identifiers.related_publication_doi` | `publications[]` | `migrate_identifiers.py` |
 | `identifiers.project` | nothing; it was read by nothing | `migrate_identifiers.py` |
 | `instruments[].pid` | `identifiers.instrument_pid`, or a typed `related_identifiers[]` row | no script; the curator moves the value by hand |

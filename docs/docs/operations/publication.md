@@ -243,9 +243,9 @@ emitted, and a station whose position is not exact has its source bytes withheld
 [Why coordinates have an access policy](../rationale/coordinate-access.md).
 
 > Note: the canonical EMTF-XML store (`--canonical-dir`) is a preservation artifact and carries no
-> served download bytes or manifest rows. The per-station `products/` files are different: in a
-> deployment they are written inside the served build directory, so they ride the same access gate
-> as the rest. A station in a non-served survey gets a withheld `station.json` with no derived
+> served download bytes or manifest rows. The per-station `products/` files behave differently.
+> In a deployment they are written inside the served build directory, so they ride the same access
+> gate as the rest. A station in a non-served survey gets a withheld `station.json` with no derived
 > science, no exact position and no dimensionality file.
 
 ---
