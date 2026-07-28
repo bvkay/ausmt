@@ -427,29 +427,11 @@
   .scard .scardhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .scard .scardhead h3{margin:0}
 
-  /* header "How to use" — a <button> styled like the .about link (keyboard/AT gets a real button, not a div) */
-  button.about{font-family:var(--sans);background:none;border:0}
-  button.about:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
-
-  /* --- intro panel: "three ways in" (S2 UX-A) --- */
-  .introoverlay{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;
-    background:rgba(11,15,18,.55);backdrop-filter:blur(1px);padding:24px}
-  .introoverlay.hidden{display:none!important}
-  .intropanel{position:relative;max-width:640px;width:100%;background:var(--panel);border:1px solid var(--line);
-    border-radius:12px;padding:28px 30px 24px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
-  .introclose{position:absolute;top:10px;right:10px;background:none;border:0;color:var(--muted);font-size:20px;
-    line-height:1;padding:6px 10px;cursor:pointer;border-radius:4px}
-  .introclose:hover{color:var(--text)}
-  .introhero{font-size:17px;font-weight:600;line-height:1.4;margin:4px 34px 20px 0;color:var(--text)}
-  .introtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-  .introtile{text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
-    padding:14px 14px;cursor:pointer;color:var(--text);font-family:var(--sans)}
-  .introtile:hover{border-color:var(--copper)}
-  .introtile h3{font-size:13.5px;margin:0 0 6px;color:var(--copper)}
-  .introtile p{font-size:12px;color:var(--muted);line-height:1.5;margin:0}
-  .introtour{margin-top:18px;background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600;
-    padding:9px 16px;border-radius:5px}
-  @media (max-width:760px){.introtiles{grid-template-columns:1fr}}
+  /* Docs wave, stage 2: the header "How to use" <button> and the whole "three ways in" intro panel
+     (.introoverlay / .intropanel / .introclose / .introhero / .introtiles / .introtile / .introtour) are
+     retired with the markup they styled. No element on this page carries those classes any more. The
+     jsdom driver (tools/interaction_test.js, section G) pins both halves: the ids and classes must be
+     absent from the DOM, and this stylesheet must carry no rule for any of them. */
 
   /* --- guided tour spotlight (tour.js) --- */
   /* U10: the dim is JS-driven (tour.js TOUR_DIM, raised .65 -> .78). On a targeted step the backdrop
@@ -636,8 +618,11 @@
       <button id="navSurveys">Surveys</button>
       <button id="navCollections">Collections</button>
     </nav>
+    <!-- Docs wave, stage 2 (owner ruling): FIVE header items, namely Map, Surveys, Collections, About,
+         Contribute. The sixth, "How to use AusMT" (#howToUse), is retired along with the #introOverlay
+         help panel it opened. The first-visit welcome popup and About now carry that job, and
+         index.html?tour=1 is the on-demand way back into the guided tour (About links it). -->
     <a class="about" href="about.html">About</a>
-    <button type="button" class="about" id="howToUse">How to use AusMT</button>
     <a class="contribute" href="add-survey.html">Contribute a survey →</a>
   </div>
   <div class="hzone hright">
@@ -792,32 +777,14 @@
        the map view). Click-closes the drawer; sits beneath the drawer + its resize handle (z-index). -->
   <div id="drawerScrim" class="drawerscrim hidden"></div>
   <div id="drawer" aria-label="Station details"></div>
-  <div id="introOverlay" class="introoverlay hidden">
-    <div class="intropanel" id="introPanel" role="region" aria-label="Welcome to AusMT">
-      <button type="button" class="introclose" id="introClose" aria-label="Dismiss introduction">&times;</button>
-      <p class="introhero">AusMT - Discover Australia's magnetotelluric surveys</p>
-      <div class="introtiles">
-        <button type="button" class="introtile" id="tileBrowse">
-          <h3>Explore data</h3>
-          <p>Search surveys, inspect station quality, preview transfer functions and download datasets</p>
-        </button>
-        <button type="button" class="introtile" id="tileContribute">
-          <h3>Contribute a survey</h3>
-          <p>Package and submit your EDIs with guided validation.</p>
-        </button>
-        <button type="button" class="introtile" id="tileIntegrate">
-          <h3>API access</h3>
-          <p>Machine-readable catalogue: MTCAT JSON and GeoJSON exports for GIS and scripts.</p>
-        </button>
-      </div>
-      <button type="button" class="introtour" id="introTakeTour">Take the tour</button>
-    </div>
-  </div>
   <!-- U7 (owner, 2026-07-13): first-visit "Welcome to AusMT" popup — a small centred modal that REPLACES
        the Wave D corner strip (#introStrip). role=dialog, focus-managed; Esc / click-out / "Browse
-       immediately" all close it. "Take the 2-minute tour" starts the tour (the #introTakeTour pathway).
+       immediately" all close it. "Take the 2-minute tour" starts the tour.
        "Don't show this again" gates persistence: ticked -> either close path persists the dismissal via
-       the existing localStorage key; unticked -> the popup may return next visit. See main.js. -->
+       the existing localStorage key; unticked -> the popup may return next visit. See main.js.
+       Docs wave, stage 2: this popup is now the ONLY tour button on the page. The retired #introOverlay
+       panel used to carry a second one (#introTakeTour); the on-demand replacement is the ?tour=1 query
+       parameter that About links, handled in main.js maybeShowIntro(). -->
   <div id="introWelcome" class="introwelcome hidden" role="dialog" aria-modal="true"
        aria-labelledby="introWelcomeHeading" aria-describedby="introWelcomeText">
     <div class="introwelcome-box" tabindex="-1">

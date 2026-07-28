@@ -57,6 +57,125 @@ key). Every column is enumerated in the developer contract — see
 [Portal Data Files](../developer/data-files.md) — which is the authoritative definition for anyone
 adding or changing a field.
 
+## Fetching data today
+
+These are the patterns that work against the live site right now. Every one of them was run end to end
+against `https://ausmt.au` before it was written down. Nothing here needs a key, a quota or a signed
+request, and every response carries `Access-Control-Allow-Origin: *`, so a browser application can fetch
+it cross-origin. Paths are site-relative and the examples use `https://ausmt.au`.
+
+The portal's [About page](https://ausmt.au/about.html#api) carries a short quickstart. This is the long
+version.
+
+### Whole-survey bundles
+
+One request per survey, keyed by the survey slug (`vulcan-2022` and the like). Each published survey is
+packaged three ways:
+
+```text
+/data/bundles/<slug>-edi.zip     every served station of that survey as EDI
+/data/bundles/<slug>-xml.zip     the same stations as EMTF XML
+/data/bundles/<slug>-tf.h5       the survey's transfer functions as MTH5
+```
+
+```bash
+curl -O https://ausmt.au/data/bundles/vulcan-2022-edi.zip
+```
+
+A `LICENSE.txt` rides inside each zip, carrying that survey's licence and its required attribution.
+
+To find a slug, read `/data/mtcat.json`. Its survey records carry the slug under `survey_id`, and
+`/data/surveys.json` carries the same value under `slug`.
+
+### Per-station fetch through the manifest
+
+Fetch `/data/products/manifest.json` once, filter its `files` rows by `format` (`edi` or `emtfxml`) and
+by `survey`, then fetch `/data/` joined to each row's `url` and check the bytes against that row's
+`sha256`.
+
+Go through the manifest rather than building paths yourself. A served filename is not derivable from the
+station id, so the manifest is the only correct way to locate one station's file. In the live corpus,
+station A1 of `vulcan-2022` is served as `edi/vulcan-2022/Vulcan_A1.edi`.
+
+The manifest's other list, `bundles`, holds the whole-survey artifacts above and the third format,
+`mth5`, which exists per survey rather than per station. Don't filter station rows by `mth5`; there are
+none.
+
+```bash
+BASE=https://ausmt.au
+curl -s "$BASE/data/products/manifest.json" \
+  | jq -r '.files[] | select(.survey=="Vulcan 2022" and .format=="edi") | "\(.url) \(.sha256)"' \
+  | while read -r url sha; do
+      curl -s -O "$BASE/data/$url"
+      echo "$sha  $(basename "$url")" | shasum -a 256 -c -
+    done
+```
+
+The same loop in Python, standard library only:
+
+```python
+import hashlib, json, urllib.request
+BASE = "https://ausmt.au"
+man = json.load(urllib.request.urlopen(f"{BASE}/data/products/manifest.json"))
+for r in man["files"]:
+    if r["survey"] != "Vulcan 2022" or r["format"] != "edi": continue
+    body = urllib.request.urlopen(f"{BASE}/data/{r['url']}").read()
+    assert hashlib.sha256(body).hexdigest() == r["sha256"], r["url"]
+    open(r["url"].split("/")[-1], "wb").write(body)
+```
+
+An embargoed survey has no rows in the manifest at all. Its bytes are withheld by construction, so
+there's nothing to request and no access error to handle, while its catalogue record stays public.
+
+### Bounding-box fetch
+
+`/data/catalogue.json` is one row per station, and the rows are POSITIONAL arrays rather than objects.
+Every column is read by index, with no field names in the file. The authoritative column map is
+[`/src/contract.js`](https://ausmt.au/src/contract.js), generated from the one file that defines the
+column order, so take indices from there rather than counting them. A bounding-box fetch needs three:
+`lat` at index **2**, `lon` at index **3**, and `ausmt_id` at index **12**. Columns are only ever
+appended, never reordered.
+
+Filter the catalogue to the box, join to the products manifest on `ausmt_id` (the one identifier both a
+catalogue row and a manifest row carry), then fetch each matched row's `url` under `/data/` and check its
+`sha256`.
+
+```python
+import hashlib, json, pathlib, urllib.request
+BASE = "https://ausmt.au"
+LAT, LON, AUSMT_ID = 2, 3, 12               # column indices; /src/contract.js is the map
+W, S, E, N = 133.0, -30.0, 135.0, -28.0     # west, south, east, north
+cat = json.load(urllib.request.urlopen(f"{BASE}/data/catalogue.json"))
+ids = {r[AUSMT_ID] for r in cat
+       if r[LAT] is not None and r[LON] is not None
+       and S <= r[LAT] <= N and W <= r[LON] <= E}
+man = json.load(urllib.request.urlopen(f"{BASE}/data/products/manifest.json"))
+for row in man["files"]:
+    if row["ausmt_id"] not in ids or row["format"] != "edi": continue
+    body = urllib.request.urlopen(f"{BASE}/data/{row['url']}").read()
+    assert hashlib.sha256(body).hexdigest() == row["sha256"], row["url"]
+    out = pathlib.Path(row["url"])          # mirror the manifest path, do not flatten it
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)
+```
+
+Two coordinate caveats, both about honesty rather than precision.
+
+A station whose position its custodian **withholds** carries `null` in the lat and lon columns, so the
+example tests for null before comparing and those stations are excluded rather than compared. A null is
+not a position, and no box can honestly contain one. Do not leave that to the language. JavaScript reads
+`null` as `0` in a numeric comparison, which silently treats a withheld station as if it sat at 0°, 0°
+instead of dropping it.
+
+A station whose position is **generalised** at the custodian's request is served rounded to a 0.1° cell,
+roughly 11 km, so a box edge is approximate. A generalised station can land on the wrong side of it by up
+to 0.05°. The build emits `/data/coord_policy.json`, a map of `ausmt_id` to `generalised` or `withheld`,
+whenever any station is non-exact. The file is absent when every served position is exact.
+
+One practical note. A box crosses surveys, and two surveys can hold a station with the same filename, so
+write files out under the manifest's `url` path rather than flattening them to a basename or you will
+lose one of the pair.
+
 ## Downloads
 
 The API may expose resource links for published survey-package releases.

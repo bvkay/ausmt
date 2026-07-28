@@ -132,9 +132,16 @@ def test_drawer_api_section_lists_the_real_endpoints(tmp_path):
                      "/data/surveys.json",
                      "/data/products/manifest.json"):
         assert endpoint in html, f"the drawer API section must list {endpoint}; rendered:\n{html[-2500:]}"
-    # The pointer at the About page's worked patterns (the anchor the new section carries).
-    assert "about.html#api" in html, "the API section must link About's 'Fetching data programmatically'"
-    assert "Fetching data programmatically" in html, "the About pointer must name the section it targets"
+    # Docs wave, stage 2 (owner ruling 3): the depth pointer is the docs site's API reference, and it must
+    # be the SAME url About links, so a reader is never sent to two different "for depth" pages. Read off
+    # about.html rather than typed twice, which is what makes the two surfaces provably agree.
+    about = (ROOT / "about.html").read_text(encoding="utf-8")
+    doc_api = "https://ausmt.readthedocs.io/en/latest/interoperability/api-reference/"
+    assert doc_api in about, f"about.html must link the docs API reference ({doc_api})"
+    assert doc_api in html, f"the drawer API section must link the same docs API reference ({doc_api})"
+    assert "about.html#api" not in html, (
+        "the drawer's depth pointer moved off About and onto the docs API reference; the old anchor link "
+        "must not come back alongside it")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")

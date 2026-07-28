@@ -291,19 +291,23 @@ function showEmptyState(){
   }
   var sv=document.getElementById("surveysview");if(sv)sv.innerHTML=html;
 }
-// --- First-visit welcome popup (UX7b U7) + "How AusMT works" help panel (S2 UX-A) ----------------
-// U7 (owner, 2026-07-13): the first-visit surface is now a small centred MODAL popup (#introWelcome),
-// successor to the Wave D corner strip. It offers exactly: "Take the 2-minute tour" (the #introTakeTour
-// pathway — starts the tour), "Browse immediately" (close), and a "Don't show this again" checkbox that
+// --- First-visit welcome popup (UX7b U7) -----------------------------------------------------------
+// U7 (owner, 2026-07-13): the first-visit surface is a small centred MODAL popup (#introWelcome),
+// successor to the Wave D corner strip. It offers exactly: "Take the 2-minute tour" (starts the tour),
+// "Browse immediately" (close), and a "Don't show this again" checkbox that
 // GATES persistence — ticked, every close path (tour / browse / Esc / click-out) persists the dismissal
 // via the existing localStorage key; unticked, the popup may return next visit. Esc and click-out behave
-// as "Browse immediately". The #introOverlay "How AusMT works" panel stays an on-demand help dialog
-// (header #howToUse). First-visit show fires from runInit() (populated AND empty-data paths).
+// as "Browse immediately". First-visit show fires from runInit() (populated AND empty-data paths).
+// Docs wave, stage 2 (owner ruling): the header's "How to use AusMT" item and the #introOverlay
+// "How AusMT works" panel it opened are both retired, which took the on-demand tour button with them.
+// The replacement is the ?tour=1 query parameter handled in maybeShowIntro() below, which About links as
+// "start the guided tour". It is checked BEFORE the seen flag on purpose: someone who ticked "don't show
+// this again" months ago is exactly the person who follows that link, so the flag must not swallow it.
 const INTRO_KEY="ausmt_intro_dismissed";
 function introSeen(){try{return localStorage.getItem(INTRO_KEY)==="1";}catch(e){return false;}}
 function markIntroSeen(){try{localStorage.setItem(INTRO_KEY,"1");}catch(e){/* storage unavailable (e.g. privacy mode) — just don't persist */}}
-function showIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.remove("hidden");}   // opens the "How AusMT works" help panel
-function hideIntro(){const ov=document.getElementById("introOverlay");if(ov)ov.classList.add("hidden");}
+// startTour lives in tour.js (loaded after main.js); guard so a missing/broken tour.js can't break wiring.
+function startTourSafe(){if(typeof startTour==="function")startTour();}
 // Welcome popup: focus is moved INTO the box on show and RESTORED to the opener on close — the same
 // best-effort/guarded pattern the drawer uses (so the headless harness, with no real focus, never throws).
 let _welcomeReturnFocus=null;
@@ -319,21 +323,20 @@ function hideWelcome(){const w=document.getElementById("introWelcome");if(w)w.cl
   const f=_welcomeReturnFocus;_welcomeReturnFocus=null;if(f&&f.focus){try{f.focus();}catch(e){}}}
 // Close via Browse / Esc / click-out: persist ONLY when "Don't show this again" is ticked.
 function closeWelcome(){if(welcomeDismissChecked())markIntroSeen();hideWelcome();}
-function maybeShowIntro(){if(!introSeen())showWelcome();}      // first visit shows the WELCOME POPUP
+// ?tour=1 (About's "start the guided tour" link) starts the tour outright and shows no popup. Anything
+// else falls back to the first-visit rule: show the welcome popup unless the visitor dismissed it.
+// The parameter is dropped from the address bar once the tour is running (same replaceState pattern the
+// drawer and the tour itself use for their hashes), so a later reload browses the portal rather than
+// replaying the tour at someone who has finished it.
+function tourRequested(){try{return /(^|[?&])tour=1(&|$)/.test(location.search||"");}catch(e){return false;}}
+function dropTourParam(){try{
+  const q=(location.search||"").replace(/(^\?|&)tour=1(?=&|$)/,"").replace(/^&/,"?");
+  history.replaceState(null,"",location.pathname+(q==="?"?"":q)+location.hash);
+}catch(e){/* no History API (or a file:// document); leaving the parameter in place is harmless */}}
+function maybeShowIntro(){if(tourRequested()){startTourSafe();dropTourParam();return;}if(!introSeen())showWelcome();}
 
 (function(){
-  // "How AusMT works" help panel (#introOverlay) — on-demand only (header "How to use AusMT"). Close and
-  // tiles no longer persist anything; the first-visit localStorage key is owned by the welcome popup.
-  const closeBtn=document.getElementById("introClose");if(closeBtn)closeBtn.onclick=hideIntro;
-  const tB=document.getElementById("tileBrowse");if(tB)tB.onclick=()=>{hideIntro();setView("map");};
-  const tC=document.getElementById("tileContribute");if(tC)tC.onclick=()=>{hideIntro();window.location.href="add-survey.html";};
-  const tI=document.getElementById("tileIntegrate");if(tI)tI.onclick=()=>{hideIntro();window.location.href="about.html#standards";};
-  const howTo=document.getElementById("howToUse");if(howTo)howTo.onclick=showIntro;
-  // startTour lives in tour.js (loaded after main.js); guard so a missing/broken tour.js can't break wiring.
-  function startTourSafe(){if(typeof startTour==="function")startTour();}
-  // #introTakeTour (help panel) — the sole tour entry from the on-demand panel: hide the panel, start.
-  const tourBtn=document.getElementById("introTakeTour");if(tourBtn)tourBtn.onclick=()=>{hideIntro();startTourSafe();};
-  // Welcome popup wiring. "Take the tour" reuses the #introTakeTour pathway (start the tour) AND closes
+  // Welcome popup wiring. "Take the tour" starts the tour AND closes
   // the popup persisting-if-ticked; "Browse immediately" just closes (persist-if-ticked); Esc / click-out
   // behave as Browse immediately.
   const wTour=document.getElementById("welcomeTour");if(wTour)wTour.onclick=()=>{closeWelcome();startTourSafe();};
