@@ -2,6 +2,38 @@
 // Shared mutable state (assigned during boot) + constants + small colour/format utils.
 // No survey metadata is hard-coded here; SMETA is loaded from data/surveys.json at boot.
 let CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID; /*__DATA_BINDING__*/
+// ---- two-phase boot: background hydration gates ------------------------------------------------
+// The boot paints from the SMALL products (catalogue + surveys, plus the four small optionals). The heavy
+// ones (tf.json ~3.2MB raw, sci.json and the download manifest) stream in AFTERWARDS, so between first
+// paint and their arrival TFD/SCI/MANIFEST are simply NOT LOADED YET. That is a THIRD state, distinct both
+// from "loaded and empty" and from "this deployment does not serve it", and the honesty rule of this
+// codebase forbids collapsing it into either: no consumer may render "not recorded" / "not currently
+// available" / "not evaluated" / "none currently served" for a product that is merely still in flight.
+//   HYDR[k] === "ready"   -> assigned; render exactly as before
+//   HYDR[k] === "pending" -> in flight; render an unobtrusive LOADING state, NEVER absence
+//   HYDR[k] === "failed"  -> the fetch resolved not-ok / unparseable; say THAT, never dress it as absence
+// TF_READY / SCI_READY / MANIFEST_READY are the awaitable gates for consumers that cannot degrade (the
+// exports read TFD/SCI; the bulk EDI zip reads the manifest). The defaults are the SETTLED values so every
+// harness that assigns TFD/SCI/MANIFEST directly (the coord-access and bundle-tile drivers do) behaves
+// byte-for-byte as it did before phasing: only a boot that actually starts phase 2 flips them to pending.
+let TF_READY=Promise.resolve(),SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
+const HYDR={tf:"ready",sci:"ready",manifest:"ready"};
+function hydrating(k){return HYDR[k]==="pending";}
+function hydrFailed(k){return HYDR[k]==="failed";}
+// A product is USABLE only when it is loaded. "pending" and "failed" are two different REASONS for one
+// fact: the values are not here. A surface that can name the reason (the drawer, which renders a loading
+// line or a could-not-load line) distinguishes them; a surface that cannot (a filter predicate, a marker
+// fill, a property written into an exported file) must gate on THIS, because a failed sci.json leaves s.q
+// undefined for every station exactly as a pending one does. Gating those on hydrating() alone would resume
+// claiming "fails the threshold" / "not evaluated" / "remote_ref: false" the instant the fetch errored,
+// which is the same dishonesty one state later. Phase 2 made a tf/sci failure survivable (before the split
+// it was fatal and the portal blanked), so this state is reachable and has to be answered here.
+function hydrUsable(k){return HYDR[k]==="ready";}
+// The two positional rows consumers deref by station index. Both tolerate a NOT-YET-ASSIGNED global
+// (phase 1 renders before tf/sci land), so a pre-hydration read yields the same empty row an absent product
+// yields; the DISPLAY difference is carried by hydrating()/hydrFailed(), never by the data itself.
+function sciRow(i){return (SCI&&SCI[i])||[];}
+function tfRow(i){return (TFD&&TFD[i])||null;}
 let ST=[],surveys=[],visible=[],selected=new Set(),curView="map",colorMode="type",qMin=0;
 let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState(); backs the #/survey/<slug> route
 // UX4 (D1/D2): the set of survey SLUGS that belong to the `auslamp` collection, built once at boot

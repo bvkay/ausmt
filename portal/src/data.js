@@ -25,22 +25,60 @@ function dataUrl(name){
   var base=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.data_base_url)||"data";
   return String(base).replace(/\/+$/,"")+"/"+name;
 }
-async function loadData(){const u=["catalogue.json","tf.json","sci.json","surveys.json"].map(dataUrl);
-  const [c,t,s,sv]=await Promise.all(u.map(x=>fetch(x).then(r=>{if(!r.ok)throw new Error("load "+x);return r.json();})));
-  let prov=null; try{const r=await fetch(dataUrl("build_provenance.json"));if(r.ok)prov=await r.json();}catch(e){}
-  let coll={}; try{const r=await fetch(dataUrl("collections.json"));if(r.ok)coll=await r.json();}catch(e){}
-  // manifest.json is optional (older data sets / empty builds still load): the download index.
-  let man=null; try{const r=await fetch(dataUrl("manifest.json"));if(r.ok)man=await r.json();}catch(e){}
-  // C12: build.json (build_id/engine_commit/source_commit/generated) — optional, tolerant of absence
-  // (older builds predate it); the footer only renders the "data build …" line when this resolves.
-  // No skew-handshake check here yet (comparing this against a contract hash the portal itself
-  // carries) — that's C16, once the contract-hash plumbing exists.
-  let build=null; try{const r=await fetch(dataUrl("build.json"));if(r.ok)build=await r.json();}catch(e){}
-  // C42 Amendment A1: optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted
-  // by the engine ONLY when a survey has a non-exact station. Absent for an all-exact corpus (the common
-  // case) => {} => no badges. Same tolerant-of-absence pattern as collections/manifest/build above.
-  let cpol={}; try{const r=await fetch(dataUrl("coord_policy.json"));if(r.ok)cpol=await r.json();}catch(e){}
-  return [c,t,s,sv,prov,coll,man,build,cpol];}
+// One JSON product. REQUIRED semantics: a not-ok response or unparseable body rejects, so the caller can
+// decide whether that is fatal (phase 1) or a hydration failure to be reported honestly (phase 2).
+function fetchJson(name){return fetch(dataUrl(name)).then(r=>{if(!r.ok)throw new Error("load "+name);return r.json();});}
+// One OPTIONAL product: absence (404 / network / bad JSON) resolves to `fallback` and never rejects. This is
+// the tolerant-of-absence contract build_provenance / collections / build / coord_policy / manifest have
+// always had; it is factored out here only so the five of them can run CONCURRENTLY.
+function fetchOptional(name,fallback){return fetchJson(name).then(v=>v,()=>fallback);}
+
+// ---- PHASE 1: the first-paint set ---------------------------------------------------------------
+// Everything the map dots, the filter rail and the survey/collection views need, and nothing else:
+// catalogue.json (~320KB, REQUIRED: it IS the dots) + surveys.json (REQUIRED: the per-survey metadata
+// every card and drawer header reads) + the four SMALL optionals. All SIX are issued together.
+// Before this split the boot awaited a Promise.all that also carried tf.json (3.2MB raw / ~1MB gzipped,
+// ~3.1s measured on a live load) and then ran the five optionals STRICTLY SEQUENTIALLY, so their five
+// round trips stacked on top of that wait. Both defects die here: the dots no longer wait on the transfer
+// functions, and the optionals no longer wait on each other.
+async function loadPhase1(){
+  const [c,sv,prov,coll,build,cpol]=await Promise.all([
+    fetchJson("catalogue.json"),
+    fetchJson("surveys.json"),
+    fetchOptional("build_provenance.json",null),
+    fetchOptional("collections.json",{}),
+    // C12: build.json (build_id/engine_commit/source_commit/generated), optional and tolerant of absence
+    // (older builds predate it); the footer only renders the "data build …" line when this resolves.
+    // No skew-handshake check here yet (comparing this against a contract hash the portal itself
+    // carries); that is C16, once the contract-hash plumbing exists.
+    fetchOptional("build.json",null),
+    // C42 Amendment A1: optional coordinate-policy markers (ausmt_id -> 'generalised'|'withheld'), emitted
+    // by the engine ONLY when a survey has a non-exact station. Absent for an all-exact corpus (the common
+    // case) => {} => no badges. Same tolerant-of-absence pattern as collections/build above.
+    fetchOptional("coord_policy.json",{}),
+  ]);
+  return [c,sv,prov,coll,build,cpol];
+}
+
+// ---- PHASE 2: background hydration --------------------------------------------------------------
+// The heavy products, issued in PARALLEL alongside phase 1 and awaited by NOBODY on the first-paint path.
+// Each assigns its global and settles its own gate, so a consumer waits only for the product it actually
+// reads (a station drawer's plots need tf; the Files tab needs the manifest; neither needs the other).
+// Returns the three gates so a caller (and the headless drivers) can observe hydration.
+function startHydration(){
+  HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";
+  // A tf/sci FAILURE is not absence: before the phased boot these were part of the required Promise.all and
+  // a bad fetch showed the load-error page. First paint no longer depends on them, so the failure is recorded
+  // as "failed" and the products fall back to EMPTY arrays; the empty array keeps every positional deref
+  // safe, and hydrFailed() is what the consumers render, so a broken build is never mistaken for a station
+  // that genuinely has no curves.
+  TF_READY=fetchJson("tf.json").then(v=>{TFD=v;HYDR.tf="ready";},()=>{TFD=[];HYDR.tf="failed";});
+  SCI_READY=fetchJson("sci.json").then(v=>{SCI=v;HYDR.sci="ready";},()=>{SCI=[];HYDR.sci="failed";});
+  // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
+  // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
+  MANIFEST_READY=fetchOptional("manifest.json",null).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
+  return [TF_READY,SCI_READY,MANIFEST_READY];
+}
 
 // ---- download manifest resolver (slice #4 — the distribution backbone) ------------------------
 // manifest.json indexes every downloadable artifact: per-station files (EDI/EMTF-XML) and per-survey
