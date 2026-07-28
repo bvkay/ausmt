@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent   # portal/
 ABOUT = ROOT / "about.html"
 INDEX = ROOT / "index.html"
 ADD = ROOT / "add-survey.html"
+RELEASES = ROOT / "releases.html"
 
 
 class _Collector(HTMLParser):
@@ -337,15 +338,16 @@ def test_header_parity_about_matches_index():
 def test_no_page_header_keeps_the_retired_how_to_use_entry():
     """Docs wave, stage 2 (owner ruling): the "How to use AusMT" header entry is gone from every page.
     On index it was a <button id="howToUse"> that opened the #introOverlay help panel; on About it was an
-    <a href="#howto">. Both are pinned absent, by id and by visible text, on all three shipped pages.
-    Non-vacuous: run against the pre-wave HTML, index.html and about.html both fail.
+    <a href="#howto">, and releases.html arrived on main with an <a href="about.html#howto"> copy of the
+    same item. All are pinned absent, by id and by visible text, on all four shipped pages. Non-vacuous:
+    run against the pre-wave HTML, index.html, about.html and releases.html all fail.
 
     The #howto ANCHOR survives on About (answer 2 keeps that id, so an inbound deep link still lands) and
     is deliberately not what this asserts against; the assertion is about the HEADER entry.
 
     Comments are stripped before the text check on purpose: both headers carry a comment explaining what
     was removed and why, and a rule that forbids explaining a removal is a rule that loses the reason."""
-    for path in (INDEX, ABOUT, ADD):
+    for path in (INDEX, ABOUT, ADD, RELEASES):
         raw = path.read_text(encoding="utf-8")
         if "<header>" not in raw:
             continue
