@@ -509,6 +509,27 @@ def test_analytics_omits_the_state_table_when_the_fold_produced_none(tmp_path):
     run(_body())
 
 
+def test_analytics_tolerates_a_stats_file_that_still_carries_legacy_day_states(tmp_path):
+    """LEGACY-DAY-STATES PIN. The daily state grain was dropped (it is the finest cell in the file, and
+    the small-cell argument that rules out a city rules it out too), but a box that folded before the
+    drop still has a `states` map on its day rows until they age out of the 92-day window. The screen
+    reads day rows for the sparkline and the reach note only, so that residue must be INERT. FAILS IF
+    such a file 500s the screen, or if a day-level state figure reaches the page."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            doc = _v3_stats()
+            doc["daily"][0]["states"] = {"TAS": 1}      # exactly what the pre-drop fold wrote
+            _write_stats(cfg, doc)
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            html = r.text
+            assert "Australia by state" in html, "the kept grains still render"
+            assert "Tasmania" not in html, "a day-level state count must not reach the screen"
+            assert "Distinct networks" in html, "the daily-derived panels still render"
+    run(_body())
+
+
 def test_analytics_state_table_says_why_it_is_state_and_not_city(tmp_path):
     """RATIONALE PIN. The screen must carry the reason the breakdown stops at state, so the next person
     reading it does not file 'add cities' as an obvious improvement. FAILS IF the note loses either

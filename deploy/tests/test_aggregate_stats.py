@@ -566,10 +566,11 @@ def _au_lines():
     ]
 
 
-def test_au_state_breakdown_folds_from_the_masked_prefix_at_every_grain():
+def test_au_state_breakdown_folds_from_the_masked_prefix_at_the_month_and_cumulative_grains():
     """STATE PIN. With the compact state table present, every request that classifies as AU must ALSO
-    land in a state bucket -- cumulatively, in its calendar-month rollup, and in its daily row -- with
-    the v6 /48 resolving exactly like the v4 /24. FAILS IF by_state is absent, if a state is
+    land in a state bucket -- cumulatively and in its calendar-month rollup, the TWO grains that are
+    kept -- with the v6 /48 resolving exactly like the v4 /24. The DAILY grain is deliberately not
+    recorded at all (see the no-daily-grain pin below). FAILS IF by_state is absent, if a state is
     misattributed, if a v6 prefix is not resolved, or if a non-AU request is given a state."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
@@ -581,10 +582,53 @@ def test_au_state_breakdown_folds_from_the_masked_prefix_at_every_grain():
     assert stats["countries"] == {"AU": 4, "NZ": 1}
     month = stats["monthly"][0]
     assert month["by_state"] == {"NSW": 2, "WA": 1, "unattributed": 1}, month["by_state"]
-    day = stats["daily"][0]
-    assert day["states"] == {"NSW": 2, "WA": 1, "unattributed": 1}, day.get("states")
     # A state code is a two/three-letter label, never an address: the leak sweep must still be clean.
     assert _sweep_ip_or_ua(json.dumps(stats, indent=1)) == []
+
+
+def test_no_day_row_ever_records_a_state_breakdown():
+    """NO-DAILY-GRAIN PIN. A day-by-state cell would be the FINEST-grained cell in the whole file, and
+    the small-cell argument that rules out a city column rules it out at the daily grain too: a single
+    Tasmanian download on a named day is quasi-identifying in a community this size. Nothing renders or
+    exports it, so it is not recorded in the first place. FAILS IF any day row gains a `states` key,
+    with the state table loaded or without it."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    assert states.loaded, "the fixture state table must load"
+
+    with_table = AGG.aggregate(None, _au_lines(), rmap, geoip, _RUN, au_states=states)
+    without = AGG.aggregate(None, _au_lines(), rmap, geoip, _RUN)
+    assert with_table["by_state"], "the cumulative breakdown must still be recorded"
+    for stats in (with_table, without):
+        for day in stats["daily"]:
+            assert "states" not in day, f"a day row must carry no state buckets: {day}"
+
+
+def test_a_prior_file_carrying_legacy_day_states_folds_and_is_left_to_age_out():
+    """TOLERANT-READ PIN. A box that folded with the build which briefly wrote a per-day `states` map has
+    those keys sitting in its stats.json already. The next fold must read that file without a murmur:
+    the legacy key is carried forward EXACTLY as written and ages out with the 92-day daily window
+    (rewriting history on upgrade is the one thing this file never does), while no new day row gains
+    one. FAILS IF such a file raises, if the legacy key is stripped or mutated, or if the daily grain
+    starts being written again."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-01
+    run2 = dt.datetime(2026, 6, 4, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-03
+
+    s1 = AGG.aggregate(None, [_line("/data/catalogue.json", _AU_NSW, date="2026-06-01")],
+                       rmap, geoip, run1, au_states=states)
+    s1["daily"][0]["states"] = {"NSW": 1}                    # exactly what the pre-drop code wrote
+    s1 = json.loads(json.dumps(s1))                          # round-trip: a real file read off disk
+
+    s2 = AGG.aggregate(s1, [_line("/data/catalogue.json", _AU_WA_V6, date="2026-06-03")],
+                       rmap, geoip, run2, au_states=states)
+    rows = {d["date"]: d for d in s2["daily"]}
+    assert rows["2026-06-01"]["states"] == {"NSW": 1}, "a legacy key is left exactly as it was written"
+    assert "states" not in rows["2026-06-03"], "the newly folded day must not gain a states key"
+    assert s2["by_state"] == {"NSW": 1, "WA": 1}, s2["by_state"]
 
 
 def test_au_state_rows_plus_unattributed_reconcile_with_the_country_row():
@@ -624,15 +668,15 @@ def test_absent_state_table_degrades_silently_to_country_only():
         assert stats["totals"]["downloads"] == 2
         assert stats["by_state"] == {}, "no table means no state buckets, not empty-labelled ones"
         assert stats["monthly"][0]["by_state"] == {}
-        assert "states" not in stats["daily"][0], "a day with no state data carries no states key"
+        assert "states" not in stats["daily"][0], "no day row carries state buckets, table or no table"
 
 
 def test_state_data_is_forward_only_and_never_backfills_a_folded_day():
-    """FORWARD-ONLY PIN. Days folded before the state table was installed carry NO state data and must
+    """FORWARD-ONLY PIN. Months folded before the state table was installed carry NO state data and must
     stay that way: installing the table later must not rewrite an existing daily row, invent state
     counts for an earlier month, or make the cumulative breakdown claim to cover the whole history.
-    FAILS IF an already-folded day gains a states key, if an earlier month gains state counts, or if
-    the cumulative state total silently claims every AU request ever counted."""
+    FAILS IF a day row gains a states key, if an earlier month gains state counts, or if the cumulative
+    state total silently claims every AU request ever counted."""
     rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
     geoip = AGG.GeoIP.load(_DBIP)
     states = AGG.AuStates.load(_AU_STATES_CSV)
@@ -646,7 +690,7 @@ def test_state_data_is_forward_only_and_never_backfills_a_folded_day():
     s2 = AGG.aggregate(s1, after, rmap, geoip, run2, au_states=states)         # table installed
 
     june = [d for d in s2["daily"] if d["date"] == "2026-06-01"][0]
-    assert "states" not in june, "a day folded before the table must not be backfilled"
+    assert "states" not in june, "no day row records state buckets, and none is ever backfilled"
     months = {m["month"]: m for m in s2["monthly"]}
     assert months["2026-06"]["by_state"] == {}, "an earlier month must not gain state counts"
     assert months["2026-07"]["by_state"] == {"WA": 1}

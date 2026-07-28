@@ -84,10 +84,13 @@ TIMER_PERIOD_MIN = 1440
 # permanent monthly rollups. v1 files are UPGRADED IN PLACE by _coerce_prev (tolerant read, no migration
 # script): every v1 field is carried forward, the new dimensions simply start accruing from the next fold.
 #
-# The AU state breakdown (`by_state`, and `states` on a day row) is an ADDITIVE v2 dimension and does
-# NOT bump this number: like every other optional input in this file it is detected by KEY PRESENCE,
-# never by version, and a v2 file written before it existed reads back cleanly with the maps empty.
-# Bumping the version would gate nothing and would only invite a migration step that is not needed.
+# The AU state breakdown (`by_state`, cumulative and per calendar month) is an ADDITIVE v2 dimension
+# and does NOT bump this number: like every other optional input in this file it is detected by KEY
+# PRESENCE, never by version, and a v2 file written before it existed reads back cleanly with the maps
+# empty. Bumping the version would gate nothing and would only invite a migration step that is not
+# needed. That also covers the reverse case: a file folded by a build that briefly wrote a `states` map
+# onto each DAY row reads back fine here -- the key is simply carried forward untouched and ages out
+# with the 92-day daily window (see _count_geo for why no day-by-state cell is written any more).
 SCHEMA_VERSION = 2
 
 # The rolling window (in DAYS) of daily rows kept in stats.json. 92 days is one quarter, which is what
@@ -567,10 +570,13 @@ def _coerce_prev(prev: dict | None) -> dict:
     if isinstance(prev.get("countries"), dict):
         s["countries"] = dict(prev["countries"])
     # The AU state breakdown, carried forward whole. A file written before it existed simply has no
-    # such key and starts empty: state counts are FORWARD-ONLY and no earlier day is ever backfilled
+    # such key and starts empty: state counts are FORWARD-ONLY and no earlier month is ever backfilled
     # (that would need raw logs that have long since rotated away).
     if isinstance(prev.get("by_state"), dict):
         s["by_state"] = {str(k): _as_int(v) for k, v in prev["by_state"].items()}
+    # Day rows are carried forward WHOLE, unknown keys and all. A row written by a build that briefly
+    # recorded a per-day `states` map keeps it and simply ages out of the 92-day window; it is not
+    # stripped, because rewriting history on upgrade is the one thing this file never does.
     if isinstance(prev.get("daily"), list):
         s["daily"] = [d for d in prev["daily"] if isinstance(d, dict) and isinstance(d.get("date"), str)]
     # The v1 -> v2 hinge. Key on the PRESENCE of `monthly`, never on its emptiness: a genuinely fresh v2
@@ -602,8 +608,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     complete and permanent.
 
     `au_states` is the OPTIONAL AU state table. When it is present, a request that classifies as AU also
-    lands in a state bucket (at all three grains); when it is absent the fold is country-only and writes
-    no state buckets at all: absent, never a zero (see AuStates for why state and not city)."""
+    lands in a state bucket -- cumulatively and in its calendar month, never on the day row; when it is
+    absent the fold is country-only and writes no state buckets at all: absent, never a zero (see
+    AuStates for why state and not city, and _count_geo for why not by day)."""
     stats = _coerce_prev(prev)
     prev_folded = stats.get("last_folded_date")
     cutoff_date = (run_dt.date() - dt.timedelta(days=1))  # last complete day
@@ -657,7 +664,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             totals["visits"] += 1
             day["visits"] += 1
             month["visits"] += 1
-            _count_geo(geoip, au_states, rec["address"], countries, by_state, month, day)
+            _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
         elif kind == "api":
             totals["api_requests"] += 1
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
@@ -701,7 +708,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             if survey:
                 _bump_survey(by_survey, survey, size)
                 _bump_survey(month["surveys"], survey, size)
-            _count_geo(geoip, au_states, rec["address"], countries, by_state, month, day)
+            _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
 
     # Distinct-network counts for the days folded in THIS run. Only the SIZE of each set is written --
     # the masked addresses themselves never leave memory (record D2/D6).
@@ -750,7 +757,7 @@ def _bump_survey(index: dict, survey: str, size: int) -> None:
 
 
 def _count_geo(geoip: GeoIP, au_states, address, countries: dict, by_state: dict,
-               month: dict, day: dict) -> None:
+               month: dict) -> None:
     """Resolve the masked address to a country (and, for AU, to a state) and count it. The address
     itself is discarded immediately -- only the country code and the state code are ever counted.
 
@@ -758,10 +765,14 @@ def _count_geo(geoip: GeoIP, au_states, address, countries: dict, by_state: dict
       * every AU request lands in exactly ONE bucket -- its state, or the explicit `unattributed`
         bucket when the table does not cover that prefix. Nothing is dropped, so the state rows plus
         `unattributed` reconcile exactly with the AU country row they sit beneath;
-      * the count goes to the cumulative map, the calendar-month rollup, and the day row.
-    When it is NOT loaded, nothing at all is written: no bucket, no zero, no key on the day row.
-    Days folded before the table was installed are therefore ABSENT from the breakdown rather than
-    reading as a measured zero, and they are never backfilled (the raw logs are long gone)."""
+      * the count goes to the cumulative map and the calendar-month rollup, and NOWHERE ELSE. There is
+        deliberately NO day-by-state cell: it would be the finest-grained cell in the whole file, and
+        the small-cell argument that rules out a city column (see AuStates) rules out a named day in a
+        named state just as squarely. Nothing renders or exports such a cell, so it is not recorded in
+        the first place rather than recorded and then withheld.
+    When the table is NOT loaded, nothing at all is written: no bucket, no zero. Months folded before
+    it was installed are therefore ABSENT from the breakdown rather than reading as a measured zero,
+    and they are never backfilled (the raw logs are long gone)."""
     cc = geoip.country(address)
     _bump(countries, cc)
     _bump(month["countries"], cc)
@@ -770,9 +781,6 @@ def _count_geo(geoip: GeoIP, au_states, address, countries: dict, by_state: dict
     code = au_states.state(address) or AU_STATE_UNATTRIBUTED
     _bump(by_state, code)
     _bump(month.setdefault("by_state", {}), code)
-    # setdefault, never a skeleton field: a daily row folded before state counting existed is left
-    # exactly as it was written (the forward-only pin).
-    _bump(day.setdefault("states", {}), code)
 
 
 def _note_network(seen: dict[str, set], date: str, address) -> None:
