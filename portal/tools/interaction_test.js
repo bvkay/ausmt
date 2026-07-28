@@ -147,6 +147,14 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // driver can drive the attribution/sources render paths that the base fixture doesn't carry.
   "screeningIndicators,maturityModel,groupMarkersBySurvey,licBadgeState,licIsOpen,attributionText," +
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
+  // Card-lane polish hooks. processingSoftwareText/pubShortCite are the PURE lineage derivations (the
+  // most-specific software string, and a publication reduced to a short cite without fabricating an
+  // "et al."); setManifest swaps the download manifest so the distributed-formats node can be driven
+  // against real availability (the fixture data dir ships none), mirroring tools/bundle_tiles_test.js.
+  // LAZY arrows (not bare references) so a boot on pre-change drawer.js still REACHES section LG and
+  // fails there with a precise message, instead of dying at this api hook with a ReferenceError.
+  "processingSoftwareText:(m,sc)=>processingSoftwareText(m,sc),pubShortCite:(p)=>pubShortCite(p)," +
+  "setManifest:(mf)=>{MANIFEST=mf;}," +
   // CVD amendment hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
   "qColor," +
   // UX9 item 2 (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
@@ -2057,8 +2065,9 @@ async function bootFreshWindow(dataMap) {
   const betaH = doc.getElementById("drawer").innerHTML;
   ok(!/Contributors \(/.test(betaH),
     "CREDIT: a survey with no contributors[] must render NO Contributors <details> (no summary, no placeholder)");
-  ok(/>Attribution/.test(betaH) && !/attribution-authors/.test(betaH),
-    "CREDIT: a survey with no creators[] renders the Attribution block unchanged (no attribution names line)");
+  const betaAttn = [...doc.getElementById("drawer").querySelectorAll(".attn")];
+  ok(/>Attribution/.test(betaH) && betaAttn.length === 1 && betaAttn[0].querySelector("a") === null,
+    "CREDIT: a survey with no creators[] renders the ONE attribution box as the flat sentence (no names line, no links), got " + betaAttn.length + " boxes");
   ok(!/Cited authors/.test(betaH) && !/credited whenever this dataset is cited/.test(betaH),
     "CREDIT: no 'Cited authors' label and no citation gloss ever render");
   doc.getElementById("drawer").classList.remove("open");
@@ -2074,6 +2083,11 @@ async function bootFreshWindow(dataMap) {
       { name: "Kate Robertson", name_type: "person", orcid: "0000-0002-1111-2222" },
       { name: "Geological Survey of South Australia", name_type: "organisation", ror: "https://ror.org/028g18b61" },
     ],
+    // Faithful to what the engine SERVES: CONTRIBUTOR-CREDIT-SPEC §2.1 builds cite.au from creators[]
+    // ("; "-joined, in order), so the attribution sentence and the creator names are the same names.
+    // dates gives the sentence its "(year)" tail.
+    dates: "2019", cite: { au: "Kate Robertson; Geological Survey of South Australia", yr: "2019",
+                           ti: "Gamma Survey magnetotelluric transfer functions", ve: "", pb: "OrgZ" },
     related_identifiers: [
       { identifier: "10.25914/gamma-raw", identifier_type: "DOI", relation: "IsDerivedFrom", custodian: "NCI", identifies: "raw_packed" },
       { identifier: "10.25914/gamma-coll", identifier_type: "DOI", relation: "IsPartOf", custodian: "NCI", identifies: "collection" },
@@ -2084,26 +2098,47 @@ async function bootFreshWindow(dataMap) {
       { t: "An untitled note on the Gamma survey", doi: "10.5555/gamma-note" },
     ],
   });
-  // (1) ATTRIBUTION AUTHORS: card-credit rework - the ordered creators[] render as an unlabelled names line
-  //     INSIDE the Attribution block (no standalone Creators section), in declared order; a person carries the
-  //     ORCID icon-link, an organisation's name links to its ROR. AusMT mints no DOIs, so the line makes no
-  //     citation claim: no "Cited authors" label and no gloss.
+  // (1) ONE ATTRIBUTION BOX (owner ruling, card-lane polish). The Attribution section renders EXACTLY ONE
+  //     .attn box. When creators[] drive the attribution (§2.1: cite.au IS the "; "-joined creators) that
+  //     single box carries the SAME sentence with each name ORCID/ROR-linked in place, keeping the "; "
+  //     separators and the "(year)" tail; there is never a second names box. RED on origin/main: TWO
+  //     visually identical .attn boxes render (the sentence, then a separate ' · '-joined names line).
   A.openSurvey("Gamma Survey");
   const drwPC = doc.getElementById("drawer"), pcH = drwPC.innerHTML;
   ok(!/>Creators</.test(pcH),
     "PC: no standalone Creators section/heading remains (creators fold into the Attribution block)");
-  ok(/attribution-authors/.test(pcH),
-    "PC: creators[] render as the unlabelled attribution names line inside the Attribution block when creators[] is present");
-  ok(/Kate Robertson/.test(pcH) && /orcid\.org\/0000-0002-1111-2222/.test(pcH),
-    "PC: a person creator renders their name plus the ORCID icon-link");
-  ok(/Geological Survey of South Australia/.test(pcH) && /ror\.org\/028g18b61/.test(pcH),
-    "PC: an organisation creator's name links to its ROR");
-  ok(pcH.indexOf("Kate Robertson") < pcH.indexOf("Geological Survey of South Australia"),
-    "PC: creators must render in their declared citation order (person before org here)");
+  const attnBoxes = [...drwPC.querySelectorAll(".attn")];
+  ok(attnBoxes.length === 1,
+    "ONEBOX: the Attribution section must render EXACTLY ONE .attn box (the sentence with the names linked in place), got " + attnBoxes.length);
+  ok(!/attribution-authors/.test(pcH),
+    "ONEBOX: the separate attribution names box (.attribution-authors) must be gone entirely");
+  // The box's TEXT is the plain attribution sentence (the string exports.attributionLine mirrors), so
+  // linking the names never changes what the attribution says. The ORCID icon-link is an IMAGE with no
+  // text, so extracting textContent leaves the space that separates a name from its icon dangling before
+  // the "; " separator (the rendered line is correct); collapse that before comparing.
+  const attnText = el => el.textContent.replace(/\s+/g, " ").replace(/\s+([;,.])/g, "$1").trim();
+  ok(attnText(attnBoxes[0]) === "Kate Robertson; Geological Survey of South Australia (2019)",
+    "ONEBOX: the box must read the attribution sentence with '; ' separators and the '(year)' tail, got: " + JSON.stringify(attnText(attnBoxes[0])));
+  ok(attnText(attnBoxes[0]) === A.attributionText(A.smeta("Gamma Survey")),
+    "ONEBOX: the rendered box text must equal attributionText(m) exactly (the CSV / citation-pack attribution string)");
+  ok(/Kate Robertson/.test(attnBoxes[0].innerHTML) && /orcid\.org\/0000-0002-1111-2222/.test(attnBoxes[0].innerHTML),
+    "ONEBOX: a person creator is ORCID-linked INSIDE the one attribution box");
+  ok(/Geological Survey of South Australia/.test(attnBoxes[0].innerHTML) && /ror\.org\/028g18b61/.test(attnBoxes[0].innerHTML),
+    "ONEBOX: an organisation creator's name links to its ROR INSIDE the one attribution box");
+  ok(attnBoxes[0].innerHTML.indexOf("Kate Robertson") < attnBoxes[0].innerHTML.indexOf("Geological Survey of South Australia"),
+    "ONEBOX: creators must render in their declared attribution order (person before org here)");
   ok(pcH.indexOf(">Attribution") < pcH.indexOf("Kate Robertson") && pcH.indexOf("Kate Robertson") < pcH.indexOf(">Downloads<"),
-    "PC: the attribution names line sits INSIDE the Attribution block (after the Attribution heading, ahead of Downloads)");
+    "ONEBOX: the attribution box sits after the Attribution heading and ahead of Downloads");
   ok(!/Cited authors/.test(pcH) && !/credited whenever this dataset is cited/.test(pcH),
-    "PC: the attribution names line carries NO 'Cited authors' label and NO citation gloss (attribution, not citation)");
+    "PC: the attribution box carries NO 'Cited authors' label and NO citation gloss (attribution, not citation)");
+  // (1b) CONTRIBUTORS PLACEMENT (owner ruling): the collapsed "Contributors (N)" details moves out from
+  //      below Downloads to sit directly beneath the attribution box, inside the Attribution block. RED on
+  //      origin/main: the details renders AFTER the Downloads grid.
+  ok(/survey-contributors/.test(pcH), "PLACE: setup, Gamma must still carry its contributors <details>");
+  ok(pcH.indexOf('class="attn"') < pcH.indexOf("survey-contributors"),
+    "PLACE: the Contributors details must sit directly BENEATH the attribution box");
+  ok(pcH.indexOf("survey-contributors") < pcH.indexOf(">Downloads<"),
+    "PLACE: the Contributors details must sit ABOVE the Downloads section (it used to trail below it)");
   // (2) FUNDING grant id: the funder's grant_id is appended to the Funding section (2 live rows in the corpus).
   const _fundBlock = (pcH.split(">Funding<")[1] || "").split(">Related publications<")[0];
   ok(/Australian Research Council/.test(_fundBlock) && /ADI RD02-260/.test(_fundBlock),
@@ -2190,6 +2225,107 @@ async function bootFreshWindow(dataMap) {
   ok(gcH.indexOf("0000-0009-0000-0009") < 0,
     "GROUP: a nameless contributor row is dropped silently (its ORCID never renders, uncounted)");
   drwGC.classList.remove("open");
+
+  // LG. LINEAGE + PROVENANCE POLISH (owner ruling, from live screenshots). Four fixes in the station
+  // drawer's Provenance tab, driven on Gamma's G1 (its survey already carries the pubs[] poked in section
+  // PC, and no later section pins Gamma's provenance):
+  //   (a) the processing-software node shows the MOST SPECIFIC versioned string available (station-level
+  //       first, survey-level fallback, never an invented version) and reads the SAME string as the
+  //       Provenance tab's own row;
+  //   (b) the collapsed pipeline section is titled "AusMT Provenance" (it is the AusMT pipeline's run, not
+  //       the custodian's MT data processing) and the old title is gone;
+  //   (c) the distributed-formats node lists ONLY the formats actually served, dot-separated, with no
+  //       ticks and no "(pipeline)" qualifier. RED on origin/main: it always claimed "EDI ✓ · EMTF XML
+  //       (pipeline)" even where the manifest serves neither;
+  //   (d) the publication node reads the survey's pubs[], not the dataset DOI. RED on origin/main: Gamma
+  //       has two publications and no dataset DOI, so the node read "none recorded" (the live Newer
+  //       Volcanic Province 2019 case: a 2023 paper on the card, "none recorded" in the lineage).
+  // The lineage rows are label/value pairs; read the VALUE of one node by its label so a match can never
+  // be satisfied by unrelated text elsewhere in the tab (the format-availability badges also say "EMTF XML").
+  const lineageValue = (panel, label) => {
+    const row = [...panel.querySelectorAll(".lineage .lrow")]
+      .find(r => r.querySelector(".lt") && r.querySelector(".lt").textContent.trim() === label);
+    return row ? row.querySelector(".lv") : null;
+  };
+  // (a) PURE derivation: station-level wins, survey-level is the fallback, neither invents a version.
+  ok(A.processingSoftwareText({ software: "Geotools" }, ["", "", "", "Geotools 4.0.5.12583"]) === "Geotools 4.0.5.12583",
+    "SOFTWARE: the station-level versioned string must win over the bare survey-level software field");
+  ok(A.processingSoftwareText({ software: "Geotools 4.0.5.12583" }, []) === "Geotools 4.0.5.12583",
+    "SOFTWARE: with no station-level string, the survey-level software field is the fallback");
+  ok(A.processingSoftwareText({}, []) === "not stated in EDI",
+    "SOFTWARE: with neither, the honest 'not stated in EDI' stands (no version is ever synthesised)");
+  // (a, rendered) Gamma declares an UNVERSIONED survey-level software while its stations carry the EDI's
+  // own string: both the lineage node and the Provenance row must show the specific one, and agree.
+  A.setSMETA("Gamma Survey", { software: "Geotools" });
+  A.openStationById("nz.gamma.G1");
+  const lgProv = doc.getElementById("dp-provenance");
+  const lgSwNode = lineageValue(lgProv, "Processing software");
+  const lgSwRow = [...lgProv.querySelectorAll("tr")].find(tr => /Processing software/.test(tr.textContent));
+  ok(lgSwNode && lgSwRow, "SOFTWARE: the Provenance tab must carry both a processing-software lineage node and row");
+  ok(lgSwNode.textContent.trim() === "BIRRP",
+    "SOFTWARE: the lineage node must show the station-level string, got: " + JSON.stringify(lgSwNode.textContent.trim()));
+  ok(lgSwNode.textContent.trim() === lgSwRow.cells[1].textContent.trim(),
+    "SOFTWARE: the lineage node and the Provenance row must read the SAME string, got: " +
+    JSON.stringify([lgSwNode.textContent.trim(), lgSwRow.cells[1].textContent.trim()]));
+  // (b) the collapsed pipeline section is retitled; the old title survives nowhere in the tab.
+  ok([...lgProv.querySelectorAll("details summary")].some(su => su.textContent.trim() === "AusMT Provenance"),
+    "TITLE: the collapsed pipeline section must be titled 'AusMT Provenance', got: " +
+    JSON.stringify([...lgProv.querySelectorAll("details summary")].map(su => su.textContent.trim())));
+  ok(!/processing provenance/i.test(lgProv.textContent),
+    "TITLE: the old 'Processing provenance' title must be gone from the Provenance tab");
+  // (c) distributed formats: exactly the served set, dot-separated, no ticks and no "(pipeline)" claim.
+  //     The fixture ships NO manifest, so G1 is the served-EDI-only case (edi_available=1, open access):
+  //     the unserved XML and MTH5 must simply be ABSENT, never claimed.
+  const lgFmtEdi = lineageValue(doc.getElementById("dp-provenance"), "Distributed formats");
+  ok(lgFmtEdi && lgFmtEdi.textContent.trim() === "EDI",
+    "FORMATS: an unserved format must be ABSENT from the list, not claimed, got: " +
+    JSON.stringify(lgFmtEdi && lgFmtEdi.textContent.trim()));
+  // All three served (manifest EDI + EMTF XML artifacts, plus a survey MTH5 bundle).
+  A.setManifest({ files: [
+    { ausmt_id: "nz.gamma.G1", format: "edi", url: "files/g1.edi", size: 1000 },
+    { ausmt_id: "nz.gamma.G1", format: "emtfxml", url: "files/g1.xml", size: 900 },
+  ], bundles: [{ survey: "Gamma Survey", slug: "gamma", format: "mth5", url: "bundles/gamma-tf.h5", size: 5000 }] });
+  A.openStationById("nz.gamma.G1");
+  const lgFmtAll = lineageValue(doc.getElementById("dp-provenance"), "Distributed formats");
+  ok(lgFmtAll && lgFmtAll.textContent.trim() === "EDI · EMTF XML · MTH5",
+    "FORMATS: all three served must list dot-separated with no ticks and no '(pipeline)', got: " +
+    JSON.stringify(lgFmtAll && lgFmtAll.textContent.trim()));
+  ok(lgFmtAll.textContent.indexOf("✓") < 0 && lgFmtAll.textContent.indexOf("(pipeline)") < 0,
+    "FORMATS: the node must carry neither a tick nor the '(pipeline)' qualifier");
+  A.setManifest(null);                                   // restore the fixture's manifest-less state
+  // An EMBARGOED station (Delta D1: access embargoed, no served EDI, no bundle) claims NOTHING.
+  A.openStationById("au.delta.D1");
+  const lgFmtNone = lineageValue(doc.getElementById("dp-provenance"), "Distributed formats");
+  ok(lgFmtNone && lgFmtNone.textContent.trim() === "none currently served",
+    "FORMATS: an embargoed station must claim no distributed format at all, got: " +
+    JSON.stringify(lgFmtNone && lgFmtNone.textContent.trim()));
+  // (d) publication node: pubs[]-driven, short cite + "+N more", DOI-linked, and never "none recorded"
+  //     for a survey that HAS publications. PURE short-cite rules first (no fabricated co-authors).
+  ok(A.pubShortCite({ a: "Robertson, K.", y: "2023" }) === "Robertson, K. (2023)",
+    "PUB: a single 'Last, First' author must never gain a fabricated 'et al.', got: " + A.pubShortCite({ a: "Robertson, K.", y: "2023" }));
+  ok(A.pubShortCite({ a: "Kay B, Heinson G, Thiel S", y: "2023" }) === "Kay B et al. (2023)",
+    "PUB: three or more comma-separated authors collapse to the first author + et al.");
+  ok(A.pubShortCite({ a: "Robertson, K.; Thiel, S.", y: "2023" }) === "Robertson, K. et al. (2023)",
+    "PUB: a '; '-separated author list collapses on that unambiguous separator");
+  ok(A.pubShortCite({ t: "An untitled note", doi: "10.5555/x" }) === "An untitled note",
+    "PUB: a row with no author falls back to its title (never an empty cite)");
+  A.openStationById("nz.gamma.G1");
+  const lgPub = lineageValue(doc.getElementById("dp-provenance"), "Publication (interpretation)");
+  ok(lgPub, "PUB: the lineage publication node must be labelled 'Publication (interpretation)'");
+  ok(lgPub.textContent.indexOf("none recorded") < 0,
+    "PUB: a survey WITH publications must not read 'none recorded' (the live Newer Volcanic Province bug)");
+  ok(/Robertson, K\. \(2023\)/.test(lgPub.textContent),
+    "PUB: the node must show the first publication as a short cite, got: " + JSON.stringify(lgPub.textContent.trim()));
+  ok(/\(\+1 more\)/.test(lgPub.textContent),
+    "PUB: a second publication must add a '+N more' tail, got: " + JSON.stringify(lgPub.textContent.trim()));
+  ok(lgPub.innerHTML.indexOf('href="https://doi.org/10.1093/gji/ggad999"') >= 0 && lgPub.innerHTML.indexOf("doi.org/https") < 0,
+    "PUB: the short cite links to the publication DOI with a single doi.org prefix, got: " + lgPub.innerHTML);
+  // A survey with NO publications keeps the honest "none recorded" (Beta declares none).
+  A.openStationById("au.beta.B1");
+  const lgPubNone = lineageValue(doc.getElementById("dp-provenance"), "Publication (interpretation)");
+  ok(lgPubNone && lgPubNone.textContent.trim() === "none recorded",
+    "PUB: a survey with no publications must still read 'none recorded', got: " + JSON.stringify(lgPubNone && lgPubNone.textContent.trim()));
+  doc.getElementById("drawer").classList.remove("open");
 
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured
   // dE76≈9.6 under a deuteranopia simulation — indistinguishable for red-green CVD readers. The ramp is
@@ -2329,6 +2465,7 @@ async function bootFreshWindow(dataMap) {
     "D3 draw-toast copy+fires+auto-switch, Draw-buttons in-SELECTION-panel reuse-toolbar-handler + shared-armedDrawMode(button/icon parity) + complete/cancel-clears-both, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
     "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore, " +
-    "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted))");
+    "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted), " +
+    "CARD-POLISH one-attribution-box(single .attn, names ORCID/ROR-linked in place, text == attributionText) + contributors-above-Downloads + lineage software(station-level-wins/survey-fallback/no-invented-version, node == prov row) + AusMT-Provenance-title + formats(served-only, no ticks/(pipeline), embargoed claims nothing) + publication-node-from-pubs(short cite + N-more, no fabricated et al., none-recorded when empty))");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
