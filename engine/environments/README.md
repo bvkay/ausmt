@@ -9,9 +9,15 @@ The Phase-1 canonical-ingest path (`ausmt_science.ingest.normalize`) needs the c
 | File | What | Use |
 |------|------|-----|
 | `environment-lock.yml` | Exact conda lock of the tested env (win-64, captured 2026-06-16) | local/dev on win-64: `conda env create -f environments/environment-lock.yml` |
-| `requirements-mtmetadata-lock.txt` | Exact all-pip lock (full transitive pins) | Linux / CI: `pip install -r requirements-mtmetadata-lock.txt` |
+| `requirements-mtmetadata-lock.txt` | Exact all-pip lock (full transitive pins) | Linux / CI / **the engine image**: `pip install -r requirements-mtmetadata-lock.txt` |
 | `environment.yml` | Human-readable source spec (loose major pins) | starting point; not the reproducibility anchor |
 | `../requirements-mtmetadata.txt` | Direct deps only (`mt_metadata`, `mth5`); lives in `engine/`, **not** in this `environments/` dir | convenience; transitive deps float — prefer the lock |
+
+Three pins in `requirements-mtmetadata-lock.txt` carry `sys_platform` markers (`colorama`,
+`tzdata`, `win32_setctime`): the freeze was taken on Windows and those three are only ever required
+there, per their upstream metadata. They install fine anywhere (all are pure-python wheels), so the
+markers are for honesty and to keep three inert packages out of the Linux image. `pip freeze` on
+Windows emits them unmarked, so re-apply the markers when regenerating.
 
 ## Tested versions (2026-06-16, all round-trips pass)
 

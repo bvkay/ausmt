@@ -1,8 +1,12 @@
 # Gateway RUNTIME deps (design: stdlib + fastapi + uvicorn + python-multipart only — no ORM, no
 # pydantic-settings, no extra deps). These floors match the versions installed + tested into the
-# ausmt conda env on 2026-07-05 (recorded per the C10 contract's dep-provenance rule). The
-# gateway.Dockerfile locker stage pip-freezes the exact linux transitive closure, mirroring
-# engine.Dockerfile; these are the DIRECT pins that feed that resolve.
+# ausmt conda env on 2026-07-05 (recorded per the C10 contract's dep-provenance rule).
+#
+# THESE FLOORS ARE NOT WHAT SHIPS. requirements-lock.txt beside this file is the exact linux/amd64
+# CPython 3.12 closure resolved from these floors, and deploy/docker/gateway.Dockerfile installs THAT.
+# This file is the human-readable statement of intent; the lock is the reproducible artifact. Raising
+# a floor here does nothing to the image until the lock is refreshed, and the refresh ritual lives in
+# the lock's own header. Keep the two in step: refresh the lock in the same commit as a floor bump.
 #
 # python-multipart is required by starlette to parse multipart/form-data uploads; without it the
 # form parser raises at import. uvicorn is the ASGI server the container entrypoint runs. httpx is

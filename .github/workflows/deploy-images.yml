@@ -153,9 +153,42 @@ jobs:
           path: /tmp/${{ matrix.image }}.tar
           retention-days: 1
 
+      # Record the EXACT python stack of the image that was just built, straight out of the image
+      # itself. The two python images install committed locks (engine/environments/
+      # requirements-mtmetadata-lock.txt, gateway/requirements-lock.txt), so this should simply agree
+      # with them; the point is that it is measured, not asserted. Anything the locks do not pin
+      # (the engine image's test tooling) is recorded here too, so "which versions did the image we
+      # shipped in July actually contain" is answerable from the run that shipped it rather than from
+      # a file someone may have refreshed since.
+      #
+      # `docker run` works for both push and PR runs: the export step above pulled the image back on
+      # push runs, and `load: true` put it in the daemon on PR runs. --entrypoint sh because both
+      # images set a non-shell ENTRYPOINT. Skipped for ausmt-portal, which is caddy-based with no
+      # python in it.
+      - name: Record the shipped pip stack
+        if: matrix.image != 'ausmt-portal'
+        run: |
+          FIRST_TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d, -f1)
+          {
+            echo "# pip freeze from ${{ matrix.image }} as built by run ${{ github.run_id }}"
+            echo "# commit ${{ github.sha }}, image tag ${FIRST_TAG}"
+          } > /tmp/${{ matrix.image }}-pip-freeze.txt
+          docker run --rm --entrypoint sh "$FIRST_TAG" -c 'python -m pip freeze' \
+            >> /tmp/${{ matrix.image }}-pip-freeze.txt
+          cat /tmp/${{ matrix.image }}-pip-freeze.txt
+      - uses: actions/upload-artifact@v4
+        if: matrix.image != 'ausmt-portal'
+        with:
+          name: pip-freeze-${{ matrix.image }}
+          path: /tmp/${{ matrix.image }}-pip-freeze.txt
+          retention-days: 90
+
   # ---------------------------------------------------------------------------------------------
-  # Full pytest lane INSIDE the built engine image (the pinned Linux lock from the `locker` stage
-  # is already installed in the image — this is the real release gate for the engine stack). C39
+  # Full pytest lane INSIDE the built engine image (the committed lock,
+  # engine/environments/requirements-mtmetadata-lock.txt, is already installed in the image; this is
+  # the real release gate for the engine stack). Until 2026-07-28 the image carried a build-time
+  # `locker` resolve of the floating pins instead, so this gate tested a stack the repo had never
+  # verified; engine.Dockerfile now installs the committed lock and the two agree. C39
   # made this the SOLE in-image engine-suite run: engine.Dockerfile's own in-build stack-less pytest
   # was removed as the least truthful + only ~4-min-per-build of the three engine runs. This lane is
   # where the D3.1 topology skip ("gateway tree not shipped") legitimately fires — the engine image

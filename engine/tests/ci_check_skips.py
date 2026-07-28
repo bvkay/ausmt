@@ -16,7 +16,9 @@ exact environment, so the allow-list is the same for both:
         engine/tests/test_validator_gate.py::test_env_var_path_resolves_real_validator — the only test
         gated purely on a sibling ausmt-surveys checkout, which neither engine CI lane has (the private
         repo is not cross-checked-out here; see build-products.yml's --no-validate note and
-        engine.Dockerfile:133-134). LEGITIMATE: it is a dev-box-only cross-repo integration check.
+        engine.Dockerfile's `ENV AUSMT_VALIDATOR_PATH` block, which explains that the validator
+        arrives at RUNTIME on a bind mount and is never baked into the image). LEGITIMATE: it is a
+        dev-box-only cross-repo integration check.
         Empirically confirmed (C35a verification): with the stack present and no sibling checkout, this
         is the ONE and ONLY skip the engine suite produces; every mt_metadata/mth5/yaml/jsonschema/
         _mth5 importorskip RUNS (all of those deps ARE in the CI lock / image).
