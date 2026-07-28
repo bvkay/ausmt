@@ -24,7 +24,13 @@ SURVEYS = HERE / "fixtures"          # vendored, self-contained (no sibling-repo
 
 
 def _check(node, schema, path="$"):
-    """Minimal draft-07 subset validator: type, required, const, pattern, items, properties."""
+    """Minimal draft-07 subset validator: type, required, const, enum, pattern, items, properties.
+
+    MTCAT 1.2 pins the ratified vocabularies (name_type, contributor role, identifier_type, relation,
+    identifies, the station band) with `enum`, so this stdlib checker learns `enum` too: without it every
+    _check call in this file would silently wave an out-of-vocabulary token through, and the vocab pins
+    would only ever be enforced where jsonschema happens to be installed. `integer` is honoured as a
+    distinct type for the same reason (a stringified count must not pass as a number)."""
     import re
     t = schema.get("type")
     types = t if isinstance(t, list) else ([t] if t else None)
@@ -33,12 +39,16 @@ def _check(node, schema, path="$"):
             (ty == "object" and isinstance(node, dict)) or
             (ty == "array" and isinstance(node, list)) or
             (ty == "string" and isinstance(node, str)) or
+            (ty == "integer" and isinstance(node, int) and not isinstance(node, bool)) or
+            (ty == "boolean" and isinstance(node, bool)) or
             (ty == "number" and isinstance(node, (int, float)) and not isinstance(node, bool)) or
             (ty == "null" and node is None)
             for ty in types)
         assert ok, f"{path}: expected {types}, got {type(node).__name__}"
     if "const" in schema:
         assert node == schema["const"], f"{path}: expected const {schema['const']}"
+    if "enum" in schema:
+        assert node in schema["enum"], f"{path}: {node!r} is not in the ratified vocab {schema['enum']}"
     if "pattern" in schema and isinstance(node, str):
         assert re.search(schema["pattern"], node), f"{path}: {node!r} fails /{schema['pattern']}/"
     if isinstance(node, dict):
@@ -60,14 +70,75 @@ def _build_mtcat(tmp_path):
     return json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
 
 
+def _build_data_dir(tmp_path, *extra):
+    """A build with the distribution flags on, so the download manifest is populated and the MTCAT
+    `formats` facet has something real to derive from. Returns the output dir."""
+    out = tmp_path / "data"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(SURVEYS),
+                        "--out", str(out), "--no-validate", *extra],
+                       cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return out
+
+
 def test_mtcat_emitted_and_valid(tmp_path):
     doc = _build_mtcat(tmp_path)
     _check(doc, SCHEMA)
     assert doc["portal"]["portal_id"] == "ausmt"
     assert doc["portal"]["schema"] == "mtcat"
-    assert doc["portal"]["version"] == "1.1"   # C46-W3a: MTCAT minor bump (attribution/sources/changes)
+    assert doc["portal"]["version"] == "1.2"   # MTCAT 1.2: describe every served field + derived facets
     assert doc["surveys"], "at least one survey"
     assert doc["stations"], "at least one station"
+
+
+def test_mtcat_derived_facets_agree_with_the_document_they_ride_in(tmp_path):
+    """MTCAT 1.2: n_stations / data_types / period range / tipper count are DERIVED, so on a real build
+    they must reconcile EXACTLY with this document's own stations[] and with the positional catalogue the
+    same build wrote. A drift between the survey summary and the station rows is the failure this pins;
+    it is also the reason the summary is safe to publish at all."""
+    out = _build_data_dir(tmp_path)
+    doc = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
+    cat = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    _check(doc, SCHEMA)
+    by_survey = {}
+    for st in doc["stations"]:
+        by_survey.setdefault(st["survey_id"], []).append(st)
+    # catalogue rows are positional: id, survey, lat, lon, period_min_s, period_max_s, ..., comps(7)
+    cat_by_ausmt = {row[12]: row for row in cat}
+    for s in doc["surveys"]:
+        rows = by_survey.get(s["survey_id"], [])
+        assert s["n_stations"] == len(rows), f"{s['survey_id']}: n_stations disagrees with stations[]"
+        mix = {}
+        for st in rows:
+            mix[st["data_type"]] = mix.get(st["data_type"], 0) + 1
+        assert s["data_types"] == mix, f"{s['survey_id']}: band mix disagrees with stations[]"
+        pmins = [cat_by_ausmt[st["station_id"]][4] for st in rows
+                 if cat_by_ausmt[st["station_id"]][4] is not None]
+        pmaxs = [cat_by_ausmt[st["station_id"]][5] for st in rows
+                 if cat_by_ausmt[st["station_id"]][5] is not None]
+        assert s["period_min_s"] == (min(pmins) if pmins else None)
+        assert s["period_max_s"] == (max(pmaxs) if pmaxs else None)
+        assert s["n_stations_tipper"] == sum(
+            1 for st in rows if "T" in (cat_by_ausmt[st["station_id"]][7] or ""))
+        assert 0 <= s["n_stations_tipper"] <= s["n_stations"]
+    assert sum(s["n_stations"] for s in doc["surveys"]) == len(doc["stations"])
+
+
+def test_mtcat_formats_match_the_download_manifest(tmp_path):
+    """MTCAT 1.2: `formats` states what is ACTUALLY distributed, so on a real build it must equal the
+    set of formats the manifest carries for that survey. Derived from the one authority, never declared:
+    a survey whose bytes the access/licence gate withholds has no manifest rows and so serves []."""
+    out = _build_data_dir(tmp_path, "--bundle-edi", "--survey-h5")
+    doc = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
+    man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    _check(doc, SCHEMA)
+    title_of = {s["survey_id"]: s["title"] for s in doc["surveys"]}
+    expected = {}
+    for row in man["files"] + man["bundles"]:
+        expected.setdefault(row["survey"], set()).add(row["format"])
+    for s in doc["surveys"]:
+        assert s["formats"] == sorted(expected.get(title_of[s["survey_id"]], set())), s["survey_id"]
+    assert any(s["formats"] for s in doc["surveys"]), "this build distributes something, so prove it"
 
 
 def test_mtcat_schema_served_beside_data(tmp_path):
