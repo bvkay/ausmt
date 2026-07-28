@@ -188,9 +188,10 @@ live corpus. Their columns are enumerated in
 Two facts about withheld surveys, both verifiable on `au.kalkaroo-2022.KD-C3`:
 
 - its `tf.json` entry is 18 empty arrays, one per column, so the width and the index alignment hold;
-- its `sci.json` entry has the science-derived fields nulled but keeps the processing metadata
-  (`rr`, `sw`, `alg`), because those describe how the data were processed rather than what the data
-  say. `sw` for that station is `"Geotools 4.0.5.12583"`, and it is public.
+- its `sci.json` entry has the science-derived fields nulled but keeps the processing metadata that
+  exists at source, because that describes how the data were processed rather than what the data
+  say. For this station that means `rr` is 0 and `sw` is `"Geotools 4.0.5.12583"`, both public;
+  `alg` is null here because no Kalkaroo station declares one, withheld or not.
 
 The catalogue row itself stays complete apart from `edi_available`, which is 0. The band, the period
 range and the component list of an embargoed station are public; the curves are not.

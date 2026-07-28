@@ -207,13 +207,14 @@ schema states in prose:
 
 This is the field guide for anyone writing a harvester against a served catalogue document. It moved here
 from the portal's About page in the 2026-07 documentation wave, so About could go back to being a short
-front door. Everything below is read off
-[`mtcat.schema.json`](https://ausmt.au/data/mtcat.schema.json), which is served beside
-[`mtcat.json`](https://ausmt.au/data/mtcat.json) so a second implementation can validate the document
-without resolving anything off-site.
+front door. Everything below describes MTCAT v1.2. The schema file is served beside the document at
+[`mtcat.schema.json`](https://ausmt.au/data/mtcat.schema.json), so a second implementation can validate
+without resolving anything off-site, and a fetched schema self-identifies in its `title`. Check that the
+title says v1.2 before relying on this section against it; a deployment updates the served schema on its
+next data build, so shortly after a release the served copy can trail this page by one version.
 
-The schema is permissive about unknown keys and strict about known ones. Unknown keys ride through, so a
-reader written for the current minor version will not break on a later one. Every described field is
+The v1.2 schema is permissive about unknown keys and strict about known ones. Unknown keys ride through,
+so a reader written for the current minor version will not break on a later one. Every described field is
 typed, and where a value comes from a ratified vocabulary that vocabulary is pinned, so an
 out-of-vocabulary token fails the build rather than reaching you.
 

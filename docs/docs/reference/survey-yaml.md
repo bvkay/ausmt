@@ -277,19 +277,22 @@ performs no registry lookup, matching the ROR and RAiD checks.
 
 ## Retired fields
 
-These keys are still read, so an un-migrated package publishes as before. Each one raises a
-deprecation warning when it carries a real value, and the migration scripts live in
-`ausmt-surveys/_tools/`. `instruments[].pid` is the exception. It is retired from the editor and the
-validator warns on it, but no script rewrites it, so a curator holding a real value moves it by
-hand. No corpus survey carries one today, so nothing is outstanding.
+Five of these keys are still read as fallbacks (`lead_investigator`, `principal_investigators`,
+`identifiers.dataset_doi`, `time_series.collection_pid`, `sources[]`), so an un-migrated package
+publishes as before. The three `identifiers.*` orphans below were read by nothing and are simply
+dropped. Each key raises a deprecation warning when it carries a real value, and the migration
+scripts live in `ausmt-surveys/_tools/`. `instruments[].pid` is the exception on the script side.
+It is retired from the editor and the validator warns on it, but no script rewrites it, so a curator
+holding a real value moves it by hand. No corpus survey carries one today, so nothing is outstanding.
 
 | Retired key | Replaced by | Migration |
 |---|---|---|
 | `lead_investigator` | a `contributors[]` row with `role: ProjectLeader` | `migrate_credit.py` |
 | `principal_investigators` | `creators[]` | `migrate_credit.py` |
 | `identifiers.dataset_doi` | a `related_identifiers[]` row | `migrate_identifiers.py` |
-| `time_series.collection_pid` | a `related_identifiers[]` row with `identifies: raw_packed` | `migrate_identifiers.py` moves the value; `migrate_identifies.py` then adds the `identifies` level |
-| `identifiers.related_publication` and `identifiers.related_publication_doi` | `publications[]` | `migrate_identifiers.py` |
+| `time_series.collection_pid` | a `related_identifiers[]` row; NCI-custodian rows gain `identifies: raw_packed` | `migrate_identifiers.py` moves the value; `migrate_identifies.py` then infers the `identifies` level for NCI rows and lists any other custodian for curator fill-in |
+| `identifiers.related_publication_doi` | `publications[]` | `migrate_identifiers.py` |
+| `identifiers.related_publication` | nothing; dead free text, dropped by the script | `migrate_identifiers.py` |
 | `identifiers.project` | nothing; it was read by nothing | `migrate_identifiers.py` |
 | `instruments[].pid` | `identifiers.instrument_pid`, or a typed `related_identifiers[]` row | no script; the curator moves the value by hand |
 | `sources[]` | a `related_identifiers[]` row with `identifies: entire` plus the acquisition keys | `migrate_identifies.py` |
