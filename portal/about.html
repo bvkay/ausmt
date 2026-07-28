@@ -51,6 +51,11 @@
   .ver{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
   .apilink:hover{color:var(--copper)}
+  /* api-docs lane: the header right zone's mono stats block, copied verbatim from index.html's .counts so
+     the two headers render identically. On index it carries live app state; here it carries CORPUS totals
+     (see the header comment). The .corpus marker distinguishes the two at a glance and in the chrome pins. */
+  .counts{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .counts b{color:var(--text)}
   /* Matches index.html: at narrow widths the three header zones stack full-width and left-align, so the
      centred nav / right-aligned mtcat link don't read as stranded fragments once they wrap. */
   @media (max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
@@ -70,6 +75,11 @@
   .card.out{border-left:3px solid var(--no)}
   .card h3{margin-top:0}
   code{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);padding:1px 5px;border-radius:3px}
+  /* api-docs lane: multi-line command blocks. Same mono/panel-2 tokens as the inline <code> above, plus a
+     border and horizontal scroll so a long command line can never widen the 820px column. */
+  pre.code{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:5px;padding:10px 12px;margin:6px 0 14px;
+    overflow-x:auto;line-height:1.55;white-space:pre}
   .toc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:0 0 26px;font-size:13.5px}
   .toc a{color:var(--muted);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
   .toc a:hover{color:var(--text)}
@@ -106,10 +116,13 @@
     <nav>
       <!-- No #/surveys or #/collections deep-link route exists in main.js routeFromHash (only
            #/station, #/survey/<slug>, #/collection/<id>); Surveys/Collections are view-switch buttons,
-           not hash routes. Per lane scope (don't invent routes), all three link to the portal home. -->
-      <a href="index.html">Map</a>
-      <a href="index.html">Surveys</a>
-      <a href="index.html">Collections</a>
+           not hash routes. Per lane scope (don't invent routes), all three link to the portal home.
+           api-docs lane: they carry index's navMap/navSurveys/navCollections ids so the two headers are
+           comparable element-for-element (the header-parity pin). The TAG differs by necessity: on index
+           these are <button>s that switch app views in place; About is static, so they must be links. -->
+      <a id="navMap" href="index.html">Map</a>
+      <a id="navSurveys" href="index.html">Surveys</a>
+      <a id="navCollections" href="index.html">Collections</a>
     </nav>
     <a class="about active" href="about.html">About</a>
     <!-- On THIS page the how-to content lives in the in-body #howto section, so the header item jumps
@@ -118,9 +131,18 @@
     <a class="contribute" href="add-survey.html">Contribute a survey →</a>
   </div>
   <div class="hzone hright">
-    <!-- UX7a (A5): the MTCAT machine-readable link moved to the footer (bottom-left), matching index and
-         add-survey. Live counts are app-state and meaningless on this static page, so the right zone is
-         intentionally empty — kept for symmetric alignment with the flex:1 left zone. -->
+    <!-- UX7a (A5): the MTCAT machine-readable link lives in the footer (bottom-left), matching index and
+         add-survey. api-docs lane: the right zone now carries the mono stats block that used to be
+         index-only, so the two headers no longer differ. What it states is different by necessity, and
+         deliberately so: index shows LIVE app state ("N shown · N selected · N total" for the current map
+         filters/selection), which has no meaning on a page with no map, no filters and no selection.
+         About shows CORPUS totals instead, read from the same catalogue the app reads. The three live ids
+         (nVis/nSel/nTot) stay off this page. corpus-stats.js fills it and reveals it only when both
+         documents resolve to a non-empty corpus, so a file:// page, an unpublished deployment or an empty
+         build shows nothing at all rather than a fabricated or zero total. -->
+    <div class="counts corpus" id="corpusCounts" hidden
+         title="stations and surveys in the AusMT catalogue"><b id="corpusStations"></b> stations ·
+      <b id="corpusSurveys"></b> surveys</div>
   </div>
 </header>
 <main>
@@ -137,6 +159,7 @@
   <div class="toc">
     <a href="#what">What is AusMT</a><a href="#howto">What you can do</a><a href="#contains">What it contains</a>
     <a href="#excludes">What it doesn't</a><a href="#why">Why it exists</a><a href="#docs">Documentation</a>
+    <a href="#api">Fetching data programmatically</a>
   </div>
 
   <section id="what">
@@ -164,7 +187,8 @@
         <h3>API access</h3>
         <p>Machine-readable catalogue exports for GIS and scripts. <b>MTCAT is AusMT's machine-readable
         catalogue format — one JSON file describing every survey</b>, with GeoJSON available as an
-        in-browser export for GIS.</p>
+        in-browser export for GIS. To script downloads, see
+        <a class="link" href="#api">Fetching data programmatically</a>.</p>
       </div>
     </div>
     <p><a class="cta" href="add-survey.html">Contribute a survey →</a></p>
@@ -238,6 +262,62 @@
     </ul>
   </section>
 
+  <!-- api-docs lane: the practical counterpart to answer 6. Everything stated here is a live path on the
+       hosted site, and both worked examples were run end to end against it before being written down.
+       Deliberately NOT documented: any endpoint under an /api prefix. No such tier has ever existed; the
+       read surface is the static data tree, which is why the two patterns below are the whole story. -->
+  <section id="api">
+    <h2>7 · Fetching data programmatically</h2>
+    <p>Everything the portal reads is a read-only static JSON file on this site: no key, no quota, no
+    request signing. Every response carries <code>Access-Control-Allow-Origin: *</code> so a browser
+    application can fetch it cross-origin, and every downloadable artifact is listed in the products
+    manifest with a <code>sha256</code> you can verify after downloading. Paths below are site-relative;
+    the examples use <code>https://ausmt.au</code>.</p>
+
+    <h3>Pattern A · whole-survey bundles</h3>
+    <p>One request per survey, keyed by the survey slug (<code>vulcan-2022</code> and the like; see the
+    discovery note at the foot of this section for where to read one). Each published survey is packaged
+    three ways:</p>
+    <ul>
+      <li><code>/data/bundles/&lt;slug&gt;-edi.zip</code>, every served station of that survey as EDI</li>
+      <li><code>/data/bundles/&lt;slug&gt;-xml.zip</code>, the same stations as EMTF XML</li>
+      <li><code>/data/bundles/&lt;slug&gt;-tf.h5</code>, the survey's transfer functions as MTH5</li>
+    </ul>
+    <pre class="code">curl -O https://ausmt.au/data/bundles/vulcan-2022-edi.zip</pre>
+
+    <h3>Pattern B · manifest-driven per-station fetch</h3>
+    <p>Fetch <code>/data/products/manifest.json</code> once, filter its <code>files</code> rows by
+    <code>format</code> (<code>edi</code> or <code>emtfxml</code>) and by <code>survey</code>, then fetch
+    <code>/data/</code> joined to each row's <code>url</code> and check the bytes against that row's
+    <code>sha256</code>. Go through the manifest rather than building paths yourself: a served filename is
+    not derivable from the station id, so the manifest is the only correct way to locate one station's
+    file. The manifest's other list, <code>bundles</code>, holds the Pattern A artifacts and the third
+    format, <code>mth5</code>, which exists per survey rather than per station.</p>
+    <pre class="code">BASE=https://ausmt.au
+curl -s "$BASE/data/products/manifest.json" \
+  | jq -r '.files[] | select(.survey=="Vulcan 2022" and .format=="edi") | "\(.url) \(.sha256)"' \
+  | while read -r url sha; do
+      curl -s -O "$BASE/data/$url"
+      echo "$sha  $(basename "$url")" | shasum -a 256 -c -
+    done</pre>
+    <p>The same loop in Python, standard library only:</p>
+    <pre class="code">import hashlib, json, urllib.request
+BASE = "https://ausmt.au"
+man = json.load(urllib.request.urlopen(f"{BASE}/data/products/manifest.json"))
+for r in man["files"]:
+    if r["survey"] != "Vulcan 2022" or r["format"] != "edi": continue
+    body = urllib.request.urlopen(f"{BASE}/data/{r['url']}").read()
+    assert hashlib.sha256(body).hexdigest() == r["sha256"], r["url"]
+    open(r["url"].split("/")[-1], "wb").write(body)</pre>
+
+    <p>An embargoed survey has no rows in the manifest at all: its bytes are withheld by construction, so
+    there is nothing to request and no access error to handle, while its catalogue record stays public.</p>
+    <p>For survey-level discovery, start from <a class="link" href="data/mtcat.json">mtcat.json</a>, the
+    MTCAT document that describes every survey in the catalogue in one file. Its survey records carry the
+    slug under the key <code>survey_id</code>, which is the value both patterns above are keyed by;
+    <code>/data/surveys.json</code> carries the same value under <code>slug</code>.</p>
+  </section>
+
   <!-- Footer matches index.html's structure: the machine-readable MTCAT link (UX7a A5, bottom-left) +
        the copyright line + the data-ver-chip version chip (populated by version.js from config.js, which
        this page loads). Index's footer also has a #buildId span, but that is filled only by
@@ -262,5 +342,10 @@
 </main>
 <script src="config.js"></script>
 <script src="version.js"></script>
+<!-- api-docs lane: fills the header's corpus-totals block. A SEPARATE FILE, not an inline block: the
+     deployed CSP for every page except add-survey.html is script-src 'self' with no 'unsafe-inline'
+     (deploy/docker/caddy/Caddyfile, @strictPages), so an inline script here would be blocked in
+     production. Same reason index.html's analytics shim lives in src/analytics-shim.js. -->
+<script src="corpus-stats.js"></script>
 </body>
 </html>

@@ -12,9 +12,16 @@ Each assertion states its failure criterion:
     non-vacuous: the pre-fix about.html had a flat header with none of these classes.
   * About marked active — FAILS if the centre-zone About link is not rendered in the active state, or if
     any OTHER centre nav item is (only the current page may be active).
-  * no counts on a static page — FAILS if about.html carries any live-counts element (id nVis/nSel/nTot
-    or class "counts"); those are app-state and meaningless on a static page. Non-vacuous: index.html
-    HAS these ids, so a naive copy-the-whole-header would trip this.
+  * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
+    (nVis/nSel/nTot). Those three are map/filter/selection state, which has no meaning on a page with no
+    map, no filters and no selection. Non-vacuous: index.html HAS these ids, so a naive
+    copy-the-whole-header would trip this.
+    NARROWED by the api-docs lane, deliberately: the ban used to extend to the class "counts" as well,
+    on the reasoning that a static page has no counts to state. That reasoning covered app state only.
+    About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
+    load time) in index's right zone, reusing index's .counts styling so the two headers render
+    identically (see test_header_parity_about_matches_index). The app-state ids remain banned, which is
+    the half of the old assertion that was actually about honesty; the class ban was about styling.
   * one version chip — FAILS if the number of real elements carrying data-ver-chip is not exactly 1
     (must survive the reverse case too: zero chips, or a duplicated chip, both fail).
 """
@@ -126,13 +133,22 @@ def test_about_marked_active_and_no_other_center_nav_is():
 
 
 def test_about_has_no_live_counts_elements():
-    # Live counts are app-state and meaningless on a static page — none of index's count ids/classes.
+    """Live APP-STATE counts are meaningless on a static page: none of index's nVis/nSel/nTot may appear
+    here. The corpus-totals block About does carry is a different claim (catalogue facts, not the current
+    map's filter/selection state) and is pinned separately below; see the module docstring for why the
+    old class-level ban was narrowed."""
     els = _parse(ABOUT)
     count_ids = {"nVis", "nSel", "nTot"}
     id_hits = [a.get("id") for (tag, a, inh) in els if a.get("id") in count_ids]
-    class_hits = [a for (tag, a, inh) in els if "counts" in _classes(a)]
-    assert not id_hits, f"about.html must carry no live-counts ids; found {id_hits}"
-    assert not class_hits, "about.html must carry no .counts element (live counts are app-state)"
+    assert not id_hits, (
+        f"about.html must carry no live app-state count ids (nVis/nSel/nTot); found {id_hits}. The "
+        f"header's corpus-totals block states catalogue totals and must not borrow these ids.")
+    # Whatever .counts element About does carry must be the CORPUS one, marked as such.
+    counts = [a for (tag, a, inh) in els if "counts" in _classes(a)]
+    assert len(counts) == 1, f"about.html must carry exactly one .counts element; found {len(counts)}"
+    assert "corpus" in _classes(counts[0]), (
+        "about.html's .counts element must carry the 'corpus' marker class: it states catalogue totals, "
+        "not index's live map state, and the two must stay distinguishable at a glance")
 
 
 def test_about_footer_carries_exactly_one_ver_chip():
@@ -194,6 +210,131 @@ def test_mtcat_link_in_footer_not_header_across_pages():
             f"{path.name}: the footer MTCAT link title must be kept verbatim, got {footer_hits[0].get('title')}")
         assert "Machine-readable record (MTCAT JSON) ↗" in path.read_text(encoding="utf-8"), (
             f"{path.name}: the verbatim MTCAT link text must be preserved")
+
+
+class _HeaderShape(HTMLParser):
+    """Records the ORDER and nesting of elements inside <header>, so the two pages' headers can be
+    compared position-by-position rather than as a bag of classes. Each entry is
+    (tag, attrs-dict, in_nav:bool) in document order; in_nav marks the three primary view items, which
+    live inside <nav> on both pages."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.items = []
+        self._depth = 0        # header nesting depth
+        self._nav_at = None    # header-depth at which <nav> opened (None => not inside nav)
+
+    def handle_starttag(self, tag, attrs):
+        d = {k: (v or "") for k, v in attrs}
+        if self._depth > 0 and tag != "header":
+            self.items.append((tag, d, self._nav_at is not None))
+        if tag == "header":
+            self._depth += 1
+        elif self._depth > 0 and tag not in _VOID:
+            self._depth += 1
+        if self._nav_at is None and tag == "nav":
+            self._nav_at = self._depth
+
+    def handle_endtag(self, tag):
+        if self._depth > 0 and tag not in _VOID:
+            self._depth -= 1
+            if self._nav_at is not None and self._depth < self._nav_at:
+                self._nav_at = None
+
+
+def _header_shape(path):
+    p = _HeaderShape()
+    p.feed(path.read_text(encoding="utf-8"))
+    return p.items
+
+
+def test_header_parity_about_matches_index():
+    """api-docs lane. About's header used to differ from the SPA's in two visible ways: its primary nav
+    items carried none of index's ids, and its right zone was empty while index's carried a mono stats
+    block. Both are now aligned, and this pins the alignment structurally (parsed DOM, so comments and
+    raw-text coincidences cannot pass it).
+
+    Failure criteria:
+      * NAV ID ORDER: FAILS if the ids of the elements inside <nav> are not exactly
+        [navMap, navSurveys, navCollections], in that order, on BOTH pages. Non-vacuous: before the lane
+        about.html's nav items were bare <a href="index.html"> with no ids at all, so About failed this.
+        The TAG is deliberately not compared: index's are <button>s that switch app views in place, About
+        is static so its must be links. Ids + order + placement are the parity that matters.
+      * CENTRE-ZONE ORDER: FAILS if the six primary items are not in the same order on both pages:
+        Map, Surveys, Collections, About, How-to-use, Contribute.
+      * STATS BLOCK: FAILS if either page's right zone lacks a single .counts element. Non-vacuous: the
+        pre-lane about.html had an empty .hright, so it failed this half.
+      * ACTIVE-PAGE HIGHLIGHT NOT REGRESSED: FAILS if adding the ids also made a view button active on
+        About (only the current page may be highlighted) or dropped index's active Map button."""
+    idx, abt = _header_shape(INDEX), _header_shape(ABOUT)
+
+    nav_ids = {"index.html": [a.get("id") for (tag, a, in_nav) in idx if in_nav and a.get("id")],
+               "about.html": [a.get("id") for (tag, a, in_nav) in abt if in_nav and a.get("id")]}
+    for name, ids in nav_ids.items():
+        assert ids == ["navMap", "navSurveys", "navCollections"], (
+            f"{name}: the primary nav must be navMap, navSurveys, navCollections in that order; got {ids}")
+
+    def centre_order(items):
+        """The six primary header items in document order, each reduced to a stable label."""
+        out = []
+        for tag, a, in_nav in items:
+            if in_nav and a.get("id") in ("navMap", "navSurveys", "navCollections"):
+                out.append(a["id"])
+            elif "about" in _classes(a) and a.get("href") == "about.html":
+                out.append("about")
+            elif "about" in _classes(a) and a.get("href") != "about.html":
+                out.append("howto")          # index: a <button>; about: an <a href="#howto">
+            elif "contribute" in _classes(a):
+                out.append("contribute")
+        return out
+
+    expected = ["navMap", "navSurveys", "navCollections", "about", "howto", "contribute"]
+    for name, items in (("index.html", idx), ("about.html", abt)):
+        assert centre_order(items) == expected, (
+            f"{name}: header items must run {expected}; got {centre_order(items)}")
+
+    for name, items in (("index.html", idx), ("about.html", abt)):
+        counts = [a for (tag, a, in_nav) in items if "counts" in _classes(a)]
+        assert len(counts) == 1, (
+            f"{name}: the header must carry exactly one mono stats block (.counts) in its right zone; "
+            f"found {len(counts)}")
+
+    # Active-page highlight, both directions: index's Map view stays active; About activates NO view
+    # button (its current page is marked on the About link, asserted in
+    # test_about_marked_active_and_no_other_center_nav_is).
+    idx_active = [a.get("id") for (tag, a, in_nav) in idx if in_nav and "active" in _classes(a)]
+    assert idx_active == ["navMap"], f"index.html must still highlight the Map view; active={idx_active}"
+    abt_active = [a.get("id") for (tag, a, in_nav) in abt if in_nav and "active" in _classes(a)]
+    assert abt_active == [], (
+        f"about.html must not highlight a view button (none of them is the current page); active={abt_active}")
+
+
+def test_about_corpus_stats_are_fetched_not_hardcoded():
+    """The corpus totals must be READ from the served catalogue, never baked into the HTML, and the block
+    must degrade to invisible when the data cannot be read (file://, an unpublished deployment, an empty
+    build). FAILS if the block ships visible, if the script that fills it is missing or inlined (the
+    deployed CSP for about.html is script-src 'self' with no 'unsafe-inline'), or if a digit is
+    hard-coded into the block's markup."""
+    raw = ABOUT.read_text(encoding="utf-8")
+    assert '<script src="corpus-stats.js"></script>' in raw, (
+        "about.html must load corpus-stats.js as an EXTERNAL script (the deployed strict CSP allows no "
+        "inline script on this page)")
+    assert (ROOT / "corpus-stats.js").exists(), "portal/corpus-stats.js is missing"
+
+    block = [a for (tag, a, inh) in _parse(ABOUT) if "counts" in _classes(a)]
+    assert block and "hidden" in block[0], (
+        "the corpus-totals block must ship hidden and be revealed only once the data resolves, so a "
+        "file:// or unpublished page shows nothing rather than an empty or zero total")
+
+    js = (ROOT / "corpus-stats.js").read_text(encoding="utf-8")
+    assert "catalogue.json" in js and "surveys.json" in js, (
+        "corpus-stats.js must read the totals from catalogue.json + surveys.json")
+    assert ".catch(" in js, "corpus-stats.js must swallow a failed fetch and leave the block hidden"
+    # No fabricated number anywhere in the header block markup: the counts spans must be empty in source.
+    header_src = raw.split("<header>")[1].split("</header>")[0]
+    assert 'id="corpusStations"></b>' in header_src and 'id="corpusSurveys"></b>' in header_src, (
+        "the corpus-total spans must be EMPTY in the served HTML: the numbers can only come from the "
+        "catalogue at load time, never from a hard-coded value that would silently go stale")
 
 
 def test_index_still_has_the_count_ids_the_about_guard_forbids():
