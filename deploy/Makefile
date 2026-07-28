@@ -6,7 +6,7 @@
 # every compose invocation below is relative to this file's directory, matching the .env lookup
 # `docker compose` does by default (a sibling .env next to the compose file it's given).
 
-.PHONY: build up down rebuild-data smoke sync-surveys preflight reconcile refresh-pid-status doctor
+.PHONY: build up down rebuild-data cut-release smoke sync-surveys preflight reconcile refresh-pid-status doctor
 
 # C40: read deploy/.env so `make` targets see the SAME truth `docker compose` does (compose
 # auto-loads a sibling .env; make does not). `-include` => absent .env is not an error (portal-only /
@@ -115,6 +115,64 @@ rebuild-data:
 	fi; \
 	echo "rebuild-data: current -> $$BUILD_REL"; \
 	echo "rebuild-data: done"
+
+# =================================================================================================
+# THE QUARTERLY RELEASE RITUAL (cut-release)
+# =================================================================================================
+# Cut a CITABLE snapshot of the corpus: "AusMT Data Portal, Release 2026-Q3". Run it once a quarter,
+# in this order, and never out of order:
+#
+#   1. make sync-surveys            fast-forward the surveys-live checkout to the corpus you intend
+#                                   to freeze (the release's source_commit comes from THIS checkout)
+#   2. make refresh-pid-status      refresh the DOI resolution cache BEFORE the build, so reserved-
+#                                   but-404 DOIs render honestly in the bytes about to be frozen
+#   3. make rebuild-data            build + verify + atomically swap `current`
+#   4. make cut-release TAG=2026-Q3 NOTE="one line"
+#   5. run the two `git -C .../surveys-live tag ...` commands the tool PRINTS. It never runs git:
+#      tagging pushes to an owner-authenticated remote, which a build container has no business
+#      holding a credential for.
+#
+# WHAT IT DOES. Follows `current`, copies that build's mtcat.json / surveys.json / manifest.json and
+# the whole bundles/ tree into /out/releases/<TAG>/, re-hashes every copied bundle against the
+# download manifest's own sha256 claims (ANY mismatch fails the cut and leaves nothing behind),
+# writes release.json (build id, both commits, corpus counts, per-file size+sha256), updates the
+# newest-first /out/releases/releases.json index, and emits a DataCite Schema 4 record ready to
+# submit unchanged. releases/ is a SIBLING of builds/, like cache/, so it survives both the
+# rebuild-data prune and the `current` symlink swap.
+#
+# IT MINTS NOTHING. No network, no DataCite credentials. While the DOI is null the DataCite record
+# deliberately carries no identifier at all. Once AuScope's ARDC/DataCite access lands and the DOI is
+# minted, run the SAME target again with DOI= to stamp it back in:
+#
+#   make cut-release TAG=2026-Q3 DOI=10.xxxxx/yyyy      # backfill: rewrites release.json +
+#                                                       # datacite.json only, never re-copies data
+#
+# A cut release is IMMUTABLE: re-cutting an existing TAG (without DOI=) is a hard error, because
+# something may already cite it.
+#
+# TAG= is REQUIRED and is the RELEASE tag. Note the name collision: compose.yaml uses ${TAG:-latest}
+# for the IMAGE tag, and this Makefile exports its variables into every recipe, so an unguarded run
+# would ask Docker for `ausmt-engine:2026-Q3`. `env -u TAG` strips it for the compose call only, so
+# compose resolves the image tag from its own sibling .env exactly as every other target does.
+#
+# Runs INSIDE the build-runner container (site-data at /out) for the same reason the rebuild-data
+# swap does: site-data is owned by uid 10001, so a host-side write gets Permission denied. Uses
+# --entrypoint python because the image entrypoint is build_portal and this is a different module.
+# --surveys-live is passed the HOST path so the tag commands it prints are the exact commands the
+# owner runs on the box, not container-internal paths.
+cut-release:
+	@set -e; \
+	REL_TAG="$(TAG)"; \
+	if [ -z "$$REL_TAG" ]; then \
+	  echo "cut-release: set TAG=<release tag>, e.g. make cut-release TAG=2026-Q3" >&2; exit 2; \
+	fi; \
+	SURVEYS_LIVE="$${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}/surveys-live"; \
+	set -- --data /out --tag "$$REL_TAG" --surveys-live "$$SURVEYS_LIVE"; \
+	if [ -n "$${DOI:-}" ]; then set -- "$$@" --doi "$$DOI"; fi; \
+	if [ -n "$${NOTE:-}" ]; then set -- "$$@" --note "$$NOTE"; fi; \
+	echo "cut-release: cutting release $$REL_TAG from the current build"; \
+	env -u TAG docker compose -f compose.yaml --profile jobs run --rm --entrypoint python \
+	  build-runner -m extract.cut_release "$$@"
 
 # IDCONS D4 (SPEC §5.2): refresh the DOI resolution cache. This is the ONLY thing that HEADs doi.org —
 # the build itself stays OFFLINE and byte-reproducible, consuming /out/cache/pid_status.json if present.
