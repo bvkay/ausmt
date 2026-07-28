@@ -7,7 +7,10 @@ truncated (red-then-green vs an unfiltered block). This dev/CI harness has no `c
   * the MASKING PIN is a CONFIG ASSERTION over the rendered Caddyfile (the ip_mask filter is present
     on the client-address fields with the /24 + /48 masks) — flagged CONFIG-ONLY;
   * a `caddy validate` leg runs IFF a caddy binary is on PATH (so a syntax slip in the log block reds
-    in an environment that has caddy — CI, the box), else it skips;
+    in an environment that has caddy: CI, the box), else it skips. That leg validates a temp COPY
+    whose log OUTPUT PATH alone is redirected to a writable dir, because validation provisions the
+    file writer and the shipped container path (/var/log/caddy) is unwritable to an unprivileged
+    user; a companion meta-pin proves the redirect did not turn the leg into a rubber stamp;
   * the PROMISE-CONSISTENCY PIN checks the shipped portal/index.html text matches the logging
     behaviour keywords (truncate/mask at the edge, no cookies) and no longer makes the now-false
     absolute "no IPs stored" claim.
@@ -127,16 +130,85 @@ def test_portal_promise_matches_logging_behaviour():
     assert "aggregate" in text, "the promise must state only aggregate counts are kept"
 
 
+# The `output file <path>` directive(s) in the shipped Caddyfile. `caddy validate` does not merely
+# parse: it PROVISIONS the log writer, which mkdir's the output directory. The shipped path is the
+# container-side /var/log/caddy, so validation of the file AS SHIPPED fails on any box where the
+# validating user cannot create /var/log/caddy (an unprivileged dev machine, a rootless CI runner):
+# a false red about the ENVIRONMENT, not the config. The rewrite below redirects only this path token
+# to a writable temp dir so the real directives (log block, ip_mask filter, trusted_proxies, every
+# header/CSP/handle) are still validated by the real Caddy.
+_LOG_OUTPUT_RE = re.compile(r"(?m)^(?P<indent>[\t ]*)output file[\t ]+(?P<path>\S+)")
+
+
+def _caddyfile_with_writable_log_output(tmpdir: Path, text: str | None = None) -> Path:
+    """Write the SHIPPED Caddyfile into `tmpdir`, rewriting ONLY the `output file` path token(s) to a
+    writable temp location. Everything else is byte-identical, so validation still covers the whole
+    shipped config. FAILS IF the pinned pattern matches nothing (a Caddyfile restructure that renamed
+    or reshaped the log output must not silently gut this rewrite and leave the leg validating a config
+    it never redirected), or if an unwritable /var/log path survives the rewrite by some other route."""
+    text = _caddyfile_text() if text is None else text
+    logdir = tmpdir / "caddy-logs"
+    logdir.mkdir(parents=True, exist_ok=True)
+    n = 0
+
+    def _swap(m: re.Match[str]) -> str:
+        nonlocal n
+        n += 1
+        target = (logdir / f"access{n}.json").as_posix()
+        return f"{m.group('indent')}output file {target}"
+
+    rewritten, count = _LOG_OUTPUT_RE.subn(_swap, text)
+    assert count >= 1, (
+        "no `output file <path>` directive found in the Caddyfile; the log-output rewrite this "
+        "validation leg depends on matched nothing. Either the access log was removed (which the "
+        "masking pins above must red on) or the directive was reshaped; update _LOG_OUTPUT_RE so "
+        "this leg keeps validating a config whose log writer can actually be provisioned.")
+    assert "/var/log" not in rewritten, (
+        "an unwritable /var/log path survives the rewrite; validation would fail on provisioning "
+        "again rather than on the config itself; extend the rewrite to cover it.")
+    out = tmpdir / "Caddyfile"
+    out.write_text(rewritten, encoding="utf-8")
+    return out
+
+
+def _validate(path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["caddy", "validate", "--adapter", "caddyfile", "--config", str(path)],
+        capture_output=True, text=True)
+
+
 @pytest.mark.skipif(shutil.which("caddy") is None,
                     reason="no caddy binary on PATH — masking is config-asserted; caddy validate runs in CI")
-def test_caddyfile_validates_with_caddy():
-    """LIVE-VALIDATE LEG (ubuntu/CI). `caddy validate` accepts the Caddyfile (the log block + ip_mask
-    filter + trusted_proxies parse under the shipped Caddy). FAILS IF any is syntactically invalid for
-    the installed Caddy version. Skips where caddy is absent (this dev box)."""
-    r = subprocess.run(
-        ["caddy", "validate", "--adapter", "caddyfile", "--config", str(_CADDYFILE)],
-        capture_output=True, text=True)
+def test_caddyfile_validates_with_caddy(tmp_path):
+    """LIVE-VALIDATE LEG. `caddy validate` accepts the Caddyfile (the log block + ip_mask filter +
+    trusted_proxies parse under the shipped Caddy). FAILS IF any is syntactically invalid for the
+    installed Caddy version. Skips where caddy is absent.
+
+    The log OUTPUT PATH (and only that) is redirected to a writable temp dir first: validation
+    provisions the file writer, so the shipped container path /var/log/caddy makes this leg red on any
+    box that cannot mkdir it (unprivileged dev machine, rootless runner). That is an environment fact,
+    not a config defect, and skipping the leg there would drop the coverage entirely. The companion
+    test below proves the redirect does not neuter the check."""
+    cfg = _caddyfile_with_writable_log_output(tmp_path)
+    r = _validate(cfg)
     assert r.returncode == 0, f"caddy validate rejected the Caddyfile:\n{r.stdout}\n{r.stderr}"
+
+
+@pytest.mark.skipif(shutil.which("caddy") is None,
+                    reason="no caddy binary on PATH; the validate leg above is skipped too")
+def test_caddy_validation_still_rejects_a_broken_caddyfile(tmp_path):
+    """META-PIN on the leg above. A DELIBERATELY broken Caddyfile (the shipped text plus one bogus
+    directive inside the log block) must still be REJECTED after the same log-output rewrite. FAILS IF
+    the rewrite (or a future loosening of it) turned the validate leg into a rubber stamp that passes
+    anything."""
+    broken_src = _caddyfile_text().replace(
+        "\t\tformat filter {", "\t\tnot_a_caddy_directive yes\n\t\tformat filter {", 1)
+    assert broken_src != _caddyfile_text(), "could not inject the bogus directive into the log block"
+    cfg = _caddyfile_with_writable_log_output(tmp_path, broken_src)
+    r = _validate(cfg)
+    assert r.returncode != 0, (
+        "caddy validate ACCEPTED a Caddyfile carrying a bogus directive; the validation leg is not "
+        f"actually validating:\n{r.stdout}\n{r.stderr}")
 
 
 def _extract_block(text: str, opener: str) -> str:

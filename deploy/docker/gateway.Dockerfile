@@ -7,34 +7,28 @@
 # Build context MUST be the ausmt repo root (docker build -f deploy/docker/gateway.Dockerfile .):
 #   COPY gateway/ below is relative to that root, matching engine/portal Dockerfile convention.
 #
-# Two stages, mirroring engine.Dockerfile (which retired pip-tools deliberately — read its header):
-#   1. locker  -- resolves the floating direct pins (gateway/requirements.txt) into a LINUX lock by
-#                 INSTALLING them into a clean venv and pip-freezing the result. Same rationale as
-#                 the engine image: a real install + freeze gives the platform-correct transitive
-#                 closure through pip's PUBLIC interface only, with zero pip-tools private-API
-#                 coupling (pip-tools broke twice in CI on pip's internals — see engine.Dockerfile).
-#   2. runtime -- python:3.12-slim, non-root (gwuser:10002 — a NEW uid distinct from the engine's
-#                 10001 so a compromised gateway stack cannot touch published site-data even via a
-#                 uid collision; design §1), installs the stage-1 lock + the gateway package, and
-#                 sets the entrypoint to `python -m gateway` (uvicorn on :8000, container-internal).
+# ONE stage, mirroring engine.Dockerfile (which retired pip-tools deliberately -- read its header):
+# python:3.12-slim, non-root (gwuser:10002 -- a NEW uid distinct from the engine's 10001 so a
+# compromised gateway stack cannot touch published site-data even via a uid collision; design §1),
+# installs the COMMITTED lock + the gateway package, and sets the entrypoint to `python -m gateway`
+# (uvicorn on :8000, container-internal).
+#
+# REPRODUCIBILITY (2026-07-28). This file used to carry a `locker` stage that resolved
+# gateway/requirements.txt (deliberate FLOORS: fastapi>=..., starlette>=..., the tested majors) into a
+# lock INSIDE the build and threw it away with the stage. Nothing was committed, so two builds of the
+# same commit could ship different dependency versions and a PyPI release could break the image with
+# no repo change at all. That is a sharper risk here than in a typical web app: gateway/upload.py
+# imports starlette.formparsers.MultiPartParser DIRECTLY (a non-public API, see that module's header)
+# to cap a multipart stream by bytes, and a floating starlette can move or rename it without any
+# deprecation cycle. Floors break exactly that way.
+#
+# The resolved closure is now COMMITTED at gateway/requirements-lock.txt (linux/amd64, CPython 3.12,
+# the platform of the base image below) and this image installs it. requirements.txt keeps the floors
+# as the human-readable statement of intent; the lock is what actually ships. Refreshing it is a
+# deliberate act with a ritual documented in the lock file's own header, not a build-time side effect.
+# Every published image also uploads its `pip freeze` as a CI artifact (deploy-images.yml), so the
+# exact stack of any shipped image is recorded independently of this file.
 
-# ---------------------------------------------------------------------------
-# Stage 1: locker -- resolve a LINUX-correct lock via clean-venv install + pip freeze.
-# ---------------------------------------------------------------------------
-FROM python:3.12-slim AS locker
-
-WORKDIR /lock
-# Only the runtime requirements feed the resolve (httpx/pytest are dev-only and must NOT enter the
-# image). requirements.txt lists fastapi + uvicorn + python-multipart — the whole runtime surface.
-COPY gateway/requirements.txt ./
-RUN python -m venv /lockvenv \
- && /lockvenv/bin/pip install --no-cache-dir -r requirements.txt \
- && /lockvenv/bin/pip freeze > /lock/gateway-lock.txt \
- && sed -i '1i # Generated in-image by deploy/docker/gateway.Dockerfile (locker stage): clean-venv install of\n# gateway/requirements.txt on linux/amd64 py3.12, then pip freeze.' /lock/gateway-lock.txt
-
-# ---------------------------------------------------------------------------
-# Stage 2: runtime
-# ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
 # GIT_SHA build-arg, mirroring engine.Dockerfile: baked into an env var so a startup log line can
@@ -60,11 +54,12 @@ RUN groupadd --gid 10002 gwuser \
 
 WORKDIR /app
 
-# Install the Linux-resolved lock from stage 1 first (maximises layer-cache reuse across source-only
-# edits — this layer only invalidates when gateway/requirements.txt changes).
-COPY --from=locker /lock/gateway-lock.txt /app/gateway-lock.txt
+# Install the committed lock first (maximises layer-cache reuse across source-only edits: this layer
+# only invalidates when the lock itself changes). httpx/pytest are absent from it on purpose, they
+# are dev-only (gateway/requirements-dev.txt) and must never enter the image.
+COPY gateway/requirements-lock.txt /app/gateway-requirements-lock.txt
 RUN python -m pip install --no-cache-dir -U pip \
- && python -m pip install --no-cache-dir -r /app/gateway-lock.txt
+ && python -m pip install --no-cache-dir -r /app/gateway-requirements-lock.txt
 
 # The gateway package. Nothing else from the repo is needed at runtime: the gateway is content-blind
 # (no contract/, no engine/, no portal/) — those belong to the gw-runner (engine image) which the

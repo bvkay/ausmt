@@ -10,28 +10,43 @@
 #   image would require a second build context / git submodule wiring that the contract for this
 #   image does not include; the bind-mount keeps ausmt-surveys on its own release cadence.
 #
-# Two stages:
-#   1. locker  -- resolves the FLOATING direct pins (requirements-mtmetadata.txt +
-#                 requirements-dev.txt) into a LINUX lock by INSTALLING them into a clean venv and
-#                 `pip freeze`-ing the result. The committed
-#                 environments/requirements-mtmetadata-lock.txt was captured on WINDOWS (it pins
-#                 win32_setctime==1.2.0, a Windows-only package, with no environment marker -- an
-#                 unconditional `pip install -r` of that file on Linux fails outright), so the lock
-#                 is re-resolved fresh inside a linux/amd64 python:3.12-slim container.
-#                 NOTE: pip-tools/pip-compile was deliberately RETIRED here after breaking twice in
-#                 CI -- it couples to pip's private internals (pip 26 removed
-#                 PackageFinder.allow_all_prereleases and pip-tools 7.4.1 crashed on it). A real
-#                 install + freeze produces the same artifact (the platform-correct transitive
-#                 closure) with zero private-API coupling.
-#   2. runtime -- python:3.12-slim, non-root (ausmt:10001), installs the stage-1 lock, installs the
-#                 engine editable, verifies the contract, and sets ENTRYPOINT to the build pipeline
-#                 module. (An in-build stack-less pytest sanity lane used to run here; C39 removed it
-#                 as redundant — see the HISTORY note below and the note at its former site.) No CMD:
-#                 the actual --surveys/--out/--products/... args are supplied by the
-#                 caller (compose.yaml's build-runner service, or an operator's `docker run`/
-#                 `compose run`) -- build_portal.py has no meaningful zero-arg invocation
-#                 (--out is `required=True`), so a bare `docker run ausmt-engine` intentionally
-#                 exits on argparse's own usage error rather than silently doing nothing.
+# ONE stage (python:3.12-slim, non-root ausmt:10001): install the COMMITTED lock, install the engine
+# editable, verify the contract, ENTRYPOINT to the build pipeline module. (An in-build stack-less
+# pytest sanity lane used to run here; C39 removed it as redundant -- see the HISTORY note below and
+# the note at its former site.) No CMD: the actual --surveys/--out/--products/... args are supplied by
+# the caller (compose.yaml's build-runner service, or an operator's `docker run`/`compose run`) --
+# build_portal.py has no meaningful zero-arg invocation (--out is `required=True`), so a bare
+# `docker run ausmt-engine` intentionally exits on argparse's own usage error rather than silently
+# doing nothing.
+#
+# REPRODUCIBILITY (corrected 2026-07-28). This file used to carry a `locker` stage that IGNORED the
+# committed engine/environments/requirements-mtmetadata-lock.txt and re-resolved the floating direct
+# pins fresh on every build, justified by this claim:
+#
+#   "the committed lock was captured on WINDOWS (it pins win32_setctime==1.2.0, a Windows-only
+#    package, with no environment marker -- an unconditional `pip install -r` of that file on Linux
+#    fails outright)"
+#
+# That claim is FALSE and the bypass it justified was the real problem. win32_setctime ships as
+# win32_setctime-1.2.0-py3-none-any.whl, a pure-python universal wheel that installs on any platform;
+# every one of the lock's pins resolves to a linux/amd64 CPython 3.12 wheel (verified 2026-07-28 by a
+# cross-platform resolve of the whole file). Nothing ever failed outright.
+#
+# What the bypass DID cost was reproducibility: the resolve floated, so the image shipped whatever
+# PyPI held at build time rather than the VERIFIED stack. Re-resolving the same direct pins on
+# 2026-07-28 produced numpy 2.5.1 / scipy 1.18.0 / pandas 3.0.5 / xarray 2026.7.0 against the lock's
+# verified numpy 2.4.6 / scipy 1.17.1 / pandas 3.0.3 / xarray 2026.4.0. The lock exists precisely
+# because normalize.py's metadata conditioning is version-sensitive, so the image was shipping an
+# unverified science stack while the repo carried a verified one.
+#
+# The image now installs the committed lock. Its three genuinely Windows-only pins (colorama,
+# tzdata, win32_setctime) carry environment markers taken from their upstream metadata, so they are
+# skipped here honestly rather than routed around. The test tooling on top is installed CONSTRAINED
+# by the same lock, so resolving pytest/jsonschema/ruff can never move the science stack.
+#
+# pip-tools/pip-compile stays RETIRED (it broke twice in CI: pip 26 removed
+# PackageFinder.allow_all_prereleases and pip-tools 7.4.1 crashed on it). Refreshing the lock is a
+# deliberate act documented in the lock file's own header, not a build-time side effect.
 #
 # HISTORY (C39, CI minutes economy): the runtime stage used to `RUN python -m pytest -q tests` as an
 # in-build STACK-LESS sanity check — against whatever mt_metadata/mth5 the `locker` stage resolved
@@ -42,29 +57,10 @@
 # CI (.github/workflows/deploy-images.yml's `engine-full-tests` job) INSIDE the shipped image with the
 # lock installed and the M5 skip tripwire; the fast source-tree gate runs in build-products.yml. No
 # CI truth was given back: the two truthful runs remain, only the redundant least-truthful one is gone.
+# (The `locker` stage that note refers to no longer exists; see REPRODUCIBILITY above. The gap it
+# described is now closed at the root: there is no separate build-time resolve to be untruthful about,
+# because the image and the release gate both install the one committed lock.)
 
-# ---------------------------------------------------------------------------
-# Stage 1: locker -- resolve a LINUX-correct lock via clean-venv install + pip freeze.
-# (pip-tools retired: see the stage notes in the header -- it broke on pip 26's internals.)
-# ---------------------------------------------------------------------------
-FROM python:3.12-slim AS locker
-
-WORKDIR /lock
-# The floating direct-pin files feed the resolve; the committed (Windows) lock is deliberately
-# NOT an input here. requirements.txt MUST be copied too: requirements-dev.txt does
-# `-r requirements.txt` (the very first CI run failed chasing that include into a missing file).
-COPY engine/requirements.txt engine/requirements-mtmetadata.txt engine/requirements-dev.txt ./
-# A clean venv so the freeze contains EXACTLY the resolved closure (no base-image site-packages
-# noise); freeze output is the same artifact pip-compile produced -- pinned name==version lines --
-# but obtained through pip's PUBLIC interface only.
-RUN python -m venv /lockvenv \
- && /lockvenv/bin/pip install --no-cache-dir -r requirements-mtmetadata.txt -r requirements-dev.txt \
- && /lockvenv/bin/pip freeze > /lock/engine-lock.txt \
- && sed -i '1i # Generated in-image by deploy/docker/engine.Dockerfile (locker stage): clean-venv install of\n# requirements-mtmetadata.txt + requirements-dev.txt on linux/amd64 py3.12, then pip freeze.' /lock/engine-lock.txt
-
-# ---------------------------------------------------------------------------
-# Stage 2: runtime
-# ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
 # U2: engine_commit fallback. This stage COPYs engine/ WITHOUT .git (see the COPY below), so
@@ -105,11 +101,29 @@ RUN git config --system --add safe.directory /srv/surveys
 
 WORKDIR /app
 
-# Install the Linux-resolved lock from stage 1 first (maximises Docker layer cache reuse across
-# source-only edits -- this layer only invalidates when a *requirements* file changes).
-COPY --from=locker /lock/engine-lock.txt /app/engine-lock.txt
+# Install the COMMITTED lock first (maximises Docker layer cache reuse across source-only edits --
+# this layer only invalidates when a *requirements* file changes). The requirements files are COPYed
+# on their own, ahead of the bulk `COPY engine/` further down, so an edit to engine source does not
+# invalidate this expensive layer.
+#
+# Two installs, in this order and for this reason:
+#   1. the LOCK -- the verified, pinned science stack this image ships. Its three Windows-only pins
+#      carry environment markers, so on linux/amd64 they are skipped and the remaining 32 pins all
+#      resolve to CPython 3.12 wheels.
+#   2. the test tooling (pytest/jsonschema/ruff from requirements-dev.txt) CONSTRAINED by that same
+#      lock (-c). deploy-images.yml's `engine-full-tests` job runs the engine suite INSIDE this
+#      image, so the tooling has to be here; -c guarantees that resolving it cannot upgrade,
+#      downgrade or re-pin anything the lock already fixed. requirements-dev.txt pulls in
+#      requirements.txt (loose floors), every one of which the lock already satisfies, so this step
+#      adds only the test packages. jsonschema is the one genuine float; the pip-freeze artifact
+#      deploy-images.yml uploads records what any given image actually got.
+COPY engine/requirements.txt engine/requirements-dev.txt /app/engine/
+COPY engine/environments/requirements-mtmetadata-lock.txt /app/engine/environments/
 RUN python -m pip install --no-cache-dir -U pip \
- && python -m pip install --no-cache-dir -r /app/engine-lock.txt
+ && python -m pip install --no-cache-dir -r /app/engine/environments/requirements-mtmetadata-lock.txt \
+ && python -m pip install --no-cache-dir \
+      -c /app/engine/environments/requirements-mtmetadata-lock.txt \
+      -r /app/engine/requirements-dev.txt
 
 # Repo content the pipeline needs at runtime: contract/ (single-source column + licence contract,
 # read by both generate.py and the engine) and engine/ (the package + its tests). Portal/ is NOT
@@ -155,6 +169,9 @@ RUN python ../contract/generate.py --check
 #   (c) build-products.yml — the fast source-tree gate on the pinned lock. UNCHANGED.
 # Nothing downstream in this Dockerfile depended on the deleted RUN's layer (the next step chowns
 # /app wholesale; no file the pytest run produced is read later), so removing it is layer-safe.
+# 2026-07-28: (b)'s description of itself, "with the pinned lock installed", only became TRUE with the
+# locker-stage removal above. Until then the shipped image carried the locker's floating resolve, so
+# the release gate tested a stack the repo had never verified.
 
 # Drop root for the actual runtime process.
 RUN chown -R ausmt:ausmt /app

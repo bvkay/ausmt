@@ -1,0 +1,47 @@
+# AusMT gateway image lock: the EXACT transitive closure of gateway/requirements.txt, resolved for
+# linux/amd64 CPython 3.12 (the python:3.12-slim base gateway.Dockerfile builds on). Captured
+# 2026-07-28. deploy/docker/gateway.Dockerfile installs THIS file, so the shipped image is
+# reproducible: rebuilding the same commit installs the same versions, today and in six months.
+#
+# WHY A COMMITTED LOCK, NOT FLOORS. requirements.txt carries deliberate FLOORS (fastapi>=..., the
+# tested majors) and the image used to resolve them fresh on every build, so two builds of the SAME
+# commit could ship different dependency versions and a PyPI release could break the image with no
+# repo change. That matters more here than in a typical web app because gateway/upload.py imports
+# starlette.formparsers.MultiPartParser DIRECTLY (a non-public API, see that module's header) to cap
+# a multipart stream by bytes; a floating starlette can move or rename it with no deprecation. The
+# floors stay in requirements.txt as the human-readable intent; this file is what actually ships.
+#
+# REFRESHING THIS LOCK IS A DELIBERATE ACT, never a side effect of another change:
+#
+#   1. Re-resolve in the image's own platform (linux/amd64, py3.12), NOT on a dev box:
+#        docker run --rm -v "$PWD/gateway:/g" -w /g python:3.12-slim sh -c \
+#          'python -m venv /v && /v/bin/pip install -q -r requirements.txt && /v/bin/pip freeze'
+#      Redirect that output into this file, then restore this header above the pins.
+#   2. Run the gateway suite against the new versions before committing:
+#        python -m pytest -q gateway/tests
+#      In particular the multipart/upload tests: they are the tripwire for a starlette move.
+#   3. Bump any FLOOR in requirements.txt that the refresh has outgrown, in the same commit, so the
+#      two files never tell different stories.
+#   4. Commit the refresh on its own, with the reason (a CVE, a needed feature, routine currency).
+#      A lock that changes inside an unrelated pull request is how a stack drifts unnoticed.
+#
+# Every published image also uploads its own `pip freeze` as a CI artifact (deploy-images.yml), so
+# the exact stack of any shipped image can be read back without trusting this file to be current.
+#
+# httpx / pytest are ABSENT on purpose: they are test-only (gateway/requirements-dev.txt) and must
+# never enter the runtime image.
+
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.14.2
+click==8.4.2
+fastapi==0.140.12
+h11==0.16.0
+idna==3.18
+pydantic==2.13.4
+pydantic_core==2.46.4
+python-multipart==0.0.32
+starlette==1.3.1
+typing-inspection==0.4.2
+typing_extensions==4.16.0
+uvicorn==0.51.0
