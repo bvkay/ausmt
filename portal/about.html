@@ -256,16 +256,82 @@
       <li><b>Roadmap</b> — where AusMT is headed (broader validation, catalogue expansion, MTCAT as an open
       standard, federation between portals):
       <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/roadmap/">Roadmap</a>.</li>
-      <li><b>MTCAT</b> — the machine-readable catalogue format; the <code>MTCAT v1.0</code> specification:
+      <li><b>MTCAT</b>: the machine-readable catalogue format. The prose walkthrough of the
+      <code>MTCAT</code> specification:
       <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/mtcat/">MTCAT</a>, or fetch the
-      live <a class="link" href="data/mtcat.json">mtcat.json</a> discovery document.</li>
+      live <a class="link" href="data/mtcat.json">mtcat.json</a> discovery document. The schema itself is
+      the normative artifact and states its own version; see Machine contract below.</li>
+      <li><b>Machine contract</b>: the JSON Schema the catalogue document is validated against, served
+      beside it as <a class="link" href="data/mtcat.schema.json">mtcat.schema.json</a>. Schema
+      <code>mtcat</code>, version <code>1.2</code>, catalogue metadata <code>CC0-1.0</code>. Field guide
+      below.</li>
     </ul>
+
+    <!-- mtcat-v1.2 docs lane: the field guide for the served schema. Everything asserted here is read off
+         engine/schema/mtcat.schema.json (the file this section links) or off the emitter that writes the
+         document, and the vocabularies are pinned test-side against that schema's enums so this copy
+         cannot drift from what the build validates. Kept in answer 6 rather than answer 7 on purpose:
+         answer 7 is how to FETCH bytes, this is how to READ the catalogue record. -->
+    <h3>Machine contract</h3>
+    <p>The catalogue document <a class="link" href="data/mtcat.json">mtcat.json</a> is written against the
+    MTCAT schema served next to it at <a class="link" href="data/mtcat.schema.json">data/mtcat.schema.json</a>,
+    so a second implementation can validate the document without resolving anything off-site. The document
+    names its own contract in its <code>portal</code> block: <code>schema</code> is <code>mtcat</code>,
+    <code>version</code> is <code>1.2</code>, and <code>metadata_license</code> is <code>CC0-1.0</code>.
+    That licence covers the catalogue metadata only. A survey's DATA licence is the separate
+    <code>license</code> field on its own survey record, and it varies by survey.</p>
+    <p>The schema is permissive about unknown keys and strict about known ones. Unknown keys ride through,
+    so a reader written for v1.2 will not break on a later minor version; but every described field is
+    typed, and where a value comes from a ratified vocabulary that vocabulary is pinned, so an
+    out-of-vocabulary token fails the build rather than reaching you. The parts worth reading before you
+    write a harvester:</p>
+    <div class="card"><ul>
+      <li><b>Credit is two lists, and they are not interchangeable.</b> <code>creators[]</code> is the
+      citation author list; its ORDER is load-bearing, so reproduce it as given. <code>contributors[]</code>
+      records who did what, each row carrying a <code>role</code> from the eight DataCite contributor types
+      a survey may declare: <code>ProjectLeader</code>, <code>ProjectMember</code>, <code>DataCollector</code>,
+      <code>ContactPerson</code>, <code>DataCurator</code>, <code>Sponsor</code>, <code>RightsHolder</code>,
+      <code>Distributor</code>. A ninth value, <code>HostingInstitution</code>, appears only on the row
+      AusMT appends to every survey for itself; no survey declares it. Order in <code>contributors[]</code>
+      carries no citation meaning. Rows in both lists mark themselves <code>person</code> or
+      <code>organisation</code> in <code>name_type</code> and carry <code>orcid</code> or <code>ror</code>
+      where one was declared; a row that declares neither omits the key rather than serving a null.</li>
+
+      <li><b><code>related_identifiers[]</code> says what a survey points at, and how honestly.</b> Each row
+      carries the identifier and its <code>identifier_type</code> (<code>DOI</code>, <code>Handle</code>,
+      <code>URL</code>, <code>RAiD</code>), a DataCite <code>relation</code> to be read as "this survey
+      <i>relation</i> that record", and <code>identifies</code>, which states what data LEVEL the identifier
+      points at in NCI Table 1 terms: <code>collection</code> (parent record), <code>raw_packed</code> (raw
+      time series, packed), <code>level0</code> (edited time series), <code>level1</code> (transformed time
+      series), <code>level2</code> (processed data, EDI and transfer functions), <code>level3</code> (models),
+      <code>entire</code> (one record covering all levels). <code>resolution</code> is the honesty state,
+      taken from a cached check the build consumes but never performs: <code>ok</code> means it resolves
+      today, <code>reserved</code> means registered but not yet active. The key is ABSENT when the answer is
+      unknown, and absent never means broken, so still link an identifier that carries no
+      <code>resolution</code>.</li>
+
+      <li><b>Access and embargo withhold bytes, never discovery.</b> <code>access</code> is the normalised
+      level: <code>open</code>, <code>metadata_only</code> or <code>embargoed</code>. Only <code>open</code>
+      distributes data; anything else, including a level AusMT does not recognise, fails closed. An
+      embargoed survey keeps its full catalogue record, its stations and its footprint, and only its bytes
+      are withheld, so it serves an empty <code>formats</code> list and has no rows in the download
+      manifest. <code>embargo_until</code> is present only when the survey declares an end date, so its
+      absence means no declared end date rather than "not embargoed", and a date that has passed publishes
+      nothing by itself: a curator releases a survey by changing the level.</li>
+
+      <li><b>One survey, two key names.</b> MTCAT keys a survey by <code>survey_id</code>, which is the slug
+      (<code>vulcan-2022</code> and the like). <code>/data/surveys.json</code> is keyed by the survey's
+      display NAME and carries that same slug under <code>slug</code>, and the download manifest names
+      surveys by display name in <code>files[].survey</code> but by slug in <code>bundles[].slug</code>.
+      Below the survey, the stable join is the station: <code>ausmt_id</code> is the one identifier the
+      catalogue row and the manifest row both carry.</li>
+    </ul></div>
   </section>
 
   <!-- api-docs lane: the practical counterpart to answer 6. Everything stated here is a live path on the
        hosted site, and both worked examples were run end to end against it before being written down.
        Deliberately NOT documented: any endpoint under an /api prefix. No such tier has ever existed; the
-       read surface is the static data tree, which is why the two patterns below are the whole story. -->
+       read surface is the static data tree, which is why the patterns below are the whole story. -->
   <section id="api">
     <h2>7 · Fetching data programmatically</h2>
     <p>Everything the portal reads is a read-only static JSON file on this site: no key, no quota, no
@@ -310,6 +376,55 @@ for r in man["files"]:
     assert hashlib.sha256(body).hexdigest() == r["sha256"], r["url"]
     open(r["url"].split("/")[-1], "wb").write(body)</pre>
 
+    <!-- mtcat-v1.2 docs lane: Pattern C. The worked example was RUN against the live site before being
+         written down (15 stations in the box, all 15 sha256-verified). Two things it deliberately does
+         that a shorter example would not: it null-guards lat/lon before comparing (a withheld station has
+         no position, and a numeric comparison against null is either an error or, in JS, a silent 0), and
+         it mirrors the manifest's url path instead of flattening to a basename (a box crosses surveys, and
+         the live corpus really does hold two stations named SA225_2 in different AusLAMP surveys). The
+         column indices below are pinned test-side against src/contract.js, so a columns.json reorder
+         fails the test rather than silently misdocumenting the map. -->
+    <h3>Pattern C · bounding-box fetch</h3>
+    <p><code>/data/catalogue.json</code> is one row per station, and the rows are POSITIONAL arrays rather
+    than objects: every column is read by index, with no field names in the file. The authoritative column
+    map is <a class="link" href="src/contract.js"><code>/src/contract.js</code></a>, generated from the one
+    file that defines the column order, so take indices from there rather than counting them. A
+    bounding-box fetch needs three: <code>lat</code> at index <b>2</b>, <code>lon</code> at index <b>3</b>,
+    and <code>ausmt_id</code> at index <b>12</b>. Columns are only ever appended, never reordered.</p>
+    <p>Filter the catalogue to the box, join to the products manifest on <code>ausmt_id</code> (the one
+    identifier both a catalogue row and a manifest row carry), then fetch each matched row's
+    <code>url</code> under <code>/data/</code> and check its <code>sha256</code>, exactly as in Pattern B.</p>
+    <pre class="code">import hashlib, json, pathlib, urllib.request
+BASE = "https://ausmt.au"
+LAT, LON, AUSMT_ID = 2, 3, 12               # column indices; /src/contract.js is the map
+W, S, E, N = 133.0, -30.0, 135.0, -28.0     # west, south, east, north
+cat = json.load(urllib.request.urlopen(f"{BASE}/data/catalogue.json"))
+ids = {r[AUSMT_ID] for r in cat
+       if r[LAT] is not None and r[LON] is not None
+       and S &lt;= r[LAT] &lt;= N and W &lt;= r[LON] &lt;= E}
+man = json.load(urllib.request.urlopen(f"{BASE}/data/products/manifest.json"))
+for row in man["files"]:
+    if row["ausmt_id"] not in ids or row["format"] != "edi": continue
+    body = urllib.request.urlopen(f"{BASE}/data/{row['url']}").read()
+    assert hashlib.sha256(body).hexdigest() == row["sha256"], row["url"]
+    out = pathlib.Path(row["url"])          # mirror the manifest path, do not flatten it
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)</pre>
+    <p>Two coordinate caveats, both about honesty rather than precision. A station whose position its
+    custodian <b>withholds</b> carries <code>null</code> in the lat and lon columns, so the example tests
+    for null before comparing and those stations are excluded rather than compared: a null is not a
+    position, and no box can honestly contain one. Do not leave that to the language. JavaScript reads
+    <code>null</code> as <code>0</code> in a numeric comparison, which silently treats a withheld station
+    as if it sat at 0°, 0° instead of dropping it. Second, a station whose position is <b>generalised</b>
+    at the custodian's request is served rounded to a 0.1° cell (roughly 11 km), so a box edge is
+    approximate: a generalised station can land on the wrong side of it by up to 0.05°. The build emits
+    <code>/data/coord_policy.json</code>, a map of <code>ausmt_id</code> to <code>generalised</code> or
+    <code>withheld</code>, whenever any station is non-exact; the file is absent when every served position
+    is exact.</p>
+    <p>One practical note: a box crosses surveys, and two surveys can hold a station with the same
+    filename, so write files out under the manifest's <code>url</code> path rather than flattening them to
+    a basename or you will lose one of the pair.</p>
+
     <p>An embargoed survey has no rows in the manifest at all: its bytes are withheld by construction, so
     there is nothing to request and no access error to handle, while its catalogue record stays public.</p>
     <p>For survey-level discovery, start from <a class="link" href="data/mtcat.json">mtcat.json</a>, the
@@ -325,7 +440,7 @@ for r in man["files"]:
        loaded on this static page, so a #buildId span would stay permanently empty here; it is
        intentionally omitted. -->
   <footer>
-    <a class="apilink" href="data/mtcat.json" title="MTCAT v1.0 discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
+    <a class="apilink" href="data/mtcat.json" title="MTCAT discovery document (JSON)">Machine-readable record (MTCAT JSON) ↗</a>
     <span class="foot-main">© 2026 AuScope and the AusMT contributors · Data licences vary by survey ·
       <details class="aboutbuild">
         <summary>About this build</summary>

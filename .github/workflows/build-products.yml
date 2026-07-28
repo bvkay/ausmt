@@ -9,6 +9,17 @@ name: build-products
 # and installed separately; the build does NOT depend on it, so CI stays green without the fork.
 #
 # PATH-SCOPED (ADR-001 monorepo): only runs when the engine/ subtree (or this workflow) changes.
+#
+# ...PLUS the handful of PORTAL files the engine's own tests read as SURFACES OF A SINGLE SOURCE. The
+# MTCAT schema version is declared once, in engine/schema/mtcat.schema.json's title, and
+# engine/tests/test_mtcat_version_parity.py asserts every surface that restates it still agrees:
+# portal.config.yaml, the generated config.js, the committed data/mtcat.json placeholder, gen_config's
+# default for a config omitting the key, and version.js's config-missing sentinel. Scoped to engine/**
+# alone that pin would only be a NEXT-PR backstop, which is exactly how four separate hardcoded
+# defaults accumulated in the first place: a PR editing portal.config.yaml touches no engine path, so
+# this lane never ran and the drift shipped. Listing the files the pin reads makes it a SAME-PR gate.
+# The named files are cheap to watch and do not overlap portal-ci.yml, which lints and tests the static
+# portal over the same paths without running this stack.
 
 on:
   workflow_dispatch:
@@ -16,6 +27,11 @@ on:
     paths:
       - "engine/**"
       - "contract/**"
+      - "portal/portal.config.yaml"
+      - "portal/config.js"
+      - "portal/data/mtcat.json"
+      - "portal/tools/gen_config.py"
+      - "portal/version.js"
       - ".github/workflows/build-products.yml"
   # M8: also run on pull requests touching the engine subtree, so a fork/branch PR gets the full
   # engine lane (build + tests + skip accounting) BEFORE merge — previously this workflow triggered
@@ -25,6 +41,11 @@ on:
     paths:
       - "engine/**"
       - "contract/**"
+      - "portal/portal.config.yaml"
+      - "portal/config.js"
+      - "portal/data/mtcat.json"
+      - "portal/tools/gen_config.py"
+      - "portal/version.js"
       - ".github/workflows/build-products.yml"
 
 concurrency:

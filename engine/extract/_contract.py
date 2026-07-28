@@ -76,3 +76,9 @@ PROFILES = {
         "_draft_note": "wording pending owner confirmation against GA's published licensing page (owner decision C46-2, 2026-07-13)"
     }
 }
+
+# The MTCAT schema version, read from engine/schema/mtcat.schema.json's own title by
+# contract/generate.py:mtcat_schema_version(). The schema file is the SINGLE SOURCE; this is a
+# generated mirror so build_portal's emitter and config defaults hold no version literal of their
+# own. To bump: edit the schema title, then regenerate; never hand-edit here.
+MTCAT_SCHEMA_VERSION = '1.2'

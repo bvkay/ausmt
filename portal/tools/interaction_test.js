@@ -587,6 +587,26 @@ async function bootFreshWindow(dataMap) {
   ok(footerChips[0].textContent === "AusMT v1.2.3 · MTCAT 1.0",
     "footer version chip was not populated by version.js, got: " + JSON.stringify(footerChips[0].textContent));
 
+  // THE CONFIG-MISSING SENTINEL must be HONEST. version.js used to fall back to schema_version "1.0",
+  // so a page whose config.js failed to load rendered a confident "MTCAT 1.0" chip through the whole of
+  // schema 1.1 and 1.2. A JS file cannot read engine/schema/mtcat.schema.json at render time, so the
+  // sentinel now carries NO version and the chip stops after the schema name. Driven in its own bare
+  // jsdom (no AUSMT_CONFIG at all), because that is the only state that reaches the sentinel.
+  const bare = new JSDOM("<footer><span data-ver-chip></span></footer>", { runScripts: "outside-only" });
+  vm.runInContext(fs.readFileSync(path.join(PORTAL, "version.js"), "utf8"), bare.getInternalVMContext());
+  // Assert the LABEL, not the filled node: a just-constructed jsdom document can still be "loading",
+  // in which case version.js correctly defers fill() to DOMContentLoaded. The label is the exact string
+  // fill() writes into every chip (the populated-chip case is the assertion directly above), so this
+  // pins the rendered text without racing the document's own readiness.
+  const bareLabel = bare.window.AUSMT_VERSION.label;
+  ok(bareLabel === "AusMT v0.0.0 · MTCAT",
+    "with no config loaded the chip must name the schema and state NO version, got: " + JSON.stringify(bareLabel));
+  ok(!/MTCAT\s*\d/.test(bareLabel),
+    "the config-missing chip must not end in a schema version number, got: " + JSON.stringify(bareLabel));
+  ok(bare.window.AUSMT_VERSION.schema_version === null,
+    "the config-missing sentinel must expose schema_version null (an explicit 'no version'), got: " +
+    JSON.stringify(bare.window.AUSMT_VERSION.schema_version));
+
   // UX4 (D1/D2) AUSLAMP PARTITION + MEMBERSHIP. partitionMarkers() is the PURE split behind the two map
   // containers — AusLAMP-COLLECTION members into the never-clustered plain layer, everything else (incl.
   // legacy non-AusLAMP LPMT) into the markerClusterGroup. Tested on synthetic stations (no Leaflet; jsdom

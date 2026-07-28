@@ -45,7 +45,7 @@ import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_par
 import _conventions as conv         # noqa: E402  (C25 convention gates: frame guard + quadrant check)
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
-from _contract import CATALOGUE_COLUMNS  # noqa: E402  (single-source positional column contract)
+from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + MTCAT schema version)
 
 # Named sci-column access for the consumer side (mirrors the portal's contract.js SC map) so the product
 # writers below read sci fields BY NAME, not raw integer index. Built from the same generated SCI_COLUMNS,
@@ -558,15 +558,56 @@ def collections_document(surveys_meta: dict, all_stations: list, coll_by_id: dic
     return coll_by_id
 
 
+# MTCAT 1.2: the canonical band order the survey-level data_types map is emitted in (the SAME order the
+# portal presents bands in, so the served key order and the rendered order can never disagree). A band the
+# classifier produces but this tuple does not name (only "unknown" today) is appended, sorted, after these:
+# the map NEVER silently drops a station's band.
+_MTCAT_TYPE_ORDER = ("BBMT", "LPMT", "AMT", "GDS")
+
+
+def _type_mix(counts: dict) -> dict:
+    """{data_type: n_stations} in _MTCAT_TYPE_ORDER, then any unnamed band sorted. {} when no stations."""
+    named = [t for t in _MTCAT_TYPE_ORDER if t in (counts or {})]
+    rest = sorted(t for t in (counts or {}) if t not in _MTCAT_TYPE_ORDER)
+    return {t: counts[t] for t in named + rest}
+
+
+def _formats_by_survey(manifest_doc):
+    """MTCAT 1.2: {survey label: sorted[format]} from the build's download manifest, or None when no
+    manifest was supplied. The manifest is the ONE authority on what is actually distributed, and its rows
+    are written only for a survey whose bytes the access/licence gate lets through, so a withheld
+    (embargoed or metadata-only) survey derives an EMPTY format list here automatically, with no separate
+    withholding rule to keep in step. None (no manifest at all) is distinct from {} and makes the caller
+    OMIT the key: "not known" must not be served as "nothing distributed"."""
+    if not isinstance(manifest_doc, dict):
+        return None
+    out = {}
+    for row in list(manifest_doc.get("files") or []) + list(manifest_doc.get("bundles") or []):
+        if isinstance(row, dict) and row.get("survey") and row.get("format"):
+            out.setdefault(row["survey"], set()).add(str(row["format"]))
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = None,
-                   portal: dict = None, coll_by_id: dict = None, lib_vers: dict = None) -> dict:
-    """Build an MTCAT v1.0 discovery/federation document (see docs/MTCAT_v1.0.md and
-    schema/mtcat.schema.json). Portal owns its data; MTCAT is the shared, minimal metadata other
+                   portal: dict = None, coll_by_id: dict = None, lib_vers: dict = None,
+                   manifest_doc: dict = None) -> dict:
+    """Build an MTCAT discovery/federation document (see docs/docs/reference/mtcat-schema.md and
+    schema/mtcat.schema.json; the old docs/MTCAT_v1.0.md pointer this docstring carried does not exist).
+    Portal owns its data; MTCAT is the shared, minimal metadata other
     portals could harvest. Derived purely from already-computed catalogue data — no new science.
     `coll_by_id` may be passed in so the (single) collection grouping is shared with
-    collections_document instead of being recomputed here."""
+    collections_document instead of being recomputed here.
+
+    MTCAT 1.2 adds the per-survey DISCOVERY FACETS every consumer previously had to re-derive by walking
+    stations[] itself (n_stations, data_types, period_min_s/period_max_s, n_stations_tipper) plus the
+    distributed `formats` read off the download manifest and the declared year range. All of it is PURE
+    derivation or verbatim pass-through of metadata the build already holds: this function still computes
+    no science and reads no new source. `manifest_doc` is the manifest built earlier in the same run; when
+    it is not supplied the `formats` key is OMITTED rather than emitted empty (see _formats_by_survey)."""
     from datetime import datetime, timezone
     slug_of, bbox_of = {}, {}
+    n_of, types_of, per_of, tip_of = {}, {}, {}, {}
+    fmt_of = _formats_by_survey(manifest_doc)
     for (_p, r) in all_stations:
         lbl, aid, sid = r["survey"], r["ausmt_id"], r["id"]
         slug = aid[3:]                                   # strip "au."
@@ -577,6 +618,19 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
             b = bbox_of.setdefault(lbl, [r["lon"], r["lat"], r["lon"], r["lat"]])  # w,s,e,n
             b[0] = min(b[0], r["lon"]); b[1] = min(b[1], r["lat"])
             b[2] = max(b[2], r["lon"]); b[3] = max(b[3], r["lat"])
+        # MTCAT 1.2 derived facets, accumulated in the walk that was already happening (no second pass and
+        # no new upstream computation): station count, band mix, period range and tipper count.
+        n_of[lbl] = n_of.get(lbl, 0) + 1
+        _t = r.get("type")
+        if _t:
+            _c = types_of.setdefault(lbl, {})
+            _c[_t] = _c.get(_t, 0) + 1
+        if "T" in (r.get("comps") or ""):     # the tipper component, exactly as the catalogue records it
+            tip_of[lbl] = tip_of.get(lbl, 0) + 1
+        _pr = per_of.setdefault(lbl, [None, None])
+        for _i, _v in ((0, r.get("period_min_s")), (1, r.get("period_max_s"))):
+            if _v is not None:                # each bound guarded separately: a half-populated row still counts
+                _pr[_i] = _v if _pr[_i] is None else (min(_pr[_i], _v) if _i == 0 else max(_pr[_i], _v))
     surveys = []
     for lbl, meta in sorted(surveys_meta.items()):
         bb = bbox_of.get(lbl)
@@ -598,7 +652,20 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
             "bbox": ({"west": round(bb[0], 6), "south": round(bb[1], 6),
                       "east": round(bb[2], 6), "north": round(bb[3], 6)} if bb else None),
             "centroid": ({"latitude": round((bb[1] + bb[3]) / 2, 6),
-                          "longitude": round((bb[0] + bb[2]) / 2, 6)} if bb else None)}
+                          "longitude": round((bb[0] + bb[2]) / 2, 6)} if bb else None),
+            # MTCAT 1.2 (schema/mtcat.schema.json): the DERIVED discovery facets. Emitted for EVERY survey
+            # (a survey with no station serves 0 / {} / null, never a missing key) so a harvester can size,
+            # band and band-limit a survey without walking stations[] itself. n_stations is a convenience
+            # over stations[], which stays authoritative; the schema says so.
+            "n_stations": n_of.get(lbl, 0),
+            "data_types": _type_mix(types_of.get(lbl)),
+            "period_min_s": per_of.get(lbl, [None, None])[0],
+            "period_max_s": per_of.get(lbl, [None, None])[1],
+            "n_stations_tipper": tip_of.get(lbl, 0),
+            # MTCAT 1.2: the declared acquisition year range, a verbatim SMETA pass-through (ints or null,
+            # never inferred from file timestamps). Until now a harvester got NO temporal facet at all.
+            "year_start": m.get("year_start"),
+            "year_end": m.get("year_end")}
         # C46-W3a (schema 1.1): the attribution/sources/changes rights blocks, PRESENT ONLY when the
         # survey declares them in SMETA — a survey without them keeps a byte-identical entry (the whole
         # existing corpus). Emitted verbatim from SMETA (mtcat.schema.json is additionalProperties:true).
@@ -620,6 +687,16 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         if m.get("creators"):
             entry["creators"] = m["creators"]
         entry["contributors"] = _export_contributors_of(m)
+        # MTCAT 1.2: what is ACTUALLY distributed for this survey, off the download manifest (the one
+        # authority). Emitted for every survey the moment a manifest exists, INCLUDING the empty list a
+        # withheld survey honestly derives; OMITTED entirely when no manifest was supplied, because an
+        # unknown distribution must not be served as an empty one.
+        if fmt_of is not None:
+            entry["formats"] = fmt_of.get(lbl, [])
+        # MTCAT 1.2: the embargo end date, present ONLY when the survey declares one (absent means "no
+        # declared end date", NOT "not embargoed" - `access` above is the state of record). Pure copy.
+        if m.get("embargo_until"):
+            entry["embargo_until"] = m["embargo_until"]
         surveys.append(entry)
     stations = [{"station_id": r["ausmt_id"], "survey_id": slug_of.get(r["survey"], slugify(r["survey"])),
                  "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"]}
@@ -636,7 +713,10 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     doc = {
         "portal": {"portal_id": p.get("portal_id", "ausmt"),
                    "portal_name": p.get("portal_name", "AusMT — Australia's Magnetotelluric Data Portal"),
-                   "schema": "mtcat", "version": str(p.get("schema_version", "1.1")),
+                   # The version is NEVER a literal here: MTCAT_SCHEMA_VERSION is generated from the
+                   # schema's OWN title (contract/generate.py), so this document cannot claim a version
+                   # the schema served beside it does not declare.
+                   "schema": "mtcat", "version": str(p.get("schema_version", MTCAT_SCHEMA_VERSION)),
                    # FAIR-I: point harvesters at the schema served BESIDE this document (relative to the
                    # data dir — the build copies schema/mtcat.schema.json to out/mtcat.schema.json), so a
                    # second implementation can validate mtcat.json without resolving the canonical $id.
@@ -1027,7 +1107,7 @@ def survey_meta_from_yaml(y: dict) -> dict:
         "ts_pid": _ts_pid_of(y),              # C7: survey-specific raw-TS collection PID (None => deployment default)
         "edi": "ok",
         "mth5": "unk",
-        "access": acc,                       # normalised level (open|metadata_only|embargoed|legacy) — SMETA key
+        "access": acc,                       # SMETA key; normalised ACCESS_LEVELS: open|metadata_only|embargoed
         "embargo_until": embargo_until,       # C1: ISO date or None; the portal badges withholding from these
         # C7: yr/ve were always '' (every citation rendered "(n.d.)" regardless of a declared date/version);
         # yr = year of dates.end, else dates.start, else '' (genuinely no date -> honest "(n.d.)"); ve = the
@@ -1534,10 +1614,15 @@ def process_mth5(h5_paths, survey_label, org, slug):
 def load_portal_config(path) -> dict:
     """Read the portal's branding/version config (portal.config.yaml) for the MTCAT portal block, so a
     re-used portal (NZMT, CanadaMT, …) is configured in one place. Falls back to AusMT defaults when no
-    config is given or it cannot be read. Uses PyYAML if present, else the stdlib mini-parser."""
+    config is given or it cannot be read. Uses PyYAML if present, else the stdlib mini-parser.
+
+    The branding defaults are AusMT literals because AusMT is what this repo brands. The schema version
+    is NOT: it comes from MTCAT_SCHEMA_VERSION, generated from the schema's own title, so a re-used
+    portal that ships no config (or an unreadable one, or one omitting the key) publishes the version
+    the schema in this tree actually declares instead of whatever was last typed here."""
     default = {"portal_id": "ausmt",
                "portal_name": "AusMT — Australia's Magnetotelluric Data Portal",
-               "schema_version": "1.1"}
+               "schema_version": MTCAT_SCHEMA_VERSION}
     if not path:
         return default
     try:
@@ -1562,7 +1647,7 @@ def load_portal_config(path) -> dict:
     portal_name = name
     return {"portal_id": p.get("id", "ausmt"),
             "portal_name": portal_name,
-            "schema_version": str(p.get("schema_version", "1.1"))}
+            "schema_version": str(p.get("schema_version", MTCAT_SCHEMA_VERSION))}
 
 
 def _extent_of(y: dict):
@@ -2565,7 +2650,16 @@ def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
     """Validate the emitted MTCAT + download-manifest (+ optional build_report) docs against
     schema/{mtcat,manifest,build_report}.schema.json. Returns a list of human-readable violations
     (empty = OK). jsonschema is optional: absent => [] + a note. A missing/broken schema file is
-    noted, not fatal — only an actual schema VIOLATION fails."""
+    noted, not fatal: only an actual schema VIOLATION fails.
+
+    Each document is validated through _jdump + json.loads first, i.e. against THE BYTES THAT SHIP, not
+    against the in-memory object. The two are not the same object graph: _jdump's default= hook ISO-
+    formats a date/datetime/time an unquoted survey.yaml scalar carried into SMETA (attribution.
+    declared_date is the live case), so the in-memory doc holds a datetime.date exactly where the served
+    JSON holds a string. Validating the object would therefore report a violation the shipped file does
+    not have, and would equally miss one the serialiser introduces. This gate exists to answer "does what
+    we publish conform", so it must read what we publish. A doc that cannot be serialised at all is a
+    genuine emit failure and is reported as a violation rather than crashing the build."""
     try:
         import jsonschema  # noqa: PLC0415
     except ImportError:
@@ -2578,7 +2672,12 @@ def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
     for name, doc in _docs:
         schema_path = HERE.parent / "schema" / f"{name}.schema.json"
         try:
-            jsonschema.validate(doc, json.loads(schema_path.read_text()))
+            served = json.loads(_jdump(doc))
+        except (TypeError, ValueError) as e:
+            errs.append(f"{name}.json: cannot be serialised for validation ({type(e).__name__}: {e})")
+            continue
+        try:
+            jsonschema.validate(served, json.loads(schema_path.read_text()))
         except jsonschema.ValidationError as e:  # noqa: PERF203
             errs.append(f"{name}.json: {e.message} (at /{'/'.join(str(x) for x in e.absolute_path)})")
         except Exception as e:  # noqa: BLE001  (missing/unreadable schema must not crash the build)
@@ -3470,9 +3569,12 @@ def main(argv=None):
                     "files": manifest["files"], "bundles": manifest["bundles"]}
     (out / "manifest.json").write_text(_jdump(manifest_doc, separators=(",", ":")), encoding="utf-8")
 
-    # ---- MTCAT v1.0 discovery/federation document (portal owns data; shared minimal metadata) ----
+    # ---- MTCAT discovery/federation document (portal owns data; shared minimal metadata) ----
+    # MTCAT 1.2 reads the manifest assembled just above so each survey entry can state the formats
+    # ACTUALLY distributed for it. The manifest is already complete at this point (both writers below and
+    # the file above consume the same object), so this costs one dict pass and no new derivation.
     mtcat = mtcat_document(surveys_meta, all_stations, portal=load_portal_config(a.portal_config),
-                           coll_by_id=coll_by_id, lib_vers=LIB_VERSIONS)
+                           coll_by_id=coll_by_id, lib_vers=LIB_VERSIONS, manifest_doc=manifest_doc)
     (out / "mtcat.json").write_text(_jdump(mtcat, indent=1), encoding="utf-8")
     # FAIR-I: serve the schema beside the data so mtcat.json's schema_url ("mtcat.schema.json")
     # resolves relative to the catalogue itself — a harvester can validate without reaching the

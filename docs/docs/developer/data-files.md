@@ -280,9 +280,11 @@ silently auto-picked.
 
 ## `mtcat.json`, `collections.json`, `build_provenance.json`, `build_report.json`, `qc_report.json`
 
-- **`mtcat.json`** — the MTCAT v1.0 discovery/federation document; its shape is fixed by
-  [`schema/mtcat.schema.json`](../reference/mtcat-schema.md) and validated in tests. This is the
-  recommended integration point for external systems (key-based, schema-versioned).
+- **`mtcat.json`**: the MTCAT discovery/federation document; its shape is fixed by
+  [`schema/mtcat.schema.json`](../reference/mtcat-schema.md) and validated in tests. The document
+  declares which schema version it is in its own `portal.version` field, so read it there rather than
+  from any prose page. This is the recommended integration point for external systems (key-based,
+  schema-versioned).
 - **`collections.json`** — `{ <collection_id>: { id, title, type, surveys[], n_surveys, n_stations,
   bbox, centroid, … } }`; empty `{}` when no survey declares collection membership.
 - **`build_provenance.json`** — `PROV` block: pipeline, pipeline_version, extractor, software,

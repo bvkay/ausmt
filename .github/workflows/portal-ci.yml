@@ -7,18 +7,32 @@ name: portal-ci
 # The shipped portal has no runtime deps; the interaction tests' jsdom dev-dep is restored via npm ci.
 #
 # PATH-SCOPED (ADR-001 monorepo): only runs when the portal/ subtree (or this workflow) changes.
+#
+# ...PLUS the two engine artifacts the portal's own tests read as SINGLE SOURCES. About's
+# machine-contract field guide documents the served schema's vocabularies in prose, and
+# portal/tests/test_mtcat_machine_contract.py pins that prose set-for-set against
+# engine/schema/mtcat.schema.json's enums and against engine/extract/build_portal.py's ACCESS_LEVELS /
+# emitter defaults. Scoped to portal/** alone those pins were only a NEXT-PR backstop: a PR adding a
+# contributor role or an NCI data level to the schema touches no portal path, so portal-ci never ran and
+# the public page went stale green. Listing the two files they read makes the guard a SAME-PR gate. The
+# lane stays cheap (it lints and tests the static portal either way) and it does not overlap
+# build-products.yml, which runs the engine's own suite over the same paths.
 
 on:
   pull_request:
     paths:
       - "portal/**"
       - "contract/**"
+      - "engine/schema/**"
+      - "engine/extract/build_portal.py"
       - ".github/workflows/portal-ci.yml"
   push:
     branches: [main]
     paths:
       - "portal/**"
       - "contract/**"
+      - "engine/schema/**"
+      - "engine/extract/build_portal.py"
       - ".github/workflows/portal-ci.yml"
 
 # C39 (CI minutes economy): cancel a superseded run of the SAME ref. Keyed on github.ref (not a
