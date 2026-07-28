@@ -1,9 +1,13 @@
-"""MTCAT v1.0 emission (Prototype 18).
+"""MTCAT v1.2 emission.
 
 The build emits mtcat.json — the portal-owned discovery document other portals could harvest.
 This validates structure against schema/mtcat.schema.json with a dependency-free checker (jsonschema
 is optional; a small recursive validator keeps the core test suite stdlib-only) and confirms the
 required Portal / Survey / Station objects are populated from real data.
+
+v1.2 additions covered here: the DERIVED per-survey discovery facets reconcile with the stations[] and
+manifest the same build wrote, the document-level served tool versions are present, and the version the
+portal block stamps is the one the emitter's defaults actually agree on.
 """
 import json
 import subprocess
@@ -89,6 +93,35 @@ def test_mtcat_emitted_and_valid(tmp_path):
     assert doc["portal"]["version"] == "1.2"   # MTCAT 1.2: describe every served field + derived facets
     assert doc["surveys"], "at least one survey"
     assert doc["stations"], "at least one station"
+
+
+def test_portal_config_omitting_schema_version_still_stamps_the_current_version(tmp_path):
+    """A readable portal config that OMITS portal.schema_version must fall back to the version its two
+    sibling defaults use, not to a stale one.
+
+    build_portal carries THREE independent defaults for this single value: the no-config default and the
+    unreadable-config default in load_portal_config, and the emitter's own p.get fallback. Only the
+    no-config default is exercised by the other tests here, because this repo's own portal.config.yaml
+    declares schema_version explicitly, so a re-used portal (NZMT, CanadaMT, ...) that ships a config
+    without the key is the one caller that reads the third default. A version bump that misses it stamps
+    a stale version into every document those portals publish while AusMT's own build looks correct.
+
+    This drives that third path directly: config present, parseable, key absent. The portal_name
+    assertion is load-bearing, since it proves the config was actually READ and this is not silently
+    re-testing the no-config default."""
+    cfg = tmp_path / "portal.config.yaml"
+    cfg.write_text('portal:\n  id: ausmt\n  name: "AusMT re-used portal"\n', encoding="utf-8")
+    out = tmp_path / "data"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(SURVEYS),
+                        "--out", str(out), "--no-validate", "--portal-config", str(cfg)],
+                       cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    doc = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
+    assert doc["portal"]["portal_name"] == "AusMT re-used portal", (
+        "the config was not read, so this test is not on the path it claims to cover")
+    assert doc["portal"]["version"] == "1.2", (
+        "a config that omits portal.schema_version must default to the CURRENT schema version, the same "
+        f"one the sibling defaults carry; got {doc['portal']['version']!r}")
 
 
 def test_mtcat_derived_facets_agree_with_the_document_they_ride_in(tmp_path):

@@ -1639,7 +1639,7 @@ def load_portal_config(path) -> dict:
     portal_name = name
     return {"portal_id": p.get("id", "ausmt"),
             "portal_name": portal_name,
-            "schema_version": str(p.get("schema_version", "1.1"))}
+            "schema_version": str(p.get("schema_version", "1.2"))}
 
 
 def _extent_of(y: dict):
