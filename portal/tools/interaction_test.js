@@ -1532,6 +1532,17 @@ async function bootFreshWindow(dataMap) {
     "C1b: the embargoed Files tab must NOT offer 'EDI (via source archive)'");
   ok(doc.querySelector(".dtop .dl-edi") == null,
     "C1b: an embargoed station must show NO Download EDI action in the sticky header");
+  // api-docs lane, same C1b fence applied to the API expander: the engine emits a WITHHELD station.json
+  // for a non-served survey but returns before writing dimensionality.json at all (a dimensionality
+  // classification is interpretation OF the embargoed transfer function). So the endpoint list here must
+  // keep the station.json line and drop the dimensionality one, or ~17% of the catalogue is handed a GET
+  // that 404s. Asserted on the embargoed fixture in the real DOM, a second harness for the pin in
+  // tests/test_drawer_api_endpoints.py.
+  const dProvEmb = doc.getElementById("dp-provenance");
+  ok(dProvEmb.textContent.indexOf("dimensionality.json") < 0,
+    "C1b: an embargoed station has no dimensionality.json emitted, so the API expander must not list one");
+  ok(/\/data\/products\/delta\/D1\/station\.json/.test(dProvEmb.textContent),
+    "C1b: the embargoed station's station.json line must survive (it is emitted as a withheld stub)");
   drwV.classList.remove("open");
 
   // W. UX6 Wave D (D2): rail Browse / Select & export mode. Default is Browse; the toggle swaps the two
@@ -1982,9 +1993,30 @@ async function bootFreshWindow(dataMap) {
   ok(/Not a measure of scientific quality/.test(matP.textContent), "X7: the maturity block must state it is NOT scientific quality");
   // X6: the three always-visible provenance rows are present up top.
   ok(/Processing software/.test(matP.textContent) && /Source archive/.test(matP.textContent), "X6: the Provenance tab must show the software + source-archive summary rows");
-  // X8: the Metadata & API box is a single small 'API' expander at the foot (Wave A honest text inside).
+  // X8: the Metadata & API box is a single small 'API' expander at the foot.
   ok([...matP.querySelectorAll("details summary")].some(su => su.textContent.trim() === "API"), "X8: the Provenance tab must carry a single 'API' expander");
-  ok(/Read API \(planned\)/.test(matP.textContent), "X8: Wave A's honest 'Read API (planned)' text must be kept inside the API expander");
+  // api-docs lane: this used to pin the string "Read API (planned)". That text was retired because its
+  // premise was false: the three paths it hedged (station json / survey json / station edi, all under an
+  // /api prefix) were never served by any AusMT deployment, so "planned" dressed fiction as a roadmap.
+  // The expander now lists the endpoints that DO resolve, templated with this station's own slug + id.
+  // The needle below is assembled rather than written literally so this driver does not itself trip
+  // tests/test_api_docs_section.py's repo-wide scan for that prefix.
+  const _noApiTier = "/" + "api" + "/";
+  ok(!/\(planned\)/.test(matP.textContent), "X8: the API expander must not hedge live endpoints as '(planned)'");
+  ok(matP.textContent.indexOf(_noApiTier) < 0, "X8: the API expander must advertise no fictional API-tier path");
+  ok(/\/data\/products\/alpha\/A1\/station\.json/.test(matP.textContent),
+    "X8: the API expander must list this station's own products/<slug>/<id>/station.json endpoint");
+  ok(/\/data\/products\/alpha\/A1\/dimensionality\.json/.test(matP.textContent),
+    "X8: the API expander must list this station's own dimensionality.json endpoint");
+  ok(/\/data\/surveys\.json/.test(matP.textContent) && /\/data\/products\/manifest\.json/.test(matP.textContent),
+    "X8: the API expander must list the two survey-level documents");
+  // This fixture ships NO manifest (see the distributed-formats block below), so the station has no
+  // served EDI artifact row and the expander must therefore render NO EDI endpoint line: the url can
+  // only ever be read from a manifest row, never invented.
+  ok(matP.textContent.indexOf("/data/edi/") < 0,
+    "X8: with no manifest artifact row there is no EDI url to advertise, so no EDI line may be rendered");
+  ok(/about\.html#api/.test(matP.innerHTML),
+    "X8: the API expander must point at About's 'Fetching data programmatically' section");
   doc.getElementById("drawer").classList.remove("open");
 
   // MM. C46-W3b LICENCE CLASS via the CANON TABLES (not startsWith('CC')) + the attribution line.

@@ -274,6 +274,13 @@ function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
 // MTH5 from THIS (not the stale SMETA.mth5, which the engine always emits as "unk"), so all three agree
 // with the Downloads tile (19/21 surveys live). Guarded like the other bundlesForSlug callers.
 function mth5BundleFor(m){return (typeof bundlesForSlug==="function"?bundlesForSlug(m&&m.slug):[]).find(r=>r&&r.format==="mth5");}
+// api-docs lane: a manifest artifact url rendered as the ENDPOINT a reader can GET. A tier=repo row
+// carries a portal-relative path ("edi/<slug>/<file>.edi") which the hosted site serves under /data/;
+// a tier=nci row already carries the ABSOLUTE fileServer url, so it is shown verbatim; prefixing /data/
+// there would print a path that does not exist. Display only; the download path still goes through
+// dataUrl() (which honours a deployment's data_base_url).
+function apiArtifactPath(u){const v=String(u==null?"":u);
+  return /^[a-z][a-z0-9+.\-]*:\/\//i.test(v)?v:"/data/"+v.replace(/^\/+/,"");}
 // R5: the Files tab, structured to the NCI data-level standard as a SINGLE COLUMN of full-width rows
 // (Packed raw / Level 0 / Level 1 time series -> Level 2 derived processed data with EDI/EMTF-XML/MTH5
 // sub-rows -> Level 3 models, when ever served -> Publication). Each row carries an explicit ORIGIN tag
@@ -662,9 +669,13 @@ function openStation(i){
   // (lineage graph, full provenance table, identifiers, format availability, record metadata, API)
   // behind collapsed <details>. Nothing deleted — only demoted. The API box (X8) is the last, small expander.
   const _srcArchive=sourceArchiveCell(m);
+  // This station's served artifact rows (manifest `files`), read once and reused by the format-availability
+  // badge and the API section below. Empty for a withheld/embargoed survey: the engine emits no manifest
+  // rows for one, so absence here IS the embargo, never a "row we failed to find".
+  const _arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   // R8: whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
   // ok when served, else part — produced via the build pipeline for redistributable surveys).
-  const _fmtXmlArt=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).some(a=>a.format==="emtfxml");
+  const _fmtXmlArt=_arts.some(a=>a.format==="emtfxml");
   const provTop=`<table class="meta prov-top">`+
     `<tr><td>Processing software</td><td>${esc(processingSoftwareText(m,sc))}</td></tr>`+
     `<tr><td>Transfer function</td><td>${esc(s.file)}${s.sha?` · <code title="${escAttr(s.sha)}">${esc(s.sha.slice(0,16))}…</code>`:" · <span class='prov'>no checksum</span>"}</td></tr>`+
@@ -678,9 +689,38 @@ function openStation(i){
     `<tr><td>lat, lon</td><td>${coordCellHtml(s)}</td></tr>`+
     `<tr><td>components</td><td>${esc(s.comps.split("").join(" + "))||"–"}</td></tr>`+
     `<tr><td>source file</td><td>${esc(s.file)}</td></tr></table>`;
-  // X8: the Metadata & API box collapses to a single small "API" expander at the tab's foot (Wave A's
-  // honest "planned" link text kept inside).
-  const apiBlock=`<div class="api">Read API (planned), static JSON on the hosted site:<br>GET <b>/api/station/${esc(s.ausmt_id)}.json</b><br>GET <b>/api/survey/${esc(s.slug||s.survey.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/-$/,""))}.json</b><br>GET <b>/api/station/${esc(s.ausmt_id)}/edi</b></div>`;
+  // X8: the Metadata & API box collapses to a single small "API" expander at the tab's foot.
+  // api-docs lane: the section used to advertise a "Read API (planned)" over three paths under an /api
+  // prefix (station json, survey json, station edi). No such tier has ever existed on any AusMT
+  // deployment; those three lines were fiction. What the site actually serves is read-only static JSON
+  // under /data/, so the section now lists the LIVE endpoints for the station in front of the reader:
+  //   * the per-station products, keyed by the survey slug + the station id (the same path
+  //     loadStationFrameLine() already fetches, so it is provably the real product location).
+  //     station.json is emitted for EVERY station: a non-served one gets a withheld stub that states
+  //     the access level, so the line resolves and is worth pointing at. dimensionality.json is NOT:
+  //     it is a pure interpretation of the withheld transfer function, so the engine returns before
+  //     writing it for a non-served survey (build_portal._write_station_products) and the live site
+  //     404s that path for every embargoed / metadata_only station. It is therefore gated on the SAME
+  //     predicate the engine gates emission on, access.level == "open" (isOpenAccess). Advertising it
+  //     unconditionally would reintroduce, at ~17% of the catalogue, exactly the dead-endpoint defect
+  //     this section was rewritten to remove;
+  //   * this station's OWN served EDI, taken from its manifest artifact row. The url is READ, never
+  //     templated: the served filename is genuinely not derivable from the station id (live corpus:
+  //     station A1 of vulcan-2022 is served as edi/vulcan-2022/Vulcan_A1.edi). No row => no line,
+  //     which is exactly the embargo case (withheld by construction, so there is nothing to link).
+  //   * the two survey-level documents every consumer starts from.
+  // The trailing pointer sends anyone wanting worked examples to About's "Fetching data programmatically".
+  const _apiSlug=s.slug||((SMETA[s.survey]||{}).slug)||"";
+  const _apiEdi=_arts.find(a=>a.format==="edi");
+  const _apiRows=[];
+  if(_apiSlug&&s.id){const _pp="/data/products/"+encodeURIComponent(_apiSlug)+"/"+encodeURIComponent(s.id)+"/";
+    _apiRows.push(_pp+"station.json");
+    if(isOpenAccess(m))_apiRows.push(_pp+"dimensionality.json");}
+  if(_apiEdi&&_apiEdi.url)_apiRows.push(apiArtifactPath(_apiEdi.url));
+  _apiRows.push("/data/surveys.json","/data/products/manifest.json");
+  const apiBlock=`<div class="api">Read-only static JSON on the hosted site, no key required:<br>`+
+    _apiRows.map(u=>`GET <b>${esc(u)}</b>`).join("<br>")+
+    `<br><a href="about.html#api">see About: Fetching data programmatically</a></div>`;
   const provenanceHtml=`<div class="sechead">Provenance ${roleChip("Source data")}</div>`+provTop+maturityBlock(s)+
     `<details class="prov-d"><summary>Lineage graph</summary><div class="prov-dbody">${provGraph(s)}</div></details>`+
     provenanceBox(s)+

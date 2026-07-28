@@ -214,6 +214,10 @@
   .idlogo{height:14px;width:auto;vertical-align:-2px;display:inline-block}
   .api{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 8px;margin-top:6px;word-break:break-all}
   .api b{color:var(--copper)}
+  /* api-docs lane: the trailing pointer to About's "Fetching data programmatically" section. Copper like
+     every other in-drawer link; not word-break:break-all material, so it keeps its own white-space. */
+  .api a{color:var(--copper);text-decoration:none;word-break:normal}
+  .api a:hover{text-decoration:underline}
 
   /* UX6 Wave C — station drawer: sticky header (identity + chips + actions) + tab strip that stay pinned
      while the active panel scrolls. The negative margins let the sticky bar span the drawer's padding. */
