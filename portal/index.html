@@ -238,9 +238,12 @@
   .rolechip{display:inline-block;font-size:10.5px;font-weight:600;text-transform:none;letter-spacing:.02em;
     color:var(--muted);background:var(--panel-2);border:1px solid var(--line);border-radius:3px;padding:1px 6px;vertical-align:1px}
   /* C3 — plot readability: expand affordance, always-visible subline, x-axis unit caption, collapsibles */
-  .plot .ptitle{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  /* Owner directive 2026-07-28: the expand affordance is now SECTION-level, not per-plot, so .plotexp rides
+     the "Response functions" heading row (.sechead.rsphead) and no longer sits inside a .ptitle. */
+  .sechead.rsphead{display:flex;align-items:center;gap:8px}
+  .sechead.rsphead .plotexp{margin-left:auto}
   .plotexp{flex:none;font-size:12px;line-height:1;padding:2px 6px;border:1px solid var(--line);border-radius:4px;
-    background:var(--panel-2);color:var(--muted);cursor:pointer}
+    background:var(--panel-2);color:var(--muted);cursor:pointer;text-transform:none;letter-spacing:0}
   .plotexp:hover{border-color:var(--copper);color:var(--text)}
   .psubline{font-size:11px;color:var(--muted);line-height:1.4;margin:1px 0 3px;font-weight:400;text-transform:none;letter-spacing:0}
   .paxis{font-size:10.5px;color:var(--muted);text-align:right;margin:-2px 2px 2px;font-family:var(--mono)}
@@ -252,15 +255,20 @@
   details.plotcollapse>summary::before{content:"▸";color:var(--muted);font-size:11px;margin-right:2px}
   details.plotcollapse[open]>summary::before{content:"▾"}
   details.plotcollapse .plotbody{position:relative;margin-top:4px}
-  details.plotcollapse .plotbody .plotexp{position:absolute;top:0;right:0;z-index:1}
   .prov-dbody{padding:8px 10px}
-  /* C3 (evolved): full-station RESPONSE modal. A station-identity header plus ALL response panels
-     re-rendered at large scale, stacked and scrollable; closes on Esc, click-out, or the close button.
+  /* C3 (evolved): full-station RESPONSE modal. A station-identity header plus ALL response panels,
+     stacked and scrollable; closes on Esc, click-out, or the close button.
      The stacked panels reuse the .plot / .ptitle / .psubline / .paxis styling. */
   .plotmodal{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;
     background:rgba(11,15,18,.72);padding:24px}
   .plotmodal-box{background:var(--panel);border:1px solid var(--copper);border-radius:10px;padding:14px 16px;
-    max-width:min(96vw,860px);max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+    max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+  /* Owner directive 2026-07-28: the modal content column is CAPPED, not viewport-filling. plots.js puts
+     .plotmodal-capw on the box, so this rule IS the cap: ~760px, centred by the overlay's flex, with the
+     overlay's 24px viewport margin and a 92vw ceiling so it still fits a phone. Height keeps the box's
+     existing internal scroll. Pre-change the box was min(96vw,860px) and the panels were a fixed 2x pixel
+     blow-up, which on a laptop filled almost the whole viewport. */
+  .plotmodal-capw{width:100%;max-width:min(92vw,760px)}
   .plotmodal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
     padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line)}
   .plotmodal-ident{min-width:0}
@@ -273,7 +281,12 @@
   .plotmodal-ident .pm-coord{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
   .plotmodal-close{font-size:15px;line-height:1;padding:4px 10px;flex:none}
   .plotmodal-svg{overflow:auto}
-  .plotmodal-svg svg{max-width:100%;height:auto;display:block}
+  /* The panels FILL the capped column responsively (the svg carries its design width/height AND a matching
+     viewBox, so width:100% + height:auto preserves the aspect ratio at any size). min-width is the design
+     width from plots.js (W=372, the size the drawer renders at): the modal svg may never render NARROWER
+     than the drawer's, so axis/label text can never shrink below the drawer's effective size. Below that
+     the container above scrolls horizontally rather than shrinking the type. */
+  .plotmodal-svg svg{width:100%;min-width:372px;height:auto;display:block}
   .plotmodal-svg .plot{margin:6px 0 16px}   /* vertical rhythm between the large stacked panels */
 
   /* ===== UX8 (X4/X5/X6/X7/X9) — drawer density + Station summary + Screening indicators + maturity ===== */
