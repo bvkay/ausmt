@@ -163,8 +163,9 @@ def test_country_pin_bisect_resolves_known_ranges_including_masked():
     masked /24 address (last octet 0) and a masked /48 IPv6. FAILS IF a masked address in a known range
     resolves wrong, or an out-of-range address is not 'unknown'."""
     geoip = AGG.GeoIP.load(_DBIP)
-    assert geoip.loaded and geoip.row_count == 6
+    assert geoip.loaded and geoip.row_count == 7     # 7 ranges; the fixture's comment rows are skipped
     assert geoip.country("203.0.113.0") == "AU"      # masked /24, network base
+    assert geoip.country("202.158.4.0") == "AU"      # AU, but absent from the state table (see below)
     assert geoip.country("203.0.113.200") == "AU"    # anywhere in the /24
     assert geoip.country("1.2.3.0") == "NZ"          # masked /24 in a wider range
     assert geoip.country("198.51.100.0") == "US"
@@ -531,3 +532,179 @@ def test_v2_fold_still_leaks_nothing():
              _line("/data/catalogue.json", "1.2.3.0")]
     stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
     assert _sweep_ip_or_ua(json.dumps(stats, indent=1)) == []
+
+
+# ==================================================================================================
+# Australian STATE lane (schema 2, additive): a second-level breakdown BENEATH the AU country row.
+#
+# State, never city -- the ratified design decision. The address resolved here was already truncated
+# at the edge (IPv4 /24, IPv6 /48): a /24 geolocates to a city unreliably (carrier and CGNAT pools
+# span a state from one prefix), and in a research community this small a city cell is
+# quasi-identifying ("3 downloads from Hobart" names a group). These pins fix state as the grain.
+#
+# Everything below still derives from the SAME masked address the fold already reads. No new
+# collection, no per-individual row, and an absent state table is silently country-only.
+# ==================================================================================================
+_AU_STATES_CSV = _FIXTURES / "dbip-au-states.sample.csv"
+
+# Fixture addresses, by what the two committed tables say about them:
+_AU_NSW = "203.0.113.5"          # country AU, state NSW
+_AU_NSW2 = "203.0.113.200"       # country AU, state NSW (a second masked network in the same state)
+_AU_NOSTATE = "202.158.4.0"      # country AU, NO row in the state table -> unattributed-state
+_AU_WA_V6 = "2400:cb00:1234::"   # country AU (v6 /48), state WA
+_NZ = "1.2.3.0"                  # not AU: never reaches the state lookup
+
+
+def _au_lines():
+    """One log window touching every AU state case plus a non-AU control."""
+    return [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW, size=100),
+        _line("/data/catalogue.json", _AU_NSW2),
+        _line("/data/edi/sample-survey/Vulcan_A2.edi", _AU_NOSTATE, size=200),
+        _line("/data/catalogue.json", _AU_WA_V6),
+        _line("/data/catalogue.json", _NZ),
+    ]
+
+
+def test_au_state_breakdown_folds_from_the_masked_prefix_at_every_grain():
+    """STATE PIN. With the compact state table present, every request that classifies as AU must ALSO
+    land in a state bucket -- cumulatively, in its calendar-month rollup, and in its daily row -- with
+    the v6 /48 resolving exactly like the v4 /24. FAILS IF by_state is absent, if a state is
+    misattributed, if a v6 prefix is not resolved, or if a non-AU request is given a state."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    assert states.loaded, "the fixture state table must load"
+
+    stats = AGG.aggregate(None, _au_lines(), rmap, geoip, _RUN, au_states=states)
+    assert stats["by_state"] == {"NSW": 2, "WA": 1, "unattributed": 1}, stats["by_state"]
+    assert stats["countries"] == {"AU": 4, "NZ": 1}
+    month = stats["monthly"][0]
+    assert month["by_state"] == {"NSW": 2, "WA": 1, "unattributed": 1}, month["by_state"]
+    day = stats["daily"][0]
+    assert day["states"] == {"NSW": 2, "WA": 1, "unattributed": 1}, day.get("states")
+    # A state code is a two/three-letter label, never an address: the leak sweep must still be clean.
+    assert _sweep_ip_or_ua(json.dumps(stats, indent=1)) == []
+
+
+def test_au_state_rows_plus_unattributed_reconcile_with_the_country_row():
+    """RECONCILIATION PIN. The state breakdown sits BENEATH the AU country row, so the state counts plus
+    the explicit unattributed bucket must equal the AU country figure exactly -- an AU prefix the table
+    does not cover is BUCKETED, never dropped. FAILS IF the two totals disagree (a dropped prefix would
+    make the screen's breakdown quietly under-report its own parent row)."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    lines = _au_lines() + [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NOSTATE, size=5),   # a 2nd uncovered AU hit
+        _line("/data/mtcat.json", _AU_NSW),                                     # api: not a geo class
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN, au_states=states)
+    au = stats["countries"]["AU"]
+    assert sum(stats["by_state"].values()) == au, (stats["by_state"], au)
+    assert stats["by_state"]["unattributed"] == 2, "an uncovered AU prefix must be bucketed, not dropped"
+    for m in stats["monthly"]:
+        assert sum(m["by_state"].values()) == m["countries"]["AU"], m
+
+
+def test_absent_state_table_degrades_silently_to_country_only():
+    """TOLERANCE PIN. The state table is an OPTIONAL input like every other: absent, unreadable or
+    empty, the fold must behave exactly as it does today -- countries counted, no state buckets, no
+    warning, no crash. FAILS IF a missing table changes any country/download figure, invents an empty
+    state bucket, or raises."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    baseline = AGG.aggregate(None, _au_lines(), rmap, geoip, _RUN)          # no au_states at all
+    missing = AGG.AuStates.load(_FIXTURES / "no-such-state-table.csv")
+    assert not missing.loaded and missing.state(_AU_NSW) is None
+    with_missing = AGG.aggregate(None, _au_lines(), rmap, geoip, _RUN, au_states=missing)
+
+    for stats in (baseline, with_missing):
+        assert stats["countries"] == {"AU": 4, "NZ": 1}
+        assert stats["totals"]["downloads"] == 2
+        assert stats["by_state"] == {}, "no table means no state buckets, not empty-labelled ones"
+        assert stats["monthly"][0]["by_state"] == {}
+        assert "states" not in stats["daily"][0], "a day with no state data carries no states key"
+
+
+def test_state_data_is_forward_only_and_never_backfills_a_folded_day():
+    """FORWARD-ONLY PIN. Days folded before the state table was installed carry NO state data and must
+    stay that way: installing the table later must not rewrite an existing daily row, invent state
+    counts for an earlier month, or make the cumulative breakdown claim to cover the whole history.
+    FAILS IF an already-folded day gains a states key, if an earlier month gains state counts, or if
+    the cumulative state total silently claims every AU request ever counted."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)   # folds up to 2026-06-01
+    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)  # folds up to 2026-07-11
+
+    before = [_line("/data/catalogue.json", _AU_NSW, date="2026-06-01"),
+              _line("/data/catalogue.json", _AU_NSW2, date="2026-06-01")]
+    after = [_line("/data/catalogue.json", _AU_WA_V6, date="2026-07-10")]
+    s1 = AGG.aggregate(None, before, rmap, geoip, run1)                        # no table yet
+    s2 = AGG.aggregate(s1, after, rmap, geoip, run2, au_states=states)         # table installed
+
+    june = [d for d in s2["daily"] if d["date"] == "2026-06-01"][0]
+    assert "states" not in june, "a day folded before the table must not be backfilled"
+    months = {m["month"]: m for m in s2["monthly"]}
+    assert months["2026-06"]["by_state"] == {}, "an earlier month must not gain state counts"
+    assert months["2026-07"]["by_state"] == {"WA": 1}
+    # The cumulative breakdown covers only what was counted with the table in place; the difference
+    # against the AU country row is real and is what the screen names rather than hides.
+    assert s2["countries"]["AU"] == 3
+    assert s2["by_state"] == {"WA": 1}
+    assert sum(s2["by_state"].values()) < s2["countries"]["AU"]
+
+
+def test_state_table_rejects_anything_that_is_not_one_of_the_eight_codes():
+    """VOCABULARY PIN. The fold accepts only the eight state/territory codes from the table file, so a
+    hand-edited or mangled table cannot push an arbitrary label onto the analytics screen. FAILS IF a
+    junk code, a city name, or a lowercase stray is accepted as a state."""
+    assert set(AGG.AU_STATE_CODES) == {"NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT"}
+    t = _FIXTURES.parent / "_junk-states.csv"
+    try:
+        t.write_text("203.0.113.0,203.0.113.255,Hobart\n"
+                     "192.0.2.0,192.0.2.255,<script>\n"
+                     "1.0.0.0,1.0.0.255,qld\n", encoding="utf-8")
+        table = AGG.AuStates.load(t)
+        assert table.state("203.0.113.5") is None, "a city name is not a state code"
+        assert table.state("192.0.2.1") is None, "junk must never reach the screen"
+        assert table.state("1.0.0.1") == "QLD", "a lowercase code is normalised, not rejected"
+    finally:
+        t.unlink(missing_ok=True)
+
+
+def test_main_wires_the_state_table_through_the_env(tmp_path, monkeypatch):
+    """WIRING PIN. main() must find the state table by env (or the documented default beside the
+    country CSV) and fold state buckets into the written stats.json. FAILS IF the table is read but
+    never reaches the fold, or if the env override is ignored."""
+    data = tmp_path / "data"
+    logdir = data / "logs" / "caddy"
+    state = data / "gateway" / "state"
+    logdir.mkdir(parents=True)
+    state.mkdir(parents=True)
+    (logdir / "access.json").write_text("\n".join([
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW),
+        _line("/data/catalogue.json", _AU_WA_V6),
+        _line("/data/catalogue.json", _NZ),
+    ]) + "\n", encoding="utf-8")
+    stats_file = state / "stats.json"
+
+    monkeypatch.setenv("AUSMT_DATA_DIR", str(data))
+    monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(_MANIFEST))
+    monkeypatch.setenv("AUSMT_STATS_DBIP_CSV", str(_DBIP))
+    monkeypatch.setenv("AUSMT_STATS_AU_STATES_CSV", str(_AU_STATES_CSV))
+    monkeypatch.setenv("AUSMT_STATS_FILE", str(stats_file))
+    monkeypatch.setenv("AUSMT_STATS_NOW", "2026-07-12T03:30:00Z")
+
+    assert AGG.main([]) == 0
+    doc = json.loads(stats_file.read_text(encoding="utf-8"))
+    assert doc["by_state"] == {"NSW": 1, "WA": 1}
+    assert doc["countries"]["AU"] == 2 and doc["countries"]["NZ"] == 1
+    assert _sweep_ip_or_ua(stats_file.read_text(encoding="utf-8")) == []
+
+    # And with the override removed the DEFAULT path (beside the country CSV under the data dir) is
+    # what is consulted -- absent there, the run is country-only and still exits 0.
+    monkeypatch.delenv("AUSMT_STATS_AU_STATES_CSV")
+    assert AGG.main([]) == 0

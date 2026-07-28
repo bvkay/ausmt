@@ -891,7 +891,10 @@ funding reporting possible. Pruning a day never loses the month it belonged to.
 
 **Export.** The Analytics screen offers *Download report data*: `analytics.csv` (one row per retained
 month) and `analytics-surveys.csv` (one row per month and survey, with volume). Both are read-only,
-session-gated, and generated from the same `stats.json` the screen renders.
+session-gated, and generated from the same `stats.json` the screen renders. When an Australian state
+breakdown exists (below), `analytics.csv` also gains `au_requests` and one `state_*` column per state
+seen; the `state_*` columns of every row sum to that row's `au_requests` exactly, so a report built
+from the file cannot carry a silent Australian undercount.
 
 **Upgrading an existing box.** The aggregator reads an older `stats.json` tolerantly and upgrades it in
 place on the next fold; there is no migration step and nothing to run by hand. Every existing total,
@@ -924,6 +927,53 @@ The CSV format is `start_ip,end_ip,country_code` per line (IPv4 and IPv6 ranges 
 what db-ip's Lite CSV ships. A small **fixture** CSV lives at
 `deploy/tests/fixtures/dbip-country-lite.sample.csv` for the tests; **do not** use it in production.
 
+#### Australian state resolution: the compact state table (optional operator chore)
+
+Beneath the AU row of the country table the Analytics screen can also show **Australia by state**
+(NSW / VIC / QLD / SA / WA / TAS / NT / ACT). This is **entirely optional**: with no state table in
+place the fold is country-only, silently, and the screen simply omits the section.
+
+**State, and deliberately not city.** The address behind these counts is masked at the edge to a /24
+(IPv4) or /48 (IPv6) *before it is written*. A /24 does not place a request in a city reliably
+(carrier and CGNAT pools routinely serve a whole state from one prefix), and in a research community
+this small a city-level cell is quasi-identifying ("3 downloads from Hobart" names a group). State is
+the finest grain that is both defensible from a /24 and non-identifying here. **Do not "improve" this
+to cities.** The rationale is repeated in the aggregator, the prep script, the screen and
+`docs/docs/operations/usage-analytics.md` for exactly that reason.
+
+The state table is **derived** from db-ip's larger **"IP to City Lite"** CSV (same CC-BY-4.0 terms, no
+account, no licence key). The big city CSV is never kept: a prep script reads it once and writes a
+small AU-only table (a few MB), and you delete the download.
+
+```sh
+# One-time, then monthly if you want the breakdown to stay current. Download the CSV edition of
+#   https://db-ip.com/db/download/ip-to-city-lite   (CC-BY-4.0; .csv.gz is read directly).
+mkdir -p "$AUSMT_DATA_DIR/geoip"
+python3 deploy/scripts/prep_au_states.py ~/Downloads/dbip-city-lite-*.csv.gz \
+  --out "$AUSMT_DATA_DIR/geoip/dbip-au-states.csv"
+rm ~/Downloads/dbip-city-lite-*.csv.gz     # the source is not needed again
+
+# Override the destination in .env with AUSMT_STATS_AU_STATES_CSV if you keep it elsewhere.
+```
+
+The script prints how many source rows it read, how many were Australian, and how big the emitted
+table is. Unlike the daily aggregator it **fails loudly and non-zero** on a useless input (wrong
+dataset, unreadable file) and writes nothing rather than leaving an empty table behind. An empty
+table would degrade every Australian request to `unattributed` and look like a geolocation fault
+instead of an operator one.
+
+The emitted format is `start_ip,end_ip,state_code` per line, behind a comment header carrying the
+db-ip attribution. **Staleness is acceptable**: networks change state rarely, so a late refresh
+degrades gracefully. A small **fixture** table lives at `deploy/tests/fixtures/dbip-au-states.sample.csv`
+for the tests; **do not** use it in production.
+
+**Forward-only, like every other dimension here.** Days folded before the table was in place carry no
+state data at all and are never backfilled (the raw logs are long gone). The screen names that
+residue on its own row (*"Counted before state data existed"*) rather than letting the state rows
+imply they account for every Australian request. An AU prefix the table does not cover is counted in
+its own *"Not in the state table"* row, never dropped, so the breakdown always adds up to the AU
+country figure exactly.
+
 #### Install the daily timer
 
 ```sh
@@ -952,6 +1002,10 @@ running) rather than presenting old figures as live.
 | Analytics screen shows "No usage analytics yet" | The `ausmt-stats` timer has not produced a `stats.json`. Install + start it (above); check `journalctl -u ausmt-stats.service`. |
 | Analytics screen shows a **STALE** banner | The timer stopped, or no complete day has been folded since. Check `systemctl list-timers ausmt-stats.timer` and the service journal. |
 | Every country shows as `unknown` | The db-ip CSV is missing/unreadable at `$AUSMT_DATA_DIR/geoip/dbip-country-lite.csv` (or `AUSMT_STATS_DBIP_CSV`). Place/refresh it (above). Counts are still correct; only the country split degrades. |
+| No **Australia by state** section at all | No state table at `$AUSMT_DATA_DIR/geoip/dbip-au-states.csv` (or `AUSMT_STATS_AU_STATES_CSV`), or none has been folded yet. Run `prep_au_states.py` (above); the section appears after the next daily fold. Its absence is deliberate: eight zeroes would read as "no traffic from Victoria" rather than "not measured". |
+| Most Australian traffic lands in **Not in the state table** | The state table is stale or was built from a partial CSV. Re-run `prep_au_states.py` over a fresh db-ip City Lite download. The AU country figure is unaffected; the bucket exists so the breakdown still reconciles with it. |
+| **Counted before state data existed** is a large row | Expected on a box that folded days before the state table was installed. Those days carry no state data and are never backfilled (the raw logs have rotated away). The row shrinks in relative terms as new days fold. |
+| `prep_au_states.py` exits non-zero with "no Australian (AU) state ranges" | The input was not db-ip's **IP to City Lite** CSV (the Country Lite CSV has no state column), or the download is truncated. Nothing was written; re-download and re-run. |
 | Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. |
 | Quarterly view says "No monthly rollups yet" | The box has not folded a day since the detailed aggregator was installed. Rollups begin at the next daily fold and fill in one month at a time; earlier months are deliberately **not** backfilled. |
 | A month shows downloads but little or no volume | Some of its days were folded before per-month detail existed. The screen flags exactly those months; the counts are complete, the breakdown covers only the later days. |

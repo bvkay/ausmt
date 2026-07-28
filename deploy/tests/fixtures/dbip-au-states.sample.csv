@@ -1,0 +1,11 @@
+# AusMT compact AU state table (TEST FIXTURE -- do not use in production).
+# Byte-for-byte the shape deploy/scripts/prep_au_states.py emits: start_ip,end_ip,state_code.
+# Derived from dbip-city-lite.sample.csv in this dir. 202.158.0.0/16 is deliberately ABSENT while the
+# country fixture calls it AU, so the fold's "AU unattributed-state" bucket has something to catch.
+1.0.0.0,1.0.0.255,QLD
+192.0.2.0,192.0.2.255,VIC
+203.0.113.0,203.0.113.255,NSW
+210.10.0.0,210.10.0.255,SA
+210.10.1.0,210.10.1.255,WA
+210.10.2.0,210.10.2.255,TAS
+2400:cb00::,2400:cb00:ffff:ffff:ffff:ffff:ffff:ffff,WA
