@@ -4,3 +4,6 @@
 100.64.0.0,100.127.255.255,ZZ
 2400:cb00::,2400:cb00:ffff:ffff:ffff:ffff:ffff:ffff,AU
 2001:db8::,2001:db8:ffff:ffff:ffff:ffff:ffff:ffff,DE
+# 202.158/16 is AU here but is deliberately ABSENT from dbip-au-states.sample.csv -- it is what gives
+# the fold's "AU unattributed-state" bucket something to catch. A comment row is skipped by the loader.
+202.158.0.0,202.158.255.255,AU

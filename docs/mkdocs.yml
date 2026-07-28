@@ -62,3 +62,6 @@ nav:
       - Loading Real Surveys: developer/real-survey-loading.md
       - Collection IDs: developer/collection-ids.md
       - Curator Checklist: developer/curator-checklist.md
+
+theme:
+  name: readthedocs

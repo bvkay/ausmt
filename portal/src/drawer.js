@@ -643,8 +643,14 @@ function openStation(i){
   // facts. C1b: a non-open station shows the
   // access panel here INSTEAD of the plots (curves ARE the withheld data). #pt_anchor is kept so the
   // "Phase tensor" related-product scroll target never dangles; the frame line is populated lazily.
-  const responseHtml=`<div class="sechead">Response functions ${roleChip("AusMT-derived")}</div>`+
-    (isOpenAccess(m)
+  // Owner directive (2026-07-28): the response section carries exactly ONE expand control, on this heading
+  // row, instead of a ⤢ button per plot block (all four opened the same full-station modal). It is rendered
+  // only for an open-access station: without curves openStationModal has no panels to show and would open
+  // nothing, so a control there would be a dead affordance over the access panel.
+  const _rspOpen=isOpenAccess(m);
+  const responseHtml=`<div class="sechead rsphead">Response functions ${roleChip("AusMT-derived")}`+
+    (_rspOpen&&typeof responseExpandBtn==="function"?responseExpandBtn():"")+`</div>`+
+    (_rspOpen
       ? plotBlock("rho",t)+plotBlock("phase",t)+`<div id="pt_anchor"></div>`+plotBlock("pt",t)+plotBlock("arrow",t)
       : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
     `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+

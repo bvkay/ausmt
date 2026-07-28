@@ -1280,10 +1280,12 @@ async function bootFreshWindow(dataMap, url) {
     "PTIA a: the phase-tensor convention subline must survive on the always-shown block");
   ok(drwC.innerHTML.indexOf("Real arrows point toward conductors; imaginary unreversed.") >= 0,
     "PTIA a: the induction-arrow convention subline must survive on the always-shown block");
-  // the expand-to-modal affordance is retained on both blocks.
-  ok(drwC.querySelector('div.plot[data-plot="pt"] .plotexp') &&
-     drwC.querySelector('div.plot[data-plot="arrow"] .plotexp'),
-    "PTIA a: the expand affordance must remain on the always-shown pt/arrow blocks");
+  // OWNER DIRECTIVE 2026-07-28: the PER-PLOT expand affordance is gone. Every block carried its own ⤢
+  // button and all four opened the SAME full-station modal; the response section now carries exactly one
+  // control, on its heading row (pinned in section V (h)). RED on stage-1 HEAD, where both blocks have one.
+  ok(!drwC.querySelector('div.plot[data-plot="pt"] [data-act="expand"]') &&
+     !drwC.querySelector('div.plot[data-plot="arrow"] [data-act="expand"]'),
+    "PTIA a: no plot block may carry its own expand control (the response section has ONE, on its heading)");
   // (d) the #pt_anchor scroll target still exists so the related-product quick-link scroll lands.
   ok(drwC.querySelector("#pt_anchor"),
     "PTIA d: the #pt_anchor scroll target must remain in the Response tab");
@@ -1478,20 +1480,41 @@ async function bootFreshWindow(dataMap, url) {
   ok(/<circle [^>]*fill="#EF7256"/.test(rspHtml),
     "C3: the xy (copper #EF7256) series must keep <circle> markers");
 
-  // (h) C3 (evolved): FULL-STATION RESPONSE MODAL. Clicking ANY plot's expand button opens ONE #plotmodal
-  //     that shows a station-identity header (id / site name / survey / organisation / data-type chip /
-  //     honest coordinate line) plus ALL response panels re-rendered at LARGE scale: apparent resistivity,
-  //     phase, phase tensor, and (A1 carries tipper) the induction arrows. Esc / click-out / the close
-  //     button close it WITHOUT closing the drawer, and focus returns to the opener. Pre-change the expand
-  //     opened a SINGLE-plot popup (rho only, no station context and no .plot wrapper), so the all-panels +
-  //     header-fields assertions below RED-prove the swap against stage-1 HEAD.
+  // (h) C3 (evolved) + OWNER DIRECTIVE 2026-07-28: ONE EXPAND CONTROL + a CAPPED MODAL.
+  //     Pre-change EVERY plot block carried its own ⤢ button (FOUR of them in the response section) and all
+  //     four opened the SAME full-station modal, whose panels were rendered at a fixed 2x pixel blow-up
+  //     (STATION_MODAL_SCALE: the rho svg went out at width="744"). Now the section carries EXACTLY ONE
+  //     control, on the "Response functions" heading row, with ZERO inside the plot blocks; it opens the
+  //     same #plotmodal (station-identity header plus ALL response panels: apparent resistivity, phase,
+  //     phase tensor and, since A1 carries tipper, the induction arrows); the modal's content column
+  //     carries the capped-width class .plotmodal-capw; and the panels are emitted at DESIGN size to be
+  //     CSS-stretched to fill that cap. Esc / click-out / the close button close it WITHOUT closing the
+  //     drawer, and focus returns to the opener.
+  //     Every leg is RED on stage-1 HEAD: the control count is 4 not 1, the heading carries none, the
+  //     .plotmodal-capw class does not exist, and the modal rho svg is 744 wide.
+  //     NOTE on the cap: jsdom does no layout, so the WIDTH itself cannot be measured here. What is pinned
+  //     is the contract that produces it: the class on the box, plus the index.html rules that cap the
+  //     column and stretch the svg to fill it (asserted against the stylesheet source, not a computed box).
   ok(doc.getElementById("plotmodal") == null, "C3: no plot modal should be open before the expand click");
-  const rhoExpand = drwV.querySelector('.plot[data-plot="rho"] .plotexp');
-  ok(rhoExpand != null, "C3: no per-plot expand affordance on the rho plot");
+  const rspPanelV = drwV.querySelector("#dp-response");
+  const rspExpandAll = [...rspPanelV.querySelectorAll('[data-act="expand"]')];
+  ok(rspExpandAll.length === 1,
+    "C3/ONE-EXPAND: the response section must carry EXACTLY ONE expand control (the four per-plot buttons " +
+    "are removed), got " + rspExpandAll.length);
+  ok(rspPanelV.querySelectorAll('.plot [data-act="expand"]').length === 0,
+    "C3/ONE-EXPAND: no expand control may live INSIDE a plot block");
+  const rhoExpand = rspPanelV.querySelector('.sechead [data-act="expand"]');
+  ok(rhoExpand != null && rhoExpand === rspExpandAll[0],
+    "C3/ONE-EXPAND: the single expand control must sit on the 'Response functions' section heading row");
+  ok(rhoExpand.tagName === "BUTTON" &&
+     /expand/i.test(rhoExpand.getAttribute("aria-label") || ""),
+    "C3/ONE-EXPAND: the section control must be a <button> carrying an accessible expand label (keyboard " +
+    "reachable, Enter/Space activated), got " + rhoExpand.tagName + " / " +
+    JSON.stringify(rhoExpand.getAttribute("aria-label")));
   if (rhoExpand.focus) rhoExpand.focus();
   fire(rhoExpand, "click");
   const modal = doc.getElementById("plotmodal");
-  ok(modal != null, "C3: clicking the expand button did not open the full-station response modal");
+  ok(modal != null, "C3: clicking the section expand control did not open the full-station response modal");
   // ALL FOUR response panels are present as scaled .plot blocks (A1 carries tipper, so the arrow panel too).
   ["rho", "phase", "pt", "arrow"].forEach(k =>
     ok(modal.querySelector('.plot[data-plot="' + k + '"]') != null,
@@ -1500,13 +1523,35 @@ async function bootFreshWindow(dataMap, url) {
   ["apparent resistivity", "phase φ", "phase tensor", "Induction arrows (Parkinson)"].forEach(title =>
     ok(modal.innerHTML.indexOf(title) >= 0,
       "C3: the full-station modal is missing the '" + title + "' panel title"));
-  // Each panel re-renders at LARGE scale: the rho svg design width 372 -> 744 (2x), viewBox unchanged.
+  // CAPPED, RESPONSIVE SIZING. The content column carries .plotmodal-capw, whose index.html rule is the
+  // cap (min(<vw>,~760px): centred by the overlay flex, with the overlay's viewport margin), and the panels
+  // go out at DESIGN size (372) with the design viewBox, to be stretched to width:100% of that column.
+  // A regression to the fixed 2x blow-up (width="744") or a dropped cap fails here.
+  const modalBox = modal.querySelector(".plotmodal-box");
+  ok(modalBox != null && modalBox.classList.contains("plotmodal-capw"),
+    "C3/CAP: the modal content column must carry the capped-width class .plotmodal-capw, got class=" +
+    JSON.stringify(modalBox && modalBox.className));
+  const capRule = /\.plotmodal-capw\s*\{([^}]*)\}/.exec(html);
+  ok(capRule != null, "C3/CAP: index.html declares no .plotmodal-capw rule (nothing caps the modal column)");
+  const capPx = capRule && /max-width:\s*min\(\s*\d+vw\s*,\s*(\d+)px\s*\)/.exec(capRule[1]);
+  ok(capPx != null && +capPx[1] >= 700 && +capPx[1] <= 800,
+    "C3/CAP: .plotmodal-capw must cap the column at a sane px width (700-800) with a vw ceiling for small " +
+    "viewports, got: " + (capRule ? capRule[1] : "no rule"));
+  const svgRule = /\.plotmodal-svg svg\s*\{([^}]*)\}/.exec(html);
+  ok(svgRule != null && /(^|;)\s*width:\s*100%/.test(svgRule[1]),
+    "C3/CAP: the modal panels must FILL the capped column (.plotmodal-svg svg{width:100%}), got: " +
+    (svgRule ? svgRule[1] : "no rule"));
+  ok(svgRule != null && /min-width:\s*372px/.test(svgRule[1]),
+    "C3/CAP: the modal svg needs the 372px design-width floor so axis/label text never renders SMALLER " +
+    "than in the drawer (the container scrolls instead), got: " + (svgRule ? svgRule[1] : "no rule"));
   const modalSvg = modal.querySelector('.plot[data-plot="rho"] svg');
   ok(modalSvg != null, "C3: the modal rho panel did not re-render an SVG");
-  ok(modalSvg.getAttribute("width") === "744",
-    "C3: the modal rho panel must re-render at 2x (design width 372 -> 744), got width=" + modalSvg.getAttribute("width"));
+  ok(modalSvg.getAttribute("width") === "372",
+    "C3/CAP: the modal panels must go out at DESIGN size and be CSS-stretched to the cap, not blown up to a " +
+    "fixed 2x pixel size, got width=" + modalSvg.getAttribute("width"));
   ok(modalSvg.getAttribute("viewBox") === "0 0 372 118",
-    "C3: the modal rho svg must keep the design viewBox (scale is display-only), got " + modalSvg.getAttribute("viewBox"));
+    "C3: the modal rho svg must keep the design viewBox (it is what makes the CSS stretch responsive), got " +
+    modalSvg.getAttribute("viewBox"));
   // HEADER FIELDS: station id, its differing site name, survey, organisation, the data-type chip, and the
   // HONEST coordinate line (coordCellHtml). A1 is an EXACT station, so its 6-dp position renders verbatim.
   const modalHead = modal.querySelector(".plotmodal-head");
@@ -1527,23 +1572,24 @@ async function bootFreshWindow(dataMap, url) {
   ok(doc.getElementById("plotmodal") == null, "C3: Esc did not close the full-station modal");
   ok(drwV.classList.contains("open"), "C3: Esc on the modal must NOT also close the drawer underneath it");
   ok(doc.activeElement === rhoExpand, "C3: focus did not return to the expand button after closing the modal");
-  // Click-out on the overlay backdrop ALSO closes it (any expand button opens the SAME full-station modal,
-  // so open via the phase-tensor button this time to prove the affordance is not rho-specific).
-  const ptExpand = drwV.querySelector('.plot[data-plot="pt"] .plotexp');
-  ok(ptExpand != null, "C3: no expand affordance on the phase-tensor plot");
-  fire(ptExpand, "click");
+  // Click-out on the overlay backdrop ALSO closes it. Re-open from the SAME (only) control and re-assert
+  // that it expands the WHOLE station, not one panel: with the per-plot buttons gone, the section control
+  // is the only route to the modal, so re-openability from it is the thing worth pinning.
+  fire(rhoExpand, "click");
   const modal2 = doc.getElementById("plotmodal");
-  ok(modal2 != null, "C3: the phase-tensor expand button did not open the full-station modal");
-  ok(modal2.querySelector('.plot[data-plot="rho"]') != null,
-    "C3: expanding from the pt plot must still open the WHOLE station (rho panel present), not just pt");
+  ok(modal2 != null, "C3: the section expand control did not re-open the full-station modal");
+  ok(modal2.querySelector('.plot[data-plot="rho"]') != null && modal2.querySelector('.plot[data-plot="pt"]') != null,
+    "C3: the section control must expand the WHOLE station (rho + pt panels present), not a single plot");
   fire(modal2, "click");   // the overlay itself is the click target -> close
   ok(doc.getElementById("plotmodal") == null, "C3: clicking the overlay backdrop did not close the modal");
   // NON-TIPPER STATION: A2 has no tipper -> its modal shows rho / phase / pt but NO induction-arrow panel.
   drwV.classList.remove("open");
   win.location.hash = "#/station/au.alpha.A2"; A.routeFromHash();
   ok(drwV.classList.contains("open"), "C3: #/station/au.alpha.A2 did not open the drawer");
-  const a2Expand = drwV.querySelector('.plot[data-plot="rho"] .plotexp');
-  ok(a2Expand != null, "C3: no expand affordance on the A2 rho plot");
+  const a2Expand = drwV.querySelector('#dp-response .sechead [data-act="expand"]');
+  ok(a2Expand != null, "C3: no section expand control on the A2 response heading");
+  ok(drwV.querySelectorAll('#dp-response [data-act="expand"]').length === 1,
+    "C3/ONE-EXPAND: A2 must also carry exactly one expand control in its response section");
   fire(a2Expand, "click");
   const a2Modal = doc.getElementById("plotmodal");
   ok(a2Modal != null, "C3: expand did not open the modal for the non-tipper station A2");
@@ -1569,6 +1615,10 @@ async function bootFreshWindow(dataMap, url) {
   ok(dRes.textContent.indexOf(EMBARGO_NODATE) >= 0,
     "C1b: the embargoed access panel must render inside the Response tab; got: " + dRes.textContent.slice(0, 200));
   ok(dRes.querySelectorAll("svg path").length === 0, "C1b: the embargoed Response tab must render no plot paths");
+  // ...and NO expand control either: with the curves withheld the modal has no panels to open, so an
+  // affordance over the access panel would be a dead control. (Section-level control, owner 2026-07-28.)
+  ok(dRes.querySelectorAll('[data-act="expand"]').length === 0,
+    "C1b: an embargoed station's Response tab must carry no expand control (there is nothing to expand)");
   ok(dFiles.innerHTML.indexOf("EDI (via source archive)") < 0,
     "C1b: the embargoed Files tab must NOT offer 'EDI (via source archive)'");
   ok(doc.querySelector(".dtop .dl-edi") == null,
