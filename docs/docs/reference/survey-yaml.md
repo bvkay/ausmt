@@ -279,7 +279,9 @@ performs no registry lookup, matching the ROR and RAiD checks.
 
 These keys are still read, so an un-migrated package publishes as before. Each one raises a
 deprecation warning when it carries a real value, and the migration scripts live in
-`ausmt-surveys/_tools/`.
+`ausmt-surveys/_tools/`. `instruments[].pid` is the exception. It is retired from the editor and the
+validator warns on it, but no script rewrites it, so a curator holding a real value moves it by
+hand. No corpus survey carries one today, so nothing is outstanding.
 
 | Retired key | Replaced by | Migration |
 |---|---|---|
@@ -289,7 +291,7 @@ deprecation warning when it carries a real value, and the migration scripts live
 | `time_series.collection_pid` | a `related_identifiers[]` row with `identifies: raw_packed` | `migrate_identifiers.py` |
 | `identifiers.related_publication` and `identifiers.related_publication_doi` | `publications[]` | `migrate_identifiers.py` |
 | `identifiers.project` | nothing; it was read by nothing | `migrate_identifiers.py` |
-| `instruments[].pid` | `identifiers.instrument_pid`, or a typed `related_identifiers[]` row | `migrate_identifiers.py` |
+| `instruments[].pid` | `identifiers.instrument_pid`, or a typed `related_identifiers[]` row | no script; the curator moves the value by hand |
 | `sources[]` | a `related_identifiers[]` row with `identifies: entire` plus the acquisition keys | `migrate_identifies.py` |
 
 The curator metadata editor no longer offers any of them as inputs. A value it does not model is

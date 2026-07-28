@@ -72,10 +72,11 @@ impedance did not survive is never published in either format.
 
 What the derivation had to change is worth knowing, because some of it is visible in the file:
 
-- **mt_metadata's writer emits metadata its own reader rejects.** Four separate cases, from an enum
+- **mt_metadata's writer emits metadata its own reader rejects.** Six separate cases, from an enum
   serialised as a Python repr to identifier patterns that reject a real station id. AusMT works around
   each one at write time. The workarounds are listed with their symptoms at the top of
-  `engine/ausmt_science/ingest/normalize.py`.
+  `engine/ausmt_science/ingest/normalize.py`, which numbers a seventh item as well. That one is the
+  library-default category described in the last bullet below, not another writer/reader mismatch.
 - **Identifier fields are sanitised.** `Site/Id` is restricted to `^[a-zA-Z0-9]*$`, so a station id like
   `SA225_2` is written as `SA2252`. The unsanitised id is preserved inside the artifact, in the free-text
   `Site/Name` element, which for that station reads `AusLAMP South Australia ausmt_src_id:SA225_2`.
