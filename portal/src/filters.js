@@ -217,7 +217,14 @@ function buildTree(){const hier={},svCount={};ST.forEach(s=>{(hier[s.country]=hi
 }
 
 // static control wiring (registrations only; functions resolved at event time)
-document.getElementById("typeBoxes").addEventListener("change",refresh);
+// The SINGLE data-type state path. Both ends of the type filter reach it: the rail's own checkboxes, and
+// the map legend's type rows (which proxy those checkboxes and dispatch this very event - see
+// toggleLegendType/syncLegendTypes in main.js). syncLegendTypes repaints the legend FROM the checkbox
+// state, so a rail flip dims the legend row and a legend flip confirms itself, off one function. Guarded
+// on typeof for the same reason every other handler here resolves late: main.js loads after this file.
+document.getElementById("typeBoxes").addEventListener("change",()=>{
+  if(typeof syncLegendTypes==="function")syncLegendTypes();
+  refresh();});
 tree.addEventListener("change",e=>{if(e.target.value!==undefined&&e.target.value!=="")refresh();});
 document.getElementById("find").addEventListener("input",()=>{refresh();renderFind();});
 document.getElementById("find").addEventListener("focus",renderFind);
