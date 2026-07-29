@@ -41,10 +41,10 @@ marked as such wherever they appear in this documentation.
 
 ## Out of scope
 
-AusMT is not a waveform archive. Raw time series remain in their original repositories
+AusMT does not archive raw data. Time series remain in their original repositories
 (national facilities such as NCI, institutional and project archives). Where a survey's
 time-series collection has a persistent identifier, the survey package records it, so the
-portal links to the waveforms without duplicating them.
+portal links to the time series without duplicating them.
 
 ---
 

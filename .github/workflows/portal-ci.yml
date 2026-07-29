@@ -17,12 +17,20 @@ name: portal-ci
 # the public page went stale green. Listing the two files they read makes the guard a SAME-PR gate. The
 # lane stays cheap (it lints and tests the static portal either way) and it does not overlap
 # build-products.yml, which runs the engine's own suite over the same paths.
+#
+# ...AND the documentation tree, for the same reason. Four test modules here read docs/docs/*.md as a
+# single source: test_api_docs_section.py and test_docs_static_api.py pin the worked fetch patterns that
+# moved off about.html, test_mtcat_machine_contract.py pins the MTCAT field guide, and
+# test_docs_vocabulary.py forbids the seismic word "waveform" in the corpus. Scoped to portal/** alone,
+# a docs-only PR could delete or contradict any of that and never run the test that guards it. Listing
+# docs/docs/** makes those four a same-PR gate rather than a next-PR surprise.
 
 on:
   pull_request:
     paths:
       - "portal/**"
       - "contract/**"
+      - "docs/docs/**"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
       - ".github/workflows/portal-ci.yml"
@@ -31,6 +39,7 @@ on:
     paths:
       - "portal/**"
       - "contract/**"
+      - "docs/docs/**"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
       - ".github/workflows/portal-ci.yml"
