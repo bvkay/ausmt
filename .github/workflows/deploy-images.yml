@@ -16,6 +16,49 @@ name: deploy-images
 # ahead" incident was exactly this hole (C32 merged, no deploy/** change, no image rebuilt). The unit
 # suites still run in build-products.yml / portal-ci.yml / gateway-ci.yml; this workflow owns the
 # packaging + image layer, and its path filter must mirror the Dockerfiles' COPY surface.
+#
+# The paragraph above describes the PUSH leg, which is still filtered at the trigger. The PR leg is
+# NOT: it runs on every PR, and the same five-path filter is applied per-JOB by the `changes` job, so
+# this workflow's checks can be REQUIRED without wedging unrelated PRs on a check that never
+# reports. See the `pull_request:` block below for why the two legs differ.
+#
+# =============================================================================================
+# THE REQUIRE-THREE CONTRACT. READ THIS BEFORE EDITING ANY `needs:` OR `if:` IN THIS FILE.
+# =============================================================================================
+# This workflow is only a gate if branch protection requires THREE of its jobs, not one. In repo
+# Settings, Branches, main, "Require status checks to pass", the required list must contain:
+#
+#     changes
+#     build (ausmt-engine)
+#     build (ausmt-portal)
+#     build (ausmt-gateway)
+#     engine-full-tests
+#
+# Three JOBS, five CHECK NAMES: `build` is a matrix, so it reports one check run per image. The
+# `name:` on that job below pins those three strings so this list can be typed rather than guessed.
+# A maintainer who renames a job, adds a matrix leg, or adds a job that gates on `changes` must
+# update this list in the repository settings at the same time. Nothing in this file can enforce
+# that, which is why it is written down here.
+#
+# WHY THREE AND NOT JUST engine-full-tests. Branch protection reads a check's CONCLUSION, and it
+# accepts `skipped` as satisfying a required check. A job that GitHub skipped because a job it
+# `needs:` FAILED reports exactly the same `skipped` conclusion as a job skipped by its own `if:`.
+# The two are indistinguishable to branch protection. So with engine-full-tests as the sole required
+# check, a `build` that fails skips engine-full-tests, the required check goes green because skipped
+# counts as satisfied, the actual red sits on a check nobody required, and the PR merges over an
+# image that never compiled. That is the same hollow green this workflow exists to remove, reached
+# by a different door. Requiring all three closes it, with no always() gymnastics in the jobs:
+#
+#   * `changes` crashing (checkout failure, a refs/pull/N/merge that has not been recomputed yet, a
+#     network blip on the fetch) is its own RED required check and blocks the PR.
+#   * `build` failing is its own RED required check and blocks the PR, whether or not anything
+#     downstream of it ever ran.
+#   * `engine-full-tests` failing is RED and blocks the PR.
+#   * a docs-only PR skips all three by `if:`, all three report `skipped`, all three are satisfied,
+#     and the PR merges immediately without paying for a build.
+#
+# What survives: no path where a green tick means less than "the images built and the engine suite
+# passed inside the shipped one", or "nothing that can affect an image changed".
 
 on:
   workflow_dispatch:
@@ -29,20 +72,33 @@ on:
       - "portal/**"
       - "contract/**"
       - ".github/workflows/deploy-images.yml"
-  # C39 (CI minutes economy): the PR leg is TRIMMED to deploy/**, gateway/** and this workflow —
-  # engine/**, portal/** and contract/** are DELIBERATELY absent here (they remain on the push leg
-  # above, so a merge to main always rebuilds + republishes fresh images from any of the five COPY
-  # inputs; :latest is never stale). Ruling: the container-topology bug class (handle_path prefix,
-  # runner PYTHONPATH, compose wiring — c35b's red was caught exactly here) lives in gateway/deploy,
-  # so those two keep pre-merge image proof. engine/ and portal/ PRs are already gated by their unit
-  # CI (build-products.yml / portal-ci.yml), and their IMAGE proof moves to the merge push. This
-  # halves the PR-leg image-build cost for the most common lane types (an engine-only or portal-only
-  # PR no longer triggers a full 3-image build + e2e on every push to the branch).
+  # THE PR LEG IS DELIBERATELY UNFILTERED. It carries no `paths:` (and no `branches:`, so the base
+  # branch scope is unchanged from C39) because the owner requires this workflow's checks on PRs to
+  # main, and a path filter HERE makes that impossible. The asymmetry GitHub gives us: when a
+  # WORKFLOW is skipped by a path or branch filter, its checks never report at all and stay Pending
+  # forever, so a required check blocks the PR permanently; but a JOB inside a workflow that DID
+  # start, skipped by its own `if:`, reports the `skipped` conclusion, which branch protection
+  # accepts as satisfying the requirement. So the filtering has to move off the trigger and onto the
+  # jobs. That is what the `changes` job below does. This was not theoretical: the trimmed trigger
+  # meant deploy-images simply never started on most PRs, engine-full-tests never reported, and
+  # three consecutive release-gate failures merged anyway because the gate that would have caught
+  # them was not a gate at all.
+  # The same leniency toward `skipped` is why ONE required check is not enough: see the
+  # REQUIRE-THREE CONTRACT at the top of this file before changing anything here.
+  #
+  # C39 (CI minutes economy), RESTATED HONESTLY. What C39 bought is kept: the heavy jobs (3-image
+  # build, engine-full-tests, both e2e lanes) still only run when an image INPUT actually changed, so
+  # a docs / README / maintainer-notes PR costs one short `changes` job and nothing else, and merges
+  # immediately because all three required checks report `skipped`.
+  # What C39 bought is GIVEN BACK, on purpose: the `changes` job matches all FIVE image-input paths
+  # (deploy, gateway, engine, portal, contract), not the trimmed deploy/gateway pair, so engine-only
+  # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase over C39
+  # for the two most common lane types, and it is the price of the check being honest. A required
+  # gate that skips itself on exactly the PRs that change the engine is worse than no gate: it is a
+  # green tick over an untested image. C39's reasoning (engine/portal PRs are already covered by
+  # build-products.yml / portal-ci.yml) still holds for the UNIT suites, but those lanes do not run
+  # the pinned-lock pytest INSIDE the shipped image, which is what engine-full-tests exists to prove.
   pull_request:
-    paths:
-      - "deploy/**"
-      - "gateway/**"
-      - ".github/workflows/deploy-images.yml"
 
 concurrency:
   # C39 (CI minutes economy) safety note — this cancels superseded runs of the SAME ref, INCLUDING
@@ -61,12 +117,168 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------------------------
+  # Which inputs changed? This is the whole CI-economy filter, moved off the `pull_request:` trigger
+  # (see the block above) and onto a short job so that the workflow ALWAYS starts and therefore
+  # always reports its checks. Every heavy job below hangs off this one's single `matched` output.
+  #
+  # Implemented as a plain `git diff` in a run step, NOT a marketplace paths-filter action, to match
+  # house style: every `uses:` in this repo's four workflows is a first-party actions/* or docker/*
+  # action at a major-version tag. Adding a third-party action here would be the only one in the repo
+  # and would widen the supply-chain surface of the release gate itself.
+  #
+  # FAIL-SAFE, AND EXACTLY WHERE THAT FAIL-SAFE STOPS. A required check that a SKIP satisfies has
+  # one dangerous failure mode: if this detector goes wrong, `matched` comes back empty, the gates
+  # below evaluate false, every heavy job skips, and the PR collects a green tick over an image
+  # nobody built. Two separate mechanisms cover that, and they only work together:
+  #
+  #   1. IN-SCRIPT error paths default to matched=true. No merge base, a diff that fails, a grep
+  #      that exits 2 or worse: each of those runs the FULL gate rather than failing the step. A
+  #      confused detector may cost extra minutes; it may never buy a hollow green.
+  #   2. A JOB-LEVEL failure of `changes` is NOT covered by rule 1 and cannot be. If the checkout
+  #      step dies, or the runner is lost, the script never executes and `matched` is never set at
+  #      all. That case is caught from outside: `changes` is itself a REQUIRED check (see the
+  #      REQUIRE-THREE CONTRACT at the top of this file), so the job going red takes the PR with it.
+  #
+  # Do not read rule 1 as "every error path emits matched=true". It covers the branches inside this
+  # script and nothing else. The protection settings are load-bearing here, not decorative.
+  #
+  # COST, NAMED. Every job in this workflow now hangs off `changes`, and that includes the push and
+  # tag PUBLISH path, which previously started building the instant the run did. It now waits for
+  # one job first. On push, tag and workflow_dispatch that job checks nothing out (see the fetch
+  # strategy on the checkout step) and runs a single echo, so the wait is runner acquisition plus a
+  # few seconds: call it 15 to 30 seconds of extra latency before :latest lands after a merge. On a
+  # PR it also does a blobless clone. That serialisation is not removable: the gate has to know
+  # whether an image input changed before it can decide not to build.
+  # ---------------------------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matched: ${{ steps.filter.outputs.matched }}
+    steps:
+      # FETCH STRATEGY. The detector reads the merge base of two SHAs and the NAMES of the files
+      # between them. That needs the whole commit graph and none of the file contents, so:
+      #   - PR ONLY. Every other event short-circuits to matched=true before the script touches git,
+      #     so push, tag and workflow_dispatch runs check nothing out and this step is a no-op for
+      #     them. This is the free half of the serialisation cost named above.
+      #   - fetch-depth: 0, not a shallow depth. A PR can sit one commit or two hundred behind its
+      #     base and there is no depth that is right in advance; a depth that undershoots the merge
+      #     base sends the detector down the fail-safe path and rebuilds three images for nothing.
+      #   - filter: blob:none, a PARTIAL clone: all commits, all trees, no HISTORICAL file
+      #     contents. The action still checks out the merge ref, which lazily fetches the blobs of
+      #     that one tree; what the filter saves is every OTHER revision's blobs across the
+      #     fetch-depth: 0 history, which is the bulk of a full clone. `merge-base` and
+      #     `diff --name-only --no-renames` then read only commits and trees. (`filter` needs
+      #     actions/checkout >= v4.1.0; this repo pins the major tag, so it resolves to a version
+      #     that has it. An unknown input would only warn and degrade to a full clone, never fail
+      #     the job.)
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Does this change touch an image input?
+        id: filter
+        # `shell: bash` on purpose. It makes the here-string bashism an explicit contract rather
+        # than a reliance on the hosted runner's default (which is bash on Ubuntu, sh only where
+        # bash is absent), and it is what turns on -e and -o pipefail, making the pipefail
+        # reasoning further down actually true rather than aspirational.
+        shell: bash
+        run: |
+          set -u
+
+          # Non-PR events are unchanged from C39 and MUST stay that way: the push leg is still
+          # path-filtered at the trigger, so any push run already matched one of the five inputs, and
+          # workflow_dispatch is a deliberate human "build it now". Both mean matched=true, which
+          # makes the gates below no-ops for them and preserves the publish behaviour exactly.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "event=${{ github.event_name }} (not a PR): full run"
+            echo "matched=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # SHAs from the event payload, not branch names: a fork PR controls its branch name, and a
+          # branch name interpolated into a shell script is a command-injection seam. A SHA is not.
+          BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+          if ! MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA"); then
+            echo "::warning::no merge base for ${BASE_SHA}...${HEAD_SHA}; running the full gate"
+            echo "matched=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # --no-renames for two reasons. It keeps the diff honest for a PREFIX filter: a file moved
+          # out of engine/ is reported as both the old and the new path, where rename detection
+          # would report only the destination and could hide the fact that an image input lost a
+          # file. And rename detection compares file CONTENTS, which under the blobless clone above
+          # would drag blobs back over the network for no benefit.
+          # -c core.quotePath=false because git's default C-quotes any path with non-ASCII or
+          # special bytes, emitting it with a LEADING double quote ("engine/caf\303\251.py") that
+          # the anchored prefix regex below cannot match; a unicode filename under engine/ would
+          # skip the gate. Raw bytes keep the prefix anchored on the real first character.
+          if ! FILES=$(git -c core.quotePath=false diff --name-only --no-renames "$MERGE_BASE" "$HEAD_SHA"); then
+            echo "::warning::could not diff ${MERGE_BASE}..${HEAD_SHA}; running the full gate"
+            echo "matched=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "--- files changed vs merge base ${MERGE_BASE} ---"
+          echo "$FILES"
+          echo "---"
+
+          # The five COPY inputs the three images are BUILT FROM (kept identical to the push-leg
+          # `paths:` above; if that list changes, this regex changes with it), plus this workflow.
+          # A here-string, not a pipe: `grep -q` exits on first match and would SIGPIPE the producer,
+          # which under the `-o pipefail` that `shell: bash` sets would read as "no match" and
+          # silently skip the gate.
+          #
+          # The exit code is CAPTURED, not branched on inline, because grep has three outcomes and
+          # only two of them are answers: 0 is match, 1 is no match, and 2 or above is an ERROR
+          # (unreadable input, a regex the runner's grep rejects, a SIGPIPE-poisoned 141). A plain
+          # `if grep` folds every error into the no-match branch, which skips the whole gate: the
+          # exact hollow green this job exists to prevent. Errors go to the safe side instead.
+          # `set +e` around the call because `shell: bash` runs with -e, under which the ordinary
+          # rc=1 "no match" would abort the step before the code could be read.
+          set +e
+          grep -Eq '^(deploy/|gateway/|engine/|portal/|contract/|\.github/workflows/deploy-images\.yml$)' <<< "$FILES"
+          rc=$?
+          set -e
+
+          if [ "$rc" -eq 0 ]; then
+            echo "image inputs touched: running the full build + gate"
+            echo "matched=true" >> "$GITHUB_OUTPUT"
+          elif [ "$rc" -eq 1 ]; then
+            echo "no image inputs touched: heavy jobs will skip (branch protection accepts skipped)"
+            echo "matched=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::grep failed with rc=${rc} (not a match/no-match answer); running the full gate"
+            echo "matched=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------------------------
   # Build both images. Pushes to GHCR only on a push to main or a v* tag (never on pull_request —
   # a PR from a fork wouldn't have registry write access anyway, and PRs shouldn't publish images).
   # Otherwise `load: true` brings the image into the local daemon so the later steps in THIS job
   # can still exercise it (full pytest lane / compose smoke) even when nothing is pushed.
   # ---------------------------------------------------------------------------------------------
   build:
+    # One of the three REQUIRED jobs (see the REQUIRE-THREE CONTRACT at the top of this file). It is
+    # required in its OWN right, not through its dependents: when this job fails, everything
+    # downstream is skipped, and a dependency-skip is reported to branch protection as `skipped`,
+    # which SATISFIES a required check. The only thing that blocks the PR on a failed build is this
+    # job's own red tick, so it has to be in the required list.
+    # The explicit `name:` exists for that list. A matrix job's default check-run name is generated
+    # from its matrix values, and this matrix carries two keys (image and dockerfile), so the
+    # generated names would be long and would change if the Dockerfile paths ever moved. Pinning
+    # them to "build (<image>)" keeps the three strings in the settings list short and stable.
+    name: build (${{ matrix.image }})
+    # Job outputs are STRINGS, always: compare against the literal 'true', never rely on truthiness
+    # (a non-empty string is truthy in GitHub expressions, so a bare `needs.changes.outputs.matched`
+    # would run the gate on the string "false" too). Every gate in this file uses this exact form.
+    needs: changes
+    if: needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -198,7 +410,22 @@ jobs:
   # load-bearing.
   # ---------------------------------------------------------------------------------------------
   engine-full-tests:
-    needs: build
+    # The third REQUIRED job, and the one the owner actually cares about (see the REQUIRE-THREE
+    # CONTRACT at the top of this file). It needs `changes` as well as `build` because the `needs`
+    # context only carries DIRECT dependencies: without `changes` in this list,
+    # `needs.changes.outputs.matched` below would evaluate to null and this gate would never run.
+    #
+    # When matched=false this job is skipped by its own `if:`, reports `skipped`, and branch
+    # protection accepts that, so a docs-only PR merges without waiting. When matched=true it runs
+    # for real and a failure blocks the PR.
+    #
+    # When `build` FAILS, the implicit success() on `needs` skips this job, and that dependency-skip
+    # reports the SAME `skipped` conclusion as the docs-only skip above. Branch protection cannot
+    # tell the two apart, so THIS check goes green on a failed build. Do not try to fix that here
+    # with always() and a status-function gate: it is why `build` is a required check in its own
+    # right. The red that blocks the PR on a broken build is build's, not this job's.
+    needs: [changes, build]
+    if: needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -232,7 +459,8 @@ jobs:
   # overlay), so a YAML/interpolation error in either is caught here rather than at first deploy.
   # ---------------------------------------------------------------------------------------------
   compose-validate:
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -264,7 +492,8 @@ jobs:
   # shell, matching the Makefile's own `smoke` target scope).
   # ---------------------------------------------------------------------------------------------
   compose-smoke:
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -304,7 +533,8 @@ jobs:
   # validated structurally by compose-validate above.
   # ---------------------------------------------------------------------------------------------
   gateway-e2e:
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -542,7 +772,8 @@ jobs:
   # compose-validate.
   # ---------------------------------------------------------------------------------------------
   curator-e2e:
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -852,8 +1083,11 @@ jobs:
   # it is push-only, adds nothing to the PR leg.
   # ---------------------------------------------------------------------------------------------
   anon-pull-check:
-    needs: build
-    if: github.event_name == 'push'
+    # Unchanged in effect: on a push event `changes` always emits matched=true (see that job), so the
+    # added clause is a tautology here and this stays exactly "push only". It is spelled out anyway so
+    # every gated job in this file reads the same way.
+    needs: [changes, build]
+    if: github.event_name == 'push' && needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Anonymous manifest pull for each GHCR image (asserts public visibility)
