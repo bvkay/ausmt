@@ -37,9 +37,26 @@ portal/tests/test_mtcat_machine_contract.py (the lane that triggers on portal/**
 and the ENGINE's re-used-portal path (a real build against a config that omits the key), in
 test_mtcat.py, which owns build-emission coverage.
 
+TOPOLOGY (why the portal reads are guarded): surfaces 4-7 live in portal/, a tree the ENGINE IMAGE
+deliberately does not ship. deploy/docker/engine.Dockerfile COPYs contract/ and engine/ plus the one
+generated file portal/src/contract.js (so `generate.py --check` can verify it) and nothing else, and
+deploy-images' engine-full-tests release gate runs THIS suite inside that image, where /app/portal/
+holds that single file and none of the five pinned ones. Those reads therefore sit behind a
+module-level topology check that skips them when no pinned portal file is present. That is the same
+designed-topology skip test_validator_gate.py takes for the absent gateway tree, and its reason is
+allow-listed in tests/ci_check_skips.py the same way. What still asserts IN the image: the schema-title
+authority, the contract parser, the generated engine constant, the real build's emitted portal block,
+and the builder's own literal guard. The image's internal coherence is exactly what the release gate
+exists to prove, and none of that needs portal/. On a checkout all five files exist, so the guard is
+inert and the pin is not one assertion weaker there; a checkout carrying SOME of them still FAILS on
+the missing read, because a broken tree is not a topology. The portal surfaces are pinned from the
+CHECKOUT lane:
+build-products.yml runs this suite post-checkout and its path filter names all five files (and
+engine/**, so this module's own edits trigger it), on push and on pull_request.
+
 RED-proven: restoring the literal "1.0" default in gen_config.build_config fails
-test_every_surface_that_states_the_mtcat_version_agrees and test_no_site_carries_a_version_literal,
-and nothing else in either suite notices.
+test_every_portal_surface_that_states_the_mtcat_version_agrees and
+test_no_portal_site_carries_a_version_literal, and nothing else in either suite notices.
 """
 import json
 import re
@@ -60,6 +77,24 @@ PORTAL_CFG = REPO / "portal" / "portal.config.yaml"
 CONFIG_JS = REPO / "portal" / "config.js"
 PLACEHOLDER = REPO / "portal" / "data" / "mtcat.json"
 SURVEYS = HERE / "fixtures"                         # vendored, self-contained (as in test_mtcat.py)
+
+# ---------------------------------------------------------------- which tree is this? (topology)
+# The five portal files this module reads. They all exist on any monorepo checkout and NONE of them
+# exists in the engine image, whose Dockerfile COPYs contract/ + engine/ and exactly one portal file
+# (portal/src/contract.js, the generated browser contract that `generate.py --check` verifies). So the
+# presence of the SET is the topology probe, not the presence of portal/ (which the image does have,
+# holding that single unrelated file), and not the presence of any one file (a checkout missing one is
+# BROKEN, and must fail the read, not skip it).
+PORTAL_SURFACES = (PORTAL_CFG, CONFIG_JS, PLACEHOLDER, GEN_CONFIG, VERSION_JS)
+
+IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: portal tree not shipped "
+                              "(designed topology; portal surfaces are pinned from checkout lanes)")
+
+# Skip ONLY when NOT ONE of them is present: that is the image, where these surfaces do not exist to
+# disagree. Any one of them present means a portal tree is meant to be here, so the guard opens and a
+# missing sibling fails the read loudly (the arm test_validator_gate.py calls a broken checkout).
+portal_surface = pytest.mark.skipif(not any(p.is_file() for p in PORTAL_SURFACES),
+                                    reason=IMAGE_TOPOLOGY_SKIP_REASON)
 
 
 # ---------------------------------------------------------------- the surfaces, read one by one
@@ -117,25 +152,41 @@ def _gen_config_default() -> str:
 
 # ---------------------------------------------------------------- the pin
 
-def test_every_surface_that_states_the_mtcat_version_agrees():
-    """One value, eight statements of it (seven here, the real build below). Any drift fails, naming
-    the surfaces that disagree, so a future bump cannot half-land."""
-    want = _authority()
-    stated = {
-        "engine/schema/mtcat.schema.json (title)": want,
-        "contract/generate.py mtcat_schema_version()": _shared_parser(),
-        "engine/extract/_contract.py MTCAT_SCHEMA_VERSION": _generated_engine_constant(),
-        "portal/portal.config.yaml portal.schema_version": _portal_config_yaml(),
-        "portal/config.js AUSMT_CONFIG.schema_version": _generated_config_js(),
-        "portal/data/mtcat.json portal.version": _placeholder_document(),
-        "portal/tools/gen_config.py build_config() on an omitted key": _gen_config_default(),
-    }
+def _assert_agrees(want: str, stated: dict):
+    """Fail naming every surface that states something other than the authority's value, so a future
+    bump cannot half-land and the diagnostic says exactly where it half-landed."""
     disagree = {k: v for k, v in stated.items() if v != want}
     assert not disagree, (
         f"the MTCAT schema version is {want} per engine/schema/mtcat.schema.json's title, but these "
         f"surfaces state something else: {disagree}. Bump the schema title, run "
         f"`python contract/generate.py --write` and `python portal/tools/gen_config.py`, and update "
         f"portal.config.yaml + the committed portal/data/mtcat.json placeholder.")
+
+
+def test_every_engine_surface_that_states_the_mtcat_version_agrees():
+    """Statements 1-3: the authority, the one parser, the generated constant. All three ship in the
+    engine image, so this runs there too and the release gate proves the image's own coherence: the
+    _contract.py constant baked into it really is what the schema baked in beside it declares."""
+    want = _authority()
+    _assert_agrees(want, {
+        "engine/schema/mtcat.schema.json (title)": want,
+        "contract/generate.py mtcat_schema_version()": _shared_parser(),
+        "engine/extract/_contract.py MTCAT_SCHEMA_VERSION": _generated_engine_constant(),
+    })
+
+
+@portal_surface
+def test_every_portal_surface_that_states_the_mtcat_version_agrees():
+    """Statements 4-7, checked against the same authority (the schema title, read here even in the
+    image lane's absence of these files, because the authority is an ENGINE file). Skipped where the
+    portal tree is not shipped; asserted on every checkout lane, which is where these files change."""
+    want = _authority()
+    _assert_agrees(want, {
+        "portal/portal.config.yaml portal.schema_version": _portal_config_yaml(),
+        "portal/config.js AUSMT_CONFIG.schema_version": _generated_config_js(),
+        "portal/data/mtcat.json portal.version": _placeholder_document(),
+        "portal/tools/gen_config.py build_config() on an omitted key": _gen_config_default(),
+    })
 
 
 def test_the_schema_id_stays_unversioned_so_it_cannot_become_another_surface():
@@ -148,12 +199,13 @@ def test_the_schema_id_stays_unversioned_so_it_cannot_become_another_surface():
         f"got {schema_id}")
 
 
-def test_no_site_carries_a_version_literal():
-    """The CLASS guard. Every one of the four defects was the same shape: a MAJOR.MINOR literal parked
-    beside the word schema_version. Forbidding the shape is what stops the fifth one, because the four
-    were not found by reading carefully, they were found one per review round."""
+def _assert_no_version_literal(files):
+    """The CLASS guard, applied to whichever of the three sites this topology ships. Every one of the
+    four defects was the same shape: a MAJOR.MINOR literal parked beside the word schema_version.
+    Forbidding the shape is what stops the fifth one, because the four were not found by reading
+    carefully, they were found one per review round."""
     offenders = {}
-    for f in (BUILDER, GEN_CONFIG, VERSION_JS):
+    for f in files:
         hits = re.findall(r"schema_version[^\n]{0,60}?[\"']\d+\.\d+[\"']", f.read_text(encoding="utf-8"))
         if hits:
             offenders[str(f.relative_to(REPO))] = hits
@@ -164,6 +216,20 @@ def test_no_site_carries_a_version_literal():
         "from a browser, must state no version at all rather than a stale one.")
 
 
+def test_the_builder_carries_no_version_literal():
+    """build_portal.py is engine code and ships in the image, so the site that held TWO of the four
+    literals is guarded in the release gate as well as on every checkout."""
+    _assert_no_version_literal((BUILDER,))
+
+
+@portal_surface
+def test_no_portal_site_carries_a_version_literal():
+    """The other two sites of the same class (gen_config.py held the fourth literal, version.js is the
+    one that cannot derive the value at all), guarded wherever the portal tree is shipped."""
+    _assert_no_version_literal((GEN_CONFIG, VERSION_JS))
+
+
+@portal_surface
 def test_version_js_sentinel_states_no_version_rather_than_a_stale_one():
     """version.js is the one surface that CANNOT derive the version (no build step, no way to read the
     schema at render time), so its config-missing sentinel is honest instead: an explicit null, and a
