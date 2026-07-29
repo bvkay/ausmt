@@ -2844,6 +2844,126 @@ async function bootFreshWindow(dataMap) {
     "StageB GUARD: a hand-unchecked Browse-mode tree box must survive an unrelated drawer open/close, got " + JSON.stringify(treeChecked()));
   sbBetaBox.checked = true; A.refresh();   // restore the baseline
 
+  // ===== INTERACTIVE MAP LEGEND (LEG) ============================================================
+  // A visitor tried to click the legend's data-type rows to show/hide sites - reasonable, since the rail's
+  // DATA TYPE checkboxes use the identical dot+label visual language and ARE toggles. The four TYPE rows
+  // are now real toggle BUTTONS that PROXY those rail checkboxes: a legend click flips the SAME checkbox
+  // and dispatches its change event, so there is NO second state store and every existing consumer
+  // (passesCore, the map redraw, the counts, the surveys decoupling, the select-lens semantics) runs on the
+  // one existing path. The cluster row stays inert.
+  A.setSidebarMode("browse"); A.setView("map");
+  const legB = doc.getElementById("mapLegend");
+  ok(legB, "LEG: #mapLegend was not built");
+  // Rows are resolved BY LABEL TEXT (not by a new class) so the core pin below is meaningful against the
+  // PRE-CHANGE markup too: there the row is a plain inert <div> carrying the very same label.
+  const legRow = txt => [...legB.querySelectorAll(".legrow")].find(r => r.textContent.trim() === txt);
+  const typeBox = k => [...doc.querySelectorAll("#typeBoxes input")].find(c => c.value === k);
+  const lpRow = legRow("Long period"), bbRow = legRow("Broadband"),
+        amRow = legRow("AMT"), gdRow = legRow("GDS (tipper)");
+  ok(lpRow && bbRow && amRow && gdRow, "LEG: the four data-type legend rows are not all present by label");
+
+  // (a) CORE PROXY (the RED-proof pin). The fixture is all-BBMT, so re-type A1 to LPMT first: hiding one
+  // type is then FALSIFIABLE against the four stations that must stay. Against pre-change main.js the row
+  // is an inert div - the click lands on nothing, the rail checkbox stays checked and this pin fails.
+  A.setType("A1", "LPMT"); A.refresh();
+  ok(A.visIds().length === 5, "LEG setup: all 5 stations must be visible before toggling, got " + A.visIds().length);
+  lpRow.click();
+  ok(typeBox("LPMT").checked === false,
+    "LEG CORE: clicking the 'Long period' legend row must flip the RAIL #typeBoxes LPMT checkbox (the legend " +
+    "PROXIES the one existing state store - pre-change the row was an inert div and this stayed checked)");
+  ok(!A.visIds().includes("A1") && A.visIds().length === 4,
+    "LEG CORE: hiding a type from the legend must drop exactly that type's stations from the map set, got " + JSON.stringify(A.visIds()));
+  ok(A.markerCount() === 5,
+    "LEG CORE: hiding a type must not destroy markers - it filters the layer set, got " + A.markerCount());
+  ok(doc.getElementById("nVis").textContent === "4",
+    "LEG CORE: the header count must follow a legend toggle, got " + doc.getElementById("nVis").textContent);
+  ok(lpRow.getAttribute("aria-pressed") === "false" && lpRow.classList.contains("legoff"),
+    "LEG: an OFF legend row must report aria-pressed=false AND render dimmed (.legoff)");
+  lpRow.click();
+  ok(typeBox("LPMT").checked === true && lpRow.getAttribute("aria-pressed") === "true" &&
+     !lpRow.classList.contains("legoff") && A.visIds().length === 5,
+    "LEG: a second legend click must turn the type back on and restore its stations");
+
+  // (b) SEMANTICS. Real <button type=button> (keyboard reachable), aria-pressed state, and the EXACT rail
+  // type keys in rail order - a legend that invented its own keys would silently filter nothing.
+  const legBtns = [...legB.querySelectorAll(".legtype")];
+  ok(legBtns.length === 4, "LEG: expected 4 legend TYPE toggle buttons (.legtype), got " + legBtns.length);
+  ok(legBtns.every(b => b.tagName === "BUTTON" && b.getAttribute("type") === "button"),
+    "LEG: a legend type row must be a real <button type=button>, got " + JSON.stringify(legBtns.map(b => b.tagName)));
+  ok(JSON.stringify(legBtns.map(b => b.dataset.type)) === JSON.stringify(["LPMT", "BBMT", "AMT", "GDS"]),
+    "LEG: the legend rows must carry the EXACT rail type keys, in rail order, got " + JSON.stringify(legBtns.map(b => b.dataset.type)));
+  ok(legBtns.every(b => b.getAttribute("aria-pressed") === "true"),
+    "LEG: every legend type must read aria-pressed=true while its rail checkbox is checked");
+  // The cluster row is NOT a control - it stays exactly as it was.
+  const clusterRow = [...legB.querySelectorAll(".legrow")].find(r => r.querySelector(".legcluster"));
+  ok(clusterRow && clusterRow.tagName === "DIV" && !clusterRow.classList.contains("legtype") &&
+     clusterRow.getAttribute("aria-pressed") === null && !clusterRow.hasAttribute("data-type"),
+    "LEG: the 'stations (zoom to expand)' cluster row must keep NO button semantics");
+  // Affordance copy, in place of where a 'Legend' title would have gone (the box has no desktop title).
+  const legHint = legB.querySelector(".leghint");
+  ok(legHint && /click a type to show or hide it/i.test(legHint.textContent),
+    "LEG: the legend must carry the muted hint 'Click a type to show or hide it'");
+  ok(legB.querySelector(".maplegend-body").firstElementChild === legHint,
+    "LEG: the hint belongs at the TOP of the legend body (where a title would have gone)");
+
+  // (c) TWO-WAY SYNC. The rail is the other end of the SAME state - flipping a rail checkbox must dim the
+  // legend row through the one sync function on the single #typeBoxes change path.
+  const bbBox = typeBox("BBMT");
+  bbBox.checked = false; fire(bbBox, "change");
+  ok(bbRow.getAttribute("aria-pressed") === "false" && bbRow.classList.contains("legoff"),
+    "LEG two-way: flipping the RAIL checkbox must dim the legend row in sync");
+  ok(JSON.stringify(A.visIds()) === JSON.stringify(["A1"]),
+    "LEG two-way: hiding BBMT from the rail must leave only the LPMT station, got " + JSON.stringify(A.visIds()));
+  bbBox.checked = true; fire(bbBox, "change");
+  ok(bbRow.getAttribute("aria-pressed") === "true" && !bbRow.classList.contains("legoff") && A.visIds().length === 5,
+    "LEG two-way: restoring the rail checkbox must undim the legend row and restore the map set");
+
+  // (d) KEYBOARD. Enter and Space activate the toggle (and the handler cancels the default so a real
+  // browser cannot ALSO fire its native button click - one keypress, one flip).
+  const key = (el, k) => el.dispatchEvent(new win.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+  key(amRow, "Enter");
+  ok(typeBox("AMT").checked === false && amRow.getAttribute("aria-pressed") === "false" && amRow.classList.contains("legoff"),
+    "LEG keyboard: Enter must activate a legend type toggle");
+  key(amRow, "Enter");
+  ok(typeBox("AMT").checked === true, "LEG keyboard: a second Enter must toggle back");
+  key(amRow, " ");
+  ok(typeBox("AMT").checked === false && amRow.getAttribute("aria-pressed") === "false",
+    "LEG keyboard: Space must activate a legend type toggle");
+  key(amRow, " ");
+  ok(typeBox("AMT").checked === true && amRow.getAttribute("aria-pressed") === "true", "LEG keyboard: a second Space must toggle back");
+  ok(legBtns.every(b => { const e = new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }); b.dispatchEvent(e); b.click(); return e.defaultPrevented; }),
+    "LEG keyboard: the keydown handler must preventDefault so a browser's native button activation cannot double-fire");
+
+  // (e) ALL FOUR OFF. An empty map must render with NO error and the header must read 0 shown; toggling
+  // back must restore. (A throw anywhere in refresh() would reach the driver's catch and fail the run.)
+  legBtns.forEach(b => { if (b.getAttribute("aria-pressed") === "true") b.click(); });
+  ok(legBtns.every(b => b.getAttribute("aria-pressed") === "false" && b.classList.contains("legoff")),
+    "LEG all-off: every legend row must read aria-pressed=false and render dimmed");
+  ok(A.visIds().length === 0, "LEG all-off: no station may pass with every type hidden, got " + JSON.stringify(A.visIds()));
+  ok(doc.getElementById("nVis").textContent === "0",
+    "LEG all-off: the header must read '0 shown', got " + doc.getElementById("nVis").textContent);
+  ok(A.selCount() === 0, "LEG all-off: no station can remain selected when none is visible, got " + A.selCount());
+  ok(A.markerCount() === 5, "LEG all-off: the markers themselves survive an empty map, got " + A.markerCount());
+  legBtns.forEach(b => b.click());
+  ok(legBtns.every(b => b.getAttribute("aria-pressed") === "true") && A.visIds().length === 5,
+    "LEG all-off: toggling every type back on must restore the full map set, got " + A.visIds().length);
+
+  // (f) SELECT-AND-EXPORT LENS. enterSelectLens/restoreSelectLens snapshot ONLY the tree's survey
+  // checkboxes (`tree.querySelectorAll('input[value]')`, filters.js) - they never read #typeBoxes. So a
+  // hand-toggled TYPE (rail or legend: the same checkbox) is a DURABLE Browse filter that the All-EDIs tile
+  // flow neither captures nor restores, exactly like the hand-toggled tree box in StageB GUARD above.
+  gdRow.click();
+  ok(typeBox("GDS").checked === false, "LEG lens setup: GDS must be off before entering the lens");
+  A.openSurvey("Alpha Survey");
+  doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]').click();   // enters the lens
+  ok(typeBox("GDS").checked === false && gdRow.getAttribute("aria-pressed") === "false",
+    "LEG lens: entering the All-EDIs select lens must not touch a legend/rail TYPE toggle");
+  A.setSidebarMode("browse");                                                             // leaves it -> restoreSelectLens()
+  ok(typeBox("GDS").checked === false && gdRow.getAttribute("aria-pressed") === "false",
+    "LEG lens: leaving the lens must NOT restore over a legend/rail TYPE toggle (the lens snapshots the tree only)");
+  gdRow.click(); A.closeDrawer();
+  A.setType("A1", "BBMT"); A.setView("map"); A.refresh();   // restore the all-BBMT baseline
+
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
@@ -2851,6 +2971,9 @@ async function bootFreshWindow(dataMap) {
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, Draw-buttons in-SELECTION-panel reuse-toolbar-handler + shared-armedDrawMode(button/icon parity) + complete/cancel-clears-both, " +
     "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
+    "LEG interactive-legend (type rows PROXY the rail checkboxes: rail flip + marker-set + header count, exact type keys/order, " +
+    "button semantics + aria-pressed, two-way dim from the rail, Enter/Space + preventDefault-no-double-fire, " +
+    "all-four-off empty map reads '0 shown' and restores, inert cluster row, affordance hint at the top, select-lens never captures a type toggle), " +
     "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore, " +
     "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted), " +
     "CARD-POLISH one-attribution-box(single .attn, names ORCID/ROR-linked in place, text == attributionText) + contributors-above-Downloads + lineage software(station-level-wins/survey-fallback/no-invented-version, node == prov row) + AusMT-Provenance-title + formats(served-only, no ticks/(pipeline), embargoed claims nothing) + publication-node-from-pubs(short cite + N-more, no fabricated et al., none-recorded when empty))");

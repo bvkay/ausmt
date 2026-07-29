@@ -583,6 +583,17 @@
   .maplegend .legcluster{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
     border-radius:50%;background:rgba(239,114,86,.45);color:#12202b;font-family:var(--mono);font-weight:700;
     font-size:10px;flex:none;border:2px solid rgba(232,237,241,.4)}
+  /* The four TYPE rows are real toggle BUTTONS proxying the rail's #typeBoxes checkboxes (main.js
+     toggleLegendType), so strip the UA button chrome back to the .legrow look and add the affordances a
+     control owes: pointer, hover, visible focus ring. .legoff dims the WHOLE row (dot and label together)
+     when its type is hidden. The cluster row is not a button and inherits none of this. */
+  .maplegend .legtype{appearance:none;-webkit-appearance:none;background:none;border:0;border-radius:4px;
+    padding:2px 4px;margin:0 -4px;font-family:inherit;font-size:inherit;line-height:1.3;color:var(--text);
+    text-align:left;cursor:pointer}
+  .maplegend .legtype:hover{background:rgba(232,237,241,.10)}
+  .maplegend .legtype:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
+  .maplegend .legtype.legoff{opacity:.4}
+  .maplegend .leghint{color:var(--muted);font-size:11px;line-height:1.35}
   /* Collapsible ONLY on small widths: the toggle appears and the body defaults collapsed there (the .expanded
      class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
      narrow-built legend can never get stuck collapsed with no visible way to expand it. */

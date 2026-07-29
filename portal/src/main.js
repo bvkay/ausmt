@@ -366,18 +366,60 @@ function maybeShowIntro(){if(!introSeen())showWelcome();}      // first visit sh
 // map's framing at load. Inside #map (which Leaflet keeps position:relative) it is an overlay that can
 // NEVER affect the map container's own size or centre: #map's box is measured before this child is
 // appended and an absolute child adds nothing to it. It also rides #map's display toggle for free.
+//
+// INTERACTIVE LEGEND (owner ruling): a visitor tried to CLICK the data-type rows to show/hide sites, which
+// is the reasonable reading - the rail's DATA TYPE checkboxes use the identical dot+label visual language
+// and ARE toggles, and mapping tools conventionally make a legend a layer switch. So the four TYPE rows are
+// real toggle buttons that PROXY the rail's #typeBoxes checkboxes. There is deliberately NO second state
+// store: a legend click flips the SAME checkbox the rail owns and dispatches its change event, so the one
+// existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the header
+// counts, the surveys-view decoupling and the select-lens semantics - exactly as a rail click does.
+// The "stations (zoom to expand)" cluster row is NOT a control and stays an inert div.
+//
+// Resolve a rail type checkbox by its type key (LPMT / BBMT / AMT / GDS - the keys passesCore compares
+// against s.type). Read live from the DOM on each call: the rail is the single source of truth.
+function legendTypeBox(key){
+  return [...document.querySelectorAll("#typeBoxes input")].find(c=>c.value===key)||null;}
+// Legend row activation. Flip the rail checkbox and fire ITS change event - the sole state mutation.
+function toggleLegendType(key){
+  const box=legendTypeBox(key);if(!box)return;
+  box.checked=!box.checked;
+  box.dispatchEvent(new Event("change",{bubbles:true}));}
+// Two-way sync: repaint the legend FROM the checkboxes. Called from the one #typeBoxes change path, so a
+// rail flip and a legend flip both land here. An off type renders dimmed (the .legoff opacity covers the
+// dot AND the label together) and reports aria-pressed=false.
+function syncLegendTypes(){
+  const leg=document.getElementById("mapLegend");if(!leg||!leg.querySelectorAll)return;
+  leg.querySelectorAll(".legtype").forEach(btn=>{
+    const box=legendTypeBox(btn.dataset.type),on=box?!!box.checked:true;
+    btn.setAttribute("aria-pressed",String(on));
+    btn.classList.toggle("legoff",!on);});}
 function buildLegend(){
   if(document.getElementById("mapLegend"))return;                 // idempotent
   const host=document.getElementById("map");if(!host)return;       // the Leaflet container is the overlay's positioning context
-  const types=[["--lpmt","Long period"],["--bbmt","Broadband"],["--amt","AMT"],["--gds","GDS (tipper)"]];
-  const rows=types.map(([v,label])=>`<div class="legrow"><span class="dot" style="background:var(${v})"></span>${label}</div>`).join("");
+  const types=[["--lpmt","Long period","LPMT"],["--bbmt","Broadband","BBMT"],["--amt","AMT","AMT"],["--gds","GDS (tipper)","GDS"]];
+  const rows=types.map(([v,label,key])=>`<button type="button" class="legrow legtype" data-type="${key}" aria-pressed="true" `+
+    `title="Show or hide ${label} stations on the map"><span class="dot" style="background:var(${v})"></span>${label}</button>`).join("");
   const small=typeof window!=="undefined"&&window.innerWidth<=760;   // body defaults collapsed on small widths
   const el=document.createElement("div");el.id="mapLegend";el.className="maplegend";
+  // The hint takes the slot a "Legend" title would have occupied (the box carries no desktop title; the
+  // "Legend" button above is the small-width collapse control only), so the affordance is stated once,
+  // where the eye lands first, without adding a heading the desktop layout never had.
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
-    `<div class="maplegend-body"><div class="legrow"><span class="legcluster">n</span> stations (zoom to expand)</div>${rows}</div>`;
+    `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>`+
+    `<div class="legrow"><span class="legcluster">n</span> stations (zoom to expand)</div>${rows}</div>`;
   host.appendChild(el);
   const toggle=el.querySelector("#mapLegendToggle");
   if(toggle)toggle.addEventListener("click",()=>{const ex=el.classList.toggle("expanded");toggle.setAttribute("aria-expanded",String(ex));});
+  el.querySelectorAll(".legtype").forEach(btn=>{
+    btn.addEventListener("click",()=>toggleLegendType(btn.dataset.type));
+    // Explicit keyboard activation. A <button> already activates on Enter/Space in a browser, but the
+    // default action is CANCELLED here so the browser cannot then synthesise its own click on top of this
+    // handler (one keypress must be one flip, not two). It also makes the keyboard path directly drivable
+    // in the headless jsdom harness, which does not synthesise clicks from key events.
+    btn.addEventListener("keydown",e=>{
+      if(e.key==="Enter"||e.key===" "||e.key==="Spacebar"){e.preventDefault();toggleLegendType(btn.dataset.type);}});});
+  syncLegendTypes();                                               // paint from the checkboxes, never from an assumption
 }
 function runInit(){
   buildState();
