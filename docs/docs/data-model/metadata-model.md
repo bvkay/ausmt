@@ -1,358 +1,54 @@
 # Metadata Model
 
-## Overview
+Metadata are what let a transfer function be found, interpreted, reproduced and cited, so
+AusMT treats them as scientific products rather than supporting paperwork. Their value also
+grows: shortly after a survey the project team still knows the details, and twenty years later
+the metadata may be the only place those details survive.
 
-Metadata provide the information required to understand, discover, interpret and reuse a dataset.
+## Metadata follow the data hierarchy
 
-Within AusMT, metadata are treated as scientific products rather than supplementary information.
+Different metadata belong at different levels, and the level a fact sits at is part of what it
+means.
 
-A transfer function without metadata may be difficult to interpret, difficult to reproduce and difficult to cite.
+| Level | What its metadata describe |
+| --- | --- |
+| Collection | Title, description, custodian organisation, geographic coverage, time span, collection identifiers. Broad discovery context. |
+| Survey | Title, identifier, abstract, creators and contributors, organisations, funding, acquisition dates, geographic extent, licence, access level and coordinate policy, related identifiers and publications. The primary discovery and citation record. |
+| Station | Identifier, coordinates, elevation, deployment dates, instrumentation, sensor orientations. The observational context for a transfer function. |
+| Transfer function | Format, period range, processing software and version, creation date, product identifiers. |
+| Derived product | Product type, creation date, software version, source transfer function, parameters. Always linked back to the transfer function it came from. |
 
-For this reason, metadata are considered a core component of every survey package.
+The survey level is where most of this is recorded, field by field, in
+[survey.yaml](../reference/survey-yaml.md). Persistent identifiers (DOI, ORCID, ROR, RAiD) are
+covered in [Standards and alignment](../introduction/standards.md), and the rule that a
+dataset identifier must state which data level it points at is in
+[Identifiers by data level](../reference/survey-yaml.md#identifiers-by-data-level).
 
----
+## Required and recommended
 
-## Objectives
+Completeness varies, particularly for historical datasets, so the model separates two tiers.
 
-The AusMT metadata model has four primary objectives:
+**Required** for publication: survey title, survey identifier, geographic location,
+transfer-function products. Missing any of these fails validation.
 
-### Discovery
+**Recommended** because they substantially improve reuse: investigators, organisations,
+acquisition dates, publications, identifiers. Missing these produces warnings, not failures.
 
-Allow users to find relevant datasets.
+That split is deliberate. A historical survey with thin records is usually more valuable
+published with its gaps visible than withheld while someone tries to reconstruct them.
+Validation therefore checks consistency, structure and discoverability rather than trying to
+enforce complete metadata; the checks themselves are listed under
+[Submission](../operations/submission.md).
 
-Examples include:
+## Governance metadata
 
-- Geographic searches
-- Collection searches
-- Survey searches
-- Organisation searches
-- Investigator searches
+Some datasets carry access conditions, usage constraints, Indigenous data governance
+requirements or embargo terms. These are recorded alongside the scientific metadata so that a
+dataset can stay discoverable while its access conditions are respected. The serving
+consequences are in [Publication](../operations/publication.md).
 
-### Interpretation
+## Metadata and provenance
 
-Provide sufficient context to understand what was collected and how.
-
-Examples include:
-
-- Survey design
-- Instrumentation
-- Acquisition dates
-- Processing information
-
-### Reproducibility
-
-Record information required to understand how products were generated.
-
-Examples include:
-
-- Processing software
-- Product lineage
-- Provenance records
-
-### Citation
-
-Support attribution of:
-
-- Surveys
-- Investigators
-- Organisations
-- Publications
-- Funding programs
-
----
-
-## Metadata as a Hierarchy
-
-The AusMT metadata model follows the same organisational structure as the data model:
-
-```text
-Collection
-↓
-Survey
-↓
-Station
-↓
-Transfer Function
-↓
-Derived Product
-```
-
-Different metadata belong at different levels.
-
-Understanding these boundaries is important.
-
----
-
-## Collection Metadata
-
-Collection metadata describe groups of related surveys.
-
-Examples include:
-
-- Collection title
-- Collection description
-- Custodian organisation
-- Geographic coverage
-- Time span
-- Collection identifiers
-
-Examples of collections include:
-
-- AusLAMP
-- Institutional holdings
-- State-based releases
-
-Collection metadata provide broad discovery context.
-
----
-
-## Survey Metadata
-
-Survey metadata describe a specific survey.
-
-Examples include:
-
-- Survey title
-- Survey identifier
-- Abstract
-- Creators, the ordered list of parties the citation names
-- Contributors and the role each one played
-- Organisations
-- Funding sources
-- Acquisition dates
-- Geographic extent
-- Licence information, and the access level and coordinate-access policy
-- Related identifiers and publications
-
-Survey metadata provide the primary discovery and citation information used within AusMT.
-
----
-
-## Station Metadata
-
-Station metadata describe individual observation locations.
-
-Examples include:
-
-- Station identifier
-- Coordinates
-- Elevation
-- Deployment dates
-- Instrumentation
-- Sensor orientations
-
-Station metadata provide the observational context required for transfer functions and derived products.
-
----
-
-## Transfer Function Metadata
-
-Transfer-function metadata describe the published MT products.
-
-Examples include:
-
-- Product format
-- Period range
-- Processing software
-- Processing version
-- Creation date
-- Product identifiers
-
-These metadata help users understand how a transfer function was generated and how it should be interpreted.
-
----
-
-## Derived Product Metadata
-
-Derived products should retain links to the transfer functions from which they were generated.
-
-Examples include:
-
-- Product type
-- Creation date
-- Software version
-- Source transfer function
-- Processing parameters
-
-This information supports provenance and reproducibility.
-
----
-
-## Persistent Identifiers
-
-AusMT encourages the use of persistent identifiers wherever practical.
-
-Persistent identifiers improve discoverability and reduce ambiguity.
-
-> **Implementation status (current).** AusMT is a curator of identifiers, not a minter. It does
-> not mint or register anything; integrated DataCite minting via ARDC is planned, not implemented.
-> Dataset-level identifiers are recorded as typed `related_identifiers[]` rows, each stating what
-> the identifier points at in NCI data-level terms, and the DataCite relation is derived from that
-> level. ORCID rides on people and ROR on organisations in `creators[]`/`contributors[]`; RAiD and
-> the survey and instrument PIDs sit under `identifiers`. All of these reach the portal's served
-> products. A separate refresh script resolves recorded identifiers and caches the outcome, and the
-> build stamps that outcome onto the served rows, so the portal can say whether a DOI resolves or
-> is registered but not yet active. An identifier the cache does not know gets no facet and is
-> linked as before. See [survey.yaml Reference](../reference/survey-yaml.md).
-
-Examples include:
-
-### DOI
-
-Used to identify:
-
-- Datasets
-- Publications
-
-### ORCID
-
-Used to identify:
-
-- Investigators
-- Contributors
-
-### ROR
-
-Used to identify:
-
-- Organisations
-- Institutions
-
-### RAiD
-
-Used to identify:
-
-- Research projects
-- Research activities
-
-Not all surveys will contain all identifier types.
-
-The metadata model is designed to accommodate varying levels of identifier availability.
-
----
-
-## Relationship to Existing Standards
-
-AusMT does not define a new MT metadata standard.
-
-Instead, it builds upon existing community standards.
-
-Examples include:
-
-- mt_metadata
-- MTH5
-- EMTFXML metadata
-- DOI metadata
-- ORCID
-- ROR
-
-Where established standards exist, they should be used in preference to project-specific alternatives.
-
----
-
-## Required and Optional Metadata
-
-Not all surveys contain the same level of metadata completeness.
-
-This is particularly true for historical datasets.
-
-The metadata model therefore distinguishes between:
-
-### Required Metadata
-
-Minimum information required for publication.
-
-Examples include:
-
-- Survey title
-- Survey identifier
-- Geographic location
-- Transfer-function products
-
-### Recommended Metadata
-
-Information that substantially improves reuse.
-
-Examples include:
-
-- Investigators
-- Organisations
-- Acquisition dates
-- Publications
-
-The objective is to encourage publication of valuable historical datasets without imposing unrealistic requirements.
-
----
-
-## Metadata Quality
-
-Completeness and quality vary between datasets.
-
-Validation therefore focuses on:
-
-- Consistency
-- Structure
-- Discoverability
-
-rather than attempting to enforce perfect metadata.
-
-Historical surveys frequently remain scientifically valuable despite incomplete records.
-
-The metadata model is intended to support these datasets while encouraging improvements over time.
-
----
-
-## Metadata and Provenance
-
-Metadata and provenance are closely related but serve different purposes.
-
-Metadata describe a product.
-
-Provenance describes how that product came into existence.
-
-For example:
-
-```text
-Metadata:
-    Survey title
-    Acquisition dates
-    Investigator
-
-Provenance:
-    Processing software
-    Product lineage
-    Derived products
-```
-
-Both are required to fully understand a scientific dataset.
-
----
-
-### Governance Metadata
-
-Some datasets may contain governance information beyond traditional scientific metadata.
-
-Examples include:
-
-- Access conditions
-- Usage constraints
-- Indigenous data governance requirements
-- Embargo information
-
-These metadata help ensure that datasets remain discoverable while respecting applicable governance requirements.
-
----
-
-## Long-Term Perspective
-
-The value of metadata often increases with time.
-
-Immediately after a survey is completed, many details remain known by the project team.
-
-Years later, metadata may become the primary source of information describing how a dataset was collected and used.
-
-For this reason metadata are treated as part of the scientific record rather than supplementary documentation.
-
-A transfer function can often survive for decades.
-
-Understanding what it represents depends on the metadata that accompany it.
+Metadata describe a product. Provenance describes how it came into existence. Both are needed
+to understand a dataset, and AusMT records both; the provenance model is in
+[Provenance](provenance.md).

@@ -74,7 +74,7 @@ mt_metadata/mth5 has been the sole parser since the dependency-free regex extrac
 
 AusMT distinguishes between authoritative metadata, derived products, screening diagnostics, and
 not-provided products. Definitions, provenance policy and classification rules live in the AusMT
-documentation site (`docs` → `developer/product-schema.md` and `science/science-products.md`).
+documentation site (`docs` → `developer/data-files.md` and `science/science-products.md`).
 
 Current outputs: transfer-function metadata, period coverage, apparent resistivity and phase, tipper
 availability, dimensionality screening diagnostics, collection metadata, survey metadata and

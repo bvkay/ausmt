@@ -59,22 +59,16 @@ Retention applies to *counts*, never to the log. Two different lifetimes, delibe
 Each calendar month is accumulated *as its days fold*, so expiring a daily row never loses the month
 it belonged to. Reports can be exported as CSV: monthly totals, and one row per month and survey.
 
-### No backfill
-
-Only days that were actually folded exist. When the detailed breakdown was added, existing months were
-seeded from the daily rows already held (downloads and visits, marked as partial) and nothing earlier
-was invented. A month whose days predate a given breakdown is flagged on screen rather than shown as a
-complete figure, and older days carry no network count at all: absent, not zero. The same rule governs
-the Australian state breakdown: days folded before the state table existed carry no state data, that
-gap is shown as its own row rather than hidden, and nothing earlier is reconstructed.
+**Nothing is backfilled.** Only days that were actually folded exist, and a breakdown added later
+starts from the day it was added; the raw logs that could reconstruct earlier days are long since
+rotated away. A month whose days predate a given breakdown is flagged on screen rather than shown as a
+complete figure, and older days carry no network count at all: absent, not zero.
 
 ## Australian traffic by state, and why not by city
 
 Australia is the reporting audience for this infrastructure, so the country row alone is too coarse:
 "how much of this is used inside Australia, and where" is a question a funding report has to answer.
-Beneath the AU row the screen can therefore show a breakdown by **state or territory**: New South
-Wales, Victoria, Queensland, South Australia, Western Australia, Tasmania, the Northern Territory and
-the Australian Capital Territory.
+Beneath the AU row the screen can therefore show a breakdown by **state or territory**.
 
 **The breakdown stops at state, deliberately.** This is a settled design decision, not an oversight
 waiting to be improved:
@@ -86,23 +80,16 @@ waiting to be improved:
   small. "Three downloads from Hobart" names a research group as effectively as naming it would. A
   state-level cell does not.
 
-State is the finest grain that is *both* defensible from a /24 *and* non-identifying at this
-community's scale. There is no city dimension anywhere in the pipeline: the city and coordinate
-columns of the source dataset are read only to be discarded.
+There is no city dimension anywhere in the pipeline: the city and coordinate columns of the source
+dataset are read only to be discarded. For the same reason state counts exist at the **monthly and
+cumulative grains only**. A state count for one named day would be the finest-grained cell in the
+file, small enough to point at a particular group in a community this size.
 
-For the same reason, state counts are recorded at the **monthly and cumulative grains only**. A state
-count for a single named day would be the finest-grained cell in the file, small enough to point at a
-particular group in a community this size, so daily-by-state is deliberately not recorded at all.
-
-Two further honesty properties hold, and are visible on the screen:
-
-- **The breakdown always reconciles with its parent.** An Australian request whose prefix the state
-  table does not cover is counted in its own *"Not in the state table"* row, never dropped. The state
-  rows plus that row always add up to the AU country figure exactly.
-- **It is forward-only.** Days folded before the state table was in place carry no state data and are
-  never backfilled, because the raw logs that could tell us are long since rotated away. That residue is
-  shown on its own row (*"Counted before state data existed"*) rather than being folded silently into
-  the states, or omitted so that the states appear to account for everything.
+Two honesty properties hold, and are visible on the screen. The breakdown **always reconciles with its
+parent**: an Australian request whose prefix the state table does not cover lands in its own *"Not in
+the state table"* row, never dropped, so the state rows plus that row add up to the AU figure exactly.
+And the forward-only rule above gets its own row (*"Counted before state data existed"*) rather than
+being folded silently into the states.
 
 The state table is optional. Where it is absent the screen shows no state section at all, because
 eight zeroes would read as "no traffic from Victoria" when the truth is "not measured".

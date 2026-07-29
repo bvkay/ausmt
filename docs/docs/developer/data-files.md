@@ -184,79 +184,76 @@ full, current set.
 
 ## `manifest.json` — key-based download index (rides beside the positional catalogue)
 
-Source of truth: [`schema/manifest.schema.json`](../reference/manifest-schema.md) in the `engine`. This
-file is the **authoritative index of every downloadable artifact**: per-station EDI/EMTF-XML copies and
-per-survey bundles, each with `size` + `sha256` integrity and a tier-resolved `url`.
+The field-by-field reference is [Download manifest schema](../reference/manifest-schema.md), and
+the fetch patterns are in the
+[data reference](../interoperability/api-reference.md#per-station-fetch-through-the-manifest).
+What matters on the producer side:
 
-> **This is NOT new catalogue columns.** Download metadata is added *safely* as a separate **key-based**
-> file that rides *beside* `catalogue.json` — the positional `catalogue.json`/`sci.json`/`tf.json` arrays
-> are **unchanged**. Extend `manifest.json` by adding keys, not by shifting array indices.
+- **It is key-based on purpose.** Download metadata is added *beside* the positional arrays, never
+  as new `catalogue`/`sci`/`tf` columns, so extending it costs the index-reading consumers nothing.
+  Extend `manifest.json` by adding keys.
+- **It is written to both** the portal data dir **and** the `--products` dir.
+- **`sha256` is of the SERVED bytes.** The EDI copies and the per-survey EDI zip are
+  byte-reproducible across builds (given a fixed zlib). EMTF XML, the EMTF-XML zip and the
+  transfer-function MTH5 embed timestamps and UUIDs and are **not**: their digest is a per-build
+  integrity hash, not a cross-build invariant. Do not write a test that asserts otherwise.
+- **A row exists only for what AusMT serves.** A non-served station has no row at all; the portal
+  routes it to the source DOI archive via the catalogue's `edi_available` bit (`r[13] = 0`).
+- **The bundle set is flag-gated** by `flags:` in `portal/portal.config.yaml`, mirrored to
+  `config.js` and read by the build, and recorded in `build_provenance.json` under
+  `distribution_flags`. The EDI zip and the EMTF-XML zip are unconditional for a served survey.
 
-It is written to **both** the portal data dir **and** the `--products` dir.
+## Derived-product files
 
-### Top-level shape
+The engine also writes per-station product files under `products/<survey-slug>/<station>/` (the
+`--products` dir). These are key-based, not positional.
 
-| Key | Type | Meaning |
-|---|---|---|
-| `generated_count` | integer | total artifacts = `len(files)` + `len(bundles)` |
-| `base_url` | string | URL prefix applied to artifact urls; `""` means **portal-relative** (the portal joins it onto its `data_base_url`) |
-| `files` | array | per-station downloadable artifacts (see below) |
-| `bundles` | array | per-survey bundles (see below) |
+**`station.json`**, the per-station product record:
 
-Empty build:
-`{"generated_count": 0, "base_url": "", "files": [], "bundles": []}`.
+```json
+{
+  "ausmt_id": "au.<slug>.<station>", "station": "<id>", "survey": "<name>",
+  "country": "...", "organisation": "...",
+  "location": { "lat": 0.0, "lon": 0.0 },
+  "data": { "type": "BBMT", "n_periods": 0, "period_min_s": 0.0, "period_max_s": 0.0 },
+  "diagnostics": { "median_relative_error": 0.0, "remote_reference": false,
+                   "tipper_available": false, "dimensionality": "2-D", "skew_beta_median_deg": 0.0,
+                   "completeness_smoothness_diagnostic": { "value": 0.0, "basis": "e",
+                     "note": "not a quality or geological-value judgement" } },
+  "processing": { "software": "...", "algorithm": "...", "remote_reference": false,
+                  "remote_site": null, "note": null },
+  "distribution": { "edi_available": false, "license": "...", "edi_path": null },
+  "provenance": { "...PROV...": "...", "input_file": "...", "input_sha256": "..." },
+  "coordinate_qc": { "flag": "...", "head_info_conflict_deg": null, "resolution": {} },
+  "canonical_conditioning": null,
+  "frame": { "...C25 frame facts and the sign-convention verdict...": "..." },
+  "coordinate_policy": "generalised"
+}
+```
 
-### `files[]` — one row per station artifact
+`coordinate_qc` and `canonical_conditioning` are `null` unless the parse actually flagged
+something, so an unflagged station is never implied to have been touched. `coordinate_policy` is
+present only when the station's C42 policy is not `exact`, which keeps an exact station's file
+byte-unchanged.
 
-| Key | Type | Meaning |
-|---|---|---|
-| `ausmt_id` | string | globally unique station id (`au.<slug>.<station>`, matches `catalogue.json` `r[12]`) |
-| `survey` | string | survey label |
-| `station` | string | station id |
-| `format` | `"edi"` \| `"emtfxml"` | served artifact format |
-| `url` | string\|null | portal-relative path, e.g. `edi/<slug>/<file>.edi`, `xml/<slug>/<station>.xml` (EDIs are namespaced by survey slug, like the XML and bundles); the portal joins it onto `data_base_url`. **`null`** when `tier: "nci"` (see tiers below) |
-| `size` | integer | size of the **served** artifact, bytes |
-| `sha256` | string | SHA-256 of the **served** artifact (64 hex chars) — download integrity |
-| `tier` | `"repo"` \| `"nci"` | where the artifact is served from (see below) |
-| `license` | string | license of the served artifact |
+**`dimensionality.json`** carries `{ classification, skew_beta_median_deg, pct_periods_3d,
+method, screening_diagnostic, note }`.
 
-### `bundles[]` — one row per survey bundle
+`--products` **is** a served surface in a deployment, so it rides the same access gate as
+`tf.json`/`sci.json`. A station in a non-served survey gets a withheld record carrying only the
+discovery-safe identity the public catalogue already exposes, with `"withheld": true`, no derived
+science, and no `dimensionality.json` at all.
 
-| Key | Type | Meaning |
-|---|---|---|
-| `survey` | string | survey label |
-| `slug` | string | survey slug |
-| `format` | `"edi-zip"` \| `"xml-zip"` \| `"mth5"` | bundle format (`mth5` = transfer functions only) |
-| `url` | string\|null | portal-relative path, e.g. `bundles/<slug>-edi.zip`, `bundles/<slug>-xml.zip`, `bundles/<slug>-tf.h5`; **`null`** for `tier: "nci"` |
-| `size` | integer | size of the served bundle, bytes |
-| `sha256` | string | SHA-256 of the served bundle (64 hex chars) |
-| `tier` | `"repo"` \| `"nci"` | where the bundle is served from |
-| `license` | string | license of the served bundle |
-| `n_stations` | integer | number of stations in the bundle |
+Every product MUST carry a `provenance` block (input file, sha256, pipeline and parameters) so it
+is traceable to its source. That is non-negotiable for reproducibility.
 
-### Semantics
-
-- **`url` resolution.** Urls are **portal-relative by default** (`base_url: ""`); the portal joins each
-  `url` onto its `data_base_url`. For `tier: "nci"` the `url` is **`null`** — this tier is **RESERVED**
-  for the future NCI/THREDDS migration and no NCI base is configured yet, so the current build emits only
-  `tier: "repo"` rows.
-- **Integrity, and what is reproducible.** `size`/`sha256` describe the **served** artifact so a consumer
-  can verify the bytes it fetched. The EDI copies and the per-survey EDI zip are **byte-reproducible**
-  across builds. **EMTF XML (and the EMTF-XML zip) and the transfer-function MTH5 embed timestamps/UUIDs
-  and are NOT byte-reproducible** — their `sha256` is a *per-build* integrity hash, not a cross-build
-  invariant.
-- **Manifest = "what you can download here", with integrity.** Only redistributably-licensed
-  (CC\*/CC0/public-domain/ODbL/ODC-BY) **served** surveys appear. A non-served station has **no manifest
-  row**; the portal instead routes it to the source DOI archive via the catalogue's `edi_available` bit
-  (`r[13] = 0`).
-- **Feature flags.** Distribution is gated by a `flags:` block in `portal/portal.config.yaml`
-  (default **OFF**), mirrored to `config.js` and read by the build:
-  - `survey_h5_enabled` — gates the per-survey transfer-function MTH5 bundle (`bundles/<slug>-tf.h5`).
-    Per decision **D4**, MTH5 stays **OFF** pending a storage/management decision. The EDI zip and the
-    EMTF-XML zip are unconditional for a served survey.
-  - `collection_download_enabled` — **reserved**; no producer yet.
-
-  Both flags are also recorded in `build_provenance.json` under `distribution_flags`.
+**New products** follow the same conventions: emit
+`products/<survey>/<station>/<product>.json` with a `method`/citation field, a
+`screening_diagnostic` or interpretation caveat where relevant, a `provenance` block, and any
+companion assets (an SVG, say) alongside the JSON. The wiring steps are in
+[How to extend](extending.md#2-add-a-new-derived-science-product-eg-wire-up-strike) and the
+reference pattern is `ausmt_science/decomposition/`. Which products exist today and which are
+planned is owned by [Science products](../science/science-products.md).
 
 ## Interpretation-sensitive operations
 
@@ -317,14 +314,12 @@ silently auto-picked.
   string** — one `{note, count, stations, except}` entry per distinct note (ordered by first
   appearance), where `count` is the number of note-carrying stations, and at most one of `stations`
   (the small carrier set) / `except` (the small absentee complement, ≤ 5) is listed — the rest is the
-  count alone. This is the SAME aggregation the build's survey-level `[xml] NOTICE <slug>: <note> — …`
-  log lines print (one shared function), so the human log and the machine report never disagree, and
-  it replaces the old one-NOTICE-per-station logging (a ~1100-station rebuild emitted ~792
-  near-identical boilerplate lines). The per-station notes themselves are unchanged — they still live
-  in each `station.json`'s `canonical_conditioning` and the canonical store's `provenance.json`; this
-  report is a survey-level view over them. Shape fixed by `engine/schema/build_report.schema.json`;
-  validated in the build self-check and re-checked (presence + schema + a station-count cross-check
-  against the manifest) by `engine/scripts/verify.py`. Public build metadata for the (planned) curator
-  serve-state UI; the portal runtime does not consume it.
+  count alone. One shared function produces both this and the build's survey-level
+  `[xml] NOTICE` log lines, so the human log and the machine report cannot disagree. The per-station notes are unchanged and still live in each `station.json`'s
+  `canonical_conditioning` and the canonical store's `provenance.json`; this is a survey-level view
+  over them. Shape fixed by `engine/schema/build_report.schema.json`; validated in the build
+  self-check and re-checked (presence, schema, and a station-count cross-check against the manifest)
+  by `engine/scripts/verify.py`. Public build metadata for the planned curator serve-state UI; the
+  portal runtime does not consume it.
 - **`qc_report.json`** — curator-facing QC findings (duplicate ids, coord flags, near-duplicates,
   out-of-extent); not consumed by the portal runtime.

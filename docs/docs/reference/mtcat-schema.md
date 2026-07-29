@@ -2,15 +2,33 @@
 
 ## Overview
 
-MTCAT is a lightweight JSON-based discovery schema for magnetotelluric catalogue exchange.
+MTCAT (Magnetotelluric Catalogue) is a lightweight JSON discovery schema for exchanging
+information about MT holdings between repositories. It describes the collections, surveys,
+stations and transfer-function availability a portal exposes, and exists to answer:
 
-It is designed to describe the collections, surveys, stations and transfer-function availability exposed by an MT portal or repository.
+- What collections exist?
+- What surveys exist?
+- Where are they, and which stations do they hold?
+- Which organisation published them?
+- What access conditions apply?
 
-MTCAT does not store transfer functions.
+MTCAT stores no transfer functions, no time series, no derived products and no inversion models,
+and it replaces neither EDI, EMTF XML, MTH5 nor mt_metadata. The survey package remains the
+authoritative scientific object; an MTCAT record is a discovery record describing it. The schema
+should stay small enough to keep doing that one job, and should not grow into a scientific data
+model.
 
-It does not replace EDI, EMTFXML, MTH5 or mt_metadata.
+AusMT ships this today: every build emits `mtcat.json` and validates it against
+`mtcat.schema.json` before publishing. It is currently produced by one implementation, and its
+value as an *exchange* format grows as other repositories adopt or harvest it. Reading it as a
+harvester is covered in
+[Tool integration](../interoperability/tool-integration.md#mtcat-as-a-harvest-surface).
 
-Its purpose is discovery.
+Two fields on a survey record have owners elsewhere in the documentation, and this page describes
+only how they are served: the two-list credit model is specified in
+[survey.yaml](survey-yaml.md#credit-creators-and-contributors), and what an access level does to
+the bytes is specified in
+[Publication](../operations/publication.md#access-levels-and-embargoes).
 
 ---
 
@@ -57,24 +75,9 @@ it likes, but the unversioned URL must keep resolving to the current schema.
 
 ## Document Structure
 
-An MTCAT document contains four main sections:
-
-```text
-portal
-collections
-surveys
-stations
-```
-
-The required sections are:
-
-```text
-portal
-surveys
-stations
-```
-
-collections is optional, but recommended where surveys form part of a program, release, institutional holding or other logical grouping.
+A document has four sections: `portal`, `collections`, `surveys` and `stations`. All but
+`collections` are required. Include `collections` where surveys form part of a program, release,
+institutional holding or other logical grouping.
 
 ---
 
@@ -302,13 +305,9 @@ Detailed station metadata remain in the survey package or underlying MT metadata
 
 ## Extensibility
 
-The MTCAT schema permits additional properties.
-
-This allows individual portals to include local fields without breaking interoperability.
-
-However, additional fields should not be required for basic discovery.
-
-The core discovery fields should remain stable and simple.
+The schema permits additional properties, so a portal can carry local fields without breaking
+interoperability. Those fields must never be required for basic discovery: the core discovery
+fields stay stable and simple, which is the whole point of a small schema.
 
 ---
 
@@ -353,22 +352,3 @@ The shipped copy, which the build serves byte-identically, lives at:
 ```text
 engine/schema/mtcat.schema.json
 ```
-
----
-
-## Principle
-
-MTCAT should remain small.
-
-It exists so that portals and repositories can exchange discovery records without exchanging the underlying datasets.
-
-The schema should describe enough to answer:
-
-- What collections exist?
-- What surveys exist?
-- Where are they?
-- Which stations exist?
-- Which organisation published them?
-- What access conditions apply?
-
-It should not attempt to become a full scientific data model.

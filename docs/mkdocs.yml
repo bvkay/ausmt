@@ -3,49 +3,42 @@ site_name: AusMT Documentation
 copyright: "Copyright © 2026 AuScope and the AusMT contributors. Framework software (engine, portal, docs) is licensed under Apache-2.0; the magnetotelluric survey data AusMT serves is licensed separately by its custodians (typically CC-BY-4.0)."
 nav:
   - Home: index.md
-  - Introduction:
-      - What is AusMT?: introduction/what-is-ausmt.md
-      - Scientific Philosophy: introduction/scientific-philosophy.md
-      - Data Lifecycle: introduction/data-lifecycle.md
-      - Governance & Operation: introduction/governance.md
-      - Standards & Alignment: introduction/standards.md
+  - About the project:
+      - Scientific philosophy: introduction/scientific-philosophy.md
+      - Governance & operation: introduction/governance.md
+      - Standards & alignment: introduction/standards.md
       - Roadmap: introduction/roadmap.md
-  - Architecture:
-      - Overview: architecture/overview.md
-      - Repositories: architecture/repositories.md
-  - Data Model:
-      - Survey Package: data-model/survey-package.md
-      - Metadata Model: data-model/metadata-model.md
-      - Provenance Model: data-model/provenance.md
-      - Versioning: data-model/versioning.md
-      - MTH5 Integration: data-model/mth5.md
-      - MTCAT: data-model/mtcat.md
+      - Usage analytics: introduction/usage-analytics.md
+  - Architecture & data model:
+      - Architecture: architecture/repositories.md
+      - Survey package: data-model/survey-package.md
+      - Metadata model: data-model/metadata-model.md
+      - Provenance model: data-model/provenance.md
+      - Versioning & releases: data-model/versioning.md
+      - MTH5 integration: data-model/mth5.md
   - Science:
-      - Transfer Functions: science/transfer-functions.md
-      - Phase Tensor: science/phase-tensor.md
-      - Strike Analysis: science/strike-analysis.md
+      - Science products: science/science-products.md
+      - Transfer functions: science/transfer-functions.md
+      - Phase tensor: science/phase-tensor.md
       - Dimensionality: science/dimensionality.md
-      - Quality Metrics: science/quality-metrics.md
-      - Distortion & Decomposition: science/distortion-and-dimensionality.md
-      - Science Products: science/science-products.md
-  - Operations:
-      - Submission: operations/submission.md
-      - Validation: operations/validation.md
-      - Review: operations/review.md
-      - Publication: operations/publication.md
-      - Releases: operations/releases.md
-      - Usage Analytics: operations/usage-analytics.md
-  - Interoperability:
+      - Strike analysis: science/strike-analysis.md
+      - Distortion & decomposition: science/distortion-and-dimensionality.md
+      - Quality metrics: science/quality-metrics.md
+  - Using the data:
       - Overview: interoperability/overview.md
-      - Metadata Exchange: interoperability/metadata-exchange.md
       - How AusMT serves data: interoperability/api-overview.md
       - Data reference: interoperability/api-reference.md
       - Tool integration: interoperability/tool-integration.md
-      - External Archives: interoperability/external-archives.md
+      - External archives: interoperability/external-archives.md
+  - Contributing data:
+      - Data lifecycle: introduction/data-lifecycle.md
+      - Submission: operations/submission.md
+      - Review: operations/review.md
+      - Publication: operations/publication.md
   - Reference:
-      - MTCAT Schema: reference/mtcat-schema.md
-      - Download Manifest Schema: reference/manifest-schema.md
-      - Survey Package Specification: reference/survey-yaml.md
+      - MTCAT schema: reference/mtcat-schema.md
+      - Download manifest schema: reference/manifest-schema.md
+      - survey.yaml reference: reference/survey-yaml.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
   - Design rationale:
@@ -55,13 +48,11 @@ nav:
   - Developer:
       - Architecture (start here): developer/architecture.md
       - Build lifecycle: developer/build-lifecycle.md
+      - Portal data files (contract): developer/data-files.md
+      - How to extend: developer/extending.md
       - Conventions: developer/conventions.md
-      - How to Extend: developer/extending.md
-      - Portal Data Files (contract): developer/data-files.md
-      - Product Schema: developer/product-schema.md
-      - Loading Real Surveys: developer/real-survey-loading.md
       - Collection IDs: developer/collection-ids.md
-      - Curator Checklist: developer/curator-checklist.md
+      - Curator checklist: developer/curator-checklist.md
 
 theme:
   name: readthedocs

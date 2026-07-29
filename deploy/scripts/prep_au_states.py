@@ -36,7 +36,7 @@ file outlives the terminal it was made in. Written atomically (tmp -> rename), s
 never read a half-written table.
 
 ATTRIBUTION. db-ip Lite data is CC-BY-4.0 and the credit is REQUIRED. It is carried in three places:
-the header of every table this writes, docs/docs/operations/usage-analytics.md, and deploy/README.md.
+the header of every table this writes, docs/docs/introduction/usage-analytics.md, and deploy/README.md.
 """
 from __future__ import annotations
 

@@ -4,6 +4,57 @@ Ordered recipes for the changes a maintainer will actually make. Each lists the 
 order** and how to verify. Read [Developer architecture](architecture.md) and
 [Portal Data Files](data-files.md) first.
 
+## 0. Load a real survey into the pipeline
+
+1. **Prepare the package.** Either `cp -r ausmt-surveys/_example/example-survey
+   ausmt-surveys/surveys/<your-slug>`, edit `survey.yaml` and drop the transfer functions into
+   `transfer_functions/edi/` (and/or `mth5/`); or use the **Add Survey page**
+   (`portal/add-survey.html`): drop your EDIs in the browser, fill the form, **confirm station
+   locations on the map** (this resolves the DMS HEAD/INFO conflict and writes
+   `coordinate_resolution`), then either **Upload** to the submission gateway (the normal
+   contributor path) or download the package zip and unzip it under `surveys/<your-slug>/`. The
+   `slug` MUST equal the folder name. Layout:
+   [Survey package](../data-model/survey-package.md#package-structure).
+
+2. **Validate.**
+
+   ```bash
+   cd ausmt-surveys
+   python _validation/validate_survey.py surveys/<your-slug> --json /tmp/report.json
+   ```
+
+   Fix any `FAIL`; WARNINGs (no DOI yet, say) do not block. See the
+   [Curator checklist](curator-checklist.md).
+
+3. **Build the portal data.**
+
+   ```bash
+   cd ../ausmt/engine
+   python -m extract.build_portal --surveys ../../ausmt-surveys/surveys --out ../portal/data --products products
+   ```
+
+   The extractor is `mt_metadata`, a required dependency on Python 3.12 (install
+   `environments/requirements-mtmetadata-lock.txt`); the build fails loudly if it is absent, and
+   refuses to emit empty products unless `--allow-empty`.
+
+4. **Review and publish.** Gateway submissions land in the curator queue automatically and
+   approval publishes the package as a git commit, served after the operator's next data
+   rebuild. For the manual path, open a pull request adding `surveys/<your-slug>/`; CI runs the
+   authoritative validator and a curator reviews against the
+   [Curator checklist](curator-checklist.md) before merging.
+
+### Bulk and seed mode
+
+To regenerate a large demo from loose EDI folders without packaging each one:
+
+```bash
+python -m extract.build_portal --raw <edi_root> --collections <map.json> --seed-meta <seed.json> \
+       --out ../portal/data
+```
+
+This path uses `state_of()` to split AusLAMP into per-state surveys; survey-package mode does
+not, and raw mode is excluded from the incremental cache.
+
 ## 1. Add support for a new EDI dialect / processing code
 
 The parser is **`mt_metadata`** (the community library), so most dialects — including Phoenix EMpower
@@ -27,12 +78,13 @@ mt_metadata mis-reads a file, or omits metadata AusMT relies on.
 ## 2. Add a new derived science product (e.g. wire up `strike`)
 
 The product modules in `engine/ausmt_science/` are **PLANNED stubs** today. The wiring pattern
-is `ausmt_science/decomposition/` and the output schema is [Product schema](product-schema.md).
+is `ausmt_science/decomposition/` and the output schema is
+[Derived-product files](data-files.md#derived-product-files).
 
 1. Implement `ausmt_science/<product>/__init__.py` — replace the `NotImplementedError` `write()` stub
    with `write(tf, out_dir)`; reuse `_ediparse.pt_params` for any phase-tensor math (do **not** add a
    fourth copy). Heavy products may use the optional MTpy-v2 stack (Tier-3, like decomposition).
-2. Define the product's JSON in [Product schema](product-schema.md) and emit it under
+2. Define the product's JSON in [Derived-product files](data-files.md#derived-product-files) and emit it under
    `products/<survey>/<station>/<product>.json` (follow how `build_portal` writes `station.json` /
    `dimensionality.json`).
 3. Surface it in the portal: add a tile in `portal/src/drawer.js` `relatedProducts()`.

@@ -17,7 +17,7 @@ Reasoning:
 - Re-implementing Groom–Bailey / McNeice–Jones correctly (and validating it) is weeks of
   work that already exists, tested, in the fork.
 - Coupling risk is contained by the product contract: the portal reads `decomposition.json`
-  (see docs developer/product-schema.md), never the library. The engine can be
+  (see docs developer/data-files.md), never the library. The engine can be
   swapped — re-implemented, replaced, or upgraded — without the portal noticing.
 
 When to revisit (i.e., extract just the algorithms into a lean module here):
@@ -32,4 +32,4 @@ definitive geological solution** (McNeice–Jones as the primary display; Garcia
 cross-validation; Groom–Bailey + Mohr circles under "Advanced analysis").
 
 ## Output
-`decomposition.json` and optional `mohr.svg` per station — schema in docs developer/product-schema.md.
+`decomposition.json` and optional `mohr.svg` per station; schema in docs developer/data-files.md.

@@ -3586,7 +3586,7 @@ def _country_table(stats: dict) -> str:
 
 # ---- Australia by state: the sub-country breakdown beneath the AU country row --------------------
 # WHY STATE, AND WHY NOT CITY -- a ratified design decision, recorded here (and in the aggregator, and
-# in docs/docs/operations/usage-analytics.md) so it is not casually "improved" into a city breakdown:
+# in docs/docs/introduction/usage-analytics.md) so it is not casually "improved" into a city breakdown:
 #   * the address behind these counts was ALREADY TRUNCATED at the edge (IPv4 /24, IPv6 /48). A /24
 #     prefix does not place a request in a city reliably -- mobile carrier and CGNAT pools routinely
 #     serve a whole state from one prefix -- so a city figure would be confidently wrong;

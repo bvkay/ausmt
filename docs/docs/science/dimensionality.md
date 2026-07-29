@@ -1,174 +1,45 @@
 # Dimensionality
 
-## Overview
-
-Dimensionality describes the degree to which a magnetotelluric response approximates one-dimensional, two-dimensional or three-dimensional behaviour.
-
-It is one of the most important diagnostic concepts in magnetotellurics because many interpretation and inversion methods make assumptions regarding the dimensionality of the subsurface conductivity structure.
-
-AusMT publishes dimensionality products to assist users in understanding the complexity of a dataset and to provide context for interpretation and model design.
-
----
-
-## Why Dimensionality Matters
-
-The electrical conductivity structure of the Earth may vary in one, two or three spatial dimensions.
-
-These different situations produce different MT responses.
-
-In simplified form:
+Dimensionality describes how far an MT response approximates one-, two- or three-dimensional
+behaviour. It matters because many interpretation and inversion methods assume an answer, and
+knowing whether that assumption is reasonable is part of using the data properly.
 
 ```text
-1D Conductivity varies with depth only
-2D Conductivity varies with depth and one horizontal direction
-3D Conductivity varies in all directions
+1D  Conductivity varies with depth only
+2D  Conductivity varies with depth and one horizontal direction
+3D  Conductivity varies in all directions
 ```
 
-Many MT processing and inversion workflows are based on assumptions regarding dimensionality.
+It cannot be observed directly. It is inferred from impedance tensor behaviour, phase tensor
+characteristics, strike stability, tipper response and tensor invariants, and different
+diagnostics can disagree about the same dataset. Treat any dimensionality assessment as an
+indicator, not a verdict.
 
-Understanding whether those assumptions are reasonable is therefore an important part of data interpretation.
+## What each case looks like
 
----
+**One-dimensional.** Rotationally symmetric response, no preferred geoelectric strike: stable
+under rotation, small phase tensor skew, minimal directional dependence, ambiguous strike. Rare
+in regional datasets, though it can hold over limited period ranges.
 
-## Dimensionality is a Diagnostic Concept
+**Two-dimensional.** A preferred strike exists and the response can often be simplified by
+rotating into a strike-aligned frame: stable strike estimates, directional conductivity
+contrasts, consistent phase tensor orientations, distinct TE and TM responses. Many
+interpretation and inversion workflows assume approximately this.
 
-Dimensionality cannot be observed directly.
+**Three-dimensional.** No single strike direction: variable strike estimates, significant phase
+tensor skew, complex tipper behaviour, strong lateral variability. Common in real geology, and
+increasingly visible as data quality and coverage improve.
 
-Instead, it is inferred from characteristics of the transfer functions and related products.
+## Dimensionality varies with period
 
-Examples include:
+Short periods respond to near-surface structure, intermediate periods to crustal structure,
+long periods to lithospheric structure. A survey can therefore be 3-D at short periods and 2-D
+at long ones, which is why dimensionality is not one property of a dataset. Strike behaves the
+same way: undefined in 1-D, well defined in 2-D, unstable or ambiguous in strong 3-D, so read
+the two together (see [Strike analysis](strike-analysis.md)).
 
-- Impedance tensor behaviour
-- Phase tensor characteristics
-- Strike stability
-- Tipper responses
-- Tensor invariants
-
-Different diagnostics may provide different perspectives on the same dataset.
-
-For this reason dimensionality assessments should be regarded as indicators rather than definitive classifications.
-
----
-
-## One-Dimensional Behaviour
-
-In a one-dimensional Earth, conductivity varies only with depth.
-
-The response is rotationally symmetric and no preferred geoelectric strike direction exists.
-
-Characteristics commonly associated with one-dimensional behaviour include:
-
-- Stable responses under rotation
-- Small phase tensor skew
-- Minimal directional dependence
-- Strike ambiguity
-
-True one-dimensional behaviour is relatively uncommon in regional MT datasets but may occur over limited period ranges or in specific geological settings.
-
----
-
-## Two-Dimensional Behaviour
-
-In a two-dimensional Earth, conductivity varies with depth and one horizontal direction.
-
-A preferred geoelectric strike direction exists and the response may often be simplified through rotation into a strike-aligned coordinate system.
-
-Characteristics commonly associated with two-dimensional behaviour include:
-
-- Stable strike estimates
-- Directional conductivity contrasts
-- Consistent phase tensor orientations
-- Distinct TE and TM responses
-
-Many MT interpretation methods and inversion workflows are based on the assumption of approximately two-dimensional behaviour.
-
----
-
-## Three-Dimensional Behaviour
-
-In a three-dimensional Earth, conductivity varies in all directions.
-
-The response cannot generally be reduced to a single strike direction and may exhibit substantial complexity.
-
-Characteristics commonly associated with three-dimensional behaviour include:
-
-- Variable strike estimates
-- Significant phase tensor skew
-- Complex tipper behaviour
-- Strong lateral variability
-
-Three-dimensional behaviour is common in many geological environments and becomes increasingly apparent as data quality and spatial coverage improve.
-
----
-
-## Dimensionality and Scale
-
-Dimensionality often varies with period.
-
-Short periods may be influenced by shallow conductivity structure, while longer periods may reflect deeper geological features.
-
-For example:
-
-```text
-Short Periods
-↓
-Near-Surface Structure
-
-Intermediate Periods
-↓
-Crustal Structure
-
-Long Periods
-↓
-Lithospheric Structure
-```
-
-A survey may therefore exhibit different dimensionality characteristics at different periods.
-
-Dimensionality should not necessarily be considered a single property of an entire dataset.
-
----
-
-## Phase Tensor Diagnostics
-
-Many modern dimensionality assessments are based on phase tensor analysis (Caldwell et al., 2004).
-
-Phase tensor products provide information regarding:
-
-- Directionality
-- Geoelectric strike
-- Three-dimensional behaviour
-- Structural complexity
-
-Because phase tensor diagnostics are insensitive to galvanic distortion, they have become a widely used component of dimensionality analysis.
-
----
-
-## Phase Tensor Skew
-
-Phase tensor skew is commonly used as an indicator of departures from one-dimensional and two-dimensional behaviour.
-
-In general terms:
-
-- Small skew values are often associated with simpler responses.
-- Larger skew values may indicate increasing three-dimensional complexity.
-
-However, skew should not be interpreted in isolation.
-
-It is most useful when considered alongside other dimensionality diagnostics.
-
----
-
-## Ellipticity
-
-Phase tensor ellipticity describes the shape of the phase tensor ellipse.
-
-Ellipticity provides information about directional variations in the MT response and may assist in identifying departures from simple one-dimensional behaviour.
-
-Within AusMT, the median phase-tensor ellipticity is the diagnostic that separates 2-D from
-1-D behaviour in the shipped classification below.
-
----
+The diagnostics used below come from the [phase tensor](phase-tensor.md), which is where skew
+and ellipticity are defined.
 
 ## The shipped classification
 
@@ -179,81 +50,18 @@ AusMT's build assigns each station a screening classification from its phase ten
 2. Periods with non-physical skew (|β| ≥ 15°, symptomatic of dead channels or near-singular
    tensors rather than 3-D structure) are excluded as unusable.
 3. If fewer than **50%** of the impedance-bearing periods survive, the station is
-   **indeterminate** — the data do not support a call, and the build says so rather than
+   **indeterminate**. The data do not support a call, and the build says so rather than
    defaulting to 3-D off saturated skew.
 4. Otherwise: **3-D** if median |β| > **5°** or more than **40%** of usable periods have
    |β| > **3°**; else **2-D** if median ellipticity > **0.10**; else **1-D**.
 
-Alongside the class, the station's science row carries the median |β|, the percentage of
-3-D periods and the median ellipticity, and the station drawer displays them. This is a
-screening product for survey triage — not a substitute for period-by-period dimensionality
-analysis, which the classification deliberately does not attempt.
+Alongside the class, the station's science row carries the median |β|, the percentage of 3-D
+periods and the median ellipticity, and the station drawer displays them. The portal also
+colours the map by class.
 
----
-
-## Strike and Dimensionality
-
-Strike analysis and dimensionality assessment are closely related.
-
-For example:
-
-```text
-1D Strike undefined
-2D Strike may be well defined
-3D Strike may become unstable or ambiguous
-```
-
-For this reason dimensionality products should generally be interpreted together with strike products rather than independently.
-
----
-
-## Survey-Level Products
-
-Shipped today:
-
-- Per-station classification (1-D / 2-D / 3-D / indeterminate) with median |β|, %3-D periods
-  and median ellipticity in the station diagnostics
-- Map colouring by dimensionality class
-
-Period-dependent dimensionality products and survey-level statistics are not currently
-computed.
-
-These products provide a concise summary of the complexity of a dataset.
-
----
-
-## Classification
-
-Dimensionality classifications should be regarded as interpretive tools rather than absolute descriptions of the Earth.
-
-A classification such as:
-
-```text
-1D
-2D
-3D
-```
-
-is a simplification of a much more complex conductivity structure.
-
-The purpose of dimensionality products is to assist understanding and guide further analysis rather than provide definitive answers.
-
----
-
-## Relationship to Other Products
-
-Dimensionality products are closely linked to:
-
-- Transfer functions
-- Phase tensor products
-- Strike analyses
-- Tipper products
-
-Together these products provide complementary information regarding the structure and complexity of a dataset.
-
-No single diagnostic should be used in isolation.
-
----
+This is a screening product for survey triage, not a substitute for period-by-period
+dimensionality analysis, which the classification deliberately does not attempt.
+Period-dependent products and survey-level statistics are not computed today.
 
 ## References
 

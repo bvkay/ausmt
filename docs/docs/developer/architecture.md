@@ -35,41 +35,19 @@ never parses survey content in its own process (see Trust boundaries below).
 `engine/extract/build_portal.py` is the single build command:
 
 ```text
-python -m extract.build_portal --surveys <survey-root> --out <out> --products <dir> --bundle-edi
-```
-
-Per survey package it runs:
-
-```text
 survey.yaml + transfer_functions/
       |  validate_survey.py        submission gate; a FAIL skips the survey
       v
-   EXTRACT    mt_metadata reads each EDI (standard and Phoenix SPECTRA dialects) into a
-      |       canonical record and component dict (_mtm); MTH5 input goes through _mth5.
-      |       EDI, MTH5 and canonical-XML input feed the same downstream math, so
-      |       differences between them are parsing and storage round-trip only
-      |       (pinned by tests/test_canonical_parity.py).
+   EXTRACT    _mtm (mt_metadata) -> canonical record + component dict; _mth5 for MTH5 input
       v
-   SCIENCE    phase tensor, dimensionality, diagnostics; one implementation
-      |       (_ediparse.pt_params) shared by every consumer
+   SCIENCE    phase tensor, dimensionality, diagnostics (_ediparse.pt_params)
       v
-   WRITE      data/{catalogue,tf,sci,surveys,collections,build_provenance,build_report,
-              manifest,mtcat,qc_report,base_ids,coord_policy,build}.json, canonical EMTF XML
-              per station (xml/<slug>/), per-survey EDI and XML zip bundles (and the
-              transfer-function MTH5 bundle when the flag is on),
-              products/survey_digests.json
+   WRITE      data/*.json, canonical EMTF XML per station, per-survey bundles, per-station
+              products
 ```
 
-An incremental build cache (`--incremental --cache-dir`) keys station products on the EDI
-bytes, the engine commit, library versions, the column contract, and the survey.yaml digest.
-The verification step (`scripts/verify.py`) is cache-independent: it checks the built products
-against schemas and, given `--surveys`, proves every served XML was produced from the current
-survey.yaml. A degenerate cache salt (unknown or dirty engine commit) disables the cache for
-that build.
-
-Run modes: survey-package mode (`--surveys`, the standard loop) and raw/bulk mode (`--raw` with
-`--collections` and `--seed-meta`) for regenerating a seed from loose EDI folders. Raw mode is
-excluded from caching.
+Steps, exit codes, run modes, the incremental cache and the verification step are in
+[Build lifecycle](build-lifecycle.md).
 
 ## The submission pipeline
 
@@ -92,12 +70,10 @@ bump with release notes, and commits through the same publish path.
 
 ## The positional data contract
 
-`catalogue.json`, `sci.json` and `tf.json` are bare arrays decoded by index in two languages.
-The column order is defined once in `contract/columns.json` and generated into the engine's
-`extract/_contract.py` and the portal's `src/contract.js`; CI fails if either generated file is
-out of sync. Column order is a published interface: columns are append-only, and a reorder is
-a breaking change. Read [Portal Data Files](data-files.md) before touching any of the three
-products, and follow the ordered recipes in [How to extend](extending.md).
+`catalogue.json`, `sci.json` and `tf.json` are bare arrays decoded by index in two languages,
+from one source of order (`contract/columns.json`). Read
+[Portal data files](data-files.md) before touching any of the three, and follow the ordered
+recipes in [How to extend](extending.md).
 
 ## Module map
 
@@ -152,14 +128,12 @@ last shared byte-for-byte with the curator editor. Presentation only.
 
 ## Trust boundaries
 
-- Submitted packages are untrusted until the validator and a curator pass them. Content
-  parsing happens only in the network-disabled runner container. `safe_component` sanitises
-  DATAID and slug values before they touch paths or markup.
-- Submitter contact details are stored only in the gateway database. They never enter the
-  package tree, reports, logs or git.
-- Publication is a reviewed git commit. The portal is a read-only consumer.
-- The deployment binds all published ports to loopback; external access is by the operator's
-  reverse proxy or tailnet. See `deploy/README.md`.
+The four boundaries are stated in [Architecture](../architecture/repositories.md#trust-boundaries).
+Their implementation here: content parsing happens only in the network-disabled runner
+container, and `safe_component` sanitises DATAID and slug values before they touch paths or
+markup. Submitter contact details live only in the gateway database and never enter the package
+tree, reports, logs or git. The deployment binds all published ports to loopback; external
+access is by the operator's reverse proxy or tailnet (see `deploy/README.md`).
 
 ## What must not break
 

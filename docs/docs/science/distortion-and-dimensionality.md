@@ -1,226 +1,61 @@
 # Distortion and Decomposition (in development)
 
-## Overview
-
-Magnetotelluric transfer functions contain information about conductivity structure across a wide range of spatial scales.
-
-However, the observed response may also be influenced by local conductivity variations near the measurement site.
-
-These local effects can alter the apparent resistivity response and complicate the interpretation of regional conductivity structure.
-
-A variety of decomposition and diagnostic methods have been developed to investigate these effects and to separate regional behaviour from local influences.
-
-AusMT intends to publish distortion and decomposition products as advanced diagnostic tools
-supporting interpretation and quality assessment — these are **in development, not yet
-generated** (see the status note under Products Published by AusMT below).
-
-These products should be regarded as complementary to the original transfer functions rather than replacements for them.
-
----
-
-## Local and Regional Effects
-
-MT responses commonly reflect a combination of:
-
-```text
-Regional Conductivity Structure
-+ Local Conductivity Structure
-= Observed Response
-```
-
-Local conductivity variations may influence:
-
-- Apparent resistivity
-- Strike estimates
-- Dimensionality indicators
-- Tensor geometry
-
-The extent of these effects varies between sites and geological environments.
-
----
-
-## What is Distortion?
-
-The term distortion is commonly used to describe modifications of the observed impedance tensor caused by local conductivity structure.
-
-These effects are often associated with conductivity contrasts near the measurement site and may alter the amplitude and directional characteristics of the observed response.
-
-Distortion does not necessarily imply that the data are incorrect.
-
-Rather, it reflects the fact that the observed response contains information from multiple spatial scales.
-
----
-
-## Why Examine Distortion?
-
-Distortion analysis may assist with:
-
-- Understanding site responses
-- Comparing neighbouring stations
-- Assessing strike stability
-- Evaluating dimensionality assumptions
-- Identifying regional conductivity trends
-
-These products are intended to provide additional context for interpretation rather than definitive corrections.
-
----
-
-## Tensor Decomposition
-
-Tensor decomposition methods attempt to separate different components of the observed MT response.
-
-Many approaches seek to distinguish:
-
-```text
-Regional Response
-Local Distortion Effects
-Observed Impedance Tensor
-```
-
-Different decomposition methods make different assumptions regarding dimensionality and conductivity structure.
-
-As a result, different methods may produce different estimates for the same dataset.
-
----
-
-## Groom–Bailey Decomposition
-
-The Groom–Bailey decomposition (Groom & Bailey, 1989) remains one of the most widely used approaches for analysing galvanic distortion in magnetotellurics.
-
-The method assumes an underlying two-dimensional regional conductivity structure and represents the observed response using a set of distortion operators and regional impedance parameters.
-
-Outputs commonly include estimates of:
-
-- Twist
-- Shear
-- Anisotropy
-- Site gain
-- Regional strike
-
-These parameters should be interpreted within the assumptions of the method.
-
----
-
-## Multi-Site Decomposition
-
-Several decomposition approaches extend the original Groom–Bailey framework by incorporating information from multiple stations simultaneously.
-
-Examples include the methods of McNeice and Jones (2001).
-
-By considering neighbouring stations together, these approaches may provide more stable estimates of regional strike and distortion parameters than single-station methods.
-
-Multi-site approaches are widely used in regional MT studies.
-
----
-
-## Modern Decomposition Approaches
-
-Additional decomposition methods have been developed to address limitations of earlier approaches and to support more complex geological settings.
-
-Examples include approaches based on:
-
-- Phase tensor analysis
-- Multi-site inversion
-- Statistical decomposition
-- Tensor invariants
-
-Different methods emphasise different aspects of the MT response and should be interpreted within their respective theoretical frameworks.
-
----
-
-## Lilley Invariants and Mohr Circles
-
-Tensor invariants provide an alternative perspective on MT responses that does not rely directly on a preferred coordinate system.
-
-Lilley (1993, 1998) introduced a series of tensor invariant representations that provide insight into:
-
-- Dimensionality
-- Rotational behaviour
-- Tensor geometry
-
-Mohr circle representations provide a graphical method for visualising tensor properties and assessing departures from simplified dimensionality assumptions.
-
-These products are particularly useful for diagnostic analysis and educational purposes.
-
----
-
-## Distortion and Dimensionality
-
-Distortion analysis and dimensionality assessment are closely related.
-
-Many decomposition methods assume:
-
-```text
-1D
-or
-2D
-```
-
-regional conductivity structure.
-
-When the true Earth is strongly three-dimensional, decomposition results may become unstable or difficult to interpret.
-
-For this reason distortion products should generally be interpreted alongside:
-
-- Phase tensor products
-- Strike analyses
-- Dimensionality diagnostics
-- Geological information
-
----
-
-## Products Published by AusMT
-
-> **Status: planned (in development).** Decomposition products are **not yet generated** (the
-> `ausmt_science/decomposition` module is an optional, MTpy-v2-backed Tier-3 stub — see the developer
-> [Product schema](../developer/product-schema.md)). The list below is the intended scope once it is
-> wired in, not what currently ships.
-
-Once implemented, depending on the survey and available processing products, AusMT may publish:
-
-- Groom–Bailey parameters
-- Multi-site decomposition products
-- Regional strike estimates
-- Tensor invariant products
-- Mohr circle products
-- Survey-level decomposition summaries
-
-The available product set may evolve as methods and community practices develop.
-
----
+An observed MT response mixes regional conductivity structure with local structure near the
+measurement site. **Distortion** is the name for what that local structure does to the observed
+impedance tensor: it can change amplitude and directional character, which shifts apparent
+resistivity, strike estimates, dimensionality indicators and tensor geometry. Distortion does
+not mean the data are wrong. It means the response contains information from more than one
+spatial scale.
+
+Decomposition methods try to separate those scales, which helps with understanding site
+responses, comparing neighbouring stations, assessing strike stability and testing
+dimensionality assumptions. They provide context rather than definitive corrections.
+
+> **Status: planned (in development).** Decomposition products are **not yet generated**. The
+> `ausmt_science/decomposition` module is an optional, MTpy-v2-backed Tier-3 stub. Everything
+> below is background and intended scope, not what ships. See
+> [Science products](science-products.md) for the authoritative implemented-versus-planned
+> list.
+
+## Methods
+
+**Groom-Bailey** (Groom & Bailey, 1989) remains the most widely used approach to galvanic
+distortion. It assumes a two-dimensional regional structure and represents the observed
+response with a set of distortion operators plus regional impedance parameters, yielding twist,
+shear, anisotropy, site gain and regional strike. Read those parameters inside the method's
+assumptions.
+
+**Multi-site decomposition** extends that framework across stations simultaneously; McNeice and
+Jones (2001) is the standard example. Using neighbouring stations together tends to give more
+stable regional strike and distortion estimates than single-station fitting, which is why it is
+common in regional studies.
+
+**Newer approaches** based on phase tensor analysis, multi-site inversion, statistical
+decomposition and tensor invariants address limitations of the earlier methods and suit more
+complex settings. Each emphasises a different aspect of the response.
+
+**Lilley invariants and Mohr circles** offer a view that does not depend on a preferred
+coordinate system. Lilley (1993, 1998) introduced tensor invariant representations that
+describe dimensionality, rotational behaviour and tensor geometry, and Mohr circles give a
+graphical way to see departures from simple dimensionality assumptions. Both are useful
+diagnostically and as teaching tools.
+
+## Intended products
+
+Once the module is wired in, and depending on the survey and the available processing products:
+Groom-Bailey parameters, multi-site decomposition products, regional strike estimates, tensor
+invariant products, Mohr circle products, and survey-level decomposition summaries. The set may
+change as methods and community practice do.
 
 ## Interpretation
 
-Distortion and decomposition products are diagnostic tools.
-
-They do not provide a unique description of the Earth.
-
-Different methods may produce different estimates because they are based on different assumptions regarding:
-
-- Dimensionality
-- Regional structure
-- Distortion mechanisms
-
-Users should therefore regard decomposition products as aids to interpretation rather than definitive solutions.
-
-The original transfer functions remain the authoritative scientific products.
-
----
-
-## Relationship to Other Products
-
-Distortion and decomposition products should be interpreted together with:
-
-- Transfer functions
-- Phase tensor products
-- Strike analyses
-- Dimensionality diagnostics
-
-No single product provides a complete description of the MT response.
-
-The greatest value is often obtained by examining the consistency between multiple independent diagnostics.
-
----
+Decomposition products do not give a unique description of the Earth, and different methods
+produce different estimates because they assume different things about dimensionality, regional
+structure and distortion mechanisms. Most decomposition assumes a 1-D or 2-D regional
+structure, so results become unstable where the Earth is strongly three-dimensional. Read them
+against the [phase tensor](phase-tensor.md), [strike](strike-analysis.md) and
+[dimensionality](dimensionality.md) diagnostics, and the geology; the value is usually in
+whether independent diagnostics agree. The transfer functions remain authoritative.
 
 ## References
 
