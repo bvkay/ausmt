@@ -207,7 +207,8 @@ schema states in prose:
 
 This is the field guide for anyone writing a harvester against a served catalogue document. It moved here
 from the portal's About page in the 2026-07 documentation wave, so About could go back to being a short
-front door. Everything below describes MTCAT v1.2. The schema file is served beside the document at
+front door. Everything below describes MTCAT v1.2. The document is served at
+[`mtcat.json`](https://ausmt.au/data/mtcat.json) with the schema file beside it at
 [`mtcat.schema.json`](https://ausmt.au/data/mtcat.schema.json), so a second implementation can validate
 without resolving anything off-site, and a fetched schema self-identifies in its `title`. Check that the
 title says v1.2 before relying on this section against it; a deployment updates the served schema on its
