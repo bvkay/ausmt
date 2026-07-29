@@ -214,9 +214,14 @@ jobs:
           # Run pytest -rs and the M5 skip tripwire INSIDE the image (the host job does no checkout, so
           # the allow-list script only exists in the container, at /app/engine/tests/ci_check_skips.py —
           # it ships in the image via engine.Dockerfile's `COPY engine/`). This lane's env is the SAME
-          # as build-products: mt_metadata/mth5 present (image lock), no sibling ausmt-surveys checkout,
-          # so the only legitimate skip is the validator-gate one; any other skip (e.g. the stack
-          # silently missing from the image) reds the release gate here.
+          # as build-products in its INSTALLED stack (mt_metadata/mth5 present, from the image lock)
+          # but NOT in its tree: the image ships engine/ + contract/ only, so the legitimate skips here
+          # are the designed-topology ones for the trees it does not ship: the validator-gate oracle
+          # (no /app/gateway) and the MTCAT parity module's portal-surface reads (no /app/portal/*,
+          # bar the one generated contract.js). Both reasons are allow-listed in ci_check_skips.py, and
+          # the parity module's ENGINE-side assertions still run here, which is the point: the release
+          # gate proves the IMAGE's own coherence. Any other skip (e.g. the stack silently missing from
+          # the image) reds the release gate here.
           # No pipe (the image's /bin/sh is dash — no `pipefail`): redirect to a file so pytest's own
           # exit code is preserved, echo it for the log, fail on pytest failure, THEN run the tripwire.
           docker run --rm --entrypoint sh "$IMG" -c \
