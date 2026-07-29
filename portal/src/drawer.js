@@ -40,9 +40,48 @@ let _curTf=null;
 // UX6 Wave C (evolved): the currently-open station object, stashed alongside _curTf so the expand handler
 // can build the response modal's identity header (id / site / survey / org / type / honest coords).
 let _curStation=null;
+// Two-phase boot: WHAT the drawer is currently showing: {kind:"station",i} | {kind:"survey",sv} | null,
+// so a phase-2 product landing can re-render exactly that subject in place (rehydrateOpenDrawer). null means
+// "nothing that reads a phase-2 product is on screen": the drawer is shut, or something that builds its own
+// markup (the strike rose) owns it.
+let _drawerSubject=null;
 // UX6 Wave C (C2): a small section-role chip using the engine README taxonomy — "Source data",
 // "Automated screening", "AusMT-derived". Plain muted text, no colour semantics.
 function roleChip(l){return `<span class="rolechip">${esc(l)}</span>`;}
+// ---- two-phase boot: the loading surfaces ------------------------------------------------------
+// The drawer is the densest consumer of the PHASE 2 products (tf.json -> the response curves; sci.json ->
+// the processing/screening rows; manifest.json -> every served-artifact row, badge and download tile), and
+// almost every one of those surfaces has an HONEST-ABSENCE rendering: "not currently available", "not
+// recorded", "not stated in EDI", "none currently served", "not evaluated". Each of those is a CLAIM about
+// the corpus. None of them may be shown for a product that is merely still in flight, so every such site
+// below routes through hydrGate(): pending -> a loading state; failed -> an explicit could-not-load line;
+// ready -> the untouched pre-existing rendering. The open drawer re-renders when each gate settles
+// (rehydrateOpenDrawer), so nothing that showed a loading state stays showing one.
+function hydrBlock(what){return `<div class="hydrating" role="status">Loading ${esc(what)}…</div>`;}
+function hydrFailBlock(what){return `<div class="hydrating hydrfail" role="status">Could not load ${esc(what)}.</div>`;}
+function hydrCell(){return `<span class="hydrating hydr-inline">loading…</span>`;}
+function hydrFailCell(){return `<span class="hydrating hydr-inline hydrfail">could not be loaded</span>`;}
+// Render helper: returns the loading / failed markup for product `k`, or "" when it is ready and the caller
+// should render its normal content. `block` picks the block form over the inline-cell form.
+function hydrGate(k,what,block){
+  if(hydrating(k))return block?hydrBlock(what):hydrCell();
+  if(hydrFailed(k))return block?hydrFailBlock(what):hydrFailCell();
+  return "";}
+// A hydration re-render rewrites the whole drawer, which would otherwise snap every expander shut under a
+// reader who opened one, up to three times (once per gate) across a multi-second hydration window. Record
+// which <details> are open by their summary text (stable across a re-render, and the only key that survives
+// an innerHTML rewrite) and put them back. A summary whose text legitimately CHANGES with hydration simply
+// fails to match and reverts to its default state, which is the pre-fix behaviour, never worse. Guarded for
+// the stubbed-DOM smoke harness (querySelectorAll -> []).
+function _openDetailsKeys(){
+  if(!(drawer&&drawer.querySelectorAll))return[];
+  return [...drawer.querySelectorAll("details")].filter(d=>d.open)
+    .map(d=>{const sm=d.querySelector&&d.querySelector("summary");return sm?sm.textContent:"";}).filter(Boolean);}
+function _restoreOpenDetails(keys){
+  if(!keys||!keys.length||!(drawer&&drawer.querySelectorAll))return;
+  [...drawer.querySelectorAll("details")].forEach(d=>{
+    const sm=d.querySelector&&d.querySelector("summary");
+    if(sm&&keys.indexOf(sm.textContent)>=0)d.open=true;});}
 // UX6 Wave C (C1): one tab panel. ALL panels render in the DOM at openStation time; selectDrawerTab
 // toggles them via the `hidden` attribute + aria-selected, so the pinned innerHTML/text assertions keep
 // matching against the same rendered strings regardless of which tab is active.
@@ -50,12 +89,16 @@ function drawerPanel(id,content,selected){
   return `<div class="dpanel" id="dp-${id}" role="tabpanel" data-tab="${id}" aria-labelledby="dt-${id}" tabindex="0"${selected?"":" hidden"}>${content}</div>`;}
 // Activate one drawer tab (ARIA roving-tabindex + hidden toggle). Degrades to a no-op under the smoke
 // harness (stubbed drawer with querySelectorAll()->[]). Falls back to the first tab for an unknown name.
+// Two-phase boot: the active tab is remembered so a hydration re-render (rehydrateOpenDrawer) puts the
+// reader back on the panel they were reading, not back on the default Response tab.
+let _curDrawerTab="response";
 function selectDrawerTab(name){
+  _curDrawerTab=name;
   if(!drawer||!drawer.querySelectorAll)return;
   const tabs=[...drawer.querySelectorAll('[role="tab"]')];
   const panels=[...drawer.querySelectorAll('[role="tabpanel"]')];
   if(!tabs.length)return;
-  if(!tabs.some(tb=>tb.dataset.tab===name))name=tabs[0].dataset.tab;
+  if(!tabs.some(tb=>tb.dataset.tab===name))name=_curDrawerTab=tabs[0].dataset.tab;
   tabs.forEach(tb=>{const on=tb.dataset.tab===name;tb.setAttribute("aria-selected",on?"true":"false");tb.tabIndex=on?0:-1;if(tb.classList)tb.classList.toggle("on",on);});
   panels.forEach(p=>{p.hidden=(p.dataset.tab!==name);});
 }
@@ -65,6 +108,12 @@ function selectDrawerTab(name){
 // they say "embargoed"/"metadata only" instead. An OPEN survey keeps today's exact tile text (byte-for-
 // byte), including the "EDI (via source archive)" fallback that the C1b pins assert is ABSENT when embargoed.
 function ediDescriptor(s,m){
+  // Two-phase boot: the manifest is a PHASE 2 product, so before it lands there is no honest answer here:
+  // the served-artifact branch and BOTH fallbacks ("EDI (via source archive)" / the embargo wording) are
+  // claims about what this deployment serves. Report the pending state with NO download affordance (d:null,
+  // so headerDownloadBtn renders nothing at all rather than a button that might resolve to the wrong route),
+  // and let MANIFEST_READY re-render the drawer into the real descriptor.
+  if(hydrating("manifest"))return {sub:"loading…",st:"unk",d:null};
   const arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   const ediArt=arts.find(a=>a.format==="edi");
   if(ediArt) return {sub:"Download"+(ediArt.size?" · "+fmtBytes(ediArt.size):""),st:"ok",d:{prod:"fetch",url:ediArt.url,name:ediArt.url.split("/").pop()}};
@@ -74,7 +123,14 @@ function ediDescriptor(s,m){
 // C1b: the sticky-header Download EDI action. Renders NOTHING where the gate refuses (no download
 // affordance for an embargoed/metadata-only station) — otherwise a primary button routed through the
 // same [data-prod] dispatch as the product tiles.
-function headerDownloadBtn(s,m){const e=ediDescriptor(s,m);if(!e.d)return"";
+// Two-phase boot: rendering NOTHING is precisely this function's embargo signal, so an in-flight manifest
+// must not be allowed to borrow it. ediDescriptor returns d:null while the manifest is pending (correctly:
+// it cannot yet know the route), which would silently render an OPEN-access station as embargoed for the
+// whole flight: absence by omission, the same defect surveyBundleTiles gets a loading tile for. Say what
+// is happening instead, and claim nothing either way about availability.
+function headerDownloadBtn(s,m){
+  if(hydrating("manifest"))return `<span class="hydrating hydr-inline" role="status">checking file availability…</span>`;
+  const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
 // Overview "primary download" tile — the same gated descriptor rendered as a single product tile (disabled
@@ -258,7 +314,13 @@ function maturityModel(m,sc){m=m||{};sc=sc||[];
     {key:"ts",label:"Time series",achieved:tsOn,note:tsOn?"linked":"not available"},
   ];
   return {dims,stars:dims.filter(d=>d.achieved).length,total:dims.length};}
-function maturityBlock(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];const mod=maturityModel(m,sc);
+function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
+  // Two-phase boot: the "Reproducible" dimension reads sc[SC.sw] (sci.json, PHASE 2). An unlit star is a
+  // statement that the dimension was NOT achieved, so the whole block waits rather than under-counting the
+  // stars for a moment and then silently gaining one.
+  const gate=hydrGate("sci","dataset maturity",true);
+  if(gate)return `<div class="matblock"><div class="mat-h">Dataset maturity</div>${gate}</div>`;
+  const mod=maturityModel(m,sc);
   const stars="★".repeat(mod.stars)+"☆".repeat(mod.total-mod.stars);
   const rows=mod.dims.map(d=>`<li class="matdim ${d.achieved?"on":"off"}"><span class="matglyph">${d.achieved?"★":"☆"}</span><span>${esc(d.label)}${d.note?": "+esc(d.note):""}</span></li>`).join("");
   return `<div class="matblock"><div class="mat-h">Dataset maturity <span class="mat-stars" title="${mod.stars} of ${mod.total} stewardship dimensions achieved">${stars}</span></div>`+
@@ -352,8 +414,14 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     tsLevelRow("Level 0 edited time series","instrument-recorded, full resolution","level0"),
     tsLevelRow("Level 1 transformed time series","calibrated, resampled, filtered","level1"),
   ].map(row).join("");
+  // Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (PHASE 2), and each of
+  // them degrades to a "not currently available" / "via source archive" line, i.e. statements about what the
+  // build actually served. Render the loading state in place of the three rows until the manifest lands
+  // (the time-series rows above and the publication row below read survey metadata from phase 1, so they
+  // are honest immediately and are left alone).
+  const level2Body=hydrating("manifest")?hydrBlock("served files"):level2Subs.map(row).join("");
   const level2=`<div class="fl-group"><div class="fl-ghead">Level 2 derived processed data <small>transfer functions</small></div>`+
-    `<div class="fl-sub">${level2Subs.map(row).join("")}</div></div>`;
+    `<div class="fl-sub">${level2Body}</div></div>`;
   // R5: Level 3 models render ONLY when a model DOI is served in the survey metadata. No such field exists
   // today, so the slot stays here as a comment and simply does not render yet. When one lands, e.g.:
   //   if(m.model_doi) level3 = row({n:"Level 3 models",sub:...,origin:"source archive",st:"ok",d:{prod:"open",url:"https://doi.org/"+m.model_doi}});
@@ -364,7 +432,13 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
 // product name) is the fallback; with neither, the honest "not stated in EDI" stands. No version is ever
 // synthesised. SINGLE SOURCE for the Provenance tab's own row AND the lineage graph node, so the two
 // surfaces in one tab cannot disagree about what processed this station.
+// Two-phase boot: the station-level string lives in sci.json (PHASE 2). The fallbacks are honest ONLY once
+// that row is known: "not stated in EDI" asserts the EDI carried no software field, and the survey-level
+// m.software would silently win over a station string that simply had not arrived. So while sci is
+// unresolved this says so instead. PURE (no DOM) as before; the caller escapes it.
 function processingSoftwareText(m,sc){
+  if(hydrating("sci"))return "loading…";
+  if(hydrFailed("sci"))return "could not be loaded";
   const st=(((sc||[])[SC.sw])||"").toString().trim();
   if(st)return st;
   const sv=((m&&m.software)||"").toString().trim();
@@ -377,6 +451,10 @@ function processingSoftwareText(m,sc){
 // ABSENT from the list; the old line asserted "EDI ✓ · EMTF XML (pipeline)" unconditionally, claiming an
 // XML for the 8 surveys the build pipeline never produced one for and an EDI for embargoed stations.
 function distributedFormatsText(s,m){
+  // Two-phase boot: every input here is a manifest row (PHASE 2). Pre-hydration the list would come back
+  // empty and print "none currently served", a false claim about the corpus and exactly the overclaim in
+  // the other direction that this function was written to remove. Say it is loading instead.
+  if(hydrating("manifest"))return "loading…";
   const arts=(typeof artifactsFor==="function"?artifactsFor(s&&s.ausmt_id):[]);
   const out=[];
   if(ediDescriptor(s,m).st==="ok")out.push("EDI");
@@ -411,7 +489,10 @@ function publicationCell(m){
   const doi=String(p0.doi==null?"":p0.doi).trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");
   const cell=doi?`<a href="${escUrl("https://doi.org/"+doi)}" target="_blank" rel="noopener noreferrer">${esc(cite)}</a>`:esc(cite);
   return cell+(ps.length>1?` <span class="prov">(+${ps.length-1} more)</span>`:"");}
-function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
+function provGraph(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
+  // Two-phase boot: the Method node reads sc[SC.alg]/sc[SC.rr] (sci.json) and would otherwise fall to
+  // "not stated", a claim about the source EDI, before the row exists.
+  const methodGate=hydrGate("sci","processing method");
   const nodes=[];
   // C46-W3b: an upstream "source dataset" node when the survey declares sources[] — the lineage's origin,
   // above the raw time series. Shows the first source's title + identifier link (with a "+N more" tail).
@@ -422,7 +503,7 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=SCI[s.i]||[];
   nodes.push(
    ["Raw time series",m.ts==="ok"?tsCollectionCell(m):"not located in source archives"],
    ["Processing software",esc(processingSoftwareText(m,sc))],
-   ["Method",sc[SC.alg]?esc(sc[SC.alg]):(sc[SC.rr]?"remote reference (stated)":"not stated")],
+   ["Method",methodGate||(sc[SC.alg]?esc(sc[SC.alg]):(sc[SC.rr]?"remote reference (stated)":"not stated"))],
    ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
    ["Distributed formats",esc(distributedFormatsText(s,m))],
    ["Publication (interpretation)",publicationCell(m)]
@@ -496,20 +577,33 @@ function frameLineText(frame){
 // Best-effort: an absent/withheld station.json (older builds, no --products, or a file:// portal) just
 // yields no line, never an error. Only called for OPEN-access surveys (a withheld survey serves no
 // impedances, so a "served in frame X" line would be false).
+// Two-phase boot: a hydration re-render calls this again for the SAME station (the innerHTML rewrite blanks
+// the #frameline placeholder, so it does have to be re-injected), and with three gates that is up to four
+// identical station.json requests per drawer open. Cache the RESOLVED LINE per station instead: "" covers
+// every no-line outcome (absent station.json, no frame block, nothing worth saying, an offline/file:// error)
+// so a station that produced no line is not re-requested either.
+const _frameLineCache=new Map();                          // ausmt_id -> the resolved line ("" = no line)
+function _injectFrameLine(s,txt){
+  if(!txt) return;
+  const el=document.getElementById("frameline");
+  if(el&&el.dataset.ausmt===s.ausmt_id){                  // guard: drawer may have moved on (async)
+    el.textContent=txt;
+    el.style.cssText="font-size:12px;color:var(--muted);margin:2px 0 10px;line-height:1.4";
+  }
+}
 function loadStationFrameLine(s){
   const slug=s.slug||((SMETA[s.survey]||{}).slug);
   if(!slug||!s.id) return Promise.resolve();              // cannot locate station.json — skip
+  if(_frameLineCache.has(s.ausmt_id)){_injectFrameLine(s,_frameLineCache.get(s.ausmt_id));return Promise.resolve();}
   const url=dataUrl("products/"+encodeURIComponent(slug)+"/"+encodeURIComponent(s.id)+"/station.json");
-  return fetch(url).then(r=>r.ok?r.json():null).then(doc=>{
-    if(!doc||!doc.frame) return;
-    const txt=frameLineText(doc.frame);
-    if(!txt) return;
-    const el=document.getElementById("frameline");
-    if(el&&el.dataset.ausmt===s.ausmt_id){                // guard: drawer may have moved on (async)
-      el.textContent=txt;
-      el.style.cssText="font-size:12px;color:var(--muted);margin:2px 0 10px;line-height:1.4";
-    }
-  }).catch(()=>{});                                       // withheld / offline / file:// => no line
+  // The catch sits on the FETCH, not on the whole chain, so a withheld/offline/file:// station caches its
+  // no-line outcome (and is not re-requested) while a throw in the render step below caches nothing and is
+  // simply retried, exactly as before.
+  return fetch(url).then(r=>r.ok?r.json():null).catch(()=>null).then(doc=>{   // withheld / offline / file:// => no line
+    const txt=(doc&&doc.frame)?(frameLineText(doc.frame)||""):"";
+    _frameLineCache.set(s.ausmt_id,txt);
+    _injectFrameLine(s,txt);
+  }).catch(()=>{});
 }
 // UX8 (X5): the five Screening indicators, each derived ONLY from a quantity the pipeline already computes.
 // PURE (no DOM) so the field->indicator->threshold mapping is falsifiable: flip one input and exactly one
@@ -569,11 +663,15 @@ function stationSummaryDetails(s,m,sc){
   stationRows.push(["ausmt_id",esc(s.ausmt_id)]);
   if(m.collection&&m.collection.id)stationRows.push(["collection",esc(m.collection.title||m.collection.id)]);
   const station=_ssGroup("Station",stationRows,overviewDownload(s,m));
+  // Two-phase boot: periods/components/tipper are catalogue columns (phase 1, honest at first paint);
+  // "remote reference" and the Processing group read the sci row (PHASE 2), whose absent-value renderings
+  // ("not recorded", "not stated in EDI") are claims about the source EDI. Those two wait.
+  const sciGate=hydrGate("sci","processing details");
   const tf=_ssGroup("Transfer function",[
     ["periods",`${fmtP(s.pmin)}–${fmtP(s.pmax)} s`],
     ["components",(esc(s.comps.split("").join(" + "))||"–")],
     ["tipper",s.comps.includes("T")?"yes":"no"],
-    ["remote reference",sc[SC.rr]?"yes":"not recorded"]]);
+    ["remote reference",sciGate||(sc[SC.rr]?"yes":"not recorded")]]);
   // R4: the "Data checks" group (the TF error row) is REMOVED per owner ruling — reversibly commented per
   // house style for hidden-not-deleted surfaces. mre / DATA_CHECKS_LABEL / _ssGroup are left intact so
   // re-enabling is uncommenting only.
@@ -581,19 +679,29 @@ function stationSummaryDetails(s,m,sc){
   const checks=_ssGroup(DATA_CHECKS_LABEL,[
     ["TF error",mre!=null?Math.round(mre*100)+"%":"n/a"]]); */
   const proc=_ssGroup("Processing",[
-    ["software",sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI"],
+    ["software",sciGate||(sc[SC.sw]?esc(sc[SC.sw]):"not stated in EDI")],
     ["source",esc(s.file)]]);
   return `<details class="prov-d ssdetails"><summary>Station summary</summary><div class="prov-dbody ssbody">${station}${tf}${proc}</div></details>`;
 }
-function openStation(i){
-  _rememberDrawerOpener();                            // E7: capture the invoking element before the rewrite
-  const s=ST[i],t=TFD[i]||[[]],m=SMETA[s.survey]||{},sc=SCI[i]||[];
+// Two-phase boot: `opts.rehydrate` marks a re-render driven by a phase-2 product LANDING (main.js
+// wireHydration -> rehydrateOpenDrawer), not by a reader opening the drawer. Such a re-render must not
+// re-capture the opener, must not pull focus back into the dialog, must not rewrite the hash, and must leave
+// the reader exactly where they were (same scroll offset, same tab), so the only visible change is the
+// section that was showing a loading state filling in.
+function openStation(i,opts){
+  const rehydrate=!!(opts&&opts.rehydrate);
+  const keepScroll=rehydrate?(drawer.scrollTop||0):0;
+  const keepTab=rehydrate?_curDrawerTab:"response";
+  const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
+  if(!rehydrate)_rememberDrawerOpener();              // E7: capture the invoking element before the rewrite
+  _drawerSubject={kind:"station",i};                  // what rehydrateOpenDrawer re-renders when a gate settles
+  const s=ST[i],t=tfRow(i)||[[]],m=SMETA[s.survey]||{},sc=sciRow(i);
   // UX3 item 7a: sc[SC.dim] (dimensionality) is no longer surfaced in the drawer screening grid — it's
   // inferable from the phase tensor + skew, which stay shown (strike/|β|/3-D-periods line below). The
   // sc.json field itself is unchanged (data products are display-only edits); the map's colour-by-dim
   // mode still reads s.dim. So `dim` is intentionally not destructured here anymore.
   const p3d=sc[SC.p3d],gd=sc[SC.gd],skew=sc[SC.skew],dec=sc[SC.decades];
-  location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
+  if(!rehydrate)location.hash="#/station/"+encodeURIComponent(s.ausmt_id);   // ausmt_id is globally unique; s.id (DATAID) repeats across surveys
   const azs=[],azPers=[];if(t[T.pt_az])t[T.pt_az].forEach((a,k)=>{if(a!=null&&t[T.pt_beta][k]!=null&&Math.abs(t[T.pt_beta][k])<5){azs.push(((a%180)+180)%180);const _pk=t[T.periods]&&t[T.periods][k];if(_pk!=null)azPers.push(_pk);}});
   const _perTxt=azPers.length?` over ${fmtP(Math.min(...azPers))}–${fmtP(Math.max(...azPers))}s`:"";
   // Per-period 3-D screening threshold echoed from the build's own provenance (never hard-coded); when
@@ -648,9 +756,17 @@ function openStation(i){
   // only for an open-access station: without curves openStationModal has no panels to show and would open
   // nothing, so a control there would be a dead affordance over the access panel.
   const _rspOpen=isOpenAccess(m);
+  // Two-phase boot: the curves live in tf.json (PHASE 2). An empty TF row renders NO plot at all (plotBlock
+  // guards on an empty series), so painting the plots pre-hydration would show an open-access station as
+  // having no response functions, the loudest absence claim in the drawer. While tf is in flight the panel
+  // carries a loading state instead, and the expand control is withheld with it (openStationModal would find
+  // no panels and open an empty overlay). TF_READY re-renders this section with the curves in place.
+  const _tfGate=_rspOpen?hydrGate("tf","response functions",true):"";
   const responseHtml=`<div class="sechead rsphead">Response functions ${roleChip("AusMT-derived")}`+
-    (_rspOpen&&typeof responseExpandBtn==="function"?responseExpandBtn():"")+`</div>`+
-    (_rspOpen
+    (_rspOpen&&!_tfGate&&typeof responseExpandBtn==="function"?responseExpandBtn():"")+`</div>`+
+    (_tfGate
+      ? _tfGate+`<div id="pt_anchor"></div>`
+      : _rspOpen
       ? plotBlock("rho",t)+plotBlock("phase",t)+`<div id="pt_anchor"></div>`+plotBlock("pt",t)+plotBlock("arrow",t)
       : accessPanel(m,s.survey)+`<div id="pt_anchor"></div>`)+
     `<div id="frameline" data-ausmt="${escAttr(s.ausmt_id)}"></div>`+
@@ -679,6 +795,9 @@ function openStation(i){
   // This station's served artifact rows (manifest `files`), read once and reused by the format-availability
   // badge and the API section below. Empty for a withheld/embargoed survey: the engine emits no manifest
   // rows for one, so absence here IS the embargo, never a "row we failed to find".
+  // Two-phase boot: that reading of an empty list only holds once the manifest has LANDED, so both consumers
+  // below gate on _manGate first: pre-hydration an empty list means "not received yet", not "not served".
+  const _manGate=hydrGate("manifest","served files",true);
   const _arts=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
   // R8: whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
   // ok when served, else part — produced via the build pipeline for redistributable surveys).
@@ -729,8 +848,13 @@ function openStation(i){
     if(isOpenAccess(m))_apiRows.push(_pp+"dimensionality.json");}
   if(_apiEdi&&_apiEdi.url)_apiRows.push(apiArtifactPath(_apiEdi.url));
   _apiRows.push("/data/surveys.json","/data/products/manifest.json");
+  // Two-phase boot: the per-station EDI line is READ from a manifest row, and "no row => no line" is a
+  // deliberate embargo signal. Before the manifest lands there is no row for ANY station, so the list would
+  // silently under-state itself; the loading line says which line is still to come rather than omitting it
+  // in silence. The four survey/product paths above are static and stay listed immediately.
   const apiBlock=`<div class="api">Read-only static JSON on the hosted site, no key required:<br>`+
     _apiRows.map(u=>`GET <b>${esc(u)}</b>`).join("<br>")+
+    (_manGate?`<br>${_manGate}`:"")+
     `<br><a href="https://ausmt.readthedocs.io/en/latest/interoperability/api-reference/">worked examples in the API reference</a></div>`;
   const provenanceHtml=`<div class="sechead">Provenance ${roleChip("Source data")}</div>`+provTop+maturityBlock(s)+
     `<details class="prov-d"><summary>Lineage graph</summary><div class="prov-dbody">${provGraph(s)}</div></details>`+
@@ -742,7 +866,9 @@ function openStation(i){
     // series (from the levels metadata) and the licence badge. The bare "DOI" badge is dropped (it failed
     // as communication; dataset-DOI presence is already conveyed by the maturity star and the identifiers
     // block). States stay honest (ok/unknown/no). EMTF XML is ok when a served artifact exists, else part.
-    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody"><div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",mth5BundleFor(m)?"ok":"unk")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div></div></details>`+
+    // Two-phase boot: the EMTF XML and MTH5 badge STATES are manifest-derived, so the whole badge row waits
+    // rather than briefly showing "part"/"unknown" for formats that are in fact served.
+    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody">${_manGate||`<div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",mth5BundleFor(m)?"ok":"unk")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div>`}</div></details>`+
     `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
     `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
   // Cite — the citation box. C46-W3b: a no-cite survey is EXPLICIT ("custodian citation not recorded — cite
@@ -769,12 +895,24 @@ function openStation(i){
   _curTf=t;                                        // stash for the expand-modal handler
   _curStation=s;                                   // stash the station for the response modal's identity header
   drawer.setAttribute("aria-label","Station "+s.id+" details");   // E7: refine the dialog label per subject
-  drawer.classList.add("open");drawer.scrollTop=0;showDrawerScrim();   // D: dim backdrop on non-map views
-  selectDrawerTab("response");                     // UX8 (X4): Response default-selected
-  _focusDrawer();                                  // E7: move focus into the dialog
+  drawer.classList.add("open");drawer.scrollTop=keepScroll;showDrawerScrim();   // D: dim backdrop on non-map views
+  selectDrawerTab(keepTab);                        // UX8 (X4): Response default-selected (a rehydrate keeps the reader's tab)
+  _restoreOpenDetails(keepOpen);                   // and the expanders they had open (empty on a real open)
+  if(!rehydrate)_focusDrawer();                    // E7: move focus into the dialog (never on a hydration re-render)
   if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
 }
+// Two-phase boot: re-render whatever the drawer is currently showing, IN PLACE, because a phase-2 product
+// just landed and one of its sections was rendering a loading state. A no-op when the drawer is closed, or
+// when it is showing something that reads no phase-2 product (the strike rose writes its own markup and
+// clears the subject). Scroll offset and the active tab are preserved, so nothing jumps under the reader.
+function rehydrateOpenDrawer(){
+  if(!_drawerSubject)return;
+  if(!(drawer&&drawer.classList&&drawer.classList.contains&&drawer.classList.contains("open")))return;
+  if(_drawerSubject.kind==="station"&&ST[_drawerSubject.i])openStation(_drawerSubject.i,{rehydrate:true});
+  else if(_drawerSubject.kind==="survey")openSurvey(_drawerSubject.sv,{rehydrate:true});
+}
 function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList.contains("open");
+  _drawerSubject=null;                                 // nothing to rehydrate once it is shut
   drawer.classList.remove("open");hideDrawerScrim();   // D: drop the dim backdrop
   if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);
   if(wasOpen)_restoreDrawerFocus();}               // E7: return focus to the invoking element (only if it was open)
@@ -1188,8 +1326,12 @@ function surveySummary(ss,m){
   // UX3 item 7c: the "dimensionality mix (screening only)" row was removed from this table (dimensionality
   // is inferable from the phase tensor + skew). The per-station dim tally that fed it (dimCount/nClass/
   // dimPct) is gone with it; sc[SC.dim] itself is untouched (data products unchanged — display only).
+  // Two-phase boot: the remote-reference tally and the derived processing-software mode come from sci.json
+  // (PHASE 2). "not recorded" and the m.software fallback are claims about the source EDIs, so those two
+  // rows wait for SCI_READY; every other row here is catalogue/survey metadata and is honest immediately.
+  const sciGate=hydrGate("sci","processing details");
   const typeCount={}, swCount={}; let tipper=0, rr=0, rrKnown=0, pmin=Infinity, pmax=-Infinity;
-  ss.forEach(s=>{ const sc=SCI[s.i]||[];
+  ss.forEach(s=>{ const sc=sciRow(s.i);
     if(s.type) typeCount[s.type]=(typeCount[s.type]||0)+1;
     if(sc[SC.sw]) swCount[sc[SC.sw]]=(swCount[sc[SC.sw]]||0)+1;
     if((s.comps||"").indexOf("T")>=0) tipper++;
@@ -1208,9 +1350,9 @@ function surveySummary(ss,m){
     `<tr><td>data types</td><td>${esc(types)}</td></tr>`+
     `<tr><td>period coverage</td><td>${isFinite(pmin)?fmtP(pmin)+" – "+fmtP(pmax)+" s":"–"}</td></tr>`+
     `<tr><td>tipper availability</td><td>${tipper} / ${ss.length} stations</td></tr>`+
-    `<tr><td>remote reference</td><td>${rrKnown?`${rr} / ${rrKnown} stations`:"not recorded"}</td></tr>`+
+    `<tr><td>remote reference</td><td>${sciGate||(rrKnown?`${rr} / ${rrKnown} stations`:"not recorded")}</td></tr>`+
     `<tr><td>instrumentation</td><td>${esc(m.instrument_model||"not recorded in source metadata")}</td></tr>`+
-    `<tr><td>processing software</td><td>${esc(software)}</td></tr>`+
+    `<tr><td>processing software</td><td>${sciGate||esc(software)}</td></tr>`+
     `<tr><td>acquisition</td><td>${esc(m.dates||"–")}</td></tr>`+
     `<tr><td>collection</td><td>${coll}</td></tr>`+
     `<tr><td>licence / access</td><td>${esc(m.lic||"?")} · ${_accTxt}</td></tr>`+
@@ -1229,6 +1371,10 @@ function releaseNotesHtml(m){
 // served. C32: the MTH5 bundle holds TRANSFER FUNCTIONS ONLY (never time series) — the label says so,
 // matching the engine's <slug>-tf.h5 filename.
 function surveyBundleTiles(slug){
+  // Two-phase boot: the bundle rows live in the manifest (PHASE 2). "" (no tiles) reads as "this survey is
+  // not served in bundle form", an absence claim made by OMISSION, which is no more honest than making it
+  // in words, so pre-hydration the grid shows a loading tile that MANIFEST_READY replaces with the real one.
+  if(hydrating("manifest"))return `<div class="prod dis"><span class="pdot" style="background:var(--unk)"></span><div>Survey bundles<small>loading…</small></div></div>`;
   const b=(typeof bundlesForSlug==="function")?bundlesForSlug(slug):[];
   if(!b.length)return"";
   const label={"edi-zip":["EDI bundle (.zip)","whole survey"],
@@ -1248,9 +1394,15 @@ function surveyBundleTiles(slug){
 function pidRollup(m){const has=v=>!!(v&&!String(v).startsWith("TODO"));
   const fields=[(m||{}).doi,(m||{}).org_ror,(m||{}).raid];
   return {have:fields.filter(has).length,total:fields.length};}
-function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
+// Two-phase boot: `opts.rehydrate` has the same meaning as in openStation: a re-render driven by a phase-2
+// product landing, which keeps the reader's scroll position and does not touch focus.
+function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
+  const rehydrate=!!(opts&&opts.rehydrate);
+  const keepScroll=rehydrate?(drawer.scrollTop||0):0;
+  const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
   const rel=relatedSurveys(sv),pr=pidRollup(m);
-  _rememberDrawerOpener();                            // E7: capture the invoking element before the rewrite
+  if(!rehydrate)_rememberDrawerOpener();              // E7: capture the invoking element before the rewrite
+  _drawerSubject={kind:"survey",sv};                  // what rehydrateOpenDrawer re-renders when a gate settles
   // UX6 Wave E (E4): section order — (1) title+description, (2) geographic footprint, (3) station count +
   // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
   // (7) publications, (8) identifiers (E2 rollup), (9) release history. Content is unchanged from before —
@@ -1291,8 +1443,9 @@ function openSurvey(sv){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
    `<div class="sechead">Related surveys</div><div class="surveymeta">`+
      (rel.length?rel.map(o=>`<a href="#" data-act="story" data-survey="${escAttr(o)}">${esc(o)}</a>`).join(" · "):"<span class='prov'>none nearby</span>")+`</div>`;
   drawer.setAttribute("aria-label",sv+", survey details");
-  drawer.classList.add("open");drawer.scrollTop=0;showDrawerScrim();   // D: dim backdrop on non-map views
-  _focusDrawer();}                                    // E7: move focus into the dialog
+  drawer.classList.add("open");drawer.scrollTop=keepScroll;showDrawerScrim();   // D: dim backdrop on non-map views
+  _restoreOpenDetails(keepOpen);                      // and the expanders they had open (empty on a real open)
+  if(!rehydrate)_focusDrawer();}                      // E7: move focus into the dialog (never on a hydration re-render)
 
 // ---- single delegated click handler (no inline onclick anywhere) ----
 function collLine(m){

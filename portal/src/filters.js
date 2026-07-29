@@ -29,7 +29,14 @@ function passesCore(s){
   const svs=[...tree.querySelectorAll('input[value]:checked')].map(c=>c.value);
   if(!svs.includes(s.survey))return false;
   const[plo,phi]=sliderRead();if(s.pmin>phi||s.pmax<plo)return false;
-  if(qMin>0&&!(s.q>=qMin))return false;
+  // Two-phase boot: s.q comes from sci.json, a PHASE 2 product. Until that product is USABLE this predicate
+  // is INERT: a completeness value that has not arrived is not a FAILING one, and applying it would hide
+  // every station on the map (and empty the counts) over data the portal does not have. hydrUsable, not
+  // !hydrating: a FAILED sci.json leaves s.q undefined exactly as an in-flight one does, so a pending-only
+  // gate would go live on a broken build and report "0 of 5 shown", which reads as a screening outcome. The
+  // rail control is disabled across the same window (setSciControlsEnabled), so this is the belt to that
+  // braces; SCI_READY re-runs refresh() the moment the values land, so a filter set early still takes effect.
+  if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
   const dlOnly=document.getElementById("dlOnly");
   if(dlOnly&&dlOnly.checked&&!s.ediAvail)return false;   // "Downloadable here only": predicate s.ediAvail
@@ -262,6 +269,28 @@ document.getElementById("colorSeg").addEventListener("click",e=>{const b=e.targe
   colorMode=b.dataset.c;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));recolor();});
 document.getElementById("qSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   qMin=+b.dataset.q;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));refresh();});
+// Two-phase boot: the rail controls whose MEANING depends on sci.json: the completeness (quality) filter
+// and the completeness/dimensionality colour modes. Until sci.json is USABLE they are disabled and marked
+// aria-busy, because a live control there would paint the whole map in the "not evaluated" grey or filter
+// every station out for values that are not there. Idempotent; called once from boot() and again from the
+// SCI_READY continuation (main.js wireHydration). Guarded for the stubbed-DOM smoke harness.
+// The hint NAMES the reason, and the two reasons are not the same: still loading resolves itself in a
+// moment, could-not-load does not resolve at all this session, and a reader deserves to know which wait
+// they are in. aria-busy is true only for the in-flight case; a failed product is settled, not busy.
+const SCI_PENDING_HINT="Completeness data is still loading";
+const SCI_FAILED_HINT="Completeness data could not be loaded, so this control is unavailable in this session";
+function _setSciBtn(b,on){if(!b)return;b.disabled=!on;
+  const failed=(typeof hydrFailed==="function")&&hydrFailed("sci");
+  if(b.setAttribute)b.setAttribute("aria-busy",(!on&&!failed)?"true":"false");
+  if("title" in b)b.title=on?"":(failed?SCI_FAILED_HINT:SCI_PENDING_HINT);}
+function setSciControlsEnabled(on){
+  const q=document.getElementById("qSeg");
+  if(q&&q.querySelectorAll)[...q.querySelectorAll("button")].forEach(b=>_setSciBtn(b,on));
+  const c=document.getElementById("colorSeg");
+  if(c&&c.querySelectorAll)[...c.querySelectorAll("button")].forEach(b=>{
+    const mode=(b.dataset||{}).c;
+    if(mode==="quality"||mode==="dim")_setSciBtn(b,on);});
+}
 // UX6 Wave D (D2): rail Browse / Select & export mode. Browse (default) shows find + data type + tree
 // (+ recently added on map); Select & export shows the map-selection box, exports and Screening
 // (advanced). It is a pure show/hide of the two mode panes — it never touches data-views (view/mode are

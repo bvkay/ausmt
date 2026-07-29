@@ -349,7 +349,7 @@ def test_process_job_generates_files_before_validation(tmp_path, monkeypatch):
 
     seen_at_validation = {}
 
-    def fake_sub(cmd, *, cwd, deadline):
+    def fake_sub(cmd, *, cwd, deadline, env=None):
         if any("validate_survey.py" in c for c in cmd):
             # Record whether the generated files exist on disk AT VALIDATION TIME.
             folder = Path(cmd[2])

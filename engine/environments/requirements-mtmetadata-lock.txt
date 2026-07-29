@@ -9,10 +9,24 @@
 #   python -m venv .venv && .venv/bin/pip install mt_metadata==1.0.9 mth5==0.6.8 && .venv/bin/pip freeze
 #
 # Tested interpreter: CPython 3.12 (wheels also exist for 3.11). See environments/README.md.
+#
+# The freeze was captured on Windows, so it named three pins that are only ever REQUIRED on Windows.
+# They carry environment markers below, copied from the upstream metadata that gates them rather
+# than invented here:
+#   colorama        loguru 0.7.3 and pytest 8.2.0: 'colorama...; sys_platform == "win32"'
+#   win32_setctime  loguru 0.7.3: 'win32-setctime>=1.0.0; sys_platform == "win32"'
+#   tzdata          pandas 3.0.3: 'tzdata; sys_platform == "win32"' and '...== "emscripten"'
+# All three ship as pure-python py3-none-any wheels, so an unmarked `pip install -r` of this file
+# has always SUCCEEDED on Linux (verified 2026-07-28: every pin here resolves to a linux/amd64
+# CPython 3.12 wheel, win32_setctime-1.2.0-py3-none-any.whl included). The markers are for honesty
+# and to keep three inert packages out of the Linux image, NOT a fix for an install failure. Keep
+# them when regenerating: `pip freeze` on Windows emits these three unmarked.
+#
+# deploy/docker/engine.Dockerfile installs THIS file, so the shipped engine image is reproducible.
 
 annotated-types==0.7.0
 certifi==2026.5.20
-colorama==0.4.6
+colorama==0.4.6; sys_platform == "win32"
 contourpy==1.3.3
 cycler==0.12.1
 dnspython==2.8.0
@@ -45,6 +59,6 @@ scipy==1.17.1
 six==1.17.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
-tzdata==2026.2
-win32_setctime==1.2.0
+tzdata==2026.2; sys_platform == "win32" or sys_platform == "emscripten"
+win32_setctime==1.2.0; sys_platform == "win32"
 xarray==2026.4.0

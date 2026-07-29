@@ -62,7 +62,26 @@ win.L = stub(); win.JSZip = stub();
 // version/schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip assertion
 // (item 3) can pin exactly, instead of matching a moving default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
-win.fetch = url => Promise.resolve(DATAMAP[url] ? { ok: true, json: () => Promise.resolve(DATAMAP[url]) } : { ok: false });
+
+// ---- two-phase boot instrumentation --------------------------------------------------------------
+// The portal boots in TWO phases: phase 1 fetches only what the first paint needs (catalogue + surveys and
+// the four small optionals, all in parallel) and renders; phase 2 (tf.json ~3.2MB, sci.json, manifest.json)
+// hydrates behind it. To drive that split this fetch (a) LOGS every url in request order, so the driver can
+// prove the six phase-1 products and the three heavy ones all went out together rather than one behind
+// another, and (b) HOLDS the three heavy responses until releaseHeavy(), so the driver can inspect the app
+// in exactly the window the split creates. Every other url resolves immediately, as before.
+const HEAVY = /(^|\/)(tf|sci|manifest)\.json$/;
+const fetchOrder = [];
+let heavyPending = [];
+let heavyReleased = false;
+function heavyHeld() { return heavyPending.length; }
+function releaseHeavy() { heavyReleased = true; const q = heavyPending; heavyPending = []; q.forEach(f => f()); }
+win.fetch = url => {
+  fetchOrder.push(String(url));
+  const body = DATAMAP[url] ? { ok: true, json: () => Promise.resolve(DATAMAP[url]) } : { ok: false };
+  if (!HEAVY.test(url) || heavyReleased) return Promise.resolve(body);
+  return new Promise(res => heavyPending.push(() => res(body)));
+};
 
 // Concatenate the modules + an api hook; run in the window's global scope so the top-level declarations
 // become window globals (same effect as index.html's ordered <script> tags).
@@ -174,6 +193,21 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // re-fit body (invalidateSize + fit HOME_BOUNDS, gated ONLY on !userInteracted, NOT on degeneracy);
   // scheduleDeferredHomeRefit is the double-rAF scheduler the driver drives through a controllable rAF queue.
   "mapDeferredHomeRefit:()=>_mapDeferredHomeRefit(),scheduleDeferredHomeRefit:()=>_scheduleDeferredHomeRefit()," +
+  // Two-phase boot hooks. hydrationDone settles once tf/sci/manifest have landed AND their late-render work
+  // has run, so the driver can say "the app is now in the state a single-phase boot produced" without racing
+  // the continuations. hydrState reports the per-product gate ("pending"|"ready"|"failed"), qMin/setQMin drive
+  // the completeness filter directly (its rail buttons are disabled while sci is pending, by design), and
+  // markerCount/station/closeDrawer are plain observables for the first-paint assertions.
+  "hydrationDone:()=>HYDRATION_DONE,hydrState:(k)=>HYDR[k]," +
+  "markerCount:()=>ST.filter(s=>s.marker).length,station:(id)=>ST.find(x=>x.id===id)," +
+  "qMin:()=>qMin,setQMin:(v)=>{qMin=v;},closeDrawer," +
+  // geoFC builds the GeoJSON export exactly as #dlGeo does, taking the sci-usable decision FROM THE APP
+  // (hydrUsable) rather than from the driver, so the export-honesty pins observe the real branch rather than
+  // a re-implementation of it. setSelected drives `selected` by station id without going through
+  // selectSurvey (which also enters the select lens and switches views); the strike rose needs a selection
+  // and nothing else. Both take/return plain data, so they work identically in a fresh failure window.
+  "geoFC:(sts)=>geoFeatureCollection(sts||sel(),hydrUsable('sci'))," +
+  "setSelected:(ids)=>{selected=new Set(ids.map(id=>{const s=ST.find(x=>x.id===id);return s?s.i:-1;}).filter(i=>i>=0));updateSel();}," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -193,6 +227,7 @@ async function bootFreshWindow(dataMap, url) {
   await new Promise(res => (w.document.readyState === "complete" ? res() : w.addEventListener("load", res, { once: true })));
   vm.runInContext(code, d.getInternalVMContext());
   await w.__api.boot();
+  await w.__api.hydrationDone();   // two-phase boot: settle tf/sci/manifest before the caller asserts
   return w;
 }
 
@@ -210,7 +245,31 @@ async function bootFreshWindow(dataMap, url) {
   // uses rAF, so this override only intercepts the map fix.
   const rafQ = [];
   win.requestAnimationFrame = (cb) => { rafQ.push(cb); return rafQ.length; };
-  await A.boot();
+  // ---- TWO-PHASE BOOT, part 1: boot() must return on the PHASE 1 products alone --------------------
+  // tf.json / sci.json / manifest.json are HELD by the instrumented fetch above, so this is exactly the
+  // window the split exists for. RED PROOF: before this change boot() awaited a Promise.all that carried
+  // tf.json, so with that fetch held it could never resolve: this race would report "blocked" and the whole
+  // driver below (2000+ existing assertions included) was unreachable.
+  let _bootTimer = 0;
+  const _blocked = new Promise(res => { _bootTimer = setTimeout(() => res("blocked"), 5000); });
+  const _bootOutcome = await Promise.race([A.boot().then(() => "booted"), _blocked]);
+  clearTimeout(_bootTimer);
+  ok(_bootOutcome === "booted",
+    "phase1: boot() must resolve on the FIRST-PAINT products alone (catalogue + surveys + the small " +
+    "optionals); it is still blocked on the held tf/sci/manifest fetches");
+  // PARALLELISM. Exactly NINE data fetches have been issued by boot, and all three heavy ones are in flight
+  // at the same time. Before this change the five optionals ran STRICTLY ONE AFTER ANOTHER (each awaiting the
+  // previous round trip) and none of them was even requested until the tf.json-carrying Promise.all had
+  // resolved, so with tf held four of these nine urls would be missing from the log entirely.
+  const _bootUrls = ["catalogue.json", "surveys.json", "build_provenance.json", "collections.json",
+    "build.json", "coord_policy.json", "tf.json", "sci.json", "manifest.json"];
+  _bootUrls.forEach(n => ok(fetchOrder.some(u => u.endsWith("/" + n)),
+    "phase1/2: " + n + " must be requested during boot (the optionals must not queue behind each other); issued: " + JSON.stringify(fetchOrder)));
+  ok(fetchOrder.length === _bootUrls.length,
+    "boot must issue exactly the nine data fetches, got " + JSON.stringify(fetchOrder));
+  ok(heavyHeld() === 3, "phase2: tf/sci/manifest must all be in flight CONCURRENTLY, held " + heavyHeld());
+  ["tf", "sci", "manifest"].forEach(k => ok(A.hydrState(k) === "pending",
+    "phase2: the " + k + " gate must read 'pending' while its fetch is held, got " + A.hydrState(k)));
   ok(A.nST() === 5, "fixture should load 5 stations, got " + A.nST());
 
   // UX9 ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
@@ -288,6 +347,232 @@ async function bootFreshWindow(dataMap, url) {
   A.setMapInteracted(false);
   A.mapDeferredHomeRefit();
   ok(mapCalls.filter(c => c.fn === "fitBounds").length === _fbD + 1, "mapfit: untouched -> the deferred re-fit fits HOME_BOUNDS");
+
+  // ---- TWO-PHASE BOOT, part 2: what the reader may see DURING hydration ----------------------------
+  // Everything above ran with tf/sci/manifest still held. Two things are asserted here. First the POINT of
+  // the split: the dots, the counts, the tree and the whole surveys view are already rendered off phase-1
+  // data alone (pre-change none of this existed until every product had landed). Second the HONESTY RULE:
+  // in that window no surface may render an ABSENCE claim for a product that is merely still in flight.
+  ok(A.hydrState("tf") === "pending" && A.hydrState("sci") === "pending" && A.hydrState("manifest") === "pending",
+    "phase2 window: the three gates must still read pending here");
+  ok(A.nVisCount() === 5, "phase1: all five stations must be filtered and visible before hydration, got " + A.nVisCount());
+  ok(A.markerCount() === 5, "phase1: a map marker must exist per positioned station before hydration, got " + A.markerCount());
+  ok(doc.getElementById("nTot").textContent === "5", "phase1: the total-station count must be painted before hydration, got " + doc.getElementById("nTot").textContent);
+  ok(doc.getElementById("nVis").textContent === "5", "phase1: the shown-station count must be painted before hydration, got " + doc.getElementById("nVis").textContent);
+  ok(doc.getElementById("tree").querySelectorAll("input[value]").length === 4,
+    "phase1: the survey tree must be built before hydration, got " + doc.getElementById("tree").querySelectorAll("input[value]").length);
+  // The SURVEYS view renders entirely from phase-1 data.
+  A.setView("surveys");
+  ok(A.curView() === "surveys", "phase1: the surveys view must be reachable before hydration");
+  const _preCards = doc.getElementById("cardGrid").innerHTML;
+  ["Alpha Survey", "Beta Survey", "Gamma Survey", "Delta Survey"].forEach(sv => ok(_preCards.indexOf(sv) >= 0,
+    "phase1: the surveys view must render the " + sv + " card before tf/sci/manifest resolve"));
+  A.setView("map");
+
+  // The sci-driven RAIL CONTROLS are inert-and-disabled, never live over data that has not arrived: a live
+  // completeness filter would hide every station (nothing has a q yet) and the completeness/dimensionality
+  // colour modes would paint the whole map in the "not evaluated" grey.
+  ok([...doc.getElementById("qSeg").querySelectorAll("button")].every(b => b.disabled),
+    "honesty: the completeness filter buttons must be disabled while sci.json is in flight");
+  ok([...doc.getElementById("colorSeg").querySelectorAll("button")].filter(b => b.dataset.c !== "type").every(b => b.disabled),
+    "honesty: the completeness/dimensionality colour modes must be disabled while sci.json is in flight");
+  ok(doc.getElementById("colorSeg").querySelector('button[data-c="type"]').disabled === false,
+    "the data-type colour mode is phase-1 data and must stay live");
+  ok(doc.getElementById("qSeg").querySelector("button").getAttribute("aria-busy") === "true",
+    "an in-flight product makes its controls aria-busy, so a screen reader is told a wait is under way");
+  const _a1 = A.station("A1");
+  A.setColorMode("quality");
+  ok(A.markerColor(_a1) === "#5E5ED6",
+    "honesty: with sci.json in flight the completeness colour mode must fall back to the data-type colour, never the 'not evaluated' grey, got " + A.markerColor(_a1));
+  A.setColorMode("type");
+  A.setQMin(4.5);                                    // stricter than every fixture station's q (4.0)
+  A.refresh();
+  ok(A.nVisCount() === 5,
+    "honesty: the completeness filter must be INERT while sci.json is in flight; it may never empty the map over values that have not arrived, got " + A.nVisCount());
+  A.setQMin(0); A.refresh();
+
+  // B1 (Beta Survey, open access, edi_available=0) reaches the ediDescriptor branches A1 never does: with no
+  // served artifact and no embargo, the ungated function falls through to "EDI (via source archive)", a
+  // ROUTING claim that needs the manifest to be true, and headerDownloadBtn's d:null makes the sticky header
+  // render nothing, which in that function IS the embargo signal. Both are absence claims about a station
+  // that may well be downloadable; the manifest just has not arrived.
+  A.openStation(2);
+  const _b1 = doc.getElementById("drawer").innerHTML;
+  ok(_b1.indexOf("EDI (via source archive)") < 0,
+    "honesty: the source-archive EDI fallback is a claim about how this deployment serves the file and must not render before the manifest lands");
+  ok(_b1.indexOf('class="badges"') < 0,
+    "honesty: the format-availability badges must not render before the manifest lands (an 'unk' badge claims a format is not served here)");
+  ok(/Loading served files/.test(_b1),
+    "honesty: the format-availability block must say it is loading in their place");
+  ok(/checking file availability/.test(_b1),
+    "honesty: the sticky-header download slot must SAY it is checking; rendering nothing there is how this drawer states an embargo");
+  // The lineage Method node reads sc[SC.alg]/sc[SC.rr]: ungated it prints "not stated", a claim about what
+  // the source EDI carried.
+  const _mIdx = _b1.indexOf('<div class="lt">Method</div>');
+  ok(_mIdx >= 0, "the lineage Method node must render");
+  ok(_b1.slice(_mIdx, _mIdx + 200).indexOf("loading…") >= 0,
+    "honesty: the lineage Method node must read as loading while sci.json is in flight, never 'not stated'");
+
+  // The SURVEY drawer has its own sci/manifest surfaces, and its bundle grid makes its absence claim by
+  // OMISSION (no tiles reads as "this survey is not served in bundle form"), which is no more honest for
+  // being wordless.
+  A.openSurvey("Alpha Survey");
+  const _svPre = doc.getElementById("drawer").innerHTML;
+  const _rrIdx = _svPre.indexOf("<td>remote reference</td>");
+  ok(_rrIdx >= 0, "the survey summary must render its remote-reference row");
+  ok(_svPre.slice(_rrIdx, _rrIdx + 160).indexOf("loading…") >= 0,
+    "honesty: the survey remote-reference tally must read as loading while sci.json is in flight, never 'not recorded'");
+  const _swIdx = _svPre.indexOf("<td>processing software</td>");
+  ok(_swIdx >= 0, "the survey summary must render its processing-software row");
+  ok(_svPre.slice(_swIdx, _swIdx + 160).indexOf("loading…") >= 0,
+    "honesty: the survey processing-software row must read as loading while sci.json is in flight, never 'not recorded'");
+  ok(/Survey bundles<small>loading…<\/small>/.test(_svPre),
+    "honesty: the survey bundle grid must show a loading tile while the manifest is in flight; rendering no tiles claims the survey is not served in bundle form");
+
+  // A station drawer opened DURING hydration: loading states, and NOT ONE of the honest-absence lines that
+  // belong to a product this build genuinely does not serve.
+  A.openStation(0);                                  // A1 (Alpha Survey, open access, real curves in the fixture)
+  const _preDrawer = doc.getElementById("drawer").innerHTML;
+  ok(/Loading response functions/.test(_preDrawer),
+    "honesty: the response panel must show a loading state while tf.json is in flight");
+  ok(!/data-plot=/.test(_preDrawer),
+    "honesty: no response plot may render before tf.json lands (an empty curve set renders as NO plot, i.e. as 'this station has no response functions')");
+  ok(!/class="plotexp/.test(_preDrawer),
+    "honesty: the expand control must be withheld while there are no curves to expand");
+  ok(!/mat-stars/.test(_preDrawer),
+    "honesty: the dataset-maturity stars must not render while sci.json is in flight (an unlit star claims a dimension was not achieved)");
+  ok(/Loading dataset maturity/.test(_preDrawer), "honesty: the maturity block must say it is loading instead");
+  ok(/loading…/.test(_preDrawer), "honesty: the sci/manifest-backed summary cells must read as loading");
+  ["not currently available", "none currently served", "not stated in EDI", "EDI (via source archive)"]
+    .forEach(copy => ok(_preDrawer.indexOf(copy) < 0,
+      "honesty: '" + copy + "' is a claim about what this build serves and must NOT render before hydration"));
+
+  // The re-render on each settling gate rewrites a panel the reader is ALREADY READING. Two things must not
+  // ride along with it: an expander they opened may not snap shut (three gates = up to three rewrites across
+  // a multi-second window), and the per-station station.json frame-line fetch may not be re-issued each time.
+  const _findDetails = (w, label) => [...w.getElementById("drawer").querySelectorAll("details")]
+    .find(d => d.querySelector("summary") && d.querySelector("summary").textContent === label);
+  const _lineage = _findDetails(doc, "Lineage graph");
+  ok(!!_lineage, "the Lineage graph expander must be present in the station drawer");
+  _lineage.open = true;
+  const _stationJsonBefore = fetchOrder.filter(u => /station\.json$/.test(u)).length;
+  ok(_stationJsonBefore >= 1, "opening a station drawer must fetch its station.json for the frame line");
+
+  // ---- TWO-PHASE BOOT, part 3: late hydration must refresh what it made stale ----------------------
+  releaseHeavy();
+  await A.hydrationDone();
+  ["tf", "sci", "manifest"].forEach(k => ok(A.hydrState(k) === "ready",
+    "hydration: the " + k + " gate must settle to 'ready', got " + A.hydrState(k)));
+  const _postDrawer = doc.getElementById("drawer").innerHTML;
+  ok(!/Loading response functions/.test(_postDrawer),
+    "hydration: a stale loading state may not stand once tf.json has landed; the OPEN drawer must re-render");
+  ok(/data-plot="rho"/.test(_postDrawer) && /data-plot="pt"/.test(_postDrawer),
+    "hydration: the OPEN drawer must re-render with its response curves");
+  ok(/>A1</.test(_postDrawer), "hydration: the re-render must keep the SAME station open");
+  ok(/BIRRP/.test(_postDrawer), "hydration: the sci-derived processing software must fill in on the open drawer");
+  ok(/mat-stars/.test(_postDrawer), "hydration: the dataset-maturity stars must render once sci.json has landed");
+  ok(_postDrawer.indexOf("loading…") < 0, "hydration: no loading cell may survive hydration");
+  // The absence copy the fixture DOES earn (it ships no manifest, so no EMTF XML / MTH5 is served) appears
+  // only now, which is the whole point: the same words are honest after hydration and dishonest before it.
+  ok(_postDrawer.indexOf("not currently available") >= 0,
+    "hydration: with the manifest loaded and empty, the genuine not-served copy must render");
+  // sci-derived station state and the rail controls come back to life together.
+  ok(_postDrawer.indexOf("checking file availability") < 0, "hydration: the header availability check must resolve too");
+  // The re-render must not cost the reader their place or the network a repeat round trip.
+  const _lineageAfter = _findDetails(doc, "Lineage graph");
+  ok(!!_lineageAfter && _lineageAfter.open === true,
+    "hydration: an expander the reader opened during the hydration window must still be open after the re-render");
+  ok(fetchOrder.filter(u => /station\.json$/.test(u)).length === _stationJsonBefore,
+    "hydration: the re-render must not re-issue the station.json frame-line fetch once per settling gate, issued " +
+    fetchOrder.filter(u => /station\.json$/.test(u)).length + " vs " + _stationJsonBefore);
+  ok(A.station("A1").q === 4.0, "hydration: s.q must be re-folded onto the stations from sci.json, got " + A.station("A1").q);
+  ok([...doc.getElementById("qSeg").querySelectorAll("button")].every(b => !b.disabled),
+    "hydration: the completeness filter must be re-enabled once sci.json has landed");
+  A.setQMin(4.5); A.refresh();
+  ok(A.nVisCount() === 0,
+    "hydration: the completeness filter must be LIVE after sci.json lands (q=4.0 < 4.5 for every fixture station), got " + A.nVisCount());
+  A.setQMin(0); A.refresh();
+  A.closeDrawer();
+  win.location.hash = "";
+
+  // ---- TWO-PHASE BOOT, part 4: a FAILED heavy product is not an absence either ---------------------
+  // A fresh window whose tf.json 404s (a broken or partial build). Before the split that was FATAL: tf.json
+  // rode in the required Promise.all, so the whole portal fell back to the load-error page. Now first paint
+  // survives it, which makes it critical that the response panel SAYS the curves could not be loaded instead
+  // of rendering exactly the nothing a station with no curves renders.
+  const _noTf = Object.assign({}, DATAMAP); delete _noTf["data/tf.json"];
+  const failWin = await bootFreshWindow(_noTf);
+  ok(failWin.__api.nST() === 5, "a missing tf.json must no longer blank the portal; the stations must still paint");
+  ok(failWin.__api.hydrState("tf") === "failed",
+    "a 404 on tf.json must settle its gate to 'failed', got " + failWin.__api.hydrState("tf"));
+  ok(failWin.__api.hydrState("sci") === "ready", "the other gates must be unaffected by the tf failure");
+  failWin.__api.openStation(0);
+  const _failDrawer = failWin.document.getElementById("drawer").innerHTML;
+  ok(/Could not load response functions/.test(_failDrawer),
+    "honesty: a FAILED tf.json must be STATED, never rendered as a station that has no response functions");
+  ok(!/data-plot=/.test(_failDrawer), "a failed tf.json leaves no curves to plot");
+  ok(_failDrawer.indexOf("Loading response functions") < 0, "a settled failure must not read as still loading");
+  // The strike rose reads tf.json too, and it CANNOT show a loading line: it is a one-shot action. Awaiting
+  // TF_READY is therefore not the guard, because that promise settles on failure as well: with an empty row
+  // for every station the azimuth loop collects nothing and the rose reports "not enough low-skew
+  // phase-tensor azimuths in the selection", a STATEMENT ABOUT THE SELECTION standing in for a 404.
+  failWin.__api.setSelected(["A1", "A2"]);
+  failWin.document.getElementById("toast").textContent = "";
+  failWin.document.getElementById("strike").click();
+  await new Promise(r => setTimeout(r, 0));          // the handler is async (it awaits TF_READY)
+  const _strikeToast = failWin.document.getElementById("toast").textContent;
+  ok(/could not be loaded/.test(_strikeToast),
+    "honesty: a FAILED tf.json must be stated by the strike rose, never reported as too few azimuths in the selection, got " + JSON.stringify(_strikeToast));
+  ok(failWin.document.getElementById("drawer").innerHTML.indexOf("Strike rose") < 0,
+    "a failed tf.json leaves nothing to draw a rose from");
+
+  // ---- TWO-PHASE BOOT, part 4b: a FAILED sci.json is not a screening outcome ----------------------
+  // The map, the rail and the exports cannot show a per-item loading line, so they gate on whether the
+  // product is USABLE, which covers pending AND failed. Testing only "pending" was the defect: SCI_READY
+  // settles on failure too, so a 404 on sci.json re-enabled the completeness controls, emptied the map at any
+  // qMin, painted every marker the "not evaluated" grey and wrote remote_ref:false into an exported file.
+  // Phase 2 is what made a sci.json failure survivable at all (pre-split it rode the required Promise.all and
+  // blanked the portal), so this state is this lane's to answer.
+  const _noSci = Object.assign({}, DATAMAP); delete _noSci["data/sci.json"];
+  const sciFailWin = await bootFreshWindow(_noSci);
+  const sfDoc = sciFailWin.document, sfA = sciFailWin.__api;
+  ok(sfA.hydrState("sci") === "failed", "a 404 on sci.json must settle its gate to 'failed', got " + sfA.hydrState("sci"));
+  ok(sfA.nST() === 5, "a missing sci.json must no longer blank the portal; the stations must still paint");
+  const _sfQ = [...sfDoc.getElementById("qSeg").querySelectorAll("button")];
+  ok(_sfQ.every(b => b.disabled),
+    "honesty: the completeness filter must STAY disabled when sci.json FAILED; SCI_READY settling is not the same as the values arriving");
+  ok([...sfDoc.getElementById("colorSeg").querySelectorAll("button")].filter(b => b.dataset.c !== "type").every(b => b.disabled),
+    "honesty: the completeness/dimensionality colour modes must STAY disabled when sci.json FAILED");
+  ok(/could not be loaded/.test(_sfQ[0].title),
+    "honesty: the disabled control must name the ACTUAL reason, not claim it is still loading, got " + JSON.stringify(_sfQ[0].title));
+  ok(_sfQ[0].getAttribute("aria-busy") === "false",
+    "honesty: a FAILED product is settled, not busy; aria-busy must not tell a screen reader to keep waiting");
+  sfA.setQMin(4.5); sfA.refresh();
+  ok(sfA.nVisCount() === 5,
+    "honesty: the completeness filter must be INERT on a FAILED sci.json; emptying the map reads as 'no station meets this threshold', got " + sfA.nVisCount());
+  sfA.setQMin(0); sfA.refresh();
+  sfA.setColorMode("quality");
+  ok(sfA.markerColor(sfA.station("A1")) === "#5E5ED6",
+    "honesty: a FAILED sci.json must not paint the map in the 'not evaluated' grey, got " + sfA.markerColor(sfA.station("A1")));
+  sfA.setColorMode("type");
+  // An export leaves the page. remote_ref:!!undefined is a POSITIVE claim that these stations were not
+  // remote-referenced, and quality/dimensionality would vanish as undefined keys with no trace of why.
+  const _gjFail = sfA.geoFC([sfA.station("A1")]);
+  const _pFail = _gjFail.features[0].properties;
+  ok(!("remote_ref" in _pFail),
+    "honesty: a FAILED sci.json must not write remote_ref into an exported FILE, got " + JSON.stringify(_pFail.remote_ref));
+  ok(!("quality" in _pFail) && !("dimensionality" in _pFail),
+    "the other two screening properties must be omitted with it, not silently dropped as undefined");
+  ok(typeof _gjFail.note === "string" && /could not be loaded/.test(_gjFail.note),
+    "honesty: the FILE must carry the reason those properties are missing; a toast does not travel with a download");
+  ok(_pFail.ausmt_id === "au.alpha.A1" && _pFail.license_url !== undefined,
+    "the phase-1 properties must be unaffected by the sci failure");
+  // And the healthy path is byte-for-byte what it was: the gate must not cost a good build its data.
+  const _gjOk = A.geoFC([A.station("A1")]);
+  ok(_gjOk.note === undefined, "a healthy sci.json must add NO note to the GeoJSON");
+  ok(_gjOk.features[0].properties.quality === 4.0 && _gjOk.features[0].properties.dimensionality === "2-D" &&
+     _gjOk.features[0].properties.remote_ref === true,
+    "a healthy sci.json must write the three screening properties exactly as before");
 
   // VER CHIP -> FOOTER (UX feedback round 3, item 3): the version chip moved out of the header into the
   // footer. version.js is a standalone page script (not in MODULES), so run it here against the real DOM

@@ -97,17 +97,22 @@ def claim_one(jobs_dir: Path) -> Path | None:
     return None
 
 
-def _run_subprocess(cmd: list[str], *, cwd: Path | None, deadline: float) -> subprocess.CompletedProcess:
+def _run_subprocess(cmd: list[str], *, cwd: Path | None, deadline: float,
+                    env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """Run cmd with a timeout derived from the job deadline. Raises JobTimeout if the remaining
     budget is already gone or the process overruns it. Output is captured (never streamed to the
-    runner's stdout, which could carry submitted bytes into logs)."""
+    runner's stdout, which could carry submitted bytes into logs).
+
+    `env` is the COMPLETE child environment when given (None inherits this process's, the historical
+    behaviour). Only the engine preview spawn passes it, to pin AUSMT_VALIDATOR_PATH; see
+    _preview_env()."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise JobTimeout("job budget exhausted before subprocess start")
     try:
         return subprocess.run(  # noqa: PLW1510 -- returncode inspected by the caller
             cmd, cwd=str(cwd) if cwd else None, capture_output=True, text=True,
-            timeout=remaining,
+            timeout=remaining, env=env,
         )
     except subprocess.TimeoutExpired as exc:
         raise JobTimeout(f"subprocess exceeded budget: {cmd[0]}") from exc
@@ -288,6 +293,24 @@ def _validator_passed(report: dict) -> bool:
     return True
 
 
+def _preview_env(cfg: RunnerConfig) -> dict[str, str]:
+    """The child environment for the engine preview spawn: this process's environment PLUS an
+    explicit AUSMT_VALIDATOR_PATH pinned to cfg.validator_path.
+
+    The preview build runs the SAME validator gate again in-process (build_portal._load_validator),
+    resolving it from AUSMT_VALIDATOR_PATH first and otherwise walking upward for a sibling
+    ausmt-surveys checkout; if neither resolves it refuses to ingest unvalidated and exits rc=2. The
+    runner already knows exactly which validator it gates on: cfg.validator_path, the same value
+    _run_validator hands the validator subprocess. Handing it to the build makes the two gates agree
+    BY CONSTRUCTION rather than by both happening to inherit the same ambient environment.
+
+    On the box this is the value compose exports as AUSMT_VALIDATOR_PATH, which cfg.validator_path is
+    read from, so the spawn is unchanged there. Off the box it is the difference between a preview
+    build and a bare rc=2 'survey validator not found': the gateway test suite configures the runner
+    with the vendored validator copy, which the build could not see because it was never told."""
+    return {**os.environ, "AUSMT_VALIDATOR_PATH": str(cfg.validator_path)}
+
+
 def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summary_path: Path,
                  deadline: float) -> bool:
     """Run the engine preview build of the single package into preview_dir, then write a compact
@@ -322,6 +345,9 @@ def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summar
         # runner's cwd. `extract` is now an installed package so resolution no longer NEEDS this, but
         # pinning it removes the silent dependence on compose's WORKDIR that once broke the runner.
         cwd=cfg.engine_dir, deadline=deadline,
+        # Explicit validator pin (same rationale as the cwd above, one layer down): hand the build the
+        # validator the runner is configured to gate on instead of letting it re-derive one.
+        env=_preview_env(cfg),
     )
     if proc.returncode != 0:
         _write_summary(summary_path, {
