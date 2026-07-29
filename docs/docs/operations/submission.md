@@ -36,8 +36,8 @@ the published record.
 Upload keys are issued by a curator (email the operator to request one); the key is sent to you
 out-of-band and travels only as the upload request header, never inside the package.
 
-The gateway's security design is frozen in the maintainer knowledge base
-(`maintainer/C10-GatewayDesign.md` and successors) for readers who want the full detail.
+The gateway's security design is frozen in the repository's design records
+(`maintainer/C10-GatewayDesign.md` and its successors) for readers who want the full detail.
 
 ---
 
@@ -155,9 +155,13 @@ Validation checks include:
 
 - Package structure (survey.yaml present, transfer functions under the expected directories)
 - Required metadata (name, licence, access level; semantic version and release-notes shape)
+- Closed vocabularies: access level, coordinate-access policy, contributor roles and name types,
+  identifier types and data levels. An out-of-vocabulary value fails rather than publishing a
+  claim nobody can act on
 - Coordinate sanity checks, including DMS/decimal cross-checks
 - Transfer-function file-type gates, signature checks and EDI parseability
 - File-size caps
+- Deprecation warnings for retired `survey.yaml` fields, pointing at the migration script
 
 Validation produces one of three outcomes:
 
@@ -224,8 +228,8 @@ Publication typically includes:
 - Generation of derived products
 - Catalogue registration
 - Portal indexing
-- Machine-readable discovery via the static MTCAT document (`mtcat.json`) and portal `data/*.json`
-  — a REST API is planned but not yet implemented (see [API Overview](../interoperability/api-overview.md))
+- Machine-readable discovery via the static MTCAT document (`mtcat.json`) and the portal's other
+  `data/*.json` files (see [How AusMT serves data](../interoperability/api-overview.md))
 
 Once published, the survey package becomes part of the curated AusMT record.
 

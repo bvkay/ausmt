@@ -13,9 +13,8 @@ Each assertion states its failure criterion:
   * About marked active — FAILS if the centre-zone About link is not rendered in the active state, or if
     any OTHER centre nav item is (only the current page may be active).
   * no APP-STATE counts on a static page: FAILS if about.html carries any of index's live-counts ids
-    (nVis/nSel/nTot). Those three are map/filter/selection state, which has no meaning on a page with no
-    map, no filters and no selection. Non-vacuous: index.html HAS these ids, so a naive
-    copy-the-whole-header would trip this.
+    (nVis/nSel/nTot). Those three report the current map's filter and selection state, and About has
+    neither. Non-vacuous: index.html HAS these ids, so a naive copy-the-whole-header would trip this.
     NARROWED by the api-docs lane, deliberately: the ban used to extend to the class "counts" as well,
     on the reasoning that a static page has no counts to state. That reasoning covered app state only.
     About now carries a CORPUS-totals block (total stations / total surveys, read from the catalogue at
@@ -33,6 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent   # portal/
 ABOUT = ROOT / "about.html"
 INDEX = ROOT / "index.html"
 ADD = ROOT / "add-survey.html"
+RELEASES = ROOT / "releases.html"
 
 
 class _Collector(HTMLParser):
@@ -281,8 +281,11 @@ def test_header_parity_about_matches_index():
         about.html's nav items were bare <a href="index.html"> with no ids at all, so About failed this.
         The TAG is deliberately not compared: index's are <button>s that switch app views in place, About
         is static so its must be links. Ids + order + placement are the parity that matters.
-      * CENTRE-ZONE ORDER: FAILS if the six primary items are not in the same order on both pages:
-        Map, Surveys, Collections, About, How-to-use, Contribute.
+      * CENTRE-ZONE ORDER: FAILS if the five primary items are not in the same order on both pages:
+        Map, Surveys, Collections, About, Contribute. It was six until the docs wave, when the owner cut
+        "How to use AusMT" from every header (the welcome tour and About cover it). The sixth slot is
+        pinned SHUT below, so a header that grows a sixth centre item fails here rather than drifting
+        back.
       * STATS BLOCK: FAILS if either page's right zone lacks a single .counts element. Non-vacuous: the
         pre-lane about.html had an empty .hright, so it failed this half.
       * ACTIVE-PAGE HIGHLIGHT NOT REGRESSED: FAILS if adding the ids also made a view button active on
@@ -296,20 +299,22 @@ def test_header_parity_about_matches_index():
             f"{name}: the primary nav must be navMap, navSurveys, navCollections in that order; got {ids}")
 
     def centre_order(items):
-        """The six primary header items in document order, each reduced to a stable label."""
+        """The five primary header items in document order, each reduced to a stable label. Anything else
+        carrying the .about styling is labelled 'other', which is what fails the pin: it is how a sixth
+        header item (the retired How-to-use entry, or a successor to it) shows up here."""
         out = []
         for tag, a, in_nav in items:
             if in_nav and a.get("id") in ("navMap", "navSurveys", "navCollections"):
                 out.append(a["id"])
             elif "about" in _classes(a) and a.get("href") == "about.html":
                 out.append("about")
-            elif "about" in _classes(a) and a.get("href") != "about.html":
-                out.append("howto")          # index: a <button>; about: an <a href="#howto">
+            elif "about" in _classes(a):
+                out.append("other:" + (a.get("href") or a.get("id") or tag))
             elif "contribute" in _classes(a):
                 out.append("contribute")
         return out
 
-    expected = ["navMap", "navSurveys", "navCollections", "about", "howto", "contribute"]
+    expected = ["navMap", "navSurveys", "navCollections", "about", "contribute"]
     for name, items in (("index.html", idx), ("about.html", abt)):
         assert centre_order(items) == expected, (
             f"{name}: header items must run {expected}; got {centre_order(items)}")
@@ -328,6 +333,30 @@ def test_header_parity_about_matches_index():
     abt_active = [a.get("id") for (tag, a, in_nav) in abt if in_nav and "active" in _classes(a)]
     assert abt_active == [], (
         f"about.html must not highlight a view button (none of them is the current page); active={abt_active}")
+
+
+def test_no_page_header_keeps_the_retired_how_to_use_entry():
+    """Docs wave, stage 2 (owner ruling): the "How to use AusMT" header entry is gone from every page.
+    On index it was a <button id="howToUse"> that opened the #introOverlay help panel; on About it was an
+    <a href="#howto">, and releases.html arrived on main with an <a href="about.html#howto"> copy of the
+    same item. All are pinned absent, by id and by visible text, on all four shipped pages. Non-vacuous:
+    run against the pre-wave HTML, index.html, about.html and releases.html all fail.
+
+    The #howto ANCHOR survives on About (answer 2 keeps that id, so an inbound deep link still lands) and
+    is deliberately not what this asserts against; the assertion is about the HEADER entry.
+
+    Comments are stripped before the text check on purpose: both headers carry a comment explaining what
+    was removed and why, and a rule that forbids explaining a removal is a rule that loses the reason."""
+    for path in (INDEX, ABOUT, ADD, RELEASES):
+        raw = path.read_text(encoding="utf-8")
+        if "<header>" not in raw:
+            continue
+        header = raw.split("<header>", 1)[1].split("</header>", 1)[0]
+        header = re.sub(r"<!--.*?-->", "", header, flags=re.S)
+        assert "How to use AusMT" not in header, (
+            f"{path.name}: the 'How to use AusMT' header entry was retired in the docs wave")
+        assert 'id="howToUse"' not in raw, (
+            f"{path.name}: #howToUse was retired with the help panel it opened")
 
 
 def test_about_corpus_stats_are_fetched_not_hardcoded():

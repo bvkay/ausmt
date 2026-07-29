@@ -44,6 +44,8 @@ Generated outputs (consumed directly by the AusMT Portal):
 
 ```text
 catalogue.json  tf.json  sci.json  surveys.json  collections.json  mtcat.json  manifest.json
+build_provenance.json  build_report.json  qc_report.json  base_ids.json  coord_policy.json
+build.json
 ```
 
 The positional shape of these files is defined in `docs` → `developer/data-files.md`.
@@ -62,9 +64,9 @@ pytest -q
 python -m extract.build_portal --surveys data --out portal_data --products products
 ```
 
-mt_metadata/mth5 is the sole parser since the regex retirement
-so it is a core dependency and the build requires
-it. `python scripts/verify.py` runs the tests + a build + an MTCAT schema check in one go.
+mt_metadata/mth5 has been the sole parser since the dependency-free regex extractor was retired in
+2026-06, so it is a core dependency and the build hard-exits without it.
+`python scripts/verify.py` runs the tests + a build + an MTCAT schema check in one go.
 
 ---
 

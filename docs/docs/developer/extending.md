@@ -77,13 +77,25 @@ This crosses the positional contract — do all of these together or you will si
 > Note: without PyYAML the validator uses a small `_mini_yaml` fallback. If your field is a nested
 > map or inline `{}`, confirm both PyYAML and the fallback parse it (`tests/test_mini_yaml_parity.py`).
 
+Two conventions the recent field waves settled, worth following rather than re-deciding:
+
+- **A closed vocabulary fails closed.** If a field's value must come from a fixed set (an access
+  level, a contributor role, an identifier type, a data level), an out-of-vocabulary value is a
+  hard FAIL, not a warning and never a silent coercion to the default. The reason is that these
+  fields make claims about somebody else's data or rights, and a wrong claim is worse than a
+  refused package.
+- **Retiring a field means adding a migration, not deleting a reader.** Drop the field from the
+  editor UI, leave the engine reading it, add a deprecation WARNING that fires only on a real
+  value, and ship a script under `ausmt-surveys/_tools/`. The corpus migrates at its own pace and
+  nothing stops publishing in the meantime.
+
 ## 5. Run and deploy locally
 
 ```bash
 # engine (clean all-pip venv recommended)
 cd engine
-pip install -r requirements-dev.txt          # tests
-pip install -r requirements-mtmetadata.txt   # REQUIRED: mt_metadata/mth5 is the sole engine; the build below hard-exits without it (see ABI note)
+pip install -r requirements-dev.txt          # tests + the core stack (mt_metadata/mth5 are core deps)
+pip install -r environments/requirements-mtmetadata-lock.txt   # the PINNED stack CI runs; see the ABI note in that dir
 python scripts/verify.py                      # tests + build + mtcat schema check
 python -m extract.build_portal --surveys ../../ausmt-surveys/surveys --out ../portal/data --products products
 

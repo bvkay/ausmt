@@ -45,6 +45,14 @@ declared in the survey package and recorded in provenance.
 | `mtcat.json` | `build_portal.mtcat_document` | external harvesters; validated against `schema/mtcat.schema.json` |
 | `qc_report.json` | `build_portal.qc_pass` | curator-facing; not read by the portal runtime |
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
+| `coord_policy.json` | `extract/build_portal.py` (C42 mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position honestly |
+| `base_ids.json` | `extract/build_portal.py` (`_coordaccess.base_station_id`) | the curator workbench, so a per-station coordinate override is keyed by the base station id |
+
+`coord_policy.json` maps `ausmt_id` to its coordinate policy for the stations whose policy is not
+`exact`, and `base_ids.json` maps `ausmt_id` to base station id for the stations that carry a
+processing-variant tag. Both are emitted **only when they would carry information**, so a corpus
+with no coordinate policies and no variant stations produces neither file, and a consumer must
+treat an absent file as "every station is exact" or "every station is its own base".
 
 ## `catalogue.json` — one array per station, `r[0..15]`
 
@@ -166,9 +174,13 @@ degrees), drawn only where the error is present.
 
 `{ "<survey name>": { …SMETA… } }`, produced by `survey_meta_from_yaml`. Unlike the arrays above this
 is **key-based** (safe to extend). Notable keys: `country`, `region`, `org`, `org_ror`, `version`,
-`slug`, `collection`, `software`, `lic`, `doi`, `pid`, `dates`, `investigators`, `funders`, `pubs`,
-`blurb`, `access`, `instrument_model`, `edi`, `mth5`, `ts`, `cite`, `coord_resolution`,
-`release_notes`. See `survey_meta_from_yaml` for the full, current set.
+`slug`, `collection`, `software`, `lic`, `creators`, `contributors`, `related_identifiers`,
+`instrument_pid`, `raid`, `pid`, `doi`, `dates`, `year_start`, `year_end`, `funders`, `pubs`,
+`blurb`, `access`, `embargo_until`, `instrument_model`, `edi`, `mth5`, `ts`, `ts_pid`,
+`ts_levels`, `nci_base`, `attribution`, `cite`, `coord_resolution`, `release_notes`.
+`investigators` is still emitted from the retired lead/PI keys for back-compat; `creators` and
+`contributors` are what the citation and the credit rows read. See `survey_meta_from_yaml` for the
+full, current set.
 
 ## `manifest.json` — key-based download index (rides beside the positional catalogue)
 

@@ -36,7 +36,7 @@ The layout is deliberately small:
 
 ```text
 survey-slug/
-├── survey.yaml            (survey and station metadata, provenance, citation, access)
+├── survey.yaml            (survey metadata, credit, identifiers, provenance, access)
 ├── README.md              (generated at intake when absent)
 ├── LICENSE.md             (generated at intake when absent)
 └── transfer_functions/

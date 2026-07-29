@@ -17,8 +17,8 @@ classifiers = [
 # mt_metadata 1.0.9 / mth5 0.6.8 are tested on Python 3.12 (the pinned lock); the conditioning is
 # sensitive to the transitive scientific stack, so >=3.12 is the supported floor.
 requires-python = ">=3.12"
-# mt_metadata/mth5 (the USGS community library) is the SOLE EDI/MTH5 parser since the regex
-# retirement (recorded in the maintainer knowledge base, a private archive), so it is a core
+# mt_metadata/mth5 (the USGS community library) is the SOLE EDI/MTH5 parser since the 2026-06 regex
+# retirement (see the extractor note at the top of extract/build_portal.py), so it is a core
 # dependency, not an optional extra. numpy backs the importable ausmt_science.* science modules. PyYAML parses the
 # scientific survey.yaml / portal.config.yaml — it had arrived only transitively via mt_metadata, so it
 # is now declared explicitly (the stdlib _mini_yaml stays as a fallback). These floors match the tested
@@ -63,7 +63,7 @@ ignore = [
   "PLC3002",  # direct-lambda-call: one known site (the inline date-range map; deferred survey_meta split)
   "PLR2004",  # magic-value-comparison: scientific threshold literals; the load-bearing ones are named
   "PLR0911",  # too-many-return-statements -- complexity of build_portal.main()/row-builders is tracked
-  "PLR0912",  # too-many-branches          -- as a DEFERRED refactor (tracked in the maintainer knowledge base, private archive),
+  "PLR0912",  # too-many-branches          -- as a DEFERRED refactor,
   "PLR0913",  # too-many-arguments         -- not gated here
   "PLR0915",  # too-many-statements        --
   "PLW1510",  # subprocess-run-without-check: the call sites inspect returncode explicitly

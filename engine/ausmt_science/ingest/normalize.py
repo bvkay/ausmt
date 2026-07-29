@@ -8,7 +8,9 @@ this module is cheap and never pulls the heavy stack until normalize() is actual
 
 WHY a conditioning step is required (measured on real AusLAMP/AusMT EDIs, mt_metadata 1.0.9):
 mt_metadata does NOT round-trip arbitrary real EDIs through EMTF XML out of the box — its writer
-emits metadata its own reader then rejects. Four distinct issues occur, all handled here:
+emits metadata its own reader then rejects, or refuses to write what the source actually says. Six
+distinct conditioning failures occur that way, and item 7 below is a different category again
+(library-default metadata the XML asserts as fact). All seven are handled here:
   1. enum serialization bug: `sub_type` is written as the repr "DataTypeEnum.MT_TF" instead of the
      value "MT_TF", which fails validation on read. Fixed by rewriting the XML post-write.
   2. Copyright.citation = None is rejected on read; we populate citation_dataset — HONESTLY, from the

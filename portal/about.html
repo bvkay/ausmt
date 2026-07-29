@@ -19,10 +19,10 @@
   body{font-family:var(--sans);font-size:16px;background:var(--ink);color:var(--text);margin:0;line-height:1.6}
   /* Uniform chrome (fix/about-uniform-chrome): the three-zone header below is copied verbatim from
      index.html's post-UX3 header so About carries the same chrome as the portal. Left = brand, centre =
-     nav + page links (genuinely centred via the flex:1 side zones), right = (empty). About is a STATIC
-     page: the centre items are links (not app buttons) and the right zone carries no live counts (they
-     are app-state, meaningless here); UX7a (A5) also moved the MTCAT link out of the header into the
-     footer, so the right zone is kept only for symmetric alignment. The sticky positioning is
+     nav + page links (genuinely centred via the flex:1 side zones), right = corpus totals. About is a
+     STATIC page, so the centre items are links rather than app buttons, and the right zone carries
+     catalogue totals rather than index's live map state. UX7a (A5) moved the MTCAT link out of the header
+     into the footer. The sticky positioning is
      About-specific (kept from the old header) because this page scrolls; index's header doesn't need it. */
   header{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
   .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
@@ -124,18 +124,19 @@
       <a id="navSurveys" href="index.html">Surveys</a>
       <a id="navCollections" href="index.html">Collections</a>
     </nav>
+    <!-- Docs wave, stage 2 (owner ruling): the header is FIVE items, namely Map, Surveys, Collections, About,
+         Contribute. The sixth, "How to use AusMT", is retired on both pages. On index it opened the
+         #introOverlay help panel, which is retired with it; here it jumped to the in-body #howto section,
+         which survives as answer 2 and keeps its id so an inbound deep link still lands. -->
     <a class="about active" href="about.html">About</a>
-    <!-- On THIS page the how-to content lives in the in-body #howto section, so the header item jumps
-         there (owner-adjudicated). On index the same item opens the intro panel via its click handler. -->
-    <a class="about" href="#howto">How to use AusMT</a>
     <a class="contribute" href="add-survey.html">Contribute a survey →</a>
   </div>
   <div class="hzone hright">
     <!-- UX7a (A5): the MTCAT machine-readable link lives in the footer (bottom-left), matching index and
          add-survey. api-docs lane: the right zone now carries the mono stats block that used to be
-         index-only, so the two headers no longer differ. What it states is different by necessity, and
-         deliberately so: index shows LIVE app state ("N shown · N selected · N total" for the current map
-         filters/selection), which has no meaning on a page with no map, no filters and no selection.
+         index-only, so the two headers no longer differ. What it states differs by necessity. Index shows
+         LIVE app state ("N shown · N selected · N total" for the current map filters and selection), and
+         this page has none of those to report.
          About shows CORPUS totals instead, read from the same catalogue the app reads. The three live ids
          (nVis/nSel/nTot) stay off this page. corpus-stats.js fills it and reveals it only when both
          documents resolve to a non-empty corpus, so a file:// page, an unpublished deployment or an empty
@@ -147,290 +148,220 @@
 </header>
 <main>
   <h1>About AusMT</h1>
-  <p class="sub">A national discovery, provenance, and citation layer for Australian magnetotelluric transfer
-  functions, so processed MT results can be found, trusted, reused, and credited.</p>
+  <p class="sub">A national catalogue of Australian magnetotelluric transfer functions, carrying the
+  provenance, licence and citation details of each one.</p>
 
-  <!-- UX6 Wave F (#17): About is restructured to exactly six top-level answers. The former Standards,
-       Governance, Versioning and Future-plans bodies now live on the documentation site (mkdocs), each
-       left here as a one-line pointer under "Detailed documentation" (answer 6). The #howto anchor is
-       preserved (the header "How to use AusMT" link targets it) and the Wave-A honesty rewordings (the
-       qualified MTH5 claim, the restricted-data wording, the discovery clause) are carried through intact
-       into answers 3 and 4. -->
+  <!-- Docs wave, stage 2 (owner ruling): About is the two-minute front door. It answers six questions and
+       then hands off. What AusMT is, what you can do, how licensing and access work, how to cite, how to
+       contribute, and how to fetch data without the UI. Every deeper topic is a link into the docs site at
+       https://ausmt.readthedocs.io/en/latest/ (every target below was fetched and returned 200 before it
+       was written here). Two bodies that used to live on this page moved out in the same wave: the
+       manifest-driven and bounding-box fetch patterns are now on the docs API reference, and the MTCAT
+       field guide is on the docs MTCAT schema reference. What stays here is the quickstart and the
+       machine-contract paragraph with its schema link. The #howto and #api ids are kept because other
+       surfaces deep-link them. -->
   <div class="toc">
-    <a href="#what">What is AusMT</a><a href="#howto">What you can do</a><a href="#contains">What it contains</a>
-    <a href="#excludes">What it doesn't</a><a href="#why">Why it exists</a><a href="#docs">Documentation</a>
-    <a href="#api">Fetching data programmatically</a>
+    <a href="#what">What AusMT is</a><a href="#howto">What you can do</a><a href="#access">Licence and access</a>
+    <a href="#cite">Citing and credit</a><a href="#contribute">Contributing</a>
+    <a href="#api">Fetching data programmatically</a><a href="#docs">Documentation</a>
   </div>
 
   <section id="what">
-    <h2>1 · What is AusMT?</h2>
-    <p>AusMT is a national <b>discovery, provenance, and citation</b> layer for Australian magnetotelluric
-    (MT) <b>transfer functions</b> — the processed, instrument-independent response of the Earth at each
-    site — so processed MT results can be found, trusted, reused, and credited. It is a discovery and
-    provenance layer, not a raw-data archive.</p>
+    <h2>1 · What AusMT is</h2>
+    <p>A magnetotelluric transfer function is the processed, instrument-independent response of the Earth at
+    one site. It's the result most MT work reuses, and it's what AusMT indexes. For each one the catalogue
+    records which file it came from, who produced it, which licence applies and how to cite it.</p>
+    <p>AusMT is a discovery and provenance layer over work that other people own. It doesn't hold raw time
+    series and it makes no geological interpretation of what it holds.</p>
+    <div class="two">
+      <div class="card in">
+        <h3>In the catalogue</h3>
+        <ul>
+          <li>Transfer functions, served as EDI and EMTF XML</li>
+          <li>MTH5 products, where supplied or generated through a documented pipeline</li>
+          <li>Survey and station metadata</li>
+          <li>Processing provenance, from the source file and its SHA-256 checksum through to the extractor,
+          the pipeline and build version and the git commit that produced the build</li>
+          <li>Publications and DOIs, with ready-to-use citations and acknowledgements</li>
+        </ul>
+      </div>
+      <div class="card out">
+        <h3>Not in the catalogue</h3>
+        <ul>
+          <li>Raw time series</li>
+          <li>Geological interpretation</li>
+          <li>Bytes for restricted data, though the record itself stays public and searchable</li>
+        </ul>
+      </div>
+    </div>
+    <p>Where raw time series exist, AusMT links to the archive that holds them, usually the NCI-AuScope MT
+    collection. Unknown values are shown as "not recorded" rather than guessed, so you can tell what is
+    genuinely known about a product. Australian MT results are scattered across university groups,
+    government agencies, industry collaborations, supplementary files and ageing legacy archives, which is
+    the problem this catalogue exists to fix. There's more on that in
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/what-is-ausmt/">What is
+    AusMT?</a> and in the
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/scientific-philosophy/">Scientific
+    Philosophy</a>.</p>
   </section>
 
   <section id="howto">
-    <h2>2 · What can you do here?</h2>
+    <h2>2 · What you can do here</h2>
     <div class="two" style="grid-template-columns:repeat(3,1fr)">
       <div class="card">
         <h3>Browse &amp; download</h3>
-        <p>Explore surveys on the map, screen station quality, and export data with citations.</p>
+        <p>Explore surveys on the map, screen station quality, and export data with its licences and
+        citations attached. First visit opens a short welcome popup; you can
+        <a class="link" href="index.html?tour=1">start the guided tour</a> from here at any time.</p>
       </div>
       <div class="card">
         <h3>Contribute a survey</h3>
-        <p>Package and submit your EDIs with guided validation, entirely in your browser — your files never
+        <p>Package and submit your EDIs with guided validation, entirely in your browser. Your files never
         leave your machine until you submit. Local checks are advisory; a curator's repository review is
         authoritative.</p>
       </div>
       <div class="card">
         <h3>API access</h3>
         <p>Machine-readable catalogue exports for GIS and scripts. <b>MTCAT is AusMT's machine-readable
-        catalogue format — one JSON file describing every survey</b>, with GeoJSON available as an
-        in-browser export for GIS. To script downloads, see
+        catalogue format, one JSON file describing every survey</b>. GeoJSON is available as an in-browser
+        export for GIS. To script downloads, see
         <a class="link" href="#api">Fetching data programmatically</a>.</p>
       </div>
     </div>
     <p><a class="cta" href="add-survey.html">Contribute a survey →</a></p>
   </section>
 
-  <section id="contains">
-    <h2>3 · What AusMT contains</h2>
-    <div class="card in"><ul>
-      <li>Transfer functions</li>
-      <li>EDI products</li>
-      <li>MTH5 products, where supplied or generated through a documented pipeline</li>
-      <li>Survey and station metadata</li>
-      <li>Processing provenance — source file, SHA-256 checksum, extractor, pipeline and build version, git commit</li>
-      <li>Publications &amp; DOIs, with ready-to-use citations and acknowledgements</li>
-    </ul></div>
-    <p>Unknown values are shown as "not recorded" rather than guessed, so a reader can tell what is genuinely
-    known about each product.</p>
+  <section id="access">
+    <h2>3 · Licence and access</h2>
+    <p id="policy">Custodians keep ownership of their data. AusMT claims no ownership over anything it
+    indexes, and what it may redistribute depends on the licence and the access level each custodian sets.
+    Three things are licensed separately and it's worth keeping them apart.</p>
+    <ul>
+      <li><b>Survey data</b> is licensed by its custodian, survey by survey. The licence is on every survey
+      record and travels with the bytes as a <code>LICENSE.txt</code> inside each download.</li>
+      <li><b>Catalogue metadata</b> is <code>CC0-1.0</code>, so you can harvest and republish the catalogue
+      itself freely.</li>
+      <li><b>Portal and engine software</b> is Apache-2.0.</li>
+    </ul>
+    <p>Access is one of three levels. <code>open</code> distributes data. <code>metadata_only</code> and
+    <code>embargoed</code> do not, and anything AusMT doesn't recognise fails closed. An embargo withholds
+    bytes and never withholds discovery, so an embargoed survey keeps its full catalogue record, its
+    stations and its footprint. A station whose position its custodian withholds is served without
+    coordinates, and one that's generalised at the custodian's request is rounded to a 0.1° cell.</p>
+    <p>Who runs AusMT, how to ask for a correction or a takedown, and what happens to the catalogue if the
+    project ends are all set out in
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/governance/">Governance &amp;
+    Operation</a>.</p>
   </section>
 
-  <section id="excludes">
-    <h2>4 · What AusMT does not contain</h2>
-    <div class="card out"><ul>
-      <li>Raw time-series</li>
-      <li>Geological interpretation</li>
-      <li>Redistribution of restricted data (still indexable metadata-only)</li>
-    </ul></div>
-    <p>Where raw time-series exist, AusMT <b>links</b> to the archive that holds them (for example the
-    NCI-AuScope MT collection) rather than hosting them itself. Openly licensed transfer functions may be
-    served directly; otherwise AusMT lists the record and links out to the custodian's archive.<br>
-    AusMT aims to make Australian MT holdings discoverable even where licensing or custodial arrangements prevent direct redistribution.</p>
+  <section id="cite">
+    <h2>4 · Citing and credit</h2>
+    <p>Cite the survey, not the portal. Each survey record carries the custodian's own citation, and the
+    station drawer's Cite tab renders it in APA with the DOI as a live link where one exists. Where a
+    custodian recorded no citation, the drawer says so plainly and points you at the survey package instead
+    of inventing an author list.</p>
+    <p>Credit is recorded as two separate lists. <code>creators[]</code> is the citation author list and its
+    order is the author order, so reproduce it as given. <code>contributors[]</code> records who did what,
+    each row tagged with a DataCite contributor role, and its order carries no citation meaning. People
+    carry an ORCID and organisations a ROR where one was declared.</p>
+    <p>A bulk download brings the paperwork with it. The citation pack contains
+    <code>CITATIONS.txt</code>, <code>citations.bib</code> and <code>citations.ris</code>, and each
+    survey's EDIs sit beside a <code>LICENSE.txt</code> carrying that survey's licence and its required
+    attribution. The two credit lists are documented field by field in the
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/">MTCAT schema
+    reference</a>, what gets recorded about how a product was made is in the
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/provenance/">Provenance
+    Model</a>, and
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/versioning/">Versioning</a>
+    covers what a survey version means and why you should cite the one you used.</p>
   </section>
 
-  <section id="why">
-    <h2>5 · Why AusMT exists</h2>
-    <p>Australian MT data is scattered. The same scientific results are spread across university groups,
-    government agencies, industry collaborations, supplementary files attached to papers, and ageing legacy
-    archives, all in a mix of formats and conventions. That makes good data hard to find and easy to lose.</p>
-    <p>AusMT improves <b>discoverability</b> (one searchable map and catalogue), <b>reproducibility</b>
-    (provenance travels with every product), <b>reuse</b> (consistent, standards-aligned metadata), and
-    <b>attribution</b> (custodians and funders are credited, with DOIs where they exist).</p>
+  <section id="contribute">
+    <h2>5 · Contributing a survey</h2>
+    <p>Bring your EDI or MTH5 transfer functions to the
+    <a class="link" href="add-survey.html">Contribute a survey</a> page. It extracts the stations, plots
+    them, and walks you through the metadata AusMT needs. Everything runs in your browser and nothing is
+    sent anywhere until you press submit.</p>
+    <p>After you submit, the gateway runs the AusMT validator over the package and a curator reviews it
+    before anything is published. The checks in the page are there to save you a round trip; the pipeline
+    result is the one that counts. The full validate, preview, package, review and publish path is written
+    up in the
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/operations/submission/">Submission
+    Workflow</a>.</p>
+  </section>
+
+  <section id="api">
+    <h2>6 · Fetching data programmatically</h2>
+    <p>Everything the portal reads is a read-only static JSON file on this site, and you can read the same
+    files. There's no API key and no sign-up. Every response carries
+    <code>Access-Control-Allow-Origin: *</code>, so a browser application can fetch it cross-origin.</p>
+    <p>Start from <a class="link" href="data/mtcat.json">mtcat.json</a>, the MTCAT document that describes
+    every survey in one file. Each survey record carries its slug under <code>survey_id</code>, and the
+    slug is what the download bundles are named after. This lists the catalogue, then pulls one survey's
+    EDIs down as a single zip.</p>
+    <pre class="code">import json, urllib.request
+BASE = "https://ausmt.au"
+cat = json.load(urllib.request.urlopen(f"{BASE}/data/mtcat.json"))
+for s in cat["surveys"]:
+    print(s["survey_id"], s["access"], s["license"], s["title"])
+
+slug = "vulcan-2022"                        # any survey whose access is "open"
+body = urllib.request.urlopen(f"{BASE}/data/bundles/{slug}-edi.zip").read()
+open(f"{slug}-edi.zip", "wb").write(body)</pre>
+    <p>Every published survey is bundled three ways, as
+    <code>/data/bundles/&lt;slug&gt;-edi.zip</code>, <code>/data/bundles/&lt;slug&gt;-xml.zip</code> for
+    EMTF XML and <code>/data/bundles/&lt;slug&gt;-tf.h5</code> for MTH5. A <code>LICENSE.txt</code> rides
+    inside each zip. If you need one station rather than a whole survey, want a bounding-box query, or want
+    to verify what you downloaded against its published SHA-256, the worked patterns are in the
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/interoperability/api-reference/">API
+    reference</a> on the documentation site.</p>
+    <p>An embargoed survey has no rows in the download manifest at all. Its bytes are withheld by
+    construction, so there's nothing to request and no access error to handle, while its catalogue record
+    stays public.</p>
+    <!-- mtcat-v1.2 docs lane, trimmed in the docs wave: the four-bullet field guide that used to sit here
+         moved to docs/docs/reference/mtcat-schema.md ("Reading a served survey record"), where the
+         vocabulary pins moved with it. What survives is the machine-contract paragraph the owner asked
+         About to keep. Everything it asserts is read off engine/schema/mtcat.schema.json (the file it
+         links) or off the emitter that writes the document, and it is pinned test-side against both. -->
+    <p id="machine-contract"><b>Machine contract.</b> The catalogue document
+    <a class="link" href="data/mtcat.json">mtcat.json</a> is written against the MTCAT schema served next
+    to it at <a class="link" href="data/mtcat.schema.json">data/mtcat.schema.json</a>, so a second
+    implementation can validate the document without resolving anything off-site. The document names its
+    own contract in its <code>portal</code> block, where <code>schema</code> is <code>mtcat</code>,
+    <code>version</code> is <code>1.2</code> and <code>metadata_license</code> is <code>CC0-1.0</code>.
+    That licence covers the catalogue metadata only. A survey's DATA licence is the separate
+    <code>license</code> field on its own survey record, and it varies by survey. The field guide to
+    reading a served record is on the
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/">MTCAT schema
+    reference</a>.</p>
   </section>
 
   <section id="docs">
-    <h2>6 · Detailed documentation</h2>
-    <p>The full policy and technical documentation lives on the AusMT documentation site, kept current
-    alongside the framework. The material that this page used to spell out in full now lives there:</p>
+    <h2>7 · Documentation</h2>
+    <p>The policy and technical documentation lives on the
+    <a class="link" href="https://ausmt.readthedocs.io/en/latest/">AusMT documentation site</a>, kept
+    current alongside the framework. The topics this page used to spell out in full are there:</p>
     <ul>
-      <li id="policy"><b>Data policy &amp; governance</b> — custodians retain ownership and AusMT claims no
-      ownership of anything it indexes; redistribution depends on the licence and access level. Who runs
-      AusMT, contact, corrections and takedown, and succession:
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/governance/">Governance &amp; Operation</a>.</li>
-      <li><b>Standards &amp; identifiers</b> — DOI, ORCID, ROR, RAiD, FAIR, CARE, mt_metadata and MTH5, and
-      how AusMT aligns with them:
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/standards/">Standards &amp; Alignment</a>.</li>
-      <li><b>Principles</b> — the design values behind AusMT (survey-as-object, metadata-as-data,
-      provenance-as-product, curation, interoperability):
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/scientific-philosophy/">Scientific Philosophy</a>.</li>
-      <li><b>Provenance model</b> — exactly what is recorded so a result can be traced and trusted:
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/provenance/">Provenance Model</a>.</li>
-      <li><b>Versioning</b> — how survey packages are versioned and cited:
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/versioning/">Versioning</a>.</li>
-      <li><b>Contributing</b> — the validate → preview → package → review → publish workflow:
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/operations/submission/">Submission Workflow</a>,
-      or start now on the <a class="link" href="add-survey.html">Contribute a survey</a> page.</li>
-      <li><b>Roadmap</b> — where AusMT is headed (broader validation, catalogue expansion, MTCAT as an open
-      standard, federation between portals):
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/roadmap/">Roadmap</a>.</li>
-      <li><b>MTCAT</b>: the machine-readable catalogue format. The prose walkthrough of the
-      <code>MTCAT</code> specification:
-      <a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/mtcat/">MTCAT</a>, or fetch the
-      live <a class="link" href="data/mtcat.json">mtcat.json</a> discovery document. The schema itself is
-      the normative artifact and states its own version; see Machine contract below.</li>
-      <li><b>Machine contract</b>: the JSON Schema the catalogue document is validated against, served
-      beside it as <a class="link" href="data/mtcat.schema.json">mtcat.schema.json</a>. Schema
-      <code>mtcat</code>, version <code>1.2</code>, catalogue metadata <code>CC0-1.0</code>. Field guide
-      below.</li>
+      <li><a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/standards/">Standards
+      &amp; Alignment</a> covers DOI, ORCID, ROR, RAiD, FAIR, CARE, mt_metadata and MTH5, and how AusMT
+      lines up with each of them.</li>
+      <li><a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/survey-package/">Survey
+      Package</a> describes the unit AusMT publishes and versions. The field-by-field specification is in
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/reference/survey-yaml/">Survey Package
+      Specification</a>.</li>
+      <li><a class="link" href="https://ausmt.readthedocs.io/en/latest/data-model/mtcat/">MTCAT</a> is the
+      prose walkthrough of the machine-readable catalogue format, and
+      <a class="link" href="https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/">MTCAT
+      Schema</a> is the field-level reference. The schema itself is the normative artifact and states its
+      own version.</li>
+      <li><a class="link" href="https://ausmt.readthedocs.io/en/latest/reference/manifest-schema/">Download
+      Manifest Schema</a> defines the file that lists every served artifact with its checksum.</li>
+      <li><a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/roadmap/">Roadmap</a>
+      sets out where AusMT is headed, including broader validation, catalogue expansion and MTCAT as an
+      open standard.</li>
+      <li><a class="link" href="https://ausmt.readthedocs.io/en/latest/reference/glossary/">Glossary</a>
+      explains any term on this site that's unfamiliar.</li>
     </ul>
-
-    <!-- mtcat-v1.2 docs lane: the field guide for the served schema. Everything asserted here is read off
-         engine/schema/mtcat.schema.json (the file this section links) or off the emitter that writes the
-         document, and the vocabularies are pinned test-side against that schema's enums so this copy
-         cannot drift from what the build validates. Kept in answer 6 rather than answer 7 on purpose:
-         answer 7 is how to FETCH bytes, this is how to READ the catalogue record. -->
-    <h3>Machine contract</h3>
-    <p>The catalogue document <a class="link" href="data/mtcat.json">mtcat.json</a> is written against the
-    MTCAT schema served next to it at <a class="link" href="data/mtcat.schema.json">data/mtcat.schema.json</a>,
-    so a second implementation can validate the document without resolving anything off-site. The document
-    names its own contract in its <code>portal</code> block: <code>schema</code> is <code>mtcat</code>,
-    <code>version</code> is <code>1.2</code>, and <code>metadata_license</code> is <code>CC0-1.0</code>.
-    That licence covers the catalogue metadata only. A survey's DATA licence is the separate
-    <code>license</code> field on its own survey record, and it varies by survey.</p>
-    <p>The schema is permissive about unknown keys and strict about known ones. Unknown keys ride through,
-    so a reader written for v1.2 will not break on a later minor version; but every described field is
-    typed, and where a value comes from a ratified vocabulary that vocabulary is pinned, so an
-    out-of-vocabulary token fails the build rather than reaching you. The parts worth reading before you
-    write a harvester:</p>
-    <div class="card"><ul>
-      <li><b>Credit is two lists, and they are not interchangeable.</b> <code>creators[]</code> is the
-      citation author list; its ORDER is load-bearing, so reproduce it as given. <code>contributors[]</code>
-      records who did what, each row carrying a <code>role</code> from the eight DataCite contributor types
-      a survey may declare: <code>ProjectLeader</code>, <code>ProjectMember</code>, <code>DataCollector</code>,
-      <code>ContactPerson</code>, <code>DataCurator</code>, <code>Sponsor</code>, <code>RightsHolder</code>,
-      <code>Distributor</code>. A ninth value, <code>HostingInstitution</code>, appears only on the row
-      AusMT appends to every survey for itself; no survey declares it. Order in <code>contributors[]</code>
-      carries no citation meaning. Rows in both lists mark themselves <code>person</code> or
-      <code>organisation</code> in <code>name_type</code> and carry <code>orcid</code> or <code>ror</code>
-      where one was declared; a row that declares neither omits the key rather than serving a null.</li>
-
-      <li><b><code>related_identifiers[]</code> says what a survey points at, and how honestly.</b> Each row
-      carries the identifier and its <code>identifier_type</code> (<code>DOI</code>, <code>Handle</code>,
-      <code>URL</code>, <code>RAiD</code>), a DataCite <code>relation</code> to be read as "this survey
-      <i>relation</i> that record", and <code>identifies</code>, which states what data LEVEL the identifier
-      points at in NCI Table 1 terms: <code>collection</code> (parent record), <code>raw_packed</code> (raw
-      time series, packed), <code>level0</code> (edited time series), <code>level1</code> (transformed time
-      series), <code>level2</code> (processed data, EDI and transfer functions), <code>level3</code> (models),
-      <code>entire</code> (one record covering all levels). <code>resolution</code> is the honesty state,
-      taken from a cached check the build consumes but never performs: <code>ok</code> means it resolves
-      today, <code>reserved</code> means registered but not yet active. The key is ABSENT when the answer is
-      unknown, and absent never means broken, so still link an identifier that carries no
-      <code>resolution</code>.</li>
-
-      <li><b>Access and embargo withhold bytes, never discovery.</b> <code>access</code> is the normalised
-      level: <code>open</code>, <code>metadata_only</code> or <code>embargoed</code>. Only <code>open</code>
-      distributes data; anything else, including a level AusMT does not recognise, fails closed. An
-      embargoed survey keeps its full catalogue record, its stations and its footprint, and only its bytes
-      are withheld, so it serves an empty <code>formats</code> list and has no rows in the download
-      manifest. <code>embargo_until</code> is present only when the survey declares an end date, so its
-      absence means no declared end date rather than "not embargoed", and a date that has passed publishes
-      nothing by itself: a curator releases a survey by changing the level.</li>
-
-      <li><b>One survey, two key names.</b> MTCAT keys a survey by <code>survey_id</code>, which is the slug
-      (<code>vulcan-2022</code> and the like). <code>/data/surveys.json</code> is keyed by the survey's
-      display NAME and carries that same slug under <code>slug</code>, and the download manifest names
-      surveys by display name in <code>files[].survey</code> but by slug in <code>bundles[].slug</code>.
-      Below the survey, the stable join is the station: <code>ausmt_id</code> is the one identifier the
-      catalogue row and the manifest row both carry.</li>
-    </ul></div>
-  </section>
-
-  <!-- api-docs lane: the practical counterpart to answer 6. Everything stated here is a live path on the
-       hosted site, and both worked examples were run end to end against it before being written down.
-       Deliberately NOT documented: any endpoint under an /api prefix. No such tier has ever existed; the
-       read surface is the static data tree, which is why the patterns below are the whole story. -->
-  <section id="api">
-    <h2>7 · Fetching data programmatically</h2>
-    <p>Everything the portal reads is a read-only static JSON file on this site: no key, no quota, no
-    request signing. Every response carries <code>Access-Control-Allow-Origin: *</code> so a browser
-    application can fetch it cross-origin, and every downloadable artifact is listed in the products
-    manifest with a <code>sha256</code> you can verify after downloading. Paths below are site-relative;
-    the examples use <code>https://ausmt.au</code>.</p>
-
-    <h3>Pattern A · whole-survey bundles</h3>
-    <p>One request per survey, keyed by the survey slug (<code>vulcan-2022</code> and the like; see the
-    discovery note at the foot of this section for where to read one). Each published survey is packaged
-    three ways:</p>
-    <ul>
-      <li><code>/data/bundles/&lt;slug&gt;-edi.zip</code>, every served station of that survey as EDI</li>
-      <li><code>/data/bundles/&lt;slug&gt;-xml.zip</code>, the same stations as EMTF XML</li>
-      <li><code>/data/bundles/&lt;slug&gt;-tf.h5</code>, the survey's transfer functions as MTH5</li>
-    </ul>
-    <pre class="code">curl -O https://ausmt.au/data/bundles/vulcan-2022-edi.zip</pre>
-
-    <h3>Pattern B · manifest-driven per-station fetch</h3>
-    <p>Fetch <code>/data/products/manifest.json</code> once, filter its <code>files</code> rows by
-    <code>format</code> (<code>edi</code> or <code>emtfxml</code>) and by <code>survey</code>, then fetch
-    <code>/data/</code> joined to each row's <code>url</code> and check the bytes against that row's
-    <code>sha256</code>. Go through the manifest rather than building paths yourself: a served filename is
-    not derivable from the station id, so the manifest is the only correct way to locate one station's
-    file. The manifest's other list, <code>bundles</code>, holds the Pattern A artifacts and the third
-    format, <code>mth5</code>, which exists per survey rather than per station.</p>
-    <pre class="code">BASE=https://ausmt.au
-curl -s "$BASE/data/products/manifest.json" \
-  | jq -r '.files[] | select(.survey=="Vulcan 2022" and .format=="edi") | "\(.url) \(.sha256)"' \
-  | while read -r url sha; do
-      curl -s -O "$BASE/data/$url"
-      echo "$sha  $(basename "$url")" | shasum -a 256 -c -
-    done</pre>
-    <p>The same loop in Python, standard library only:</p>
-    <pre class="code">import hashlib, json, urllib.request
-BASE = "https://ausmt.au"
-man = json.load(urllib.request.urlopen(f"{BASE}/data/products/manifest.json"))
-for r in man["files"]:
-    if r["survey"] != "Vulcan 2022" or r["format"] != "edi": continue
-    body = urllib.request.urlopen(f"{BASE}/data/{r['url']}").read()
-    assert hashlib.sha256(body).hexdigest() == r["sha256"], r["url"]
-    open(r["url"].split("/")[-1], "wb").write(body)</pre>
-
-    <!-- mtcat-v1.2 docs lane: Pattern C. The worked example was RUN against the live site before being
-         written down (15 stations in the box, all 15 sha256-verified). Two things it deliberately does
-         that a shorter example would not: it null-guards lat/lon before comparing (a withheld station has
-         no position, and a numeric comparison against null is either an error or, in JS, a silent 0), and
-         it mirrors the manifest's url path instead of flattening to a basename (a box crosses surveys, and
-         the live corpus really does hold two stations named SA225_2 in different AusLAMP surveys). The
-         column indices below are pinned test-side against src/contract.js, so a columns.json reorder
-         fails the test rather than silently misdocumenting the map. -->
-    <h3>Pattern C · bounding-box fetch</h3>
-    <p><code>/data/catalogue.json</code> is one row per station, and the rows are POSITIONAL arrays rather
-    than objects: every column is read by index, with no field names in the file. The authoritative column
-    map is <a class="link" href="src/contract.js"><code>/src/contract.js</code></a>, generated from the one
-    file that defines the column order, so take indices from there rather than counting them. A
-    bounding-box fetch needs three: <code>lat</code> at index <b>2</b>, <code>lon</code> at index <b>3</b>,
-    and <code>ausmt_id</code> at index <b>12</b>. Columns are only ever appended, never reordered.</p>
-    <p>Filter the catalogue to the box, join to the products manifest on <code>ausmt_id</code> (the one
-    identifier both a catalogue row and a manifest row carry), then fetch each matched row's
-    <code>url</code> under <code>/data/</code> and check its <code>sha256</code>, exactly as in Pattern B.</p>
-    <pre class="code">import hashlib, json, pathlib, urllib.request
-BASE = "https://ausmt.au"
-LAT, LON, AUSMT_ID = 2, 3, 12               # column indices; /src/contract.js is the map
-W, S, E, N = 133.0, -30.0, 135.0, -28.0     # west, south, east, north
-cat = json.load(urllib.request.urlopen(f"{BASE}/data/catalogue.json"))
-ids = {r[AUSMT_ID] for r in cat
-       if r[LAT] is not None and r[LON] is not None
-       and S &lt;= r[LAT] &lt;= N and W &lt;= r[LON] &lt;= E}
-man = json.load(urllib.request.urlopen(f"{BASE}/data/products/manifest.json"))
-for row in man["files"]:
-    if row["ausmt_id"] not in ids or row["format"] != "edi": continue
-    body = urllib.request.urlopen(f"{BASE}/data/{row['url']}").read()
-    assert hashlib.sha256(body).hexdigest() == row["sha256"], row["url"]
-    out = pathlib.Path(row["url"])          # mirror the manifest path, do not flatten it
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(body)</pre>
-    <p>Two coordinate caveats, both about honesty rather than precision. A station whose position its
-    custodian <b>withholds</b> carries <code>null</code> in the lat and lon columns, so the example tests
-    for null before comparing and those stations are excluded rather than compared: a null is not a
-    position, and no box can honestly contain one. Do not leave that to the language. JavaScript reads
-    <code>null</code> as <code>0</code> in a numeric comparison, which silently treats a withheld station
-    as if it sat at 0°, 0° instead of dropping it. Second, a station whose position is <b>generalised</b>
-    at the custodian's request is served rounded to a 0.1° cell (roughly 11 km), so a box edge is
-    approximate: a generalised station can land on the wrong side of it by up to 0.05°. The build emits
-    <code>/data/coord_policy.json</code>, a map of <code>ausmt_id</code> to <code>generalised</code> or
-    <code>withheld</code>, whenever any station is non-exact; the file is absent when every served position
-    is exact.</p>
-    <p>One practical note: a box crosses surveys, and two surveys can hold a station with the same
-    filename, so write files out under the manifest's <code>url</code> path rather than flattening them to
-    a basename or you will lose one of the pair.</p>
-
-    <p>An embargoed survey has no rows in the manifest at all: its bytes are withheld by construction, so
-    there is nothing to request and no access error to handle, while its catalogue record stays public.</p>
-    <p>For survey-level discovery, start from <a class="link" href="data/mtcat.json">mtcat.json</a>, the
-    MTCAT document that describes every survey in the catalogue in one file. Its survey records carry the
-    slug under the key <code>survey_id</code>, which is the value both patterns above are keyed by;
-    <code>/data/surveys.json</code> carries the same value under <code>slug</code>.</p>
   </section>
 
   <!-- Footer matches index.html's structure: the machine-readable MTCAT link (UX7a A5, bottom-left) +
@@ -446,9 +377,9 @@ for row in man["files"]:
         <summary>About this build</summary>
         <div class="aboutbuild-body">
           AusMT is a national MT research infrastructure. It indexes processed transfer functions and
-          their provenance; it does not host raw time-series or make geological interpretations.
-          The portal software is licensed under Apache-2.0; survey data remains licensed by its custodians
-          (see <a class="link" href="#policy">Data policy</a>).
+          their provenance. It doesn't host raw time series or make geological interpretations.
+          The portal software is licensed under Apache-2.0. Survey data stays licensed by its custodians
+          (see <a class="link" href="#policy">Licence and access</a>).
           <span class="ver" data-ver-chip></span>
         </div>
       </details>

@@ -53,9 +53,11 @@ survey.yaml + transfer_functions/
    SCIENCE    phase tensor, dimensionality, diagnostics; one implementation
       |       (_ediparse.pt_params) shared by every consumer
       v
-   WRITE      data/{catalogue,tf,sci,surveys,collections,build_provenance,manifest,
-              mtcat,qc_report}.json, canonical EMTF XML per station (xml/<slug>/),
-              per-survey EDI and XML zip bundles, products/survey_digests.json
+   WRITE      data/{catalogue,tf,sci,surveys,collections,build_provenance,build_report,
+              manifest,mtcat,qc_report,base_ids,coord_policy,build}.json, canonical EMTF XML
+              per station (xml/<slug>/), per-survey EDI and XML zip bundles (and the
+              transfer-function MTH5 bundle when the flag is on),
+              products/survey_digests.json
 ```
 
 An incremental build cache (`--incremental --cache-dir`) keys station products on the EDI
@@ -82,8 +84,8 @@ gw-runner   the engine image with the gateway package bind-mounted, network disa
             queue. The only component that parses submitted content.
 ```
 
-States are fail-closed: RECEIVED, SCANNED, VALIDATED, QUARANTINED, RETURNED, REJECTED,
-PUBLISHING, PUBLISH_FAILED, PUBLISHED. Publishing is a git commit and push to `ausmt-surveys`;
+States are fail-closed: RECEIVED, SCANNED, VALIDATED, QUARANTINED, REJECTED_AV, RETURNED,
+REJECTED, PUBLISHING, PUBLISH_FAILED, PUBLISHED. Publishing is a git commit and push to `ausmt-surveys`;
 serving the result requires a separate engine rebuild by the operator. The curator metadata
 editor round-trips survey.yaml through the runner (ruamel.yaml), enforces a semantic-version
 bump with release notes, and commits through the same publish path.
@@ -110,7 +112,11 @@ Engine (`engine/extract/`):
 | `_edi_catalog.py` | coordinate reads and QC, `state_of`, DATAID helpers |
 | `_edi_tf.py` | TF rows from the component dict (`TF_COLUMNS`) |
 | `_edi_science.py` | per-station diagnostics (`SCI_COLUMNS`) |
+| `_coordaccess.py` | the C42 coordinate-access mask seam and its per-station byte gate |
+| `_conventions.py` | the C25 frame and sign-convention gates run at parse time |
+| `_license_text.py` | licence primitives and the rights text shared by the build and the bundles |
 | `cache.py` | the incremental build cache (content-addressed, self-verifying entries) |
+| `compare_mth5.py` | a standalone EDI-versus-MTH5 ingestion comparison, run from CI |
 | `_contract.py` | generated column constants; do not edit by hand |
 
 `engine/ausmt_science/` holds `ingest.normalize` (the canonical EMTF XML store) and planned
@@ -122,9 +128,11 @@ intake), `states.py`, `db.py`, `checklist.py`, `publish.py` (preflight, commit, 
 rollback), `orcid.py`, `clamd.py`, and `runner/` (the job loop, safe extraction, validation,
 preview, metadata edit). The runner package is what the gw-runner container executes.
 
-Portal (`portal/src/`): plain JavaScript with no module system; concatenation order is the
-dependency order: `contract, security, state, data, plots, map, filters, drawer, exports,
-main, tour`. Presentation only.
+Portal (`portal/src/`): plain JavaScript with no module system and no build step. `index.html`
+loads scripts in dependency order: `contract, security, state, data, plots, map, filters, drawer,
+exports, main, tour`, with `analytics-shim` loaded separately in the head so the page keeps a
+`script-src 'self'` policy. `add-survey.html` loads `security`, `contract` and `doi_harvest`, the
+last shared byte-for-byte with the curator editor. Presentation only.
 
 ## Ownership boundaries
 

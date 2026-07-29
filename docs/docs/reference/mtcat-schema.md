@@ -203,6 +203,78 @@ schema states in prose:
 
 ---
 
+## Reading a served survey record
+
+This is the field guide for anyone writing a harvester against a served catalogue document. It moved here
+from the portal's About page in the 2026-07 documentation wave, so About could go back to being a short
+front door. Everything below describes MTCAT v1.2. The document is served at
+[`mtcat.json`](https://ausmt.au/data/mtcat.json) with the schema file beside it at
+[`mtcat.schema.json`](https://ausmt.au/data/mtcat.schema.json), so a second implementation can validate
+without resolving anything off-site, and a fetched schema self-identifies in its `title`. Check that the
+title says v1.2 before relying on this section against it; a deployment updates the served schema on its
+next data build, so shortly after a release the served copy can trail this page by one version.
+
+The v1.2 schema is permissive about unknown keys and strict about known ones. Unknown keys ride through,
+so a reader written for the current minor version will not break on a later one. Every described field is
+typed, and where a value comes from a ratified vocabulary that vocabulary is pinned, so an
+out-of-vocabulary token fails the build rather than reaching you.
+
+### Credit is two lists, and they are not interchangeable
+
+`creators[]` is the citation author list. Its ORDER is load-bearing, so reproduce it as given.
+
+`contributors[]` records who did what. Each row carries a `role` from the eight DataCite contributor types
+a survey may declare: `ProjectLeader`, `ProjectMember`, `DataCollector`, `ContactPerson`, `DataCurator`,
+`Sponsor`, `RightsHolder`, `Distributor`. A ninth value, `HostingInstitution`, appears only on the row
+AusMT appends to every survey for itself; no survey declares it. Order in `contributors[]` carries no
+citation meaning.
+
+Rows in both lists mark themselves `person` or `organisation` in `name_type` and carry `orcid` or `ror`
+where one was declared. A row that declares neither omits the key rather than serving a null.
+
+### `related_identifiers[]` says what a survey points at, and how honestly
+
+Each row carries the identifier and its `identifier_type` (`DOI`, `Handle`, `URL`, `RAiD`), a DataCite
+`relation` to be read as "this survey *relation* that record", and `identifies`, which states what data
+LEVEL the identifier points at in NCI Table 1 terms:
+
+| `identifies` | what the identifier points at |
+| --- | --- |
+| `collection` | the parent collection record |
+| `raw_packed` | raw time series, packed |
+| `level0` | edited time series |
+| `level1` | transformed time series |
+| `level2` | processed data, EDI and transfer functions |
+| `level3` | models |
+| `entire` | one record covering all levels |
+
+`resolution` is the honesty state, taken from a cached check the build consumes but never performs. `ok`
+means it resolves today, `reserved` means registered but not yet active. The key is ABSENT when the answer
+is unknown, and absent never means broken, so still link an identifier that carries no `resolution`.
+
+### Access and embargo withhold bytes, never discovery
+
+`access` is the normalised level: `open`, `metadata_only` or `embargoed`. Only `open` distributes data.
+Anything else, including a level AusMT does not recognise, fails closed.
+
+An embargoed survey keeps its full catalogue record, its stations and its footprint, and only its bytes
+are withheld, so it serves an empty `formats` list and has no rows in the download manifest.
+
+`embargo_until` is present only when the survey declares an end date, so its absence means no declared end
+date rather than "not embargoed". A date that has passed publishes nothing by itself. A curator releases a
+survey by changing the level.
+
+### One survey, two key names
+
+MTCAT keys a survey by `survey_id`, which is the slug (`vulcan-2022` and the like).
+`/data/surveys.json` is keyed by the survey's display NAME and carries that same slug under `slug`. The
+download manifest names surveys by display name in `files[].survey` but by slug in `bundles[].slug`.
+
+Below the survey, the stable join is the station. `ausmt_id` is the one identifier the catalogue row and
+the manifest row both carry.
+
+---
+
 ## Stations
 
 Station records describe site-level discovery information.

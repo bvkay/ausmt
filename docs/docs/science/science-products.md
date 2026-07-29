@@ -14,13 +14,21 @@ Most other products available through the portal are derived from transfer funct
 
 ## Derived Products
 
-**Implemented today** (parsed with `mt_metadata`, computed by the engine, and shown in the portal):
+**Implemented today** (parsed with `mt_metadata` and computed by the engine into the served data
+products):
 
 - Apparent resistivity and phase, with per-period error bars where the EDI supplies them
-- Phase tensor (per-period parameters and the dimensionality screening diagnostic)
-- Tipper (magnitude and full complex components; induction arrows in the station drawer,
-  Parkinson convention)
-- Selection-level strike rose (drawn in the portal from served phase-tensor azimuths)
+- Phase tensor, per-period parameters
+- Tipper, magnitude and full complex components
+- The dimensionality screening diagnostic and the median skew
+- Selection-level strike rose, drawn in the browser from served phase-tensor azimuths
+
+What the station drawer renders today is the four response plots: apparent resistivity, phase,
+phase tensor, and Parkinson-convention induction arrows. The per-station screening panel that
+displayed the dimensionality class, the median skew and the strike estimate is hidden pending a
+design review of how those numbers should be presented. The values themselves are unchanged: they
+are still computed, still served in `sci.json` and the per-station products, and still ride the
+CSV and GeoJSON exports.
 
 **Planned** (scaffolding exists in `engine`, intended for the MTpy-v2-backed advanced
 layer; not yet generated — do not assume these are present):

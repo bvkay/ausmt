@@ -58,11 +58,13 @@ package template alongside:
 
 ```text
 ausmt-surveys/
-├── _template/
-├── _validation/
+├── _template/      the package template a contributor copies
+├── _example/       a worked example package
+├── _validation/    the survey validator and the contributor CLI
+├── _tools/         migration scripts for retired survey.yaml fields
 └── surveys/
-    ├── auslamp-sa/
     ├── auslamp-tas/
+    ├── capricorn-2010/
     ├── vulcan-2022/
     └── ...
 ```
@@ -71,15 +73,17 @@ A survey package is deliberately small:
 
 ```text
 survey-slug/
-├── survey.yaml            (all survey and station metadata, provenance and citation fields)
+├── survey.yaml            (survey metadata, credit, identifiers, provenance, access)
 ├── README.md              (generated at intake when absent)
 ├── LICENSE.md             (generated at intake when absent)
 └── transfer_functions/
-    └── edi/               (one EDI per station occupation)
+    └── edi/               (one EDI per station occupation; mth5/ where a survey has it)
 ```
 
-EDI is the accepted submission format today; EMTF XML and MTH5 as *input* formats are gated
-by the format decision (D4). Derived products are **not** stored in the package — the engine
+EDI and MTH5 are the accepted submission inputs. EMTF XML and processing-software products such
+as `.zmm`/`.zrr`/`.j` are opt-in: the validator fails them unless a curator enables them for that
+submission, and even then they are stored rather than parsed. Derived products are **not** stored
+in the package. The engine
 generates them at build time from the package contents, so they can be regenerated and
 improved without touching the published record. There is no per-station side sheet
 (`stations.csv` was considered and rejected): station metadata lives in each EDI and in

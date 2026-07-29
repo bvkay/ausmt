@@ -38,8 +38,9 @@ nav:
   - Interoperability:
       - Overview: interoperability/overview.md
       - Metadata Exchange: interoperability/metadata-exchange.md
-      - API Overview: interoperability/api-overview.md
-      - API Reference: interoperability/api-reference.md
+      - How AusMT serves data: interoperability/api-overview.md
+      - Data reference: interoperability/api-reference.md
+      - Tool integration: interoperability/tool-integration.md
       - External Archives: interoperability/external-archives.md
   - Reference:
       - MTCAT Schema: reference/mtcat-schema.md
@@ -47,6 +48,10 @@ nav:
       - Survey Package Specification: reference/survey-yaml.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
+  - Design rationale:
+      - Credit model: rationale/credit-model.md
+      - Identifiers by data level: rationale/identifiers-by-level.md
+      - Coordinate access: rationale/coordinate-access.md
   - Developer:
       - Architecture (start here): developer/architecture.md
       - Build lifecycle: developer/build-lifecycle.md

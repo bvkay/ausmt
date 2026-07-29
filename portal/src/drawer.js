@@ -835,7 +835,11 @@ function openStation(i,opts){
   //     station A1 of vulcan-2022 is served as edi/vulcan-2022/Vulcan_A1.edi). No row => no line,
   //     which is exactly the embargo case (withheld by construction, so there is nothing to link).
   //   * the two survey-level documents every consumer starts from.
-  // The trailing pointer sends anyone wanting worked examples to About's "Fetching data programmatically".
+  // Docs wave, stage 2 (owner ruling 3): the trailing pointer used to send readers to About's
+  // "Fetching data programmatically". About is now a front door carrying a quickstart, and the worked
+  // patterns (per-station manifest fetch, bounding box, checksum verification) live on the docs site's
+  // API reference. The pointer goes there, to the same stable RTD path About links, so the two surfaces
+  // agree on where depth lives. tests/test_drawer_api_endpoints.py pins the URL string against About's.
   const _apiSlug=s.slug||((SMETA[s.survey]||{}).slug)||"";
   const _apiEdi=_arts.find(a=>a.format==="edi");
   const _apiRows=[];
@@ -851,7 +855,7 @@ function openStation(i,opts){
   const apiBlock=`<div class="api">Read-only static JSON on the hosted site, no key required:<br>`+
     _apiRows.map(u=>`GET <b>${esc(u)}</b>`).join("<br>")+
     (_manGate?`<br>${_manGate}`:"")+
-    `<br><a href="about.html#api">see About: Fetching data programmatically</a></div>`;
+    `<br><a href="https://ausmt.readthedocs.io/en/latest/interoperability/api-reference/">worked examples in the API reference</a></div>`;
   const provenanceHtml=`<div class="sechead">Provenance ${roleChip("Source data")}</div>`+provTop+maturityBlock(s)+
     `<details class="prov-d"><summary>Lineage graph</summary><div class="prov-dbody">${provGraph(s)}</div></details>`+
     provenanceBox(s)+

@@ -89,7 +89,12 @@ Examples include:
 
 AusMT does not normally store the observations themselves.
 
-Instead, survey packages may record persistent identifiers linking published products to the corresponding time-series collections.
+Instead, survey packages record typed pointers to them. A `related_identifiers[]` row names the
+identifier, says what kind it is, and states which data level it points at, so a reader can tell an
+NCI parent collection from the raw packed time series it contains. The DataCite relation follows
+from that level rather than being typed by hand. The field detail is in
+[survey.yaml Reference](../reference/survey-yaml.md#identifiers-by-data-level), and the reasoning
+is in [Why identifiers carry a data level](../rationale/identifiers-by-level.md).
 
 ---
 

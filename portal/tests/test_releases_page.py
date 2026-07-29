@@ -134,28 +134,35 @@ def _nav_ids(path):
 
 
 def _centre_order(path):
-    """The six primary header items in document order, each reduced to a stable label. Mirrors the
-    reducer in test_about_uniform_chrome.test_header_parity_about_matches_index."""
+    """The five primary header items in document order, each reduced to a stable label. Mirrors the
+    reducer in test_about_uniform_chrome.test_header_parity_about_matches_index, including its
+    treatment of a stray .about item as 'other:<href>', which is how a sixth header entry (the retired
+    How-to-use link, or a successor to it) shows up here instead of passing quietly."""
     out = []
     for _tag, a, in_nav in _header(path):
         if in_nav and a.get("id") in ("navMap", "navSurveys", "navCollections"):
             out.append(a["id"])
         elif "about" in _classes(a) and a.get("href") == "about.html":
             out.append("about")
-        elif "about" in _classes(a) and a.get("href") != "about.html":
-            out.append("howto")
+        elif "about" in _classes(a):
+            out.append("other:" + (a.get("href") or a.get("id") or _tag))
         elif "contribute" in _classes(a):
             out.append("contribute")
     return out
 
 
 def test_header_parity_releases_matches_about():
+    """Docs wave, stage 2 (owner ruling): every shipped header is FIVE items, namely Map, Surveys,
+    Collections, About, Contribute. Releases arrived on main carrying the retired sixth entry, a
+    "How to use AusMT" link to about.html#howto, so this pin held it to a six-item order that About no
+    longer has. Non-vacuous in both halves: run against that six-item header, the RELEASES assertion
+    below fails with other:about.html#howto in slot four."""
     assert _nav_ids(RELEASES) == ["navMap", "navSurveys", "navCollections"], (
         f"releases.html nav must be navMap, navSurveys, navCollections in that order; "
         f"got {_nav_ids(RELEASES)}")
     assert _nav_ids(RELEASES) == _nav_ids(ABOUT), "releases.html and about.html nav ids diverge"
 
-    expected = ["navMap", "navSurveys", "navCollections", "about", "howto", "contribute"]
+    expected = ["navMap", "navSurveys", "navCollections", "about", "contribute"]
     assert _centre_order(ABOUT) == expected, (
         "about.html's header changed shape; re-check what releases.html is being held to")
     assert _centre_order(RELEASES) == expected, (

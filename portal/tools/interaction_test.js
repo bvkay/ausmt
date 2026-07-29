@@ -218,8 +218,8 @@ function ok(cond, msg) { if (!cond) die(msg); }
 // Boots a SEPARATE fresh jsdom window against the given data map (used for the empty-state intro-panel
 // check below — reusing the already-booted populated `win` would double-init the app). Mirrors the setup
 // above exactly (same module list/order, same stubs) so it is a faithful re-run of index.html's boot.
-async function bootFreshWindow(dataMap) {
-  const d = new JSDOM(html, { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+async function bootFreshWindow(dataMap, url) {
+  const d = new JSDOM(html, { url: url || "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
   const w = d.window;
   w.L = stub(); w.JSZip = stub();
   w.AUSMT_CONFIG = { short_name: "AusMT" };
@@ -866,12 +866,9 @@ async function bootFreshWindow(dataMap) {
 
   // G. WELCOME POPUP (UX7b U7): on first visit a small CENTRED MODAL (#introWelcome) shows — successor to
   // the Wave D corner strip (which is GONE). role=dialog, focus-managed; "Take the 2-minute tour" starts
-  // the tour, "Browse immediately" closes, and a "Don't show this again" checkbox GATES persistence. The
-  // #introOverlay "How AusMT works" panel stays on-demand (header help), unaffected on first visit.
+  // the tour, "Browse immediately" closes, and a "Don't show this again" checkbox GATES persistence.
   const introWelcome = doc.getElementById("introWelcome");
-  const introOverlay = doc.getElementById("introOverlay");
   ok(introWelcome, "#introWelcome (first-visit welcome popup) missing from index.html");
-  ok(introOverlay, "#introOverlay (How AusMT works panel) missing from index.html");
   ok(!doc.getElementById("introStrip"), "the Wave D corner strip (#introStrip) must be REMOVED — the welcome popup is its successor");
   // U7 dialog semantics: role=dialog + aria-modal, and the three required elements exist.
   ok(introWelcome.getAttribute("role") === "dialog", "the welcome popup must be role=dialog, got: " + JSON.stringify(introWelcome.getAttribute("role")));
@@ -883,21 +880,23 @@ async function bootFreshWindow(dataMap) {
     "welcome heading copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeHeading").textContent));
   ok(doc.getElementById("introWelcomeText").textContent.trim() === "Explore Australia's national magnetotelluric data portal",
     "welcome body copy wrong, got: " + JSON.stringify(doc.getElementById("introWelcomeText").textContent));
-  // U6 "How AusMT works" panel retitles (heading + Explore-data tile + API-access tile).
-  ok(doc.querySelector("#introOverlay .introhero").textContent.trim() === "AusMT - Discover Australia's magnetotelluric surveys",
-    "U6: intro-panel main heading not retitled, got: " + JSON.stringify(doc.querySelector("#introOverlay .introhero").textContent));
-  ok(doc.querySelector("#tileBrowse h3").textContent.trim() === "Explore data",
-    "U6: browse tile title must be 'Explore data', got: " + JSON.stringify(doc.querySelector("#tileBrowse h3").textContent));
-  ok(doc.querySelector("#tileBrowse p").textContent.trim() === "Search surveys, inspect station quality, preview transfer functions and download datasets",
-    "U6: browse tile subtext wrong, got: " + JSON.stringify(doc.querySelector("#tileBrowse p").textContent));
-  ok(doc.querySelector("#tileIntegrate h3").textContent.trim() === "API access",
-    "U6: programmatic-access tile must be retitled 'API access', got: " + JSON.stringify(doc.querySelector("#tileIntegrate h3").textContent));
-  // FIRST VISIT: simulate it (clear the key + re-run the first-visit show the way runInit() does) and
-  // assert the popup shows while the on-demand help panel stays hidden.
+  // DOCS WAVE STAGE 2: the "How AusMT works" panel (#introOverlay) and its three tiles are RETIRED along
+  // with the header item that opened them. Nothing on the page may carry those ids or classes any more:
+  // an orphaned panel is dead markup a reader can never reach, and a surviving tile id would mean the
+  // header button was removed without its panel. Guards the removal from both ends (markup and styles).
+  ["introOverlay", "introPanel", "introClose", "introTakeTour", "tileBrowse", "tileContribute", "tileIntegrate", "howToUse"]
+    .forEach(id => ok(!doc.getElementById(id), "docs wave: #" + id + " belongs to the retired 'How AusMT works' panel and must be gone"));
+  ["introoverlay", "intropanel", "introtile", "introhero", "introclose", "introtour"]
+    .forEach(cls => ok(!doc.querySelector("." + cls), "docs wave: ." + cls + " markup must be gone with the retired panel"));
+  // Comments stripped first (HTML and CSS): the stylesheet carries a comment naming the retired classes
+  // so the next reader knows what went and why, and a scan that forbids that comment loses the reason.
+  const _htmlNoComments = html.replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  ok(!/\.introoverlay|\.intropanel|\.introtile|\.introhero|\.introclose|\.introtour/.test(_htmlNoComments),
+    "docs wave: index.html must not keep CSS rules for the retired intro panel");
+  // FIRST VISIT: simulate it (clear the key + re-run the first-visit show the way runInit() does).
   win.localStorage.removeItem("ausmt_intro_dismissed");
   A.showWelcome();
   ok(!introWelcome.classList.contains("hidden"), "welcome popup did not show on first visit");
-  ok(introOverlay.classList.contains("hidden"), "the 'How AusMT works' panel must stay hidden on first visit (only the welcome popup shows)");
   // FOCUS MANAGEMENT (U7): showing the popup moves focus INTO the dialog.
   ok(introWelcome.contains(doc.activeElement), "showing the welcome popup must move focus into the dialog, active=" + (doc.activeElement && doc.activeElement.id));
 
@@ -922,7 +921,7 @@ async function bootFreshWindow(dataMap) {
   }
   ["tour", "browse", "esc", "clickout"].forEach(via => { welcomeCase(true, via); welcomeCase(false, via); });
 
-  // G2. TAKING THE TOUR from the popup actually STARTS it (the #introTakeTour pathway) and closes the popup.
+  // G2. TAKING THE TOUR from the popup actually STARTS it and closes the popup.
   win.localStorage.removeItem("ausmt_intro_dismissed");
   A.showWelcome();
   doc.getElementById("welcomeTour").click();
@@ -931,14 +930,35 @@ async function bootFreshWindow(dataMap) {
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));                          // close the tour cleanly
   ok(A.tourStep() === -1, "could not close the tour started from the welcome popup");
 
-  // G3. The on-demand "How AusMT works" panel still opens from the header help entry (not gated by the seen
-  // flag) and its own close just hides it WITHOUT persisting (the welcome popup owns the first-visit key).
-  win.localStorage.removeItem("ausmt_intro_dismissed");
-  win.document.getElementById("howToUse").click();
-  ok(!introOverlay.classList.contains("hidden"), "header 'How to use AusMT' did not open the panel");
-  doc.getElementById("introClose").click();
-  ok(introOverlay.classList.contains("hidden"), "closing the 'How AusMT works' panel did not hide it");
-  ok(win.localStorage.getItem("ausmt_intro_dismissed") !== "1", "opening/closing the help panel must NOT persist a dismissal");
+  // G3. DOCS WAVE STAGE 2: retiring the header help entry took the on-demand tour button with it, so the
+  // replacement pathway is About's link, index.html?tour=1. Boot a window at that URL and assert the tour
+  // starts by itself with NO welcome popup. Load-bearing in both directions: the seen flag is SET first,
+  // so this also proves the query parameter is not swallowed by a returning visitor's dismissal (the exact
+  // person who follows a "start the guided tour" link months later).
+  const tourWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html?tour=1");
+  ok(tourWin.__api.tourStep() === 0, "?tour=1 must start the tour on load, at step " + tourWin.__api.tourStep());
+  ok(tourWin.document.getElementById("introWelcome").classList.contains("hidden"),
+    "?tour=1 must go straight to the tour and show no welcome popup");
+  ok(!/tour=1/.test(tourWin.location.search),
+    "?tour=1 must be dropped from the address bar once the tour is running, so a reload browses instead " +
+    "of replaying the tour; search is still " + JSON.stringify(tourWin.location.search));
+  tourWin.document.dispatchEvent(new tourWin.KeyboardEvent("keydown", { key: "Escape" }));
+  ok(tourWin.__api.tourStep() === -1, "could not close the tour the ?tour=1 boot opened");
+  // Same window, now marked as a visitor who ticked "don't show this again": the parameter must still win.
+  // The boot above stripped it, so put it back the way a fresh navigation would present it.
+  tourWin.localStorage.setItem("ausmt_intro_dismissed", "1");
+  tourWin.history.replaceState(null, "", "/index.html?tour=1");
+  ok(tourWin.__api.introSeen() === true, "matrix setup: the dismissal flag did not take");
+  tourWin.__api.maybeShowIntro();
+  ok(tourWin.__api.tourStep() === 0, "?tour=1 must still start the tour for a visitor who dismissed the popup");
+  ok(tourWin.document.getElementById("introWelcome").classList.contains("hidden"),
+    "?tour=1 must not raise the welcome popup for a returning visitor either");
+  tourWin.document.dispatchEvent(new tourWin.KeyboardEvent("keydown", { key: "Escape" }));
+  // A plain boot (no query) keeps the first-visit rule: popup, no tour.
+  const plainWin = await bootFreshWindow(DATAMAP);
+  ok(plainWin.__api.tourStep() === -1, "a plain boot must NOT auto-start the tour, at " + plainWin.__api.tourStep());
+  ok(!plainWin.document.getElementById("introWelcome").classList.contains("hidden"),
+    "a plain first-visit boot must still show the welcome popup");
   win.localStorage.removeItem("ausmt_intro_dismissed");                                                     // clean state for the tour sections
 
   // G4. TOUR REDESIGN (UX9 owner): CENTRED card + LEADER to the spotlight. The side-picking _tourPlace is
@@ -994,7 +1014,7 @@ async function bootFreshWindow(dataMap) {
   // DOM: open the tour and pin the leader element, the copper Next button and the raised dim. In jsdom every
   // rect is zero, so step 0 takes the no-target branch: the leader hides, the card is centred, and the
   // backdrop carries the dim (0.78, up from the old 0.65).
-  doc.getElementById("introTakeTour").click();
+  doc.getElementById("welcomeTour").click();
   ok(doc.getElementById("tourLeader"), "UX9: the tour must build a leader overlay element (#tourLeader)");
   ok(doc.getElementById("tourLeaderLine"), "UX9: the leader overlay must contain the line element (#tourLeaderLine)");
   ok(!doc.getElementById("tourArrow"), "UX9: the retired caret element (#tourArrow) must be gone");
@@ -1039,18 +1059,19 @@ async function bootFreshWindow(dataMap) {
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
   ok(A.tourStep() === -1, "G4: could not close the tour after the positioning checks");
 
-  // H0. ONE HELP BUTTON IN THE HEADER (UX feedback round 3, item 2): the header "Take the tour" button
-  // (#headerTour) was removed. The single header help entry point is now "How to use AusMT" (#howToUse),
-  // which opens the intro panel; the panel's own "Take the tour" button (#introTakeTour) starts the tour.
+  // H0. NO HELP BUTTON IN THE HEADER. #headerTour went in UX feedback round 3; #howToUse went in the docs
+  // wave with the panel it opened. The header is now five items and carries no tour or help control at
+  // all. Both ids are pinned absent so neither can quietly return.
   ok(!doc.getElementById("headerTour"), "#headerTour should have been removed from the header (item 2)");
-  ok(doc.getElementById("howToUse"), "#howToUse (the single header help button) is missing");
-  ok(doc.getElementById("introTakeTour"), "#introTakeTour (the panel's tour button) is missing");
+  ok(!doc.getElementById("howToUse"), "#howToUse was retired with the 'How AusMT works' panel (docs wave)");
+  ok(doc.getElementById("welcomeTour"), "#welcomeTour (the welcome popup's tour button) is missing");
 
-  // H. TOUR v4 (UX rounds 1/2 + UX4 D5): 10 steps now. Opens from the intro panel's "Take the tour"
-  // button (#introTakeTour) — the ONLY tour entry point now that #headerTour is gone. Step 1 text matches
-  // the verbatim design copy, ArrowRight advances to step 2, Esc closes and tears the tour DOM down.
-  doc.getElementById("introTakeTour").click();
-  ok(A.tourStep() === 0, "tour did not open to step 0 from the intro-panel button");
+  // H. TOUR v4 (UX rounds 1/2 + UX4 D5): 10 steps now. Opens from the welcome popup's "Take the 2-minute
+  // tour" button (#welcomeTour), which is the only tour BUTTON left; index.html?tour=1 is the other entry
+  // and is pinned in G3. Step 1 text matches the verbatim design copy, ArrowRight advances to step 2, Esc
+  // closes and tears the tour DOM down.
+  doc.getElementById("welcomeTour").click();
+  ok(A.tourStep() === 0, "tour did not open to step 0 from the welcome popup's tour button");
   let tourText = doc.getElementById("tourText");
   ok(tourText, "#tourText not rendered by the tour");
   ok(tourText.textContent === "Every dot is an MT station. Click one to see its transfer function.",
@@ -1067,7 +1088,7 @@ async function bootFreshWindow(dataMap) {
   const findBox = doc.getElementById("find"), findRes = doc.getElementById("findResults");
   ok(doc.getElementById("drawer").classList.contains("open") === false, "drawer unexpectedly open before the tour restarts");
   ok(findBox.value === "", "find box not empty before the tour starts");
-  doc.getElementById("introTakeTour").click();                           // step 1 (index 0)
+  doc.getElementById("welcomeTour").click();                           // step 1 (index 0)
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 1 (filters)
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 2: FIND DEMO
   ok(A.tourStep() === 2, "ArrowRight x2 did not reach the Find demo step, at step " + A.tourStep());
@@ -1098,7 +1119,7 @@ async function bootFreshWindow(dataMap) {
   ok(doc.getElementById("tree").scrollTop === 0, "tree scroll not back to its pre-tour position after close");
   // Drawer enter action (was index 2 pre-D5, now index 4): reaching it must open the first visible
   // station's drawer, and Esc from there must close it AND restore the map view.
-  doc.getElementById("introTakeTour").click();                           // restart, index 0
+  doc.getElementById("welcomeTour").click();                           // restart, index 0
   for (let k = 0; k < 4; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 4
   ok(A.tourStep() === 4, "ArrowRight x4 did not reach the station-drawer step, at step " + A.tourStep());
   ok(doc.getElementById("drawer").classList.contains("open"), "the station-drawer step did not open the drawer");
@@ -1162,7 +1183,7 @@ async function bootFreshWindow(dataMap) {
   // H3. UX5 (D8): the tour tree step EXPANDS the target's collapsed ancestors (Alpha Survey ->
   // c:Australia / o:Australia||OrgX) and RESTORES the prior collapse state on ALL THREE exit paths
   // (forward, back, close). The collapse set is real state (treeCollapsedKeys), not a proxy.
-  const goToTreeStep = () => { doc.getElementById("introTakeTour").click();
+  const goToTreeStep = () => { doc.getElementById("welcomeTour").click();
     for (let k = 0; k < 3; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); };
   A.treeSetCollapsed("c:Australia", true); A.treeSetCollapsed("o:Australia||OrgX", true);
   // path 1: FORWARD exit
@@ -1200,7 +1221,7 @@ async function bootFreshWindow(dataMap) {
   // it must restore the visitor's prior mode on ALL exit paths (forward, back, close) — the same
   // three-path restore discipline the Find/tree demo steps pin above.
   A.setSidebarMode("browse");
-  doc.getElementById("introTakeTour").click();                              // step index 0
+  doc.getElementById("welcomeTour").click();                              // step index 0
   for (let k = 0; k < 5; k++) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" })); // -> index 5 (.selbox)
   ok(A.tourStep() === 5, "D2-tour: ArrowRight x5 did not reach the selbox step, at step " + A.tourStep());
   ok(A.sidebarMode() === "select", "D2-tour: the selbox step did not switch the rail to Select & export");
@@ -1220,7 +1241,7 @@ async function bootFreshWindow(dataMap) {
 
   // I. EMPTY-STATE fixture (UX7b U7): the welcome POPUP must still show on first visit (it explains the
   // portal even before any survey exists) and boot must not crash. A fresh window/localStorage so "first
-  // visit" is genuine. The on-demand help panel stays hidden.
+  // visit" is genuine.
   const emptyWin = await bootFreshWindow({
     "data/catalogue.json": [], "data/tf.json": [], "data/sci.json": [], "data/surveys.json": {},
   });
@@ -1230,7 +1251,7 @@ async function bootFreshWindow(dataMap) {
   const emptyWelcome = emptyDoc.getElementById("introWelcome");
   ok(emptyWelcome, "#introWelcome missing in the empty-data boot");
   ok(!emptyWelcome.classList.contains("hidden"), "welcome popup did not show on first visit in the empty-data state");
-  ok(emptyDoc.getElementById("introOverlay").classList.contains("hidden"), "the help panel must stay hidden in the empty-data first-visit state");
+  ok(!emptyDoc.getElementById("introOverlay"), "the retired 'How AusMT works' panel must be absent in the empty-data boot too");
   ok(/No surveys published yet/.test(emptyDoc.getElementById("map").innerHTML), "empty-state message did not render alongside the welcome popup");
 
   // I2. UX5 (D6) GATING-OFF: a boot WITHOUT collections.json renders NO Collections group (and the
@@ -2370,8 +2391,10 @@ async function bootFreshWindow(dataMap) {
   // only ever be read from a manifest row, never invented.
   ok(matP.textContent.indexOf("/data/edi/") < 0,
     "X8: with no manifest artifact row there is no EDI url to advertise, so no EDI line may be rendered");
-  ok(/about\.html#api/.test(matP.innerHTML),
-    "X8: the API expander must point at About's 'Fetching data programmatically' section");
+  ok(/ausmt\.readthedocs\.io\/en\/latest\/interoperability\/api-reference\//.test(matP.innerHTML),
+    "X8: the API expander must point at the docs site's API reference for worked examples (docs wave)");
+  ok(!/about\.html#api/.test(matP.innerHTML),
+    "X8: the retired About pointer must not survive alongside the docs API reference link");
   doc.getElementById("drawer").classList.remove("open");
 
   // MM. C46-W3b LICENCE CLASS via the CANON TABLES (not startsWith('CC')) + the attribution line.
