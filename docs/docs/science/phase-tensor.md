@@ -46,9 +46,8 @@ Shipped today, for every station:
 - The azimuths, which feed the dimensionality classification and the selection-level
   [strike rose](strike-analysis.md)
 
-Planned: phase tensor ellipse maps per period or period band, and survey-level phase tensor
-summaries. Ellipse maps are one of the more effective ways to see a large MT dataset at a
-glance, which is why they are on the roadmap; they are not generated today.
+Not generated today: phase tensor ellipse maps per period or period band, and survey-level phase
+tensor summaries.
 
 ## Interpretation
 

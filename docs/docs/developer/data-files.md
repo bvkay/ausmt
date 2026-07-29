@@ -10,7 +10,7 @@ through AusMT.
 > hard-coded index, in a different subdirectory and language. **Adding or reordering a column shifts
 > every consumer and silently corrupts the portal** — there is no key to protect you.
 >
-> The single source of truth is **`contract/columns.json`** (ADR-001). To change a column: (1) edit
+> The single source of truth is **`contract/columns.json`**. To change a column: (1) edit
 > `contract/columns.json`, (2) run `python contract/generate.py` (regenerates the engine's
 > `engine/extract/_contract.py` and the portal's `portal/src/contract.js` named index maps), (3) update
 > this page, and (4) extend any consumer that needs the new field. CI's `generate.py --check` fails on
@@ -41,18 +41,20 @@ declared in the survey package and recorded in provenance.
 | `surveys.json` | `build_portal.survey_meta_from_yaml` | `main.js` (`SMETA`), `drawer.js`, `exports.js` |
 | `collections.json` | `build_portal.collections_document` | `main.js` (`COLL`) |
 | `build_provenance.json` | `build_portal.py` (`PROV`) | `data.js` (`PROV`), `drawer.js` provenance panel |
-| `build_report.json` | `build_portal.py` (per-survey report accumulator) | curator serve-state UI (planned); validated against `schema/build_report.schema.json`; re-checked by `engine/scripts/verify.py` |
+| `build_report.json` | `build_portal.py` (per-survey report accumulator) | the curator serve-state view; validated against `schema/build_report.schema.json`; re-checked by `engine/scripts/verify.py` |
 | `mtcat.json` | `build_portal.mtcat_document` | external harvesters; validated against `schema/mtcat.schema.json` |
 | `qc_report.json` | `build_portal.qc_pass` | curator-facing; not read by the portal runtime |
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
-| `coord_policy.json` | `extract/build_portal.py` (C42 mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position honestly |
+| `coord_policy.json` | `extract/build_portal.py` (the coordinate mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position |
 | `base_ids.json` | `extract/build_portal.py` (`_coordaccess.base_station_id`) | the curator workbench, so a per-station coordinate override is keyed by the base station id |
 
 `coord_policy.json` maps `ausmt_id` to its coordinate policy for the stations whose policy is not
 `exact`, and `base_ids.json` maps `ausmt_id` to base station id for the stations that carry a
 processing-variant tag. Both are emitted **only when they would carry information**, so a corpus
 with no coordinate policies and no variant stations produces neither file, and a consumer must
-treat an absent file as "every station is exact" or "every station is its own base".
+treat an absent file as "every station is exact" or "every station is its own base". Both are
+documented field by field in
+[Served documents](../reference/portal-documents.md#coord_policyjson).
 
 ## `catalogue.json` — one array per station, `r[0..15]`
 
@@ -104,9 +106,9 @@ lives in each station's `station.json` `processing` block, outside the positiona
 
 Source of truth: `TF_COLUMNS` in `contract/columns.json` (imported into `extract/_edi_tf.py`). Each entry
 is `[col0, col1, …, col17]`, where each `colN` is an array thinned to the SAME ≤ 32-period axis (nulls
-where data are absent/invalid/masked). **C20** appended columns `t[10]…t[17]` — APPEND-only; `t[0]…t[9]`
-keep their positions and values byte-for-byte (including `t[5] tip_mag`, retained for compatibility even
-though the portal no longer plots it).
+where data are absent/invalid/masked). Columns are APPEND-only; `t[0]…t[9]` keep their positions and
+values byte-for-byte (including `t[5] tip_mag`, retained for compatibility even though the portal no
+longer plots it).
 
 | Index | Name | Meaning |
 |---|---|---|
@@ -129,7 +131,7 @@ though the portal no longer plots it).
 | `t[16]` | `tzy_re` | tipper Ty real (Hz/Hy) |
 | `t[17]` | `tzy_im` | tipper Ty imaginary (Hz/Hy) |
 
-### C20 error propagation (columns `t[10]…t[13]`)
+### Error propagation (columns `t[10]…t[13]`)
 
 Both the apparent-resistivity and phase errors are the standard small-error **linear propagation** from
 the single per-component impedance-error magnitude `|dZ|` (mt_metadata's `impedance_error`, a real std;
@@ -146,21 +148,21 @@ intervals — an inversion error-floor policy should read them as 1σ. Note the 
 algebraically **twice** the relative impedance error (`drho/rho = 2·|dZ|/|Z|`); the `mre` diagnostic in
 `sci.json` is the median of the *resistivity*-relative quantity.
 
-### C20 tipper frame + placeholder rule (columns `t[14]…t[17]`)
+### Tipper frame and placeholder rule (columns `t[14]…t[17]`)
 
 The tipper components are the transfer-function elements `Tx = Hz/Hx` and `Ty = Hz/Hy` **as read** — no
 sign changes at the data layer (any convention reversal is a presentation concern; see the arrow panel
 below). The source-data frame is **x = north, y = east**, so `Tx` couples the vertical field to the
 NORTH horizontal field and `Ty` to the EAST field.
 
-**Placeholder-tipper honesty.** Some EDIs carry an unphysical placeholder tipper — observed as `|T|`
+**Placeholder tippers.** Some EDIs carry an unphysical placeholder tipper, observed as `|T|`
 identically 1.0 at every period, one component ≈ 1e-17 (a filler, not an estimate). At extraction, a
 tipper with ≥ 4 present periods whose `|T|` is FLAT (`max|T|−min|T| < 1e-6`) AND AT UNITY
 (`||T|−1| < 1e-3` at every period) is masked WHOLESALE — all four `tzx/tzy` series and `tip_mag` become
 `null` — and a build NOTICE names the station. Real (varying, or off-unity) tippers are untouched. This
-composes with the C19b fill/exact-zero masking.
+composes with the fill and exact-zero masking.
 
-### C20 induction-arrow panel + error bars (portal)
+### Induction-arrow panel and error bars (portal)
 
 The station drawer replaces the `|T|`-magnitude plot with an **induction-arrow panel** rendered below the
 phase-tensor plot. Per thinned period, from the log-period axis: a REAL arrow in the **Parkinson
@@ -173,14 +175,12 @@ degrees), drawn only where the error is present.
 ## `surveys.json` — object keyed by survey label
 
 `{ "<survey name>": { …SMETA… } }`, produced by `survey_meta_from_yaml`. Unlike the arrays above this
-is **key-based** (safe to extend). Notable keys: `country`, `region`, `org`, `org_ror`, `version`,
-`slug`, `collection`, `software`, `lic`, `creators`, `contributors`, `related_identifiers`,
-`instrument_pid`, `raid`, `pid`, `doi`, `dates`, `year_start`, `year_end`, `funders`, `pubs`,
-`blurb`, `access`, `embargo_until`, `instrument_model`, `edi`, `mth5`, `ts`, `ts_pid`,
-`ts_levels`, `nci_base`, `attribution`, `cite`, `coord_resolution`, `release_notes`.
-`investigators` is still emitted from the retired lead/PI keys for back-compat; `creators` and
-`contributors` are what the citation and the credit rows read. See `survey_meta_from_yaml` for the
-full, current set.
+is **key-based** (safe to extend), and a key is absent rather than null when a survey declares
+nothing, so adding a field leaves every existing entry byte-identical.
+
+The member reference is
+[Served documents](../reference/portal-documents.md#surveysjson); `survey_meta_from_yaml` is the
+producer and the definition.
 
 ## `manifest.json` — key-based download index (rides beside the positional catalogue)
 
@@ -206,46 +206,21 @@ What matters on the producer side:
 ## Derived-product files
 
 The engine also writes per-station product files under `products/<survey-slug>/<station>/` (the
-`--products` dir). These are key-based, not positional.
+`--products` dir): `station.json` and `dimensionality.json`. These are key-based, not positional, and
+their field reference is [Per-station products](../reference/station-products.md).
 
-**`station.json`**, the per-station product record:
+What matters on the producer side:
 
-```json
-{
-  "ausmt_id": "au.<slug>.<station>", "station": "<id>", "survey": "<name>",
-  "country": "...", "organisation": "...",
-  "location": { "lat": 0.0, "lon": 0.0 },
-  "data": { "type": "BBMT", "n_periods": 0, "period_min_s": 0.0, "period_max_s": 0.0 },
-  "diagnostics": { "median_relative_error": 0.0, "remote_reference": false,
-                   "tipper_available": false, "dimensionality": "2-D", "skew_beta_median_deg": 0.0,
-                   "completeness_smoothness_diagnostic": { "value": 0.0, "basis": "e",
-                     "note": "not a quality or geological-value judgement" } },
-  "processing": { "software": "...", "algorithm": "...", "remote_reference": false,
-                  "remote_site": null, "note": null },
-  "distribution": { "edi_available": false, "license": "...", "edi_path": null },
-  "provenance": { "...PROV...": "...", "input_file": "...", "input_sha256": "..." },
-  "coordinate_qc": { "flag": "...", "head_info_conflict_deg": null, "resolution": {} },
-  "canonical_conditioning": null,
-  "frame": { "...C25 frame facts and the sign-convention verdict...": "..." },
-  "coordinate_policy": "generalised"
-}
-```
-
-`coordinate_qc` and `canonical_conditioning` are `null` unless the parse actually flagged
-something, so an unflagged station is never implied to have been touched. `coordinate_policy` is
-present only when the station's C42 policy is not `exact`, which keeps an exact station's file
-byte-unchanged.
-
-**`dimensionality.json`** carries `{ classification, skew_beta_median_deg, pct_periods_3d,
-method, screening_diagnostic, note }`.
-
-`--products` **is** a served surface in a deployment, so it rides the same access gate as
-`tf.json`/`sci.json`. A station in a non-served survey gets a withheld record carrying only the
-discovery-safe identity the public catalogue already exposes, with `"withheld": true`, no derived
-science, and no `dimensionality.json` at all.
-
-Every product MUST carry a `provenance` block (input file, sha256, pipeline and parameters) so it
-is traceable to its source. That is non-negotiable for reproducibility.
+- `coordinate_qc` and `canonical_conditioning` are `null` unless the parse actually flagged
+  something, so an unflagged station is never implied to have been touched. `coordinate_policy` is
+  present only when the station's coordinate policy is not `exact`, which keeps an exact station's
+  file byte-unchanged.
+- `--products` **is** a served surface in a deployment, so it rides the same access gate as
+  `tf.json`/`sci.json`. A station in a non-served survey gets a withheld record carrying only the
+  discovery-safe identity the public catalogue already exposes, with `"withheld": true`, no derived
+  science, and no `dimensionality.json` at all.
+- Every product MUST carry a `provenance` block (input file, sha256, pipeline and parameters) so it
+  is traceable to its source. That is non-negotiable for reproducibility.
 
 **New products** follow the same conventions: emit
 `products/<survey>/<station>/<product>.json` with a `method`/citation field, a
@@ -295,31 +270,21 @@ silently auto-picked.
   from any prose page. This is the recommended integration point for external systems (key-based,
   schema-versioned).
 - **`collections.json`** — `{ <collection_id>: { id, title, type, surveys[], n_surveys, n_stations,
-  bbox, centroid, … } }`; empty `{}` when no survey declares collection membership.
-- **`build_provenance.json`** — `PROV` block: pipeline, pipeline_version, extractor, software,
-  git_commit, parameters (the dimensionality thresholds), generated timestamp, plus `n_stations`,
-  `n_surveys`, `input_formats`, `edi_bundled`, and the served-tool versions `mt_metadata_version` /
-  `mth5_version` (also written to `build.json` and the MTCAT document). Optional — the portal loads
-  without it. The dimensionality thresholds it records are read from the named constants in
-  `_edi_science`, never re-typed, so the recorded parameters cannot drift from the code that ran;
-  provenance describes what actually executed.
+  bbox, centroid, … } }`; empty `{}` when no survey declares collection membership. Member reference:
+  [Served documents](../reference/portal-documents.md#collectionsjson).
+- **`build_provenance.json`**: the `PROV` block plus the corpus counts, the distribution flags and the
+  cache statistics. Optional: the portal loads without it. The dimensionality thresholds it records are
+  read from the named constants in `_edi_science`, never re-typed, so the recorded parameters cannot
+  drift from the code that ran. Provenance describes what actually executed. Member reference:
+  [Served documents](../reference/portal-documents.md#build_provenancejson).
 - **`build_report.json`** — structured per-survey build metadata, written alongside
-  `build_provenance.json`. Top level carries `generated` (UTC), the same `engine_commit` /
-  `source_commit` / `build_id` identity fields `build.json` records (reused from the same helpers, so
-  they cannot drift), `pipeline_version`, a `surveys` object keyed by slug, and `totals`
-  (`surveys`, `stations_built`, `warnings`). Each survey entry has `stations_built`,
-  `stations_dropped`, structured `warnings` (the survey-scoped warnings the build already produces —
-  access-gate warnings, a dropped non-http `nci_base`), `conditioning`, the C18 `cache` counters, and
-  `duration_seconds`. `conditioning` is the canonical-conditioning notes aggregated **by distinct note
-  string** — one `{note, count, stations, except}` entry per distinct note (ordered by first
-  appearance), where `count` is the number of note-carrying stations, and at most one of `stations`
-  (the small carrier set) / `except` (the small absentee complement, ≤ 5) is listed — the rest is the
-  count alone. One shared function produces both this and the build's survey-level
-  `[xml] NOTICE` log lines, so the human log and the machine report cannot disagree. The per-station notes are unchanged and still live in each `station.json`'s
-  `canonical_conditioning` and the canonical store's `provenance.json`; this is a survey-level view
-  over them. Shape fixed by `engine/schema/build_report.schema.json`; validated in the build
-  self-check and re-checked (presence, schema, and a station-count cross-check against the manifest)
-  by `engine/scripts/verify.py`. Public build metadata for the planned curator serve-state UI; the
-  portal runtime does not consume it.
+  `build_provenance.json`. It reuses the same identity helpers `build.json` uses, so the recorded
+  commits cannot drift between the two. One shared function produces both its `conditioning` array and
+  the build's survey-level `[xml] NOTICE` log lines, so the human log and the machine report cannot
+  disagree; the per-station notes stay in each `station.json`'s `canonical_conditioning` and in the
+  canonical store's own provenance record. Shape fixed by `engine/schema/build_report.schema.json` and
+  documented in [Build report schema](../reference/build-report-schema.md); validated in the build
+  self-check and re-checked by `engine/scripts/verify.py`. The portal runtime does not consume it.
 - **`qc_report.json`** — curator-facing QC findings (duplicate ids, coord flags, near-duplicates,
-  out-of-extent); not consumed by the portal runtime.
+  out-of-extent); not consumed by the portal runtime. Member reference:
+  [Served documents](../reference/portal-documents.md#qc_reportjson).

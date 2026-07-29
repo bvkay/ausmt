@@ -1,8 +1,12 @@
 # How AusMT serves data
 
 AusMT has one machine interface and it is a set of files. Everything a program needs sits under
-`https://ausmt.au/data/` as a static JSON document or a downloadable artifact, written once per build
-and served by a web server that does no computation on the way out.
+`/data/` as a static JSON document or a downloadable artifact, written once per build and served by a
+web server that does no computation on the way out.
+
+Every path in this documentation is relative to the portal root, so `/data/mtcat.json` means
+`<portal root>/data/mtcat.json`; the examples take that root from a `BASE` variable you set to the
+deployment you are reading from.
 
 This page is the architecture. The [data reference](api-reference.md) lists every document and shows
 the fetch patterns. [Tool integration](tool-integration.md) covers reading the artifacts from MT
@@ -18,11 +22,12 @@ no application server, no database and no query planner between a request and a 
 Three things follow, and each one is checkable from a shell:
 
 ```console
-$ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://ausmt.au/data/mtcat.json
+$ BASE=${AUSMT_BASE:?the portal root you are reading from}
+$ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/data/mtcat.json"
 405
-$ curl -s -o /dev/null -w '%{size_download}\n' 'https://ausmt.au/data/mtcat.json?survey=vulcan-2022'
+$ curl -s -o /dev/null -w '%{size_download}\n' "$BASE/data/mtcat.json?survey=vulcan-2022"
 275587
-$ curl -s -o /dev/null -w '%{http_code}\n' https://ausmt.au/data/
+$ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/data/"
 404
 ```
 
@@ -31,7 +36,7 @@ filtered request returns the whole document at its full length. Directory listin
 walk the tree; you read an index document and follow the paths it gives you.
 
 Selection happens in your client. That is the trade this design makes, and the
-[limits](#what-does-not-exist) section below is honest about what it costs.
+[limits](#what-does-not-exist) section below states what it costs.
 
 ---
 
@@ -40,8 +45,8 @@ Selection happens in your client. That is the trade this design makes, and the
 Every response carries `ETag` and `Last-Modified`, so a conditional request works:
 
 ```console
-$ ETAG=$(curl -sI https://ausmt.au/data/mtcat.json | tr -d '\r' | awk '/^etag:/{print $2}')
-$ curl -s -o /dev/null -w '%{http_code}\n' -H "If-None-Match: $ETAG" https://ausmt.au/data/mtcat.json
+$ ETAG=$(curl -sI "$BASE/data/mtcat.json" | tr -d '\r' | awk '/^etag:/{print $2}')
+$ curl -s -o /dev/null -w '%{http_code}\n' -H "If-None-Match: $ETAG" "$BASE/data/mtcat.json"
 304
 ```
 
@@ -71,7 +76,7 @@ The `/data` handler sets `Access-Control-Allow-Origin: *`, so browser JavaScript
 fetch any data document directly:
 
 ```console
-$ curl -sI https://ausmt.au/data/mtcat.json | grep -i access-control
+$ curl -sI "$BASE/data/mtcat.json" | grep -i access-control
 access-control-allow-origin: *
 ```
 
@@ -91,10 +96,11 @@ Every artifact row in the download manifest carries the `size` and the `sha256` 
 will hand you, so a download is checkable end to end without asking us anything:
 
 ```bash
-curl -sO https://ausmt.au/data/bundles/vulcan-2022-edi.zip
+curl -sO "$BASE/data/bundles/vulcan-2022-edi.zip"
 python3 - <<'PY'
-import hashlib, json, urllib.request
-man = json.load(urllib.request.urlopen("https://ausmt.au/data/manifest.json"))
+import hashlib, json, os, urllib.request
+BASE = os.environ["AUSMT_BASE"]
+man = json.load(urllib.request.urlopen(f"{BASE}/data/manifest.json"))
 row = next(b for b in man["bundles"] if b["url"] == "bundles/vulcan-2022-edi.zip")
 print(row["sha256"] == hashlib.sha256(open("vulcan-2022-edi.zip", "rb").read()).hexdigest())
 PY
@@ -102,9 +108,8 @@ PY
 
 The same digest appears in two other places, and they agree. `catalogue.json` carries the source
 transfer-function file's SHA-256 in column 14, which for a served EDI is the same file and so the same
-digest. That was checked across the live corpus and all 1,182 served EDI rows match. Each station's
-`station.json` records `provenance.input_file` and `provenance.input_sha256` for the file its derived
-products were computed from.
+digest. Each station's `station.json` records `provenance.input_file` and `provenance.input_sha256` for
+the file its derived products were computed from.
 
 ---
 
@@ -122,7 +127,7 @@ In the live corpus, `kalkaroo-2022` and `vulcan-2024-25` are embargoed. Neither 
 `manifest.files` or `manifest.bundles`, and the bundle path you would guess for them is a `404`:
 
 ```console
-$ curl -s -o /dev/null -w '%{http_code}\n' https://ausmt.au/data/bundles/kalkaroo-2022-edi.zip
+$ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/data/bundles/kalkaroo-2022-edi.zip"
 404
 ```
 
@@ -181,7 +186,7 @@ workbench, is an explicit `404` at the public edge and reachable only over the p
 network.
 
 ```console
-$ curl -s -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/healthz
+$ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/gateway/healthz"
 200
 ```
 

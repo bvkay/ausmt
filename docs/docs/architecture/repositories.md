@@ -12,13 +12,9 @@ ausmt/portal      Public website and machine-readable products
 ausmt/docs        System documentation
 ausmt/contract    Single-source data contract (columns.json)
 ausmt/deploy      Container images and deployment configuration
-ausmt/maintainer  Design records: the ADR and the numbered C-series documents
 ```
 
 The `ausmt` subdirectories are released together. `ausmt-surveys` has its own lifecycle.
-`engine/`, `portal/` and `docs/` were previously the separate `ausmt-science`, `ausmt-portal`
-and `ausmt-docs` repositories, consolidated into this monorepo; older links and commit
-messages still use those names.
 
 ---
 

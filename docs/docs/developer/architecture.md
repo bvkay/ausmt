@@ -22,7 +22,6 @@ ausmt/
   deploy/         Docker Compose deployment: images, Makefile, operator runbook
   contract/       the positional column contract shared by engine and portal (single source)
   docs/           this documentation site
-  maintainer/     design records: the numbered C-series design documents and ADRs
 ```
 
 Data flows in one direction: submissions enter through the gateway, reviewed packages are
@@ -88,8 +87,8 @@ Engine (`engine/extract/`):
 | `_edi_catalog.py` | coordinate reads and QC, `state_of`, DATAID helpers |
 | `_edi_tf.py` | TF rows from the component dict (`TF_COLUMNS`) |
 | `_edi_science.py` | per-station diagnostics (`SCI_COLUMNS`) |
-| `_coordaccess.py` | the C42 coordinate-access mask seam and its per-station byte gate |
-| `_conventions.py` | the C25 frame and sign-convention gates run at parse time |
+| `_coordaccess.py` | the coordinate-access mask seam and its per-station byte gate |
+| `_conventions.py` | the frame and sign-convention gates run at parse time |
 | `_license_text.py` | licence primitives and the rights text shared by the build and the bundles |
 | `cache.py` | the incremental build cache (content-addressed, self-verifying entries) |
 | `compare_mth5.py` | a standalone EDI-versus-MTH5 ingestion comparison, run from CI |
@@ -155,5 +154,4 @@ deployment.
 ## To change something
 
 [How to extend](extending.md) has ordered recipes: new EDI dialect, new science product, new
-catalogue column, new survey.yaml field. For anything touching a frozen design decision, read
-the relevant `maintainer/C*.md` design record first.
+catalogue column, new survey.yaml field.

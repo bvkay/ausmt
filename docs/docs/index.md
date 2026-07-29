@@ -118,7 +118,8 @@ Three paths through this documentation.
 **Using the data.** [How AusMT serves data](interoperability/api-overview.md), then the
 [data reference](interoperability/api-reference.md) for every served document, then
 [tool integration](interoperability/tool-integration.md) for reading the artifacts in MT
-software. Four hops from here to a working fetch.
+software. Four hops from here to a working fetch. The
+[Reference section](reference/index.md) documents every served document field by field.
 
 **Contributing a survey.** [Data lifecycle](introduction/data-lifecycle.md) for the shape of
 the journey, [Submission](operations/submission.md) for how to submit and what the validator

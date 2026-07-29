@@ -272,6 +272,24 @@ def test_the_documented_mtcat_facets_exist_in_the_schema():
 
 # ---------------------------------------------------------------- voice charter
 
+def test_no_absolute_portal_host_on_the_pages_this_lane_wrote():
+    """Owner ruling (reference-grade lane): every reference to the portal becomes a path under the
+    portal root, so a page cannot go stale when the public name moves. Runnable examples set a BASE
+    variable and join the site-relative path onto it. FAILS if an absolute portal URL comes back on any
+    of the three pages, which is exactly the regression the DNS cutover would expose.
+
+    Assembled from parts so this module's own source does not contain the literal it forbids."""
+    forbidden = "https://" + "ausmt.au"
+    hits = []
+    for p in PAGES:
+        hits += [f"{p.name}:{n}: {line.strip()[:120]}"
+                 for n, line in enumerate(_text(p).splitlines(), start=1)
+                 if forbidden in line]
+    assert not hits, (
+        "the interoperability pages must reference the portal by path, not by absolute URL:\n"
+        + "\n".join(hits))
+
+
 def test_no_em_dashes_on_the_pages_this_lane_wrote():
     """The documentation wave's voice charter forbids the em dash outright. These three pages were
     written under it, so the rule is mechanical here rather than a review note. The character is built

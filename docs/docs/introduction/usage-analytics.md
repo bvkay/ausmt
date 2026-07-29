@@ -22,7 +22,7 @@ identity. Only aggregate counts are ever stored.
 | Daily time series | Downloads, volume, formats, visits, API requests and networks folded per calendar day (UTC). |
 | Calendar-month rollups | The same figures accumulated per month as each day folds, for quarterly and year-over-year reporting. |
 
-### What is *not* measured — honestly
+### What is not measured
 
 Per-station and per-survey **page views** are **not** counted, because they cannot be measured from
 server logs: the portal is a single-page application that loads the whole catalogue once and renders
@@ -70,8 +70,8 @@ Australia is the reporting audience for this infrastructure, so the country row 
 "how much of this is used inside Australia, and where" is a question a funding report has to answer.
 Beneath the AU row the screen can therefore show a breakdown by **state or territory**.
 
-**The breakdown stops at state, deliberately.** This is a settled design decision, not an oversight
-waiting to be improved:
+**The breakdown stops at state, deliberately.** Two properties of the pipeline make a finer grain
+unreportable:
 
 - **A masked prefix cannot place a request in a city.** The address is truncated to a /24 (IPv4) or
   /48 (IPv6) *before it is written to disk*. Mobile carriers and CGNAT pools routinely serve an entire
@@ -85,7 +85,7 @@ dataset are read only to be discarded. For the same reason state counts exist at
 cumulative grains only**. A state count for one named day would be the finest-grained cell in the
 file, small enough to point at a particular group in a community this size.
 
-Two honesty properties hold, and are visible on the screen. The breakdown **always reconciles with its
+Two reconciliation properties hold, and are visible on the screen. The breakdown **always reconciles with its
 parent**: an Australian request whose prefix the state table does not cover lands in its own *"Not in
 the state table"* row, never dropped, so the state rows plus that row add up to the AU figure exactly.
 And the forward-only rule above gets its own row (*"Counted before state data existed"*) rather than

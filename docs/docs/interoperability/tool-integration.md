@@ -47,11 +47,10 @@ the live corpus those agree on all 1,182 served EDIs, with no mismatches.
 That is the point of keeping EDI in the distribution. Every other representation is derived, and a
 derived file is only as trustworthy as the derivation. The original is there so you can check.
 
-### EMTF XML is derived, and honest about it
+### EMTF XML is derived
 
 The served EMTF XML is written through mt_metadata's EMTFXML writer, so it carries the same `EM_TF`
-serialisation that EarthScope's SPUD archive publishes, and the same library reads it back. Verified
-against the live site with mt_metadata 1.0.9:
+serialisation that EarthScope's SPUD archive publishes, and the same library reads it back:
 
 ```python
 from mt_metadata.transfer_functions.core import TF
@@ -124,11 +123,10 @@ Read `m.tf_summary.array` directly rather than calling `summarize()`. `summarize
 and needs write access, so it fails on a file opened `mode="r"` with
 `KeyError: "Couldn't delete link (no write intent on file)"`.
 
-The bundles need a reasonably current HDF5 library. On the machine these examples were run on, h5py
-3.12.1 built against libhdf5 1.12.1 could not open the `tf_summary` table at all
-(`KeyError: 'Unable to open object (bad version number for datatype message)'`), and h5py 3.16.0
-against libhdf5 2.0.0 opened it fine. If you see that error, upgrade h5py before assuming the file is
-damaged.
+The bundles need a reasonably current HDF5 library. h5py 3.12.1 built against libhdf5 1.12.1 cannot
+open the `tf_summary` table at all (`KeyError: 'Unable to open object (bad version number for datatype
+message)'`), while h5py 3.16.0 against libhdf5 2.0.0 opens it. If you see that error, upgrade h5py
+before assuming the file is damaged.
 
 The survey group carries the rights and credit metadata as attributes, so a workflow can pick them up
 without a second request. `Experiment/Surveys/<slug>` holds `release_license`, which is `CC-BY-4.0` on
@@ -145,7 +143,7 @@ AusMT station ids. The bundle is built by AusMT rather than round-tripped throug
 naming rules, so nothing had to be sanitised.
 
 `data/build.json` records the `mth5_version` and `mt_metadata_version` the bundles were written with, so
-you can record them in a workflow. As of the 2026-07-27 build those are `0.6.8` and `1.0.9`.
+a workflow can record them without guessing.
 
 ---
 
@@ -156,11 +154,12 @@ It is one request, it is schema-versioned, and it is designed so that another po
 same shape.
 
 ```python
-import json, urllib.request
-doc = json.load(urllib.request.urlopen("https://ausmt.au/data/mtcat.json"))
+import json, os, urllib.request
+BASE = os.environ["AUSMT_BASE"]             # the portal root you are reading from
+doc = json.load(urllib.request.urlopen(f"{BASE}/data/mtcat.json"))
 print(doc["portal"]["schema"], doc["portal"]["version"], doc["portal"]["generated_at"])
 print(len(doc["surveys"]), "surveys,", len(doc["stations"]), "stations")
-# mtcat 1.1 2026-07-27T08:29:39Z
+# mtcat 1.2 2026-07-27T08:29:39Z
 # 21 surveys, 1418 stations
 ```
 
@@ -171,7 +170,7 @@ schema's own `$id` is that same URL, so validation needs no off-site resolution 
 Every field, type and controlled vocabulary carries a `description` in the schema itself.
 
 **Unknown keys are safe.** `additionalProperties` is true on every record object, deliberately, so a
-consumer written against 1.1 reads a 1.2 document without changes. There is one exception,
+consumer written against one minor version reads a later one without changes. There is one exception,
 `surveys[].data_types`, which is a map of band to count. An unexpected key there is an unknown band and
 not a local extension, so the schema pins the key names.
 
@@ -193,7 +192,7 @@ anything that re-renders a citation. `contributors[]` order carries no meaning. 
 declared by the survey, so strip it if you are re-hosting rather than citing.
 
 The field-by-field guide is the [MTCAT schema reference](../reference/mtcat-schema.md), and the
-normative artifact is [`mtcat.schema.json`](https://ausmt.au/data/mtcat.schema.json) itself.
+normative artifact is `/data/mtcat.schema.json` itself.
 
 ---
 

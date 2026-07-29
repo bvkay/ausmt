@@ -6,7 +6,7 @@ same content in summary form.
 
 ## Who runs AusMT
 
-AusMT is operated by **Ben Kay, National Geophysics Program Manager, AuScope**, as a
+AusMT is an AuScope funded initiative, operated with the Australian MT community, as a
 pre-institutional deployment of the AusMT framework. The intended long-term home is
 AuScope/NCI institutional infrastructure; the framework, catalogue, and survey packages are
 designed to transfer to that home without rework (see [Succession](#succession)).
@@ -44,9 +44,8 @@ stated licence:
 
 AusMT is built so that no data or capability is locked to the current operator:
 
-- The framework is open source (**Apache-2.0**), and its design records live in the repository
-  itself, under `maintainer/`: the architecture decision record plus the numbered C-series
-  documents that froze each subsystem's design and security decisions before it was built.
+- The framework is open source (**Apache-2.0**), and the design and security decisions behind
+  each subsystem are recorded in the repository itself alongside the code that implements them.
 - The catalogue and all served packages are **rebuildable from the survey source repository**
   by any operator with one documented command.
 - Survey packages are plain files (EDI + `survey.yaml`) under version control; heavyweight

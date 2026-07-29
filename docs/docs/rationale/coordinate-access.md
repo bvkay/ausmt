@@ -5,16 +5,14 @@
 A survey can declare how its station coordinates are served: `exact`, `generalised` to 0.1 degrees,
 or `withheld`. Individual stations can override the survey default. The field is
 `access.coordinates`, documented in
-[survey.yaml Reference](../reference/survey-yaml.md#accesscoordinates).
+[survey.yaml Reference](../reference/survey-yaml.md#85-accesscoordinates).
 
 ## Why it is built that way
 
-Before this, station coordinates were universally public by design. The access drawer told readers
-that station locations and survey metadata are public even for embargoed surveys, because the
-embargo machinery withheld bytes and response curves only. That was a deliberate stance, and it
-was the wrong one for some real datasets. A station sits on somebody's land, often reached under a
-land-access agreement, and sometimes on country whose custodians have a view about publishing site
-positions. An embargo that hides the impedance and publishes the pin misses the point.
+A station sits on somebody's land, often reached under a land-access agreement, and sometimes on
+country whose custodians have a view about publishing site positions. Access to the position is a
+separate question from access to the data, and it needs its own answer: an embargo that hides the
+impedance and publishes the pin misses the point.
 
 The custodian decides, not AusMT. That is the whole ruling. AusMT's job is to carry the decision
 faithfully, which is why the three levels are coarse and easy to reason about rather than a
@@ -45,7 +43,7 @@ the other is a data-quality fix.
 
 ## Where the depth is
 
-The frozen design record is
-[`maintainer/C42-CoordinateAccess.md`](https://github.com/bvkay/ausmt/blob/main/maintainer/C42-CoordinateAccess.md),
-which includes the full leak inventory that motivated it. The implementation is
-[`engine/extract/_coordaccess.py`](https://github.com/bvkay/ausmt/blob/main/engine/extract/_coordaccess.py).
+The implementation is
+[`engine/extract/_coordaccess.py`](https://github.com/bvkay/ausmt/blob/main/engine/extract/_coordaccess.py),
+which holds the mask seam, the rounding function and the per-station byte gate. The field is
+specified in the [survey.yaml reference](../reference/survey-yaml.md#85-accesscoordinates).

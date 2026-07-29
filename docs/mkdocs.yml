@@ -7,7 +7,6 @@ nav:
       - Scientific philosophy: introduction/scientific-philosophy.md
       - Governance & operation: introduction/governance.md
       - Standards & alignment: introduction/standards.md
-      - Roadmap: introduction/roadmap.md
       - Usage analytics: introduction/usage-analytics.md
   - Architecture & data model:
       - Architecture: architecture/repositories.md
@@ -36,9 +35,14 @@ nav:
       - Review: operations/review.md
       - Publication: operations/publication.md
   - Reference:
+      - Machine-readable surfaces: reference/index.md
       - MTCAT schema: reference/mtcat-schema.md
       - Download manifest schema: reference/manifest-schema.md
+      - Build report schema: reference/build-report-schema.md
       - survey.yaml reference: reference/survey-yaml.md
+      - Per-station products: reference/station-products.md
+      - Served documents: reference/portal-documents.md
+      - Releases tier: reference/releases.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
   - Design rationale:

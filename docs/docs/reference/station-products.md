@@ -1,0 +1,382 @@
+# Per-station products
+
+Each station has a small product directory holding two key-based JSON documents.
+
+```text
+/data/products/<slug>/<station>/station.json
+/data/products/<slug>/<station>/dimensionality.json
+```
+
+There is no index of product directories and directory listing is off. Build the paths from the slug and
+the station id read out of `catalogue.json` or `mtcat.json`. That is safe here because the product path
+uses the station id verbatim, unlike an artifact filename.
+
+## Normative artifact
+
+| | |
+|---|---|
+| Normative artifact | the build's product emitter, `engine/extract/build_portal.py` |
+| Served location | `/data/products/<slug>/<station>/` |
+| Version | none declared; the documents are additive and key-based |
+| Access | the product tree is a served surface, so it rides the same access gate as `tf.json` and `sci.json` |
+
+There is no JSON Schema artifact for either document. Where this page and the emitter disagree, the
+emitter is right.
+
+## Gating
+
+The two documents are gated differently, and the difference matters when looping over stations.
+
+| | Open survey | Withheld survey |
+|---|---|---|
+| `station.json` | full record | `200`, with `"withheld": true`, an `access` block, and no derived science |
+| `dimensionality.json` | full record | `404`, never written |
+
+So `station.json` always resolves and is worth requesting for any station. `dimensionality.json` should
+only be requested when the survey's `access` is `open`; that `404` is not a transport error.
+
+---
+
+## 1 station.json
+
+The per-station product record: identity, location, band and period range, the derived diagnostics, the
+processing strings read from the source file, the distribution state, the coordinate QC verdict, any
+canonical conditioning notes, the frame facts, and a provenance block naming the input file and its
+SHA-256.
+
+```json
+{
+  "ausmt_id": "au.vulcan-2022.A1",
+  "station": "A1",
+  "survey": "Vulcan 2022",
+  "country": "Australia",
+  "organisation": "University of Adelaide",
+  "location": { "lat": -30.123, "lon": 135.456 },
+  "data": { "type": "BBMT", "n_periods": 62, "period_min_s": 0.0033, "period_max_s": 1365.3 },
+  "diagnostics": {
+    "median_relative_error": 0.041,
+    "remote_reference": false,
+    "tipper_available": false,
+    "dimensionality": "2-D",
+    "skew_beta_median_deg": 0.7,
+    "completeness_smoothness_diagnostic": {
+      "value": 3.4, "basis": "e",
+      "note": "not a quality or geological-value judgement" }
+  },
+  "processing": { "software": "Geotools 4.0.5", "algorithm": null,
+                  "remote_reference": false, "remote_site": null, "note": null },
+  "distribution": { "edi_available": true, "license": "CC-BY-4.0",
+                    "edi_path": "edi/vulcan-2022/Vulcan_A1.edi" },
+  "provenance": { "pipeline": "ausmt/extract.build_portal", "input_file": "Vulcan_A1.edi",
+                  "input_sha256": "0d70…" },
+  "coordinate_qc": null,
+  "canonical_conditioning": null,
+  "frame": { }
+}
+```
+
+### 1.1 ausmt_id
+
+| | |
+|---|---|
+| Definition | The station's globally unique public id. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string |
+| Format | `au.<slug>.<station>` |
+| Example | `"au.vulcan-2022.A1"` |
+
+### 1.2 station
+
+| | |
+|---|---|
+| Definition | Station id within the survey. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string |
+| Example | `"A1"` |
+| Note | Carries the processing-variant suffix where one site has several processings, matching catalogue column 0. |
+
+### 1.3 survey
+
+| | |
+|---|---|
+| Definition | The survey's display name. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string |
+| Example | `"Vulcan 2022"` |
+
+### 1.4 country
+
+| | |
+|---|---|
+| Definition | Country the survey was acquired in. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string |
+| Default | `"Australia"` when the survey declares none |
+
+### 1.5 organisation
+
+| | |
+|---|---|
+| Definition | Custodian organisation of the survey. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string |
+
+### 1.6 location
+
+| | |
+|---|---|
+| Definition | The station's published position. |
+| Obligation | mandatory on a served station |
+| Occurrence | 1 |
+| Type | object with members `lat` and `lon`, each a number or null |
+| Example | `{ "lat": -30.123, "lon": 135.456 }` |
+| Note | Post-mask values: exact, generalised to 0.1 degrees, or `null` where the custodian withholds the position. This is the position the custodian chose to publish. |
+
+### 1.7 data
+
+| | |
+|---|---|
+| Definition | Band and period coverage of the transfer function. |
+| Obligation | mandatory on a served station |
+| Occurrence | 1 |
+| Type | object |
+| Example | `{ "type": "BBMT", "n_periods": 62, "period_min_s": 0.0033, "period_max_s": 1365.3 }` |
+
+| Member | Type | Definition |
+|---|---|---|
+| `type` | string | band, from `AMT`, `BBMT`, `LPMT`, `GDS`, `unknown` |
+| `n_periods` | integer | number of periods in the source file |
+| `period_min_s` | number or null | shortest period, seconds |
+| `period_max_s` | number or null | longest period, seconds |
+
+### 1.8 diagnostics
+
+| | |
+|---|---|
+| Definition | The automated screening diagnostics for this station. |
+| Obligation | mandatory on a served station |
+| Occurrence | 1 |
+| Type | object |
+| Note | Every value here is an automated, indicative diagnostic, not a curated rating. Absence of a processing string means not stated, not not used. |
+
+| Member | Type | Definition |
+|---|---|---|
+| `median_relative_error` | number or null | median relative apparent-resistivity error |
+| `remote_reference` | boolean | whether the source file states remote reference processing |
+| `tipper_available` | boolean | whether a tipper is present |
+| `dimensionality` | string or null | `1-D`, `2-D`, `3-D`, `indeterminate` or null |
+| `skew_beta_median_deg` | number or null | median absolute phase-tensor skew, degrees |
+| `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
+
+The full definitions of these diagnostics are in
+[Quality metrics](../science/quality-metrics.md) and [Dimensionality](../science/dimensionality.md).
+
+### 1.9 processing
+
+| | |
+|---|---|
+| Definition | Processing metadata read from the source transfer-function file. |
+| Obligation | mandatory on a served station |
+| Occurrence | 1 |
+| Type | object |
+| Note | Best-effort reads of the file's free text. mt_metadata exposes no structured processing metadata for most EDI dialects, so a null here means the source did not state it. |
+
+| Member | Type | Definition |
+|---|---|---|
+| `software` | string or null | processing software |
+| `algorithm` | string or null | processing algorithm |
+| `remote_reference` | boolean | whether remote reference is stated |
+| `remote_site` | string or null | the named reference station, where the header encodes one |
+| `note` | string or null | the arrangement detail from the source file's free text |
+
+### 1.10 distribution
+
+| | |
+|---|---|
+| Definition | Whether AusMT serves this station's bytes, and under what licence. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | object |
+| Example | `{ "edi_available": true, "license": "CC-BY-4.0", "edi_path": "edi/vulcan-2022/Vulcan_A1.edi" }` |
+| Note | `edi_path` is `null` when `edi_available` is false. A station whose coordinates are not exact is excluded from byte distribution even inside a served survey, so its record does not advertise an EDI. |
+
+### 1.11 provenance
+
+| | |
+|---|---|
+| Definition | What produced this record and from which bytes. |
+| Obligation | mandatory on a served station |
+| Occurrence | 1 |
+| Type | object |
+| Note | Carries the build provenance block (pipeline, pipeline version, extractor, software, git commit, parameters, generated timestamp) plus `input_file` and `input_sha256`. Every product carries one, so it is traceable to its source. |
+
+### 1.12 coordinate_qc
+
+| | |
+|---|---|
+| Definition | The coordinate quality-control verdict for this station. |
+| Obligation | recommended |
+| Occurrence | 0-1 |
+| Type | object or null |
+| Default | `null` when the parse flagged nothing |
+| Note | Present only when the parse actually flagged something, so an unflagged station is never implied to have been touched. Members are `flag`, `head_info_conflict_deg` and `resolution`. |
+
+### 1.13 canonical_conditioning
+
+| | |
+|---|---|
+| Definition | What the canonical EMTF XML writer had to change to make this station's XML schema-valid and round-trippable. |
+| Obligation | recommended |
+| Occurrence | 0-1 |
+| Type | array or null |
+| Default | `null` when the station was not conditioned |
+| Note | Read this before treating a value in the served XML as an observation. It is the list of things that file states which the source did not, for example a rotation angle that the source never asserted. |
+
+### 1.14 frame
+
+| | |
+|---|---|
+| Definition | The measured frame facts and the sign-convention verdict for this station. |
+| Obligation | recommended |
+| Occurrence | 0-1 |
+| Type | object or null |
+| Note | Records what rotation the source declared, whether the engine derotated to geographic north at ingest, and the quadrant medians the convention gates read. `null` for inputs the gates do not cover. |
+
+### 1.15 coordinate_policy
+
+| | |
+|---|---|
+| Definition | The coordinate access policy in force for this station. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | string |
+| Allowed values | `generalised`, `withheld` |
+| Default | absent means `exact` |
+| Note | Emitted only for a non-exact station, which keeps an exact station's record byte-unchanged. The boot-time surface the portal reads is [`coord_policy.json`](portal-documents.md#coord_policyjson). |
+
+### 1.16 The withheld record
+
+A station in a survey that is not served gets a stub carrying only the discovery-safe identity the
+public catalogue already exposes.
+
+```json
+{
+  "ausmt_id": "au.kalkaroo-2022.KD-C3",
+  "station": "KD-C3",
+  "survey": "Kalkaroo 2022",
+  "country": "Australia",
+  "organisation": "…",
+  "access": { "level": "embargoed", "embargo_until": null, "served": false },
+  "distribution": { "edi_available": false, "license": "…", "edi_path": null },
+  "withheld": true,
+  "note": "This survey's access state withholds its derived science products …"
+}
+```
+
+| Member | Type | Definition |
+|---|---|---|
+| `access.level` | string | the normalised access level |
+| `access.embargo_until` | string or null | the declared embargo end date, where one exists |
+| `access.served` | boolean | `false` on every withheld record |
+| `withheld` | boolean | `true`, the marker a consumer tests on |
+| `note` | string | why the derived science is absent |
+
+There is no `location`, no `data`, no `diagnostics`, no `processing` beyond the distribution block, and
+no `provenance.input_sha256`. The survey's discovery metadata stays fully public in the catalogue; only
+the derived science is withheld here.
+
+---
+
+## 2 dimensionality.json
+
+The phase-tensor screening result for one station. It is never written for a station in a withheld
+survey.
+
+```json
+{
+ "classification": "2-D",
+ "skew_beta_median_deg": 0.7,
+ "pct_periods_3d": 0,
+ "method": "phase-tensor (Caldwell 2004)",
+ "screening_diagnostic": true,
+ "note": "screening diagnostic, not an interpretation product"
+}
+```
+
+### 2.1 classification
+
+| | |
+|---|---|
+| Definition | The dimensionality class the screening assigned. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string or null |
+| Allowed values | `1-D`, `2-D`, `3-D`, `indeterminate` |
+| Example | `"2-D"` |
+| Note | `indeterminate` is returned when fewer than half the periods are usable. The thresholds are stated in [Dimensionality](../science/dimensionality.md#the-shipped-classification). |
+
+### 2.2 skew_beta_median_deg
+
+| | |
+|---|---|
+| Definition | Median absolute phase-tensor skew across usable periods, in degrees. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | number or null |
+| Example | `0.7` |
+
+### 2.3 pct_periods_3d
+
+| | |
+|---|---|
+| Definition | Percentage of usable periods whose absolute skew exceeds the three-dimensional threshold. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | integer or null |
+| Example | `0` |
+
+### 2.4 method
+
+| | |
+|---|---|
+| Definition | The method the classification came from. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string |
+| Example | `"phase-tensor (Caldwell 2004)"` |
+
+### 2.5 screening_diagnostic
+
+| | |
+|---|---|
+| Definition | Marks the payload as a screening result rather than an interpretation. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | boolean |
+| Example | `true` |
+
+### 2.6 note
+
+| | |
+|---|---|
+| Definition | The caveat that travels with the payload. |
+| Obligation | mandatory |
+| Occurrence | 1 |
+| Type | string |
+| Example | `"screening diagnostic, not an interpretation product"` |
+| Note | Treat the classification as a filter, not as a finding. |
+
+---
+
+## New products
+
+A new derived product follows the same conventions: emit
+`products/<slug>/<station>/<product>.json` with a method or citation field, a `screening_diagnostic` or
+interpretation caveat where relevant, a `provenance` block, and any companion assets alongside the JSON.
+The wiring steps are in [How to extend](../developer/extending.md#2-add-a-new-derived-science-product-eg-wire-up-strike).
+Which products exist today is owned by [Science products](../science/science-products.md).
