@@ -75,6 +75,20 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # monorepo checkout always has <root>/gateway, so there a missing vendored fixture FAILS the oracle
     # (D3.1 arm iv), never skips.
     "engine image build: gateway tree not shipped",   # test_validator_gate.py — D3.1 arm (iii), image lanes only
+    # test_mtcat_version_parity.py, the SAME designed-topology class as the entry above, for the
+    # other tree the engine image does not ship. The MTCAT schema version has one source (the schema
+    # title) and that module reads it back off every surface that restates it; four of those surfaces
+    # are portal files (portal.config.yaml, config.js, data/mtcat.json, tools/gen_config.py) plus
+    # version.js's sentinel, and engine.Dockerfile COPYs contract/ + engine/ and exactly one portal
+    # file (the generated portal/src/contract.js), so in the image lane those five do not exist. The
+    # three tests that read them skip with the exact reason below; the ENGINE-side statements (schema
+    # title, contract parser, generated _contract constant, the real build's emitted portal block,
+    # build_portal.py's own literal guard) keep ASSERTING in the image, so the release gate still
+    # proves the image's internal coherence. INERT on the checkout lanes: build-products.yml checks
+    # out the whole monorepo and its path filter names all five portal files, so there these tests RUN
+    # (a checkout missing one of them fails the read rather than skipping; the guard opens as soon as
+    # any pinned portal file is present).
+    "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image lanes only
     # C25: test_convention_gates_realdata.py — the real-corpus convention-gate pins (the three
     # named USArray negative controls, the ccmt-2017 de-rotation acceptance, the AusLAMP-SA
     # custodian-twin proof) run only where the .audit/realdata harness exists (the dev box; the
