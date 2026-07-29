@@ -6,7 +6,11 @@ operational changes must preserve. The system-level picture is in
 
 ## The build, step by step
 
-`python -m extract.build_portal --surveys <dir> --out <data> --products <dir>`:
+`python -m extract.build_portal --surveys <dir> --out <data> --products <dir> --bundle-edi --survey-h5`
+(the production invocation in `deploy/Makefile`; `--bundle-edi` gates the entire served-download
+surface, per-survey EDI copies and manifest rows included, and `--survey-h5` enables the tier-2
+MTH5 bundles. The engine image ships without the portal config, so these CLI flags, not
+`portal.config.yaml`, are the production enables):
 
 1. Parse arguments; create the output directories; resolve the survey validator
    (`AUSMT_VALIDATOR_PATH` or the documented search path). An unresolvable validator aborts
@@ -23,12 +27,20 @@ operational changes must preserve. The system-level picture is in
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings are reported and
    written to `qc_report.json`.
 7. Emit: the JSON product set, per-station products, canonical EMTF XML, bundles, the
-   SHA-256 manifest and the digest sidecar.
+   SHA-256 manifest and the digest sidecar (`products/survey_digests.json`, which
+   `scripts/verify.py` reads by name in step 8).
 8. Verify (`scripts/verify.py`, run separately by the deployment Makefile): schema checks
    plus the cache-independent consistency check of served XML against current survey.yaml.
 
-With `--incremental --cache-dir`, unchanged stations are served from the build cache; the
-cache can only affect build speed, never output bytes, and a degenerate salt disables it.
+With `--incremental --cache-dir`, unchanged stations are served from the build cache. The cache
+keys station products on the EDI bytes, the engine commit, library versions, the column
+contract and the `survey.yaml` digest, so it can only affect build speed, never output bytes; a
+degenerate salt (an unknown or dirty engine commit) disables it for that build. The
+verification step is cache-independent by design.
+
+Two run modes: survey-package mode (`--surveys`, the standard loop) and raw/bulk mode (`--raw`
+with `--collections` and `--seed-meta`) for regenerating a seed from loose EDI folders. Raw mode
+is excluded from caching; see [How to extend](extending.md#bulk-and-seed-mode).
 
 ## Exit codes
 

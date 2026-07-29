@@ -430,7 +430,8 @@ There is no index of product directories. Directory listing is off. Build the pa
 the station id in `catalogue.json` or `mtcat.json`, which is safe here because the product path uses
 the station id verbatim, unlike an artifact filename.
 
-The full record shape is specified in [Derived-product schema](../developer/product-schema.md).
+The full record shape is specified in
+[Portal data files](../developer/data-files.md#derived-product-files).
 
 ---
 
@@ -551,7 +552,7 @@ One thing about citation. The tooling mints nothing. It prepares a DataCite reco
 AuScope's ARDC and DataCite access lands, the record can be submitted as it stands and the minted DOI
 backfilled into the release that already exists. Until then a release's `doi` is `null`, and a consumer
 should render that as plain text. A dead resolver link is worse than no link. See
-[Releases](../operations/releases.md) for the policy behind this.
+[Versioning and releases](../data-model/versioning.md) for the policy behind this.
 
 ---
 

@@ -17,7 +17,7 @@ def write(tf, out_dir):
     """Write decomposition.json if the engine is installed; otherwise no-op.
 
     NOT YET IMPLEMENTED: when wired, this calls the fork's Groom-Bailey /
-    McNeice-Jones routines and emits the schema in docs developer/product-schema.md.
+    McNeice-Jones routines and emits the schema in docs developer/data-files.md.
     """
     if not available():
         return None  # core build proceeds; Tier-3 product simply absent

@@ -1,13 +1,9 @@
 # survey.yaml Reference
 
-## Overview
-
 `survey.yaml` is the survey-level metadata document inside a survey package. Every package
-contains exactly one.
-
-It is the single source of survey metadata for the whole system. The validator checks it, the
-engine reads it to build the portal's data files and the MTCAT discovery document, and the portal
-renders it. No survey metadata is hard-coded anywhere else.
+contains exactly one, and it is the single source of survey metadata for the whole system: the
+validator checks it, the engine reads it to build the portal's data files and the MTCAT discovery
+document, and the portal renders it. No survey metadata is hard-coded anywhere else.
 
 This page describes the current model, which is what `ausmt-surveys/_template/survey.yaml` and the
 worked `_example` ship. Three ratified changes reshaped it during July 2026, and each is covered
@@ -317,9 +313,6 @@ New packages should use the structured form.
 
 ## Relationship to the survey package
 
-`survey.yaml` describes the package as a whole. Station-level information (coordinates, deployment
-dates, sensor orientations) comes from the transfer-function files themselves.
-
-## Principle
-
-If the survey package is the scientific object, `survey.yaml` is its primary metadata record.
+`survey.yaml` describes the package as a whole; it is the package's primary metadata record.
+Station-level information (coordinates, deployment dates, sensor orientations) comes from the
+transfer-function files themselves. See [Survey package](../data-model/survey-package.md).

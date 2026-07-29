@@ -1,52 +1,45 @@
-# Versioning
+# Versioning and Releases
 
-## Overview
+AusMT versions survey packages, not portal pages. Versioning exists so that a package
+downloaded in future is scientifically identical to the version originally published, and so
+that a citation can name what was actually used.
 
-Versioning allows survey packages to evolve while preserving reproducibility.
+## Semantic versioning
 
-AusMT versions survey packages, not individual portal pages.
-
-## Semantic Versioning
-
-Survey packages use semantic versioning:
-
-```text
-MAJOR.MINOR.PATCH
-```
-
-The documented convention:
+Survey packages use `MAJOR.MINOR.PATCH`:
 
 - **PATCH** — metadata-only corrections (`1.0.1`)
 - **MINOR** — additions, such as new stations (`1.1.0`)
 - **MAJOR** — reprocessed transfer functions (`2.0.0`)
 
-What is shipped today: the validator warns when `version` is missing or not
-`MAJOR.MINOR.PATCH`, and warns when `release_notes` entries are not `{version, date, note}`
-records. The portal renders `release_notes` in the survey drawer and uses the latest entry's
-date in the recently-added feed.
+What ships: the validator warns when `version` is missing or not `MAJOR.MINOR.PATCH`, and when
+`release_notes` entries are not `{version, date, note}` records. The portal renders
+`release_notes` in the survey drawer and uses the latest entry's date in the recently-added
+feed.
 
 ## Releases
 
-> **Implementation status (current).** Immutable, versioned release archives (one frozen zip per
-> published version, never touched again) are a **planned** mechanism — no code generates or
-> stores them today. What exists now: `version` in `survey.yaml` is a metadata passthrough (it is
-> recorded and displayed, e.g. in MTCAT, but nothing in the build pipeline snapshots or freezes
-> bytes per version). The actual history of a survey package lives in this repository's git
-> history, and each build reconstructs the *current* state fresh — there is no per-version archive
-> to download from an earlier release.
+> **Implementation status (current).** Immutable, versioned release archives (one frozen zip
+> per published version, never touched again) are a **planned** mechanism. No code generates or
+> stores them. `version` in `survey.yaml` is a metadata passthrough: it is recorded and
+> displayed, including in MTCAT, but nothing in the build snapshots or freezes bytes per
+> version. The history of a package is its git history in the survey repository, and each build
+> reconstructs the *current* state fresh.
 
-Each published version is intended to eventually generate an immutable release archive.
+The intended artefacts are one immutable archive per published version:
 
 ```text
 vulcan-2022_v1.0.0_survey-package.zip
+vulcan-2022_v1.0.0_edi.zip
+vulcan-2022_v1.0.0_emtfxml.zip
 ```
 
-A release must never be modified after publication.
+What the build pre-generates today is per-survey EDI and EMTF-XML zips, plus a
+transfer-function-only MTH5 bundle behind `flags.survey_h5_enabled` (which ships on). All of
+them describe the survey's **current** state. Downloads from a station selection are assembled
+on demand in the browser.
 
-## Citation
-
-Users should cite the survey package version used in their work.
-
-## Principle
-
-Versioning exists to ensure that a survey package downloaded in the future is scientifically identical to the version originally published.
+A release, once published, is meant never to change: corrections take a new version. In
+practice today a correction means editing `survey.yaml` or the transfer functions in place and
+rebuilding, and the prior state is recoverable through git history rather than a separately
+served archive. Users should cite the version they used.

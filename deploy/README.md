@@ -914,7 +914,7 @@ resolves to `unknown` and the aggregator still completes.
 ```sh
 # One-time: create the dir and drop the monthly CSV in (download from
 #   https://db-ip.com/db/download/ip-to-country-lite  — the CSV edition, CC-BY-4.0).
-# Attribution is REQUIRED by CC-BY: it is carried in docs/ (operations/usage-analytics.md).
+# Attribution is REQUIRED by CC-BY: it is carried in docs/ (introduction/usage-analytics.md).
 mkdir -p "$AUSMT_DATA_DIR/geoip"
 mv ~/Downloads/dbip-country-lite-*.csv "$AUSMT_DATA_DIR/geoip/dbip-country-lite.csv"
 
@@ -939,7 +939,7 @@ place the fold is country-only, silently, and the screen simply omits the sectio
 this small a city-level cell is quasi-identifying ("3 downloads from Hobart" names a group). State is
 the finest grain that is both defensible from a /24 and non-identifying here. **Do not "improve" this
 to cities.** The rationale is repeated in the aggregator, the prep script, the screen and
-`docs/docs/operations/usage-analytics.md` for exactly that reason.
+`docs/docs/introduction/usage-analytics.md` for exactly that reason.
 
 The state table is **derived** from db-ip's larger **"IP to City Lite"** CSV (same CC-BY-4.0 terms, no
 account, no licence key). The big city CSV is never kept: a prep script reads it once and writes a

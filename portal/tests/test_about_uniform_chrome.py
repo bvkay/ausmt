@@ -177,11 +177,17 @@ def test_about_references_no_nonexistent_federation_doc():
     VERSION NUMBER doing a link's job, and it went stale the moment the served schema moved past 1.0 (it
     was already wrong at 1.1). It is now pinned to the docs-site URL the bullet actually links, which is
     what a reader needs and which does not rot on a schema bump. The version a consumer should trust is
-    the one the document declares about itself, never a number typed into this page."""
+    the one the document declares about itself, never a number typed into this page.
+
+    Docs-consolidation round: the pinned URL moved from /data-model/mtcat/ to
+    /reference/mtcat-schema/. The two pages were a stub and its own reference, saying the same thing
+    twice; the stub was merged into the reference under the one-owner-per-topic pass, and About's
+    bullet now points at the surviving owner. The pin is still a URL rather than a version, for the
+    reason given above."""
     raw = ABOUT.read_text(encoding="utf-8")
     assert "FEDERATION.md" not in raw, (
         "about.html must not reference FEDERATION.md — that file does not exist in the repository")
-    assert "https://ausmt.readthedocs.io/en/latest/data-model/mtcat/" in raw, (
+    assert "https://ausmt.readthedocs.io/en/latest/reference/mtcat-schema/" in raw, (
         "the honest MTCAT specification reference must survive the FEDERATION.md removal (over-deletion)")
     assert "MTCAT v1.0" not in raw, (
         "about.html must not hard-code an MTCAT version that the served schema has moved past; the "

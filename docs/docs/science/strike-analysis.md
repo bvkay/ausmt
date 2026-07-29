@@ -1,228 +1,53 @@
 # Strike Analysis
 
-## Overview
-
-Strike analysis seeks to identify preferred geoelectric directions within a magnetotelluric dataset.
-
-Many MT interpretation methods assume that the subsurface conductivity structure can be approximated by a two-dimensional Earth. Under this assumption, conductivity variations occur primarily perpendicular to a preferred strike direction.
-
-Estimating this direction is therefore an important part of many MT workflows.
-
-AusMT publishes strike products to assist users in assessing directional behaviour within a dataset and to provide context for interpretation and inversion.
-
----
-
-## What is Strike?
-
-In magnetotellurics, strike generally refers to the preferred orientation of the subsurface conductivity structure.
-
-For an ideal two-dimensional Earth:
-
-```text
-Conductivity Structure
-          │
-          │
-          │
-          │
-Strike Direction
-          ↑
-```
-
-the impedance tensor can be rotated into a coordinate system where the diagonal elements are minimised and the off-diagonal elements contain most of the response (Swift, 1967).
-
-Real datasets are rarely this simple.
-
-Conductivity structures may vary with depth, location and scale, leading to different strike estimates at different periods and stations.
-
----
-
-## Why Estimate Strike?
-
-Strike estimates are commonly used to:
-
-- Assess dimensionality
-- Guide interpretation
-- Support two-dimensional inversion
-- Compare neighbouring stations
-- Identify regional structural trends
-
-Strike products can also help identify situations where a two-dimensional approximation is unlikely to be appropriate.
-
----
-
-## Strike is Not Unique
-
-Strike should not be regarded as a single definitive property of a survey.
-
-Several factors can influence strike estimates, including:
-
-- Three-dimensional structure
-- Near-surface effects
-- Data quality
-- Period range
-- Strike estimation method
-
-As a result, different methods may produce different strike estimates for the same dataset.
-
-This is expected.
-
-Strike products should be interpreted as diagnostic tools rather than absolute measurements.
-
----
-
-## Period Dependence
-
-Strike commonly varies with period.
-
-Short periods may be influenced by shallow geological structures, while longer periods may reflect deeper conductivity patterns.
-
-For this reason, AusMT typically treats strike as a function of period rather than a single survey-wide value.
-
-Examples may include:
-
-```text
-Short Periods
-↓
-Near-Surface Structure
-
-Intermediate Periods
-↓
-Crustal Structure
-
-Long Periods
-↓
-Lithospheric Structure
-```
-
-The interpretation of these relationships remains the responsibility of the user.
-
----
-
-## Strike Estimation Methods
-
-Multiple approaches exist for estimating strike.
-
-Common examples include:
-
-- Impedance tensor rotation methods
-- Phase tensor methods
-- Decomposition-based methods
-
-Different methods make different assumptions and may produce different results.
-
-The one strike indicator AusMT ships today has its method fixed and disclosed in the portal
-itself (phase-tensor azimuths at low-skew periods); once dedicated strike products are
-generated, the method used will be recorded in each product's provenance.
-
----
-
-## Phase Tensor Strike
-
-Phase tensor analysis provides one of the most widely used approaches to strike estimation.
-
-Because the phase tensor is insensitive to galvanic distortion, phase tensor strike estimates are often used as a robust indicator of directional behaviour (Caldwell et al., 2004).
-
-Phase tensor strike products should be interpreted alongside other strike indicators rather than in isolation.
-
----
-
-## Strike Roses
-
-Strike roses provide a visual summary of strike estimates across a range of periods.
-
-These products are particularly useful for identifying:
-
-- Consistent directional trends
-- Multiple strike populations
-- Period-dependent behaviour
-- Survey-wide patterns
-
-What ships today is the portal's **selection-level rose**: for any set of selected stations,
-the browser draws a rose from the served phase-tensor azimuths, using only low-skew periods
-(|β| < 5°), folded to 180°. The portal states its limitations alongside it — the 90°
-ambiguity inherent to strike is not resolved, and combining with tipper induction arrows is
-suggested to break it. Pre-computed station, survey and collection roses are planned.
-
----
-
-## Survey-Scale Strike Products
-
-Individual stations often exhibit significant variability.
-
-For this reason AusMT may generate survey-level summaries that combine information from multiple stations.
-
-Examples include:
-
-- Strike roses
-- Period-dependent strike statistics
-- Preferred strike summaries
-- Regional strike maps
-
-These products provide context that may not be apparent from individual stations alone.
-
----
-
-## Relationship to Dimensionality
-
-Strike estimation and dimensionality assessment are closely related.
-
-For an ideal one-dimensional Earth, strike is undefined.
-
-For a two-dimensional Earth, strike may be well defined.
-
-For strongly three-dimensional structures, strike estimates may become unstable or ambiguous.
-
-Strike products should therefore be interpreted alongside dimensionality diagnostics.
-
----
-
-## Relationship to Phase Tensor Products
-
-Phase tensor products and strike products describe related aspects of the MT response.
-
-Phase tensor products provide information about directional behaviour and dimensionality, while strike products attempt to summarise preferred geoelectric directions.
-
-Together they provide a more complete picture of the dataset than either product alone.
-
----
-
-## Products Published by AusMT
-
-> **Status: planned.** Dedicated strike products are **not yet generated** by the pipeline (the
-> `ausmt_science/strike` module is planned scaffolding). What ships today is the **phase-tensor
-> azimuth**, shown in the portal as an indicative strike estimate from low-skew stations. The
-> products below are the intended scope once the strike module is implemented — see
-> [Science Products](science-products.md) and the developer
-> [Product schema](../developer/product-schema.md).
-
-Once implemented, AusMT may publish, depending on the survey and processing workflow:
-
-- Station strike estimates
-- Strike roses
-- Period-dependent strike summaries
-- Survey-level strike statistics
-- Regional strike maps
-
-The available products may evolve as methods and community practices develop.
-
----
-
-## Interpretation
-
-Strike products should be regarded as diagnostic tools.
-
-A strike estimate is not a geological interpretation.
-
-Nor does the presence of a preferred strike necessarily imply that a two-dimensional inversion is appropriate.
-
-Strike products are most useful when considered alongside:
-
-- Transfer functions
-- Phase tensor products
-- Dimensionality diagnostics
-- Geological information
-
----
+Strike is the preferred orientation of subsurface conductivity structure. For an ideal
+two-dimensional Earth the impedance tensor can be rotated into a coordinate system where the
+diagonal elements are minimised and the off-diagonal elements carry most of the response
+(Swift, 1967), and estimating that direction is part of many MT workflows: assessing
+[dimensionality](dimensionality.md), guiding interpretation, supporting 2-D inversion,
+comparing neighbouring stations, and identifying regional structural trends. It also flags the
+cases where a 2-D approximation is unlikely to be appropriate.
+
+## Strike is not a single number
+
+Real datasets are not ideal. Structures vary with depth, location and scale, so strike
+estimates vary between periods and stations. Three-dimensional structure, near-surface effects,
+data quality, period range and the estimation method itself all move the answer, and different
+methods legitimately disagree about the same data. That is expected. Strike products are
+diagnostic tools, not measurements.
+
+Strike also varies with period, so AusMT treats it as a function of period rather than one
+survey-wide value: short periods respond to shallow structure, long periods to deeper
+structure.
+
+## Methods
+
+Impedance tensor rotation, phase tensor methods and decomposition-based methods all exist and
+make different assumptions. Phase tensor strike is among the most widely used, because the
+phase tensor is insensitive to galvanic distortion and so gives a comparatively robust
+indicator of directional behaviour (Caldwell et al., 2004).
+
+The one strike indicator AusMT ships has its method fixed and disclosed in the portal itself.
+Once dedicated strike products are generated, the method will be recorded in each product's
+provenance.
+
+## What ships today
+
+The portal's **selection-level rose**. For any set of selected stations, the browser draws a
+rose from the served phase-tensor azimuths, using only low-skew periods (|β| < 5°), folded to
+180°. The portal states its limitations alongside it: the 90° ambiguity inherent to strike is
+not resolved, and combining with tipper induction arrows is suggested to break it.
+
+> **Status: planned.** Dedicated strike products are **not yet generated** (the
+> `ausmt_science/strike` module is scaffolding). Once implemented, the intended scope is
+> per-station strike estimates, pre-computed station, survey and collection roses,
+> period-dependent strike summaries, survey-level statistics and regional strike maps. See
+> [Science products](science-products.md) for the authoritative implemented-versus-planned
+> list.
+
+A strike estimate is not a geological interpretation, and a well-defined strike does not by
+itself justify a two-dimensional inversion. Read strike alongside the transfer functions, the
+[phase tensor](phase-tensor.md), the dimensionality diagnostics and the regional geology.
 
 ## References
 

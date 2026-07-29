@@ -156,15 +156,14 @@ public subset by construction, so a private survey is withheld by having no byte
 than by having a guard in front of them. There is nothing for a credential to unlock.
 
 Both of those are choices about scale. The live corpus is 21 surveys, 1,418 stations and 2,421
-downloadable artifacts. The discovery document is 276 kB, the station catalogue is 320 kB and the
-download manifest is 828 kB. A client can hold all three in memory and filter them in a loop faster
-than a query API would finish its TLS handshake. What a query tier would add is an always-on service
-to keep alive, an invalidation story for its cache, and a second place where every access rule has to
-be implemented correctly. None of that buys a reader anything measurable at this size.
-
-The corpus that would change the answer is one where the catalogue no longer fits in a client's memory
-or a single request. AusMT is roughly two orders of magnitude away from that, and this page should be
-rewritten when it isn't.
+downloadable artifacts: a 276 kB discovery document, a 320 kB station catalogue and an 828 kB
+download manifest. A client can hold all three in memory and filter them in a loop faster than a
+query API would finish its TLS handshake. A query tier would add an always-on service to keep
+alive, an invalidation story for its cache, and a second place where every access rule has to be
+implemented correctly, and none of that buys a reader anything measurable at this size. The corpus
+that would change the answer is one where the catalogue no longer fits in a client's memory or a
+single request; AusMT is roughly two orders of magnitude away, and this page should be rewritten
+when it isn't.
 
 There is an upside worth naming. Nothing here can fail separately from the files. There is no service
 to run out of connections and no index that can fall behind the data it indexes. Load changes how fast

@@ -1,52 +1,43 @@
 # Science Products
 
-## Overview
+Transfer functions are the primary products; everything else the portal shows is derived from
+them and is diagnostic rather than observational. This page is the authoritative list of what
+is implemented and what is planned. Other pages defer here for that status.
 
-Transfer functions are the primary scientific products published by AusMT.
+## Primary products
 
-Most other products available through the portal are derived from transfer functions and should be regarded as diagnostic or interpretive products rather than primary scientific observations.
+EDI, EMTF XML and MTH5 transfer-function representations. See
+[Transfer functions](transfer-functions.md).
 
-## Primary Products
+## Derived products
 
-- EDI
-- EMTFXML
-- MTH5 transfer-function representations
-
-## Derived Products
-
-**Implemented today** (parsed with `mt_metadata` and computed by the engine into the served data
-products):
+**Implemented today**, parsed with `mt_metadata` and computed by the engine into the served
+data products:
 
 - Apparent resistivity and phase, with per-period error bars where the EDI supplies them
-- Phase tensor, per-period parameters
+- [Phase tensor](phase-tensor.md), per-period parameters
 - Tipper, magnitude and full complex components
-- The dimensionality screening diagnostic and the median skew
-- Selection-level strike rose, drawn in the browser from served phase-tensor azimuths
+- The [dimensionality](dimensionality.md) screening diagnostic and the median skew
+- Selection-level [strike](strike-analysis.md) rose, drawn in the browser from served
+  phase-tensor azimuths
+- The [`q` screening scalar](quality-metrics.md#the-q-screening-scalar)
 
-What the station drawer renders today is the four response plots: apparent resistivity, phase,
-phase tensor, and Parkinson-convention induction arrows. The per-station screening panel that
-displayed the dimensionality class, the median skew and the strike estimate is hidden pending a
-design review of how those numbers should be presented. The values themselves are unchanged: they
-are still computed, still served in `sci.json` and the per-station products, and still ride the
-CSV and GeoJSON exports.
+The station drawer renders four response plots: apparent resistivity, phase, phase tensor, and
+Parkinson-convention induction arrows. The per-station screening panel that displayed the
+dimensionality class, the median skew and the strike estimate is hidden pending a design review
+of how those numbers should be presented. The values themselves are unchanged: still computed,
+still served in `sci.json` and the per-station products, and still carried by the CSV and
+GeoJSON exports.
 
-**Planned** (scaffolding exists in `engine`, intended for the MTpy-v2-backed advanced
-layer; not yet generated — do not assume these are present):
+**Planned.** Scaffolding exists in `engine`, intended for the MTpy-v2-backed advanced layer,
+and is not yet generated. Do not assume these are present:
 
-- Strike analyses
-- Distortion / decomposition products (Groom–Bailey, etc.)
+- [Strike analyses](strike-analysis.md)
+- [Distortion and decomposition products](distortion-and-dimensionality.md) (Groom-Bailey and
+  related)
 - Quicklook image products
 
-These products assist interpretation but do not replace the underlying transfer functions.
-
-## Portal vs Survey Package
-
-Derived products are primarily a portal capability.
-
-The survey package remains centred on transfer functions, metadata and provenance.
-
-## Principle
-
-Transfer functions are authoritative.
-
-Derived products provide context.
+Derived products are a portal capability. They are never written back into the survey package,
+which stays centred on transfer functions, metadata and provenance, so they can be regenerated
+and improved without touching the published record. The file shape each product must take is in
+[Portal data files](../developer/data-files.md#derived-product-files).

@@ -1,11 +1,8 @@
 # Roadmap
 
-AusMT is an active project. This page records the directions it is intended to grow in; it is the
-authoritative statement of future direction, and the portal's About page carries the same material
-in summary form.
-
-These are directions of travel, not commitments to a schedule. Nothing here describes a shipped
-capability — for what exists today, see the relevant Architecture, Data Model and Operations pages.
+The authoritative statement of where AusMT intends to grow; the portal's About page carries the
+same material in summary form. These are directions of travel, not commitments to a schedule,
+and nothing here describes a shipped capability.
 
 ## Broader validation
 
@@ -22,8 +19,9 @@ past four decades; bringing these into a consistent, discoverable framework is a
 ## MTCAT as an open standard
 
 Evolution of the MTCAT JSON schema and discovery API as an open standard for interoperable MT
-catalogue discovery and federation. See [Data Model → MTCAT](../data-model/mtcat.md) for the
-current shape of the discovery document.
+catalogue discovery and federation. See the
+[MTCAT Schema reference](../reference/mtcat-schema.md) for the current shape of the discovery
+document.
 
 ## Federation
 

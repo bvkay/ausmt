@@ -8,19 +8,39 @@ The survey is the primary object: a survey package combines transfer functions, 
 provenance and citation information into one curated, versioned unit, rather than treating
 each file as an independent artifact.
 
+It is built for researchers, students, survey custodians, data managers, research
+infrastructure operators, government agencies, and the archive's future maintainers.
+
 ---
 
 ## Background
 
 Hundreds of magnetotelluric surveys have been acquired across Australia by universities,
-government agencies, research infrastructure programs and industry. Many of the resulting
-datasets remain scientifically valuable but sit in personal archives, institutional storage,
-project websites, publication supplements or legacy media. Transfer functions often survive
-while processing details, metadata or provenance are lost; in other cases the reports survive
-while the data become hard to locate.
+government agencies, research infrastructure programs and industry. They support research into
+lithospheric architecture, crustal evolution, mineral systems, groundwater systems, geothermal
+resources, natural hydrogen systems and tectonic processes. Many of the resulting datasets
+remain scientifically valuable but sit in personal archives, institutional storage, project
+websites, publication supplements or legacy media.
+
+Reuse then fails in recognisable ways:
+
+- Transfer functions survive while their metadata are lost.
+- Metadata survive while the data become hard to locate.
+- Processing workflows are undocumented, or the software no longer exists.
+- Several versions of a dataset circulate with no authoritative source.
+- Survey information is scattered across reports, publications and personal archives.
+- Publication practice differs between organisations.
 
 AusMT provides one consistent framework for survey discovery, transfer-function access,
 metadata preservation, provenance tracking and long-term stewardship of these datasets.
+
+## Why the survey, not the file
+
+A folder of EDI files rarely says enough. A user also needs acquisition dates,
+instrumentation, processing history, provenance, publications and citation information, and
+all of that belongs to the survey rather than to any one file. Researchers ask for the
+AusLAMP South Australia data or the Vulcan dataset, not for a station file. So the survey
+package is what AusMT publishes, versions, cites and serves, and identifiers attach to it.
 
 ---
 
@@ -44,7 +64,8 @@ marked as such wherever they appear in this documentation.
 AusMT does not archive raw data. Time series remain in their original repositories
 (national facilities such as NCI, institutional and project archives). Where a survey's
 time-series collection has a persistent identifier, the survey package records it, so the
-portal links to the time series without duplicating them.
+portal links to the time series without duplicating them. How those links are recorded is in
+[External archives](interoperability/external-archives.md).
 
 ---
 
@@ -85,22 +106,28 @@ submissions -> gateway -> ausmt-surveys -> engine -> portal
 - **portal** — the public discovery and access interface. It consumes generated products and
   performs no scientific processing.
 
-The developer-facing description, including the deployment and the data contract, is in
-[Developer architecture](developer/architecture.md).
+[Architecture](architecture/repositories.md) covers the components in full;
+[Developer architecture](developer/architecture.md) is the maintainer's view.
 
 ---
 
-## Intended audience
+## Where to start
 
-Researchers, students, survey custodians, data managers, research infrastructure operators,
-government agencies, and the archive's future maintainers.
+Three paths through this documentation.
 
----
+**Using the data.** [How AusMT serves data](interoperability/api-overview.md), then the
+[data reference](interoperability/api-reference.md) for every served document, then
+[tool integration](interoperability/tool-integration.md) for reading the artifacts in MT
+software. Four hops from here to a working fetch.
 
-## Reading order
+**Contributing a survey.** [Data lifecycle](introduction/data-lifecycle.md) for the shape of
+the journey, [Submission](operations/submission.md) for how to submit and what the validator
+checks, and the [survey.yaml reference](reference/survey-yaml.md) for every field.
 
-1. [What is AusMT?](introduction/what-is-ausmt.md)
-2. [Scientific Philosophy](introduction/scientific-philosophy.md)
-3. [Architecture](architecture/overview.md)
-4. [Data Lifecycle](introduction/data-lifecycle.md)
-5. [Survey Package](data-model/survey-package.md)
+**Working on the code.** [Developer architecture](developer/architecture.md), then
+[Build lifecycle](developer/build-lifecycle.md), then
+[Portal data files](developer/data-files.md) for the positional contract.
+
+For the reasoning rather than the mechanism, read
+[Scientific philosophy](introduction/scientific-philosophy.md) and the
+[design rationale](rationale/credit-model.md) pages.

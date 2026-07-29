@@ -5,18 +5,10 @@ against these.
 
 ## The positional contract
 
-- `catalogue`, `sci` and `tf` rows are decoded by index. Column order is a published
-  interface.
-- The single source of the order is `contract/columns.json`. `contract/generate.py` writes
-  the engine's `extract/_contract.py` and the portal's `src/contract.js`; CI fails on drift
-  between the source and either generated file.
-- Append, never reorder. A same-width reorder passes the width asserts, which is exactly why
-  it is forbidden by convention as well as by review.
-- Reference columns by name (the imported constants in the engine; `r[C.*]`, `sc[SC.*]`,
-  `t[T.*]` in the portal), never by raw integer.
-
-The change procedure and the full column reference are in
-[Portal Data Files](data-files.md).
+Append, never reorder, and reference columns by name (the imported constants in the engine;
+`r[C.*]`, `sc[SC.*]`, `t[T.*]` in the portal) rather than by raw integer. The contract, the
+change procedure and the full column reference are in
+[Portal data files](data-files.md).
 
 ## Dependencies
 
@@ -52,7 +44,8 @@ The change procedure and the full column reference are in
 
 ## Provenance and reproducibility
 
-- Every build emits `build_provenance.json`. A new output that affects interpretation must be
+- Every build emits `build_provenance.json` (the model is in
+  [Provenance](../data-model/provenance.md)). A new output that affects interpretation must be
   representable there, and recorded parameters are read from the code's named constants,
   never re-typed.
 - The version string is single-sourced from `pyproject` via `importlib.metadata`.
@@ -61,8 +54,8 @@ The change procedure and the full column reference are in
 
 ## Validation
 
-- FAIL blocks; WARNING does not. A first submission without a DOI warns and proceeds to a
-  human curator. This is a governance principle, not an oversight.
+- FAIL blocks; WARNING does not, and that is a governance principle rather than an oversight
+  (see [Submission](../operations/submission.md#validation)).
 - New accepted transfer-function formats go through the validator's extension and magic-byte
   checks; several formats are deliberately opt-in.
 - Gates must be non-vacuous: an empty survey tree fails, an empty build fails without
@@ -100,6 +93,5 @@ new uncertainty introduced without being flagged?
 
 ## Licensing
 
-The framework is Apache-2.0 (`LICENSE`, `NOTICE`). Survey data is licensed per survey in
-`ausmt-surveys` (typically CC-BY-4.0) and is outside the code licence. Keep that boundary
-explicit in user-facing copy and download artifacts.
+Code licence and data licence are separate ([License](../reference/license.md)). Keep that
+boundary explicit in user-facing copy and download artifacts.

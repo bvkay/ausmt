@@ -37,11 +37,13 @@ mechanism (see also [Scientific Philosophy → CARE](scientific-philosophy.md)).
 AusMT adopts the community's existing MT formats and metadata models rather than project-specific
 alternatives:
 
+- **EDI** and **EMTF XML**: the established transfer-function exchange formats.
 - **mt_metadata** — the community MT metadata model.
 - **MTH5** — the community MT data container.
 
-These are described further under [What is AusMT? → Relationship to Existing Standards](what-is-ausmt.md)
-and in the [Data Model](../data-model/metadata-model.md).
+AusMT introduces no transfer-function format of its own. See
+[Transfer functions](../science/transfer-functions.md) for what each format carries and
+[MTH5 integration](../data-model/mth5.md) for why MTH5 is the preferred archival container.
 
 ## Interoperability between portals
 
@@ -49,6 +51,5 @@ For interoperability between portals, AusMT emits an **MTCAT** discovery documen
 machine-readable catalogue format: one JSON file describing every survey, so that another repository
 can discover AusMT's holdings without exchanging the scientific data itself. This page names no MTCAT
 version on purpose: the schema declares its own in its `title` and every document declares the one it
-was written against in `portal.version`, which are the two places worth reading it from. See
-[Data Model → MTCAT](../data-model/mtcat.md) and the
+was written against in `portal.version`, which are the two places worth reading it from. See the
 [MTCAT Schema reference](../reference/mtcat-schema.md).

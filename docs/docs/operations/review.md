@@ -1,48 +1,14 @@
-# Review Workflow
+# Review
 
-## Overview
+Review is where a validated survey package is assessed for inclusion in the curated record. It
+sits between [validation](submission.md#validation), which asks whether the package is
+structurally valid, and [publication](publication.md), which makes it part of the record.
+Review asks a different question: should this be published?
 
-Review is the process by which a validated survey package is assessed for inclusion in the curated AusMT record.
+It is not scientific peer review. It does not assess geological interpretations, inversion
+results or conclusions.
 
-Review occurs after validation and before publication.
-
-```text
-Submission
-        ↓
-Validation
-        ↓
-Review
-        ↓
-Publication
-```
-
-The purpose of review is to ensure that published survey packages are appropriately documented, attributable and discoverable.
-
-Review is not a scientific peer-review process.
-
-It does not assess geological interpretations, inversion results or scientific conclusions.
-
-Instead, review focuses on the suitability of a package for publication within AusMT.
-
----
-
-## Objectives
-
-The review process aims to ensure that:
-
-- Ownership is clear.
-- Licensing is appropriate.
-- Metadata are sufficient for discovery.
-- Provenance information is available where possible.
-- Collection membership is correct.
-- CARE considerations have been considered where applicable.
-- The package can be understood by future users.
-
-Review provides a level of oversight that cannot be achieved through automated validation alone.
-
----
-
-## How Review Happens Today
+## How review happens
 
 Review runs in the gateway's curator interface. A curator signs in to a private queue of
 validated submissions and, for each one, sees the validation report, a per-item checklist, the
@@ -51,220 +17,58 @@ submitted package (sandboxed, reachable only by submission id). Submitter contac
 visible to curators only and never enter the published record.
 
 Every decision requires a written curator note and is recorded in the audit log. Approval
-publishes the package as a git commit to the survey repository; the live portal serves it
-after the operator's next data rebuild (published and served are deliberately distinct
-states).
+publishes the package as a git commit to the survey repository; the live portal serves it after
+the operator's next data rebuild. Published and served are deliberately distinct states.
 
----
+The practical item-by-item list is the
+[Curator checklist](../developer/curator-checklist.md).
 
-## Validation and Review
+## What review considers
 
-Validation and review serve different purposes.
+**Ownership.** Is the custodian identified, is the contributor identified, and is the
+submitter's authority to publish established? This is the one finding that can stop a package
+outright.
 
-### Validation
+**Licensing.** The package must state its licence and any access conditions clearly enough
+that a future user knows how it may be used. Embargo and access level are set here; their
+serving consequences are in [Publication](publication.md#access-levels-and-embargoes).
 
-Validation assesses:
+**Metadata.** Opportunities to improve descriptions, collection assignment, identifiers,
+citation information and resource references. This is about discoverability, not about
+enforcing completeness.
 
-- Structure
-- Metadata completeness
-- Format compliance
-- Identifier validity
+**Provenance.** Whether what is recorded is adequate for the nature of the dataset. Historical
+packages will be thin; the objective is to record what is known, not to require what would be
+ideal.
 
-Validation is largely automated.
+**CARE considerations.** A manual check against the `care.*` fields recorded in `survey.yaml`.
+There is no automated CARE enforcement anywhere in the pipeline.
 
-### Review
+**Collection assignment.** A package should sit in the right collection, because that is how
+most people navigate to it.
 
-Review assesses:
+## Outcomes
 
-- Ownership
-- Licensing
-- Publication suitability
-- Stewardship considerations
-- Collection assignment
-- Context
+Each outcome requires a curator note.
 
-Review requires human judgement.
+**Publish.** The package is committed to the survey repository and appears on the portal at
+the next data rebuild. Minor improvements can be recommended in the note and addressed in a
+future version; curators can also apply metadata corrections through the gateway's metadata
+editor, which follows the same validated, versioned, audited path.
 
----
+**Return for revision.** Unclear ownership, missing licensing information, incorrect collection
+assignment or significant metadata problems. The package may be resubmitted.
 
-## Scope
+**Reject.** The package is not suitable for AusMT: material outside the repository's scope, or
+a submission that cannot establish publication authority.
 
-Review may consider:
+## Consistency and record
 
-### Ownership
+The same standards apply to universities, agencies, research infrastructure facilities and
+industry contributors alike; review looks at the package, not the submitter. Decisions are
+documented so that a future user can tell when a package was reviewed, which version was
+reviewed, what was recommended and why the decision went the way it did.
 
-Examples include:
-
-- Data custodian identified
-- Contributor identified
-- Publication authority confirmed
-
-The reviewer should be satisfied that the submitter has the right to publish the package.
-
----
-
-### Licensing
-
-The package should clearly describe any applicable licence or access conditions.
-
-Examples include:
-
-- Open access licences
-- Institutional licences
-- Project-specific requirements
-- Embargo conditions
-
-Licensing information should be sufficiently clear that future users understand how the package may be used.
-
----
-
-### Metadata
-
-Review may identify opportunities to improve:
-
-- Survey descriptions
-- Collection assignments
-- Identifiers
-- Citation information
-- Resource references
-
-Review is intended to improve discoverability rather than enforce unnecessary complexity.
-
----
-
-### Provenance
-
-Reviewers should consider whether provenance information is adequate for the nature of the dataset.
-
-Examples include:
-
-- Processing software identified
-- Product lineage recorded
-- Version history documented
-
-Historical datasets may contain incomplete provenance.
-
-The objective is to record what is known rather than require perfect documentation.
-
----
-
-### CARE Considerations
-
-Some datasets may include additional governance considerations.
-
-Examples include:
-
-- Indigenous data governance requirements
-- Cultural heritage considerations
-- Community agreements
-- Access restrictions
-
-Where applicable, these considerations should be documented and reviewed before publication. This is a manual curator check against the `care.*` fields recorded in `survey.yaml` — there is no automated CARE enforcement in the review pipeline.
-
----
-
-### Collection Assignment
-
-Survey packages should be associated with an appropriate collection.
-
-Examples include:
-
-- AusLAMP
-- Institutional holdings
-- State-based releases
-
-Correct collection assignment improves discovery and navigation.
-
----
-
-## Review Outcomes
-
-Review produces one of three outcomes, each requiring a curator note:
-
-### Publish
-
-The package is suitable for publication. It is committed to the survey repository and appears
-on the portal at the next data rebuild.
-
-Minor improvements may still be recommended in the curator note — they can be addressed in a
-future version (curators can also apply metadata corrections through the gateway's metadata
-editor, which follows the same validated, versioned, audited path).
-
----
-
-### Return for Revision
-
-The package requires further work before publication.
-
-Examples include:
-
-- Unclear ownership
-- Missing licensing information
-- Incorrect collection assignment
-- Significant metadata issues
-
-The package may be resubmitted following revision.
-
----
-
-### Reject
-
-The package is not suitable for AusMT (for example, material outside the repository's scope,
-or a submission that cannot establish publication authority).
-
----
-
-## Historical Surveys
-
-Many historically important datasets contain incomplete records.
-
-Review should recognise the realities of legacy data stewardship.
-
-A survey should not be rejected simply because:
-
-- Personnel have retired.
-- Field records are incomplete.
-- Processing details are unavailable.
-- Historical documentation has been lost.
-
-The objective is to preserve scientifically valuable datasets while clearly documenting known limitations.
-
----
-
-## Independence
-
-Review should focus on the package rather than the organisation that submitted it.
-
-The same standards should apply to:
-
-- Universities
-- Government agencies
-- Research infrastructure facilities
-- Industry contributors
-
-Consistency is important for maintaining trust in the published record.
-
----
-
-## Auditability
-
-Review decisions should be documented.
-
-Future users should be able to determine:
-
-- When the package was reviewed.
-- Which version was reviewed.
-- What recommendations were made.
-- Why publication decisions were reached.
-
-Review records form part of the stewardship history of a survey package.
-
----
-
-## Stewardship
-
-Review is not intended to act as a barrier to publication.
-
-Its purpose is to improve the quality, discoverability and long-term usability of survey packages.
-
-A review should leave a package in a better state than it was when submitted, while recognising that historical datasets are rarely perfect and that metadata can continue to improve over time.
+A survey should not be rejected because personnel have retired, field records are incomplete
+or processing details are gone. Review exists to leave a package better than it arrived, not
+to hold the line against imperfect history.

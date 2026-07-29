@@ -1,116 +1,33 @@
 # External Archives
 
-## Overview
+AusMT publishes and describes transfer functions, survey metadata, provenance and derived
+products. Everything else that belongs to a survey stays where it already is, and the survey
+package records a pointer to it. Moving it all in would duplicate systems that already work and
+add maintenance AusMT would then owe forever.
 
-AusMT does not attempt to store every product associated with an MT survey.
+## What stays outside
 
-Its primary role is to publish and describe transfer functions, survey metadata, provenance records and derived products needed for discovery and reuse.
+**Time series.** The raw electric and magnetic field recordings: native instrument files,
+calibrated series, continuous recordings, intermediate processing products, large observational
+MTH5 datasets. These are large, complex and often governed by different access conditions, and
+they belong in repositories built for them (NCI, universities, agencies, project archives).
+This is the boundary the whole design turns on, so it is stated once here and referenced
+elsewhere.
 
-Other materials may remain in external archives.
+**Publications and reports.** No PDFs, theses, posters or presentations. The survey package
+records references to them instead.
 
-This includes raw MT time-series data, native recorder files, large reports, project documentation, site photographs and other supporting material.
+**Site photographs and field material.** Photographs, notebooks and large supporting
+collections live elsewhere. Lightweight structured notes that improve interpretation or
+provenance (station deployment notes, site conditions, known acquisition issues) can sit in the
+package as small text or metadata fields rather than as image or PDF collections.
 
-AusMT records links to these resources where they are useful, but does not duplicate them.
+## How the links are recorded
 
----
-
-## Why External Archives Matter
-
-Many MT datasets are already held by universities, government agencies, national facilities and institutional repositories.
-
-Moving all associated material into AusMT would create unnecessary duplication and increase long-term maintenance costs.
-
-External archives allow AusMT to remain focused on its primary role:
-
-```text
-Transfer functions
-Metadata
-Provenance
-Discovery
-```
-
-while allowing large or specialised resources to remain in systems designed to manage them.
-
----
-
-## Time-Series Data
-
-Raw MT time-series data are out of scope for AusMT.
-
-Time-series archives may be large, complex and governed by different access conditions.
-
-They may include:
-
-- Native instrument files
-- Calibrated time-series
-- Continuous recordings
-- Intermediate processing products
-- Large MTH5 observational datasets
-
-These products should remain in appropriate external repositories.
-
-Where available, AusMT records persistent identifiers or stable links connecting survey packages to the relevant time-series collections.
-
----
-
-## Publications and Reports
-
-AusMT does not store publication PDFs, reports, theses, posters or presentations.
-
-Instead, survey packages may record references to related publications and resources.
-
-Preferred identifiers include:
-
-- DOI
-- Handle
-- institutional repository record
-- stable landing page
-
-The objective is to preserve the relationship between the survey package and related resources, not to duplicate those resources.
-
----
-
-## Site Photographs and Field Material
-
-Site photographs, field notebooks and large supporting collections should normally be stored outside AusMT.
-
-Where this material is important, AusMT may record references to the external collection.
-
-Lightweight structured notes may be included in the survey package where they improve interpretation or provenance.
-
-Examples include:
-
-- station deployment notes
-- site condition notes
-- known acquisition issues
-
-These should normally be stored as small text, CSV or metadata fields rather than as image or PDF collections.
-
----
-
-## Persistent Links
-
-External archive references should use persistent identifiers wherever possible.
-
-Examples include:
-
-- DOI
-- Handle
-- ARK
-- RAiD
-- institutional repository identifier
-- NCI collection identifier
-
-Ordinary URLs may change over time and should be avoided where better identifiers exist.
-
----
-
-## What AusMT Records
-
-For each external archive reference, AusMT records enough information for a user to understand the relationship, using the real `survey.yaml` fields:
+Using the real `survey.yaml` fields:
 
 ```yaml
-time_series:                 # pointers ONLY — AusMT never hosts time series
+time_series:                 # pointers ONLY - AusMT never hosts time series
   pid: 10.25914/example      # persistent identifier of the time-series collection
 
 publications:
@@ -121,83 +38,26 @@ publications:
     doi: 10.xxxx/example
 ```
 
-The useful information in each reference:
+**Prefer a persistent identifier over a URL.** DOI, Handle, ARK, RAiD, an institutional
+repository identifier or an NCI collection identifier all survive a site reorganisation;
+an ordinary link does not. Where a dataset identifier is recorded, it also states which data
+level it points at, so a reader can tell a parent collection from the raw packed time series
+inside it; see
+[Identifiers by data level](../reference/survey-yaml.md#identifiers-by-data-level).
 
-- resource type
-- title
-- identifier
-- repository
-- access conditions
-- relationship to the survey package
+Each reference should carry enough for a user to understand the relationship: resource type,
+title, identifier, holding repository, access conditions, and how it relates to the survey
+package.
 
----
+## Access conditions
 
-## Access Conditions
+An external resource may have entirely different access conditions from the AusMT package:
+open, embargoed, restricted, mediated, or unavailable. **Do not imply that referenced material
+is openly available unless that has been confirmed.** Record the conditions in the metadata,
+along with any governance requirements attached to the resource, which a curator reviews at
+[review](../operations/review.md) time. AusMT may expose discovery metadata while the
+underlying resource stays restricted.
 
-External resources may have different access conditions from the AusMT survey package.
-
-Examples include:
-
-- open access
-- embargoed
-- restricted access
-- mediated access
-- unavailable
-
-AusMT should not imply that externally referenced material is openly available unless that has been confirmed.
-
-Where possible, access conditions should be recorded in the metadata.
-
----
-
-## Governance and CARE Considerations
-
-Some external resources may have additional governance requirements.
-
-Examples include:
-
-- Indigenous data governance considerations
-- cultural heritage constraints
-- community agreements
-- project-specific access restrictions
-
-These should be recorded where known and reviewed during curation.
-
-AusMT may expose metadata for discovery while access to the underlying resource remains restricted.
-
----
-
-## Relationship to Provenance
-
-External archive links are part of the provenance record.
-
-They help users understand where the published transfer functions came from and where supporting material may be found.
-
-For example:
-
-```text
-Time-series collection
-↓
-Processing
-↓
-Transfer functions
-↓
-AusMT survey package
-```
-
-Even where AusMT does not hold the original observations, links to external archives help preserve the connection between observations and published products.
-
----
-
-## Principle
-
-AusMT should not become a general document or media archive.
-
-Its role is to preserve and publish the MT products needed for discovery and reuse, while linking to external archives for material that is too large, too specialised or outside the core scope of the project.
-
-The boundary is simple:
-
-```text
-AusMT stores the survey package.
-External archives store large or supporting resources.
-```
+These links are part of the [provenance record](../data-model/provenance.md): even where AusMT
+does not hold the observations, they preserve the connection between the observations and the
+published products.

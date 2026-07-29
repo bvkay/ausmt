@@ -1,41 +1,16 @@
 # Quality Metrics
 
-## Overview
-
-AusMT publishes a range of quality metrics intended to assist users in assessing the characteristics of a dataset.
-
-These products are designed to support discovery, quality assessment and interpretation.
-
-Magnetotelluric data quality depends on many factors, including acquisition conditions, recording duration, processing methodology and the scientific objectives of a study. No single number can capture that, and AusMT does not rank stations or surveys.
-
-AusMT *does* compute one per-station screening scalar (`q`, described below), but it is explicitly labelled in the portal as a completeness/smoothness diagnostic, **not** a data-quality or geological-value judgement.
-
-Quality metrics should therefore be regarded as diagnostic information rather than pass–fail criteria.
-
----
-
-## Why Quality Metrics?
-
-Users commonly wish to assess:
-
-- Data completeness
-- Period coverage
-- Statistical uncertainty
-- Transfer-function stability
-- Spatial coverage
-- Survey consistency
-
-before downloading and analysing a dataset.
-
-Quality metrics provide a summary of these characteristics and help users understand the strengths and limitations of a survey.
-
----
+MT data quality depends on acquisition conditions, recording duration, processing methodology
+and what a study is trying to do. No single number captures that, and AusMT does not rank
+stations or surveys. What it publishes are diagnostics: information to assess a dataset with,
+not pass-fail criteria.
 
 ## The `q` screening scalar
 
-Each station carries a 0–5 scalar, `q`, computed by the build (`_edi_science.py`). It exists so
+Each station carries a 0-5 scalar, `q`, computed by the build (`_edi_science.py`). It exists so
 a user screening hundreds of stations can spot incomplete or rough transfer functions quickly.
-It is **not** a data-quality ranking, and the portal says so wherever it is displayed.
+It is **not** a data-quality or geological-value ranking, and the portal says so wherever it is
+displayed.
 
 The definition is deliberately simple and fully disclosed:
 
@@ -57,59 +32,22 @@ When the EDI carries no usable error blocks (`quality_basis = "shape"`):
 q = 5 × (0.40·coverage + 0.30·completeness + 0.30·smooth)
 ```
 
-Known limitations, stated plainly: smoothness uses the xy phase mode only; the error basis
-uses off-diagonal resistivity errors only; there is no normalisation across instrument
-classes (a long-period and a broadband station are scored on the same scale). Whether the
-scalar should be replaced by the underlying vector of diagnostics (`mre`, decades,
-completeness, smoothness) is an open design question to be settled with the community.
+Known limitations, stated plainly: smoothness uses the xy phase mode only; the error basis uses
+off-diagonal resistivity errors only; there is no normalisation across instrument classes, so a
+long-period and a broadband station are scored on the same scale. Whether the scalar should be
+replaced by the underlying vector of diagnostics (`mre`, decades, completeness, smoothness) is
+an open design question to settle with the community.
 
-A single metric cannot adequately represent period-dependent behaviour, survey objectives,
-acquisition environments or processing strategies — so interpret `q` together with the
-complementary metrics below, never as a standalone indicator.
+A single number cannot represent period-dependent behaviour, survey objectives, acquisition
+environments or processing strategy. Read `q` with the metrics below, never on its own.
 
----
+## Period coverage and uncertainty
 
-## Data Completeness
+**Period coverage** is one of the most informative characteristics of an MT dataset, because it
+sets the depth range a dataset can speak to. AusMT reports minimum and maximum period, the
+number of estimated periods, and decades of coverage.
 
-Completeness metrics describe the availability of observations and products.
-
-Examples include:
-
-- Number of stations
-- Available transfer-function formats
-- Period range
-- Presence of tipper products
-- Availability of provenance records
-- Availability of derived products
-
-These metrics help users determine whether a survey contains the information required for a particular application.
-
----
-
-## Period Coverage
-
-Period coverage is one of the most important characteristics of an MT dataset.
-
-AusMT reports:
-
-- Minimum and maximum period (catalogue and station pages)
-- Number of estimated periods
-- Decades of period coverage (a `q` input)
-
-Period coverage provides insight into the depth range that may be investigated using a dataset.
-
----
-
-## Statistical Uncertainty
-
-Transfer-function estimates in the original submitted format (EDI) carry per-period uncertainty estimates.
-
-These may include:
-
-- Impedance uncertainties
-- Tipper uncertainties
-- Confidence intervals
-- Variance estimates
+**Uncertainty.** Transfer-function estimates in the submitted EDI carry per-period uncertainty.
 
 > **Implementation status (current).** Per-period uncertainties for the off-diagonal modes are
 > carried through to the portal's transfer-function data product: the `tf` contract includes
@@ -118,126 +56,32 @@ These may include:
 > diagnostics. The complete VAR blocks for **all** components remain available in the original
 > served EDI file.
 
-Uncertainty estimates provide information regarding the statistical reliability of transfer-function estimates.
+**Error bars.** The station drawer renders error bars on the apparent-resistivity and phase
+plots wherever the EDI supplies per-period errors: resistivity whiskers in the log domain,
+phase whiskers as symmetric ± degrees. Stations whose EDIs carry no error blocks show no bars,
+and their `q` falls back to the shape basis. Large uncertainties do not necessarily mean poor
+data; they mean less confidence in that estimate.
 
-Users who need the full per-component uncertainty record should consult the original EDI's VAR blocks.
+## Consistency and coverage diagnostics
 
----
-
-## Error Bars
-
-Apparent resistivity and phase products in the original EDI commonly include per-period uncertainty estimates, conventionally displayed as error bars.
-
-> **Implementation status (current).** The portal's station drawer renders error bars on the
-> apparent-resistivity and phase plots wherever the EDI supplies per-period errors: resistivity
-> whiskers are drawn in the log domain, phase whiskers as symmetric ± degrees. Stations whose
-> EDIs carry no error blocks show no bars (and their `q` falls back to the shape basis).
-
-Error bars provide a visual indication of the variability associated with a transfer-function estimate.
-
-Large uncertainties do not necessarily imply poor data quality, but they may indicate reduced confidence in a particular estimate.
-
----
-
-## Transfer Function Consistency
-
-Several shipped diagnostics provide insight into the internal consistency of a transfer function:
+Several shipped diagnostics describe the internal consistency of a transfer function:
 
 - Phase smoothness (median second-difference roughness, a `q` input)
-- A galvanic/static-shift signature heuristic — resistivity modes offset by a near-constant
-  factor in log space while phases coincide; flagged with a warning in the station drawer
+- A galvanic/static-shift signature heuristic: resistivity modes offset by a near-constant
+  factor in log space while phases coincide, flagged with a warning in the station drawer
 - Phase-tensor dimensionality diagnostics (see [Dimensionality](dimensionality.md))
 
-These diagnostics help users identify unusual features that may warrant further investigation.
+At survey level AusMT reports the number of stations and the geographic extent. Derived spatial
+metrics (station spacing, profile length, survey area) are not computed today.
 
----
+## Completeness of the record
 
-## Survey Coverage Metrics
+The portal surfaces metadata completeness per station as availability badges (EDI, time series,
+MTH5, DOI, licence) and a maturity bar covering survey metadata, station metadata,
+[provenance](../data-model/provenance.md), citation and identifiers.
 
-Survey-level metrics describe the spatial characteristics of a dataset.
-
-Reported today:
-
-- Number of stations
-- Geographic extent (the map itself, and per-survey pages)
-
-Derived spatial metrics (station spacing, profile length, survey area) are not currently
-computed.
-
-These metrics help users assess whether a survey is appropriate for a particular regional or local-scale application.
-
----
-
-## Metadata Completeness
-
-Metadata quality influences the long-term usability of a dataset.
-
-The portal surfaces this per station as availability badges (EDI, time series, MTH5, DOI,
-licence) and a maturity bar covering:
-
-- Survey metadata
-- Station metadata
-- Provenance information
-- Citation information
-- Identifier information
-
-Metadata completeness should not be confused with scientific quality, but it is an important component of stewardship and reuse.
-
----
-
-## Provenance Completeness
-
-Provenance information provides context regarding the origin and processing history of a dataset.
-
-Examples include:
-
-- Processing software
-- Processing versions
-- Product generation dates
-- Version history
-
-The availability of provenance information may be reported as part of survey-level quality summaries.
-
----
-
-## Historical Datasets
-
-Historical datasets often contain incomplete metadata or provenance information.
-
-These limitations should not be interpreted as indicators of poor scientific quality.
-
-Many historically important MT surveys remain highly valuable despite incomplete documentation.
-
-Quality metrics should therefore be interpreted within the context of the survey and its history.
-
----
-
-## Quality Metrics and Interpretation
-
-Quality metrics are intended to support informed assessment of a dataset.
-
-They do not replace scientific judgement.
-
-A survey with limited metadata may contain excellent transfer functions.
-
-A survey with comprehensive metadata may still contain challenging data.
-
-The purpose of quality metrics is to provide context, not to determine whether a dataset is "good" or "bad".
-
----
-
-## Future Development
-
-Quality assessment remains an active area of research and development within the MT community.
-
-Additional metrics may be incorporated into AusMT as methods evolve and community practices develop.
-
-New metrics should complement existing products and provide meaningful information to users without obscuring the underlying transfer-function data.
-
----
-
-## Principle
-
-Quality metrics should help users understand a dataset, not rank it.
-
-The objective is to provide transparent information about the characteristics of a survey while allowing users to determine which metrics are most relevant to their own scientific questions.
+Metadata completeness is not scientific quality, and it is not evidence about it. Historical
+surveys are frequently thin on documentation and highly valuable anyway, so read every metric
+here in the context of the survey and its history. A dataset with sparse metadata can hold
+excellent transfer functions, and a thoroughly documented one can still be hard data to work
+with.
