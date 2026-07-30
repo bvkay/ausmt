@@ -357,6 +357,17 @@ def build_reverse_map(manifest: dict | None) -> dict[str, dict]:
     return out
 
 
+def _served_survey_count(reverse_map: dict[str, dict]) -> int:
+    """How many distinct surveys the SERVED manifest offers: the denominator for "N surveys
+    downloaded".
+
+    Counted from the `survey` label rather than the bundle `slug` on purpose. by_survey is keyed on the
+    label, so counting labels makes numerator and denominator the same vocabulary from the same map;
+    counting slugs would miss any survey whose rows are all files (a bundle row is where a slug lives),
+    and could then render an absurd "3 of 2 served"."""
+    return len({row.get("survey") for row in reverse_map.values() if row.get("survey")})
+
+
 def _norm_url(url) -> str | None:
     if not isinstance(url, str) or not url:
         return None
@@ -519,7 +530,19 @@ def _empty_stats() -> dict:
             "totals": {"downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
                        "api_requests": 0, "downloads_by_client": {}},
             "downloads": {"by_format": {}, "by_survey": {}, "by_dataset": {}, "by_kind": {}},
-            "countries": {}, "by_state": {}, "daily": [], "monthly": []}
+            "total_served_surveys": 0,
+            "countries": {}, "by_state": {}, "by_state_detail": {}, "daily": [], "monthly": []}
+
+
+# One row of the per-state DETAIL map: what a state actually did, not merely how many requests it made.
+# `by_state` (a bare request count per state) is untouched, because the screen's reconciliation rows and
+# their pins are built on it and its exact-total promise against the AU country row is load-bearing.
+# This map sits BESIDE it and answers the question a funding report actually asks.
+_STATE_METRICS = ("downloads", "visits", "api")
+
+
+def _empty_state_detail() -> dict:
+    return {"downloads": 0, "visits": 0, "api": 0, "bytes": 0}
 
 
 def _empty_month(month: str) -> dict:
@@ -527,11 +550,15 @@ def _empty_month(month: str) -> dict:
     it; `seeded_days` records how many of those came from a pre-upgrade daily row (downloads + visits
     only), so the screen can say which months carry partial detail instead of implying a real zero;
     `geo_days` counts the days that actually contributed a country, which is what makes the forward-only
-    country seam MACHINE-visible rather than a matter of reading the prose beside the table."""
+    country seam MACHINE-visible rather than a matter of reading the prose beside the table;
+    `networks_peak` is the largest distinct-network count any of its folded days saw. That figure used
+    to live on daily rows ONLY, so it expired with the 92-day window and could never reach a quarterly
+    report, which is exactly the horizon a funding report asks about. It accumulates as each day folds
+    and is never recomputed from a tail that is about to be pruned."""
     return {"month": month, "downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
-            "api_requests": 0, "days": 0, "seeded_days": 0, "geo_days": 0,
+            "api_requests": 0, "days": 0, "seeded_days": 0, "geo_days": 0, "networks_peak": 0,
             "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_state": {},
-            "downloads_by_client": {}}
+            "by_state_detail": {}, "downloads_by_client": {}}
 
 
 def _as_int(v, default: int = 0) -> int:
@@ -553,10 +580,15 @@ def _next_day(date_str) -> str | None:
 
 
 def _coerce_survey_map(raw) -> dict[str, dict]:
-    """The by_survey map, tolerant of BOTH shapes: v1 `{survey: count}` and v2
-    `{survey: {downloads, bytes}}`. A v1 int upgrades to {downloads: n, bytes: 0} -- the historical
-    per-survey VOLUME was never recorded and is NOT invented; `detail_since` tells the screen from when
-    the bytes column is real, so it can say so rather than show a silent undercount."""
+    """The by_survey map, tolerant of ALL THREE shapes it has had: v1 `{survey: count}`, v2
+    `{survey: {downloads, bytes}}`, and the current `{survey: {downloads, bytes, countries}}`. A v1 int
+    upgrades to {downloads: n, bytes: 0} -- the historical per-survey VOLUME was never recorded and is
+    NOT invented; `detail_since` tells the screen from when the bytes column is real, so it can say so
+    rather than show a silent undercount. The same applies to the country list: an older row reads back
+    empty and starts accruing, and no country is invented for a download folded before it existed.
+
+    The country list is the custodian promise ("downloaded N times from M countries") made derivable.
+    It is stored at COUNTRY grain and nothing finer, and only its COUNT is ever rendered."""
     out: dict[str, dict] = {}
     if not isinstance(raw, dict):
         return out
@@ -564,9 +596,27 @@ def _coerce_survey_map(raw) -> dict[str, dict]:
         if not isinstance(name, str):
             continue
         if isinstance(val, dict):
-            out[name] = {"downloads": _as_int(val.get("downloads")), "bytes": _as_int(val.get("bytes"))}
+            codes = val.get("countries")
+            out[name] = {"downloads": _as_int(val.get("downloads")), "bytes": _as_int(val.get("bytes")),
+                         "countries": sorted({str(c) for c in codes if isinstance(c, str) and c})
+                         if isinstance(codes, list) else []}
         else:
-            out[name] = {"downloads": _as_int(val), "bytes": 0}
+            out[name] = {"downloads": _as_int(val), "bytes": 0, "countries": []}
+    return out
+
+
+def _coerce_state_detail(raw) -> dict[str, dict]:
+    """The by_state_detail map from a prior file, tolerant of absence (it is an ADDITIVE dimension
+    detected by key presence, like by_state itself). A row is clamped to the four known metrics so a
+    hand-edited file cannot push an arbitrary column onto the screen."""
+    out: dict[str, dict] = {}
+    if not isinstance(raw, dict):
+        return out
+    for code, row in raw.items():
+        if not isinstance(code, str) or not isinstance(row, dict):
+            continue
+        out[code] = {"downloads": _as_int(row.get("downloads")), "visits": _as_int(row.get("visits")),
+                     "api": _as_int(row.get("api")), "bytes": _as_int(row.get("bytes"))}
     return out
 
 
@@ -597,11 +647,12 @@ def _coerce_month_rows(raw) -> list[dict]:
             continue
         m = _empty_month(row["month"])
         for k in ("downloads", "visits", "download_bytes", "unattributed", "api_requests",
-                  "days", "seeded_days", "geo_days"):
+                  "days", "seeded_days", "geo_days", "networks_peak"):
             m[k] = _as_int(row.get(k))
         for k in ("formats", "kinds", "countries", "by_state", "downloads_by_client"):
             if isinstance(row.get(k), dict):
                 m[k] = {str(kk): _as_int(vv) for kk, vv in row[k].items()}
+        m["by_state_detail"] = _coerce_state_detail(row.get("by_state_detail"))
         m["surveys"] = _coerce_survey_map(row.get("surveys"))
         out.append(m)
     out.sort(key=lambda r: r["month"])
@@ -674,6 +725,9 @@ def _coerce_prev(prev: dict | None) -> dict:
     # (that would need raw logs that have long since rotated away).
     if isinstance(prev.get("by_state"), dict):
         s["by_state"] = {str(k): _as_int(v) for k, v in prev["by_state"].items()}
+    # The per-state DETAIL map rides the same additive, key-presence rule: a file written before it
+    # existed starts empty and no earlier month is given a detail row it never measured.
+    s["by_state_detail"] = _coerce_state_detail(prev.get("by_state_detail"))
     # Day rows are carried forward WHOLE, unknown keys and all. A row written by a build that briefly
     # recorded a per-day `states` map keeps it and simply ages out of the 92-day window; it is not
     # stripped, because rewriting history on upgrade is the one thing this file never does.
@@ -736,6 +790,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     by_kind = stats["downloads"]["by_kind"]
     countries = stats["countries"]
     by_state = stats["by_state"]
+    by_state_detail = stats["by_state_detail"]
     daily_index = {d["date"]: d for d in stats["daily"]}
     month_index = {m["month"]: m for m in stats["monthly"]}
     # date -> set of MASKED networks seen on it, for THIS run only. Caddy already truncated the address
@@ -786,7 +841,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             totals["visits"] += 1
             day["visits"] += 1
             month["visits"] += 1
-            _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
+            _count_geo(geoip, au_states, rec["address"], countries, by_state, by_state_detail, month,
+                       metric="visits")
             geo_days_seen[date] = date[:7]
         elif kind == "api":
             totals["api_requests"] += 1
@@ -794,7 +850,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             month["api_requests"] += 1
             # The API line used to be the one counted class with no geography, so any reach claim built
             # from the country table silently excluded programmatic consumers.
-            _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
+            _count_geo(geoip, au_states, rec["address"], countries, by_state, by_state_detail, month,
+                       metric="api")
             geo_days_seen[date] = date[:7]
         else:
             size = max(rec["size"], 0)
@@ -843,21 +900,27 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["download_bytes"] = _as_int(day.get("download_bytes")) + size
             month["downloads"] += n
             month["download_bytes"] += size
+            cc = geoip.country(rec["address"])
             if survey:
-                _bump_survey(by_survey, survey, size, counted=counted)
-                _bump_survey(month["surveys"], survey, size, counted=counted)
+                _bump_survey(by_survey, survey, size, counted=counted, country=cc)
+                _bump_survey(month["surveys"], survey, size, counted=counted, country=cc)
             # Geography follows the COUNT, not the line, so `sum(countries.values())` stays exactly
             # downloads + visits + API requests and the table caption can say so and be true.
             if counted:
-                _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
+                _count_geo(geoip, au_states, rec["address"], countries, by_state, by_state_detail,
+                           month, metric="downloads", size=size)
                 geo_days_seen[date] = date[:7]
 
     # Distinct-network counts for the days folded in THIS run. Only the SIZE of each set is written --
-    # the masked addresses themselves never leave memory (record D2/D6).
+    # the masked addresses themselves never leave memory (record D2/D6). The month keeps the PEAK of
+    # those counts, so the reach proxy survives the pruning of the daily rows it was derived from.
     for date, nets in networks_seen.items():
         row = daily_index.get(date)
         if row is not None:
             row["networks"] = len(nets)
+        m = month_index.get(date[:7])
+        if m is not None:
+            m["networks_peak"] = max(_as_int(m.get("networks_peak")), len(nets))
     # One increment per distinct ACTIVE date, so a month row records how much of itself it covers.
     for month_key in days_seen.values():
         month_index[month_key]["days"] += 1
@@ -879,6 +942,13 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     stats["daily"] = _prune_daily(stats["daily"], stats["last_folded_date"], daily_keep)
     stats["monthly"].sort(key=lambda m: m["month"])
 
+    # The DENOMINATOR, restamped every fold from the manifest being served right now. "12 surveys
+    # downloaded" reads very differently against 14 served and against 140, and the screen had no
+    # denominator at all. It is a property of the current build, not an accumulated count, so it is
+    # overwritten rather than accrued; an absent or unreadable manifest yields 0 and the screen then
+    # renders the numerator alone rather than a ratio against a fabricated total.
+    stats["total_served_surveys"] = _served_survey_count(reverse_map)
+
     stats["schema"] = SCHEMA_VERSION
     stats["generated_at"] = now_utc(run_dt)
     stats["timer_period_min"] = TIMER_PERIOD_MIN
@@ -889,32 +959,65 @@ def _bump(counter: dict, key: str, n: int = 1) -> None:
     counter[key] = _as_int(counter.get(key)) + n
 
 
-def _bump_survey(index: dict, survey: str, size: int, *, counted: bool = True) -> None:
-    """One download line of `size` bytes against `survey` in a {survey: {downloads, bytes}} map. Bundles
-    land here under their OWN survey (the manifest bundle row carries it), so a whole-survey package
-    download is credited to that survey exactly like a per-station file.
+def _bump_survey(index: dict, survey: str, size: int, *, counted: bool = True,
+                 country: str | None = None) -> None:
+    """One download line of `size` bytes against `survey` in a {survey: {downloads, bytes, countries}}
+    map. Bundles land here under their OWN survey (the manifest bundle row carries it), so a
+    whole-survey package download is credited to that survey exactly like a per-station file.
 
     `counted` is False for a line the within-day dedupe already saw (the second leg of an abort+refetch
     pair, a further range fragment): its BYTES still sum, because they really were served, but it adds
-    no second download to the survey's count."""
+    no second download to the survey's count.
+
+    `country` accrues into a sorted, de-duplicated list of country codes for this survey. That list is
+    the custodian promise made derivable ("downloaded N times from M countries"). It is stored at
+    COUNTRY grain and nothing finer, and only its COUNT is ever rendered or exported: a named survey
+    beside a named country is already a small cell in a community this size, and the same small-cell
+    argument that rules out a city column rules out publishing the list itself."""
     row = index.get(survey)
     if not isinstance(row, dict):
-        row = {"downloads": _as_int(row), "bytes": 0}
+        row = {"downloads": _as_int(row), "bytes": 0, "countries": []}
         index[survey] = row
     row["downloads"] = _as_int(row.get("downloads")) + (1 if counted else 0)
+    row["bytes"] = _as_int(row.get("bytes")) + size
+    if country:
+        codes = row.get("countries")
+        if not isinstance(codes, list):
+            codes = []
+        if country not in codes:
+            codes.append(country)
+            codes.sort()
+        row["countries"] = codes
+
+
+def _bump_state_detail(index: dict, code: str, metric: str, size: int) -> None:
+    """One request against `code` in the per-state DETAIL map: which metric it was, and its bytes."""
+    row = index.get(code)
+    if not isinstance(row, dict):
+        row = _empty_state_detail()
+        index[code] = row
+    if metric in _STATE_METRICS:
+        row[metric] = _as_int(row.get(metric)) + 1
     row["bytes"] = _as_int(row.get("bytes")) + size
 
 
 def _count_geo(geoip: GeoIP, au_states, address, countries: dict, by_state: dict,
-               month: dict) -> None:
+               by_state_detail: dict, month: dict, *, metric: str, size: int = 0) -> None:
     """Resolve the masked address to a country (and, for AU, to a state) and count it. The address
     itself is discarded immediately -- only the country code and the state code are ever counted.
+    `metric` says which class of request this was ('downloads' / 'visits' / 'api') and `size` its bytes,
+    which is what the per-state detail map is built from.
 
     The state half is entirely conditional on the OPTIONAL state table being loaded. When it is:
       * every AU request lands in exactly ONE bucket -- its state, or the explicit `unattributed`
         bucket when the table does not cover that prefix. Nothing is dropped, so the state rows plus
         `unattributed` reconcile exactly with the AU country row they sit beneath;
-      * the count goes to the cumulative map and the calendar-month rollup, and NOWHERE ELSE. There is
+      * TWO maps are written side by side: `by_state`, a bare request count per state, which the
+        screen's reconciliation rows and their exact-total promise are built on and which is therefore
+        left exactly as it was; and `by_state_detail`, which splits the same requests into downloads,
+        visits, API requests and bytes, because "how much was downloaded from Western Australia, and
+        how many bytes" is the question a funding report actually asks;
+      * both go to the cumulative map and the calendar-month rollup, and NOWHERE ELSE. There is
         deliberately NO day-by-state cell: it would be the finest-grained cell in the whole file, and
         the small-cell argument that rules out a city column (see AuStates) rules out a named day in a
         named state just as squarely. Nothing renders or exports such a cell, so it is not recorded in
@@ -930,6 +1033,8 @@ def _count_geo(geoip: GeoIP, au_states, address, countries: dict, by_state: dict
     code = au_states.state(address) or AU_STATE_UNATTRIBUTED
     _bump(by_state, code)
     _bump(month.setdefault("by_state", {}), code)
+    _bump_state_detail(by_state_detail, code, metric, size)
+    _bump_state_detail(month.setdefault("by_state_detail", {}), code, metric, size)
 
 
 def _note_network(seen: dict[str, set], date: str, address) -> None:

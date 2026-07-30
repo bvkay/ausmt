@@ -3339,12 +3339,26 @@ def _as_int(v, default: int = 0) -> int:
         return default
 
 
-def _survey_rows(stats_or_month: dict) -> list[dict]:
-    """The by_survey map as [{survey, downloads, bytes}], sorted by downloads desc.
+def _country_count(codes) -> int:
+    """How many real countries a list of codes names. 'unknown' is not a country and is excluded, so
+    this agrees with the Countries card and the per-month country figure."""
+    if not isinstance(codes, list):
+        return 0
+    return len({c for c in codes if isinstance(c, str) and c and c != "unknown"})
 
-    TOLERANT READ of both aggregate schemas: v1 wrote `{survey: count}` (a bare int, no volume), v2
-    writes `{survey: {downloads, bytes}}`. A v1 int renders with a zero volume rather than failing, and
-    the detail caveat below tells the reader from when the volume column is real."""
+
+def _survey_rows(stats_or_month: dict) -> list[dict]:
+    """The by_survey map as [{survey, downloads, bytes, countries}], sorted by downloads desc, where
+    `countries` is a COUNT and never the list.
+
+    TOLERANT READ of all three aggregate shapes: v1 wrote `{survey: count}` (a bare int, no volume), v2
+    `{survey: {downloads, bytes}}`, and the current fold adds a country list. An older row renders with
+    a zero volume and a zero country count rather than failing, and the detail caveat tells the reader
+    from when each column is real.
+
+    The stored country LIST never leaves this function. A named survey beside a named country is a
+    small cell in a community this size, which is the same argument that keeps the state breakdown off
+    the daily grain; the count is what the custodian sentence needs and the count is all that ships."""
     raw = stats_or_month if isinstance(stats_or_month, dict) else {}
     out: list[dict] = []
     for name, val in raw.items():
@@ -3352,9 +3366,10 @@ def _survey_rows(stats_or_month: dict) -> list[dict]:
             continue
         if isinstance(val, dict):
             out.append({"survey": name, "downloads": _as_int(val.get("downloads")),
-                        "bytes": _as_int(val.get("bytes"))})
+                        "bytes": _as_int(val.get("bytes")),
+                        "countries": _country_count(val.get("countries"))})
         else:
-            out.append({"survey": name, "downloads": _as_int(val), "bytes": 0})
+            out.append({"survey": name, "downloads": _as_int(val), "bytes": 0, "countries": 0})
     out.sort(key=lambda r: (-r["downloads"], r["survey"]))
     return out
 
@@ -3392,6 +3407,13 @@ def _analytics_cards(stats: dict) -> str:
     n_countries = len([c for c in countries if c and c != "unknown"])
     by_dataset = (stats.get("downloads") or {}).get("by_dataset") or {}
     surveys = _survey_rows((stats.get("downloads") or {}).get("by_survey") or {})
+    # The denominator the fold stamps from the manifest it is serving. "2 surveys downloaded" reads
+    # very differently against 3 served and against 300. Absent (an older stats.json) or zero (a
+    # manifest the fold could not read) falls back to the bare count: "2 of 0 served" is worse than no
+    # ratio at all.
+    served = _as_int(stats.get("total_served_surveys"))
+    surveys_value = f"{len(surveys)} of {served}" if served > 0 else len(surveys)
+    surveys_label = "Surveys downloaded (of those served)" if served > 0 else "Surveys downloaded"
     cards = (
         _num_card(downloads, "Downloads")
         + _num_card(visits, "Portal visits")
@@ -3399,7 +3421,7 @@ def _analytics_cards(stats: dict) -> str:
         # The card counts distinct codes EXCLUDING 'unknown' while the table below lists 'unknown' as
         # its own row, so the card always reads one lower than the table has rows. Say so on the card.
         + _num_card(n_countries, "Countries (excluding unknown)")
-        + _num_card(len(surveys), "Surveys downloaded")
+        + _num_card(surveys_value, surveys_label)
         + _num_card(len(by_dataset), "Datasets downloaded")
         + _num_card(volume, "Download volume")
         + _num_card(unattributed, "Unattributed")
@@ -3453,8 +3475,10 @@ def _detail_caveat(stats: dict) -> str:
 
 
 def _by_survey_table(stats: dict, *, n: int = 25) -> str:
-    """Downloads BY SURVEY (count + volume) -- the funding-report unit. A whole-survey bundle is credited
-    to its survey by the fold, so this is every byte served for that survey however it was fetched."""
+    """Downloads BY SURVEY (count + volume + country count) -- the funding-report unit, and the sentence
+    a custodian is written: "your survey was downloaded N times from M countries". A whole-survey bundle
+    is credited to its survey by the fold, so this is every byte served for that survey however it was
+    fetched. The country column is a COUNT; the codes behind it are never rendered."""
     rows = _survey_rows((stats.get("downloads") or {}).get("by_survey") or {})
     if not rows:
         return '<p class="sub">No attributed downloads yet.</p>'
@@ -3463,11 +3487,17 @@ def _by_survey_table(stats: dict, *, n: int = 25) -> str:
         f'<td>{_esc(r["survey"])}</td>'
         f'<td class="num">{_esc(r["downloads"])}</td>'
         f'<td class="num">{_esc(_human_bytes(r["bytes"]))}</td>'
+        f'<td class="num">{_esc(r["countries"])}</td>'
         "</tr>" for r in rows[:n])
     more = ("" if len(rows) <= n else
             f'<p class="opsnote">Showing the top {n} of {len(rows)} surveys by downloads.</p>')
+    note = ('<p class="opsnote">Countries counts the distinct countries a survey was downloaded from, '
+            'excluding unresolved addresses. It is the figure behind "downloaded N times from M '
+            'countries"; the countries themselves are not reported per survey, because a named survey '
+            'beside a named country is a small enough cell to point at one group.</p>')
     return ('<table><thead><tr><th>Survey</th><th class="num">Downloads</th>'
-            '<th class="num">Volume</th></tr></thead><tbody>' + trs + "</tbody></table>" + more)
+            '<th class="num">Volume</th><th class="num">Countries</th></tr></thead><tbody>'
+            + trs + "</tbody></table>" + more + note)
 
 
 # The plain text a month-grain cell renders when the metric was never measured for that month. Plain
@@ -3529,6 +3559,16 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         + _row("Top survey",
                _measured(lambda c: (_esc(_survey_rows(c.get("surveys") or {})[0]["survey"])
                                     if (c.get("surveys") or {}) else "&mdash;")))
+        # The reach proxy used to exist only on daily rows, which expire after 92 days, so it could
+        # never appear in a quarterly report. The month keeps the peak of its own folded days.
+        + _row("Peak networks in a day",
+               _measured(lambda c: _esc(_as_int(c.get("networks_peak")))))
+        # The evidence that scripted scientific use exists at all: those clients used to be discarded
+        # as bots, so this row was structurally zero and invisible.
+        + _row("Browser / scripted downloads",
+               _measured(lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
+                                    f' / '
+                                    f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')))
     )
     partial = [c for c in cols if _as_int(c.get("seeded_days")) > 0]
     note = ""
@@ -3687,31 +3727,77 @@ def _au_state_rows(by_state: dict, au_requests: int) -> list[tuple[str, str, int
     return rows
 
 
+def _state_detail_cells(detail: dict, code: str) -> str:
+    """The four DETAIL cells for one state row: downloads, visits, API requests, volume.
+
+    A code with no detail row renders 'not measured' four times rather than four zeroes. That is not
+    cosmetic: the detail map is forward-only, so a state whose requests were all counted before it
+    existed genuinely has no download figure, and a zero there would read as 'nobody in New South Wales
+    downloaded anything'. The derived `not_counted` remainder row is the same case by construction."""
+    row = detail.get(code) if isinstance(detail, dict) else None
+    if not isinstance(row, dict):
+        return f'<td class="num">{_NOT_MEASURED}</td>' * 4
+    return (f'<td class="num">{_esc(_as_int(row.get("downloads")))}</td>'
+            f'<td class="num">{_esc(_as_int(row.get("visits")))}</td>'
+            f'<td class="num">{_esc(_as_int(row.get("api")))}</td>'
+            f'<td class="num">{_esc(_human_bytes(_as_int(row.get("bytes"))))}</td>')
+
+
 def _au_state_table(stats: dict) -> str:
     """The 'Australia by state' table -- rendered ONLY when the fold actually produced a breakdown. A
     box with no state table installed sees nothing here: eight zeroes would read as 'no traffic from
-    Victoria' when the truth is 'not measured', and this screen omits rather than fabricates."""
+    Victoria' when the truth is 'not measured', and this screen omits rather than fabricates.
+
+    Two columns families sit side by side, and the distinction is load-bearing. REQUESTS is the
+    original bare count, and it is what the reconciliation rows and the exact-total promise operate on:
+    those rows add up to the AU country figure exactly, and nothing else in this table may join that
+    arithmetic. The DETAIL columns (downloads, visits, API, volume) are a later, forward-only dimension
+    that can never reach that total, and they say 'not measured' wherever they were not."""
     by_state = stats.get("by_state") if isinstance(stats, dict) else None
     if not isinstance(by_state, dict) or not any(_as_int(v) > 0 for v in by_state.values()):
         return ""
+    detail = stats.get("by_state_detail")
+    detail = detail if isinstance(detail, dict) else {}
     rows = _au_state_rows(by_state, _au_requests(stats))
     trs = "".join(
         f'<tr><td>{_esc(label)}'
         + (f' <span class="k">{_esc(code)}</span>' if code in _AU_STATE_LABELS else "")
-        + f'</td><td class="num">{_esc(n)}</td></tr>'
+        + f'</td><td class="num">{_esc(n)}</td>'
+        # The remainder row is an arithmetic derivation, not a measured state, so it never carries
+        # detail even if a state of the same name later did.
+        + (f'<td class="num">{_NOT_MEASURED}</td>' * 4 if code == "not_counted"
+           else _state_detail_cells(detail, code))
+        + '</tr>'
         for code, label, n in rows)
     total = sum(n for _c, _l, n in rows)
+    measured = [detail[c] for c, _l, _n in rows if c != "not_counted" and isinstance(detail.get(c), dict)]
+    # The detail totals sum only the rows that HAVE detail, so they are the measured Australian figure
+    # and not the whole one. With no detail at all there is nothing to sum and the row says so rather
+    # than reading as a measured zero, exactly like the cells above it.
+    detail_totals = (f'<td class="num">{_NOT_MEASURED}</td>' * 4 if not measured else
+                     "".join(f'<td class="num">{_esc(sum(_as_int(r.get(k)) for r in measured))}</td>'
+                             for k in ("downloads", "visits", "api"))
+                     + f'<td class="num">'
+                       f'{_esc(_human_bytes(sum(_as_int(r.get("bytes")) for r in measured)))}</td>')
     trs += (f'<tr><td><b>Australia (all)</b></td>'
-            f'<td class="num"><b>{_esc(total)}</b></td></tr>')
+            f'<td class="num"><b>{_esc(total)}</b></td>' + detail_totals + '</tr>')
     return (
         '<h2>Australia by state</h2>'
-        '<p class="sub">A breakdown beneath the AU row of the country table: the rows below add up to '
-        'the Australian figure exactly. <b>State is the finest grain reported.</b> The address these '
-        'counts come from is masked to a /24 (IPv4) or /48 (IPv6) before it is ever written, which '
-        'does not place a request in a city reliably, and a city-level count in a research community '
-        'this small could identify a single group. There is deliberately no city breakdown.</p>'
+        '<p class="sub">A breakdown beneath the AU row of the country table: the <b>Requests</b> '
+        'column adds up to the Australian figure exactly. <b>State is the finest grain reported.</b> '
+        'The address these counts come from is masked to a /24 (IPv4) or /48 (IPv6) before it is ever '
+        'written, which does not place a request in a city reliably, and a city-level count in a '
+        'research community this small could identify a single group. There is deliberately no city '
+        'breakdown, and no state figure for any single day.</p>'
+        '<p class="sub">The Downloads, Visits, API and Volume columns are forward-only and began '
+        'later than the request count beside them, so a state counted before they existed reads '
+        f'&quot;{_NOT_MEASURED}&quot; rather than zero. They are a breakdown of the same requests, '
+        'not an additional measurement, and only the Requests column carries the exact-total '
+        'promise.</p>'
         '<table><thead><tr><th>State or territory</th>'
-        f'<th class="num">{_REQUEST_SCOPE}</th></tr></thead><tbody>'
+        f'<th class="num">{_REQUEST_SCOPE}</th><th class="num">Downloads</th>'
+        '<th class="num">Visits</th><th class="num">API</th><th class="num">Volume</th>'
+        '</tr></thead><tbody>'
         + trs + '</tbody></table>')
 
 
@@ -3906,6 +3992,7 @@ def analytics_monthly_csv(stats) -> str:
     kinds = sorted({str(k) for r in rows for k in (r.get("kinds") or {})})
     states = _state_columns(rows)
     header = (["month", "downloads", "download_bytes", "visits", "api_requests", "unattributed",
+               "downloads_browser", "downloads_scripted", "networks_peak",
                "countries", "active_days", "days_without_detail", "geo_days"]
               + [f"format_{f}" for f in formats] + [f"kind_{k}" for k in kinds])
     if states:
@@ -3914,9 +4001,12 @@ def analytics_monthly_csv(stats) -> str:
     out = []
     for r in rows:
         cc = r.get("countries") or {}
+        clients = r.get("downloads_by_client") or {}
         row = ([r["month"], _as_int(r.get("downloads")), _as_int(r.get("download_bytes")),
                 _as_int(r.get("visits")), _as_int(r.get("api_requests")),
                 _as_int(r.get("unattributed")),
+                _as_int(clients.get("browser")), _as_int(clients.get("scripted")),
+                _as_int(r.get("networks_peak")),
                 len([k for k in cc if k and k != "unknown"]),
                 _as_int(r.get("days")), _as_int(r.get("seeded_days")), _as_int(r.get("geo_days"))]
                + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
@@ -3933,15 +4023,21 @@ def analytics_monthly_csv(stats) -> str:
 
 
 def analytics_survey_csv(stats) -> str:
-    """One CSV row per (month, survey): downloads and byte volume, oldest month first and biggest survey
-    first within a month. This is the per-survey funding line -- a whole-survey bundle is credited to its
-    survey by the fold, so the volume is everything served for that survey however it was fetched."""
+    """One CSV row per (month, survey): downloads, byte volume and the COUNT of countries it was
+    downloaded from, oldest month first and biggest survey first within a month. This is the per-survey
+    funding line and the custodian sentence ("downloaded N times from M countries") in file form -- a
+    whole-survey bundle is credited to its survey by the fold, so the volume is everything served for
+    that survey however it was fetched.
+
+    The country column is a COUNT and the codes behind it never reach the file: this export leaves the
+    building, and a named survey beside a named country is a small enough cell to point at one group.
+    A month written before the fold recorded countries exports 0 rather than blanking the row."""
     rows = _monthly_rows(stats) if isinstance(stats, dict) else []
     out = []
     for r in rows:
         for s in _survey_rows(r.get("surveys") or {}):
-            out.append([r["month"], s["survey"], s["downloads"], s["bytes"]])
-    return _csv_document(["month", "survey", "downloads", "download_bytes"], out)
+            out.append([r["month"], s["survey"], s["downloads"], s["bytes"], s["countries"]])
+    return _csv_document(["month", "survey", "downloads", "download_bytes", "countries"], out)
 
 
 # ---- C43 S2b-ii: rollback + restore CONFIRMATION pages (typed id; restore also a TOTP code) ------

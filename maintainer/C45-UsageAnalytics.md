@@ -132,3 +132,87 @@ Caddy (portal container)                 host (operator uid)                    
 Owner directive 2026-07-11 (in-session, task #14). Recon 2026-07-12 (Caddyfile, portal routing,
 state-dir seam, privacy anchors — file:line cited in D1). Prior decisions folded in: enablement
 rides 2b-ii (2026-07-11); phase-1 = logs only, beacon = explicit later decision (2026-07-11).
+
+## D7. Counting honesty, and state/funding detail (2026-07-30)
+
+A four-agent read of the shipped pipeline against the live screen. Every item below is a change to
+what is counted or to what a figure claims, not a new collection: the fold still reads only the
+request path, the masked network, the response size, and the user-agent it discards.
+
+### Rotation coverage
+
+Caddy compresses a rolled log by default. Both consumers keyed on the plain `.json` name, so a roll
+was neither shipped from the front door nor folded on the box, and because the fold advances its
+watermark past a day whether or not it saw lines for it, those requests were lost rather than late.
+Both Caddyfiles now set `roll_uncompressed`; the aggregator and the ship filter also carry the
+`.gz` family as a salvage arm for the transition window.
+
+### What counts as a client
+
+The bot filter was a binary and put `curl`, `wget` and `python-requests` on the bot side, which are
+the clients the published API reference hands people. Three classes now: **crawler** (excluded, as
+bots were), **scripted** (counted, and reported as its own share of downloads), **browser**. An
+absent user-agent is scripted, not human. The user-agent is still read transiently and never stored,
+so the privacy invariant is untouched and the leak pins carry the new fields.
+
+### What counts as a download
+
+Admission gains status 206, and within one folded day an identical (masked network, path) counts
+once. One save action logs two requests on a `Content-Disposition` path (renderer cancels, download
+manager refetches) and a ranged transfer logs one per range, so the previous rule double-counted the
+headline figure while making resumed transfers invisible. Bytes of every request still sum. The
+dedupe set is run-local, built from the masked network, and never written. Visits and API requests
+are not deduped.
+
+### Surfaces that were counted nowhere
+
+`/data/mtcat.schema.json` is the `$id` the MTCAT document declares, so it is the cleanest
+machine-consumer signal in the corpus; it is now the third API path. `/data/releases/<tag>/bundles/`
+holds the citable frozen copy a DOI resolves to, and classified as `ignore` while its mutable twin
+counted: it is now a download, attributed by bundle filename against the live manifest, keeping its
+own dataset row. The same missing-prefix cause (the matcher runs after `handle_path` strips `/data`)
+left those paths out of Caddy's force-download matcher on both listeners; fixed there too. The
+licence sidecars beside each survey MTH5 are ignored, because `unattributed` exists to detect
+build/serve skew and nineteen structural sidecars drown that signal. Aggregator-side deliberately:
+the engine must keep writing the sidecar beside the bytes.
+
+### Geography
+
+API requests now count toward their country and, for Australia, their state. Geography follows the
+counted download rather than the log line, so the country map totals exactly downloads plus visits
+plus API requests, and both table captions state that scope.
+
+### What the screen may not claim
+
+A month every folded day of which predates the detailed dimensions renders `not measured` rather
+than `0 B`, `0 / 0` and a top survey drawn from nothing. This is the omit-rather-than-fabricate rule
+the state table already applied at section grain, applied at cell grain. Both partial-dimension
+disclosures now enumerate countries and unattributed; their absence is what made a month reading
+"Countries: 1" beneath a headline of 11 look like an arithmetic fault. The reach note names the date
+it actually shows (the most recent day with a network count, not the fold watermark), and the
+Countries card states that it excludes `unknown`.
+
+### State and funding detail
+
+`by_state` is untouched: the reconciliation rows and the exact-total promise against the AU country
+row are built on it. A parallel `by_state_detail` map splits the same requests into downloads,
+visits, API requests and bytes, at the cumulative and month grains only. **The ratified exclusions
+stand**: no city dimension, and no state figure for any single day. The detail columns are
+forward-only and read `not measured` where they were not.
+
+Three further figures a report needs and could not get: a per-survey country **count** (the custodian
+sentence, with the list held at country grain and never rendered or exported), a per-month
+`networks_peak` so the reach proxy outlives the 92-day daily window, and `total_served_surveys` as
+the denominator for "N surveys downloaded". The monthly export gains `geo_days`, `networks_peak` and
+the client split; the per-survey export gains the country count.
+
+`geo_days` closes the trap that ranked highest here. Per-month country counts are forward-only, so
+`au_requests` can be derived from one day of a full month while every `state_*` column reconciles to
+it exactly. The row looks self-consistent and under-reports, and it is the file that leaves the
+building.
+
+### Deploy note
+
+`caddy validate` does not run on a dev box, so the two Caddyfile changes (`roll_uncompressed`, the
+release force-download pattern) are pinned by config assertions in `deploy/tests`; the image build's
+own `caddy validate` is the syntax gate.

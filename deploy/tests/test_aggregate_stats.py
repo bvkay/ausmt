@@ -496,7 +496,8 @@ def test_monthly_rollups_accumulate_and_survive_daily_pruning():
     months = {m["month"]: m for m in s2["monthly"]}
     assert months["2026-05"]["downloads"] == 2 and months["2026-05"]["download_bytes"] == 300
     assert months["2026-05"]["visits"] == 1 and months["2026-05"]["days"] == 2
-    assert months["2026-05"]["surveys"]["CI Sample Survey"] == {"downloads": 2, "bytes": 300}
+    assert months["2026-05"]["surveys"]["CI Sample Survey"] == {"downloads": 2, "bytes": 300,
+                                                              "countries": ["AU", "NZ"]}
     assert months["2026-06"]["downloads"] == 1 and months["2026-06"]["kinds"] == {"bundle": 1}
     assert months["2026-06"]["countries"] == {"NZ": 1}
 
@@ -549,7 +550,8 @@ def test_v1_stats_file_upgrades_in_place_without_losing_or_inventing_anything():
     assert stats["totals"]["api_requests"] == 0
     assert stats["downloads"]["by_format"]["edi"] == 9
     # by_survey migrates int -> {downloads, bytes}; the historical volume is NOT fabricated.
-    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 9, "bytes": 50}
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 9, "bytes": 50,
+                                                                  "countries": ["AU"]}
     assert stats["downloads"]["by_dataset"]["edi/sample-survey/Vulcan_A1.edi"]["downloads"] == 9
     # detail_since is the day after the v1 watermark: everything before it predates the new dimensions.
     assert stats["detail_since"] == "2026-07-10"
@@ -956,7 +958,8 @@ def test_within_a_day_the_same_network_and_path_counts_once_while_bytes_still_su
     daily = {d["date"]: d for d in stats["daily"]}
     assert daily["2026-07-09"]["downloads"] == 3 and daily["2026-07-09"]["download_bytes"] == 11000
     assert daily["2026-07-10"]["downloads"] == 1
-    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 4, "bytes": 16000}
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 4, "bytes": 16000,
+                                                                  "countries": ["AU", "NZ"]}
 
 
 def test_visits_and_api_requests_are_not_deduped():
@@ -1053,7 +1056,8 @@ def test_release_tier_bundles_count_and_attribute_by_bundle_filename():
     assert stats["totals"]["unattributed"] == 1, "an unmatched release bundle is bucketed, not dropped"
     assert stats["downloads"]["by_format"] == {"mth5": 1, "unattributed": 1}
     assert stats["downloads"]["by_kind"] == {"bundle": 1, "unattributed": 1}
-    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 1, "bytes": 700}
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 1, "bytes": 700,
+                                                                  "countries": ["AU"]}
     row = stats["downloads"]["by_dataset"]["releases/v1.2.0/bundles/sample-survey-tf.h5"]
     assert row["slug"] == "sample-survey" and row["format"] == "mth5" and row["kind"] == "bundle"
     assert "bundles/sample-survey-tf.h5" not in stats["downloads"]["by_dataset"], \
@@ -1124,3 +1128,191 @@ def test_the_honesty_lane_still_leaks_nothing():
     emitted = json.dumps(stats, indent=1)
     assert _sweep_ip_or_ua(emitted) == [], emitted
     assert "downloads_by_client" in stats["totals"]
+
+
+# ==================================================================================================
+# State and funding detail: what a report is actually asked for.
+#
+# The existing by_state map answers "how many requests from each state" and the reconciliation rows
+# depend on it, so it is untouched. Beside it now sits a PARALLEL detail map answering "how many
+# DOWNLOADS, how many visits, how much VOLUME", plus the per-survey country count behind the custodian
+# promise ("downloaded N times from M countries"), a monthly reach figure that can survive the 92-day
+# daily window, and the denominator that turns "12 surveys downloaded" into "12 of 40 served".
+#
+# All of it forward-only, all of it at the two grains that are kept, and none of it at day-by-state or
+# city grain: those exclusions are ratified and the pins above hold them.
+# ==================================================================================================
+
+def test_state_rows_carry_downloads_visits_api_and_volume_beside_the_request_count():
+    """STATE DETAIL PIN. A funding report asks how much was DOWNLOADED from a state and how many bytes
+    that was, not merely how many requests it made. A parallel by_state_detail map must record
+    downloads, visits, API requests and bytes per state, at the cumulative and month grains, including
+    the uncovered-prefix bucket. FAILS IF the detail is absent, if a metric lands in the wrong column,
+    if bytes are credited to a non-download class, or if the two grains disagree."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW, size=100),
+        _line("/data/bundles/sample-survey-tf.h5", _AU_NSW2, size=900),
+        _line("/data/catalogue.json", _AU_NSW),
+        _line("/data/mtcat.schema.json", _AU_WA_V6),
+        _line("/data/edi/sample-survey/Vulcan_A2.edi", _AU_NOSTATE, size=7),
+        _line("/data/catalogue.json", _NZ),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN, au_states=states)
+    detail = stats["by_state_detail"]
+    assert detail["NSW"] == {"downloads": 2, "visits": 1, "api": 0, "bytes": 1000}
+    assert detail["WA"] == {"downloads": 0, "visits": 0, "api": 1, "bytes": 0}
+    assert detail["unattributed"] == {"downloads": 1, "visits": 0, "api": 0, "bytes": 7}
+    assert "NZ" not in detail and "AU" not in detail, "the detail is a breakdown BENEATH the AU row"
+    assert stats["monthly"][0]["by_state_detail"] == detail, \
+        "the month grain must agree with the cumulative one over a single-month window"
+    # The request map the reconciliation rows depend on is untouched, and the two agree.
+    assert stats["by_state"] == {"NSW": 3, "WA": 1, "unattributed": 1}
+    for code, row in detail.items():
+        assert row["downloads"] + row["visits"] + row["api"] == stats["by_state"][code], code
+
+
+def test_state_detail_is_forward_only_and_never_reaches_a_day_row():
+    """STATE DETAIL SCOPE PIN. The detail map is a new dimension and obeys every rule the request map
+    already does: it starts at the fold that first wrote it, no earlier month gains it, and it exists at
+    the cumulative and month grains ONLY. A day-by-state cell is the finest cell in the file and the
+    small-cell argument that rules out a city rules it out too. FAILS IF an earlier month is backfilled,
+    if a day row gains state detail, or if an older file cannot be read."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)
+    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)
+    s1 = AGG.aggregate(None, [_line("/data/catalogue.json", _AU_NSW, date="2026-06-01")],
+                       rmap, geoip, run1, au_states=states)
+    # A file written before the detail map existed, read back off disk.
+    s1.pop("by_state_detail")
+    for m in s1["monthly"]:
+        m.pop("by_state_detail")
+    s1 = json.loads(json.dumps(s1))
+
+    s2 = AGG.aggregate(s1, [_line("/data/catalogue.json", _AU_WA_V6, date="2026-07-10")],
+                       rmap, geoip, run2, au_states=states)
+    months = {m["month"]: m for m in s2["monthly"]}
+    assert months["2026-06"]["by_state_detail"] == {}, "an earlier month must not be backfilled"
+    assert months["2026-06"]["by_state"] == {"NSW": 1}, "its request map is untouched"
+    assert months["2026-07"]["by_state_detail"] == {
+        "WA": {"downloads": 0, "visits": 1, "api": 0, "bytes": 0}}
+    assert s2["by_state_detail"] == {"WA": {"downloads": 0, "visits": 1, "api": 0, "bytes": 0}}
+    for day in s2["daily"]:
+        assert "states" not in day and "by_state_detail" not in day, day
+
+
+def test_no_state_table_means_no_state_detail_either():
+    """STATE DETAIL TOLERANCE PIN. The detail map is conditional on exactly the same optional input as
+    the request map: no state table, no buckets at all, no empty-labelled zeroes. FAILS IF a box with no
+    table starts emitting a detail map, which would render as measured zeroes for every state."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    stats = AGG.aggregate(None, _au_lines(), rmap, geoip, _RUN)
+    assert stats["by_state_detail"] == {} and stats["monthly"][0]["by_state_detail"] == {}
+    assert stats["countries"] == {"AU": 4, "NZ": 1}, "the country figures are unaffected"
+
+
+def test_each_survey_accumulates_the_countries_that_downloaded_it():
+    """PER-SURVEY COUNTRY PIN. The custodian promise is "your survey was downloaded N times from M
+    countries", and M did not exist anywhere in the pipeline. Each survey row must accumulate a sorted,
+    de-duplicated list of country codes, at the cumulative and month grains, so the count is derivable.
+    The list is held at COUNTRY grain only and only its COUNT is rendered. FAILS IF the list is absent,
+    unsorted, duplicated, or if a download with no resolvable country pollutes it with a real code."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "1.2.3.0", size=1),        # NZ
+        _line("/data/edi/sample-survey/Vulcan_A2.edi", "203.0.113.5", size=2),    # AU
+        _line("/data/xml/sample-survey/A1.xml", "198.51.100.0", size=3),          # US
+        _line("/data/xml/sample-survey/A2.xml", "203.0.113.200", size=4),         # AU again
+        _line("/data/bundles/sample-survey-tf.h5", "8.8.8.0", size=5),            # unresolvable
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    row = stats["downloads"]["by_survey"]["CI Sample Survey"]
+    assert row["downloads"] == 5
+    assert row["countries"] == ["AU", "NZ", "US", "unknown"], row["countries"]
+    assert stats["monthly"][0]["surveys"]["CI Sample Survey"]["countries"] == \
+        ["AU", "NZ", "US", "unknown"]
+
+
+def test_a_survey_map_written_before_the_country_list_reads_back_and_starts_accruing():
+    """PER-SURVEY COUNTRY MIGRATION PIN. by_survey has already migrated once (a bare int to
+    {downloads, bytes}); the country list is the third shape and must be just as tolerant. An older row
+    reads back with an empty list and starts accruing, and no historical country is invented. FAILS IF
+    an older survey map raises, loses its counts, or claims countries it never recorded."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    prior = {"schema": 2, "last_folded_date": "2026-07-09", "monthly": [], "detail_since": None,
+             "totals": {"downloads": 4, "visits": 0, "download_bytes": 40, "unattributed": 0,
+                        "api_requests": 0},
+             "downloads": {"by_format": {"edi": 4}, "by_kind": {"file": 4}, "by_dataset": {},
+                           "by_survey": {"CI Sample Survey": {"downloads": 4, "bytes": 40}}},
+             "countries": {"AU": 4}, "daily": []}
+    after = AGG.aggregate(prior, [_line("/data/edi/sample-survey/Vulcan_A1.edi", "1.2.3.0",
+                                        date="2026-07-10", size=5)], rmap, geoip, _RUN)
+    row = after["downloads"]["by_survey"]["CI Sample Survey"]
+    assert row["downloads"] == 5 and row["bytes"] == 45
+    assert row["countries"] == ["NZ"], "only downloads folded with the list in place appear in it"
+
+
+def test_each_month_records_its_peak_daily_network_count():
+    """MONTHLY REACH PIN. The distinct-network reach proxy lived only on daily rows, so it died with the
+    92-day window and could never reach a quarterly report, which is exactly the horizon a funding
+    report asks about. Each month must record the PEAK of its folded days' network counts, accumulated
+    as each day folds and never recomputed from a tail that is about to be pruned. FAILS IF the peak is
+    absent, if it is an average or a sum, if it is recomputed from the daily rows, or if pruning those
+    rows loses it."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    may = [_line("/data/catalogue.json", "203.0.113.5", date="2026-05-04"),
+           _line("/data/catalogue.json", "1.2.3.0", date="2026-05-04"),
+           _line("/data/catalogue.json", "198.51.100.0", date="2026-05-04"),
+           _line("/data/catalogue.json", "203.0.113.5", date="2026-05-30")]
+    run_may = dt.datetime(2026, 6, 1, 3, 30, tzinfo=dt.timezone.utc)
+    s1 = AGG.aggregate(None, may, rmap, geoip, run_may, daily_keep=92)
+    months = {m["month"]: m for m in s1["monthly"]}
+    assert months["2026-05"]["networks_peak"] == 3, "the peak day, not the total and not the last day"
+    # Far in the future: every May daily row is pruned, and the month keeps its peak.
+    run_far = dt.datetime(2026, 11, 1, 3, 30, tzinfo=dt.timezone.utc)
+    s2 = AGG.aggregate(s1, [], rmap, geoip, run_far, daily_keep=92)
+    assert s2["daily"] == []
+    assert {m["month"]: m["networks_peak"] for m in s2["monthly"]} == {"2026-05": 3}
+
+
+def test_the_served_survey_denominator_is_recorded_at_fold_time():
+    """DENOMINATOR PIN. "12 surveys downloaded" reads very differently against 14 served and against
+    140, and the screen had no denominator at all. The fold must stamp how many surveys the SERVED
+    manifest offers, so the ratio is honest at the moment it was measured. FAILS IF the figure is
+    absent, or counts anything other than the distinct surveys the current manifest resolves."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    stats = AGG.aggregate(None, [], rmap, geoip, _RUN)
+    assert stats["total_served_surveys"] == 1, "the fixture manifest serves exactly one survey"
+    # An absent or unreadable manifest must not fabricate a denominator.
+    assert AGG.aggregate(None, [], {}, geoip, _RUN)["total_served_surveys"] == 0
+
+
+def test_the_state_and_funding_detail_still_leaks_nothing():
+    """LEAK PIN (state and funding detail). The new dimensions are per-state counters, a list of
+    two-letter country codes, a peak integer and a survey count. None may put an address or a
+    user-agent into stats.json, and in particular the per-survey country list must stay at COUNTRY
+    grain. FAILS IF any of it reaches the emitted file."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    lines = _au_lines() + [
+        _line("/data/mtcat.schema.json", _AU_NSW, ua="curl/8.4.0"),
+        _line("/data/bundles/sample-survey-tf.h5", _AU_WA_V6, size=900),
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "2001:db8:1234::", size=3),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN, au_states=states)
+    emitted = json.dumps(stats, indent=1)
+    assert _sweep_ip_or_ua(emitted) == [], emitted
+    assert stats["by_state_detail"], "the new maps really are populated (a vacuous sweep proves nothing)"
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"]["countries"]
+    for code in stats["by_state_detail"]:
+        assert code in AGG.AU_STATE_CODES or code == AGG.AU_STATE_UNATTRIBUTED, code

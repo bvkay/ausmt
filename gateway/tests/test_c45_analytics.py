@@ -367,9 +367,9 @@ def test_analytics_monthly_csv_export_downloads_every_retained_month(tmp_path):
 
 
 def test_analytics_survey_csv_export_has_one_row_per_month_and_survey(tmp_path):
-    """PER-SURVEY EXPORT PIN. The by-survey export must emit one row per (month, survey) with downloads
-    and byte volume, so a funding report can quote a named survey's usage for a named month. FAILS IF
-    the rows are collapsed across months or the volume is missing."""
+    """PER-SURVEY EXPORT PIN. The by-survey export must emit one row per (month, survey) with downloads,
+    byte volume and the country count, so a funding report can quote a named survey's usage for a named
+    month. FAILS IF the rows are collapsed across months or a column is missing."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
@@ -377,8 +377,8 @@ def test_analytics_survey_csv_export_has_one_row_per_month_and_survey(tmp_path):
             r = await client.get("/gateway/curator/analytics-surveys.csv")
             assert r.status_code == 200
             rows = list(csv.reader(io.StringIO(r.text)))
-            assert rows[0] == ["month", "survey", "downloads", "download_bytes"]
-            body = [tuple(x) for x in rows[1:]]
+            assert rows[0] == ["month", "survey", "downloads", "download_bytes", "countries"]
+            body = [tuple(x[:4]) for x in rows[1:]]
             assert ("2026-06", "CI Sample Survey", "40", "1500000") in body
             assert ("2026-06", "Burra 2017", "15", "597152") in body
             assert ("2026-05", "CI Sample Survey", "30", "1048576") in body
@@ -760,3 +760,226 @@ def test_the_monthly_csv_tolerates_a_month_written_before_geo_days_existed():
         row.pop("geo_days", None)
     rows = list(csv.DictReader(io.StringIO(curatorpage.analytics_monthly_csv(doc))))
     assert all(r["geo_days"] == "0" for r in rows), rows
+
+
+# ==================================================================================================
+# State and funding detail (screen half): the columns a report is actually written from.
+#
+# The request-count column and its reconciliation rows are UNTOUCHED -- the exact-total promise
+# against the AU country row is load-bearing and its pins above still hold it. The new columns sit
+# beside it and answer the questions that promise never could: how much was downloaded from a state,
+# how many bytes, how many countries a named survey reached, and what the peak reach of a month was.
+# ==================================================================================================
+
+def _v4_stats(**over) -> dict:
+    """A stats.json carrying the state DETAIL map, the per-survey country lists, the monthly reach
+    peak, the client split and the served-survey denominator. The detail deliberately covers FEWER
+    states than the request map: NSW and VIC were counted before the detail existed, so the screen must
+    say 'not measured' for them rather than render a zero."""
+    doc = _v3_stats()
+    doc["total_served_surveys"] = 40
+    doc["by_state_detail"] = {
+        "QLD": {"downloads": 25, "visits": 14, "api": 1, "bytes": 3_145_728},
+        "WA": {"downloads": 12, "visits": 8, "api": 0, "bytes": 1_048_576},
+        "unattributed": {"downloads": 4, "visits": 6, "api": 0, "bytes": 4096},
+    }
+    doc["totals"]["downloads_by_client"] = {"browser": 96, "scripted": 41}
+    doc["downloads"]["by_survey"] = {
+        "CI Sample Survey": {"downloads": 120, "bytes": 4_194_304,
+                             "countries": ["AU", "DE", "NZ", "US", "unknown"]},
+        "Burra 2017": {"downloads": 13, "bytes": 1_048_576, "countries": ["AU"]},
+    }
+    for row, peak, split in zip(doc["monthly"], (11, 23, 19),
+                                ({"browser": 28, "scripted": 2},
+                                 {"browser": 40, "scripted": 15},
+                                 {"browser": 30, "scripted": 22})):
+        row["networks_peak"] = peak
+        row["downloads_by_client"] = split
+        row["surveys"] = {k: dict(v, countries=["AU", "NZ"]) for k, v in row["surveys"].items()}
+    doc["monthly"][2]["by_state_detail"] = {
+        "QLD": {"downloads": 25, "visits": 14, "api": 1, "bytes": 3_145_728}}
+    doc.update(over)
+    return doc
+
+
+def test_the_state_table_gains_downloads_visits_api_and_volume_columns(tmp_path):
+    """STATE DETAIL RENDER PIN. 'Requests from Queensland' is not what a funding report asks; it asks
+    how much was downloaded and how many bytes that was. The state table must carry Downloads, Visits,
+    API and Volume beside the request count. FAILS IF a column is missing or a figure is misplaced."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Australia by state", 1)[1]
+            for head in ("Downloads", "Visits", "API", "Volume"):
+                assert f">{head}</th>" in table, f"the state table must carry a {head} column"
+            assert "3.0 MB" in table, "Queensland's volume must render"
+            assert ">25<" in table and ">14<" in table, "its downloads and visits must render"
+    run(_body())
+
+
+def test_states_counted_before_the_detail_existed_say_not_measured(tmp_path):
+    """STATE DETAIL FORWARD-ONLY PIN. The detail columns are forward-only like every other dimension
+    here, so a state whose requests were all counted before they existed has no downloads figure at
+    all. Rendering 0 would read as 'nobody in New South Wales downloaded anything', which is the exact
+    fabrication the state table was built to avoid. FAILS IF a pre-detail state row shows zeroes, or if
+    the derived pre-table remainder row claims a measured breakdown."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Australia by state", 1)[1]
+            nsw = table.split("New South Wales", 1)[1].split("</tr>", 1)[0]
+            assert nsw.count("not measured") == 4, f"NSW has no measured detail at all: {nsw}"
+            assert ">120<" in nsw, "its request count is real and must still render"
+            remainder = table.split("Counted before state data existed", 1)[1].split("</tr>", 1)[0]
+            assert remainder.count("not measured") == 4, remainder
+    run(_body())
+
+
+def test_the_state_table_still_reconciles_on_requests_alone(tmp_path):
+    """STATE RECONCILIATION SCOPE PIN. The exact-total promise is a property of the REQUEST column and
+    must stay one: the detail columns are forward-only and can never add up to the AU country figure,
+    so letting them near the promise would break it. The requests column must still total to AU
+    exactly. FAILS IF the total row moves off requests, or if the promise silently weakens."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Australia by state", 1)[1]
+            assert "<b>300</b>" in table, "the requests column must still total to the AU figure"
+            assert "adds up to the Australian figure exactly" in table
+            assert "forward" in table.lower(), "the detail columns' forward-only scope must be stated"
+    run(_body())
+
+
+def test_no_state_detail_map_leaves_the_table_exactly_as_it_was(tmp_path):
+    """STATE DETAIL ABSENCE PIN. A box that folded state requests before the detail map existed must
+    still render its table, with every detail cell saying so. FAILS IF the absent map empties the
+    table, 500s the screen, or fabricates zeroes across every row."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v3_stats())            # by_state, but no by_state_detail at all
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            table = r.text.split("Australia by state", 1)[1]
+            assert "New South Wales" in table and ">120<" in table
+            assert "not measured" in table
+            assert ">0 B<" not in table
+    run(_body())
+
+
+def test_the_by_survey_table_reports_how_many_countries_reached_each_survey(tmp_path):
+    """CUSTODIAN PROMISE PIN. "Your survey was downloaded N times from M countries" is the sentence
+    this screen exists to let the owner write, and M was nowhere in the pipeline. The by-survey table
+    must carry the country COUNT per survey, and only the count: the list itself is a named survey
+    beside a named country, which is a small cell in a community this size. FAILS IF the count is
+    absent, if it counts 'unknown' as a country, or if the country list is rendered."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Downloads by survey", 1)[1].split("<h2>", 1)[0]
+            assert ">Countries</th>" in table
+            ci_row = table.split("CI Sample Survey", 1)[1].split("</tr>", 1)[0]
+            assert ">4<" in ci_row, "five codes minus 'unknown' is four countries"
+            for code in ("DE", "NZ", "US"):
+                assert f">{code}<" not in ci_row, "the country LIST must not be rendered per survey"
+    run(_body())
+
+
+def test_the_quarterly_table_carries_the_reach_peak_and_the_client_split(tmp_path):
+    """QUARTERLY REACH AND CLIENT PIN. The reach proxy lived only on daily rows, which expire after 92
+    days, so it could never appear in a quarterly report; and the browser-versus-scripted split is the
+    evidence that scripted scientific use exists at all. Both must appear per month. FAILS IF either
+    row is missing, or if a month with no measured detail claims a figure for them."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Quarterly breakdown", 1)[1].split("Downloads by survey", 1)[0]
+            assert "Peak networks in a day" in table and ">23<" in table
+            assert "Browser / scripted downloads" in table and "40 / 15" in table
+
+            doc = _v4_stats()
+            doc["monthly"] = [_seeded_month()]
+            _write_stats(cfg, doc)
+            seeded = (await client.get("/gateway/curator/analytics")).text.split(
+                "Quarterly breakdown", 1)[1].split("Downloads by survey", 1)[0]
+            assert "Peak networks in a day" in seeded and seeded.count("not measured") >= 7
+    run(_body())
+
+
+def test_the_surveys_card_gives_the_downloaded_count_a_denominator(tmp_path):
+    """DENOMINATOR PIN. "2 surveys downloaded" reads very differently against 3 served and against 300,
+    and the card gave no way to tell. It must render the count against the number the build serves.
+    FAILS IF the denominator is missing when the fold recorded one."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "2 of 40" in html and "served" in html
+    run(_body())
+
+
+def test_the_surveys_card_omits_the_denominator_when_the_fold_recorded_none(tmp_path):
+    """DENOMINATOR TOLERANCE PIN. An older stats.json carries no served-survey figure, and a manifest
+    the fold could not read yields zero. Neither may render as "2 of 0 served", which would read as an
+    impossible ratio. The card must fall back to the bare count. FAILS IF a missing or zero denominator
+    is rendered."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            for doc in (_v4_stats(total_served_surveys=0), _v3_stats()):
+                _write_stats(cfg, doc)
+                html = (await client.get("/gateway/curator/analytics")).text
+                assert "of 0 served" not in html
+                assert "Surveys downloaded" in html
+    run(_body())
+
+
+def test_the_monthly_csv_carries_the_client_split_and_the_reach_peak():
+    """MONTHLY EXPORT PIN. The quarterly figures a report is built from must leave the building in the
+    file, not only on the screen: the browser/scripted split and the monthly reach peak both belong in
+    the monthly export. FAILS IF either column is missing or carries the wrong month's value."""
+    rows = list(csv.DictReader(io.StringIO(curatorpage.analytics_monthly_csv(_v4_stats()))))
+    header = list(rows[0].keys())
+    assert header[:6] == ["month", "downloads", "download_bytes", "visits", "api_requests",
+                          "unattributed"], "the established leading columns must not move"
+    for col in ("downloads_browser", "downloads_scripted", "networks_peak"):
+        assert col in header, header
+    june = {r["month"]: r for r in rows}["2026-06"]
+    assert june["downloads_browser"] == "40" and june["downloads_scripted"] == "15"
+    assert june["networks_peak"] == "23"
+
+
+def test_the_survey_csv_carries_the_country_count_per_month_and_survey():
+    """PER-SURVEY EXPORT PIN. The custodian sentence is written per survey, so the count of countries
+    must ride in the by-survey export beside the downloads and the volume. Only the COUNT: the export
+    leaves the building and a named survey beside a named country is a small cell. FAILS IF the column
+    is missing, if a country code reaches the file, or if 'unknown' is counted as a country."""
+    doc = _v4_stats()
+    doc["monthly"][1]["surveys"]["Burra 2017"]["countries"] = ["AU", "NZ", "unknown"]
+    body = curatorpage.analytics_survey_csv(doc)
+    rows = list(csv.reader(io.StringIO(body)))
+    assert rows[0] == ["month", "survey", "downloads", "download_bytes", "countries"]
+    data = {(r[0], r[1]): r for r in rows[1:]}
+    assert data[("2026-06", "Burra 2017")][4] == "2", "'unknown' is not a country"
+    assert data[("2026-06", "CI Sample Survey")][4] == "2"
+    assert "AU" not in body and "NZ" not in body, "no country CODE may reach the per-survey export"
+
+
+def test_the_survey_csv_tolerates_rows_written_before_the_country_list():
+    """PER-SURVEY EXPORT TOLERANCE PIN. A retained month written before the country list existed must
+    export a zero rather than blanking the row or raising. FAILS IF an older month breaks the export."""
+    doc = _v2_stats()
+    rows = list(csv.reader(io.StringIO(curatorpage.analytics_survey_csv(doc))))
+    assert rows[0][-1] == "countries"
+    assert all(r[-1] == "0" for r in rows[1:]), rows
