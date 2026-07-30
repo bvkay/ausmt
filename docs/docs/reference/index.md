@@ -6,6 +6,17 @@ documents it field by field.
 Paths in the Reference section are relative to the portal root: `/data/mtcat.json` means
 `<portal root>/data/mtcat.json`. Join them onto the deployment you are reading from.
 
+## Documentation versions
+
+This documentation is versioned with the MTCAT schema. The version picker carries one entry per
+MTCAT schema version, cut from an annotated `docs-mtcat-<version>` tag when the schema version
+changes, so the pages behind an entry describe every surface as that schema version serves it.
+`latest` follows the default branch, which is the current schema version between cuts. The tags are
+the version list; nothing in the repository enumerates them.
+
+Check `portal.version` in `/data/mtcat.json` to see which schema version a deployment is serving,
+then read the matching entry.
+
 ## Served documents
 
 | Document | Served path | Normative artifact | Version | Reference |

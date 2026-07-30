@@ -1,0 +1,279 @@
+/* AusMT documentation styling, layered on the readthedocs theme.
+ *
+ * Two jobs, in this order:
+ *
+ *   1. BRAND. The sidebar header carries the AusMT lockup (mark, wordmark, tagline, Documentation)
+ *      injected by docs/overrides/main.html, on the portal's dark navy. The theme's own header is a
+ *      centred bold link on #2980b9, so its colour, alignment, image treatment and hover fill are
+ *      all replaced here. The navigation below the header follows the same palette, because a navy
+ *      header sitting on the theme's warm grey nav reads as two sites.
+ *
+ *   2. TABLES. The theme sets white-space:nowrap on every table cell, header row and inline code
+ *      span, so the reference field tables scroll sideways instead of wrapping. They wrap here.
+ *
+ * The palette is the portal's, verbatim (portal/index.html :root, pinned by
+ * portal/tests/test_theme_tokens.py). Tangerine is an accent on navy only: at 2.6:1 on white it is
+ * not a text colour, so body links keep the theme's blue.
+ */
+
+:root {
+  --ausmt-ink: #11182D;       /* portal --ink, the header and nav ground */
+  --ausmt-nav: #0C1222;       /* one step darker, so the header reads as a band */
+  --ausmt-panel: #18213D;     /* portal --panel */
+  --ausmt-panel-2: #1E2B4F;   /* portal --panel-2 */
+  --ausmt-line: #2B3557;      /* portal --line */
+  --ausmt-text: #E8EDF1;      /* portal --text */
+  --ausmt-muted: #8FA3B0;     /* portal --muted */
+  --ausmt-accent: #EF7256;    /* portal --copper, AuScope Tangerine */
+}
+
+/* ------------------------------------------------------------------ 1. brand lockup */
+
+.wy-side-nav-search {
+  background-color: var(--ausmt-ink);
+  border-bottom: 1px solid var(--ausmt-line);
+  color: var(--ausmt-text);
+  text-align: left;
+  padding: 14px 16px;
+  margin-bottom: 0;
+}
+
+/* The theme styles this block's only link as a centred, bold, inline-block chip with a hover fill.
+ * The lockup is a three-line block, so those are replaced rather than added to.
+ */
+.wy-side-nav-search > a.ausmt-brand,
+.wy-side-nav-search > a.ausmt-brand:hover {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-weight: 400;
+  color: var(--ausmt-text);
+}
+
+/* LINE 1: mark and wordmark, side by side. */
+.ausmt-lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The theme renders every image in this block as a 45px circle on a tinted disc. The AuScope mark
+ * is a white icon and takes no treatment: 30px tall, transparent, square, matching the portal
+ * header.
+ */
+.wy-side-nav-search img.ausmt-mark,
+.wy-nav-top img.ausmt-mark {
+  display: block;
+  height: 30px;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.ausmt-wordmark {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  color: var(--ausmt-text);
+}
+
+/* LINE 2: the portal's tagline, directly beneath the lockup. */
+.ausmt-tagline {
+  display: block;
+  margin-top: 7px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ausmt-muted);
+}
+
+/* LINE 3: on its own line. Never beside the wordmark. */
+.ausmt-docs {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ausmt-accent);
+}
+
+.wy-side-nav-search input[type="text"] {
+  margin-top: 12px;
+  border: 1px solid var(--ausmt-line);
+}
+
+.wy-side-nav-search > div.version {
+  color: var(--ausmt-muted);
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+/* The mobile bar the drawer opens: mark and wordmark on one line, left aligned. */
+.wy-nav-top {
+  background: var(--ausmt-ink);
+  border-bottom: 1px solid var(--ausmt-line);
+  color: var(--ausmt-text);
+  text-align: left;
+}
+
+.wy-nav-top a.ausmt-mobile-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ausmt-text);
+  vertical-align: middle;
+}
+
+.wy-nav-top a.ausmt-mobile-brand .ausmt-wordmark {
+  font-size: 19px;
+}
+
+/* ------------------------------------------------------------------ 2. navigation palette */
+
+.wy-nav-side {
+  background: var(--ausmt-nav);
+  color: var(--ausmt-muted);
+}
+
+.wy-menu-vertical p.caption {
+  color: var(--ausmt-accent);
+}
+
+.wy-menu-vertical a,
+.wy-menu-vertical li ul li a {
+  color: #C3D0DA;
+}
+
+.wy-menu-vertical a:hover,
+.wy-menu-vertical a:active {
+  background-color: var(--ausmt-panel-2);
+  color: #FFFFFF;
+}
+
+/* An expanded section and its current page. The theme paints these light grey on grey; on navy they
+ * become the two panel tints, so the highlight still reads as depth rather than as a hole.
+ */
+.wy-menu-vertical li.current {
+  background: var(--ausmt-panel);
+}
+
+.wy-menu-vertical li.current a {
+  color: #B6C5D2;
+  border-right: 1px solid var(--ausmt-line);
+}
+
+.wy-menu-vertical li.current a:hover {
+  background: var(--ausmt-panel-2);
+}
+
+.wy-menu-vertical li.current > a,
+.wy-menu-vertical li.on a,
+.wy-menu-vertical li.current > a:hover,
+.wy-menu-vertical li.on a:hover {
+  background: var(--ausmt-panel-2);
+  color: var(--ausmt-text);
+}
+
+.wy-menu-vertical li.toctree-l1.current > a {
+  border-top: 1px solid var(--ausmt-line);
+  border-bottom: 1px solid var(--ausmt-line);
+}
+
+.wy-menu-vertical li.toctree-l2.current > a,
+.wy-menu-vertical li.toctree-l2.current li.toctree-l3 > a {
+  background: #24325C;
+}
+
+.wy-menu-vertical li.toctree-l3.current > a,
+.wy-menu-vertical li.toctree-l3.current li.toctree-l4 > a {
+  background: #2B3B69;
+}
+
+.wy-menu-vertical li button.toctree-expand,
+.wy-menu-vertical li.toctree-l2 button.toctree-expand,
+.wy-menu-vertical li.toctree-l3 button.toctree-expand,
+.wy-menu-vertical li.current > a button.toctree-expand,
+.wy-menu-vertical li.on a button.toctree-expand {
+  color: var(--ausmt-muted);
+}
+
+/* ------------------------------------------------------------------ 3. tables that wrap */
+
+/* The content column. The reference field tables are the widest thing the docs publish, and the
+ * theme's 800px leaves a five-column table splitting words that would otherwise fit.
+ */
+.wy-nav-content {
+  max-width: 960px;
+}
+
+/* CELLS. The theme's nowrap comes from three rules: .wy-table-responsive table td/th, the docutils
+ * thead, and .rst-content code. All three are matched at equal or higher specificity here, and this
+ * file loads after theme.css. The docutils class and the responsive wrapper are both added by the
+ * theme's JavaScript, so the unwrapped selectors are listed too.
+ *
+ * padding replaces the theme's 8px 16px: a five-column table spends more than a hundred pixels of
+ * the content column on gutters, which is what forces a short token like `survey` onto two lines.
+ * min-width keeps a squeezed column from collapsing to a few characters.
+ */
+.rst-content table.docutils td,
+.rst-content table.docutils th,
+.rst-content table.docutils thead,
+.wy-table-responsive table td,
+.wy-table-responsive table th,
+.wy-table td,
+.wy-table th,
+.wy-table thead {
+  white-space: normal;
+  overflow-wrap: break-word;
+  vertical-align: top;
+  min-width: 4.5em;
+  padding: 8px 10px;
+}
+
+/* CODE SPANS IN CELLS. Dotted field paths, artifact paths and enum lists live in code spans, which
+ * the theme also sets nowrap. These break anywhere, not just between words:
+ * `engine/schema/build_report.schema.json` is a single token, and under break-word alone it sets a
+ * column floor wider than the whole content column, which is what puts a scrollbar under the
+ * reference tables. The cost of anywhere is that the auto table layout may split a short token
+ * across two lines once a table is squeezed well past its natural width; the min-width floor and
+ * the reclaimed padding keep that to identifiers of about twelve characters at a 900px viewport,
+ * and from roughly 1100px up there is room enough that nothing short breaks at all.
+ */
+.rst-content table.docutils td code,
+.rst-content table.docutils th code,
+.wy-table-responsive table td code,
+.wy-table-responsive table th code,
+.wy-table td code,
+.wy-table th code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 1px 3px;
+}
+
+/* Below the width where the 300px sidebar and the theme's 3.236em side padding leave a usable
+ * column, the page keeps the sidebar and spends the padding on the content instead.
+ */
+@media screen and (max-width: 1100px) {
+  .wy-nav-content {
+    padding: 1.618em;
+  }
+}
+
+/* Fill the content column rather than overhanging it. The wrapper keeps overflow-x as the safety
+ * net for the widest table in the corpus, the nine-column transfer-function index in
+ * developer/data-files.md.
+ */
+.rst-content table.docutils,
+.wy-table-responsive table,
+.wy-table {
+  width: 100%;
+}
+
+.wy-table-responsive {
+  overflow-x: auto;
+}
