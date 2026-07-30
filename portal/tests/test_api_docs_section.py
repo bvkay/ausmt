@@ -237,11 +237,20 @@ def _code_blocks(fragment):
 
 
 def test_docs_document_the_bundle_forms_with_a_worked_command():
+    """The three bundle forms plus a worked command that actually pulls bytes.
+
+    REFERENCE-GRADE LANE: the command used to hard-code https://ausmt.au. The docs are now
+    host-relative throughout (owner ruling: every absolute portal URL becomes a path under the portal
+    root, so the pending DNS cutover cannot invalidate a page), and the runnable examples take that root
+    from a BASE variable. The pin moved with the convention; what it guards is unchanged, namely that
+    the subsection carries a command a reader can run rather than only a path listing."""
     sub = _docs_sub("-tf.h5")
     for form in ("-edi.zip", "-xml.zip", "-tf.h5"):
         assert form in sub, f"the bundles subsection must document the /data/bundles/<slug>{form} form"
-    assert "curl -O https://ausmt.au/data/bundles/" in sub, (
-        "the bundles subsection needs its worked curl example")
+    assert 'curl -O "$BASE/data/bundles/' in sub, (
+        "the bundles subsection needs its worked curl example, joined onto the BASE portal root")
+    assert "BASE=" in sub, (
+        "the example must set BASE, or a reader has nothing to join the site-relative path onto")
 
 
 def test_docs_document_the_manifest_flow():

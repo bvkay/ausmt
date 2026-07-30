@@ -1,12 +1,12 @@
 # AusMT data reference
 
 This page lists every document AusMT serves, says how to key into it, and shows worked patterns for
-getting bytes out. [How AusMT serves data](api-overview.md) covers the architecture behind it, and
-[Tool integration](tool-integration.md) covers reading the artifacts from MT software.
+getting bytes out. [How AusMT serves data](api-overview.md) covers the architecture behind it,
+[Tool integration](tool-integration.md) covers reading the artifacts from MT software, and the
+[Reference section](../reference/index.md) documents every document field by field.
 
-Every URL and command below was run against `https://ausmt.au` before it was written down. Where a
-count or a size is quoted, it comes from the build served on 2026-07-27 and moves with the corpus. The
-shapes and the rules do not.
+Counts and sizes quoted here describe a corpus of 21 surveys and 1,418 stations and move with the
+corpus. The shapes and the rules do not.
 
 ---
 
@@ -15,12 +15,16 @@ shapes and the rules do not.
 All data lives under one prefix:
 
 ```text
-https://ausmt.au/data/
+/data/
 ```
 
-Paths inside the documents are relative to that prefix, not to the document that carries them. A
+Paths on this page are relative to the portal root, so `/data/mtcat.json` means
+`<portal root>/data/mtcat.json`. The examples take that root from a `BASE` variable; set it to the
+deployment you are reading from.
+
+Paths inside the documents are relative to the data prefix, not to the document that carries them. A
 manifest row whose `url` is `edi/vulcan-2022/Vulcan_A1.edi` resolves to
-`https://ausmt.au/data/edi/vulcan-2022/Vulcan_A1.edi`. Join, do not template.
+`/data/edi/vulcan-2022/Vulcan_A1.edi`. Join, do not template.
 
 The manifest's `base_url` field is the escape hatch for a deployment that publishes artifacts
 somewhere else. It is `""` on the live site, which means portal-relative. If it is set, join `url`
@@ -33,7 +37,7 @@ Two identifiers key almost everything:
 | Identifier | Form | Example | Where it appears |
 |---|---|---|---|
 | survey slug | lowercase, hyphenated | `vulcan-2022` | `mtcat.json` as `survey_id`, `surveys.json` as `slug`, bundle filenames, product paths |
-| `ausmt_id` | `au.<slug>.<station>` | `au.vulcan-2022.A1` | `catalogue.json` column 12, every manifest row, `mtcat.json` as `station_id` |
+| `ausmt_id` | `au.<slug>.<station>[.<variant>]` | `au.vulcan-2022.A1` | `catalogue.json` column 12, every manifest row, `mtcat.json` as `station_id` |
 
 ---
 
@@ -81,20 +85,18 @@ build ran against:
 ```
 
 Read the schema version off `portal.version` rather than assuming one, and mean it. This page describes
-**1.2**, which is what the current engine writes, and a deployment serving an older build serves fewer
-keys. At the time of writing `https://ausmt.au/data/mtcat.json` declares `1.1`, so the derived facets
-described below are not on it yet. Every 1.2 addition is additive and `additionalProperties` stays true
-on every record object, so a consumer written against either version reads the other without changes as
-long as it treats an absent key as absent rather than as empty.
+**1.2**, which is what the current engine writes; a deployment serving an older build serves fewer keys.
+`additionalProperties` stays true on every record object, so a consumer written against one minor
+version reads another without changes as long as it treats an absent key as absent rather than as empty.
 
 `portal.schema_url` is served next to the document, so a harvester can validate without resolving
 anything off-site. `portal.metadata_license` is `CC0-1.0` and covers the catalogue metadata only; a
 survey's data licence is the separate `license` field on its own record and varies by survey.
 
 Survey records are identified by `survey_id` (the survey's slug). Required on every record are `survey_id`,
-`title`, `organisation` and `country`. Beyond those, v1.2 adds six facets derived from the document's
-own `stations[]` and from the build's download manifest, so a harvester can size and band-filter a
-survey without walking the station list:
+`title`, `organisation` and `country`. Six more facets are derived from the document's own `stations[]`
+and from the build's download manifest, so a harvester can size and band-filter a survey without walking
+the station list:
 
 | Field | Derived from | Note |
 |---|---|---|
@@ -105,19 +107,18 @@ survey without walking the station list:
 | `formats` | the download manifest | The formats actually served. Empty for a survey whose bytes are withheld. |
 | `year_start`, `year_end` | the survey's declared dates | Passed through, never inferred from file timestamps. |
 
-`formats` is worth dwelling on. Nobody curates it. It is read off the manifest the same build has just
-written, so an embargoed survey serves `[]`. Empty means "this build distributes nothing for this
-survey"; it never means "unknown".
+`formats` is not curated. It is read off the manifest the same build has just written, so an embargoed
+survey serves `[]`. Empty means "this build distributes nothing for this survey"; it never means
+"unknown".
 
 Station records are flat and small: `station_id` (the `ausmt_id`), `survey_id`, `latitude`, `longitude`
 and `data_type`. `data_type` is one of `AMT`, `BBMT`, `LPMT`, `GDS` or `unknown`, derived from the
 station's shortest period and which transfer functions are present. The survey does not declare it.
 Latitude and longitude are nullable, because a custodian can withhold a position.
 
-The credit and provenance blocks (`creators[]`, `contributors[]`, `related_identifiers[]`,
-`attribution`, `sources`, `changes`) and the access fields (`access`, `embargo_until`) are documented
-field by field in the [MTCAT schema reference](../reference/mtcat-schema.md), which also explains how
-to read a served record. The normative artifact is the schema itself.
+Every field, including the credit and provenance blocks and the access fields, is documented field by
+field in the [MTCAT schema reference](../reference/mtcat-schema.md), which also explains how to read a
+served record. The normative artifact is the schema itself.
 
 ### `surveys.json`
 
@@ -128,8 +129,9 @@ It is an object, and **the keys are survey display names**. The key for the Vulc
 people up, so build your own index by iterating values:
 
 ```python
-import json, urllib.request
-surveys = json.load(urllib.request.urlopen("https://ausmt.au/data/surveys.json"))
+import json, os, urllib.request
+BASE = os.environ["AUSMT_BASE"]                 # the portal root you are reading from
+surveys = json.load(urllib.request.urlopen(f"{BASE}/data/surveys.json"))
 by_slug = {v["slug"]: v for v in surveys.values()}
 print(by_slug["vulcan-2022"]["cite"])
 ```
@@ -148,18 +150,18 @@ Credit fields on each record:
 `{"name": "AusMT", "name_type": "organisation", "role": "HostingInstitution"}`. A survey never declares
 that role for itself.
 
-The full field set is specified in the
-[Survey Package Specification](../reference/survey-yaml.md), which documents the `survey.yaml` these
-records are generated from.
+The full field set is in [Served documents](../reference/portal-documents.md#surveysjson), and the
+`survey.yaml` these records are generated from is specified in the
+[survey.yaml reference](../reference/survey-yaml.md).
 
 ### `catalogue.json`
 
 One row per station, 1,418 rows in the live corpus. **The rows are positional arrays, not objects.**
 There are no field names in the file. You read by index.
 
-The authoritative column map is [`/src/contract.js`](https://ausmt.au/src/contract.js), generated from
-`contract/columns.json`, which is the single file that defines the order. Take indices from there
-instead of counting them by hand. Columns are only ever appended, never reordered.
+The authoritative column map is `/src/contract.js`, generated from `contract/columns.json`, which is
+the single file that defines the order. Take indices from there instead of counting them by hand.
+Columns are only ever appended, never reordered.
 
 | Index | Name | Type | Meaning |
 |---|---|---|---|
@@ -175,7 +177,7 @@ instead of counting them by hand. Columns are only ever appended, never reordere
 | 9 | `region` | string | Region facet from the survey |
 | 10 | `file` | string | Source transfer-function filename |
 | 11 | `coord_flag` | bool | True if the coordinate was flagged and resolved at intake |
-| 12 | `ausmt_id` | string | `au.<slug>.<station>`, the join key for the manifest |
+| 12 | `ausmt_id` | string | `au.<slug>.<station>[.<variant>]`, the join key for the manifest |
 | 13 | `edi_available` | 0 or 1 | 1 if the EDI is redistributably licensed and bundled |
 | 14 | `sha256` | string | SHA-256 of the source transfer-function file |
 | 15 | `site_name` | string or null | Original pre-sanitisation site name, when it differs from index 0 |
@@ -198,72 +200,52 @@ range and the component list of an embargoed station are public; the curves are 
 
 ### `collections.json`
 
-Programme groupings, keyed by collection id. One entry in the live corpus, `auslamp`, holding nine
-surveys and 459 stations. Each entry carries `title`, `type`, `status`, `start_year`, `last_updated`,
-`description`, the member survey display names, `n_surveys`, `n_stations`, `bbox` and `centroid`.
+Programme groupings, keyed by collection id. One entry in the current corpus, `auslamp`, holding nine
+surveys and 459 stations.
 
 `mtcat.json` carries the same groupings under `collections[]`, keyed the same way, with member surveys
 pointing back through `surveys[].collection_id`. One difference will catch you out. A collection's
 `centroid` is the mean of its member station positions, while a survey's `centroid` is the centre of
 its own bbox.
 
+The field reference is in
+[Served documents](../reference/portal-documents.md#collectionsjson).
+
 ### `build.json` and `build_provenance.json`
 
-`build.json` is small and is what you poll:
+`build.json` is small and is what you poll. Its `build_id` concatenates the engine commit, the
+survey-data commit and the build timestamp, so it changes whenever anything that could change the
+output changed.
 
-```json
-{
-  "build_id": "0d705eaaa22ded1564f6d36e349ef5d5761b3e69-2a6624e-2026-07-27T08:08:07.007756+00:00",
-  "engine_commit": "0d705eaaa22ded1564f6d36e349ef5d5761b3e69",
-  "source_commit": "2a6624e",
-  "generated": "2026-07-27T08:08:07.007756+00:00",
-  "mt_metadata_version": "1.0.9",
-  "mth5_version": "0.6.8"
-}
-```
+`build_provenance.json` is the longer record: the pipeline name and version, the extractor, the Python
+version, the git commit, the dimensionality parameters the screening ran with, corpus counts, the
+distribution flags in force and the build cache statistics. Use it when you need to say in a paper
+exactly what produced the numbers you used.
 
-`build_id` concatenates the engine commit, the survey-data commit and the build timestamp, so it
-changes whenever anything that could change the output changed.
-
-`build_provenance.json` is the longer record. It carries the pipeline name and version, the extractor,
-the Python version, the git commit, the dimensionality parameters the screening ran with, corpus
-counts, the distribution flags in force and the build cache statistics. Use it when you need to say in
-a paper exactly what produced the numbers you used.
+Both are documented field by field in
+[Served documents](../reference/portal-documents.md#buildjson).
 
 ### `feed.xml`
 
-A minimal Atom 1.0 feed at `/data/feed.xml`, not at `/feed.xml`. One entry per dated survey, newest
-first, 21 entries in the live corpus.
+A minimal Atom 1.0 feed at `/data/feed.xml`, not at the site root. One entry per dated survey, newest
+first, 21 entries in the current corpus. The entry id carries the slug, so resolve the survey from
+there; entries carry no `<link>` element, because the build emits one only when it is given a site base
+URL and the production invocation is not.
 
-```xml
-<entry>
-  <id>tag:ausmt:vulcan-2022</id>
-  <title>Vulcan 2022</title>
-  <updated>2026-07-27T00:00:00Z</updated>
-</entry>
-```
-
-The entry id carries the slug. Entries have no `<link>` element on the live deployment, because the
-build only emits one when it is given a site base URL, and the production invocation is not. Resolve
-the slug yourself.
-
-The feed's `<updated>` is the newest entry date, not the build time, so two builds of the same surveys
-produce a byte-identical feed. A survey's date is the latest of its release-note dates and its rights
-declaration date, falling back to 31 December of its last acquisition year. A survey with no date at
-all is omitted, never given a fake one.
+The element reference and the date rule are in
+[Served documents](../reference/portal-documents.md#feedxml).
 
 ---
 
 ## Fetching data today
 
-These are the patterns that work against the live corpus, meaning the current build, as opposed to the
-frozen snapshots described under [the releases tier](#the-releases-tier). Every one of them was run end
-to end against `https://ausmt.au` before it was written down. There is no key to obtain and no quota
-to stay under, and every response carries `Access-Control-Allow-Origin: *`, so a browser application
-can fetch it cross-origin. Paths are site-relative and the examples use `https://ausmt.au`.
+These are the patterns for the current build, as opposed to the frozen snapshots described under
+[the releases tier](#the-releases-tier). There is no key to obtain and no quota to stay under, and every
+response carries `Access-Control-Allow-Origin: *`, so a browser application can fetch it cross-origin.
 
-The portal's [About page](https://ausmt.au/about.html#api) carries a short quickstart. This is the long
-version.
+Every example sets `BASE` to the portal root it reads from, and joins the site-relative paths onto it.
+
+The portal's own About page carries a short quickstart. This is the long version.
 
 ### Whole-survey bundles
 
@@ -277,7 +259,8 @@ packaged three ways:
 ```
 
 ```bash
-curl -O https://ausmt.au/data/bundles/vulcan-2022-edi.zip
+BASE=${AUSMT_BASE:?the portal root you are reading from}
+curl -O "$BASE/data/bundles/vulcan-2022-edi.zip"
 ```
 
 A `LICENSE.txt` rides inside each zip, carrying that survey's licence and its required attribution.
@@ -298,7 +281,7 @@ by `survey`, then fetch `/data/` joined to each row's `url` and check the bytes 
 `sha256`.
 
 Go through the manifest rather than building paths yourself. A served filename is not derivable from the
-station id, so the manifest is the only correct way to locate one station's file. In the live corpus,
+station id, so the manifest is the only correct way to locate one station's file. In the current corpus,
 station A1 of `vulcan-2022` is served as `edi/vulcan-2022/Vulcan_A1.edi`.
 
 The manifest's other list, `bundles`, holds the whole-survey artifacts above and the third format,
@@ -306,7 +289,7 @@ The manifest's other list, `bundles`, holds the whole-survey artifacts above and
 none.
 
 ```bash
-BASE=https://ausmt.au
+BASE=${AUSMT_BASE:?the portal root you are reading from}
 curl -s "$BASE/data/products/manifest.json" \
   | jq -r '.files[] | select(.survey=="Vulcan 2022" and .format=="edi") | "\(.url) \(.sha256)"' \
   | while read -r url sha; do
@@ -318,8 +301,8 @@ curl -s "$BASE/data/products/manifest.json" \
 The same loop in Python, standard library only:
 
 ```python
-import hashlib, json, urllib.request
-BASE = "https://ausmt.au"
+import hashlib, json, os, urllib.request
+BASE = os.environ["AUSMT_BASE"]             # the portal root you are reading from
 man = json.load(urllib.request.urlopen(f"{BASE}/data/products/manifest.json"))
 for r in man["files"]:
     if r["survey"] != "Vulcan 2022" or r["format"] != "edi": continue
@@ -338,8 +321,8 @@ there's nothing to request and no access error to handle, while its catalogue re
 
 `/data/catalogue.json` is one row per station, and the rows are POSITIONAL arrays rather than objects.
 Every column is read by index, with no field names in the file. The authoritative column map is
-[`/src/contract.js`](https://ausmt.au/src/contract.js), generated from the one file that defines the
-column order, so take indices from there rather than counting them. A bounding-box fetch needs three:
+`/src/contract.js`, generated from the one file that defines the column order, so take indices from
+there rather than counting them. A bounding-box fetch needs three:
 `lat` at index **2**, `lon` at index **3**, and `ausmt_id` at index **12**. Columns are only ever
 appended, never reordered.
 
@@ -348,8 +331,8 @@ catalogue row and a manifest row carry), then fetch each matched row's `url` und
 `sha256`.
 
 ```python
-import hashlib, json, pathlib, urllib.request
-BASE = "https://ausmt.au"
+import hashlib, json, os, pathlib, urllib.request
+BASE = os.environ["AUSMT_BASE"]             # the portal root you are reading from
 LAT, LON, AUSMT_ID = 2, 3, 12               # column indices; /src/contract.js is the map
 W, S, E, N = 133.0, -30.0, 135.0, -28.0     # west, south, east, north
 cat = json.load(urllib.request.urlopen(f"{BASE}/data/catalogue.json"))
@@ -366,19 +349,19 @@ for row in man["files"]:
     out.write_bytes(body)
 ```
 
-Two coordinate caveats, both about honesty rather than precision.
+Two coordinate caveats apply to any box filter.
 
 A station whose position its custodian **withholds** carries `null` in the lat and lon columns, so the
 example tests for null before comparing and those stations are excluded rather than compared. A null is
-not a position, and no box can honestly contain one. Do not leave that to the language. JavaScript reads
-`null` as `0` in a numeric comparison, which silently treats a withheld station as if it sat at 0°, 0°
-instead of dropping it.
+not a position, and no box contains one. Do not leave that to the language. JavaScript reads `null` as
+`0` in a numeric comparison, which silently treats a withheld station as if it sat at 0°, 0° instead of
+dropping it.
 
 A station whose position is **generalised** at the custodian's request is served rounded to a 0.1° cell,
 roughly 11 km, so a box edge is approximate. A generalised station can land on the wrong side of it by up
 to 0.05°. The build emits `/data/coord_policy.json`, a map of `ausmt_id` to `generalised` or `withheld`,
-whenever any station is non-exact. The file is absent when every served position is exact, which is the
-case on the live site today, so a `404` there means every position is as surveyed.
+whenever any station is non-exact. The file is absent when every served position is exact, so a `404`
+there means every position is as surveyed.
 
 One practical note. A box crosses surveys, and two surveys can hold a station with the same filename, so
 write files out under the manifest's `url` path rather than flattening them to a basename or you will
@@ -396,12 +379,12 @@ Each station has a small product directory:
 ```
 
 `station.json` is the per-station record. It carries identity, location, band and period range, the
-derived diagnostics, the processing strings scraped from the source file, the distribution state, the
+derived diagnostics, the processing strings read from the source file, the distribution state, the
 coordinate QC verdict, any canonical conditioning notes, and a `provenance` block naming the input file
 and its SHA-256. `dimensionality.json` is the phase-tensor screening result:
 
 ```console
-$ curl -s https://ausmt.au/data/products/vulcan-2022/A1/dimensionality.json
+$ curl -s "$BASE/data/products/vulcan-2022/A1/dimensionality.json"
 {
  "classification": "2-D",
  "skew_beta_median_deg": 0.7,
@@ -412,8 +395,8 @@ $ curl -s https://ausmt.au/data/products/vulcan-2022/A1/dimensionality.json
 }
 ```
 
-The `note` is part of the payload for a reason. This is a screening diagnostic and not an
-interpretation, so treat it as a filter and not as a finding.
+The `note` travels with the payload. This is a screening diagnostic and not an interpretation, so treat
+it as a filter and not as a finding.
 
 The two files are gated differently, and the difference matters if you loop over stations:
 
@@ -430,8 +413,8 @@ There is no index of product directories. Directory listing is off. Build the pa
 the station id in `catalogue.json` or `mtcat.json`, which is safe here because the product path uses
 the station id verbatim, unlike an artifact filename.
 
-The full record shape is specified in
-[Portal data files](../developer/data-files.md#derived-product-files).
+Both records are documented field by field in
+[Per-station products](../reference/station-products.md).
 
 ---
 
@@ -450,8 +433,9 @@ Three formats are distributed, and which ones exist for a survey is stated, neve
 The manifest is the answer that always works, because it is the thing the formats are derived from:
 
 ```python
-import collections, json, urllib.request
-man = json.load(urllib.request.urlopen("https://ausmt.au/data/manifest.json"))
+import collections, json, os, urllib.request
+BASE = os.environ["AUSMT_BASE"]             # the portal root you are reading from
+man = json.load(urllib.request.urlopen(f"{BASE}/data/manifest.json"))
 per_station = collections.Counter(r["format"] for r in man["files"])
 per_survey = collections.Counter(b["format"] for b in man["bundles"])
 print(per_station, per_survey)
@@ -460,24 +444,22 @@ print(per_station, per_survey)
 That prints `Counter({'edi': 1182, 'emtfxml': 1182}) Counter({'edi-zip': 19, 'xml-zip': 19, 'mth5': 19})`
 against the current corpus. To ask the same question per survey, group `bundles` by `slug`.
 
-MTCAT 1.2 adds a shortcut. Each survey record carries a `formats` list derived from that same manifest
-during the same build, so a harvester can filter without fetching 828 kB. Use it when it is there and
-handle the case where it isn't:
+MTCAT carries a shortcut. Each survey record has a `formats` list derived from that same manifest during
+the same build, so a harvester can filter without fetching 828 kB:
 
 ```python
-import json, urllib.request
-cat = json.load(urllib.request.urlopen("https://ausmt.au/data/mtcat.json"))
-if cat["portal"]["version"] < "1.2":
-    print("this document predates the formats facet; fall back to the manifest")
+import json, os, urllib.request
+BASE = os.environ["AUSMT_BASE"]
+cat = json.load(urllib.request.urlopen(f"{BASE}/data/mtcat.json"))
 for s in cat["surveys"]:
     if "xml-zip" in s.get("formats", []):
         print(s["survey_id"])
 ```
 
-Absence of the key means "not known" rather than "nothing served". An empty list means the opposite and
-is the honest answer for an embargoed survey. An AusMT build always derives the key from a manifest it
-has just written, so an AusMT 1.2 document always carries it; absence is reserved for a producer with no
-manifest to derive from.
+Absence of the key means "not known" rather than "nothing served"; an empty list means the opposite, and
+is what an embargoed survey serves. An AusMT build always derives the key from a manifest it has just
+written, so an AusMT document always carries it. Absence is reserved for a producer with no manifest to
+derive from.
 
 ---
 
@@ -492,16 +474,17 @@ reader handles it, and the entry id carries the slug you would then fetch.
 rebuild, including one that only changed a survey's metadata:
 
 ```bash
-curl -s https://ausmt.au/data/build.json | jq -r .build_id
+curl -s "$BASE/data/build.json" | jq -r .build_id
 ```
 
 A polling client should compare `build_id`, not the `generated` timestamp on its own, and should send a
 conditional request so an unchanged document costs a `304` instead of a download:
 
 ```python
-import json, urllib.request
+import json, os, urllib.request
+BASE = os.environ["AUSMT_BASE"]                 # the portal root you are reading from
 known_etag = None                               # persist this between polls; None on the first one
-req = urllib.request.Request("https://ausmt.au/data/build.json")
+req = urllib.request.Request(f"{BASE}/data/build.json")
 if known_etag:                                  # from the previous poll
     req.add_header("If-None-Match", known_etag)
 try:
@@ -520,12 +503,12 @@ rate limiter to protect it from a tight loop.
 ## The releases tier
 
 The documents above describe the current build, and the current build moves. Build directories are
-pruned and the `current` symlink is swapped every rebuild, so neither is a citable target.
+pruned and the pointer to the current build is swapped every rebuild, so neither is a citable target.
 
-The release tier exists for that. `engine/extract/cut_release.py` freezes one build's catalogue surface
-(`mtcat.json`, `surveys.json`, `manifest.json`) plus every per-survey bundle into
-`/data/releases/<tag>/`, writes a `release.json` provenance document beside them, and updates a
-newest-first index at `/data/releases/releases.json`.
+The release tier is the citable one. It freezes one build's catalogue surface (`mtcat.json`,
+`surveys.json`, `manifest.json`) plus every per-survey bundle into `/data/releases/<tag>/`, writes a
+`release.json` provenance document beside them, and updates a newest-first index at
+`/data/releases/releases.json`.
 
 ```text
 /data/releases/releases.json          the index: tag, cut time, doi, build_id, counts, path
@@ -539,20 +522,19 @@ Every copied bundle is re-hashed from the bytes that landed in the release direc
 against the manifest's own SHA-256 claim. Any mismatch fails the cut and leaves no release behind. An
 existing tag is never overwritten.
 
-**No release has been cut yet.** `/data/releases/releases.json` returns `404` on the live site today,
-and the [Releases page](https://ausmt.au/releases.html) says "No releases cut yet" and names the
-document it looked for.
+**No release has been cut yet.** `/data/releases/releases.json` returns `404`, and the portal's
+Releases page says "No releases cut yet" and names the document it looked for.
 
 A consumer should copy that distinction. A `404` or an empty `releases[]` means none is published. Any
 other error means this request could not find out, which is a different fact and usually an operator's
-problem. Collapsing the two would report a routing fault to every reader as "nothing has ever been
-released".
+problem.
 
-One thing about citation. The tooling mints nothing. It prepares a DataCite record so that the day
-AuScope's ARDC and DataCite access lands, the record can be submitted as it stands and the minted DOI
-backfilled into the release that already exists. Until then a release's `doi` is `null`, and a consumer
-should render that as plain text. A dead resolver link is worse than no link. See
-[Versioning and releases](../data-model/versioning.md) for the policy behind this.
+The tooling mints nothing. It prepares a DataCite record that can be submitted as it stands, with the
+minted DOI stamped back into the release that already exists. Until then a release's `doi` is `null`,
+and a consumer renders that as plain text rather than as a link.
+
+The documents are specified in the [Releases tier reference](../reference/releases.md), and the policy
+is in [Versioning and releases](../data-model/versioning.md).
 
 ---
 

@@ -22,7 +22,7 @@ The survey level is where most of this is recorded, field by field, in
 [survey.yaml](../reference/survey-yaml.md). Persistent identifiers (DOI, ORCID, ROR, RAiD) are
 covered in [Standards and alignment](../introduction/standards.md), and the rule that a
 dataset identifier must state which data level it points at is in
-[Identifiers by data level](../reference/survey-yaml.md#identifiers-by-data-level).
+[Identifiers by data level](../reference/survey-yaml.md#6-identifiers-by-data-level).
 
 ## Required and recommended
 

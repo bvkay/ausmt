@@ -43,7 +43,7 @@ repository identifier or an NCI collection identifier all survive a site reorgan
 an ordinary link does not. Where a dataset identifier is recorded, it also states which data
 level it points at, so a reader can tell a parent collection from the raw packed time series
 inside it; see
-[Identifiers by data level](../reference/survey-yaml.md#identifiers-by-data-level).
+[Identifiers by data level](../reference/survey-yaml.md#6-identifiers-by-data-level).
 
 Each reference should carry enough for a user to understand the relationship: resource type,
 title, identifier, holding repository, access conditions, and how it relates to the survey

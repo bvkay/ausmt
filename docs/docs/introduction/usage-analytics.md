@@ -1,7 +1,7 @@
 # Usage analytics
 
-AusMT records **anonymous, aggregate** usage of the served data — how much is downloaded, which
-datasets, from which countries, and how many portal visits — for research-infrastructure reporting
+AusMT records **anonymous, aggregate** usage of the served data (how much is downloaded, which
+datasets, from which countries, and how many portal visits) for research-infrastructure reporting
 (AuScope) and custodian conversations ("your survey was downloaded *N* times from *M* countries").
 
 It is deliberately **not** ad-tech. There are no cookies, no cross-site tracking, and no per-user
@@ -14,7 +14,7 @@ identity. Only aggregate counts are ever stored.
 | Downloads by survey / station / format | Server access-log paths (`/data/edi`, `/data/xml`, `/data/bundles`) resolved through the build's `manifest.json` reverse map. |
 | Download **volume** by survey and dataset | The response size the access log already records, summed per survey and per artifact. A whole-survey bundle counts toward its own survey. |
 | Single-station file vs whole-survey bundle | Whether the manifest resolved the path to a per-station artifact or a survey package. |
-| Portal visits | One `catalogue.json` fetch per single-page-app boot — the only server-observable visit signal. |
+| Portal visits | One `catalogue.json` fetch per single-page-app boot, the only server-observable visit signal. |
 | API requests | Fetches of the two documented machine-readable entry points the portal itself never fetches (`/data/products/manifest.json`, `/data/mtcat.json`). This is a **path class**, not a user-agent test, and it is an upper bound: the discovery-document link sits in the page footer, so a person can click it. |
 | Distinct networks per day | How many distinct **masked** networks (a /24 or /48) were seen that day. A privacy-safe reach proxy: the addresses exist only in memory while the day is folded, and only the count is stored. One network can be an entire institution, so it is reach, not people. |
 | Downloads & visits by country | The **masked** client address resolved to a country (see below). |
@@ -22,7 +22,7 @@ identity. Only aggregate counts are ever stored.
 | Daily time series | Downloads, volume, formats, visits, API requests and networks folded per calendar day (UTC). |
 | Calendar-month rollups | The same figures accumulated per month as each day folds, for quarterly and year-over-year reporting. |
 
-### What is *not* measured — honestly
+### What is not measured
 
 Per-station and per-survey **page views** are **not** counted, because they cannot be measured from
 server logs: the portal is a single-page application that loads the whole catalogue once and renders
@@ -32,15 +32,15 @@ visits*, not page views. User identification, sessions, and funnels are never co
 
 ## Privacy design
 
-The public privacy promise — cookieless, no personal data — is a feature of this design, not an
+The public privacy promise (cookieless, no personal data) is a feature of this design, not an
 obstacle to it. Research-infrastructure analytics need aggregates, never identities.
 
 - **IP addresses are masked at the edge.** The web server truncates every client address *at write
-  time* — IPv4 to a /24, IPv6 to a /48 — so a full address never touches disk. Address-bearing
+  time* (IPv4 to a /24, IPv6 to a /48), so a full address never touches disk. Address-bearing
   headers (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`, `Referer`) and credentials (`Cookie`,
   `Authorization`) are dropped from the log entirely.
 - **Only aggregates are retained.** The daily aggregator folds the log into cumulative counts; the
-  published `stats.json` contains **no address** (masked or otherwise) and **no user-agent string** —
+  published `stats.json` contains **no address** (masked or otherwise) and **no user-agent string**,
   only counts and a daily series.
 - **Raw logs are short-lived.** The access log is rotated with a ~7-day retention; the tail exists
   only for debugging and is not the database. Nothing about that rotation changed when the reporting
@@ -70,8 +70,8 @@ Australia is the reporting audience for this infrastructure, so the country row 
 "how much of this is used inside Australia, and where" is a question a funding report has to answer.
 Beneath the AU row the screen can therefore show a breakdown by **state or territory**.
 
-**The breakdown stops at state, deliberately.** This is a settled design decision, not an oversight
-waiting to be improved:
+**The breakdown stops at state, deliberately.** Two properties of the pipeline make a finer grain
+unreportable:
 
 - **A masked prefix cannot place a request in a city.** The address is truncated to a /24 (IPv4) or
   /48 (IPv6) *before it is written to disk*. Mobile carriers and CGNAT pools routinely serve an entire
@@ -85,7 +85,7 @@ dataset are read only to be discarded. For the same reason state counts exist at
 cumulative grains only**. A state count for one named day would be the finest-grained cell in the
 file, small enough to point at a particular group in a community this size.
 
-Two honesty properties hold, and are visible on the screen. The breakdown **always reconciles with its
+Two reconciliation properties hold, and are visible on the screen. The breakdown **always reconciles with its
 parent**: an Australian request whose prefix the state table does not cover lands in its own *"Not in
 the state table"* row, never dropped, so the state rows plus that row add up to the AU figure exactly.
 And the forward-only rule above gets its own row (*"Counted before state data existed"*) rather than

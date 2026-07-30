@@ -1,13 +1,12 @@
 
 site_name: AusMT Documentation
-copyright: "Copyright © 2026 AuScope and the AusMT contributors. Framework software (engine, portal, docs) is licensed under Apache-2.0; the magnetotelluric survey data AusMT serves is licensed separately by its custodians (typically CC-BY-4.0)."
+copyright: "Copyright © 2026 AuScope and the AusMT contributors. The AusMT framework (everything other than the survey data it serves) is licensed under Apache-2.0; the magnetotelluric survey data is licensed separately by its custodians (typically CC-BY-4.0)."
 nav:
   - Home: index.md
   - About the project:
       - Scientific philosophy: introduction/scientific-philosophy.md
       - Governance & operation: introduction/governance.md
       - Standards & alignment: introduction/standards.md
-      - Roadmap: introduction/roadmap.md
       - Usage analytics: introduction/usage-analytics.md
   - Architecture & data model:
       - Architecture: architecture/repositories.md
@@ -36,9 +35,14 @@ nav:
       - Review: operations/review.md
       - Publication: operations/publication.md
   - Reference:
+      - Machine-readable surfaces: reference/index.md
       - MTCAT schema: reference/mtcat-schema.md
       - Download manifest schema: reference/manifest-schema.md
+      - Build report schema: reference/build-report-schema.md
       - survey.yaml reference: reference/survey-yaml.md
+      - Per-station products: reference/station-products.md
+      - Served documents: reference/portal-documents.md
+      - Releases tier: reference/releases.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
   - Design rationale:
@@ -56,3 +60,13 @@ nav:
 
 theme:
   name: readthedocs
+  # overrides/main.html replaces two blocks so the sidebar header and the mobile bar carry the AusMT
+  # lockup (AuScope mark, wordmark, tagline, then Documentation on its own line) instead of the
+  # theme's plain site-name link. The theme's own `logo` option renders an image INSTEAD of the name
+  # rather than beside it, which is why this is a template override and not a theme setting.
+  custom_dir: overrides
+
+# Brand palette and table wrapping, layered on the theme's stylesheets. The file's header says what
+# each block replaces and why.
+extra_css:
+  - css/ausmt.css

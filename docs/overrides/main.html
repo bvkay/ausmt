@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{#
+  AusMT branding for the readthedocs theme.
+
+  Two blocks are replaced; every other template stays the theme's.
+
+  site_name   The sidebar header. The theme renders a single bold line, either config.site_name or,
+              with theme.logo set, an image INSTEAD of the name. AusMT needs a three-line lockup, so
+              the block is rewritten rather than configured:
+
+                  line 1   AuScope mark and the AusMT wordmark, side by side
+                  line 2   Australia's Magnetotelluric Data Portal
+                  line 3   Documentation, on its own line, never beside the wordmark
+
+              The mark is docs/docs/img/auscope-icon-white.png, the same white AuScope icon the
+              portal header carries (portal/vendor/auscope-icon-white.png). The whole lockup is one
+              link to the documentation home page: a nested link out to auscope.org.au, which the
+              portal header uses, is not valid inside it.
+
+  mobile_nav  The narrow-screen bar, which renders config.site_name ("AusMT Documentation") as one
+              line. It carries the mark and the wordmark only, so the wordmark never sits beside the
+              word Documentation. The full lockup is in the drawer this bar opens.
+
+  Styling for both lives in docs/docs/css/ausmt.css.
+#}
+
+{% block site_name %}
+  <a href="{{ nav.homepage.url|url }}" class="ausmt-brand">
+    <span class="ausmt-lockup">
+      <img class="ausmt-mark" src="{{ 'img/auscope-icon-white.png'|url }}" alt="AuScope" />
+      <span class="ausmt-wordmark">AusMT</span>
+    </span>
+    <span class="ausmt-tagline">Australia's Magnetotelluric Data Portal</span>
+    <span class="ausmt-docs">Documentation</span>
+  </a>
+{% endblock %}
+
+{% block mobile_nav %}
+  <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+  <a href="{{ nav.homepage.url|url }}" class="ausmt-mobile-brand">
+    <img class="ausmt-mark" src="{{ 'img/auscope-icon-white.png'|url }}" alt="AuScope" />
+    <span class="ausmt-wordmark">AusMT</span>
+  </a>
+{% endblock %}

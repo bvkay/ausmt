@@ -26,9 +26,7 @@ something ambiguous. Submitter contact details are held separately from the pack
 enter the published record.
 
 Upload keys are issued by a curator (email the operator to request one); the key is sent
-out-of-band and travels only as the upload request header, never inside the package. The
-gateway's security design is frozen in the repository's design records
-(`maintainer/C10-GatewayDesign.md` and its successors).
+out-of-band and travels only as the upload request header, never inside the package.
 
 ## Who can submit, and what
 
