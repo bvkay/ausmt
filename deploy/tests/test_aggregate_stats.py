@@ -430,11 +430,11 @@ def test_station_file_vs_survey_bundle_split_and_format_split_over_time():
 
 
 def test_api_consumer_paths_are_classified_from_the_path_alone():
-    """API-CONSUMER PIN (c). The two DOCUMENTED machine-readable entry points must classify as `api`
-    and count on their own line, while every path the portal's own JS fetches on boot must NOT: the
-    catalogue is a VISIT, and /data/manifest.json (the SPA's own copy) is neither. Classification is by
-    PATH ONLY -- no user-agent is consulted. FAILS IF an SPA-boot fetch is credited as an API consumer,
-    if an API fetch inflates the visit count, or if the API line is missing."""
+    """API-CONSUMER PIN (c). The DOCUMENTED machine-readable entry points must classify as `api` and
+    count on their own line, while every path the portal's own JS fetches on boot must NOT: the
+    catalogue is a VISIT, and /data/manifest.json (the SPA's own copy) is neither. The class is a PATH
+    class; the client class is a separate, orthogonal axis. FAILS IF an SPA-boot fetch is credited as an
+    API consumer, if an API fetch inflates the visit count, or if the API line is missing."""
     assert AGG.classify("/data/products/manifest.json") == ("api", None)
     assert AGG.classify("/data/mtcat.json") == ("api", None)
     assert AGG.classify("/data/catalogue.json") == ("visit", None)
@@ -703,7 +703,7 @@ def test_au_state_rows_plus_unattributed_reconcile_with_the_country_row():
     states = AGG.AuStates.load(_AU_STATES_CSV)
     lines = _au_lines() + [
         _line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NOSTATE, size=5),   # a 2nd uncovered AU hit
-        _line("/data/mtcat.json", _AU_NSW),                                     # api: not a geo class
+        _line("/data/mtcat.json", _AU_NSW),                    # api: a geo class like every other
     ]
     stats = AGG.aggregate(None, lines, rmap, geoip, _RUN, au_states=states)
     au = stats["countries"]["AU"]
@@ -814,3 +814,313 @@ def test_main_wires_the_state_table_through_the_env(tmp_path, monkeypatch):
     # what is consulted -- absent there, the run is country-only and still exits 0.
     monkeypatch.delenv("AUSMT_STATS_AU_STATES_CSV")
     assert AGG.main([]) == 0
+
+
+# ==================================================================================================
+# Counting-honesty lane: what the numbers actually mean.
+#
+# Five defects shared one root: the fold's admission rules were written for "a person in a browser"
+# and every other real client was either dropped or double counted.
+#   * a THREE-WAY client class replaces the bot/not-bot binary. Crawlers are still excluded; SCRIPTED
+#     clients (curl, wget, python-requests, and an ABSENT user-agent) are counted and reported
+#     separately, because those are exactly the clients the public API documentation teaches;
+#   * a download admits status 206 as well as 200, so a resumed or ranged transfer stops vanishing;
+#   * within one folded day the same (masked network, path) counts ONCE, which kills the verified
+#     abort-then-refetch double count, while the bytes of every line still sum;
+#   * the served JSON Schema is an API path, and release-tier bundles are downloads;
+#   * the LICENSE sidecars beside each survey MTH5 are not data downloads and stop polluting
+#     `unattributed`, which exists to detect build/serve skew.
+# Every dimension is still derived from what the fold already reads. Nothing new is collected.
+# ==================================================================================================
+
+def test_client_classes_split_crawlers_from_scripted_consumers_from_browsers():
+    """CLIENT-CLASS PIN. The user-agent must resolve to exactly one of three classes. A crawler is
+    excluded from every count as it always was; a SCRIPTED client is counted, because curl, wget and
+    python-requests are the clients the published API examples hand people, and dropping them as bots
+    made programmatic scientific use invisible; an ABSENT user-agent is scripted, not human. FAILS IF a
+    crawler is admitted, if a documented scripting client is still classed as a crawler, or if a blank
+    UA is treated as a browser."""
+    for ua in ("Googlebot/2.1", "Mozilla/5.0 (compatible; AhrefsBot/7.0)", "Bytespider",
+               "facebookexternalhit/1.1", "HeadlessChrome/120.0", "Scrapy/2.11",
+               "zgrab/0.x", "uptime-kuma/1.23", "Datadog/monitoring"):
+        assert AGG.classify_client(ua) == "crawler", ua
+    for ua in ("curl/8.4.0", "Wget/1.21.4", "python-requests/2.31.0", "Python-urllib/3.12",
+               "Go-http-client/2.0", "okhttp/4.12.0", "Java/17.0.9", "axios/1.6.2",
+               "node-fetch/3.3", "libwww-perl/6.68", "aria2/1.36.0",
+               "Apache-HttpClient/5.3", "python-httpx/0.27.0", "", "   "):
+        assert AGG.classify_client(ua) == "scripted", repr(ua)
+    for ua in ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+               "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15"):
+        assert AGG.classify_client(ua) == "browser", ua
+
+
+def test_scripted_clients_are_counted_and_reported_beside_browsers():
+    """SCRIPTED-COUNTING PIN. A download by curl / wget / python-requests must reach the totals AND be
+    attributed to a survey exactly like a browser download, with the browser-vs-scripted split written
+    at the cumulative and month grains. A crawler must still change nothing at all. FAILS IF a scripted
+    download is dropped, if it is folded into the browser figure with no way to tell them apart, or if
+    a crawler is admitted."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", size=100),
+        _line("/data/edi/sample-survey/Vulcan_A2.edi", "1.2.3.0", size=200, ua="curl/8.4.0"),
+        _line("/data/xml/sample-survey/A1.xml", "198.51.100.0", size=300, ua=""),
+        _line("/data/catalogue.json", "8.8.8.0", ua="python-requests/2.31.0"),
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "2001:db8::", ua="Googlebot/2.1"),
+        _line("/data/catalogue.json", "2001:db8::", ua="Googlebot/2.1"),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["downloads"] == 3, "the curl and blank-UA downloads must count"
+    assert stats["totals"]["visits"] == 1, "the python-requests catalogue fetch is a real visit"
+    assert stats["totals"]["downloads_by_client"] == {"browser": 1, "scripted": 2}
+    assert stats["monthly"][0]["downloads_by_client"] == {"browser": 1, "scripted": 2}
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"]["downloads"] == 3
+    assert "crawler" not in stats["totals"]["downloads_by_client"], \
+        "a crawler is excluded, never reported as a counted class"
+
+
+def test_a_v2_file_without_the_client_split_gains_it_forward_only():
+    """CLIENT-SPLIT MIGRATION PIN. A stats.json written before the split existed must read back cleanly
+    and start accruing the new counters from the next fold, with no attempt to divide its historical
+    downloads between the two classes. FAILS IF an older file raises, or if the split claims to cover
+    downloads that were counted before it existed."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    prior = AGG.aggregate(None, [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5",
+                                       date="2026-07-09")], rmap, geoip,
+                          dt.datetime(2026, 7, 10, 3, 30, tzinfo=dt.timezone.utc))
+    prior["totals"].pop("downloads_by_client")
+    for m in prior["monthly"]:
+        m.pop("downloads_by_client")
+    prior = json.loads(json.dumps(prior))
+    after = AGG.aggregate(prior, [_line("/data/xml/sample-survey/A1.xml", "1.2.3.0",
+                                        date="2026-07-10", ua="curl/8.4.0")], rmap, geoip, _RUN)
+    assert after["totals"]["downloads"] == 2, "the historical download is not lost"
+    assert after["totals"]["downloads_by_client"] == {"scripted": 1}, \
+        "only downloads folded with the split in place may appear in it"
+
+
+def test_a_ranged_or_resumed_download_is_counted():
+    """206 PIN. Caddy's file_server advertises byte ranges and the MTH5 bundles are the largest things
+    served, so a download manager, `curl -C -` or aria2 gets 206 Partial Content. Admitting only 200
+    made those downloads vanish entirely, not merely undercount their bytes. FAILS IF a 206 download is
+    dropped, or if 206 leaks into the visit/API classes (which are cache-revalidation shaped, not
+    range shaped)."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", status=206, size=4000),
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "1.2.3.0", status=404, size=0),
+        _line("/data/catalogue.json", "198.51.100.0", status=206),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["downloads"] == 1, "the 206 download counts; the 404 does not"
+    assert stats["totals"]["download_bytes"] == 4000
+    assert stats["totals"]["visits"] == 0, "a 206 is not a visit shape"
+    assert stats["downloads"]["by_format"] == {"mth5": 1}
+
+
+def test_within_a_day_the_same_network_and_path_counts_once_while_bytes_still_sum():
+    """WITHIN-DAY DEDUPE PIN. The browser download hand-off logs the SAME 200 GET twice for one user
+    action: the renderer sees Content-Disposition and cancels (a 0-byte line), the download manager
+    refetches (the full line). Range fragments do the same. Within one folded day an identical (masked
+    network, path) therefore counts ONCE, while every line's bytes still sum so the volume stays true.
+    FAILS IF the double count survives, if the deduped line's bytes are lost, if two DIFFERENT networks
+    fetching the same file collapse into one, or if the dedupe leaks across days."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        # One user action, two logged lines: the cancelled leg then the refetch.
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=0, date="2026-07-09"),
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=5000, date="2026-07-09"),
+        # Two range fragments of one transfer.
+        _line("/data/bundles/sample-survey-edi.zip", "203.0.113.5", status=206, size=300,
+              date="2026-07-09"),
+        _line("/data/bundles/sample-survey-edi.zip", "203.0.113.5", status=206, size=700,
+              date="2026-07-09"),
+        # A DIFFERENT network fetching the same file is a different download.
+        _line("/data/bundles/sample-survey-tf.h5", "1.2.3.0", size=5000, date="2026-07-09"),
+        # The same network and path on the NEXT day is a new download.
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=5000, date="2026-07-10"),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["downloads"] == 4, "6 lines, 4 distinct (day, network, path) downloads"
+    assert stats["totals"]["download_bytes"] == 0 + 5000 + 300 + 700 + 5000 + 5000
+    ds = stats["downloads"]["by_dataset"]
+    assert ds["bundles/sample-survey-tf.h5"]["downloads"] == 3
+    assert ds["bundles/sample-survey-tf.h5"]["bytes"] == 15000
+    assert ds["bundles/sample-survey-edi.zip"]["downloads"] == 1, "the range fragments are one download"
+    assert ds["bundles/sample-survey-edi.zip"]["bytes"] == 1000, "both fragments' bytes still sum"
+    assert stats["downloads"]["by_format"] == {"mth5": 3, "edi-zip": 1}
+    daily = {d["date"]: d for d in stats["daily"]}
+    assert daily["2026-07-09"]["downloads"] == 3 and daily["2026-07-09"]["download_bytes"] == 11000
+    assert daily["2026-07-10"]["downloads"] == 1
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 4, "bytes": 16000}
+
+
+def test_visits_and_api_requests_are_not_deduped():
+    """DEDUPE SCOPE PIN. The dedupe exists because ONE download action can log two lines; a portal boot
+    and an API fetch have no such duplication, and each really is another use. They must be counted
+    every time. FAILS IF the dedupe is applied to the visit or API class, which would silently turn the
+    visit metric into a distinct-network-per-day count."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = ([_line("/data/catalogue.json", "203.0.113.5")] * 3
+             + [_line("/data/mtcat.json", "203.0.113.5")] * 2)
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["visits"] == 3, "each SPA boot is a visit"
+    assert stats["totals"]["api_requests"] == 2
+
+
+def test_the_served_json_schema_is_an_api_path():
+    """SCHEMA-PATH PIN. /data/mtcat.schema.json is the `$id` every validator and harvester resolves
+    when it reads the MTCAT document, which makes it the cleanest programmatic-consumer signal the
+    corpus has, and it was counted nowhere. It must classify as `api`. FAILS IF the schema fetch is
+    still ignored, or if it is mistaken for a download or a visit."""
+    assert AGG.classify("/data/mtcat.schema.json") == ("api", None)
+    assert "/data/mtcat.schema.json" in AGG._API_PATHS
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    stats = AGG.aggregate(None, [_line("/data/mtcat.schema.json", "8.8.8.0", ua="python-httpx/0.27")],
+                          rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["api_requests"] == 1
+    assert stats["totals"]["visits"] == 0 and stats["totals"]["downloads"] == 0
+
+
+def test_api_requests_are_counted_geographically_like_every_other_request():
+    """API GEO PIN. The country table is the reach evidence, and the API line was the one counted class
+    that never reached it, so any reach claim built from countries excluded programmatic consumers
+    entirely. An API request must count toward its country and, for AU, its state, exactly as a
+    download or a visit does. FAILS IF an API request adds no country, or if it adds a country without
+    the matching state bucket (which would break the reconciliation the state table promises)."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    lines = [_line("/data/products/manifest.json", _AU_NSW),
+             _line("/data/mtcat.schema.json", _AU_WA_V6),
+             _line("/data/mtcat.json", _NZ)]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN, au_states=states)
+    assert stats["totals"]["api_requests"] == 3
+    assert stats["countries"] == {"AU": 2, "NZ": 1}
+    assert stats["by_state"] == {"NSW": 1, "WA": 1}
+    assert sum(stats["by_state"].values()) == stats["countries"]["AU"]
+    month = stats["monthly"][0]
+    assert sum(month["by_state"].values()) == month["countries"]["AU"]
+
+
+def test_the_country_total_equals_every_counted_request():
+    """GEO SCOPE PIN. After the API class joined the geo count, the country map must total EXACTLY the
+    counted downloads plus visits plus API requests, so the screen's caption can state its scope and be
+    true. In particular a download that the within-day dedupe collapsed must not leave a stray country
+    behind it. FAILS IF the identity breaks in either direction."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=0),
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=900),   # the same action
+        _line("/data/catalogue.json", "203.0.113.5"),
+        _line("/data/catalogue.json", "1.2.3.0"),
+        _line("/data/mtcat.schema.json", "198.51.100.0"),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    t = stats["totals"]
+    assert sum(stats["countries"].values()) == t["downloads"] + t["visits"] + t["api_requests"]
+    assert t["downloads"] == 1, "the abort-then-refetch pair is one download"
+    assert sum(stats["monthly"][0]["countries"].values()) == 4
+
+
+def test_release_tier_bundles_count_and_attribute_by_bundle_filename():
+    """RELEASE-TIER PIN. A cut release freezes the citable copy of a bundle under
+    /data/releases/<tag>/bundles/, and that is the copy a paper's DOI resolves to, yet the whole family
+    classified as `ignore`: the archival download produced no analytics at all while its mutable twin
+    under /data/bundles/ was counted. A release bundle must count as a download and attribute to its
+    survey by bundle FILENAME against the live manifest; an unmatched filename lands in `unattributed`
+    like any other unknown download. The small release JSONs stay uncounted. FAILS IF a release bundle
+    is dropped, misattributed, or if the release metadata documents start counting as downloads."""
+    assert AGG.classify("/data/releases/v1.2.0/bundles/sample-survey-tf.h5") == (
+        "download", "releases/v1.2.0/bundles/sample-survey-tf.h5")
+    for ignored in ("/data/releases/releases.json", "/data/releases/v1.2.0/release.json",
+                    "/data/releases/v1.2.0/datacite.json", "/data/releases/v1.2.0/mtcat.json",
+                    "/data/releases/v1.2.0/bundles"):
+        assert AGG.classify(ignored) == ("ignore", None), ignored
+
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [_line("/data/releases/v1.2.0/bundles/sample-survey-tf.h5", "203.0.113.5", size=700),
+             _line("/data/releases/v1.2.0/bundles/gone-from-the-manifest.zip", "1.2.3.0", size=9)]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["downloads"] == 2
+    assert stats["totals"]["unattributed"] == 1, "an unmatched release bundle is bucketed, not dropped"
+    assert stats["downloads"]["by_format"] == {"mth5": 1, "unattributed": 1}
+    assert stats["downloads"]["by_kind"] == {"bundle": 1, "unattributed": 1}
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"] == {"downloads": 1, "bytes": 700}
+    row = stats["downloads"]["by_dataset"]["releases/v1.2.0/bundles/sample-survey-tf.h5"]
+    assert row["slug"] == "sample-survey" and row["format"] == "mth5" and row["kind"] == "bundle"
+    assert "bundles/sample-survey-tf.h5" not in stats["downloads"]["by_dataset"], \
+        "the frozen release copy keeps its own row rather than merging into the live one"
+
+
+def test_licence_sidecars_beside_a_bundle_are_not_data_downloads():
+    """SIDECAR PIN. build_portal writes bundles/<slug>-tf.LICENSE.txt beside every survey MTH5 and adds
+    no manifest row for it, so every fetch of one landed in `unattributed`. That bucket exists to
+    detect build/serve skew, and nineteen structural sidecars drown the signal it is there to give.
+    A licence sidecar is boilerplate travelling with the bytes, not a data download, so it is ignored.
+    FAILS IF a sidecar is counted at all, or if the exclusion over-reaches onto a real bundle."""
+    assert AGG.classify("/data/bundles/sample-survey-tf.LICENSE.txt") == ("ignore", None)
+    assert AGG.classify("/data/releases/v1.2.0/bundles/sample-survey-tf.LICENSE.txt") == \
+        ("ignore", None)
+    assert AGG.classify("/data/bundles/sample-survey-tf.h5")[0] == "download"
+    assert AGG.classify("/data/edi/sample-survey/Vulcan_A1.edi")[0] == "download"
+
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    stats = AGG.aggregate(None, [_line("/data/bundles/sample-survey-tf.LICENSE.txt", "203.0.113.5")],
+                          rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["downloads"] == 0 and stats["totals"]["unattributed"] == 0
+    assert stats["countries"] == {}, "an ignored path is dropped before any counter is touched"
+
+
+def test_each_month_records_how_many_of_its_days_carried_geo():
+    """GEO-DAYS PIN. Per-month country counts are forward-only, so a month can hold a full download
+    figure and one day's worth of countries, and an export built from it looks internally consistent
+    while under-reporting. Each month must therefore record how many folded days actually contributed
+    geo, so the partiality is machine-visible and not a matter of reading prose. FAILS IF the counter
+    is absent, counts days with no geo, or double counts a day across runs."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    run1 = dt.datetime(2026, 7, 10, 3, 30, tzinfo=dt.timezone.utc)
+    s1 = AGG.aggregate(None, [_line("/data/catalogue.json", "203.0.113.5", date="2026-07-08"),
+                              _line("/data/catalogue.json", "1.2.3.0", date="2026-07-09")],
+                       rmap, geoip, run1)
+    assert s1["monthly"][0]["geo_days"] == 2
+    s2 = AGG.aggregate(s1, [_line("/data/catalogue.json", "203.0.113.5", date="2026-07-10")],
+                       rmap, geoip, _RUN)
+    assert s2["monthly"][0]["geo_days"] == 3, "a later fold adds only its own new days"
+    s3 = AGG.aggregate(s2, [], rmap, geoip, _RUN)
+    assert s3["monthly"][0]["geo_days"] == 3, "a re-run must not re-count a folded day"
+    # A month seeded from a v1 daily tail carries days it has no geo for: that is the whole point.
+    seeded = AGG.aggregate(_v1_stats(), [], rmap, geoip,
+                           dt.datetime(2026, 7, 11, 3, 30, tzinfo=dt.timezone.utc))
+    assert seeded["monthly"][0]["days"] == 2 and seeded["monthly"][0]["geo_days"] == 0
+
+
+def test_the_honesty_lane_still_leaks_nothing():
+    """LEAK PIN (counting-honesty lane). The new dimensions are a client class label, a status code, a
+    run-local dedupe set and a per-month day count: none of them may put an address or a user-agent
+    into stats.json. The dedupe key in particular is built FROM the masked network and must stay in
+    memory. FAILS IF any of it reaches the emitted file."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    lines = [
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=0),
+        _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=900),
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "2001:db8:1234::", status=206,
+              ua="curl/8.4.0"),
+        _line("/data/mtcat.schema.json", "198.51.100.0", ua="python-requests/2.31.0"),
+        _line("/data/releases/v1.2.0/bundles/sample-survey-edi.zip", "1.2.3.0", ua=""),
+        _line("/data/catalogue.json", "203.0.113.5", ua="Googlebot/2.1"),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN, au_states=states)
+    emitted = json.dumps(stats, indent=1)
+    assert _sweep_ip_or_ua(emitted) == [], emitted
+    assert "downloads_by_client" in stats["totals"]

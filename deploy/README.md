@@ -887,7 +887,10 @@ per-page view is countable (see the caveat above).
 | Downloads **by survey**, count + volume | The manifest reverse map. A whole-survey bundle is credited to its own survey, so the figure is everything served for that survey however it was fetched. |
 | **Format** split (`edi` / `emtfxml` / `mth5` / the bundle zips) | The manifest row's `format`, counted cumulatively, per day and per month. |
 | **Single-station file vs whole-survey bundle** | The manifest row's kind (`files[]` vs `bundles[]`). |
-| **API requests** | Fetches of the two documented machine-readable entry points the portal's own JavaScript never fetches: `/data/products/manifest.json` and `/data/mtcat.json`. A **path class**, not a user-agent test. It is an **upper bound**: the mtcat link is in every page footer, so a human click lands here too. `/data/catalogue.json` stays the visit proxy and `/data/manifest.json` (the SPA's own boot fetch) is deliberately excluded. |
+| **API requests** | Fetches of the three documented machine-readable entry points the portal's own JavaScript never fetches: `/data/products/manifest.json`, `/data/mtcat.json` and `/data/mtcat.schema.json` (the `$id` every validator resolves). A **path class**. It is an **upper bound**: the mtcat link is in every page footer, so a human click lands here too. `/data/catalogue.json` stays the visit proxy and `/data/manifest.json` (the SPA's own boot fetch) is deliberately excluded. |
+| **Client class** | The user-agent resolves to crawler, scripted or browser, read transiently and never stored. Crawlers are excluded from every figure. **Scripted** clients (curl, wget, python-requests, and anything sending no user-agent) are **counted**, and their share of downloads is reported: those are the clients the published API examples hand people, so classing them as robots hid scientific use. |
+| **Download counting** | A download counts **once per day per masked network per file**, and admits status 200 or 206. One save action can log two requests (the browser cancels on the download header, its download manager refetches) and a resumed transfer logs one request per range. Every request's **bytes still sum**, so the volume covers what was actually served. |
+| **Release-tier bundles** | `/data/releases/<tag>/bundles/<file>` counts as a download and attributes to its survey by bundle filename against the live manifest. The frozen citable copy keeps its own row; the release metadata JSONs are not counted. |
 | **Distinct networks** per day | The count of distinct masked networks (the /24 or /48 the edge already wrote) seen that day. The addresses live in memory for the one run that folds the day; only the integer is written. One network can be a whole institution, so read it as reach, not as people. |
 | **Monthly rollups** | Each calendar month is accumulated as its days fold, never recomputed from the daily tail. |
 
@@ -902,6 +905,14 @@ session-gated, and generated from the same `stats.json` the screen renders. When
 breakdown exists (below), `analytics.csv` also gains `au_requests` and one `state_*` column per state
 seen; the `state_*` columns of every row sum to that row's `au_requests` exactly, so a report built
 from the file cannot carry a silent Australian undercount.
+
+**Coverage columns in `analytics.csv`.** Three columns state coverage rather than counts:
+`active_days` (days folded into the month), `days_without_detail` (how many of those predate the
+detailed dimensions) and `geo_days` (how many actually contributed a country). Read `geo_days` beside
+`active_days` before quoting `au_requests`: country counting is forward-only, so a month can hold a
+full download figure and one day's worth of countries. The `state_*` columns still reconcile to
+`au_requests` exactly in that case, which makes the row look self-consistent while under-reporting the
+month. `geo_days` is what makes that visible in the file itself rather than in prose beside it.
 
 **Upgrading an existing box.** The aggregator reads an older `stats.json` tolerantly and upgrades it in
 place on the next fold; there is no migration step and nothing to run by hand. Every existing total,
@@ -1013,7 +1024,7 @@ running) rather than presenting old figures as live.
 | Most Australian traffic lands in **Not in the state table** | The state table is stale or was built from a partial CSV. Re-run `prep_au_states.py` over a fresh db-ip City Lite download. The AU country figure is unaffected; the bucket exists so the breakdown still reconciles with it. |
 | **Counted before state data existed** is a large row | Expected on a box that folded days before the state table was installed. Those days carry no state data and are never backfilled (the raw logs have rotated away). The row shrinks in relative terms as new days fold. |
 | `prep_au_states.py` exits non-zero with "no Australian (AU) state ranges" | The input was not db-ip's **IP to City Lite** CSV (the Country Lite CSV has no state column), or the download is truncated. Nothing was written; re-download and re-run. |
-| Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. |
+| Downloads counted but `unattributed` is high | The served `manifest.json` did not resolve those paths (a build/serve skew, or NCI-tier absolute URLs). Confirm `site-data/current/manifest.json` matches what is served. The licence sidecars beside each survey MTH5 (`bundles/*.LICENSE.txt`) are **not** counted, so they no longer inflate this figure. |
 | Quarterly view says "No monthly rollups yet" | The box has not folded a day since the detailed aggregator was installed. Rollups begin at the next daily fold and fill in one month at a time; earlier months are deliberately **not** backfilled. |
 | A month shows downloads but little or no volume | Some of its days were folded before per-month detail existed. The screen flags exactly those months; the counts are complete, the breakdown covers only the later days. |
 | Per-day "distinct networks" is blank for older days | Those days were folded before the reach proxy existed. It is absent, not zero, and is never backfilled (that would need raw logs which are long gone). |

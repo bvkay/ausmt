@@ -574,3 +574,189 @@ def test_analytics_monthly_csv_has_no_state_columns_without_state_data():
     assert "countries" in header, "the existing columns are untouched"
     # And an entirely absent stats.json still yields a header row alone, not an error.
     assert curatorpage.analytics_monthly_csv(None).strip().splitlines()[0].startswith("month,")
+
+
+# ==================================================================================================
+# Counting-honesty lane (screen half): say what each figure covers, and never render a figure that
+# was not measured.
+#
+# The aggregator half of this lane changed what is counted (client classes, the within-day dedupe,
+# 206, the served schema as an API path, API requests joining the geo count, release bundles). The
+# screen's job is to keep every caption true to that, and to stop presenting a seeded month's zeroes
+# as measurements -- the same omit-rather-than-fabricate rule the state table has always applied.
+# ==================================================================================================
+
+def _seeded_month(month: str = "2026-07", **over) -> dict:
+    """A month whose every folded day predates the detailed dimensions: real downloads and visits,
+    and nothing else measured at all. This is the live July shape that renders '0 / 0' and '0 B'."""
+    row = {"month": month, "downloads": 41, "visits": 160, "download_bytes": 0, "unattributed": 0,
+           "api_requests": 0, "days": 7, "seeded_days": 7, "geo_days": 0,
+           "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_state": {},
+           "downloads_by_client": {}}
+    row.update(over)
+    return row
+
+
+def test_a_fully_seeded_month_says_not_measured_instead_of_rendering_zeroes(tmp_path):
+    """SEEDED-MONTH PIN. A month whose days were ALL folded before the detailed dimensions existed has
+    no volume, no format split, no station/bundle split, no countries and no top survey. Rendering
+    those as '0 B', '0 / 0' and a bare 0 states a measurement that was never taken, which is exactly
+    what the state table refuses to do when it omits itself rather than show eight zeroes. Such a cell
+    must read 'not measured'. FAILS IF a fabricated zero survives, or if the real downloads and visits
+    of that month are suppressed along with them."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            doc = _v2_stats()
+            doc["monthly"] = [_seeded_month()]
+            _write_stats(cfg, doc)
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Quarterly breakdown", 1)[1].split("Downloads by survey", 1)[0]
+            assert table.count("not measured") >= 5, \
+                "every unmeasured metric of a fully seeded month must say so"
+            assert ">0 B<" not in table, "a seeded month has no measured volume to render as 0 B"
+            assert "0 / 0" not in table, "a seeded month has no measured station/bundle split"
+            assert ">41<" in table and ">160<" in table, \
+                "the downloads and visits of a seeded month ARE real and must still render"
+            assert ">7<" in table, "the active-day count is real too"
+    run(_body())
+
+
+def test_a_measured_month_still_renders_its_real_zeroes(tmp_path):
+    """NEGATIVE CONTROL for the pin above. A month that WAS measured and genuinely saw no unattributed
+    downloads must render 0, not 'not measured': the degrade must distinguish 'we did not measure this'
+    from 'we measured it and it was nothing'. FAILS IF the degrade fires on a fully detailed month,
+    which would turn every real zero into a claim of ignorance."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            doc = _v2_stats()
+            doc["monthly"] = [dict(doc["monthly"][0], seeded_days=0, unattributed=0)]
+            _write_stats(cfg, doc)
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Quarterly breakdown", 1)[1].split("Downloads by survey", 1)[0]
+            assert "not measured" not in table, "a fully measured month claims no missing measurement"
+            assert "1.0 MB" in table, "its measured volume still renders"
+    run(_body())
+
+
+def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_path):
+    """DISCLOSURE PIN. Both honesty lines enumerate which dimensions are partial, and both omitted
+    COUNTRIES and UNATTRIBUTED, which is why a month showing 'Countries: 1' beside a headline of 11
+    reads as a bug rather than as the forward-only seam it is. Both lines must name every partial
+    dimension, including the ones this lane added. FAILS IF either line still omits countries or
+    unattributed, or if the new dimensions land undisclosed."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            doc = _v2_stats()
+            doc["monthly"][-1]["seeded_days"] = 3
+            _write_stats(cfg, doc)
+            html = (await client.get("/gateway/curator/analytics")).text
+            caveat = html.split("Per-survey volume", 1)[1].split("</p>", 1)[0]
+            for term in ("countr", "unattributed", "browser", "scripted"):
+                assert term in caveat.lower(), f"the detail caveat must name {term}: {caveat}"
+            assert "onward" in caveat, "the established 'counted from ... onward' pattern must stand"
+            seeded = html.split("folded before the detailed breakdown", 1)[1].split("</p>", 1)[0]
+            for term in ("countr", "unattributed"):
+                assert term in seeded.lower(), f"the seeded-month note must name {term}: {seeded}"
+    run(_body())
+
+
+def test_the_screen_names_the_third_machine_readable_entry_point(tmp_path):
+    """API-SURFACE COPY PIN. The API line now counts three documented entry points, the third being the
+    served JSON Schema every validator resolves from the MTCAT document's own $id. The screen states
+    what the figure covers, so it must name all three or the number means something the reader cannot
+    check. FAILS IF the preamble still claims two, or omits the schema path."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "/data/mtcat.schema.json" in html
+            assert "three documented" in html
+            assert "two documented" not in html
+    run(_body())
+
+
+def test_the_request_scope_captions_include_api_requests(tmp_path):
+    """GEO SCOPE CAPTION PIN. API requests now count toward the country map, so both tables built on
+    that map must say so: the country table and the Australia-by-state table beneath it. Leaving either
+    caption at 'downloads + visits' would understate its own scope, and the two must agree because the
+    state rows reconcile against the AU country row. FAILS IF either caption is stale, or if they
+    disagree."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v3_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "Requests (downloads + visits)" not in html, "the caption must state its real scope"
+            assert html.count("Requests (downloads + visits + API)") == 2, \
+                "the country table and the state table must carry the SAME scope caption"
+    run(_body())
+
+
+def test_the_countries_card_says_it_excludes_unknown(tmp_path):
+    """CARD SCOPE PIN. The Countries card counts distinct codes EXCLUDING 'unknown', while the country
+    table below lists 'unknown' as a row, so the card reads one lower than the table has rows and gets
+    queried every time. The card must say what it excludes. FAILS IF the card label is silent about
+    it."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "Countries (excluding unknown)" in html
+    run(_body())
+
+
+def test_the_reach_note_labels_the_date_it_actually_shows(tmp_path):
+    """REACH LABEL PIN. The reach note called its date 'the most recent folded day', but it is the most
+    recent day carrying a NETWORK COUNT, which on a quiet service can lag the fold watermark by days
+    with nothing on screen saying so. The label must describe the date it shows. FAILS IF the note
+    still claims to be showing the fold watermark."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            doc = _v2_stats()
+            doc["last_folded_date"] = "2026-07-20"      # the watermark has moved well past the last
+            doc["daily"][-1]["date"] = "2026-07-11"     # day that carried a network count
+            _write_stats(cfg, doc)
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "most recent day with a network count" in html
+            assert "most recent folded day" not in html
+    run(_body())
+
+
+def test_the_monthly_csv_exposes_how_many_days_carried_geo(tmp_path):
+    """CSV PARTIALITY PIN. The monthly export derives au_requests from that month's own country map,
+    which is forward-only, so every state_* column reconciles to it exactly while the whole row
+    under-reports the month's Australian traffic. The file looks self-consistent and is wrong, and it
+    is the artefact that leaves the building. A geo_days column makes the partiality machine-visible
+    beside the figure it qualifies. FAILS IF the column is absent or does not carry the aggregator's
+    own count."""
+    doc = _v3_stats()
+    doc["monthly"][0]["geo_days"] = 0                    # May: folded before country counting
+    doc["monthly"][1]["geo_days"] = 29
+    doc["monthly"][2]["geo_days"] = 1                    # July: one day of geo behind 4 folded days
+    body = curatorpage.analytics_monthly_csv(doc)
+    rows = list(csv.DictReader(io.StringIO(body)))
+    header = list(rows[0].keys())
+    assert "geo_days" in header, header
+    assert header.index("geo_days") == header.index("days_without_detail") + 1, \
+        "geo_days belongs beside the other coverage columns, not among the counts"
+    by_month = {r["month"]: r for r in rows}
+    assert by_month["2026-05"]["geo_days"] == "0"
+    assert by_month["2026-07"]["geo_days"] == "1" and by_month["2026-07"]["active_days"] == "4"
+    assert by_month["2026-07"]["au_requests"] == "200", "the AU figure itself is unchanged"
+
+
+def test_the_monthly_csv_tolerates_a_month_written_before_geo_days_existed():
+    """CSV TOLERANCE PIN. geo_days is an additive column, so a retained month written before it existed
+    must export as 0 rather than blanking the row or raising. FAILS IF an older month row breaks the
+    export."""
+    doc = _v2_stats()
+    for row in doc["monthly"]:
+        row.pop("geo_days", None)
+    rows = list(csv.DictReader(io.StringIO(curatorpage.analytics_monthly_csv(doc))))
+    assert all(r["geo_days"] == "0" for r in rows), rows

@@ -11,16 +11,23 @@ WHAT IT DOES, once a day:
   * reads the Caddy access-log file(s) under the logs volume: access.json plus any rolled sibling,
     plain (access*.json) or compressed (access*.json.gz). See read_log_lines for why the compressed
     arm exists even though the shipped Caddyfiles now roll uncompressed;
-  * attributes each DOWNLOAD request (`/data/edi|xml|bundles/...`) to a survey/station/format via
-    manifest.json's reverse map (url -> row). An unknown download path lands in an `unattributed`
-    bucket — never dropped silently;
+  * attributes each DOWNLOAD request (`/data/edi|xml|bundles/...`, plus a frozen release bundle under
+    `/data/releases/<tag>/bundles/...`) to a survey/station/format via manifest.json's reverse map
+    (url -> row). An unknown download path lands in an `unattributed` bucket, never dropped silently;
+  * counts a download ONCE per (day, masked network, path) while summing the bytes of every line, so
+    one user action that the log records twice is one download (see `aggregate` for the two shapes
+    that produce it), and admits 206 as well as 200 so a ranged/resumed transfer is not invisible;
+  * classifies the CLIENT three ways from the user-agent (crawler / scripted / browser): crawlers are
+    excluded from every count as bots always were, scripted clients ARE counted and their share of
+    downloads is reported, because curl/wget/python-requests are the clients the published API examples
+    hand people. The UA is read transiently and never stored;
   * counts portal VISITS as `/data/catalogue.json` fetches (one per SPA boot — the only
     server-observable visit proxy, record D3);
-  * counts API-CONSUMER requests as fetches of the two DOCUMENTED machine-readable entry points the
-    portal SPA never fetches for itself (`/data/products/manifest.json`, `/data/mtcat.json`). This is a
-    PATH-CLASS signal only: no user-agent is inspected, nothing new is collected. It is an upper bound
-    on programmatic use (a human can click the footer's mtcat link) and is reported as its own line,
-    never folded into visits;
+  * counts API-CONSUMER requests as fetches of the three DOCUMENTED machine-readable entry points the
+    portal SPA never fetches for itself (`/data/products/manifest.json`, `/data/mtcat.json`,
+    `/data/mtcat.schema.json`). This is a PATH-CLASS signal only: nothing new is collected. It is an
+    upper bound on programmatic use (a human can click the footer's mtcat link) and is reported as its
+    own line, never folded into visits;
   * counts DISTINCT MASKED NETWORKS per day as a privacy-safe reach proxy. Caddy has already truncated
     the address to a /24 (v4) or /48 (v6) at the edge, so the distinct set IS a network count. The set
     lives in memory for the one run that folds a day and only its SIZE is written -- no address, masked
@@ -107,6 +114,25 @@ _DOWNLOAD_FAMILIES = ("edi", "xml", "bundles")
 _DATA_PREFIX = "/data/"
 _VISIT_PATH = "/data/catalogue.json"
 
+# The RELEASE tier. A cut release freezes the citable copy of each bundle under
+# /data/releases/<tag>/bundles/<file>, and that frozen copy is the one a paper's DOI resolves to. It
+# used to classify as `ignore`, so the archival download produced no analytics at all while its
+# mutable twin under /data/bundles/ was counted: exactly the wrong way round for a custodian report.
+# It is a download here, attributed by bundle FILENAME against the live manifest (see
+# _release_bundle_row). The small release metadata documents (releases.json, release.json,
+# datacite.json, mtcat.json under /data/releases/) stay UNCOUNTED for now: they are discovery reads
+# rather than data downloads, and folding them into either the download or the API line would blur a
+# figure that is already an upper bound.
+_RELEASE_FAMILY = "releases"
+_RELEASE_BUNDLE_SEGMENT = "bundles"
+
+# The licence sidecar build_portal writes beside every survey MTH5 (bundles/<slug>-tf.LICENSE.txt).
+# It carries no manifest row, so every fetch of one landed in `unattributed` -- and `unattributed`
+# exists to detect build/serve skew, a signal nineteen structural sidecars drown. Boilerplate that
+# travels with the bytes is not a data download, so it is ignored here. Aggregator-side deliberately:
+# the engine keeps writing the sidecar, because the rights instrument must ship beside the file.
+_LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
+
 # The API-CONSUMER path class: the documented machine-readable entry points that the portal's OWN
 # JavaScript never fetches, so a hit is a third party reading the corpus programmatically rather than a
 # browser booting the SPA. Verified against the shipped portal tree, and the exclusions are the point:
@@ -115,15 +141,32 @@ _VISIT_PATH = "/data/catalogue.json"
 #     are all fetched by portal/src/data.js on every SPA boot -- they measure browsers, not consumers;
 #   * /data/products/<slug>/<station>/station.json is fetched by portal/src/drawer.js when a station
 #     drawer opens -- also a browser.
-# What is left is the pair About documents as the programmatic surface. This is a PATH CLASS, never a
-# user-agent test, and it is an UPPER BOUND: the mtcat link sits in every page footer, so a human click
-# lands here too. Reported as its own line, never merged into visits.
-_API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json")
+# What is left is the trio About documents as the programmatic surface. The third, mtcat.schema.json,
+# is the `$id` the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and
+# every harvester that resolves the schema fetches it: the cleanest machine-consumer signal the corpus
+# has, and the one that was counted nowhere. This is a PATH CLASS, never a user-agent test, and it is
+# an UPPER BOUND: the mtcat link sits in every page footer, so a human click lands here too. Reported
+# as its own line, never merged into visits.
+_API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json", "/data/mtcat.schema.json")
 
-# A conservative bot filter (record D2: "user-agent for bot filtering only"). The UA is read
-# transiently and NEVER stored. Kept small and lower-cased; aggregate reporting tolerates the margin.
-_BOT_TOKENS = ("bot", "spider", "crawl", "slurp", "bingpreview", "facebookexternalhit",
-               "headlesschrome", "python-requests", "curl/", "wget/", "monitoring", "uptime")
+# CLIENT CLASSES (record D2: "user-agent for bot filtering only" -- read transiently, NEVER stored).
+# The old binary was bot-or-human, which put curl, wget and python-requests on the bot side. Those are
+# the exact clients the public API documentation hands people, so scripted scientific use was invisible
+# and the API-requests figure degenerated toward a footer-click counter. Three classes now:
+#   * CRAWLER -- excluded from every count, as bots always were. Self-declaring indexers, previewers,
+#     scanners and uptime probes;
+#   * SCRIPTED -- COUNTED, and reported separately for downloads. A documented HTTP client, or NO
+#     user-agent at all (a UA-less client is a script, never a person at a browser);
+#   * BROWSER -- everything else.
+# Substring match on the lower-cased UA, crawler tested first so a crawler that also names an HTTP
+# library stays excluded. Kept small; aggregate reporting tolerates the margin.
+_CRAWLER_TOKENS = ("bot", "spider", "crawl", "slurp", "bingpreview", "facebookexternalhit",
+                   "headlesschrome", "monitoring", "uptime", "scrapy", "zgrab")
+_SCRIPTED_TOKENS = ("curl/", "wget/", "python-requests", "python-urllib", "go-http-client", "okhttp",
+                    "java/", "axios", "node-fetch", "libwww", "aria2", "apache-httpclient", "httpx")
+CLIENT_CRAWLER = "crawler"
+CLIENT_SCRIPTED = "scripted"
+CLIENT_BROWSER = "browser"
 
 
 # --------------------------------------------------------------------------------------------------
@@ -399,28 +442,71 @@ def _ts_to_date(ts) -> str | None:
     return None
 
 
-def is_bot(ua: str) -> bool:
-    u = (ua or "").lower()
-    return any(tok in u for tok in _BOT_TOKENS)
+def classify_client(ua: str) -> str:
+    """CLIENT_CRAWLER / CLIENT_SCRIPTED / CLIENT_BROWSER for a user-agent string, read transiently and
+    never stored. An EMPTY or absent UA is SCRIPTED: a client that declares nothing is a script, and
+    treating it as a person was the old filter's other blind spot."""
+    u = (ua or "").strip().lower()
+    if not u:
+        return CLIENT_SCRIPTED
+    if any(tok in u for tok in _CRAWLER_TOKENS):
+        return CLIENT_CRAWLER
+    if any(tok in u for tok in _SCRIPTED_TOKENS):
+        return CLIENT_SCRIPTED
+    return CLIENT_BROWSER
+
+
+def _is_licence_sidecar(rel: str) -> bool:
+    """True for a `.../bundles/<name>.LICENSE.txt` sidecar: the rights instrument written beside a
+    bundle, in the live tree or a frozen release. Not a data download (see _LICENCE_SIDECAR_SUFFIX)."""
+    parts = rel.split("/")
+    return (len(parts) >= 2 and parts[-2] == _RELEASE_BUNDLE_SEGMENT
+            and parts[-1].endswith(_LICENCE_SIDECAR_SUFFIX))
 
 
 def classify(path: str) -> tuple[str, str | None]:
     """(kind, rel) for a request path: ('visit', None) for the catalogue fetch; ('api', None) for one of
     the documented machine-readable entry points the SPA never fetches itself; ('download', rel) for a
-    `/data/edi|xml|bundles/...` path where rel is the manifest-relative url; ('ignore', None) otherwise.
+    `/data/edi|xml|bundles/...` or `/data/releases/<tag>/bundles/<file>` path where rel is the path
+    below /data/; ('ignore', None) otherwise.
 
-    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the two API paths, and the three
-    download families are disjoint), so no request is ever counted twice."""
+    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the three API paths, the three
+    download families and the release-bundle shape are disjoint), so no request is ever counted twice."""
     if path == _VISIT_PATH:
         return "visit", None
     if path in _API_PATHS:
         return "api", None
     if path.startswith(_DATA_PREFIX):
         rel = path[len(_DATA_PREFIX):]
+        if _is_licence_sidecar(rel):
+            return "ignore", None
         family = rel.split("/", 1)[0]
         if family in _DOWNLOAD_FAMILIES and "/" in rel:
             return "download", rel
+        # releases/<tag>/bundles/<file> -- the frozen citable copy. Exactly four segments: the release
+        # metadata documents beside it (releases.json, release.json, datacite.json, mtcat.json) and the
+        # bare directory listing all fall short of that shape and stay ignored.
+        parts = rel.split("/")
+        if (family == _RELEASE_FAMILY and len(parts) == 4
+                and parts[2] == _RELEASE_BUNDLE_SEGMENT and parts[3]):
+            return "download", rel
     return "ignore", None
+
+
+def _release_bundle_row(reverse_map: dict[str, dict], rel: str) -> dict | None:
+    """The manifest row for a `releases/<tag>/bundles/<file>` path, matched by bundle FILENAME against
+    the LIVE manifest, or None when the filename is not one the current build ships.
+
+    A release freezes bytes under a tag-scoped url the manifest never carries, so the ordinary
+    reverse-map lookup always misses. The filename is the stable identity across the freeze (cut_release
+    copies the bundle verbatim), which makes it the right join key. A no-match falls through to the
+    existing `unattributed` bucket exactly like any other unknown download path -- a withdrawn or
+    renamed survey therefore shows up as skew rather than being silently dropped. The frozen copy keeps
+    its OWN by_dataset key, so a release's usage stays distinguishable from the live copy's."""
+    parts = rel.split("/")
+    if len(parts) != 4 or parts[0] != _RELEASE_FAMILY or parts[2] != _RELEASE_BUNDLE_SEGMENT:
+        return None
+    return reverse_map.get(f"{_RELEASE_BUNDLE_SEGMENT}/{parts[3]}")
 
 
 # --------------------------------------------------------------------------------------------------
@@ -431,7 +517,7 @@ def _empty_stats() -> dict:
     return {"schema": SCHEMA_VERSION, "timer_period_min": TIMER_PERIOD_MIN, "generated_at": None,
             "since": None, "last_folded_date": None, "detail_since": None,
             "totals": {"downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
-                       "api_requests": 0},
+                       "api_requests": 0, "downloads_by_client": {}},
             "downloads": {"by_format": {}, "by_survey": {}, "by_dataset": {}, "by_kind": {}},
             "countries": {}, "by_state": {}, "daily": [], "monthly": []}
 
@@ -439,10 +525,13 @@ def _empty_stats() -> dict:
 def _empty_month(month: str) -> dict:
     """One calendar-month rollup row. `days` counts the distinct dates with counted activity folded into
     it; `seeded_days` records how many of those came from a pre-upgrade daily row (downloads + visits
-    only), so the screen can say which months carry partial detail instead of implying a real zero."""
+    only), so the screen can say which months carry partial detail instead of implying a real zero;
+    `geo_days` counts the days that actually contributed a country, which is what makes the forward-only
+    country seam MACHINE-visible rather than a matter of reading the prose beside the table."""
     return {"month": month, "downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
-            "api_requests": 0, "days": 0, "seeded_days": 0,
-            "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_state": {}}
+            "api_requests": 0, "days": 0, "seeded_days": 0, "geo_days": 0,
+            "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_state": {},
+            "downloads_by_client": {}}
 
 
 def _as_int(v, default: int = 0) -> int:
@@ -508,9 +597,9 @@ def _coerce_month_rows(raw) -> list[dict]:
             continue
         m = _empty_month(row["month"])
         for k in ("downloads", "visits", "download_bytes", "unattributed", "api_requests",
-                  "days", "seeded_days"):
+                  "days", "seeded_days", "geo_days"):
             m[k] = _as_int(row.get(k))
-        for k in ("formats", "kinds", "countries", "by_state"):
+        for k in ("formats", "kinds", "countries", "by_state", "downloads_by_client"):
             if isinstance(row.get(k), dict):
                 m[k] = {str(kk): _as_int(vv) for kk, vv in row[k].items()}
         m["surveys"] = _coerce_survey_map(row.get("surveys"))
@@ -563,6 +652,13 @@ def _coerce_prev(prev: dict | None) -> dict:
         for k in s["totals"]:
             if isinstance(pt.get(k), int):
                 s["totals"][k] = pt[k]
+        # The browser/scripted split is an ADDITIVE dimension detected by key presence, like by_state.
+        # A file written before it existed simply starts empty: its historical downloads stay in the
+        # headline total and are NOT divided between the two classes, because nothing recorded which
+        # they were and the raw logs that could say have long since rotated away.
+        if isinstance(pt.get("downloads_by_client"), dict):
+            s["totals"]["downloads_by_client"] = {str(k): _as_int(v)
+                                                  for k, v in pt["downloads_by_client"].items()}
     pd = prev.get("downloads")
     if isinstance(pd, dict):
         if isinstance(pd.get("by_format"), dict):
@@ -611,6 +707,19 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     later) is what lets the daily window be pruned to `daily_keep` days while the monthly history stays
     complete and permanent.
 
+    ADMISSION, and what each rule is protecting:
+      * CRAWLERS are excluded and SCRIPTED clients are counted (see classify_client). A download's
+        client class is also recorded, so the scripted share is reportable rather than merely admitted;
+      * a DOWNLOAD admits 200 and 206. Caddy's file_server advertises byte ranges and the MTH5 bundles
+        are the largest artifacts served, so 200-only made every resumed or ranged transfer vanish;
+      * within ONE folded day an identical (masked network, path) counts ONCE toward the download COUNT
+        while every line's BYTES still sum. One user action logs two lines on a Content-Disposition
+        path (the renderer cancels, the download manager refetches) and a ranged transfer logs one line
+        per fragment; counting each line was a straight double count of the headline figure. Visits and
+        API requests are NOT deduped: each SPA boot and each API fetch really is another use.
+      The dedupe set is run-local exactly like `networks_seen`: it is built FROM the masked network and
+      nothing derived from an address is ever written.
+
     `au_states` is the OPTIONAL AU state table. When it is present, a request that classifies as AU also
     lands in a state bucket -- cumulatively and in its calendar month, never on the day row; when it is
     absent the fold is country-only and writes no state buckets at all: absent, never a zero (see
@@ -633,9 +742,17 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # to a /24 (v4) or /48 (v6), so the distinct set is a network count. Only its SIZE is ever written;
     # the sets die with the process. A day folds exactly once, so one run sees all of that day's lines.
     networks_seen: dict[str, set] = {}
+    # date -> set of (masked network, download path) already counted on it, for THIS run only. This is
+    # the within-day download dedupe; like networks_seen it is built from the masked address the edge
+    # already wrote, it is never written anywhere, and it dies with the process.
+    downloads_seen: dict[str, set] = {}
     # date -> month, for the "distinct active days per month" counter (a day counts once per month even
     # though it contributes many requests).
     days_seen: dict[str, str] = {}
+    # date -> month, for the per-month count of days that actually contributed a country. Country
+    # counting is forward-only, so a month can carry a full download figure beside one day of geo; this
+    # is what lets the export state that rather than look self-consistent while under-reporting.
+    geo_days_seen: dict[str, str] = {}
 
     for raw in lines:
         rec = parse_caddy_line(raw) if isinstance(raw, str) else None
@@ -649,7 +766,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             continue
         if rec["method"] not in ("GET", ""):
             continue
-        if is_bot(rec["ua"]):
+        client = classify_client(rec["ua"])
+        if client == CLIENT_CRAWLER:
             continue
         kind, rel = classify(rec["path"])
         if kind == "ignore":
@@ -657,7 +775,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         if kind in ("visit", "api"):
             if rec["status"] not in (200, 304):
                 continue
-        elif rec["status"] != 200:              # download: only a completed full transfer counts
+        elif rec["status"] not in (200, 206):   # download: a complete OR a ranged/resumed transfer
             continue
         day = _day_row(daily_index, stats["daily"], date)
         month = _month_row(month_index, stats["monthly"], date[:7])
@@ -669,18 +787,33 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             day["visits"] += 1
             month["visits"] += 1
             _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
+            geo_days_seen[date] = date[:7]
         elif kind == "api":
             totals["api_requests"] += 1
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
             month["api_requests"] += 1
+            # The API line used to be the one counted class with no geography, so any reach claim built
+            # from the country table silently excluded programmatic consumers.
+            _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
+            geo_days_seen[date] = date[:7]
         else:
             size = max(rec["size"], 0)
-            totals["downloads"] += 1
+            # WITHIN-DAY DEDUPE. The bytes of every admitted line sum (so an abort+refetch pair and a
+            # set of range fragments both add up to roughly the real volume), but the COUNT increments
+            # only the first time this network fetched this path today.
+            dedupe_key = (rec["address"] or "", rel)
+            counted = dedupe_key not in downloads_seen.setdefault(date, set())
+            downloads_seen[date].add(dedupe_key)
+            n = 1 if counted else 0
+            totals["downloads"] += n
             totals["download_bytes"] += size
-            row = reverse_map.get(rel)
+            if counted:
+                _bump(totals["downloads_by_client"], client)
+                _bump(month["downloads_by_client"], client)
+            row = reverse_map.get(rel) or _release_bundle_row(reverse_map, rel)
             if row is None:
-                totals["unattributed"] += 1
-                month["unattributed"] += 1
+                totals["unattributed"] += n
+                month["unattributed"] += n
                 fmt = "unattributed"
                 survey = None
                 kind_key = "unattributed"
@@ -695,24 +828,29 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 if d is None:
                     by_dataset[rel] = {"survey": survey, "station": row.get("station"),
                                        "slug": row.get("slug"), "format": fmt, "kind": kind_key,
-                                       "downloads": 1, "bytes": size}
+                                       "downloads": n, "bytes": size}
                 else:
-                    d["downloads"] = _as_int(d.get("downloads")) + 1
+                    d["downloads"] = _as_int(d.get("downloads")) + n
                     d["bytes"] = _as_int(d.get("bytes")) + size
-            by_format[fmt] = by_format.get(fmt, 0) + 1
-            by_kind[kind_key] = by_kind.get(kind_key, 0) + 1
-            day["downloads"] += 1
+            if counted:
+                by_format[fmt] = by_format.get(fmt, 0) + 1
+                by_kind[kind_key] = by_kind.get(kind_key, 0) + 1
+                _bump(day.setdefault("formats", {}), fmt)
+                _bump(day.setdefault("kinds", {}), kind_key)
+                _bump(month["formats"], fmt)
+                _bump(month["kinds"], kind_key)
+            day["downloads"] += n
             day["download_bytes"] = _as_int(day.get("download_bytes")) + size
-            _bump(day.setdefault("formats", {}), fmt)
-            _bump(day.setdefault("kinds", {}), kind_key)
-            month["downloads"] += 1
+            month["downloads"] += n
             month["download_bytes"] += size
-            _bump(month["formats"], fmt)
-            _bump(month["kinds"], kind_key)
             if survey:
-                _bump_survey(by_survey, survey, size)
-                _bump_survey(month["surveys"], survey, size)
-            _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
+                _bump_survey(by_survey, survey, size, counted=counted)
+                _bump_survey(month["surveys"], survey, size, counted=counted)
+            # Geography follows the COUNT, not the line, so `sum(countries.values())` stays exactly
+            # downloads + visits + API requests and the table caption can say so and be true.
+            if counted:
+                _count_geo(geoip, au_states, rec["address"], countries, by_state, month)
+                geo_days_seen[date] = date[:7]
 
     # Distinct-network counts for the days folded in THIS run. Only the SIZE of each set is written --
     # the masked addresses themselves never leave memory (record D2/D6).
@@ -723,6 +861,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # One increment per distinct ACTIVE date, so a month row records how much of itself it covers.
     for month_key in days_seen.values():
         month_index[month_key]["days"] += 1
+    # One increment per distinct date that actually contributed a country to this month.
+    for month_key in geo_days_seen.values():
+        month_index[month_key]["geo_days"] = _as_int(month_index[month_key].get("geo_days")) + 1
 
     # Advance the fold watermark to the run's date-1 (the cutoff), always — a window with no lines
     # still advances so old dates are never re-scanned.
@@ -748,15 +889,19 @@ def _bump(counter: dict, key: str, n: int = 1) -> None:
     counter[key] = _as_int(counter.get(key)) + n
 
 
-def _bump_survey(index: dict, survey: str, size: int) -> None:
-    """One download of `size` bytes against `survey` in a {survey: {downloads, bytes}} map. Bundles land
-    here under their OWN survey (the manifest bundle row carries it), so a whole-survey package download
-    is credited to that survey exactly like a per-station file."""
+def _bump_survey(index: dict, survey: str, size: int, *, counted: bool = True) -> None:
+    """One download line of `size` bytes against `survey` in a {survey: {downloads, bytes}} map. Bundles
+    land here under their OWN survey (the manifest bundle row carries it), so a whole-survey package
+    download is credited to that survey exactly like a per-station file.
+
+    `counted` is False for a line the within-day dedupe already saw (the second leg of an abort+refetch
+    pair, a further range fragment): its BYTES still sum, because they really were served, but it adds
+    no second download to the survey's count."""
     row = index.get(survey)
     if not isinstance(row, dict):
         row = {"downloads": _as_int(row), "bytes": 0}
         index[survey] = row
-    row["downloads"] = _as_int(row.get("downloads")) + 1
+    row["downloads"] = _as_int(row.get("downloads")) + (1 if counted else 0)
     row["bytes"] = _as_int(row.get("bytes")) + size
 
 
