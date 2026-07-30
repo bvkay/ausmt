@@ -69,7 +69,12 @@
 	# and Cookie / Authorization / Set-Cookie (session tokens / credentials) are all deleted. What
 	# remains (User-Agent for bot filtering, Accept*, etc.) is non-PII. The server terminates plain
 	# HTTP on :8080 (TLS is tailscale's), so there is no request>tls block to leak. Rotation + a 7-day
-	# retention (roll_keep_for 168h) are Caddy's own roll options — no logrotate, no cron.
+	# retention (roll_keep_for 168h) are Caddy's own roll options: no logrotate, no cron.
+	#
+	# ROLLED FILES STAY PLAIN JSON (roll_uncompressed). Caddy gzips a rolled log by default, and the
+	# daily fold globs `access*.json` while the front-door ship filter matches the same plain name, so
+	# a compressed roll would be read by nobody. That is not a late fold, it is a lost one: the fold
+	# advances its watermark past a day whether or not it saw any lines for it.
 	#
 	# ip_mask requires Caddy >= 2.5 (the base image is caddy:2-alpine, current 2.x). The block is
 	# validated at image build by `caddy validate` (portal.Dockerfile), so a syntax slip fails the
@@ -79,6 +84,7 @@
 			roll_size 10mb
 			roll_keep 5
 			roll_keep_for 168h
+			roll_uncompressed
 		}
 		format filter {
 			wrap json

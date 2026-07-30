@@ -10,6 +10,7 @@ network), so it never trips the CI skip tripwire.
 from __future__ import annotations
 
 import datetime as dt
+import gzip
 import importlib.util
 import json
 import re
@@ -209,6 +210,67 @@ def test_absent_log_is_tolerated(tmp_path):
     assert stats["totals"]["downloads"] == 0 and stats["totals"]["visits"] == 0
     assert stats["last_folded_date"] == "2026-07-11"   # advanced to run-date-1 even with no lines
     assert stats["generated_at"] == "2026-07-12T03:30:00Z"
+
+
+def test_rolled_plain_json_siblings_are_read_beside_the_live_log(tmp_path):
+    """ROLLED-SIBLING PIN. Caddy rolls access.json to a timestamped sibling, and the fold reads a day
+    exactly once, so a roll that the glob misses loses those lines permanently (the watermark advances
+    regardless). Every plain rolled sibling must therefore be read alongside the live file. FAILS IF
+    the glob only picks up the live access.json."""
+    logdir = tmp_path / "caddy"
+    logdir.mkdir()
+    (logdir / "access.json").write_text(
+        _line("/data/catalogue.json", "203.0.113.5") + "\n", encoding="utf-8")
+    (logdir / "access-2026-07-10T03-25-11.004.json").write_text(
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5") + "\n", encoding="utf-8")
+    lines = AGG.read_log_lines(logdir)
+    assert len(lines) == 2, lines
+    stats = AGG.aggregate(None, lines, AGG.build_reverse_map(
+        json.loads(_MANIFEST.read_text(encoding="utf-8"))), AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["visits"] == 1 and stats["totals"]["downloads"] == 1
+
+
+def test_compressed_rolled_logs_are_folded_and_a_corrupt_archive_is_skipped(tmp_path):
+    """GZIP-ROLL PIN. Caddy COMPRESSES a rolled log unless `roll_uncompressed` is set, so a box that
+    rolled before that setting shipped (or an operator hand-placing a salvaged archive) has whole days
+    sitting in access*.json.gz. The fold reads a day once and then advances its watermark past it, so a
+    .gz the glob never opens is a day lost for good. Every compressed sibling must be read, and a
+    corrupt/truncated archive must be skipped SILENTLY without costing the readable ones. FAILS IF a
+    .gz roll is ignored, or if one bad archive raises or suppresses the good ones."""
+    logdir = tmp_path / "caddy"
+    logdir.mkdir()
+    (logdir / "access.json").write_text(
+        _line("/data/catalogue.json", "203.0.113.5") + "\n", encoding="utf-8")
+    with gzip.open(logdir / "access-2026-07-09T03-25-02.001.json.gz", "wt", encoding="utf-8") as fh:
+        fh.write(_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-09") + "\n")
+    with gzip.open(logdir / "access-frontdoor-2026-07-10T03-25-07.002.json.gz", "wt",
+                   encoding="utf-8") as fh:
+        fh.write(_line("/data/xml/sample-survey/A2.xml", "1.2.3.0", date="2026-07-10") + "\n")
+    # A corrupt archive beside them: plain text under a .gz name, exactly what a truncated pull leaves.
+    (logdir / "access-2026-07-08T03-25-00.000.json.gz").write_text("not gzip at all\n", encoding="utf-8")
+
+    lines = AGG.read_log_lines(logdir)
+    assert len(lines) == 3, f"the two readable archives plus the live file must all be read: {lines}"
+    stats = AGG.aggregate(None, lines, AGG.build_reverse_map(
+        json.loads(_MANIFEST.read_text(encoding="utf-8"))), AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["downloads"] == 2, "both compressed days must fold"
+    assert stats["totals"]["visits"] == 1
+    assert {d["date"] for d in stats["daily"]} == {"2026-07-09", "2026-07-10"}
+
+
+def test_a_compressed_log_is_not_also_read_as_a_plain_one(tmp_path):
+    """DOUBLE-READ PIN. The plain glob and the compressed glob must be disjoint: `access*.json` must
+    not also match `access*.json.gz`, or every gzipped roll would be read twice (once as binary
+    garbage, once decompressed) and its day would double-count. FAILS IF the same archive is read by
+    both arms."""
+    logdir = tmp_path / "caddy"
+    logdir.mkdir()
+    with gzip.open(logdir / "access-2026-07-10T03-25-02.001.json.gz", "wt", encoding="utf-8") as fh:
+        fh.write(_line("/data/catalogue.json", "203.0.113.5") + "\n")
+    lines = AGG.read_log_lines(logdir)
+    assert len(lines) == 1, f"the archive must be read exactly once: {lines}"
+    stats = AGG.aggregate(None, lines, {}, AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["visits"] == 1
 
 
 # --------------------------------------------------------------------------------------------------

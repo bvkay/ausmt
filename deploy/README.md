@@ -869,6 +869,13 @@ daily series — **never an address (masked or not) and never a user-agent**.
 daily and the raw lines are **not** the database: once a day is folded into `stats.json` the log is no
 longer needed, and the aggregator tolerates an already-rotated / absent log without error.
 
+**Rolled files stay plain JSON** (`roll_uncompressed`, set in both Caddyfiles). Caddy gzips a rolled
+log by default, and both consumers key on the plain `.json` name: the fold globs `access*.json` and the
+front-door pull filters on `access-frontdoor*.json`. A gzipped roll would therefore be read by neither,
+and that is a lost day rather than a late one, because the fold advances its watermark past a day
+whether or not it saw any lines for it. For the transition window (and for an archive recovered by
+hand) the aggregator also reads `access*.json.gz`, and the front-door pull also includes that family.
+
 #### What the screen reports (funding detail)
 
 Everything below is derived from what the fold already reads: the request **path**, the **masked**

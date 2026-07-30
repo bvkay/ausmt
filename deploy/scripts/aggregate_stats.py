@@ -8,7 +8,9 @@ everything and exits 0), writes atomically (tmp -> chmod 0644 -> os.replace), an
 UTC timestamp so the gateway's staleness clock parses it identically.
 
 WHAT IT DOES, once a day:
-  * reads the Caddy access-log file(s) under the logs volume (access.json + any rolled siblings);
+  * reads the Caddy access-log file(s) under the logs volume: access.json plus any rolled sibling,
+    plain (access*.json) or compressed (access*.json.gz). See read_log_lines for why the compressed
+    arm exists even though the shipped Caddyfiles now roll uncompressed;
   * attributes each DOWNLOAD request (`/data/edi|xml|bundles/...`) to a survey/station/format via
     manifest.json's reverse map (url -> row). An unknown download path lands in an `unattributed`
     bucket — never dropped silently;
@@ -69,10 +71,12 @@ import bisect
 import csv
 import datetime as dt
 import glob
+import gzip
 import ipaddress
 import json
 import os
 import sys
+import zlib
 from pathlib import Path
 
 # The daily aggregation cadence, in minutes — stamped into stats.json as the staleness clock the
@@ -830,9 +834,21 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 # I/O: read the log dir, load inputs, write stats.json atomically (tmp -> chmod 0644 -> os.replace).
 # --------------------------------------------------------------------------------------------------
 def read_log_lines(log_dir) -> list[str]:
-    """Every line of every Caddy access-log file under `log_dir` (access.json + rolled siblings
-    access*.json). Tolerant of an absent dir / already-rotated files (record D6 retention pin): a
-    missing dir or unreadable file yields no lines, never an exception."""
+    """Every line of every Caddy access-log file under `log_dir`: the live access.json, its PLAIN
+    rolled siblings (access*.json / access*.log), and its COMPRESSED rolled siblings (access*.json.gz).
+
+    The compressed arm is the salvage path. Caddy gzips a rolled log unless `roll_uncompressed` is set,
+    which both shipped Caddyfiles now do, so new rolls stay plain and both this glob and the front-door
+    ship filter see them. A box that rolled BEFORE that setting shipped, or an operator placing a
+    recovered archive by hand, still has whole days sitting in .gz. Reading them here matters more than
+    it looks: a day is folded exactly once and the watermark then advances past it regardless (see
+    `aggregate`), so a roll this function never opens is not late data, it is lost data.
+
+    The two globs are DISJOINT by construction (`access*.json` cannot match a name ending `.json.gz`),
+    so no archive is read twice.
+
+    Tolerant, as the whole file is (record D6 retention pin): a missing dir, an unreadable file, or a
+    truncated/non-gzip archive contributes no lines from THAT file and never raises."""
     lines: list[str] = []
     if not log_dir:
         return lines
@@ -845,6 +861,14 @@ def read_log_lines(log_dir) -> list[str]:
             with open(f, encoding="utf-8", errors="replace") as fh:
                 lines.extend(fh.read().splitlines())
         except OSError:
+            continue
+    for f in sorted(glob.glob(str(d / "access*.json.gz"))):
+        try:
+            with gzip.open(f, "rt", encoding="utf-8", errors="replace") as fh:
+                lines.extend(fh.read().splitlines())
+        except (OSError, EOFError, zlib.error):
+            # Not a gzip stream, truncated, or corrupt mid-stream. Skip this archive and keep the
+            # readable ones: one bad file must never cost a whole fold (gzip.BadGzipFile is an OSError).
             continue
     return lines
 

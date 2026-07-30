@@ -65,11 +65,18 @@ mkdir -p "$DEST"
 # siblings) so nothing else on the VPS log dir is dragged in and the box's own access.json is never
 # touched. -a preserves times (idempotent re-copies are no-ops); -z compresses over the wire; the
 # trailing slash on the remote path copies the DIRECTORY CONTENTS (filtered), not the dir itself.
+#
+# The .gz include is the SALVAGE arm. The front-door Caddyfile sets roll_uncompressed so a new roll
+# stays plain, but a roll written before that setting is gzipped, and rsync filters are
+# first-match-wins: without an explicit include ahead of the catch-all exclude those archives never
+# leave the VPS, and its own 7-day retention then deletes them. The aggregator reads access*.json.gz
+# on the box for the same reason.
 # shellcheck disable=SC2086 -- RSYNC_CMD / SSH_CMD may be multi-word overrides (tests pass `sh shim.sh`).
 log "pulling access-frontdoor logs from $REMOTE -> $DEST"
 $RSYNC_CMD -az \
   -e "$SSH_CMD" \
   --include='access-frontdoor*.json' \
+  --include='access-frontdoor*.json.gz' \
   --exclude='*' \
   "$REMOTE/" "$DEST/" \
   || die "rsync of front-door logs failed — check the tailnet, the ssh key, and the ACL (box -> VPS:22)."
