@@ -213,9 +213,11 @@ building.
 
 ### Deploy note
 
-`caddy validate` does not run on a dev box, so the two Caddyfile changes (`roll_uncompressed`, the
-release force-download pattern) are pinned by config assertions in `deploy/tests`; the image build's
-own `caddy validate` is the syntax gate.
+The two Caddyfile changes (`roll_uncompressed`, the release force-download pattern) are pinned by
+config assertions in `deploy/tests`, and by a live `caddy validate` leg that runs wherever a caddy
+binary is on PATH (`test_caddy_log_masking.py`, `test_frontdoor_bridge.py`; both skip where it is
+not, and CI has it). Both edited Caddyfiles validate. The image build's own `caddy validate` remains
+the last gate before the box serves either of them.
 
 ## D7.1. The second forward-only seam (2026-07-30)
 

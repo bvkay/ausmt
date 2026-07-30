@@ -17,7 +17,14 @@ The fix has two halves and this file pins both:
     archive an operator places by hand.
 
 Pure text assertions over the committed files plus a black-box shim run of the ship script: no caddy
-binary, no network, so this runs everywhere and never trips the CI skip tripwire.
+binary, no network, no engine stack.
+
+The two config pins run everywhere. The shim run needs a POSIX shell to execute the shipped script,
+so it carries the same `_SH is None` skip its four sibling shell pins carry (test_alert_sh,
+test_actions_sh, test_backup_sh, test_frontdoor_doctor_sh), and DELIBERATELY without an entry in the
+CI skip allow-list: `sh` is present on the runner, so the skip cannot fire there, and if it ever did
+the tripwire should red the lane rather than wave it through. That is the same convention the lane
+already applies to its flock(1) case.
 """
 from __future__ import annotations
 
@@ -102,11 +109,17 @@ def test_ship_filter_carries_the_compressed_frontdoor_family(tmp_path):
     r = subprocess.run([_SH, str(_SHIP)], capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
     argv = marker.read_text(encoding="utf-8")
-    assert "access-frontdoor*.json.gz" in argv, (
-        f"rsync must also pull the compressed rolled front-door family; argv={argv!r}")
-    assert "access-frontdoor*.json" in argv, f"the plain family must still be pulled; argv={argv!r}"
-    gz_at = argv.index("access-frontdoor*.json.gz")
-    excl_at = argv.index("--exclude")
-    assert gz_at < excl_at, (
-        f"rsync filters are first-match-wins: the .gz include must precede the catch-all exclude; "
+    # WHOLE ARGUMENTS, not substrings. `access-frontdoor*.json` is a proper prefix of
+    # `access-frontdoor*.json.gz`, so a substring test for the plain family passes on the .gz include
+    # alone and cannot fail independently: delete the plain --include from the script and a substring
+    # assertion still goes green. Splitting into arguments is what makes each include its own pin.
+    args = argv.split()
+    gz = "--include=access-frontdoor*.json.gz"
+    plain = "--include=access-frontdoor*.json"
+    assert gz in args, f"rsync must also pull the compressed rolled front-door family; argv={argv!r}"
+    assert plain in args, f"the plain family must still be pulled; argv={argv!r}"
+    excl_at = next((i for i, a in enumerate(args) if a.startswith("--exclude")), -1)
+    assert excl_at >= 0, f"the catch-all exclude must still be there; argv={argv!r}"
+    assert max(args.index(gz), args.index(plain)) < excl_at, (
+        f"rsync filters are first-match-wins: BOTH includes must precede the catch-all exclude; "
         f"argv={argv!r}")
