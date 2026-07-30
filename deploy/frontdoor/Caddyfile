@@ -55,12 +55,18 @@
 	# Set-Cookie / Referer). Written to a DISTINCT filename (access-frontdoor.json) so that, once
 	# shipped into the box log dir beside the box's own access.json, the aggregator's `access*.json`
 	# glob folds it without collision. VPS-side retention: rotated + kept 7 days (roll_keep_for 168h),
-	# a short debugging tail — the shipped-and-folded copy on the box is the durable record.
+	# a short debugging tail; the shipped-and-folded copy on the box is the durable record.
+	#
+	# ROLLED FILES STAY PLAIN JSON (roll_uncompressed). Caddy gzips a rolled log by default, and both
+	# the ship filter and the box's fold glob key on the plain `.json` name, so a compressed roll would
+	# never be shipped and never be folded. Every line that rolled before the daily 03:25 pull would be
+	# deleted by this listener's own 7-day retention having reached the box's aggregate nowhere.
 	log {
 		output file /var/log/caddy/access-frontdoor.json {
 			roll_size 10mb
 			roll_keep 5
 			roll_keep_for 168h
+			roll_uncompressed
 		}
 		format filter {
 			wrap json
