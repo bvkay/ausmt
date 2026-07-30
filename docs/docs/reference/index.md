@@ -21,20 +21,20 @@ different version, the served document is the authority for that deployment.
 
 | Document | Served path | Normative artifact | Version | Reference |
 |---|---|---|---|---|
-| MTCAT catalogue | `/data/mtcat.json` | `engine/schema/mtcat.schema.json` | 1.2 | [MTCAT schema](mtcat-schema.md) |
+| MTCAT catalogue | `/data/mtcat.json`, `/data/products/mtcat.json` | `engine/schema/mtcat.schema.json` | 1.2 | [MTCAT schema](mtcat-schema.md) |
 | MTCAT schema | `/data/mtcat.schema.json` | itself | 1.2 | [MTCAT schema](mtcat-schema.md#normative-artifact) |
 | Download manifest | `/data/manifest.json`, `/data/products/manifest.json` | `engine/schema/manifest.schema.json` | 1.0 | [Download manifest schema](manifest-schema.md) |
 | Build report | `/data/build_report.json` | `engine/schema/build_report.schema.json` | 1.0 | [Build report schema](build-report-schema.md) |
-| Station catalogue | `/data/catalogue.json` | `contract/columns.json` | 16 columns | [Portal data files](../developer/data-files.md) |
+| Station catalogue | `/data/catalogue.json`, `/data/products/catalogue.json` | `contract/columns.json` | 16 columns | [Portal data files](../developer/data-files.md) |
 | Science diagnostics | `/data/sci.json` | `contract/columns.json` | 12 columns | [Portal data files](../developer/data-files.md) |
 | Transfer-function curves | `/data/tf.json` | `contract/columns.json` | 18 columns | [Portal data files](../developer/data-files.md) |
-| Survey metadata | `/data/surveys.json` | `survey_meta_from_yaml` in the build | none declared | [Served documents](portal-documents.md#surveysjson) |
+| Survey metadata | `/data/surveys.json`, `/data/products/surveys.json` | `survey_meta_from_yaml` in the build | none declared | [Served documents](portal-documents.md#surveysjson) |
 | Collections | `/data/collections.json` | `collections_document` in the build | none declared | [Served documents](portal-documents.md#collectionsjson) |
 | Build identity | `/data/build.json` | the build | none declared | [Served documents](portal-documents.md#buildjson) |
 | Build provenance | `/data/build_provenance.json` | the build | none declared | [Served documents](portal-documents.md#build_provenancejson) |
-| Coordinate policy | `/data/coord_policy.json` | the build | none declared | [Served documents](portal-documents.md#coord_policyjson) |
+| Coordinate policy | `/data/coord_policy.json`, `/data/products/coord_policy.json` | the build | none declared | [Served documents](portal-documents.md#coord_policyjson) |
 | Base station ids | `/data/base_ids.json` | the build | none declared | [Served documents](portal-documents.md#base_idsjson) |
-| QC report | `/data/qc_report.json` | the build | none declared | [Served documents](portal-documents.md#qc_reportjson) |
+| QC report | `/data/qc_report.json`, `/data/products/qc_report.json` | the build | none declared | [Served documents](portal-documents.md#qc_reportjson) |
 | Survey feed | `/data/feed.xml` | Atom 1.0 (RFC 4287) | none declared | [Served documents](portal-documents.md#feedxml) |
 | Digest stamp sidecar | `/data/products/survey_digests.json` | the build | none declared | [Build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step) |
 | Per-station record | `/data/products/<slug>/<station>/station.json` | the build | none declared | [Per-station products](station-products.md#1-stationjson) |

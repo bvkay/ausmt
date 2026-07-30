@@ -67,8 +67,8 @@ Every field is specified in the [survey.yaml reference](../reference/survey-yaml
 
 Each package carries a semantic `version` in `survey.yaml` with per-version `release_notes`
 that the portal displays. The authoritative history is the survey repository's git history.
-Immutable per-version release archives are planned; see [Versioning](versioning.md) for what
-ships today.
+Immutable corpus-level release snapshots ship under `/data/releases/`; see
+[Versioning](versioning.md) and the [Releases tier](../reference/releases.md).
 
 ## Relationship to other components
 

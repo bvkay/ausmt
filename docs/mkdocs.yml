@@ -1,6 +1,6 @@
 
 site_name: AusMT Documentation
-copyright: "Copyright © 2026 AuScope and the AusMT contributors. Framework software (engine, portal, docs) is licensed under Apache-2.0; the magnetotelluric survey data AusMT serves is licensed separately by its custodians (typically CC-BY-4.0)."
+copyright: "Copyright © 2026 AuScope and the AusMT contributors. The AusMT framework (everything other than the survey data it serves) is licensed under Apache-2.0; the magnetotelluric survey data is licensed separately by its custodians (typically CC-BY-4.0)."
 nav:
   - Home: index.md
   - About the project:

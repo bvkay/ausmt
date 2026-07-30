@@ -1,8 +1,8 @@
 # Curator checklist
 
-The automated validator (`ausmt-surveys/_validation/validate_survey.py`) is Stage 2. This checklist
-is **Stage 3** — the human review a curator does before a survey is published. The conceptual
-rationale is in [Review and Curation](../operations/review.md); this is the practical list.
+The automated validator (`ausmt-surveys/_validation/validate_survey.py`) checks structure and
+vocabulary; this checklist is the human review a curator does before a survey is published. The
+conceptual rationale is in [Review and Curation](../operations/review.md); this is the practical list.
 
 ## Before approving a survey package
 

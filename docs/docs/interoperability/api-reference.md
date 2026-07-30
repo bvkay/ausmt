@@ -37,7 +37,7 @@ Two identifiers key almost everything:
 | Identifier | Form | Example | Where it appears |
 |---|---|---|---|
 | survey slug | lowercase, hyphenated | `vulcan-2022` | `mtcat.json` as `survey_id`, `surveys.json` as `slug`, bundle filenames, product paths |
-| `ausmt_id` | `au.<slug>.<station>` | `au.vulcan-2022.A1` | `catalogue.json` column 12, every manifest row, `mtcat.json` as `station_id` |
+| `ausmt_id` | `au.<slug>.<station>[.<variant>]` | `au.vulcan-2022.A1` | `catalogue.json` column 12, every manifest row, `mtcat.json` as `station_id` |
 
 ---
 
@@ -177,7 +177,7 @@ Columns are only ever appended, never reordered.
 | 9 | `region` | string | Region facet from the survey |
 | 10 | `file` | string | Source transfer-function filename |
 | 11 | `coord_flag` | bool | True if the coordinate was flagged and resolved at intake |
-| 12 | `ausmt_id` | string | `au.<slug>.<station>`, the join key for the manifest |
+| 12 | `ausmt_id` | string | `au.<slug>.<station>[.<variant>]`, the join key for the manifest |
 | 13 | `edi_available` | 0 or 1 | 1 if the EDI is redistributably licensed and bundled |
 | 14 | `sha256` | string | SHA-256 of the source transfer-function file |
 | 15 | `site_name` | string or null | Original pre-sanitisation site name, when it differs from index 0 |

@@ -83,7 +83,7 @@ SHA-256.
 | Obligation | mandatory |
 | Occurrence | 1 |
 | Type | string |
-| Format | `au.<slug>.<station>` |
+| Format | `au.<slug>.<station>[.<variant>]` (the variant suffix appears only when a survey serves two processings of one site) |
 | Example | `"au.vulcan-2022.A1"` |
 
 ### 1.2 station

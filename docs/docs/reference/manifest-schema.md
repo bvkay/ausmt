@@ -8,7 +8,7 @@ It rides beside the positional `catalogue.json` / `sci.json` / `tf.json` arrays.
 never added as new positional columns, so adding or changing it costs the index-reading consumers
 nothing. The portal's download resolver is the primary consumer; the fetch patterns are in the
 [data reference](../interoperability/api-reference.md#per-station-fetch-through-the-manifest) and the
-producer-side rules are in [Portal data files](../developer/data-files.md#manifestjson-key-based-download-index-rides-beside-the-positional-catalogue).
+producer-side rules are in [Portal data files](../developer/data-files.md#manifestjson-the-key-based-download-index-beside-the-positional-catalogue).
 
 ## Normative artifact
 
@@ -98,7 +98,7 @@ One row per downloadable file for one station.
 | Obligation | mandatory |
 | Occurrence | 1 |
 | Type | string |
-| Format | `au.<slug>.<station>` |
+| Format | `au.<slug>.<station>[.<variant>]` (the variant suffix appears only when a survey serves two processings of one site) |
 | Example | `"au.vulcan-2022.A1"` |
 | Note | The one identifier a catalogue row and a manifest row both carry. Catalogue column 12. |
 

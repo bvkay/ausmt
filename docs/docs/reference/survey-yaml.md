@@ -744,7 +744,8 @@ carries a real value. Nine are listed below. Six are still read as fallbacks, so
 publishes as before: `lead_investigator`, `principal_investigators`, `identifiers.dataset_doi`,
 `time_series.collection_pid`, `instruments[].pid` and `sources[]`. The other three,
 `identifiers.related_publication`, `identifiers.related_publication_doi` and `identifiers.project`, are
-read by nothing and are dropped. Migration scripts live in `ausmt-surveys/_tools/`.
+read by nothing; the migration script deletes them, though the curator editor round-trips them
+verbatim until it runs. Migration scripts live in `ausmt-surveys/_tools/`.
 
 | Retired key | Replaced by | Migration |
 |---|---|---|

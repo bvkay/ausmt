@@ -74,7 +74,7 @@ Source of truth: `CATALOGUE_COLUMNS` in `extract/build_portal.py`.
 | `r[9]` | `region` | string | survey-driven region facet (`survey.yaml` `region` → `country` → `"?"`) |
 | `r[10]` | `file` | string | source transfer-function filename |
 | `r[11]` | `coord_flag` | bool | true if the coordinate was flagged/resolved (HEAD/INFO conflict) |
-| `r[12]` | `ausmt_id` | string | globally unique id `au.<slug>.<station>` — keys URLs, exports, products |
+| `r[12]` | `ausmt_id` | string | globally unique id `au.<slug>.<station>[.<variant>]`; keys URLs, exports, products |
 | `r[13]` | `edi_available` | 0\|1 | 1 if the EDI is redistributably licensed and bundled for download |
 | `r[14]` | `sha256` | string | SHA-256 of the source file (provenance/anti-tamper) |
 | `r[15]` | `site_name` | string\|null | original pre-sanitisation station/site name, emitted only when it differs from `r[0]` (`id`); null otherwise. Lets the drawer show the source station/site name for sanitised-id cases (e.g. `SA28_2B` → `SA282B`) |
@@ -182,7 +182,7 @@ The member reference is
 [Served documents](../reference/portal-documents.md#surveysjson); `survey_meta_from_yaml` is the
 producer and the definition.
 
-## `manifest.json` — key-based download index (rides beside the positional catalogue)
+## `manifest.json`: the key-based download index beside the positional catalogue
 
 The field-by-field reference is [Download manifest schema](../reference/manifest-schema.md), and
 the fetch patterns are in the

@@ -569,7 +569,7 @@ underlying MT metadata structures.
 | Obligation | mandatory |
 | Occurrence | 1 |
 | Type | string, at least one character |
-| Format | `au.<slug>.<station>` |
+| Format | `au.<slug>.<station>[.<variant>]` (the variant suffix appears only when a survey serves two processings of one site) |
 | Example | `"au.vulcan-2022.A1"` |
 
 ### 3.2 stations[].survey_id

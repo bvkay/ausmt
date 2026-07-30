@@ -4,10 +4,10 @@ The AusMT **framework**, meaning everything in this repository other than the su
 serves, is licensed under the **Apache License 2.0**. The `NOTICE` file in the repository root is the
 normative statement of that scope, and `LICENSE` carries the licence text.
 
-## Software, not data
+## Framework, not data
 
-Apache-2.0 covers the **software only**. The magnetotelluric **survey data** AusMT processes and serves —
-transfer functions and survey metadata — is **not** Apache-licensed. It is licensed individually by its
+Apache-2.0 covers the **framework**, not the data. The magnetotelluric **survey data** AusMT
+processes and serves (transfer functions and survey metadata) is **not** Apache-licensed. It is licensed individually by its
 custodians (typically **CC-BY-4.0**) and lives in the separate `ausmt-surveys` repository; each survey
 package carries its own `LICENSE.md`. The sample survey bundled under `engine/data/` for testing is
 likewise CC-BY-4.0.
