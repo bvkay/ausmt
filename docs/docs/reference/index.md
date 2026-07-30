@@ -8,14 +8,14 @@ Paths in the Reference section are relative to the portal root: `/data/mtcat.jso
 
 ## Documentation versions
 
-This documentation is versioned with the MTCAT schema. The version picker carries one entry per
-MTCAT schema version, cut from an annotated `docs-mtcat-<version>` tag when the schema version
-changes, so the pages behind an entry describe every surface as that schema version serves it.
-`latest` follows the default branch, which is the current schema version between cuts. The tags are
-the version list; nothing in the repository enumerates them.
+This documentation is versioned with the MTCAT schema. A documentation version is cut per MTCAT
+schema version, as an annotated `docs-mtcat-<version>` tag on the commit the schema version changed
+at, so the pages behind a cut describe every surface as that schema version serves it. The tags are
+the version list; nothing in the repository enumerates them, so a cut needs no file change.
 
-Check `portal.version` in `/data/mtcat.json` to see which schema version a deployment is serving,
-then read the matching entry.
+**The current documentation describes schema version 1.2.** Check `portal.version` in
+`/data/mtcat.json` to see which schema version a deployment serves. Where a deployment serves a
+different version, the served document is the authority for that deployment.
 
 ## Served documents
 
@@ -36,11 +36,18 @@ then read the matching entry.
 | Base station ids | `/data/base_ids.json` | the build | none declared | [Served documents](portal-documents.md#base_idsjson) |
 | QC report | `/data/qc_report.json` | the build | none declared | [Served documents](portal-documents.md#qc_reportjson) |
 | Survey feed | `/data/feed.xml` | Atom 1.0 (RFC 4287) | none declared | [Served documents](portal-documents.md#feedxml) |
+| Digest stamp sidecar | `/data/products/survey_digests.json` | the build | none declared | [Build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step) |
 | Per-station record | `/data/products/<slug>/<station>/station.json` | the build | none declared | [Per-station products](station-products.md#1-stationjson) |
 | Dimensionality screening | `/data/products/<slug>/<station>/dimensionality.json` | the build | none declared | [Per-station products](station-products.md#2-dimensionalityjson) |
 | Releases index | `/data/releases/releases.json` | `cut_release` | 1.0 | [Releases tier](releases.md#1-releasesjson) |
 | Release record | `/data/releases/<tag>/release.json` | `cut_release` | none declared | [Releases tier](releases.md#2-releasejson) |
 | DataCite record | `/data/releases/<tag>/datacite.json` | DataCite Metadata Schema 4 | kernel-4 | [Releases tier](releases.md#3-datacitejson) |
+
+The digest stamp sidecar is operational rather than scientific. It maps each served survey's slug to
+`{yaml_digest_current, xml_digest_stamped}`: the digest of the `survey.yaml` the build read, and the
+digest each served station XML was produced under. `engine/scripts/verify.py` compares those stamps
+against the live sources, so a product served from a stale cache entry fails verification. It is
+listed here because it is served, not because a consumer is expected to read it.
 
 ## Source documents
 

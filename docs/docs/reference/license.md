@@ -1,7 +1,8 @@
 # License
 
-The AusMT **framework** in this repository (`engine/`, `portal/`, `docs/`, and tooling) is
-licensed under the **Apache License 2.0**. See the `LICENSE` and `NOTICE` files in the repository root.
+The AusMT **framework**, meaning everything in this repository other than the survey data AusMT
+serves, is licensed under the **Apache License 2.0**. The `NOTICE` file in the repository root is the
+normative statement of that scope, and `LICENSE` carries the licence text.
 
 ## Software, not data
 

@@ -264,6 +264,49 @@
   }
 }
 
+/* PHONE WIDTHS. The rules above leave the page itself intact at 375px, but the widest reference
+ * tables still scrolled inside their own wrapper. Two things drove that. The cell floor sets a table's
+ * minimum width, and 4.5em plus 20px of padding across five columns is already wider than the content
+ * column on a phone; and under break-word a column can be no narrower than its longest word. So under
+ * 500px the floor drops to 3em, the padding to 6px, and cell prose may hyphenate.
+ *
+ * Hyphenation is switched OFF inside code spans. A hyphen dropped into `/data/mtcat.json` reads as
+ * part of the path, and these tables are mostly paths; code spans keep breaking without one, as they
+ * do at every width. A browser with no `en` hyphenation dictionary keeps whole words, which costs a
+ * little table width and nothing else. Nothing here applies above 500px, so the desktop layout is
+ * unchanged.
+ *
+ * This narrows the residual rather than removing it: at 375px two tables on reference/index.md and
+ * one on developer/data-files.md still scroll inside their wrapper, by 63px at worst. Clearing those
+ * as well needs break-anywhere on prose, which puts "Versi on" in a table header, and a reference
+ * table that looks broken is worse than one that scrolls.
+ */
+@media screen and (max-width: 500px) {
+  .rst-content table.docutils td,
+  .rst-content table.docutils th,
+  .wy-table-responsive table td,
+  .wy-table-responsive table th,
+  .wy-table td,
+  .wy-table th {
+    min-width: 3em;
+    padding: 6px 6px;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+  }
+
+  .rst-content table.docutils td code,
+  .rst-content table.docutils th code,
+  .wy-table-responsive table td code,
+  .wy-table-responsive table th code,
+  .wy-table td code,
+  .wy-table th code {
+    -webkit-hyphens: none;
+    hyphens: none;
+    font-size: 90%;
+    padding: 0 2px;
+  }
+}
+
 /* Fill the content column rather than overhanging it. The wrapper keeps overflow-x as the safety
  * net for the widest table in the corpus, the nine-column transfer-function index in
  * developer/data-files.md.

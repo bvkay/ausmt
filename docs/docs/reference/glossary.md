@@ -31,5 +31,7 @@ The custodian's declaration of how a survey's station positions are served: exac
 about 11 km, or withheld.
 
 ## Release
-An immutable published version of a survey package (a planned mechanism — see
-[Versioning](../data-model/versioning.md) for what exists today).
+A frozen snapshot of the whole served corpus, cut into `/data/releases/<tag>/` with its own download
+manifest and citation record. A release directory is immutable, so a paper can cite a fixed state of
+the corpus rather than a build that moves. The documents and their fields are in
+[Releases tier](releases.md).

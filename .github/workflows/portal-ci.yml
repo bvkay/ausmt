@@ -24,6 +24,13 @@ name: portal-ci
 # test_docs_vocabulary.py forbids the seismic word "waveform" in the corpus. Scoped to portal/** alone,
 # a docs-only PR could delete or contradict any of that and never run the test that guards it. Listing
 # docs/docs/** makes those four a same-PR gate rather than a next-PR surprise.
+#
+# ...AND the documentation site's own build inputs, for the same reason once more.
+# test_docs_branding.py reads three files that sit OUTSIDE docs/docs/: the sidebar template
+# (docs/overrides/main.html), the mkdocs configuration (docs/mkdocs.yml) and the Read the Docs
+# configuration (.readthedocs.yaml). Its regression path is exactly an edit to one of those, so
+# without them listed the test could only ever fail on the NEXT PR that happened to touch
+# portal/**. Listing them makes the branding and docs-version pins gate their own inputs.
 
 on:
   pull_request:
@@ -31,6 +38,9 @@ on:
       - "portal/**"
       - "contract/**"
       - "docs/docs/**"
+      - "docs/overrides/**"
+      - "docs/mkdocs.yml"
+      - ".readthedocs.yaml"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
       - ".github/workflows/portal-ci.yml"
@@ -40,6 +50,9 @@ on:
       - "portal/**"
       - "contract/**"
       - "docs/docs/**"
+      - "docs/overrides/**"
+      - "docs/mkdocs.yml"
+      - ".readthedocs.yaml"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
       - ".github/workflows/portal-ci.yml"

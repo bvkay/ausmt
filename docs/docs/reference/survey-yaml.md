@@ -740,9 +740,11 @@ No automated check blocks publication on CARE grounds. A curator reviews the blo
 ## Retired keys
 
 These keys are not offered by the curator metadata editor. Each raises a deprecation warning when it
-carries a real value. Five are still read as fallbacks, so an un-migrated package publishes as before;
-the three `identifiers.*` orphans are read by nothing and are dropped. Migration scripts live in
-`ausmt-surveys/_tools/`.
+carries a real value. Nine are listed below. Six are still read as fallbacks, so an un-migrated package
+publishes as before: `lead_investigator`, `principal_investigators`, `identifiers.dataset_doi`,
+`time_series.collection_pid`, `instruments[].pid` and `sources[]`. The other three,
+`identifiers.related_publication`, `identifiers.related_publication_doi` and `identifiers.project`, are
+read by nothing and are dropped. Migration scripts live in `ausmt-surveys/_tools/`.
 
 | Retired key | Replaced by | Migration |
 |---|---|---|

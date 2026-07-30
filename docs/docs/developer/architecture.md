@@ -22,6 +22,7 @@ ausmt/
   deploy/         Docker Compose deployment: images, Makefile, operator runbook
   contract/       the positional column contract shared by engine and portal (single source)
   docs/           this documentation site
+  maintainer/     design and security decision records
 ```
 
 Data flows in one direction: submissions enter through the gateway, reviewed packages are

@@ -57,10 +57,29 @@ The documents and their fields are in the [Releases tier reference](../reference
 ## Reprocessed transfer functions
 
 A station's transfer function can be re-made: reprocessed with a better remote reference, longer runs
-folded in, a newer code, different error floors. AusMT versions that at the survey grain. A reprocessing
-is a MAJOR bump of the survey package, carrying the release note the publish path already requires; the
-station's file under `transfer_functions/edi/` is replaced in place, and the previous bytes stay in the
-git history of the survey repository.
+folded in, a newer code, different error floors. AusMT versions that at the survey grain, and the build
+has two ways of serving the result. Both are a MAJOR bump of the survey package, carrying the release
+note the publish path already requires.
+
+**Replacement in place.** The station's file under `transfer_functions/edi/` is replaced by the new
+one. One station id, one served transfer function, and the previous bytes stay in the git history of
+the survey repository.
+
+**A distinct variant station record.** When a package hands the build two transfer functions for one
+station id, the build keeps both rather than dropping either. It appends a processing-variant tag, so
+the records are served as `<station>.<variant>` with `ausmt_id` `au.<slug>.<station>.<variant>`, each
+with its own product path and portal route. The tag is the part of the filename beyond the station id,
+lowercased and sanitised (`MBV20_LemiGraph` beside `MBV20_Ohmega` gives `MBV20.lemigraph` and
+`MBV20.ohmega`), or a positional `v1`, `v2` where the filename leaves nothing to use. A station with
+one transfer function is untouched. The physical site behind a tagged record is published in
+[`base_ids.json`](../reference/portal-documents.md#base_idsjson), so a per-station coordinate override
+still keys on the site rather than on one of its processings.
+
+A variant tag is an identity, not a version. It records that two processings are served, not which is
+newer: nothing marks one current and the other superseded, and the two are ordinary sibling stations
+everywhere downstream. Reprocessings in the corpus today arrive under their own station id, because
+the processing marker rides in the source file's `DATAID` (the `...r` and `..._BxReplaced` files), so
+they are served as separate stations and no station in the corpus currently carries a variant tag.
 
 No per-station version number exists anywhere in the system. `survey.yaml` has no station-level version
 key, the station product and the MTCAT station record carry no version field, and no manifest row carries
@@ -71,4 +90,4 @@ changing those schemas and the build, not adding a curation convention on top of
 What distinguishes one processing run from another is recorded in two places, both survey-current:
 [`processing`](../reference/survey-yaml.md#111-processing) in `survey.yaml`, which is survey-wide, and
 each station product's [`processing`](../reference/station-products.md#19-processing) block, read from
-the source file's own header. No station in the corpus carries a second transfer function.
+the source file's own header.

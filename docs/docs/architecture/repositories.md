@@ -12,6 +12,7 @@ ausmt/portal      Public website and machine-readable products
 ausmt/docs        System documentation
 ausmt/contract    Single-source data contract (columns.json)
 ausmt/deploy      Container images and deployment configuration
+ausmt/maintainer  Design and security decision records
 ```
 
 The `ausmt` subdirectories are released together. `ausmt-surveys` has its own lifecycle.
