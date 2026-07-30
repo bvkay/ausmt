@@ -1258,3 +1258,34 @@ def test_the_second_seam_note_states_the_bias_in_both_directions(tmp_path):
             assert "not recoverable" in note, \
                 f"and that the net of the three is not recoverable: {note}"
     run(_body())
+
+
+def test_the_screen_reports_downloads_by_collection(tmp_path):
+    """COLLECTION ROLLUP RENDER PIN. The fold credits a download to the programme its survey belongs
+    to (AusLAMP and its siblings, from the served mtcat.json), so "how much did this programme move"
+    can be answered without joining two documents by hand. The screen must show it, with its volume,
+    and must say that the rollup is forward-only: it is a THIRD starting point, younger than both
+    seams the rest of the screen marks, and neither seam marker covers it.
+
+    FAILS IF the rollup is folded but never rendered, if a box that folded none renders an empty
+    heading or a zero, or if the line claims coverage it does not have."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats(by_collection={
+                "auslamp": {"downloads": 96, "bytes": 3_145_728},
+                "hydro": {"downloads": 12, "bytes": 1024}}))
+            html = (await client.get("/gateway/curator/analytics")).text
+            line = html.split("Downloads by collection", 1)[1].split("</p>", 1)[0]
+            assert "auslamp" in line and ">96<" in line and "3.0 MB" in line, line
+            assert line.index("auslamp") < line.index("hydro"), "biggest collection first"
+            assert "sum of its member surveys" in line, "the arithmetic promise must be stated"
+            assert "counted from the fold that added the rollup onward" in line, \
+                f"the third forward-only seam must be disclosed on its own line: {line}"
+
+            # A box whose fold produced no collection dimension shows nothing at all here.
+            _write_stats(cfg, _v4_stats())
+            bare = (await client.get("/gateway/curator/analytics")).text
+            assert "Downloads by collection" not in bare, \
+                "no served mtcat.json means no line, not an empty one and not a zero"
+    run(_body())

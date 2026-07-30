@@ -254,3 +254,82 @@ Separately, the "N of M served" ratio is dropped when the numerator exceeds the 
 `by_survey` accumulates every survey ever downloaded and nothing prunes it, while the denominator is
 restamped from the manifest being served now, so withdrawing one survey with historical downloads
 renders an honest "41 of 40 served". Label counting closed the slug-versus-label case only.
+
+## D8. The daily aggregate archive (2026-07-30)
+
+Owner ruling: capture maximal non-geographic granularity at day grain now, so a report nobody has
+asked for yet can still be derived later. "We do not want to limit ourselves."
+
+The problem it closes is retroactive. The raw log rotates in about a week; the daily rows in
+`stats.json` roll off after 92 days; only the calendar-month rollup is permanent. Every question
+finer than a month therefore becomes unanswerable once the window passes, and it becomes
+unanswerable about days we *did* fold: the data existed, the fold read it, and the detail was
+discarded. Monthly rollups were built to survive daily pruning; this is the same argument one grain
+down.
+
+**Shape.** After the fold, one JSON line per newly folded day is appended to
+`daily_archive.jsonl` beside `stats.json` (`AUSMT_STATS_DAILY_ARCHIVE` overrides the path). A line
+carries `date`, the day's `downloads` / `visits` / `api` / `networks` / `download_bytes` /
+`unattributed`, and the `by_format`, `by_kind`, `by_client`, `by_survey`, `by_dataset` and
+`by_collection` maps, plus `served_build` where the served tree names itself. Sparse: only nonzero
+entries are written, so a quiet day is a short line rather than a wall of zeroes that would read as
+measured absence.
+
+**Invariants.**
+
+- *Append-only, once per day.* The fold watermark already guarantees a day folds exactly once, so
+  the rows come only from the days this call folded and a rerun appends nothing. The append happens
+  AFTER `stats.json` lands, deliberately: a failed stats write leaves the watermark where it was and
+  those days fold again next run, so they must not already be in the file. The reverse failure loses
+  a day from the archive, which is the tolerable direction and is why it is warned about loudly.
+- *Never read.* No gateway route, no render path, no export opens it. It lives in the gateway state
+  dir, outside `site-data/`, so nothing can serve it. Both facts are pinned in `deploy/tests`.
+- *Never pruned, never rewritten.* It is the durable record; that is its whole purpose.
+- *Never fatal.* A write failure warns and the fold still counts as done.
+
+**The geographic boundary, which is the line that must not move.** The ratified exclusion of
+day-by-state data generalises: no country and no state below the monthly grain, rendered OR
+retained. A named country on a named day is a smaller cell than the named state in a named month
+that was already ruled out. So the archive carries no country, no state, no address, no user-agent
+and no per-network datum beyond the scalar count, and the leak sweep runs over it exactly as it runs
+over `stats.json`.
+
+### Collection rollup
+
+A download is now credited to the programme its survey belongs to, from the served `mtcat.json`'s
+`collection_id`, at the cumulative and month grains and in the archive line. The join is on the
+bundle **slug** first and the survey **title** second: a slug is an identifier, a title is prose
+that can be re-worded between builds. The map is keyed on the survey label like every other
+per-survey map here, so a collection total is exactly the sum of its members and a reader can check
+it by eye. Optional in the way the state table is: no served `mtcat.json`, no dimension, no zero.
+
+It is rendered as one line under the cards, with its own one-sentence caveat rather than borrowing a
+seam marker. This is a THIRD forward-only starting point, younger than both `seeded_days` and
+`detail_days`, and neither of those speaks for it; naming it under either would overstate its
+coverage by the same distance the D7.1 review found. It is deliberately not a quarterly-table row:
+that would need a fourth per-month coverage counter to avoid rendering a zero nobody measured, and
+the month data rides in `stats.json` and the archive for whenever a report actually wants it.
+
+Tier-3 collection bundles do not exist yet. When they do they arrive as ordinary manifest bundle
+rows and flow through the download path already; the latent case is noted in `build_collection_map`
+so it is recognised rather than rediscovered.
+
+### Unreadable log files are visible now
+
+Verified incident, 2026-07-30: the box's `access.json` was `root:root 0600`. `read_log_lines` hit
+`OSError` and continued silently, so the fold ran for days on the shipped front-door file alone and
+wrote a complete-looking `stats.json` the whole time. Tolerant was never meant to mean silent. A
+file the glob MATCHED but could not OPEN is now named on stderr and counted into `files_skipped=` on
+the journal line. The posture is unchanged: it still never raises.
+
+A gzip archive keeps the distinction it earns. Failing to open it is the same operational fault and
+is reported; opening it and finding it is not a gzip stream is the documented salvage case, expected
+of a hand-placed or half-pulled archive, and stays a silent skip so a routine recovery does not
+become a nightly warning.
+
+### Backfill: dropped
+
+The July 2026 rotation-loss window (27 Jul 00:00 to 28 Jul 13:27 UTC, dropped before folding) is
+accepted as-is by owner ruling: the site is not publicly launched, so pre-DNS numbers are not a
+reporting baseline. No backfill machinery exists and none was built. **"Nothing is backfilled" stays
+absolute.** The salvaged raw files remain on the box at zero cost.

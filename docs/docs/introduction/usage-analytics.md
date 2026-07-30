@@ -22,6 +22,7 @@ identity. Only aggregate counts are ever stored.
 | Requests by country | The **masked** client address resolved to a country (see below). Downloads, visits and API requests all count, so the country total is exactly the counted requests. |
 | Australian traffic by **state** | For requests that resolve to Australia only, a second-level lookup of the same masked address to a state or territory (NSW, VIC, QLD, SA, WA, TAS, NT, ACT). Reported both as a request count and as a split into downloads, visits, API requests and volume. Optional, and **state is the finest grain** (see below). |
 | Client class | Each request's user-agent resolves to crawler, scripted or browser. It is read while the day is folded and never stored (see below). |
+| Downloads by **collection** | The programme a survey belongs to, read from the served catalogue document's `collection_id`. A collection total is the sum of its member surveys and nothing else. |
 | Daily time series | Downloads, volume, formats, visits, API requests and networks folded per calendar day (UTC). |
 | Calendar-month rollups | The same figures accumulated per month as each day folds, for quarterly and year-over-year reporting. |
 
@@ -84,9 +85,16 @@ Retention applies to *counts*, never to the log. Two different lifetimes, delibe
 | Raw access log (masked) | ~7 days | Debugging only. It is not the database. |
 | Daily aggregate rows | 92 days (one quarter) | Enough for a rolling operational view without accumulating fine-grained history. |
 | Monthly rollup rows | Indefinitely | Tiny pure-count records with no address, path or identity in them. They are what makes quarterly and year-over-year reporting possible. |
+| Daily aggregate archive | Indefinitely | One line of pure counts per folded day, appended beside the aggregates. It holds **no geographic data at all** (see below) and it is never served, never rendered and never rewritten. |
 
 Each calendar month is accumulated *as its days fold*, so expiring a daily row never loses the month
 it belonged to. Reports can be exported as CSV: monthly totals, and one row per month and survey.
+
+The daily archive exists because **the aggregates are the durable record**. The raw log rotates away
+within the week and the daily rows roll off after a quarter, so a question finer than a month becomes
+unanswerable once that window passes, and unanswerable *retroactively*: the data existed and the
+detail was discarded. Keeping the day-grain counts leaves a future report free to ask something
+nobody has asked yet, without ever needing data that no longer exists.
 
 Each month also records how much of itself each breakdown covers: how many days were folded into it,
 how many of those predate the detailed dimensions, how many were folded under the current counting
@@ -126,6 +134,11 @@ There is no city dimension anywhere in the pipeline: the city and coordinate col
 dataset are read only to be discarded. For the same reason state counts exist at the **monthly and
 cumulative grains only**. A state count for one named day would be the finest-grained cell in the
 file, small enough to point at a particular group in a community this size.
+
+That rule governs every record, including the daily archive above: **no country and no state below
+the monthly grain**, rendered or retained. A named country on a named day is a smaller cell than a
+named state in a named month, so the archive carries counts, volumes, formats, surveys, datasets and
+collections, and no geography whatsoever.
 
 Two reconciliation properties hold, and are visible on the screen. The **request count** column
 **always reconciles with its parent**: an Australian request whose prefix the state table does not

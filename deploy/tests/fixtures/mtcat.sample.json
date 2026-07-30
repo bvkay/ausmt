@@ -1,0 +1,11 @@
+{
+ "portal": {"name": "AusMT (test fixture)", "mtcat_version": "1.2"},
+ "surveys": [
+  {"survey_id": "sample-survey", "title": "CI Sample Survey", "collection_id": "auslamp"},
+  {"survey_id": "other-survey", "title": "Other Survey", "collection_id": "auslamp"},
+  {"survey_id": "lonely-survey", "title": "Lonely Survey"}
+ ],
+ "collections": [
+  {"collection_id": "auslamp", "title": "AusLAMP", "type": "programme", "n_surveys": 2}
+ ]
+}

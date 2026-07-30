@@ -1356,3 +1356,294 @@ def test_the_state_and_funding_detail_still_leaks_nothing():
     assert stats["downloads"]["by_survey"]["CI Sample Survey"]["countries"]
     for code in stats["by_state_detail"]:
         assert code in AGG.AU_STATE_CODES or code == AGG.AU_STATE_UNATTRIBUTED, code
+
+
+# ==================================================================================================
+# The APPEND-ONLY DAILY ARCHIVE lane (owner ruling 2026-07-30).
+#
+# The raw log rotates in a week and the daily rows roll off after 92 days, so the only permanent
+# record was the calendar month. Every question finer than a month became unanswerable RETROACTIVELY:
+# we had the data, we folded it, and we discarded the detail. The archive is one JSON line per folded
+# day at maximal NON-GEO granularity, appended beside stats.json, read by nothing and served by
+# nothing.
+#
+# The boundary these pins hold is the geographic one. The owner's ratified exclusion of day-by-state
+# data generalises: no country and no state below month grain, RENDERED OR ARCHIVED. A named country
+# on a named day is a smaller cell than a named state in a named month.
+# ==================================================================================================
+_MTCAT = _FIXTURES / "mtcat.sample.json"
+
+
+def _archive_of(prev, lines, *, rmap=None, geoip=None, run=_RUN, **kw) -> list[dict]:
+    """The archive rows one fold produces, via the out channel `aggregate` fills."""
+    rows: list[dict] = []
+    AGG.aggregate(prev, lines,
+                  rmap if rmap is not None else AGG.build_reverse_map(
+                      json.loads(_MANIFEST.read_text(encoding="utf-8"))),
+                  geoip if geoip is not None else AGG.GeoIP.load(_DBIP),
+                  run, archive_out=rows, **kw)
+    return rows
+
+
+def test_a_fold_archives_each_new_day_once_and_a_rerun_archives_nothing():
+    """ARCHIVE APPEND PIN. The fold must hand back exactly one row per day it actually folded, oldest
+    first, and a rerun over the same lines must hand back NOTHING: the watermark already guarantees a
+    day folds once, and the archive is append-only, so a second row for a day would be a permanent
+    duplicate nothing can clean up. FAILS IF a day is archived twice, if the rows are unordered, or if
+    a rerun produces any row at all."""
+    lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-09"),
+             _line("/data/catalogue.json", "1.2.3.0", date="2026-07-09"),
+             _line("/data/xml/sample-survey/A2.xml", "198.51.100.0", date="2026-07-10")]
+    rows: list[dict] = []
+    stats = AGG.aggregate(None, lines, AGG.build_reverse_map(
+        json.loads(_MANIFEST.read_text(encoding="utf-8"))), AGG.GeoIP.load(_DBIP), _RUN,
+        archive_out=rows)
+    assert [r["date"] for r in rows] == ["2026-07-09", "2026-07-10"], rows
+    assert rows[0]["downloads"] == 1 and rows[0]["visits"] == 1
+    assert rows[1]["downloads"] == 1 and "visits" not in rows[1]
+
+    again = _archive_of(stats, lines)
+    assert again == [], f"a rerun must append nothing: {again}"
+
+
+def test_an_archive_line_is_sparse_and_an_active_day_matches_the_fold():
+    """ARCHIVE SHAPE PIN. Only NONZERO entries are written: a day of visits alone must carry no
+    by_dataset, no by_format and no download keys, so a quiet day is a short line rather than a wall
+    of zeroes that reads as measured absence. An ACTIVE day's per-dataset rows must agree with the
+    counts the same fold wrote into stats.json. FAILS IF an idle day carries download noise, or if the
+    archive and the cumulative maps disagree about the same day."""
+    idle = _archive_of(None, [_line("/data/catalogue.json", "203.0.113.5", date="2026-07-09")])
+    assert idle[0]["visits"] == 1
+    for absent in ("downloads", "download_bytes", "unattributed", "by_dataset", "by_format",
+                   "by_kind", "by_survey", "by_collection"):
+        assert absent not in idle[0], f"an idle day must not carry {absent}: {idle[0]}"
+
+    lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", size=100),
+             _line("/data/edi/sample-survey/Vulcan_A1.edi", "1.2.3.0", size=100),
+             _line("/data/bundles/sample-survey-tf.h5", "203.0.113.5", size=900)]
+    rows: list[dict] = []
+    stats = AGG.aggregate(None, lines, AGG.build_reverse_map(
+        json.loads(_MANIFEST.read_text(encoding="utf-8"))), AGG.GeoIP.load(_DBIP), _RUN,
+        archive_out=rows)
+    day = rows[0]
+    assert day["downloads"] == stats["totals"]["downloads"] == 3
+    assert day["download_bytes"] == stats["totals"]["download_bytes"] == 1100
+    assert day["by_dataset"]["edi/sample-survey/Vulcan_A1.edi"] == {
+        "downloads": 2, "bytes": 200, "format": "edi", "survey": "CI Sample Survey"}
+    assert day["by_survey"]["CI Sample Survey"] == {"downloads": 3, "bytes": 1100}
+    assert day["by_format"] == stats["downloads"]["by_format"]
+    assert day["networks"] == 2, "the scalar network count is the only per-network datum archived"
+
+
+def test_no_archive_line_ever_carries_a_country_or_a_state():
+    """ARCHIVE GEO PIN. Geography stops at the MONTH, rendered or archived. The day rows here are the
+    finest-grained record in the whole pipeline, and a named country on a named day is a smaller cell
+    than the named-state-in-a-named-month the owner already ruled out. FAILS IF any geographic key or
+    value reaches an archive line, even though the very same fold is counting countries and states
+    into stats.json beside it."""
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    rows: list[dict] = []
+    stats = AGG.aggregate(None, _au_lines(), AGG.build_reverse_map(
+        json.loads(_MANIFEST.read_text(encoding="utf-8"))), AGG.GeoIP.load(_DBIP), _RUN,
+        au_states=states, archive_out=rows)
+    assert stats["countries"] and stats["by_state"], \
+        "the same fold must really be counting geography, or this pin is vacuous"
+    assert rows, "and it must really have archived something"
+    blob = json.dumps(rows)
+    for banned in ("countries", "country", "by_state", "state", "AU", "NZ", "unknown"):
+        assert banned not in blob, f"the archive must carry no geography: {banned} in {blob}"
+
+
+def test_the_daily_archive_leaks_no_address_and_no_user_agent():
+    """LEAK PIN (daily archive). The archive is a SECOND file leaving the fold, kept forever, so the
+    record D2/D6 promise has to hold over it exactly as it holds over stats.json: no address, masked
+    or not, and no user-agent string. FAILS IF either survives into an archive line. Non-vacuous by
+    the same negative control the stats.json sweep uses."""
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", size=100),
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "2001:db8:1234::", status=206,
+              ua="curl/8.4.0"),
+        _line("/data/mtcat.schema.json", "198.51.100.0", ua="python-requests/2.31.0"),
+        _line("/data/catalogue.json", "1.2.3.0", ua="Mozilla/5.0 (X11) AppleWebKit/537"),
+    ]
+    rows = _archive_of(None, lines, au_states=states,
+                       collections={"CI Sample Survey": "auslamp"})
+    emitted = "\n".join(json.dumps(r, sort_keys=True) for r in rows)
+    assert _sweep_ip_or_ua(emitted) == [], emitted
+    assert rows[0]["by_client"] and rows[0]["by_collection"], \
+        "the maps really are populated (a vacuous sweep proves nothing)"
+    assert _sweep_ip_or_ua(emitted + ' "v4": "203.0.113.5"'), \
+        "the sweep must still catch a planted address over the archive text"
+
+
+def test_collection_downloads_reconcile_with_their_member_surveys():
+    """COLLECTION ROLLUP PIN. A collection bump must be exactly the sum of its member surveys' bumps
+    for the same fold, at the cumulative grain, the month grain and in the archive line, or a
+    programme figure quoted in a report will not survive being checked against the surveys under it.
+    FAILS IF the three grains disagree, or if a survey the served mtcat.json does not place in a
+    collection is credited to one anyway."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    collections = AGG.build_collection_map(json.loads(_MTCAT.read_text(encoding="utf-8")), rmap)
+    assert collections == {"CI Sample Survey": "auslamp"}, collections
+    lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", size=100),
+             _line("/data/bundles/sample-survey-tf.h5", "1.2.3.0", size=900),
+             _line("/data/edi/UNKNOWN/x.edi", "198.51.100.0", size=7)]     # unattributed: no survey
+    rows: list[dict] = []
+    stats = AGG.aggregate(None, lines, rmap, AGG.GeoIP.load(_DBIP), _RUN,
+                          collections=collections, archive_out=rows)
+    member = stats["downloads"]["by_survey"]["CI Sample Survey"]
+    assert stats["by_collection"] == {"auslamp": {"downloads": member["downloads"],
+                                                  "bytes": member["bytes"]}}
+    assert stats["monthly"][0]["by_collection"] == stats["by_collection"]
+    assert rows[0]["by_collection"] == stats["by_collection"]
+    assert stats["by_collection"]["auslamp"]["downloads"] == 2, \
+        "the unattributed download belongs to no survey and so to no collection"
+
+
+def test_no_served_mtcat_means_no_collection_dimension_at_all():
+    """COLLECTION ABSENCE PIN. The collection map is OPTIONAL exactly as the state table is: an absent
+    or unreadable mtcat.json must leave the maps EMPTY rather than inventing a bucket, and must not
+    stop the fold. FAILS IF a missing document fabricates a collection or raises."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    assert AGG.build_collection_map(None, rmap) == {}
+    assert AGG.build_collection_map({"surveys": "not a list"}, rmap) == {}
+    assert AGG.build_collection_map({"surveys": [{"survey_id": "sample-survey"}]}, rmap) == {}, \
+        "a survey in no collection gets no bucket, not an empty-string one"
+    stats = AGG.aggregate(None, [_line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5")],
+                          rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["by_collection"] == {} and stats["monthly"][0]["by_collection"] == {}
+
+
+def test_the_collection_map_prefers_the_slug_over_the_title():
+    """COLLECTION JOIN PIN. MTCAT names a survey twice and the manifest's bundle rows carry the SLUG,
+    which is an identifier, while the title is prose that can be re-worded between builds. The slug
+    join must win. FAILS IF a re-worded title silently drops a survey out of its collection, or if a
+    title collision overrides a slug match."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    retitled = {"surveys": [{"survey_id": "sample-survey", "title": "Renamed Between Builds",
+                             "collection_id": "auslamp"}]}
+    assert AGG.build_collection_map(retitled, rmap) == {"CI Sample Survey": "auslamp"}
+    # And with no slug to join on, the title still carries it (a survey with only file rows).
+    files_only = {k: v for k, v in rmap.items() if v.get("kind") == "file"}
+    assert AGG.build_collection_map(
+        {"surveys": [{"survey_id": "not-this-one", "title": "CI Sample Survey",
+                      "collection_id": "auslamp"}]}, files_only) == {"CI Sample Survey": "auslamp"}
+
+
+def test_an_unreadable_log_file_is_named_and_counted_rather_than_swallowed(tmp_path, capsys):
+    """UNREADABLE-LOG PIN (verified incident, 2026-07-30). The box's access.json was root:root 0600;
+    every open raised, this reader swallowed it, and the fold ran for DAYS on the shipped front-door
+    file alone while producing a complete-looking stats.json. Tolerant must not mean silent: a file
+    the glob matched but could not open must be NAMED on stderr and counted, while the readable
+    siblings still fold and nothing raises. FAILS IF the skip is silent, uncounted, or fatal."""
+    logdir = tmp_path / "caddy"
+    logdir.mkdir()
+    (logdir / "access.json").write_text(
+        _line("/data/catalogue.json", "203.0.113.5") + "\n", encoding="utf-8")
+    locked = logdir / "access-2026-07-09T03-25-02.001.json"
+    locked.write_text(_line("/data/edi/sample-survey/Vulcan_A1.edi", "1.2.3.0",
+                            date="2026-07-09") + "\n", encoding="utf-8")
+    locked.chmod(0o000)
+    try:
+        skipped: list[str] = []
+        lines = AGG.read_log_lines(logdir, skipped=skipped)
+        err = capsys.readouterr().err
+        assert len(lines) == 1, f"the readable sibling must still fold: {lines}"
+        assert skipped == [str(locked)], f"the unreadable file must be counted: {skipped}"
+        assert "access-2026-07-09T03-25-02.001.json" in err, f"and named on stderr: {err}"
+        # A corrupt gz is a different case and stays a silent skip: it is the documented salvage
+        # path, not an operational fault, and it must not become a nightly warning.
+        (logdir / "access-2026-07-08T03-25-00.000.json.gz").write_text("not gzip", encoding="utf-8")
+        quiet: list[str] = []
+        AGG.read_log_lines(logdir, skipped=quiet)
+        capsys.readouterr()
+        assert quiet == [str(locked)], f"a corrupt archive is not an unreadable file: {quiet}"
+    finally:
+        locked.chmod(0o644)
+
+
+def test_main_writes_the_archive_beside_stats_json_outside_the_served_tree(tmp_path, monkeypatch):
+    """ARCHIVE LOCATION PIN. The archive must land in the gateway STATE dir beside stats.json and NOT
+    anywhere under site-data, because everything under site-data is served to the public web and this
+    file is the finest-grained record the pipeline holds. Its journal line must also report how many
+    days it archived. FAILS IF the default path falls inside the served tree, if main() does not write
+    it, or if a second run duplicates a day already in the file."""
+    data = tmp_path / "data"
+    logdir = data / "logs" / "caddy"
+    state = data / "gateway" / "state"
+    served = data / "site-data" / "current"
+    logdir.mkdir(parents=True)
+    state.mkdir(parents=True)
+    served.mkdir(parents=True)
+    (served / "manifest.json").write_text(_MANIFEST.read_text(encoding="utf-8"), encoding="utf-8")
+    (served / "mtcat.json").write_text(_MTCAT.read_text(encoding="utf-8"), encoding="utf-8")
+    (served / "build.json").write_text(json.dumps({"build_id": "abc123-7776900-2026-07-11"}),
+                                       encoding="utf-8")
+    (logdir / "access.json").write_text("\n".join([
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", "203.0.113.5", date="2026-07-09", size=100),
+        _line("/data/catalogue.json", "1.2.3.0", date="2026-07-10"),
+    ]) + "\n", encoding="utf-8")
+
+    monkeypatch.setenv("AUSMT_DATA_DIR", str(data))
+    monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(served / "manifest.json"))
+    monkeypatch.setenv("AUSMT_STATS_DBIP_CSV", str(_DBIP))
+    monkeypatch.setenv("AUSMT_STATS_NOW", "2026-07-12T03:30:00Z")
+    monkeypatch.delenv("AUSMT_STATS_FILE", raising=False)
+    monkeypatch.delenv("AUSMT_STATS_DAILY_ARCHIVE", raising=False)
+    assert AGG.main([]) == 0
+
+    archive = state / "daily_archive.jsonl"
+    assert archive.is_file(), f"main() must write the archive beside stats.json: {list(state.iterdir())}"
+    assert (data / "site-data") not in archive.parents, "the archive must never sit in the served tree"
+    rows = [json.loads(ln) for ln in archive.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert [r["date"] for r in rows] == ["2026-07-09", "2026-07-10"], rows
+    assert rows[0]["by_collection"] == {"auslamp": {"downloads": 1, "bytes": 100}}
+    assert all(r["served_build"] == "abc123-7776900-2026-07-11" for r in rows), \
+        "the served tree names itself, so each line carries that name"
+    assert _sweep_ip_or_ua(archive.read_text(encoding="utf-8")) == []
+
+    # A second run folds no new day and must therefore append nothing.
+    assert AGG.main([]) == 0
+    assert archive.read_text(encoding="utf-8").count("\n") == 2, "append-only means appended ONCE"
+
+
+def test_an_unwritable_archive_warns_and_still_lets_stats_json_land(tmp_path, monkeypatch, capsys):
+    """ARCHIVE NEVER-RAISE PIN. The archive is a bonus record, not the fold. An archive path that
+    cannot be written (a directory in its place, a read-only mount) must produce a loud note and leave
+    stats.json exactly as it would have been. FAILS IF the run raises, returns non-zero, or costs the
+    stats write."""
+    data = tmp_path / "data"
+    logdir = data / "logs" / "caddy"
+    state = data / "gateway" / "state"
+    logdir.mkdir(parents=True)
+    state.mkdir(parents=True)
+    (logdir / "access.json").write_text(
+        _line("/data/catalogue.json", "203.0.113.5") + "\n", encoding="utf-8")
+    blocked = state / "daily_archive.jsonl"
+    blocked.mkdir()                     # a DIRECTORY where the archive file should be
+
+    monkeypatch.setenv("AUSMT_DATA_DIR", str(data))
+    monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(_MANIFEST))
+    monkeypatch.setenv("AUSMT_STATS_DBIP_CSV", str(_DBIP))
+    monkeypatch.setenv("AUSMT_STATS_FILE", str(state / "stats.json"))
+    monkeypatch.setenv("AUSMT_STATS_NOW", "2026-07-12T03:30:00Z")
+    monkeypatch.delenv("AUSMT_STATS_DAILY_ARCHIVE", raising=False)
+
+    assert AGG.main([]) == 0
+    err = capsys.readouterr().err
+    assert "daily archive" in err, f"the failure must be loud: {err}"
+    doc = json.loads((state / "stats.json").read_text(encoding="utf-8"))
+    assert doc["totals"]["visits"] == 1, "stats.json still lands in full"
+
+
+def test_nothing_in_the_gateway_reads_the_daily_archive():
+    """NEVER-SERVED PIN. The archive is written by the host timer and read by NOTHING: no gateway
+    route, no render path, no export. It holds the finest-grained record in the pipeline precisely
+    because nothing consumes it, so a reference to it from the serving stack is the change that must
+    be caught here rather than in review. FAILS IF any gateway source names the archive file."""
+    gateway = _REPO / "gateway"
+    assert gateway.is_dir(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    offenders = [str(p.relative_to(_REPO)) for p in sorted(gateway.rglob("*.py"))
+                 if "daily_archive" in p.read_text(encoding="utf-8", errors="replace")]
+    assert offenders == [], f"the gateway must not read the daily archive: {offenders}"

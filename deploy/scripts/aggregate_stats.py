@@ -45,7 +45,11 @@ WHAT IT DOES, once a day:
     permanent per-calendar-month rollup). The raw log lines are NOT the database: once a day is folded
     it is never re-read, so losing a rotated log loses nothing already folded. Idempotent: only days
     AFTER `last_folded_date` and STRICTLY BEFORE the run's UTC date (i.e. complete days) are folded, so
-    re-runs never double-count.
+    re-runs never double-count;
+  * credits a download to the COLLECTION its survey belongs to (the served mtcat.json's collection_id),
+    so a programme-level figure needs no join at report time. Optional: no mtcat.json, no dimension;
+  * APPENDS one line per newly folded day to a permanent archive beside stats.json, at the finest
+    NON-GEOGRAPHIC granularity the fold sees. Nothing reads it and nothing serves it.
 
 RETENTION (aggregates only -- the RAW log keeps its own untouched ~7-day Caddy rotation):
   * DAILY rows are a rolling window of AUSMT_STATS_DAILY_KEEP days (default 92, i.e. a quarter) ending
@@ -54,6 +58,9 @@ RETENTION (aggregates only -- the RAW log keeps its own untouched ~7-day Caddy r
     no identity) and they are what makes year-over-year funding reporting possible. Each month is
     accumulated AS ITS DAYS FOLD, never recomputed from the daily tail, so pruning a day never loses
     the month it belonged to.
+  * The DAILY ARCHIVE (daily_archive.jsonl) is kept INDEFINITELY too and is never pruned or rewritten.
+    It is the answer to "the aggregates are all we keep, so keep enough of them": pure counts at day
+    grain, with NO geography at any grain finer than the month. See the archive section below.
 
 WHAT IT NEVER WRITES (record D2/D6, the leak pin enforces it): an address (masked or not) and a
 user-agent string never reach stats.json. Only aggregates leave the pipeline — counts + dailies.
@@ -66,6 +73,7 @@ Config (env; every path derives from AUSMT_DATA_DIR, each overridable for tests)
   AUSMT_STATS_AU_STATES_CSV compact AU state table         [default $AUSMT_DATA_DIR/geoip/dbip-au-states.csv]
                             (produced by deploy/scripts/prep_au_states.py; absent => country only)
   AUSMT_STATS_FILE          the cumulative stats.json      [default $AUSMT_DATA_DIR/gateway/state/stats.json]
+  AUSMT_STATS_DAILY_ARCHIVE the append-only day archive    [default: daily_archive.jsonl beside stats.json]
   AUSMT_STATS_DAILY_KEEP    daily-row retention, in DAYS   [default 92; monthly rollups are never pruned]
   AUSMT_STATS_NOW           run instant (ISO %Y-%m-%dT%H:%M:%SZ or %Y-%m-%d) — TEST hook for determinism
 
@@ -167,6 +175,10 @@ _SCRIPTED_TOKENS = ("curl/", "wget/", "python-requests", "python-urllib", "go-ht
 CLIENT_CRAWLER = "crawler"
 CLIENT_SCRIPTED = "scripted"
 CLIENT_BROWSER = "browser"
+
+# The append-only daily archive, written beside stats.json in the gateway state dir. See the archive
+# section further down for what it holds and, more importantly, what it deliberately does not.
+_ARCHIVE_FILENAME = "daily_archive.jsonl"
 
 
 # --------------------------------------------------------------------------------------------------
@@ -374,6 +386,48 @@ def _norm_url(url) -> str | None:
     return url.replace("\\", "/").lstrip("/")
 
 
+def build_collection_map(mtcat: dict | None, reverse_map: dict[str, dict]) -> dict[str, str]:
+    """{survey label: collection_id} for the surveys the SERVED mtcat.json places in a collection, or
+    {} when that document is absent, unreadable or names no collection.
+
+    Keyed on the survey LABEL because every other per-survey map in this file is, so a collection
+    total is exactly the sum of its members' rows and a reader can check it by eye.
+
+    MTCAT names a survey twice: `survey_id` (the slug the manifest's bundle rows carry) and `title`
+    (the label every manifest row carries). Both joins are built and the SLUG is preferred, because
+    a slug is an identifier and a title is prose that can be re-worded between builds. A survey the
+    document does not place in a collection simply has no entry: no bucket, no zero, exactly like the
+    optional state table.
+
+    Tier-3 collection bundles do not exist yet. When they do, they arrive as ordinary manifest bundle
+    rows and flow through the download path already, so a collection-level artifact will be credited
+    to whatever survey label its row carries; the latent case needs no handling here, only this note
+    so it is recognised rather than rediscovered."""
+    out: dict[str, str] = {}
+    if not isinstance(mtcat, dict):
+        return out
+    by_slug: dict[str, str] = {}
+    by_title: dict[str, str] = {}
+    for row in mtcat.get("surveys") or []:
+        if not isinstance(row, dict):
+            continue
+        cid = row.get("collection_id")
+        if not isinstance(cid, str) or not cid:
+            continue
+        if isinstance(row.get("survey_id"), str) and row["survey_id"]:
+            by_slug[row["survey_id"]] = cid
+        if isinstance(row.get("title"), str) and row["title"]:
+            by_title[row["title"]] = cid
+    for row in reverse_map.values():
+        survey = row.get("survey")
+        if not isinstance(survey, str) or not survey:
+            continue
+        cid = by_slug.get(row.get("slug")) or by_title.get(survey)
+        if cid:
+            out[survey] = cid
+    return out
+
+
 # --------------------------------------------------------------------------------------------------
 # Caddy log-line parsing. The JSON encoder logs one object per request; we read only the minimal
 # fields the record permits (ts / method / uri / status / size / masked-address / UA-for-bot-only).
@@ -530,7 +584,7 @@ def _empty_stats() -> dict:
             "totals": {"downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
                        "api_requests": 0, "downloads_by_client": {}},
             "downloads": {"by_format": {}, "by_survey": {}, "by_dataset": {}, "by_kind": {}},
-            "total_served_surveys": 0,
+            "total_served_surveys": 0, "by_collection": {},
             "countries": {}, "by_state": {}, "by_state_detail": {}, "daily": [], "monthly": []}
 
 
@@ -567,7 +621,7 @@ def _empty_month(month: str) -> dict:
             "api_requests": 0, "days": 0, "seeded_days": 0, "geo_days": 0, "detail_days": 0,
             "networks_peak": 0,
             "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_state": {},
-            "by_state_detail": {}, "downloads_by_client": {}}
+            "by_state_detail": {}, "downloads_by_client": {}, "by_collection": {}}
 
 
 def _as_int(v, default: int = 0) -> int:
@@ -611,6 +665,20 @@ def _coerce_survey_map(raw) -> dict[str, dict]:
                          if isinstance(codes, list) else []}
         else:
             out[name] = {"downloads": _as_int(val), "bytes": 0, "countries": []}
+    return out
+
+
+def _coerce_volume_map(raw) -> dict[str, dict]:
+    """A {key: {downloads, bytes}} map from a prior file: the shape the collection rollup uses, and
+    the shape the daily archive writes for surveys and collections. Absent (a file written before the
+    dimension existed) reads back empty and starts accruing, like every other additive dimension."""
+    out: dict[str, dict] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, val in raw.items():
+        if not isinstance(key, str) or not isinstance(val, dict):
+            continue
+        out[key] = {"downloads": _as_int(val.get("downloads")), "bytes": _as_int(val.get("bytes"))}
     return out
 
 
@@ -662,6 +730,7 @@ def _coerce_month_rows(raw) -> list[dict]:
             if isinstance(row.get(k), dict):
                 m[k] = {str(kk): _as_int(vv) for kk, vv in row[k].items()}
         m["by_state_detail"] = _coerce_state_detail(row.get("by_state_detail"))
+        m["by_collection"] = _coerce_volume_map(row.get("by_collection"))
         m["surveys"] = _coerce_survey_map(row.get("surveys"))
         out.append(m)
     out.sort(key=lambda r: r["month"])
@@ -735,8 +804,11 @@ def _coerce_prev(prev: dict | None) -> dict:
     if isinstance(prev.get("by_state"), dict):
         s["by_state"] = {str(k): _as_int(v) for k, v in prev["by_state"].items()}
     # The per-state DETAIL map rides the same additive, key-presence rule: a file written before it
-    # existed starts empty and no earlier month is given a detail row it never measured.
+    # existed starts empty and no earlier month is given a detail row it never measured. So does the
+    # collection rollup, which is younger again: it starts at the fold that could first read a served
+    # mtcat.json, and no earlier download is credited to a collection after the fact.
     s["by_state_detail"] = _coerce_state_detail(prev.get("by_state_detail"))
+    s["by_collection"] = _coerce_volume_map(prev.get("by_collection"))
     # Day rows are carried forward WHOLE, unknown keys and all. A row written by a build that briefly
     # recorded a per-day `states` map keeps it and simply ages out of the 92-day window; it is not
     # stripped, because rewriting history on upgrade is the one thing this file never does.
@@ -757,7 +829,8 @@ def _coerce_prev(prev: dict | None) -> dict:
 
 def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: GeoIP,
               run_dt: dt.datetime, *, daily_keep: int = DEFAULT_DAILY_KEEP_DAYS,
-              au_states: "AuStates | None" = None) -> dict:
+              au_states: "AuStates | None" = None, collections: dict[str, str] | None = None,
+              served_build: str | None = None, archive_out: list | None = None) -> dict:
     """Fold every COMPLETE day in `lines` into `prev`, returning the new cumulative stats dict.
 
     Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
@@ -786,7 +859,17 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     `au_states` is the OPTIONAL AU state table. When it is present, a request that classifies as AU also
     lands in a state bucket -- cumulatively and in its calendar month, never on the day row; when it is
     absent the fold is country-only and writes no state buckets at all: absent, never a zero (see
-    AuStates for why state and not city, and _count_geo for why not by day)."""
+    AuStates for why state and not city, and _count_geo for why not by day).
+
+    `collections` is the OPTIONAL {survey label: collection_id} map from the served mtcat.json
+    (build_collection_map). Present, a download to a member survey also bumps its collection at the
+    cumulative and month grains; absent, no collection dimension is written for that run.
+
+    `archive_out`, when given, receives ONE dict per day this call actually folded: the day at maximal
+    NON-GEO granularity, for the append-only archive (see _archive_line). It is an out channel and not
+    a second return value, so every existing caller keeps its signature; `aggregate` stays a function
+    of its inputs and simply hands the caller the rows it built. `served_build` is stamped onto those
+    rows when the served tree names itself."""
     stats = _coerce_prev(prev)
     prev_folded = stats.get("last_folded_date")
     cutoff_date = (run_dt.date() - dt.timedelta(days=1))  # last complete day
@@ -800,6 +883,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     countries = stats["countries"]
     by_state = stats["by_state"]
     by_state_detail = stats["by_state_detail"]
+    by_collection = stats["by_collection"]
+    collections = collections or {}
     daily_index = {d["date"]: d for d in stats["daily"]}
     month_index = {m["month"]: m for m in stats["monthly"]}
     # date -> set of MASKED networks seen on it, for THIS run only. Caddy already truncated the address
@@ -817,6 +902,11 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # counting is forward-only, so a month can carry a full download figure beside one day of geo; this
     # is what lets the export state that rather than look self-consistent while under-reporting.
     geo_days_seen: dict[str, str] = {}
+    # date -> the ARCHIVE row for that day, built only for the days THIS call folds. The daily rows in
+    # stats.json are a 92-day window that the render path reads; these are the permanent, never-read
+    # record, so they carry the finer per-survey / per-dataset / per-collection detail that has no
+    # place on a rendered day row. Geography is deliberately absent from them (see _archive_line).
+    archive_index: dict[str, dict] = {}
 
     for raw in lines:
         rec = parse_caddy_line(raw) if isinstance(raw, str) else None
@@ -843,6 +933,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             continue
         day = _day_row(daily_index, stats["daily"], date)
         month = _month_row(month_index, stats["monthly"], date[:7])
+        arc = _archive_day(archive_index, date)
         days_seen[date] = date[:7]
         _note_network(networks_seen, date, rec["address"])
 
@@ -850,6 +941,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             totals["visits"] += 1
             day["visits"] += 1
             month["visits"] += 1
+            arc["visits"] += 1
             _count_geo(geoip, au_states, rec["address"], countries, by_state, by_state_detail, month,
                        metric="visits")
             geo_days_seen[date] = date[:7]
@@ -857,6 +949,7 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             totals["api_requests"] += 1
             day["api_requests"] = _as_int(day.get("api_requests")) + 1
             month["api_requests"] += 1
+            arc["api"] += 1
             # The API line used to be the one counted class with no geography, so any reach claim built
             # from the country table silently excluded programmatic consumers.
             _count_geo(geoip, au_states, rec["address"], countries, by_state, by_state_detail, month,
@@ -873,13 +966,17 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             n = 1 if counted else 0
             totals["downloads"] += n
             totals["download_bytes"] += size
+            arc["downloads"] += n
+            arc["download_bytes"] += size
             if counted:
                 _bump(totals["downloads_by_client"], client)
                 _bump(month["downloads_by_client"], client)
+                _bump(arc["by_client"], client)
             row = reverse_map.get(rel) or _release_bundle_row(reverse_map, rel)
             if row is None:
                 totals["unattributed"] += n
                 month["unattributed"] += n
+                arc["unattributed"] += n
                 fmt = "unattributed"
                 survey = None
                 kind_key = "unattributed"
@@ -898,6 +995,15 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 else:
                     d["downloads"] = _as_int(d.get("downloads")) + n
                     d["bytes"] = _as_int(d.get("bytes")) + size
+                # The archive's own per-dataset row: sparse (only the datasets this day touched) and
+                # attributed only, exactly like the cumulative map above it.
+                a = arc["by_dataset"].get(rel)
+                if a is None:
+                    arc["by_dataset"][rel] = {"downloads": n, "bytes": size, "format": fmt,
+                                              "survey": survey}
+                else:
+                    a["downloads"] += n
+                    a["bytes"] += size
             if counted:
                 by_format[fmt] = by_format.get(fmt, 0) + 1
                 by_kind[kind_key] = by_kind.get(kind_key, 0) + 1
@@ -905,6 +1011,8 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
                 _bump(day.setdefault("kinds", {}), kind_key)
                 _bump(month["formats"], fmt)
                 _bump(month["kinds"], kind_key)
+                _bump(arc["by_format"], fmt)
+                _bump(arc["by_kind"], kind_key)
             day["downloads"] += n
             day["download_bytes"] = _as_int(day.get("download_bytes")) + size
             month["downloads"] += n
@@ -913,6 +1021,16 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             if survey:
                 _bump_survey(by_survey, survey, size, counted=counted, country=cc)
                 _bump_survey(month["surveys"], survey, size, counted=counted, country=cc)
+                _bump_volume(arc["by_survey"], survey, size, counted=counted)
+                # The COLLECTION rollup: the same download credited to the programme its survey
+                # belongs to, so "how much did AusLAMP move" needs no join against mtcat.json at
+                # report time. Keyed and counted exactly like the survey above it, so a collection
+                # total is the sum of its members and nothing else.
+                cid = collections.get(survey)
+                if cid:
+                    _bump_volume(by_collection, cid, size, counted=counted)
+                    _bump_volume(month["by_collection"], cid, size, counted=counted)
+                    _bump_volume(arc["by_collection"], cid, size, counted=counted)
             # Geography follows the COUNT, not the line, so `sum(countries.values())` stays exactly
             # downloads + visits + API requests and the table caption can say so and be true.
             if counted:
@@ -930,6 +1048,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         m = month_index.get(date[:7])
         if m is not None:
             m["networks_peak"] = max(_as_int(m.get("networks_peak")), len(nets))
+        arc = archive_index.get(date)
+        if arc is not None:
+            arc["networks"] = len(nets)
     # One increment per distinct ACTIVE date, so a month row records how much of itself it covers.
     # `detail_days` rides the same loop and counts the same days, because every day THIS fold folds is
     # folded with every dimension it knows about. The two diverge only across an upgrade: a month
@@ -967,11 +1088,29 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     stats["schema"] = SCHEMA_VERSION
     stats["generated_at"] = now_utc(run_dt)
     stats["timer_period_min"] = TIMER_PERIOD_MIN
+    # The archive rows for the days this call folded, oldest first. Only days with counted activity
+    # produce one, exactly as only such days produce a daily row: a day the fold passed over holds no
+    # measurement, and writing an all-zero line for it would state one.
+    if archive_out is not None:
+        archive_out.extend(_archive_line(archive_index[d], served_build=served_build)
+                           for d in sorted(archive_index))
     return stats
 
 
 def _bump(counter: dict, key: str, n: int = 1) -> None:
     counter[key] = _as_int(counter.get(key)) + n
+
+
+def _bump_volume(index: dict, key: str, size: int, *, counted: bool = True) -> None:
+    """One download line of `size` bytes against `key` in a {key: {downloads, bytes}} map: the shape
+    the collection rollup and the archive's per-survey map share. `counted` is False for a line the
+    within-day dedupe already saw, whose bytes still sum because they really were served."""
+    row = index.get(key)
+    if not isinstance(row, dict):
+        row = {"downloads": 0, "bytes": 0}
+        index[key] = row
+    row["downloads"] = _as_int(row.get("downloads")) + (1 if counted else 0)
+    row["bytes"] = _as_int(row.get("bytes")) + size
 
 
 def _bump_survey(index: dict, survey: str, size: int, *, counted: bool = True,
@@ -1096,9 +1235,62 @@ def _month_row(index: dict, monthly: list, month: str) -> dict:
 
 
 # --------------------------------------------------------------------------------------------------
+# The APPEND-ONLY DAILY ARCHIVE (owner ruling 2026-07-30: capture maximal non-geo granularity at day
+# grain now, so a report nobody has asked for yet can still be derived later).
+#
+# WHY IT EXISTS. The raw log rotates in about a week and the daily rows in stats.json roll off after 92
+# days, so today the only permanent record is the calendar-month rollup. Every question finer than a
+# month becomes unanswerable the moment the window passes, and it becomes unanswerable RETROACTIVELY:
+# the data existed, we folded it, and we threw the detail away. This file is the durable aggregate.
+#
+# WHAT IT IS NOT. It is not read by anything. The gateway never opens it, no route serves it, and it
+# lives in the gateway state dir, outside the published site-data tree. It is not pruned, and it is
+# not rewritten: a day is appended once, when it folds, and the fold watermark guarantees that happens
+# exactly once. Nothing here is ever backfilled.
+#
+# THE GEO BOUNDARY, which is the one line that must not move. The owner's ratified exclusion of
+# day-by-state data generalises: NO country and NO state below month grain, rendered OR archived. A
+# named country on a named day is a smaller cell than a named state on a named month, and the
+# small-cell argument that ruled out a city column rules it out too. So these rows carry counts,
+# volumes, formats, kinds, client classes, surveys, datasets and collections, and no geography at all.
+# The leak sweep is extended over the archive for the same reason it covers stats.json.
+# --------------------------------------------------------------------------------------------------
+def _archive_day(index: dict, date: str) -> dict:
+    """The run-local working row for `date`, created on first use. Dense while it accumulates; the
+    zero counters and empty maps are dropped when it is serialised (see _archive_line)."""
+    row = index.get(date)
+    if row is None:
+        row = {"date": date, "downloads": 0, "visits": 0, "api": 0, "networks": 0,
+               "download_bytes": 0, "unattributed": 0, "by_format": {}, "by_kind": {},
+               "by_client": {}, "by_survey": {}, "by_dataset": {}, "by_collection": {}}
+        index[date] = row
+    return row
+
+
+def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
+    """One archive row as it is written: SPARSE, so a quiet day is a short line rather than a wall of
+    zeroes and an empty map. `date` is always present; every other key appears only when it carries
+    something. `served_build` is stamped when the served tree names itself and the key is simply
+    omitted when it does not (see _served_build_id: this reads an identifier, it never makes one).
+
+    There is deliberately no country, state, address or user-agent key here, and no per-network datum
+    beyond the scalar `networks` count."""
+    out: dict = {"date": row["date"]}
+    for key in ("downloads", "visits", "api", "networks", "download_bytes", "unattributed"):
+        if _as_int(row.get(key)):
+            out[key] = _as_int(row[key])
+    for key in ("by_format", "by_kind", "by_client", "by_survey", "by_dataset", "by_collection"):
+        if row.get(key):
+            out[key] = row[key]
+    if served_build:
+        out["served_build"] = served_build
+    return out
+
+
+# --------------------------------------------------------------------------------------------------
 # I/O: read the log dir, load inputs, write stats.json atomically (tmp -> chmod 0644 -> os.replace).
 # --------------------------------------------------------------------------------------------------
-def read_log_lines(log_dir) -> list[str]:
+def read_log_lines(log_dir, *, skipped: list | None = None) -> list[str]:
     """Every line of every Caddy access-log file under `log_dir`: the live access.json, its PLAIN
     rolled siblings (access*.json / access*.log), and its COMPRESSED rolled siblings (access*.json.gz).
 
@@ -1113,28 +1305,54 @@ def read_log_lines(log_dir) -> list[str]:
     so no archive is read twice.
 
     Tolerant, as the whole file is (record D6 retention pin): a missing dir, an unreadable file, or a
-    truncated/non-gzip archive contributes no lines from THAT file and never raises."""
+    truncated/non-gzip archive contributes no lines from THAT file and never raises.
+
+    TOLERANT IS NOT SILENT, and the difference cost real days. On 2026-07-30 the box's own access.json
+    was root:root 0600, every open raised, and this function swallowed it: the fold ran for days on the
+    shipped front-door file alone and produced a plausible, complete-looking stats.json the whole time.
+    A file that the glob MATCHED but that could not be OPENED is an operational fault, so it is named
+    on stderr and recorded in `skipped` (an optional list the caller passes to get the count into the
+    journal line). Never raising is unchanged; being quiet about it is not.
+
+    A gzip archive gets the distinction it earns. Failing to OPEN it is the same fault as above and is
+    reported. Opening it and finding it is not a gzip stream (or is truncated mid-stream) is the
+    already-documented salvage case, expected of a hand-placed or half-pulled archive, and stays a
+    silent skip: it must not turn a routine recovery into a nightly warning."""
     lines: list[str] = []
     if not log_dir:
         return lines
     d = Path(log_dir)
     if not d.is_dir():
         return lines
+
+    def _unreadable(path, exc) -> None:
+        print(f"aggregate_stats: cannot read log file {path} ({type(exc).__name__}: {exc}) -- "
+              f"its lines are NOT in this fold", file=sys.stderr)
+        if skipped is not None:
+            skipped.append(str(path))
+
     files = sorted(glob.glob(str(d / "access*.json")) + glob.glob(str(d / "access*.log")))
     for f in files:
         try:
             with open(f, encoding="utf-8", errors="replace") as fh:
                 lines.extend(fh.read().splitlines())
-        except OSError:
-            continue
+        except OSError as exc:
+            _unreadable(f, exc)
     for f in sorted(glob.glob(str(d / "access*.json.gz"))):
         try:
-            with gzip.open(f, "rt", encoding="utf-8", errors="replace") as fh:
+            raw = open(f, "rb")
+        except OSError as exc:      # permissions, a vanished file: the same fault as above
+            _unreadable(f, exc)
+            continue
+        try:
+            with gzip.open(raw, "rt", encoding="utf-8", errors="replace") as fh:
                 lines.extend(fh.read().splitlines())
         except (OSError, EOFError, zlib.error):
             # Not a gzip stream, truncated, or corrupt mid-stream. Skip this archive and keep the
             # readable ones: one bad file must never cost a whole fold (gzip.BadGzipFile is an OSError).
             continue
+        finally:
+            raw.close()
     return lines
 
 
@@ -1163,6 +1381,46 @@ def write_stats_atomic(stats_file, stats: dict) -> None:
     os.replace(tmp, dest)
 
 
+def _served_build_id(served_dir) -> str | None:
+    """The identifier the SERVED tree already carries, or None. Read from build.json's `build_id`
+    (the build root writes it beside manifest.json), falling back to build_report.json's `build_id`
+    and then its `generated` stamp.
+
+    This READS an identifier, it never makes one: no machinery is added to stamp a build that does not
+    stamp itself, and a tree that names itself nowhere simply archives no such key."""
+    for name, keys in (("build.json", ("build_id",)),
+                       ("build_report.json", ("build_id", "generated"))):
+        doc = _load_json(Path(served_dir) / name)
+        for key in (keys if isinstance(doc, dict) else ()):
+            val = doc.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+    return None
+
+
+def append_daily_archive(archive_file, rows) -> None:
+    """Append one JSON line per newly folded day to the archive, oldest first.
+
+    APPEND-ONLY and never rewritten, so this cannot corrupt what is already there. It is called only
+    AFTER stats.json has landed, which is what makes a duplicate impossible: if the stats write fails,
+    the watermark never advances, the same days fold again next run, and they must not already be in
+    the file. The reverse failure (stats written, this append fails) loses that day from the archive,
+    which is the tolerable direction and is why it is noted loudly.
+
+    Never raises, like everything else the timer calls: a warning on stderr, and the fold still
+    counts as done."""
+    if not archive_file or not rows:
+        return
+    try:
+        with open(archive_file, "a", encoding="utf-8") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, sort_keys=True) + "\n")
+    except OSError as exc:
+        print(f"aggregate_stats: could not append {len(rows)} day(s) to the daily archive at "
+              f"{archive_file} ({type(exc).__name__}: {exc}) -- stats.json is unaffected, but those "
+              f"days are not in the permanent archive", file=sys.stderr)
+
+
 def _cfg(name: str, default: str) -> str:
     v = os.environ.get(name, "").strip()
     return v if v else default
@@ -1182,6 +1440,10 @@ def main(argv=None) -> int:
     au_states_csv = _cfg("AUSMT_STATS_AU_STATES_CSV",
                          str(Path(data_dir) / "geoip" / "dbip-au-states.csv"))
     stats_file = _cfg("AUSMT_STATS_FILE", str(Path(data_dir) / "gateway" / "state" / "stats.json"))
+    # The permanent daily archive lives BESIDE stats.json, i.e. in the gateway state dir and outside
+    # the published site-data tree, because nothing serves it and nothing should be able to.
+    archive_file = _cfg("AUSMT_STATS_DAILY_ARCHIVE",
+                        str(Path(stats_file).parent / _ARCHIVE_FILENAME))
     try:
         daily_keep = int(_cfg("AUSMT_STATS_DAILY_KEEP", str(DEFAULT_DAILY_KEEP_DAYS)))
     except ValueError:
@@ -1194,23 +1456,36 @@ def main(argv=None) -> int:
         # The AU state table is OPTIONAL in exactly the way the country CSV is: absent, the fold is
         # country-only and silent about it (deploy/scripts/prep_au_states.py is what produces it).
         au_states = AuStates.load(au_states_csv)
+        # The collection rollup and the build stamp both come from the SERVED tree beside the manifest
+        # (mtcat.json, build.json). Both optional, both read tolerantly: absent, the fold simply
+        # writes no collection dimension and stamps no build on the archive rows.
+        served_dir = Path(manifest_path).parent
+        collections = build_collection_map(_load_json(served_dir / "mtcat.json"), reverse_map)
+        served_build = _served_build_id(served_dir)
         prev = _load_json(stats_file)
-        lines = read_log_lines(log_dir)
+        skipped_logs: list[str] = []
+        lines = read_log_lines(log_dir, skipped=skipped_logs)
+        archive_rows: list[dict] = []
         stats = aggregate(prev, lines, reverse_map, geoip, run_dt, daily_keep=daily_keep,
-                          au_states=au_states)
+                          au_states=au_states, collections=collections,
+                          served_build=served_build, archive_out=archive_rows)
         dest_dir = Path(stats_file).parent
         if not dest_dir.is_dir():
             print(f"aggregate_stats: state dir {dest_dir} does not exist -- not writing stats.json "
                   f"(is the gateway state dir created?)", file=sys.stderr)
             return 0
         write_stats_atomic(stats_file, stats)
+        # AFTER the stats write, deliberately: a failed stats write leaves the watermark where it was,
+        # so those days fold again next run and must not already sit in the append-only archive.
+        append_daily_archive(archive_file, archive_rows)
         print(f"aggregate_stats: folded up to {stats.get('last_folded_date')} -- "
               f"downloads={stats['totals']['downloads']} visits={stats['totals']['visits']} "
               f"api={stats['totals']['api_requests']} months={len(stats['monthly'])} "
               f"days_kept={len(stats['daily'])} "
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
-              f"au_state_rows={au_states.row_count} "
-              f"log_lines={len(lines)} -> {stats_file}", file=sys.stderr)
+              f"au_state_rows={au_states.row_count} collections={len(collections)} "
+              f"log_lines={len(lines)} files_skipped={len(skipped_logs)} "
+              f"archived_days={len(archive_rows)} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 0

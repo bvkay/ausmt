@@ -892,12 +892,35 @@ per-page view is countable (see the caveat above).
 | **Download counting** | A download counts **once per day per masked network per file**, and admits status 200 or 206. One save action can log two requests (the browser cancels on the download header, its download manager refetches) and a resumed transfer logs one request per range. Every request's **bytes still sum**, so the volume covers what was actually served. |
 | **Release-tier bundles** | `/data/releases/<tag>/bundles/<file>` counts as a download and attributes to its survey by bundle filename against the live manifest. The frozen citable copy keeps its own row; the release metadata JSONs are not counted. |
 | **Distinct networks** per day | The count of distinct masked networks (the /24 or /48 the edge already wrote) seen that day. The addresses live in memory for the one run that folds the day; only the integer is written. One network can be a whole institution, so read it as reach, not as people. |
+| **Downloads by collection** | The `collection_id` the served `mtcat.json` gives a survey (AusLAMP and its siblings), joined on the bundle **slug** first and the survey title second. A collection total is the sum of its member surveys. Optional: no served `mtcat.json`, no collection dimension, no zero. |
 | **Monthly rollups** | Each calendar month is accumulated as its days fold, never recomputed from the daily tail. |
 
 **Aggregate retention (separate from the raw log).** Daily rows are a rolling **92-day** window
 (`AUSMT_STATS_DAILY_KEEP`, in days). Monthly rollup rows are kept **indefinitely**: they are tiny
 pure-count records with no address, path or identity in them, and they are what makes year-over-year
 funding reporting possible. Pruning a day never loses the month it belonged to.
+
+**The daily aggregate archive.** Beside `stats.json`, the fold appends one JSON line per newly folded
+day to `${AUSMT_DATA_DIR}/gateway/state/daily_archive.jsonl` (override with
+`AUSMT_STATS_DAILY_ARCHIVE`). It is the durable day-grain record: the raw log rotates in a week and
+the daily rows roll off after a quarter, so without it any question finer than a month becomes
+unanswerable, and unanswerable retroactively.
+
+| Property | Value |
+| --- | --- |
+| Location | `${AUSMT_DATA_DIR}/gateway/state/daily_archive.jsonl`: the **gateway state dir**, deliberately outside `site-data/`, so nothing can serve it |
+| Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, volume, unattributed, and the by-format / by-kind / by-client / by-survey / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse: only nonzero entries are written |
+| Never | No country, no state, no address, no user-agent, and no per-network datum beyond the scalar count. **No geography below the monthly grain, retained or rendered** |
+| Retention | Indefinite. Never pruned, never rewritten, append-only, one line per day, written after `stats.json` lands so a failed fold cannot duplicate a day |
+| Read by | **Nothing.** No gateway route, no render path, no export. A pin in `deploy/tests` fails the lane if a gateway source ever names it |
+| Backups | **Include it.** `backup.sh` copies every non-secret flat file in the state dir, so it rides along already, but verify it is in your snapshots, because it is the one file there whose loss is permanent: once the logs have rotated, nothing can rebuild it |
+
+A write failure is warned about on stderr and does **not** break the fold: `stats.json` still lands,
+and the journal line reports `archived_days=` alongside `files_skipped=`, the number of log files the
+glob matched but could not open, each one named on stderr. `files_skipped` is not cosmetic: on
+2026-07-30 the box's `access.json` was `root:root 0600`, every open failed silently, and the fold ran
+for days on the shipped front-door file alone while writing a complete-looking `stats.json`. A
+non-zero count there means the fold is missing lines it should have had.
 
 **Export.** The Analytics screen offers *Download report data*: `analytics.csv` (one row per retained
 month) and `analytics-surveys.csv` (one row per month and survey, with volume). Both are read-only,

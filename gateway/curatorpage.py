@@ -3475,6 +3475,28 @@ def _format_breakdown(stats: dict) -> str:
     return out
 
 
+def _collection_line(stats: dict) -> str:
+    """'Downloads by collection' -- the programme-level rollup (AusLAMP and its siblings), built by the
+    fold from the served mtcat.json's collection_id so a programme figure needs no join at report time.
+
+    Rendered only when the fold actually produced one. It is a THIRD forward-only starting point,
+    younger than both seams the rest of this screen marks, and neither `seeded_days` nor `detail_days`
+    speaks for it, so it carries its own one-line caveat rather than borrowing a marker that would
+    overstate its coverage. A box with no served mtcat.json shows nothing here: no line, no zero."""
+    rows = stats.get("by_collection") if isinstance(stats, dict) else None
+    if not isinstance(rows, dict) or not rows:
+        return ""
+    items = sorted(((str(k), _as_int(v.get("downloads")), _as_int(v.get("bytes")))
+                    for k, v in rows.items() if isinstance(v, dict)),
+                   key=lambda kv: (-kv[1], kv[0]))
+    if not items:
+        return ""
+    line = ", ".join(f'{_esc(k)}: <b>{_esc(n)}</b> ({_esc(_human_bytes(b))})' for k, n, b in items)
+    return (f'<p class="opsnote">Downloads by collection &mdash; {line}. A collection total is the '
+            f'sum of its member surveys and nothing else. It is counted from the fold that added the '
+            f'rollup onward, so earlier downloads are in the totals above and in no figure here.</p>')
+
+
 def _detail_caveat(stats: dict) -> str:
     """The honesty line for a box that was folding BEFORE the detailed dimensions existed. `detail_since`
     is stamped by the aggregator when it upgrades an older stats.json in place; downloads before that day
@@ -4028,6 +4050,7 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
         + chip
         + _analytics_cards(stats)
         + _format_breakdown(stats)
+        + _collection_line(stats)
         + _detail_caveat(stats)
         + '<h2>Quarterly breakdown</h2>'
         + '<p class="sub">The last three calendar months side by side. Monthly rollups are kept '
