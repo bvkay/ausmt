@@ -83,5 +83,16 @@ jobs:
       - name: Install portal dev deps (jsdom, for the interaction tests)
         run: npm ci
 
+      # Lint the guard tests themselves. portal/tests/ was the one body of Python in the repo that no
+      # lane linted: build-products.yml's ruff step reaches ../contract and ../portal/tools but not
+      # ../portal/tests, and it is not triggered by portal/tests/** anyway, so the tests could only ever
+      # have been a next-PR backstop there. This lane already triggers on portal/** and runs the suite,
+      # so the lint belongs beside it. Same ruff pin and same engine config as the other two lanes
+      # (build-products.yml, gateway-ci.yml): engine/pyproject.toml [tool.ruff] is the single lint policy.
+      - name: Lint the guard tests (ruff)
+        run: |
+          python -m pip install ruff==0.15.17
+          python -m ruff check --config ../engine/pyproject.toml tests
+
       - name: Headless portal smoke + interaction tests
         run: pytest -q tests

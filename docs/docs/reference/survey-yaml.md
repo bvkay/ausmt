@@ -60,7 +60,6 @@ absence is silent.
 | `nci_base` | optional | string | [10 Time series and distribution](#10-time-series-and-distribution) |
 | `processing` | recommended | mapping | [11 Processing and instruments](#11-processing-and-instruments) |
 | `instruments` | optional | list of mapping | [11 Processing and instruments](#11-processing-and-instruments) |
-| `tf_versions` | optional | list of mapping | [11 Processing and instruments](#11-processing-and-instruments) |
 | `collection` | optional | mapping | [12 Collection membership](#12-collection-membership) |
 | `release_notes` | recommended | list of mapping | [13 Release notes](#13-release-notes) |
 | `coordinate_resolution` | optional | mapping | [14 Coordinate resolution](#14-coordinate-resolution) |
@@ -665,16 +664,11 @@ mandatory: a source that mandates exact wording fails without it.
 | Type | list of mapping with members `manufacturer` and `model` |
 | Example | `- manufacturer: "Phoenix"` with `model: "MTU-5C"` |
 
-### 11.3 tf_versions[]
-
-| | |
-|---|---|
-| Definition | Per-station transfer-function version records, one entry per station that holds more than one version. |
-| Obligation | optional |
-| Occurrence | 0-n |
-| Type | list of mapping |
-| Default | absent means the station has one version, which is current |
-| Note | The version record and its processing block are specified in [Versioning and releases](../data-model/versioning.md#per-station-transfer-function-versions). |
+`processing` is survey-wide: no key here records processing per station, and no key versions a station's
+transfer function. A reprocessing is a MAJOR bump of the package, as
+[Versioning and releases](../data-model/versioning.md#reprocessed-transfer-functions) sets out. What a
+station's own source file states about its processing is read into its
+[station product](station-products.md#19-processing).
 
 ---
 

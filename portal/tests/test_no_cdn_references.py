@@ -8,7 +8,6 @@ relative path (see portal/vendor/README.md for upstream URLs + sha256 provenance
 Fails if: `cdnjs.cloudflare.com` reappears anywhere in the shipped HTML entry points, OR any vendored
 script/link tag in index.html points somewhere other than `vendor/`.
 """
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent   # portal/

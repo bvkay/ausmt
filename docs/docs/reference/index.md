@@ -53,7 +53,10 @@ These are not served. They define what the served documents are built from.
 
 ## Reading the field entries
 
-Every field entry on these pages carries the same rows.
+The numbered field entries on [MTCAT schema](mtcat-schema.md), [Download manifest
+schema](manifest-schema.md), [Build report schema](build-report-schema.md), the
+[survey.yaml reference](survey-yaml.md), [Per-station products](station-products.md) and the
+[Releases tier](releases.md) carry the same rows.
 
 | Row | Meaning |
 |---|---|
@@ -65,6 +68,11 @@ Every field entry on these pages carries the same rows.
 | Default | The value assumed when the field is absent, where one applies. |
 | Example | A value from the served corpus. |
 | Note | Non-normative guidance. Every other row is normative. |
+
+[Served documents](portal-documents.md) uses a compact `Member | Type | Definition` table instead. The
+documents on that page declare no schema and no obligations, so whether a member is present is stated in
+its Definition rather than in an Obligation row. `Note` means the same thing there: non-normative, and
+everything outside it normative.
 
 ## Other reference pages
 
