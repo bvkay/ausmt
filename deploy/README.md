@@ -906,13 +906,23 @@ breakdown exists (below), `analytics.csv` also gains `au_requests` and one `stat
 seen; the `state_*` columns of every row sum to that row's `au_requests` exactly, so a report built
 from the file cannot carry a silent Australian undercount.
 
-**Coverage columns in `analytics.csv`.** Three columns state coverage rather than counts:
+**Coverage columns in `analytics.csv`.** Four columns state coverage rather than counts:
 `active_days` (days folded into the month), `days_without_detail` (how many of those predate the
-detailed dimensions) and `geo_days` (how many actually contributed a country). Read `geo_days` beside
-`active_days` before quoting `au_requests`: country counting is forward-only, so a month can hold a
-full download figure and one day's worth of countries. The `state_*` columns still reconcile to
-`au_requests` exactly in that case, which makes the row look self-consistent while under-reporting the
-month. `geo_days` is what makes that visible in the file itself rather than in prose beside it.
+detailed dimensions), `detail_days` (how many were folded under the current counting rules) and
+`geo_days` (how many actually contributed a country). Read `geo_days` beside `active_days` before
+quoting `au_requests`: country counting is forward-only, so a month can hold a full download figure
+and one day's worth of countries. The `state_*` columns still reconcile to `au_requests` exactly in
+that case, which makes the row look self-consistent while under-reporting the month. `geo_days` is
+what makes that visible in the file itself rather than in prose beside it.
+
+There are **two** forward-only starting points, not one, and `detail_days` marks the later of them:
+the client split, the within-day download de-duplication, the country count for API requests, the
+per-survey country counts and the monthly network peak all began well after the detailed dimensions
+`days_without_detail` refers to. Where a month has no day folded under the current rules, its
+`geo_days`, `networks_peak`, `downloads_browser` and `downloads_scripted` cells are **left empty**
+rather than written as `0` (and so is the `countries` cell of `analytics-surveys.csv`): every
+spreadsheet and dataframe reads an empty cell as missing and a zero as measured, and this file is the
+one a funding report is built from.
 
 **Upgrading an existing box.** The aggregator reads an older `stats.json` tolerantly and upgrades it in
 place on the next fold; there is no migration step and nothing to run by hand. Every existing total,

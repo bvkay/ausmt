@@ -554,9 +554,18 @@ def _empty_month(month: str) -> dict:
     `networks_peak` is the largest distinct-network count any of its folded days saw. That figure used
     to live on daily rows ONLY, so it expired with the 92-day window and could never reach a quarterly
     report, which is exactly the horizon a funding report asks about. It accumulates as each day folds
-    and is never recomputed from a tail that is about to be pruned."""
+    and is never recomputed from a tail that is about to be pruned.
+
+    `detail_days` counts the days folded with THIS fold's dimensions in place, and it exists because
+    there are TWO forward-only seams in this file rather than one. `seeded_days` marks the first
+    (days carried over from a v1 daily tail). A month folded after that upgrade and before the client
+    split, the network peak, the per-survey country list and the within-day download dedupe existed
+    sits between the two: it carries a real volume and a real format split beside NONE of those. With
+    no such counter the screen cannot tell that month from one that measured them and saw zero, and a
+    fabricated 0 is exactly what the omit-rather-than-fabricate rule refuses."""
     return {"month": month, "downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
-            "api_requests": 0, "days": 0, "seeded_days": 0, "geo_days": 0, "networks_peak": 0,
+            "api_requests": 0, "days": 0, "seeded_days": 0, "geo_days": 0, "detail_days": 0,
+            "networks_peak": 0,
             "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_state": {},
             "by_state_detail": {}, "downloads_by_client": {}}
 
@@ -647,7 +656,7 @@ def _coerce_month_rows(raw) -> list[dict]:
             continue
         m = _empty_month(row["month"])
         for k in ("downloads", "visits", "download_bytes", "unattributed", "api_requests",
-                  "days", "seeded_days", "geo_days", "networks_peak"):
+                  "days", "seeded_days", "geo_days", "detail_days", "networks_peak"):
             m[k] = _as_int(row.get(k))
         for k in ("formats", "kinds", "countries", "by_state", "downloads_by_client"):
             if isinstance(row.get(k), dict):
@@ -922,8 +931,14 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         if m is not None:
             m["networks_peak"] = max(_as_int(m.get("networks_peak")), len(nets))
     # One increment per distinct ACTIVE date, so a month row records how much of itself it covers.
+    # `detail_days` rides the same loop and counts the same days, because every day THIS fold folds is
+    # folded with every dimension it knows about. The two diverge only across an upgrade: a month
+    # carried forward from an older file keeps its `days` and gains detail_days only for the days
+    # folded from here on, which is precisely what lets the screen refuse to render a zero for a
+    # dimension that month never measured.
     for month_key in days_seen.values():
         month_index[month_key]["days"] += 1
+        month_index[month_key]["detail_days"] = _as_int(month_index[month_key].get("detail_days")) + 1
     # One increment per distinct date that actually contributed a country to this month.
     for month_key in geo_days_seen.values():
         month_index[month_key]["geo_days"] = _as_int(month_index[month_key].get("geo_days")) + 1

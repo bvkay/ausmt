@@ -1107,6 +1107,46 @@ def test_each_month_records_how_many_of_its_days_carried_geo():
     assert seeded["monthly"][0]["days"] == 2 and seeded["monthly"][0]["geo_days"] == 0
 
 
+def test_each_month_records_how_many_days_carried_the_current_dimensions():
+    """CURRENT-DETAIL PIN. This file has TWO forward-only seams, not one. `seeded_days` marks the
+    first (days carried over from a v1 daily tail). A month folded AFTER that upgrade but BEFORE the
+    client split, the monthly network peak, the per-survey country list and the within-day download
+    dedupe existed sits between them: real volume, real formats, none of those. Without a counter for
+    the second seam the screen cannot tell such a month from one that measured them and saw nothing,
+    and it renders a fabricated zero. Each month must therefore record how many of its days were
+    folded with the current dimensions in place. FAILS IF the counter is absent, counts a day this
+    fold did not fold, double counts a day across runs, or credits days carried in from an older
+    file."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    run1 = dt.datetime(2026, 7, 10, 3, 30, tzinfo=dt.timezone.utc)
+    s1 = AGG.aggregate(None, [_line("/data/catalogue.json", "203.0.113.5", date="2026-07-08"),
+                              _line("/data/catalogue.json", "1.2.3.0", date="2026-07-09")],
+                       rmap, geoip, run1)
+    assert s1["monthly"][0]["detail_days"] == 2 == s1["monthly"][0]["days"], \
+        "every day this fold folds is folded with every dimension it knows about"
+    s2 = AGG.aggregate(s1, [_line("/data/catalogue.json", "203.0.113.5", date="2026-07-10")],
+                       rmap, geoip, _RUN)
+    assert s2["monthly"][0]["detail_days"] == 3, "a later fold adds only its own new days"
+    s3 = AGG.aggregate(s2, [], rmap, geoip, _RUN)
+    assert s3["monthly"][0]["detail_days"] == 3, "a re-run must not re-count a folded day"
+    # THE CASE THE SCREEN NEEDS: a month carried in from a file written before these dimensions. Its
+    # twenty folded days are real and stay real; only the day THIS fold adds carries the detail.
+    prior = {"schema": 2, "last_folded_date": "2026-07-09", "since": "2026-07-01",
+             "totals": {"downloads": 30, "visits": 90, "download_bytes": 1048576, "unattributed": 0,
+                        "api_requests": 12},
+             "downloads": {"by_format": {}, "by_survey": {}, "by_dataset": {}, "by_kind": {}},
+             "countries": {"AU": 60}, "daily": [],
+             "monthly": [{"month": "2026-07", "downloads": 30, "visits": 90, "days": 20,
+                          "seeded_days": 0, "download_bytes": 1048576, "api_requests": 12}]}
+    mixed = AGG.aggregate(prior, [_line("/data/catalogue.json", "203.0.113.5", date="2026-07-10")],
+                          rmap, geoip, _RUN)
+    row = mixed["monthly"][0]
+    assert row["days"] == 21, "the days folded before are not forgotten"
+    assert row["detail_days"] == 1, "only the day folded with the dimensions in place carries them"
+    assert row["seeded_days"] == 0, "the second seam is not the first one and must not borrow it"
+
+
 def test_the_honesty_lane_still_leaks_nothing():
     """LEAK PIN (counting-honesty lane). The new dimensions are a client class label, a status code, a
     run-local dedupe set and a per-month day count: none of them may put an address or a user-agent

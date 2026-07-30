@@ -630,7 +630,7 @@ def test_a_measured_month_still_renders_its_real_zeroes(tmp_path):
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
-            doc = _v2_stats()
+            doc = _v4_stats()
             doc["monthly"] = [dict(doc["monthly"][0], seeded_days=0, unattributed=0)]
             _write_stats(cfg, doc)
             html = (await client.get("/gateway/curator/analytics")).text
@@ -644,8 +644,11 @@ def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_p
     """DISCLOSURE PIN. Both honesty lines enumerate which dimensions are partial, and both omitted
     COUNTRIES and UNATTRIBUTED, which is why a month showing 'Countries: 1' beside a headline of 11
     reads as a bug rather than as the forward-only seam it is. Both lines must name every partial
-    dimension, including the ones this lane added. FAILS IF either line still omits countries or
-    unattributed, or if the new dimensions land undisclosed."""
+    dimension, INCLUDING the ones this lane added, and each must attach them to the seam they actually
+    belong to: the caveat's dated sentence covers the v1 hinge, and the dimensions that began at the
+    later fold are named in their own sentence, which does NOT claim that date. FAILS IF either line
+    omits countries or unattributed, if the new dimensions land undisclosed, or if the dated sentence
+    swallows them."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
@@ -653,13 +656,22 @@ def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_p
             doc["monthly"][-1]["seeded_days"] = 3
             _write_stats(cfg, doc)
             html = (await client.get("/gateway/curator/analytics")).text
-            caveat = html.split("Per-survey volume", 1)[1].split("</p>", 1)[0]
-            for term in ("countr", "unattributed", "browser", "scripted"):
-                assert term in caveat.lower(), f"the detail caveat must name {term}: {caveat}"
-            assert "onward" in caveat, "the established 'counted from ... onward' pattern must stand"
+            dated = html.split("Per-survey volume", 1)[1].split("</p>", 1)[0]
+            for term in ("countr", "unattributed"):
+                assert term in dated.lower(), f"the detail caveat must name {term}: {dated}"
+            assert "onward" in dated, "the established 'counted from ... onward' pattern must stand"
+            assert "2026-05-01" in dated, "the dated sentence names the date it is dating"
+            later = html.split("A second set of dimensions", 1)[1].split("</p>", 1)[0]
+            for term in ("browser", "scripted", "de-duplication", "API requests", "network peak"):
+                assert term in later, f"the later-seam sentence must name {term}: {later}"
+            assert "2026-05-01" not in later, \
+                "the later dimensions did not begin at the v1 hinge and must not claim it"
             seeded = html.split("folded before the detailed breakdown", 1)[1].split("</p>", 1)[0]
             for term in ("countr", "unattributed"):
                 assert term in seeded.lower(), f"the seeded-month note must name {term}: {seeded}"
+            current = html.split("folded before the current counting rules", 1)[1].split("</p>", 1)[0]
+            for term in ("browser/scripted", "peak-networks", "country counts", "geo-day"):
+                assert term in current, f"the current-rules note must name {term}: {current}"
     run(_body())
 
 
@@ -735,10 +747,10 @@ def test_the_monthly_csv_exposes_how_many_days_carried_geo(tmp_path):
     is the artefact that leaves the building. A geo_days column makes the partiality machine-visible
     beside the figure it qualifies. FAILS IF the column is absent or does not carry the aggregator's
     own count."""
-    doc = _v3_stats()
-    doc["monthly"][0]["geo_days"] = 0                    # May: folded before country counting
+    doc = _v4_stats()
     doc["monthly"][1]["geo_days"] = 29
     doc["monthly"][2]["geo_days"] = 1                    # July: one day of geo behind 4 folded days
+    doc["monthly"][2]["detail_days"] = 1
     body = curatorpage.analytics_monthly_csv(doc)
     rows = list(csv.DictReader(io.StringIO(body)))
     header = list(rows[0].keys())
@@ -746,20 +758,26 @@ def test_the_monthly_csv_exposes_how_many_days_carried_geo(tmp_path):
     assert header.index("geo_days") == header.index("days_without_detail") + 1, \
         "geo_days belongs beside the other coverage columns, not among the counts"
     by_month = {r["month"]: r for r in rows}
-    assert by_month["2026-05"]["geo_days"] == "0"
+    assert by_month["2026-06"]["geo_days"] == "29"
     assert by_month["2026-07"]["geo_days"] == "1" and by_month["2026-07"]["active_days"] == "4"
     assert by_month["2026-07"]["au_requests"] == "200", "the AU figure itself is unchanged"
 
 
 def test_the_monthly_csv_tolerates_a_month_written_before_geo_days_existed():
     """CSV TOLERANCE PIN. geo_days is an additive column, so a retained month written before it existed
-    must export as 0 rather than blanking the row or raising. FAILS IF an older month row breaks the
-    export."""
+    must export without raising and without blanking the row. It must also not export a ZERO: that
+    month contributed countries on days the counter was not there to count, so a 0 read beside a real
+    active_days says the month had no geography at all, which is the under-report the column exists to
+    expose. The cell is EMPTY and `detail_days` says why. FAILS IF an older month row breaks the
+    export, or fills the cell with a fabricated zero."""
     doc = _v2_stats()
     for row in doc["monthly"]:
         row.pop("geo_days", None)
     rows = list(csv.DictReader(io.StringIO(curatorpage.analytics_monthly_csv(doc))))
-    assert all(r["geo_days"] == "0" for r in rows), rows
+    assert all(r["geo_days"] == "" for r in rows), rows
+    assert all(r["detail_days"] == "0" for r in rows), "the counter that explains the empty cell"
+    assert all(int(r["downloads"]) > 0 and int(r["active_days"]) > 0 for r in rows), \
+        "the counts the month DID measure are untouched"
 
 
 # ==================================================================================================
@@ -775,7 +793,12 @@ def _v4_stats(**over) -> dict:
     """A stats.json carrying the state DETAIL map, the per-survey country lists, the monthly reach
     peak, the client split and the served-survey denominator. The detail deliberately covers FEWER
     states than the request map: NSW and VIC were counted before the detail existed, so the screen must
-    say 'not measured' for them rather than render a zero."""
+    say 'not measured' for them rather than render a zero.
+
+    Every month carries `detail_days` equal to its active days: this is the shape a box folding under
+    the CURRENT rules writes, so it is the fixture against which the not-measured degrades must NOT
+    fire. `_v2_stats`/`_v3_stats` deliberately carry no such counter, because that is the shape a box
+    that folded before this fold existed carries, and it is what those degrades exist for."""
     doc = _v3_stats()
     doc["total_served_surveys"] = 40
     doc["by_state_detail"] = {
@@ -796,6 +819,8 @@ def _v4_stats(**over) -> dict:
         row["networks_peak"] = peak
         row["downloads_by_client"] = split
         row["surveys"] = {k: dict(v, countries=["AU", "NZ"]) for k, v in row["surveys"].items()}
+        row["detail_days"] = row["days"]
+        row["geo_days"] = row["days"]
     doc["monthly"][2]["by_state_detail"] = {
         "QLD": {"downloads": 25, "visits": 14, "api": 1, "bytes": 3_145_728}}
     doc.update(over)
@@ -978,8 +1003,177 @@ def test_the_survey_csv_carries_the_country_count_per_month_and_survey():
 
 def test_the_survey_csv_tolerates_rows_written_before_the_country_list():
     """PER-SURVEY EXPORT TOLERANCE PIN. A retained month written before the country list existed must
-    export a zero rather than blanking the row or raising. FAILS IF an older month breaks the export."""
+    export without raising and without dropping the row, and its country cell must be EMPTY rather than
+    zero: "downloaded 30 times from 0 countries" is the custodian sentence answered with a measurement
+    nobody took, and this file is the one that leaves the building. FAILS IF an older month breaks the
+    export, or exports a fabricated zero."""
     doc = _v2_stats()
     rows = list(csv.reader(io.StringIO(curatorpage.analytics_survey_csv(doc))))
     assert rows[0][-1] == "countries"
-    assert all(r[-1] == "0" for r in rows[1:]), rows
+    assert all(r[-1] == "" for r in rows[1:]), rows
+    assert all(int(r[2]) > 0 for r in rows[1:]), "the downloads those rows DID measure are untouched"
+
+
+# ==================================================================================================
+# The SECOND forward-only seam. `detail_since` is the v1 -> v2 hinge; the dimensions the counting
+# lane added (client split, within-day dedupe, API geography, per-survey countries, monthly network
+# peak) began months after it. A month folded in between carries a real volume and a real format
+# split beside NONE of those, so the seeded-month degrade above never fires for it and every one of
+# those cells rendered a zero nobody measured. These pins hold the line at that second seam, on the
+# screen and in the file that leaves the building.
+# ==================================================================================================
+
+def test_a_month_folded_before_the_current_rules_says_not_measured_for_them(tmp_path):
+    """SECOND-SEAM PIN. The quarterly rows the counting lane added must read 'not measured' for a
+    month with no day folded under the current rules, exactly as the fully seeded month does for the
+    older dimensions. Such a month is NOT seeded: it has a real volume, a real format split and a real
+    top survey, so the existing degrade cannot cover it and the rows rendered '0' and '0 / 0' for
+    months carrying tens of real downloads. FAILS IF either row fabricates a zero, if the degrade
+    swallows the figures the month genuinely measured, or if it fires on a month folded under the
+    current rules."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())              # months with no detail_days at all
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("Quarterly breakdown", 1)[1].split("Downloads by survey", 1)[0]
+            peak = table.split("Peak networks in a day", 1)[1].split("</tr>", 1)[0]
+            assert peak.count("not measured") == 3 and ">0<" not in peak, peak
+            clients = table.split("Browser / scripted downloads", 1)[1].split("</tr>", 1)[0]
+            assert clients.count("not measured") == 3 and "0 / 0" not in clients, clients
+            assert ">30<" in table and ">55<" in table and ">52<" in table, \
+                "the downloads those months DID measure must still render"
+            assert "1.0 MB" in table, "so must the volume they measured"
+
+            _write_stats(cfg, _v4_stats())              # the same months, folded under current rules
+            now = (await client.get("/gateway/curator/analytics")).text.split(
+                "Quarterly breakdown", 1)[1].split("Downloads by survey", 1)[0]
+            assert "not measured" not in now, "the degrade must not fire on a measured month"
+            assert ">23<" in now and "40 / 15" in now, "its real peak and split render"
+    run(_body())
+
+
+def test_the_screen_does_not_contradict_itself_about_the_peak(tmp_path):
+    """SECOND-SEAM CONTRADICTION PIN. The reach note under the sparkline reads the surviving daily
+    rows, which are younger than the monthly rollups, so it reports a real peak from the same page on
+    which the month rows reported a peak of zero for months carrying real downloads. One page, two
+    answers. FAILS IF a month row claims a numeric peak the fold never recorded for it while the note
+    beside it reports one it did."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "peak over the window: <b>19</b>" in html, "the daily rows do carry a real peak"
+            peak_row = html.split("Peak networks in a day", 1)[1].split("</tr>", 1)[0]
+            assert "0" not in peak_row.replace("class=\"num\"", ""), \
+                f"no month may answer the same question with a zero it never measured: {peak_row}"
+    run(_body())
+
+
+def test_the_monthly_csv_leaves_unmeasured_coverage_cells_empty():
+    """SECOND-SEAM EXPORT PIN. geo_days was the column added to make partial geography visible, and on
+    every month folded before it existed it exported 0 beside a real au_requests and real state_*
+    columns: the docstring tells the reader to compare geo_days with active_days, and a reader doing
+    that concludes the month contributed no country at all while the same row reports Australian
+    requests split across named states. The client split and the network peak are the same fabrication
+    in the same file. Those cells must be EMPTY, and `detail_days` must say why. FAILS IF any of them
+    exports a zero for a month that measured nothing, or if a measured month exports a blank."""
+    doc = _v4_stats()
+    doc["monthly"][0].pop("detail_days")                 # May: folded before the current rules
+    doc["monthly"][0].pop("geo_days")
+    rows = {r["month"]: r for r in csv.DictReader(io.StringIO(
+        curatorpage.analytics_monthly_csv(doc)))}
+    may = rows["2026-05"]
+    assert "detail_days" in may, "the coverage counter must ride in the export"
+    assert may["detail_days"] == "0"
+    for col in ("geo_days", "downloads_browser", "downloads_scripted", "networks_peak"):
+        assert may[col] == "", f"{col} must be empty, not a fabricated zero: {may}"
+    assert may["active_days"] == "20" and may["downloads"] == "30" and may["au_requests"] == "60", \
+        "everything that month DID measure is untouched"
+    june = rows["2026-06"]
+    assert june["detail_days"] == "29"
+    assert june["networks_peak"] == "23" and june["downloads_browser"] == "40", \
+        "a month folded under the current rules exports its real figures"
+
+
+def test_the_by_survey_table_says_not_measured_when_no_country_was_recorded(tmp_path):
+    """CUSTODIAN SENTENCE PIN. The Countries column answers "downloaded N times from M countries", and
+    the per-survey country list is forward-only like everything else here. A survey whose downloads
+    were all counted before the list existed carries no codes, and a 0 there answers that sentence
+    with a measurement nobody took. It must read 'not measured', and the export must leave the cell
+    empty. FAILS IF the zero returns, or if it fires on a survey whose codes ARE recorded, which would
+    turn a real 'nothing outside the unknowns' into a claim of ignorance."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())               # by_survey rows with no country list
+            table = (await client.get("/gateway/curator/analytics")).text.split(
+                "Downloads by survey", 1)[1].split("<h2>", 1)[0]
+            ci = table.split("CI Sample Survey", 1)[1].split("</tr>", 1)[0]
+            assert "not measured" in ci and ">0<" not in ci, ci
+            assert ">120<" in ci, "the downloads that survey DID measure still render"
+
+            doc = _v4_stats()                            # a survey seen ONLY from unresolved addresses
+            doc["downloads"]["by_survey"]["Burra 2017"]["countries"] = ["unknown"]
+            _write_stats(cfg, doc)
+            measured = (await client.get("/gateway/curator/analytics")).text.split(
+                "Downloads by survey", 1)[1].split("<h2>", 1)[0]
+            burra = measured.split("Burra 2017", 1)[1].split("</tr>", 1)[0]
+            assert ">0<" in burra and "not measured" not in burra, \
+                f"measured-and-nothing-resolved is a real zero, not an unmeasured cell: {burra}"
+    run(_body())
+
+
+def test_the_survey_csv_blanks_the_country_cell_it_never_measured():
+    """CUSTODIAN SENTENCE EXPORT PIN. The same distinction must survive into the file: a (month,
+    survey) with no recorded codes exports an empty cell, one whose codes resolved to nothing but
+    'unknown' exports 0. FAILS IF the two collapse into the same cell."""
+    doc = _v4_stats()
+    doc["monthly"][0]["surveys"]["CI Sample Survey"].pop("countries")
+    doc["monthly"][1]["surveys"]["Burra 2017"]["countries"] = ["unknown"]
+    rows = {(r[0], r[1]): r for r in list(csv.reader(io.StringIO(
+        curatorpage.analytics_survey_csv(doc))))[1:]}
+    assert rows[("2026-05", "CI Sample Survey")][4] == "", "no codes recorded is not zero countries"
+    assert rows[("2026-06", "Burra 2017")][4] == "0", "codes recorded, none of them a country"
+
+
+def test_the_country_table_says_api_requests_joined_it_later(tmp_path):
+    """GEO SCOPE SEAM PIN. The caption says the map counts downloads plus visits plus API requests,
+    and it does, NOW. The map is cumulative, and API requests used to be the one counted class with no
+    geography at all, so on a box with days folded before that change the caption describes only the
+    later part of its own map. The table must say so where it is true, and must not say it where it is
+    not. FAILS IF the seam goes unstated, or if a box with no such history carries the note anyway."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v3_stats())               # months folded before API geography
+            html = (await client.get("/gateway/curator/analytics")).text
+            country = html.split("<h2>By country</h2>", 1)[1]
+            assert "API requests count toward a country only from" in country, country[:600]
+            assert "Requests (downloads + visits + API)" in country, "the caption itself still stands"
+
+            _write_stats(cfg, _v4_stats())               # every month folded under the current rules
+            clean = (await client.get("/gateway/curator/analytics")).text.split(
+                "<h2>By country</h2>", 1)[1]
+            assert "API requests count toward a country only from" not in clean, \
+                "a box with no such history must not carry a caveat about one"
+    run(_body())
+
+
+def test_the_surveys_card_drops_a_ratio_larger_than_its_denominator(tmp_path):
+    """DENOMINATOR SANITY PIN. The numerator counts every survey ever downloaded and nothing prunes
+    it; the denominator is restamped from the manifest being served right now. Withdraw or rename one
+    survey that has historical downloads and the honest arithmetic reads "3 of 2 served", which is the
+    absurd ratio the denominator was introduced to avoid. The card must fall back to the bare count.
+    FAILS IF an impossible ratio renders."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats(total_served_surveys=1))   # 2 downloaded, 1 still served
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "2 of 1" not in html, "a numerator above its denominator is not a ratio"
+            assert "Surveys downloaded" in html and "of those served" not in html
+            _write_stats(cfg, _v4_stats(total_served_surveys=2))   # the boundary case still renders
+            assert "2 of 2" in (await client.get("/gateway/curator/analytics")).text
+    run(_body())

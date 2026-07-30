@@ -3339,22 +3339,36 @@ def _as_int(v, default: int = 0) -> int:
         return default
 
 
-def _country_count(codes) -> int:
-    """How many real countries a list of codes names. 'unknown' is not a country and is excluded, so
-    this agrees with the Countries card and the per-month country figure."""
-    if not isinstance(codes, list):
-        return 0
+# The plain text a cell renders when the metric was never measured for it. Plain words, not a dash: a
+# dash reads as "nothing" and this means "we did not measure it".
+_NOT_MEASURED = "not measured"
+
+
+def _country_count(codes) -> int | None:
+    """How many real countries a list of codes names, or None when the fold never recorded a country
+    for it at all. 'unknown' is not a country and is excluded, so this agrees with the Countries card
+    and the per-month country figure.
+
+    NONE IS NOT ZERO, and the distinction is the whole point. The per-survey country list is
+    forward-only like every other dimension on this screen, so a survey whose downloads were all
+    counted before it existed carries an EMPTY list; rendering that as 0 answers the custodian sentence
+    with "downloaded 120 times from 0 countries", which is a measurement nobody took. A survey the fold
+    HAS seen always carries at least one code, because an address that resolves to nothing is recorded
+    as 'unknown' (a code, and not a country). So an empty list means unmeasured, and a zero count means
+    measured and nothing resolved."""
+    if not isinstance(codes, list) or not codes:
+        return None
     return len({c for c in codes if isinstance(c, str) and c and c != "unknown"})
 
 
 def _survey_rows(stats_or_month: dict) -> list[dict]:
     """The by_survey map as [{survey, downloads, bytes, countries}], sorted by downloads desc, where
-    `countries` is a COUNT and never the list.
+    `countries` is a COUNT or None (never the list).
 
     TOLERANT READ of all three aggregate shapes: v1 wrote `{survey: count}` (a bare int, no volume), v2
     `{survey: {downloads, bytes}}`, and the current fold adds a country list. An older row renders with
-    a zero volume and a zero country count rather than failing, and the detail caveat tells the reader
-    from when each column is real.
+    a zero volume and NO country count rather than failing, and the detail caveat tells the reader from
+    when each column is real.
 
     The stored country LIST never leaves this function. A named survey beside a named country is a
     small cell in a community this size, which is the same argument that keeps the state breakdown off
@@ -3369,7 +3383,7 @@ def _survey_rows(stats_or_month: dict) -> list[dict]:
                         "bytes": _as_int(val.get("bytes")),
                         "countries": _country_count(val.get("countries"))})
         else:
-            out.append({"survey": name, "downloads": _as_int(val), "bytes": 0, "countries": 0})
+            out.append({"survey": name, "downloads": _as_int(val), "bytes": 0, "countries": None})
     out.sort(key=lambda r: (-r["downloads"], r["survey"]))
     return out
 
@@ -3411,9 +3425,17 @@ def _analytics_cards(stats: dict) -> str:
     # very differently against 3 served and against 300. Absent (an older stats.json) or zero (a
     # manifest the fold could not read) falls back to the bare count: "2 of 0 served" is worse than no
     # ratio at all.
+    #
+    # So does a numerator LARGER than the denominator, and that one is not hypothetical. The two sides
+    # come from different places and only one of them can shrink: by_survey accumulates every survey
+    # ever downloaded and nothing prunes it, while the denominator is restamped from the manifest being
+    # served right now. Withdraw or rename one survey that has historical downloads and the arithmetic
+    # honestly reads "41 of 40 served". The bare count is the smaller and safer claim, so an impossible
+    # ratio is dropped rather than rendered.
     served = _as_int(stats.get("total_served_surveys"))
-    surveys_value = f"{len(surveys)} of {served}" if served > 0 else len(surveys)
-    surveys_label = "Surveys downloaded (of those served)" if served > 0 else "Surveys downloaded"
+    ratio = 0 < len(surveys) <= served
+    surveys_value = f"{len(surveys)} of {served}" if ratio else len(surveys)
+    surveys_label = "Surveys downloaded (of those served)" if ratio else "Surveys downloaded"
     cards = (
         _num_card(downloads, "Downloads")
         + _num_card(visits, "Portal visits")
@@ -3461,17 +3483,30 @@ def _detail_caveat(stats: dict) -> str:
 
     The enumeration is the whole point of the line, so it must be COMPLETE. It used to omit per-month
     countries and unattributed, which is how a month reading 'Countries: 1' beneath a headline of 11
-    came to look like an arithmetic bug rather than the forward-only seam it is."""
+    came to look like an arithmetic bug rather than the forward-only seam it is.
+
+    THERE ARE TWO SEAMS, and only the first one has a date. `detail_since` is the v1 -> v2 hinge and it
+    is stamped in the file. The dimensions in the second paragraph began at the later fold that
+    introduced them, which is months after that hinge and is recorded nowhere, so this line does not
+    claim a date for them: it names them, and points at the per-month and per-cell markers that say
+    exactly where they do and do not reach. Naming them under `detail_since` would overstate their
+    coverage by exactly the distance between the two seams."""
     since = stats.get("detail_since")
     if not isinstance(since, str) or not since:
         return ""
     return (f'<p class="opsnote">Per-survey volume, the format and station/bundle split, the API line, '
-            f'the network reach proxy, the per-month country and unattributed figures, the '
-            f'browser-versus-scripted download split, the within-day download de-duplication and the '
-            f'country count for API requests are all counted from <b>{_esc(since)}</b> onward. Earlier '
-            f'downloads and visits are in the headline totals but carry no such breakdown, so months '
-            f'spanning that date are marked below. The cumulative country and unattributed cards do '
-            f'cover the whole history, which is why a month can read lower than the card above it.</p>')
+            f'the network reach proxy and the per-month country and unattributed figures are all '
+            f'counted from <b>{_esc(since)}</b> onward. Earlier downloads and visits are in the '
+            f'headline totals but carry no such breakdown, so months spanning that date are marked '
+            f'below. The cumulative country and unattributed cards do cover the whole history, which '
+            f'is why a month can read lower than the card above it.</p>'
+            f'<p class="opsnote">A second set of dimensions began later still, at the fold that '
+            f'introduced them: the browser-versus-scripted download split, the within-day download '
+            f'de-duplication, the country count for API requests, the per-survey country counts and '
+            f'the monthly network peak. That fold date is not recorded in the file, so it is not '
+            f'claimed here. Every month and every cell they do not cover reads '
+            f'&quot;{_NOT_MEASURED}&quot; instead, and the note under the quarterly table names the '
+            f'months.</p>')
 
 
 def _by_survey_table(stats: dict, *, n: int = 25) -> str:
@@ -3487,22 +3522,24 @@ def _by_survey_table(stats: dict, *, n: int = 25) -> str:
         f'<td>{_esc(r["survey"])}</td>'
         f'<td class="num">{_esc(r["downloads"])}</td>'
         f'<td class="num">{_esc(_human_bytes(r["bytes"]))}</td>'
-        f'<td class="num">{_esc(r["countries"])}</td>'
+        # A survey the fold never recorded a country for says so rather than answering the custodian
+        # sentence with a zero it never measured. See _country_count for why an empty list is exactly
+        # that case and a measured nothing is not.
+        f'<td class="num">'
+        f'{_NOT_MEASURED if r["countries"] is None else _esc(r["countries"])}</td>'
         "</tr>" for r in rows[:n])
     more = ("" if len(rows) <= n else
             f'<p class="opsnote">Showing the top {n} of {len(rows)} surveys by downloads.</p>')
     note = ('<p class="opsnote">Countries counts the distinct countries a survey was downloaded from, '
             'excluding unresolved addresses. It is the figure behind "downloaded N times from M '
             'countries"; the countries themselves are not reported per survey, because a named survey '
-            'beside a named country is a small enough cell to point at one group.</p>')
+            'beside a named country is a small enough cell to point at one group. The count began '
+            'later than the downloads beside it and is never backfilled, so a survey whose downloads '
+            f'were all counted before it existed reads &quot;{_NOT_MEASURED}&quot; rather than zero, '
+            'and the export leaves that cell empty.</p>')
     return ('<table><thead><tr><th>Survey</th><th class="num">Downloads</th>'
             '<th class="num">Volume</th><th class="num">Countries</th></tr></thead><tbody>'
             + trs + "</tbody></table>" + more + note)
-
-
-# The plain text a month-grain cell renders when the metric was never measured for that month. Plain
-# words, not a dash: a dash reads as "nothing" and this means "we did not measure it".
-_NOT_MEASURED = "not measured"
 
 
 def _month_has_no_detail(month: dict) -> bool:
@@ -3511,6 +3548,25 @@ def _month_has_no_detail(month: dict) -> bool:
     NOT this case: it carries a real (partial) figure, and the note beneath the table says so."""
     days = _as_int(month.get("days"))
     return days > 0 and _as_int(month.get("seeded_days")) >= days
+
+
+def _month_has_no_current_detail(month: dict) -> bool:
+    """True when NOT ONE folded day of this month was counted with the CURRENT fold's dimensions, so it
+    holds nothing at all for the browser/scripted split, the monthly network peak, the per-survey
+    country counts or the geo-day coverage figure.
+
+    This is the SECOND seam and `_month_has_no_detail` above cannot stand in for it. That one fires
+    only on a month every day of which came from a pre-v1-upgrade daily row; a month folded between the
+    two seams carries a real volume, a real format split and a real top survey beside no client split
+    and no network peak whatsoever. Rendering those as 0 and '0 / 0' states a measurement nobody took,
+    which is the same fabrication the state table refuses when it says 'not measured' rather than show
+    eight zeroes.
+
+    It reads the aggregator's own `detail_days` counter rather than inferring absence from a zero: the
+    fold increments it for every day it folds, so an absent or zero counter beside real active days is
+    an exact statement that those days predate the dimensions, not a guess about a quiet month."""
+    days = _as_int(month.get("days"))
+    return days > 0 and _as_int(month.get("detail_days")) <= 0
 
 
 def _monthly_table(stats: dict, *, months: int = 3) -> str:
@@ -3542,6 +3598,13 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         omits itself rather than show eight zeroes, and this is the same refusal at cell grain."""
         return lambda c: (_NOT_MEASURED if _month_has_no_detail(c) else fn(c))
 
+    def _currently_measured(fn):
+        """The same refusal at the SECOND seam. `_measured` above fires only on a month carried in from
+        a v1 daily tail; the dimensions this fold added are younger than that by months, so a month
+        with a real volume and a real format split can still hold no client split and no network peak
+        at all. Those rows must not read 0 and '0 / 0' for it (see _month_has_no_current_detail)."""
+        return lambda c: (_NOT_MEASURED if _month_has_no_current_detail(c) else fn(c))
+
     body = (
         _row("Downloads", lambda c: _esc(_as_int(c.get("downloads"))))
         + _row("Download volume",
@@ -3562,13 +3625,14 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         # The reach proxy used to exist only on daily rows, which expire after 92 days, so it could
         # never appear in a quarterly report. The month keeps the peak of its own folded days.
         + _row("Peak networks in a day",
-               _measured(lambda c: _esc(_as_int(c.get("networks_peak")))))
+               _currently_measured(lambda c: _esc(_as_int(c.get("networks_peak")))))
         # The evidence that scripted scientific use exists at all: those clients used to be discarded
         # as bots, so this row was structurally zero and invisible.
         + _row("Browser / scripted downloads",
-               _measured(lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
-                                    f' / '
-                                    f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')))
+               _currently_measured(
+                   lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
+                              f' / '
+                              f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')))
     )
     partial = [c for c in cols if _as_int(c.get("seeded_days")) > 0]
     note = ""
@@ -3579,6 +3643,20 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
                 f'station/bundle, per-survey, country and unattributed figures cover only the later '
                 f'days of the month, and a month with no detailed days at all reads '
                 f'&quot;{_NOT_MEASURED}&quot; rather than zero.</p>')
+    # The SECOND seam gets its own line, because it covers different dimensions and different months.
+    # A month can sit entirely after the seeded seam above (full volume, full formats) and still hold
+    # none of the figures the current fold added.
+    later = [c for c in cols
+             if _as_int(c.get("detail_days")) < _as_int(c.get("days")) and _as_int(c.get("days")) > 0]
+    if later:
+        names = ", ".join(_esc(_month_label(c["month"])) for c in later)
+        note += (f'<p class="opsnote">{names}: some days were folded before the current counting rules '
+                 f'existed. The browser/scripted split, the peak-networks figure, the per-survey '
+                 f'country counts and the geo-day column of the export cover only the later days, and '
+                 f'read &quot;{_NOT_MEASURED}&quot; where they cover none of them. The downloads of '
+                 f'those earlier days were counted per request rather than once per network per file '
+                 f'per day, so they carry the double count a repeated or resumed transfer produces.'
+                 f'</p>')
     table = ('<div style="overflow-x:auto"><table><thead><tr><th>Metric</th>' + heads
              + "</tr></thead><tbody>" + body + "</tbody></table></div>" + note)
     if len(rows) > len(cols):
@@ -3668,9 +3746,23 @@ def _country_table(stats: dict) -> str:
     # The scope caption must match the fold exactly: downloads, visits AND API requests all count
     # toward a country, and the state table beneath reconciles against this table's AU row, so the two
     # captions are deliberately the same string.
+    #
+    # The caption states what the map counts NOW, and the API third of it is younger than the other
+    # two: API requests used to be the one counted class with no geography at all. This map is
+    # cumulative, so on a box with days folded before that change it is a MIXTURE, and the caption
+    # alone would overstate the historical portion. The note says so, and only where it is true: a box
+    # every folded day of which was counted under the current rules has no such history and gets no
+    # note.
+    seam = any(_month_has_no_current_detail(m) for m in _monthly_rows(stats))
+    note = ("" if not seam else
+            '<p class="opsnote">API requests count toward a country only from the fold that began '
+            'counting them geographically. An API request folded before that is in the API total '
+            'above and in no row here, so this map is a mixture over the months the note under the '
+            'quarterly table names. Downloads and visits carry their country for the whole of the '
+            'detailed history.</p>')
     return ('<table><thead><tr><th>Country</th>'
             f'<th class="num">{_REQUEST_SCOPE}</th>'
-            '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>")
+            '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>" + note)
 
 
 # ---- Australia by state: the sub-country breakdown beneath the AU country row --------------------
@@ -3968,15 +4060,22 @@ def analytics_monthly_csv(stats) -> str:
     """Every retained calendar month as one CSV row: the headline counts, then one column per download
     format and per kind seen across the whole history (so the columns are stable down the file).
 
-    Three columns state COVERAGE rather than counts, and they are what keep the file from lying by
+    Four columns state COVERAGE rather than counts, and they are what keep the file from lying by
     omission: `active_days` (days folded into the month), `days_without_detail` (how many of those
-    predate the detailed dimensions) and `geo_days` (how many actually contributed a country).
+    predate the detailed dimensions), `detail_days` (how many were folded under the CURRENT counting
+    rules) and `geo_days` (how many actually contributed a country).
 
     `geo_days` matters most, because the trap it closes is invisible otherwise. Per-month country
     counts are forward-only, so `au_requests` below is derived from a country map that may cover one
     day of a full month. The state_* columns then reconcile to it EXACTLY, and the row looks
     self-consistent while under-reporting that month's Australian traffic by an order of magnitude.
     Comparing `geo_days` with `active_days` is how a reader sees that in the file itself.
+
+    A CELL IS LEFT EMPTY WHERE THE MONTH MEASURED NOTHING, never filled with a zero. `geo_days`,
+    `networks_peak` and the two client columns are all counted by the current fold and by nothing
+    before it, so on a month with `detail_days` of 0 a zero would be a fabrication that survives into
+    whatever the reader builds from this file, and it is the file that leaves the building. An empty
+    cell reads as missing in every spreadsheet and every dataframe; a zero reads as measured.
 
     When any month carries the AU state breakdown the row also gains `au_requests` (that month's AU
     country figure) and one column per state seen, plus `state_unattributed` (AU traffic the state
@@ -3993,7 +4092,7 @@ def analytics_monthly_csv(stats) -> str:
     states = _state_columns(rows)
     header = (["month", "downloads", "download_bytes", "visits", "api_requests", "unattributed",
                "downloads_browser", "downloads_scripted", "networks_peak",
-               "countries", "active_days", "days_without_detail", "geo_days"]
+               "countries", "active_days", "days_without_detail", "geo_days", "detail_days"]
               + [f"format_{f}" for f in formats] + [f"kind_{k}" for k in kinds])
     if states:
         header += (["au_requests"] + [f"state_{c}" for c in states]
@@ -4002,13 +4101,19 @@ def analytics_monthly_csv(stats) -> str:
     for r in rows:
         cc = r.get("countries") or {}
         clients = r.get("downloads_by_client") or {}
+        # Empty, not zero, for every column the current fold is the sole source of. See the docstring:
+        # this file is the artefact a funding report is built from, so a fabricated zero here outlives
+        # the screen that would have said "not measured".
+        blank = _month_has_no_current_detail(r)
         row = ([r["month"], _as_int(r.get("downloads")), _as_int(r.get("download_bytes")),
                 _as_int(r.get("visits")), _as_int(r.get("api_requests")),
                 _as_int(r.get("unattributed")),
-                _as_int(clients.get("browser")), _as_int(clients.get("scripted")),
-                _as_int(r.get("networks_peak")),
+                "" if blank else _as_int(clients.get("browser")),
+                "" if blank else _as_int(clients.get("scripted")),
+                "" if blank else _as_int(r.get("networks_peak")),
                 len([k for k in cc if k and k != "unknown"]),
-                _as_int(r.get("days")), _as_int(r.get("seeded_days")), _as_int(r.get("geo_days"))]
+                _as_int(r.get("days")), _as_int(r.get("seeded_days")),
+                "" if blank else _as_int(r.get("geo_days")), _as_int(r.get("detail_days"))]
                + [_as_int((r.get("formats") or {}).get(f)) for f in formats]
                + [_as_int((r.get("kinds") or {}).get(k)) for k in kinds])
         if states:
@@ -4031,12 +4136,15 @@ def analytics_survey_csv(stats) -> str:
 
     The country column is a COUNT and the codes behind it never reach the file: this export leaves the
     building, and a named survey beside a named country is a small enough cell to point at one group.
-    A month written before the fold recorded countries exports 0 rather than blanking the row."""
+    A (month, survey) written before the fold recorded countries exports an EMPTY cell rather than a
+    zero: the count is forward-only, "downloaded 30 times from 0 countries" is a measurement nobody
+    took, and an empty cell is what every spreadsheet and dataframe already reads as missing."""
     rows = _monthly_rows(stats) if isinstance(stats, dict) else []
     out = []
     for r in rows:
         for s in _survey_rows(r.get("surveys") or {}):
-            out.append([r["month"], s["survey"], s["downloads"], s["bytes"], s["countries"]])
+            countries = "" if s["countries"] is None else s["countries"]
+            out.append([r["month"], s["survey"], s["downloads"], s["bytes"], countries])
     return _csv_document(["month", "survey", "downloads", "download_bytes", "countries"], out)
 
 

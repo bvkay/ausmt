@@ -89,9 +89,9 @@ Each calendar month is accumulated *as its days fold*, so expiring a daily row n
 it belonged to. Reports can be exported as CSV: monthly totals, and one row per month and survey.
 
 Each month also records how much of itself each breakdown covers: how many days were folded into it,
-how many of those predate the detailed dimensions, and how many contributed a country. Those three
-figures travel in the monthly export, so a partial month is visible in the file and not only in the
-prose beside it.
+how many of those predate the detailed dimensions, how many were folded under the current counting
+rules, and how many contributed a country. Those four figures travel in the monthly export, so a
+partial month is visible in the file and not only in the prose beside it.
 
 **Nothing is backfilled.** Only days that were actually folded exist, and a breakdown added later
 starts from the day it was added; the raw logs that could reconstruct earlier days are long since
@@ -99,6 +99,10 @@ rotated away. A month whose days predate a given breakdown is flagged on screen 
 complete figure, and older days carry no network count at all: absent, not zero. Where a month has no
 detailed days at all, the cell reads *"not measured"* rather than a zero, because a zero would state a
 measurement that was never taken.
+
+Breakdowns were not all added at once, so a month can be complete for one and empty for another. The
+screen names the months each breakdown does not reach, and the exports leave that cell **empty**
+rather than writing a zero into it.
 
 ## Australian traffic by state, and why not by city
 

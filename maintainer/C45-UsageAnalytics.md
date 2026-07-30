@@ -216,3 +216,39 @@ building.
 `caddy validate` does not run on a dev box, so the two Caddyfile changes (`roll_uncompressed`, the
 release force-download pattern) are pinned by config assertions in `deploy/tests`; the image build's
 own `caddy validate` is the syntax gate.
+
+## D7.1. The second forward-only seam (2026-07-30)
+
+Review of D7 found the same fabricated-zero defect one seam later than the rule that forbids it.
+`detail_since` is the v1 to v2 hinge. Every dimension D7 added began months after it, so a month
+folded between the two carries a real volume and a real format split beside no client split, no
+network peak and no per-survey country count, and `seeded_days` (which marks only the first seam)
+never fires for it. The screen rendered `0`, `0 / 0` and `0 countries` for months holding tens of
+real downloads, and contradicted itself on one page: the reach note read a real peak off the
+surviving daily rows while the month row above it read zero.
+
+Each month now records `detail_days`, the count of its days folded under the current counting rules,
+incremented in the same loop as `days`. It is an exact statement rather than an inference from a
+zero: every day this fold folds is folded with every dimension it knows about, so a month carried
+forward from an older file gains detail only for the days added from here on.
+
+What follows from it:
+
+- the quarterly peak and client rows read `not measured` at the second seam, as the older rows
+  already did at the first;
+- the detail caveat splits in two. The dated sentence keeps the dimensions that really do start at
+  `detail_since`; the rest are named in their own sentence which claims no date, because that fold
+  date is recorded nowhere and claiming the earlier one overstates coverage by the distance between
+  the seams;
+- the country table states that API requests joined the map later than the downloads and visits
+  beside them, and states it only on a box whose history predates that;
+- the per-survey country column distinguishes an empty code list (unmeasured) from codes that all
+  resolved to `unknown` (measured, no country), because the fold records `unknown` as a code;
+- `analytics.csv` gains `detail_days` and leaves `geo_days`, `networks_peak` and the two client
+  columns EMPTY on a month that measured none of them, as `analytics-surveys.csv` does for its
+  country cell. A zero in the file outlives the screen that would have said `not measured`.
+
+Separately, the "N of M served" ratio is dropped when the numerator exceeds the denominator.
+`by_survey` accumulates every survey ever downloaded and nothing prunes it, while the denominator is
+restamped from the manifest being served now, so withdrawing one survey with historical downloads
+renders an honest "41 of 40 served". Label counting closed the slug-versus-label case only.
