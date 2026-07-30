@@ -3492,9 +3492,11 @@ def _collection_line(stats: dict) -> str:
     if not items:
         return ""
     line = ", ".join(f'{_esc(k)}: <b>{_esc(n)}</b> ({_esc(_human_bytes(b))})' for k, n, b in items)
-    return (f'<p class="opsnote">Downloads by collection &mdash; {line}. A collection total is the '
-            f'sum of its member surveys and nothing else. It is counted from the fold that added the '
-            f'rollup onward, so earlier downloads are in the totals above and in no figure here.</p>')
+    return (f'<p class="opsnote">Downloads by collection: {line}. A collection total is the '
+            f'sum of its member surveys over the days the served catalogue carried the collection '
+            f'map; a day folded without one is in the survey figures but in no collection. It is '
+            f'counted from the fold that added the rollup onward, so earlier downloads are in the '
+            f'totals above and in no figure here.</p>')
 
 
 def _detail_caveat(stats: dict) -> str:

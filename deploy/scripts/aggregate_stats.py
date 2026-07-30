@@ -1398,8 +1398,10 @@ def _served_build_id(served_dir) -> str | None:
     return None
 
 
-def append_daily_archive(archive_file, rows) -> None:
-    """Append one JSON line per newly folded day to the archive, oldest first.
+def append_daily_archive(archive_file, rows) -> int:
+    """Append one JSON line per newly folded day to the archive, oldest first. Returns the number
+    of day lines actually written (0 when there was nothing to write or the append failed), so the
+    journal line reports what landed rather than what was offered.
 
     APPEND-ONLY and never rewritten, so this cannot corrupt what is already there. It is called only
     AFTER stats.json has landed, which is what makes a duplicate impossible: if the stats write fails,
@@ -1410,7 +1412,7 @@ def append_daily_archive(archive_file, rows) -> None:
     Never raises, like everything else the timer calls: a warning on stderr, and the fold still
     counts as done."""
     if not archive_file or not rows:
-        return
+        return 0
     try:
         with open(archive_file, "a", encoding="utf-8") as fh:
             for row in rows:
@@ -1419,6 +1421,8 @@ def append_daily_archive(archive_file, rows) -> None:
         print(f"aggregate_stats: could not append {len(rows)} day(s) to the daily archive at "
               f"{archive_file} ({type(exc).__name__}: {exc}) -- stats.json is unaffected, but those "
               f"days are not in the permanent archive", file=sys.stderr)
+        return 0
+    return len(rows)
 
 
 def _cfg(name: str, default: str) -> str:
@@ -1477,7 +1481,7 @@ def main(argv=None) -> int:
         write_stats_atomic(stats_file, stats)
         # AFTER the stats write, deliberately: a failed stats write leaves the watermark where it was,
         # so those days fold again next run and must not already sit in the append-only archive.
-        append_daily_archive(archive_file, archive_rows)
+        archived = append_daily_archive(archive_file, archive_rows)
         print(f"aggregate_stats: folded up to {stats.get('last_folded_date')} -- "
               f"downloads={stats['totals']['downloads']} visits={stats['totals']['visits']} "
               f"api={stats['totals']['api_requests']} months={len(stats['monthly'])} "
@@ -1485,7 +1489,7 @@ def main(argv=None) -> int:
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
               f"au_state_rows={au_states.row_count} collections={len(collections)} "
               f"log_lines={len(lines)} files_skipped={len(skipped_logs)} "
-              f"archived_days={len(archive_rows)} -> {stats_file}", file=sys.stderr)
+              f"archived_days={archived} -> {stats_file}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- never raise into the timer; note loudly and exit 0
         print(f"aggregate_stats: aborted without writing ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 0

@@ -913,10 +913,11 @@ unanswerable, and unanswerable retroactively.
 | Never | No country, no state, no address, no user-agent, and no per-network datum beyond the scalar count. **No geography below the monthly grain, retained or rendered** |
 | Retention | Indefinite. Never pruned, never rewritten, append-only, one line per day, written after `stats.json` lands so a failed fold cannot duplicate a day |
 | Read by | **Nothing.** No gateway route, no render path, no export. A pin in `deploy/tests` fails the lane if a gateway source ever names it |
-| Backups | **Include it.** `backup.sh` copies every non-secret flat file in the state dir, so it rides along already, but verify it is in your snapshots, because it is the one file there whose loss is permanent: once the logs have rotated, nothing can rebuild it |
+| Backups | **Include it.** `backup.sh` copies every non-secret flat file in the state dir, so it rides along already, but verify it is in your snapshots, because it is the one file there whose loss is permanent: once the logs have rotated, nothing can rebuild it. The snapshot scheme keeps 14 copies, so the archive is duplicated into each; at roughly a hundred bytes per active dataset per day that stays trivial for years, but it is the one state file that only grows |
 
 A write failure is warned about on stderr and does **not** break the fold: `stats.json` still lands,
-and the journal line reports `archived_days=` alongside `files_skipped=`, the number of log files the
+and the journal line reports `archived_days=`, the number of day lines that actually landed in the
+archive (0 on a failed append, with the path named on stderr), alongside `files_skipped=`, the number of log files the
 glob matched but could not open, each one named on stderr. `files_skipped` is not cosmetic: on
 2026-07-30 the box's `access.json` was `root:root 0600`, every open failed silently, and the fold ran
 for days on the shipped front-door file alone while writing a complete-looking `stats.json`. A

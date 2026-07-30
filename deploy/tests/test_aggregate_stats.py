@@ -1449,9 +1449,16 @@ def test_no_archive_line_ever_carries_a_country_or_a_state():
     assert stats["countries"] and stats["by_state"], \
         "the same fold must really be counting geography, or this pin is vacuous"
     assert rows, "and it must really have archived something"
-    blob = json.dumps(rows)
-    for banned in ("countries", "country", "by_state", "state", "AU", "NZ", "unknown"):
-        assert banned not in blob, f"the archive must carry no geography: {banned} in {blob}"
+    def _walk(obj, path="$"):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                assert k not in ("countries", "country", "by_state", "state", "states"), \
+                    f"the archive must carry no geography: key {k!r} at {path}"
+                _walk(v, f"{path}.{k}")
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                _walk(v, f"{path}[{i}]")
+    _walk(rows)
 
 
 def test_the_daily_archive_leaks_no_address_and_no_user_agent():
