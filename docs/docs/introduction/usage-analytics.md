@@ -101,8 +101,9 @@ detailed days at all, the cell reads *"not measured"* rather than a zero, becaus
 measurement that was never taken.
 
 Breakdowns were not all added at once, so a month can be complete for one and empty for another. The
-screen names the months each breakdown does not reach, and the exports leave that cell **empty**
-rather than writing a zero into it.
+screen names any such month among the three it shows side by side, the monthly export carries the
+coverage columns for every month retained, and the exports leave an unmeasured cell **empty** rather
+than writing a zero into it.
 
 ## Australian traffic by state, and why not by city
 

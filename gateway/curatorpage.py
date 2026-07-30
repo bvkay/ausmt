@@ -3490,7 +3490,14 @@ def _detail_caveat(stats: dict) -> str:
     introduced them, which is months after that hinge and is recorded nowhere, so this line does not
     claim a date for them: it names them, and points at the per-month and per-cell markers that say
     exactly where they do and do not reach. Naming them under `detail_since` would overstate their
-    coverage by exactly the distance between the two seams."""
+    coverage by exactly the distance between the two seams.
+
+    WHAT IT POINTS AT MUST ALWAYS BE THERE. This line used to send the reader to "the note under the
+    quarterly table", which is built from the THREE months that table shows while this line fires off
+    `detail_since` alone. The monthly rollups are never pruned, so the moment a second-seam month ages
+    out of that three-month window the citation named a note the page no longer renders. The export's
+    `detail_days` column carries the same coverage figure for EVERY retained month, so that is what is
+    cited; the quarterly note is offered for the months it can actually speak about."""
     since = stats.get("detail_since")
     if not isinstance(since, str) or not since:
         return ""
@@ -3505,8 +3512,10 @@ def _detail_caveat(stats: dict) -> str:
             f'de-duplication, the country count for API requests, the per-survey country counts and '
             f'the monthly network peak. That fold date is not recorded in the file, so it is not '
             f'claimed here. Every month and every cell they do not cover reads '
-            f'&quot;{_NOT_MEASURED}&quot; instead, and the note under the quarterly table names the '
-            f'months.</p>')
+            f'&quot;{_NOT_MEASURED}&quot; instead. The quarterly table names any such month among the '
+            f'three it shows, and the <code>detail_days</code> column of the monthly export carries '
+            f'the same coverage figure for every month retained, including the ones older than '
+            f'that.</p>')
 
 
 def _by_survey_table(stats: dict, *, n: int = 25) -> str:
@@ -3646,6 +3655,12 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
     # The SECOND seam gets its own line, because it covers different dimensions and different months.
     # A month can sit entirely after the seeded seam above (full volume, full formats) and still hold
     # none of the figures the current fold added.
+    #
+    # And it must state the BIAS IN BOTH DIRECTIONS. Three admission rules changed at that seam, not
+    # one: every request used to count (an over-count), scripted clients used to be discarded as
+    # robots and status 206 used to be refused (two under-counts). Naming only the over-count told a
+    # funding-report reader that the older figure is inflated, when its bias is two-sided and its net
+    # is not recoverable from anything still on disk.
     later = [c for c in cols
              if _as_int(c.get("detail_days")) < _as_int(c.get("days")) and _as_int(c.get("days")) > 0]
     if later:
@@ -3653,10 +3668,11 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         note += (f'<p class="opsnote">{names}: some days were folded before the current counting rules '
                  f'existed. The browser/scripted split, the peak-networks figure, the per-survey '
                  f'country counts and the geo-day column of the export cover only the later days, and '
-                 f'read &quot;{_NOT_MEASURED}&quot; where they cover none of them. The downloads of '
-                 f'those earlier days were counted per request rather than once per network per file '
-                 f'per day, so they carry the double count a repeated or resumed transfer produces.'
-                 f'</p>')
+                 f'read &quot;{_NOT_MEASURED}&quot; where they cover none of them. Their downloads '
+                 f'were admitted under the earlier rules, which err in both directions: every request '
+                 f'counted, so one repeated or resumed transfer counted twice, while scripted clients '
+                 f'were discarded as robots and ranged transfers were not admitted at all, so those '
+                 f'downloads went uncounted. The net of the three is not recoverable.</p>')
     table = ('<div style="overflow-x:auto"><table><thead><tr><th>Metric</th>' + heads
              + "</tr></thead><tbody>" + body + "</tbody></table></div>" + note)
     if len(rows) > len(cols):
@@ -3753,13 +3769,19 @@ def _country_table(stats: dict) -> str:
     # alone would overstate the historical portion. The note says so, and only where it is true: a box
     # every folded day of which was counted under the current rules has no such history and gets no
     # note.
+    #
+    # This trigger scans EVERY retained month, and the monthly rollups are never pruned, so it must
+    # not cite a note built from the three months the quarterly table happens to show: the moment a
+    # seam month ages out of that window the citation points at nothing. The export's `detail_days`
+    # column covers exactly the set this trigger scanned.
     seam = any(_month_has_no_current_detail(m) for m in _monthly_rows(stats))
     note = ("" if not seam else
             '<p class="opsnote">API requests count toward a country only from the fold that began '
             'counting them geographically. An API request folded before that is in the API total '
-            'above and in no row here, so this map is a mixture over the months the note under the '
-            'quarterly table names. Downloads and visits carry their country for the whole of the '
-            'detailed history.</p>')
+            'above and in no row here, so this map is a mixture. The quarterly table names any such '
+            'month among the three it shows, and the <code>detail_days</code> column of the monthly '
+            'export covers every retained month. Downloads and visits carry their country for the '
+            'whole of the detailed history.</p>')
     return ('<table><thead><tr><th>Country</th>'
             f'<th class="num">{_REQUEST_SCOPE}</th>'
             '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>" + note)

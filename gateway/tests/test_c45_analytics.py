@@ -1177,3 +1177,84 @@ def test_the_surveys_card_drops_a_ratio_larger_than_its_denominator(tmp_path):
             _write_stats(cfg, _v4_stats(total_served_surveys=2))   # the boundary case still renders
             assert "2 of 2" in (await client.get("/gateway/curator/analytics")).text
     run(_body())
+
+
+def _aged_out_seam_stats(**over) -> dict:
+    """A stats.json whose second-seam months have AGED OUT of the three the quarterly table shows.
+    Six retained months: the first three carry real downloads with no day folded under the current
+    rules, the last three are fully current. Every disclosure that fires off the WHOLE retained set
+    therefore fires, while the quarterly table (which only ever looks at its three columns) has
+    nothing to say."""
+    doc = _v4_stats()
+    old = []
+    for month, downloads in (("2026-02", 12), ("2026-03", 18), ("2026-04", 21)):
+        old.append({"month": month, "downloads": downloads, "visits": downloads * 3,
+                    "download_bytes": 1_048_576, "unattributed": 0, "api_requests": 5,
+                    "days": 28, "seeded_days": 0, "geo_days": 0, "detail_days": 0,
+                    "networks_peak": 0, "formats": {"edi": downloads}, "kinds": {"file": downloads},
+                    "surveys": {"CI Sample Survey": {"downloads": downloads, "bytes": 1_048_576}},
+                    "countries": {"AU": downloads}})
+    doc["monthly"] = old + doc["monthly"]
+    doc.update(over)
+    return doc
+
+
+def test_no_disclosure_points_at_a_note_that_is_not_on_the_page(tmp_path):
+    """DANGLING-CITATION PIN. Two disclosures used to tell the reader that "the note under the
+    quarterly table names the months", but that note is built from the THREE months the quarterly
+    table shows while the disclosures citing it fire off a scan of every retained month, which the
+    aggregator never prunes. Once a second-seam month ages out of the three-month window the citation
+    points at a note the page no longer renders, and the reader is sent to nothing.
+
+    FAILS IF any text on the page cites the quarterly note while that note is absent. The fixture is
+    exactly that shape and the assertions below prove it is not vacuous: the country-table seam note
+    (whole-set trigger) IS rendered and the quarterly second-seam note (three-column trigger) is
+    NOT."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _aged_out_seam_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            # The fixture really does drive the two triggers apart.
+            assert "API requests count toward a country only from" in html, \
+                "the whole-set trigger must fire, or this pin proves nothing"
+            assert "some days were folded before the current counting rules existed" not in html, \
+                "the three-column note must be absent, or this pin proves nothing"
+            assert "note under the quarterly table" not in html, \
+                "no disclosure may send the reader to a note the page does not render"
+            # And what they cite instead must be a column every retained month actually carries.
+            assert html.count("detail_days") >= 2, \
+                "both disclosures must point at the export column that covers every retained month"
+            csv_text = (await client.get("/gateway/curator/analytics.csv")).text
+            header = next(csv.reader(io.StringIO(csv_text)))
+            assert "detail_days" in header, "the cited column must exist in the export"
+            rows = list(csv.DictReader(io.StringIO(csv_text)))
+            assert len(rows) == 6 and rows[0]["month"] == "2026-02", \
+                "the export really does reach past the three months the screen shows"
+    run(_body())
+
+
+def test_the_second_seam_note_states_the_bias_in_both_directions(tmp_path):
+    """TWO-SIDED-BIAS PIN. The second-seam note named ONE of the three counting-rule changes that
+    separate an earlier month from a current one, and it named the only one that makes the earlier
+    figure too BIG (every request counted, so a repeated or resumed transfer counted twice). The same
+    days also discarded scripted clients as robots and admitted status 200 alone, and both of those
+    make the earlier figure too SMALL. A funding-report reader was told the older months are inflated
+    when the bias is two-sided and its net is not recoverable.
+
+    FAILS IF the note states only the over-count direction, or omits that the net effect is
+    unknown."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v2_stats())        # three visible months, none folded under the rules
+            html = (await client.get("/gateway/curator/analytics")).text
+            note = html.split("some days were folded before the current counting rules existed", 1)[1]
+            note = note.split("</p>", 1)[0]
+            assert "counted twice" in note, "the over-count direction must still be stated"
+            assert "scripted" in note and "ranged" in note, \
+                f"the two under-count directions must be stated as well: {note}"
+            assert "both directions" in note, f"the note must say the bias is two-sided: {note}"
+            assert "not recoverable" in note, \
+                f"and that the net of the three is not recoverable: {note}"
+    run(_body())
