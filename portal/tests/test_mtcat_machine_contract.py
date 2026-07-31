@@ -65,7 +65,7 @@ def _about_contract() -> str:
     api = _api_section()
     assert '<p id="machine-contract">' in api, (
         'about.html must keep the machine-contract paragraph (<p id="machine-contract">) in its '
-        '"Fetching data programmatically" section')
+        '"Fetching data via API" section')
     return api.split('<p id="machine-contract">', 1)[1].split("</p>", 1)[0]
 
 
