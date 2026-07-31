@@ -443,3 +443,20 @@ def test_about_api_card_makes_no_served_geojson_claim():
         "GeoJSON is the portal's in-browser export (src/exports.js)")
     # The card still tells the GIS/GeoJSON story, just truthfully (an in-browser export).
     assert "GeoJSON" in text, "the API card should still mention GeoJSON (as the in-browser export for GIS)"
+
+
+def test_the_about_button_carries_the_contribute_button_treatment_on_every_page():
+    """Owner ruling (about-polish lane): the header's About link wears the same outlined-button style as
+    "Contribute a survey", on every page that renders it, so the two header actions read as siblings.
+    FAILS IF any page's .about rule drops the border (the old muted borderless style creeping back) or
+    the pages drift apart from each other."""
+    rules = {}
+    for name in ("index.html", "about.html", "releases.html"):
+        css = (ROOT / name).read_text(encoding="utf-8")
+        m = re.search(r"^\s*\.about\{([^}]*)\}", css, re.M)
+        assert m, f"{name} must style the header About link"
+        rules[name] = m.group(1)
+    assert "border:1px solid" in rules["index.html"], \
+        "the About link must be an outlined button like .contribute, not borderless text"
+    assert len(set(rules.values())) == 1, \
+        f"the .about rule must be byte-identical on every page, got {rules}"

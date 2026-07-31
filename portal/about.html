@@ -45,9 +45,9 @@
   nav a.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
   .contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
   .contribute:hover{border-color:var(--copper)}
-  .about{color:var(--muted);font-size:13px;text-decoration:none;padding:6px 11px;border-radius:4px}
-  .about:hover{color:var(--text)}
-  .about.active{color:var(--text);background:var(--panel-2)}
+  .about{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
+  .about:hover{border-color:var(--copper)}
+  .about.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
   .ver{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}
   .apilink{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;white-space:nowrap}
   .apilink:hover{color:var(--copper)}
@@ -163,42 +163,34 @@
   <div class="toc">
     <a href="#what">What AusMT is</a><a href="#howto">What you can do</a><a href="#access">Licence and access</a>
     <a href="#cite">Citing and credit</a><a href="#contribute">Contributing</a>
-    <a href="#api">Fetching data programmatically</a><a href="#docs">Documentation</a>
+    <a href="#api">Fetching data via API</a><a href="#docs">Documentation</a>
   </div>
 
   <section id="what">
     <h2>1 · What AusMT is</h2>
+    <p>Australian MT results are scattered across university groups, government agencies, industry
+    collaborations, supplementary files and ageing legacy archives. AusMT exists to fix that: one national
+    catalogue where every transfer function can be found, cited and downloaded with its provenance
+    attached.</p>
     <p>A magnetotelluric transfer function is the processed, instrument-independent response of the Earth at
     one site. It's the result most MT work reuses, and it's what AusMT indexes. For each one the catalogue
     records which file it came from, who produced it, which licence applies and how to cite it.</p>
     <p>AusMT is a discovery and provenance layer over work that other people own. It doesn't hold raw time
-    series and it makes no geological interpretation of what it holds.</p>
-    <div class="two">
-      <div class="card in">
-        <h3>In the catalogue</h3>
-        <ul>
-          <li>Transfer functions, served as EDI and EMTF XML</li>
-          <li>MTH5 products, where supplied or generated through a documented pipeline</li>
-          <li>Survey and station metadata</li>
-          <li>Processing provenance, from the source file and its SHA-256 checksum through to the extractor,
-          the pipeline and build version and the git commit that produced the build</li>
-          <li>Publications and DOIs, with ready-to-use citations and acknowledgements</li>
-        </ul>
-      </div>
-      <div class="card out">
-        <h3>Not in the catalogue</h3>
-        <ul>
-          <li>Raw time series</li>
-          <li>Geological interpretation</li>
-          <li>Bytes for restricted data, though the record itself stays public and searchable</li>
-        </ul>
-      </div>
+    series; where they exist, it links to the archive that holds them, usually the NCI-AuScope MT
+    collection.</p>
+    <div class="card in">
+      <h3>In the catalogue</h3>
+      <ul>
+        <li>Transfer functions, served as EDI and EMTF XML</li>
+        <li>MTH5 products, where supplied or generated through a documented pipeline</li>
+        <li>Survey and station metadata</li>
+        <li>Processing provenance, from the source file and its SHA-256 checksum through to the extractor,
+        the pipeline and build version and the git commit that produced the build</li>
+        <li>Publications and DOIs, with ready-to-use citations and acknowledgements</li>
+      </ul>
     </div>
-    <p>Where raw time series exist, AusMT links to the archive that holds them, usually the NCI-AuScope MT
-    collection. Unknown values are shown as "not recorded" rather than guessed, so you can tell what is
-    genuinely known about a product. Australian MT results are scattered across university groups,
-    government agencies, industry collaborations, supplementary files and ageing legacy archives, which is
-    the problem this catalogue exists to fix. There's more on that in the
+    <p>Unknown values are shown as "not recorded" rather than guessed, so you can tell what is genuinely
+    known about a product. There's more on the thinking behind the catalogue on the
     <a class="link" href="https://ausmt.readthedocs.io/en/latest/">documentation home page</a> and in the
     <a class="link" href="https://ausmt.readthedocs.io/en/latest/introduction/scientific-philosophy/">Scientific
     Philosophy</a>.</p>
@@ -224,7 +216,7 @@
         <p>Machine-readable catalogue exports for GIS and scripts. <b>MTCAT is AusMT's machine-readable
         catalogue format, one JSON file describing every survey</b>. GeoJSON is available as an in-browser
         export for GIS. To script downloads, see
-        <a class="link" href="#api">Fetching data programmatically</a>.</p>
+        <a class="link" href="#api">Fetching data via API</a>.</p>
       </div>
     </div>
     <p><a class="cta" href="add-survey.html">Contribute a survey →</a></p>
@@ -290,7 +282,7 @@
   </section>
 
   <section id="api">
-    <h2>6 · Fetching data programmatically</h2>
+    <h2>6 · Fetching data via API</h2>
     <p>Everything the portal reads is a read-only static JSON file on this site, and you can read the same
     files. There's no API key and no sign-up. Every response carries
     <code>Access-Control-Allow-Origin: *</code>, so a browser application can fetch it cross-origin.</p>
@@ -372,7 +364,7 @@ open(f"{slug}-edi.zip", "wb").write(body)</pre>
         <summary>About this build</summary>
         <div class="aboutbuild-body">
           AusMT is a national MT research infrastructure. It indexes processed transfer functions and
-          their provenance. It doesn't host raw time series or make geological interpretations.
+          their provenance. It doesn't host raw time series.
           The portal software is licensed under Apache-2.0. Survey data stays licensed by its custodians
           (see <a class="link" href="#policy">Licence and access</a>).
           <span class="ver" data-ver-chip></span>

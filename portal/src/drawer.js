@@ -836,7 +836,7 @@ function openStation(i,opts){
   //     which is exactly the embargo case (withheld by construction, so there is nothing to link).
   //   * the two survey-level documents every consumer starts from.
   // Docs wave, stage 2 (owner ruling 3): the trailing pointer used to send readers to About's
-  // "Fetching data programmatically". About is now a front door carrying a quickstart, and the worked
+  // "Fetching data via API". About is now a front door carrying a quickstart, and the worked
   // patterns (per-station manifest fetch, bounding box, checksum verification) live on the docs site's
   // API reference. The pointer goes there, to the same stable RTD path About links, so the two surfaces
   // agree on where depth lives. tests/test_drawer_api_endpoints.py pins the URL string against About's.

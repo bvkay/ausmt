@@ -127,7 +127,7 @@ def test_about_has_the_api_section_and_it_is_navigable():
     p = _page()
     assert "api" in p.section_ids, (
         "about.html must carry a section with id='api' (the anchor the page's own nav strip links)")
-    assert any(h.endswith("Fetching data programmatically") for h in p.headings), (
+    assert any(h.endswith("Fetching data via API") for h in p.headings), (
         f"the section needs its heading; page headings were {sorted(p.headings)}")
     assert "#api" in p.hrefs, (
         "the section-nav strip must carry an entry pointing at #api, or the section is unreachable")
@@ -137,7 +137,7 @@ def test_about_has_the_api_section_and_it_is_navigable():
     assert len(card) == 2, "about.html lost its 'API access' card"
     card_body = card[1].split("</div>", 1)[0]
     assert 'href="#api"' in card_body, (
-        "the 'API access' card must link the Fetching-data-programmatically section")
+        "the 'API access' card must link the Fetching-data-via-API section")
 
 
 def test_quickstart_is_ten_lines_or_fewer():
