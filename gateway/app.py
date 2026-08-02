@@ -638,7 +638,8 @@ class Gateway:
             stats=stats, stats_stale=stats_stale, nav=nav))
 
     def handle_analytics_csv(self, request: Request, view: str) -> Response:
-        """GET /gateway/curator/analytics.csv | analytics-surveys.csv -- the funding-report export.
+        """GET /gateway/curator/analytics.csv | analytics-surveys.csv | analytics-countries.csv -- the
+        funding-report export.
         READ-ONLY and session-gated exactly like the screen, over the SAME stats.json read server-side:
         it renders the retained MONTHLY rollups (totals, or one row per month and survey) as text/csv so
         the numbers paste straight into a report. No new data, no new privilege, no new mount.
@@ -653,6 +654,9 @@ class Gateway:
         if view == "surveys":
             body = curatorpage.analytics_survey_csv(stats)
             filename = "ausmt-usage-by-survey-monthly.csv"
+        elif view == "countries":
+            body = curatorpage.analytics_country_csv(stats)
+            filename = "ausmt-usage-by-country-monthly.csv"
         else:
             body = curatorpage.analytics_monthly_csv(stats)
             filename = "ausmt-usage-monthly.csv"
@@ -3117,8 +3121,9 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     def curator_analytics(request: Request):
         return gw.handle_analytics(request)
 
-    # The funding-report export: the retained monthly rollups as CSV (totals, and one row per month and
-    # survey). Same session gate and same read-only stats.json seam as the screen above.
+    # The funding-report export: the retained monthly rollups as CSV (totals, one row per month and
+    # survey, and one row per month and country). Same session gate and same read-only stats.json seam
+    # as the screen above.
     @app.get("/gateway/curator/analytics.csv")
     def curator_analytics_csv(request: Request):
         return gw.handle_analytics_csv(request, "monthly")
@@ -3126,6 +3131,10 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
     @app.get("/gateway/curator/analytics-surveys.csv")
     def curator_analytics_surveys_csv(request: Request):
         return gw.handle_analytics_csv(request, "surveys")
+
+    @app.get("/gateway/curator/analytics-countries.csv")
+    def curator_analytics_countries_csv(request: Request):
+        return gw.handle_analytics_csv(request, "countries")
 
     # ---- C43 S2b-ii: privileged serve-state actions. Session + CSRF checked in the handlers; each
     # writes an intent the host actions agent executes (the gateway gains no shell). The destructive
