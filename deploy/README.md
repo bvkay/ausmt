@@ -880,19 +880,24 @@ hand) the aggregator also reads `access*.json.gz`, and the front-door pull also 
 
 Everything below is derived from what the fold already reads: the request **path**, the **masked**
 network, and the response **size**. No beacon exists, no user-agent is inspected for reporting, and no
-per-page view is countable (see the caveat above).
+per-page view is countable (see the caveat above). There is exactly **one** thing the portal puts
+*into* the log rather than the fold reading out of it, and it is the bulk-export label in the table
+below: a query flag on file requests the portal was making anyway.
 
 | Breakdown | How it is derived |
 | --- | --- |
 | Downloads **by survey**, count + volume | The manifest reverse map. A whole-survey bundle is credited to its own survey, so the figure is everything served for that survey however it was fetched. |
+| **Files vs bundles, per survey** | The same manifest kind, counted per survey rather than only globally, so "was this survey pulled station by station or taken whole" is answerable for one named survey. Forward-only: a survey split on none of its downloads reads *"not measured"*, never `0 / 0`. |
 | **Format** split (`edi` / `emtfxml` / `mth5` / the bundle zips) | The manifest row's `format`, counted cumulatively, per day and per month. |
 | **Single-station file vs whole-survey bundle** | The manifest row's kind (`files[]` vs `bundles[]`). |
 | **API requests** | Fetches of the three documented machine-readable entry points the portal's own JavaScript never fetches: `/data/products/manifest.json`, `/data/mtcat.json` and `/data/mtcat.schema.json` (the `$id` every validator resolves). A **path class**. It is an **upper bound**: the mtcat link is in every page footer, so a human click lands here too. `/data/catalogue.json` stays the visit proxy and `/data/manifest.json` (the SPA's own boot fetch) is deliberately excluded. |
 | **Client class** | The user-agent resolves to crawler, scripted or browser, read transiently and never stored. Crawlers are excluded from every figure. **Scripted** clients (curl, wget, python-requests, and anything sending no user-agent) are **counted**, and their share of downloads is reported: those are the clients the published API examples hand people, so classing them as robots hid scientific use. |
+| **Bulk map exports** | `portal/src/exports.js` appends `sel=bulk` to each file request its multi-file export issues, and nothing else in the portal does; the drawer's single-station downloads stay unlabelled, which is what makes an unlabelled fetch mean *single*. The fold reads the flag from the **raw** line, before the query strip that produces the attribution path, so a labelled and an unlabelled fetch of the same file still de-duplicate to one download (bulk if **any** of that day's requests for it carried the label). Reported as a file count plus an **event proxy**: distinct masked networks that took at least one labelled download that day, summed into the month. That is a floor, not a count of actions. When the fold upgrades a `stats.json` that predates the split it stamps `select_since` at the day after that file's watermark, so the screen names the day the split begins instead of describing it; a box whose first-ever fold already had the split records no stamp, because nothing predates it. |
 | **Download counting** | A download counts **once per day per masked network per file**, and admits status 200 or 206. One save action can log two requests (the browser cancels on the download header, its download manager refetches) and a resumed transfer logs one request per range. Every request's **bytes still sum**, so the volume covers what was actually served. |
 | **Release-tier bundles** | `/data/releases/<tag>/bundles/<file>` counts as a download and attributes to its survey by bundle filename against the live manifest. The frozen citable copy keeps its own row; the release metadata JSONs are not counted. |
 | **Distinct networks** per day | The count of distinct masked networks (the /24 or /48 the edge already wrote) seen that day. The addresses live in memory for the one run that folds the day; only the integer is written. One network can be a whole institution, so read it as reach, not as people. |
 | **Downloads by collection** | The `collection_id` the served `mtcat.json` gives a survey (AusLAMP and its siblings), joined on the bundle **slug** first and the survey title second. A collection total is the sum of its member surveys. Optional: no served `mtcat.json`, no collection dimension, no zero. |
+| **Requests by country, split by class** | Beside the combined per-country request count, the same four-way breakdown the state table carries: downloads, visits, API requests and volume per country. Needs no state table (the country lookup is the fold's own). It lives at the **cumulative and monthly grains only**, like the state breakdown and for the same reason: a named country on a named day is the smaller cell. Forward-only, so a country counted before it existed reads *"not measured"*. |
 | **Monthly rollups** | Each calendar month is accumulated as its days fold, never recomputed from the daily tail. |
 
 **Aggregate retention (separate from the raw log).** Daily rows are a rolling **92-day** window
@@ -909,7 +914,7 @@ unanswerable, and unanswerable retroactively.
 | Property | Value |
 | --- | --- |
 | Location | `${AUSMT_DATA_DIR}/gateway/state/daily_archive.jsonl`: the **gateway state dir**, deliberately outside `site-data/`, so nothing can serve it |
-| Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, volume, unattributed, and the by-format / by-kind / by-client / by-survey / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse: only nonzero entries are written |
+| Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, bulk-export events, volume, unattributed, and the by-format / by-kind / by-client / by-select / by-survey (with its file/bundle split) / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse at the row level: only touched datasets and surveys are written, while inside a written row the class splits (files/bundles, single/bulk) keep their zeros so each split sums to its row's downloads |
 | Never | No country, no state, no address, no user-agent, and no per-network datum beyond the scalar count. **No geography below the monthly grain, retained or rendered** |
 | Retention | Indefinite. Never pruned, never rewritten, append-only, one line per day, written after `stats.json` lands so a failed fold cannot duplicate a day |
 | Read by | **Nothing.** No gateway route, no render path, no export. A pin in `deploy/tests` fails the lane if a gateway source ever names it |
@@ -924,11 +929,21 @@ for days on the shipped front-door file alone while writing a complete-looking `
 non-zero count there means the fold is missing lines it should have had.
 
 **Export.** The Analytics screen offers *Download report data*: `analytics.csv` (one row per retained
-month) and `analytics-surveys.csv` (one row per month and survey, with volume). Both are read-only,
+month), `analytics-surveys.csv` (one row per month and survey, with volume and the file/bundle split)
+and `analytics-countries.csv` (one row per month and country). All three are read-only,
 session-gated, and generated from the same `stats.json` the screen renders. When an Australian state
 breakdown exists (below), `analytics.csv` also gains `au_requests` and one `state_*` column per state
 seen; the `state_*` columns of every row sum to that row's `au_requests` exactly, so a report built
 from the file cannot carry a silent Australian undercount.
+
+**`analytics-countries.csv`.** Columns are `month, country, requests, downloads, visits, api,
+download_bytes, geo_days`. `requests` is the combined figure (downloads + visits + API) the country
+table renders and the one the `state_*` columns of `analytics.csv` reconcile against; the four
+columns after it split those same requests and are **forward-only**, so a (month, country) folded
+before they existed exports four **empty** cells rather than four zeroes. `geo_days` rides every row
+because it is what makes the rest of the row readable: country counting is forward-only, so a month
+can hold a full download figure beside one day's worth of countries. Read it against `active_days` in
+`analytics.csv` before quoting a country figure for a month.
 
 **Coverage columns in `analytics.csv`.** Four columns state coverage rather than counts:
 `active_days` (days folded into the month), `days_without_detail` (how many of those predate the
@@ -944,7 +959,8 @@ the client split, the within-day download de-duplication, the country count for 
 per-survey country counts and the monthly network peak all began well after the detailed dimensions
 `days_without_detail` refers to. Where a month has no day folded under the current rules, its
 `geo_days`, `networks_peak`, `downloads_browser` and `downloads_scripted` cells are **left empty**
-rather than written as `0` (and so is the `countries` cell of `analytics-surveys.csv`): every
+rather than written as `0` (and so are the `countries`, `files` and `bundles` cells of
+`analytics-surveys.csv`, and the four detail columns of `analytics-countries.csv`): every
 spreadsheet and dataframe reads an empty cell as missing and a zero as measured, and this file is the
 one a funding report is built from.
 

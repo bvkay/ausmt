@@ -56,6 +56,20 @@ def _write_stats(cfg, doc: dict) -> None:
     (cfg.state_dir / serve_state.STATS_FILENAME).write_text(json.dumps(doc), encoding="utf-8")
 
 
+def _cells(row_html: str) -> list[str]:
+    """The rendered text of each <td> in one table row, tags stripped. Lets a pin assert on ONE cell
+    instead of on the whole row: the by-survey row carries several independently-degrading columns,
+    so 'not measured' appearing somewhere in it says nothing about which column it came from."""
+    return [re.sub(r"<[^>]+>", "", c).strip()
+            for c in re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.S)]
+
+
+def _country_cell(row_html: str) -> str:
+    """The Countries cell of a Downloads-by-survey row (survey, downloads, volume, COUNTRIES, split).
+    The row split passed in starts AFTER the survey name, so the country cell is the third <td>."""
+    return _cells(row_html)[2]
+
+
 # --------------------------------------------------------------------------------------------------
 # Render: a fresh stats.json paints the cards, tables, and the SVG sparkline.
 # --------------------------------------------------------------------------------------------------
@@ -377,7 +391,8 @@ def test_analytics_survey_csv_export_has_one_row_per_month_and_survey(tmp_path):
             r = await client.get("/gateway/curator/analytics-surveys.csv")
             assert r.status_code == 200
             rows = list(csv.reader(io.StringIO(r.text)))
-            assert rows[0] == ["month", "survey", "downloads", "download_bytes", "countries"]
+            assert rows[0] == ["month", "survey", "downloads", "download_bytes", "countries",
+                               "files", "bundles"]
             body = [tuple(x[:4]) for x in rows[1:]]
             assert ("2026-06", "CI Sample Survey", "40", "1500000") in body
             assert ("2026-06", "Burra 2017", "15", "597152") in body
@@ -703,7 +718,7 @@ def test_the_request_scope_captions_include_api_requests(tmp_path):
             _write_stats(cfg, _v3_stats())
             html = (await client.get("/gateway/curator/analytics")).text
             assert "Requests (downloads + visits)" not in html, "the caption must state its real scope"
-            assert html.count("Requests (downloads + visits + API)") == 2, \
+            assert html.count('<th class="num">Requests (downloads + visits + API)</th>') == 2, \
                 "the country table and the state table must carry the SAME scope caption"
     run(_body())
 
@@ -994,7 +1009,8 @@ def test_the_survey_csv_carries_the_country_count_per_month_and_survey():
     doc["monthly"][1]["surveys"]["Burra 2017"]["countries"] = ["AU", "NZ", "unknown"]
     body = curatorpage.analytics_survey_csv(doc)
     rows = list(csv.reader(io.StringIO(body)))
-    assert rows[0] == ["month", "survey", "downloads", "download_bytes", "countries"]
+    assert rows[0] == ["month", "survey", "downloads", "download_bytes", "countries",
+                       "files", "bundles"]
     data = {(r[0], r[1]): r for r in rows[1:]}
     assert data[("2026-06", "Burra 2017")][4] == "2", "'unknown' is not a country"
     assert data[("2026-06", "CI Sample Survey")][4] == "2"
@@ -1008,10 +1024,11 @@ def test_the_survey_csv_tolerates_rows_written_before_the_country_list():
     nobody took, and this file is the one that leaves the building. FAILS IF an older month breaks the
     export, or exports a fabricated zero."""
     doc = _v2_stats()
-    rows = list(csv.reader(io.StringIO(curatorpage.analytics_survey_csv(doc))))
-    assert rows[0][-1] == "countries"
-    assert all(r[-1] == "" for r in rows[1:]), rows
-    assert all(int(r[2]) > 0 for r in rows[1:]), "the downloads those rows DID measure are untouched"
+    rows = list(csv.DictReader(io.StringIO(curatorpage.analytics_survey_csv(doc))))
+    assert rows and "countries" in rows[0]
+    assert all(r["countries"] == "" for r in rows), rows
+    assert all(int(r["downloads"]) > 0 for r in rows), \
+        "the downloads those rows DID measure are untouched"
 
 
 # ==================================================================================================
@@ -1111,7 +1128,7 @@ def test_the_by_survey_table_says_not_measured_when_no_country_was_recorded(tmp_
             table = (await client.get("/gateway/curator/analytics")).text.split(
                 "Downloads by survey", 1)[1].split("<h2>", 1)[0]
             ci = table.split("CI Sample Survey", 1)[1].split("</tr>", 1)[0]
-            assert "not measured" in ci and ">0<" not in ci, ci
+            assert _country_cell(ci) == "not measured" and ">0<" not in ci, ci
             assert ">120<" in ci, "the downloads that survey DID measure still render"
 
             doc = _v4_stats()                            # a survey seen ONLY from unresolved addresses
@@ -1120,7 +1137,7 @@ def test_the_by_survey_table_says_not_measured_when_no_country_was_recorded(tmp_
             measured = (await client.get("/gateway/curator/analytics")).text.split(
                 "Downloads by survey", 1)[1].split("<h2>", 1)[0]
             burra = measured.split("Burra 2017", 1)[1].split("</tr>", 1)[0]
-            assert ">0<" in burra and "not measured" not in burra, \
+            assert _country_cell(burra) == "0", \
                 f"measured-and-nothing-resolved is a real zero, not an unmeasured cell: {burra}"
     run(_body())
 
@@ -1288,4 +1305,360 @@ def test_the_screen_reports_downloads_by_collection(tmp_path):
             bare = (await client.get("/gateway/curator/analytics")).text
             assert "Downloads by collection" not in bare, \
                 "no served mtcat.json means no line, not an empty one and not a zero"
+    run(_body())
+
+
+# ==================================================================================================
+# COUNTRY-CLASS DETAIL and the PER-SURVEY KIND SPLIT (owner rulings 2026-08-01).
+#
+# The state table already answers "what did this place DO"; the country table above it answered only
+# "how many requests". These pins hold the same three properties there that they hold beneath the AU
+# row: the detail columns render, a country counted before they existed says so rather than showing a
+# zero, and the REQUEST column keeps its combined semantics untouched (the AU reconciliation is built
+# on it). The per-survey rows gain the file-versus-bundle split the global map already carried.
+# ==================================================================================================
+def _v5_stats(**over) -> dict:
+    """A stats.json carrying the per-country DETAIL map and the per-survey kind split.
+
+    The country detail deliberately covers FEWER countries than the country map: US and `unknown` were
+    counted before it existed, so the screen must say 'not measured' for them rather than render four
+    zeroes. The same asymmetry runs through the surveys: CI Sample Survey carries a split that adds up
+    to its download count exactly, and Burra 2017 carries none at all."""
+    doc = _v4_stats()
+    doc["by_country_detail"] = {
+        "AU": {"downloads": 90, "visits": 200, "api": 10, "bytes": 3_145_728},
+        "NZ": {"downloads": 12, "visits": 26, "api": 2, "bytes": 1_048_576},
+    }
+    doc["downloads"]["by_survey"]["CI Sample Survey"].update({"files": 95, "bundles": 25})
+    doc["monthly"][2]["by_country_detail"] = {
+        "AU": {"downloads": 30, "visits": 160, "api": 10, "bytes": 2_097_152},
+        "NZ": {"downloads": 4, "visits": 8, "api": 0, "bytes": 4096},
+    }
+    doc["monthly"][2]["surveys"]["CI Sample Survey"].update({"files": 40, "bundles": 12})
+    doc.update(over)
+    return doc
+
+
+def test_the_country_table_gains_downloads_visits_api_and_volume_columns(tmp_path):
+    """COUNTRY DETAIL RENDER PIN. "Requests from New Zealand" is not the custodian conversation; "how
+    much was downloaded, and how many bytes" is. The country table must carry Downloads, Visits, API
+    and Volume beside the request count, exactly as the state table beneath it does. FAILS IF a column
+    is missing or a figure lands in the wrong one."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("<h2>By country</h2>", 1)[1].split("<h2>Australia by state", 1)[0]
+            for head in ("Downloads", "Visits", "API", "Volume"):
+                assert f">{head}</th>" in table, f"the country table must carry a {head} column"
+            au = table.split(">AU<", 1)[1].split("</tr>", 1)[0]
+            assert ">300<" in au, "its combined request count must still render"
+            assert ">90<" in au and ">200<" in au and ">10<" in au and "3.0 MB" in au, au
+    run(_body())
+
+
+def test_countries_counted_before_the_detail_existed_say_not_measured(tmp_path):
+    """COUNTRY DETAIL FORWARD-ONLY PIN. The detail columns are forward-only like every other dimension
+    on this screen, so a country whose requests were all counted before they existed has no download
+    figure at all. Rendering 0 would read as 'nobody in the United States downloaded anything', the
+    exact fabrication the state table was built to refuse. FAILS IF a pre-detail country row shows
+    zeroes instead of saying it was not measured."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("<h2>By country</h2>", 1)[1].split("<h2>Australia by state", 1)[0]
+            us = table.split(">US<", 1)[1].split("</tr>", 1)[0]
+            assert us.count("not measured") == 4, f"US has no measured detail at all: {us}"
+            assert ">120<" in us, "its request count is real and must still render"
+            unknown = table.split(">unknown<", 1)[1].split("</tr>", 1)[0]
+            assert unknown.count("not measured") == 4, unknown
+            assert ">0 B<" not in table, "an unmeasured volume is never a measured zero"
+    run(_body())
+
+
+def test_the_country_table_says_the_new_columns_break_down_the_same_requests(tmp_path):
+    """COUNTRY DETAIL SCOPE PIN. The Requests column keeps its COMBINED semantics (downloads + visits
+    + API), because the AU state table beneath reconciles against its AU row and that promise is
+    load-bearing. The caption must therefore say the new columns are a breakdown of those same
+    requests and not an additional measurement, and must not weaken the request column's scope. FAILS
+    IF the scope caption changes, or if the breakdown is presented as a second measurement."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("<h2>By country</h2>", 1)[1].split("<h2>Australia by state", 1)[0]
+            assert f">{curatorpage._REQUEST_SCOPE}</th>" in table, \
+                "the request column keeps the combined scope the AU reconciliation depends on"
+            assert "breakdown of the same requests" in table, table[:600]
+            assert "not an additional measurement" in table, table[:600]
+            # And the state table beneath it still reconciles on requests alone: untouched.
+            state = html.split("Australia by state", 1)[1]
+            assert "<b>300</b>" in state and "adds up to the Australian figure exactly" in state
+    run(_body())
+
+
+def test_a_box_with_no_country_detail_renders_the_country_table_exactly_as_it_was(tmp_path):
+    """COUNTRY DETAIL ABSENCE PIN. A box that folded country requests before the detail map existed
+    must still render its table, with every detail cell saying so. FAILS IF the absent map empties the
+    table, 500s the screen, or fabricates zeroes across every row."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v4_stats())          # countries, but no by_country_detail at all
+            r = await client.get("/gateway/curator/analytics")
+            assert r.status_code == 200
+            table = r.text.split("<h2>By country</h2>", 1)[1].split("<h2>Australia by state", 1)[0]
+            assert ">AU<" in table and ">300<" in table
+            assert "not measured" in table and ">0 B<" not in table
+    run(_body())
+
+
+def test_the_monthly_country_csv_has_one_row_per_month_and_country(tmp_path):
+    """COUNTRY EXPORT PIN. The funding-report affordance for the country breakdown: every retained
+    month, every country it saw, as one row carrying the combined request count and the four-way split
+    beside it. FAILS IF the export is not served, is not an attachment, or loses a month or a
+    country."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            r = await client.get("/gateway/curator/analytics-countries.csv")
+            assert r.status_code == 200
+            assert r.headers["content-type"].startswith("text/csv")
+            assert "attachment" in r.headers["content-disposition"]
+            rows = list(csv.DictReader(io.StringIO(r.text)))
+            assert [f for f in rows[0]] == ["month", "country", "requests", "downloads", "visits",
+                                            "api", "download_bytes", "geo_days"], rows[0]
+            assert {r["month"] for r in rows} == {"2026-05", "2026-06", "2026-07"}
+            jul = {r["country"]: r for r in rows if r["month"] == "2026-07"}
+            assert jul["AU"]["requests"] == "200" and jul["NZ"]["requests"] == "12"
+            assert jul["AU"]["downloads"] == "30" and jul["AU"]["visits"] == "160"
+            assert jul["AU"]["api"] == "10" and jul["AU"]["download_bytes"] == "2097152"
+            assert jul["AU"]["geo_days"] == "4", "the geo-coverage marker rides every row"
+    run(_body())
+
+
+def test_the_country_csv_leaves_an_unmeasured_cell_empty_rather_than_zero(tmp_path):
+    """COUNTRY EXPORT HONESTY PIN. The detail is forward-only, so a (month, country) the fold counted
+    before it existed has no download figure. This file is what a funding report is built from, and a
+    zero there outlives the screen that would have said 'not measured' -- every spreadsheet reads an
+    empty cell as missing and a zero as measured. FAILS IF an unmeasured cell exports as 0, or if the
+    combined request count is blanked along with it."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            rows = list(csv.DictReader(io.StringIO(
+                (await client.get("/gateway/curator/analytics-countries.csv")).text)))
+            may = {r["country"]: r for r in rows if r["month"] == "2026-05"}
+            assert may["AU"]["requests"] == "60", "the combined count is real and always exports"
+            for col in ("downloads", "visits", "api", "download_bytes"):
+                assert may["AU"][col] == "", f"{col} was never measured for May: {may['AU']}"
+    run(_body())
+
+
+def test_the_country_csv_is_session_gated_and_empty_safe(tmp_path):
+    """COUNTRY EXPORT GATE PIN. The export carries the same data the session-gated screen does, so it
+    takes the same gate, and a missing stats.json yields the header row alone. FAILS IF an anonymous
+    caller gets a body, or if an absent aggregate 500s instead of exporting an honest empty file."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            anon = await client.get("/gateway/curator/analytics-countries.csv")
+            assert anon.status_code in (302, 303, 401, 403), anon.status_code
+            await curator_login(client)
+            r = await client.get("/gateway/curator/analytics-countries.csv")
+            assert r.status_code == 200
+            assert r.text.strip().splitlines() == ["month,country,requests,downloads,visits,api,"
+                                                   "download_bytes,geo_days"]
+    run(_body())
+
+
+def test_the_export_links_include_the_monthly_country_csv(tmp_path):
+    """EXPORT LINK PIN. An export nothing links to is an export nobody finds. FAILS IF the country CSV
+    is served but absent from the 'Download report data' row."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert 'href="/gateway/curator/analytics-countries.csv"' in html
+            assert 'href="/gateway/curator/analytics.csv"' in html
+            assert 'href="/gateway/curator/analytics-surveys.csv"' in html
+    run(_body())
+
+
+def test_the_by_survey_table_splits_each_survey_into_files_and_bundles(tmp_path):
+    """PER-SURVEY KIND RENDER PIN. "Was my survey pulled station by station or taken whole" is a
+    question about ONE survey, and the split existed only as a global counter. The Downloads-by-survey
+    table must carry a Files / bundles column. FAILS IF the column is missing or the two numbers are
+    swapped."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("<h2>Downloads by survey</h2>", 1)[1]
+            assert ">Files / bundles</th>" in table, "the split column must be in the header"
+            row = table.split("CI Sample Survey", 1)[1].split("</tr>", 1)[0]
+            assert "95 / 25" in row, f"files first, bundles second: {row}"
+    run(_body())
+
+
+def test_a_survey_row_with_no_kind_split_says_not_measured(tmp_path):
+    """PER-SURVEY KIND FORWARD-ONLY PIN. The split is forward-only, so a survey whose downloads were
+    all counted before it existed carries files and bundles both at zero beside a real download count.
+    Rendering '0 / 0' would state that thirteen downloads were neither files nor bundles, which is not
+    a measurement anybody took. FAILS IF such a row renders zeroes, or if the note does not say the
+    split can cover fewer downloads than the count beside it."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v5_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            table = html.split("<h2>Downloads by survey</h2>", 1)[1]
+            burra = table.split("Burra 2017", 1)[1].split("</tr>", 1)[0]
+            assert "not measured" in burra, f"an unmeasured split is not a zero: {burra}"
+            assert "0 / 0" not in burra
+            assert ">13<" in burra, "its download count is real and must still render"
+            assert "fewer downloads than the count beside it" in table, \
+                "a partially covered row must be disclosed, not left to look complete"
+    run(_body())
+
+
+def test_the_survey_csv_carries_the_files_and_bundles_split(tmp_path):
+    """PER-SURVEY KIND EXPORT PIN. The split must reach the file a funding report is built from, and an
+    unmeasured split must export EMPTY rather than as two zeroes, exactly as the country count beside
+    it already does. FAILS IF the columns are absent, or if a row that never measured the split
+    exports 0."""
+    doc = _v5_stats()
+    doc["monthly"][1]["surveys"]["Burra 2017"].pop("files", None)
+    doc["monthly"][1]["surveys"]["Burra 2017"].pop("bundles", None)
+    rows = list(csv.DictReader(io.StringIO(curatorpage.analytics_survey_csv(doc))))
+    assert [f for f in rows[0]] == ["month", "survey", "downloads", "download_bytes", "countries",
+                                    "files", "bundles"], rows[0]
+    jul = [r for r in rows if r["month"] == "2026-07" and r["survey"] == "CI Sample Survey"][0]
+    assert jul["files"] == "40" and jul["bundles"] == "12"
+    jun = [r for r in rows if r["month"] == "2026-06" and r["survey"] == "Burra 2017"][0]
+    assert jun["files"] == "" and jun["bundles"] == "", f"an unmeasured split exports empty: {jun}"
+    assert jun["downloads"] == "15", "its real download count still exports"
+
+
+# ==================================================================================================
+# The BULK-EXPORT LABEL on the screen (owner ruling 2026-08-01).
+#
+# The portal marks its own multi-file export fetches with a query flag so the fold can tell a
+# drag-selected bulk export from a single station download. That is the FIRST thing this pipeline puts
+# INTO the log rather than reading out of it, so the screen's own claim about itself has to change:
+# "nothing new is collected" was true and now needs one honest exception. These pins hold the figure,
+# the claim, and the seam date, and they hold the citation-pack sentence to what the portal actually
+# does rather than to what a bulk export might be assumed to imply.
+# ==================================================================================================
+def _v6_stats(**over) -> dict:
+    """A stats.json carrying the bulk/single download split, the export-event proxy and the recorded
+    seam date the screen is now able to name."""
+    doc = _v5_stats()
+    doc["select_since"] = "2026-08-01"
+    doc["totals"]["downloads_by_select"] = {"single": 104, "bulk": 33}
+    doc["totals"]["bulk_export_events"] = 7
+    doc["monthly"][2]["downloads_by_select"] = {"single": 19, "bulk": 33}
+    doc["monthly"][2]["bulk_export_events"] = 7
+    doc.update(over)
+    return doc
+
+
+def test_the_screen_reports_bulk_map_exports_as_events_and_files(tmp_path):
+    """BULK LINE PIN. One export fetches many files, so a file count alone would read as far more
+    exports than happened and a bare event count would hide the volume. The line must carry BOTH, under
+    the station/bundle split it extends. FAILS IF either figure is missing, if files and events are
+    swapped, or if the line appears on a box whose fold never took the split."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            line = html.split("Bulk map exports", 1)[1].split("</p>", 1)[0]
+            assert "<b>7</b>" in line and "event" in line, f"the export-event proxy must render: {line}"
+            assert "<b>33</b>" in line and "file" in line, f"the file count must render: {line}"
+            assert html.index("whole-survey bundles") < html.index("Bulk map exports"), \
+                "the line sits under the split it extends"
+
+            _write_stats(cfg, _v5_stats())      # a fold that never took the split
+            assert "Bulk map exports" not in (await client.get(
+                "/gateway/curator/analytics")).text, "no split means no line, not a zero"
+    run(_body())
+
+
+def test_the_bulk_line_does_not_claim_the_export_produces_a_citation_pack(tmp_path):
+    """CITATION-PACK HONESTY PIN. A citation pack IS generated in the browser and IS uncountable here,
+    and the line must say so. What it must NOT say is that the bulk export produces one: in
+    portal/src/exports.js the export flow (#dlZip) writes EDIs, a per-survey LICENSE.txt and the
+    not-included pointer file, and nothing else; the citation pack is #dlCite, a separate button the
+    reader clicks separately. A line asserting the causal link would put a claim on a funding screen
+    that the shipped code does not make true.
+
+    FAILS IF the line implies the export generates a pack, or if it implies packs are counted."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            line = (await client.get("/gateway/curator/analytics")).text.split(
+                "Bulk map exports", 1)[1].split("</p>", 1)[0]
+            assert "citation pack" in line, "the pack is worth naming; it is simply not caused by this"
+            assert "separate" in line, f"it must read as its own action, not a consequence: {line}"
+            assert "not counted" in line or "counts none" in line, \
+                f"a client-generated pack is uncountable and the line must say so: {line}"
+            for overclaim in ("each export also generates", "every export generates",
+                              "generates a citation pack"):
+                assert overclaim not in line, f"the line must not assert the causal link: {line}"
+    run(_body())
+
+
+def test_the_screen_states_the_one_thing_the_portal_adds_to_the_log(tmp_path):
+    """DISCLOSURE PIN. The preamble used to say, truthfully, that nothing here is a beacon and nothing
+    new is collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
+    the second half of that sentence is no longer true as written and must be amended rather than left
+    standing. The amendment has to be specific: WHAT is added (a query flag), to WHAT (fetches that
+    already happen), and what is NOT added (a request, an identity).
+
+    FAILS IF the screen still claims nothing new is collected, if the beacon claim is dropped along
+    with it (it is still true), or if the amendment is vague about what the flag is."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "nothing new is collected" not in html, \
+                "the claim is no longer true as written and must not survive verbatim"
+            assert "Nothing here is a beacon" in html, "that half is still true and must stay"
+            assert "sel=bulk" in html, "the amendment must name the flag it is disclosing"
+            assert "no new request" in html and "no identity" in html, \
+                "and must say what it is NOT: a request, or anything about who is asking"
+    run(_body())
+
+
+def test_the_screen_names_the_day_the_selection_split_begins(tmp_path):
+    """THIRD-SEAM PIN. This screen declines to date the second seam because that fold date is recorded
+    nowhere. This one IS recorded, by the fold, in `select_since`, so declining to name it here would
+    be a false modesty that leaves the reader unable to place the figure. The seam line must name the
+    date; a box with no stamp must still say nothing rather than guess.
+
+    FAILS IF the date is not named, or if a box that never recorded one has a date invented for it."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "2026-08-01" in html, "the recorded seam date must be named on the screen"
+            seam = html.split("2026-08-01", 1)[0].rsplit("<p", 1)[1]
+            assert "selection" in seam or "bulk" in seam, \
+                f"the date must sit on the sentence about the split, not float free: {seam}"
+
+            _write_stats(cfg, _v6_stats(select_since=None))
+            bare = (await client.get("/gateway/curator/analytics")).text
+            assert "2026-08-01" not in bare, "no stamp, no date: nothing is guessed"
+            assert "Bulk map exports" in bare, "the figures themselves still render"
     run(_body())

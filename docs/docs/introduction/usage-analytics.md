@@ -13,15 +13,16 @@ identity. Only aggregate counts are ever stored.
 | --- | --- |
 | Downloads by survey / station / format | Server access-log paths (`/data/edi`, `/data/xml`, `/data/bundles`, and `/data/releases/<tag>/bundles` for a cut release) resolved through the build's `manifest.json` reverse map. A release bundle matches by filename, so the frozen citable copy counts alongside the live one and keeps its own row. |
 | Download **volume** by survey and dataset | The response size the access log already records, summed per survey and per artifact. A whole-survey bundle counts toward its own survey. |
-| Single-station file vs whole-survey bundle | Whether the manifest resolved the path to a per-station artifact or a survey package. |
+| Single-station file vs whole-survey bundle | Whether the manifest resolved the path to a per-station artifact or a survey package. Counted globally and **per survey**, so "was this survey pulled station by station or taken whole" can be answered for one named survey. |
 | **Countries per survey** | How many distinct countries downloaded a given survey. Only the count is reported: a named survey beside a named country is a small enough cell to identify one group. |
 | Portal visits | One `catalogue.json` fetch per single-page-app boot, the only server-observable visit signal. |
 | API requests | Fetches of the three documented machine-readable entry points the portal itself never fetches (`/data/products/manifest.json`, `/data/mtcat.json`, `/data/mtcat.schema.json`). This is a **path class**, and it is an upper bound: the discovery-document link sits in the page footer, so a person can click it. The schema is the `$id` the catalogue document declares, so every validator that resolves it lands here. |
 | Distinct networks per day | How many distinct **masked** networks (a /24 or /48) were seen that day. A privacy-safe reach proxy: the addresses exist only in memory while the day is folded, and only the count is stored. One network can be an entire institution, so it is reach, not people. |
 | Peak networks per month | The largest of that month's daily network counts, kept with the month so the reach figure outlives the 92-day daily window and can appear in a quarterly report. |
-| Requests by country | The **masked** client address resolved to a country (see below). Downloads, visits and API requests all count, so the country total is exactly the counted requests. |
+| Requests by country | The **masked** client address resolved to a country (see below). Downloads, visits and API requests all count, so the country total is exactly the counted requests. Reported both as that combined count and as a split of those same requests into downloads, visits, API requests and volume. |
 | Australian traffic by **state** | For requests that resolve to Australia only, a second-level lookup of the same masked address to a state or territory (NSW, VIC, QLD, SA, WA, TAS, NT, ACT). Reported both as a request count and as a split into downloads, visits, API requests and volume. Optional, and **state is the finest grain** (see below). |
 | Client class | Each request's user-agent resolves to crawler, scripted or browser. It is read while the day is folded and never stored (see below). |
+| Bulk map exports vs single downloads | When you export a map selection, the portal marks the file requests it was going to make anyway with a query flag (`sel=bulk`), so a drag-selected bulk export can be told apart from a single station download. Reported as a file count and as an export-event proxy (distinct masked networks per day, which is a floor: two exports from one network on one day read as one). |
 | Downloads by **collection** | The programme a survey belongs to, read from the served catalogue document's `collection_id`. A collection total is the sum of its member surveys and nothing else. |
 | Daily time series | Downloads, volume, formats, visits, API requests and networks folded per calendar day (UTC). |
 | Calendar-month rollups | The same figures accumulated per month as each day folds, for quarterly and year-over-year reporting. |
@@ -74,7 +75,16 @@ obstacle to it. Research-infrastructure analytics need aggregates, never identit
   only counts and a daily series.
 - **Raw logs are short-lived.** The access log is rotated with a ~7-day retention; the tail exists
   only for debugging and is not the database. Nothing about that rotation changed when the reporting
-  detail grew: every breakdown is derived from the log the server already wrote.
+  detail grew: every breakdown is derived from the log the server already wrote, with the single
+  labelled exception below.
+- **One label, and only one.** When you export a map selection, the portal adds a query flag
+  (`sel=bulk`) to the file requests it was already making, so a bulk export can be told apart from a
+  single download. That is the one thing the portal puts *into* the log rather than reading out of it.
+  No separate request is made for the label (it rides on the download fetches the export already
+  performs) and nothing about who is asking is recorded; the flag is stripped off
+  before the file is attributed, so a labelled and an unlabelled fetch of the same file are still one
+  download. The single-station download links in a station drawer carry no flag, which is what makes
+  an unlabelled fetch mean *single* rather than merely *unknown*.
 
 ## Retention of the aggregates
 
@@ -113,6 +123,12 @@ screen names any such month among the three it shows side by side, the monthly e
 coverage columns for every month retained, and the exports leave an unmeasured cell **empty** rather
 than writing a zero into it.
 
+The bulk-versus-single split is the newest of those starting points, and the only one whose start date
+is recorded in the aggregate itself. On a box that folded before the split existed, the screen
+**names the day it begins** instead of describing it in prose; downloads folded before that day are
+in the totals and in neither class. A box whose very first fold already carried the split has no
+seam to name, and shows no date.
+
 ## Australian traffic by state, and why not by city
 
 Australia is the reporting audience for this infrastructure, so the country row alone is too coarse:
@@ -131,9 +147,10 @@ unreportable:
   state-level cell does not.
 
 There is no city dimension anywhere in the pipeline: the city and coordinate columns of the source
-dataset are read only to be discarded. For the same reason state counts exist at the **monthly and
-cumulative grains only**. A state count for one named day would be the finest-grained cell in the
-file, small enough to point at a particular group in a community this size.
+dataset are read only to be discarded. For the same reason country and state counts, and the
+download/visit/API/volume split beside each of them, exist at the **monthly and cumulative grains
+only**. A state count for one named day would be the finest-grained cell in the file, small enough to
+point at a particular group in a community this size, and a country on a named day is smaller still.
 
 That rule governs every record, including the daily archive above: **no country and no state below
 the monthly grain**, rendered or retained. A named country on a named day is a smaller cell than a

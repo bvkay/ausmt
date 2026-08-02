@@ -85,7 +85,10 @@ win.fetch = url => {
 
 // Concatenate the modules + an api hook; run in the window's global scope so the top-level declarations
 // become window globals (same effect as index.html's ordered <script> tags).
-const MODULES = ["contract", "security", "state", "data", "plots", "map", "filters", "drawer", "exports", "main", "tour"];
+// analytics-shim is FIRST, exactly as index.html loads it: it defines the no-op window.track() every
+// export click handler calls on its first line. The harness used to omit it, which is why no pin could
+// drive a real export BUTTON (only the pure helpers behind one) without dying on an undefined track.
+const MODULES = ["analytics-shim", "contract", "security", "state", "data", "plots", "map", "filters", "drawer", "exports", "main", "tour"];
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
 code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFind," +
   "curView:()=>curView,nST:()=>ST.length,visIds:()=>visible.map(s=>s.id)," +
@@ -208,6 +211,13 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // and nothing else. Both take/return plain data, so they work identically in a fresh failure window.
   "geoFC:(sts)=>geoFeatureCollection(sts||sel(),hydrUsable('sci'))," +
   "setSelected:(ids)=>{selected=new Set(ids.map(id=>{const s=ST.find(x=>x.id===id);return s?s.i:-1;}).filter(i=>i>=0));updateSel();}," +
+  // BULK-EXPORT LABEL hooks. dispatchProd is the drawer's OWN product-download dispatcher (the single
+  // station path, drawer.js), exposed so the pin can drive the real unlabelled call site rather than a
+  // re-implementation of it; selBulkFlag is the flag string exports.js appends, so the cross-file pin
+  // in portal/tests can compare it with the aggregator's constant instead of hard-coding a third copy.
+  // LAZY arrows so a boot on pre-lane code still REACHES the section and fails there with a precise
+  // message, instead of dying at this api hook with a ReferenceError.
+  "dispatchProd:(d)=>dispatchProd(d),selBulkFlag:()=>SEL_BULK_FLAG," +
   "selCount:()=>selected.size,nVisCount:()=>visible.length};";
 
 const doc = win.document;
@@ -2986,6 +2996,42 @@ async function bootFreshWindow(dataMap, url) {
     "LEG lens: leaving the lens must NOT restore over a legend/rail TYPE toggle (the lens snapshots the tree only)");
   gdRow.click(); A.closeDrawer();
   A.setType("A1", "BBMT"); A.setView("map"); A.refresh();   // restore the all-BBMT baseline
+
+  // ---- BULK-EXPORT LABEL (owner ruling 2026-08-01) -------------------------------------------------
+  // The portal marks the file fetches its multi-file export issues with a query flag, so the server-log
+  // aggregator can tell a drag-selected bulk export from a single station download. Two properties, and
+  // the second is what makes the first mean anything: the export flow labels EVERY file it fetches, and
+  // NOTHING ELSE does. An unlabelled fetch is precisely what "single" means downstream, so a label that
+  // leaked onto the drawer's own download would silently reclassify every single download as bulk.
+  //
+  // Driven through the REAL click handlers against the real fetch, which this harness already records in
+  // request order; the JSZip stub swallows the archive, but the fetches are what the label lives on and
+  // they are observed here exactly as the browser would issue them.
+  ok(typeof A.selBulkFlag === "function" && /^sel=/.test(A.selBulkFlag() || ""),
+    "SEL: exports.js must define the bulk-export flag string, got " + JSON.stringify(A.selBulkFlag && A.selBulkFlag()));
+  const SELFLAG = A.selBulkFlag();
+  const ediFetches = (from) => fetchOrder.slice(from).filter(u => /\/edi\//.test(u));
+
+  A.setSelected(["A1", "A2", "G1"]);              // three EDI-available stations across two surveys
+  ok(A.selCount() === 3, "SEL setup: three stations must be selected, got " + A.selCount());
+  let mark = fetchOrder.length;
+  await doc.getElementById("dlZip").onclick();
+  const bulkUrls = ediFetches(mark);
+  ok(bulkUrls.length === 3, "SEL: the export must fetch one file per selected station, got " + JSON.stringify(bulkUrls));
+  ok(bulkUrls.every(u => u.indexOf(SELFLAG) >= 0),
+    "SEL: every file the bulk export fetches must carry " + SELFLAG + ", got " + JSON.stringify(bulkUrls));
+  ok(bulkUrls.every(u => u.split("?")[0].endsWith("x.edi")),
+    "SEL: the flag rides the QUERY, never the path (the aggregator strips the query to attribute), got " + JSON.stringify(bulkUrls));
+
+  // The drawer's own single-station download goes through drawer.js dispatchProd -> fetchEdi ->
+  // downloadUrl, a different call site, and must stay unlabelled.
+  mark = fetchOrder.length;
+  await A.dispatchProd({ prod: "edi", file: "x.edi", avail: "1", survey: "Alpha Survey" });
+  const singleUrls = ediFetches(mark);
+  ok(singleUrls.length === 1, "SEL: the drawer download must fetch exactly one file, got " + JSON.stringify(singleUrls));
+  ok(singleUrls.every(u => u.indexOf("sel=") < 0),
+    "SEL: a single-station download must carry NO selection flag, got " + JSON.stringify(singleUrls));
+  A.setSelected([]);
 
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
