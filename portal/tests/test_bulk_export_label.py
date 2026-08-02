@@ -75,7 +75,8 @@ def test_the_public_analytics_page_discloses_the_label():
     assert DISCLOSURE.is_file(), "this pin runs from a full checkout (portal-ci lane), never skipped"
     text = DISCLOSURE.read_text(encoding="utf-8")
     assert f"`{_js_flag()}`" in text, "the disclosure must name the flag it is disclosing"
-    assert "No extra request is made" in text, "and must say the label adds no request"
+    assert "No separate request is made for the label" in text, \
+        "and must say the label adds no request of its own"
     assert "nothing about who is asking is recorded" in text, "and adds no identity"
     assert "single-station download links in a station drawer carry no flag" in text, \
         "and that the unlabelled path is what makes an unlabelled fetch mean 'single'"

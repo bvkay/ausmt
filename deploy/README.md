@@ -914,7 +914,7 @@ unanswerable, and unanswerable retroactively.
 | Property | Value |
 | --- | --- |
 | Location | `${AUSMT_DATA_DIR}/gateway/state/daily_archive.jsonl`: the **gateway state dir**, deliberately outside `site-data/`, so nothing can serve it |
-| Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, bulk-export events, volume, unattributed, and the by-format / by-kind / by-client / by-select / by-survey (with its file/bundle split) / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse: only nonzero entries are written |
+| Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, bulk-export events, volume, unattributed, and the by-format / by-kind / by-client / by-select / by-survey (with its file/bundle split) / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse at the row level: only touched datasets and surveys are written, while inside a written row the class splits (files/bundles, single/bulk) keep their zeros so each split sums to its row's downloads |
 | Never | No country, no state, no address, no user-agent, and no per-network datum beyond the scalar count. **No geography below the monthly grain, retained or rendered** |
 | Retention | Indefinite. Never pruned, never rewritten, append-only, one line per day, written after `stats.json` lands so a failed fold cannot duplicate a day |
 | Read by | **Nothing.** No gateway route, no render path, no export. A pin in `deploy/tests` fails the lane if a gateway source ever names it |

@@ -80,7 +80,8 @@ obstacle to it. Research-infrastructure analytics need aggregates, never identit
 - **One label, and only one.** When you export a map selection, the portal adds a query flag
   (`sel=bulk`) to the file requests it was already making, so a bulk export can be told apart from a
   single download. That is the one thing the portal puts *into* the log rather than reading out of it.
-  No extra request is made and nothing about who is asking is recorded; the flag is stripped off
+  No separate request is made for the label (it rides on the download fetches the export already
+  performs) and nothing about who is asking is recorded; the flag is stripped off
   before the file is attributed, so a labelled and an unlabelled fetch of the same file are still one
   download. The single-station download links in a station drawer carry no flag, which is what makes
   an unlabelled fetch mean *single* rather than merely *unknown*.
@@ -123,8 +124,10 @@ coverage columns for every month retained, and the exports leave an unmeasured c
 than writing a zero into it.
 
 The bulk-versus-single split is the newest of those starting points, and the only one whose start date
-is recorded in the aggregate itself. The screen therefore **names the day it begins** instead of
-describing it in prose; downloads folded before that day are in the totals and in neither class.
+is recorded in the aggregate itself. On a box that folded before the split existed, the screen
+**names the day it begins** instead of describing it in prose; downloads folded before that day are
+in the totals and in neither class. A box whose very first fold already carried the split has no
+seam to name, and shows no date.
 
 ## Australian traffic by state, and why not by city
 
