@@ -1545,3 +1545,120 @@ def test_the_survey_csv_carries_the_files_and_bundles_split(tmp_path):
     jun = [r for r in rows if r["month"] == "2026-06" and r["survey"] == "Burra 2017"][0]
     assert jun["files"] == "" and jun["bundles"] == "", f"an unmeasured split exports empty: {jun}"
     assert jun["downloads"] == "15", "its real download count still exports"
+
+
+# ==================================================================================================
+# The BULK-EXPORT LABEL on the screen (owner ruling 2026-08-01).
+#
+# The portal marks its own multi-file export fetches with a query flag so the fold can tell a
+# drag-selected bulk export from a single station download. That is the FIRST thing this pipeline puts
+# INTO the log rather than reading out of it, so the screen's own claim about itself has to change:
+# "nothing new is collected" was true and now needs one honest exception. These pins hold the figure,
+# the claim, and the seam date, and they hold the citation-pack sentence to what the portal actually
+# does rather than to what a bulk export might be assumed to imply.
+# ==================================================================================================
+def _v6_stats(**over) -> dict:
+    """A stats.json carrying the bulk/single download split, the export-event proxy and the recorded
+    seam date the screen is now able to name."""
+    doc = _v5_stats()
+    doc["select_since"] = "2026-08-01"
+    doc["totals"]["downloads_by_select"] = {"single": 104, "bulk": 33}
+    doc["totals"]["bulk_export_events"] = 7
+    doc["monthly"][2]["downloads_by_select"] = {"single": 19, "bulk": 33}
+    doc["monthly"][2]["bulk_export_events"] = 7
+    doc.update(over)
+    return doc
+
+
+def test_the_screen_reports_bulk_map_exports_as_events_and_files(tmp_path):
+    """BULK LINE PIN. One export fetches many files, so a file count alone would read as far more
+    exports than happened and a bare event count would hide the volume. The line must carry BOTH, under
+    the station/bundle split it extends. FAILS IF either figure is missing, if files and events are
+    swapped, or if the line appears on a box whose fold never took the split."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            line = html.split("Bulk map exports", 1)[1].split("</p>", 1)[0]
+            assert "<b>7</b>" in line and "event" in line, f"the export-event proxy must render: {line}"
+            assert "<b>33</b>" in line and "file" in line, f"the file count must render: {line}"
+            assert html.index("whole-survey bundles") < html.index("Bulk map exports"), \
+                "the line sits under the split it extends"
+
+            _write_stats(cfg, _v5_stats())      # a fold that never took the split
+            assert "Bulk map exports" not in (await client.get(
+                "/gateway/curator/analytics")).text, "no split means no line, not a zero"
+    run(_body())
+
+
+def test_the_bulk_line_does_not_claim_the_export_produces_a_citation_pack(tmp_path):
+    """CITATION-PACK HONESTY PIN. A citation pack IS generated in the browser and IS uncountable here,
+    and the line must say so. What it must NOT say is that the bulk export produces one: in
+    portal/src/exports.js the export flow (#dlZip) writes EDIs, a per-survey LICENSE.txt and the
+    not-included pointer file, and nothing else; the citation pack is #dlCite, a separate button the
+    reader clicks separately. A line asserting the causal link would put a claim on a funding screen
+    that the shipped code does not make true.
+
+    FAILS IF the line implies the export generates a pack, or if it implies packs are counted."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            line = (await client.get("/gateway/curator/analytics")).text.split(
+                "Bulk map exports", 1)[1].split("</p>", 1)[0]
+            assert "citation pack" in line, "the pack is worth naming; it is simply not caused by this"
+            assert "separate" in line, f"it must read as its own action, not a consequence: {line}"
+            assert "not counted" in line or "counts none" in line, \
+                f"a client-generated pack is uncountable and the line must say so: {line}"
+            for overclaim in ("each export also generates", "every export generates",
+                              "generates a citation pack"):
+                assert overclaim not in line, f"the line must not assert the causal link: {line}"
+    run(_body())
+
+
+def test_the_screen_states_the_one_thing_the_portal_adds_to_the_log(tmp_path):
+    """DISCLOSURE PIN. The preamble used to say, truthfully, that nothing here is a beacon and nothing
+    new is collected. The bulk label is the first thing the portal deliberately puts INTO the log, so
+    the second half of that sentence is no longer true as written and must be amended rather than left
+    standing. The amendment has to be specific: WHAT is added (a query flag), to WHAT (fetches that
+    already happen), and what is NOT added (a request, an identity).
+
+    FAILS IF the screen still claims nothing new is collected, if the beacon claim is dropped along
+    with it (it is still true), or if the amendment is vague about what the flag is."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "nothing new is collected" not in html, \
+                "the claim is no longer true as written and must not survive verbatim"
+            assert "Nothing here is a beacon" in html, "that half is still true and must stay"
+            assert "sel=bulk" in html, "the amendment must name the flag it is disclosing"
+            assert "no new request" in html and "no identity" in html, \
+                "and must say what it is NOT: a request, or anything about who is asking"
+    run(_body())
+
+
+def test_the_screen_names_the_day_the_selection_split_begins(tmp_path):
+    """THIRD-SEAM PIN. This screen declines to date the second seam because that fold date is recorded
+    nowhere. This one IS recorded, by the fold, in `select_since`, so declining to name it here would
+    be a false modesty that leaves the reader unable to place the figure. The seam line must name the
+    date; a box with no stamp must still say nothing rather than guess.
+
+    FAILS IF the date is not named, or if a box that never recorded one has a date invented for it."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v6_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "2026-08-01" in html, "the recorded seam date must be named on the screen"
+            seam = html.split("2026-08-01", 1)[0].rsplit("<p", 1)[1]
+            assert "selection" in seam or "bulk" in seam, \
+                f"the date must sit on the sentence about the split, not float free: {seam}"
+
+            _write_stats(cfg, _v6_stats(select_since=None))
+            bare = (await client.get("/gateway/curator/analytics")).text
+            assert "2026-08-01" not in bare, "no stamp, no date: nothing is guessed"
+            assert "Bulk map exports" in bare, "the figures themselves still render"
+    run(_body())

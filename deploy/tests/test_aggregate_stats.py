@@ -1829,3 +1829,193 @@ def test_a_survey_map_written_before_the_kind_split_reads_back_and_starts_accrui
     assert row["downloads"] == 5 and row["bytes"] == 45
     assert (row["files"], row["bundles"]) == (0, 1), \
         "only downloads folded with the split in place appear in it; the earlier four are not guessed"
+
+
+# ==================================================================================================
+# The BULK-EXPORT LABEL (owner ruling 2026-08-01).
+#
+# The portal's multi-file export marks its OWN file fetches with a query flag (sel=bulk), so the fold
+# can tell a drag-selected bulk export from a single station download. It is a label on a request that
+# already happens: no new request, no beacon, no identity. These pins hold the four properties that
+# make the label mean something:
+#   * it is read from the RAW request line, BEFORE the query strip that produces the attribution path;
+#   * the dedupe key stays the query-stripped path, so one file fetched with and without the flag is
+#     still ONE download;
+#   * a deduped download counts as bulk if ANY of its requests that day carried the flag, whichever
+#     order they arrived in;
+#   * the export-event count is distinct (network, day) pairs, held in memory for the fold exactly like
+#     networks_seen and never persisted per network.
+# ==================================================================================================
+_BULK = "?sel=bulk"
+
+
+def test_the_bulk_flag_is_read_from_the_raw_line_before_the_query_is_stripped():
+    """FLAG READ PIN. The attribution path is the query-STRIPPED one, and it has to stay that way or a
+    flagged fetch would attribute to a different dataset than the same file fetched plainly. So the
+    flag must be read from the RAW uri first and handed on beside the stripped path. FAILS IF the flag
+    is invisible to the parser, if reading it disturbs the path, or if a query that merely mentions the
+    token in another parameter is accepted."""
+    plain = AGG.parse_caddy_line(_line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW))
+    flagged = AGG.parse_caddy_line(_line("/data/edi/sample-survey/Vulcan_A1.edi" + _BULK, _AU_NSW))
+    assert plain["path"] == flagged["path"] == "/data/edi/sample-survey/Vulcan_A1.edi", \
+        "the flag must never reach the path the manifest is looked up by"
+    assert plain["bulk"] is False and flagged["bulk"] is True
+    # Other query strings are not the label, and neither is the token buried in another parameter.
+    for uri in ("/data/edi/sample-survey/Vulcan_A1.edi?v=2",
+                "/data/edi/sample-survey/Vulcan_A1.edi?ref=sel=bulk",
+                "/data/edi/sample-survey/Vulcan_A1.edi?sel=single"):
+        assert AGG.parse_caddy_line(_line(uri, _AU_NSW))["bulk"] is False, uri
+    # It survives a companion parameter on either side of it.
+    for uri in ("/data/edi/sample-survey/Vulcan_A1.edi?sel=bulk&v=2",
+                "/data/edi/sample-survey/Vulcan_A1.edi?v=2&sel=bulk"):
+        assert AGG.parse_caddy_line(_line(uri, _AU_NSW))["bulk"] is True, uri
+
+
+def test_the_same_file_with_and_without_the_flag_is_still_one_download():
+    """DEDUPE PIN. The within-day dedupe key is the query-stripped path, and adding a label must not
+    quietly double the headline figure by making the same file look like two. One network fetching one
+    file twice on one day, once labelled and once not, is ONE download whose bytes both sum. FAILS IF
+    the flag enters the dedupe key, or if the bytes stop summing."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW, size=100),
+             _line("/data/edi/sample-survey/Vulcan_A1.edi" + _BULK, _AU_NSW, size=40)]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["downloads"] == 1, "one file, one network, one day: one download"
+    assert stats["totals"]["download_bytes"] == 140, "every admitted line's bytes still sum"
+    assert stats["downloads"]["by_survey"]["CI Sample Survey"]["downloads"] == 1
+
+
+def test_a_deduped_download_counts_as_bulk_if_any_of_its_requests_carried_the_flag():
+    """ANY-FLAGGED PIN. A browser saving a file logs the request twice (cancel, then the download
+    manager refetches) and a ranged transfer logs one line per fragment, so the ONE download the fold
+    keeps may have arrived flagged or unflagged first. It counts as bulk if ANY of that day's requests
+    for it carried the label, which means the classification must be revisable after the count is
+    already taken. FAILS IF the class is fixed by whichever line happened to arrive first, or if a
+    reclassification loses or duplicates the download."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    for order in (("", _BULK), (_BULK, "")):
+        lines = [_line("/data/edi/sample-survey/Vulcan_A1.edi" + q, _AU_NSW, size=10) for q in order]
+        stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+        assert stats["totals"]["downloads"] == 1, order
+        assert stats["totals"]["downloads_by_select"] == {"single": 0, "bulk": 1}, \
+            f"either arrival order must classify the one download as bulk: {order}"
+        assert stats["monthly"][0]["downloads_by_select"] == {"single": 0, "bulk": 1}, order
+    # And a wholly unflagged download stays single.
+    solo = AGG.aggregate(None, [_line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW, size=10)],
+                         rmap, geoip, _RUN)
+    assert solo["totals"]["downloads_by_select"] == {"single": 1, "bulk": 0}
+
+
+def test_bulk_export_events_count_distinct_networks_per_day_and_sum_into_the_month():
+    """EXPORT EVENT PIN. One export action fetches many files, so counting flagged downloads counts
+    files, not exports. The event proxy is distinct (network, day) pairs that carried at least one bulk
+    download, summed into the month: a second export from the same network on the same day is not
+    separable from the first and is not claimed to be. FAILS IF events count files, if two networks on
+    one day collapse to one event, if one network across two days collapses, or if the month does not
+    sum its days."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    lines = [
+        # Day 1: TWO networks export. The first takes three files, the second one: 2 events, 4 files.
+        _line("/data/edi/sample-survey/Vulcan_A1.edi" + _BULK, _AU_NSW, date="2026-07-09", size=1),
+        _line("/data/edi/sample-survey/Vulcan_A2.edi" + _BULK, _AU_NSW, date="2026-07-09", size=1),
+        _line("/data/xml/sample-survey/A1.xml" + _BULK, _AU_NSW, date="2026-07-09", size=1),
+        _line("/data/edi/sample-survey/Vulcan_A1.edi" + _BULK, _NZ, date="2026-07-09", size=1),
+        # ... plus an ordinary single download from a third network, which is no event at all.
+        _line("/data/xml/sample-survey/A2.xml", _US, date="2026-07-09", size=1),
+        # Day 2: the FIRST network again. A different day is a different event.
+        _line("/data/edi/sample-survey/Vulcan_A1.edi" + _BULK, _AU_NSW, date="2026-07-10", size=1),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, geoip, _RUN)
+    assert stats["totals"]["downloads_by_select"] == {"single": 1, "bulk": 5}
+    assert stats["totals"]["bulk_export_events"] == 3, "2 networks on day 1, the same one again on day 2"
+    month = stats["monthly"][0]
+    assert month["bulk_export_events"] == 3 and month["downloads_by_select"] == {"single": 1, "bulk": 5}
+    # Nothing per-network is persisted: the sets die with the fold, exactly like networks_seen.
+    assert _sweep_ip_or_ua(json.dumps(stats, indent=1)) == []
+
+
+def test_the_select_split_accumulates_across_folds_and_is_never_backfilled():
+    """SELECT SEAM PIN. The split is forward-only like every other dimension here: a file written
+    before it existed reads back with no split at all, no earlier month gains one, and the fold stamps
+    `select_since` so the screen can NAME the day it begins instead of declining to. FAILS IF an older
+    file raises, if an earlier month is backfilled, if the stamp is missing, or if it is re-stamped on
+    every later run (which would walk the disclosed date forward forever)."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    run1 = dt.datetime(2026, 6, 2, 3, 30, tzinfo=dt.timezone.utc)    # folds up to 2026-06-01
+    run2 = dt.datetime(2026, 7, 12, 3, 30, tzinfo=dt.timezone.utc)
+    run3 = dt.datetime(2026, 7, 14, 3, 30, tzinfo=dt.timezone.utc)
+
+    first = AGG.aggregate(None, [_line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW,
+                                       date="2026-06-01", size=9)], rmap, geoip, run1)
+    assert first["select_since"] is None, "a first-ever fold has nothing predating the split to caveat"
+    # A file written before the split existed, read back off disk.
+    first["totals"].pop("downloads_by_select", None)
+    first["totals"].pop("bulk_export_events", None)
+    first.pop("select_since", None)
+    for m in first["monthly"]:
+        m.pop("downloads_by_select", None)
+        m.pop("bulk_export_events", None)
+    first = json.loads(json.dumps(first))
+
+    s2 = AGG.aggregate(first, [_line("/data/xml/sample-survey/A1.xml" + _BULK, _NZ,
+                                     date="2026-07-10", size=3)], rmap, geoip, run2)
+    assert s2["select_since"] == "2026-06-02", "the day after the watermark the older file left"
+    months = {m["month"]: m for m in s2["monthly"]}
+    assert months["2026-06"]["downloads_by_select"] == {"single": 0, "bulk": 0}, \
+        "an earlier month takes an empty split, never a backfilled one"
+    assert months["2026-06"]["downloads"] == 1, "its real download figure is untouched"
+    assert months["2026-07"]["downloads_by_select"] == {"single": 0, "bulk": 1}
+    assert s2["totals"]["downloads_by_select"] == {"single": 0, "bulk": 1}, \
+        "the cumulative split covers only what was folded with it in place"
+    assert s2["totals"]["downloads"] == 2, "the headline total still covers the whole history"
+
+    s3 = AGG.aggregate(s2, [], rmap, geoip, run3)
+    assert s3["select_since"] == "2026-06-02", "the stamp is written once and carried, never re-stamped"
+
+
+def test_the_archive_carries_the_select_split_and_the_event_count_and_still_no_geography():
+    """ARCHIVE SELECT PIN. The split and the event count are NON-GEO day facts, which is exactly the
+    class of detail the archive exists to keep once the 92-day window has dropped the day. They must
+    ride the archive line, and the geographic boundary must not move an inch to let them. FAILS IF the
+    archive loses them, if a day with no bulk download carries a fabricated zero pair, or if any
+    geography arrives alongside."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    geoip = AGG.GeoIP.load(_DBIP)
+    states = AGG.AuStates.load(_AU_STATES_CSV)
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi" + _BULK, _AU_NSW, date="2026-07-09", size=5),
+        _line("/data/xml/sample-survey/A1.xml" + _BULK, _AU_NSW, date="2026-07-09", size=5),
+        _line("/data/edi/sample-survey/Vulcan_A2.edi", _NZ, date="2026-07-09", size=5),
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", _NZ, date="2026-07-10", size=5),
+    ]
+    rows: list[dict] = []
+    AGG.aggregate(None, lines, rmap, geoip, _RUN, au_states=states, archive_out=rows)
+    day1, day2 = rows
+    assert day1["by_select"] == {"single": 1, "bulk": 2} and day1["bulk_events"] == 1
+    assert day2["by_select"] == {"single": 1}, "a sparse line carries only what it counted"
+    assert "bulk_events" not in day2, "a day with no export claims no event, not a zero"
+    emitted = "\n".join(json.dumps(r, sort_keys=True) for r in rows)
+    assert _sweep_ip_or_ua(emitted) == [], emitted
+    for banned in ("countries", "country", "by_state", "by_country_detail"):
+        assert banned not in emitted, f"the archive still carries no geography: {banned}"
+
+
+def test_the_aggregator_and_the_portal_agree_on_the_bulk_flag():
+    """CROSS-SUBSYSTEM PIN (mirror). The label is a constant shared by two subsystems whose CI lanes
+    never run each other's suites: portal/src/exports.js writes it, this file reads it. Edited on one
+    side alone, the split degenerates SILENTLY -- the fold keeps working and every bulk export simply
+    counts as a single download. This lane (gateway-ci: deploy/** and gateway/**) holds the pin for an
+    aggregator-side edit; portal/tests/test_bulk_export_label.py holds it for a portal-side one.
+
+    FAILS IF the two tokens drift, or if the portal stops declaring one at all."""
+    exports_js = _REPO / "portal" / "src" / "exports.js"
+    assert exports_js.is_file(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    m = re.search(r"""SEL_BULK_FLAG\s*=\s*["']([^"']+)["']""", exports_js.read_text(encoding="utf-8"))
+    assert m, "portal/src/exports.js must declare SEL_BULK_FLAG; the label has no other source"
+    assert m.group(1) == AGG._SELECT_BULK_FLAG, (
+        f"the portal writes {m.group(1)!r} and this fold reads {AGG._SELECT_BULK_FLAG!r}; "
+        f"every bulk export would be counted as a single download")

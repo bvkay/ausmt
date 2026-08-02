@@ -22,6 +22,7 @@ identity. Only aggregate counts are ever stored.
 | Requests by country | The **masked** client address resolved to a country (see below). Downloads, visits and API requests all count, so the country total is exactly the counted requests. Reported both as that combined count and as a split of those same requests into downloads, visits, API requests and volume. |
 | Australian traffic by **state** | For requests that resolve to Australia only, a second-level lookup of the same masked address to a state or territory (NSW, VIC, QLD, SA, WA, TAS, NT, ACT). Reported both as a request count and as a split into downloads, visits, API requests and volume. Optional, and **state is the finest grain** (see below). |
 | Client class | Each request's user-agent resolves to crawler, scripted or browser. It is read while the day is folded and never stored (see below). |
+| Bulk map exports vs single downloads | When you export a map selection, the portal marks the file requests it was going to make anyway with a query flag (`sel=bulk`), so a drag-selected bulk export can be told apart from a single station download. Reported as a file count and as an export-event proxy (distinct masked networks per day, which is a floor: two exports from one network on one day read as one). |
 | Downloads by **collection** | The programme a survey belongs to, read from the served catalogue document's `collection_id`. A collection total is the sum of its member surveys and nothing else. |
 | Daily time series | Downloads, volume, formats, visits, API requests and networks folded per calendar day (UTC). |
 | Calendar-month rollups | The same figures accumulated per month as each day folds, for quarterly and year-over-year reporting. |
@@ -74,7 +75,15 @@ obstacle to it. Research-infrastructure analytics need aggregates, never identit
   only counts and a daily series.
 - **Raw logs are short-lived.** The access log is rotated with a ~7-day retention; the tail exists
   only for debugging and is not the database. Nothing about that rotation changed when the reporting
-  detail grew: every breakdown is derived from the log the server already wrote.
+  detail grew: every breakdown is derived from the log the server already wrote, with the single
+  labelled exception below.
+- **One label, and only one.** When you export a map selection, the portal adds a query flag
+  (`sel=bulk`) to the file requests it was already making, so a bulk export can be told apart from a
+  single download. That is the one thing the portal puts *into* the log rather than reading out of it.
+  No extra request is made and nothing about who is asking is recorded; the flag is stripped off
+  before the file is attributed, so a labelled and an unlabelled fetch of the same file are still one
+  download. The single-station download links in a station drawer carry no flag, which is what makes
+  an unlabelled fetch mean *single* rather than merely *unknown*.
 
 ## Retention of the aggregates
 
@@ -112,6 +121,10 @@ Breakdowns were not all added at once, so a month can be complete for one and em
 screen names any such month among the three it shows side by side, the monthly export carries the
 coverage columns for every month retained, and the exports leave an unmeasured cell **empty** rather
 than writing a zero into it.
+
+The bulk-versus-single split is the newest of those starting points, and the only one whose start date
+is recorded in the aggregate itself. The screen therefore **names the day it begins** instead of
+describing it in prose; downloads folded before that day are in the totals and in neither class.
 
 ## Australian traffic by state, and why not by city
 

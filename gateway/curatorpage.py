@@ -3500,7 +3500,47 @@ def _format_breakdown(stats: dict) -> str:
         tail = f', unattributed paths: <b>{_esc(other)}</b>' if other else ""
         out += (f'<p class="opsnote">Single-station files: <b>{_esc(files)}</b> &nbsp;·&nbsp; '
                 f'whole-survey bundles: <b>{_esc(bundles)}</b>{tail}.</p>')
-    return out
+    return out + _bulk_export_line(stats)
+
+
+def _bulk_export_line(stats: dict) -> str:
+    """The bulk-export line: how many map-selection exports the fold saw, and how many files they took.
+
+    BOTH figures, because one export fetches many files. The file count alone would read as far more
+    exports than happened; the event count alone would hide the volume. The event figure is distinct
+    (masked network, day) pairs that took at least one labelled download, which is a FLOOR: a second
+    export from the same network on the same day is not separable from the first, and the line says
+    proxy rather than count.
+
+    THE CITATION PACK. The portal does generate one in the browser, and it is genuinely uncountable
+    here because it fetches nothing from the server. It is NOT, however, produced by this export: in
+    portal/src/exports.js the export flow (#dlZip) writes the EDIs, a per-survey LICENSE.txt and the
+    not-included pointer file, and the citation pack is #dlCite, a separate control the reader clicks
+    separately. So the line names the pack and its uncountability, and states the relationship the code
+    actually has rather than the causal one it does not.
+
+    Rendered only when the fold produced the split. A box that folded before it shows nothing here: no
+    line, no zero, exactly like the collection rollup above."""
+    totals = stats.get("totals") if isinstance(stats, dict) else None
+    split = (totals or {}).get("downloads_by_select")
+    if not isinstance(split, dict) or not split:
+        return ""
+    events = _as_int((totals or {}).get("bulk_export_events"))
+    files = _as_int(split.get("bulk"))
+    since = stats.get("select_since")
+    # The one seam on this screen whose date IS recorded, so it is named rather than left to the
+    # markers. The other two are dated by `detail_since` or by nothing at all (see _detail_caveat).
+    seam = ("" if not isinstance(since, str) or not since else
+            f' The selection split is counted from <b>{_esc(since)}</b> onward; downloads folded '
+            f'before that are in the totals above and in neither class here.')
+    return (f'<p class="opsnote">Bulk map exports: <b>{_esc(events)}</b> event(s), '
+            f'<b>{_esc(files)}</b> file(s). An export is a map selection the portal zips in the '
+            f'browser, and it labels its own file requests so they can be told apart from single '
+            f'downloads. The event figure counts distinct networks per day, so two exports from one '
+            f'network on one day read as one: it is a floor, not a count of actions. The citation '
+            f'pack is a separate export the reader runs beside this one; it is assembled entirely in '
+            f'the browser and fetches nothing from the server, so it is not counted anywhere on this '
+            f'screen.{seam}</p>')
 
 
 def _collection_line(stats: dict) -> str:
@@ -4074,8 +4114,13 @@ def render_analytics_page(*, stats, stats_stale: bool, nav: "NavContext") -> str
              'them client-side with no per-navigation request (record D3), so this screen reports '
              'downloads and whole-portal visits, honestly, not page views.</p>'
              '<p class="sub">Every figure below is derived from request paths, the masked network and '
-             'the response size the access log already records. Nothing here is a beacon and nothing '
-             'new is collected. <b>API requests</b> counts fetches of the three documented '
+             'the response size the access log already records. Nothing here is a beacon. One thing '
+             'is added, and it is the only one: when you export a map selection, the portal marks its '
+             'own file requests with a query flag (<code>sel=bulk</code>) so a bulk selection can be '
+             'told apart from a single download. That is a label on requests that already happen: '
+             'no new request, no beacon, no identity. The flag is stripped off before the file is '
+             'attributed, so a labelled and an unlabelled fetch of the same file are still one '
+             'download. <b>API requests</b> counts fetches of the three documented '
              'machine-readable entry points the portal never fetches for itself '
              '(<code>/data/products/manifest.json</code>, <code>/data/mtcat.json</code>, '
              '<code>/data/mtcat.schema.json</code>): it is a path-class signal and it is an upper '

@@ -157,6 +157,23 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 # as its own line, never merged into visits.
 _API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json", "/data/mtcat.schema.json")
 
+# The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's multi-file export (portal/src/exports.js,
+# the "EDIs (zip)" flow over a map selection) marks each file fetch it issues with this exact query
+# token. It is the ONE thing in this pipeline the portal deliberately puts INTO the log; everything else
+# here is read from what the server was already writing. It is a label on a request that already
+# happens: no additional request, no beacon, and nothing about who is asking.
+#
+# It is read from the RAW request line, BEFORE the query strip that produces the attribution path (see
+# parse_caddy_line), and it never touches that path. That is what keeps the within-day dedupe key the
+# query-stripped path, so the same file fetched with and without the label is still ONE download.
+#
+# The drawer's single-station downloads carry no label, which is what makes an unlabelled fetch mean
+# "single" rather than merely "unknown". Change this token and portal/src/exports.js must change with
+# it; a pin in portal/tests holds the two together.
+_SELECT_BULK_FLAG = "sel=bulk"
+_SELECT_SINGLE = "single"
+_SELECT_BULK = "bulk"
+
 # CLIENT CLASSES (record D2: "user-agent for bot filtering only" -- read transiently, NEVER stored).
 # The old binary was bot-or-human, which put curl, wget and python-requests on the bot side. Those are
 # the exact clients the public API documentation hands people, so scripted scientific use was invisible
@@ -456,6 +473,11 @@ def parse_caddy_line(line: str) -> dict | None:
     uri = req.get("uri") or ""
     if not isinstance(uri, str):
         return None
+    # The bulk-export label is read from the RAW uri, before the split below throws the query away. It
+    # must be an exact whole parameter: a token merely mentioned inside another value (`?ref=sel=bulk`)
+    # is not the portal's label and must not be read as one.
+    bulk = any(part == _SELECT_BULK_FLAG
+               for part in uri.split("?", 1)[1].split("&")) if "?" in uri else False
     path = uri.split("?", 1)[0]
     try:
         from urllib.parse import unquote
@@ -486,7 +508,7 @@ def parse_caddy_line(line: str) -> dict | None:
         elif isinstance(h, str):
             ua = h
     return {"date": date, "method": (req.get("method") or "").upper(), "path": path,
-            "status": status, "size": size, "address": address, "ua": ua}
+            "status": status, "size": size, "address": address, "ua": ua, "bulk": bulk}
 
 
 def _ts_to_date(ts) -> str | None:
@@ -580,9 +602,10 @@ def _release_bundle_row(reverse_map: dict[str, dict], rel: str) -> dict | None:
 # --------------------------------------------------------------------------------------------------
 def _empty_stats() -> dict:
     return {"schema": SCHEMA_VERSION, "timer_period_min": TIMER_PERIOD_MIN, "generated_at": None,
-            "since": None, "last_folded_date": None, "detail_since": None,
+            "since": None, "last_folded_date": None, "detail_since": None, "select_since": None,
             "totals": {"downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
-                       "api_requests": 0, "downloads_by_client": {}},
+                       "api_requests": 0, "downloads_by_client": {},
+                       "downloads_by_select": _empty_select(), "bulk_export_events": 0},
             "downloads": {"by_format": {}, "by_survey": {}, "by_dataset": {}, "by_kind": {}},
             "total_served_surveys": 0, "by_collection": {},
             "countries": {}, "by_country_detail": {}, "by_state": {}, "by_state_detail": {},
@@ -601,6 +624,20 @@ _CLASS_METRICS = ("downloads", "visits", "api")
 
 def _empty_class_detail() -> dict:
     return {"downloads": 0, "visits": 0, "api": 0, "bytes": 0}
+
+
+def _empty_select() -> dict:
+    """The bulk/single download split, DENSE at the cumulative and month grains: once a month has folded
+    a day under these rules, `bulk: 0` is a real measurement of that month and must render as one. The
+    ARCHIVE's copy is sparse instead, like every other map on an archive line."""
+    return {_SELECT_SINGLE: 0, _SELECT_BULK: 0}
+
+
+def _coerce_select(raw) -> dict:
+    """A downloads_by_select map from a prior file, clamped to the two known classes and tolerant of
+    absence (an ADDITIVE dimension detected by key presence, like every other on this file)."""
+    return ({_SELECT_SINGLE: _as_int(raw.get(_SELECT_SINGLE)), _SELECT_BULK: _as_int(raw.get(_SELECT_BULK))}
+            if isinstance(raw, dict) else _empty_select())
 
 
 def _empty_month(month: str) -> dict:
@@ -624,8 +661,10 @@ def _empty_month(month: str) -> dict:
     return {"month": month, "downloads": 0, "visits": 0, "download_bytes": 0, "unattributed": 0,
             "api_requests": 0, "days": 0, "seeded_days": 0, "geo_days": 0, "detail_days": 0,
             "networks_peak": 0,
+            "bulk_export_events": 0,
             "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_country_detail": {},
-            "by_state": {}, "by_state_detail": {}, "downloads_by_client": {}, "by_collection": {}}
+            "by_state": {}, "by_state_detail": {}, "downloads_by_client": {},
+            "downloads_by_select": _empty_select(), "by_collection": {}}
 
 
 def _as_int(v, default: int = 0) -> int:
@@ -736,8 +775,10 @@ def _coerce_month_rows(raw) -> list[dict]:
             continue
         m = _empty_month(row["month"])
         for k in ("downloads", "visits", "download_bytes", "unattributed", "api_requests",
-                  "days", "seeded_days", "geo_days", "detail_days", "networks_peak"):
+                  "days", "seeded_days", "geo_days", "detail_days", "networks_peak",
+                  "bulk_export_events"):
             m[k] = _as_int(row.get(k))
+        m["downloads_by_select"] = _coerce_select(row.get("downloads_by_select"))
         for k in ("formats", "kinds", "countries", "by_state", "downloads_by_client"):
             if isinstance(row.get(k), dict):
                 m[k] = {str(kk): _as_int(vv) for kk, vv in row[k].items()}
@@ -801,6 +842,18 @@ def _coerce_prev(prev: dict | None) -> dict:
         if isinstance(pt.get("downloads_by_client"), dict):
             s["totals"]["downloads_by_client"] = {str(k): _as_int(v)
                                                   for k, v in pt["downloads_by_client"].items()}
+        s["totals"]["downloads_by_select"] = _coerce_select(pt.get("downloads_by_select"))
+    # The bulk/single split is the one dimension here whose start date IS recorded. `detail_since` marks
+    # the v1 hinge and the dimensions after it were left undated on purpose (the fold that added them is
+    # written nowhere), but this one is stamped as it begins, so the screen can NAME the day instead of
+    # declining to. Stamped ONCE: a prior file that already carries the stamp keeps it, and a prior file
+    # that already carries the surface without a stamp is left unclaimed rather than given a date later
+    # than the truth. Absent both (an older file), it is the day after that file's fold watermark, which
+    # is the first day this build could have counted.
+    if isinstance(prev.get("select_since"), str):
+        s["select_since"] = prev["select_since"]
+    elif not isinstance(pt, dict) or "downloads_by_select" not in pt:
+        s["select_since"] = _next_day(s["last_folded_date"])
     pd = prev.get("downloads")
     if isinstance(pd, dict):
         if isinstance(pd.get("by_format"), dict):
@@ -906,10 +959,17 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     # to a /24 (v4) or /48 (v6), so the distinct set is a network count. Only its SIZE is ever written;
     # the sets die with the process. A day folds exactly once, so one run sees all of that day's lines.
     networks_seen: dict[str, set] = {}
-    # date -> set of (masked network, download path) already counted on it, for THIS run only. This is
-    # the within-day download dedupe; like networks_seen it is built from the masked address the edge
-    # already wrote, it is never written anywhere, and it dies with the process.
-    downloads_seen: dict[str, set] = {}
+    # date -> {(masked network, download path): 'single'|'bulk'} already counted on it, for THIS run
+    # only. This is the within-day download dedupe; like networks_seen it is built from the masked
+    # address the edge already wrote, it is never written anywhere, and it dies with the process. The
+    # VALUE is which class the one counted download currently sits in, so a later request for the same
+    # file that carries the bulk label can move it rather than add a second download.
+    downloads_seen: dict[str, dict] = {}
+    # date -> set of MASKED networks that took at least one BULK-labelled download on it, for THIS run
+    # only, and with exactly the lifecycle of networks_seen above: only the SIZE is ever written, the
+    # set dies with the process, and nothing per-network is persisted. Its size is the export-EVENT
+    # proxy: one export fetches many files, so counting flagged downloads would count files.
+    bulk_networks_seen: dict[str, set] = {}
     # date -> month, for the "distinct active days per month" counter (a day counts once per month even
     # though it contributes many requests).
     days_seen: dict[str, str] = {}
@@ -976,13 +1036,31 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             # set of range fragments both add up to roughly the real volume), but the COUNT increments
             # only the first time this network fetched this path today.
             dedupe_key = (rec["address"] or "", rel)
-            counted = dedupe_key not in downloads_seen.setdefault(date, set())
-            downloads_seen[date].add(dedupe_key)
+            seen_today = downloads_seen.setdefault(date, {})
+            counted = dedupe_key not in seen_today
             n = 1 if counted else 0
             totals["downloads"] += n
             totals["download_bytes"] += size
             arc["downloads"] += n
             arc["download_bytes"] += size
+            # THE BULK/SINGLE SPLIT. A download is bulk if ANY of that day's requests for it carried the
+            # portal's label, which is why the class has to be revisable: one save action logs the
+            # request twice and a ranged transfer once per fragment, so the labelled leg can arrive
+            # after the one that was counted. On that arrival the download MOVES between the two
+            # classes; it is never counted a second time, and the headline figure never moves.
+            select = _SELECT_BULK if rec["bulk"] else _SELECT_SINGLE
+            if counted:
+                seen_today[dedupe_key] = select
+                _bump(totals["downloads_by_select"], select)
+                _bump(month["downloads_by_select"], select)
+                _bump(arc["by_select"], select)
+            elif select == _SELECT_BULK and seen_today.get(dedupe_key) == _SELECT_SINGLE:
+                seen_today[dedupe_key] = _SELECT_BULK
+                for counter in (totals["downloads_by_select"], month["downloads_by_select"],
+                                arc["by_select"]):
+                    _reclassify_select(counter)
+            if rec["bulk"]:
+                _note_network(bulk_networks_seen, date, rec["address"])
             if counted:
                 _bump(totals["downloads_by_client"], client)
                 _bump(month["downloads_by_client"], client)
@@ -1071,6 +1149,19 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         arc = archive_index.get(date)
         if arc is not None:
             arc["networks"] = len(nets)
+    # EXPORT EVENTS for the days folded in THIS run: distinct masked networks that took at least one
+    # bulk-labelled download that day, summed into the cumulative total and into the month. A second
+    # export from the same network on the same day is not separable from the first and is not claimed
+    # to be, so this is a floor on export actions and is reported as a proxy, never as a count of them.
+    # Only the SIZE of each set is written; the masked addresses never leave memory.
+    for date, nets in bulk_networks_seen.items():
+        totals["bulk_export_events"] = _as_int(totals.get("bulk_export_events")) + len(nets)
+        m = month_index.get(date[:7])
+        if m is not None:
+            m["bulk_export_events"] = _as_int(m.get("bulk_export_events")) + len(nets)
+        arc = archive_index.get(date)
+        if arc is not None:
+            arc["bulk_events"] = len(nets)
     # One increment per distinct ACTIVE date, so a month row records how much of itself it covers.
     # `detail_days` rides the same loop and counts the same days, because every day THIS fold folds is
     # folded with every dimension it knows about. The two diverge only across an upgrade: a month
@@ -1119,6 +1210,14 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
 
 def _bump(counter: dict, key: str, n: int = 1) -> None:
     counter[key] = _as_int(counter.get(key)) + n
+
+
+def _reclassify_select(counter: dict) -> None:
+    """Move one already-counted download from `single` to `bulk`. Used when a later request for the same
+    file on the same day carries the portal's bulk label: the download is already in the headline total,
+    so the split has to MOVE it rather than count it again."""
+    counter[_SELECT_SINGLE] = _as_int(counter.get(_SELECT_SINGLE)) - 1
+    counter[_SELECT_BULK] = _as_int(counter.get(_SELECT_BULK)) + 1
 
 
 def _bump_volume(index: dict, key: str, size: int, *, counted: bool = True,
@@ -1318,8 +1417,9 @@ def _archive_day(index: dict, date: str) -> dict:
     row = index.get(date)
     if row is None:
         row = {"date": date, "downloads": 0, "visits": 0, "api": 0, "networks": 0,
-               "download_bytes": 0, "unattributed": 0, "by_format": {}, "by_kind": {},
-               "by_client": {}, "by_survey": {}, "by_dataset": {}, "by_collection": {}}
+               "bulk_events": 0, "download_bytes": 0, "unattributed": 0, "by_format": {},
+               "by_kind": {}, "by_client": {}, "by_select": {}, "by_survey": {}, "by_dataset": {},
+               "by_collection": {}}
         index[date] = row
     return row
 
@@ -1331,12 +1431,19 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
     omitted when it does not (see _served_build_id: this reads an identifier, it never makes one).
 
     There is deliberately no country, state, address or user-agent key here, and no per-network datum
-    beyond the scalar `networks` count."""
+    beyond the scalar `networks` and `bulk_events` counts. Both are sizes of a run-local set of masked
+    networks; neither is a per-network record, and the sets die with the process.
+
+    `by_select` and `bulk_events` belong here for the same reason the format and client splits do: they
+    are day facts with no geography in them, and the day grain is exactly what is otherwise lost once
+    the 92-day window drops the row."""
     out: dict = {"date": row["date"]}
-    for key in ("downloads", "visits", "api", "networks", "download_bytes", "unattributed"):
+    for key in ("downloads", "visits", "api", "networks", "bulk_events", "download_bytes",
+                "unattributed"):
         if _as_int(row.get(key)):
             out[key] = _as_int(row[key])
-    for key in ("by_format", "by_kind", "by_client", "by_survey", "by_dataset", "by_collection"):
+    for key in ("by_format", "by_kind", "by_client", "by_select", "by_survey", "by_dataset",
+                "by_collection"):
         if row.get(key):
             out[key] = row[key]
     if served_build:

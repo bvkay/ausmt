@@ -880,7 +880,9 @@ hand) the aggregator also reads `access*.json.gz`, and the front-door pull also 
 
 Everything below is derived from what the fold already reads: the request **path**, the **masked**
 network, and the response **size**. No beacon exists, no user-agent is inspected for reporting, and no
-per-page view is countable (see the caveat above).
+per-page view is countable (see the caveat above). There is exactly **one** thing the portal puts
+*into* the log rather than the fold reading out of it, and it is the bulk-export label in the table
+below: a query flag on file requests the portal was making anyway.
 
 | Breakdown | How it is derived |
 | --- | --- |
@@ -890,6 +892,7 @@ per-page view is countable (see the caveat above).
 | **Single-station file vs whole-survey bundle** | The manifest row's kind (`files[]` vs `bundles[]`). |
 | **API requests** | Fetches of the three documented machine-readable entry points the portal's own JavaScript never fetches: `/data/products/manifest.json`, `/data/mtcat.json` and `/data/mtcat.schema.json` (the `$id` every validator resolves). A **path class**. It is an **upper bound**: the mtcat link is in every page footer, so a human click lands here too. `/data/catalogue.json` stays the visit proxy and `/data/manifest.json` (the SPA's own boot fetch) is deliberately excluded. |
 | **Client class** | The user-agent resolves to crawler, scripted or browser, read transiently and never stored. Crawlers are excluded from every figure. **Scripted** clients (curl, wget, python-requests, and anything sending no user-agent) are **counted**, and their share of downloads is reported: those are the clients the published API examples hand people, so classing them as robots hid scientific use. |
+| **Bulk map exports** | `portal/src/exports.js` appends `sel=bulk` to each file request its multi-file export issues, and nothing else in the portal does; the drawer's single-station downloads stay unlabelled, which is what makes an unlabelled fetch mean *single*. The fold reads the flag from the **raw** line, before the query strip that produces the attribution path, so a labelled and an unlabelled fetch of the same file still de-duplicate to one download (bulk if **any** of that day's requests for it carried the label). Reported as a file count plus an **event proxy**: distinct masked networks that took at least one labelled download that day, summed into the month. That is a floor, not a count of actions. When the fold upgrades a `stats.json` that predates the split it stamps `select_since` at the day after that file's watermark, so the screen names the day the split begins instead of describing it; a box whose first-ever fold already had the split records no stamp, because nothing predates it. |
 | **Download counting** | A download counts **once per day per masked network per file**, and admits status 200 or 206. One save action can log two requests (the browser cancels on the download header, its download manager refetches) and a resumed transfer logs one request per range. Every request's **bytes still sum**, so the volume covers what was actually served. |
 | **Release-tier bundles** | `/data/releases/<tag>/bundles/<file>` counts as a download and attributes to its survey by bundle filename against the live manifest. The frozen citable copy keeps its own row; the release metadata JSONs are not counted. |
 | **Distinct networks** per day | The count of distinct masked networks (the /24 or /48 the edge already wrote) seen that day. The addresses live in memory for the one run that folds the day; only the integer is written. One network can be a whole institution, so read it as reach, not as people. |
@@ -911,7 +914,7 @@ unanswerable, and unanswerable retroactively.
 | Property | Value |
 | --- | --- |
 | Location | `${AUSMT_DATA_DIR}/gateway/state/daily_archive.jsonl`: the **gateway state dir**, deliberately outside `site-data/`, so nothing can serve it |
-| Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, volume, unattributed, and the by-format / by-kind / by-client / by-survey (with its file/bundle split) / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse: only nonzero entries are written |
+| Contents | Pure counts for one day: downloads, visits, API requests, distinct networks, bulk-export events, volume, unattributed, and the by-format / by-kind / by-client / by-select / by-survey (with its file/bundle split) / by-dataset / by-collection maps, plus the served build id when the tree carries one. Sparse: only nonzero entries are written |
 | Never | No country, no state, no address, no user-agent, and no per-network datum beyond the scalar count. **No geography below the monthly grain, retained or rendered** |
 | Retention | Indefinite. Never pruned, never rewritten, append-only, one line per day, written after `stats.json` lands so a failed fold cannot duplicate a day |
 | Read by | **Nothing.** No gateway route, no render path, no export. A pin in `deploy/tests` fails the lane if a gateway source ever names it |

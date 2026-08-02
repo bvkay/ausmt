@@ -199,6 +199,19 @@ document.getElementById("dlCite").onclick=async()=>{track("DownloadGenerated",{f
   txt.push(...ack);
   const z=new JSZip();z.file("CITATIONS.txt",txt.join("\n"));z.file("citations.bib",bib);z.file("citations.ris",risT);
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);};
+// The BULK-EXPORT LABEL (owner ruling 2026-08-01). The multi-file export below marks each file fetch it
+// issues with this query flag, so the server-log aggregator can tell a drag-selected bulk export from a
+// single station download. It is a LABEL on a request that already happens: no extra request, no beacon,
+// nothing about who is asking. The flag rides the QUERY and never the path, because the aggregator strips
+// the query before attributing a download, so a flagged and an unflagged fetch of the same file are still
+// one file (see deploy/scripts/aggregate_stats.py: the dedupe key is the query-stripped path).
+//
+// ONLY this flow labels anything. The drawer's own single-station downloads go through drawer.js
+// downloadUrl() and stay unlabelled, which is the whole point: an unlabelled fetch is exactly what
+// "single" means downstream, so leaking the flag onto that path would reclassify every single download
+// as a bulk one. The gate is therefore the CALL SITE, not the shared dataUrl() helper both use.
+var SEL_BULK_FLAG="sel=bulk";
+function bulkUrl(u){u=String(u);return u+(u.indexOf("?")>=0?"&":"?")+SEL_BULK_FLAG;}
 document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{format:"zip",n:sel().length});
   // Two-phase boot: each EDI is fetched at its MANIFEST url when there is one (the legacy flat path is only
   // the fallback), so packaging before the manifest lands would silently take the fallback route for every
@@ -213,7 +226,7 @@ document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{fo
     // Namespace the zip entry by survey slug too: a selection can span surveys that reuse an EDI basename
     // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip (audit M3).
     const entry=(s.slug?s.slug+"/":"")+s.file;
-    const r=await fetch(u);if(!r.ok)throw 0;f.file(entry,await r.blob());ok++;included[s.survey]=s.slug?s.slug+"/":"";}catch(e){}}
+    const r=await fetch(bulkUrl(u));if(!r.ok)throw 0;f.file(entry,await r.blob());ok++;included[s.survey]=s.slug?s.slug+"/":"";}catch(e){}}
   // C6/C46: rights travel with the bytes — one LICENSE.txt per included survey, beside its EDIs (same slug
   // namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip instrument. The
   // m -> (who, yr, attn) derivation mirrors build_portal's LICENSE.txt call site; sources/changes ride on
