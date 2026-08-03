@@ -39,7 +39,7 @@ sys.path.insert(0, str(ROOT / "extract"))
 # The C42 lane's engine-produced coordinate fixtures (one EDI per station, distinctive positions) and
 # its survey.yaml writer. Reused so the byte gate is exercised against the SAME fixture shape the
 # coordinate-access lane proves the gate on.
-from test_coord_access import EXACT, GEN, HID, _stage_survey   # noqa: E402
+from test_coord_access import EXACT, GEN, HID, _stage_survey, _sweep_h5_for_non_exact   # noqa: E402
 
 
 def _build(tmp_path, *extra, surveys=None):
@@ -149,8 +149,10 @@ def test_a_non_exact_station_is_byte_gated_out_of_tier_one(tmp_path):
     assert served == {EXACT["id"]}, f"only the exact station may get an h5, got {served}"
     on_disk = sorted(p.name for p in (out / "h5" / "gate-survey").glob("*"))
     assert on_disk == [f"{EXACT['id']}.h5"], on_disk
-    # and the true positions of the two gated stations appear nowhere in the h5 tree
-    blob = b"".join(p.read_bytes() for p in (out / "h5").rglob("*.h5"))
-    for st in (GEN, HID):
-        for val in (st["lat"], st["lon"], st["elev"]):
-            assert f"{val}".encode() not in blob, f"{st['id']} true value {val} leaked into an h5"
+    # And the true positions of the two gated stations appear nowhere in the h5 tree. Checked with the
+    # C42 leak-sweep's OWN numeric HDF5 leg (the engine's mth5 reader, values compared as floats), not
+    # a byte-string search: a search for b"-33.555551" inside an HDF5 file is the check C42 documents
+    # as structurally blind, because an IEEE-754 double has no decimal spelling in the container.
+    hits = _sweep_h5_for_non_exact(out)
+    assert not hits, "a byte-gated station's position reached a per-station MTH5:\n" + "\n".join(
+        f"  {f}: {h}" for f, h in hits)
