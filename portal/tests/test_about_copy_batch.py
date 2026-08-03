@@ -97,7 +97,7 @@ def test_the_raw_timeseries_archive_is_named_by_link_not_in_passing():
         "the raw-time-series sentence must no longer name one archive as the usual case")
     assert "it links to the archive that holds them, such as the" in what, (
         "the sentence must read 'such as the <linked collection>'")
-    assert ("https://dx.doi.org/10.25914/mtjg-jp22", "NCI-AuScope MT collection") in _links(_section("what")), (
+    assert ("https://doi.org/10.25914/mtjg-jp22", "NCI-AuScope MT collection") in _links(_section("what")), (
         "the NCI-AuScope MT collection must be an anchor on its collection DOI")
 
 
@@ -282,7 +282,7 @@ def test_the_submission_section_drops_the_browser_side_reassurances():
                     "The checks in the page are there to save you a round trip",
                     "the pipeline result is the one that counts"):
         assert retired not in flat, f"the retired submission copy is back: {retired!r}"
-    assert "Bring your EDI or MTH5 transfer functions to the" in flat, (
+    assert "Bring your EDI, EMTF XML or MTH5 transfer functions to the" in flat, (
         "the section must still open by pointing at the Contribute page")
     assert "walks you through the metadata AusMT needs." in flat, (
         "the surviving first paragraph must still end on a whole sentence")
