@@ -54,8 +54,13 @@ name: deploy-images
 #   * `build` failing is its own RED required check and blocks the PR, whether or not anything
 #     downstream of it ever ran.
 #   * `engine-full-tests` failing is RED and blocks the PR.
-#   * a docs-only PR skips all three by `if:`, all three report `skipped`, all three are satisfied,
-#     and the PR merges immediately without paying for a build.
+#   * a docs-only PR satisfies all three WITHOUT paying for a build, by two different mechanisms:
+#     `engine-full-tests` (non-matrix) is skipped by its job-level `if:` and reports the `skipped`
+#     conclusion, which branch protection accepts; the three `build (...)` names come from a MATRIX
+#     job, and a matrix job skipped at job level never expands, so its named checks never report at
+#     all and the PR blocks forever (PR #137 proved it). The build job therefore always starts and
+#     gates its STEPS instead, reporting three green no-op ticks. Never re-add a job-level `if:`
+#     to the build job.
 #
 # What survives: no path where a green tick means less than "the images built and the engine suite
 # passed inside the shipped one", or "nothing that can affect an image changed".
@@ -76,9 +81,11 @@ on:
   # branch scope is unchanged from C39) because the owner requires this workflow's checks on PRs to
   # main, and a path filter HERE makes that impossible. The asymmetry GitHub gives us: when a
   # WORKFLOW is skipped by a path or branch filter, its checks never report at all and stay Pending
-  # forever, so a required check blocks the PR permanently; but a JOB inside a workflow that DID
-  # start, skipped by its own `if:`, reports the `skipped` conclusion, which branch protection
-  # accepts as satisfying the requirement. So the filtering has to move off the trigger and onto the
+  # forever, so a required check blocks the PR permanently; but a NON-MATRIX job inside a workflow
+  # that DID start, skipped by its own `if:`, reports the `skipped` conclusion, which branch
+  # protection accepts as satisfying the requirement (a MATRIX job skipped at job level collapses
+  # unexpanded and its named checks never report; that is why the build job gates its steps, not
+  # itself). So the filtering has to move off the trigger and onto the
   # jobs. That is what the `changes` job below does. This was not theoretical: the trimmed trigger
   # meant deploy-images simply never started on most PRs, engine-full-tests never reported, and
   # three consecutive release-gate failures merged anyway because the gate that would have caught
@@ -88,8 +95,11 @@ on:
   #
   # C39 (CI minutes economy), RESTATED HONESTLY. What C39 bought is kept: the heavy jobs (3-image
   # build, engine-full-tests, both e2e lanes) still only run when an image INPUT actually changed, so
-  # a docs / README / maintainer-notes PR costs one short `changes` job and nothing else, and merges
-  # immediately because all three required checks report `skipped`.
+  # a docs / README / maintainer-notes PR costs one short `changes` job plus three no-op matrix
+  # starts, and merges immediately: engine-full-tests reports `skipped` (which branch protection
+  # accepts) while the build matrix expands and reports three green no-op ticks. A job-level skip
+  # would collapse the matrix and the three required build names would never report at all (the
+  # build job's own comment carries the full story, learned from PR #137).
   # What C39 bought is GIVEN BACK, on purpose: the `changes` job matches all FIVE image-input paths
   # (deploy, gateway, engine, portal, contract), not the trimmed deploy/gateway pair, so engine-only
   # and portal-only PRs DO pay for a full build + e2e again. That is a real cost increase over C39
@@ -128,8 +138,8 @@ jobs:
   #
   # FAIL-SAFE, AND EXACTLY WHERE THAT FAIL-SAFE STOPS. A required check that a SKIP satisfies has
   # one dangerous failure mode: if this detector goes wrong, `matched` comes back empty, the gates
-  # below evaluate false, every heavy job skips, and the PR collects a green tick over an image
-  # nobody built. Two separate mechanisms cover that, and they only work together:
+  # below evaluate false, every heavy job goes inert (the non-matrix jobs skip, the build matrix
+  # runs as no-ops), and the PR collects a green tick over an image nobody built. Two separate mechanisms cover that, and they only work together:
   #
   #   1. IN-SCRIPT error paths default to matched=true. No merge base, a diff that fails, a grep
   #      that exits 2 or worse: each of those runs the FULL gate rather than failing the step. A
@@ -250,7 +260,7 @@ jobs:
             echo "image inputs touched: running the full build + gate"
             echo "matched=true" >> "$GITHUB_OUTPUT"
           elif [ "$rc" -eq 1 ]; then
-            echo "no image inputs touched: heavy jobs will skip (branch protection accepts skipped)"
+            echo "no image inputs touched: non-matrix heavy jobs skip; the build matrix runs as no-ops"
             echo "matched=false" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::grep failed with rc=${rc} (not a match/no-match answer); running the full gate"
@@ -277,8 +287,25 @@ jobs:
     # Job outputs are STRINGS, always: compare against the literal 'true', never rely on truthiness
     # (a non-empty string is truthy in GitHub expressions, so a bare `needs.changes.outputs.matched`
     # would run the gate on the string "false" too). Every gate in this file uses this exact form.
+    #
+    # THE GATE LIVES ON THE STEPS, NOT THE JOB, and for this job only. A MATRIX job skipped by a
+    # job-level `if:` never expands its matrix: GitHub reports ONE check named with the literal,
+    # unexpanded expression, so the three required names "build (ausmt-engine|portal|gateway)"
+    # never report and branch protection waits forever. PR #137 (README-only, 2026-08-02) proved
+    # it: `changes` passed, engine-full-tests reported its skip, and the PR sat BLOCKED behind
+    # three checks that could never arrive. So this job always starts (the matrix expands, the
+    # three names report) and every step gates itself on the changes output instead: an
+    # unmatched PR costs three no-op runners for a few seconds each and reports three green
+    # ticks that truthfully mean "nothing to build". The non-matrix jobs below keep their
+    # job-level gates: a skipped NON-matrix job reports its name with the `skipped` conclusion,
+    # which branch protection accepts.
+    # EVERY STEP ADDED TO THIS JOB MUST CARRY THE `needs.changes.outputs.matched == 'true'` GATE
+    # (AND-composed onto any condition of its own): an ungated step runs real work on docs PRs.
+    # Known residual: if `changes` itself fails, this job is dependency-skipped and the matrix
+    # collapses again; that is correct, because the PR then blocks on `changes`'s own red tick.
+    # (Three explicit non-matrix jobs would report the names at zero runner cost; the matrix with
+    # step gates was chosen to keep one shared step list. Cost: three no-op starts per docs PR.)
     needs: changes
-    if: needs.changes.outputs.matched == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -295,9 +322,11 @@ jobs:
             dockerfile: deploy/docker/gateway.Dockerfile
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.matched == 'true'
 
       - name: Should push? (main branch push, or a v* tag — never on pull_request)
         id: push_gate
+        if: needs.changes.outputs.matched == 'true'
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "push=true" >> "$GITHUB_OUTPUT"
@@ -306,18 +335,20 @@ jobs:
           fi
 
       - uses: docker/login-action@v3
-        if: steps.push_gate.outputs.push == 'true'
+        if: needs.changes.outputs.matched == 'true' && steps.push_gate.outputs.push == 'true'
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/setup-buildx-action@v3
+        if: needs.changes.outputs.matched == 'true'
 
       # Tag with both `latest` (main-branch pushes only) and the git ref (branch name or vX.Y.Z tag)
       # so a pinned deploy/.env TAG=vX.Y.Z always resolves to something that was actually published.
       - name: Compute image tags
         id: tags
+        if: needs.changes.outputs.matched == 'true'
         run: |
           REF_TAG=$(echo "${{ github.ref_name }}" | tr '/' '-')
           TAGS="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:${REF_TAG}"
@@ -328,6 +359,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         id: build
+        if: needs.changes.outputs.matched == 'true'
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -353,6 +385,7 @@ jobs:
       # exactly here: `docker save` on a pushed-only tag => "reference does not exist"), so pull
       # it back first — we're still logged in and it was pushed seconds ago (cache-hot).
       - name: Export image to a tar artifact
+        if: needs.changes.outputs.matched == 'true'
         run: |
           FIRST_TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d, -f1)
           if [ "${{ steps.push_gate.outputs.push }}" = "true" ]; then
@@ -360,6 +393,7 @@ jobs:
           fi
           docker save "$FIRST_TAG" -o /tmp/${{ matrix.image }}.tar
       - uses: actions/upload-artifact@v4
+        if: needs.changes.outputs.matched == 'true'
         with:
           name: image-${{ matrix.image }}
           path: /tmp/${{ matrix.image }}.tar
@@ -378,7 +412,7 @@ jobs:
       # images set a non-shell ENTRYPOINT. Skipped for ausmt-portal, which is caddy-based with no
       # python in it.
       - name: Record the shipped pip stack
-        if: matrix.image != 'ausmt-portal'
+        if: needs.changes.outputs.matched == 'true' && matrix.image != 'ausmt-portal'
         run: |
           FIRST_TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d, -f1)
           {
@@ -389,7 +423,7 @@ jobs:
             >> /tmp/${{ matrix.image }}-pip-freeze.txt
           cat /tmp/${{ matrix.image }}-pip-freeze.txt
       - uses: actions/upload-artifact@v4
-        if: matrix.image != 'ausmt-portal'
+        if: needs.changes.outputs.matched == 'true' && matrix.image != 'ausmt-portal'
         with:
           name: pip-freeze-${{ matrix.image }}
           path: /tmp/${{ matrix.image }}-pip-freeze.txt
