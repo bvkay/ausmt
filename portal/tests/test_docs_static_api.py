@@ -22,7 +22,10 @@ Four groups of claim.
 (2) THE FORMAT VOCABULARIES MATCH THE MANIFEST SCHEMA. Docs that name a format the build cannot emit
     send a reader looking for artifacts that do not exist. The per-station formats and the bundle
     formats are compared against engine/schema/manifest.schema.json's own enums, both directions, so
-    adding a format to the schema without documenting it fails here too.
+    adding a format to the schema without documenting it fails here too. The comparison is over
+    (token, granularity) PAIRS because `mth5` is in both enums since the tier-1 lane: a files[] row is
+    one station, a bundles[] row is the whole survey, and a token-keyed check could not tell the two
+    apart or notice that only one of them had been documented.
 
 (3) THE CATALOGUE COLUMN TABLE MATCHES THE CONTRACT. catalogue.json rows are positional, so the
     reference reproduces the column table. A stale table is the worst kind of documentation bug: a
@@ -131,8 +134,11 @@ def _schema_formats():
 
 
 def test_documented_formats_match_the_manifest_schema_exactly():
-    """Both directions. A documented format the build cannot emit sends a reader looking for files
-    that do not exist; an emitted format nobody documented is a distribution surface with no reader."""
+    """Both directions, as (token, granularity) PAIRS rather than tokens. `mth5` is now in both enums:
+    a files[] row is one station, a bundles[] row is the whole survey. A token-keyed check could not
+    express that, and would silently accept a table that documented only one of the two. A documented
+    pair the build cannot emit sends a reader looking for files that do not exist; an emitted pair
+    nobody documented is a distribution surface with no reader."""
     per_station, per_survey = _schema_formats()
     body = _text(REFERENCE)
     table = body.split("## Selecting a format", 1)
@@ -140,30 +146,36 @@ def test_documented_formats_match_the_manifest_schema_exactly():
     section = table[1].split("\n## ", 1)[0]
     # The section's own table is the claim under test: first cell = the format token, third = whether
     # it is per station or per survey. Parsed rather than eyeballed so both directions are checked.
-    documented = {tok: gran.strip().lower()
+    documented = {(tok, gran.strip().lower())
                   for tok, _where, gran in re.findall(
                       r"^\|\s*`([a-z0-9-]+)`\s*\|([^|]*)\|([^|]*)\|", section, flags=re.M)}
     assert documented, "the format section must carry its format table"
-    assert set(documented) == per_station | per_survey, (
-        f"the format table says {sorted(documented)}; manifest.schema.json's enums are "
-        f"{sorted(per_station)} per station and {sorted(per_survey)} per survey")
-    for tok, granularity in documented.items():
-        want = "per station" if tok in per_station else "per survey"
-        assert granularity == want, (
-            f"the format table calls {tok!r} {granularity!r}; the manifest schema puts it {want}")
+    expected = ({(t, "per station") for t in per_station}
+                | {(t, "per survey") for t in per_survey})
+    assert documented == expected, (
+        f"the format table says {sorted(documented)}; manifest.schema.json's enums imply "
+        f"{sorted(expected)}")
 
 
-def test_the_bundle_forms_are_documented_as_per_survey():
-    """mth5 is a BUNDLE format. A reader told to look for a per-station MTH5 finds nothing, because
-    files.format cannot carry it."""
+def test_the_two_mth5_granularities_are_documented_as_two_things():
+    """`mth5` is the one format token that means two different artifacts. A reader who filters on the
+    token without reading the list it came from fetches a whole survey where they wanted one station,
+    or misses the station files entirely. Both pages must say which list distinguishes them, and the
+    integration page must not still be warning a tool author off a per-station MTH5 that now exists."""
     per_station, per_survey = _schema_formats()
-    assert "mth5" in per_survey and "mth5" not in per_station, (
+    assert "mth5" in per_survey and "mth5" in per_station, (
         "this test encodes the schema's own split; if that changed, the docs need rewriting, not this "
         "assertion relaxing")
-    assert "per survey rather than per station" in _flat(REFERENCE), (
-        "the reference must say plainly that mth5 exists per survey")
-    assert "no per-station MTH5" in _flat(INTEGRATION), (
-        "the integration page must warn a tool author off looking for a per-station MTH5")
+    ref, integ = _flat(REFERENCE), _flat(INTEGRATION)
+    for page_name, flat in (("api-reference.md", ref), ("tool-integration.md", integ)):
+        assert "h5/<slug>/<station>.h5" in flat, (
+            f"{page_name} must give the served path of a per-station MTH5")
+        assert "bundles/<slug>-tf.h5" in flat, (
+            f"{page_name} must keep the served path of the per-survey MTH5 bundle")
+    assert "one station" in ref and "the whole survey" in ref, (
+        "the reference must say what each of the two mth5 rows actually is")
+    assert "no per-station MTH5" not in integ, (
+        "the integration page still warns a tool author off a per-station MTH5, which now exists")
 
 
 # ---------------------------------------------------------------- (3) the catalogue column table

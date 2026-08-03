@@ -6,11 +6,12 @@ operational changes must preserve. The system-level picture is in
 
 ## The build, step by step
 
-`python -m extract.build_portal --surveys <dir> --out <data> --products <dir> --bundle-edi --survey-h5`
+`python -m extract.build_portal --surveys <dir> --out <data> --products <dir> --bundle-edi --survey-h5
+--station-h5`
 (the production invocation in `deploy/Makefile`; `--bundle-edi` gates the entire served-download
-surface, per-survey EDI copies and manifest rows included, and `--survey-h5` enables the tier-2
-MTH5 bundles. The engine image ships without the portal config, so these CLI flags, not
-`portal.config.yaml`, are the production enables):
+surface, per-survey EDI copies and manifest rows included, `--survey-h5` enables the tier-2
+MTH5 bundles and `--station-h5` the tier-1 per-station MTH5 files. The engine image ships without the
+portal config, so these CLI flags, not `portal.config.yaml`, are the production enables):
 
 1. Parse arguments; create the output directories; resolve the survey validator
    (`AUSMT_VALIDATOR_PATH` or the documented search path). An unresolvable validator aborts

@@ -59,6 +59,7 @@ def build_config(cfg):
         "analytics": {"enabled": bool(a.get("enabled", False)),
                       "plausible_domain": a.get("plausible_domain", "") or ""},
         "flags": {"survey_h5_enabled": bool(f.get("survey_h5_enabled", False)),
+                  "station_h5_enabled": bool(f.get("station_h5_enabled", False)),
                   "collection_download_enabled": bool(f.get("collection_download_enabled", False))},
     }
 

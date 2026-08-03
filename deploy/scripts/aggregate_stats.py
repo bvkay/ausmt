@@ -116,9 +116,14 @@ SCHEMA_VERSION = 2
 # the quarterly funding view needs. Monthly rollups are NOT subject to this -- they are kept forever.
 DEFAULT_DAILY_KEEP_DAYS = 92
 
-# The three served download families (path prefixes under /data/) and the visit proxy. `/data/h5/*`
-# is a latent Caddy matcher with NO producer (record D1) — deliberately NOT a download family here.
-_DOWNLOAD_FAMILIES = ("edi", "xml", "bundles")
+# The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
+# for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer (record D1).
+# The engine produces per-station MTH5 files there since the tier-1 lane (owner ruling 2026-08-02), so
+# the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
+# classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
+# station-h5 download would have vanished from the analytics rather than surfacing as build/serve skew.
+# Silent absence, not undercounting. Pinned in deploy/tests/test_aggregate_stats.py.
+_DOWNLOAD_FAMILIES = ("edi", "xml", "h5", "bundles")
 _DATA_PREFIX = "/data/"
 _VISIT_PATH = "/data/catalogue.json"
 

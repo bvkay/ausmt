@@ -26,10 +26,12 @@ representation over time, and historical and contemporary datasets coexist under
 ## What AusMT does with it
 
 MTH5 is an accepted submission input for transfer-function products only, never raw time
-series. Separately, the build generates a per-survey transfer-function-only MTH5 bundle as a
-download product, gated by `flags.survey_h5_enabled` in `portal.config.yaml`, which the
-repository ships set to `true`. Where a package holds several representations of the same
-survey, they must describe the same underlying transfer functions.
+series. Separately, the build generates transfer-function-only MTH5 download products at two
+granularities: one file per survey (`bundles/<slug>-tf.h5`, gated by `flags.survey_h5_enabled`)
+and one file per served station (`h5/<slug>/<station>.h5`, gated by `flags.station_h5_enabled`).
+Both flags ship set to `true`. The same writer produces both, so a station reads identically out
+of either. Where a package holds several representations of the same survey, they must describe
+the same underlying transfer functions.
 
 The package layout and the rules on accepted inputs are in
 [Survey package](survey-package.md). The formats themselves are compared in

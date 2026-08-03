@@ -1009,6 +1009,40 @@ def test_the_served_stations_geojson_is_an_api_path():
     assert stats["totals"]["visits"] == 0 and stats["totals"]["downloads"] == 0
 
 
+def test_the_station_h5_family_is_a_download_family():
+    """DOWNLOAD-FAMILY INTERLOCK PIN. `/data/h5/*` was a latent Caddy force-download matcher with NO
+    producer, so `h5` was deliberately left out of _DOWNLOAD_FAMILIES and the comment there said why.
+    The engine now produces per-station MTH5 files under exactly that path, which makes the exclusion
+    wrong in the one direction that is invisible: an excluded family classifies as `ignore`, and an
+    ignored path is absent from `unattributed` too, so every station-h5 download would disappear from
+    the analytics entirely rather than show up as skew. FAILS IF the family is missing, or if the
+    classification stops returning the below-/data/ path the manifest reverse map joins on."""
+    assert "h5" in AGG._DOWNLOAD_FAMILIES, (
+        "the h5 family has a producer now; leaving it out silently drops every station-h5 download")
+    assert AGG.classify("/data/h5/sample-survey/A1.h5") == ("download", "h5/sample-survey/A1.h5")
+    # the bare family path carries no file below it and stays ignored, exactly like /data/edi
+    assert AGG.classify("/data/h5") == ("ignore", None)
+
+
+def test_a_station_h5_download_attributes_to_its_station():
+    """The other half of the interlock: classified is not the same as attributed. A station h5 carries
+    an ordinary manifest files[] row, so it must resolve through the reverse map to its own survey,
+    station and format, and count as a per-station FILE rather than a survey bundle. FAILS IF the row
+    shape the producer writes does not join, which would land every station-h5 fetch in `unattributed`
+    instead: visible, but as skew rather than as science."""
+    manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
+    h5_rows = [r for r in manifest["files"] if r.get("format") == "mth5"]
+    assert h5_rows, "the engine-truth manifest fixture must carry a per-station mth5 row"
+    url = h5_rows[0]["url"]
+    rmap = AGG.build_reverse_map(manifest)
+    stats = AGG.aggregate(None, [_line("/data/" + url, "203.0.113.5")], rmap,
+                          AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["downloads"] == 1 and stats["totals"]["unattributed"] == 0
+    row = stats["downloads"]["by_dataset"][url]
+    assert row["station"] == h5_rows[0]["station"] and row["format"] == "mth5"
+    assert stats["downloads"]["by_kind"]["file"] == 1, "a per-station h5 is a file, not a bundle"
+
+
 def test_the_published_api_line_copy_counts_what_the_code_counts():
     """API-SURFACE COPY PIN (aggregator half). Two published descriptions state the scope of the API
     line in words: the operator runbook (deploy/README.md) and the public analytics page

@@ -96,10 +96,21 @@ What the derivation had to change is worth knowing, because some of it is visibl
 Read `canonical_conditioning` before treating any of those fields as an observation. It is the list of
 things the file states that the source did not.
 
-### MTH5 is per survey, transfer functions only
+### MTH5 comes two ways, transfer functions only
 
-One HDF5 file per survey at `data/bundles/<slug>-tf.h5`, built EDI to mt_metadata TF to MTH5. There is
-no per-station MTH5, so don't look for one in the manifest's `files` list.
+One HDF5 file per survey at `data/bundles/<slug>-tf.h5`, and one per station at
+`data/h5/<slug>/<station>.h5`. Both are built EDI to mt_metadata TF to MTH5 by the same writer, so a
+station reads identically out of either; the survey file simply holds all of them. Neither carries time
+series.
+
+Take the survey file when you want the survey. Take the station file when you want one station and the
+survey file would be an oversized fetch. Note that a single-station MTH5 is not a small file: HDF5 pays
+its structural cost once per file, so the per-station files together are several times the size of the
+one bundle that holds the same transfer functions.
+
+In the manifest, `mth5` therefore appears in BOTH lists, and the list is what tells them apart: a
+`files[]` row with `format: "mth5"` is one station, a `bundles[]` row with the same token is the whole
+survey. Filter on the list first.
 
 ```python
 from mth5.mth5 import MTH5

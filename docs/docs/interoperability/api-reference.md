@@ -315,17 +315,31 @@ Nineteen of the 21 live surveys have bundles, three each, which is the 57 rows i
 
 ### Per-station fetch through the manifest
 
-Fetch `/data/products/manifest.json` once, filter its `files` rows by `format` (`edi` or `emtfxml`) and
-by `survey`, then fetch `/data/` joined to each row's `url` and check the bytes against that row's
-`sha256`.
+Fetch `/data/products/manifest.json` once, filter its `files` rows by `format` (`edi`, `emtfxml` or
+`mth5`) and by `survey`, then fetch `/data/` joined to each row's `url` and check the bytes against that
+row's `sha256`.
 
 Go through the manifest rather than building paths yourself. A served filename is not derivable from the
 station id, so the manifest is the only correct way to locate one station's file. In the current corpus,
 station A1 of `vulcan-2022` is served as `edi/vulcan-2022/Vulcan_A1.edi`.
 
-The manifest's other list, `bundles`, holds the whole-survey artifacts above and the third format,
-`mth5`, which exists per survey rather than per station. Don't filter station rows by `mth5`; there are
-none.
+A served station has three rows, one per format:
+
+```text
+/data/edi/<slug>/<file>.edi     the custodian's transfer function as submitted
+/data/xml/<slug>/<station>.xml  the same station as canonical EMTF XML
+/data/h5/<slug>/<station>.h5    the same station as a transfer-function MTH5
+```
+
+`mth5` is the one token that means two different things depending on which list it came from. A
+`files[]` row with `format: "mth5"` is ONE station; a `bundles[]` row with the same token is the whole
+survey in one file. Filter on the list first, then the format, or a per-survey bundle will arrive where
+a per-station file was expected. Both are transfer functions only, never time series.
+
+The per-station MTH5 is the format to take when a tool wants one station with its metadata attached and
+the survey bundle would be an oversized fetch. It is also the largest of the three per-station files by
+some margin, because HDF5 pays its structural cost once per file rather than once per survey. Take the
+survey bundle when you want the whole survey.
 
 ```bash
 BASE=${AUSMT_BASE:?the portal root you are reading from}
@@ -459,12 +473,18 @@ Both records are documented field by field in
 
 ## Selecting a format
 
-Three formats are distributed, and which ones exist for a survey is stated, never implied.
+Three transfer-function formats are distributed, and which ones exist for a survey is stated, never
+implied.
+
+`mth5` is the one token that appears at both granularities, so read the list it came from rather than
+the token alone: a `files[]` row is one station's transfer function, a `bundles[]` row is the whole
+survey's.
 
 | Format token | Where it appears | Granularity |
 |---|---|---|
 | `edi` | manifest `files[].format` | per station |
 | `emtfxml` | manifest `files[].format` | per station |
+| `mth5` | manifest `files[].format` | per station |
 | `edi-zip` | manifest `bundles[].format` | per survey |
 | `xml-zip` | manifest `bundles[].format` | per survey |
 | `mth5` | manifest `bundles[].format` | per survey |
@@ -480,8 +500,9 @@ per_survey = collections.Counter(b["format"] for b in man["bundles"])
 print(per_station, per_survey)
 ```
 
-That prints `Counter({'edi': 1182, 'emtfxml': 1182}) Counter({'edi-zip': 19, 'xml-zip': 19, 'mth5': 19})`
-against the current corpus. To ask the same question per survey, group `bundles` by `slug`.
+That prints `Counter({'edi': 1182, 'emtfxml': 1182, 'mth5': 1182})` and
+`Counter({'edi-zip': 19, 'xml-zip': 19, 'mth5': 19})` against the current corpus. To ask the same
+question per survey, group `bundles` by `slug`.
 
 MTCAT carries a shortcut. Each survey record has a `formats` list derived from that same manifest during
 the same build, so a harvester can filter without fetching 828 kB:
