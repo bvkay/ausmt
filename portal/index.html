@@ -166,7 +166,7 @@
   .dsub{font-size:12.5px;color:var(--muted);margin-top:2px}
   .chip{display:inline-block;font-size:13px;font-weight:700;padding:2px 9px;border-radius:9px;color:#16110b;vertical-align:2px}
   /* (UX8 X4/X7: the .sci science-summary strip and the .maturity/.step legacy-maturity bar were retired —
-     their facts now live in the Response "Station summary" fold and the "Dataset maturity" star block.) */
+     their facts now live in the Response "Station summary" fold and the record-stewardship rows.) */
   .qbar{height:5px;border-radius:3px;background:var(--line);margin-top:5px;overflow:hidden}
   .qbar > div{height:5px;border-radius:3px}
   .badges{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
@@ -309,11 +309,10 @@
   .ind-part{border-left-color:var(--part)}.ind-part .indglyph{color:var(--part)}
   .ind-no{border-left-color:var(--no)}.ind-no .indglyph{color:var(--no)}
   .ind-na{border-left-color:var(--unk)}.ind-na .indglyph{color:var(--unk)}
-  /* X7: Dataset-maturity block — stars + honest dimension states (record stewardship, not science quality). */
+  /* X7: record-stewardship rows, with honest per-dimension states. (Owner ruling 2026-08-02: the block heading,
+     the five-star summary row and the explainer sentence were removed, and .mat-h / .mat-stars / .mat-sub
+     went with them; the itemised list below is the whole surface now.) */
   .matblock{margin:16px 0 6px}
-  .mat-h{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
-  .mat-stars{font-size:14px;letter-spacing:1px;color:var(--part)}
-  .mat-sub{font-size:11.5px;color:var(--muted);line-height:1.45;margin:3px 0 8px}
   .matdims{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
   .matdim{display:flex;align-items:center;gap:8px;font-size:12.5px}
   .matdim.off{color:var(--muted)}

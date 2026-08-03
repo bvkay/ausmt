@@ -314,18 +314,23 @@ function maturityModel(m,sc){m=m||{};sc=sc||[];
     {key:"ts",label:"Time series",achieved:tsOn,note:tsOn?"linked":"not available"},
   ];
   return {dims,stars:dims.filter(d=>d.achieved).length,total:dims.length};}
+// OWNER RULING (2026-08-02): the AGGREGATE presentation is removed. The "Dataset maturity" heading, the
+// five-star summary row and the "Record-stewardship maturity ... Not a measure of scientific quality."
+// explainer are gone; what a reader gets is the ITEMISED list, where every row states its own dimension in
+// words. The model above is untouched and still drives the per-row stars and their honest notes, so this is
+// a change of presentation, not of information: the summary said in one number what the rows say in five
+// lines, and a single star count invited exactly the scientific-quality reading the explainer had to deny.
 function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
   // Two-phase boot: the "Reproducible" dimension reads sc[SC.sw] (sci.json, PHASE 2). An unlit star is a
-  // statement that the dimension was NOT achieved, so the whole block waits rather than under-counting the
-  // stars for a moment and then silently gaining one.
-  const gate=hydrGate("sci","dataset maturity",true);
-  if(gate)return `<div class="matblock"><div class="mat-h">Dataset maturity</div>${gate}</div>`;
+  // statement that the dimension was NOT achieved, so the whole LIST waits rather than under-stating a
+  // dimension for a moment and then silently lighting it. With the heading gone the gate is anchored to the
+  // surviving list, and names it in the reader's terms ("stewardship details") rather than by the retired
+  // block title.
+  const gate=hydrGate("sci","stewardship details",true);
+  if(gate)return `<div class="matblock">${gate}</div>`;
   const mod=maturityModel(m,sc);
-  const stars="★".repeat(mod.stars)+"☆".repeat(mod.total-mod.stars);
   const rows=mod.dims.map(d=>`<li class="matdim ${d.achieved?"on":"off"}"><span class="matglyph">${d.achieved?"★":"☆"}</span><span>${esc(d.label)}${d.note?": "+esc(d.note):""}</span></li>`).join("");
-  return `<div class="matblock"><div class="mat-h">Dataset maturity <span class="mat-stars" title="${mod.stars} of ${mod.total} stewardship dimensions achieved">${stars}</span></div>`+
-    `<div class="mat-sub">Record-stewardship maturity: how completely this record is archived, licensed and reproducible. Not a measure of scientific quality.</div>`+
-    `<ul class="matdims">${rows}</ul></div>`;}
+  return `<div class="matblock"><ul class="matdims">${rows}</ul></div>`;}
 // C7: the raw-TS pointer. A survey's OWN time_series.collection_pid (SMETA.ts_pid) is authoritative
 // when declared; TS_COLLECTION (the AusLAMP/NCI collection DOI) is only the DEPLOYMENT-WIDE default for
 // surveys that genuinely belong to that shared collection and declare no PID of their own — never a
@@ -864,7 +869,7 @@ function openStation(i,opts){
     (identifiersHtml(m)?`<details class="prov-d"><summary>Identifiers &amp; instruments</summary><div class="prov-dbody">${identifiersHtml(m)}</div></details>`:"")+
     // R8: the badge set tells the DISTRIBUTED-FORMATS story — EDI, EMTF XML (via pipeline), MTH5, time
     // series (from the levels metadata) and the licence badge. The bare "DOI" badge is dropped (it failed
-    // as communication; dataset-DOI presence is already conveyed by the maturity star and the identifiers
+    // as communication; dataset-DOI presence is already conveyed by the DOI stewardship row and the identifiers
     // block). States stay honest (ok/unknown/no). EMTF XML is ok when a served artifact exists, else part.
     // Two-phase boot: the EMTF XML and MTH5 badge STATES are manifest-derived, so the whole badge row waits
     // rather than briefly showing "part"/"unknown" for formats that are in fact served.
