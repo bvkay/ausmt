@@ -51,6 +51,7 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 | `/data/mtcat.schema.json` | 7.8 kB | The JSON Schema the document above validates against. |
 | `/data/surveys.json` | 54 kB | Full per-survey metadata, including credit and citation. |
 | `/data/catalogue.json` | 320 kB | One positional row per station. |
+| `/data/stations.geojson` | 390 kB | Every station that has a position, as a GeoJSON point layer. Open it in a GIS. |
 | `/data/sci.json` | 93 kB | Per-station derived diagnostics, aligned to the catalogue by index. |
 | `/data/tf.json` | 3.2 MB | Per-station transfer-function curves, thinned, aligned by index. |
 | `/data/collections.json` | 1.8 kB | Programme groupings. |
@@ -197,6 +198,44 @@ Two facts about withheld surveys, both verifiable on `au.kalkaroo-2022.KD-C3`:
 
 The catalogue row itself stays complete apart from `edi_available`, which is 0. The band, the period
 range and the component list of an embargoed station are public; the curves are not.
+
+### `stations.geojson`
+
+An RFC 7946 `FeatureCollection` of `Point` features, one per station that has a position, in WGS84
+(GeoJSON's only coordinate reference system, so there is nothing to set). It exists so you can put the
+corpus on a map without first writing a script against the positional catalogue.
+
+In QGIS: **Layer > Add Layer > Add Vector Layer**, set Source Type to **Protocol: HTTP(S)**, and paste
+the URL:
+
+```text
+<portal root>/data/stations.geojson
+```
+
+The same URL works anywhere that reads GeoJSON over HTTP, and with `ogr2ogr` for a local conversion:
+
+```bash
+BASE=${AUSMT_BASE:?the portal root you are reading from}
+ogr2ogr -f GPKG stations.gpkg "/vsicurl/$BASE/data/stations.geojson"
+```
+
+Each feature carries seven flat properties, chosen to be joinable and to keep the file small:
+`ausmt_id`, `station`, `survey` (the display name), `survey_id` (the slug), `data_type`,
+`period_min_s` and `period_max_s`. Join on `ausmt_id` to the download manifest, or on `survey_id` to
+`mtcat.json`, for anything else. Licence and credit are deliberately not repeated per feature: they
+are survey-level facts and live in `surveys.json` and `mtcat.json`.
+
+Two membership rules, and they are the same rules the catalogue follows:
+
+- a station whose position the custodian **withholds** is **absent**, rather than present with a null
+  geometry. A null-geometry feature parses but nothing draws it, so it would be an invisible row. The
+  station itself is not hidden: it keeps its catalogue row, its `mtcat.json` entry and its
+  `station.json`, and `/data/coord_policy.json` records that its position is withheld;
+- a station whose position is **generalised** is here, at the same 0.1° cell the catalogue serves, so a
+  point can sit up to about 5 km from the true site. Nothing is rounded twice.
+
+An embargoed survey's stations **are** on this layer. An embargo withholds bytes, never discovery, and
+this document carries no bytes.
 
 ### `collections.json`
 

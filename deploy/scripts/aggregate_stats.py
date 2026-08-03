@@ -23,11 +23,11 @@ WHAT IT DOES, once a day:
     hand people. The UA is read transiently and never stored;
   * counts portal VISITS as `/data/catalogue.json` fetches (one per SPA boot — the only
     server-observable visit proxy, record D3);
-  * counts API-CONSUMER requests as fetches of the three DOCUMENTED machine-readable entry points the
+  * counts API-CONSUMER requests as fetches of the four DOCUMENTED machine-readable entry points the
     portal SPA never fetches for itself (`/data/products/manifest.json`, `/data/mtcat.json`,
-    `/data/mtcat.schema.json`). This is a PATH-CLASS signal only: nothing new is collected. It is an
-    upper bound on programmatic use (a human can click the footer's mtcat link) and is reported as its
-    own line, never folded into visits;
+    `/data/mtcat.schema.json`, `/data/stations.geojson`). This is a PATH-CLASS signal only: nothing new
+    is collected. It is an upper bound on programmatic use (a human can click the footer's mtcat link
+    or the About page's GeoJSON link) and is reported as its own line, never folded into visits;
   * counts DISTINCT MASKED NETWORKS per day as a privacy-safe reach proxy. Caddy has already truncated
     the address to a /24 (v4) or /48 (v6) at the edge, so the distinct set IS a network count. The set
     lives in memory for the one run that folds a day and only its SIZE is written -- no address, masked
@@ -149,13 +149,19 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 #     are all fetched by portal/src/data.js on every SPA boot -- they measure browsers, not consumers;
 #   * /data/products/<slug>/<station>/station.json is fetched by portal/src/drawer.js when a station
 #     drawer opens -- also a browser.
-# What is left is the trio About documents as the programmatic surface. The third, mtcat.schema.json,
-# is the `$id` the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and
-# every harvester that resolves the schema fetches it: the cleanest machine-consumer signal the corpus
-# has, and the one that was counted nowhere. This is a PATH CLASS, never a user-agent test, and it is
-# an UPPER BOUND: the mtcat link sits in every page footer, so a human click lands here too. Reported
-# as its own line, never merged into visits.
-_API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json", "/data/mtcat.schema.json")
+# What is left is the documents About points a programmatic reader at. mtcat.schema.json is the `$id`
+# the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and every harvester
+# that resolves the schema fetches it: the cleanest machine-consumer signal the corpus has, and the one
+# that was counted nowhere. stations.geojson (owner ruling 2026-08-02) is the corpus as a vector layer:
+# a GIS user adds it as a layer straight from the URL and the SPA never fetches it, so it belongs on
+# this line for the same reason -- and without it every QGIS reader of the corpus would count nowhere,
+# because a `.geojson` at the data root is in no download family and would fall through to `ignore`.
+# This is a PATH CLASS, never a user-agent test, and it is an UPPER BOUND: the mtcat and GeoJSON links
+# sit on public pages, so a human click lands here too. Reported as its own line, never merged into
+# visits. The published word-count of this tuple is pinned in deploy/tests (deploy/README.md and
+# docs/docs/introduction/usage-analytics.md both state it), so a fifth entry point cannot land silently.
+_API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json", "/data/mtcat.schema.json",
+              "/data/stations.geojson")
 
 # The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's multi-file export (portal/src/exports.js,
 # the "EDIs (zip)" flow over a map selection) marks each file fetch it issues with this exact query
@@ -557,7 +563,7 @@ def classify(path: str) -> tuple[str, str | None]:
     `/data/edi|xml|bundles/...` or `/data/releases/<tag>/bundles/<file>` path where rel is the path
     below /data/; ('ignore', None) otherwise.
 
-    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the three API paths, the three
+    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the four API paths, the
     download families and the release-bundle shape are disjoint), so no request is ever counted twice."""
     if path == _VISIT_PATH:
         return "visit", None

@@ -993,6 +993,42 @@ def test_the_served_json_schema_is_an_api_path():
     assert stats["totals"]["visits"] == 0 and stats["totals"]["downloads"] == 0
 
 
+def test_the_served_stations_geojson_is_an_api_path():
+    """GEOJSON-PATH PIN (owner ruling 2026-08-02). /data/stations.geojson is the corpus as a vector
+    layer: a GIS user adds it as a layer straight from the URL, and the portal's own JavaScript never
+    fetches it, so every hit is a third party reading the corpus programmatically. It is the fourth
+    documented machine-readable entry point and must classify as `api`. FAILS IF the new document is
+    counted nowhere (which is what would happen by default: `.geojson` is not a download family and
+    would fall through to `ignore`), or if it is mistaken for a download or a visit."""
+    assert AGG.classify("/data/stations.geojson") == ("api", None)
+    assert "/data/stations.geojson" in AGG._API_PATHS
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    stats = AGG.aggregate(None, [_line("/data/stations.geojson", "8.8.8.0", ua="QGIS/3.34")],
+                          rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["api_requests"] == 1
+    assert stats["totals"]["visits"] == 0 and stats["totals"]["downloads"] == 0
+
+
+def test_the_published_api_line_copy_counts_what_the_code_counts():
+    """API-SURFACE COPY PIN (aggregator half). Two published descriptions state the scope of the API
+    line in words: the operator runbook (deploy/README.md) and the public analytics page
+    (docs/docs/introduction/usage-analytics.md). Both name the entry points one by one and both spell
+    out how many there are, so a path added to _API_PATHS without the copy moving leaves two documents
+    understating a figure a custodian is asked to trust. FAILS IF either page omits a path that is in
+    _API_PATHS, or still says 'three documented' now that there are four.
+
+    The word is derived from len(_API_PATHS), never hard-coded, so a fifth entry point fails this pin
+    rather than silently passing a stale 'four'."""
+    _count_word = {2: "two", 3: "three", 4: "four", 5: "five"}[len(AGG._API_PATHS)]
+    for page in (_REPO / "deploy" / "README.md",
+                 _REPO / "docs" / "docs" / "introduction" / "usage-analytics.md"):
+        text = page.read_text(encoding="utf-8")
+        assert f"{_count_word} documented machine-readable entry points" in text, (
+            f"{page.name} must say '{_count_word} documented machine-readable entry points'")
+        for path in AGG._API_PATHS:
+            assert path in text, f"{page.name} does not name the API path {path}"
+
+
 def test_api_requests_are_counted_geographically_like_every_other_request():
     """API GEO PIN. The country table is the reach evidence, and the API line was the one counted class
     that never reached it, so any reach claim built from countries excluded programmatic consumers

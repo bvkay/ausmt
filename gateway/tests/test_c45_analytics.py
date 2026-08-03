@@ -690,19 +690,22 @@ def test_the_partial_dimension_disclosures_name_countries_and_unattributed(tmp_p
     run(_body())
 
 
-def test_the_screen_names_the_third_machine_readable_entry_point(tmp_path):
-    """API-SURFACE COPY PIN. The API line now counts three documented entry points, the third being the
-    served JSON Schema every validator resolves from the MTCAT document's own $id. The screen states
-    what the figure covers, so it must name all three or the number means something the reader cannot
-    check. FAILS IF the preamble still claims two, or omits the schema path."""
+def test_the_screen_names_every_machine_readable_entry_point(tmp_path):
+    """API-SURFACE COPY PIN. The API line counts four documented entry points: the products manifest,
+    the MTCAT document, the served JSON Schema every validator resolves from that document's own $id,
+    and (owner ruling 2026-08-02) the stations GeoJSON a GIS opens straight from the URL. The screen
+    states what the figure covers, so it must name all four or the number means something the reader
+    cannot check. FAILS IF the preamble still claims two or three, or omits any of the paths."""
     async def _body():
         async with app_client(tmp_path) as (client, _app, _gw, cfg):
             await curator_login(client)
             _write_stats(cfg, _v2_stats())
             html = (await client.get("/gateway/curator/analytics")).text
-            assert "/data/mtcat.schema.json" in html
-            assert "three documented" in html
-            assert "two documented" not in html
+            for path in ("/data/products/manifest.json", "/data/mtcat.json",
+                         "/data/mtcat.schema.json", "/data/stations.geojson"):
+                assert path in html, f"the preamble must name the API path {path}"
+            assert "four documented" in html
+            assert "two documented" not in html and "three documented" not in html
     run(_body())
 
 

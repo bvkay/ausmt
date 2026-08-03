@@ -240,6 +240,37 @@ def test_the_withheld_station_record_is_documented_as_the_emitter_writes_it():
         "station")
 
 
+def test_the_stations_geojson_is_documented_the_way_the_emitter_writes_it():
+    """The GeoJSON exists so a GIS user never has to read the positional catalogue, so the page has to
+    carry an instruction a GIS user can follow, not just a path. Its two membership rules are the
+    coordinate-access rules, and both are pinned to the emitter: a WITHHELD station is absent (not a
+    null-geometry feature, which parses and draws nothing) and a GENERALISED one is present at the
+    0.1 degree cell the catalogue already serves. A page that got either backwards would be telling a
+    reader the map is complete when it is not, or that a withheld position is on it when it is not.
+    FAILS if the section goes missing, if the QGIS instruction degrades to a bare URL, or if the
+    emitter stops implementing what the page claims."""
+    src = _text(BUILDER)
+    assert "def stations_geojson(" in src, "the reference documents a document the build must emit"
+    assert '(out / "stations.geojson").write_text' in src, "the document must actually be served"
+    assert "continue   # withheld position => no usable geometry => no feature" in src, (
+        "the docs say a withheld station is ABSENT; that must be what the emitter does")
+    body = _text(REFERENCE)
+    section = body.split("### `stations.geojson`", 1)
+    assert len(section) == 2, "the reference must carry a stations.geojson section"
+    frag = section[1].split("\n### ", 1)[0]
+    flat = re.sub(r"\s+", " ", frag)
+    assert "/data/stations.geojson" in _text(REFERENCE), "the served path must be listed"
+    assert "QGIS" in frag and "Add Vector Layer" in frag, (
+        "the section must carry the GIS instruction, not only the URL")
+    assert "FeatureCollection" in frag and "WGS84" in frag
+    assert "absent" in flat and "null geometry" in flat, (
+        "the section must state that a withheld station is absent rather than null-geometry")
+    assert "0.1" in flat, "the section must state the generalised cell size"
+    assert "embargo withholds bytes, never discovery" in flat, (
+        "an embargoed survey's stations ARE on this layer; say so, because the opposite is the "
+        "reader's natural assumption")
+
+
 def test_the_releases_tier_is_documented_as_unpopulated():
     """cut_release.py defines the tier and nothing has been cut. Documenting the layout is useful;
     implying a reader can fetch a release is not. FAILS if the honest state disappears."""

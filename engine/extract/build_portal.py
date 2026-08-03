@@ -558,6 +558,52 @@ def collections_document(surveys_meta: dict, all_stations: list, coll_by_id: dic
     return coll_by_id
 
 
+def stations_geojson(all_stations: list, surveys_meta: dict) -> dict:
+    """The served stations GeoJSON (RFC 7946 FeatureCollection, one Point per station) so a GIS can add
+    AusMT as a vector layer straight from the URL instead of scripting against the positional catalogue.
+
+    COORDINATE POSTURE (C42, the only thing that makes this product safe). It is derived from the SAME
+    policy-applied station records the catalogue is projected from (call it AFTER the mask seam), so it
+    cannot disclose a position the catalogue withholds. A generalised station's geometry is its served
+    0.1 degree cell VERBATIM: nothing is re-derived or re-rounded here, because a second rounding site is
+    a second thing that can round differently.
+
+    A WITHHELD station is EXCLUDED, not emitted with a null geometry. RFC 7946 permits a null-geometry
+    feature, but no GIS draws one: QGIS keeps it as an invisible attribute row a user can neither see nor
+    select, so it helps nobody and it would be a second surface describing a station whose position the
+    custodian withheld. Absence is the honest answer; coord_policy.json remains the record that the
+    station exists with its position withheld, and the station keeps its catalogue row, its mtcat entry
+    and its station.json. There is no other exclusion: an EMBARGOED or metadata-only survey keeps
+    DISCOVERY (the access gate withholds BYTES), and this document carries no bytes, so its stations
+    appear here exactly as the catalogue serves them.
+
+    Properties are lean and FLAT. A GIS attribute table has no useful nesting, and credit/licence are
+    survey-level facts that already have one owner each (surveys.json, mtcat.json, and the record link in
+    the docs); a copy of the licence string on every one of ~1400 features is bloat, not provenance."""
+    feats = []
+    for (_p, r) in all_stations:
+        lat, lon = r.get("lat"), r.get("lon")
+        if lat is None or lon is None:
+            continue   # withheld position => no usable geometry => no feature (see the docstring)
+        feats.append({
+            "type": "Feature",
+            # RFC 7946 positions are [longitude, latitude], the opposite order to every AusMT surface
+            # that says "lat, lon". Getting this backwards still parses and still draws, in the Indian
+            # Ocean, so the order is pinned by test_stations_geojson.
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "properties": {
+                "ausmt_id": r["ausmt_id"],
+                "station": r["id"],
+                "survey": r["survey"],                                    # display label
+                "survey_id": (surveys_meta.get(r["survey"]) or {}).get("slug"),   # slug, never re-derived
+                "data_type": r.get("type"),
+                "period_min_s": r.get("period_min_s"),
+                "period_max_s": r.get("period_max_s"),
+            },
+        })
+    return {"type": "FeatureCollection", "features": feats}
+
+
 # MTCAT 1.2: the canonical band order the survey-level data_types map is emitted in (the SAME order the
 # portal presents bands in, so the served key order and the rendered order can never disagree). A band the
 # classifier produces but this tuple does not name (only "unknown" today) is appended, sorted, after these:
@@ -3477,6 +3523,16 @@ def main(argv=None):
         print(f"WARNING collections: ids {_dup} differ only by case/whitespace — likely a typo; they form "
               f"SEPARATE collections. Use one exact collection.id across member surveys.", file=sys.stderr)
     (out / "collections.json").write_text(_jdump(collections_document(surveys_meta, all_stations, coll_by_id), separators=(",", ":")), encoding="utf-8")
+    # ---- stations.geojson: the corpus as a vector layer (owner ruling 2026-08-02) ----
+    # Emitted from the SAME masked records the catalogue projection above reads, so the two documents
+    # cannot disagree about where a station is; a withheld station has no geometry and is absent (see
+    # stations_geojson). Served beside the other top-level documents and mirrored under products/ like
+    # mtcat.json. Both paths are published in docs/docs/reference/index.md. Compact bytes in both
+    # copies: a FeatureCollection is read by software, and 1418 features of pretty-printing is dead weight.
+    _stations_gj = _jdump(stations_geojson(all_stations, surveys_meta), separators=(",", ":"))
+    (out / "stations.geojson").write_text(_stations_gj, encoding="utf-8")
+    if prod:
+        (prod / "stations.geojson").write_text(_stations_gj, encoding="utf-8")
     # C18: the deterministic cache hit/miss/write tally (design §4.6) — NOT wall-clock timing. Only
     # emitted into build_provenance.json (which already carries a non-deterministic `generated`
     # timestamp, so it is NOT a §4.5 byte-equivalence surface); the served products stay cache-blind.
