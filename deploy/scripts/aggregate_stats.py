@@ -168,6 +168,23 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 _API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json", "/data/mtcat.schema.json",
               "/data/stations.geojson")
 
+# The products/ MIRROR of an entry point. Several top-level documents are served at TWO paths and
+# docs/docs/reference/index.md publishes both: /data/mtcat.json beside /data/products/mtcat.json,
+# /data/stations.geojson beside /data/products/stations.geojson. Only the root path was classified, so
+# a reader who used the ADVERTISED mirror counted nowhere -- `products` is in no download family, so the
+# mirror fell through to `ignore`, which is the very failure this path class exists to prevent. It bites
+# hardest on the GeoJSON, the first of these documents pointed at external GIS consumers.
+#
+# DERIVED from _API_PATHS, never listed in it. A document is ONE entry point however many paths serve
+# it, and the published word ("four documented machine-readable entry points") counts documents, not
+# URLs; adding the mirrors to the tuple above would make that word wrong. The derivation is also what
+# keeps a future fifth entry point's mirror covered without a second edit. It cannot reach the SPA's own
+# fetches: products/<slug>/<station>/station.json is a browser fetch and is not derivable from any root
+# path on the list.
+_API_MIRROR_PREFIX = _DATA_PREFIX + "products/"
+_API_MIRROR_PATHS = tuple(_API_MIRROR_PREFIX + p[len(_DATA_PREFIX):] for p in _API_PATHS
+                          if not p.startswith(_API_MIRROR_PREFIX))
+
 # The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's multi-file export (portal/src/exports.js,
 # the "EDIs (zip)" flow over a map selection) marks each file fetch it issues with this exact query
 # token. It is the ONE thing in this pipeline the portal deliberately puts INTO the log; everything else
@@ -568,11 +585,12 @@ def classify(path: str) -> tuple[str, str | None]:
     `/data/edi|xml|bundles/...` or `/data/releases/<tag>/bundles/<file>` path where rel is the path
     below /data/; ('ignore', None) otherwise.
 
-    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the four API paths, the
-    download families and the release-bundle shape are disjoint), so no request is ever counted twice."""
+    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the four API entry points with
+    their products/ mirrors, the download families and the release-bundle shape are disjoint), so no
+    request is ever counted twice."""
     if path == _VISIT_PATH:
         return "visit", None
-    if path in _API_PATHS:
+    if path in _API_PATHS or path in _API_MIRROR_PATHS:
         return "api", None
     if path.startswith(_DATA_PREFIX):
         rel = path[len(_DATA_PREFIX):]

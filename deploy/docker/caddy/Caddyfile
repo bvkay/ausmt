@@ -170,9 +170,11 @@
 		# /data ONLY by this handler — it must never reach /gateway or any other path.
 		header Access-Control-Allow-Origin "*"
 		# Force download (not inline-render) for the byte-payload families: original EDI files,
-		# derived EMTF-XML (browsers would inline-render XML), and the packaged bundles —
-		# everything else under /data (catalogue.json etc) is fetched by the portal's own JS and
-		# must stay inline-servable.
+		# derived EMTF-XML (browsers would inline-render XML), the per-station MTH5 files under
+		# /h5 and the packaged bundles. Everything else under /data (catalogue.json etc) is
+		# fetched by the portal's own JS and must stay inline-servable. /h5/* was a latent matcher
+		# with no producer until the tier-1 lane (owner ruling 2026-08-02) created one; it is a
+		# real served family now, and deploy/scripts/aggregate_stats.py counts it as one.
 		# NOTE the patterns are written against the path AFTER handle_path stripped /data. That is why
 		# a frozen release bundle needs its own /releases/*/bundles/* pattern: it arrives here as
 		# /releases/<tag>/bundles/<file>, so the bare /bundles/* pattern never matched it and the
