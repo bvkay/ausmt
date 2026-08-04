@@ -185,11 +185,17 @@ _API_MIRROR_PREFIX = _DATA_PREFIX + "products/"
 _API_MIRROR_PATHS = tuple(_API_MIRROR_PREFIX + p[len(_DATA_PREFIX):] for p in _API_PATHS
                           if not p.startswith(_API_MIRROR_PREFIX))
 
-# The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's multi-file export (portal/src/exports.js,
-# the "EDIs (zip)" flow over a map selection) marks each file fetch it issues with this exact query
-# token. It is the ONE thing in this pipeline the portal deliberately puts INTO the log; everything else
-# here is read from what the server was already writing. It is a label on a request that already
-# happens: no additional request, no beacon, and nothing about who is asking.
+# The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's THREE selection exports over a map
+# selection (portal/src/exports.js SEL_ZIP_BUTTONS: the EDI, EMTF XML and MTH5 zips) each mark every file
+# fetch they issue with this exact query token. It is the ONE thing in this pipeline the portal
+# deliberately puts INTO the log; everything else here is read from what the server was already writing.
+# It is a label on a request that already happens: no additional request, no beacon, and nothing about
+# who is asking.
+#
+# The token says an ARCHIVE WAS TAKEN, never which format was in it: a labelled fetch resolves to its own
+# manifest row like any other, so the format split below separates the three flows while the bulk figure
+# sums them. Reading this as an EDI-export counter (the shape it had when the EDI zip was the only flow
+# writing it) would under-report the derived formats by exactly the amount they are used.
 #
 # It is read from the RAW request line, BEFORE the query strip that produces the attribution path (see
 # parse_caddy_line), and it never touches that path. That is what keeps the within-day dedupe key the

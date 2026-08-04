@@ -87,6 +87,28 @@ function startHydration(){
 // change with zero consumer edits. tier=nci rows carry an ABSOLUTE NCI fileServer url that dataUrl()
 // passes through unchanged and renders as a live download link (url is null only if a row is unresolvable).
 function mfRows(kind){return (MANIFEST&&Array.isArray(MANIFEST[kind]))?MANIFEST[kind]:[];}
-function artifactsFor(ausmt_id){return mfRows("files").filter(r=>r.ausmt_id===ausmt_id&&r.url);}
+// ONE ausmt_id -> served-rows index over files[], built once per manifest and shared by every consumer.
+// artifactsFor used to FILTER the whole files[] array on every call, which is nothing for a drawer opened
+// once and quadratic for the selection panel: paintExportSizes asks it per selected station on every
+// keystroke, so at corpus scale (3k stations selected, ~9k manifest rows) one repaint walked ~27M rows and
+// took 670ms, on the input path. Measured 18ms at 500 stations, 77ms at 1000, 290ms at 2000: the cost grew
+// with the SQUARE of the corpus, so it was invisible in every fixture and worst on the full selection.
+//
+// The cache is keyed on the MANIFEST OBJECT ITSELF, not on a "loaded" flag or a reset call. MANIFEST is
+// assigned whole (data.js hydration, and the drivers/harnesses that poke it directly) and never mutated in
+// place, so identity is exactly the invalidation signal, and a caller that swaps the manifest cannot forget
+// to invalidate a cache it does not know exists. A cache that had to be reset by hand would go stale
+// silently, showing one manifest's files under another's, which is worse than the cost it saves.
+//
+// The returned array is SHARED and must be treated as read-only: every caller reads it with find/some/
+// filter. Copying per call would defeat the point on the very path this exists for.
+let _MF_IDX=null,_MF_IDX_SRC;
+function mfFileIndex(){
+  if(_MF_IDX&&_MF_IDX_SRC===MANIFEST)return _MF_IDX;
+  const ix=new Map();
+  mfRows("files").forEach(r=>{if(!r||!r.url)return;
+    const cur=ix.get(r.ausmt_id);if(cur)cur.push(r);else ix.set(r.ausmt_id,[r]);});
+  _MF_IDX=ix;_MF_IDX_SRC=MANIFEST;return ix;}
+function artifactsFor(ausmt_id){return mfFileIndex().get(ausmt_id)||[];}
 function bundlesForSlug(slug){return slug?mfRows("bundles").filter(r=>r.slug===slug&&r.url):[];}
 function fmtBytes(n){if(n==null)return"";if(n<1024)return n+" B";if(n<1048576)return(n/1024).toFixed(0)+" KB";return(n/1048576).toFixed(1)+" MB";}

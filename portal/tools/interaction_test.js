@@ -81,6 +81,14 @@ win.JSZip = new Proxy(function () {}, { construct: () => zipRec(""), apply: () =
 // (which is where the entry list is complete) instead of stopping short of the code that writes it.
 win.URL.createObjectURL = () => "blob:interaction-test";
 win.URL.revokeObjectURL = () => {};
+// ANALYTICS RECORDER. analytics-shim.js defines window.track() over window.plausible, and it only installs
+// its own no-op queue when there is no plausible already (`window.plausible || function(){}`). Defining one
+// FIRST therefore records what the real track() emits, through the real shim, rather than replacing track()
+// with a re-implementation of it. What an export button reports is a published vocabulary: the fold that
+// reads these events cannot see the difference between two buttons that describe themselves differently
+// and two buttons that do different things, so the shape is worth pinning at the call site.
+const trackCalls = [];
+win.plausible = (name, opts) => { trackCalls.push({ name, props: (opts && opts.props) || {} }); };
 // version/schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip assertion
 // (item 3) can pin exactly, instead of matching a moving default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
@@ -99,6 +107,20 @@ const HEAVY = /(^|\/)(tf|sci|manifest)\.json$/;
 // holding. A matching url resolves as a served file would, so the packaging path runs to completion.
 // The query is stripped first, because the bulk label rides there.
 const ARTIFACT = /\.(edi|xml|h5)$/i;
+// FAILURE INJECTION. Making every artifact fetch succeed (above) is what let the packaging path run to its
+// end, and it also made the OTHER end unreachable: an export's transport-failure branch (the fetch throws,
+// the station lands in failed[], the archive says which files were served but did not arrive) could not be
+// entered by any driver, so the one branch that speaks about the NETWORK rather than about the corpus
+// shipped unexercised. Add a path here and its fetch REJECTS, the way a dropped connection does, which is
+// the harsher of the two routes into that branch (a not-ok response reaches the same catch). Matched on the
+// query-stripped url by SUFFIX, so a leg names the manifest row ("h5/gamma/G1.h5") and not the data-base
+// prefix or the bulk label the export appends.
+const fetchFail = new Set();
+const fetchWouldFail = (url) => {
+  const p = String(url).split("?")[0];
+  for (const t of fetchFail) if (p === t || p.endsWith("/" + t)) return true;
+  return false;
+};
 const fetchOrder = [];
 let heavyPending = [];
 let heavyReleased = false;
@@ -106,6 +128,7 @@ function heavyHeld() { return heavyPending.length; }
 function releaseHeavy() { heavyReleased = true; const q = heavyPending; heavyPending = []; q.forEach(f => f()); }
 win.fetch = url => {
   fetchOrder.push(String(url));
+  if (fetchWouldFail(url)) return Promise.reject(new Error("injected transport failure: " + url));
   const body = DATAMAP[url] ? { ok: true, json: () => Promise.resolve(DATAMAP[url]) }
     : ARTIFACT.test(String(url).split("?")[0]) ? { ok: true, blob: () => Promise.resolve({ size: 1 }) }
       : { ok: false };
@@ -3304,7 +3327,108 @@ async function bootFreshWindow(dataMap, url) {
     "SELFMT: a single-station MTH5 download must still carry NO selection flag, got " +
     JSON.stringify(fetchedExt(fmark, ".h5")));
 
-  // (e) Size honesty has a floor: with no manifest there are no sizes, and a "~0 B" would be a claim
+  // (e) TRANSPORT FAILURE. A selected station can be absent from the archive for three different reasons,
+  //     and the third is not a statement about the corpus at all: the file IS served, and the fetch for it
+  //     did not come back. Reporting that station under "no MTH5 is served for these" would tell a reader
+  //     their station has no such file, when in fact one exists and the network dropped it, and the second
+  //     attempt they would never make is the one that works. The branch has been in the flow since the
+  //     export shipped and no driver could enter it: every artifact fetch in this harness resolved ok.
+  //     G1 has an h5 row; its fetch is made to fail. A2 still has no row at all, so ONE archive now
+  //     carries both kinds of gap and the pin can prove they are told apart rather than pooled.
+  fetchFail.add("h5/gamma/G1.h5");
+  fmark = fetchOrder.length; zmark = zipEntries.length;
+  await h5Btn.onclick();
+  ok(fetchedExt(fmark, ".h5").length === 2,
+    "SELFMT fail: the export must still ATTEMPT both served files, got " + JSON.stringify(fetchedExt(fmark, ".h5")));
+  const failNames = zipNames(zmark);
+  ok(failNames.filter(n => /\.h5$/.test(n)).length === 1 && failNames.some(n => /alpha\/A1\.h5$/.test(n)),
+    "SELFMT fail: only the file that ARRIVED may be in the archive, got " + JSON.stringify(failNames));
+  ok(failNames.filter(n => /LICENSE\.txt$/.test(n)).length === 1,
+    "SELFMT fail: the rights instrument must cover the surveys actually INCLUDED, not the ones attempted, got " +
+    JSON.stringify(failNames));
+  const failGap = String(zipBody(zmark, /NOT_INCLUDED/));
+  ok(failGap !== "undefined", "SELFMT fail: a fetch that did not come back must be reported in the archive, " +
+    "never dropped in silence; entries were " + JSON.stringify(failNames));
+  const iTransport = failGap.indexOf("network or server"), iG1 = failGap.indexOf("G1"), iA2 = failGap.indexOf("A2");
+  ok(iTransport >= 0, "SELFMT fail: the archive must carry a TRANSPORT section, got " + JSON.stringify(failGap.slice(0, 400)));
+  ok(iG1 > iTransport,
+    "SELFMT fail: the station whose fetch failed must be listed under the transport section, not under the " +
+    "not-served one (its file exists; saying otherwise is a false claim about the corpus), got " +
+    JSON.stringify(failGap.slice(0, 500)));
+  ok(iA2 >= 0 && iA2 < iTransport,
+    "SELFMT fail: the station with no file at all must stay under the not-served section, so the two kinds " +
+    "of gap are not pooled, got " + JSON.stringify(failGap.slice(0, 500)));
+  ok(/try the export again/.test(failGap),
+    "SELFMT fail: a transport fault must tell the reader the retry is worth making, got " +
+    JSON.stringify(failGap.slice(0, 500)));
+
+  // (f) EVERY FETCH FAILS. The floor of the same branch, and the only path that writes README.txt: nothing
+  //     arrived, so there is no archive content to explain itself, and a zip holding only a gap note would
+  //     otherwise read as an empty download. It must NOT toast "Nothing to package" and return (that is the
+  //     genuinely-empty selection, a different fact), and it must carry no LICENSE.txt, because a rights
+  //     instrument beside no bytes claims a survey is in an archive it is not in.
+  fetchFail.add("h5/alpha/A1.h5");
+  fmark = fetchOrder.length; zmark = zipEntries.length;
+  await h5Btn.onclick();
+  const allFailNames = zipNames(zmark);
+  ok(fetchedExt(fmark, ".h5").length === 2 && allFailNames.filter(n => /\.h5$/.test(n)).length === 0,
+    "SELFMT allfail: both fetches are attempted and neither lands, so no file entry may exist, got " +
+    JSON.stringify(allFailNames));
+  const readme = String(zipBody(zmark, /README\.txt$/));
+  ok(readme !== "undefined",
+    "SELFMT allfail: an archive with nothing in it must say so in a README, not arrive silently empty; " +
+    "entries were " + JSON.stringify(allFailNames));
+  ok(/MTH5/.test(readme) && /NOT_INCLUDED/.test(readme),
+    "SELFMT allfail: the README must name the format and point at the file that lists the stations, got " +
+    JSON.stringify(readme));
+  ok(allFailNames.filter(n => /LICENSE\.txt$/.test(n)).length === 0,
+    "SELFMT allfail: no bytes were included, so no custodian's licence may travel with the archive, got " +
+    JSON.stringify(allFailNames));
+  const allFailGap = String(zipBody(zmark, /NOT_INCLUDED/));
+  ok(/\bA1\b/.test(allFailGap) && /\bG1\b/.test(allFailGap) && /\bA2\b/.test(allFailGap),
+    "SELFMT allfail: all three selected stations must be accounted for, each under its own reason, got " +
+    JSON.stringify(allFailGap.slice(0, 600)));
+  fetchFail.clear();
+
+  // (g) ONE ANALYTICS VOCABULARY ACROSS THE THREE ZIPS. The fold behind these events cannot see the
+  //     difference between "two buttons describe themselves differently" and "two buttons do different
+  //     things". The EDI zip reported format:"zip" and the two new ones reported format:"emtfxml" /
+  //     format:"mth5", so the same action (zip a selection) landed in two different vocabularies and the
+  //     three flows could not be summed, compared, or charted as one series. One shape now: format is what
+  //     the reader receives (a zip) and `files` is what is inside it.
+  const tmark = trackCalls.length;
+  await ediBtn.onclick(); await xmlBtn.onclick(); await h5Btn.onclick();
+  const dl = trackCalls.slice(tmark).filter(e => e.name === "DownloadGenerated");
+  ok(dl.length === 3, "SELFMT event: each of the three zip buttons must report exactly one download event, got " +
+    JSON.stringify(trackCalls.slice(tmark)));
+  ok(dl.every(e => e.props.format === "zip"),
+    "SELFMT event: all three bulk exports deliver a zip, so all three must SAY zip; a per-format `format` " +
+    "puts the same action in two vocabularies, got " + JSON.stringify(dl.map(e => e.props)));
+  ok(dl.map(e => e.props.files).join(",") === "edi,emtfxml,mth5",
+    "SELFMT event: the format actually packaged rides its own field, in button order, got " +
+    JSON.stringify(dl.map(e => e.props)));
+  ok(dl.every(e => e.props.n === 3),
+    "SELFMT event: every export must report the selection size it was given, got " + JSON.stringify(dl.map(e => e.props)));
+
+  // (h) THE MANIFEST INDEX IS PER MANIFEST. artifactsFor() answers from an ausmt_id -> rows index built
+  //     once per manifest (data.js mfFileIndex), which is what takes the size repaint off the keystroke
+  //     path. A cache is a wrong answer that never goes away unless something invalidates it, and this one
+  //     is invalidated by the manifest's own identity precisely so no caller has to remember to. Swap the
+  //     manifest for one with different rows and every reader of the index must move with it.
+  A.setManifest({ files: [{ ausmt_id: "au.alpha.A1", format: "emtfxml", url: "xml/alpha/A1.xml", size: 1048576 }], bundles: [] });
+  A.refresh();
+  ok(/~1\.0 MB/.test(xmlBtn.textContent),
+    "SELFMT index: a swapped manifest must be read immediately (A1's new 1.0 MB XML row), got " +
+    JSON.stringify(xmlBtn.textContent) + " (a stale index would still be showing the previous manifest)");
+  ok(h5Btn.textContent.indexOf("~") < 0,
+    "SELFMT index: rows the new manifest does NOT carry must stop being counted, got " +
+    JSON.stringify(h5Btn.textContent));
+  A.setManifest(SEL_MANIFEST); A.refresh();
+  ok(/~2\.1 MB/.test(xmlBtn.textContent) && /~1\.1 MB/.test(h5Btn.textContent),
+    "SELFMT index: swapping back must restore the original totals, got " +
+    JSON.stringify([xmlBtn.textContent, h5Btn.textContent]));
+
+  // (i) Size honesty has a floor: with no manifest there are no sizes, and a "~0 B" would be a claim
   //     about the corpus rather than about what is known. No estimate at all is the honest state.
   A.setManifest(null); A.refresh(); A.setSelected(["A1", "A2", "G1"]);
   ok(xmlBtn.textContent.indexOf("~") < 0 && h5Btn.textContent.indexOf("~") < 0 && ediBtn.textContent.indexOf("~") < 0,

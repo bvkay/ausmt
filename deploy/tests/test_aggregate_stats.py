@@ -2140,3 +2140,44 @@ def test_the_aggregator_and_the_portal_agree_on_the_bulk_flag():
     assert m.group(1) == AGG._SELECT_BULK_FLAG, (
         f"the portal writes {m.group(1)!r} and this fold reads {AGG._SELECT_BULK_FLAG!r}; "
         f"every bulk export would be counted as a single download")
+
+
+_COUNT_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
+
+
+def _selection_zip_formats() -> list[str]:
+    """The manifest formats the portal's selection-zip buttons package, read from the ONE array that
+    declares them (portal/src/exports.js SEL_ZIP_BUTTONS). Every one of those buttons writes the bulk
+    flag, so this list IS the set of flows the operator copy has to describe."""
+    exports_js = _REPO / "portal" / "src" / "exports.js"
+    assert exports_js.is_file(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
+    block = re.search(r"SEL_ZIP_BUTTONS\s*=\s*\[(.*?)\];", exports_js.read_text(encoding="utf-8"), re.S)
+    assert block, "portal/src/exports.js must declare SEL_ZIP_BUTTONS; the button set has no other source"
+    return re.findall(r'"([a-z0-9]+)"\s*\]', block.group(1))
+
+
+def test_the_bulk_export_copy_describes_every_flow_that_writes_the_flag():
+    """BULK-EXPORT COPY PIN. The operator runbook's analytics table states, in words, what puts `sel=bulk`
+    into the access log, and an operator reading a bulk figure is entitled to know which downloads can be
+    in it. That sentence was written when the map selection could only be taken as EDIs, and it still
+    described the writer as that one flow after the EMTF XML and MTH5 selection zips shipped writing the
+    same flag: the figure silently covered three formats while the document that explains it named one.
+    Under-describing a counted class is how a real rise in derived-format use gets read as a rise in EDI
+    exports.
+
+    The count word is DERIVED from the portal's own button array, never hard-coded, so a fourth selection
+    export fails this pin instead of quietly inheriting a stale 'three'.
+
+    FAILS IF the runbook row stops naming a format the portal packages, or stops agreeing on how many."""
+    formats = _selection_zip_formats()
+    assert formats == ["edi", "emtfxml", "mth5"], (
+        f"the portal's selection zips are {formats}; update this pin and the copy it guards together")
+    readme = (_REPO / "deploy" / "README.md").read_text(encoding="utf-8")
+    rows = [ln for ln in readme.splitlines() if ln.startswith("| **Bulk map exports**")]
+    assert len(rows) == 1, "deploy/README.md must carry exactly one Bulk map exports row"
+    row = rows[0]
+    assert f"{_COUNT_WORDS[len(formats)]} selection export" in row, (
+        f"the row must say '{_COUNT_WORDS[len(formats)]} selection export(s)': the portal has "
+        f"{len(formats)} buttons writing the flag, and the row is where an operator learns that")
+    for label in ("EDI", "EMTF XML", "MTH5"):
+        assert label in row, f"the Bulk map exports row does not name the {label} selection export"
