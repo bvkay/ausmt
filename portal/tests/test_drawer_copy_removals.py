@@ -131,9 +131,9 @@ def test_drawer_copy_removals(tmp_path):
     #     declares a licence and processing software but no DOI and no time series, so two rows must
     #     read "not recorded" / "not available" (never "pending") and carry the hollow glyph.
     assert 'class="matdims"' in station, "station drawer lost the itemised maturity list"
-    assert station.count('class="matdim ') == 5, (
-        "the itemised maturity list must still render exactly 5 rows, found "
-        f"{station.count('class=\"matdim ')}")
+    matdim_rows = station.count('class="matdim ')
+    assert matdim_rows == 5, (
+        f"the itemised maturity list must still render exactly 5 rows, found {matdim_rows}")
     for row in ("<span>Curated archive</span>", "<span>Reproducible</span>",
                 "<span>Licence verified</span>", "<span>DOI: not recorded</span>",
                 "<span>Time series: not available</span>"):
