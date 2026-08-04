@@ -212,6 +212,20 @@ document.getElementById("dlCite").onclick=async()=>{track("DownloadGenerated",{f
 // as a bulk one. The gate is therefore the CALL SITE, not the shared dataUrl() helper both use.
 var SEL_BULK_FLAG="sel=bulk";
 function bulkUrl(u){u=String(u);return u+(u.indexOf("?")>=0?"&":"?")+SEL_BULK_FLAG;}
+// C6/C46: rights travel with the bytes: one LICENSE.txt per included survey, beside that survey's files
+// (same slug namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip
+// instrument. The m -> (who, yr, attn) derivation mirrors build_portal's LICENSE.txt call site;
+// sources/changes ride on SMETA when present (dormant until a survey carries an attribution/sources
+// block). Extracted from the EDI flow, byte for byte, when the EMTF XML and MTH5 selection zips arrived:
+// three archives of the same custodian's files must carry the same instrument, and a second copy of this
+// derivation is exactly how they would come to differ. `included` maps survey name -> zip subdirectory.
+function writeLicenseFiles(folder,included){
+  Object.keys(included).forEach(sv=>{const m=SMETA[sv]||{};
+    const who=((m.cite&&m.cite.au)||m.org||"the survey custodian").trim();
+    const yr=(m.dates?(m.dates.match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
+    const attn=[who,yr?"("+yr+")":"",(m.cite&&m.cite.ti)||""].filter(Boolean).join(" ").trim()||who;
+    folder.file(included[sv]+"LICENSE.txt",licenseInstrumentText(m.lic,who,yr,attn,m.sources||null,m.changes||null));});
+}
 document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{format:"zip",n:sel().length});
   // Two-phase boot: each EDI is fetched at its MANIFEST url when there is one (the legacy flat path is only
   // the fallback), so packaging before the manifest lands would silently take the fallback route for every
@@ -227,15 +241,7 @@ document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{fo
     // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip (audit M3).
     const entry=(s.slug?s.slug+"/":"")+s.file;
     const r=await fetch(bulkUrl(u));if(!r.ok)throw 0;f.file(entry,await r.blob());ok++;included[s.survey]=s.slug?s.slug+"/":"";}catch(e){}}
-  // C6/C46: rights travel with the bytes — one LICENSE.txt per included survey, beside its EDIs (same slug
-  // namespace). Built entirely from client-side SMETA (no fetch), mirroring the served-zip instrument. The
-  // m -> (who, yr, attn) derivation mirrors build_portal's LICENSE.txt call site; sources/changes ride on
-  // SMETA when present (dormant until a survey carries an attribution/sources block).
-  Object.keys(included).forEach(sv=>{const m=SMETA[sv]||{};
-    const who=((m.cite&&m.cite.au)||m.org||"the survey custodian").trim();
-    const yr=(m.dates?(m.dates.match(/\d{4}/g)||[]).slice(-1)[0]:"")||"";
-    const attn=[who,yr?"("+yr+")":"",(m.cite&&m.cite.ti)||""].filter(Boolean).join(" ").trim()||who;
-    f.file(included[sv]+"LICENSE.txt",licenseInstrumentText(m.lic,who,yr,attn,m.sources||null,m.changes||null));});
+  writeLicenseFiles(f,included);
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
     "Request them from the source archive, or contact the custodian where no DOI is recorded:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
     // C7: m.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
@@ -249,6 +255,104 @@ document.getElementById("dlZip").onclick=async()=>{track("DownloadGenerated",{fo
   if(ok===0){z.file("README.txt","No EDIs were redistributable in this selection; see the archive pointers file.");}
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-selection-edis-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
   toast(`Zipped ${ok} EDI(s)`+(unavail.length?`; ${unavail.length} not redistributable (archive pointers included).`:"."));};
+
+// ---- selection exports for the two AusMT-derived formats (owner ask 2026-08-04) ------------------
+// A reader who has drawn a box around forty stations can take their EDIs in one click. AusMT also serves
+// a per-station EMTF XML and a per-station MTH5, and until now the only way to collect those over a
+// selection was forty visits to forty drawers. These two flows are the EDI flow over a different format:
+// same per-station manifest rows, same bulk label on every fetch, same LICENSE.txt beside the bytes.
+//
+// One thing genuinely differs, and it drives the honesty rules below. An EDI is the custodian's own file,
+// so "is it served here?" is a LICENCE question (s.ediAvail) with a legacy flat path to fall back on. A
+// derived file exists only where the build produced one: eight surveys have no served XML at all, and a
+// coordinate-generalised or withheld station gets neither format. So availability here is simply "does
+// this station have a manifest row of this format", there is no fallback path to guess at, and a
+// selection will routinely contain stations that must be skipped. Skipping them quietly would hand back
+// an archive of 31 files for 40 stations with nothing to say which nine went missing or why.
+var SEL_FORMATS={
+  emtfxml:{label:"EMTF XML",folder:"ausmt_emtf_xml",stem:"ausmt-selection-emtf-xml-",
+           note:"No EMTF XML is served for these selected stations."},
+  mth5:{label:"MTH5",folder:"ausmt_mth5",stem:"ausmt-selection-mth5-",
+        note:"No per-station MTH5 is served for these selected stations."},
+};
+// This station's served manifest row of one format, or null. The SAME rows the station drawer's Files tab
+// links, so what a selection export packages and what a drawer offers cannot disagree.
+function selArtifact(s,fmt){
+  return (typeof artifactsFor==="function"?artifactsFor(s&&s.ausmt_id):[]).find(a=>a&&a.format===fmt)||null;}
+// The bytes a selection would pull for one format, from the manifest rows themselves. null (NOT 0) when
+// the manifest has not landed: 0 would render "~0 B", a claim that the selection costs nothing, when the
+// truth is that nothing is known yet.
+function selBytes(stations,fmt){
+  if(typeof MANIFEST==="undefined"||!MANIFEST)return null;
+  let n=0;(stations||[]).forEach(s=>{const a=selArtifact(s,fmt);if(a&&a.size)n+=a.size;});
+  return n;}
+// Size honesty (owner, 2026-08-04): each zip button states what THIS selection would cost before it is
+// clicked, so nobody starts a multi-hundred-megabyte MTH5 pull to find out. It counts only the rows the
+// export will actually fetch, so it is the estimate for the archive that will arrive, not for the
+// selection: an EDI whose station has no manifest row (the legacy flat path) contributes no size, which
+// is why every figure is prefixed "~". No manifest, no figure.
+function paintExportSizes(){
+  const st=sel();
+  [["dlZip","EDIs (zip)","edi"],["dlZipXml","EMTF XML (zip)","emtfxml"],["dlZipH5","MTH5 (zip)","mth5"]].forEach(([id,base,fmt])=>{
+    const b=document.getElementById(id);if(!b)return;
+    const n=st.length?selBytes(st,fmt):null;
+    b.textContent=n?base+" ~"+fmtBytes(n):base;
+    b.title=n?base+": about "+fmtBytes(n)+" across "+st.length+" selected station(s), estimated from the download index."
+            :base+" for the current selection.";});
+}
+// One selection export, for one AusMT-derived format. Mirrors the EDI flow above step for step.
+async function exportSelectionFormat(fmt){
+  const C=SEL_FORMATS[fmt];
+  track("DownloadGenerated",{format:fmt,n:sel().length});
+  // Two-phase boot: availability IS the manifest row here, so packaging before the manifest lands would
+  // report every station as having no file of this format. Await the gate.
+  if(hydrating("manifest")){toast("Waiting for the download index…");}
+  await MANIFEST_READY;
+  const z=new JSZip(),f=z.folder(C.folder);
+  const chosen=sel(),have=chosen.filter(s=>selArtifact(s,fmt)),missing=chosen.filter(s=>!selArtifact(s,fmt));
+  let ok=0;const included={},failed=[];toast("Packaging "+have.length+" "+C.label+" file(s)…");
+  for(const s of have){const a=selArtifact(s,fmt);
+    // Namespace the zip entry by survey slug, exactly as the EDI zip does: a selection can span surveys
+    // that reuse a station id, which would otherwise overwrite each other inside the archive (audit M3).
+    const entry=(s.slug?s.slug+"/":"")+a.url.split("/").pop();
+    try{const r=await fetch(bulkUrl(dataUrl(a.url)));if(!r.ok)throw 0;
+      f.file(entry,await r.blob());ok++;included[s.survey]=s.slug?s.slug+"/":"";}
+    catch(e){failed.push(s);}}
+  writeLicenseFiles(f,included);
+  // The gap file. A station can be absent from this archive for two DIFFERENT reasons and they are not
+  // interchangeable: its survey is not redistributable here at all (licence/embargo, the same wording and
+  // the same archive pointers the EDI zip writes), or the survey IS served but this format was never
+  // produced for that station. A third list records files that were served but did not come back, which
+  // is a transport failure and not a statement about the corpus at all.
+  const notServed=missing.filter(s=>!s.ediAvail),noFile=missing.filter(s=>s.ediAvail);
+  if(missing.length||failed.length){
+    const lines=[`${C.label} selection export: stations NOT included`,""];
+    if(notServed.length){
+      lines.push("Not redistributable via AusMT (licence/embargo). Request them from the source archive,",
+        "or contact the custodian where no DOI is recorded:","");
+      notServed.forEach(s=>{const m=SMETA[s.survey]||{};
+        lines.push(m.doi?`  ${s.id}  (${s.survey})  ->  https://doi.org/${m.doi}`
+                        :`  ${s.id}  (${s.survey})  ->  ${withheldReason(m)}`);});
+      lines.push("");}
+    if(noFile.length){
+      lines.push(C.note+" Each of them is served in at least its source EDI; the",
+        "station's Files tab in the portal lists exactly what this deployment holds for it:","");
+      noFile.forEach(s=>lines.push(`  ${s.id}  (${s.survey})`));
+      lines.push("");}
+    if(failed.length){
+      lines.push("These files ARE served but could not be fetched for this archive (network or server",
+        "error). Nothing is wrong with the data; try the export again:","");
+      failed.forEach(s=>lines.push(`  ${s.id}  (${s.survey})`));
+      lines.push("");}
+    z.file("NOT_INCLUDED_read_me.txt",lines.join("\n"));}
+  if(ok===0&&!missing.length&&!failed.length){toast("Nothing to package.");return;}
+  if(ok===0){z.file("README.txt",`No ${C.label} file was available for this selection; see NOT_INCLUDED_read_me.txt.`);}
+  const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=C.stem+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
+  const skipped=missing.length+failed.length;
+  toast(`Zipped ${ok} ${C.label} file(s)`+(skipped?`; ${skipped} selected station(s) not included (the zip says which and why).`:"."));}
+document.getElementById("dlZipXml").onclick=()=>exportSelectionFormat("emtfxml");
+document.getElementById("dlZipH5").onclick=()=>exportSelectionFormat("mth5");
+
 document.getElementById("strike").onclick=async()=>{
   // Two-phase boot: the rose is built entirely from phase-tensor azimuths in tf.json (PHASE 2). Its
   // not-enough-data message is a STATEMENT ABOUT THE SELECTION, so it must never fire because the transfer
