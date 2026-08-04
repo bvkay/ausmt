@@ -62,6 +62,11 @@
             }
           }
         },
+        "ingest_sources": {
+          "type": "object",
+          "description": "the ingest source per BUILT station, keyed by station id: 'edi', 'mth5' or 'emtfxml'. Derived from the suffix of the input file the record was parsed from, so a mixed survey records which stations the EDI-wins precedence rule resolved to EDI and which came from EMTF XML. Optional for pre-EMTF-XML-ingest reports.",
+          "additionalProperties": {"type": "string", "enum": ["edi", "mth5", "emtfxml"]}
+        },
         "conditioning": {
           "type": "array",
           "items": {"$ref": "#/definitions/conditioning_entry"},

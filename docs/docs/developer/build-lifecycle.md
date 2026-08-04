@@ -17,12 +17,13 @@ portal config, so these CLI flags, not `portal.config.yaml`, are the production 
    (`AUSMT_VALIDATOR_PATH` or the documented search path). An unresolvable validator aborts
    the build rather than ingesting packages unvalidated.
 2. Discover survey packages: one folder per survey containing `survey.yaml` and
-   `transfer_functions/edi|mth5/`. Folders prefixed `_` are skipped; a package that fails
-   validation is skipped and reported.
+   `transfer_functions/edi|emtfxml|mth5/`. Folders prefixed `_` are skipped; a package that
+   fails validation is skipped and reported.
 3. Record provenance: git commit, versions, extractor, dimensionality parameters.
-4. Extract: mt_metadata parses each EDI once into a canonical record and component dict.
-   Standard and Phoenix SPECTRA dialects are read natively; MTH5 input goes through the same
-   component dict.
+4. Extract: mt_metadata parses each input once into a canonical record and component dict.
+   Standard and Phoenix SPECTRA EDI dialects are read natively; EMTF XML and MTH5 input go
+   through the same component dict. Where a station is supplied as both an EDI and an EMTF XML
+   the EDI wins and the XML is not ingested; `build_report.json` records the source per station.
 5. Derive: TF rows, science diagnostics, catalogue rows; coordinate QC and declared
    coordinate resolutions applied; station-id variants disambiguated.
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings are reported and
@@ -57,9 +58,9 @@ other green check meaningless.
 ## Invariants
 
 - **Parity.** The component dict feeds the same downstream mathematics whether the transfer
-  function came from an EDI, an MTH5 file, or the canonical EMTF XML. Any difference between
-  input formats is parsing or storage round-trip, never science. `tests/test_canonical_parity.py`
-  pins this.
+  function came from an EDI, an EMTF XML, or an MTH5 file. Any difference between input formats
+  is parsing or storage round-trip, never science. `tests/test_canonical_parity.py` and
+  `tests/test_emtfxml_input.py` pin this.
 - **Traceability.** Every published value traces to a source file (`r[10]`), a content hash
   (`r[14]`), a unique identifier (`r[12]`), and `build_provenance.json`. Changes must keep
   the chain intact.

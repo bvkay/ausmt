@@ -35,9 +35,9 @@ facilities and industry partners. The submitter should have the authority to pub
 dataset or act on behalf of the custodian.
 
 The unit of submission is the survey package, whose layout and accepted transfer-function
-formats are specified in [Survey package](../data-model/survey-package.md). In short: EDI and
-MTH5 by default, EMTF XML and processing-software products (`.zmm`, `.zrr`, `.j`) only when a
-curator enables them for that submission with `--allow-optin-formats` in `validate_survey.py`
+formats are specified in [Survey package](../data-model/survey-package.md). In short: EDI,
+EMTF XML and MTH5 by default, and processing-software products (`.zmm`, `.zrr`, `.j`) only when
+a curator enables them for that submission with `--allow-optin-formats` in `validate_survey.py`
 (`--allow-mth5` still works as a deprecated alias), and even then they are stored rather than
 parsed into any built product.
 

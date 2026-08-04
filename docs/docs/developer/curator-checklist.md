@@ -30,6 +30,18 @@ conceptual rationale is in [Review and Curation](../operations/review.md); this 
 - [ ] Any surviving `lead_investigator`/`principal_investigators` values were migrated
       (`_tools/migrate_credit.py`), not left to the back-compat reader.
 
+**Transfer-function inputs**
+
+- [ ] The transfer functions sit under `transfer_functions/edi|emtfxml|mth5/` and are the format
+      their extension claims. EDI, EMTF XML and MTH5 are accepted inputs; `.zmm`/`.zrr`/`.j` still
+      need `--allow-optin-formats` and are stored rather than parsed.
+- [ ] Where a station is supplied in more than one format, the EDI is what gets served. Check
+      `build_report.json`'s `ingest_sources` for the preview build and confirm the source per
+      station is the one the custodian intends to be citable.
+- [ ] No `xml_failures` rows in the preview `build_report.json`. A station supplied only as EMTF
+      XML that fails the canonical round trip serves nothing at all, so it must be fixed upstream
+      rather than published with a gap.
+
 **Coordinates** (the common real-world problem)
 
 - [ ] Station locations were confirmed on the Add Survey map; any HEAD/INFO DMS conflict is resolved
