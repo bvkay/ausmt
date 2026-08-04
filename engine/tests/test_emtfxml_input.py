@@ -503,3 +503,55 @@ def test_per_period_rotation_declaration_refuses_the_station():
     facts, fail = bp._emtfxml_frame(_TF(), 4)
     assert fail is None and facts["frame_served"] == "not-asserted", facts
     assert facts["declared_azimuth_deg"] is None, facts
+
+
+def test_a_generated_edi_and_its_survey_zip_are_byte_reproducible_across_builds(tmp_path):
+    """THE SERVED-EDI CROSS-BUILD INVARIANT, over the source format that could break it. The
+    manifest reference states that the served EDI and the per-survey EDI zip are byte-reproducible
+    across builds, so their SHA-256 is a stable cross-build invariant, unlike the EMTF XML and the
+    MTH5. That was free while every served EDI was a custodian copy. An EMTF-XML-sourced station's
+    EDI is WRITTEN by mt_metadata, whose EDI header writer stamps FILEDATE with the wall clock at
+    write time, so without the source-stamped FILEDATE the generated file (and the survey zip that
+    carries it) hashes differently on every build.
+
+    ONE package, built TWICE, with the input bytes checked unchanged in between so a drifting digest
+    can only come from the build. test_manifest.py's determinism test cannot see this: the sample
+    survey it builds is EDI-only, so no generated EDI exists in it.
+
+    FAILS IF a served EDI or the EDI zip changes digest across two builds of one package, or if the
+    generated EDI's FILEDATE is not its source document's own creation time."""
+    surveys = tmp_path / "surveys"
+    pkg = _package(surveys, xml_stations=("EXAMPLE02",), edi_stations=("EXAMPLE01",))
+    before = {p.relative_to(pkg).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in sorted(pkg.rglob("*")) if p.is_file()}
+
+    rc1, out1, _p1 = _build(tmp_path / "b1", surveys)
+    rc2, out2, _p2 = _build(tmp_path / "b2", surveys)
+    assert rc1 == 0 and rc2 == 0, (rc1, rc2)
+    after = {p.relative_to(pkg).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+             for p in sorted(pkg.rglob("*")) if p.is_file()}
+    assert before == after, "the build must not modify the submitted package it is reading"
+
+    m1, m2 = _docs(out1)["manifest"], _docs(out2)["manifest"]
+    assert _docs(out1)["build_report"]["surveys"][SLUG]["ingest_sources"] == \
+        {"EXAMPLE01": "edi", "EXAMPLE02": "emtfxml"}, "fixture sanity: one station per source format"
+
+    def digests(man, fmt, scope):
+        return sorted((r["url"], r["sha256"]) for r in man[scope] if r["format"] == fmt)
+
+    edi1 = digests(m1, "edi", "files")
+    assert len(edi1) == 2, f"both stations must serve an EDI: {edi1}"
+    assert edi1 == digests(m2, "edi", "files"), \
+        f"served EDI digests drifted across two builds of ONE package: {edi1} vs {digests(m2, 'edi', 'files')}"
+    zip1 = digests(m1, "edi-zip", "bundles")
+    assert zip1 and zip1 == digests(m2, "edi-zip", "bundles"), \
+        f"the survey EDI zip digest drifted across two builds: {zip1} vs {digests(m2, 'edi-zip', 'bundles')}"
+
+    # the mechanism, not just the symptom: the generated file carries its SOURCE document's date
+    gen_url = next(r["url"] for r in m1["files"] if r["format"] == "edi" and r["station"] == "EXAMPLE02")
+    text = (out1 / gen_url).read_text(encoding="utf-8", errors="replace")
+    filedate = re.search(r"^\s*FILEDATE=(.+?)\s*$", text, re.M)
+    source_date = re.search(r"^\s*original_file\.date=(.+?)\s*$", text, re.M)
+    assert filedate and source_date, "the generated EDI must carry both a FILEDATE and a source date"
+    assert filedate.group(1) == source_date.group(1), \
+        f"FILEDATE must be the source document's own date, got {filedate.group(1)} vs {source_date.group(1)}"

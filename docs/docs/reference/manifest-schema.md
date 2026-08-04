@@ -352,10 +352,13 @@ base, so moving a tier to NCI is a manifest change with no consumer edits.
 
 ### Integrity across builds
 
-The digests are of the served bytes in every case. EDI copies and the per-survey EDI zip are
+The digests are of the served bytes in every case. The served EDI and the per-survey EDI zip are
 byte-reproducible across builds given a fixed zlib, so their SHA-256 is a stable cross-build invariant.
-EMTF XML, the EMTF-XML zip and the transfer-function MTH5 embed timestamps and UUIDs and are not
-byte-reproducible: their SHA-256 is a per-build download-integrity hash, not a cross-build invariant.
+That holds for a generated EDI as well as a copied one: the only clock-dependent field an
+EMTF-XML-sourced station's EDI would carry is its `FILEDATE`, and the build stamps that from the date
+the source document declares before serving it. EMTF XML, the EMTF-XML zip and the transfer-function
+MTH5 embed timestamps and UUIDs and are not byte-reproducible: their SHA-256 is a per-build
+download-integrity hash, not a cross-build invariant.
 
 ### The manifest lists only what AusMT serves
 

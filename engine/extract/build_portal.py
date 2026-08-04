@@ -2351,6 +2351,49 @@ def _derived_edi_filename(station_id, taken):
     return cand
 
 
+# mt_metadata's own "no date asserted" header value; it omits the INFO original_file.date line for it.
+_EDI_NULL_DATE = b"1980-01-01T00:00:00+00:00"
+_EDI_FILEDATE_RE = _re.compile(rb"(?m)^([ \t]*FILEDATE[ \t]*=[ \t]*).*$")
+_EDI_SOURCE_DATE_RES = (_re.compile(rb"(?m)^[ \t]*original_file\.date[ \t]*=[ \t]*(\S.*?)[ \t]*$"),
+                        _re.compile(rb"(?m)^[ \t]*provenance\.creation_time[ \t]*=[ \t]*(\S.*?)[ \t]*$"))
+
+
+def _reproducible_derived_edi(raw: bytes) -> bytes:
+    """The bytes a GENERATED EDI is SERVED as: mt_metadata's output with its one wall-clock field
+    carrying the date the source document declared instead of the minute this build ran.
+
+    The download manifest's reference states that the served EDI and the per-survey EDI zip are
+    byte-reproducible across builds, so their SHA-256 is a stable cross-build invariant, unlike the
+    EMTF XML and the MTH5 which embed timestamps and UUIDs. A custodian EDI satisfies that for free
+    because it is copied. A generated EDI is WRITTEN, and mt_metadata's header writer assigns
+    FILEDATE = now at write time with no knob to pass it (Header.write_header), so an untouched
+    generated file would publish a new digest for its station AND for its survey's whole EDI zip on
+    every rebuild of an unchanged package. That is the same class of build-clock leak the zip writers
+    already spend effort on (a pinned member timestamp) and _license_text avoids (no timestamp in the
+    instrument text), for the same reason: a citable download whose digest churns cannot be checked
+    against a previously published one.
+
+    The value stamped in is not invented. It is the filedate mt_metadata itself carried in from the
+    source, which it writes into the INFO block as original_file.date BEFORE the header writer
+    overwrites it, and which for an EMTF-XML source is that document's own CreateTime. So the served
+    file dates the transfer function it renders, and re-reading it yields the same
+    provenance.creation_time the source asserts rather than a build clock. Falls back to the INFO
+    provenance.creation_time, then to mt_metadata's null date (the value whose presence makes it drop
+    original_file.date altogether); every branch is a function of the source bytes alone.
+
+    Byte-level on purpose: this runs on a file the round-trip gate has already passed, so it must not
+    re-serialise anything. A file with no FILEDATE line is returned unchanged (nothing to pin)."""
+    src_date = None
+    for rx in _EDI_SOURCE_DATE_RES:
+        m = rx.search(raw)
+        if m:
+            src_date = m.group(1)
+            break
+    if src_date is None:
+        src_date = _EDI_NULL_DATE
+    return _EDI_FILEDATE_RE.sub(lambda mm: mm.group(1) + src_date, raw, count=1)
+
+
 def _claim_served_artifact(claims, collisions, served: Path, ausmt_id, fmt):
     """Register ONE station's claim on ONE served file, and record a collision if the file was already
     claimed. `claims` maps a resolved served path to the row that owns it; `collisions` collects the
@@ -2491,7 +2534,10 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                     _taken_edi_names.add(_dname.lower())
                     _dest = Path(derived_edi_dir) / _dname
                     _dest.parent.mkdir(parents=True, exist_ok=True)
-                    _dest.write_bytes(Path(res.derived_edi).read_bytes())
+                    # Served through _reproducible_derived_edi: mt_metadata stamps FILEDATE with the
+                    # write-time clock, and a served EDI (and the survey EDI zip it lands in) is
+                    # documented as byte-reproducible across builds.
+                    _dest.write_bytes(_reproducible_derived_edi(Path(res.derived_edi).read_bytes()))
                     Path(res.derived_edi).unlink(missing_ok=True)
                     derived_edis[r["id"]] = _dest
                 except OSError as _de:
