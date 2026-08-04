@@ -372,18 +372,13 @@ def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
     assert summary["station_count"] == len(xmls), summary
 
 
-def test_real_validator_still_rejects_emtfxml_as_a_standard_input(tmp_path):
-    """HONEST STATE PIN, not a wish. The engine and the gateway now accept EMTF XML, but the
-    validator lives in the SIBLING ausmt-surveys repo and its copy here is vendored: it still lists
-    .xml under OPTIN_TF_EXT, so an EMTF-XML-only package FAILS validation unless a curator passes
-    --allow-optin-formats. Until the surveys-repo branch feat/validator-emtfxml-input is merged and
-    the vendored copy + PIN are resynced, that is the REAL end-to-end behaviour and this test says so
-    out loud rather than letting an untested gap look finished.
-
-    FOLLOW-UP: when the resync lands, this test INVERTS -- rename it, assert `ok is True`, and drop
-    the FAIL-item assertion. It is deliberately written so the resync cannot land silently: it goes
-    RED the moment the validator starts accepting .xml.
-    """
+def test_real_validator_accepts_emtfxml_as_a_standard_input(tmp_path):
+    """END-STATE PIN, inverted from its honest-state predecessor on 2026-08-04 when the surveys-repo
+    branch feat/validator-emtfxml-input merged (surveys main 7ab0a0d) and the vendored copy + PIN
+    were resynced. An EMTF-XML-only package now validates as a standard input with no curator
+    enablement: the accepted-extension table and the structural where-do-transfer-functions-live
+    check both moved together, which is exactly what the predecessor pin demanded. FAILS IF a future
+    resync regresses either rule and xml-only packages quietly stop validating."""
     import time as _t
 
     pkg_root = tmp_path / "package"
@@ -403,17 +398,10 @@ def test_real_validator_still_rejects_emtfxml_as_a_standard_input(tmp_path):
     report = json.loads(out_json.read_text(encoding="utf-8"))
     fails = [i for i in report.get("items", [])
              if str(i.get("level")).upper() == "FAIL" and "transfer_functions" in str(i.get("message"))]
-    assert ok is False and fails, (
-        "the vendored validator now ACCEPTS EMTF XML as a standard input. That is the intended end "
-        "state, so this is good news, not a defect: the surveys-repo branch has been merged and the "
-        "vendored copy resynced. Invert this test (assert ok is True) and delete this message.")
-    # BOTH rules the surveys-repo branch has to move, named here so the follow-up is unambiguous:
-    # the accepted-extension table (OPTIN_TF_EXT) and the structural "where do transfer functions
-    # live" check. Fixing only one leaves an EMTF-XML-only package still failing.
-    msgs = " | ".join(str(i.get("message")) for i in report["items"])
-    assert "allow-optin-formats" in msgs, msgs
-    assert "no transfer functions under transfer_functions/edi/ or transfer_functions/mth5/" in msgs, \
-        msgs
+    assert ok is True and not fails, (
+        "an EMTF-XML-only package must validate as a standard input; the vendored validator "
+        "(see the PIN) has regressed one of the two rules the emtfxml-input branch moved: "
+        + " | ".join(str(i.get("message")) for i in report.get("items", [])))
 
 
 def _assert_engine_surveys_level(cmd) -> None:
