@@ -2740,11 +2740,15 @@ async function bootFreshWindow(dataMap, url) {
   ok(lgFmtEdi && lgFmtEdi.textContent.trim() === "EDI",
     "FORMATS: an unserved format must be ABSENT from the list, not claimed, got: " +
     JSON.stringify(lgFmtEdi && lgFmtEdi.textContent.trim()));
-  // All three served (manifest EDI + EMTF XML artifacts, plus a survey MTH5 bundle).
+  // All three served: three per-station manifest files[] rows. The MTH5 entry is the STATION's own h5,
+  // never the survey's <slug>-tf.h5 bundle: this node sits in a STATION drawer beside a Files tab that
+  // reads the station row, and the discriminating case (bundle present, station row absent) is pinned
+  // under STATION-H5 below.
   A.setManifest({ files: [
     { ausmt_id: "nz.gamma.G1", format: "edi", url: "files/g1.edi", size: 1000 },
     { ausmt_id: "nz.gamma.G1", format: "emtfxml", url: "files/g1.xml", size: 900 },
-  ], bundles: [{ survey: "Gamma Survey", slug: "gamma", format: "mth5", url: "bundles/gamma-tf.h5", size: 5000 }] });
+    { ausmt_id: "nz.gamma.G1", format: "mth5", url: "files/g1.h5", size: 5000 },
+  ], bundles: [] });
   A.openStationById("nz.gamma.G1");
   const lgFmtAll = lineageValue(doc.getElementById("dp-provenance"), "Distributed formats");
   ok(lgFmtAll && lgFmtAll.textContent.trim() === "EDI · EMTF XML · MTH5",
@@ -3054,6 +3058,23 @@ async function bootFreshWindow(dataMap, url) {
     const body = d.querySelector("div");
     return body && body.firstChild && body.firstChild.nodeType === 3 && body.firstChild.textContent.trim() === name;
   });
+  // The OTHER two station-scoped MTH5 surfaces, read the same way a reader reads them. Both live in the
+  // Provenance tab: the lineage graph's "Distributed formats" node (drawer.js distributedFormatsText) and
+  // the "Format availability" badge row. Panels are rendered whatever tab is selected (drawerPanel hides
+  // them with `hidden`), so both are queryable without clicking through.
+  const lineageVal = (label) => {
+    const lt = [...doc.querySelectorAll("#drawer .lineage .lt")].find(e => e.textContent.trim() === label);
+    return lt ? lt.parentNode.querySelector(".lv").textContent.trim() : null;
+  };
+  // A badge is `<span class="badge {state}">{glyph} {label}</span>`; match on the LABEL (everything after
+  // the state glyph) so "MTH5" never matches "EMTF XML", and report the state by its glyph.
+  const badgeState = (label) => {
+    const b = [...doc.querySelectorAll("#drawer .badges .badge")]
+      .find(e => e.textContent.trim().replace(/^\S+\s*/, "") === label);
+    if (!b) return null;
+    const g = b.textContent.trim().charAt(0);
+    return g === "✓" ? "ok" : g === "◐" ? "part" : g === "✗" ? "no" : "unk";
+  };
   A.setManifest({
     files: [
       { ausmt_id: "nz.gamma.G1", format: "edi", url: "edi/gamma/x.edi", size: 1000 },
@@ -3083,6 +3104,15 @@ async function bootFreshWindow(dataMap, url) {
   ok(h5Files.innerHTML.indexOf(H5_BUNDLE_URL) < 0,
     "STATION-H5: the survey-level bundle URL must NEVER render inside a station's Files list, found it in " +
     h5Files.innerHTML.slice(0, 400));
+  // A station that HAS its own h5 reads the same in all three station-scoped places. This half of the
+  // consistency pin is the one that stays true either way (station row and survey bundle both exist), so
+  // it is here to prove the negative half below is measuring the surfaces and not merely their absence.
+  ok(/MTH5/.test(lineageVal("Distributed formats") || ""),
+    "STATION-H5 consistency: a station with its own served h5 must list MTH5 in the lineage's distributed " +
+    "formats, got " + JSON.stringify(lineageVal("Distributed formats")));
+  ok(badgeState("MTH5") === "ok",
+    "STATION-H5 consistency: a station with its own served h5 must carry an ok MTH5 availability badge, got " +
+    JSON.stringify(badgeState("MTH5")));
   // Honest absence: a station with no per-station row of its own (the engine emits none for a
   // coordinate-generalised or withheld station) says so. It must never borrow the survey bundle.
   A.setManifest({
@@ -3099,6 +3129,23 @@ async function bootFreshWindow(dataMap, url) {
     "STATION-H5: the not-available row must carry no download action at all");
   ok(h5FilesNone.innerHTML.indexOf(H5_BUNDLE_URL) < 0,
     "STATION-H5: an absent station h5 must never fall back to the survey bundle");
+  // ONE DRAWER, ONE ANSWER. The Files tab reads the station's files[] row; the lineage's distributed-formats
+  // node and the format-availability badge read the survey's bundles[] row. This fixture is exactly where
+  // those two readings diverge: no station h5, but the survey bundle exists. The reader then sees the same
+  // drawer say "not currently available" on the Files tab and "MTH5 is distributed / ✓ MTH5" two tabs over,
+  // and there is no way to tell from the screen which one is lying. All three are STATION-scoped surfaces,
+  // so all three must answer about the station.
+  ok(!/MTH5/.test(lineageVal("Distributed formats") || ""),
+    "STATION-H5 consistency: with no station h5 the lineage's distributed formats must NOT claim MTH5 " +
+    "(the Files tab in the same drawer says it is not available), got " +
+    JSON.stringify(lineageVal("Distributed formats")));
+  ok(badgeState("MTH5") === "unk",
+    "STATION-H5 consistency: with no station h5 the format-availability badge must read unknown, not ok " +
+    "(an ok badge is the survey bundle answering a question about the station), got " +
+    JSON.stringify(badgeState("MTH5")));
+  ok(/EDI/.test(lineageVal("Distributed formats") || ""),
+    "STATION-H5 consistency: the formats line must still list what IS served for the station, got " +
+    JSON.stringify(lineageVal("Distributed formats")));
   // ...and the survey bundle keeps the surface it belongs to: the SURVEY drawer's Downloads grid.
   A.openSurvey("Gamma Survey");
   ok(doc.getElementById("drawer").innerHTML.indexOf(H5_BUNDLE_URL) >= 0,
