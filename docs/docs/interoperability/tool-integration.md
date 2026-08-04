@@ -33,19 +33,31 @@ a browser. A command-line or library client is unaffected.
 
 | Format | Granularity | What it is |
 |---|---|---|
-| EDI | per station | The custodian's original file, served byte for byte |
+| EDI | per station | The custodian's original file, served byte for byte, unless the station was submitted only as EMTF XML |
 | EMTF XML | per station | Derived, written by mt_metadata from the same transfer function |
 | MTH5 | per survey | Transfer functions only, one HDF5 file per survey |
 
 ### EDI is the citable artifact
 
-The served EDI is the file the custodian submitted, unmodified. You can check that without trusting
-this page. `catalogue.json` column 14 is the SHA-256 of the source transfer-function file, and the
-manifest's `edi` row for the same station carries the SHA-256 of the bytes the server hands you. Across
-the live corpus those agree on all 1,182 served EDIs, with no mismatches.
+For a station submitted as EDI, the served EDI is the file the custodian submitted, unmodified. You
+can check that without trusting this page. `catalogue.json` column 14 is the SHA-256 of the source
+transfer-function file, and the manifest's `edi` row for the same station carries the SHA-256 of the
+bytes the server hands you. For an EDI-sourced station those are the same file, so the digests agree.
+Across the live corpus that comparison currently holds for all 1,182 served EDIs, with no mismatches.
+That is a statement about the corpus as it stands, and the stations below are not part of it.
 
-That is the point of keeping EDI in the distribution. Every other representation is derived, and a
-derived file is only as trustworthy as the derivation. The original is there so you can check.
+A station can also arrive as EMTF XML alone, and then there is no original EDI to serve. Its EDI is
+written by mt_metadata from the same transfer function, and its XML is a re-emission of the submitted
+one, so column 14, the digest of the file the custodian actually sent, matches neither served file.
+That is a different provenance, not a tampered download, and the check above should not be read as if
+it were. `build_report.json` records the source format for every station under `ingest_sources`, and
+it is the only place that fact is published, so it is where to look before drawing a conclusion from a
+digest that does not match. Where a station arrives in both formats the EDI wins and is served as an
+original.
+
+That is the point of keeping EDI in the distribution wherever there is an original to keep. Every
+other representation is derived, and a derived file is only as trustworthy as the derivation. The
+original is there so you can check.
 
 ### EMTF XML is derived
 

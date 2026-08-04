@@ -326,10 +326,15 @@ station A1 of `vulcan-2022` is served as `edi/vulcan-2022/Vulcan_A1.edi`.
 A served station has three rows, one per format:
 
 ```text
-/data/edi/<slug>/<file>.edi     the custodian's transfer function as submitted
+/data/edi/<slug>/<file>.edi     the station's transfer function as EDI
 /data/xml/<slug>/<station>.xml  the same station as canonical EMTF XML
 /data/h5/<slug>/<station>.h5    the same station as a transfer-function MTH5
 ```
+
+The EDI is the custodian's own file for a station submitted as EDI, and one mt_metadata generated from
+the same transfer function for a station submitted only as EMTF XML. `build_report.json`'s
+`ingest_sources` says which, per station; [EDI is the citable
+artifact](tool-integration.md#edi-is-the-citable-artifact) says what it means for a digest check.
 
 `mth5` is the one token that means two different things depending on which list it came from. A
 `files[]` row with `format: "mth5"` is ONE station; a `bundles[]` row with the same token is the whole
