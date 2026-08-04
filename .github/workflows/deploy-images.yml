@@ -1082,7 +1082,15 @@ jobs:
           # (design 4.4) owes us a 409 naming the first submission: an already-published package
           # must not buy a second scan + validate + preview cycle, nor a second publishable copy
           # under a fresh id.
-          (cd "$GITHUB_WORKSPACE/engine/tests/fixtures" && zip -qr /tmp/example2.zip example-survey)
+          # BYTE-IDENTITY BY CONSTRUCTION: resubmit the very file the approve leg uploaded, never a
+          # re-zip of the same tree. Re-zipping is NOT byte-stable on these runners: Info-ZIP stores
+          # access times in its UT extra fields on Linux, and the first zip's own reads advance every
+          # atime under relatime, so a second archive of an identical tree hashes differently and the
+          # sha guard CORRECTLY admits it as new content. The 2026-08-04 rerun proved it with full
+          # evidence: the fixed guard answered a clean 201 to what was meant to be a duplicate, and
+          # the guard's own history explains itself (its 409 arm had never fired on CI). Same BYTES,
+          # not same tree, is what the guard dedupes; only same bytes can test it.
+          cp /tmp/example.zip /tmp/example2.zip
           RESP=$(curl -s -o /tmp/ex2.json -w '%{http_code}' \
             -H 'X-AusMT-Submit-Key: ci-e2e-submit-key-abcdefgh' \
             -F 'file=@/tmp/example2.zip' -F 'submitter_name=CI2' -F 'submitter_email=ci2@example.test' \
@@ -1095,6 +1103,7 @@ jobs:
           if [ "$RESP" != "409" ]; then
             echo "::error::duplicate submit answered HTTP ${RESP}, expected 409 (duplicate content)"
             echo "--- status: ${RESP}"
+            sha256sum /tmp/example.zip /tmp/example2.zip || true
             echo "--- body (/tmp/ex2.json), $(wc -c < /tmp/ex2.json) bytes ---"
             cat /tmp/ex2.json || true
             echo ""
