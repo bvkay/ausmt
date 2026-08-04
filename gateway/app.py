@@ -259,7 +259,11 @@ class Gateway:
             return JSONResponse({"detail": str(rej)}, status_code=400)
 
         digest = sha.hexdigest()
-        dup = self.db.find_active_by_sha(digest)
+        # Duplicate CONTENT (design §4.4), not merely duplicate work-in-progress: bytes the archive
+        # has already ingested are refused whatever became of the first copy. See
+        # db.find_duplicate_by_sha for why the old non-terminal-only lookup let an already-published
+        # package back through the door with a fresh 201.
+        dup = self.db.find_duplicate_by_sha(digest)
         if dup is not None:
             part_path.unlink(missing_ok=True)
             return JSONResponse(

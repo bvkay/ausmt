@@ -405,17 +405,32 @@ class Database:
             ).fetchone()
         return self._row_to_submission(row) if row else None
 
-    def find_active_by_sha(self, zip_sha256: str) -> Submission | None:
-        """A non-terminal submission with the same zip bytes (duplicate-content 409, design §4.4)."""
+    def find_duplicate_by_sha(self, zip_sha256: str) -> Submission | None:
+        """The submission that already carries these exact zip bytes (duplicate-content 409,
+        design §4.4).
+
+        The rule is about CONTENT, not liveness. It used to match only NON-TERMINAL rows, which
+        meant the guard switched itself off the moment the first copy finished: once a submission
+        reached PUBLISHED (or QUARANTINED / REJECTED_AV / REJECTED / RETURNED) the identical bytes
+        were accepted again with a fresh 201, a fresh id, a fresh scan + validate + preview cycle
+        and a second publishable copy of a package the archive already holds. Every terminal state
+        makes a resubmit of the SAME bytes pointless or worse: already published, already refused,
+        already found infected, or returned for a revision that identical bytes plainly are not.
+
+        A live (non-terminal) row is preferred when one exists, so the 409 names a submission the
+        submitter can still watch; otherwise the oldest matching row is named, which is the copy
+        whose audit trail explains what happened to this content.
+        """
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM submissions WHERE zip_sha256 = ?", (zip_sha256,)
+                "SELECT * FROM submissions WHERE zip_sha256 = ? ORDER BY created_utc, id",
+                (zip_sha256,),
             ).fetchall()
-        for row in rows:
-            sub = self._row_to_submission(row)
+        subs = [self._row_to_submission(row) for row in rows]
+        for sub in subs:
             if not states.is_terminal(sub.state):
                 return sub
-        return None
+        return subs[0] if subs else None
 
     def count_inflight(self) -> int:
         placeholders = ",".join("?" * len(states.TERMINAL))

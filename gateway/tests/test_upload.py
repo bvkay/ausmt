@@ -14,8 +14,9 @@ import pytest
 
 from gateway import states
 from gateway.tests.conftest import (
-    SUBMIT_KEY, app_client, eicar_package_zip, good_package_zip, make_zip, ratio_bomb_zip,
-    run, scanner_clean, scanner_down, scanner_eicar_aware, submit_zip,
+    SUBMIT_KEY, FakeGit, app_client, csrf_for_session, curator_login, eicar_package_zip,
+    good_package_zip, make_zip, ratio_bomb_zip, run, scanner_clean, scanner_down,
+    scanner_eicar_aware, settle_publish, submit_zip,
 )
 
 
@@ -80,7 +81,8 @@ def test_good_upload_scans_clean_and_queues(tmp_path):
     (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/../evil.edi": b"x"}), "parent-directory"),
     (lambda: make_zip({"mysurvey/survey.yaml": b"s", "/etc/evil.edi": b"x"}), "absolute path"),
     (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/inner.zip": b"PK", "mysurvey/S.edi": b"e"}), "nested archive"),
-    (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/README.md": b"hi"}), "no .edi"),
+    (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/README.md": b"hi"}),
+     "no transfer-function members"),
     (lambda: make_zip({"a/survey.yaml": b"s", "a/S.edi": b"e", "b/x.txt": b"y"}), "top-level"),
 ])
 def test_hostile_zip_rejected_nothing_quarantined(tmp_path, zip_factory, needle):
@@ -175,6 +177,98 @@ def test_duplicate_sha_conflicts(tmp_path):
             r2 = await submit_zip(client, z)
             assert r2.status_code == 409
             assert r2.json()["submission_id"] == r1.json()["submission_id"]
+    run(_body())
+
+
+def _materialise_curation_artifacts(cfg, sid: str, slug: str) -> None:
+    """The package tree + reports the gw-runner leaves behind, so the curator checklist, the PII
+    sweep and the publish stage have something real to read. Written here rather than reusing
+    seed_validated because these tests need the artifacts to belong to a submission that came in
+    through the REAL upload path (its own zip_sha256), not to a row inserted beside it."""
+    import json
+
+    pkg = cfg.quarantine_dir / sid / "package" / slug
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "survey.yaml").write_text("survey:\n  slug: %s\n" % slug, encoding="utf-8")
+    reports = cfg.quarantine_dir / sid / "reports"
+    (reports / "preview-data").mkdir(parents=True, exist_ok=True)
+    (reports / "validate.json").write_text(
+        json.dumps({"items": [{"level": "PASS", "name": "structure", "message": "ok"}]}),
+        encoding="utf-8")
+    (reports / "preview-summary.json").write_text(
+        json.dumps({"station_count": 1, "types": ["MT"], "coord_flags": [], "warnings": []}),
+        encoding="utf-8")
+    (reports / "preview-data" / "index.html").write_text(
+        "<!doctype html><title>preview</title><p>preview shell</p>", encoding="utf-8")
+
+
+def test_duplicate_sha_conflicts_after_the_first_was_approved_and_published(tmp_path):
+    """The duplicate-content guard is about CONTENT, not liveness: bytes the archive has already
+    ingested and PUBLISHED must not buy a second scan + validate + preview cycle, nor a second
+    publish of the identical package under a fresh submission id.
+
+    This is the exact sequence deploy-images.yml's curator-e2e drives (submit the fixture, approve
+    it, then submit the byte-identical zip again) and the 409 that job's reject leg names.
+
+    FAILS IF the second submit of identical bytes is accepted. Proven failing 2026-08-04 against
+    find_active_by_sha: PUBLISHED is a TERMINAL state, so the lookup skipped the first row entirely
+    and the resubmit got its own 201 with a new submission id.
+    """
+    async def _body():
+        git = FakeGit()
+        async with app_client(tmp_path, scanner=scanner_clean(), git_runner=git) as (
+                client, _app, gw, cfg):
+            z = good_package_zip()
+            r1 = await submit_zip(client, z)
+            assert r1.status_code == 201
+            sid = r1.json()["submission_id"]
+            assert gw.db.get(sid).state == states.SCANNED
+
+            # What the runner does in production: VALIDATED plus the artifacts on disk.
+            gw.db.transition(sid, states.VALIDATED, actor="runner", reason="validated",
+                             slug="mysurvey")
+            _materialise_curation_artifacts(cfg, sid, "mysurvey")
+
+            await curator_login(client)
+            approved = await client.post(
+                f"/gateway/curator/submission/{sid}/approve",
+                data={"note": "approved by the test", "csrf_token": csrf_for_session(client)},
+                follow_redirects=False)
+            assert approved.status_code == 303, approved.text
+            await settle_publish(gw, sid)
+            assert gw.db.get(sid).state == states.PUBLISHED
+
+            r2 = await submit_zip(client, z, email="someone-else@example.org", name="Someone Else")
+            assert r2.status_code == 409, (
+                "identical bytes were accepted again after the first copy was published: "
+                f"{r2.status_code} {r2.text}")
+            assert r2.json()["submission_id"] == sid
+            # Refused at the door: no second row, and nothing promoted into incoming/.
+            assert len(gw.db.ids_in_state(states.SCANNED)) == 0
+            assert not any(cfg.incoming_dir.glob("*.part"))
+    run(_body())
+
+
+def test_duplicate_sha_conflicts_after_the_first_was_rejected_by_the_scanner(tmp_path):
+    """The same rule at the other terminal state, and the cheap one to reason about: bytes clamd
+    already called a virus are still that virus on the second upload. A fresh 201 would mean an
+    attacker can make the gateway re-scan and re-log the same payload without limit.
+
+    FAILS IF the resubmit of an already REJECTED_AV package is accepted. Proven failing 2026-08-04:
+    REJECTED_AV is terminal, so the second upload got its own 201 and its own audit trail.
+    """
+    async def _body():
+        async with app_client(tmp_path, scanner=scanner_eicar_aware()) as (client, _app, gw, _cfg):
+            z = eicar_package_zip()
+            r1 = await submit_zip(client, z)
+            assert r1.status_code == 201
+            sid = r1.json()["submission_id"]
+            assert gw.db.get(sid).state == states.REJECTED_AV
+
+            r2 = await submit_zip(client, z)
+            assert r2.status_code == 409, (
+                f"identical infected bytes were accepted again: {r2.status_code} {r2.text}")
+            assert r2.json()["submission_id"] == sid
     run(_body())
 
 

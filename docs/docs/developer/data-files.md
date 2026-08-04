@@ -193,10 +193,15 @@ What matters on the producer side:
   as new `catalogue`/`sci`/`tf` columns, so extending it costs the index-reading consumers nothing.
   Extend `manifest.json` by adding keys.
 - **It is written to both** the portal data dir **and** the `--products` dir.
-- **`sha256` is of the SERVED bytes.** The EDI copies and the per-survey EDI zip are
-  byte-reproducible across builds (given a fixed zlib). EMTF XML, the EMTF-XML zip and the
-  transfer-function MTH5 embed timestamps and UUIDs and are **not**: their digest is a per-build
-  integrity hash, not a cross-build invariant. Do not write a test that asserts otherwise.
+- **`sha256` is of the SERVED bytes.** The served EDIs and the per-survey EDI zip are
+  byte-reproducible across builds (given a fixed zlib and, for generated EDIs, a fixed
+  mt_metadata: the writer stamps PROGVERS into the HEAD block, so a toolchain bump moves every
+  generated digest with no data change), the generated ones included: a copied
+  custodian EDI carries no build clock, and `_reproducible_derived_edi` stamps the one field
+  mt_metadata would clock-stamp in a generated one from the source document's own date. EMTF XML,
+  the EMTF-XML zip and the transfer-function MTH5 embed timestamps and UUIDs and are **not**: their
+  digest is a per-build integrity hash, not a cross-build invariant. Do not write a test that
+  asserts otherwise.
 - **A row exists only for what AusMT serves.** A non-served station has no row at all; the portal
   routes it to the source DOI archive via the catalogue's `edi_available` bit (`r[13] = 0`).
 - **The bundle set is flag-gated** by `flags:` in `portal/portal.config.yaml`, mirrored to

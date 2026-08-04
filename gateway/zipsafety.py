@@ -30,6 +30,11 @@ _ALLOWED_NAME_CHARS = set(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._ /-"
 )
 
+# Extensions that make a member count as a transfer function for the "package is not empty" shape
+# rule. EDI and EMTF XML are both first-class submission inputs (owner ruling 2026-08-03). Checked on
+# the lowercased basename suffix; see inspect() for why this is a shape heuristic, not an allowlist.
+_TF_SUFFIXES = (".edi", ".xml")
+
 # External-attr high bits carry the unix mode in the top 16 bits; S_IFLNK (0o120000) marks a
 # symlink, other non-regular types (block/char/fifo/socket) are equally rejected. A zip member
 # should be a regular file or a directory and nothing else.
@@ -90,7 +95,15 @@ def inspect(zip_path, max_upload_bytes: int) -> list[str]:
     that fires. Never extracts — reads the central directory only.
 
     Package-shape rules (design §4.3): exactly one top-level directory, at most one survey.yaml at
-    depth <= 2, at least one .edi member.
+    depth <= 2, at least one transfer-function member.
+
+    "Transfer-function member" is a NAME-SHAPE heuristic, not an allowlist: this module is
+    content-blind by design (house rule: the gateway never parses EDI/YAML), so it can only ask
+    whether the package plausibly contains transfer functions at all. `.edi` and, since EMTF XML
+    became a first-class submission input (owner ruling 2026-08-03), `.xml` both count. The
+    surveys-repo validator is the authority on whether those files are really transfer functions and
+    whether their type is accepted; this guard only stops an empty or obviously-wrong upload from
+    consuming a scan + validation cycle.
     """
     try:
         zf = zipfile.ZipFile(zip_path)
@@ -105,7 +118,7 @@ def inspect(zip_path, max_upload_bytes: int) -> list[str]:
         total_uncompressed = 0
         top_level_dirs: set[str] = set()
         survey_yaml_count = 0
-        edi_count = 0
+        tf_count = 0
         seen_names: set[str] = set()
 
         for info in infos:
@@ -131,8 +144,8 @@ def inspect(zip_path, max_upload_bytes: int) -> list[str]:
                 lower_base = parts[-1].lower() if parts else ""
                 if lower_base == "survey.yaml" and len(parts) <= 2:
                     survey_yaml_count += 1
-                if lower_base.endswith(".edi"):
-                    edi_count += 1
+                if lower_base.endswith(_TF_SUFFIXES):
+                    tf_count += 1
 
         limit = MAX_TOTAL_UNCOMPRESSED_FACTOR * max_upload_bytes
         if total_uncompressed > limit:
@@ -143,7 +156,7 @@ def inspect(zip_path, max_upload_bytes: int) -> list[str]:
             raise ZipRejection(reason=f"more than one top-level directory: {sorted(top_level_dirs)}")
         if survey_yaml_count > 1:
             raise ZipRejection(reason=f"more than one survey.yaml at depth <= 2 ({survey_yaml_count})")
-        if edi_count == 0:
-            raise ZipRejection(reason="no .edi members in package")
+        if tf_count == 0:
+            raise ZipRejection(reason="no transfer-function members in package (.edi or .xml)")
 
         return [i.filename for i in infos]

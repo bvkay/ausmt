@@ -106,10 +106,13 @@ print(row["sha256"] == hashlib.sha256(open("vulcan-2022-edi.zip", "rb").read()).
 PY
 ```
 
-The same digest appears in two other places, and they agree. `catalogue.json` carries the source
-transfer-function file's SHA-256 in column 14, which for a served EDI is the same file and so the same
-digest. Each station's `station.json` records `provenance.input_file` and `provenance.input_sha256` for
-the file its derived products were computed from.
+The same digest appears in two other places. `catalogue.json` carries the source transfer-function
+file's SHA-256 in column 14, which for a station submitted as EDI is the same file and so the same
+digest; for one submitted only as EMTF XML the served EDI is generated rather than original, and
+column 14 is the digest of the submitted XML instead. Each station's `station.json` records
+`provenance.input_file` and `provenance.input_sha256` for the file its derived products were computed
+from, which is the source file either way. [EDI is the citable
+artifact](tool-integration.md#edi-is-the-citable-artifact) sets out what that means for a check.
 
 ---
 

@@ -39,16 +39,21 @@ survey-slug/
 └── transfer_functions/
     ├── edi/               (one EDI per station occupation)
     ├── mth5/              (where a survey has it)
-    └── emtfxml/           (build output, not an ingest folder)
+    └── emtfxml/           (where a survey has it)
 ```
 
 `slug` and the folder name must match; the validator fails the package otherwise.
 
-**EDI and MTH5 are the accepted submission inputs.** EMTF XML and processing-software products
-such as `.zmm`, `.zrr` and `.j` are opt-in: the validator fails them unless a curator enables
+**EDI, EMTF XML and MTH5 are the accepted submission inputs.** Processing-software products
+such as `.zmm`, `.zrr` and `.j` remain opt-in: the validator fails them unless a curator enables
 them for that submission, and even then they are stored rather than parsed.
 
-> `transfer_functions/emtfxml/` in a published package is a **build output**, not an input;
+Where one station arrives as both an EDI and an EMTF XML, the **EDI is the canonical source**
+and the XML is kept in the package without being ingested. The build records the ingest source
+for every station in `build_report.json`.
+
+> The build also writes its own canonical EMTF XML for every served station, into the served
+> data tree rather than back into the package;
 > [Transfer functions](../science/transfer-functions.md) owns that statement and its status.
 
 There is no per-station side sheet. `stations.csv` was considered and rejected: station

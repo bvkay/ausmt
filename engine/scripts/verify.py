@@ -170,11 +170,33 @@ def stamps_common(stamps: dict, stale_ids) -> str:
     return next(iter(vals)) if len(vals) == 1 else "<mixed>"
 
 
+def _duplicate_repo_urls(arts):
+    """Repo-tier artifact urls claimed by more than one manifest row, as readable 'url (a <-> b)'
+    strings. One served file belongs to exactly one row: the download contract says a row's sha256 is
+    the integrity of THAT station's artifact, so two rows over one file make both digests verify while
+    one station serves the other's bytes. Recomputing sha256 cannot see this (both rows hash the file
+    they name), which is why it is checked separately. Scoped to tier=repo, like the integrity check
+    above it: an nci-tier row resolves to a flat remote directory this script cannot observe."""
+    seen, dupes = {}, []
+    for row in arts:
+        url = row.get("url")
+        if row.get("tier") != "repo" or not url:
+            continue
+        who = row.get("ausmt_id") or row.get("slug") or "?"
+        if url in seen:
+            dupes.append(f"{url} ({seen[url]} <-> {who})")
+        else:
+            seen[url] = who
+    return dupes
+
+
 def _check_mtcat_and_manifest(cat, mtc, man, base_dir: Path, jsonschema, schema, man_schema, station_label="stations"):
     """The two post-build checks SHARED by the self-building path (main()) and --data-dir mode
     (_validate_data_dir): (1) mtcat.json schema-conformance + non-empty catalogue, (2) manifest.json
     integrity — every repo-tier artifact's sha256 RECOMPUTED from the bytes at `base_dir / row['url']`
-    (an independent observable; a manifest that lies about its bytes is a hard failure) — + schema.
+    (an independent observable; a manifest that lies about its bytes is a hard failure), plus schema,
+    plus no served file claimed by two rows (_duplicate_repo_urls: the one integrity failure that
+    recomputing digests cannot see).
     Returns (ok: bool, lines: list[str]) so the two call sites can print in their own report style."""
     ok = True
     lines = []
@@ -197,8 +219,12 @@ def _check_mtcat_and_manifest(cat, mtc, man, base_dir: Path, jsonschema, schema,
                if row.get("tier") == "repo" and row.get("url")
                and (not (base_dir / row["url"]).exists()
                     or hashlib.sha256((base_dir / row["url"]).read_bytes()).hexdigest() != row.get("sha256"))]
+        dupes = _duplicate_repo_urls(arts)
         if bad:
             man_ok = f"FAIL (integrity: {bad[:3]})"
+            ok = False
+        elif dupes:
+            man_ok = f"FAIL (one served file claimed by two rows: {dupes[:3]})"
             ok = False
         elif jsonschema:
             try:

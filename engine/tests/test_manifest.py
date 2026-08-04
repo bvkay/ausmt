@@ -141,7 +141,12 @@ def test_tf_h5_bundle_round_opens_with_served_tfs(tmp_path):
 
 def test_manifest_deterministic_for_reproducible_formats(tmp_path):
     """EDI copies and the per-survey EDI zip are byte-reproducible across builds, so their manifest
-    sha256 is stable. (EMTF XML and HDF5 embed timestamps and are intentionally not asserted here.)"""
+    sha256 is stable. (EMTF XML and HDF5 embed timestamps and are intentionally not asserted here.)
+
+    The sample survey this builds is EDI-only, so every served EDI here is a COPY. The other half of
+    the invariant, a served EDI the build WRITES for an EMTF-XML-sourced station, needs a mixed
+    package and is owned by
+    test_emtfxml_input.py::test_a_generated_edi_and_its_survey_zip_are_byte_reproducible_across_builds."""
     out1, m1 = _build(tmp_path / "b1")
     out2, m2 = _build(tmp_path / "b2")
     def sha_of(man, fmt, scope):

@@ -273,6 +273,149 @@ def test_preview_end_to_end_real_engine(tmp_path):
     assert summary["station_count"] >= 1, summary
 
 
+@pytest.mark.skipif(not _has_real_engine(),
+                    reason="real engine stack / sample survey / validator not present")
+def test_preview_end_to_end_real_engine_emtfxml_only_package(tmp_path):
+    # NO MOCKS, and no assertion-by-assumption: EMTF XML became a first-class submission input
+    # (owner ruling 2026-08-03), so an EMTF-XML-ONLY upload must survive the REAL safe_extract and
+    # build a REAL preview with stations in it. The engine change alone is not proof that the
+    # gateway's path carries it, which is why this drives the actual gw-runner preview rather than
+    # inspecting build_portal directly.
+    #
+    # The XML fixture is written by the ENGINE'S OWN emitter from the engine's sample-survey EDIs, so
+    # it is a real EMTF XML this build produces rather than hand-rolled bytes that could drift from
+    # the writer. FAILS IF the preview reports zero stations for an XML-only package.
+    import io
+    import sys as _sys
+    import time as _t
+    import zipfile as _zf
+
+    _sys.path.insert(0, str(_ENGINE_DIR))
+    from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
+
+    sample = _ENGINE_DIR / "data" / "sample-survey"
+    slug = "e2e-preview-xml-2026"
+    xml_dir = tmp_path / "xmlsrc"
+    xml_dir.mkdir()
+    for edi in sorted((sample / "transfer_functions" / "edi").glob("*.edi")):
+        res = normalize(edi, xml_dir, survey_id=slug, station_id=edi.stem)
+        Path(res.derived_edi).unlink(missing_ok=True)
+    xmls = sorted(xml_dir.glob("*.xml"))
+    assert xmls, "the engine emitter produced no EMTF XML to submit"
+
+    buf = io.BytesIO()
+    with _zf.ZipFile(buf, "w", _zf.ZIP_DEFLATED) as zf:
+        sy = (sample / "survey.yaml").read_text(encoding="utf-8").replace(
+            "slug: sample-survey", f"slug: {slug}")
+        zf.writestr(f"{slug}/survey.yaml", sy)
+        for x in xmls:
+            zf.writestr(f"{slug}/transfer_functions/emtfxml/{x.name}", x.read_bytes())
+    zpath = tmp_path / "upload.zip"
+    zpath.write_bytes(buf.getvalue())
+
+    package_dir = tmp_path / "quarantine" / "SUBXML" / "package"
+    safeextract.safe_extract(zpath, package_dir)
+    assert (package_dir / slug / "transfer_functions" / "emtfxml").is_dir(), \
+        "safe_extract must carry transfer_functions/emtfxml/ through untouched"
+
+    # THE VALIDATOR IS NOT THE SUBJECT HERE, and it is not this repo's to change: it lives in the
+    # sibling ausmt-surveys repo (ADR-001) and still classes .xml as an opt-in format, so with the
+    # real one build_portal's discovery SKIPS this package and the preview cannot succeed. That
+    # refusal is REAL and is pinned, unmocked, by test_real_validator_still_rejects_emtfxml_as_a_
+    # standard_input below; asserting a green preview against it here would be faking a pass.
+    #
+    # So this test stubs the validator to a PASS and puts the ENGINE PREVIEW under test, which is the
+    # half this repo owns and the half a claim like "the preview builds with the same engine, so the
+    # engine commit carries it" needs proving rather than asserting. FAILS IF the gw-runner's preview
+    # of an EMTF-XML-only package builds no stations.
+    #
+    # FOLLOW-UP: after the surveys branch feat/validator-emtfxml-input is merged and the vendored copy
+    # + PIN are resynced, the stub can go and this test can run against require_validator_dir().
+    # The stub honours BOTH contracts the real validate_survey.py serves, because both are exercised
+    # in this flow: build_portal IMPORTS it (validate(folder) -> report with worst()/counts()) while
+    # the gw-runner SPAWNS it as a subprocess (folder positional + --json output file).
+    stub_dir = tmp_path / "validator-stub"
+    stub_dir.mkdir()
+    (stub_dir / "validate_survey.py").write_text(
+        "import argparse, json, sys\n"
+        "\n"
+        "class Report:\n"
+        "    items = [{'level': 'PASS', 'check': 'stub', 'message': 'validator stubbed'}]\n"
+        "    manifest = []\n"
+        "    def worst(self):\n"
+        "        return 0\n"
+        "    def counts(self):\n"
+        "        return {'PASS': 1, 'WARNING': 0, 'FAIL': 0}\n"
+        "\n"
+        "def validate(folder, **kw):\n"
+        "    return Report()\n"
+        "\n"
+        "if __name__ == '__main__':\n"
+        "    ap = argparse.ArgumentParser()\n"
+        "    ap.add_argument('folder')\n"
+        "    ap.add_argument('--json', dest='json_out')\n"
+        "    a = ap.parse_args()\n"
+        "    r = Report()\n"
+        "    open(a.json_out, 'w').write(json.dumps({'counts': r.counts(), 'items': r.items}))\n"
+        "    print('[PASS   ] stub         validator stubbed')\n"
+        "    sys.exit(0)\n", encoding="utf-8")
+
+    cfg = RunnerConfig(
+        incoming_dir=tmp_path / "incoming", quarantine_dir=tmp_path / "quarantine",
+        jobs_dir=tmp_path / "jobs", validator_path=str(stub_dir), timeout_s=900,
+        engine_dir=_ENGINE_DIR)
+    summary_path = tmp_path / "preview-summary.json"
+    ok = runner._run_preview(cfg, package_dir, tmp_path / "preview-data", summary_path,
+                             deadline=_t.monotonic() + 600)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert ok is True, summary
+    assert summary["station_count"] == len(xmls), summary
+
+
+def test_real_validator_still_rejects_emtfxml_as_a_standard_input(tmp_path):
+    """HONEST STATE PIN, not a wish. The engine and the gateway now accept EMTF XML, but the
+    validator lives in the SIBLING ausmt-surveys repo and its copy here is vendored: it still lists
+    .xml under OPTIN_TF_EXT, so an EMTF-XML-only package FAILS validation unless a curator passes
+    --allow-optin-formats. Until the surveys-repo branch feat/validator-emtfxml-input is merged and
+    the vendored copy + PIN are resynced, that is the REAL end-to-end behaviour and this test says so
+    out loud rather than letting an untested gap look finished.
+
+    FOLLOW-UP: when the resync lands, this test INVERTS -- rename it, assert `ok is True`, and drop
+    the FAIL-item assertion. It is deliberately written so the resync cannot land silently: it goes
+    RED the moment the validator starts accepting .xml.
+    """
+    import time as _t
+
+    pkg_root = tmp_path / "package"
+    pkg = pkg_root / "intg-survey-2026"
+    (pkg / "transfer_functions" / "emtfxml").mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(_REAL_PACKAGE_YAML, encoding="utf-8")
+    (pkg / "transfer_functions" / "emtfxml" / "S01.xml").write_text(
+        "<?xml version=\"1.0\"?>\n<EM_TF><Site><Id>S01</Id></Site></EM_TF>\n", encoding="utf-8")
+    cfg = RunnerConfig(
+        incoming_dir=tmp_path / "incoming", quarantine_dir=tmp_path / "quarantine",
+        jobs_dir=tmp_path / "jobs", validator_path=str(require_validator_dir()), timeout_s=900)
+    out_json = tmp_path / "reports" / "validate.json"
+    out_json.parent.mkdir(parents=True)
+
+    ok = runner._run_validator(cfg, pkg_root, out_json, deadline=_t.monotonic() + 300)
+
+    report = json.loads(out_json.read_text(encoding="utf-8"))
+    fails = [i for i in report.get("items", [])
+             if str(i.get("level")).upper() == "FAIL" and "transfer_functions" in str(i.get("message"))]
+    assert ok is False and fails, (
+        "the vendored validator now ACCEPTS EMTF XML as a standard input. That is the intended end "
+        "state, so this is good news, not a defect: the surveys-repo branch has been merged and the "
+        "vendored copy resynced. Invert this test (assert ok is True) and delete this message.")
+    # BOTH rules the surveys-repo branch has to move, named here so the follow-up is unambiguous:
+    # the accepted-extension table (OPTIN_TF_EXT) and the structural "where do transfer functions
+    # live" check. Fixing only one leaves an EMTF-XML-only package still failing.
+    msgs = " | ".join(str(i.get("message")) for i in report["items"])
+    assert "allow-optin-formats" in msgs, msgs
+    assert "no transfer functions under transfer_functions/edi/ or transfer_functions/mth5/" in msgs, \
+        msgs
+
+
 def _assert_engine_surveys_level(cmd) -> None:
     """Pin the --surveys DISCOVERY LEVEL inside every mocked engine invocation: the value must be a
     directory whose CHILD dir carries survey.yaml (package/<slug>/survey.yaml — the empirically

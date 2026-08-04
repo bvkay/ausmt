@@ -1657,6 +1657,184 @@ def process_mth5(h5_paths, survey_label, org, slug):
     return stations, tf_rows, sci_rows
 
 
+# The ingest source recorded per station, keyed by the SUFFIX of the file the record was parsed from.
+# One derivation for the whole build: build_provenance's input_formats set and build_report's
+# per-station ingest_sources both read it, so the two can never disagree about where a station came
+# from. A suffix outside this table cannot reach a station record (discovery globs only these).
+_INGEST_SOURCE_BY_SUFFIX = {".edi": "edi", ".xml": "emtfxml", ".h5": "mth5", ".mth5": "mth5"}
+
+
+def _emtfxml_frame(tfobj, n_periods):
+    """C25 frame facts for an EMTF-XML source, and the POLICY v3 verdict taken off the file's own
+    declaration. Returns (facts, fail_reason); fail_reason is None to serve.
+
+    Gate 1's EDI leg scrapes the RAW EDI text (ZROT/TROT/ROTSPEC/HMEAS) because an EDI states its
+    frame only in prose-ish header records. EMTF XML states it MACHINE-READABLY, in
+    <Site><Orientation angle_to_geographic_north=...>, which mt_metadata surfaces as
+    station_metadata.orientation -- so that block, not a text scrape, is the evidence here. v3 is
+    then applied unchanged: a declaration of ANY magnitude serves AS STORED with the angle recorded,
+    and an ABSENT declaration is recorded as not-asserted rather than silently reported as 0 degrees.
+    Nothing is ever rotated (v3), so `derotated` is always False.
+
+    The TF's own `_rotation_angle` is deliberately NOT read as the declared angle: mt_metadata 1.0.9's
+    EMTF-XML reader does not populate it from the file at all (it hands back a bare int 0 even for a
+    file declaring 30 degrees -- measured), so reporting it would assert a library default as a
+    station fact, exactly what normalize()'s Issue #4/#7 notes exist to prevent. It is consulted for
+    one thing only: should a reader ever surface a PER-PERIOD array there, V3-C refuses the station
+    rather than pick one of the angles. On the pinned mt_metadata no real EMTF XML reaches that
+    branch, so it is a fail-closed guard, exercised at the unit seam rather than by a fixture file."""
+    import numpy as np  # noqa: PLC0415
+
+    rot = getattr(tfobj, "_rotation_angle", None)
+    rot_vals = []
+    if rot is not None:
+        try:
+            rot_vals = sorted({round(float(v), 4)
+                               for v in np.atleast_1d(np.asarray(rot, dtype=float)).ravel()
+                               if np.isfinite(v)})
+        except (TypeError, ValueError):
+            rot_vals = []
+    ori = getattr(getattr(tfobj, "station_metadata", None), "orientation", None)
+    declared = getattr(ori, "angle_to_geographic_north", None) if ori is not None else None
+    try:
+        declared = float(declared) if declared is not None else None
+    except (TypeError, ValueError):
+        declared = None
+    facts: dict = {
+        "evidence": {
+            "branch": "emtfxml",
+            "orientation_angle_to_geographic_north_deg": declared,
+            "orientation_reference_frame": (getattr(ori, "reference_frame", None)
+                                            if ori is not None else None),
+            "n_periods": int(n_periods),
+        },
+        # Kept for station.json shape stability with the EDI path: v3 never rotates, so the
+        # rotation SOURCE fields are always None and `derotated` is always False.
+        "impedance_rotation_deg_source": None,
+        "tipper_rotation_deg_source": None,
+        "derotated": False,
+    }
+    if len(rot_vals) > 1:
+        return facts, (f"the EMTF XML resolves to PER-PERIOD rotation angles "
+                       f"({min(rot_vals):g}..{max(rot_vals):g}, {len(rot_vals)} distinct); AusMT "
+                       f"serves data as stored and never serves a per-period-mixed frame. Re-export "
+                       f"this station in one frame.")
+    if declared is None:
+        facts["frame_served"] = "not-asserted"
+        facts["declared_azimuth_deg"] = None
+    elif abs(conv._norm_angle(declared)) > conv.ROT_ZERO_EPS_DEG:
+        facts["frame_served"] = "declared-azimuth"
+        facts["declared_azimuth_deg"] = round(conv._norm_angle(declared), 4)
+    else:
+        facts["frame_served"] = "declared-zero"
+        facts["declared_azimuth_deg"] = 0.0
+    return facts, None
+
+
+def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), report=None):
+    """Read transfer functions from EMTF XML file(s) and run the SAME shared science as the EDI
+    path. Different input format, identical downstream: `_mtm.record_from_tf` /
+    `_mtm.components_from_tf` yield the very same (record, periods, components) the EDI path feeds
+    into tf_from_components / science_from_components, so the catalogue row, the derived products
+    and the diagnostics are identical where equivalent information exists (the same contract the
+    MTH5 input path holds).
+
+    `exclude_ids` carries the OWNER PRECEDENCE RULING (2026-08-03): where a station has both an EDI
+    and an EMTF XML, the EDI is the canonical source and the XML is NOT ingested. The caller passes
+    the base station ids the EDI pass already produced; a matching XML is skipped with a NOTICE and
+    the file stays in the package, untouched. `report`, when given, collects the same survey-scoped
+    gate output process_edis collects ({"stations_dropped": [...], "frame_notes": {...}}).
+
+    NOT cached (like the MTH5 input path): the C18 cache stores the EDI parse and the EDI-sourced
+    served XML, and the XML path's served bytes include a normalize()-generated EDI that the cache
+    does not carry. See _emit_served_xml's derived_edi_dir."""
+    if not mtm.available():
+        sys.exit("ERROR: the mt_metadata stack is required for the build "
+                 "(pip install -r environments/requirements-mtmetadata-lock.txt).")
+    exclude = {str(x) for x in (exclude_ids or ())}
+    stations, tf_rows, sci_rows = [], [], []
+    for p in sorted(xml_paths):
+        try:
+            tfobj = mtm.read(p)
+        except Exception as e:  # noqa: BLE001
+            print(f"  PARSE FAIL {p.name}: {e}", file=sys.stderr)
+            continue
+        r = mtm.record_from_tf(tfobj, p.name, extractor="emtfxml")
+        # An EMTF XML sanitises the station id on write (Site.id is ^[a-zA-Z0-9]*$), so recover the
+        # UNSANITISED source id the emitter preserved in the Site <Name> when one is present -- the
+        # same token normalize() embeds, read back with its own public helper rather than re-derived.
+        try:
+            from ausmt_science.ingest.normalize import (  # noqa: PLC0415
+                source_station_id_from_geographic_name as _src_id)
+            _true = _src_id(getattr(tfobj.station_metadata, "geographic_name", None))
+        except Exception:  # noqa: BLE001  (never let an id-recovery detail drop a station)
+            _true = None
+        if _true and _true != r.get("id"):
+            r["site_name"] = r.get("id")
+            r["id"] = _true
+        r["state"] = cat.state_of(r.get("lat"), r.get("lon"))
+        if r.get("lat") is None or not r.get("n_periods"):
+            print(f"  SKIP {p.name}: no coordinates/periods recovered by mt_metadata "
+                  f"(malformed EMTF XML or unreadable transfer function)", file=sys.stderr)
+            continue
+        r["survey"] = survey_label
+        r["org"] = org
+        r["id"] = safe_component(r.get("id"))          # untrusted Site id -> no traversal / XSS
+        if r["id"] in exclude:
+            # OWNER PRECEDENCE RULING: this station's EDI already won. The XML is not ingested and
+            # not re-emitted from here; it stays in the submitted package as a custodian artifact.
+            print(f"  PRECEDENCE {p.name}: station {r['id']} is already ingested from "
+                  f"transfer_functions/edi/ -- the EDI is canonical, this EMTF XML is kept in the "
+                  f"package but NOT ingested.", file=sys.stderr)
+            continue
+        r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
+        r["comps"] = "".join(r.get("components") or [])
+        per, comp = mtm.components_from_tf(tfobj)
+        # Processing metadata comes from the TF's own structured fields: an EMTF XML has no EDI
+        # >INFO block, so the EDI text scrape has nothing to read here and is not run.
+        _pm = mtm.proc_info_from_tf(tfobj)
+        proc = (_pm[0], _pm[1], _pm[2])
+        tf = tfmod.tf_from_components(per, comp) if per else ep.EMPTY_TF
+        srow = sci.science_from_components(per, comp, proc) if per \
+            else sci.science_from_components(None, {}, None)
+        # C25 Gate 1 (frame), from the file's own machine-readable rotation -- see _emtfxml_frame.
+        _frame, _fail = _emtfxml_frame(tfobj, r.get("n_periods") or 0)
+        if _fail:
+            print(f"  GATE FAIL {p.name} [rotation-frame]: {_fail}", file=sys.stderr)
+            if report is not None:
+                report.setdefault("stations_dropped", []).append(
+                    {"station": r["id"], "reason": f"[rotation-frame] {_fail}"})
+            continue
+        # C25 Gate 2 (sign convention) is format-agnostic -- it reads the SERVED components, so the
+        # EMTF-XML path runs the identical check the EDI path does. A coherent quadrant flip FAILs
+        # the station (never serve data under the wrong e^{+/-iwt} sense); one side out is a WARN.
+        _ck = conv.convention_check(comp)
+        if _ck["verdict"] == "fail":
+            print(f"  GATE FAIL {p.name} [sign-convention]: {_ck['detail']}", file=sys.stderr)
+            if report is not None:
+                report.setdefault("stations_dropped", []).append(
+                    {"station": r["id"], "reason": f"[sign-convention] {_ck['detail']}"})
+            continue
+        _frame["convention_check"] = _ck
+        r["frame"] = _frame
+        _fn = []
+        if _ck["verdict"] in ("warn_xy", "warn_yx", "insufficient"):
+            _fn.append(f"convention: {_ck['detail']}")
+        if _fn:
+            r["_frame_notes"] = _fn                    # keyed by FINAL id below (post-disambiguate)
+        stations.append((p, r))
+        tf_rows.append(tf)
+        sci_rows.append(srow)
+    _disambiguate(stations, slug)   # keep same-station re-processings as distinct variant records
+    # C25: hand the frame notes to the caller keyed by the FINAL (post-disambiguation) station id --
+    # the same key discipline process_edis uses.
+    for (_p, _r) in stations:
+        _notes = _r.pop("_frame_notes", None)
+        if _notes and report is not None:
+            report.setdefault("frame_notes", {})[_r["id"]] = _notes
+    return stations, tf_rows, sci_rows
+
+
 def load_portal_config(path) -> dict:
     """Read the portal's branding/version config (portal.config.yaml) for the MTCAT portal block, so a
     re-used portal (NZMT, CanadaMT, …) is configured in one place. Falls back to AusMT defaults when no
@@ -1740,8 +1918,14 @@ def _write_station_products(job, prov):
     """Render + write one station's --products station.json + dimensionality.json (C42 deferred so it
     runs AFTER the coordinate mask: `r` is the SHARED station record, masked in place at the single seam,
     so `location` carries the post-mask value every other emitter reads — no per-emitter mask logic).
-    `job` is the tuple captured in main()'s per-survey loop; `prov` is the build PROV block."""
-    (sdir, r, srow, label, org, meta, lic, slug, p, edi_served, conditioning_notes, served) = job
+    `job` is the tuple captured in main()'s per-survey loop; `prov` is the build PROV block.
+
+    `edi_rel` is the portal-relative path of the EDI this station ACTUALLY serves, or None when it
+    serves none. It is a path rather than a bool because the served EDI is not always named after the
+    input: an EMTF-XML-sourced station serves the normalize()-generated <station>.edi, while its
+    `input_file` provenance stays the submitted .xml it was built from."""
+    (sdir, r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served) = job
+    edi_served = edi_rel is not None
     sdir.mkdir(parents=True, exist_ok=True)
     # C1c: --products IS a served surface in deployment (deploy/Makefile writes products/ INSIDE the served
     # build dir; D1). So it rides the SAME C1 access gate as tf.json/sci.json: for a NON-SERVED survey
@@ -1793,7 +1977,7 @@ def _write_station_products(job, prov):
         # C42: edi_served folds in the per-station coordinate byte-gate — a non-exact station is NOT
         # distributed even inside a served survey, so its station.json must not advertise an EDI.
         "distribution": {"edi_available": edi_served, "license": lic,
-                         "edi_path": f"edi/{slug}/{p.name}" if edi_served else None},
+                         "edi_path": edi_rel},
         # provenance: input -> software/params -> output (traceable, per Egbert)
         "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p)},
         # coordinate QC: present only when the parse flagged something, so consumers can
@@ -2141,21 +2325,113 @@ def emit_canonical_store(stations, slug, cdir, survey_meta=None):
     return n_ok, n_fail, versions, notes
 
 
+def _derived_edi_filename(station_id, taken):
+    """The filename a GENERATED EDI is served under inside a survey's out/edi/<slug>/ directory.
+
+    That one directory carries TWO naming schemes at once: a custodian EDI keeps its own submitted
+    filename (it is the citable artifact, so it is copied byte for byte under the name it arrived
+    with), and an EMTF-XML-sourced station has no custodian file, so its generated EDI is named for
+    the station. The two schemes are NOT disjoint. An EDI's filename need not equal its DATAID -- the
+    build derives the station id from DATAID, not from the name -- so a custodian file called B.edi
+    can carry station A while station B arrives as EMTF XML and generates its own B.edi. Left
+    unhandled that is a silent swap, not a crash: one file on disk, two manifest rows naming it, both
+    sha256 columns verifying against the same bytes, and station B's advertised download handing back
+    station A's transfer function.
+
+    `taken` is the case-folded set of names already spoken for (custodian filenames first, then each
+    generated name as it is allocated); the served tree is read from case-insensitive filesystems too,
+    so the fold is part of the guarantee. The generated file steps aside rather than overwrite or be
+    overwritten. Deterministic: the suffix is a function of the survey's own input file set alone, so
+    the same package always produces the same served filename."""
+    cand = f"{station_id}.edi"
+    n = 0
+    while cand.lower() in taken:
+        n += 1
+        cand = f"{station_id}.generated.edi" if n == 1 else f"{station_id}.generated-{n}.edi"
+    return cand
+
+
+# mt_metadata's own "no date asserted" header value; it omits the INFO original_file.date line for it.
+_EDI_NULL_DATE = b"1980-01-01T00:00:00+00:00"
+_EDI_FILEDATE_RE = _re.compile(rb"(?m)^([ \t]*FILEDATE[ \t]*=[ \t]*).*$")
+_EDI_SOURCE_DATE_RES = (_re.compile(rb"(?m)^[ \t]*original_file\.date[ \t]*=[ \t]*(\S.*?)[ \t]*$"),
+                        _re.compile(rb"(?m)^[ \t]*provenance\.creation_time[ \t]*=[ \t]*(\S.*?)[ \t]*$"))
+
+
+def _reproducible_derived_edi(raw: bytes) -> bytes:
+    """The bytes a GENERATED EDI is SERVED as: mt_metadata's output with its one wall-clock field
+    carrying the date the source document declared instead of the minute this build ran.
+
+    The download manifest's reference states that the served EDI and the per-survey EDI zip are
+    byte-reproducible across builds, so their SHA-256 is a stable cross-build invariant, unlike the
+    EMTF XML and the MTH5 which embed timestamps and UUIDs. A custodian EDI satisfies that for free
+    because it is copied. A generated EDI is WRITTEN, and mt_metadata's header writer assigns
+    FILEDATE = now at write time with no knob to pass it (Header.write_header), so an untouched
+    generated file would publish a new digest for its station AND for its survey's whole EDI zip on
+    every rebuild of an unchanged package. That is the same class of build-clock leak the zip writers
+    already spend effort on (a pinned member timestamp) and _license_text avoids (no timestamp in the
+    instrument text), for the same reason: a citable download whose digest churns cannot be checked
+    against a previously published one.
+
+    The value stamped in is not invented. It is the filedate mt_metadata itself carried in from the
+    source, which it writes into the INFO block as original_file.date BEFORE the header writer
+    overwrites it, and which for an EMTF-XML source is that document's own CreateTime. So the served
+    file dates the transfer function it renders, and re-reading it yields the same
+    provenance.creation_time the source asserts rather than a build clock. Falls back to the INFO
+    provenance.creation_time, then to mt_metadata's null date (the value whose presence makes it drop
+    original_file.date altogether); every branch is a function of the source bytes alone.
+
+    Byte-level on purpose: this runs on a file the round-trip gate has already passed, so it must not
+    re-serialise anything. A file with no FILEDATE line is returned unchanged (nothing to pin)."""
+    src_date = None
+    for rx in _EDI_SOURCE_DATE_RES:
+        m = rx.search(raw)
+        if m:
+            src_date = m.group(1)
+            break
+    if src_date is None:
+        src_date = _EDI_NULL_DATE
+    return _EDI_FILEDATE_RE.sub(lambda mm: mm.group(1) + src_date, raw, count=1)
+
+
+def _claim_served_artifact(claims, collisions, served: Path, ausmt_id, fmt):
+    """Register ONE station's claim on ONE served file, and record a collision if the file was already
+    claimed. `claims` maps a resolved served path to the row that owns it; `collisions` collects the
+    contradictions for the build gate.
+
+    Two manifest rows describing the same bytes as two different stations' downloads is an integrity
+    contradiction that the sha256 columns cannot surface -- BOTH rows verify, because both really do
+    hash the file they name. The gate is the only place it can be caught, so it is a corpus-wide
+    invariant checked over every per-station artifact (EDI, EMTF XML and MTH5 alike) rather than a
+    guard bolted onto the one naming scheme that broke it."""
+    key = str(Path(served).resolve())
+    prev = claims.get(key)
+    if prev is not None:
+        collisions.append({"path": key, "first": prev,
+                           "second": {"ausmt_id": ausmt_id, "format": fmt}})
+        return
+    claims[key] = {"ausmt_id": ausmt_id, "format": fmt}
+
+
 def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, survey_digest="",
-                     coord_default="exact", coord_overrides=None):
+                     coord_default="exact", coord_overrides=None, derived_edi_dir=None,
+                     reserved_edi_names=()):
     """Write the canonical EMTF XML for each station into the PORTAL data dir (xmldir = out/xml/<slug>)
     so EMTF XML is a downloadable format alongside the bundled EDI. Same normalize() path + impedance
-    round-trip gate as the canonical store; a per-EDI failure is logged and SKIPPED (that station
-    simply has no XML download). Keyed by the station's FINAL r["id"] (post-disambiguation) so the XML
-    filename matches the manifest/catalogue id. `survey_meta` (the survey SMETA) sources an HONEST
-    citation (custodian org, not the portal brand). Engine-guarded by the caller (mt_metadata is a core
-    build dep). Returns (written, notes, stamped, failures): written={station_id: xml_path},
+    round-trip gate as the canonical store; a per-station failure is logged and SKIPPED, and what that
+    station still serves afterwards depends on its SOURCE format (see `derived_edi_dir` below and the
+    except arm, which is where that consequence is stated). Keyed by the station's FINAL r["id"]
+    (post-disambiguation) so the XML filename matches the manifest/catalogue id. `survey_meta` (the
+    survey SMETA) sources an HONEST citation (custodian org, not the portal brand). Engine-guarded by
+    the caller (mt_metadata is a core build dep). Returns (written, notes, stamped, failures,
+    derived_edis): written={station_id: xml_path},
     notes={station_id:[note,...]} for conditioned stations (rotation unknown / source-id preserved /
     citation provenance) — the caller persists notes into that station's station.json
-    (canonical_conditioning) and emits a NOTICE; failures={station_id: exception-class-name} for
-    every station whose XML emission RAISED (logged+skipped: served EDI-only, no XML download), so the
-    caller can surface the gap in build_report.json instead of it vanishing into a printed WARN, and
-    stamped={station_id: survey_digest} recording,
+    (canonical_conditioning) and emits a NOTICE; failures={station_id: exception-class-name} for every
+    station whose XML emission RAISED (logged and skipped), so the caller can surface the gap in
+    build_report.json instead of it vanishing into a printed WARN; derived_edis={station_id: generated-EDI
+    path} for the XML-sourced stations whose served EDI this call produced (empty unless
+    `derived_edi_dir` is given); and stamped={station_id: survey_digest} recording,
     per served station, the survey.yaml digest the served XML was KEYED/PRODUCED under (C18b,
     Amendment A3). On the FRESH path that is the digest this call was invoked with; on a cache HIT it is
     the digest carried in the entry's own meta blob (a stale entry surfaces its stale digest here). The
@@ -2167,12 +2443,30 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     verbatim to <xmldir>/<station>.xml (the exact bytes normalize() produced on the miss build) and
     returns the cached conditioning notes — skipping the round-trip entirely. The served XML a hit
     writes is byte-identical to what a fresh normalize() writes (the round-trip QC gate already ran on
-    the miss build that populated it); verify.py re-hashes these bytes cache-blind regardless."""
+    the miss build that populated it); verify.py re-hashes these bytes cache-blind regardless.
+
+    `derived_edi_dir` (the EMTF-XML ingest path, owner ruling 2026-08-03): normalize() always writes a
+    round-trip-verified derived EDI beside the canonical XML. For an EDI-sourced station that file is
+    redundant (the custodian's own EDI is served) and is deleted, exactly as before. For a station
+    whose SOURCE is an EMTF XML there is no custodian EDI, so (when this dir is given) the derived
+    EDI is KEPT and moved into <derived_edi_dir> under a name allocated by _derived_edi_filename, and
+    returned in `derived_edis`; that is the "generated EDI where mt_metadata supports the write" half
+    of serving the full product set from an XML-only station. `reserved_edi_names` is every custodian
+    EDI basename this survey could serve, so a generated file never lands on one (see
+    _derived_edi_filename for why that is a silent swap rather than a crash). The cache is BYPASSED for
+    those stations (a hit would restore the XML bytes but not the generated EDI, silently serving one
+    format instead of two), so the XML ingest path is always a fresh, gated normalize(), the same
+    posture the MTH5 input path takes."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415  (installed pkg; C37/F8)
     written = {}
     notes = {}
     stamped = {}   # C18b (A3): {station_id: survey_digest the served XML was keyed/produced under}
     failures = {}  # {station_id: exception-class-name} for stations whose XML emission RAISED (skipped)
+    derived_edis = {}  # {station_id: generated-EDI path} for XML-sourced stations (see derived_edi_dir)
+    # The served-EDI filename namespace for THIS survey: custodian basenames reserved up front, then
+    # each generated name as it is allocated. Case-folded (the served tree is read from
+    # case-insensitive filesystems too).
+    _taken_edi_names = {str(_n).lower() for _n in (reserved_edi_names or ())}
     _use_cache = cache is not None and getattr(cache, "enabled", False)
     for (p, r) in stations:
         # C42 byte gate: a non-exact (generalised/withheld) station's EMTF-XML — a full elevation +
@@ -2188,8 +2482,13 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
         # disambiguated id depends on the survey's EDI SET (two EDIs sharing a DATAID -> X.a / X.b),
         # which is NOT captured by the survey.yaml digest, so BIND r["id"] into the key namespace.
         # Otherwise removing a colliding sibling EDI could serve a hit whose internal id is stale.
+        # A station whose source is NOT an EDI must ALSO emit a generated EDI (derived_edi_dir), and
+        # the cache carries only the XML blob + meta, so bypass it there rather than serve a
+        # half-product set off a hit. EDI-sourced stations keep the C18 behaviour byte-for-byte.
+        _src_is_edi = Path(p).suffix.lower() == ".edi"
+        _keep_derived = (derived_edi_dir is not None) and not _src_is_edi
         _ck = cache.key(edi_sha=sha256(p), survey_digest=survey_digest,
-                        kind=f"xml:{r['id']}") if _use_cache else None
+                        kind=f"xml:{r['id']}") if (_use_cache and not _keep_derived) else None
         if _ck:
             _cached_xml = cache.get_bytes(_ck, "xml")
             if _cached_xml is not None:
@@ -2225,12 +2524,34 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
             if res.conditioned:
                 notes[r["id"]] = res.conditioned
                 # per-station NOTICE retired -> survey-level aggregation in main() (aggregate_conditioning).
-            # normalize() also writes a round-trip derived .edi beside the .xml; we only serve the
-            # canonical XML here, so drop the derived EDI to keep out/xml/ to manifested artifacts.
-            try:
-                Path(res.derived_edi).unlink(missing_ok=True)
-            except OSError:
-                pass
+            # normalize() also writes a round-trip derived .edi beside the .xml. For an EDI-sourced
+            # station the custodian's own EDI is what gets served, so the derived copy is dropped to
+            # keep out/xml/ to manifested artifacts. For an EMTF-XML-sourced station it IS the served
+            # EDI (there is no custodian EDI), so it is moved into the survey's edi/ dir instead.
+            if _keep_derived:
+                try:
+                    # Named against the survey's WHOLE served-EDI namespace, custodian filenames
+                    # included, so a generated file can never overwrite (or be overwritten by) the
+                    # custodian bytes of a different station -- see _derived_edi_filename.
+                    _dname = _derived_edi_filename(r["id"], _taken_edi_names)
+                    _taken_edi_names.add(_dname.lower())
+                    _dest = Path(derived_edi_dir) / _dname
+                    _dest.parent.mkdir(parents=True, exist_ok=True)
+                    # Served through _reproducible_derived_edi: mt_metadata stamps FILEDATE with the
+                    # write-time clock, and a served EDI (and the survey EDI zip it lands in) is
+                    # documented as byte-reproducible across builds.
+                    _dest.write_bytes(_reproducible_derived_edi(Path(res.derived_edi).read_bytes()))
+                    Path(res.derived_edi).unlink(missing_ok=True)
+                    derived_edis[r["id"]] = _dest
+                except OSError as _de:
+                    # The XML still serves; only the generated-EDI convenience rendition is missing.
+                    print(f"  [edi] WARN {p.name}: generated EDI not written ({type(_de).__name__}: "
+                          f"{str(_de)[:80]}); this station serves EMTF XML only", file=sys.stderr)
+            else:
+                try:
+                    Path(res.derived_edi).unlink(missing_ok=True)
+                except OSError:
+                    pass
             if _ck:   # populate the cache with the EXACT served bytes + notes for the next warm build.
                 # C18b (A3): the meta blob carries survey_digest (the digest this entry was keyed under)
                 # so a future cache HIT can propagate it to the sidecar — surfacing a stale entry's
@@ -2241,10 +2562,32 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
         except Exception as ex:  # noqa: BLE001
             # Record the failure (station id + exception class) so the caller can COUNT it into
             # build_report.json; a per-station XML gap must never again be invisible in a green build,
-            # only a printed WARN. The station still serves its EDI; it just has no XML download.
+            # only a printed WARN. What the station still serves depends on its SOURCE (see the
+            # _keep_derived branch below), so this arm states no consequence of its own.
             failures[r["id"]] = type(ex).__name__
             print(f"  [xml] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
-    return written, notes, stamped, failures
+            # normalize() writes the canonical XML and the derived EDI BEFORE its round-trip gate
+            # runs, so a gate FAILURE leaves both of them sitting in xmldir -- inside the served data
+            # tree, which the file server hands out by path with no manifest row required to reach it
+            # (deploy's Caddyfile serves the whole tree, and api-reference documents
+            # /data/xml/<slug>/<station>.xml as the public URL). An unverified rendition must not be
+            # fetchable at the URL this build reports as NOT served, so remove both. Best effort: a
+            # file that will not delete is named loudly rather than left silently reachable.
+            for _stale in (xml_target, Path(xmldir) / f"{r['id']}.edi"):
+                try:
+                    _stale.unlink(missing_ok=True)
+                except OSError as _ue:
+                    print(f"  [xml] WARN {r['id']}: could NOT remove the unverified {_stale.name} "
+                          f"({type(_ue).__name__}); it is unmanifested but still on disk",
+                          file=sys.stderr)
+            if _keep_derived:
+                # An XML-sourced station whose canonical emission RAISED (the round-trip gate, or a
+                # write mt_metadata refuses) has NO custodian EDI to fall back on, so it serves NO
+                # bytes at all. Say so loudly here as well as in build_report's xml_failures: the
+                # EDI-sourced wording ("served as EDI-only") would be false for this station.
+                print(f"  [xml] {r['id']}: EMTF-XML-sourced station FAILED the canonical round-trip "
+                      f"gate; NO bytes are served for it (no XML, no generated EDI).", file=sys.stderr)
+    return written, notes, stamped, failures, derived_edis
 
 
 def _emit_survey_edi_zip(served_edis, slug, out, license_txt=None):
@@ -2848,13 +3191,28 @@ def discover_work(a, ap, validator):
             edis = sorted((d / "transfer_functions" / "edi").glob("*.edi"))
             mh = sorted((d / "transfer_functions" / "mth5").glob("*.h5")) \
                 + sorted((d / "transfer_functions" / "mth5").glob("*.mth5"))
+            # EMTF XML is a FIRST-CLASS submission input (owner ruling 2026-08-03), alongside EDI and
+            # MTH5. transfer_functions/emtfxml/ in a SUBMITTED package is therefore an ingest folder;
+            # the build's own canonical re-emission still lands in the served tree (out/xml/<slug>/),
+            # never back into the package, so the two never collide.
+            xmls = sorted((d / "transfer_functions" / "emtfxml").glob("*.xml"))
             fmt = a.input_format
             if fmt == "edi":
                 inputs, kind = edis, "edi"
             elif fmt == "mth5":
                 inputs, kind = mh, "mth5"
-            else:  # auto: EDI if present, otherwise MTH5
-                inputs, kind = (edis, "edi") if edis else ((mh, "mth5") if mh else (edis, "edi"))
+            elif fmt == "emtfxml":
+                inputs, kind = xmls, "emtfxml"
+            # auto: the file-based TF inputs (EDI and/or EMTF XML) together, otherwise MTH5. EDI+XML
+            # are ingested as ONE set because precedence is PER STATION (the ruling: a station present
+            # in edi/ wins; its same-station XML stays in the package as an untouched artifact and is
+            # not ingested). main() applies that precedence after the parse, where the real station ids
+            # exist. `kind` names the PRIMARY file format so the pre-parse dispatch below stays a
+            # two-way choice; the honest per-station source is recorded from each input's own suffix.
+            elif edis or xmls:
+                inputs, kind = edis + xmls, ("edi" if edis else "emtfxml")
+            else:
+                inputs, kind = ((mh, "mth5") if mh else (edis, "edi"))
             # Use the extracted org NAME (string), never the raw `organisation` mapping — under the
             # structured schema that mapping would otherwise land in station.json as a dict.
             smeta = survey_meta_from_yaml(y)
@@ -2901,7 +3259,8 @@ def discover_work(a, ap, validator):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--surveys", help="root of survey packages (<slug>/survey.yaml + transfer_functions/edi/)")
+    ap.add_argument("--surveys", help="root of survey packages (<slug>/survey.yaml + "
+                                      "transfer_functions/{edi,emtfxml,mth5}/)")
     ap.add_argument("--raw", help="root of raw EDI folders (bulk seed mode)")
     ap.add_argument("--collections", help="JSON {folder:[survey_label,org]} for --raw mode")
     ap.add_argument("--seed-meta", help="JSON of survey metadata (SMETA) for --raw mode -> surveys.json")
@@ -2926,9 +3285,11 @@ def main(argv=None):
                          "dependency-free regex extractor was retired (see "
                          "the 2026-06 regex-parser retirement). Kept as an explicit flag so "
                          "provenance records the engine and call sites stay stable.")
-    ap.add_argument("--input-format", choices=["auto", "edi", "mth5"], default="auto",
-                    help="transfer-function input for --surveys packages: 'edi', 'mth5', or 'auto' "
-                         "(EDI if present in a package, otherwise MTH5). One science seam for both.")
+    ap.add_argument("--input-format", choices=["auto", "edi", "mth5", "emtfxml"], default="auto",
+                    help="transfer-function input for --surveys packages: 'edi', 'mth5', 'emtfxml', "
+                         "or 'auto' (the file-based inputs EDI+EMTF XML together where either is "
+                         "present, otherwise MTH5). One science seam for all three. Under 'auto' a "
+                         "station present in edi/ wins over a same-station file in emtfxml/.")
     ap.add_argument("--portal-config", default=None,
                     help="path to portal.config.yaml — sets the MTCAT portal_id/name (for re-used portals). "
                          "Defaults to AusMT when omitted.")
@@ -3094,6 +3455,12 @@ def main(argv=None):
 
     # === per-survey processing: extract + science + per-station products ===
     available_ids = set()
+    # ONE served file, ONE owning manifest row. {resolved served path: {ausmt_id, format}} plus the
+    # contradictions found, gated hard after the loop (see _claim_served_artifact): two rows over the
+    # same bytes is the one integrity failure the manifest's own sha256 column cannot expose, because
+    # both rows hash the file they name and both verify.
+    _artifact_claims: dict = {}
+    _artifact_collisions: list = []
     # C42: --products station.json carries a `location` (r[lat/lon]) and IS a served surface in
     # deployment (deploy/Makefile writes products/ INSIDE the served build dir; D1/D3). Its coordinates
     # must therefore be the POST-MASK values from the single seam — but the mask runs after the corpus-
@@ -3147,9 +3514,26 @@ def main(argv=None):
         if kind == "mth5":
             stations, tf_rows, sci_rows = process_mth5(inputs, label, org, slug)   # MTH5 path not cached
         else:
-            stations, tf_rows, sci_rows = process_edis(inputs, label, org, slug, a.extractor,
+            # The file-based TF inputs, split by their OWN suffix -- the single derivation of a
+            # station's ingest source in this build (never a second guess from `kind`).
+            _edi_in = [_p for _p in inputs if Path(_p).suffix.lower() == ".edi"]
+            _xml_in = [_p for _p in inputs if Path(_p).suffix.lower() == ".xml"]
+            stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
-                                                       report=_gate_report)
+                                                       report=_gate_report) \
+                if _edi_in else ([], [], [])
+            if _xml_in:
+                # OWNER PRECEDENCE RULING (2026-08-03): EDI wins per station. The exclusion set is the
+                # BASE station ids the EDI pass produced (a disambiguated variant A.lemi still occupies
+                # station A), computed with the SAME shared matcher the coordinate policy uses, so the
+                # precedence key and the policy key cannot diverge.
+                _edi_base = {coordacc.base_station_id(_r.get("id"), _r.get("variant"))
+                             for (_p, _r) in stations}
+                _xs, _xt, _xsci = process_emtfxml(_xml_in, label, org, slug,
+                                                  exclude_ids=_edi_base, report=_gate_report)
+                stations += _xs
+                tf_rows += _xt
+                sci_rows += _xsci
         for _d in _gate_report.get("stations_dropped", []):
             _survey_warnings.append(f"station {_d['station']} SKIPPED by convention gate: {_d['reason']}")
         if not stations:
@@ -3182,7 +3566,10 @@ def main(argv=None):
         # the conditioning is persisted even for surveys whose bytes are withheld (no served XML). The
         # canonical store's provenance.json also records this per-station map (not just counts).
         conditioning_notes: dict = {}
-        if cdir is not None and kind == "edi":
+        # The canonical store runs over every FILE-based TF input (EDI and EMTF XML alike): normalize()
+        # reads both into the same TF object and applies the same round-trip gate. `kind != "mth5"` is
+        # the same set `kind == "edi"` selected before EMTF XML became an ingest format.
+        if cdir is not None and kind != "mth5":
             n_ok, n_fail, _cver, _cnotes = emit_canonical_store(stations, slug, cdir, survey_meta=meta)
             canonical_ok += n_ok
             canonical_fail += n_fail
@@ -3227,7 +3614,13 @@ def main(argv=None):
             }
             dropped_surveys.append((label, len(inputs), f"metadata not JSON-serializable ({_smeta_exc})"))
             continue
-        input_formats.add(kind)
+        # The ingest source PER STATION, derived from the input file this record was actually parsed
+        # from: the one derivation in the build (never re-guessed from `kind`, which names only the
+        # survey's primary format and would mislabel a mixed EDI+EMTF-XML survey). Feeds both the
+        # build_provenance input_formats set and build_report's per-station ingest_sources.
+        _ingest_sources = {r["id"]: _INGEST_SOURCE_BY_SUFFIX.get(Path(p).suffix.lower(), "unknown")
+                           for (p, r) in stations}
+        input_formats.update(_ingest_sources.values())
         all_stations += stations; all_tf += tf_rows; all_sci += sci_rows
         surveys_meta[label] = smeta_entry
         lic = (meta or {}).get("lic", "unknown")
@@ -3263,10 +3656,14 @@ def main(argv=None):
         # a NON-OPEN ACCESS state (embargoed/metadata_only/unrecognised) withholds the derived display data.
         if not _acc["served"]:
             withheld_ids.update(r["ausmt_id"] for (_p, r) in stations)
-        can_serve = a.bundle_edi and redistributable(lic) and kind == "edi" and _acc["served"]  # only EDI is byte-copied
+        # Only the FILE-based TF inputs are byte-copied. `kind != "mth5"` is the same set `kind ==
+        # "edi"` selected before EMTF XML became an ingest format; it now also admits the XML path,
+        # whose served EDI is normalize()-generated rather than copied (see _derived_edis below).
+        can_serve = a.bundle_edi and redistributable(lic) and kind != "mth5" and _acc["served"]
         xml_written = {}
         h5_written = {}      # tier 1: {station_id: h5_path} for the per-station MTH5 (flag-gated)
         _xml_failures = {}   # {station_id: exception-class} per-station EMTF-XML emission failures (report)
+        _derived_edis = {}   # {station_id: generated-EDI path} for EMTF-XML-sourced stations
         # Per-survey EDI dir, NAMESPACED by slug (like out/xml/<slug>/ and out/bundles/) so two surveys
         # that reuse an EDI basename (e.g. both ship 01.edi) cannot overwrite each other in a flat tree —
         # which would also corrupt the path-keyed sha256 cache. ausmt_id is unique but basenames are not.
@@ -3275,10 +3672,17 @@ def main(argv=None):
             sedir.mkdir(parents=True, exist_ok=True)
             # Derived EMTF XML is the SAME redistribution as the EDI (same TF data), so it rides the
             # same license gate; served into out/xml/<slug>/ as a downloadable format.
-            xml_written, _xnotes, _xstamped, _xml_failures = _emit_served_xml(
+            # Every custodian EDI basename this survey could serve, reserved BEFORE a single generated
+            # EDI is named, so a generated file cannot land on one. Reserved unconditionally, including
+            # for stations the coordinate gate will withhold: a generated filename must not depend on
+            # access policy, or editing an override would silently rename a published download.
+            _reserved_edi_names = {Path(_p).name for (_p, _r) in stations
+                                   if Path(_p).suffix.lower() == ".edi"}
+            xml_written, _xnotes, _xstamped, _xml_failures, _derived_edis = _emit_served_xml(
                 stations, slug, out / "xml" / slug, survey_meta=meta,
                 cache=build_cache, survey_digest=_survey_digest,
-                coord_default=_coord_default, coord_overrides=_coord_overrides)
+                coord_default=_coord_default, coord_overrides=_coord_overrides,
+                derived_edi_dir=sedir, reserved_edi_names=_reserved_edi_names)
             # If the canonical-store pass did not run (no --canonical-dir) these are the only notes; merge
             # (both passes agree, so update is idempotent) so station.json carries conditioning either way.
             for _sid, _nl in _xnotes.items():
@@ -3331,17 +3735,39 @@ def main(argv=None):
             # zips + manifest all build from these copy/emit sites).
             _cserved = coordacc.coordinates_served(
                 coordacc.station_policy(_coord_default, _coord_overrides, r.get("id"), r.get("variant")))
+            # Where THIS station's served EDI comes from depends on its OWN source format:
+            #  - EDI source: the custodian's file, copied byte-for-byte (it is the citable record).
+            #  - EMTF-XML source: no custodian EDI exists, so the served EDI is the one normalize()
+            #    generated and round-trip verified while writing the canonical XML. A station whose
+            #    canonical emission FAILED has neither (the failure is already recorded in
+            #    build_report's xml_failures), so it serves NO bytes, never a quietly-unverified
+            #    copy of the submitted XML under an .edi name.
+            served_edi = None
             if can_serve and _cserved:
-                served_edi = sedir / p.name
-                served_edi.write_bytes(p.read_bytes())
+                if Path(p).suffix.lower() == ".edi":
+                    served_edi = sedir / p.name
+                    served_edi.write_bytes(p.read_bytes())
+                else:
+                    _gen = _derived_edis.get(r["id"])
+                    served_edi = Path(_gen) if (_gen and Path(_gen).exists()) else None
+            if served_edi is not None:
                 available_ids.add(r["ausmt_id"])
                 served_edis.append(served_edi)
+                # One file, one owner (see _claim_served_artifact): the served-EDI directory is the
+                # one place two naming schemes meet, but the invariant is checked over every
+                # per-station artifact so no future emitter can reintroduce the class.
+                _claim_served_artifact(_artifact_claims, _artifact_collisions,
+                                       served_edi, r["ausmt_id"], "edi")
                 manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "edi",
-                                                    served_edi, f"edi/{slug}/{p.name}", lic,
+                                                    served_edi,
+                                                    f"edi/{slug}/{served_edi.name}", lic,
                                                     nci_base=nci_base, base_url=base_url,
                                                     custodian=_custodian))
+            if can_serve and _cserved:
                 _xmlp = xml_written.get(r["id"])
                 if _xmlp and Path(_xmlp).exists():
+                    _claim_served_artifact(_artifact_claims, _artifact_collisions,
+                                           Path(_xmlp), r["ausmt_id"], "emtfxml")
                     manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "emtfxml",
                                                         Path(_xmlp), f"xml/{slug}/{Path(_xmlp).name}",
                                                         lic, nci_base=nci_base, base_url=base_url,
@@ -3351,6 +3777,8 @@ def main(argv=None):
                 # advertised as a 404 (the same rule the EMTF-XML row above follows).
                 _h5p = h5_written.get(r["id"])
                 if _h5p and Path(_h5p).exists():
+                    _claim_served_artifact(_artifact_claims, _artifact_collisions,
+                                           Path(_h5p), r["ausmt_id"], "mth5")
                     manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "mth5",
                                                         Path(_h5p), f"h5/{slug}/{Path(_h5p).name}",
                                                         lic, nci_base=nci_base, base_url=base_url,
@@ -3365,9 +3793,13 @@ def main(argv=None):
                 # C1c: the SURVEY access-serve state (_acc["served"], the SAME result the byte gate and the
                 # C1b tf/sci withholding use — never re-derived) is captured so the deferred emitter withholds
                 # the derived science products for a non-served survey, exactly as tf.json/sci.json are.
+                # edi_served is the ACTUAL served-EDI outcome for this station, not the gate alone:
+                # an EMTF-XML-sourced station whose canonical emission failed passes both gates yet
+                # has no EDI to advertise, and station.json's distribution must not claim one.
                 _station_product_jobs.append(
                     (prod / slug / r["id"], r, srow, label, org, meta, lic, slug, p,
-                     bool(can_serve and _cserved), conditioning_notes, bool(_acc["served"])))
+                     (f"edi/{slug}/{served_edi.name}" if served_edi is not None else None),
+                     conditioning_notes, bool(_acc["served"])))
         # ---- per-survey bundles (served surveys only): pre-zipped EDIs + optional survey MTH5 ----
         if can_serve and served_edis:
             # C6: rights travel with the bytes — build a deterministic LICENSE.txt for the zip. Licensor =
@@ -3448,9 +3880,10 @@ def main(argv=None):
             if _fe["note"].startswith("convention:") and "outside its expected quadrant" in _fe["note"]:
                 _survey_warnings.append(f"{_fe['note']} — {_fe['count']} station(s): "
                                         f"{_fe['stations'] or _fe['except'] or _fe['count']}")
-        # Per-station EMTF-XML emission failures: served as EDI-only, no XML download. A structured
-        # xml_failures list (station + exception class) PLUS a counted survey warning, so an otherwise
-        # green build can never hide this class of gap (the 8-survey/~380-station regression that shipped
+        # Per-station EMTF-XML emission failures. What such a station still serves depends on its ingest
+        # source, so that is stated once where it is computed (see _consequence below) rather than here.
+        # A structured xml_failures list (station + exception class) PLUS a counted survey warning, so an
+        # otherwise green build can never hide this class of gap (the 8-survey/~380-station regression that shipped
         # 1182 EDI rows but only 732 EMTF-XML rows, invisible behind a printed '[xml] WARN'). Aggregated
         # by exception class for the warning; the full station->class map rides the xml_failures field.
         _xml_fail_rows = [{"station": _sid, "error": _cls} for _sid, _cls in sorted(_xml_failures.items())]
@@ -3459,8 +3892,19 @@ def main(argv=None):
             for _row in _xml_fail_rows:
                 _fail_by_cls.setdefault(_row["error"], []).append(_row["station"])
             _cls_summary = ", ".join(f"{_c} x{len(_ids)}" for _c, _ids in sorted(_fail_by_cls.items()))
+            # The CONSEQUENCE differs by ingest source, so the warning must not state one for both: an
+            # EDI-sourced station falls back to serving its custodian EDI, but an EMTF-XML-sourced one
+            # has no EDI behind it and serves NOTHING. Saying "served as EDI-only" for the latter would
+            # advertise a file that does not exist.
+            _fail_xml_src = [_row["station"] for _row in _xml_fail_rows
+                             if _ingest_sources.get(_row["station"]) == "emtfxml"]
+            _consequence = "served as EDI-only (no XML download)"
+            if _fail_xml_src:
+                _consequence = (f"{len(_xml_fail_rows) - len(_fail_xml_src)} served as EDI-only; "
+                                f"{len(_fail_xml_src)} were EMTF-XML-sourced and serve NO bytes at all "
+                                f"({', '.join(_fail_xml_src)})")
             _survey_warnings.append(f"EMTF-XML emission failed for {len(_xml_fail_rows)} station(s) "
-                                    f"[{_cls_summary}]; served as EDI-only (no XML download)")
+                                    f"[{_cls_summary}]; {_consequence}")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
             # C25: convention-gate skips are STRUCTURED drops ({station, reason}); the legacy
@@ -3469,6 +3913,10 @@ def main(argv=None):
             "warnings": list(_survey_warnings),
             # Per-station EMTF-XML emission failures (empty when every served station's XML emitted).
             "xml_failures": _xml_fail_rows,
+            # The INGEST SOURCE per station (owner ruling 2026-08-03): {station_id: edi|mth5|emtfxml}.
+            # A provenance fact, not a summary: for a mixed survey it is the only place that says
+            # which stations the EDI precedence rule resolved to EDI and which came from EMTF XML.
+            "ingest_sources": dict(sorted(_ingest_sources.items())),
             # Same shared aggregation as the log lines above: [{note,count,stations|null,except|null}].
             "conditioning": conditioning_report(conditioning_notes),
             # C25: frame/convention notes, same aggregation shape as `conditioning`.
@@ -3530,6 +3978,20 @@ def main(argv=None):
         for d in qc["duplicate_ausmt_ids"]:
             print(f"  {d['ausmt_id']}: {d['files'][0]} <-> {d['files'][1]}", file=sys.stderr)
         print("Fix the colliding station ids (or survey slugs) and re-run.", file=sys.stderr)
+        return 2
+    # A served file claimed by two manifest rows is the same class of failure and is equally HARD:
+    # the download contract says a row's sha256 is the integrity of THAT station's artifact, and a
+    # shared file makes both rows verify while one station serves the other's transfer function. The
+    # sha256 columns cannot catch it, so the build refuses to publish rather than emit it.
+    if _artifact_collisions:
+        print(f"ERROR: {len(_artifact_collisions)} served artifact(s) claimed by more than one manifest "
+              f"row: one file cannot be two stations' download (both rows would carry the same, "
+              f"VERIFYING sha256 while one station serves the other's transfer function). Offenders:",
+              file=sys.stderr)
+        for _col in _artifact_collisions:
+            print(f"  {_col['path']}: {_col['first']['ausmt_id']} ({_col['first']['format']}) <-> "
+                  f"{_col['second']['ausmt_id']} ({_col['second']['format']})", file=sys.stderr)
+        print("Fix the colliding served filenames and re-run.", file=sys.stderr)
         return 2
 
     # ---- portal projection (compact arrays the portal reads); r[13]=edi_available, r[14]=sha256 ----

@@ -43,11 +43,16 @@ and inversion workflows expect.
 giving a structured representation of transfer functions, processing metadata, station
 information and error estimates.
 
-> **Implementation status (current).** EMTF XML is **not an ingest format**. AusMT's build
-> discovers input transfer functions from `transfer_functions/edi/` and from MTH5, then writes
-> a faithful EMTF-XML rendering alongside them as the canonical served output. Accepting EMTF
-> XML directly as an ingest format, bypassing the EDI round trip, is planned and not
-> implemented. This is the one place that statement is made; other pages link here.
+> **Implementation status (current).** EMTF XML is **an ingest format as well as an output
+> format**. AusMT's build discovers input transfer functions from `transfer_functions/edi/`,
+> `transfer_functions/emtfxml/` and MTH5, and writes a faithful EMTF-XML rendering of every
+> served station as the canonical served output. A station submitted only as EMTF XML gets the
+> same product set as one submitted as an EDI, including an EDI generated from the same transfer
+> function. Where a station arrives in both formats the EDI is the canonical source and the
+> submitted XML is not ingested. Ingest is gated: the canonical rendering must round-trip
+> (impedance, tipper and their error estimates preserved) or that station serves nothing and the
+> failure is recorded in `build_report.json`. This is the one place that statement is made;
+> other pages link here.
 
 **MTH5** is an HDF5-based container able to hold time series, transfer functions, metadata and
 provenance in a single self-describing file (Peacock et al., 2022). AusMT accepts it as input
