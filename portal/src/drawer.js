@@ -337,10 +337,12 @@ function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
 // stand-in for a survey's dataset DOI (see tsUrlFor's caller sites vs. fetchEdi/exports.js source-citation).
 function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
-// The served MTH5 bundle for a survey (the per-survey <slug>-tf.h5 the Downloads grid + Files tab use).
-// SINGLE SOURCE of MTH5 presence: the format-availability badge and the provenance lineage line derive
-// MTH5 from THIS (not the stale SMETA.mth5, which the engine always emits as "unk"), so all three agree
-// with the Downloads tile (19/21 surveys live). Guarded like the other bundlesForSlug callers.
+// The served MTH5 bundle for a SURVEY (the per-survey <slug>-tf.h5 the survey drawer's Downloads grid
+// offers). SURVEY-SCOPED presence: the format-availability badge and the provenance lineage line derive
+// MTH5 from THIS (not the stale SMETA.mth5, which the engine always emits as "unk"), so they agree with
+// the Downloads tile (19/21 surveys live). The station Files tab does NOT read this: a station's MTH5 row
+// is that station's OWN manifest files[] row (see relatedProducts). Guarded like the other
+// bundlesForSlug callers.
 function mth5BundleFor(m){return (typeof bundlesForSlug==="function"?bundlesForSlug(m&&m.slug):[]).find(r=>r&&r.format==="mth5");}
 // api-docs lane: a manifest artifact url rendered as the ENDPOINT a reader can GET. A tier=repo row
 // carries a portal-relative path ("edi/<slug>/<file>.edi") which the hosted site serves under /data/;
@@ -397,15 +399,23 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     // them), so the old "via pipeline / served for redistributable surveys" toast was FALSE. Show the same
     // honest inert not-available sub-line the MTH5 row uses, with no toast overclaim.
     : {n:"EMTF XML",sub:"not currently available",origin:"AusMT-derived",st:"unk",d:null};
-  // C32 tier 2: the Level 2 MTH5 sub-row LIGHTS from the actual per-survey <slug>-tf.h5 bundle in the
-  // manifest (the same rows the Downloads grid uses), NOT a static SMETA flag — so it is true to what the
-  // build served. An embargoed/withheld survey produces NO bundle (the h5 is suppressed byte-for-byte like
-  // the EDI), so the row falls back to the honest not-available state. Download is wired exactly like the
-  // EMTF XML row ({prod:"fetch"}), so the pull is counted by the same masked front-door analytics. The
-  // label stays TF-only honest ("transfer functions").
-  const mth5Bundle=mth5BundleFor(m);
-  const mth5Sub=mth5Bundle
-    ? {n:"MTH5",sub:"Transfer functions only · Download"+(mth5Bundle.size?" · "+fmtBytes(mth5Bundle.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5Bundle.url,name:mth5Bundle.url.split("/").pop()}}
+  // The Level 2 MTH5 sub-row is THIS STATION's own transfer-function h5: the manifest files[] row with
+  // format mth5 (the h5/<slug>/<station>.h5 family), read from the very same `arts` rows the EDI and
+  // EMTF XML sub-rows beside it read. It used to read mth5BundleFor(m), the SURVEY-aggregated
+  // <slug>-tf.h5 bundles[] row, which was true only while that bundle was the sole MTH5 the build
+  // produced; once the per-station producer landed (build_portal emit_station_mth5) every station's
+  // Files tab started offering the WHOLE SURVEY under a station heading (owner report 2026-08-04:
+  // SA026E showed the 1.74 MB survey bundle in place of its own 174,696 B file).
+  // There is deliberately NO fallback to the bundle. A station with no row of its own gets none: the
+  // engine emits no station h5 for a coordinate-generalised or withheld station, exactly as it serves no
+  // EDI for one, so the honest not-available state the EMTF XML row uses is the truthful answer and the
+  // survey bundle is not a substitute for it. That bundle keeps the surface it belongs to, the survey
+  // drawer's Downloads grid (surveyBundleTiles). Download is wired exactly like the EMTF XML row
+  // ({prod:"fetch"}), so the pull is counted by the same masked front-door analytics, and the label
+  // stays TF-only honest ("transfer functions").
+  const mth5=arts.find(a=>a.format==="mth5");
+  const mth5Sub=mth5
+    ? {n:"MTH5",sub:"Transfer functions only · Download"+(mth5.size?" · "+fmtBytes(mth5.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5.url,name:mth5.url.split("/").pop()}}
     : {n:"MTH5",sub:"Transfer functions only · not currently available",origin:"AusMT-derived",st:"unk",d:null};
   const level2Subs=[ediSub,xmlSub,mth5Sub];
   // Publication (interpretation) — the parenthetical separates the dataset citation from an interpretation

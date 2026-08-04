@@ -3007,6 +3007,74 @@ async function bootFreshWindow(dataMap, url) {
   gdRow.click(); A.closeDrawer();
   A.setType("A1", "BBMT"); A.setView("map"); A.refresh();   // restore the all-BBMT baseline
 
+  // ---- STATION MTH5 IS THE STATION'S OWN FILE (owner report 2026-08-04) ---------------------------
+  // The Files tab's Level 2 list belongs to ONE STATION. Its EDI and EMTF XML rows have always read that
+  // station's own manifest files[] row; the MTH5 row read the SURVEY's bundles[] row instead, because it
+  // was written when the survey-aggregated <slug>-tf.h5 was the only MTH5 the build produced. Once the
+  // per-station producer landed (h5/<slug>/<station>.h5, one files[] row each) that row started offering
+  // the WHOLE SURVEY under a station heading: live, SA026E showed the 1.74 MB survey bundle in place of
+  // its own 174,696 B file.
+  //
+  // The fixture is the shape that makes the confusion possible, and it is the shape the served manifest
+  // actually has: the per-station mth5 files[] row AND the survey-level mth5 bundles[] row, together.
+  const H5_STATION_URL = "h5/gamma/G1.h5", H5_BUNDLE_URL = "bundles/gamma-tf.h5";
+  // The Level 2 rows are `<div class="prod" …>{dot}<div>NAME {chip}<small>sub</small></div></div>`, so the
+  // row NAME is the inner div's leading text node, matched exactly, never by a substring of the whole row.
+  const prodNamed = (panel, name) => [...panel.querySelectorAll(".prod")].find(d => {
+    const body = d.querySelector("div");
+    return body && body.firstChild && body.firstChild.nodeType === 3 && body.firstChild.textContent.trim() === name;
+  });
+  A.setManifest({
+    files: [
+      { ausmt_id: "nz.gamma.G1", format: "edi", url: "edi/gamma/x.edi", size: 1000 },
+      { ausmt_id: "nz.gamma.G1", format: "emtfxml", url: "xml/gamma/G1.xml", size: 900 },
+      { ausmt_id: "nz.gamma.G1", format: "mth5", url: H5_STATION_URL, size: 174696 },
+    ],
+    bundles: [{ survey: "Gamma Survey", slug: "gamma", format: "mth5", url: H5_BUNDLE_URL, size: 1824522 }],
+  });
+  A.openStationById("nz.gamma.G1");
+  const h5Files = doc.getElementById("dp-files");
+  const h5Row = prodNamed(h5Files, "MTH5");
+  ok(h5Row, "STATION-H5: the Files tab must carry an MTH5 row when the station has its own served h5");
+  ok(h5Row.getAttribute("data-url") === H5_STATION_URL,
+    "STATION-H5: the MTH5 row must link the STATION's own files[] row (" + H5_STATION_URL + "), got " +
+    JSON.stringify(h5Row.getAttribute("data-url")) + " (the survey bundle is not this station's file)");
+  ok(h5Row.getAttribute("data-name") === "G1.h5",
+    "STATION-H5: the download name must be the station file's, got " + JSON.stringify(h5Row.getAttribute("data-name")));
+  ok(h5Row.getAttribute("data-prod") === "fetch",
+    "STATION-H5: the row must download through the same masked front-door fetch the EMTF XML row uses");
+  // Size comes from the STATION's manifest row: 174,696 B renders "171 KB". The bundle's 1.7 MB is the
+  // live symptom the owner reported and must appear nowhere on the row.
+  ok(/171 KB/.test(h5Row.textContent) && h5Row.textContent.indexOf("1.7 MB") < 0,
+    "STATION-H5: the size must be the STATION row's (171 KB), not the survey bundle's (1.7 MB), got " +
+    JSON.stringify(h5Row.textContent.trim()));
+  ok(/AusMT-derived/.test(h5Row.textContent) && /Transfer functions only/.test(h5Row.textContent),
+    "STATION-H5: the row keeps its AusMT-derived origin chip and its TF-only wording");
+  ok(h5Files.innerHTML.indexOf(H5_BUNDLE_URL) < 0,
+    "STATION-H5: the survey-level bundle URL must NEVER render inside a station's Files list, found it in " +
+    h5Files.innerHTML.slice(0, 400));
+  // Honest absence: a station with no per-station row of its own (the engine emits none for a
+  // coordinate-generalised or withheld station) says so. It must never borrow the survey bundle.
+  A.setManifest({
+    files: [{ ausmt_id: "nz.gamma.G1", format: "edi", url: "edi/gamma/x.edi", size: 1000 }],
+    bundles: [{ survey: "Gamma Survey", slug: "gamma", format: "mth5", url: H5_BUNDLE_URL, size: 1824522 }],
+  });
+  A.openStationById("nz.gamma.G1");
+  const h5FilesNone = doc.getElementById("dp-files");
+  const h5RowNone = prodNamed(h5FilesNone, "MTH5");
+  ok(h5RowNone && /not currently available/.test(h5RowNone.textContent),
+    "STATION-H5: with no per-station h5 the MTH5 row must read the honest not-available line, got " +
+    JSON.stringify(h5RowNone && h5RowNone.textContent.trim()));
+  ok(h5RowNone.getAttribute("data-url") == null,
+    "STATION-H5: the not-available row must carry no download action at all");
+  ok(h5FilesNone.innerHTML.indexOf(H5_BUNDLE_URL) < 0,
+    "STATION-H5: an absent station h5 must never fall back to the survey bundle");
+  // ...and the survey bundle keeps the surface it belongs to: the SURVEY drawer's Downloads grid.
+  A.openSurvey("Gamma Survey");
+  ok(doc.getElementById("drawer").innerHTML.indexOf(H5_BUNDLE_URL) >= 0,
+    "STATION-H5: the survey MTH5 bundle must still be offered by the survey drawer's Downloads grid");
+  A.setManifest(null); A.closeDrawer();
+
   // ---- BULK-EXPORT LABEL (owner ruling 2026-08-01) -------------------------------------------------
   // The portal marks the file fetches its multi-file export issues with a query flag, so the server-log
   // aggregator can tell a drag-selected bulk export from a single station download. Two properties, and
