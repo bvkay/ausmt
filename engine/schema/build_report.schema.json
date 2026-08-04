@@ -51,7 +51,7 @@
         "warnings": {"type": "array", "items": {"type": "string"}},
         "xml_failures": {
           "type": "array",
-          "description": "per-station EMTF-XML emission failures (station served as EDI-only, no XML download): the station id and the exception class raised by normalize(). Empty when every served station's XML emitted; also surfaced as a counted `warnings` entry so a green build cannot hide the gap. Optional for pre-fix reports.",
+          "description": "per-station EMTF-XML emission failures: the station id and the exception class raised by normalize(). The CONSEQUENCE depends on the station's entry in ingest_sources, so this field does not state one: an EDI-sourced station falls back to serving its custodian EDI and loses only the XML download, while an emtfxml-sourced station has no custodian file behind it and serves NO bytes at all. Neither leaves an unverified rendition in the served tree. Empty when every served station's XML emitted; also surfaced as a counted `warnings` entry so a green build cannot hide the gap. Optional for pre-fix reports.",
           "items": {
             "type": "object",
             "required": ["station", "error"],

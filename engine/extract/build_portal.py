@@ -2325,8 +2325,54 @@ def emit_canonical_store(stations, slug, cdir, survey_meta=None):
     return n_ok, n_fail, versions, notes
 
 
+def _derived_edi_filename(station_id, taken):
+    """The filename a GENERATED EDI is served under inside a survey's out/edi/<slug>/ directory.
+
+    That one directory carries TWO naming schemes at once: a custodian EDI keeps its own submitted
+    filename (it is the citable artifact, so it is copied byte for byte under the name it arrived
+    with), and an EMTF-XML-sourced station has no custodian file, so its generated EDI is named for
+    the station. The two schemes are NOT disjoint. An EDI's filename need not equal its DATAID -- the
+    build derives the station id from DATAID, not from the name -- so a custodian file called B.edi
+    can carry station A while station B arrives as EMTF XML and generates its own B.edi. Left
+    unhandled that is a silent swap, not a crash: one file on disk, two manifest rows naming it, both
+    sha256 columns verifying against the same bytes, and station B's advertised download handing back
+    station A's transfer function.
+
+    `taken` is the case-folded set of names already spoken for (custodian filenames first, then each
+    generated name as it is allocated); the served tree is read from case-insensitive filesystems too,
+    so the fold is part of the guarantee. The generated file steps aside rather than overwrite or be
+    overwritten. Deterministic: the suffix is a function of the survey's own input file set alone, so
+    the same package always produces the same served filename."""
+    cand = f"{station_id}.edi"
+    n = 0
+    while cand.lower() in taken:
+        n += 1
+        cand = f"{station_id}.generated.edi" if n == 1 else f"{station_id}.generated-{n}.edi"
+    return cand
+
+
+def _claim_served_artifact(claims, collisions, served: Path, ausmt_id, fmt):
+    """Register ONE station's claim on ONE served file, and record a collision if the file was already
+    claimed. `claims` maps a resolved served path to the row that owns it; `collisions` collects the
+    contradictions for the build gate.
+
+    Two manifest rows describing the same bytes as two different stations' downloads is an integrity
+    contradiction that the sha256 columns cannot surface -- BOTH rows verify, because both really do
+    hash the file they name. The gate is the only place it can be caught, so it is a corpus-wide
+    invariant checked over every per-station artifact (EDI, EMTF XML and MTH5 alike) rather than a
+    guard bolted onto the one naming scheme that broke it."""
+    key = str(Path(served).resolve())
+    prev = claims.get(key)
+    if prev is not None:
+        collisions.append({"path": key, "first": prev,
+                           "second": {"ausmt_id": ausmt_id, "format": fmt}})
+        return
+    claims[key] = {"ausmt_id": ausmt_id, "format": fmt}
+
+
 def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, survey_digest="",
-                     coord_default="exact", coord_overrides=None, derived_edi_dir=None):
+                     coord_default="exact", coord_overrides=None, derived_edi_dir=None,
+                     reserved_edi_names=()):
     """Write the canonical EMTF XML for each station into the PORTAL data dir (xmldir = out/xml/<slug>)
     so EMTF XML is a downloadable format alongside the bundled EDI. Same normalize() path + impedance
     round-trip gate as the canonical store; a per-EDI failure is logged and SKIPPED (that station
@@ -2357,17 +2403,24 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     round-trip-verified derived EDI beside the canonical XML. For an EDI-sourced station that file is
     redundant (the custodian's own EDI is served) and is deleted, exactly as before. For a station
     whose SOURCE is an EMTF XML there is no custodian EDI, so (when this dir is given) the derived
-    EDI is KEPT and moved to <derived_edi_dir>/<station>.edi, and returned in `derived_edis`; that is
-    the "generated EDI where mt_metadata supports the write" half of serving the full product set from
-    an XML-only station. The cache is BYPASSED for those stations (a hit would restore the XML bytes
-    but not the generated EDI, silently serving one format instead of two), so the XML ingest path is
-    always a fresh, gated normalize(), the same posture the MTH5 input path takes."""
+    EDI is KEPT and moved into <derived_edi_dir> under a name allocated by _derived_edi_filename, and
+    returned in `derived_edis`; that is the "generated EDI where mt_metadata supports the write" half
+    of serving the full product set from an XML-only station. `reserved_edi_names` is every custodian
+    EDI basename this survey could serve, so a generated file never lands on one (see
+    _derived_edi_filename for why that is a silent swap rather than a crash). The cache is BYPASSED for
+    those stations (a hit would restore the XML bytes but not the generated EDI, silently serving one
+    format instead of two), so the XML ingest path is always a fresh, gated normalize(), the same
+    posture the MTH5 input path takes."""
     from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415  (installed pkg; C37/F8)
     written = {}
     notes = {}
     stamped = {}   # C18b (A3): {station_id: survey_digest the served XML was keyed/produced under}
     failures = {}  # {station_id: exception-class-name} for stations whose XML emission RAISED (skipped)
     derived_edis = {}  # {station_id: generated-EDI path} for XML-sourced stations (see derived_edi_dir)
+    # The served-EDI filename namespace for THIS survey: custodian basenames reserved up front, then
+    # each generated name as it is allocated. Case-folded (the served tree is read from
+    # case-insensitive filesystems too).
+    _taken_edi_names = {str(_n).lower() for _n in (reserved_edi_names or ())}
     _use_cache = cache is not None and getattr(cache, "enabled", False)
     for (p, r) in stations:
         # C42 byte gate: a non-exact (generalised/withheld) station's EMTF-XML — a full elevation +
@@ -2431,7 +2484,12 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
             # EDI (there is no custodian EDI), so it is moved into the survey's edi/ dir instead.
             if _keep_derived:
                 try:
-                    _dest = Path(derived_edi_dir) / f"{r['id']}.edi"
+                    # Named against the survey's WHOLE served-EDI namespace, custodian filenames
+                    # included, so a generated file can never overwrite (or be overwritten by) the
+                    # custodian bytes of a different station -- see _derived_edi_filename.
+                    _dname = _derived_edi_filename(r["id"], _taken_edi_names)
+                    _taken_edi_names.add(_dname.lower())
+                    _dest = Path(derived_edi_dir) / _dname
                     _dest.parent.mkdir(parents=True, exist_ok=True)
                     _dest.write_bytes(Path(res.derived_edi).read_bytes())
                     Path(res.derived_edi).unlink(missing_ok=True)
@@ -2455,9 +2513,24 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
         except Exception as ex:  # noqa: BLE001
             # Record the failure (station id + exception class) so the caller can COUNT it into
             # build_report.json; a per-station XML gap must never again be invisible in a green build,
-            # only a printed WARN. The station still serves its EDI; it just has no XML download.
+            # only a printed WARN. What the station still serves depends on its SOURCE (see the
+            # _keep_derived branch below), so this arm states no consequence of its own.
             failures[r["id"]] = type(ex).__name__
             print(f"  [xml] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+            # normalize() writes the canonical XML and the derived EDI BEFORE its round-trip gate
+            # runs, so a gate FAILURE leaves both of them sitting in xmldir -- inside the served data
+            # tree, which the file server hands out by path with no manifest row required to reach it
+            # (deploy's Caddyfile serves the whole tree, and api-reference documents
+            # /data/xml/<slug>/<station>.xml as the public URL). An unverified rendition must not be
+            # fetchable at the URL this build reports as NOT served, so remove both. Best effort: a
+            # file that will not delete is named loudly rather than left silently reachable.
+            for _stale in (xml_target, Path(xmldir) / f"{r['id']}.edi"):
+                try:
+                    _stale.unlink(missing_ok=True)
+                except OSError as _ue:
+                    print(f"  [xml] WARN {r['id']}: could NOT remove the unverified {_stale.name} "
+                          f"({type(_ue).__name__}); it is unmanifested but still on disk",
+                          file=sys.stderr)
             if _keep_derived:
                 # An XML-sourced station whose canonical emission RAISED (the round-trip gate, or a
                 # write mt_metadata refuses) has NO custodian EDI to fall back on, so it serves NO
@@ -3333,6 +3406,12 @@ def main(argv=None):
 
     # === per-survey processing: extract + science + per-station products ===
     available_ids = set()
+    # ONE served file, ONE owning manifest row. {resolved served path: {ausmt_id, format}} plus the
+    # contradictions found, gated hard after the loop (see _claim_served_artifact): two rows over the
+    # same bytes is the one integrity failure the manifest's own sha256 column cannot expose, because
+    # both rows hash the file they name and both verify.
+    _artifact_claims: dict = {}
+    _artifact_collisions: list = []
     # C42: --products station.json carries a `location` (r[lat/lon]) and IS a served surface in
     # deployment (deploy/Makefile writes products/ INSIDE the served build dir; D1/D3). Its coordinates
     # must therefore be the POST-MASK values from the single seam — but the mask runs after the corpus-
@@ -3544,11 +3623,17 @@ def main(argv=None):
             sedir.mkdir(parents=True, exist_ok=True)
             # Derived EMTF XML is the SAME redistribution as the EDI (same TF data), so it rides the
             # same license gate; served into out/xml/<slug>/ as a downloadable format.
+            # Every custodian EDI basename this survey could serve, reserved BEFORE a single generated
+            # EDI is named, so a generated file cannot land on one. Reserved unconditionally, including
+            # for stations the coordinate gate will withhold: a generated filename must not depend on
+            # access policy, or editing an override would silently rename a published download.
+            _reserved_edi_names = {Path(_p).name for (_p, _r) in stations
+                                   if Path(_p).suffix.lower() == ".edi"}
             xml_written, _xnotes, _xstamped, _xml_failures, _derived_edis = _emit_served_xml(
                 stations, slug, out / "xml" / slug, survey_meta=meta,
                 cache=build_cache, survey_digest=_survey_digest,
                 coord_default=_coord_default, coord_overrides=_coord_overrides,
-                derived_edi_dir=sedir)
+                derived_edi_dir=sedir, reserved_edi_names=_reserved_edi_names)
             # If the canonical-store pass did not run (no --canonical-dir) these are the only notes; merge
             # (both passes agree, so update is idempotent) so station.json carries conditioning either way.
             for _sid, _nl in _xnotes.items():
@@ -3619,6 +3704,11 @@ def main(argv=None):
             if served_edi is not None:
                 available_ids.add(r["ausmt_id"])
                 served_edis.append(served_edi)
+                # One file, one owner (see _claim_served_artifact): the served-EDI directory is the
+                # one place two naming schemes meet, but the invariant is checked over every
+                # per-station artifact so no future emitter can reintroduce the class.
+                _claim_served_artifact(_artifact_claims, _artifact_collisions,
+                                       served_edi, r["ausmt_id"], "edi")
                 manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "edi",
                                                     served_edi,
                                                     f"edi/{slug}/{served_edi.name}", lic,
@@ -3627,6 +3717,8 @@ def main(argv=None):
             if can_serve and _cserved:
                 _xmlp = xml_written.get(r["id"])
                 if _xmlp and Path(_xmlp).exists():
+                    _claim_served_artifact(_artifact_claims, _artifact_collisions,
+                                           Path(_xmlp), r["ausmt_id"], "emtfxml")
                     manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "emtfxml",
                                                         Path(_xmlp), f"xml/{slug}/{Path(_xmlp).name}",
                                                         lic, nci_base=nci_base, base_url=base_url,
@@ -3636,6 +3728,8 @@ def main(argv=None):
                 # advertised as a 404 (the same rule the EMTF-XML row above follows).
                 _h5p = h5_written.get(r["id"])
                 if _h5p and Path(_h5p).exists():
+                    _claim_served_artifact(_artifact_claims, _artifact_collisions,
+                                           Path(_h5p), r["ausmt_id"], "mth5")
                     manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "mth5",
                                                         Path(_h5p), f"h5/{slug}/{Path(_h5p).name}",
                                                         lic, nci_base=nci_base, base_url=base_url,
@@ -3834,6 +3928,20 @@ def main(argv=None):
         for d in qc["duplicate_ausmt_ids"]:
             print(f"  {d['ausmt_id']}: {d['files'][0]} <-> {d['files'][1]}", file=sys.stderr)
         print("Fix the colliding station ids (or survey slugs) and re-run.", file=sys.stderr)
+        return 2
+    # A served file claimed by two manifest rows is the same class of failure and is equally HARD:
+    # the download contract says a row's sha256 is the integrity of THAT station's artifact, and a
+    # shared file makes both rows verify while one station serves the other's transfer function. The
+    # sha256 columns cannot catch it, so the build refuses to publish rather than emit it.
+    if _artifact_collisions:
+        print(f"ERROR: {len(_artifact_collisions)} served artifact(s) claimed by more than one manifest "
+              f"row: one file cannot be two stations' download (both rows would carry the same, "
+              f"VERIFYING sha256 while one station serves the other's transfer function). Offenders:",
+              file=sys.stderr)
+        for _col in _artifact_collisions:
+            print(f"  {_col['path']}: {_col['first']['ausmt_id']} ({_col['first']['format']}) <-> "
+                  f"{_col['second']['ausmt_id']} ({_col['second']['format']})", file=sys.stderr)
+        print("Fix the colliding served filenames and re-run.", file=sys.stderr)
         return 2
 
     # ---- portal projection (compact arrays the portal reads); r[13]=edi_available, r[14]=sha256 ----

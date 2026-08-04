@@ -10,9 +10,12 @@ Pre-fix (revert engine/extract/build_portal.py): transfer_functions/emtfxml/ is 
 all, so an XML-only package builds 0 stations and the build FAILS with rc 2 ("pipeline produced 0
 stations") -- every test below goes red on that.
 """
+import hashlib
 import json
+import re
 import shutil
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -31,10 +34,14 @@ SCHEMA = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(enc
 SLUG = "example-survey"
 
 
-def _package(root, *, xml_stations=(), edi_stations=(), yaml_text=None):
+def _package(root, *, xml_stations=(), edi_stations=(), yaml_text=None, edi_filenames=None):
     """A survey package at <root>/<SLUG> carrying the named stations as EMTF XML and/or EDI. The XML
     is emitted by the engine's own writer from the matching sample EDI, so an 'A in both folders'
-    package holds two renditions of ONE real station -- exactly the precedence case."""
+    package holds two renditions of ONE real station -- exactly the precedence case.
+
+    `edi_filenames` files a station's EDI under a name of the caller's choosing. An EDI's filename
+    carries no authority -- the build reads the station id from DATAID inside the file -- so a
+    custodian file may legitimately be named for a different station than it holds."""
     pkg = root / SLUG
     (pkg).mkdir(parents=True, exist_ok=True)
     pkg.joinpath("survey.yaml").write_text(
@@ -45,7 +52,7 @@ def _package(root, *, xml_stations=(), edi_stations=(), yaml_text=None):
         d = pkg / "transfer_functions" / "edi"
         d.mkdir(parents=True, exist_ok=True)
         for s in edi_stations:
-            shutil.copy(by_stem[s], d / f"{s}.edi")
+            shutil.copy(by_stem[s], d / (edi_filenames or {}).get(s, f"{s}.edi"))
     if xml_stations:
         make_emtfxml_inputs(pkg / "transfer_functions" / "emtfxml",
                             edis=[by_stem[s] for s in xml_stations], survey_id=SLUG)
@@ -154,6 +161,79 @@ def test_edi_wins_when_one_station_has_both_edi_and_emtfxml(tmp_path):
                     ("EXAMPLE02", "edi"), ("EXAMPLE02", "emtfxml")], rows
 
 
+def _collision_package(root):
+    """The served-EDI namespace collision, built from real bytes: station EXAMPLE01's custodian EDI
+    filed under the name EXAMPLE02.edi (legal -- the id comes from DATAID, not the filename), and
+    station EXAMPLE02 supplied ONLY as EMTF XML, whose generated EDI is named for the station. Two
+    naming schemes, one directory, one contested name."""
+    pkg = _package(root, edi_stations=("EXAMPLE01",), xml_stations=("EXAMPLE02",),
+                   edi_filenames={"EXAMPLE01": "EXAMPLE02.edi"})
+    assert (pkg / "transfer_functions" / "edi" / "EXAMPLE02.edi").is_file()
+    assert (pkg / "transfer_functions" / "emtfxml" / "EXAMPLE02.xml").is_file()
+    return pkg
+
+
+def test_a_generated_edi_never_lands_on_a_custodian_edi_filename(tmp_path):
+    """SERVED-EDI NAMESPACE. out/edi/<slug>/ holds two naming schemes: a custodian EDI keeps its own
+    submitted filename, and an EMTF-XML-sourced station's generated EDI is named for the station.
+    They are not disjoint, and a collision is SILENT -- one file on disk, two manifest rows naming
+    it, both sha256 columns verifying against the same bytes.
+
+    FAILS IF the two stations share a served file, if a manifest row's sha256 does not match the
+    bytes at its own url, if the custodian's file is not served verbatim, or if the survey EDI zip
+    claims more stations than it holds."""
+    pkg = _collision_package(tmp_path / "surveys")
+    rc, out, prod = _build(tmp_path, tmp_path / "surveys")
+    assert rc == 0, "a legal package must build"
+
+    d = _docs(out)
+    assert d["build_report"]["surveys"][SLUG]["ingest_sources"] == \
+        {"EXAMPLE01": "edi", "EXAMPLE02": "emtfxml"}, "fixture sanity: one station per source format"
+
+    edi_rows = {f["station"]: f for f in d["manifest"]["files"] if f["format"] == "edi"}
+    assert set(edi_rows) == {"EXAMPLE01", "EXAMPLE02"}, edi_rows
+    urls = [row["url"] for row in edi_rows.values()]
+    assert len(set(urls)) == 2, f"two stations must not advertise ONE served file: {urls}"
+
+    for sid, row in edi_rows.items():
+        served = out / row["url"]
+        assert served.is_file(), f"{sid}: the advertised file must exist"
+        assert hashlib.sha256(served.read_bytes()).hexdigest() == row["sha256"], \
+            f"{sid}: the manifest digest must be the digest of the bytes at its own url"
+
+    custodian = (pkg / "transfer_functions" / "edi" / "EXAMPLE02.edi").read_bytes()
+    assert (out / edi_rows["EXAMPLE01"]["url"]).read_bytes() == custodian, \
+        "the EDI-sourced station serves the custodian's own bytes, under the custodian's own filename"
+    assert (out / edi_rows["EXAMPLE02"]["url"]).read_bytes() != custodian, \
+        "the XML-sourced station must serve ITS OWN generated EDI, not its neighbour's science"
+
+    for sid in ("EXAMPLE01", "EXAMPLE02"):
+        sj = json.loads((prod / SLUG / sid / "station.json").read_text(encoding="utf-8"))
+        assert sj["distribution"]["edi_path"] == edi_rows[sid]["url"], sj["distribution"]
+
+    served_dir = sorted(p.name for p in (out / "edi" / SLUG).glob("*.edi"))
+    assert len(served_dir) == 2, f"one served EDI per station: {served_dir}"
+    zip_path = out / "bundles" / f"{SLUG}-edi.zip"
+    members = [n for n in zipfile.ZipFile(zip_path).namelist() if n != "LICENSE.txt"]
+    bundle = next(b for b in d["manifest"]["bundles"] if b["format"] == "edi-zip")
+    assert len(members) == bundle["n_stations"] == 2, (members, bundle["n_stations"])
+
+
+def test_the_build_refuses_two_manifest_rows_over_one_served_file(tmp_path, monkeypatch):
+    """THE INVARIANT BEHIND THE FIX, not just the fix. Naming is one way two rows could end up over
+    one file; the gate is what makes the class impossible. Driven by restoring the pre-fix naming
+    rule (always <station>.edi, blind to the custodian namespace) over the collision package.
+
+    FAILS IF the build publishes a manifest in which one served file is two stations' download. It
+    must exit non-zero and name both claimants, rather than emit a corpus where both rows verify."""
+    _collision_package(tmp_path / "surveys")
+    monkeypatch.setattr(bp, "_derived_edi_filename", lambda station_id, taken: f"{station_id}.edi")
+    rc, out, _prod = _build(tmp_path, tmp_path / "surveys")
+    assert rc == 2, "a served file claimed by two manifest rows must fail the build"
+    assert not (out / "manifest.json").exists(), \
+        "a build that refuses must not leave a published manifest behind"
+
+
 def test_roundtrip_gate_failure_serves_no_bytes_and_is_loud_in_the_build_report(tmp_path, monkeypatch):
     """ROUND-TRIP HONESTY. normalize() is the gate: EMTF XML in -> TF -> EMTF XML out must satisfy the
     same maxdiff closeness check the EDI pipeline uses, and a file that cannot round-trip must fail
@@ -205,6 +285,98 @@ def test_roundtrip_gate_failure_serves_no_bytes_and_is_loud_in_the_build_report(
         f"station.json must not advertise a download that was never written: {sj['distribution']}"
     # the failed station is still DISCOVERABLE -- it is a byte gap, not a disappearance
     assert victim in {row[0] for row in d["catalogue"]}
+
+
+_Z_CELL = re.compile(r'(<value[^>]*name="Zxy"[^>]*>)([^<]+)(</value>)')
+
+
+def _corrupt_first_impedance_cell(xml_path):
+    """Corrupt a REAL generated EMTF XML the way a damaged submission is corrupt: replace the first
+    Zxy value cell with a non-numeric pair. mt_metadata still READS the file, so normalize() gets as
+    far as writing the canonical XML and the derived EDI, and only the round-trip comparison after
+    them raises. That ordering is the whole point: a gate failure happens with two files already
+    written into the served tree, which a normalize() stubbed to raise immediately cannot reproduce.
+    """
+    text = xml_path.read_text(encoding="utf-8")
+    doctored, n = _Z_CELL.subn(lambda m: m.group(1) + "NaN NaN" + m.group(3), text, count=1)
+    assert n == 1, f"fixture assumption: {xml_path.name} carries a Zxy value cell to corrupt"
+    xml_path.write_text(doctored, encoding="utf-8")
+
+
+def test_a_real_round_trip_failure_leaves_no_unverified_bytes_in_the_served_tree(tmp_path):
+    """ROUND-TRIP HONESTY against a genuinely corrupted file, with nothing stubbed. The served data
+    tree is handed out by PATH: deploy's file server serves whatever is under it, and
+    /data/xml/<slug>/<station>.xml is a documented public URL, so a file needs no manifest row to be
+    fetchable. A station the build reports as serving no bytes must therefore leave none.
+
+    FAILS IF the gate fires and the unverified canonical XML or derived EDI is still on disk. Both
+    are written before the comparison that rejects them. Self-guarding: if the corruption stops
+    tripping the gate, the xml_failures assertion goes red rather than the test passing vacuously."""
+    pkg = _package(tmp_path / "surveys", xml_stations=("EXAMPLE01", "EXAMPLE02"))
+    victim = "EXAMPLE01"
+    _corrupt_first_impedance_cell(pkg / "transfer_functions" / "emtfxml" / f"{victim}.xml")
+
+    rc, out, prod = _build(tmp_path, tmp_path / "surveys")
+    assert rc == 0, "one station failing the gate must not abort the corpus build"
+
+    d = _docs(out)
+    survey = d["build_report"]["surveys"][SLUG]
+    assert [r["station"] for r in survey["xml_failures"]] == [victim], \
+        f"the corrupted station must FAIL the round-trip gate: {survey['xml_failures']}"
+    assert any("serve NO bytes at all" in w and victim in w for w in survey["warnings"]), \
+        survey["warnings"]
+
+    leftovers = sorted(str(p.relative_to(out)) for p in out.rglob(f"{victim}.*") if p.is_file())
+    assert leftovers == [], \
+        f"the served tree must hold nothing for a station that serves nothing: {leftovers}"
+    assert {(f["station"], f["format"]) for f in d["manifest"]["files"]} == \
+        {("EXAMPLE02", "edi"), ("EXAMPLE02", "emtfxml")}, "only the station that passed is advertised"
+    assert (out / "xml" / SLUG / "EXAMPLE02.xml").is_file() and \
+        (out / "edi" / SLUG / "EXAMPLE02.edi").is_file(), "the healthy sibling is unaffected"
+    sj = json.loads((prod / SLUG / victim / "station.json").read_text(encoding="utf-8"))
+    assert sj["distribution"]["edi_available"] is False and sj["distribution"]["edi_path"] is None, \
+        sj["distribution"]
+    assert victim in {row[0] for row in d["catalogue"]}, "a byte gap, not a disappearance"
+
+
+def _corrupt_first_edi_impedance_value(edi_path):
+    """The same corruption on the EDI side: the first value of the first >ZXYR data line."""
+    text = edi_path.read_text(encoding="utf-8", errors="replace")
+    m = re.search(r"(>ZXYR[^\n]*\n)([^\n]*\n)", text)
+    assert m, f"fixture assumption: {edi_path.name} carries a >ZXYR block"
+    first = m.group(2).split()[0]
+    edi_path.write_text(text[:m.start(2)] + m.group(2).replace(first, "NaN", 1) + text[m.end(2):],
+                        encoding="utf-8")
+
+
+def test_a_real_round_trip_failure_leaves_no_unverified_bytes_for_an_edi_station(tmp_path):
+    """The EDI-sourced leg of the same emitter, kept beside its sibling because it is the same
+    failure path in _emit_served_xml. An EDI-sourced station keeps its custodian EDI when the XML
+    emission fails, so the consequence differs -- but the two files normalize() wrote before the
+    gate rejected them are just as unverified, and out/xml/<slug>/ is just as public.
+
+    FAILS IF the rejected canonical XML, or the derived EDI written beside it, survives in the served
+    tree. The custodian EDI must still serve: this is a lost XML download, not a lost station."""
+    pkg = _package(tmp_path / "surveys", edi_stations=("EXAMPLE01", "EXAMPLE02"))
+    victim = "EXAMPLE01"
+    _corrupt_first_edi_impedance_value(pkg / "transfer_functions" / "edi" / f"{victim}.edi")
+
+    rc, out, _prod = _build(tmp_path, tmp_path / "surveys")
+    assert rc == 0
+
+    d = _docs(out)
+    survey = d["build_report"]["surveys"][SLUG]
+    assert [r["station"] for r in survey["xml_failures"]] == [victim], \
+        f"the corrupted station must FAIL the round-trip gate: {survey['xml_failures']}"
+
+    assert not (out / "xml" / SLUG / f"{victim}.xml").exists(), \
+        "the rejected canonical XML must not sit at its own public URL"
+    assert not (out / "xml" / SLUG / f"{victim}.edi").exists(), \
+        "nor the derived EDI written beside it before the gate ran"
+    assert (out / "edi" / SLUG / f"{victim}.edi").is_file(), \
+        "an EDI-sourced station still serves the custodian file it was built from"
+    rows = {(f["station"], f["format"]) for f in d["manifest"]["files"]}
+    assert (victim, "edi") in rows and (victim, "emtfxml") not in rows, rows
 
 
 def test_embargoed_emtfxml_survey_serves_no_bytes(tmp_path):

@@ -68,6 +68,30 @@ def test_verify_data_dir_fails_on_doctored_manifest(tmp_path):
     assert "VERIFY: FAIL" in r.stdout, r.stdout + r.stderr
 
 
+def test_verify_data_dir_fails_when_two_rows_claim_one_served_file(tmp_path):
+    """The integrity failure recomputing sha256 cannot see. Point a second station's row at the first
+    station's file and give it that file's real digest: every row now hashes the bytes it names, so
+    the byte check passes while one station's advertised download serves another station's data.
+
+    FAILS IF --data-dir blesses a manifest in which one served file is two stations' download. The
+    doctored row is internally consistent on purpose: an inconsistent one would be caught by the
+    integrity check instead and prove nothing about this one."""
+    out = _build(tmp_path)
+    man_path = out / "manifest.json"
+    man = json.loads(man_path.read_text(encoding="utf-8"))
+    rows = [r for r in man["files"] if r.get("tier") == "repo" and r.get("format") == "edi"]
+    assert len(rows) >= 2, "expected at least two served EDIs from the sample survey"
+    assert rows[0]["url"] != rows[1]["url"], "a clean build must not already share a served file"
+    rows[1]["url"] = rows[0]["url"]
+    rows[1]["size"], rows[1]["sha256"] = rows[0]["size"], rows[0]["sha256"]
+    man_path.write_text(json.dumps(man))
+
+    r = _run_verify_data_dir(out)
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "VERIFY: FAIL" in r.stdout, r.stdout + r.stderr
+    assert "claimed by two rows" in r.stdout, r.stdout
+
+
 def test_verify_data_dir_fails_when_build_report_absent(tmp_path):
     """The build_report presence check is NON-VACUOUS: remove build_report.json from an otherwise-good
     build dir and --data-dir must FAIL (a build that predates / dropped the report is not blessed)."""
