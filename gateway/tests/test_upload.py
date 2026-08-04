@@ -80,7 +80,8 @@ def test_good_upload_scans_clean_and_queues(tmp_path):
     (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/../evil.edi": b"x"}), "parent-directory"),
     (lambda: make_zip({"mysurvey/survey.yaml": b"s", "/etc/evil.edi": b"x"}), "absolute path"),
     (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/inner.zip": b"PK", "mysurvey/S.edi": b"e"}), "nested archive"),
-    (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/README.md": b"hi"}), "no .edi"),
+    (lambda: make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/README.md": b"hi"}),
+     "no transfer-function members"),
     (lambda: make_zip({"a/survey.yaml": b"s", "a/S.edi": b"e", "b/x.txt": b"y"}), "top-level"),
 ])
 def test_hostile_zip_rejected_nothing_quarantined(tmp_path, zip_factory, needle):

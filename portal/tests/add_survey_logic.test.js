@@ -560,6 +560,43 @@ ok(!/Package \.zip to email \(fallback path\)/.test(html), "the old rewording of
 ok(/async function buildPackage/.test(html) && /function buildSubmissionMd/.test(html),
    "R2 is visibility-only: the zip packager code is kept intact");
 
+// ============================ EMTF XML as a first-class input (owner ruling 2026-08-03) ============================
+// The page must ADMIT EMTF XML the way it admits EDI and MTH5: in the file picker's accept list, in the
+// drop-zone copy, in the kind classification, and in the validation gate. Pre-fix the accept list was
+// ".edi,.h5,.mth5", so a submitter literally could not select their .xml files.
+ok(/accept="\.edi,\.xml,\.h5,\.mth5"/.test(html), "the file input accepts .xml alongside .edi and .mth5/.h5");
+ok(/Drop <b>\.edi<\/b>, <b>\.xml<\/b>, or <b>\.mth5 \/ \.h5<\/b> files here/.test(html)
+   || /Drop <b>\.edi<\/b>, <b>\.xml<\/b> or <b>\.mth5 \/ \.h5<\/b> files here/.test(html),
+   "the drop zone names .xml");
+ok(/EDI, EMTF XML and MTH5 transfer functions are all accepted/.test(html),
+   "the file hint states all three accepted formats");
+ok(/kind:"emtfxml"/.test(html), "a dropped .xml is classified as an emtfxml transfer function");
+ok(/function xmlFiles\(\)/.test(html), "the page keeps an EMTF XML file list beside ediFiles()/mth5Files()");
+ok(/transfer_functions\/emtfxml\//.test(html), "the packager writes EMTF XML into transfer_functions/emtfxml/");
+
+// emtfxmlLooksReal: the browser-side anti-masquerade check, the sibling of the .edi NUL-byte gate.
+ok(M.emtfxmlLooksReal('<?xml version="1.0"?>\n<EM_TF><Site/></EM_TF>'), "a real EMTF XML is recognised");
+ok(M.emtfxmlLooksReal("<EM_TF>"), "the bare root element is enough");
+ok(!M.emtfxmlLooksReal('<?xml version="1.0"?>\n<rss><channel/></rss>'), "an unrelated XML is NOT an EMTF XML");
+ok(!M.emtfxmlLooksReal(""), "empty content is not an EMTF XML");
+ok(!M.emtfxmlLooksReal(null), "null content does not throw and is not an EMTF XML");
+
+// validateSurvey's structure gate: EMTF XML alone is a complete submission.
+const xmlOnly = M.validateSurvey({ ...base, locations_confirmed: true }, [], [],
+                                 [{ name: "S01.xml", emtf: true }]);
+ok(!xmlOnly.items.some(i => i.check === "structure" && i.level === "FAIL"),
+   "an EMTF-XML-only submission raises no 'no transfer-function files' FAIL");
+ok(xmlOnly.items.some(i => i.check === "emtfxml" && i.level === "WARNING" && /submission pipeline/.test(i.message)),
+   "an accepted EMTF XML carries the honest 'validated in the pipeline, not in this browser' note");
+const noneAtAll = M.validateSurvey({ ...base, locations_confirmed: true }, [], [], []);
+ok(noneAtAll.items.some(i => i.check === "structure" && i.level === "FAIL" && /EDI, EMTF XML or MTH5/.test(i.message)),
+   "a submission with no transfer functions at all still FAILs, naming all three formats");
+const badXml = M.validateSurvey({ ...base, locations_confirmed: true }, [], [],
+                                [{ name: "notatf.xml", emtf: false }]);
+ok(badXml.items.some(i => i.check === "emtfxml" && i.level === "FAIL" && /EM_TF/.test(i.message)),
+   "a .xml that is not an EMTF transfer function is a blocking FAIL, not a silent pass");
+ok(badXml.counts.FAIL > 0, "the masquerading .xml blocks submission");
+
 // R3 harvest tests are async (harvestDoi returns a Promise); run them, THEN report + exit.
 r3HarvestTests().then(() => {
   console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED (add-survey logic)");

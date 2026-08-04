@@ -192,7 +192,7 @@
 </header>
 <main>
   <h1>Contribute a survey</h1>
-  <p class="lede">Files first. Drop your <b>EDI</b> or <b>MTH5</b> transfer functions, watch the stations
+  <p class="lede">Files first. Drop your <b>EDI</b>, <b>EMTF XML</b> or <b>MTH5</b> transfer functions, watch the stations
   land on the map, then fill the short required section below. The optional sections help us publish
   faster, but you can skip straight to <b>package</b> and submit. Everything runs in your browser; your
   files and details never leave this page until you submit. New here? A worked example survey package
@@ -208,11 +208,12 @@
     <div class="tlead"><h2>1. Your files</h2><span class="tk on">start here</span></div>
 
     <!-- (1) FILE DROP FIRST: EDIs land, auto-extraction runs, the station map + count render at once. -->
-    <div class="drop" id="drop">Drop <b>.edi</b> or <b>.mth5 / .h5</b> files here, or click to choose. Files stay in your browser.</div>
-    <input id="filein" type="file" accept=".edi,.h5,.mth5" multiple style="display:none">
-    <div class="hint"><b>MTH5 files containing transfer-function products are supported.</b> AusMT catalogues transfer
-       functions and their metadata, not raw MT time-series data. Files are checked locally now; the AusMT validator
-       in the submission pipeline is authoritative during curator review.</div>
+    <div class="drop" id="drop">Drop <b>.edi</b>, <b>.xml</b> or <b>.mth5 / .h5</b> files here, or click to choose. Files stay in your browser.</div>
+    <input id="filein" type="file" accept=".edi,.xml,.h5,.mth5" multiple style="display:none">
+    <div class="hint"><b>EDI, EMTF XML and MTH5 transfer functions are all accepted.</b> AusMT catalogues transfer
+       functions and their metadata, not raw MT time-series data. If you send a station as both an EDI and an
+       EMTF XML, the EDI is what gets served and the XML is kept alongside it. Files are checked locally now; the
+       AusMT validator in the submission pipeline is authoritative during curator review.</div>
     <div class="filelist" id="filelist"></div>
 
     <!-- the wow moment: stations plotted the instant files land -->
@@ -768,8 +769,19 @@ function isSemver(s){ return /^\d+\.\d+\.\d+$/.test(String(s||"").trim()); }
 // safe_component() and forks the survey identity, a server-side hard FAIL. Mirroring it here catches
 // the most common first-timer mistake before a wasted quarantine cycle. Keep in sync with that line.
 function slugValid(s){ return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(String(s==null?"":s).trim()); }
-function validateSurvey(meta, edis, mth5s){
+// emtfxmlLooksReal: the browser-side anti-masquerade check for a submitted EMTF XML, the sibling of the
+// validator's magic-byte gate for binary TF types and its NUL-byte gate for .edi. EMTF XML is text, and
+// its root element is <EM_TF> (the EarthScope schema), so a .xml that never opens that element is not a
+// transfer function whatever it is named. Reads a bounded prefix only, like ediDataId. This is a local
+// pre-submission check, not the authority: validate_survey.py in the pipeline decides.
+const EMTFXML_HEAD_SCAN_BYTES=65536;   // 64 KB: bounded prefix, never the whole file
+function emtfxmlLooksReal(text){
+  return /<\s*EM_TF[\s>]/i.test(String(text==null?"":text).slice(0, EMTFXML_HEAD_SCAN_BYTES));
+}
+
+function validateSurvey(meta, edis, mth5s, xmls){
   mth5s = mth5s || [];
+  xmls = xmls || [];
   const items=[]; const add=(level,check,message)=>items.push({level,check,message});
   const labels={name:"project name",slug:"slug",organisation:"organisation",country:"country",license:"licence",access:"access"};
   REQUIRED.forEach(f=>{
@@ -801,10 +813,14 @@ function validateSurvey(meta, edis, mth5s){
   var hasProvId=(meta.related_identifiers||[]).some(function(r){return r&&(r.identifier||"").toString().trim();});
   if(!hasProvId) add("WARNING","provenance","no related identifier recorded (a dataset DOI, collection PID, or archive handle under 'This dataset elsewhere'), recommended so the record has a citable provenance identifier");
   if(meta.processing_software==="Unknown") add("WARNING","provenance","processing software is 'Unknown', recommended to identify it");
-  if(!edis.length && !mth5s.length) add("FAIL","structure","no transfer-function files added (EDI or MTH5)");
+  if(!edis.length && !mth5s.length && !xmls.length) add("FAIL","structure","no transfer-function files added (EDI, EMTF XML or MTH5)");
   mth5s.forEach(f=>{
     if(f.hdf5===false) add("FAIL","mth5",f.name+": not a valid HDF5/MTH5 file (signature check failed)");
     else add("WARNING","mth5",f.name+": MTH5 structure, supported version & transfer-function groups are validated in the AusMT submission pipeline (not in this browser)");
+  });
+  xmls.forEach(f=>{
+    if(f.emtf===false) add("FAIL","emtfxml",f.name+": not an EMTF XML transfer function (no <EM_TF> root element)");
+    else add("WARNING","emtfxml",f.name+": EMTF XML structure, station metadata and the canonical round trip are validated in the AusMT submission pipeline (not in this browser)");
   });
   add("WARNING","security","antivirus (ClamAV) scan runs in the AusMT submission pipeline, not in this browser preview");
   const seen={};
@@ -1164,7 +1180,7 @@ function stationCountsByName(catalogue){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,relatedIdentifiersEmit,creditRowsEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES,NAME_TYPES,CONTRIBUTOR_ROLES};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,emtfxmlLooksReal,relatedIdentifiersEmit,creditRowsEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES,NAME_TYPES,CONTRIBUTOR_ROLES};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -1611,8 +1627,9 @@ if(typeof document!=="undefined"&&document.getElementById){
     if(!f.dataid) return ` <span class="autoid">→ ${esc(packagedEdiName(deriveDataId(f.name)))} (auto from filename, flagged for curator)</span>`;
     return ` <span class="rename">→ ${esc(packagedEdiName(f.dataid))}</span>`;
   }
+  const KIND_LABEL={mth5:"MTH5", emtfxml:"EMTF XML", edi:"EDI"};
   function renderFiles(){ $("filelist").innerHTML=files.map((f,i)=>
-    `<div class="f"><span class="meta"><span>${esc(f.name)} <span style="color:var(--muted)">${f.kind==="mth5"?"MTH5":"EDI"}</span>${renameLabel(f)}</span><span>${(f.bytes/1024).toFixed(1)} KB</span></span><button type="button" class="rm" data-i="${i}" title="Remove ${escAttr(f.name)}" aria-label="Remove ${escAttr(f.name)}">✕</button></div>`).join("")
+    `<div class="f"><span class="meta"><span>${esc(f.name)} <span style="color:var(--muted)">${KIND_LABEL[f.kind]||"EDI"}</span>${renameLabel(f)}</span><span>${(f.bytes/1024).toFixed(1)} KB</span></span><button type="button" class="rm" data-i="${i}" title="Remove ${escAttr(f.name)}" aria-label="Remove ${escAttr(f.name)}">✕</button></div>`).join("")
     || '<span style="color:var(--muted)">No files yet.</span>'; updateConf(); }
   // Per-row remove: one delegated listener (data-i indexes the `files` array). Splice + re-render, which
   // ends in updateConf() (keeps the DMS/confirm state consistent) and feeds every downstream flow
@@ -1621,14 +1638,23 @@ if(typeof document!=="undefined"&&document.getElementById){
     const i=+b.getAttribute("data-i"); if(i>=0&&i<files.length){ files.splice(i,1); renderFiles(); } });
   function ediFiles(){ return files.filter(f=>f.kind==="edi"); }
   function mth5Files(){ return files.filter(f=>f.kind==="mth5"); }
+  function xmlFiles(){ return files.filter(f=>f.kind==="emtfxml"); }
   function parsed(){ return ediFiles().map(f=>({name:f.name, parsed:parseEdi(f.text)})); }
   function isHdf5(buf){ const b=new Uint8Array(buf.slice(0,8));
     return b.length>=8 && b[0]===0x89&&b[1]===0x48&&b[2]===0x44&&b[3]===0x46&&b[4]===0x0d&&b[5]===0x0a&&b[6]===0x1a&&b[7]===0x0a; }
   function addFiles(list){ Array.from(list).forEach(file=>{
-    const isMth5=/\.(h5|mth5)$/i.test(file.name); const r=new FileReader();
+    const isMth5=/\.(h5|mth5)$/i.test(file.name);
+    // EMTF XML is a TEXT format like EDI, so it is read as text and its bytes are the UTF-8 encoding of
+    // that text, the same convention the EDI branch uses for its sha256. It is NOT parsed here: the
+    // station identity lives in the file's own Site metadata and the engine reads it at build time.
+    const isXml=/\.xml$/i.test(file.name);
+    const r=new FileReader();
     if(isMth5){ r.onload=e=>{ const buf=e.target.result;
         files.push({name:file.name,kind:"mth5",buf,bytes:buf.byteLength,hdf5:isHdf5(buf)}); renderFiles(); };
       r.readAsArrayBuffer(file);
+    } else if(isXml){ r.onload=e=>{ const text=e.target.result; const buf=new TextEncoder().encode(text).buffer;
+        files.push({name:file.name,kind:"emtfxml",text,buf,bytes:buf.byteLength,emtf:emtfxmlLooksReal(text)}); renderFiles(); };
+      r.readAsText(file);
     } else { r.onload=e=>{ const text=e.target.result; const buf=new TextEncoder().encode(text).buffer;
         // dataid: extracted once at ingest from the >HEAD block (bounded prefix). null when absent -
         // the validation gate turns that into a blocking FAIL. Drives both the rename preview and the
@@ -1722,14 +1748,25 @@ if(typeof document!=="undefined"&&document.getElementById){
     $("t0mapwrap").style.display=withCoords.length?"block":"none";
     // No conflict -> an informational nudge, no checkbox wall.
     $("locNudge").style.display=(withCoords.length&&!flagged.length)?"block":"none";
-    $("t0count").innerHTML = pf.length
+    // Only EDIs are parsed in the browser, so only their stations plot. EMTF XML and MTH5 carry their
+    // coordinates in structured metadata the engine reads at build time; rather than write a second
+    // coordinate parser here (a second derivation of the same fact, and a divergence risk), the page
+    // says plainly that those files were accepted and where their stations are read. Never a silent
+    // "no stations" for a submission that is entirely EMTF XML or MTH5.
+    const nOther=xmlFiles().length+mth5Files().length;
+    const otherNote=nOther
+      ? (pf.length?" &middot; ":"")+"<b>"+nOther+"</b> EMTF XML/MTH5 file"+(nOther===1?"":"s")
+        +" accepted (their stations are read in the submission pipeline, not in this browser)"
+      : "";
+    $("t0count").innerHTML = (pf.length
       ? "<b>"+pf.length+"</b> station"+(pf.length===1?"":"s")+" read"
         +(withCoords.length<pf.length?" ("+(pf.length-withCoords.length)+" missing coordinates)":"")
         +(flagged.length?" &middot; <b>"+flagged.length+"</b> with a HEAD/INFO conflict to confirm":"")
-      : "";
+      : "")+otherNote;
     $("confReadout").textContent = withCoords.length
       ? withCoords.length+" station(s) plotted"+(flagged.length?", "+flagged.length+" with a HEAD/INFO conflict":"")
-      : "Add EDI files, then review their plotted locations.";
+      : (nOther ? "EMTF XML and MTH5 stations are read in the submission pipeline; add EDI files to plot stations here."
+                : "Add EDI files, then review their plotted locations.");
     renderT0Map(withCoords);
   }
   function openConfirm(){
@@ -1761,8 +1798,9 @@ if(typeof document!=="undefined"&&document.getElementById){
 
   $("btnValidate").onclick=()=>{
     const mh=mth5Files().map(f=>({name:f.name,hdf5:f.hdf5}));
-    const {items,counts}=validateSurvey(readMeta(), parsed(), mh);
-    track("ValidationRun",{result:counts.FAIL>0?"blocked":"ok",edis:parsed().length,mth5:mh.length}); // PII-free
+    const xf=xmlFiles().map(f=>({name:f.name,emtf:f.emtf}));
+    const {items,counts}=validateSurvey(readMeta(), parsed(), mh, xf);
+    track("ValidationRun",{result:counts.FAIL>0?"blocked":"ok",edis:parsed().length,mth5:mh.length,emtfxml:xf.length}); // PII-free
     const row=i=>`<div class="v"><span class="badge ${i.level}">${i.level}</span><span>${esc(i.check)}: ${esc(i.message)}</span></div>`;
     const g=lvl=>items.filter(i=>i.level===lvl);
     const fails=g("FAIL"), warns=g("WARNING"), infos=g("INFO"), passes=g("PASS");
@@ -1780,9 +1818,10 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("btnPreview").onclick=()=>{
     const p=previewSurvey(readMeta(), parsed());
     const types=Object.keys(p.types).sort().map(k=>k+" "+p.types[k]).join(", ")||"-";
-    const nMh=mth5Files().length;
+    const nMh=mth5Files().length, nXml=xmlFiles().length;
     $("pvBody").innerHTML=
       `<div>stations (from EDIs): <b>${p.n}</b>  (coords on ${p.withCoords}; impedance ${p.impedance}; spectra-section ${p.spectra})</div>`+
+      (nXml?`<div>EMTF XML files: <b>${nXml}</b>  <span style="color:var(--muted)">(stations read + round-trip verified in the submission pipeline; an EDI of the same station takes precedence)</span></div>`:"")+
       (nMh?`<div>MTH5 files: <b>${nMh}</b>  <span style="color:var(--muted)">(transfer functions read + validated in the submission pipeline)</span></div>`:"")+
       (p.latRange?`<div>station extent: lat <b>[${p.latRange[0].toFixed(4)}, ${p.latRange[1].toFixed(4)}]</b>  lon <b>[${p.lonRange[0].toFixed(4)}, ${p.lonRange[1].toFixed(4)}]</b></div>`:"")+
       `<div>data types (from EDIs): <b>${esc(types)}</b></div>`+
@@ -1795,10 +1834,11 @@ if(typeof document!=="undefined"&&document.getElementById){
   // callers need. It performs NO DOM writes and NO download/upload side effect, the caller decides
   // what to do with the blob. Email/ORCID are NEVER written here (C3 / §4): the package is PII-clean
   // whether it goes out as a public-PR attachment OR as a same-origin gateway upload.
-  async function buildPackage(meta, pf, ediF, mh, gatewayAvailable){
+  async function buildPackage(meta, pf, ediF, mh, gatewayAvailable, xf){
+    xf = xf || [];
     if(pf.some(e=>e.parsed.coord_flag))
       meta.coord_resolution={dms_sign:meta.dms_choice||"head", basis:"reviewed and confirmed on the AusMT submission map"};
-    const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})));
+    const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})), xf.map(f=>({name:f.name,emtf:f.emtf})));
     if(v.counts.FAIL>0) return {blocked:true, counts:v.counts};
     const slug=meta.slug||"survey";
     const zip=new JSZip(), root=zip.folder(slug);
@@ -1817,11 +1857,20 @@ if(typeof document!=="undefined"&&document.getElementById){
         tf.push(entry);
         if(derived) dataidFlags.push({file:entry.file, source_filename:f.name,
           note:"no DATAID in the EDI HEAD; station id auto-derived from the filename, please confirm"}); } }
+    // EMTF XML is NOT renamed, for the same reason MTH5 is not: the station identity travels INSIDE
+    // the file (the Site id and, where the id needed sanitising, the Site Name), and the engine reads
+    // it there rather than from the filename. Renaming would invent an identity the file does not
+    // claim. source_filename == the packaged name here, uniform provenance across every tf entry.
+    if(xf.length){ const xdir=root.folder("transfer_functions").folder("emtfxml");
+      for(const f of xf){ xdir.file(f.name, f.text); tf.push({file:"transfer_functions/emtfxml/"+f.name, source_filename:f.name, format:"emtfxml", dataid_source:"emtfxml", bytes:f.bytes, sha256:await sha256Hex(f.buf)}); } }
     if(mh.length){ const mhdir=root.folder("transfer_functions").folder("mth5");
       // MTH5 files are NOT renamed (they carry no single EDI DATAID; a station map lives inside the
       // HDF5). source_filename == the packaged name here, uniform provenance across every tf entry.
       for(const f of mh){ mhdir.file(f.name, f.buf); tf.push({file:"transfer_functions/mth5/"+f.name, source_filename:f.name, format:"mth5", dataid_source:"mth5", bytes:f.bytes, sha256:await sha256Hex(f.buf)}); } }
-    const inputFormat = ediF.length && mh.length ? "edi+mth5" : (mh.length ? "mth5" : "edi");
+    // input_format names every format actually packaged, in the order the engine prefers them, so a
+    // mixed submission is described honestly rather than collapsed to its first format.
+    const inputFormat = [ediF.length && "edi", xf.length && "emtfxml", mh.length && "mth5"]
+      .filter(Boolean).join("+") || "edi";
     // C3 (PII scrub): MANIFEST.json/SUBMISSION.md may be published (PR attachment) -- email/ORCID must
     // NOT be written into the package. Name is fine (a submission needs an attributable submitter).
     const manifest={slug, survey:meta.name, organisation:meta.organisation, licence:meta.license,
@@ -1887,8 +1936,8 @@ if(typeof document!=="undefined"&&document.getElementById){
     return head+direct;
   }
   $("btnPackage").onclick=async()=>{
-    const meta=readMeta(), pf=parsed(), ediF=ediFiles(), mh=mth5Files();
-    const pkg=await buildPackage(meta, pf, ediF, mh, gatewayReady);
+    const meta=readMeta(), pf=parsed(), ediF=ediFiles(), mh=mth5Files(), xf=xmlFiles();
+    const pkg=await buildPackage(meta, pf, ediF, mh, gatewayReady, xf);
     if(pkg.blocked){ $("pkBody").innerHTML=`<b style="color:var(--no)">Cannot package: ${pkg.counts.FAIL} validation FAIL(s).</b> Run Validate and fix them first.`; $("pPackage").classList.add("show"); return; }
     const url=URL.createObjectURL(pkg.blob), a=document.createElement("a");
     a.href=url; a.download=pkg.fname; a.click(); URL.revokeObjectURL(url);
@@ -2004,9 +2053,9 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("btnCancelSubmit").onclick=()=>{ if(submitInFlight) submitInFlight.abort(); };
   $("btnSubmitGateway").onclick=async()=>{
     if(submitBusy) return;                              // already building or in flight
-    const meta=readMeta(), pf=parsed(), ediF=ediFiles(), mh=mth5Files();
+    const meta=readMeta(), pf=parsed(), ediF=ediFiles(), mh=mth5Files(), xf=xmlFiles();
     // 1. Validation gate, same gate as packaging; any FAIL blocks.
-    const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})));
+    const v=validateSurvey(meta, pf, mh.map(f=>({name:f.name,hdf5:f.hdf5})), xf.map(f=>({name:f.name,emtf:f.emtf})));
     if(v.counts.FAIL>0){ submitBlocked("Cannot submit: "+v.counts.FAIL+" validation FAIL(s). Run Validate and fix them first."); return; }
     // 2. Submitter-ORCID CHECKSUM (fail fast, the server enforces ISO 7064 MOD 11-2 and would 400
     //    after a full upload). Blank ORCID is fine (optional); a present one must pass the checksum.
@@ -2020,7 +2069,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     setSubmitting(true);
     $("pSubmit").classList.remove("show");
     // 4. Build the package via the SHARED builder (byte-identical to the download path).
-    const pkg=await buildPackage(meta, pf, ediF, mh, gatewayReady);
+    const pkg=await buildPackage(meta, pf, ediF, mh, gatewayReady, xf);
     if(pkg.blocked){ setSubmitting(false); submitBlocked("Cannot submit: "+pkg.counts.FAIL+" validation FAIL(s). Run Validate and fix them first."); return; }
     // 5. POST via XMLHttpRequest (upload progress + Cancel). No client timeout (250 MB on slow links
     //    is legitimate); Cancel is the escape hatch. multipart per §3: one file part + submitter

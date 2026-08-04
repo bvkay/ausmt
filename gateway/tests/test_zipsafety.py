@@ -123,12 +123,37 @@ def _two_manifest_zip() -> bytes:
     return out.getvalue()
 
 
-def test_zero_edi_rejected():
-    # proven failing 2026-07-05: package with no .edi accepted (edi-count check absent).
+def test_zero_transfer_functions_rejected():
+    # proven failing 2026-07-05: package with no transfer function accepted (count check absent).
     data = make_zip({"mysurvey/survey.yaml": b"s", "mysurvey/README.md": b"hi"})
     with pytest.raises(zipsafety.ZipRejection) as exc:
         _inspect(data)
-    assert "no .edi" in str(exc.value)
+    assert "no transfer-function members" in str(exc.value)
+
+
+def test_emtfxml_only_package_accepted():
+    """EMTF XML is a first-class submission input (owner ruling 2026-08-03), so a package whose only
+    transfer functions are EMTF XML must pass the shape rule.
+
+    FAILS IF the shape rule still demands a .edi: before this change an EMTF-XML-only submission was
+    rejected at the door with "no .edi members in package" and never reached the validator, so the
+    engine's XML ingest path could not be exercised by a real submission at all."""
+    names = _inspect(make_zip({
+        "mysurvey/survey.yaml": b"s",
+        "mysurvey/transfer_functions/emtfxml/S01.xml": b"<EM_TF></EM_TF>",
+    }))
+    assert "mysurvey/transfer_functions/emtfxml/S01.xml" in names
+
+
+def test_mixed_edi_and_emtfxml_package_accepted():
+    # The precedence case (a station supplied in both formats) must get through the door too; which
+    # rendition wins is the ENGINE's decision, made after parsing, not a shape rule this module knows.
+    names = _inspect(make_zip({
+        "mysurvey/survey.yaml": b"s",
+        "mysurvey/transfer_functions/edi/S01.edi": b">HEAD\n",
+        "mysurvey/transfer_functions/emtfxml/S01.xml": b"<EM_TF></EM_TF>",
+    }))
+    assert len(names) == 3
 
 
 def test_more_than_one_top_level_dir_rejected():

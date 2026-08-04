@@ -96,14 +96,22 @@ def _abstract_of(y: dict) -> str:
 
 
 def _station_count(package_root: Path) -> int:
-    """A CHEAP station count: the number of .edi files under transfer_functions/edi/. Not a parse —
-    just a glob — so it is a best-effort figure the README states honestly ('N stations') and omits
-    when zero/unknown. build_portal's real catalogue is authoritative; this is a convenience line."""
-    edi_dir = package_root / "transfer_functions" / "edi"
-    if not edi_dir.is_dir():
-        return 0
-    return sum(1 for p in edi_dir.iterdir()
-               if p.is_file() and p.suffix.lower() == ".edi")
+    """A CHEAP station count: the number of one-station transfer-function files under
+    transfer_functions/edi/ and transfer_functions/emtfxml/ (EMTF XML is a first-class submission
+    input since the 2026-08-03 ruling, so counting only EDIs would report an XML-only survey as
+    having no stations). Not a parse, just a glob, so it is a best-effort figure the README states
+    honestly ('N stations') and omits when zero/unknown.
+
+    It deliberately does NOT de-duplicate a station supplied in both formats, and does not count
+    MTH5 (one file holds many stations): both would need a parse, which this is not. build_portal's
+    real catalogue is authoritative; this is a convenience line."""
+    n = 0
+    for folder, suffix in (("edi", ".edi"), ("emtfxml", ".xml")):
+        d = package_root / "transfer_functions" / folder
+        if not d.is_dir():
+            continue
+        n += sum(1 for p in d.iterdir() if p.is_file() and p.suffix.lower() == suffix)
+    return n
 
 
 def _read_survey_yaml(package_root: Path) -> dict:
