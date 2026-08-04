@@ -1072,27 +1072,74 @@ jobs:
           ls /srv/ausmt/surveys-live/surveys/ | grep -q . || { echo "no survey staged into surveys-live"; exit 1; }
           echo "OK: curator approve -> PUBLISHED, PII confined, commit author fixed"
 
-      - name: Reject leaves surveys-live clean
+      - name: Duplicate content is refused, and a reject leaves surveys-live clean
         if: steps.gate.outputs.have_surveys == 'true'
         run: |
           set -e
           BEFORE=$(git -C /srv/ausmt/surveys-live rev-parse HEAD)
+
+          # PART 1: the SAME bytes as the submission just published. The duplicate-content guard
+          # (design 4.4) owes us a 409 naming the first submission: an already-published package
+          # must not buy a second scan + validate + preview cycle, nor a second publishable copy
+          # under a fresh id.
           (cd "$GITHUB_WORKSPACE/engine/tests/fixtures" && zip -qr /tmp/example2.zip example-survey)
           RESP=$(curl -s -o /tmp/ex2.json -w '%{http_code}' \
             -H 'X-AusMT-Submit-Key: ci-e2e-submit-key-abcdefgh' \
             -F 'file=@/tmp/example2.zip' -F 'submitter_name=CI2' -F 'submitter_email=ci2@example.test' \
             http://127.0.0.1:8444/gateway/submit)
-          # A duplicate zip is a 409; make it distinct so it is accepted.
-          if [ "$RESP" = "409" ]; then echo "duplicate content (expected on identical fixture) — reject-clean asserted structurally"; else
-            SID2=$(python3 -c 'import json;print(json.load(open("/tmp/ex2.json"))["submission_id"])')
-            URL2=$(python3 -c 'import json;print(json.load(open("/tmp/ex2.json"))["status_url"])')
-            for i in $(seq 1 60); do curl -s "http://127.0.0.1:8444${URL2}" | grep -qi 'Validated' && break; sleep 3; done
-            COOKIES=/tmp/cj.txt
-            DETAIL=$(curl -s -b "$COOKIES" "http://127.0.0.1:8444/gateway/curator/submission/${SID2}")
-            CSRF=$(echo "$DETAIL" | grep -o 'name="csrf_token" value="[0-9a-f]*"' | head -n1 | sed 's/.*value="//;s/"//')
-            curl -s -b "$COOKIES" -X POST --data "note=rejected&csrf_token=${CSRF}" \
-              "http://127.0.0.1:8444/gateway/curator/submission/${SID2}/reject" >/dev/null
+          # ANY answer other than the expected 409 dumps the status, the body and the gateway log
+          # BEFORE exiting. On 2026-08-04 this leg went straight from a non-409 into json.load, died
+          # with "Expecting value: line 1 column 1", and left the run with no status code, no body
+          # and no gateway log to diagnose from. A harness that discards its own evidence turns a
+          # one-run diagnosis into a guessing game.
+          if [ "$RESP" != "409" ]; then
+            echo "::error::duplicate submit answered HTTP ${RESP}, expected 409 (duplicate content)"
+            echo "--- status: ${RESP}"
+            echo "--- body (/tmp/ex2.json), $(wc -c < /tmp/ex2.json) bytes ---"
+            cat /tmp/ex2.json || true
+            echo ""
+            echo "--- docker logs gateway ---"
+            docker logs gateway 2>&1 || true
+            exit 1
           fi
+          grep -q '"submission_id"' /tmp/ex2.json \
+            || { echo "409 body does not name the first submission:"; cat /tmp/ex2.json; exit 1; }
+          echo "OK: byte-identical resubmit refused with 409 after the first was published"
+
+          # PART 2: the reject path itself, which needs a submission the gateway will ACCEPT. Re-zip
+          # the same package STORED instead of deflated: different archive bytes (so the sha guard
+          # lets it in) carrying byte-identical members (so it validates exactly as part 1 did).
+          (cd "$GITHUB_WORKSPACE/engine/tests/fixtures" && zip -q -r -0 /tmp/example3.zip example-survey)
+          RESP=$(curl -s -o /tmp/ex3.json -w '%{http_code}' \
+            -H 'X-AusMT-Submit-Key: ci-e2e-submit-key-abcdefgh' \
+            -F 'file=@/tmp/example3.zip' -F 'submitter_name=CI3' -F 'submitter_email=ci3@example.test' \
+            http://127.0.0.1:8444/gateway/submit)
+          if [ "$RESP" != "201" ]; then
+            echo "::error::re-compressed resubmit answered HTTP ${RESP}, expected 201"
+            echo "--- status: ${RESP}"
+            echo "--- body (/tmp/ex3.json), $(wc -c < /tmp/ex3.json) bytes ---"
+            cat /tmp/ex3.json || true
+            echo ""
+            echo "--- docker logs gateway ---"
+            docker logs gateway 2>&1 || true
+            exit 1
+          fi
+          SID3=$(python3 -c 'import json;print(json.load(open("/tmp/ex3.json"))["submission_id"])')
+          URL3=$(python3 -c 'import json;print(json.load(open("/tmp/ex3.json"))["status_url"])')
+          for i in $(seq 1 60); do
+            curl -s "http://127.0.0.1:8444${URL3}" | grep -qi 'Validated' && break
+            [ "$i" = 60 ] && { echo "the reject-leg submission never reached VALIDATED"; docker logs gw-runner; exit 1; }
+            sleep 3
+          done
+          COOKIES=/tmp/cj.txt
+          DETAIL=$(curl -s -b "$COOKIES" "http://127.0.0.1:8444/gateway/curator/submission/${SID3}")
+          CSRF=$(echo "$DETAIL" | grep -o 'name="csrf_token" value="[0-9a-f]*"' | head -n1 | sed 's/.*value="//;s/"//')
+          [ -n "$CSRF" ] || { echo "no csrf token on the reject-leg detail page"; exit 1; }
+          curl -s -b "$COOKIES" -X POST --data "note=rejected&csrf_token=${CSRF}" \
+            "http://127.0.0.1:8444/gateway/curator/submission/${SID3}/reject" >/dev/null
+          curl -s "http://127.0.0.1:8444${URL3}" | grep -qi 'Rejected' \
+            || { echo "the curator reject did not take"; curl -s "http://127.0.0.1:8444${URL3}"; exit 1; }
+
           AFTER=$(git -C /srv/ausmt/surveys-live rev-parse HEAD)
           [ "$BEFORE" = "$AFTER" ] || { echo "reject/duplicate changed surveys-live HEAD"; exit 1; }
           echo "OK: reject path left surveys-live clean (HEAD unchanged)"
