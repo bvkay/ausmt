@@ -3514,8 +3514,9 @@ def _bulk_export_line(stats: dict) -> str:
 
     THE CITATION PACK. The portal does generate one in the browser, and it is genuinely uncountable
     here because it fetches nothing from the server. It is NOT, however, produced by this export: in
-    portal/src/exports.js the export flow (#dlZip) writes the EDIs, a per-survey LICENSE.txt and the
-    not-included pointer file, and the citation pack is #dlCite, a separate control the reader clicks
+    portal/src/exports.js the three selection exports (#dlZip, #dlZipXml, #dlZipH5) write the selected
+    files of their format, a per-survey LICENSE.txt and the not-included pointer file, and the citation
+    pack is #dlCite, a separate control the reader clicks
     separately. So the line names the pack and its uncountability, and states the relationship the code
     actually has rather than the causal one it does not.
 

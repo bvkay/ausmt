@@ -2181,3 +2181,7 @@ def test_the_bulk_export_copy_describes_every_flow_that_writes_the_flag():
         f"{len(formats)} buttons writing the flag, and the row is where an operator learns that")
     for label in ("EDI", "EMTF XML", "MTH5"):
         assert label in row, f"the Bulk map exports row does not name the {label} selection export"
+    assert "labelled and unlabelled alike" in row and "independent total" in row, (
+        "the runbook must state the bulk figure and the format breakdown are INDEPENDENT totals: "
+        "stats.json holds no select-by-format cross-tab, and claiming the format split separates "
+        "the three flows invites the exact misreading this pin exists to prevent")

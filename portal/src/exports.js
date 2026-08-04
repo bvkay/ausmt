@@ -312,7 +312,11 @@ function paintExportSizes(){
   SEL_ZIP_BUTTONS.forEach(([,,fmt])=>{total[fmt]=0;});
   if(known)for(const s of st){
     const rows=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]);
-    for(const a of rows){if(a&&a.size&&total[a.format]!==undefined)total[a.format]+=a.size;}}
+    // First row of each format only: exportSelectionFormat fetches .find(format), so the estimate
+    // counts exactly what the archive will contain even if a future manifest carries mirror rows
+    // (a repo copy beside an NCI copy) for one station.
+    const seen=Object.create(null);
+    for(const a of rows){if(a&&a.size&&total[a.format]!==undefined&&!seen[a.format]){seen[a.format]=1;total[a.format]+=a.size;}}}
   SEL_ZIP_BUTTONS.forEach(([id,base,fmt])=>{
     const b=document.getElementById(id);if(!b)return;
     const n=(known&&st.length)?total[fmt]:null;
