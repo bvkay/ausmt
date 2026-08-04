@@ -194,7 +194,9 @@ What matters on the producer side:
   Extend `manifest.json` by adding keys.
 - **It is written to both** the portal data dir **and** the `--products` dir.
 - **`sha256` is of the SERVED bytes.** The served EDIs and the per-survey EDI zip are
-  byte-reproducible across builds (given a fixed zlib), the generated ones included: a copied
+  byte-reproducible across builds (given a fixed zlib and, for generated EDIs, a fixed
+  mt_metadata: the writer stamps PROGVERS into the HEAD block, so a toolchain bump moves every
+  generated digest with no data change), the generated ones included: a copied
   custodian EDI carries no build clock, and `_reproducible_derived_edi` stamps the one field
   mt_metadata would clock-stamp in a generated one from the source document's own date. EMTF XML,
   the EMTF-XML zip and the transfer-function MTH5 embed timestamps and UUIDs and are **not**: their
