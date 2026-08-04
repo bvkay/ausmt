@@ -18,9 +18,14 @@ than built from the station id.
 
 | File | Served path | Format |
 |---|---|---|
-| Source transfer function | `/data/edi/<slug>/<file>.edi` | EDI, as the custodian submitted it |
+| Transfer function as EDI | `/data/edi/<slug>/<file>.edi` | EDI, the custodian's own file for a station submitted as EDI, and one generated from the same transfer function for a station submitted only as EMTF XML |
 | Canonical transfer function | `/data/xml/<slug>/<station>.xml` | EMTF XML, derived by the build |
 | Station MTH5 | `/data/h5/<slug>/<station>.h5` | MTH5, transfer functions only, derived by the build |
+
+Only the first row is ever a submitted file, and only for a station submitted as EDI.
+`build_report.json`'s `ingest_sources` says which source format a station arrived in, and [EDI is the
+citable artifact](../interoperability/tool-integration.md#edi-is-the-citable-artifact) says what that
+means for a digest check.
 
 The EDI filename is not derivable from the station id, so take all three paths from the manifest rather
 than templating them. The MTH5 and EMTF XML paths do use the station id, but the manifest is still the
@@ -29,9 +34,9 @@ the [data reference](../interoperability/api-reference.md#per-station-fetch-thro
 [Tool integration](../interoperability/tool-integration.md).
 
 The station MTH5 is written by the same writer that produces the per-survey bundle and passes the same
-round-trip gate against its source EDI, so a station reads identically out of either. It carries the
-survey's licence and credit inside the file (`Experiment/Surveys/<slug>` holds `release_license` and the
-credit attributes), which is why it ships with no licence sidecar beside it.
+round-trip gate against its source transfer function, so a station reads identically out of either. It
+carries the survey's licence and credit inside the file (`Experiment/Surveys/<slug>` holds
+`release_license` and the credit attributes), which is why it ships with no licence sidecar beside it.
 
 ## Normative artifact
 
