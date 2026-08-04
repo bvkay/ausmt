@@ -58,7 +58,37 @@ const stub = () => new Proxy(function () {}, {
 const html = fs.readFileSync(path.join(PORTAL, "index.html"), "utf8");
 const dom = new JSDOM(html, { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
 const win = dom.window;
-win.L = stub(); win.JSZip = stub();
+win.L = stub();
+// JSZip RECORDER. jsdom writes no real archive, but WHICH entries a selection export puts in one is
+// exactly the claim the export pins make ("the zip holds a file per station that has this format, and a
+// LICENSE.txt beside them"), and the old blanket stub swallowed every z.file() call, so no such claim
+// could be asserted at all. This records the entry names (folder prefix included) and degenerates to the
+// generic stub for everything else, so generateAsync() still resolves exactly as it did before.
+const zipEntries = [];
+const zipRec = (prefix) => new Proxy(function () {}, {
+  get: (t, p) => {
+    if (p === "then") return undefined;
+    if (p === Symbol.iterator) return function* () {};
+    if (p === "folder") return (n) => zipRec(prefix + String(n) + "/");
+    if (p === "file") return (name, body) => { zipEntries.push({ name: prefix + String(name), body }); return zipRec(prefix); };
+    return stub();
+  },
+  apply: () => stub(), construct: () => stub(),
+});
+win.JSZip = new Proxy(function () {}, { construct: () => zipRec(""), apply: () => zipRec("") });
+// jsdom implements no object-URL store, and every export ends by handing a Blob to createObjectURL to
+// drive the download anchor. Stubbing the pair lets a pin drive an export CLICK all the way to its end
+// (which is where the entry list is complete) instead of stopping short of the code that writes it.
+win.URL.createObjectURL = () => "blob:interaction-test";
+win.URL.revokeObjectURL = () => {};
+// ANALYTICS RECORDER. analytics-shim.js defines window.track() over window.plausible, and it only installs
+// its own no-op queue when there is no plausible already (`window.plausible || function(){}`). Defining one
+// FIRST therefore records what the real track() emits, through the real shim, rather than replacing track()
+// with a re-implementation of it. What an export button reports is a published vocabulary: the fold that
+// reads these events cannot see the difference between two buttons that describe themselves differently
+// and two buttons that do different things, so the shape is worth pinning at the call site.
+const trackCalls = [];
+win.plausible = (name, opts) => { trackCalls.push({ name, props: (opts && opts.props) || {} }); };
 // version/schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip assertion
 // (item 3) can pin exactly, instead of matching a moving default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
@@ -71,6 +101,26 @@ win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", sch
 // another, and (b) HOLDS the three heavy responses until releaseHeavy(), so the driver can inspect the app
 // in exactly the window the split creates. Every other url resolves immediately, as before.
 const HEAVY = /(^|\/)(tf|sci|manifest)\.json$/;
+// The served ARTIFACT families (the per-station files the selection exports package). The data dir holds
+// only JSON products, so without this every artifact fetch came back !ok and every export packaged
+// nothing: a pin could then only observe which URLs were requested, never what the archive ended up
+// holding. A matching url resolves as a served file would, so the packaging path runs to completion.
+// The query is stripped first, because the bulk label rides there.
+const ARTIFACT = /\.(edi|xml|h5)$/i;
+// FAILURE INJECTION. Making every artifact fetch succeed (above) is what let the packaging path run to its
+// end, and it also made the OTHER end unreachable: an export's transport-failure branch (the fetch throws,
+// the station lands in failed[], the archive says which files were served but did not arrive) could not be
+// entered by any driver, so the one branch that speaks about the NETWORK rather than about the corpus
+// shipped unexercised. Add a path here and its fetch REJECTS, the way a dropped connection does, which is
+// the harsher of the two routes into that branch (a not-ok response reaches the same catch). Matched on the
+// query-stripped url by SUFFIX, so a leg names the manifest row ("h5/gamma/G1.h5") and not the data-base
+// prefix or the bulk label the export appends.
+const fetchFail = new Set();
+const fetchWouldFail = (url) => {
+  const p = String(url).split("?")[0];
+  for (const t of fetchFail) if (p === t || p.endsWith("/" + t)) return true;
+  return false;
+};
 const fetchOrder = [];
 let heavyPending = [];
 let heavyReleased = false;
@@ -78,7 +128,10 @@ function heavyHeld() { return heavyPending.length; }
 function releaseHeavy() { heavyReleased = true; const q = heavyPending; heavyPending = []; q.forEach(f => f()); }
 win.fetch = url => {
   fetchOrder.push(String(url));
-  const body = DATAMAP[url] ? { ok: true, json: () => Promise.resolve(DATAMAP[url]) } : { ok: false };
+  if (fetchWouldFail(url)) return Promise.reject(new Error("injected transport failure: " + url));
+  const body = DATAMAP[url] ? { ok: true, json: () => Promise.resolve(DATAMAP[url]) }
+    : ARTIFACT.test(String(url).split("?")[0]) ? { ok: true, blob: () => Promise.resolve({ size: 1 }) }
+      : { ok: false };
   if (!HEAVY.test(url) || heavyReleased) return Promise.resolve(body);
   return new Promise(res => heavyPending.push(() => res(body)));
 };
@@ -2710,11 +2763,15 @@ async function bootFreshWindow(dataMap, url) {
   ok(lgFmtEdi && lgFmtEdi.textContent.trim() === "EDI",
     "FORMATS: an unserved format must be ABSENT from the list, not claimed, got: " +
     JSON.stringify(lgFmtEdi && lgFmtEdi.textContent.trim()));
-  // All three served (manifest EDI + EMTF XML artifacts, plus a survey MTH5 bundle).
+  // All three served: three per-station manifest files[] rows. The MTH5 entry is the STATION's own h5,
+  // never the survey's <slug>-tf.h5 bundle: this node sits in a STATION drawer beside a Files tab that
+  // reads the station row, and the discriminating case (bundle present, station row absent) is pinned
+  // under STATION-H5 below.
   A.setManifest({ files: [
     { ausmt_id: "nz.gamma.G1", format: "edi", url: "files/g1.edi", size: 1000 },
     { ausmt_id: "nz.gamma.G1", format: "emtfxml", url: "files/g1.xml", size: 900 },
-  ], bundles: [{ survey: "Gamma Survey", slug: "gamma", format: "mth5", url: "bundles/gamma-tf.h5", size: 5000 }] });
+    { ausmt_id: "nz.gamma.G1", format: "mth5", url: "files/g1.h5", size: 5000 },
+  ], bundles: [] });
   A.openStationById("nz.gamma.G1");
   const lgFmtAll = lineageValue(doc.getElementById("dp-provenance"), "Distributed formats");
   ok(lgFmtAll && lgFmtAll.textContent.trim() === "EDI · EMTF XML · MTH5",
@@ -3007,6 +3064,117 @@ async function bootFreshWindow(dataMap, url) {
   gdRow.click(); A.closeDrawer();
   A.setType("A1", "BBMT"); A.setView("map"); A.refresh();   // restore the all-BBMT baseline
 
+  // ---- STATION MTH5 IS THE STATION'S OWN FILE (owner report 2026-08-04) ---------------------------
+  // The Files tab's Level 2 list belongs to ONE STATION. Its EDI and EMTF XML rows have always read that
+  // station's own manifest files[] row; the MTH5 row read the SURVEY's bundles[] row instead, because it
+  // was written when the survey-aggregated <slug>-tf.h5 was the only MTH5 the build produced. Once the
+  // per-station producer landed (h5/<slug>/<station>.h5, one files[] row each) that row started offering
+  // the WHOLE SURVEY under a station heading: live, SA026E showed the 1.74 MB survey bundle in place of
+  // its own 174,696 B file.
+  //
+  // The fixture is the shape that makes the confusion possible, and it is the shape the served manifest
+  // actually has: the per-station mth5 files[] row AND the survey-level mth5 bundles[] row, together.
+  const H5_STATION_URL = "h5/gamma/G1.h5", H5_BUNDLE_URL = "bundles/gamma-tf.h5";
+  // The Level 2 rows are `<div class="prod" …>{dot}<div>NAME {chip}<small>sub</small></div></div>`, so the
+  // row NAME is the inner div's leading text node, matched exactly, never by a substring of the whole row.
+  const prodNamed = (panel, name) => [...panel.querySelectorAll(".prod")].find(d => {
+    const body = d.querySelector("div");
+    return body && body.firstChild && body.firstChild.nodeType === 3 && body.firstChild.textContent.trim() === name;
+  });
+  // The OTHER two station-scoped MTH5 surfaces, read the same way a reader reads them. Both live in the
+  // Provenance tab: the lineage graph's "Distributed formats" node (drawer.js distributedFormatsText) and
+  // the "Format availability" badge row. Panels are rendered whatever tab is selected (drawerPanel hides
+  // them with `hidden`), so both are queryable without clicking through.
+  const lineageVal = (label) => {
+    const lt = [...doc.querySelectorAll("#drawer .lineage .lt")].find(e => e.textContent.trim() === label);
+    return lt ? lt.parentNode.querySelector(".lv").textContent.trim() : null;
+  };
+  // A badge is `<span class="badge {state}">{glyph} {label}</span>`; match on the LABEL (everything after
+  // the state glyph) so "MTH5" never matches "EMTF XML", and report the state by its glyph.
+  const badgeState = (label) => {
+    const b = [...doc.querySelectorAll("#drawer .badges .badge")]
+      .find(e => e.textContent.trim().replace(/^\S+\s*/, "") === label);
+    if (!b) return null;
+    const g = b.textContent.trim().charAt(0);
+    return g === "✓" ? "ok" : g === "◐" ? "part" : g === "✗" ? "no" : "unk";
+  };
+  A.setManifest({
+    files: [
+      { ausmt_id: "nz.gamma.G1", format: "edi", url: "edi/gamma/x.edi", size: 1000 },
+      { ausmt_id: "nz.gamma.G1", format: "emtfxml", url: "xml/gamma/G1.xml", size: 900 },
+      { ausmt_id: "nz.gamma.G1", format: "mth5", url: H5_STATION_URL, size: 174696 },
+    ],
+    bundles: [{ survey: "Gamma Survey", slug: "gamma", format: "mth5", url: H5_BUNDLE_URL, size: 1824522 }],
+  });
+  A.openStationById("nz.gamma.G1");
+  const h5Files = doc.getElementById("dp-files");
+  const h5Row = prodNamed(h5Files, "MTH5");
+  ok(h5Row, "STATION-H5: the Files tab must carry an MTH5 row when the station has its own served h5");
+  ok(h5Row.getAttribute("data-url") === H5_STATION_URL,
+    "STATION-H5: the MTH5 row must link the STATION's own files[] row (" + H5_STATION_URL + "), got " +
+    JSON.stringify(h5Row.getAttribute("data-url")) + " (the survey bundle is not this station's file)");
+  ok(h5Row.getAttribute("data-name") === "G1.h5",
+    "STATION-H5: the download name must be the station file's, got " + JSON.stringify(h5Row.getAttribute("data-name")));
+  ok(h5Row.getAttribute("data-prod") === "fetch",
+    "STATION-H5: the row must download through the same masked front-door fetch the EMTF XML row uses");
+  // Size comes from the STATION's manifest row: 174,696 B renders "171 KB". The bundle's 1.7 MB is the
+  // live symptom the owner reported and must appear nowhere on the row.
+  ok(/171 KB/.test(h5Row.textContent) && h5Row.textContent.indexOf("1.7 MB") < 0,
+    "STATION-H5: the size must be the STATION row's (171 KB), not the survey bundle's (1.7 MB), got " +
+    JSON.stringify(h5Row.textContent.trim()));
+  ok(/AusMT-derived/.test(h5Row.textContent) && /Transfer functions only/.test(h5Row.textContent),
+    "STATION-H5: the row keeps its AusMT-derived origin chip and its TF-only wording");
+  ok(h5Files.innerHTML.indexOf(H5_BUNDLE_URL) < 0,
+    "STATION-H5: the survey-level bundle URL must NEVER render inside a station's Files list, found it in " +
+    h5Files.innerHTML.slice(0, 400));
+  // A station that HAS its own h5 reads the same in all three station-scoped places. This half of the
+  // consistency pin is the one that stays true either way (station row and survey bundle both exist), so
+  // it is here to prove the negative half below is measuring the surfaces and not merely their absence.
+  ok(/MTH5/.test(lineageVal("Distributed formats") || ""),
+    "STATION-H5 consistency: a station with its own served h5 must list MTH5 in the lineage's distributed " +
+    "formats, got " + JSON.stringify(lineageVal("Distributed formats")));
+  ok(badgeState("MTH5") === "ok",
+    "STATION-H5 consistency: a station with its own served h5 must carry an ok MTH5 availability badge, got " +
+    JSON.stringify(badgeState("MTH5")));
+  // Honest absence: a station with no per-station row of its own (the engine emits none for a
+  // coordinate-generalised or withheld station) says so. It must never borrow the survey bundle.
+  A.setManifest({
+    files: [{ ausmt_id: "nz.gamma.G1", format: "edi", url: "edi/gamma/x.edi", size: 1000 }],
+    bundles: [{ survey: "Gamma Survey", slug: "gamma", format: "mth5", url: H5_BUNDLE_URL, size: 1824522 }],
+  });
+  A.openStationById("nz.gamma.G1");
+  const h5FilesNone = doc.getElementById("dp-files");
+  const h5RowNone = prodNamed(h5FilesNone, "MTH5");
+  ok(h5RowNone && /not currently available/.test(h5RowNone.textContent),
+    "STATION-H5: with no per-station h5 the MTH5 row must read the honest not-available line, got " +
+    JSON.stringify(h5RowNone && h5RowNone.textContent.trim()));
+  ok(h5RowNone.getAttribute("data-url") == null,
+    "STATION-H5: the not-available row must carry no download action at all");
+  ok(h5FilesNone.innerHTML.indexOf(H5_BUNDLE_URL) < 0,
+    "STATION-H5: an absent station h5 must never fall back to the survey bundle");
+  // ONE DRAWER, ONE ANSWER. The Files tab reads the station's files[] row; the lineage's distributed-formats
+  // node and the format-availability badge read the survey's bundles[] row. This fixture is exactly where
+  // those two readings diverge: no station h5, but the survey bundle exists. The reader then sees the same
+  // drawer say "not currently available" on the Files tab and "MTH5 is distributed / ✓ MTH5" two tabs over,
+  // and there is no way to tell from the screen which one is lying. All three are STATION-scoped surfaces,
+  // so all three must answer about the station.
+  ok(!/MTH5/.test(lineageVal("Distributed formats") || ""),
+    "STATION-H5 consistency: with no station h5 the lineage's distributed formats must NOT claim MTH5 " +
+    "(the Files tab in the same drawer says it is not available), got " +
+    JSON.stringify(lineageVal("Distributed formats")));
+  ok(badgeState("MTH5") === "unk",
+    "STATION-H5 consistency: with no station h5 the format-availability badge must read unknown, not ok " +
+    "(an ok badge is the survey bundle answering a question about the station), got " +
+    JSON.stringify(badgeState("MTH5")));
+  ok(/EDI/.test(lineageVal("Distributed formats") || ""),
+    "STATION-H5 consistency: the formats line must still list what IS served for the station, got " +
+    JSON.stringify(lineageVal("Distributed formats")));
+  // ...and the survey bundle keeps the surface it belongs to: the SURVEY drawer's Downloads grid.
+  A.openSurvey("Gamma Survey");
+  ok(doc.getElementById("drawer").innerHTML.indexOf(H5_BUNDLE_URL) >= 0,
+    "STATION-H5: the survey MTH5 bundle must still be offered by the survey drawer's Downloads grid");
+  A.setManifest(null); A.closeDrawer();
+
   // ---- BULK-EXPORT LABEL (owner ruling 2026-08-01) -------------------------------------------------
   // The portal marks the file fetches its multi-file export issues with a query flag, so the server-log
   // aggregator can tell a drag-selected bulk export from a single station download. Two properties, and
@@ -3015,8 +3183,8 @@ async function bootFreshWindow(dataMap, url) {
   // leaked onto the drawer's own download would silently reclassify every single download as bulk.
   //
   // Driven through the REAL click handlers against the real fetch, which this harness already records in
-  // request order; the JSZip stub swallows the archive, but the fetches are what the label lives on and
-  // they are observed here exactly as the browser would issue them.
+  // request order; the fetches are what the label lives on and they are observed here exactly as the
+  // browser would issue them.
   ok(typeof A.selBulkFlag === "function" && /^sel=/.test(A.selBulkFlag() || ""),
     "SEL: exports.js must define the bulk-export flag string, got " + JSON.stringify(A.selBulkFlag && A.selBulkFlag()));
   const SELFLAG = A.selBulkFlag();
@@ -3041,6 +3209,231 @@ async function bootFreshWindow(dataMap, url) {
   ok(singleUrls.length === 1, "SEL: the drawer download must fetch exactly one file, got " + JSON.stringify(singleUrls));
   ok(singleUrls.every(u => u.indexOf("sel=") < 0),
     "SEL: a single-station download must carry NO selection flag, got " + JSON.stringify(singleUrls));
+  A.setSelected([]);
+
+  // ---- SELECTION EXPORTS: EMTF XML AND MTH5 (owner ask 2026-08-04) --------------------------------
+  // "EDIs (zip)" packaged the selection in the custodian's format only. AusMT also serves a per-station
+  // EMTF XML and a per-station MTH5, and a reader who has just drawn a box around 40 stations had no way
+  // to take either without opening 40 drawers. Two more buttons zip those, client-side, through the same
+  // flow: the same per-station manifest rows, the same bulk label on every fetch, the same LICENSE.txt
+  // beside the bytes, and the same refusal to shrink the answer in silence.
+  //
+  // The gap is the point of the fixture. Unlike an EDI, a derived file exists only where the build made
+  // one: A2 has no MTH5 and G1 no EMTF XML, so each export must skip a DIFFERENT station and say so.
+  const SEL_MANIFEST = { files: [
+    { ausmt_id: "au.alpha.A1", format: "edi", url: "edi/alpha/A1.edi", size: 1000 },
+    { ausmt_id: "au.alpha.A1", format: "emtfxml", url: "xml/alpha/A1.xml", size: 2000000 },
+    { ausmt_id: "au.alpha.A1", format: "mth5", url: "h5/alpha/A1.h5", size: 174696 },
+    { ausmt_id: "au.alpha.A2", format: "edi", url: "edi/alpha/A2.edi", size: 1100 },
+    { ausmt_id: "au.alpha.A2", format: "emtfxml", url: "xml/alpha/A2.xml", size: 200000 },
+    { ausmt_id: "nz.gamma.G1", format: "edi", url: "edi/gamma/G1.edi", size: 1200 },
+    { ausmt_id: "nz.gamma.G1", format: "mth5", url: "h5/gamma/G1.h5", size: 1000000 },
+  ], bundles: [] };
+  const xmlBtn = doc.getElementById("dlZipXml"), h5Btn = doc.getElementById("dlZipH5"), ediBtn = doc.getElementById("dlZip");
+  ok(xmlBtn, "SELFMT: the Select and export card must offer an EMTF XML zip export (#dlZipXml)");
+  ok(h5Btn, "SELFMT: the Select and export card must offer an MTH5 zip export (#dlZipH5)");
+  ok(typeof xmlBtn.onclick === "function" && typeof h5Btn.onclick === "function",
+    "SELFMT: both new export buttons must have a handler bound in exports.js");
+  ok(/EMTF XML/.test(xmlBtn.textContent) && /zip/.test(xmlBtn.textContent),
+    "SELFMT: the XML button must read as an EMTF XML zip export, got " + JSON.stringify(xmlBtn.textContent));
+  ok(/MTH5/.test(h5Btn.textContent) && /zip/.test(h5Btn.textContent),
+    "SELFMT: the MTH5 button must read as an MTH5 zip export, got " + JSON.stringify(h5Btn.textContent));
+  // Both must be gated on a selection exactly as the other export buttons are.
+  A.setSelected([]);
+  ok(xmlBtn.disabled && h5Btn.disabled,
+    "SELFMT: with nothing selected both new exports must be disabled, like every other export button");
+
+  A.setManifest(SEL_MANIFEST);
+  A.setSelected(["A1", "A2", "G1"]);
+  ok(!xmlBtn.disabled && !h5Btn.disabled, "SELFMT: a selection must enable both new exports");
+
+  // (a) SIZE HONESTY. The manifest carries per-file sizes client-side, so each of the three zip buttons
+  //     states what the current selection would cost before it is clicked. XML: 2,000,000 + 200,000 B
+  //     over A1+A2 (G1 has none) = 2.1 MB. MTH5: 174,696 + 1,000,000 over A1+G1 (A2 has none) = 1.1 MB.
+  //     EDI: 1000+1100+1200 = 3 KB. Each is an ESTIMATE of what will actually be packaged, so it counts
+  //     only the rows the export will fetch, never the whole selection.
+  ok(/~2\.1 MB/.test(xmlBtn.textContent),
+    "SELFMT size: the XML button must show the selection's XML total (~2.1 MB), got " + JSON.stringify(xmlBtn.textContent));
+  ok(/~1\.1 MB/.test(h5Btn.textContent),
+    "SELFMT size: the MTH5 button must show the selection's MTH5 total (~1.1 MB), got " + JSON.stringify(h5Btn.textContent));
+  ok(/~3 KB/.test(ediBtn.textContent),
+    "SELFMT size: the EDI button must show the selection's EDI total (~3 KB), got " + JSON.stringify(ediBtn.textContent));
+
+  const fetchedExt = (from, ext) => fetchOrder.slice(from).filter(u => String(u).split("?")[0].endsWith(ext));
+  const zipNames = (from) => zipEntries.slice(from).map(e => e.name);
+  const zipBody = (from, re) => (zipEntries.slice(from).find(e => re.test(e.name)) || {}).body;
+
+  // (b) EMTF XML export. Fetches exactly the two stations that HAVE an XML row, every URL bulk-labelled;
+  //     packages them under their survey slug; writes the survey's LICENSE.txt beside them; and names
+  //     the skipped station in the archive rather than quietly returning two files for three stations.
+  let fmark = fetchOrder.length, zmark = zipEntries.length;
+  await xmlBtn.onclick();
+  const xmlUrls = fetchedExt(fmark, ".xml");
+  ok(xmlUrls.length === 2, "SELFMT xml: the export must fetch one file per selected station THAT HAS an " +
+    "EMTF XML (A1 and A2, never G1, which has none), got " + JSON.stringify(xmlUrls));
+  ok(xmlUrls.every(u => u.indexOf(SELFLAG) >= 0),
+    "SELFMT xml: every file the export fetches must carry " + SELFLAG + ", got " + JSON.stringify(xmlUrls));
+  ok(xmlUrls.every(u => u.split("?")[0].indexOf("/xml/alpha/") >= 0),
+    "SELFMT xml: the export must fetch the stations' own manifest rows, got " + JSON.stringify(xmlUrls));
+  ok(fetchedExt(fmark, ".edi").length === 0 && fetchedExt(fmark, ".h5").length === 0,
+    "SELFMT xml: an EMTF XML export must fetch nothing but EMTF XML");
+  const xmlNames = zipNames(zmark);
+  ok(xmlNames.filter(n => /\.xml$/.test(n)).length === 2,
+    "SELFMT xml: the zip must hold one entry per fetched file, got " + JSON.stringify(xmlNames));
+  ok(xmlNames.some(n => /alpha\/A1\.xml$/.test(n)) && xmlNames.some(n => /alpha\/A2\.xml$/.test(n)),
+    "SELFMT xml: entries must be namespaced by survey slug (two surveys can reuse a station basename), got " +
+    JSON.stringify(xmlNames));
+  ok(xmlNames.some(n => /alpha\/LICENSE\.txt$/.test(n)),
+    "SELFMT xml: the rights must travel with the bytes, one LICENSE.txt per included survey, got " +
+    JSON.stringify(xmlNames));
+  const xmlGap = zipBody(zmark, /NOT_INCLUDED/);
+  ok(xmlGap != null, "SELFMT xml: a selected station with no EMTF XML must be reported in the archive, " +
+    "never dropped in silence; entries were " + JSON.stringify(xmlNames));
+  ok(/\bG1\b/.test(String(xmlGap)),
+    "SELFMT xml: the gap note must NAME the skipped station, got " + JSON.stringify(String(xmlGap).slice(0, 300)));
+  ok(String(xmlGap).indexOf("A1") < 0 && String(xmlGap).indexOf("A2") < 0,
+    "SELFMT xml: the gap note must list only what was skipped, got " + JSON.stringify(String(xmlGap).slice(0, 300)));
+
+  // (c) MTH5 export. The SAME contract over a different gap: A2 is the station with no file this time.
+  fmark = fetchOrder.length; zmark = zipEntries.length;
+  await h5Btn.onclick();
+  const h5Urls = fetchedExt(fmark, ".h5");
+  ok(h5Urls.length === 2, "SELFMT h5: the export must fetch one file per selected station THAT HAS an " +
+    "MTH5 (A1 and G1, never A2, which has none), got " + JSON.stringify(h5Urls));
+  ok(h5Urls.every(u => u.indexOf(SELFLAG) >= 0),
+    "SELFMT h5: every file the export fetches must carry " + SELFLAG + ", got " + JSON.stringify(h5Urls));
+  ok(h5Urls.every(u => u.split("?")[0].indexOf("/h5/") >= 0),
+    "SELFMT h5: the export must fetch the h5/ station files, got " + JSON.stringify(h5Urls));
+  ok(fetchedExt(fmark, ".edi").length === 0 && fetchedExt(fmark, ".xml").length === 0,
+    "SELFMT h5: an MTH5 export must fetch nothing but MTH5");
+  const h5Names = zipNames(zmark);
+  ok(h5Names.filter(n => /\.h5$/.test(n)).length === 2,
+    "SELFMT h5: the zip must hold one entry per fetched file, got " + JSON.stringify(h5Names));
+  ok(h5Names.some(n => /alpha\/A1\.h5$/.test(n)) && h5Names.some(n => /gamma\/G1\.h5$/.test(n)),
+    "SELFMT h5: entries must be namespaced by survey slug, got " + JSON.stringify(h5Names));
+  ok(h5Names.filter(n => /LICENSE\.txt$/.test(n)).length === 2,
+    "SELFMT h5: a selection spanning two surveys must carry BOTH custodians' LICENSE.txt, got " +
+    JSON.stringify(h5Names));
+  const h5Gap = zipBody(zmark, /NOT_INCLUDED/);
+  ok(h5Gap != null && /\bA2\b/.test(String(h5Gap)),
+    "SELFMT h5: the gap note must name A2, the selected station with no MTH5, got " +
+    JSON.stringify(String(h5Gap).slice(0, 300)));
+
+  // (d) The two new flows are the ONLY thing that changed about the label: the drawer's single-station
+  //     download is still unlabelled, so the single-vs-bulk split downstream still means what it says.
+  fmark = fetchOrder.length;
+  await A.dispatchProd({ prod: "fetch", url: "h5/alpha/A1.h5", name: "A1.h5" });
+  ok(fetchedExt(fmark, ".h5").every(u => u.indexOf("sel=") < 0),
+    "SELFMT: a single-station MTH5 download must still carry NO selection flag, got " +
+    JSON.stringify(fetchedExt(fmark, ".h5")));
+
+  // (e) TRANSPORT FAILURE. A selected station can be absent from the archive for three different reasons,
+  //     and the third is not a statement about the corpus at all: the file IS served, and the fetch for it
+  //     did not come back. Reporting that station under "no MTH5 is served for these" would tell a reader
+  //     their station has no such file, when in fact one exists and the network dropped it, and the second
+  //     attempt they would never make is the one that works. The branch has been in the flow since the
+  //     export shipped and no driver could enter it: every artifact fetch in this harness resolved ok.
+  //     G1 has an h5 row; its fetch is made to fail. A2 still has no row at all, so ONE archive now
+  //     carries both kinds of gap and the pin can prove they are told apart rather than pooled.
+  fetchFail.add("h5/gamma/G1.h5");
+  fmark = fetchOrder.length; zmark = zipEntries.length;
+  await h5Btn.onclick();
+  ok(fetchedExt(fmark, ".h5").length === 2,
+    "SELFMT fail: the export must still ATTEMPT both served files, got " + JSON.stringify(fetchedExt(fmark, ".h5")));
+  const failNames = zipNames(zmark);
+  ok(failNames.filter(n => /\.h5$/.test(n)).length === 1 && failNames.some(n => /alpha\/A1\.h5$/.test(n)),
+    "SELFMT fail: only the file that ARRIVED may be in the archive, got " + JSON.stringify(failNames));
+  ok(failNames.filter(n => /LICENSE\.txt$/.test(n)).length === 1,
+    "SELFMT fail: the rights instrument must cover the surveys actually INCLUDED, not the ones attempted, got " +
+    JSON.stringify(failNames));
+  const failGap = String(zipBody(zmark, /NOT_INCLUDED/));
+  ok(failGap !== "undefined", "SELFMT fail: a fetch that did not come back must be reported in the archive, " +
+    "never dropped in silence; entries were " + JSON.stringify(failNames));
+  const iTransport = failGap.indexOf("network or server"), iG1 = failGap.indexOf("G1"), iA2 = failGap.indexOf("A2");
+  ok(iTransport >= 0, "SELFMT fail: the archive must carry a TRANSPORT section, got " + JSON.stringify(failGap.slice(0, 400)));
+  ok(iG1 > iTransport,
+    "SELFMT fail: the station whose fetch failed must be listed under the transport section, not under the " +
+    "not-served one (its file exists; saying otherwise is a false claim about the corpus), got " +
+    JSON.stringify(failGap.slice(0, 500)));
+  ok(iA2 >= 0 && iA2 < iTransport,
+    "SELFMT fail: the station with no file at all must stay under the not-served section, so the two kinds " +
+    "of gap are not pooled, got " + JSON.stringify(failGap.slice(0, 500)));
+  ok(/try the export again/.test(failGap),
+    "SELFMT fail: a transport fault must tell the reader the retry is worth making, got " +
+    JSON.stringify(failGap.slice(0, 500)));
+
+  // (f) EVERY FETCH FAILS. The floor of the same branch, and the only path that writes README.txt: nothing
+  //     arrived, so there is no archive content to explain itself, and a zip holding only a gap note would
+  //     otherwise read as an empty download. It must NOT toast "Nothing to package" and return (that is the
+  //     genuinely-empty selection, a different fact), and it must carry no LICENSE.txt, because a rights
+  //     instrument beside no bytes claims a survey is in an archive it is not in.
+  fetchFail.add("h5/alpha/A1.h5");
+  fmark = fetchOrder.length; zmark = zipEntries.length;
+  await h5Btn.onclick();
+  const allFailNames = zipNames(zmark);
+  ok(fetchedExt(fmark, ".h5").length === 2 && allFailNames.filter(n => /\.h5$/.test(n)).length === 0,
+    "SELFMT allfail: both fetches are attempted and neither lands, so no file entry may exist, got " +
+    JSON.stringify(allFailNames));
+  const readme = String(zipBody(zmark, /README\.txt$/));
+  ok(readme !== "undefined",
+    "SELFMT allfail: an archive with nothing in it must say so in a README, not arrive silently empty; " +
+    "entries were " + JSON.stringify(allFailNames));
+  ok(/MTH5/.test(readme) && /NOT_INCLUDED/.test(readme),
+    "SELFMT allfail: the README must name the format and point at the file that lists the stations, got " +
+    JSON.stringify(readme));
+  ok(allFailNames.filter(n => /LICENSE\.txt$/.test(n)).length === 0,
+    "SELFMT allfail: no bytes were included, so no custodian's licence may travel with the archive, got " +
+    JSON.stringify(allFailNames));
+  const allFailGap = String(zipBody(zmark, /NOT_INCLUDED/));
+  ok(/\bA1\b/.test(allFailGap) && /\bG1\b/.test(allFailGap) && /\bA2\b/.test(allFailGap),
+    "SELFMT allfail: all three selected stations must be accounted for, each under its own reason, got " +
+    JSON.stringify(allFailGap.slice(0, 600)));
+  fetchFail.clear();
+
+  // (g) ONE ANALYTICS VOCABULARY ACROSS THE THREE ZIPS. The fold behind these events cannot see the
+  //     difference between "two buttons describe themselves differently" and "two buttons do different
+  //     things". The EDI zip reported format:"zip" and the two new ones reported format:"emtfxml" /
+  //     format:"mth5", so the same action (zip a selection) landed in two different vocabularies and the
+  //     three flows could not be summed, compared, or charted as one series. One shape now: format is what
+  //     the reader receives (a zip) and `files` is what is inside it.
+  const tmark = trackCalls.length;
+  await ediBtn.onclick(); await xmlBtn.onclick(); await h5Btn.onclick();
+  const dl = trackCalls.slice(tmark).filter(e => e.name === "DownloadGenerated");
+  ok(dl.length === 3, "SELFMT event: each of the three zip buttons must report exactly one download event, got " +
+    JSON.stringify(trackCalls.slice(tmark)));
+  ok(dl.every(e => e.props.format === "zip"),
+    "SELFMT event: all three bulk exports deliver a zip, so all three must SAY zip; a per-format `format` " +
+    "puts the same action in two vocabularies, got " + JSON.stringify(dl.map(e => e.props)));
+  ok(dl.map(e => e.props.files).join(",") === "edi,emtfxml,mth5",
+    "SELFMT event: the format actually packaged rides its own field, in button order, got " +
+    JSON.stringify(dl.map(e => e.props)));
+  ok(dl.every(e => e.props.n === 3),
+    "SELFMT event: every export must report the selection size it was given, got " + JSON.stringify(dl.map(e => e.props)));
+
+  // (h) THE MANIFEST INDEX IS PER MANIFEST. artifactsFor() answers from an ausmt_id -> rows index built
+  //     once per manifest (data.js mfFileIndex), which is what takes the size repaint off the keystroke
+  //     path. A cache is a wrong answer that never goes away unless something invalidates it, and this one
+  //     is invalidated by the manifest's own identity precisely so no caller has to remember to. Swap the
+  //     manifest for one with different rows and every reader of the index must move with it.
+  A.setManifest({ files: [{ ausmt_id: "au.alpha.A1", format: "emtfxml", url: "xml/alpha/A1.xml", size: 1048576 }], bundles: [] });
+  A.refresh();
+  ok(/~1\.0 MB/.test(xmlBtn.textContent),
+    "SELFMT index: a swapped manifest must be read immediately (A1's new 1.0 MB XML row), got " +
+    JSON.stringify(xmlBtn.textContent) + " (a stale index would still be showing the previous manifest)");
+  ok(h5Btn.textContent.indexOf("~") < 0,
+    "SELFMT index: rows the new manifest does NOT carry must stop being counted, got " +
+    JSON.stringify(h5Btn.textContent));
+  A.setManifest(SEL_MANIFEST); A.refresh();
+  ok(/~2\.1 MB/.test(xmlBtn.textContent) && /~1\.1 MB/.test(h5Btn.textContent),
+    "SELFMT index: swapping back must restore the original totals, got " +
+    JSON.stringify([xmlBtn.textContent, h5Btn.textContent]));
+
+  // (i) Size honesty has a floor: with no manifest there are no sizes, and a "~0 B" would be a claim
+  //     about the corpus rather than about what is known. No estimate at all is the honest state.
+  A.setManifest(null); A.refresh(); A.setSelected(["A1", "A2", "G1"]);
+  ok(xmlBtn.textContent.indexOf("~") < 0 && h5Btn.textContent.indexOf("~") < 0 && ediBtn.textContent.indexOf("~") < 0,
+    "SELFMT size: with no download index there is nothing to estimate, so no size may be shown, got " +
+    JSON.stringify([xmlBtn.textContent, h5Btn.textContent, ediBtn.textContent]));
   A.setSelected([]);
 
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +

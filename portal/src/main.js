@@ -489,7 +489,11 @@ function wireHydration(){
     if(ST.length&&typeof refresh==="function")refresh();
     rehydrateOpenDrawer();
   });
-  const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();});
+  // The selection card's zip-size estimates are read off the manifest too, and updateSel() last ran
+  // before it landed, so they would sit blank until the reader next changed the selection. Repaint them
+  // on the same gate that re-renders the drawer.
+  const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();
+    if(typeof paintExportSizes==="function")paintExportSizes();});
   HYDRATION_DONE=Promise.all([tf,sci,man]);
 }
 async function boot(){

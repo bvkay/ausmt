@@ -337,11 +337,11 @@ function maturityBlock(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
 // stand-in for a survey's dataset DOI (see tsUrlFor's caller sites vs. fetchEdi/exports.js source-citation).
 function tsPidRaw(m){return (m&&m.ts_pid)||TS_COLLECTION.doi;}
 function tsUrlFor(m){return "https://doi.org/"+tsPidRaw(m);}
-// The served MTH5 bundle for a survey (the per-survey <slug>-tf.h5 the Downloads grid + Files tab use).
-// SINGLE SOURCE of MTH5 presence: the format-availability badge and the provenance lineage line derive
-// MTH5 from THIS (not the stale SMETA.mth5, which the engine always emits as "unk"), so all three agree
-// with the Downloads tile (19/21 surveys live). Guarded like the other bundlesForSlug callers.
-function mth5BundleFor(m){return (typeof bundlesForSlug==="function"?bundlesForSlug(m&&m.slug):[]).find(r=>r&&r.format==="mth5");}
+// mth5BundleFor() lived here: the survey's <slug>-tf.h5 bundles[] row, looked up by slug. It is gone
+// because every surface that called it was STATION-scoped and therefore reading the wrong scope. The
+// survey bundle has exactly one surface left, the survey drawer's Downloads grid, and surveyBundleTiles
+// renders it straight off bundlesForSlug with its two sibling bundles; a second, MTH5-only accessor was
+// only ever a way for a station surface to reach a survey fact.
 // api-docs lane: a manifest artifact url rendered as the ENDPOINT a reader can GET. A tier=repo row
 // carries a portal-relative path ("edi/<slug>/<file>.edi") which the hosted site serves under /data/;
 // a tier=nci row already carries the ABSOLUTE fileServer url, so it is shown verbatim; prefixing /data/
@@ -397,15 +397,23 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     // them), so the old "via pipeline / served for redistributable surveys" toast was FALSE. Show the same
     // honest inert not-available sub-line the MTH5 row uses, with no toast overclaim.
     : {n:"EMTF XML",sub:"not currently available",origin:"AusMT-derived",st:"unk",d:null};
-  // C32 tier 2: the Level 2 MTH5 sub-row LIGHTS from the actual per-survey <slug>-tf.h5 bundle in the
-  // manifest (the same rows the Downloads grid uses), NOT a static SMETA flag — so it is true to what the
-  // build served. An embargoed/withheld survey produces NO bundle (the h5 is suppressed byte-for-byte like
-  // the EDI), so the row falls back to the honest not-available state. Download is wired exactly like the
-  // EMTF XML row ({prod:"fetch"}), so the pull is counted by the same masked front-door analytics. The
-  // label stays TF-only honest ("transfer functions").
-  const mth5Bundle=mth5BundleFor(m);
-  const mth5Sub=mth5Bundle
-    ? {n:"MTH5",sub:"Transfer functions only · Download"+(mth5Bundle.size?" · "+fmtBytes(mth5Bundle.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5Bundle.url,name:mth5Bundle.url.split("/").pop()}}
+  // The Level 2 MTH5 sub-row is THIS STATION's own transfer-function h5: the manifest files[] row with
+  // format mth5 (the h5/<slug>/<station>.h5 family), read from the very same `arts` rows the EDI and
+  // EMTF XML sub-rows beside it read. It used to read mth5BundleFor(m), the SURVEY-aggregated
+  // <slug>-tf.h5 bundles[] row, which was true only while that bundle was the sole MTH5 the build
+  // produced; once the per-station producer landed (build_portal emit_station_mth5) every station's
+  // Files tab started offering the WHOLE SURVEY under a station heading (owner report 2026-08-04:
+  // SA026E showed the 1.74 MB survey bundle in place of its own 174,696 B file).
+  // There is deliberately NO fallback to the bundle. A station with no row of its own gets none: the
+  // engine emits no station h5 for a coordinate-generalised or withheld station, exactly as it serves no
+  // EDI for one, so the honest not-available state the EMTF XML row uses is the truthful answer and the
+  // survey bundle is not a substitute for it. That bundle keeps the surface it belongs to, the survey
+  // drawer's Downloads grid (surveyBundleTiles). Download is wired exactly like the EMTF XML row
+  // ({prod:"fetch"}), so the pull is counted by the same masked front-door analytics, and the label
+  // stays TF-only honest ("transfer functions").
+  const mth5=arts.find(a=>a.format==="mth5");
+  const mth5Sub=mth5
+    ? {n:"MTH5",sub:"Transfer functions only · Download"+(mth5.size?" · "+fmtBytes(mth5.size):""),origin:"AusMT-derived",st:"ok",d:{prod:"fetch",url:mth5.url,name:mth5.url.split("/").pop()}}
     : {n:"MTH5",sub:"Transfer functions only · not currently available",origin:"AusMT-derived",st:"unk",d:null};
   const level2Subs=[ediSub,xmlSub,mth5Sub];
   // Publication (interpretation) — the parenthetical separates the dataset citation from an interpretation
@@ -448,13 +456,14 @@ function processingSoftwareText(m,sc){
   if(st)return st;
   const sv=((m&&m.software)||"").toString().trim();
   return sv||"not stated in EDI";}
-// Card-lane polish (owner): the formats AusMT actually distributes for this station/survey, dot-separated
-// with no ticks and no "(pipeline)" qualifier. Availability comes from the SAME sources the Files tab
-// reads: ediDescriptor for the EDI (its manifest artifact first, then the served-here fallback, and "no"
-// for an embargoed/metadata-only station, so a withheld EDI is never listed), the manifest artifact row
-// for the EMTF XML, and the per-survey bundle helper for MTH5. A format that is not served is simply
-// ABSENT from the list; the old line asserted "EDI ✓ · EMTF XML (pipeline)" unconditionally, claiming an
-// XML for the 8 surveys the build pipeline never produced one for and an EDI for embargoed stations.
+// Card-lane polish (owner): the formats AusMT actually distributes for THIS STATION, dot-separated with no
+// ticks and no "(pipeline)" qualifier. It renders inside the station drawer's lineage graph, so every input
+// must be station-scoped. Availability comes from the SAME sources the Files tab reads: ediDescriptor for
+// the EDI (its manifest artifact first, then the served-here fallback, and "no" for an embargoed/
+// metadata-only station, so a withheld EDI is never listed), and this station's own manifest files[] rows
+// for the two AusMT-derived formats. A format that is not served is simply ABSENT from the list; the old
+// line asserted "EDI ✓ · EMTF XML (pipeline)" unconditionally, claiming an XML for the 8 surveys the build
+// pipeline never produced one for and an EDI for embargoed stations.
 function distributedFormatsText(s,m){
   // Two-phase boot: every input here is a manifest row (PHASE 2). Pre-hydration the list would come back
   // empty and print "none currently served", a false claim about the corpus and exactly the overclaim in
@@ -464,7 +473,12 @@ function distributedFormatsText(s,m){
   const out=[];
   if(ediDescriptor(s,m).st==="ok")out.push("EDI");
   if(arts.some(a=>a&&a.format==="emtfxml"))out.push("EMTF XML");
-  if(mth5BundleFor(m))out.push("MTH5");
+  // MTH5 reads the STATION's own files[] row, like its two neighbours. It used to read the survey's
+  // bundles[] row (mth5BundleFor), which made one drawer contradict itself the moment the two disagreed:
+  // the Files tab, reading the station row, said "not currently available" while this line, reading the
+  // survey bundle, listed MTH5 as distributed for the station. Nothing on the screen told the reader
+  // which of the two was about their station.
+  if(arts.some(a=>a&&a.format==="mth5"))out.push("MTH5");
   return out.length?out.join(" · "):"none currently served";}
 // Card-lane polish (owner): a publication reduced to a short lineage cite, "FirstAuthor et al. (Year)".
 // Never fabricates a co-author: names split on "; " when the row uses that separator, else on "," where
@@ -807,6 +821,11 @@ function openStation(i,opts){
   // R8: whether a served EMTF-XML artifact exists for this station (drives the format-availability badge:
   // ok when served, else part — produced via the build pipeline for redistributable surveys).
   const _fmtXmlArt=_arts.some(a=>a.format==="emtfxml");
+  // The same question for MTH5, off the same station rows. It used to be answered by the SURVEY's
+  // <slug>-tf.h5 bundle (mth5BundleFor), which put a survey fact under a station heading: a station with no
+  // h5 of its own inside a survey that has a bundle showed a green MTH5 badge two tabs away from a Files
+  // row reading "not currently available". A badge in a station drawer answers about the station.
+  const _fmtH5Art=_arts.some(a=>a.format==="mth5");
   const provTop=`<table class="meta prov-top">`+
     `<tr><td>Processing software</td><td>${esc(processingSoftwareText(m,sc))}</td></tr>`+
     `<tr><td>Transfer function</td><td>${esc(s.file)}${s.sha?` · <code title="${escAttr(s.sha)}">${esc(s.sha.slice(0,16))}…</code>`:" · <span class='prov'>no checksum</span>"}</td></tr>`+
@@ -873,7 +892,7 @@ function openStation(i,opts){
     // block). States stay honest (ok/unknown/no). EMTF XML is ok when a served artifact exists, else part.
     // Two-phase boot: the EMTF XML and MTH5 badge STATES are manifest-derived, so the whole badge row waits
     // rather than briefly showing "part"/"unknown" for formats that are in fact served.
-    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody">${_manGate||`<div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",mth5BundleFor(m)?"ok":"unk")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div>`}</div></details>`+
+    `<details class="prov-d"><summary>Format availability</summary><div class="prov-dbody">${_manGate||`<div class="badges">${badge("EDI","ok")}${badge("EMTF XML",_fmtXmlArt?"ok":"part","EMTF XML is produced in the build pipeline (mt_metadata); served for redistributable surveys.")}${badge("MTH5",_fmtH5Art?"ok":"unk","Per-station MTH5 (transfer functions only) is written where the build produced one; the survey's whole-survey bundle, when there is one, is offered on the survey page.")}${badge("time series",(m.ts_levels&&m.ts_levels.length)?"ok":(m.ts||"unk"))}${licBadge}${s.fixed?badge("coord QC","part","Coordinates were flagged during QC; see this station's provenance and treat with caution."):""}</div>`}</div></details>`+
     `<details class="prov-d"><summary>Record metadata</summary><div class="prov-dbody">${metaTable}</div></details>`+
     `<details class="prov-d"><summary>API</summary><div class="prov-dbody">${apiBlock}</div></details>`;
   // Cite — the citation box. C46-W3b: a no-cite survey is EXPLICIT ("custodian citation not recorded — cite

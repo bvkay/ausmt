@@ -119,7 +119,12 @@ function refresh(){paintSlider();visible=ST.filter(passes);
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
-  const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlCite","dlZip","strike"].forEach(id=>document.getElementById(id).disabled=!on);
+  const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlCite","dlZip","dlZipXml","dlZipH5","strike"].forEach(id=>document.getElementById(id).disabled=!on);
+  // The three format zips also state what the current selection would cost. The estimate is derived from
+  // the download manifest, so it is owned by exports.js (which owns the packaging that must agree with
+  // it) and simply re-run here, where the selection is known to have changed. Guarded like the other
+  // cross-module calls: a harness that loads filters.js without exports.js still updates the counts.
+  if(typeof paintExportSizes==="function")paintExportSizes();
   document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":"Draw on the map with the buttons below (or the toolbar, top-left), or take everything that passes the filters.";
   // UX6 Wave D (D4, #21): until a selection exists, hide the whole export row and show the empty-state
   // hint in its place; reveal the row once there is something to export. Class toggle only — the buttons

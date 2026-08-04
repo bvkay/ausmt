@@ -726,7 +726,12 @@
         <button id="dlSh" disabled>Archive pointers</button>
         <button id="dlCite" disabled>Citation pack (.zip)</button>
         <button id="strike" disabled>Strike rose (selection)</button>
+        <!-- The three per-station format zips. Each packages the SELECTED stations' own manifest rows of
+             one format, client-side. Their labels carry the selection's estimated total, written by
+             exports.js paintExportSizes() (see the base labels there, which own this text). -->
         <button class="primary" id="dlZip" disabled>EDIs (zip)</button>
+        <button id="dlZipXml" disabled>EMTF XML (zip)</button>
+        <button id="dlZipH5" disabled>MTH5 (zip)</button>
         <button class="wide" id="clearSel">Clear selection &amp; shapes</button>
       </div>
     </div>
