@@ -2418,17 +2418,20 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                      reserved_edi_names=()):
     """Write the canonical EMTF XML for each station into the PORTAL data dir (xmldir = out/xml/<slug>)
     so EMTF XML is a downloadable format alongside the bundled EDI. Same normalize() path + impedance
-    round-trip gate as the canonical store; a per-EDI failure is logged and SKIPPED (that station
-    simply has no XML download). Keyed by the station's FINAL r["id"] (post-disambiguation) so the XML
-    filename matches the manifest/catalogue id. `survey_meta` (the survey SMETA) sources an HONEST
-    citation (custodian org, not the portal brand). Engine-guarded by the caller (mt_metadata is a core
-    build dep). Returns (written, notes, stamped, failures): written={station_id: xml_path},
+    round-trip gate as the canonical store; a per-station failure is logged and SKIPPED, and what that
+    station still serves afterwards depends on its SOURCE format (see `derived_edi_dir` below and the
+    except arm, which is where that consequence is stated). Keyed by the station's FINAL r["id"]
+    (post-disambiguation) so the XML filename matches the manifest/catalogue id. `survey_meta` (the
+    survey SMETA) sources an HONEST citation (custodian org, not the portal brand). Engine-guarded by
+    the caller (mt_metadata is a core build dep). Returns (written, notes, stamped, failures,
+    derived_edis): written={station_id: xml_path},
     notes={station_id:[note,...]} for conditioned stations (rotation unknown / source-id preserved /
     citation provenance) — the caller persists notes into that station's station.json
-    (canonical_conditioning) and emits a NOTICE; failures={station_id: exception-class-name} for
-    every station whose XML emission RAISED (logged+skipped: served EDI-only, no XML download), so the
-    caller can surface the gap in build_report.json instead of it vanishing into a printed WARN, and
-    stamped={station_id: survey_digest} recording,
+    (canonical_conditioning) and emits a NOTICE; failures={station_id: exception-class-name} for every
+    station whose XML emission RAISED (logged and skipped), so the caller can surface the gap in
+    build_report.json instead of it vanishing into a printed WARN; derived_edis={station_id: generated-EDI
+    path} for the XML-sourced stations whose served EDI this call produced (empty unless
+    `derived_edi_dir` is given); and stamped={station_id: survey_digest} recording,
     per served station, the survey.yaml digest the served XML was KEYED/PRODUCED under (C18b,
     Amendment A3). On the FRESH path that is the digest this call was invoked with; on a cache HIT it is
     the digest carried in the entry's own meta blob (a stale entry surfaces its stale digest here). The
@@ -3877,9 +3880,10 @@ def main(argv=None):
             if _fe["note"].startswith("convention:") and "outside its expected quadrant" in _fe["note"]:
                 _survey_warnings.append(f"{_fe['note']} — {_fe['count']} station(s): "
                                         f"{_fe['stations'] or _fe['except'] or _fe['count']}")
-        # Per-station EMTF-XML emission failures: served as EDI-only, no XML download. A structured
-        # xml_failures list (station + exception class) PLUS a counted survey warning, so an otherwise
-        # green build can never hide this class of gap (the 8-survey/~380-station regression that shipped
+        # Per-station EMTF-XML emission failures. What such a station still serves depends on its ingest
+        # source, so that is stated once where it is computed (see _consequence below) rather than here.
+        # A structured xml_failures list (station + exception class) PLUS a counted survey warning, so an
+        # otherwise green build can never hide this class of gap (the 8-survey/~380-station regression that shipped
         # 1182 EDI rows but only 732 EMTF-XML rows, invisible behind a printed '[xml] WARN'). Aggregated
         # by exception class for the warning; the full station->class map rides the xml_failures field.
         _xml_fail_rows = [{"station": _sid, "error": _cls} for _sid, _cls in sorted(_xml_failures.items())]
