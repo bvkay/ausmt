@@ -449,9 +449,9 @@ async function bootFreshWindow(dataMap, url) {
     "honesty: no response plot may render before tf.json lands (an empty curve set renders as NO plot, i.e. as 'this station has no response functions')");
   ok(!/class="plotexp/.test(_preDrawer),
     "honesty: the expand control must be withheld while there are no curves to expand");
-  ok(!/mat-stars/.test(_preDrawer),
-    "honesty: the dataset-maturity stars must not render while sci.json is in flight (an unlit star claims a dimension was not achieved)");
-  ok(/Loading dataset maturity/.test(_preDrawer), "honesty: the maturity block must say it is loading instead");
+  ok(!/class="matdim /.test(_preDrawer),
+    "honesty: the stewardship rows must not render while sci.json is in flight (an unlit star claims a dimension was not achieved)");
+  ok(/Loading stewardship details/.test(_preDrawer), "honesty: the stewardship list must say it is loading instead");
   ok(/loading…/.test(_preDrawer), "honesty: the sci/manifest-backed summary cells must read as loading");
   ["not currently available", "none currently served", "not stated in EDI", "EDI (via source archive)"]
     .forEach(copy => ok(_preDrawer.indexOf(copy) < 0,
@@ -480,7 +480,8 @@ async function bootFreshWindow(dataMap, url) {
     "hydration: the OPEN drawer must re-render with its response curves");
   ok(/>A1</.test(_postDrawer), "hydration: the re-render must keep the SAME station open");
   ok(/BIRRP/.test(_postDrawer), "hydration: the sci-derived processing software must fill in on the open drawer");
-  ok(/mat-stars/.test(_postDrawer), "hydration: the dataset-maturity stars must render once sci.json has landed");
+  ok((_postDrawer.match(/class="matdim /g) || []).length === 5,
+    "hydration: all five stewardship rows must render once sci.json has landed");
   ok(_postDrawer.indexOf("loading…") < 0, "hydration: no loading cell may survive hydration");
   // The absence copy the fixture DOES earn (it ships no manifest, so no EMTF XML / MTH5 is served) appears
   // only now, which is the whole point: the same words are honest after hydration and dishonest before it.
@@ -2371,12 +2372,21 @@ async function bootFreshWindow(dataMap, url) {
   ok(modNoTs.dims.find(d => d.key === "ts").note === "not available", "X7: a missing time series reads 'not available'");
   ok(A.maturityModel({ lic: "Bananas", doi: "10.1/x", ts: "ok" }, ["", "", "", "BIRRP"]).dims.find(d => d.key === "licence").achieved === false,
     "X7: an unrecognised licence must leave the 'Licence verified' dimension unachieved");
-  // the RENDERED Provenance tab carries the star row + the honest, not-scientific-quality framing.
+  // The RENDERED Provenance tab carries the ITEMISED rows only. OWNER RULING (2026-08-02): the aggregate
+  // presentation was removed: the "Dataset maturity" heading, the five-star summary row and the
+  // "Record-stewardship maturity ... Not a measure of scientific quality." explainer. The model above is
+  // untouched (it still drives the per-row stars), so what is pinned here is the PRESENTATION.
   win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
   const matP = doc.getElementById("dp-provenance");
-  ok(/Dataset maturity/.test(matP.textContent), "X7: the Provenance tab must render the 'Dataset maturity' block");
-  ok(matP.querySelector(".mat-stars") && /[★☆]/.test(matP.querySelector(".mat-stars").textContent), "X7: the maturity block must render a star row");
-  ok(/Not a measure of scientific quality/.test(matP.textContent), "X7: the maturity block must state it is NOT scientific quality");
+  ok(!/Dataset maturity/.test(matP.textContent), "X7: the Provenance tab must no longer render the 'Dataset maturity' heading");
+  ok(!matP.querySelector(".mat-stars"), "X7: the five-star maturity summary row must be gone");
+  ok(!/Record-stewardship maturity/.test(matP.textContent), "X7: the maturity explainer sentence must be gone");
+  ok(!/Not a measure of scientific quality/.test(matP.textContent), "X7: the not-scientific-quality explainer clause must be gone");
+  ok(matP.querySelectorAll(".matdim").length === 5, "X7: the five itemised stewardship rows must survive the header removal");
+  ok([...matP.querySelectorAll(".matdim")].every(li => li.querySelector(".matglyph") && /[★☆]/.test(li.querySelector(".matglyph").textContent)),
+    "X7: every surviving stewardship row must keep its own star glyph");
+  ok(/Curated archive/.test(matP.textContent) && /Licence verified/.test(matP.textContent),
+    "X7: the surviving rows must still be labelled");
   // X6: the three always-visible provenance rows are present up top.
   ok(/Processing software/.test(matP.textContent) && /Source archive/.test(matP.textContent), "X6: the Provenance tab must show the software + source-archive summary rows");
   // X8: the Metadata & API box is a single small 'API' expander at the foot.

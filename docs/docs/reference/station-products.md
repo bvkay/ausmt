@@ -11,6 +11,28 @@ There is no index of product directories and directory listing is off. Build the
 the station id read out of `catalogue.json` or `mtcat.json`. That is safe here because the product path
 uses the station id verbatim, unlike an artifact filename.
 
+Those two are the derived RECORDS. A served station also has downloadable transfer-function FILES, which
+are a different thing in three ways: they are the data rather than a description of it, they exist only
+for a station whose bytes AusMT distributes, and their paths are read from the download manifest rather
+than built from the station id.
+
+| File | Served path | Format |
+|---|---|---|
+| Source transfer function | `/data/edi/<slug>/<file>.edi` | EDI, as the custodian submitted it |
+| Canonical transfer function | `/data/xml/<slug>/<station>.xml` | EMTF XML, derived by the build |
+| Station MTH5 | `/data/h5/<slug>/<station>.h5` | MTH5, transfer functions only, derived by the build |
+
+The EDI filename is not derivable from the station id, so take all three paths from the manifest rather
+than templating them. The MTH5 and EMTF XML paths do use the station id, but the manifest is still the
+only place that tells you whether they exist for a given station. Their field-level documentation is in
+the [data reference](../interoperability/api-reference.md#per-station-fetch-through-the-manifest) and
+[Tool integration](../interoperability/tool-integration.md).
+
+The station MTH5 is written by the same writer that produces the per-survey bundle and passes the same
+round-trip gate against its source EDI, so a station reads identically out of either. It carries the
+survey's licence and credit inside the file (`Experiment/Surveys/<slug>` holds `release_license` and the
+credit attributes), which is why it ships with no licence sidecar beside it.
+
 ## Normative artifact
 
 | | |
@@ -34,6 +56,11 @@ The two documents are gated differently, and the difference matters when looping
 
 So `station.json` always resolves and is worth requesting for any station. `dimensionality.json` should
 only be requested when the survey's `access` is `open`; that `404` is not a transport error.
+
+The three downloadable files above are gated together and more strictly: a withheld survey has none of
+them and no manifest row for any of them, and inside a served survey a station whose position the
+custodian generalises or withholds also has none, because all three carry the true position. A station
+with no manifest rows is not an error to handle; it is the withholding, stated by omission.
 
 ---
 

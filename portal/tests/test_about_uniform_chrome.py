@@ -432,17 +432,29 @@ def test_footer_version_chip_relocated_inside_about_this_build_across_pages():
             f"(<details class='aboutbuild'>), not floating in the visible footer line")
 
 
-def test_about_api_card_makes_no_served_geojson_claim():
-    """API-access honesty (feat/api-cors-geojson-honesty). The About API card must NOT claim MTCAT is
-    "served alongside GeoJSON": no GeoJSON file is generated or served — the only GeoJSON is the portal's
-    in-browser export button (portal/src/exports.js, #dlGeo). FAILS if the false served-GeoJSON claim
-    reappears. Non-vacuous: the pre-fix card carried exactly that phrase."""
+def test_about_api_card_describes_the_geojson_as_the_served_document_it_now_is():
+    """API-access honesty (feat/api-cors-geojson-honesty, inverted by feat/geojson-station-h5-and-about).
+
+    This pin was written when NO GeoJSON was generated or served: the only one was the portal's
+    in-browser export button (portal/src/exports.js, #dlGeo), so the card was forbidden from claiming
+    MTCAT was "served alongside GeoJSON". That premise is dead. The build now emits
+    /data/stations.geojson, so the honest description of the card's GeoJSON is exactly the one the old
+    wording had to avoid, and the sentence that WAS honest ("an in-browser export for GIS") is the one
+    that would now understate what the site serves.
+
+    The rule did not change, only its direction: the card must describe the GeoJSON as what it is
+    today. FAILS if the retired in-browser-export wording returns, or if the card stops linking the
+    served document. The full dictated copy batch is pinned in tests/test_about_copy_batch.py."""
     text = ABOUT.read_text(encoding="utf-8")
-    assert "served alongside GeoJSON" not in text, (
-        "about.html must not claim MTCAT is 'served alongside GeoJSON' — no GeoJSON is served; the only "
-        "GeoJSON is the portal's in-browser export (src/exports.js)")
-    # The card still tells the GIS/GeoJSON story, just truthfully (an in-browser export).
-    assert "GeoJSON" in text, "the API card should still mention GeoJSON (as the in-browser export for GIS)"
+    # Flattened: the retired sentence was line-wrapped in the source, so a raw substring scan for it
+    # would pass vacuously against the very page it is meant to catch.
+    flat = re.sub(r"\s+", " ", text)
+    assert "in-browser export" not in flat, (
+        "about.html must not describe GeoJSON as an in-browser export; the build serves "
+        "/data/stations.geojson (engine/extract/build_portal.py: stations_geojson)")
+    assert "GeoJSON" in flat, "the API card must still tell the GIS/GeoJSON story"
+    assert 'href="data/stations.geojson"' in flat, (
+        "the API card must link the served GeoJSON document by portal-relative path")
 
 
 def test_the_about_button_carries_the_contribute_button_treatment_on_every_page():

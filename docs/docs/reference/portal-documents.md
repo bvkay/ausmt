@@ -1,7 +1,8 @@
 # Served documents without a schema artifact
 
-Seven JSON documents and one feed are served under `/data/` with no JSON-Schema artifact behind them.
-Their shape is defined by the build that writes them, and this page is their field reference.
+Seven JSON documents, one GeoJSON document and one feed are served under `/data/` with no JSON-Schema
+artifact behind them. Their shape is defined by the build that writes them (the GeoJSON additionally by
+RFC 7946), and this page is their field reference.
 
 The documents that do have a schema artifact are covered by [MTCAT schema](mtcat-schema.md),
 [Download manifest schema](manifest-schema.md) and [Build report schema](build-report-schema.md). The
@@ -23,6 +24,7 @@ Where this page and the build disagree, the build is right.
 |---|---|---|
 | [`surveys.json`](#surveysjson) | `/data/surveys.json` | always |
 | [`collections.json`](#collectionsjson) | `/data/collections.json` | always |
+| [`stations.geojson`](#stationsgeojson) | `/data/stations.geojson` | always |
 | [`build.json`](#buildjson) | `/data/build.json` | always |
 | [`build_provenance.json`](#build_provenancejson) | `/data/build_provenance.json` | always |
 | [`coord_policy.json`](#coord_policyjson) | `/data/coord_policy.json` | only when a station is not exact |
@@ -147,6 +149,64 @@ is the centre of that survey's bbox. The two are computed differently.
 
 `mtcat.json` carries the same groupings under `collections[]`, keyed the same way, with member surveys
 pointing back through `surveys[].collection_id`.
+
+---
+
+## stations.geojson
+
+The corpus as a point layer, so a GIS can open the catalogue without a script. It is an RFC 7946
+`FeatureCollection` in WGS84, which is the only coordinate reference system GeoJSON has, so there is
+nothing to configure at the reading end. A worked QGIS and `ogr2ogr` example is in the
+[data reference](../interoperability/api-reference.md#stationsgeojson).
+
+### Structure
+
+| | |
+|---|---|
+| Definition | An RFC 7946 `FeatureCollection` of `Point` features, one per station that has a position. |
+| Type | object |
+| Members | `type` (always `"FeatureCollection"`) and `features` (array) |
+| Default | `{"type": "FeatureCollection", "features": []}` on a build with no positioned stations |
+
+### Feature members
+
+| Member | Type | Definition |
+|---|---|---|
+| `type` | string | always `"Feature"` |
+| `geometry` | object | `{"type": "Point", "coordinates": [longitude, latitude]}`; never null |
+| `properties` | object | the flat attribute row below |
+
+### Feature properties
+
+| Member | Type | Definition |
+|---|---|---|
+| `ausmt_id` | string | the station identifier, the join key to the download manifest and the catalogue |
+| `station` | string | station id within its survey |
+| `survey` | string | survey DISPLAY name, as `surveys.json` keys it |
+| `survey_id` | string or null | survey slug, the join key to `mtcat.json` |
+| `data_type` | string or null | band classification, for example `BBMT` |
+| `period_min_s` | number or null | shortest period in the transfer function, seconds |
+| `period_max_s` | number or null | longest period, seconds |
+
+### Notes
+
+Properties are flat and deliberately few: a GIS attribute table cannot render nesting, and licence and
+credit are survey-level facts with one owner each (`surveys.json`, `mtcat.json`). Join on `ausmt_id` or
+`survey_id` for anything not listed above.
+
+Membership follows the same coordinate-access rules as the catalogue, because it is built from the same
+masked records.
+
+A station whose position is **withheld** is ABSENT from this document rather than present with a null
+geometry: a null-geometry feature is valid GeoJSON that no GIS draws, so it would be an invisible row.
+The station is not hidden by this; it keeps its catalogue row, its `mtcat.json` entry and its
+`station.json`, and [`coord_policy.json`](#coord_policyjson) records that its position is withheld.
+
+A station whose position is **generalised** is present at the same 0.1° cell the catalogue serves. No
+position is rounded a second time here.
+
+An embargoed survey's stations ARE present. An embargo withholds bytes, never discovery, and this
+document carries no bytes.
 
 ---
 

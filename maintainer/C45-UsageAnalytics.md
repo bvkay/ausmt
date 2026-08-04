@@ -16,6 +16,9 @@ downloaded N times from M countries"), not ad-tech.
   `bundles/<slug>-edi.zip` / `-xml.zip` / `-tf.h5` (flag-gated, default off). `manifest.json` is the
   authoritative reverse map `url → {ausmt_id|slug, survey}` (`build_portal.py:305-320`). The
   `@download` matcher also names `/h5/*`, which has **no producer** — latent path, ignore.
+  *(SUPERSEDED 2026-08-03: the tier-1 lane created the producer. `/data/h5/<slug>/<station>.h5` is a
+  real served family, `h5` is in `_DOWNLOAD_FAMILIES`, and the recon fact above holds only as of the
+  dated verification.)*
 * **Per-dataset "views" are structurally uncountable server-side.** The portal is a hash-routed SPA
   that loads the corpus JSONs once at boot; `#/station/…`, `#/survey/…`, `#/collection/…` render
   from memory with **zero** per-navigation HTTP requests (`main.js:124-137`, `drawer.js:115-169`).

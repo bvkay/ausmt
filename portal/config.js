@@ -18,6 +18,7 @@ window.AUSMT_CONFIG = {
   },
   "flags": {
     "survey_h5_enabled": true,
+    "station_h5_enabled": true,
     "collection_download_enabled": false
   }
 };

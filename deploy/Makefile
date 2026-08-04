@@ -86,9 +86,13 @@ down:
 # current image and the cache fires). Losing the cache dir costs one slow rebuild, nothing more.
 # C18b (Amendment A3): the verify step passes --surveys (same root the build used) to ARM the
 # cache-staleness digest gate -- served-product digest stamps vs live survey.yaml, cache-independent.
-# --survey-h5: tier-2 survey MTH5 bundles, owner-enabled 2026-07-25 (A6). The engine image
-# deliberately excludes portal/, so the portal.config.yaml flag cannot reach a box build;
-# the CLI flag is the production enable and this line is its single source of truth.
+# --survey-h5: tier-2 survey MTH5 bundles, owner-enabled 2026-07-25 (A6).
+# --station-h5: tier-1 per-station MTH5 (h5/<slug>/<station>.h5), owner-enabled 2026-08-02.
+# The engine image deliberately excludes portal/, so the portal.config.yaml flags cannot reach a box
+# build; these CLI flags are the production enable and this line is their single source of truth. A
+# producer enabled in the YAML alone is a no-op here, which has bitten twice, so
+# deploy/tests/test_makefile_build_flags.py pins every producer flag against this line in both
+# directions (present here, and a real option of the engine CLI).
 rebuild-data:
 	@set -e; \
 	DATA_DIR=$${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR (see .env)}/site-data; \
@@ -97,7 +101,7 @@ rebuild-data:
 	CACHE_MODE=$${AUSMT_BUILD_CACHE_MODE:-rw}; \
 	echo "rebuild-data: building into $$DATA_DIR/$$BUILD_REL (cache-mode=$$CACHE_MODE)"; \
 	if ! docker compose -f compose.yaml --profile jobs run --rm build-runner \
-	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi --survey-h5 \
+	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi --survey-h5 --station-h5 \
 	      --products /out/$$BUILD_REL/products \
 	      --pid-status /out/cache/pid_status.json \
 	      --incremental --cache-dir /out/cache --cache-mode $$CACHE_MODE; then \

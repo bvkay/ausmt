@@ -23,7 +23,11 @@ _REPO = Path(__file__).resolve().parents[2]
 _BOX_CADDY = _REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
 
 # The families a browser must never render inline: original EDI, derived EMTF-XML, the packaged
-# bundles, the latent /h5 path, and the frozen release bundles.
+# bundles, the per-station MTH5 files under /h5, and the frozen release bundles.
+#
+# /h5/* carried the word "latent" here for as long as it had no producer. The tier-1 lane (owner
+# ruling 2026-08-02) made it a real served family, so the description is a live one now: an .h5 that
+# rendered inline instead of downloading would be a browser handed a binary container.
 _REQUIRED_PATTERNS = ("/edi/*", "/xml/*", "/bundles/*", "/h5/*", "/releases/*/bundles/*")
 
 

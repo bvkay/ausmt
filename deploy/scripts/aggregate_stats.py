@@ -23,11 +23,11 @@ WHAT IT DOES, once a day:
     hand people. The UA is read transiently and never stored;
   * counts portal VISITS as `/data/catalogue.json` fetches (one per SPA boot — the only
     server-observable visit proxy, record D3);
-  * counts API-CONSUMER requests as fetches of the three DOCUMENTED machine-readable entry points the
+  * counts API-CONSUMER requests as fetches of the four DOCUMENTED machine-readable entry points the
     portal SPA never fetches for itself (`/data/products/manifest.json`, `/data/mtcat.json`,
-    `/data/mtcat.schema.json`). This is a PATH-CLASS signal only: nothing new is collected. It is an
-    upper bound on programmatic use (a human can click the footer's mtcat link) and is reported as its
-    own line, never folded into visits;
+    `/data/mtcat.schema.json`, `/data/stations.geojson`). This is a PATH-CLASS signal only: nothing new
+    is collected. It is an upper bound on programmatic use (a human can click the footer's mtcat link
+    or the About page's GeoJSON link) and is reported as its own line, never folded into visits;
   * counts DISTINCT MASKED NETWORKS per day as a privacy-safe reach proxy. Caddy has already truncated
     the address to a /24 (v4) or /48 (v6) at the edge, so the distinct set IS a network count. The set
     lives in memory for the one run that folds a day and only its SIZE is written -- no address, masked
@@ -116,9 +116,14 @@ SCHEMA_VERSION = 2
 # the quarterly funding view needs. Monthly rollups are NOT subject to this -- they are kept forever.
 DEFAULT_DAILY_KEEP_DAYS = 92
 
-# The three served download families (path prefixes under /data/) and the visit proxy. `/data/h5/*`
-# is a latent Caddy matcher with NO producer (record D1) — deliberately NOT a download family here.
-_DOWNLOAD_FAMILIES = ("edi", "xml", "bundles")
+# The served download families (path prefixes under /data/) and the visit proxy. `h5` was excluded here
+# for as long as `/data/h5/*` was a latent Caddy force-download matcher with NO producer (record D1).
+# The engine produces per-station MTH5 files there since the tier-1 lane (owner ruling 2026-08-02), so
+# the exclusion had to go with it. It is worth naming why the interlock matters: an excluded family
+# classifies as `ignore`, and an ignored path is absent from `unattributed` as well, so every
+# station-h5 download would have vanished from the analytics rather than surfacing as build/serve skew.
+# Silent absence, not undercounting. Pinned in deploy/tests/test_aggregate_stats.py.
+_DOWNLOAD_FAMILIES = ("edi", "xml", "h5", "bundles")
 _DATA_PREFIX = "/data/"
 _VISIT_PATH = "/data/catalogue.json"
 
@@ -149,13 +154,36 @@ _LICENCE_SIDECAR_SUFFIX = ".LICENSE.txt"
 #     are all fetched by portal/src/data.js on every SPA boot -- they measure browsers, not consumers;
 #   * /data/products/<slug>/<station>/station.json is fetched by portal/src/drawer.js when a station
 #     drawer opens -- also a browser.
-# What is left is the trio About documents as the programmatic surface. The third, mtcat.schema.json,
-# is the `$id` the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and
-# every harvester that resolves the schema fetches it: the cleanest machine-consumer signal the corpus
-# has, and the one that was counted nowhere. This is a PATH CLASS, never a user-agent test, and it is
-# an UPPER BOUND: the mtcat link sits in every page footer, so a human click lands here too. Reported
-# as its own line, never merged into visits.
-_API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json", "/data/mtcat.schema.json")
+# What is left is the documents About points a programmatic reader at. mtcat.schema.json is the `$id`
+# the MTCAT document declares (engine/schema/mtcat.schema.json), so every validator and every harvester
+# that resolves the schema fetches it: the cleanest machine-consumer signal the corpus has, and the one
+# that was counted nowhere. stations.geojson (owner ruling 2026-08-02) is the corpus as a vector layer:
+# a GIS user adds it as a layer straight from the URL and the SPA never fetches it, so it belongs on
+# this line for the same reason -- and without it every QGIS reader of the corpus would count nowhere,
+# because a `.geojson` at the data root is in no download family and would fall through to `ignore`.
+# This is a PATH CLASS, never a user-agent test, and it is an UPPER BOUND: the mtcat and GeoJSON links
+# sit on public pages, so a human click lands here too. Reported as its own line, never merged into
+# visits. The published word-count of this tuple is pinned in deploy/tests (deploy/README.md and
+# docs/docs/introduction/usage-analytics.md both state it), so a fifth entry point cannot land silently.
+_API_PATHS = ("/data/products/manifest.json", "/data/mtcat.json", "/data/mtcat.schema.json",
+              "/data/stations.geojson")
+
+# The products/ MIRROR of an entry point. Several top-level documents are served at TWO paths and
+# docs/docs/reference/index.md publishes both: /data/mtcat.json beside /data/products/mtcat.json,
+# /data/stations.geojson beside /data/products/stations.geojson. Only the root path was classified, so
+# a reader who used the ADVERTISED mirror counted nowhere -- `products` is in no download family, so the
+# mirror fell through to `ignore`, which is the very failure this path class exists to prevent. It bites
+# hardest on the GeoJSON, the first of these documents pointed at external GIS consumers.
+#
+# DERIVED from _API_PATHS, never listed in it. A document is ONE entry point however many paths serve
+# it, and the published word ("four documented machine-readable entry points") counts documents, not
+# URLs; adding the mirrors to the tuple above would make that word wrong. The derivation is also what
+# keeps a future fifth entry point's mirror covered without a second edit. It cannot reach the SPA's own
+# fetches: products/<slug>/<station>/station.json is a browser fetch and is not derivable from any root
+# path on the list.
+_API_MIRROR_PREFIX = _DATA_PREFIX + "products/"
+_API_MIRROR_PATHS = tuple(_API_MIRROR_PREFIX + p[len(_DATA_PREFIX):] for p in _API_PATHS
+                          if not p.startswith(_API_MIRROR_PREFIX))
 
 # The BULK-EXPORT LABEL (owner ruling 2026-08-01). The portal's multi-file export (portal/src/exports.js,
 # the "EDIs (zip)" flow over a map selection) marks each file fetch it issues with this exact query
@@ -557,11 +585,12 @@ def classify(path: str) -> tuple[str, str | None]:
     `/data/edi|xml|bundles/...` or `/data/releases/<tag>/bundles/<file>` path where rel is the path
     below /data/; ('ignore', None) otherwise.
 
-    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the three API paths, the three
-    download families and the release-bundle shape are disjoint), so no request is ever counted twice."""
+    The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the four API entry points with
+    their products/ mirrors, the download families and the release-bundle shape are disjoint), so no
+    request is ever counted twice."""
     if path == _VISIT_PATH:
         return "visit", None
-    if path in _API_PATHS:
+    if path in _API_PATHS or path in _API_MIRROR_PATHS:
         return "api", None
     if path.startswith(_DATA_PREFIX):
         rel = path[len(_DATA_PREFIX):]

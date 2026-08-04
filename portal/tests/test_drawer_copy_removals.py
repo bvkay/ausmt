@@ -1,11 +1,17 @@
 """Owner-requested drawer copy removals — render pins (Invariant 10).
 
-Two placeholder/aggregate lines were removed from portal/src/drawer.js:
+Three placeholder/aggregate presentations were removed from portal/src/drawer.js:
   (1) the SURVEY-summary "Automated completeness/smoothness check" row (the qavg mean-of-per-station-Q
       aggregate) — a not-a-verdict number the owner did not want at the survey-level 10-second view;
   (2) the STATION-drawer Tier-3 "Advanced analysis · Tier 3, generated offline" placeholder block
       (McNeice-Jones / Groom-Bailey decomposition ... "planned AusMT pipeline products ... Not computed
       in the browser.") — a not-yet-produced-products stub.
+  (3) the STATION-drawer dataset-maturity AGGREGATE (owner ruling 2026-08-02): the "Dataset maturity"
+      block heading, the five-star summary row and the "Record-stewardship maturity ... Not a measure
+      of scientific quality." explainer. This removes the SUMMARY, not the information: the five
+      itemised rows (Curated archive / Reproducible / Licence verified / DOI / Time series) survive
+      with their per-row stars and their reserved/not-recorded honesty text, and are pinned here
+      row by row so the removal cannot quietly take them with it.
 
 This boots the REAL src modules in a VM (smoke.js idiom) against a synthetic one-survey/one-station
 fixture carrying a q value, keeps a stable per-id element cache so drawer.innerHTML persists, then renders
@@ -105,3 +111,32 @@ def test_drawer_copy_removals(tmp_path):
         "station still renders the (owner-hidden) 'Screening indicators' section"
     assert station.count("Automated completeness/smoothness check") == 0, \
         "station still renders the (owner-hidden) per-station completeness/smoothness line"
+
+    # (d) dataset-maturity AGGREGATE removed: heading, star summary row, explainer sentence.
+    assert "Dataset maturity" not in station, \
+        "station drawer still renders the removed 'Dataset maturity' block heading"
+    assert "Record-stewardship maturity" not in station, \
+        "station drawer still renders the removed record-stewardship explainer sentence"
+    assert "Not a measure of scientific quality" not in station, \
+        "station drawer still renders the removed 'not scientific quality' explainer clause"
+    assert "mat-stars" not in station, \
+        "station drawer still renders the removed five-star maturity summary row"
+    assert "stewardship dimensions achieved" not in station, \
+        "station drawer still renders the star row's 'N of 5 dimensions achieved' tooltip"
+    assert "mat-h" not in station and "mat-sub" not in station, \
+        "station drawer still renders the removed maturity heading/explainer elements"
+
+    # (e) retained. The itemised rows are what the removal must NOT take with it. All five, in place,
+    #     each with its own star glyph and its honest note where the dimension is unmet. The fixture
+    #     declares a licence and processing software but no DOI and no time series, so two rows must
+    #     read "not recorded" / "not available" (never "pending") and carry the hollow glyph.
+    assert 'class="matdims"' in station, "station drawer lost the itemised maturity list"
+    matdim_rows = station.count('class="matdim ')
+    assert matdim_rows == 5, (
+        f"the itemised maturity list must still render exactly 5 rows, found {matdim_rows}")
+    for row in ("<span>Curated archive</span>", "<span>Reproducible</span>",
+                "<span>Licence verified</span>", "<span>DOI: not recorded</span>",
+                "<span>Time series: not available</span>"):
+        assert row in station, f"the itemised maturity list lost its {row!r} row"
+    assert station.count('<span class="matglyph">') == 5, \
+        "each surviving maturity row must keep its own star glyph"

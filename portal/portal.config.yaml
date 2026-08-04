@@ -32,6 +32,7 @@ analytics:
 # manifest is authoritative for what actually exists, so these are the publish-time switches.
 flags:
   survey_h5_enabled: true         # tier 2: publish a per-survey aggregated MTH5 bundle (<slug>-tf.h5). Owner flipped 2026-07-25 (A6 sign-off; producer + round-trip gate deployed).
+  station_h5_enabled: true        # tier 1: publish one MTH5 per served station (h5/<slug>/<station>.h5). Owner ruling 2026-08-02. NOTE this YAML is NOT in the engine image: the production enable is --station-h5 on deploy/Makefile's rebuild-data.
   collection_download_enabled: false  # reserved: collection-level bundle DOWNLOAD tile in the portal (paired with the tier-3 producer below)
   collection_h5_enabled: false    # tier 3: gate the collection PRODUCER (emit_collection_mth5). Designed-but-disabled by construction (A4); confirm AusLAMP member counts before flipping.
   max_collection_stations: 600    # tier-3 RAM ceiling (SPEC §7.2 / A4): refuse a collection build above this so an AusLAMP-national-sized ~6 GiB build cannot OOM the host.

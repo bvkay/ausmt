@@ -205,9 +205,10 @@ def _sweep_non_exact_true_values(out_dir):
 
     NOTE: this text/byte sweep is STRUCTURALLY BLIND to binary containers — an IEEE-754 double
     inside an HDF5 file never matches a string variant, and the text-token numeric parse cannot see
-    it either. Served *.h5 bundles are therefore swept SEPARATELY and NUMERICALLY by
-    _sweep_h5_for_non_exact (the F1 fix-round leg); a leak-sweep over a build that enables any
-    binary distribution emitter must run BOTH legs."""
+    it either. Served *.h5 files (tier-2 bundles under bundles/ AND tier-1 per-station files under
+    h5/) are therefore swept SEPARATELY and NUMERICALLY by _sweep_h5_for_non_exact (the F1 fix-round
+    leg); a leak-sweep over a build that enables any binary distribution emitter must run BOTH legs,
+    over EVERY such emitter's tree."""
     hits = []
     for st in (GEN, HID):
         for field in ("lat", "lon", "elev"):
@@ -221,13 +222,18 @@ def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
     (latitude/longitude/elevation) as NUMBERS. Returns hits [(file, msg)] when:
 
       * a non-exact station's true lat/lon/elev appears within epsilon, OR
-      * a non-exact station is PRESENT in the bundle at all — the per-station byte gate withholds
-        the whole contribution (we never rewrite custodian bytes, D3), so presence itself is a
-        gate bypass regardless of the values it carries.
+      * a non-exact station is PRESENT in the container at all, because the per-station byte gate
+        withholds the whole contribution (we never rewrite custodian bytes, D3), so presence itself
+        is a gate bypass regardless of the values it carries.
+
+    Both MTH5 tiers are in scope and the rglob is what makes that true: the tier-2 survey bundle
+    (bundles/<slug>-tf.h5) and the tier-1 per-station files (h5/<slug>/<station>.h5) are the same
+    container class from the same writer, so neither gets its own weaker check.
 
     Exists because the text sweep cannot see into binary containers. Historically RED against the
     pre-F1 build, where emit_survey_mth5 received the FULL station list and re-read the RAW source
-    EDIs (TF(fn=...)), bypassing both the mask and the byte gate."""
+    EDIs (TF(fn=...)), bypassing both the mask and the byte gate; RED again against a tier-1 producer
+    handed the same unfiltered list, which is why the fixture build must enable both emitters."""
     import _mth5 as m5  # noqa: PLC0415  (the engine's own MTH5 reader — same TF->record logic)
     hits = []
     for hp in sorted(out_dir.rglob("*.h5")):
@@ -252,26 +258,34 @@ def _sweep_h5_for_non_exact(out_dir, *, epsilon=1e-3):
 
 def test_leak_sweep_no_true_value_of_a_non_exact_station_anywhere(tmp_path):
     """CENTREPIECE. Build one exact + one generalised + one withheld station with distinctive coords +
-    elevation, with EVERY flag-gated distribution emitter enabled (--survey-h5 — F1: an emitter left
-    out of the fixture build is an emitter the sweep never audits); sweep EVERY byte of the emitted
+    elevation, with EVERY flag-gated distribution emitter enabled (--survey-h5 AND --station-h5; F1:
+    an emitter left out of the fixture build is an emitter the sweep never audits, and the tier-1
+    per-station files are the SAME container class written by the SAME writer, so an emitter list that
+    names only tier 2 narrows this pin to half the binary surface); sweep EVERY byte of the emitted
     out/ tree for the true values of the two non-exact stations (6dp, trimmed, 3-dp derivative, DMS;
-    plus numeric parse epsilon >= 1e-3) AND numerically sweep every served *.h5 bundle — the text
+    plus numeric parse epsilon >= 1e-3) AND numerically sweep every served *.h5, because the text
     sweep is structurally blind to IEEE-754 doubles inside binary containers, so the HDF5 leg reads
-    each bundled TF's latitude/longitude/elevation as numbers via the engine's own reader.
+    each stored TF's latitude/longitude/elevation as numbers via the engine's own reader.
 
     FAILS IF any true value (or a rounded derivative finer than the 0.1deg disclosure) of the
     generalised OR withheld station appears anywhere in served output — text or binary — or a
-    non-exact station is present in the served MTH5 bundle at all.
+    non-exact station is present in ANY served MTH5 (tier-2 bundle or tier-1 station file) at all.
     """
-    out, r = _build(tmp_path, [EXACT, GEN, HID], extra=("--survey-h5",))
+    out, r = _build(tmp_path, [EXACT, GEN, HID], extra=("--survey-h5", "--station-h5"))
     assert r.returncode == 0, r.stderr
     hits = _sweep_non_exact_true_values(out) + _sweep_h5_for_non_exact(out)
     assert not hits, "TRUE coordinate/elevation of a non-exact station leaked:\n" + "\n".join(
         f"  {f}: {h}" for f, h in hits)
-    # the exact station must still be IN the served MTH5 (the h5 leg must be sweeping a real bundle,
-    # not a vacuously absent one — the byte gate withholds contributions, never the whole bundle).
-    h5s = sorted(out.rglob("*.h5"))
-    assert h5s, "--survey-h5 build must serve an MTH5 bundle (else the HDF5 leg is vacuous)"
+    # the exact station must still be IN the served MTH5 of BOTH tiers (the h5 leg must be sweeping
+    # real containers, not vacuously absent ones: the byte gate withholds contributions, never the
+    # whole bundle, and never the served station's own file). Asserted per tier: a single rglob count
+    # is satisfied by the bundle alone, which is exactly how tier 1 would fall out of this pin again.
+    h5s = {p.relative_to(out).as_posix() for p in out.rglob("*.h5")}
+    assert any(f.startswith("bundles/") for f in h5s), (
+        f"--survey-h5 build must serve a tier-2 MTH5 bundle (else the HDF5 leg is vacuous): {sorted(h5s)}")
+    assert any(f.startswith("h5/") for f in h5s), (
+        f"--station-h5 build must serve a tier-1 per-station MTH5 (else the HDF5 leg never audits the "
+        f"per-station tree): {sorted(h5s)}")
 
 
 def test_leak_sweep_mutation_all_exact_flip_finds_every_value(tmp_path):

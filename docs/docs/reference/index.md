@@ -30,6 +30,7 @@ different version, the served document is the authority for that deployment.
 | Transfer-function curves | `/data/tf.json` | `contract/columns.json` | 18 columns | [Portal data files](../developer/data-files.md) |
 | Survey metadata | `/data/surveys.json`, `/data/products/surveys.json` | `survey_meta_from_yaml` in the build | none declared | [Served documents](portal-documents.md#surveysjson) |
 | Collections | `/data/collections.json` | `collections_document` in the build | none declared | [Served documents](portal-documents.md#collectionsjson) |
+| Stations GeoJSON | `/data/stations.geojson`, `/data/products/stations.geojson` | RFC 7946 | none declared | [Served documents](portal-documents.md#stationsgeojson) |
 | Build identity | `/data/build.json` | the build | none declared | [Served documents](portal-documents.md#buildjson) |
 | Build provenance | `/data/build_provenance.json` | the build | none declared | [Served documents](portal-documents.md#build_provenancejson) |
 | Coordinate policy | `/data/coord_policy.json`, `/data/products/coord_policy.json` | the build | none declared | [Served documents](portal-documents.md#coord_policyjson) |

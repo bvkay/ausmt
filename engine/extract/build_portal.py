@@ -558,6 +558,52 @@ def collections_document(surveys_meta: dict, all_stations: list, coll_by_id: dic
     return coll_by_id
 
 
+def stations_geojson(all_stations: list, surveys_meta: dict) -> dict:
+    """The served stations GeoJSON (RFC 7946 FeatureCollection, one Point per station) so a GIS can add
+    AusMT as a vector layer straight from the URL instead of scripting against the positional catalogue.
+
+    COORDINATE POSTURE (C42, the only thing that makes this product safe). It is derived from the SAME
+    policy-applied station records the catalogue is projected from (call it AFTER the mask seam), so it
+    cannot disclose a position the catalogue withholds. A generalised station's geometry is its served
+    0.1 degree cell VERBATIM: nothing is re-derived or re-rounded here, because a second rounding site is
+    a second thing that can round differently.
+
+    A WITHHELD station is EXCLUDED, not emitted with a null geometry. RFC 7946 permits a null-geometry
+    feature, but no GIS draws one: QGIS keeps it as an invisible attribute row a user can neither see nor
+    select, so it helps nobody and it would be a second surface describing a station whose position the
+    custodian withheld. Absence is the honest answer; coord_policy.json remains the record that the
+    station exists with its position withheld, and the station keeps its catalogue row, its mtcat entry
+    and its station.json. There is no other exclusion: an EMBARGOED or metadata-only survey keeps
+    DISCOVERY (the access gate withholds BYTES), and this document carries no bytes, so its stations
+    appear here exactly as the catalogue serves them.
+
+    Properties are lean and FLAT. A GIS attribute table has no useful nesting, and credit/licence are
+    survey-level facts that already have one owner each (surveys.json, mtcat.json, and the record link in
+    the docs); a copy of the licence string on every one of ~1400 features is bloat, not provenance."""
+    feats = []
+    for (_p, r) in all_stations:
+        lat, lon = r.get("lat"), r.get("lon")
+        if lat is None or lon is None:
+            continue   # withheld position => no usable geometry => no feature (see the docstring)
+        feats.append({
+            "type": "Feature",
+            # RFC 7946 positions are [longitude, latitude], the opposite order to every AusMT surface
+            # that says "lat, lon". Getting this backwards still parses and still draws, in the Indian
+            # Ocean, so the order is pinned by test_stations_geojson.
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "properties": {
+                "ausmt_id": r["ausmt_id"],
+                "station": r["id"],
+                "survey": r["survey"],                                    # display label
+                "survey_id": (surveys_meta.get(r["survey"]) or {}).get("slug"),   # slug, never re-derived
+                "data_type": r.get("type"),
+                "period_min_s": r.get("period_min_s"),
+                "period_max_s": r.get("period_max_s"),
+            },
+        })
+    return {"type": "FeatureCollection", "features": feats}
+
+
 # MTCAT 1.2: the canonical band order the survey-level data_types map is emitted in (the SAME order the
 # portal presents bands in, so the served key order and the rendered order can never disagree). A band the
 # classifier produces but this tuple does not name (only "unknown" today) is appended, sorted, after these:
@@ -2462,36 +2508,42 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     return ok, report
 
 
-def emit_survey_mth5(stations, slug, label, out, smeta=None):
-    """C32 §1.2: write ONE survey-aggregated MTH5 (out/bundles/<slug>-tf.h5) holding every served
-    station's TRANSFER FUNCTION via mth5.add_transfer_function — the idiomatic MTCollection working unit
-    for mtpy-v2/ModEM. It contains transfer functions ONLY (never time series); the -tf filename says so.
-    FLAG-GATED by the caller (survey_h5_enabled). Each station is grouped under one named survey
-    (survey_metadata.id = slug), with the survey.yaml scholarly fields + the injected dataset DOI mapped
-    on at write time (SPEC §3.3). A per-station TF write failure is logged (WARN) and SKIPPED — never a
-    build failure — and n_written is the ACTUAL count included, so the manifest row's n_stations reflects
-    reality (design §1.4). Before returning, the built file passes the SPEC §6 round-trip gate (reopen,
-    compare each TF impedance+coords to the source EDI, assert TF-only); a survey that FAILS the gate is
-    WITHHELD (deleted, returns no bundle) rather than shipping a silently-wrong TF — the survey is
-    withheld, not the corpus. Returns (rel_url, h5_path, n_written) or (None, None, 0).
-    NOTE: HDF5 embeds creation timestamps/uuids, so this file is NOT byte-reproducible across builds; its
-    manifest sha256 is a download-integrity hash for THIS build's bytes, not a cross-build invariant."""
+def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
+    """THE MTH5 writer. Both served tiers go through this one function: the tier-2 survey bundle
+    (emit_survey_mth5, every station in one file) and the tier-1 per-station files (emit_station_mth5,
+    one station per file). Sharing it is the design, not a tidy-up: the station-id sanitisation, the
+    survey.yaml -> survey_metadata mapping with the injected dataset DOI (SPEC §3.3 / A5), the
+    withhold-not-crash posture and the SPEC §6 round-trip gate are then INHERITED by tier 1 rather than
+    written a second time, so there is no second place for any of them to be got wrong. The two
+    remaining differences are the caller's business: which stations it hands over, and where the file
+    goes.
+
+    Every station is grouped under one named survey (survey_metadata.id = slug) so a station never
+    collapses into the raw EDI's survey '0'. A per-station TF write failure is logged (WARN) and
+    SKIPPED, never a build failure. Before returning, the file passes the SPEC §6 round-trip gate
+    (reopen, compare each stored TF's impedance/tipper + coordinates to a fresh parse of its source EDI,
+    assert the payload is TF-only); a file that FAILS the gate is WITHHELD (deleted) rather than shipping
+    a silently-wrong TF. Returns n_written, and 0 means nothing shipped and the path does not exist.
+
+    NOTE: HDF5 embeds creation timestamps/uuids, so these files are NOT byte-reproducible across builds;
+    a manifest sha256 over one is a download-integrity hash for THIS build's bytes, not a cross-build
+    invariant."""
     from mt_metadata.transfer_functions.core import TF  # noqa: PLC0415
     from mth5.mth5 import MTH5  # noqa: PLC0415
-    hdir = out / "bundles"; hdir.mkdir(parents=True, exist_ok=True)
-    hpath = hdir / f"{slug}-tf.h5"
+    hpath = Path(hpath)
+    hpath.parent.mkdir(parents=True, exist_ok=True)
     if hpath.exists():
         hpath.unlink()
     # Opening the h5 can itself fail (file lock, HDF5 driver). Keep it best-effort like the per-station
-    # loop: a single survey's h5 failure must NOT abort the whole portal build (catalogue/tf/sci/manifest
-    # are written after the survey loop), so swallow it and return "no bundle".
+    # loop: one h5 failure must NOT abort the whole portal build (catalogue/tf/sci/manifest are written
+    # after the survey loop), so swallow it and report "nothing written".
     try:
         m = MTH5()
         m.open_mth5(str(hpath), mode="w")
     except Exception as ex:  # noqa: BLE001
         print(f"  [h5] WARN open {hpath.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
         hpath.unlink(missing_ok=True)
-        return None, None, 0
+        return 0
     n = 0
     try:
         for (p, r) in stations:
@@ -2508,8 +2560,8 @@ def emit_survey_mth5(stations, slug, label, out, smeta=None):
         m.close_mth5()
     if not n:
         hpath.unlink(missing_ok=True)
-        return None, None, 0
-    # SPEC §6 blocking round-trip gate: withhold the survey (not the corpus) on any mismatch.
+        return 0
+    # SPEC §6 blocking round-trip gate: withhold this file (never the corpus) on any mismatch.
     ok, rep = mth5_survey_roundtrip_ok(hpath, stations)
     if not ok:
         print(f"  [h5] WITHHOLD {hpath.name}: round-trip gate FAILED "
@@ -2517,8 +2569,54 @@ def emit_survey_mth5(stations, slug, label, out, smeta=None):
               f"coord_maxdiff={rep['coord_max_abs_diff']:.3g}, tf_only={rep['tf_only']}); "
               f"first: {rep['mismatches'][0] if rep['mismatches'] else 'n/a'}", file=sys.stderr)
         hpath.unlink(missing_ok=True)
+        return 0
+    return n
+
+
+def emit_survey_mth5(stations, slug, label, out, smeta=None):
+    """C32 §1.2 (tier 2): write ONE survey-aggregated MTH5 (out/bundles/<slug>-tf.h5) holding every
+    served station's TRANSFER FUNCTION via mth5.add_transfer_function, the idiomatic MTCollection
+    working unit for mtpy-v2/ModEM. It contains transfer functions ONLY (never time series); the -tf
+    filename says so. FLAG-GATED by the caller (survey_h5_enabled). The write, the metadata mapping and
+    the SPEC §6 withhold gate are _write_tf_mth5's; n_written is the ACTUAL count included, so the
+    manifest row's n_stations reflects reality (design §1.4). A survey that fails the gate is withheld,
+    not the corpus. Returns (rel_url, h5_path, n_written) or (None, None, 0)."""
+    hpath = out / "bundles" / f"{slug}-tf.h5"
+    n = _write_tf_mth5(stations, slug, label, hpath, smeta=smeta)
+    if not n:
         return None, None, 0
     return f"bundles/{slug}-tf.h5", hpath, n
+
+
+def emit_station_mth5(stations, slug, label, h5dir, smeta=None):
+    """Tier 1 (owner ruling 2026-08-02, which OVERRIDES the earlier skip-tier-1 ruling): one
+    <station>.h5 per served station, written into h5dir = out/h5/<slug>/ so the per-station MTH5 sits
+    beside the edi/ and xml/ families the manifest already keys. deploy/docker/caddy/Caddyfile has
+    force-downloaded /h5/* since before there was a producer; this is the producer.
+
+    Written by the SAME writer the tier-2 bundle uses (one station handed over instead of the survey),
+    so the round-trip gate, the metadata mapping and the withhold-not-crash posture are inherited. The
+    CALLER owns both gates: it is invoked only inside the served-survey branch (an embargoed or
+    non-served survey emits nothing, identically to its EDI), and it is handed only the stations that
+    pass the C42 per-station byte gate (an MTH5 carries the true latitude/longitude/elevation in its
+    own station metadata, so a generalised or withheld station is withheld here exactly as its EDI and
+    its EMTF-XML are).
+
+    NO LICENCE SIDECAR is written beside these files, unlike the survey bundle's
+    bundles/<slug>-tf.LICENSE.txt. It is not needed and it would be harmful: the licence already
+    travels INSIDE each file (survey_metadata.release_license, set by _apply_mth5_survey_metadata), and
+    a sidecar per station would put ~1400 unmanifested files into a served download family, every one
+    of which would land in the analytics `unattributed` bucket that exists to detect build/serve skew.
+
+    A station whose write fails is simply absent from the returned map (the WARN is printed by the
+    writer); the caller emits a manifest row only for what came back, so the manifest can never
+    advertise a file that was withheld. Returns {station_id: h5_path}."""
+    written = {}
+    for (p, r) in stations:
+        hpath = Path(h5dir) / f"{r['id']}.h5"
+        if _write_tf_mth5([(p, r)], slug, label, hpath, smeta=smeta):
+            written[r["id"]] = hpath
+    return written
 
 
 # ---- Tier 3 (collection): DESIGNED, DISABLED BY CONSTRUCTION (SPEC §2.3 / A4). The producer exists so
@@ -2607,12 +2705,20 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
 def load_flags(path) -> dict:
     """Distribution feature flags from the portal.config.yaml `flags:` block (default OFF). The single
     config seam, mirrored to the portal via tools/gen_config.py -> config.js. survey_h5_enabled gates the
-    survey-aggregated MTH5 producer (D4: MTH5 off pending management sign-off); collection_download_enabled
-    reserves the future collection-level bundle. CLI --survey-h5 / --collection-download OR on top."""
+    tier-2 survey-aggregated MTH5 producer; station_h5_enabled gates the tier-1 per-station MTH5 producer
+    (owner ruling 2026-08-02); collection_download_enabled reserves the future collection-level bundle.
+    CLI --survey-h5 / --station-h5 / --collection-download OR on top.
+
+    NOTE FOR ANYONE FLIPPING A FLAG HERE: this YAML lives under portal/ and the engine image does NOT
+    copy it (deploy/docker/engine.Dockerfile takes contract/, engine/ and portal/src/contract.js only),
+    so inside a production build container this function reads a path that does not exist and every flag
+    falls back to the OFF default below. The enable that reaches a box is the CLI flag on
+    deploy/Makefile's rebuild-data recipe. Setting a flag here ALONE is a production no-op, which has
+    caught this repository twice; deploy/tests/test_makefile_build_flags.py now pins the wiring."""
     # Boolean distribution flags default OFF. collection_h5_enabled gates the tier-3 collection PRODUCER
     # (SPEC A4, designed-but-disabled); collection_download_enabled reserves the portal-side download.
-    flags = {"survey_h5_enabled": False, "collection_download_enabled": False,
-             "collection_h5_enabled": False}
+    flags = {"survey_h5_enabled": False, "station_h5_enabled": False,
+             "collection_download_enabled": False, "collection_h5_enabled": False}
     # max_collection_stations is the tier-3 RAM ceiling (SPEC §7.2): an INT, not a bool — kept out of the
     # bool-coercion loop below. Default ~600 (A4) so an AusLAMP-national-sized build cannot OOM the host.
     flags["max_collection_stations"] = 600
@@ -2636,7 +2742,8 @@ def load_flags(path) -> dict:
     f = (cfg or {}).get("flags", {}) if isinstance(cfg, dict) else {}
     if not isinstance(f, dict):
         f = {}   # a non-mapping flags: block must not crash f.get below
-    for k in ("survey_h5_enabled", "collection_download_enabled", "collection_h5_enabled"):
+    for k in ("survey_h5_enabled", "station_h5_enabled", "collection_download_enabled",
+              "collection_h5_enabled"):
         flags[k] = bool(f.get(k, flags[k]))
     _cap = f.get("max_collection_stations", flags["max_collection_stations"])
     try:
@@ -2847,6 +2954,12 @@ def main(argv=None):
                          "(out/bundles/<slug>-tf.h5) and list it in the manifest. OFF by default (D4: "
                          "MTH5 gated pending storage/management sign-off). ORs with portal.config "
                          "flags.survey_h5_enabled.")
+    ap.add_argument("--station-h5", action="store_true",
+                    help="produce ONE transfer-function MTH5 per served station "
+                         "(out/h5/<slug>/<station>.h5) and list each in the manifest's files[]. Rides "
+                         "the same access + coordinate gates as the station's EDI. OFF by default; "
+                         "ORs with portal.config flags.station_h5_enabled. Wired into deploy/Makefile's "
+                         "rebuild-data, which is the ONLY enable that reaches a production build.")
     ap.add_argument("--collection-download", action="store_true",
                     help="set the collection-level download capability flag (reserved; no producer yet).")
     # C18 incremental build cache (default OFF; a no-op without --cache-dir). See
@@ -2914,11 +3027,12 @@ def main(argv=None):
     # Distribution feature flags (config OR CLI): D4 keeps survey MTH5 OFF by default.
     flags = load_flags(a.portal_config)
     flags["survey_h5_enabled"] = flags["survey_h5_enabled"] or a.survey_h5
+    flags["station_h5_enabled"] = flags["station_h5_enabled"] or a.station_h5
     flags["collection_download_enabled"] = flags["collection_download_enabled"] or a.collection_download
     base_url = a.base_url
-    if flags["survey_h5_enabled"] and not mtm.available():
-        sys.exit("ERROR: --survey-h5 / flags.survey_h5_enabled requires the mt_metadata stack "
-                 "(pip install -r environments/requirements-mtmetadata-lock.txt).")
+    if (flags["survey_h5_enabled"] or flags["station_h5_enabled"]) and not mtm.available():
+        sys.exit("ERROR: --survey-h5 / --station-h5 (and their portal.config flags) require the "
+                 "mt_metadata stack (pip install -r environments/requirements-mtmetadata-lock.txt).")
 
     all_stations, all_tf, all_sci = [], [], []
     # manifest: per-station artifacts (files) + per-survey bundles (bundles). Key-based, NOT positional.
@@ -3151,6 +3265,7 @@ def main(argv=None):
             withheld_ids.update(r["ausmt_id"] for (_p, r) in stations)
         can_serve = a.bundle_edi and redistributable(lic) and kind == "edi" and _acc["served"]  # only EDI is byte-copied
         xml_written = {}
+        h5_written = {}      # tier 1: {station_id: h5_path} for the per-station MTH5 (flag-gated)
         _xml_failures = {}   # {station_id: exception-class} per-station EMTF-XML emission failures (report)
         # Per-survey EDI dir, NAMESPACED by slug (like out/xml/<slug>/ and out/bundles/) so two surveys
         # that reuse an EDI basename (e.g. both ship 01.edi) cannot overwrite each other in a flat tree —
@@ -3178,6 +3293,20 @@ def main(argv=None):
                 "yaml_digest_current": _survey_digest,
                 "xml_digest_stamped": _xstamped,
             }
+            # ---- tier 1: one <station>.h5 per served station (owner ruling 2026-08-02) ----
+            # Inside `can_serve`, so an embargoed or non-served survey emits nothing, identically to
+            # its EDI. The station list is filtered by the SAME per-station coordinate byte gate the
+            # EDI copy loop and the tier-2 bundle apply (C42 F1: an MTH5 rebuilt from the RAW source
+            # carries the true lat/lon/elev in its own metadata, which is exactly how the survey
+            # bundle leaked one before it was gated), so a generalised or withheld station gets no
+            # file, no manifest row and no bytes. NOT cached: the C18 cache stores the pre-mask parse
+            # and the served XML only, and an HDF5 file is not byte-reproducible anyway.
+            if flags["station_h5_enabled"]:
+                h5_written = emit_station_mth5(
+                    [(_p, _r) for (_p, _r) in stations
+                     if coordacc.coordinates_served(coordacc.station_policy(
+                         _coord_default, _coord_overrides, _r.get("id"), _r.get("variant")))],
+                    slug, label, out / "h5" / slug, smeta=meta)
         # C18b (A3): one per-survey instrumentation line (the delta of this survey's cache activity vs
         # the snapshot at the top of the iteration). digest=<first12> ties the log to the sidecar so an
         # operator reading the build log sees, per survey, which digest keyed it and how it hit/missed.
@@ -3217,6 +3346,15 @@ def main(argv=None):
                                                         Path(_xmlp), f"xml/{slug}/{Path(_xmlp).name}",
                                                         lic, nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
+                # Tier 1: the row exists only for a station the writer actually shipped, so a station
+                # whose h5 was withheld by the round-trip gate is absent from the manifest rather than
+                # advertised as a 404 (the same rule the EMTF-XML row above follows).
+                _h5p = h5_written.get(r["id"])
+                if _h5p and Path(_h5p).exists():
+                    manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "mth5",
+                                                        Path(_h5p), f"h5/{slug}/{Path(_h5p).name}",
+                                                        lic, nci_base=nci_base, base_url=base_url,
+                                                        custodian=_custodian))
             if prod:
                 # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
                 # above). The job captures this station's SHARED record `r` (masked in place downstream), its
@@ -3247,7 +3385,8 @@ def main(argv=None):
             # survey carries them); the gw-runner reads the SAME blocks from the raw survey.yaml, and both
             # go through instrument_params_from_survey so the two instruments state identical rights.
             from _license_text import instrument_params_from_survey  # stdlib leaf (imported at module load)
-            _derived = bool(xml_written) or bool(flags.get("survey_h5_enabled"))
+            _derived = (bool(xml_written) or bool(flags.get("survey_h5_enabled"))
+                        or bool(h5_written))
             _p = instrument_params_from_survey(
                 attribution_block=(meta or {}).get("attribution"),
                 sources_block=(meta or {}).get("sources"),
@@ -3477,6 +3616,16 @@ def main(argv=None):
         print(f"WARNING collections: ids {_dup} differ only by case/whitespace — likely a typo; they form "
               f"SEPARATE collections. Use one exact collection.id across member surveys.", file=sys.stderr)
     (out / "collections.json").write_text(_jdump(collections_document(surveys_meta, all_stations, coll_by_id), separators=(",", ":")), encoding="utf-8")
+    # ---- stations.geojson: the corpus as a vector layer (owner ruling 2026-08-02) ----
+    # Emitted from the SAME masked records the catalogue projection above reads, so the two documents
+    # cannot disagree about where a station is; a withheld station has no geometry and is absent (see
+    # stations_geojson). Served beside the other top-level documents and mirrored under products/ like
+    # mtcat.json. Both paths are published in docs/docs/reference/index.md. Compact bytes in both
+    # copies: a FeatureCollection is read by software, and 1418 features of pretty-printing is dead weight.
+    _stations_gj = _jdump(stations_geojson(all_stations, surveys_meta), separators=(",", ":"))
+    (out / "stations.geojson").write_text(_stations_gj, encoding="utf-8")
+    if prod:
+        (prod / "stations.geojson").write_text(_stations_gj, encoding="utf-8")
     # C18: the deterministic cache hit/miss/write tally (design §4.6) — NOT wall-clock timing. Only
     # emitted into build_provenance.json (which already carries a non-deterministic `generated`
     # timestamp, so it is NOT a §4.5 byte-equivalence surface); the served products stay cache-blind.

@@ -22,6 +22,26 @@ _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _MANIFEST = _FIXTURES / "manifest.engine-truth.json"
 _DBIP = _FIXTURES / "dbip-country-lite.sample.csv"
 
+# PROVENANCE of manifest.engine-truth.json, recorded because it is SHARED test data that several pins
+# join against and it had silently drifted from the engine before the tier-1 lane regenerated it.
+# It is the real build's own manifest, never hand-typed rows:
+#
+#   cd engine && python -m extract.build_portal --surveys data --out <tmp> \
+#       --bundle-edi --no-validate --survey-h5 --station-h5
+#
+# then <tmp>/manifest.json TRIMMED to the four keys the aggregator joins on (base_url, files, bundles,
+# generated_count); the engine also writes mt_metadata_version / mth5_version, which this file drops
+# because nothing here reads them. Regeneration is NOT byte-stable and that is expected rather than a
+# fault: HDF5 embeds a creation timestamp, the EMTF-XML embeds a generation stamp, and the xml zip
+# carries both, so those rows' sha256 (and the zip's size, by a byte or two of DEFLATE) move on every
+# run. The EDI rows and the EDI zip ARE stable, being verbatim copies of the vendored sample.
+#
+# What is NOT expected, and is what drift looks like: a field appearing or changing value across a
+# regeneration. Regenerating for tier 1 flipped `custodian` (null -> "AusMT CI") and `canon_license`
+# (null -> "CC-BY-4.0") on all seven pre-existing rows, which are C46-W3a manifest fields this fixture
+# had never carried. If a regeneration moves anything other than the h5/xml/xml-zip digests, the
+# fixture was stale and the diff is a real engine change to read, not noise to accept.
+
 # IP-like tokens the leak sweep hunts (record D6 leak pin): any IPv4 dotted-quad, or an IPv6 token —
 # one carrying a `::` (every masked /48 compresses to one) OR >=4 hextet groups (>=3 internal colons).
 # That discriminates a real address from a `HH:MM:SS` timestamp (2 colons, no `::`), so the sweep flags
@@ -991,6 +1011,107 @@ def test_the_served_json_schema_is_an_api_path():
                           rmap, AGG.GeoIP.load(_DBIP), _RUN)
     assert stats["totals"]["api_requests"] == 1
     assert stats["totals"]["visits"] == 0 and stats["totals"]["downloads"] == 0
+
+
+def test_the_served_stations_geojson_is_an_api_path():
+    """GEOJSON-PATH PIN (owner ruling 2026-08-02). /data/stations.geojson is the corpus as a vector
+    layer: a GIS user adds it as a layer straight from the URL, and the portal's own JavaScript never
+    fetches it, so every hit is a third party reading the corpus programmatically. It is the fourth
+    documented machine-readable entry point and must classify as `api`. FAILS IF the new document is
+    counted nowhere (which is what would happen by default: `.geojson` is not a download family and
+    would fall through to `ignore`), or if it is mistaken for a download or a visit."""
+    assert AGG.classify("/data/stations.geojson") == ("api", None)
+    assert "/data/stations.geojson" in AGG._API_PATHS
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    stats = AGG.aggregate(None, [_line("/data/stations.geojson", "8.8.8.0", ua="QGIS/3.34")],
+                          rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["api_requests"] == 1
+    assert stats["totals"]["visits"] == 0 and stats["totals"]["downloads"] == 0
+
+
+def test_the_products_mirror_of_an_api_document_counts_as_the_same_entry_point():
+    """API MIRROR PIN. Several top-level documents are served at TWO paths and
+    docs/docs/reference/index.md publishes both of them: `/data/mtcat.json` alongside
+    `/data/products/mtcat.json`, `/data/stations.geojson` alongside `/data/products/stations.geojson`.
+    Only the root path was classified, so a reader who used the ADVERTISED mirror counted nowhere:
+    `products` is in no download family, so the mirror fell through to `ignore`, which is the exact
+    failure the API path class was created to prevent. It bites hardest on the GeoJSON, the first of
+    these documents advertised to external GIS consumers.
+
+    A document is ONE entry point however many paths serve it, so the mirrors are DERIVED from
+    _API_PATHS rather than listed in it: listing them would inflate the published entry-point count,
+    which is a count of documents and not of URLs. FAILS IF an advertised mirror classifies as anything
+    other than `api`, if a mirror is credited as a download or a visit, or if the derivation stops
+    covering every root entry point."""
+    assert AGG.classify("/data/products/stations.geojson") == ("api", None)
+    assert AGG.classify("/data/products/mtcat.json") == ("api", None)
+    # derived, never hand-listed: every root entry point must have its mirror covered, and the mirrors
+    # must not move the published count of entry points.
+    for p in AGG._API_PATHS:
+        if not p.startswith("/data/products/"):
+            assert AGG.classify("/data/products/" + p[len("/data/"):]) == ("api", None), p
+    assert len(AGG._API_PATHS) == 4, "the published copy states the number of ENTRY POINTS, not paths"
+
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    stats = AGG.aggregate(None, [_line("/data/products/stations.geojson", "8.8.8.0", ua="QGIS/3.34")],
+                          rmap, AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["api_requests"] == 1, "a GIS reader of the advertised mirror counts nowhere"
+    assert stats["totals"]["visits"] == 0 and stats["totals"]["downloads"] == 0
+    assert stats["totals"]["unattributed"] == 0, "an api path is never unattributed skew"
+
+
+def test_the_station_h5_family_is_a_download_family():
+    """DOWNLOAD-FAMILY INTERLOCK PIN. `/data/h5/*` was a latent Caddy force-download matcher with NO
+    producer, so `h5` was deliberately left out of _DOWNLOAD_FAMILIES and the comment there said why.
+    The engine now produces per-station MTH5 files under exactly that path, which makes the exclusion
+    wrong in the one direction that is invisible: an excluded family classifies as `ignore`, and an
+    ignored path is absent from `unattributed` too, so every station-h5 download would disappear from
+    the analytics entirely rather than show up as skew. FAILS IF the family is missing, or if the
+    classification stops returning the below-/data/ path the manifest reverse map joins on."""
+    assert "h5" in AGG._DOWNLOAD_FAMILIES, (
+        "the h5 family has a producer now; leaving it out silently drops every station-h5 download")
+    assert AGG.classify("/data/h5/sample-survey/A1.h5") == ("download", "h5/sample-survey/A1.h5")
+    # the bare family path carries no file below it and stays ignored, exactly like /data/edi
+    assert AGG.classify("/data/h5") == ("ignore", None)
+
+
+def test_a_station_h5_download_attributes_to_its_station():
+    """The other half of the interlock: classified is not the same as attributed. A station h5 carries
+    an ordinary manifest files[] row, so it must resolve through the reverse map to its own survey,
+    station and format, and count as a per-station FILE rather than a survey bundle. FAILS IF the row
+    shape the producer writes does not join, which would land every station-h5 fetch in `unattributed`
+    instead: visible, but as skew rather than as science."""
+    manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
+    h5_rows = [r for r in manifest["files"] if r.get("format") == "mth5"]
+    assert h5_rows, "the engine-truth manifest fixture must carry a per-station mth5 row"
+    url = h5_rows[0]["url"]
+    rmap = AGG.build_reverse_map(manifest)
+    stats = AGG.aggregate(None, [_line("/data/" + url, "203.0.113.5")], rmap,
+                          AGG.GeoIP.load(_DBIP), _RUN)
+    assert stats["totals"]["downloads"] == 1 and stats["totals"]["unattributed"] == 0
+    row = stats["downloads"]["by_dataset"][url]
+    assert row["station"] == h5_rows[0]["station"] and row["format"] == "mth5"
+    assert stats["downloads"]["by_kind"]["file"] == 1, "a per-station h5 is a file, not a bundle"
+
+
+def test_the_published_api_line_copy_counts_what_the_code_counts():
+    """API-SURFACE COPY PIN (aggregator half). Two published descriptions state the scope of the API
+    line in words: the operator runbook (deploy/README.md) and the public analytics page
+    (docs/docs/introduction/usage-analytics.md). Both name the entry points one by one and both spell
+    out how many there are, so a path added to _API_PATHS without the copy moving leaves two documents
+    understating a figure a custodian is asked to trust. FAILS IF either page omits a path that is in
+    _API_PATHS, or still says 'three documented' now that there are four.
+
+    The word is derived from len(_API_PATHS), never hard-coded, so a fifth entry point fails this pin
+    rather than silently passing a stale 'four'."""
+    _count_word = {2: "two", 3: "three", 4: "four", 5: "five"}[len(AGG._API_PATHS)]
+    for page in (_REPO / "deploy" / "README.md",
+                 _REPO / "docs" / "docs" / "introduction" / "usage-analytics.md"):
+        text = page.read_text(encoding="utf-8")
+        assert f"{_count_word} documented machine-readable entry points" in text, (
+            f"{page.name} must say '{_count_word} documented machine-readable entry points'")
+        for path in AGG._API_PATHS:
+            assert path in text, f"{page.name} does not name the API path {path}"
 
 
 def test_api_requests_are_counted_geographically_like_every_other_request():

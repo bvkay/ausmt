@@ -28,8 +28,9 @@ Three groups of claim are pinned here.
 
       * the three bundle URL forms (-edi.zip / -xml.zip / -tf.h5) are the only three the engine emits
         (engine/schema/manifest.schema.json bundles.format enum: edi-zip, xml-zip, mth5);
-      * the per-station formats are edi and emtfxml, and ONLY those (files.format enum); mth5 exists per
-        SURVEY, never per station, so a reader must not be told to filter station rows by it;
+      * the per-station formats are edi, emtfxml and mth5 (files.format enum). Since the tier-1 lane
+        `mth5` is in BOTH enums and means a different artifact in each, so the patterns must tell a
+        reader to filter on the LIST (files[] vs bundles[]) before the format token;
       * artifact bytes are located through the manifest's url + sha256, never by templating a path from a
         station id (in the live corpus, station A1 of vulcan-2022 is served as
         edi/vulcan-2022/Vulcan_A1.edi; the filename is not the id).
@@ -267,15 +268,21 @@ def test_docs_document_the_manifest_flow():
         "the station id")
 
 
-def test_docs_do_not_promise_a_per_station_mth5():
-    """files.format is edi|emtfxml (engine/schema/manifest.schema.json); mth5 is a BUNDLE format. FAILS
-    if the docs tell a reader to filter per-station rows by mth5, which would send them looking for
-    artifacts that do not exist."""
-    body = _docs_fetch_section()
-    assert "per survey rather than per station" in _flat(body), (
-        "the docs must say plainly that mth5 is a per-survey format, not a per-station one")
-    for wrong in ('.format=="mth5"', 'format == "mth5"', 'files[] | select(.format=="mth5")'):
-        assert wrong not in body, f"the docs must not filter per-station rows by mth5 ({wrong})"
+def test_docs_distinguish_the_two_mth5_granularities():
+    """files.format is edi|emtfxml|mth5 and bundles.format is edi-zip|xml-zip|mth5
+    (engine/schema/manifest.schema.json), so `mth5` is the one token that appears in both lists and
+    means a different artifact in each. The fetch patterns must tell a reader that the LIST is what
+    distinguishes them; a reader who filters on the token alone pulls a whole survey where they wanted
+    one station. FAILS if the section stops saying so, or if it reverts to the pre-tier-1 claim that a
+    per-station MTH5 does not exist."""
+    flat = _flat(_docs_fetch_section())
+    assert "per survey rather than per station" not in flat, (
+        "the section still carries the pre-tier-1 claim; a per-station MTH5 exists now")
+    assert "h5/<slug>/<station>.h5" in flat, "the section must give the per-station MTH5 path"
+    assert "one station" in flat and "the whole survey" in flat, (
+        "the section must say what each of the two mth5 row kinds actually is")
+    assert "Filter on the list first" in flat, (
+        "the section must tell a reader to filter on files[] vs bundles[] before the format token")
 
 
 def test_docs_state_embargo_by_omission():

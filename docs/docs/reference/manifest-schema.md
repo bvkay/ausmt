@@ -131,9 +131,9 @@ One row per downloadable file for one station.
 | Obligation | mandatory |
 | Occurrence | 1 |
 | Type | string |
-| Allowed values | `edi`, `emtfxml` |
+| Allowed values | `edi`, `emtfxml`, `mth5` |
 | Example | `"edi"` |
-| Note | `mth5` is a per-survey bundle format and never appears here. Filtering station rows by it returns nothing. |
+| Note | `mth5` here is ONE station's transfer function, served at `h5/<slug>/<station>.h5`. The same token in a `bundles[]` row is the whole survey's file. Read the list a row came from, not the token alone. |
 
 ### 2.5 files[].url
 
@@ -363,13 +363,18 @@ Only redistributably licensed surveys with an open access level appear. A non-se
 and the portal routes it to the source archive through the catalogue's `edi_available` bit. An embargoed
 survey has no rows at all, so a consumer has no access error to handle and no request to make.
 
-### Feature flags gate the optional bundles
+### Feature flags gate the optional MTH5 products
 
-The bundle set is gated by the deployment's `flags:` configuration and recorded in
+The MTH5 products are gated by the deployment's `flags:` configuration and recorded in
 `build_provenance.json` under `distribution_flags`. `survey_h5_enabled` produces the per-survey
-transfer-function MTH5 and ships enabled; `collection_h5_enabled` gates the collection-level producer and
-`collection_download_enabled` gates its portal tile, and both ship disabled. The EDI zip and the
-EMTF-XML zip are unconditional for a served survey.
+transfer-function MTH5 bundle and `station_h5_enabled` produces the per-station MTH5 files; both ship
+enabled. `collection_h5_enabled` gates the collection-level producer and `collection_download_enabled`
+gates its portal tile, and both ship disabled. The EDI, the EMTF XML, the EDI zip and the EMTF-XML zip
+are unconditional for a served survey.
+
+A flag being enabled in a deployment's configuration is not the same as it being enabled on that
+deployment's build. Read `build_provenance.json`'s `distribution_flags` for what a given build actually
+ran with; the manifest is authoritative for what that build actually produced.
 
 ## Versioning
 

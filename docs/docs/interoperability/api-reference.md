@@ -51,6 +51,7 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 | `/data/mtcat.schema.json` | 7.8 kB | The JSON Schema the document above validates against. |
 | `/data/surveys.json` | 54 kB | Full per-survey metadata, including credit and citation. |
 | `/data/catalogue.json` | 320 kB | One positional row per station. |
+| `/data/stations.geojson` | 390 kB | Every station that has a position, as a GeoJSON point layer. Open it in a GIS. |
 | `/data/sci.json` | 93 kB | Per-station derived diagnostics, aligned to the catalogue by index. |
 | `/data/tf.json` | 3.2 MB | Per-station transfer-function curves, thinned, aligned by index. |
 | `/data/collections.json` | 1.8 kB | Programme groupings. |
@@ -198,6 +199,44 @@ Two facts about withheld surveys, both verifiable on `au.kalkaroo-2022.KD-C3`:
 The catalogue row itself stays complete apart from `edi_available`, which is 0. The band, the period
 range and the component list of an embargoed station are public; the curves are not.
 
+### `stations.geojson`
+
+An RFC 7946 `FeatureCollection` of `Point` features, one per station that has a position, in WGS84
+(GeoJSON's only coordinate reference system, so there is nothing to set). It exists so you can put the
+corpus on a map without first writing a script against the positional catalogue.
+
+In QGIS: **Layer > Add Layer > Add Vector Layer**, set Source Type to **Protocol: HTTP(S)**, and paste
+the URL:
+
+```text
+<portal root>/data/stations.geojson
+```
+
+The same URL works anywhere that reads GeoJSON over HTTP, and with `ogr2ogr` for a local conversion:
+
+```bash
+BASE=${AUSMT_BASE:?the portal root you are reading from}
+ogr2ogr -f GPKG stations.gpkg "/vsicurl/$BASE/data/stations.geojson"
+```
+
+Each feature carries seven flat properties, chosen to be joinable and to keep the file small:
+`ausmt_id`, `station`, `survey` (the display name), `survey_id` (the slug), `data_type`,
+`period_min_s` and `period_max_s`. Join on `ausmt_id` to the download manifest, or on `survey_id` to
+`mtcat.json`, for anything else. Licence and credit are deliberately not repeated per feature: they
+are survey-level facts and live in `surveys.json` and `mtcat.json`.
+
+Two membership rules, and they are the same rules the catalogue follows:
+
+- a station whose position the custodian **withholds** is **absent**, rather than present with a null
+  geometry. A null-geometry feature parses but nothing draws it, so it would be an invisible row. The
+  station itself is not hidden: it keeps its catalogue row, its `mtcat.json` entry and its
+  `station.json`, and `/data/coord_policy.json` records that its position is withheld;
+- a station whose position is **generalised** is here, at the same 0.1° cell the catalogue serves, so a
+  point can sit up to about 5 km from the true site. Nothing is rounded twice.
+
+An embargoed survey's stations **are** on this layer. An embargo withholds bytes, never discovery, and
+this document carries no bytes.
+
 ### `collections.json`
 
 Programme groupings, keyed by collection id. One entry in the current corpus, `auslamp`, holding nine
@@ -276,17 +315,31 @@ Nineteen of the 21 live surveys have bundles, three each, which is the 57 rows i
 
 ### Per-station fetch through the manifest
 
-Fetch `/data/products/manifest.json` once, filter its `files` rows by `format` (`edi` or `emtfxml`) and
-by `survey`, then fetch `/data/` joined to each row's `url` and check the bytes against that row's
-`sha256`.
+Fetch `/data/products/manifest.json` once, filter its `files` rows by `format` (`edi`, `emtfxml` or
+`mth5`) and by `survey`, then fetch `/data/` joined to each row's `url` and check the bytes against that
+row's `sha256`.
 
 Go through the manifest rather than building paths yourself. A served filename is not derivable from the
 station id, so the manifest is the only correct way to locate one station's file. In the current corpus,
 station A1 of `vulcan-2022` is served as `edi/vulcan-2022/Vulcan_A1.edi`.
 
-The manifest's other list, `bundles`, holds the whole-survey artifacts above and the third format,
-`mth5`, which exists per survey rather than per station. Don't filter station rows by `mth5`; there are
-none.
+A served station has three rows, one per format:
+
+```text
+/data/edi/<slug>/<file>.edi     the custodian's transfer function as submitted
+/data/xml/<slug>/<station>.xml  the same station as canonical EMTF XML
+/data/h5/<slug>/<station>.h5    the same station as a transfer-function MTH5
+```
+
+`mth5` is the one token that means two different things depending on which list it came from. A
+`files[]` row with `format: "mth5"` is ONE station; a `bundles[]` row with the same token is the whole
+survey in one file. Filter on the list first, then the format, or a per-survey bundle will arrive where
+a per-station file was expected. Both are transfer functions only, never time series.
+
+The per-station MTH5 is the format to take when a tool wants one station with its metadata attached and
+the survey bundle would be an oversized fetch. It is also the largest of the three per-station files by
+some margin, because HDF5 pays its structural cost once per file rather than once per survey. Take the
+survey bundle when you want the whole survey.
 
 ```bash
 BASE=${AUSMT_BASE:?the portal root you are reading from}
@@ -420,12 +473,18 @@ Both records are documented field by field in
 
 ## Selecting a format
 
-Three formats are distributed, and which ones exist for a survey is stated, never implied.
+Three transfer-function formats are distributed, and which ones exist for a survey is stated, never
+implied.
+
+`mth5` is the one token that appears at both granularities, so read the list it came from rather than
+the token alone: a `files[]` row is one station's transfer function, a `bundles[]` row is the whole
+survey's.
 
 | Format token | Where it appears | Granularity |
 |---|---|---|
 | `edi` | manifest `files[].format` | per station |
 | `emtfxml` | manifest `files[].format` | per station |
+| `mth5` | manifest `files[].format` | per station |
 | `edi-zip` | manifest `bundles[].format` | per survey |
 | `xml-zip` | manifest `bundles[].format` | per survey |
 | `mth5` | manifest `bundles[].format` | per survey |
@@ -441,8 +500,9 @@ per_survey = collections.Counter(b["format"] for b in man["bundles"])
 print(per_station, per_survey)
 ```
 
-That prints `Counter({'edi': 1182, 'emtfxml': 1182}) Counter({'edi-zip': 19, 'xml-zip': 19, 'mth5': 19})`
-against the current corpus. To ask the same question per survey, group `bundles` by `slug`.
+That prints `Counter({'edi': 1182, 'emtfxml': 1182, 'mth5': 1182})` and
+`Counter({'edi-zip': 19, 'xml-zip': 19, 'mth5': 19})` against the current corpus. To ask the same
+question per survey, group `bundles` by `slug`.
 
 MTCAT carries a shortcut. Each survey record has a `formats` list derived from that same manifest during
 the same build, so a harvester can filter without fetching 828 kB:
