@@ -48,9 +48,11 @@ access:
 """
 
 
-def _make_package(root: Path, *, survey_yaml: str = _SURVEY_YAML, n_edi: int = 2) -> Path:
-    """Build an extracted-package-shaped folder <root>/<slug>/ with survey.yaml + n_edi EDIs, the
-    layout safe_extract produces (package_dir/<slug>/...)."""
+def _make_package(root: Path, *, survey_yaml: str = _SURVEY_YAML, n_edi: int = 2,
+                  n_xml: int = 0) -> Path:
+    """Build an extracted-package-shaped folder <root>/<slug>/ with survey.yaml, n_edi EDIs and n_xml
+    EMTF XMLs, the layout safe_extract produces (package_dir/<slug>/...). EMTF XML is a first-class
+    submission input since the 2026-08-03 ruling, so a package may carry either folder or both."""
     pkg = root / "intake-survey-2026"
     (pkg / "transfer_functions" / "edi").mkdir(parents=True)
     (pkg / "survey.yaml").write_text(survey_yaml, encoding="utf-8")
@@ -61,6 +63,12 @@ def _make_package(root: Path, *, survey_yaml: str = _SURVEY_YAML, n_edi: int = 2
         (pkg / "transfer_functions" / "edi" / f"S{i:02d}.edi").write_text(
             ">HEAD\n  LAT=-30:08:45.2\n  LONG=136:58:12.0\n>END\n>FREQ ORDER=INC //1\n  1.0\n",
             encoding="utf-8")
+    if n_xml:
+        (pkg / "transfer_functions" / "emtfxml").mkdir(parents=True, exist_ok=True)
+        for i in range(n_xml):
+            (pkg / "transfer_functions" / "emtfxml" / f"X{i:02d}.xml").write_text(
+                f'<?xml version="1.0"?>\n<EM_TF><Site><Id>X{i:02d}</Id></Site></EM_TF>\n',
+                encoding="utf-8")
     return pkg
 
 
@@ -158,6 +166,33 @@ def test_readme_carries_declared_metadata(tmp_path):
     assert "broadband deployment" in rdm         # the abstract
     assert "## Citation" in rdm
     assert "(2021)" in rdm                        # citation year
+
+
+def test_readme_station_count_covers_emtf_xml_submissions(tmp_path):
+    # The README station count is what a curator reads to decide whether a submission arrived intact,
+    # so it must count the transfer functions the engine will actually ingest. EMTF XML has been one
+    # of those since the 2026-08-03 ruling. FAILS IF an XML-only package is described as having no
+    # stations, or a mixed one counts only half of what it carries. RED against the pre-ruling
+    # _station_count (edi/ alone): "Stations: 0" for the first, "Stations: 1" for the second.
+    xml_only = _make_package(tmp_path / "x", n_edi=0, n_xml=3)
+    intake.generate_intake_files(xml_only, now_utc=_NOW)
+    rdm = (xml_only / "README.md").read_text(encoding="utf-8")
+    assert "Stations: 3" in rdm, \
+        f"an EMTF-XML-only submission is not a submission with no stations: {rdm}"
+
+    mixed = _make_package(tmp_path / "m", n_edi=1, n_xml=2)
+    intake.generate_intake_files(mixed, now_utc=_NOW)
+    assert "Stations: 3" in (mixed / "README.md").read_text(encoding="utf-8")
+
+    # Not a parse, so it counts files rather than distinct stations, and says nothing about MTH5
+    # (one file holds many). Pinned so the honest limits of the figure cannot drift unnoticed.
+    assert intake._station_count(xml_only) == 3
+    (mixed / "transfer_functions" / "mth5").mkdir(parents=True)
+    (mixed / "transfer_functions" / "mth5" / "survey.h5").write_bytes(b"\x89HDF\r\n\x1a\n")
+    assert intake._station_count(mixed) == 3, "MTH5 needs a parse to count, so it is not counted"
+    for junk in ("notes.txt", "S00.EDI.bak"):
+        (mixed / "transfer_functions" / "edi" / junk).write_text("x", encoding="utf-8")
+    assert intake._station_count(mixed) == 3, "only the transfer-function suffixes count"
 
 
 # --------------------------------------------------------------------------------------------------
