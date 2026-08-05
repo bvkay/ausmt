@@ -32,10 +32,17 @@ def _norm(s: str) -> str:
 
 
 AUS_BBOX = (108.0, 156.0, -45.0, -8.0)  # w,e,s,n — generous; non-AU surveys override in survey.yaml
-ALLOWED_TF_EXT = {".edi", ".h5", ".mth5"}   # EDI and MTH5 are first-class TF inputs (Prototype 23)
-# EMTF-XML and processing-software formats remain deferred; enable per-deployment with --allow-optin-formats
-# (--allow-mth5 is a deprecated alias, kept only for existing CI invocations; same dest, same effect)
-OPTIN_TF_EXT = {".xml", ".zmm", ".zrr", ".j"}
+# EDI, EMTF XML and MTH5 are first-class TF inputs (Prototype 23; EMTF XML added by the owner ruling
+# of 2026-08-03, which made it a submission input alongside the other two rather than a build output).
+ALLOWED_TF_EXT = {".edi", ".xml", ".h5", ".mth5"}
+# Processing-software products remain deferred: they are stored, never parsed into a built product,
+# so a curator enables them per submission with --allow-optin-formats (--allow-mth5 is a deprecated
+# alias, kept only for existing CI invocations; same dest, same effect).
+OPTIN_TF_EXT = {".zmm", ".zrr", ".j"}
+# EMTF XML anti-masquerade: the EarthScope root element, matched over a BOUNDED prefix (the root is
+# within the first few lines of any real file; this never reads a whole multi-MB XML to decide).
+EMTFXML_ROOT_RE = re.compile(r"<\s*EM_TF[\s>]", re.IGNORECASE)
+EMTFXML_HEAD_SCAN_BYTES = 65536
 DISALLOWED_EXT = {".exe", ".dll", ".bat", ".sh", ".scr", ".js", ".vbs", ".jar", ".com",
                   ".cmd", ".ps1", ".py", ".pl", ".php", ".so", ".dylib"}
 ARCHIVE_EXT = {".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".bz2", ".xz"}
@@ -579,10 +586,16 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
               f"{req} {'present' if (folder/req).exists() else 'missing'}")
     tf_dir = folder / "transfer_functions" / "edi"
     edis = sorted(tf_dir.glob("*.edi")) if tf_dir.exists() else []
+    xml_dir = folder / "transfer_functions" / "emtfxml"
+    xml_files = sorted(xml_dir.glob("*.xml")) if xml_dir.exists() else []
     mh_dir = folder / "transfer_functions" / "mth5"
     mh_files = (sorted(mh_dir.glob("*.h5")) + sorted(mh_dir.glob("*.mth5"))) if mh_dir.exists() else []
-    if not edis and not mh_files:
-        r.add("FAIL", "structure", "no transfer functions under transfer_functions/edi/ or transfer_functions/mth5/")
+    # A package needs transfer functions in at least ONE of the three accepted homes. emtfxml/ counts
+    # since the 2026-08-03 ruling: an EMTF-XML-only survey is a complete submission, and the engine
+    # builds it into the same product set an EDI survey gets.
+    if not edis and not xml_files and not mh_files:
+        r.add("FAIL", "structure", "no transfer functions under transfer_functions/edi/, "
+              "transfer_functions/emtfxml/ or transfer_functions/mth5/")
 
     # --- metadata ---
     # Tolerant of both the Prototype-20 structured schema (project_name; organisation as a map with
@@ -1049,6 +1062,18 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         # HEAD and an appended binary payload that the coordinate parse alone would not catch.
         if ext == ".edi" and b"\x00" in f.read_bytes():
             r.add("FAIL", "security", f"{rel}: declared .edi but content is binary (NUL byte) — possible masquerade")
+        # anti-masquerade for .xml under transfer_functions/: an EMTF XML is TEXT whose root element
+        # is <EM_TF> (the EarthScope schema). A .xml there that never opens that element is not a
+        # transfer function whatever it is named, and now that EMTF XML is a standard accepted input
+        # it would otherwise be handed to the engine to fail per-station at build time, where the
+        # station simply goes missing from the catalogue. Fail it here, at the gate, like the .edi
+        # NUL-byte check above. Reads a bounded prefix, so a large file is not slurped to decide this.
+        if ext == ".xml" and "transfer_functions" in rel.parts:
+            with f.open("rb") as fh:
+                head = fh.read(EMTFXML_HEAD_SCAN_BYTES)
+            if not EMTFXML_ROOT_RE.search(head.decode("utf-8", "replace")):
+                r.add("FAIL", "security", f"{rel}: declared .xml under transfer_functions/ but it is "
+                      "not an EMTF XML transfer function (no <EM_TF> root element)")
     # Antivirus is a CI responsibility, not this validator's. If CI has already run ClamAV it
     # sets AUSMT_CLAMAV_RAN=1, and we record PASS so --strict does not fail an already-scanned
     # survey. Outside CI we stay honest: a WARNING that the scan was NOT performed here.
@@ -1064,7 +1089,8 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         if not f.is_file():
             continue
         if f.suffix.lower() not in accepted:
-            extra = "" if allow_mth5 else " (.edi and .mth5 accepted; enable EMTF-XML/.zmm/.zrr/.j with --allow-optin-formats)"
+            extra = ("" if allow_mth5 else
+                     " (.edi, .xml and .mth5 accepted; enable .zmm/.zrr/.j with --allow-optin-formats)")
             r.add("FAIL", "security", f"unaccepted file type in transfer_functions/: {f.relative_to(folder)}{extra}")
 
     # generated provenance manifest: SHA256 for every accepted file (anti-tamper / canonicalisation record)
@@ -1221,7 +1247,7 @@ def main(argv=None):
     ap.add_argument("--allow-large", action="store_true",
                     help="curator override: downgrade >MAX_FILE_MB from FAIL to WARNING")
     ap.add_argument("--allow-optin-formats", dest="allow_mth5", action="store_true",
-                    help="also accept EMTF-XML/.zmm/.zrr/.j (EDI and MTH5 are accepted by default)")
+                    help="also accept .zmm/.zrr/.j (EDI, EMTF XML and MTH5 are accepted by default)")
     ap.add_argument("--allow-mth5", dest="allow_mth5", action="store_true", help=argparse.SUPPRESS)  # deprecated alias, same dest
     a = ap.parse_args(argv)
     rep = validate(Path(a.folder), allow_large=a.allow_large, allow_mth5=a.allow_mth5)
