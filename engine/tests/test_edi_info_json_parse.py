@@ -21,9 +21,23 @@ is merely the only one that lands in a numerically-typed field, so it is the onl
 the other 140 carry junk into free-text metadata silently. The fix therefore targets the trailing
 DELIMITER, and these tests pin that generality so a later reader cannot narrow it to one keyword.
 
-FIXTURES are byte-for-byte copies out of the READ-ONLY delivery tree, custodian filenames kept:
-  LineNo__StationNo_11.edi -- carries `"Declination": 5,`; FAILS on stock mt_metadata 1.0.9
-  LineNo__StationNo_39.edi -- same delivery, same JSON >INFO, NO Declination key; parses stock
+FIXTURES are byte-for-byte copies out of the READ-ONLY delivery tree, custodian filenames kept. The
+delivery is NOT uniform -- it mixes two >INFO dialects -- and all three are needed, because each
+declines the fallback at a different guard:
+  LineNo__StationNo_11.edi  -- JSON >INFO, `"Declination": 5,`, an "empower" token.
+                               FAILS on stock mt_metadata 1.0.9. The defect vector.
+  LineNo__StationNo_104.edi -- JSON >INFO, a `"Declination"` member, trailing commas throughout, and
+                               NO "empower" token, so step 2 never fires and it READS FINE on stock.
+                               The hard no-regression control: normalisation is NOT a no-op on it,
+                               so only the "the read actually failed" guard keeps the retry away.
+  LineNo__StationNo_39.edi  -- a PLAIN-TEXT (Phoenix/Zonge line-oriented) >INFO block: no JSON, no
+                               Declination key, no trailing delimiters anywhere in the block. The
+                               weaker control, and the one normalisation must leave byte-identical.
+                               (Do not describe this one as a JSON >INFO file -- it is not.)
+
+Delivery census behind those three, measured over all 312 files: 267 carry a `"Declination"` key,
+246 also carry an "empower" token (these are the ones that fail stock), 21 carry the key WITHOUT the
+token (104 is one of them), and 45 carry no key at all (39 is one of them).
 """
 import hashlib
 import sys
@@ -35,13 +49,14 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "extract"))
 
 FIX = HERE / "fixtures" / "edi-info-json"
-DECL = FIX / "LineNo__StationNo_11.edi"       # has "Declination": 5,  -> fails on stock 1.0.9
-NODECL = FIX / "LineNo__StationNo_39.edi"     # same delivery, no Declination key -> parses stock
+DECL = FIX / "LineNo__StationNo_11.edi"       # JSON >INFO + "Declination": 5, + empower -> fails stock
+STOCKJSON = FIX / "LineNo__StationNo_104.edi"  # JSON >INFO + Declination + commas, no empower -> parses stock
+NODECL = FIX / "LineNo__StationNo_39.edi"     # plain-text >INFO, no Declination key -> parses stock
 
 # A REAL pre-existing unrelated failure, already checked into the sibling surveys repo: capricorn
 # CP3B21.edi carries reflat='--26.0322667' (a doubled minus) and raises a pydantic value_error, NOT
 # a *_parsing error, and its offending input does not end in a comma. It is the natural control for
-# "an unrelated failure must still fail, with its ORIGINAL error" -- see test_unrelated_* below.
+# "an unrelated failure must still fail, with its ORIGINAL error" -- see _unrelated_failure_edi below.
 UNRELATED_REFLAT = "--26.0322667"
 
 pytest.importorskip("mt_metadata")
@@ -54,13 +69,32 @@ def _mtm():
 
 def test_fixtures_are_present_and_carry_the_defect_shape():
     """Guards the fixtures themselves: if someone re-copies them from a corrected delivery, the
-    tests below would pass vacuously. Pins the exact source line the defect keys on."""
-    assert DECL.exists() and NODECL.exists()
+    tests below would pass vacuously. Pins the exact source line the defect keys on, AND pins what
+    makes each control a control -- a fixture silently swapped for a differently-shaped file would
+    otherwise leave the no-regression claim resting on a file that never had the shape it needed."""
+    m = _mtm()
+    assert DECL.exists() and NODECL.exists() and STOCKJSON.exists()
     decl_text = DECL.read_text(encoding="utf-8", errors="replace")
     assert '"Declination": 5,' in decl_text, "fixture no longer carries the trailing-comma member"
     assert "empower_version" in decl_text, "fixture no longer trips the Empower branch"
-    assert '"Declination"' not in NODECL.read_text(encoding="utf-8", errors="replace"), \
-        "the control fixture must have NO Declination key"
+
+    # NODECL: PLAIN-TEXT >INFO. No JSON, no Declination key, and -- the property the no-op test
+    # rests on -- not one trailing delimiter anywhere in the block.
+    nodecl_raw = NODECL.read_bytes()
+    assert b'"Declination"' not in nodecl_raw, "the plain-text control must have NO Declination key"
+    assert b"empower" not in nodecl_raw.lower(), "the plain-text control must carry no empower token"
+    assert m.normalise_info_json_delimiters(nodecl_raw) == nodecl_raw, \
+        "the plain-text control now carries trailing delimiters; it is no longer a no-op control"
+
+    # STOCKJSON: JSON >INFO, a Declination member, trailing delimiters present -- and NO empower
+    # token, which is the only reason mt_metadata reads it. Every one of those must hold or the
+    # hard no-regression control has quietly become a second copy of the defect vector.
+    stock_raw = STOCKJSON.read_bytes()
+    assert b'"Declination"' in stock_raw, "the JSON control must carry a Declination member"
+    assert b"empower" not in stock_raw.lower(), \
+        "the JSON control gained an empower token; it would now FAIL stock and prove nothing"
+    assert m.normalise_info_json_delimiters(stock_raw) != stock_raw, \
+        "the JSON control lost its trailing delimiters; normalisation is a no-op on it now"
 
 
 # --------------------------------------------------------------------------------------------
@@ -129,40 +163,149 @@ def test_normalisation_touches_only_the_info_block():
 
 
 def test_normalisation_is_a_noop_for_a_file_without_the_defect():
-    """No trailing delimiters in >INFO => the bytes come back IDENTICAL, so the fallback can never
-    fire on a file that does not carry the defect."""
+    """No trailing delimiters in >INFO => the bytes come back IDENTICAL. This is the property guard
+    3 of the retry rests on (`if fixed == raw: raise`), so it is asserted as IDENTITY -- the earlier
+    idempotence form reduced to `raw == raw` on this fixture and would have stayed green even if
+    normalisation had started rewriting files that do not carry the defect."""
     m = _mtm()
     raw = NODECL.read_bytes()
-    assert m.normalise_info_json_delimiters(m.normalise_info_json_delimiters(raw)) == \
-        m.normalise_info_json_delimiters(raw), "normalisation is not idempotent"
+    assert m.normalise_info_json_delimiters(raw) == raw, \
+        "normalisation is not a no-op on a file with no trailing delimiters in >INFO"
+
+
+def test_normalisation_is_idempotent_where_it_actually_changes_bytes():
+    """Idempotence is only meaningful on a file normalisation DOES rewrite: a second pass over an
+    already-normalised >INFO block must not eat a second character."""
+    m = _mtm()
+    raw = DECL.read_bytes()
+    once = m.normalise_info_json_delimiters(raw)
+    assert once != raw, "the defect fixture is no longer changed by normalisation; this is vacuous"
+    assert m.normalise_info_json_delimiters(once) == once, "normalisation is not idempotent"
 
 
 # --------------------------------------------------------------------------------------------
-# 3. the retry is NARROW -- unrelated failures still fail, with their original error
+# 3. the retry is NARROW -- unrelated failures still fail, with their original error.
+#
+# `_read_with_fallback` advertises FOUR independent guards. Each one is pinned INDIVIDUALLY below,
+# by counting calls to `_read_once`: exactly one call means the retry never happened. A guard that
+# is only pinned "in combination" is not pinned at all -- deleting it leaves the suite green, which
+# is what an earlier revision of this file did for three of the four.
+#
+# Isolating one guard means neutralising the others (they are ANDed, so any of them can mask the one
+# under test). Where a test does that it monkeypatches the *other* guards and says which, so what is
+# actually being asserted stays legible.
 # --------------------------------------------------------------------------------------------
 
-def test_unrelated_failure_still_raises_its_original_error(tmp_path):
-    """A file broken for an unrelated reason must fail exactly as it does today. The vector is the
-    REAL one from the selected corpus (capricorn CP3B21: reflat='--26.0322667'), not an invention."""
-    m = _mtm()
-    broken = tmp_path / "broken.edi"
-    text = DECL.read_text(encoding="utf-8", errors="replace")
-    text = text.replace("LAT=", "LAT=-", 1).replace("REFLAT=", f"REFLAT={UNRELATED_REFLAT}#", 1)
-    broken.write_text(text, encoding="utf-8")
-    with pytest.raises(Exception) as ei:
-        m.read(broken)
-    msg = str(ei.value)
-    assert "float_parsing" not in msg or "5," not in msg, \
-        "an unrelated failure was reported as the >INFO delimiter defect"
+def _count_reads(monkeypatch, m):
+    """Wrap `_mtm._read_once` in a call counter and return the list it appends to. len(list) == 1
+    means the file was read once and never retried; == 2 means the retry ran."""
+    real = m._read_once
+    seen: list = []
+
+    def counting(path):
+        seen.append(Path(path))
+        return real(path)
+
+    monkeypatch.setattr(m, "_read_once", counting)
+    return seen
 
 
-def test_a_file_that_is_not_an_edi_is_not_retried(tmp_path):
-    """>INFO is an EDI construct. A non-EDI input must never take the normalisation path."""
+def _unrelated_failure_edi(tmp_path):
+    """The DECL fixture broken for a reason the fallback has nothing to do with: the capricorn
+    CP3B21 shape (reflat='--26.0322667', a doubled minus) grafted onto it. Crucially it KEEPS the
+    fixture's trailing >INFO delimiters, so it is not declined for lack of anything to normalise --
+    it is declined because its error is a pydantic value_error, not a scalar-parsing one."""
+    broken = tmp_path / "unrelated.edi"
+    broken.write_bytes(DECL.read_bytes().replace(b"REFLAT=", f"REFLAT={UNRELATED_REFLAT}#".encode(), 1))
+    return broken
+
+
+def _unfixable_declination_edi(tmp_path):
+    """A file that carries the defect SIGNATURE but that normalisation cannot rescue: the declination
+    member is non-numeric, so the value is 'north-ish,' before the retry and 'north-ish' after it.
+    This is the ONLY vector that reaches the fourth guard (retry ran, retry failed)."""
+    broken = tmp_path / "unfixable.edi"
+    broken.write_bytes(DECL.read_bytes().replace(b'"Declination": 5,', b'"Declination": "north-ish",'))
+    return broken
+
+
+def test_guard1_a_non_edi_input_is_never_retried(tmp_path, monkeypatch):
+    """GUARD 1 (.edi only), isolated: the signature and bytes-changed guards are forced OPEN, so the
+    suffix check is the only thing left that can refuse. mt_metadata's own dispatcher would raise a
+    ParseError on a .xml long before the declination error, which is why forcing the other guards is
+    the only way to make this guard the sole reason for the outcome."""
     m = _mtm()
+    monkeypatch.setattr(m, "_is_info_delimiter_defect", lambda exc: True)
+    monkeypatch.setattr(m, "normalise_info_json_delimiters", lambda raw: raw + b"\n")
+    seen = _count_reads(monkeypatch, m)
     junk = tmp_path / "notanedi.xml"
     junk.write_bytes(b"<xml>not a transfer function</xml>")
     with pytest.raises(Exception):
         m.read(junk)
+    assert len(seen) == 1, f"a non-.edi input was retried through the >INFO normalisation: {seen}"
+
+
+def test_guard2_a_failure_without_the_defect_signature_is_never_retried(tmp_path, monkeypatch):
+    """GUARD 2 (the signature predicate), not isolated and not needing to be: the vector is a real
+    .edi that DOES have normalisable >INFO bytes, so the suffix and bytes-changed guards both say
+    'go'. Only the predicate stands between it and a retry."""
+    m = _mtm()
+    broken = _unrelated_failure_edi(tmp_path)
+    assert m.normalise_info_json_delimiters(broken.read_bytes()) != broken.read_bytes(), \
+        "vector has nothing to normalise; it would be declined by guard 3 and prove nothing"
+    seen = _count_reads(monkeypatch, m)
+    with pytest.raises(Exception) as ei:
+        m.read(broken)
+    assert len(seen) == 1, f"a failure with no defect signature was retried: {seen}"
+    assert UNRELATED_REFLAT in str(ei.value), f"the reported error is not the reflat one: {ei.value}"
+
+
+def test_guard3_no_byte_change_means_no_retry(monkeypatch):
+    """GUARD 3 (normalisation must actually change bytes), isolated by forcing normalisation to be
+    the identity: the read still fails with the genuine defect signature, so guards 1 and 2 both say
+    'go', and only 'there is nothing to fix' can stop the retry."""
+    m = _mtm()
+    monkeypatch.setattr(m, "normalise_info_json_delimiters", lambda raw: raw)
+    seen = _count_reads(monkeypatch, m)
+    with pytest.raises(Exception) as ei:
+        m.read(DECL)
+    assert len(seen) == 1, f"a file with nothing to normalise was retried anyway: {seen}"
+    assert "5," in str(ei.value), f"the reported error is not the original declination one: {ei.value}"
+
+
+def test_guard4_a_failed_retry_reports_the_original_error_not_the_retrys(tmp_path, monkeypatch):
+    """GUARD 4 (retry failed -> re-raise the ORIGINAL), the arm no earlier test reached. The retry
+    genuinely RUNS here (two reads) and genuinely fails, and what surfaces must be the pre-retry
+    error -- input 'north-ish,' WITH the delimiter, never the retry's 'north-ish' without it. A bare
+    `raise` in that arm would surface the retry's error and silently rewrite what the curator sees."""
+    m = _mtm()
+    broken = _unfixable_declination_edi(tmp_path)
+    seen = _count_reads(monkeypatch, m)
+    with pytest.raises(Exception) as ei:
+        m.read(broken)
+    assert len(seen) == 2, f"the retry arm was never reached, so this test proves nothing: {seen}"
+    rows = [r.get("input") for r in ei.value.errors()] if hasattr(ei.value, "errors") else []
+    assert "north-ish," in rows, \
+        f"the RETRY's error was reported instead of the original: {rows or str(ei.value)}"
+
+
+@pytest.mark.parametrize("make_broken", [_unrelated_failure_edi, _unfixable_declination_edi],
+                         ids=["declined-at-the-signature-guard", "retried-then-failed"])
+def test_a_broken_file_fails_with_byte_identical_stock_behaviour(tmp_path, make_broken):
+    """THE CONTRACT ITSELF, asserted directly rather than by absence: for a file the fallback cannot
+    fix, `read` must be indistinguishable from stock mt_metadata. Both arms are covered -- the one
+    that never retries and the one that retries and fails -- and the comparison is against the error
+    STOCK actually raises (captured here from `_read_once`), not against a hand-written expectation."""
+    m = _mtm()
+    broken = make_broken(tmp_path)
+    with pytest.raises(Exception) as stock:
+        m._read_once(broken)
+    with pytest.raises(Exception) as through_fallback:
+        m.read(broken)
+    assert type(through_fallback.value) is type(stock.value), \
+        f"error CLASS changed: stock {type(stock.value).__name__} -> {type(through_fallback.value).__name__}"
+    assert str(through_fallback.value) == str(stock.value), \
+        f"error MESSAGE changed:\n  stock: {stock.value}\n  fallback: {through_fallback.value}"
 
 
 def test_garbage_edi_still_fails(tmp_path):
@@ -314,9 +457,11 @@ def test_build_report_stays_schema_valid_with_the_new_field(tmp_path):
 
 
 def test_a_survey_without_the_defect_records_no_fallback(tmp_path):
-    """NO-REGRESSION: the control fixture is from the SAME delivery with the SAME JSON >INFO block
-    and simply has no Declination key. It must build with an EMPTY fallback ledger and no warning,
-    i.e. the new path is inert for every file mt_metadata can already read."""
+    """NO-REGRESSION: the control fixture is a plain-text >INFO file from the SAME delivery. It must
+    build with an EMPTY fallback ledger and no warning, i.e. the new path is inert for every file
+    mt_metadata can already read. (`test_a_json_info_survey_that_parses_stock_records_no_fallback`
+    below is the harder no-regression control: JSON >INFO, Declination key, trailing commas, and it
+    still must not take the fallback.)"""
     import json  # noqa: PLC0415
     surveys = _survey_package(tmp_path, "clean", [NODECL])
     _out, _prod, report, _cat = _run_build(tmp_path, surveys)
@@ -327,6 +472,29 @@ def test_a_survey_without_the_defect_records_no_fallback(tmp_path):
     assert not any("trailing-delimiter" in w for w in entry["warnings"]), \
         f"a cleanly-read survey raised the fallback warning: {entry['warnings']}"
     assert json.dumps(entry)  # the entry stays JSON-serialisable
+
+
+def test_a_json_info_survey_that_parses_stock_records_no_fallback(tmp_path):
+    """THE HARD NO-REGRESSION CONTROL. `NODECL` above has a plain-text >INFO block, so it exercises
+    the inert path only weakly. `STOCKJSON` is the case that actually matters: a JSON >INFO block,
+    a `"Declination"` member, trailing commas throughout (normalisation is NOT a no-op on it) -- and
+    mt_metadata 1.0.9 reads it FINE, because it carries no "empower" token so step 2 of the defect
+    never fires. It must build with an empty fallback ledger: the retry is gated on the READ having
+    failed, never on the file merely looking like it could carry the defect."""
+    import json  # noqa: PLC0415
+    m = _mtm()
+    raw = STOCKJSON.read_bytes()
+    assert m.normalise_info_json_delimiters(raw) != raw, \
+        "STOCKJSON no longer carries trailing delimiters; it is no longer the hard control"
+    surveys = _survey_package(tmp_path, "stockjson", [STOCKJSON])
+    _out, _prod, report, _cat = _run_build(tmp_path, surveys)
+    entry = report["surveys"]["stockjson"]
+    assert entry["stations_built"] == 1
+    assert entry.get("source_parse_fallbacks") == [], \
+        f"a stock-readable JSON >INFO survey reported a fallback: {entry.get('source_parse_fallbacks')}"
+    assert not any("trailing-delimiter" in w for w in entry["warnings"]), \
+        f"a stock-readable JSON >INFO survey raised the fallback warning: {entry['warnings']}"
+    assert json.dumps(entry)
 
 
 # --------------------------------------------------------------------------------------------

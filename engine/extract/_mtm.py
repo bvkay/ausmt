@@ -71,9 +71,22 @@ INFO_JSON_DELIMITER_DEFECT = (
     "reparsed from a normalised temporary copy (the source file is untouched and is what is served)"
 )
 
-# The observable signature of the defect: a pydantic scalar-parsing failure whose offending input is
-# a STRING ending in the JSON member separator. Deliberately narrow -- an unrelated read failure has
-# either a different error type or an input that does not end in a comma, and must still fail loudly.
+# The observable signature of the defect: a pydantic scalar-parsing failure (`*_parsing`) whose
+# offending input is a STRING ending in the JSON member separator. Deliberately narrow -- an
+# unrelated read failure has either a different error type or an input that does not end in a comma,
+# and must still fail loudly.
+#
+# BOUNDARY, stated because the NORMALISATION below is general over the delimiter class while this
+# TRIGGER is not. Only pydantic's own scalar coercion (`float_parsing`, `int_parsing`, ...) is
+# recognised. A field whose custom validator raises `value_error` instead is NOT recognised, even if
+# its input carries the same trailing comma -- mt_metadata's lat/lon validator is exactly that shape.
+# That restriction has no effect on this corpus: substituting every other key `_empower_translation_dict`
+# maps onto a typed field (year, process_date, length, azimuth, ac, dc, negative_res, positive_res) into
+# the fixture still PARSES on stock 1.0.9, so `declination` is the only mapped key that raises at all, and the one
+# real value_error in the selected corpus (capricorn CP3B21.edi, reflat='--26.0322667') has no trailing
+# comma either way. If a value_error-shaped instance of the delimiter class ever turns up, widening
+# here is safe by construction -- guards 3 and 4 of _read_with_fallback make a false positive inert --
+# but it is not widened on speculation.
 _DELIMITED_SCALAR_RE = re.compile(r"type=\w+_parsing, input_value='[^']*,'")
 
 
