@@ -570,8 +570,35 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = station_id or src.stem
 
-    tf = TF()
-    tf.read(str(src))
+    # THE SOURCE READ GOES THROUGH `_mtm.read_with_fallback`, NOT a bare TF().read(). normalize() is
+    # the SECOND place the engine hands a custodian EDI to mt_metadata (build_portal's catalogue pass
+    # is the first), and it is the one that produces the canonical EMTF XML. A source-read workaround
+    # wired into only one of the two seams still BUILDS every station -- catalogue row, served EDI and
+    # integrity gate all green -- and then raises HERE, so the station is booked into
+    # build_report.xml_failures and ships EDI-only. Not silent (the report says so loudly, 246 times);
+    # wrong, because it records as an unreadable file one the engine reads perfectly well one function
+    # over. Measured on the GSSA Western Gawler 2023 delivery: 66 of 312 stations emitted canonical XML
+    # before this line changed, 312 of 312 after.
+    # Behaviour is UNCHANGED for a file mt_metadata reads directly: read_with_fallback's first act is
+    # the same TF().read(str(src)), and the retry it may attempt is parse-only (a normalised copy in a
+    # TemporaryDirectory destroyed before the call returns; tf.fn points back at `src`), so the bytes
+    # this function writes, hashes or serves are unaffected -- see the D1 note in extract/_mtm.py.
+    # NOT recorded here: build_portal's catalogue pass reads every source file first and already
+    # records the per-station fallback into build_report (surveys.<slug>.source_parse_fallbacks), so
+    # adding it to `conditioned` would double-report it and would put a READ-side workaround into a
+    # vocabulary that otherwise describes what was changed IN the artifact.
+    # Import shape mirrors the _license_text import at the top of this module: `extract` is an
+    # installed package in the engine env, with a bare-name fallback for an extract/-only-on-path
+    # caller. Function-local, so merely importing this module still does not pull the heavy stack.
+    # Consequence, stated rather than hidden: build_portal reaches _mtm by the bare name (its own
+    # sys.path insert) and this reaches it by package path, so a build holds BOTH `_mtm` and
+    # `extract._mtm` in sys.modules. That is already true of _license_text and is harmless here --
+    # the module has no mutable state, and `TF` resolves to the one class object either way.
+    try:
+        from extract._mtm import read_with_fallback  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - exercised only when extract/ (not engine/) is the path root
+        from _mtm import read_with_fallback  # noqa: PLC0415
+    tf, _parse_fallback = read_with_fallback(src)
     notes = condition_tf(tf, survey_id=survey_id, station_id=station_id, survey_meta=survey_meta,
                          source_format=src.suffix.lower(), source_provenance=source_provenance)
 

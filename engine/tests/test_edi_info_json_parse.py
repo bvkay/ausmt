@@ -328,3 +328,61 @@ def test_a_survey_without_the_defect_records_no_fallback(tmp_path):
         f"a cleanly-read survey raised the fallback warning: {entry['warnings']}"
     assert json.dumps(entry)  # the entry stays JSON-serialisable
 
+
+# --------------------------------------------------------------------------------------------
+# 6. THE SECOND SEAM. `_mtm.read` is NOT the only place the engine hands an EDI path to
+#    mt_metadata: `ausmt_science.ingest.normalize` opens the source itself, and it is what produces
+#    the canonical EMTF XML (and the served .xml download). A fallback wired into only one seam
+#    still BUILDS the station -- from the catalogue's point of view everything is green -- and then
+#    books it into build_report.xml_failures as an EDI-only station. That failure is LOUD, not
+#    silent; it is simply WRONG, because it reports as unreadable a file the engine reads perfectly
+#    well one function over. At Western Gawler scale it was 246 of 312 stations. These tests pin
+#    BOTH seams, on the report field and on the written file, so the gap cannot be re-opened.
+# --------------------------------------------------------------------------------------------
+
+def test_normalize_reads_a_source_that_needs_the_fallback(tmp_path):
+    """The unit form: normalize() itself must not raise on a file that only the fallback can read."""
+    from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
+    res = normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")
+    assert Path(res.canonical_xml).exists(), "no canonical EMTF-XML was written"
+    assert res.n_periods > 0, f"canonical XML certified with no periods: {res.n_periods}"
+
+
+def test_the_canonical_xml_carries_the_declination_the_custodian_wrote(tmp_path):
+    """Not merely "it did not raise": the value recovered by the fallback must reach the canonical
+    artefact. A degenerate parse that produced an XML with a defaulted declination would satisfy the
+    test above and would still be wrong."""
+    import re as _re  # noqa: PLC0415
+    from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
+    res = normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")
+    xml = Path(res.canonical_xml).read_text(encoding="utf-8", errors="replace")
+    found = _re.search(r"<Declination[^>]*>([^<]+)</Declination>", xml)
+    assert found, "the canonical XML carries no Declination element"
+    assert float(found.group(1)) == pytest.approx(5.0), \
+        f"canonical XML declination is {found.group(1)!r}, not the custodian's 5"
+
+
+def test_normalize_leaves_the_source_bytes_untouched(tmp_path):
+    """D1 through the SECOND seam too: normalize() reads the custodian's file, never rewrites it."""
+    from ausmt_science.ingest.normalize import normalize  # noqa: PLC0415
+    before = hashlib.sha256(DECL.read_bytes()).hexdigest()
+    normalize(DECL, tmp_path / "xml", survey_id="declfix", station_id="1039")
+    assert hashlib.sha256(DECL.read_bytes()).hexdigest() == before, \
+        "normalize() modified the source EDI"
+
+
+def test_a_fallback_parsed_station_still_serves_its_canonical_xml(tmp_path):
+    """The end-to-end form, through a real build: a fallback-parsed station must appear in
+    out/xml/<slug>/ and must NOT be counted as an XML-emission failure. This is the assertion that
+    catches a fallback wired into the catalogue seam only."""
+    surveys = _survey_package(tmp_path, "declfix", [DECL])
+    out, _prod, report, _cat = _run_build(tmp_path, surveys)
+    entry = report["surveys"]["declfix"]
+    assert entry["stations_built"] == 1, f"the fallback station did not build: {entry}"
+    assert entry["xml_failures"] == [], \
+        f"the fallback station failed EMTF-XML emission: {entry['xml_failures']}"
+    assert not any("EMTF-XML emission failed" in w for w in entry["warnings"]), \
+        f"the build reported an XML-emission failure: {entry['warnings']}"
+    written = sorted(p.name for p in (out / "xml" / "declfix").glob("*.xml"))
+    assert written == ["1_039.xml"], f"canonical XML not served for the fallback station: {written}"
+
