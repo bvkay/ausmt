@@ -11,7 +11,9 @@ store (see docs developer/architecture.md).
 """
 from __future__ import annotations
 import math
+import re
 import sys
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -34,10 +36,157 @@ def available() -> bool:
     return HAVE_MTM
 
 
-def _read(path: Path):
+# ---------------------------------------------------------------------------------------------
+# mt_metadata 1.0.9 >INFO JSON trailing-delimiter defect (measured 2026-08-08, GSSA Western Gawler
+# 2023, a Zonge job: 246 of 312 EDIs unreadable). THE DATA IS FINE; THE READER IS WRONG, in three
+# composing steps, all in mt_metadata:
+#
+#   1. io/tools.py::_validate_edi_lines strips `"`, `'`, `[` and `]` from EVERY line of the file
+#      before any section parser runs:
+#          return [line.replace('"', "").replace("'", "").replace("[", "").replace("]", "")
+#                  for line in edi_lines]
+#      so the JSON object member `    "Declination": 5,` reaches the >INFO parser as
+#      `    Declination: 5,`, now indistinguishable from an EDI `key: value` pair.
+#   2. io/edi/metadata/information.py::read_info flips into its EMPOWER branch for any INFO line
+#      containing "empower" and "v". The Zonge JSON carries `"empower_version": "v1.54.2.5"`, so
+#      the branch fires on a file that is not in Empower's line-oriented format at all.
+#   3. _parse_empower_info splits on `:` and keeps the remainder verbatim (`value = parts[1].strip()`).
+#      Its cleanup handles bracketed units and degree symbols; NOTHING removes JSON's structural
+#      member separator. The value is the STRING '5,', _empower_translation_dict maps `declination`
+#      onto the typed field station.location.declination.value, and pydantic's float validator raises.
+#
+# The defect is a CLASS: every JSON scalar that is not the LAST member of its object keeps its
+# trailing comma (measured: 141 of 160 scraped values on one file). Declination is only the one that
+# lands in a numerically-typed field, so it is the only one that RAISES; the rest carry junk into
+# free-text metadata silently. The remedy below therefore targets the trailing DELIMITER, not the
+# word "Declination". (The 21 Western Gawler files that carry the key and still parse simply lack an
+# "empower" token, so step 2 never fires for them and the value never reaches a typed field.)
+#
+# THE REMEDY IS PARSE-ONLY. The normalised copy lives in a TemporaryDirectory that is destroyed
+# before this function returns, is never returned to a caller, and never reaches the served tree or
+# the sha256 integrity gate (both of which take the ORIGINAL path). D1 stands: source EDI bytes are
+# never edited, and what AusMT serves stays byte-identical to what the custodian released.
+INFO_JSON_DELIMITER_DEFECT = (
+    "mt_metadata could not read the >INFO JSON block: a JSON scalar kept its trailing delimiter; "
+    "reparsed from a normalised temporary copy (the source file is untouched and is what is served)"
+)
+
+# The observable signature of the defect: a pydantic scalar-parsing failure (`*_parsing`) whose
+# offending input is a STRING ending in the JSON member separator. Deliberately narrow -- an
+# unrelated read failure has either a different error type or an input that does not end in a comma,
+# and must still fail loudly.
+#
+# BOUNDARY, stated because the NORMALISATION below is general over the delimiter class while this
+# TRIGGER is not. Only pydantic's own scalar coercion (`float_parsing`, `int_parsing`, ...) is
+# recognised. A field whose custom validator raises `value_error` instead is NOT recognised, even if
+# its input carries the same trailing comma -- mt_metadata's lat/lon validator is exactly that shape.
+# That restriction has no effect on this corpus: substituting every other key `_empower_translation_dict`
+# maps onto a typed field (year, process_date, length, azimuth, ac, dc, negative_res, positive_res) into
+# the fixture still PARSES on stock 1.0.9, so `declination` is the only mapped key that raises at all, and the one
+# real value_error in the selected corpus (capricorn CP3B21.edi, reflat='--26.0322667') has no trailing
+# comma either way. If a value_error-shaped instance of the delimiter class ever turns up, widening
+# here is safe by construction -- guards 3 and 4 of _read_with_fallback make a false positive inert --
+# but it is not widened on speculation.
+_DELIMITED_SCALAR_RE = re.compile(r"type=\w+_parsing, input_value='[^']*,'")
+
+
+def _is_info_delimiter_defect(exc: BaseException) -> bool:
+    """True only for the >INFO trailing-delimiter defect above. Prefers pydantic's STRUCTURED errors
+    (stable across message rewording) and falls back to the rendered message for any other raiser."""
+    errors = getattr(exc, "errors", None)
+    if callable(errors):
+        try:
+            rows = list(errors())
+        except Exception:  # noqa: BLE001  (a non-pydantic .errors(); fall through to the message)
+            rows = None
+        if rows is not None:
+            for row in rows:
+                if not str(row.get("type", "")).endswith("_parsing"):
+                    continue
+                value = row.get("input")
+                if isinstance(value, str) and value.rstrip().endswith(","):
+                    return True
+            return False
+    return bool(_DELIMITED_SCALAR_RE.search(str(exc)))
+
+
+def normalise_info_json_delimiters(raw: bytes) -> bytes:
+    """Return `raw` with the JSON structural member separator removed from the end of lines INSIDE
+    the >INFO block, and every other byte of the file left exactly as it was.
+
+    Operates on BYTES and never re-encodes, so nothing outside the one dropped comma can shift. The
+    block bounds mirror mt_metadata's own read_info (start: a line containing ">info"; end: the next
+    line starting with ">"), so the region normalised is exactly the region it mis-parses. Returns
+    the ORIGINAL object when there is nothing to change, which is what lets the caller refuse to
+    retry a file that does not actually carry the defect."""
+    out: list[bytes] = []
+    in_info = False
+    changed = False
+    for line in raw.splitlines(keepends=True):
+        body = line.rstrip(b"\r\n")
+        eol = line[len(body):]
+        stripped = body.strip()
+        if not in_info:
+            if b">info" in stripped.lower():
+                in_info = True
+            out.append(line)
+            continue
+        if stripped.startswith(b">"):        # next section: the >INFO block is over
+            in_info = False
+            out.append(line)
+            continue
+        trimmed = body.rstrip()
+        if trimmed.endswith(b","):
+            changed = True
+            out.append(trimmed[:-1] + body[len(trimmed):] + eol)   # keep trailing space + line ending
+        else:
+            out.append(line)
+    return b"".join(out) if changed else raw
+
+
+def _read_once(path: Path):
     tf = TF()
     tf.read(str(path))
     return tf
+
+
+def _read_with_fallback(path: Path):
+    """(TF, fallback_reason_or_None). Normal read first; on a failure ATTRIBUTABLE TO the >INFO
+    delimiter defect, retry ONCE against a normalised temporary copy, then return the parse.
+
+    Narrow by construction, in four independent ways, so no unrelated failure is ever swallowed:
+      * only for `.edi` inputs (>INFO is an EDI construct);
+      * only when the raised error carries the defect's signature (_is_info_delimiter_defect);
+      * only when normalisation actually CHANGES the bytes, i.e. the file really carries it;
+      * and if the retry itself fails, the ORIGINAL exception is re-raised, so a file broken for any
+        other reason still fails exactly as it does today, with its own error.
+    """
+    p = Path(path)
+    try:
+        return _read_once(p), None
+    except Exception as exc:  # noqa: BLE001  (re-raised unless it is precisely this defect)
+        if p.suffix.lower() != ".edi" or not _is_info_delimiter_defect(exc):
+            raise
+        raw = p.read_bytes()
+        fixed = normalise_info_json_delimiters(raw)
+        if fixed == raw:
+            raise
+        with tempfile.TemporaryDirectory(prefix="ausmt-edi-parse-") as scratch_dir:
+            scratch = Path(scratch_dir) / p.name
+            scratch.write_bytes(fixed)
+            try:
+                tf = _read_once(scratch)
+            except Exception:  # noqa: BLE001
+                raise exc from None      # report the ORIGINAL failure, never the retry's
+        # mt_metadata records the path it read in TF.fn. Point it back at the custodian's file: a TF
+        # carrying the (now deleted) scratch path would hand any downstream consumer a location
+        # outside the citable record. NOT guarded -- a failure to scrub is a leak and must be loud.
+        tf.fn = p
+        return tf, INFO_JSON_DELIMITER_DEFECT
+
+
+def _read(path: Path):
+    return _read_with_fallback(path)[0]
 
 
 def read(path: Path):
@@ -45,6 +194,12 @@ def read(path: Path):
     it across record_from_tf / components_from_tf / proc_info_from_tf (instead of re-reading the
     file three times)."""
     return _read(path)
+
+
+def read_with_fallback(path: Path):
+    """`read`, plus the reason string when the >INFO delimiter fallback fired (None when it did not),
+    so the build can RECORD per station that a file needed it. Silent repair is not acceptable."""
+    return _read_with_fallback(path)
 
 
 def classify(pmin, has_z, has_t):

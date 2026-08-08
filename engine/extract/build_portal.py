@@ -1460,7 +1460,11 @@ def _parse_one_edi(p):
     carries no policy context. The V3-B survey-level "mixed declared frames" note is applied by the
     caller (process_edis), not here. Gate 2's quadrant check sees the SERVED (as-stored) frame. The
     source file bytes are never touched (D1)."""
-    tfobj = mtm.read(p)                          # parse ONCE, reuse below
+    # parse ONCE, reuse below. `_parse_fallback` is the reason string when mt_metadata could only
+    # read this file from a NORMALISED TEMPORARY COPY (its >INFO JSON trailing-delimiter defect; see
+    # _mtm). Parse-only: that copy is destroyed inside the read, so `p` -- the custodian's file --
+    # remains the ONLY path this build ever copies to the served tree or hands to sha256().
+    tfobj, _parse_fallback = mtm.read_with_fallback(p)
     _raw = ep.read_norm(p)   # raw EDI text: frame evidence + coord-QC + processing-metadata scrape
     _did = cat.grab(_raw, "DATAID")
 
@@ -1544,7 +1548,7 @@ def _parse_one_edi(p):
     _frame = dict(_disp.facts)
     _frame["convention_check"] = _ck
     return {"record": r, "tf": tf, "sci": srow, "email_flag": email_flag, "coord_warn": coord_warn,
-            "frame": _frame, "frame_notes": _frame_notes}
+            "frame": _frame, "frame_notes": _frame_notes, "parse_fallback": _parse_fallback}
 
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
@@ -1666,6 +1670,11 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                 r["frame"]["survey_frame_note"] = _survey_frame_note
         if _fn:
             r["_frame_notes"] = _fn                     # keyed by FINAL id below (post-disambiguate)
+        # A file mt_metadata could only read from a normalised temporary copy is RECORDED, never
+        # silently repaired: a curator must be able to see which stations needed it. Rides the C18
+        # cache with the rest of the parse, so a warm rebuild reports it identically to a cold one.
+        if parsed.get("parse_fallback"):
+            r["_parse_fallback"] = parsed["parse_fallback"]   # keyed by FINAL id below, as above
         stations.append((p, r))
         tf_rows.append(tf)
         sci_rows.append(srow)
@@ -1676,9 +1685,14 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         for (_p, _r) in stations:
             if _r.get("_frame_notes"):
                 report.setdefault("frame_notes", {})[_r["id"]] = _r.pop("_frame_notes")
+            _fb = _r.pop("_parse_fallback", None)
+            if _fb:
+                report.setdefault("parse_fallbacks", []).append(
+                    {"station": _r["id"], "file": _p.name, "defect": _fb})
     else:
         for (_p, _r) in stations:
             _r.pop("_frame_notes", None)
+            _r.pop("_parse_fallback", None)
     if _email_hits:
         # Loud, ONCE per survey (not per file — a survey can have hundreds of EDIs from the same
         # custodian). This is a curator flag, not a mutation: the served original .edi bytes are the
@@ -4093,6 +4107,18 @@ def main(argv=None):
                                 f"({', '.join(_fail_xml_src)})")
             _survey_warnings.append(f"EMTF-XML emission failed for {len(_xml_fail_rows)} station(s) "
                                     f"[{_cls_summary}]; {_consequence}")
+        # >INFO JSON delimiter fallback: a counted survey WARNING as well as the structured ledger,
+        # same discipline as xml_failures and the integrity gate. These stations parsed only from a
+        # normalised TEMPORARY copy, so a curator should know the custodian's file trips a reader
+        # defect -- while the bytes AusMT serves for them are still the custodian's, unmodified.
+        _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
+        if _parse_fallback_rows:
+            _survey_warnings.append(
+                f"mt_metadata could not read {len(_parse_fallback_rows)} source file(s) directly "
+                f"(>INFO JSON trailing-delimiter defect); each was reparsed from a normalised "
+                f"TEMPORARY copy and its unmodified source bytes are what is served "
+                f"[{', '.join(_row['file'] for _row in _parse_fallback_rows[:8])}"
+                f"{', ...' if len(_parse_fallback_rows) > 8 else ''}]")
         # Source-bytes integrity: a counted survey WARNING as well as the structured ledger, so a
         # mismatch can never hide behind an otherwise-green build (the xml_failures lesson).
         if _integrity["mismatches"]:
@@ -4109,6 +4135,11 @@ def main(argv=None):
             "warnings": list(_survey_warnings),
             # Per-station EMTF-XML emission failures (empty when every served station's XML emitted).
             "xml_failures": _xml_fail_rows,
+            # Per-station record of the >INFO JSON delimiter fallback (empty for every survey whose
+            # files mt_metadata reads directly, which is the whole existing corpus). A PROVENANCE
+            # fact, not a repair log: the parse came from a normalised temporary copy that no longer
+            # exists, while the served bytes and the sha256 columns are the custodian's source file.
+            "source_parse_fallbacks": _parse_fallback_rows,
             # The INGEST SOURCE per station (owner ruling 2026-08-03): {station_id: edi|mth5|emtfxml}.
             # A provenance fact, not a summary: for a mixed survey it is the only place that says
             # which stations the EDI precedence rule resolved to EDI and which came from EMTF XML.

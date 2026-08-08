@@ -140,8 +140,9 @@ the three documents cannot disagree about which commits produced a build.
 ## 2 A survey entry
 
 Every survey entry is closed to further keys and carries all six of `stations_built`,
-`stations_dropped`, `warnings`, `conditioning`, `cache` and `duration_seconds`. Four more,
-`xml_failures`, `ingest_sources`, `frame` and `source_integrity`, are optional.
+`stations_dropped`, `warnings`, `conditioning`, `cache` and `duration_seconds`. Five more,
+`xml_failures`, `ingest_sources`, `frame`, `source_integrity` and `source_parse_fallbacks`, are
+optional.
 
 ### 2.1 surveys.<slug>.stations_built
 
@@ -267,6 +268,31 @@ corrected in `survey.yaml` rather than in the file.
 | Occurrence | 1 |
 | Type | number, minimum 0 |
 | Example | `4.21` |
+
+### 2.11 surveys.<slug>.source_parse_fallbacks
+
+| | |
+|---|---|
+| Definition | Source files the parser could not read directly, and that were reparsed from a normalised temporary copy. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | array of objects with required members `station`, `file` and `defect` (all strings) |
+| Example | `[{"station": "1_001", "file": "LineNo__StationNo_1.edi", "defect": "mt_metadata could not read the >INFO JSON block: ..."}]` |
+| Note | Empty for every survey whose files the parser reads directly. Closed to further keys. Absent from reports written before the fallback existed. |
+
+The known case is a reader defect, not a data defect. `mt_metadata` 1.0.9 strips JSON quoting from
+every line of an EDI before parsing it, then mis-detects an `>INFO` block that happens to be a JSON
+document as Empower's line-oriented format, and finally keeps JSON's structural member separator in
+the value it scrapes. A typed field is then handed a string such as `5,` and refuses it. Every JSON
+scalar that is not the last member of its object is affected; only the ones that reach a numeric
+field raise.
+
+This field is a provenance record, not a repair log. The normalised copy exists only for the
+duration of the parse and is destroyed before the read returns: it is never served, never hashed for
+the [`source_integrity`](#26-surveyssource_integrity) gate, and never copied into the output
+tree. A station listed here still serves the custodian's unmodified bytes, and `catalogue.json`
+column 14 is still the SHA-256 of the file the custodian supplied. Each entry is also raised as a
+counted `warnings` entry, so an otherwise green build cannot hide it.
 
 ---
 
