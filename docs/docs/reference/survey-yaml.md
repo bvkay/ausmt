@@ -64,6 +64,7 @@ absence is silent.
 | `release_notes` | recommended | list of mapping | [13 Release notes](#13-release-notes) |
 | `coordinate_resolution` | optional | mapping | [14 Coordinate resolution](#14-coordinate-resolution) |
 | `care` | optional | mapping | [15 CARE](#15-care) |
+| `station_ids` | optional | mapping | [16 Station identifiers](#16-station-identifiers) |
 
 A key the validator does not model warns as unknown but is carried through the curator editor's
 round-trip verbatim, so hand-edited YAML is never silently dropped.
@@ -734,6 +735,114 @@ exact match on `id`, so every member survey must spell it identically. Naming ru
 
 No automated check blocks publication on CARE grounds. A curator reviews the block; see
 [Submission](../operations/submission.md#care-considerations).
+
+---
+
+## 16 Station identifiers
+
+By default the station identifier AusMT publishes is the EDI `DATAID`. That is right for data AusMT
+or its partners collected, where the field numbering is the identifier everyone already uses. It is
+wrong for a third-party release whose contractor numbering is not usable as a public identifier, and
+AusMT serves third-party files byte for byte, so the identifier cannot be corrected by editing the
+EDI. `station_ids` declares the identifier to publish instead, per source file.
+
+### 16.1 station_ids
+
+| | |
+|---|---|
+| Definition | The station identifier AusMT publishes for a given source file, overriding that file's `DATAID`. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | mapping with members `source` and `map` |
+| Allowed values | `source` is `filename`; `map` is a mapping of source file name to published identifier |
+| Default | absent means the `DATAID` is authoritative for every station, which is how the whole existing corpus builds |
+| Example | see below |
+
+```yaml
+station_ids:
+  source: filename                    # only `filename` is defined today
+  map:
+    "92.edi": "RD18-092"
+    "92_S1.edi": "RD18-092-S1"
+    "49R stage 1.edi": "RD18-049-S1"  # quote any name with a space or a bracket
+```
+
+Rules, all of which fail the survey rather than guessing:
+
+| Situation | Outcome |
+|---|---|
+| a key naming a file the package does not contain | `FAIL`; the survey is dropped and the key is named |
+| two keys mapping to the same identifier | `FAIL`; both keys are named |
+| a key carrying a path separator or `..` | `FAIL` |
+| an identifier outside `A-Z a-z 0-9 . _ -`, or starting with `.` or `-` | `FAIL`; AusMT will not publish a mangled form of an identifier you declared |
+| an identifier longer than 96 characters | `FAIL`; the identifier becomes a directory name in the served tree |
+| a key written with nothing after the colon | `FAIL`; the key is named. It declares neither an identifier nor any provenance, so it cannot be told apart from a typo |
+| a file in `transfer_functions/edi/` with no entry | not an error; that station keeps its `DATAID` |
+
+A partial map is therefore legal, and the override applies before same-identifier records are
+disambiguated. That ordering is the point of the feature. In the GSSA and BHP Roxby Downs 2018
+delivery the contractor reused 56 station numbers across two acquisition stages, the furthest
+colliding pair 58.5 km apart. Without the override those pairs would publish as processing variants
+of one station, `92.v1` and `92.s1`, which says two processings of one site and is false. With it,
+each file carries its own identifier and no variant tag is created.
+
+There is no way to spell "keep this file's `DATAID`" inside the map. Leaving the file out of the map
+is how you say that, and a partial map is legal, so a key with an empty value is always a
+half-finished edit.
+
+The block is read only by PyYAML. AusMT carries a small stdlib parser as a fallback for environments
+without it, and that parser cannot read every legal YAML mapping key, so it would see part of a map
+and nothing would look wrong. Rather than build from a map it may have read only half of, both the
+build and the package validator drop a survey that declares `station_ids` when PyYAML is missing, and
+say so. Installing PyYAML is the fix.
+
+The source file is never modified. Its own `DATAID` is kept as the station's `site_name`, so the
+identifier the custodian's file carries stays recoverable from the catalogue. Where that `DATAID`
+itself differed from the station name recorded inside the file, the `DATAID` is what `site_name`
+carries: it is the identifier the custodian's published file presents, and only one of the two can be
+kept. The internal name is not retained.
+
+### 16.2 station_ids.map[].source provenance
+
+A map entry may be a mapping rather than a bare identifier, carrying the custodian's own record
+detail for that file alongside the optional `id`.
+
+```yaml
+station_ids:
+  source: filename
+  map:
+    "84.edi": "RD18-084"                # identifier only
+    "84R.edi":                          # identifier and provenance
+      id: "RD18-084-S1-b"
+      source_record_id: "2781110A"      # the custodian's own opaque record handle
+      acquisition_stage: "1"            # free text, the delivery's own stage label
+```
+
+| Key | Obligation | Type | Definition |
+|---|---|---|---|
+| `id` | optional | string | the identifier to publish; absent means keep the `DATAID` |
+| `source_record_id` | optional | string | the custodian's own record handle for these bytes, opaque to AusMT |
+| `acquisition_stage` | optional | string | free-text label for the acquisition stage or campaign |
+
+`original_filename` is not a declarable key. It is the map key, so AusMT derives it and the two can
+never disagree. An unknown key inside the mapping is a `FAIL`, and a mapping that declares neither an
+`id` nor any provenance is a `FAIL`.
+
+In the station's own record this arrives as
+[`provenance.source`](station-products.md#1111-provenancesource), which is where its members are
+defined.
+
+The provenance travels only in AusMT's own records: the station's `station.json`, the build report,
+and, for the two derived products, the fields measured to survive their round trips. In the MTH5 that
+is the station comments; in the EMTF XML it is the Site Name marker `ausmt_src_file:`, which carries
+the original filename beside the existing `ausmt_src_id:` marker. Nothing is written into the source
+EDI, which is served byte for byte.
+
+That last point is a checked guarantee rather than a policy statement. Every build re-hashes what it
+actually placed in the served tree and compares it with the file supplied, per station, and records
+the result in `build_report.json` under `source_integrity`. If a served copy is not identical, the
+file is removed, the station gets no download row and serves no bytes, and the build report and the
+build log both name it.
 
 ---
 

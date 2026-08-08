@@ -79,3 +79,22 @@ def test_parity_comment_after_quoted_scalar():
     # lack of backslash UNescaping is a pre-existing, separate limitation).
     esc = _mini_yaml('escaped: "say \\"hi\\""  # note\n')["escaped"]
     assert "note" not in esc
+
+
+def test_parity_quoted_mapping_keys():
+    """2026-08-08 (station-id override): a QUOTED mapping key must parse like PyYAML parses it.
+    Filenames with spaces/parentheses are only expressible quoted, and the fallback used to drop
+    such keys entirely. The same alternation must NOT turn a quoted list-item SCALAR that contains a
+    colon into a one-key map, so both shapes are pinned here against PyYAML."""
+    import yaml
+    from extract.build_portal import _mini_yaml
+    text = ('bare: 1\n'
+            'quoted:\n'
+            '  "49R stage 1.edi": "RD18-049-S1"\n'
+            "  '53(RR).edi': RD18-053\n"
+            '  plain.key: value\n'
+            'items:\n'
+            '  - "a: b"\n'
+            "  - 'c: d'\n"
+            '  - plain\n')
+    assert _mini_yaml(text) == yaml.safe_load(text)

@@ -74,7 +74,8 @@ with no manifest rows is not an error to handle; it is the withholding, stated b
 The per-station product record: identity, location, band and period range, the derived diagnostics, the
 processing strings read from the source file, the distribution state, the coordinate QC verdict, any
 canonical conditioning notes, the frame facts, and a provenance block naming the input file and its
-SHA-256.
+SHA-256. The example below shows every member, including the optional ones; a station whose survey
+declares no `station_ids` provenance carries no `provenance.source`.
 
 ```json
 {
@@ -100,7 +101,9 @@ SHA-256.
   "distribution": { "edi_available": true, "license": "CC-BY-4.0",
                     "edi_path": "edi/vulcan-2022/Vulcan_A1.edi" },
   "provenance": { "pipeline": "ausmt/extract.build_portal", "input_file": "Vulcan_A1.edi",
-                  "input_sha256": "0d70…" },
+                  "input_sha256": "0d70…",
+                  "source": { "original_filename": "Vulcan_A1.edi",
+                              "source_record_id": "2781110A", "acquisition_stage": "1" } },
   "coordinate_qc": null,
   "canonical_conditioning": null,
   "frame": { }
@@ -245,7 +248,19 @@ The full definitions of these diagnostics are in
 | Obligation | mandatory on a served station |
 | Occurrence | 1 |
 | Type | object |
-| Note | Carries the build provenance block (pipeline, pipeline version, extractor, software, git commit, parameters, generated timestamp) plus `input_file` and `input_sha256`. Every product carries one, so it is traceable to its source. |
+| Note | Carries the build provenance block (pipeline, pipeline version, extractor, software, git commit, parameters, generated timestamp) plus `input_file` and `input_sha256`. Every product carries one, so it is traceable to its source. A `source` member is added when the survey declares custodian provenance for this station's file; see below. |
+
+#### 1.11.1 provenance.source
+
+| | |
+|---|---|
+| Definition | The data custodian's own record detail for the source file this station was parsed from, carried verbatim. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | object |
+| Default | absent, which is every station whose survey declares no `station_ids` provenance |
+| Example | `{ "original_filename": "92_S1.edi", "source_record_id": "2781110A", "acquisition_stage": "1" }` |
+| Note | Present only for a station whose survey declares a mapping-form `station_ids.map` entry carrying provenance keys, which the [survey.yaml reference](survey-yaml.md#162-station_idsmapsource-provenance) defines. `original_filename` is derived from the map key rather than declared, so it always names the file the bytes came from. AusMT does not interpret these values; they are the custodian's, and they travel in AusMT's own records only. The source file itself is served byte for byte and is never rewritten. |
 
 ### 1.12 coordinate_qc
 
