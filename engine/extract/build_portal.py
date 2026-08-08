@@ -1217,6 +1217,12 @@ def survey_meta_from_yaml(y: dict) -> dict:
     return sm
 
 
+# A TOP-LEVEL `station_ids:` key in survey.yaml source text. Used only to decide whether the
+# no-PyYAML fallback is allowed to read this document at all (see _read_yaml); a text scan is
+# deliberate, because the parser being gated is the one that cannot be trusted to see the key.
+_STATION_IDS_KEY = _re.compile(r"(?m)^station_ids[ \t]*:")
+
+
 def _read_yaml(path: Path, raw: bytes | None = None):
     """Parse a survey.yaml. `raw`, when given, is the file's ALREADY-READ bytes and is parsed instead
     of re-reading the path — so a caller that also derives a content digest from those same bytes gets
@@ -1229,7 +1235,28 @@ def _read_yaml(path: Path, raw: bytes | None = None):
         import yaml  # noqa: PLC0415
     except ModuleNotFoundError:
         # tolerant stdlib fallback (top-level scalars + simple nested maps)
-        return _mini_yaml(text if text is not None else path.read_text())
+        src = text if text is not None else path.read_text()
+        # ...tolerant EXCEPT for `station_ids`, which it does not get to read at all. The fallback is
+        # reduced-fidelity in two ways that both END in a PARTIAL map, and a partial map is a LEGAL
+        # shape, so nothing fails: the unread stations publish under the raw contractor DATAID with
+        # no warning anywhere, which is the exact mis-identification the block exists to prevent.
+        #   (1) it matches a mapping key as bare-word or QUOTED, while YAML's plain scalar keys are
+        #       wider, so `49R stage 1.edi:` and `53(RR).edi:` are read by PyYAML and dropped here;
+        #   (2) PRE-EXISTING, unrelated to this block: a top-level block SEQUENCE whose key line
+        #       carries a TRAILING COMMENT takes the comment as its value, orphans the list items,
+        #       and drops every later top-level key. That is the shipped template's own shape
+        #       (`data_types:  # select all that apply`), so on the ausmt-surveys example package
+        #       this fallback returns 11 of 21 top-level keys -- station_ids among the 10 missing.
+        # (2) is why this gate reads the SOURCE TEXT rather than the parsed document: asking the
+        # parser whether the block is present is asking the very thing that cannot see it.
+        if _STATION_IDS_KEY.search(src):
+            print(f"SKIP {path.parent.name}: {path.name} declares station_ids, which requires PyYAML "
+                  f"(the stdlib fallback parser cannot read this block faithfully and would build "
+                  f"the survey from a PARTIAL map, publishing raw contractor DATAIDs silently). "
+                  f"Install PyYAML (pip install PyYAML) -- survey dropped from the build",
+                  file=sys.stderr)
+            return None
+        return _mini_yaml(src)
     try:
         return yaml.safe_load(text if text is not None else path.read_text()) or {}
     except yaml.YAMLError as e:
@@ -3614,6 +3641,20 @@ def main(argv=None):
         # C25: survey-scoped gate output (structured drops + per-station frame notes) — collected
         # by process_edis, fed into build_report.json + the NOTICE log below.
         _gate_report: dict = {}
+        # `station_ids` keys are EDI source FILENAMES, and both the key check and the application
+        # live in the EDI arm below. On the MTH5 arm the block can never be honoured, so a package
+        # carrying one there was a silent WHOLE-BLOCK no-op with no diagnostic: the stations publish
+        # under their raw identifiers while the custodian believes they were renamed. Reachable via
+        # `--input-format mth5` (which forces this arm even on a package that DOES contain EDIs) and
+        # via any MTH5-only package built with --no-validate. Fail closed, survey granularity, like
+        # every other invalid shape of the block. The emtfxml arm needs no guard: it falls through to
+        # the else, where validate_station_ids sees an EMPTY EDI set and fails on the first key.
+        if kind == "mth5" and (_station_ids.ids or _station_ids.provenance):
+            print(f"SKIP {slug}: station_ids block INVALID: this survey is ingested as MTH5, and "
+                  f"station_ids map keys are EDI source filenames inside transfer_functions/edi/, "
+                  f"so the block cannot be honoured on this path (fail closed rather than publish "
+                  f"the raw identifiers while the block silently does nothing).", file=sys.stderr)
+            continue
         if kind == "mth5":
             stations, tf_rows, sci_rows = process_mth5(inputs, label, org, slug)   # MTH5 path not cached
         else:

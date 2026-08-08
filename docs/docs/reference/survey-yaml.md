@@ -775,6 +775,8 @@ Rules, all of which fail the survey rather than guessing:
 | two keys mapping to the same identifier | `FAIL`; both keys are named |
 | a key carrying a path separator or `..` | `FAIL` |
 | an identifier outside `A-Z a-z 0-9 . _ -`, or starting with `.` or `-` | `FAIL`; AusMT will not publish a mangled form of an identifier you declared |
+| an identifier longer than 96 characters | `FAIL`; the identifier becomes a directory name in the served tree |
+| a key written with nothing after the colon | `FAIL`; the key is named. It declares neither an identifier nor any provenance, so it cannot be told apart from a typo |
 | a file in `transfer_functions/edi/` with no entry | not an error; that station keeps its `DATAID` |
 
 A partial map is therefore legal, and the override applies before same-identifier records are
@@ -784,8 +786,21 @@ colliding pair 58.5 km apart. Without the override those pairs would publish as 
 of one station, `92.v1` and `92.s1`, which says two processings of one site and is false. With it,
 each file carries its own identifier and no variant tag is created.
 
+There is no way to spell "keep this file's `DATAID`" inside the map. Leaving the file out of the map
+is how you say that, and a partial map is legal, so a key with an empty value is always a
+half-finished edit.
+
+The block is read only by PyYAML. AusMT carries a small stdlib parser as a fallback for environments
+without it, and that parser cannot read every legal YAML mapping key, so it would see part of a map
+and nothing would look wrong. Rather than build from a map it may have read only half of, both the
+build and the package validator drop a survey that declares `station_ids` when PyYAML is missing, and
+say so. Installing PyYAML is the fix.
+
 The source file is never modified. Its own `DATAID` is kept as the station's `site_name`, so the
-identifier the custodian's file carries stays recoverable from the catalogue.
+identifier the custodian's file carries stays recoverable from the catalogue. Where that `DATAID`
+itself differed from the station name recorded inside the file, the `DATAID` is what `site_name`
+carries: it is the identifier the custodian's published file presents, and only one of the two can be
+kept. The internal name is not retained.
 
 ### 16.2 station_ids.map[].source provenance
 
@@ -812,6 +827,10 @@ station_ids:
 `original_filename` is not a declarable key. It is the map key, so AusMT derives it and the two can
 never disagree. An unknown key inside the mapping is a `FAIL`, and a mapping that declares neither an
 `id` nor any provenance is a `FAIL`.
+
+In the station's own record this arrives as
+[`provenance.source`](station-products.md#1111-provenancesource), which is where its members are
+defined.
 
 The provenance travels only in AusMT's own records: the station's `station.json`, the build report,
 and, for the two derived products, the fields measured to survive their round trips. In the MTH5 that

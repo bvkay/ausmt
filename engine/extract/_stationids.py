@@ -28,6 +28,13 @@ coordinate policy already take):
     ids are exactly the defect this block exists to fix.
   * a file in edi/ with NO map entry, while the block is present, is NOT an error. Partial maps are
     legal and such a station simply keeps DATAID behaviour.
+  * a map entry that declares NOTHING (a null value, or an empty mapping) is a survey-level build
+    FAILURE naming the key. Leaving the file out of the map is how you keep its DATAID; a key typed
+    with nothing after it is a half-finished edit and is indistinguishable from a typo.
+  * the block is read only by PyYAML. The stdlib `_mini_yaml` fallback cannot express YAML's plain
+    scalar keys, so it silently UNDER-READS a map keyed on unquoted filenames carrying spaces or
+    brackets; build_portal._read_yaml therefore refuses any survey carrying the block when PyYAML is
+    absent, rather than building it from a partial map.
 
 Ordering matters and is pinned by test: the override is applied AFTER the DATAID parse and BEFORE
 build_portal._disambiguate, so _disambiguate sees already-unique ids and never invents a `.a`/`.b`
@@ -92,6 +99,15 @@ class StationIds(NamedTuple):
 # vector fixture, so they cannot drift apart.
 _SAFE_ID = re.compile(r"\A[A-Za-z0-9._-]+\Z")
 
+# ...INTERSECTED with a length bound. safe_component has none, so a declared id of 300 legal
+# characters used to pass validation and then reach the filesystem as this station's product
+# DIRECTORY name: ENAMETOOLONG, raised out of the per-survey emission, and the WHOLE corpus build
+# died with no catalogue.json written at all. A bound here turns that into an ordinary
+# survey-granularity StationIdError like every other charset violation. 96 is far beyond any real
+# station identifier (the owner's own RD18 scheme peaks at 13) and leaves ample room inside the
+# 255-byte filesystem component limit for the product suffixes appended to it.
+MAX_STATION_ID_LEN = 96
+
 
 class StationIdError(ValueError):
     """A survey's `station_ids` block is invalid: an unknown key, a bad `source`, a map key that is
@@ -102,11 +118,17 @@ class StationIdError(ValueError):
 
 def station_id_is_safe(value) -> bool:
     """True when `value` is a published station id that survives build_portal.safe_component
-    UNCHANGED. Rejects the empty string, path separators, whitespace, markup, '..' anywhere, and a
-    leading '.' or '-' (safe_component strips those, so accepting one would mean publishing a
-    different id than the custodian declared)."""
+    UNCHANGED **and** is at most MAX_STATION_ID_LEN characters. Rejects the empty string, path
+    separators, whitespace, markup, '..' anywhere, and a leading '.' or '-' (safe_component strips
+    those, so accepting one would mean publishing a different id than the custodian declared).
+
+    The length bound is the one place this predicate is deliberately STRICTER than safe_component's
+    fixed point: the sanitiser has no bound, and an unbounded id is not a mangling risk but a
+    filesystem one (see MAX_STATION_ID_LEN)."""
     s = str(value) if value is not None else ""
     if not _SAFE_ID.match(s):
+        return False
+    if len(s) > MAX_STATION_ID_LEN:
         return False
     if ".." in s:
         return False
@@ -138,7 +160,20 @@ def _parse_value(key: str, value):
     A bare scalar is the published id. A mapping carries an optional `id` plus the provenance keys;
     an unknown key inside it is a FAILURE, not a silent drop (the frozen-allow-list discipline the
     attribution/sources blocks already use). A mapping with neither an id nor any provenance says
-    nothing at all and is refused, because it is almost certainly a half-finished edit."""
+    nothing at all and is refused, because it is almost certainly a half-finished edit.
+
+    A NULL value (a key written with nothing after the colon) says exactly what that empty mapping
+    says, and is refused for the same reason. It is not a way to spell "keep the DATAID": that is
+    what leaving the file OUT of the map means, and a partial map is legal. Before this the null
+    landed in neither `ids` nor `provenance`, so validate_station_ids never saw the key and could not
+    check that it names a real file -- the silent no-op this module exists to make impossible."""
+    if value is None:
+        raise StationIdError(
+            f"station_ids.map[{key!r}] has no value: a key written with nothing after the colon "
+            f"declares neither an `id` nor any of {list(PROVENANCE_KEYS)}, so it says nothing. To "
+            f"keep this file's DATAID, remove the key entirely (a partial map is legal); the "
+            f"half-finished form is refused because it cannot be told apart from a typo (fail "
+            f"closed).")
     if isinstance(value, dict):
         unknown = sorted(k for k in value if k not in _VALUE_KEYS)
         if unknown:
@@ -170,7 +205,8 @@ def parse_station_ids(block) -> StationIds:
 
     Raises StationIdError for: a non-mapping block, an unknown top-level key, a `source` outside
     STATION_ID_SOURCES, a non-mapping `map`, a key that is not a bare filename, an unknown key inside
-    a mapping-form value, a value outside the published-id charset, or two keys mapping to the SAME
+    a mapping-form value, a value that declares nothing (null or an empty mapping), a value outside
+    the published-id charset or longer than MAX_STATION_ID_LEN, or two keys mapping to the SAME
     published id. Key EXISTENCE is validated separately by validate_station_ids, against the package's
     real files (the same split the C42 coordinate policy uses: enum shape at discovery, identity
     against reality in the build loop)."""
@@ -211,11 +247,13 @@ def parse_station_ids(block) -> StationIds:
             continue                       # provenance-only entry: this file keeps its DATAID
         sid = str(raw_id).strip()
         if not station_id_is_safe(sid):
+            shown = sid if len(sid) <= 60 else f"{sid[:60]}... ({len(sid)} characters)"
             raise StationIdError(
-                f"station_ids.map[{k!r}]={raw_id!r} is not a usable published station id. Allowed "
+                f"station_ids.map[{k!r}]={shown!r} is not a usable published station id. Allowed "
                 f"characters are letters, digits, '.', '_' and '-'; the id may not be empty, may "
-                f"not start with '.' or '-', and may not contain '..'. AusMT refuses to publish a "
-                f"mangled form of an id you declared (fail closed).")
+                f"not start with '.' or '-', may not contain '..', and may be at most "
+                f"{MAX_STATION_ID_LEN} characters long. AusMT refuses to publish a mangled form of "
+                f"an id you declared (fail closed).")
         mapping[k] = sid
     dupes = {}
     for k, sid in mapping.items():

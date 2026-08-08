@@ -331,15 +331,11 @@ def test_the_block_parses_identically_without_pyyaml():
     assert from_mini == from_pyyaml
 
 
-def test_an_untouched_survey_is_byte_identical_with_the_feature_present(tmp_path):
-    """Default stability: a package with no `station_ids` block must build exactly as before."""
-    surveys = _make_survey(tmp_path, slug="plain", name="Plain")
-    out = tmp_path / "out"
-    assert _build(surveys, out) == 0
-    cat = _catalogue(out)
-    assert sorted(cat) == ["92.s1", "92.v1"]
-    for row in cat.values():
-        assert row[_col("site_name")] is None or row[_col("site_name")] == COLLIDING_DATAID
+# Default stability for a survey with no `station_ids` block is pinned by
+# test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field, in the review-round section
+# below. It replaced a test named ..._is_byte_identical_... that compared no bytes at all: it
+# asserted two catalogue ids and the site_name column, so nothing in this suite would have caught
+# the feature's additive fields leaking into a survey that never declared the block.
 
 
 # --------------------------------------------------------------------------------------------
@@ -508,3 +504,222 @@ def test_the_integrity_gate_withholds_a_station_whose_served_bytes_differ(tmp_pa
     assert edi_stations == ["RD18-092"], "a station whose served bytes differ was still manifested"
     assert not (out / "edi" / "rd18-probe" / "92_S1.edi").exists(), \
         "the non-identical copy is still fetchable in the served tree"
+
+
+# --------------------------------------------------------------------------------------------
+# COMMIT 3: adversarial-review round. Every test below was RED against commit 0884792.
+# --------------------------------------------------------------------------------------------
+
+def test_a_null_map_value_fails_closed():
+    """A key written with NOTHING after the colon ("92_S1.edi":) is YAML null. It declares neither an
+    id nor any provenance, so it says exactly what the empty mapping `{}` says and must fail the same
+    way. Before this it landed in NEITHER `ids` nor `provenance`, so validate_station_ids never saw
+    the key at all and a typo'd filename was a silent no-op: the module's stated reason for existing
+    ("a typo must never be a silent no-op, which is how the wrong site gets published under the right
+    name") inverted for this one shape."""
+    with pytest.raises(stnids.StationIdError) as ei:
+        stnids.parse_station_ids({"source": "filename", "map": {"92_S1.edi": None}})
+    assert "92_S1.edi" in str(ei.value)
+
+
+def test_a_half_finished_map_entry_drops_the_survey_loudly(tmp_path, capsys):
+    """The real hazard shape: one entry finished, the next one typed but not yet given a value. The
+    two fixture EDIs are two DIFFERENT physical sites ~110 km apart, so publishing one as RD18-092
+    and the other under the raw contractor '92' is the exact mis-identification the block exists to
+    prevent. Fail closed at SURVEY granularity."""
+    half = ('station_ids:\n  source: filename\n  map:\n'
+            '    "92.edi": "RD18-092"\n    "92_S1.edi":\n')
+    surveys = _make_survey(tmp_path, yaml_extra=half)
+    out = tmp_path / "out"
+    _build(surveys, out, extra=["--allow-empty"])
+    err = capsys.readouterr().err
+    assert "SKIP" in err and "92_S1.edi" in err
+    cat = _catalogue(out) if (out / "catalogue.json").exists() else {}
+    assert cat == {}, f"a half-finished map still published {sorted(cat)}"
+
+
+def test_a_null_valued_key_naming_no_file_drops_the_survey_loudly(tmp_path, capsys):
+    """A null value also has to reach the EXISTENCE check. With the key in neither `ids` nor
+    `provenance` the key set was empty, validate_station_ids returned early, and a package whose map
+    named a file it does not contain built happily under its raw DATAIDs."""
+    typo = ('station_ids:\n  source: filename\n  map:\n    "TYPO.edi":\n')
+    surveys = _make_survey(tmp_path, yaml_extra=typo)
+    out = tmp_path / "out"
+    _build(surveys, out, extra=["--allow-empty"])
+    err = capsys.readouterr().err
+    assert "SKIP" in err and "TYPO.edi" in err
+    cat = _catalogue(out) if (out / "catalogue.json").exists() else {}
+    assert cat == {}, f"a map key naming no file still published {sorted(cat)}"
+
+
+def test_a_pathologically_long_id_fails_closed_instead_of_killing_the_corpus(tmp_path, capsys):
+    """A declared id inside the charset but longer than any filesystem component aborted the WHOLE
+    build with an unhandled OSError (ENAMETOOLONG) while writing that station's product directory:
+    no catalogue.json was written at all, so every OTHER survey in the corpus was lost too. The
+    lane's posture is survey granularity, so this must drop ONE survey and leave the rest building."""
+    long_id = "R" * 300
+    bad = _make_survey(tmp_path, slug="rd18-long", name="RD18 Long",
+                       yaml_extra=f'station_ids:\n  source: filename\n  map:\n'
+                                  f'    "92.edi": "{long_id}"\n')
+    _make_survey(tmp_path, slug="rd18-plain", name="RD18 Plain")   # the innocent bystander
+    out, prod = tmp_path / "out", tmp_path / "products"
+    rc = _build(bad, out, extra=["--products", str(prod)])
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert "SKIP" in err and "rd18-long" in err
+    assert (out / "catalogue.json").exists(), "the whole corpus catalogue was lost to one bad id"
+    surveys_built = {r[_col("survey")] for r in _catalogue(out).values()}
+    assert surveys_built == {"RD18 Plain"}, f"expected only the good survey, got {surveys_built}"
+
+
+def test_station_ids_on_the_mth5_ingest_path_drops_the_survey_loudly(tmp_path, capsys):
+    """`station_ids` keys are EDI source FILENAMES, and both the key check and the application live
+    in the EDI arm of the `kind` dispatch. A package routed to the MTH5 arm therefore ignored the
+    whole block silently: no validation, no application, no diagnostic. Fail closed instead."""
+    surveys = _make_survey(tmp_path, yaml_extra=OVERRIDE_YAML)
+    out = tmp_path / "out"
+    _build(surveys, out, extra=["--input-format", "mth5", "--allow-empty"])
+    err = capsys.readouterr().err
+    assert "SKIP" in err and "station_ids" in err
+    cat = _catalogue(out) if (out / "catalogue.json").exists() else {}
+    assert cat == {}, f"an unhonourable station_ids block still published {sorted(cat)}"
+
+
+def _no_pyyaml(monkeypatch):
+    """Make `import yaml` raise ModuleNotFoundError inside the build, the way a bare CI interpreter
+    does. Setting sys.modules['yaml']=None would raise plain ImportError, which the production
+    `except ModuleNotFoundError` does not catch, so the simulation has to be at the import hook."""
+    import builtins
+    real_import = builtins.__import__
+
+    def _fake(name, *a, **kw):
+        if name == "yaml" or name.startswith("yaml."):
+            raise ModuleNotFoundError("No module named 'yaml'")
+        return real_import(name, *a, **kw)
+
+    monkeypatch.setattr(builtins, "__import__", _fake)
+
+
+def test_a_station_ids_block_without_pyyaml_drops_the_survey_loudly(tmp_path, capsys, monkeypatch):
+    """The `_mini_yaml` fallback reads QUOTED map keys but still drops UNQUOTED keys carrying spaces
+    or brackets, which is legal YAML that PyYAML reads correctly. A partial map is a legal shape, so
+    nothing failed and the affected stations published under the raw contractor DATAID with no
+    warning anywhere. The fallback cannot honestly read this block, so it must refuse the survey
+    rather than under-read it."""
+    surveys = _make_survey(tmp_path, yaml_extra=OVERRIDE_YAML)
+    out = tmp_path / "out"
+    _no_pyyaml(monkeypatch)
+    _build(surveys, out, extra=["--allow-empty"])
+    err = capsys.readouterr().err
+    assert "SKIP" in err and "station_ids" in err and "PyYAML" in err
+    cat = _catalogue(out) if (out / "catalogue.json").exists() else {}
+    assert cat == {}
+
+
+def test_the_pyyaml_refusal_survives_a_block_the_fallback_cannot_even_see(tmp_path, capsys,
+                                                                          monkeypatch):
+    """The refusal reads the survey.yaml SOURCE, not the parse, and this is why. `_mini_yaml` stops
+    reading a document at a top-level block SEQUENCE whose key line carries a TRAILING COMMENT: the
+    comment is taken as the key's scalar value, the list items are then orphaned, and every later
+    top-level key is dropped. That is pre-existing and has nothing to do with this block, but it is
+    exactly the shape of the shipped ausmt-surveys template (`data_types:  # select all that apply`),
+    where it drops 10 of the example package's 21 top-level keys, `license` and `access` among them.
+    A parse-based gate would therefore ask the parser being gated whether it saw the key, get None,
+    and build the survey with NO override at all: silent raw-DATAID publication in its worst form."""
+    surveys = _make_survey(
+        tmp_path, yaml_extra="data_types:   # select all that apply\n  - BBMT\n" + OVERRIDE_YAML)
+    out = tmp_path / "out"
+    sy_text = (surveys / "rd18-probe" / "survey.yaml").read_text(encoding="utf-8")
+    assert "station_ids" not in build_portal._mini_yaml(sy_text), \
+        "fixture no longer exercises the after-a-list blind spot the source scan exists for"
+    _no_pyyaml(monkeypatch)
+    _build(surveys, out, extra=["--allow-empty"])
+    err = capsys.readouterr().err
+    assert "SKIP" in err and "station_ids" in err and "PyYAML" in err
+    cat = _catalogue(out) if (out / "catalogue.json").exists() else {}
+    assert cat == {}, f"a block the fallback cannot see was still built around: {sorted(cat)}"
+
+
+def test_the_mini_yaml_fallback_under_reads_an_unquoted_filename_key():
+    """The KNOWN limitation the refusal above exists for, pinned so it cannot be forgotten: this is
+    what `_mini_yaml` does to the legal unquoted forms, and it is why the block is PyYAML-only."""
+    yaml = pytest.importorskip("yaml")
+    text = ('station_ids:\n  source: filename\n  map:\n'
+            '    49R stage 1.edi: RD18-049-S1\n'
+            '    53(RR).edi: RD18-053\n'
+            '    92.edi: RD18-092\n')
+    assert yaml.safe_load(text)["station_ids"]["map"] == {
+        "49R stage 1.edi": "RD18-049-S1", "53(RR).edi": "RD18-053", "92.edi": "RD18-092"}
+    assert build_portal._mini_yaml(text)["station_ids"]["map"] == {"92.edi": "RD18-092"}
+
+
+def test_an_untouched_survey_keeps_its_dataid_ids_and_gains_no_new_field(tmp_path):
+    """Default stability: a package with NO `station_ids` block builds as it did before the lane.
+    The previous name claimed byte-identity and asserted only two catalogue ids, so nothing in the
+    suite would have caught the feature leaking into a survey that never asked for it. The two
+    additive surfaces this lane created are named here: no record carries `source_provenance`, and
+    no station.json carries `provenance.source`."""
+    surveys = _make_survey(tmp_path, slug="plain", name="Plain")
+    out, prod = tmp_path / "out", tmp_path / "products"
+    assert _build(surveys, out, extra=["--products", str(prod)]) == 0
+    cat = _catalogue(out)
+    assert sorted(cat) == ["92.s1", "92.v1"]
+    for row in cat.values():
+        assert row[_col("site_name")] is None or row[_col("site_name")] == COLLIDING_DATAID
+    docs = sorted((prod / "plain").glob("*/station.json"))
+    assert len(docs) == 2, f"expected two station.json documents, got {[str(d) for d in docs]}"
+    for d in docs:
+        doc = json.loads(d.read_text(encoding="utf-8"))
+        assert "source" not in doc["provenance"], \
+            f"{d.parent.name}/station.json gained provenance.source without declaring the block"
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    assert "station_ids" not in json.dumps(report["surveys"]["plain"])
+
+
+def test_site_name_carries_the_source_dataid_not_the_file_s_internal_name(tmp_path):
+    """Precedence, pinned because two mechanisms write `site_name` and only one can win. When the
+    parsed DATAID already differs from the transfer function's internal station name, _parse_one_edi
+    puts that INTERNAL name in site_name; the override then replaces it with the DATAID. The DATAID
+    is the identifier the custodian's published file carries, which is what survey-yaml.md section 16
+    promises stays recoverable, so it wins. This test states the loss out loud."""
+    pkg = tmp_path / "surveys" / "phx"
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    # A Phoenix compound DATAID: parse_dataid unpacks it to 'RD92', which differs from whatever the
+    # transfer function reports as its own station name, so BOTH site_name writers are live.
+    _write_edi(edir / "compound.edi", SAMPLE_EDIS[0], "P=RD92 R=REM1 (H)", lat_shift=False)
+    (pkg / "survey.yaml").write_text(
+        "name: Phx\nslug: phx\ncountry: Australia\norganisation: Test Org\naccess: open\n"
+        "license: CC-BY-4.0\n", encoding="utf-8")
+    out = tmp_path / "out"
+    assert _build(tmp_path / "surveys", out) == 0
+    plain = _catalogue(out)
+    assert sorted(plain) == ["RD92"]
+    internal = plain["RD92"][_col("site_name")]
+    assert internal is not None and internal != "RD92", \
+        "fixture is not exercising the DATAID-overwrite site_name path"
+
+    (pkg / "survey.yaml").write_text(
+        (pkg / "survey.yaml").read_text(encoding="utf-8")
+        + 'station_ids:\n  source: filename\n  map:\n    "compound.edi": "RD18-092"\n',
+        encoding="utf-8")
+    out2 = tmp_path / "out2"
+    assert _build(tmp_path / "surveys", out2) == 0
+    over = _catalogue(out2)
+    assert sorted(over) == ["RD18-092"]
+    assert over["RD18-092"][_col("site_name")] == "RD92", \
+        "site_name must carry the source DATAID once an override is declared"
+
+
+def test_the_published_id_has_a_length_bound():
+    """The charset predicate is the safe_component fixed point INTERSECTED with a length bound.
+    safe_component has no bound, so an id of 300 legal characters passed validation and then hit the
+    filesystem as a directory name: ENAMETOOLONG, unhandled, corpus gone. 96 is far beyond any real
+    station identifier (the owner's own scheme peaks at 13) and well inside the 255-byte component
+    limit even after a product suffix is appended."""
+    assert stnids.MAX_STATION_ID_LEN == 96
+    assert stnids.station_id_is_safe("R" * stnids.MAX_STATION_ID_LEN)
+    assert not stnids.station_id_is_safe("R" * (stnids.MAX_STATION_ID_LEN + 1))
+    with pytest.raises(stnids.StationIdError) as ei:
+        stnids.parse_station_ids({"source": "filename", "map": {"92.edi": "R" * 300}})
+    assert "96" in str(ei.value)
