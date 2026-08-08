@@ -94,6 +94,18 @@ def _sanitize_alnum(value: Optional[str], default: str) -> str:
 _SRC_ID_MARKER = "ausmt_src_id:"
 _SRC_ID_RE = re.compile(r"ausmt_src_id:(\S+)")
 
+# The same recoverable-token convention for the SOURCE FILE a third-party ingest was derived from.
+# For a third-party release the published station id is declared in survey.yaml rather than taken
+# from the DATAID, so nothing inside the served XML would otherwise say which custodian file it came
+# from. The Site <Name> is the only station-level free-text slot that survives the write->read round
+# trip on the pinned mt_metadata (measured: provenance.comments, provenance.log and station.comments
+# are all dropped by the EMTF-XML writer), so the filename rides here beside the source-id token.
+# Written ONLY when the survey declares source provenance, so every existing artifact is unchanged.
+# The rest of the declared provenance stays in AusMT's own records (station.json), where it belongs:
+# a Site Name is a place name, not a record dump.
+_SRC_FILE_MARKER = "ausmt_src_file:"
+_SRC_FILE_RE = re.compile(r"ausmt_src_file:(\S+)")
+
 
 def source_station_id_from_geographic_name(geographic_name: Optional[str]) -> Optional[str]:
     """Recover the true source station id embedded by condition_tf, from a (possibly round-tripped)
@@ -101,6 +113,15 @@ def source_station_id_from_geographic_name(geographic_name: Optional[str]) -> Op
     if not geographic_name:
         return None
     m = _SRC_ID_RE.search(geographic_name)
+    return m.group(1) if m else None
+
+
+def source_file_from_geographic_name(geographic_name: Optional[str]) -> Optional[str]:
+    """Recover the source FILENAME embedded by condition_tf for a third-party ingest. None when the
+    survey declared no source provenance (the whole pre-existing corpus)."""
+    if not geographic_name:
+        return None
+    m = _SRC_FILE_RE.search(geographic_name)
     return m.group(1) if m else None
 
 
@@ -244,7 +265,8 @@ def _drop_unwritable_fieldnotes_comments(comments_obj) -> int:
 
 def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
                  survey_meta: Optional[dict] = None,
-                 source_format: Optional[str] = None) -> list[str]:
+                 source_format: Optional[str] = None,
+                 source_provenance: Optional[dict] = None) -> list[str]:
     """Make an mt_metadata TF schema-valid for EMTF-XML write+read. Returns notes of what changed.
 
     `survey_meta` (a survey SMETA dict: org, investigators, cite.ti/title, doi) sources the citation
@@ -309,6 +331,17 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
         _existing = (tf.station_metadata.geographic_name or "").strip()   # already sanitised above
         tf.station_metadata.geographic_name = (f"{_existing} {_SRC_ID_MARKER}{st_true}").strip()
         notes.append(f"station.source_id_preserved_in_site_name:{st_true}")
+
+    # Third-party ingest: which custodian FILE these bytes were derived from. For such a survey the
+    # published station id comes from survey.yaml, not from the DATAID, so without this the served
+    # XML names no source at all. Same Site <Name> marker convention as the source id above and for
+    # the same measured reason (it is the only station-level free-text slot that round-trips). Gated
+    # on a DECLARED provenance, so an artifact from a survey without one is byte-unchanged.
+    _src_file = str((source_provenance or {}).get("original_filename") or "").strip()
+    if _src_file and _SRC_FILE_MARKER not in (tf.station_metadata.geographic_name or ""):
+        _existing = (tf.station_metadata.geographic_name or "").strip()
+        tf.station_metadata.geographic_name = (f"{_existing} {_SRC_FILE_MARKER}{_src_file}").strip()
+        notes.append(f"station.source_file_preserved_in_site_name:{_src_file}")
 
     # Issue #4: spectra-origin TFs have _rotation_angle == None (frame unknown — e.g. Phoenix EMpower,
     # derived from a spectra section). mt_metadata's writer requires the array, so we STILL zero-fill —
@@ -515,11 +548,15 @@ class NormalizeResult:
 
 def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
               station_id: Optional[str] = None, survey_meta: Optional[dict] = None,
+              source_provenance: Optional[dict] = None,
               rtol: float = 1e-3, atol: float = 1e-6) -> NormalizeResult:
     """Read a TF (EDI/EMTF-XML) -> conditioned canonical EMTF XML + derived EDI, round-trip verified.
 
     `survey_meta` (the survey's SMETA dict) sources the citation honestly (custodian org / investigators
-    / survey title / DOI) — see condition_tf. The returned NormalizeResult.conditioned notes list what
+    / survey title / DOI): see condition_tf. `source_provenance` is the per-station third-party ingest
+    record the custodian declared (original filename, their opaque record id, the acquisition stage);
+    only its original_filename reaches the artifact, as a Site <Name> marker, and only when declared.
+    The returned NormalizeResult.conditioned notes list what
     was conditioned (rotation-unknown, source-id preservation, citation provenance); callers persist it.
 
     Raises RuntimeError if the impedance does not survive the EDI->XML->re-read round-trip — the QC
@@ -536,7 +573,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
     tf = TF()
     tf.read(str(src))
     notes = condition_tf(tf, survey_id=survey_id, station_id=station_id, survey_meta=survey_meta,
-                         source_format=src.suffix.lower())
+                         source_format=src.suffix.lower(), source_provenance=source_provenance)
 
     canonical_xml = out_dir / f"{stem}.xml"
     # The canonical XML is mt_metadata's FAITHFUL standard EMTF-XML output. For missing components

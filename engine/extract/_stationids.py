@@ -12,6 +12,10 @@ id AusMT should publish in survey.yaml instead, keyed by the SOURCE FILE the rec
         "92.edi":    "RD18-092"
         "92_S1.edi": "RD18-092-S1"
 
+A map value may instead be a mapping, carrying the custodian's own provenance for that file
+alongside the optional published id (see PROVENANCE_KEYS below). The provenance travels in AusMT's
+own records only; the source file is never rewritten.
+
 Semantics, all fail-closed (the refuse-to-serve posture the C25 convention gates and the C42
 coordinate policy already take):
 
@@ -42,10 +46,42 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 # The `source` enum. Only filename-keyed maps exist in this lane; the enum is declared as a tuple so
 # a future key ('dataid', 'raw_recording') is an addition here rather than a shape change.
 STATION_ID_SOURCES = ("filename",)
+
+# The per-file provenance a third-party ingest carries. The map VALUE may be a bare published id
+# (the common case) or a mapping carrying these alongside an optional `id`:
+#
+#     map:
+#       "84.edi": "RD18-084"                    # id only
+#       "84R.edi":                               # id + provenance
+#         id: "RD18-084-S1-b"
+#         source_record_id: "2781110A"           # the custodian's own opaque record handle
+#         acquisition_stage: "1"                 # free text; the delivery's own stage label
+#
+# `original_filename` is deliberately NOT a declarable key: it IS the map key, so deriving it here
+# makes the two impossible to disagree. `id` is optional inside the mapping form, so a file may carry
+# provenance while keeping its DATAID.
+PROVENANCE_KEYS = ("source_record_id", "acquisition_stage")
+_VALUE_KEYS = ("id",) + PROVENANCE_KEYS
+
+
+class StationIds(NamedTuple):
+    """A survey's parsed `station_ids` block.
+
+    * `source`     - the key discipline; 'filename' today.
+    * `ids`        - {source filename: published station id} for the files that declare one.
+    * `provenance` - {source filename: {original_filename, source_record_id, acquisition_stage}} for
+      the files that declare provenance. Keyed identically to `ids` but INDEPENDENT of it: a file may
+      appear in one, the other, or both.
+    """
+
+    source: str
+    ids: dict
+    provenance: dict
 
 # The published-id charset, expressed as the FIXED POINT of build_portal.safe_component: a value is
 # acceptable only when safe_component would return it unchanged. safe_component keeps
@@ -96,19 +132,50 @@ def _check_map_key(key) -> str:
     return k
 
 
-def parse_station_ids(block):
-    """Read (source, mapping) from a survey.yaml top-level `station_ids` value.
+def _parse_value(key: str, value):
+    """One map VALUE, in either accepted form. Returns (published id or None, provenance or None).
 
-    Returns ("filename", {}) for an ABSENT/empty block: the caller then applies no override at all
-    and every station keeps DATAID behaviour, so an existing survey is byte-identical.
+    A bare scalar is the published id. A mapping carries an optional `id` plus the provenance keys;
+    an unknown key inside it is a FAILURE, not a silent drop (the frozen-allow-list discipline the
+    attribution/sources blocks already use). A mapping with neither an id nor any provenance says
+    nothing at all and is refused, because it is almost certainly a half-finished edit."""
+    if isinstance(value, dict):
+        unknown = sorted(k for k in value if k not in _VALUE_KEYS)
+        if unknown:
+            raise StationIdError(
+                f"station_ids.map[{key!r}] has unknown key(s) {unknown}; only {list(_VALUE_KEYS)} "
+                f"are defined (fail closed, so a typo cannot silently drop provenance).")
+        raw_id = value.get("id")
+        prov = {}
+        for pk in PROVENANCE_KEYS:
+            pv = value.get(pk)
+            if pv not in (None, ""):
+                prov[pk] = str(pv).strip()
+        if raw_id in (None, "") and not prov:
+            raise StationIdError(
+                f"station_ids.map[{key!r}] is an empty mapping: it declares neither an `id` nor any "
+                f"of {list(PROVENANCE_KEYS)} (fail closed).")
+        # original_filename is the KEY, never a declared field, so the two cannot disagree.
+        if prov:
+            prov = {"original_filename": key, **prov}
+        return (raw_id if raw_id not in (None, "") else None), (prov or None)
+    return value, None
+
+
+def parse_station_ids(block) -> StationIds:
+    """Read a StationIds(source, ids, provenance) from a survey.yaml top-level `station_ids` value.
+
+    Returns StationIds("filename", {}, {}) for an ABSENT/empty block: the caller then applies no
+    override at all and every station keeps DATAID behaviour, so an existing survey is byte-identical.
 
     Raises StationIdError for: a non-mapping block, an unknown top-level key, a `source` outside
-    STATION_ID_SOURCES, a non-mapping `map`, a key that is not a bare filename, a value outside the
-    published-id charset, or two keys mapping to the SAME published id. Key EXISTENCE is validated
-    separately by validate_station_ids, against the package's real files (the same split the C42
-    coordinate policy uses: enum shape at discovery, identity against reality in the build loop)."""
+    STATION_ID_SOURCES, a non-mapping `map`, a key that is not a bare filename, an unknown key inside
+    a mapping-form value, a value outside the published-id charset, or two keys mapping to the SAME
+    published id. Key EXISTENCE is validated separately by validate_station_ids, against the package's
+    real files (the same split the C42 coordinate policy uses: enum shape at discovery, identity
+    against reality in the build loop)."""
     if block in (None, "", {}):
-        return STATION_ID_SOURCES[0], {}
+        return StationIds(STATION_ID_SOURCES[0], {}, {})
     if not isinstance(block, dict):
         raise StationIdError(
             f"station_ids must be a mapping with `source` and `map`, got "
@@ -126,20 +193,26 @@ def parse_station_ids(block):
             f"(refusing to build this survey; fail closed).")
     raw_map = block.get("map")
     if raw_map in (None, "", {}):
-        return source, {}
+        return StationIds(source, {}, {})
     if not isinstance(raw_map, dict):
         raise StationIdError(
             f"station_ids.map must be a mapping of {{source filename: published station id}}, got "
             f"{type(raw_map).__name__} (refusing to build this survey; fail closed).")
     mapping: dict = {}
+    provenance: dict = {}
     for key, value in raw_map.items():
         k = _check_map_key(key)
-        if k in mapping:
+        if k in mapping or k in provenance:
             raise StationIdError(f"station_ids.map names the file {k!r} twice (fail closed).")
-        sid = str(value).strip() if value is not None else ""
+        raw_id, prov = _parse_value(k, value)
+        if prov:
+            provenance[k] = prov
+        if raw_id is None:
+            continue                       # provenance-only entry: this file keeps its DATAID
+        sid = str(raw_id).strip()
         if not station_id_is_safe(sid):
             raise StationIdError(
-                f"station_ids.map[{k!r}]={value!r} is not a usable published station id. Allowed "
+                f"station_ids.map[{k!r}]={raw_id!r} is not a usable published station id. Allowed "
                 f"characters are letters, digits, '.', '_' and '-'; the id may not be empty, may "
                 f"not start with '.' or '-', and may not contain '..'. AusMT refuses to publish a "
                 f"mangled form of an id you declared (fail closed).")
@@ -154,24 +227,33 @@ def parse_station_ids(block):
             f"station_ids.map assigns the same published id to more than one source file: {detail}. "
             f"Two files that are two DIFFERENT physical sites need two different ids; two files "
             f"that are the same site need one of them removed from the package (fail closed).")
-    return source, mapping
+    return StationIds(source, mapping, provenance)
 
 
-def validate_station_ids(mapping, source_paths):
+def _all_keys(station_ids):
+    """Every source filename the block names, whether it declares an id, provenance or both. Accepts
+    a StationIds or a bare {filename: id} mapping so unit callers stay simple."""
+    if isinstance(station_ids, StationIds):
+        return set(station_ids.ids) | set(station_ids.provenance)
+    return set(station_ids or {})
+
+
+def validate_station_ids(station_ids, source_paths):
     """Every map key must name a file actually present in this survey's ingest set.
 
     `source_paths` is the list of source files the build is about to parse (the package's
     transfer_functions/edi/*.edi). A key naming no such file is a survey-level FAILURE: silently
     ignoring it would publish that station under its raw DATAID while the custodian believed it was
-    renamed, which is the exact failure mode the block exists to prevent. The message names the
-    unmatched key(s) and lists the package's real filenames so the fix is immediate.
+    renamed, or drop the provenance the custodian declared. The message names the unmatched key(s)
+    and lists the package's real filenames so the fix is immediate.
 
     The reverse direction is deliberately NOT an error: a file with no map entry keeps DATAID
     behaviour, so partial maps are legal."""
-    if not mapping:
+    keys = _all_keys(station_ids)
+    if not keys:
         return
     present = {Path(str(p)).name for p in (source_paths or ())}
-    missing = sorted(k for k in mapping if k not in present)
+    missing = sorted(k for k in keys if k not in present)
     if missing:
         raise StationIdError(
             f"station_ids.map names source file(s) {missing} that this survey's "
@@ -206,3 +288,29 @@ def apply_override(record, source_path, mapping) -> bool:
     if previous and str(previous) != str(new_id):
         record["site_name"] = previous
     return True
+
+
+def provenance_for(station_ids, source_path):
+    """The declared source provenance for THIS file, or None. Same bare-filename key discipline as
+    the id map, so a validated key is never a no-op at application time."""
+    if not isinstance(station_ids, StationIds) or not station_ids.provenance:
+        return None
+    return station_ids.provenance.get(Path(str(source_path)).name)
+
+
+def apply(record, source_path, station_ids) -> bool:
+    """Apply this source file's declared id AND its declared provenance to `record` IN PLACE.
+
+    The provenance rides on the record as `source_provenance` and travels into AusMT's OWN records
+    (station.json, build_report, the derived MTH5 and EMTF XML). It is NEVER written into the source
+    file: for a third-party release the served EDI is the custodian's published record and stays
+    byte-identical, which is the guarantee the whole no-editing posture rests on."""
+    if station_ids is None:
+        return False
+    ids = station_ids.ids if isinstance(station_ids, StationIds) else station_ids
+    changed = apply_override(record, source_path, ids)
+    prov = provenance_for(station_ids, source_path)
+    if prov:
+        record["source_provenance"] = dict(prov)
+        changed = True
+    return changed

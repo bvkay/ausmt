@@ -161,6 +161,15 @@ def _jdump(obj, **kw) -> str:
     return json.dumps(obj, ensure_ascii=False, default=_json_default, **kw)
 
 
+def _copy_source_bytes(src: Path, dest: Path) -> None:
+    """Copy a custodian source file into the served tree, byte for byte. A named seam rather than an
+    inline write_bytes so the integrity gate at the call site has something INDEPENDENT to check: the
+    gate re-hashes what landed on disk, and a test can substitute a faulty copier without touching
+    the gate itself. Never transforms; never re-encodes; the source is the citable record (D1)."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(src.read_bytes())
+
+
 def sha256(p: Path) -> str:
     # Cached per build: the same file is referenced for the per-station provenance, the
     # manifest and the catalogue's r[14]; without this it would be read and hashed three times.
@@ -1609,8 +1618,10 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # A file with no map entry is untouched and keeps DATAID behaviour (partial maps are legal).
         # apply_override retains the EDI's own DATAID as site_name via the SAME mechanism the DATAID
         # overwrite in _parse_one_edi uses, so the catalogue keeps one convention for a displayed id
-        # that differs from the source's.
-        stnids.apply_override(r, p, station_ids)
+        # that differs from the source's. The same call stamps any declared SOURCE PROVENANCE
+        # (original filename, the custodian's opaque record id, the acquisition-stage label) onto
+        # r["source_provenance"], to travel in AusMT's own records only.
+        stnids.apply(r, p, station_ids)
         r["id"] = safe_component(r.get("id"))          # untrusted DATAID/override -> no traversal / XSS
         r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
         r["comps"] = "".join(r.get("components") or [])
@@ -2009,8 +2020,13 @@ def _write_station_products(job, prov):
         # distributed even inside a served survey, so its station.json must not advertise an EDI.
         "distribution": {"edi_available": edi_served, "license": lic,
                          "edi_path": edi_rel},
-        # provenance: input -> software/params -> output (traceable, per Egbert)
-        "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p)},
+        # provenance: input -> software/params -> output (traceable, per Egbert). `source` is the
+        # THIRD-PARTY ingest provenance the custodian declared in survey.yaml's station_ids block
+        # (original filename, their own opaque record id, the acquisition-stage label). It rides
+        # AusMT's record because the source EDI is served byte-identical and is never rewritten.
+        # ADDITIVE + absent-means-absent: a survey that declares none gains no key at all.
+        "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p),
+                       **({"source": r["source_provenance"]} if r.get("source_provenance") else {})},
         # coordinate QC: present only when the parse flagged something, so consumers can
         # surface "treat with caution" without implying anything about unflagged stations.
         "coordinate_qc": ({"flag": r.get("coord_flag"),
@@ -2341,7 +2357,8 @@ def emit_canonical_store(stations, slug, cdir, survey_meta=None):
     notes: dict = {}
     for (p, r) in stations:
         try:
-            res = normalize(p, out, survey_id=slug, station_id=r["id"], survey_meta=survey_meta)
+            res = normalize(p, out, survey_id=slug, station_id=r["id"], survey_meta=survey_meta,
+                            source_provenance=r.get("source_provenance"))
             versions = res.versions or versions
             if res.conditioned:
                 notes[r["id"]] = res.conditioned
@@ -2548,7 +2565,8 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
                         # persisted per-station; a warm (cache-hit) build reports identically to a cold one.
                     continue
         try:
-            res = normalize(p, xmldir, survey_id=slug, station_id=r["id"], survey_meta=survey_meta)
+            res = normalize(p, xmldir, survey_id=slug, station_id=r["id"], survey_meta=survey_meta,
+                            source_provenance=r.get("source_provenance"))
             written[r["id"]] = res.canonical_xml
             # C18b (A3): the FRESH path is keyed under THIS call's survey_digest — stamp it directly.
             stamped[r["id"]] = survey_digest
@@ -2926,6 +2944,7 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
                 tf.read()
                 _apply_mth5_survey_metadata(tf.survey_metadata, smeta, slug, label)
                 tf.station_metadata.id = _sanitise_station_id(r["id"])
+                _stamp_mth5_source_provenance(tf.station_metadata, r)
                 m.add_transfer_function(tf)
                 n += 1
             except Exception as ex:  # noqa: BLE001
@@ -2960,6 +2979,34 @@ def emit_survey_mth5(stations, slug, label, out, smeta=None):
     if not n:
         return None, None, 0
     return f"bundles/{slug}-tf.h5", hpath, n
+
+
+def _stamp_mth5_source_provenance(station_metadata, record) -> None:
+    """Carry a third-party ingest's declared source provenance into an MTH5's station metadata.
+
+    `station_metadata.comments` is the one station-level free-text slot MEASURED to survive the mth5
+    write/read round trip on the pinned stack: provenance.comments and provenance.log are both
+    dropped, and geographic_name survives but is a place name, not a record slot. Written as
+    machine-readable `ausmt_*=value` lines and APPENDED, so the source EDI's own >INFO text is kept
+    rather than displaced. No-op when the survey declared no provenance, so every existing file is
+    byte-unchanged. Best-effort: the comments model varies across mt_metadata versions and a failure
+    here must never lose the station."""
+    prov = (record or {}).get("source_provenance")
+    if not prov:
+        return
+    lines = [f"ausmt_source_file={prov['original_filename']}"] if prov.get("original_filename") else []
+    if prov.get("source_record_id"):
+        lines.append(f"ausmt_source_record_id={prov['source_record_id']}")
+    if prov.get("acquisition_stage"):
+        lines.append(f"ausmt_acquisition_stage={prov['acquisition_stage']}")
+    if not lines:
+        return
+    try:
+        existing = str(station_metadata.comments.value or "")
+        station_metadata.comments.value = (existing + "\n" + "\n".join(lines)).strip()
+    except Exception as ex:  # noqa: BLE001  (comments model varies; never lose a station over a note)
+        print(f"  [h5] note source provenance not stamped for {record.get('id')}: "
+              f"{type(ex).__name__}: {str(ex)[:80]}", file=sys.stderr)
 
 
 def emit_station_mth5(stations, slug, label, h5dir, smeta=None):
@@ -3042,6 +3089,7 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                     tf.read()
                     _apply_mth5_survey_metadata(tf.survey_metadata, smeta_by_slug.get(slug), slug, label)
                     tf.station_metadata.id = _sanitise_station_id(r["id"])
+                    _stamp_mth5_source_provenance(tf.station_metadata, r)
                     m.add_transfer_function(tf)
                     n += 1
                     # tag the survey so the round-trip gate keys (survey, sid) — cross-survey duplicate
@@ -3274,7 +3322,7 @@ def discover_work(a, ap, validator):
             # dropped loudly and the rest of the corpus builds. Key EXISTENCE is checked in the build
             # loop against the survey's real EDI files.
             try:
-                _stn_source, station_ids[label] = stnids.parse_station_ids(y.get("station_ids"))
+                station_ids[label] = stnids.parse_station_ids(y.get("station_ids"))
             except stnids.StationIdError as _sie:
                 print(f"SKIP {d.name}: station_ids block INVALID: {_sie}", file=sys.stderr)
                 survey_extent.pop(label, None)
@@ -3550,7 +3598,7 @@ def main(argv=None):
         _coord_default, _coord_overrides = coord_policy.get(label, ("exact", {}))
         # Station-id override map for THIS survey (side-channel from discover_work; {} for a survey
         # with no `station_ids` block and for every --raw entry, which is the whole existing corpus).
-        _station_ids = station_ids_by_survey.get(label, {})
+        _station_ids = station_ids_by_survey.get(label) or stnids.StationIds("filename", {}, {})
         # C18 cache key component: this survey's WHOLE survey.yaml digest (§2.5, provably
         # over-invalidating — any yaml edit re-derives just this survey; "" for --raw entries, which
         # are cache-excluded anyway). Amendment A4: the digest is CARRIED from discover_work, computed
@@ -3579,12 +3627,11 @@ def main(argv=None):
             # custodian believed it renamed, which is precisely the mis-identification the block
             # exists to prevent. THIS survey alone is dropped loudly (rc stays 0, per the C42
             # survey-granularity precedent) and the rest of the corpus builds.
-            if _station_ids:
-                try:
-                    stnids.validate_station_ids(_station_ids, _edi_in)
-                except stnids.StationIdError as _sie:
-                    print(f"SKIP {slug}: station_ids block INVALID: {_sie}", file=sys.stderr)
-                    continue
+            try:
+                stnids.validate_station_ids(_station_ids, _edi_in)
+            except stnids.StationIdError as _sie:
+                print(f"SKIP {slug}: station_ids block INVALID: {_sie}", file=sys.stderr)
+                continue
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
                                                        report=_gate_report, station_ids=_station_ids) \
@@ -3789,6 +3836,12 @@ def main(argv=None):
             print(f"C18 survey {slug}: digest={(_survey_digest or '<none>')[:12]} "
                   f"hits={_dh} misses={_dm} writes={_dw}", file=sys.stderr)
         served_edis = []
+        # Source-bytes integrity ledger for THIS survey (build_report.source_integrity). `checked`
+        # counts the EDI-sourced stations whose bytes were actually copied into the served tree;
+        # `verified` counts those whose served copy re-hashed equal to the supplied file. A build
+        # where checked == verified and mismatches == [] is the machine-readable form of the promise
+        # AusMT makes to a third-party custodian.
+        _integrity: dict = {"checked": 0, "verified": 0, "mismatches": []}
         # C46-W3a: the survey's custodian of record for manifest rows — the declared attribution.custodian
         # (rights-holder, may differ from the acquiring organisation), else the organisation. Computed once.
         _custodian = (((meta or {}).get("attribution") or {}).get("custodian") or org)
@@ -3813,7 +3866,34 @@ def main(argv=None):
             if can_serve and _cserved:
                 if Path(p).suffix.lower() == ".edi":
                     served_edi = sedir / p.name
-                    served_edi.write_bytes(p.read_bytes())
+                    _copy_source_bytes(Path(p), served_edi)
+                    # SOURCE-BYTES INTEGRITY GATE. AusMT's whole no-editing posture for third-party
+                    # data is one claim: what we serve for an EDI-sourced station is byte-for-byte
+                    # what the custodian supplied. Assert it here, over the bytes ACTUALLY on disk in
+                    # the served tree, rather than trusting the copy. On a mismatch the station
+                    # serves NOTHING: the file is removed (the served tree is handed out by path, so
+                    # leaving it would publish bytes we have just declared unverified), no manifest
+                    # row is emitted, and the failure is recorded in build_report.source_integrity.
+                    _src_digest = sha256(Path(p))
+                    _served_digest = hashlib.sha256(served_edi.read_bytes()).hexdigest()
+                    _integrity["checked"] += 1
+                    if _served_digest == _src_digest:
+                        _integrity["verified"] += 1
+                    else:
+                        _integrity["mismatches"].append(
+                            {"station": r["id"], "file": Path(p).name,
+                             "source_sha256": _src_digest, "served_sha256": _served_digest})
+                        print(f"  INTEGRITY FAIL {Path(p).name} [{r['id']}]: the served copy is NOT "
+                              f"byte-identical to the supplied file (source {_src_digest[:12]}, "
+                              f"served {_served_digest[:12]}); serving NOTHING for this station.",
+                              file=sys.stderr)
+                        try:
+                            served_edi.unlink(missing_ok=True)
+                        except OSError as _ue:
+                            print(f"  INTEGRITY FAIL {r['id']}: could NOT remove the non-identical "
+                                  f"{served_edi.name} ({type(_ue).__name__}); it is unmanifested but "
+                                  f"still on disk", file=sys.stderr)
+                        served_edi = None
                 else:
                     _gen = _derived_edis.get(r["id"])
                     served_edi = Path(_gen) if (_gen and Path(_gen).exists()) else None
@@ -3972,6 +4052,14 @@ def main(argv=None):
                                 f"({', '.join(_fail_xml_src)})")
             _survey_warnings.append(f"EMTF-XML emission failed for {len(_xml_fail_rows)} station(s) "
                                     f"[{_cls_summary}]; {_consequence}")
+        # Source-bytes integrity: a counted survey WARNING as well as the structured ledger, so a
+        # mismatch can never hide behind an otherwise-green build (the xml_failures lesson).
+        if _integrity["mismatches"]:
+            _survey_warnings.append(
+                f"served EDI bytes were NOT identical to the supplied file for "
+                f"{len(_integrity['mismatches'])} station(s) "
+                f"[{', '.join(m['station'] for m in _integrity['mismatches'])}]; each serves no "
+                f"bytes at all")
         build_report_surveys[slug] = {
             "stations_built": len(stations),
             # C25: convention-gate skips are STRUCTURED drops ({station, reason}); the legacy
@@ -3984,6 +4072,11 @@ def main(argv=None):
             # A provenance fact, not a summary: for a mixed survey it is the only place that says
             # which stations the EDI precedence rule resolved to EDI and which came from EMTF XML.
             "ingest_sources": dict(sorted(_ingest_sources.items())),
+            # The served-bytes integrity gate for EDI-sourced stations (see _integrity above). A
+            # GATE, not a comment: a mismatch withholds that station's bytes entirely.
+            "source_integrity": {"checked": _integrity["checked"],
+                                 "verified": _integrity["verified"],
+                                 "mismatches": list(_integrity["mismatches"])},
             # Same shared aggregation as the log lines above: [{note,count,stations|null,except|null}].
             "conditioning": conditioning_report(conditioning_notes),
             # C25: frame/convention notes, same aggregation shape as `conditioning`.

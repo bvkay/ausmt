@@ -787,6 +787,44 @@ each file carries its own identifier and no variant tag is created.
 The source file is never modified. Its own `DATAID` is kept as the station's `site_name`, so the
 identifier the custodian's file carries stays recoverable from the catalogue.
 
+### 16.2 station_ids.map[].source provenance
+
+A map entry may be a mapping rather than a bare identifier, carrying the custodian's own record
+detail for that file alongside the optional `id`.
+
+```yaml
+station_ids:
+  source: filename
+  map:
+    "84.edi": "RD18-084"                # identifier only
+    "84R.edi":                          # identifier and provenance
+      id: "RD18-084-S1-b"
+      source_record_id: "2781110A"      # the custodian's own opaque record handle
+      acquisition_stage: "1"            # free text, the delivery's own stage label
+```
+
+| Key | Obligation | Type | Definition |
+|---|---|---|---|
+| `id` | optional | string | the identifier to publish; absent means keep the `DATAID` |
+| `source_record_id` | optional | string | the custodian's own record handle for these bytes, opaque to AusMT |
+| `acquisition_stage` | optional | string | free-text label for the acquisition stage or campaign |
+
+`original_filename` is not a declarable key. It is the map key, so AusMT derives it and the two can
+never disagree. An unknown key inside the mapping is a `FAIL`, and a mapping that declares neither an
+`id` nor any provenance is a `FAIL`.
+
+The provenance travels only in AusMT's own records: the station's `station.json`, the build report,
+and, for the two derived products, the fields measured to survive their round trips. In the MTH5 that
+is the station comments; in the EMTF XML it is the Site Name marker `ausmt_src_file:`, which carries
+the original filename beside the existing `ausmt_src_id:` marker. Nothing is written into the source
+EDI, which is served byte for byte.
+
+That last point is a checked guarantee rather than a policy statement. Every build re-hashes what it
+actually placed in the served tree and compares it with the file supplied, per station, and records
+the result in `build_report.json` under `source_integrity`. If a served copy is not identical, the
+file is removed, the station gets no download row and serves no bytes, and the build report and the
+build log both name it.
+
 ---
 
 ## Retired keys

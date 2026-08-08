@@ -91,18 +91,19 @@ def _col(name):
 def test_absent_block_yields_an_empty_map():
     """No `station_ids` in survey.yaml => no override at all, so the existing corpus is untouched."""
     for absent in (None, "", {}):
-        assert stnids.parse_station_ids(absent) == ("filename", {})
+        assert stnids.parse_station_ids(absent) == ("filename", {}, {})
 
 
 def test_a_good_block_parses_to_its_map():
-    src, mapping = stnids.parse_station_ids(
+    parsed = stnids.parse_station_ids(
         {"source": "filename", "map": {"92.edi": "RD18-092", "92_S1.edi": "RD18-092-S1"}})
-    assert src == "filename"
-    assert mapping == {"92.edi": "RD18-092", "92_S1.edi": "RD18-092-S1"}
+    assert parsed.source == "filename"
+    assert parsed.ids == {"92.edi": "RD18-092", "92_S1.edi": "RD18-092-S1"}
+    assert parsed.provenance == {}
 
 
 def test_source_defaults_to_filename_when_omitted():
-    assert stnids.parse_station_ids({"map": {"a.edi": "X1"}}) == ("filename", {"a.edi": "X1"})
+    assert stnids.parse_station_ids({"map": {"a.edi": "X1"}}) == ("filename", {"a.edi": "X1"}, {})
 
 
 @pytest.mark.parametrize("block", [
@@ -325,7 +326,7 @@ def test_the_block_parses_identically_without_pyyaml():
     )
     from_pyyaml = stnids.parse_station_ids((yaml.safe_load(text) or {}).get("station_ids"))
     from_mini = stnids.parse_station_ids(build_portal._mini_yaml(text).get("station_ids"))
-    assert from_pyyaml[1] == {"92.edi": "RD18-092", "92_S1.edi": "RD18-092-S1",
+    assert from_pyyaml.ids == {"92.edi": "RD18-092", "92_S1.edi": "RD18-092-S1",
                               "49R stage 1.edi": "RD18-049-S1", "53(RR).edi": "RD18-053"}
     assert from_mini == from_pyyaml
 
@@ -339,3 +340,171 @@ def test_an_untouched_survey_is_byte_identical_with_the_feature_present(tmp_path
     assert sorted(cat) == ["92.s1", "92.v1"]
     for row in cat.values():
         assert row[_col("site_name")] is None or row[_col("site_name")] == COLLIDING_DATAID
+
+
+# --------------------------------------------------------------------------------------------
+# COMMIT 2: provenance for third-party ingests, and the served-bytes integrity gate
+# --------------------------------------------------------------------------------------------
+
+PROVENANCE_YAML = (
+    'station_ids:\n'
+    '  source: filename\n'
+    '  map:\n'
+    '    "92.edi":\n'
+    '      id: "RD18-092"\n'
+    '      source_record_id: "4572110A"\n'
+    '      acquisition_stage: "2"\n'
+    '    "92_S1.edi":\n'
+    '      id: "RD18-092-S1"\n'
+    '      source_record_id: "2781110A"\n'
+    '      acquisition_stage: "1"\n'
+)
+
+
+def test_the_mapping_form_parses_id_and_provenance():
+    parsed = stnids.parse_station_ids({"source": "filename", "map": {
+        "84.edi": "RD18-084",
+        "84R.edi": {"id": "RD18-084-S1-b", "source_record_id": "2781110A",
+                    "acquisition_stage": "1"}}})
+    assert parsed.ids == {"84.edi": "RD18-084", "84R.edi": "RD18-084-S1-b"}
+    assert parsed.provenance == {"84R.edi": {"original_filename": "84R.edi",
+                                             "source_record_id": "2781110A",
+                                             "acquisition_stage": "1"}}
+
+
+def test_original_filename_is_derived_from_the_key_not_declared():
+    """It is the map KEY, so the record and the declaration can never disagree about which file the
+    bytes came from. Declaring it is an unknown key and fails."""
+    with pytest.raises(stnids.StationIdError):
+        stnids.parse_station_ids({"source": "filename", "map": {
+            "84R.edi": {"id": "X1", "original_filename": "something-else.edi"}}})
+
+
+def test_provenance_without_an_id_keeps_the_dataid():
+    parsed = stnids.parse_station_ids({"source": "filename",
+                                       "map": {"84.edi": {"acquisition_stage": "2"}}})
+    assert parsed.ids == {}
+    assert parsed.provenance["84.edi"]["acquisition_stage"] == "2"
+
+
+@pytest.mark.parametrize("value", [
+    {"id": "X1", "stage": "1"},        # unknown key inside the mapping form
+    {},                                 # says nothing at all
+])
+def test_a_malformed_mapping_value_fails_closed(value):
+    with pytest.raises(stnids.StationIdError):
+        stnids.parse_station_ids({"source": "filename", "map": {"84.edi": value}})
+
+
+def test_a_provenance_only_key_naming_no_file_fails_closed():
+    parsed = stnids.parse_station_ids({"source": "filename",
+                                       "map": {"nope.edi": {"acquisition_stage": "1"}}})
+    with pytest.raises(stnids.StationIdError) as ei:
+        stnids.validate_station_ids(parsed, [Path("/pkg/92.edi")])
+    assert "nope.edi" in str(ei.value)
+
+
+def test_provenance_reaches_station_json(tmp_path):
+    surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)
+    out, prod = tmp_path / "out", tmp_path / "products"
+    assert _build(surveys, out, extra=["--products", str(prod)]) == 0
+    doc = json.loads((prod / "rd18-probe" / "RD18-092-S1" / "station.json").read_text(encoding="utf-8"))
+    src = doc["provenance"]["source"]
+    assert src == {"original_filename": "92_S1.edi", "source_record_id": "2781110A",
+                   "acquisition_stage": "1"}
+    # the served bytes are still the custodian's file under its own name
+    assert doc["provenance"]["input_file"] == "92_S1.edi"
+
+
+def test_a_survey_without_provenance_gains_no_station_json_key(tmp_path):
+    """ADDITIVE and absent-means-absent: no declaration, no key, so the corpus is byte-unchanged."""
+    surveys = _make_survey(tmp_path, yaml_extra=OVERRIDE_YAML)
+    out, prod = tmp_path / "out", tmp_path / "products"
+    assert _build(surveys, out, extra=["--products", str(prod)]) == 0
+    doc = json.loads((prod / "rd18-probe" / "RD18-092" / "station.json").read_text(encoding="utf-8"))
+    assert "source" not in doc["provenance"]
+
+
+def test_provenance_reaches_the_station_mth5(tmp_path):
+    """MTH5 carries it in station_metadata.comments, the one station-level free-text slot MEASURED to
+    survive the mth5 write/read round trip on the pinned stack (provenance.comments and
+    provenance.log do not; see the lane report)."""
+    surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)
+    out = tmp_path / "out"
+    assert _build(surveys, out, extra=["--station-h5"]) == 0
+    from mth5.mth5 import MTH5  # noqa: PLC0415
+    m = MTH5()
+    m.open_mth5(str(out / "h5" / "rd18-probe" / "RD18-092-S1.h5"), mode="r")
+    try:
+        row = m.tf_summary.to_dataframe().iloc[0]
+        tfo = m.get_transfer_function(row["station"], row["tf_id"], survey=row["survey"])
+        comments = str(tfo.station_metadata.comments.value or "")
+    finally:
+        m.close_mth5()
+    assert "ausmt_source_file=92_S1.edi" in comments, comments[-400:]
+    assert "ausmt_source_record_id=2781110A" in comments
+    assert "ausmt_acquisition_stage=1" in comments
+
+
+def test_provenance_reaches_the_served_emtf_xml(tmp_path):
+    """EMTF XML has exactly one station-level free-text slot that survives its write/read round trip
+    on the pinned mt_metadata: the Site Name, which normalize() already uses for the source-id
+    marker. The source FILENAME rides the same convention so the served XML says which custodian file
+    it was derived from; the rest of the provenance stays in AusMT's own records."""
+    surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)
+    out = tmp_path / "out"
+    assert _build(surveys, out) == 0
+    text = (out / "xml" / "rd18-probe" / "RD18-092-S1.xml").read_text(encoding="utf-8")
+    assert "ausmt_src_file:92_S1.edi" in text, text[:1500]
+
+
+def test_a_survey_without_provenance_gains_no_xml_marker(tmp_path):
+    surveys = _make_survey(tmp_path, yaml_extra=OVERRIDE_YAML)
+    out = tmp_path / "out"
+    assert _build(surveys, out) == 0
+    text = (out / "xml" / "rd18-probe" / "RD18-092.xml").read_text(encoding="utf-8")
+    assert "ausmt_src_file" not in text
+
+
+# ---- the served-bytes integrity gate -------------------------------------------------------
+
+def test_build_report_records_the_source_integrity_gate(tmp_path):
+    """The no-editing posture rests on ONE guarantee: what AusMT serves for an EDI-sourced station is
+    byte-for-byte what the custodian supplied. That is asserted per build and recorded, not assumed."""
+    surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)
+    out = tmp_path / "out"
+    assert _build(surveys, out) == 0
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    gate = report["surveys"]["rd18-probe"]["source_integrity"]
+    assert gate["checked"] == 2 and gate["verified"] == 2 and gate["mismatches"] == []
+
+
+def test_the_integrity_gate_withholds_a_station_whose_served_bytes_differ(tmp_path, monkeypatch, capsys):
+    """FAILS IF the gate is decorative. The COPY is replaced with one that flips a byte; the gate
+    itself is untouched, so this is an independent observable of the gate, not of the copier. The
+    station must serve NOTHING (no file on disk, no manifest row) and the build report must name it."""
+    surveys = _make_survey(tmp_path, yaml_extra=PROVENANCE_YAML)
+    out = tmp_path / "out"
+
+    real_copy = build_portal._copy_source_bytes
+
+    def _tampering_copy(src, dest):
+        real_copy(src, dest)
+        if dest.name == "92_S1.edi":
+            dest.write_bytes(dest.read_bytes() + b"\n# tampered\n")
+
+    monkeypatch.setattr(build_portal, "_copy_source_bytes", _tampering_copy)
+    assert _build(surveys, out) == 0
+    err = capsys.readouterr().err
+    assert "92_S1.edi" in err and "integrity" in err.lower()
+
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    gate = report["surveys"]["rd18-probe"]["source_integrity"]
+    assert gate["checked"] == 2 and gate["verified"] == 1
+    assert [m["station"] for m in gate["mismatches"]] == ["RD18-092-S1"]
+
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    edi_stations = sorted(r["station"] for r in manifest["files"] if r["format"] == "edi")
+    assert edi_stations == ["RD18-092"], "a station whose served bytes differ was still manifested"
+    assert not (out / "edi" / "rd18-probe" / "92_S1.edi").exists(), \
+        "the non-identical copy is still fetchable in the served tree"

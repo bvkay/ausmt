@@ -67,6 +67,30 @@
           "description": "the ingest source per BUILT station, keyed by station id: 'edi', 'mth5' or 'emtfxml'. Derived from the suffix of the input file the record was parsed from, so a mixed survey records which stations the EDI-wins precedence rule resolved to EDI and which came from EMTF XML. Optional for pre-EMTF-XML-ingest reports.",
           "additionalProperties": {"type": "string", "enum": ["edi", "mth5", "emtfxml"]}
         },
+        "source_integrity": {
+          "type": "object",
+          "description": "the served-bytes integrity gate for EDI-sourced stations. AusMT serves a custodian's EDI byte for byte and never rewrites it, so each build re-hashes what actually landed in the served tree and compares it to the supplied file. `checked` counts the stations whose bytes were copied, `verified` those whose served copy hashed equal. A mismatch is a GATE, not a note: that station's served file is removed, it gets no manifest row and it serves no bytes at all, and it is also raised as a counted survey warning. Optional for pre-gate reports.",
+          "required": ["checked", "verified", "mismatches"],
+          "additionalProperties": false,
+          "properties": {
+            "checked": {"type": "integer", "minimum": 0},
+            "verified": {"type": "integer", "minimum": 0},
+            "mismatches": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["station", "file", "source_sha256", "served_sha256"],
+                "additionalProperties": false,
+                "properties": {
+                  "station": {"type": "string"},
+                  "file": {"type": "string", "description": "the supplied file's name"},
+                  "source_sha256": {"type": "string"},
+                  "served_sha256": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
         "conditioning": {
           "type": "array",
           "items": {"$ref": "#/definitions/conditioning_entry"},
