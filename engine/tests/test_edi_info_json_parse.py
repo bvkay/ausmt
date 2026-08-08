@@ -212,3 +212,119 @@ def test_no_temp_artifact_survives_the_fallback_parse(tmp_path, monkeypatch):
     assert leftovers == [], f"the normalised copy survived the parse: {leftovers}"
 
 
+# --------------------------------------------------------------------------------------------
+# 5. THE LANE'S CENTRAL CLAIM, end to end through a REAL build: a station that needed the fallback
+#    still serves the custodian's bytes, and the sha256 integrity gate still passes on it.
+#    If the normalised copy could ever be served, AusMT's no-editing guarantee for third-party data
+#    would be void; these tests are the proof that it cannot.
+# --------------------------------------------------------------------------------------------
+
+def _survey_package(tmp_path, slug, edis):
+    """A minimal buildable survey package holding byte-for-byte copies of the given fixtures."""
+    pkg = tmp_path / "surveys" / slug
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    for src in edis:
+        (edir / src.name).write_bytes(src.read_bytes())
+    (pkg / "survey.yaml").write_text(
+        f"name: {slug}\nslug: {slug}\ncountry: Australia\norganisation: T\n"
+        "access: open\nlicense: CC-BY-4.0\n", encoding="utf-8")
+    return tmp_path / "surveys"
+
+
+def _run_build(tmp_path, surveys):
+    sys.path.insert(0, str(HERE.parent))
+    import build_portal as bp  # noqa: PLC0415
+    out, prod = tmp_path / "data", tmp_path / "products"
+    rc = bp.main(["--surveys", str(surveys), "--out", str(out), "--products", str(prod),
+                  "--bundle-edi", "--no-validate"])
+    assert rc == 0, f"build exit {rc}"
+    import json  # noqa: PLC0415
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    catalogue = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))
+    return out, prod, report, catalogue
+
+
+def test_integrity_gate_passes_for_a_fallback_parsed_station(tmp_path):
+    """The sha256 served-bytes gate must be CHECKED and VERIFIED for a station whose parse needed
+    the fallback -- not skipped, not merely absent from the mismatch list."""
+    surveys = _survey_package(tmp_path, "declfix", [DECL])
+    _out, _prod, report, catalogue = _run_build(tmp_path, surveys)
+    entry = report["surveys"]["declfix"]
+    assert entry["stations_built"] == 1, f"the fallback station did not build: {entry}"
+    integrity = entry["source_integrity"]
+    assert integrity["checked"] >= 1, "the integrity gate never ran for the fallback station"
+    assert integrity["verified"] == integrity["checked"], f"integrity not verified: {integrity}"
+    assert integrity["mismatches"] == [], f"integrity mismatch: {integrity['mismatches']}"
+    assert catalogue, "no catalogue row emitted"
+
+
+def test_served_bytes_for_a_fallback_station_are_the_custodian_bytes(tmp_path):
+    """The strongest form of the claim, asserted on the BYTES rather than on a report field: every
+    served .edi must hash to the source fixture, and must still contain the trailing comma. If the
+    normalised copy had leaked into the served tree, that comma would be gone."""
+    surveys = _survey_package(tmp_path, "declfix", [DECL])
+    out, prod, _report, _cat = _run_build(tmp_path, surveys)
+    source_digest = hashlib.sha256(DECL.read_bytes()).hexdigest()
+    served = [p for p in list(out.rglob("*.edi")) + list(prod.rglob("*.edi"))
+              if p.name == DECL.name]
+    assert served, "the fallback station served no EDI at all"
+    for p in served:
+        raw = p.read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == source_digest, \
+            f"served {p} is NOT byte-identical to the custodian's file"
+        assert b'"Declination": 5,' in raw, \
+            f"served {p} lost the trailing delimiter: a NORMALISED copy reached the served tree"
+
+
+def test_catalogue_sha256_column_is_the_source_digest(tmp_path):
+    """The catalogue's sha256 column is what a downloader verifies against. It must be the digest of
+    the custodian's file, never of the copy the parse used."""
+    from _contract import CATALOGUE_COLUMNS  # noqa: PLC0415
+    surveys = _survey_package(tmp_path, "declfix", [DECL])
+    _out, _prod, _report, catalogue = _run_build(tmp_path, surveys)
+    col = CATALOGUE_COLUMNS.index("sha256")
+    digests = {row[col] for row in catalogue}
+    assert digests == {hashlib.sha256(DECL.read_bytes()).hexdigest()}, \
+        f"catalogue sha256 is not the source digest: {digests}"
+
+
+def test_build_report_records_the_fallback_per_station(tmp_path):
+    """Silent repair is not acceptable: the curator-facing report must name the station and file,
+    and the survey must carry a counted warning so a green build cannot hide it."""
+    surveys = _survey_package(tmp_path, "declfix", [DECL])
+    _out, _prod, report, _cat = _run_build(tmp_path, surveys)
+    entry = report["surveys"]["declfix"]
+    rows = entry.get("source_parse_fallbacks")
+    assert rows, f"the fallback was not recorded: {entry.get('source_parse_fallbacks')!r}"
+    assert [r["file"] for r in rows] == [DECL.name]
+    assert all(r["station"] and r["defect"] for r in rows), f"incomplete fallback row: {rows}"
+    assert any("trailing-delimiter" in w for w in entry["warnings"]), \
+        f"no counted survey warning for the fallback: {entry['warnings']}"
+
+
+def test_build_report_stays_schema_valid_with_the_new_field(tmp_path):
+    """`survey` is additionalProperties:false, so the new field must be declared in the schema."""
+    import json  # noqa: PLC0415
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = json.loads((HERE.parent / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
+    surveys = _survey_package(tmp_path, "declfix", [DECL])
+    _out, _prod, report, _cat = _run_build(tmp_path, surveys)
+    jsonschema.validate(report, schema)
+
+
+def test_a_survey_without_the_defect_records_no_fallback(tmp_path):
+    """NO-REGRESSION: the control fixture is from the SAME delivery with the SAME JSON >INFO block
+    and simply has no Declination key. It must build with an EMPTY fallback ledger and no warning,
+    i.e. the new path is inert for every file mt_metadata can already read."""
+    import json  # noqa: PLC0415
+    surveys = _survey_package(tmp_path, "clean", [NODECL])
+    _out, _prod, report, _cat = _run_build(tmp_path, surveys)
+    entry = report["surveys"]["clean"]
+    assert entry["stations_built"] == 1
+    assert entry.get("source_parse_fallbacks") == [], \
+        f"a cleanly-read survey reported a fallback: {entry.get('source_parse_fallbacks')}"
+    assert not any("trailing-delimiter" in w for w in entry["warnings"]), \
+        f"a cleanly-read survey raised the fallback warning: {entry['warnings']}"
+    assert json.dumps(entry)  # the entry stays JSON-serialisable
+
