@@ -1,1 +1,9 @@
 * text=auto eol=lf
+
+# Third-party CUSTODIAN artefacts, preserved byte for byte. `text=auto eol=lf` above would rewrite
+# these files' CRLF line endings to LF on checkout, so the copy in the tree would no longer be the
+# bytes the custodian released. That is exactly the transformation AusMT promises never to make to
+# third-party data (D1), and these particular files are the fixtures for the served-bytes integrity
+# test, which asserts the served EDI hashes equal to its source. Marking them binary keeps the bytes
+# (CRLF included) identical to the delivery they were copied from.
+engine/tests/fixtures/edi-info-json/*.edi -text
