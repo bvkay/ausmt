@@ -19,18 +19,21 @@ Any Python 3.12 env with the pinned requirements works. The maintainer's known-g
 `ausmt` conda env, so the commands below are written for it; drop the `conda run -n ausmt`
 prefix if your interpreter is already the right one.
 
-Counts below are per-suite collection figures, plus **118** in the surveys repository gate. The
-portal and deploy rows were re-measured on 2026-07-29 after `main` brought in the release machinery
-and the C45 analytics work. The engine and gateway rows predate that merge and are known to be low;
-both need a re-count in the `ausmt` env, so this file states no repository-wide total until they
-have one.
+Counts below are per-suite collection figures: **1743** across the four in-repo suites, plus **118**
+in the surveys repository gate. All four in-repo rows were re-measured on 2026-08-08, which retires
+the "engine and gateway are known low" note this table carried since 2026-07-29. That measurement
+was NOT taken in the `ausmt` conda env: it used a clean venv on macOS / CPython 3.12.7 built from
+`engine/environments/requirements-mtmetadata-lock.txt` plus each suite's dev requirements. Treat the
+Collected figures as authoritative and the pass/skip/fail splits as env-dependent, because a box
+with a different set of host tools skips (and fails) a different number of tests. The surveys-gate
+118 is unchanged and was not re-measured, since it lives in another repository.
 
 | Suite | cwd | Command | Collected | Notes |
 |-------|-----|---------|-----------|-------|
-| engine | `engine/` | `conda run -n ausmt python -m pytest -q tests` | 438 | 433 pass, 5 skip. Counted 2026-07-29 before that day's merge; known low, re-measure on next edit. Several minutes; needs mt_metadata/mth5 (pinned in `engine/environments/`) |
-| gateway | **repo root** | `conda run -n ausmt python -m pytest -q gateway/tests` | 678 | Counted 2026-07-29 before that day's merge; known low, re-measure on next edit. Under a minute; deps in `gateway/requirements-dev.txt`; cwd must be repo root so `gateway` imports |
-| deploy | **repo root** | `conda run -n ausmt python -m pytest -q deploy/tests` | 183 | shell, compose and Caddy config gates. Two tests shell out to host tools and skip when they are absent: `caddy validate` and `flock(1)`. The Caddy one needs to be able to create the log dir the Caddyfile names, so it can fail on a dev box where CI is green |
-| portal | `portal/` | `conda run -n ausmt python -m pytest -q tests` | 135 | jsdom drivers need node + `npm ci` in `portal/` (see `portal-ci.yml`) |
+| engine | `engine/` | `conda run -n ausmt python -m pytest -q tests` | 583 | 578 pass, 5 skip. Re-measured 2026-08-08. Several minutes (about 7 on a dev laptop); needs mt_metadata/mth5 (pinned in `engine/environments/`) |
+| gateway | **repo root** | `conda run -n ausmt python -m pytest -q gateway/tests` | 748 | 748 pass, 0 skip. Re-measured 2026-08-08. Under a minute; deps in `gateway/requirements-dev.txt`; cwd must be repo root so `gateway` imports. `test_publish_real_git.py::test_real_git_rollback_restores_state_then_next_publish_succeeds` is KNOWN FLAKY (1 failure in 4 full-suite runs, 0 in 8 runs of the file alone): `settle_publish` in `tests/conftest.py` gives a real-git publish only 500 ms and then falls through silently, so a loaded box can assert on a state that has not settled |
+| deploy | **repo root** | `conda run -n ausmt python -m pytest -q deploy/tests` | 247 | Re-measured 2026-08-08. Shell, compose and Caddy config gates. Some tests shell out to host tools and skip or FAIL when those are absent or behave differently: `caddy validate`, `flock(1)`, and the `alert.sh` group (12 of these failed on the 2026-08-08 macOS box and fail identically on `main`). A red deploy row on a dev laptop is not by itself a regression signal; diff the failing set against `main` before believing it |
+| portal | `portal/` | `conda run -n ausmt python -m pytest -q tests` | 165 | 165 pass. Re-measured 2026-08-08. jsdom drivers need node + `npm ci` in `portal/` (see `portal-ci.yml`) |
 | surveys gate | `../ausmt-surveys/` | `conda run -n ausmt python -m pytest -q tests` | 118 | validates the validator + contribute tooling |
 
 CI runs gateway and deploy together from the repo root
