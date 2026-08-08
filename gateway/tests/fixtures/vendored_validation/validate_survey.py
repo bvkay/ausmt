@@ -57,6 +57,27 @@ ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
 # values). Absent => exact (the record's zero-change default). Byte-identical spelling to the engine's
 # extract/_coordaccess.COORDINATE_POLICIES and gateway.editor_form.COORDINATE_POLICIES.
 COORDINATE_POLICIES = ("exact", "generalised", "withheld")
+# Station-identifier override for third-party released data (owner ruling 2026-08-08). AusMT serves
+# such data byte for byte, so a station whose contractor numbering is not a usable public identifier
+# cannot be renamed by editing its EDI; survey.yaml declares the published identifier per SOURCE FILE
+# instead. Byte-identical spelling to the engine's extract/_stationids.STATION_ID_SOURCES and
+# ("id",) + PROVENANCE_KEYS. Every rule below is a hard FAIL because every one of them is fail-closed
+# in the engine: a block this validator waves through drops the whole survey at build time, and an
+# unmatched key silently publishes a station under the raw contractor DATAID.
+STATION_ID_SOURCES = ("filename",)
+STATION_ID_VALUE_KEYS = ("id", "source_record_id", "acquisition_stage")
+# The published-identifier charset: exactly what the engine's safe_component() leaves unchanged, so a
+# declared identifier is either published verbatim or refused, never silently rewritten.
+STATION_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+# ...INTERSECTED with a length bound, mirroring engine/extract/_stationids.MAX_STATION_ID_LEN.
+# safe_component has no bound, so an identifier of 300 legal characters passed both tools and then
+# reached the filesystem as the station's product DIRECTORY name: ENAMETOOLONG, and the engine's
+# whole corpus build died with no catalogue written. 96 is far beyond any real station identifier.
+MAX_STATION_ID_LEN = 96
+# A TOP-LEVEL `station_ids:` key in survey.yaml SOURCE TEXT. Used only to decide whether the
+# no-PyYAML fallback is allowed to certify the block; a text scan is deliberate, because the parser
+# being gated is the one that cannot be trusted to see the key (see _check_station_ids).
+STATION_IDS_KEY_RE = re.compile(r"(?m)^station_ids[ \t]*:")
 # C46 schema-0.3 capture (design §2.1). schema_version is now VALIDATED (it was carried, never
 # checked); only these are known. attribution/sources are the 0.3 fields — present under 0.2 warns to
 # bump. The key allow-lists are FROZEN and must stay in EXACT parity with the editor's section keys
@@ -374,6 +395,19 @@ class Report:
         return c
 
 
+def _pyyaml_available() -> bool:
+    """Whether the real parser is installed. `_load_yaml` falls back to the vendored `_mini_yaml`
+    when it is not, and that fallback is reduced-fidelity: it matches a mapping key as bare-word or
+    QUOTED, while YAML's plain scalar keys are wider, so a `station_ids.map` keyed on an unquoted
+    filename carrying a space or a bracket is read by PyYAML and silently DROPPED here. Checks that
+    depend on having read a block COMPLETELY ask this before certifying it."""
+    try:
+        import yaml  # noqa: F401, PLC0415
+        return True
+    except ModuleNotFoundError:
+        return False
+
+
 def _load_yaml(path: Path):
     try:
         import yaml  # noqa: PLC0415
@@ -477,7 +511,17 @@ def _mini_yaml(text: str) -> dict:
         toks.append((len(ln) - len(ln.lstrip(" ")), ln.strip()))
     n = len(toks)
     pos = [0]
-    key_re = re.compile(r"^([\w.\-]+):\s*(.*)$")
+    # A mapping key: bare, or QUOTED. The quoted form is not a nicety: the `station_ids.map` keys are
+    # source FILENAMES, and real ones carry spaces and parentheses ("49R stage 1.edi", "53(RR).edi"),
+    # which YAML can express only quoted. Before this alternation the fallback matched neither and
+    # silently dropped the whole map, so a no-PyYAML build published the raw contractor DATAIDs.
+    # The closing quote must be followed IMMEDIATELY by ':', so a quoted list-item SCALAR that happens
+    # to contain a colon (- "a: b") is still a scalar, not a one-key map (pinned by test).
+    key_re = re.compile(r"""^("[^"]+"|'[^']+'|[\w.\-]+):\s*(.*)$""")
+
+    def _key(k: str) -> str:
+        """Unquote a matched mapping key; a bare key passes through unchanged."""
+        return k[1:-1] if (len(k) >= 2 and k[0] == k[-1] and k[0] in "\"'") else k
 
     def _block_scalar(min_indent, style=">"):
         buf = []
@@ -504,7 +548,7 @@ def _mini_yaml(text: str) -> dict:
                 m = key_re.match(item)
                 if m:
                     sub = {}
-                    k, val = m.group(1), m.group(2).strip()
+                    k, val = _key(m.group(1)), m.group(2).strip()
                     if val in (">", "|", ">-", "|-"):
                         pos[0] += 1; sub[k] = _block_scalar(indent + 2, val)
                     elif val == "":
@@ -517,7 +561,7 @@ def _mini_yaml(text: str) -> dict:
                         if i2 == indent + 2 and not c2.startswith("- "):
                             m2 = key_re.match(c2)
                             if m2:
-                                k2, v2 = m2.group(1), m2.group(2).strip()
+                                k2, v2 = _key(m2.group(1)), m2.group(2).strip()
                                 if v2 in (">", "|", ">-", "|-"):
                                     pos[0] += 1; sub[k2] = _block_scalar(indent + 4, v2)
                                 elif v2 == "":
@@ -538,7 +582,7 @@ def _mini_yaml(text: str) -> dict:
                 node = {}
             if not isinstance(node, dict):
                 break
-            k, val = m.group(1), m.group(2).strip()
+            k, val = _key(m.group(1)), m.group(2).strip()
             if val in (">", "|", ">-", "|-"):
                 pos[0] += 1; node[k] = _block_scalar(indent + 1, val)
             elif val == "":
@@ -570,6 +614,123 @@ def _iso_date_or_year_ok(v) -> bool:
     year loads as an int, so str()-coerce before matching (the mini_yaml fallback numeric-coerces too)."""
     s = str(v).strip()
     return bool(re.match(r"^\d{4}$", s)) or _iso_date_ok(s)
+
+
+def _check_station_ids(block, edi_names, r, *, complete_read=True, declared_in_text=False) -> None:
+    """Validate the `station_ids` block against the package's real EDI filenames.
+
+    Mirrors the engine's extract/_stationids.py rule for rule, and for the same reason each is a
+    FAIL rather than a WARNING: in the engine every one of them drops the whole survey from the
+    build, so a block this validator waves through is a package that cannot publish. The one
+    deliberately-legal shape is a PARTIAL map: a file with no entry keeps its DATAID, so an unmatched
+    FILE is silent while an unmatched KEY fails (an unmatched key would leave that station published
+    under the raw contractor identifier, which is the mis-identification the block exists to prevent).
+
+    ABSENT block: nothing is added at all, so every existing package's report is unchanged.
+
+    `complete_read` is False when survey.yaml came from the reduced-fidelity `_mini_yaml` fallback.
+    The block is then refused outright rather than certified from a possibly PARTIAL map: a partial
+    map is a LEGAL shape, so an under-read would have produced a clean PASS over half a block, and
+    the unread stations would publish under the raw contractor DATAID with no warning anywhere. The
+    engine drops the same survey for the same reason.
+
+    `declared_in_text` comes from scanning the survey.yaml SOURCE for a top-level `station_ids:`,
+    not from `block`. The fallback has a second, pre-existing limitation unrelated to this block: a
+    top-level block SEQUENCE whose key line carries a TRAILING COMMENT takes the comment as its
+    value, orphans the list items and drops every later top-level key. That is the shipped
+    _template/survey.yaml's own shape (`data_types:  # select all that apply`), so on the example
+    package the fallback returns 11 of 21 top-level keys and `block` arrives here as None even when
+    the package plainly declares one. Gating on the parse would mean asking the parser being gated
+    whether it saw the key.
+    """
+    if not complete_read and (declared_in_text or block not in (None, "", {})):
+        r.add("FAIL", "station_ids", "station_ids requires PyYAML, which is not installed. The "
+                                     "stdlib fallback parser cannot read this block faithfully "
+                                     "(an unquoted filename carrying a space or a bracket is "
+                                     "dropped, and top-level keys after the first list are not read "
+                                     "at all), so it cannot be checked without silently accepting a "
+                                     "partial map. Install PyYAML (pip install PyYAML) and re-run")
+        return
+    if block in (None, "", {}):
+        return
+    if not isinstance(block, dict):
+        r.add("FAIL", "station_ids", f"station_ids must be a mapping with 'source' and 'map', got "
+                                     f"{type(block).__name__}")
+        return
+    unknown = sorted(k for k in block if k not in ("source", "map"))
+    if unknown:
+        r.add("FAIL", "station_ids", f"station_ids has unknown key(s) {unknown}; only 'source' and "
+                                     f"'map' are defined")
+    src = block.get("source")
+    if src not in (None, "") and str(src).strip().lower() not in STATION_ID_SOURCES:
+        r.add("FAIL", "station_ids", f"station_ids.source '{src}' is not one of "
+                                     f"{list(STATION_ID_SOURCES)} - map keys are source FILENAMES")
+    raw_map = block.get("map")
+    if raw_map in (None, "", {}):
+        return
+    if not isinstance(raw_map, dict):
+        r.add("FAIL", "station_ids", f"station_ids.map must be a mapping of "
+                                     f"{{source filename: published station id}}, got "
+                                     f"{type(raw_map).__name__}")
+        return
+    seen: dict = {}
+    for key, value in raw_map.items():
+        k = str(key)
+        if not k.strip() or "/" in k or "\\" in k or k in (".", "..") or Path(k).name != k:
+            r.add("FAIL", "station_ids", f"station_ids.map key '{k}' is not a bare filename - keys "
+                                         f"name a file inside transfer_functions/edi/ and carry no "
+                                         f"path separator and no '..' component")
+            continue
+        if k not in edi_names:
+            r.add("FAIL", "station_ids", f"station_ids.map names source file '{k}', which this "
+                                         f"package's transfer_functions/edi/ does not contain - an "
+                                         f"unmatched key leaves that station published under its raw "
+                                         f"DATAID. This package's EDI files: {sorted(edi_names)}")
+            continue
+        sid = value
+        if value is None:
+            # A key written with nothing after the colon. It declares neither an identifier nor any
+            # provenance, so it says exactly what an empty mapping says and fails the same way (the
+            # engine refuses it too). Without this branch str(None) becomes the literal 'None',
+            # which matches STATION_ID_RE: one null produced a PASS line for a mapping that does not
+            # exist, and two collided as a duplicate identifier nobody declared.
+            r.add("FAIL", "station_ids", f"station_ids.map['{k}'] has no value - a key written with "
+                                         f"nothing after the colon declares neither an 'id' nor any "
+                                         f"provenance. To keep this file's DATAID, remove the key "
+                                         f"entirely; a partial map is legal")
+            continue
+        if isinstance(value, dict):
+            bad = sorted(x for x in value if x not in STATION_ID_VALUE_KEYS)
+            if bad:
+                r.add("FAIL", "station_ids", f"station_ids.map['{k}'] has unknown key(s) {bad}; only "
+                                             f"{list(STATION_ID_VALUE_KEYS)} are defined "
+                                             f"(original_filename is the map key, never declared)")
+                continue
+            if not any(value.get(x) not in (None, "") for x in STATION_ID_VALUE_KEYS):
+                r.add("FAIL", "station_ids", f"station_ids.map['{k}'] declares neither an 'id' nor "
+                                             f"any provenance - it says nothing")
+                continue
+            sid = value.get("id")
+            if sid in (None, ""):
+                continue                     # provenance-only entry: this file keeps its DATAID
+        if (not STATION_ID_RE.match(str(sid)) or ".." in str(sid) or str(sid)[0] in ".-"
+                or len(str(sid)) > MAX_STATION_ID_LEN):
+            shown = str(sid) if len(str(sid)) <= 60 else f"{str(sid)[:60]}... ({len(str(sid))} chars)"
+            r.add("FAIL", "station_ids", f"station_ids.map['{k}'] published id '{shown}' is outside "
+                                         f"the identifier charset [A-Za-z0-9._-], starts with '.' or "
+                                         f"'-', contains '..', or is longer than "
+                                         f"{MAX_STATION_ID_LEN} characters - AusMT refuses to "
+                                         f"publish a mangled form of an id you declared")
+            continue
+        seen.setdefault(str(sid), []).append(k)
+    for sid, keys in sorted(seen.items()):
+        if len(keys) > 1:
+            r.add("FAIL", "station_ids", f"station_ids.map assigns the published id '{sid}' to more "
+                                         f"than one source file {sorted(keys)} - two files that are "
+                                         f"two different physical sites need two different ids")
+    if not [i for i in r.items if i["check"] == "station_ids" and i["level"] == "FAIL"]:
+        r.add("PASS", "station_ids", f"station_ids: {len(raw_map)} source file(s) mapped, all "
+                                     f"present in transfer_functions/edi/, no duplicate ids")
 
 
 def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
@@ -663,6 +824,16 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
                 r.add("FAIL", "metadata",
                       f"access.coordinates '{coord_pol}' is not one of {COORDINATE_POLICIES} — it gates "
                       f"how station coordinates are served; an out-of-enum value silently serves them exactly")
+    # Station-identifier override for third-party released data. Checked against the package's REAL
+    # EDI filenames, which are already in hand, so a key that names nothing is caught here rather
+    # than dropping the survey at build time.
+    try:
+        _declares_station_ids = bool(STATION_IDS_KEY_RE.search(sy.read_text()))
+    except OSError:
+        _declares_station_ids = False
+    _check_station_ids(meta.get("station_ids"), {p.name for p in edis}, r,
+                       complete_read=_pyyaml_available(),
+                       declared_in_text=_declares_station_ids)
     # The slug MUST equal the package folder name: the directory IS the slug, and every downstream
     # identifier/URL is au.<slug>.<station>. A divergence silently forks the survey's identity, so
     # this is a FAIL (the _template states the slug must equal the folder name).

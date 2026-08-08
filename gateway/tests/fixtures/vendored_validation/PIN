@@ -20,6 +20,6 @@
 
 source_repo: ausmt-surveys
 source_path: _validation/validate_survey.py
-source_commit: 7ab0a0d336bd847c25281a4a4ae034fbdc0ea00b
+source_commit: a140fafef80577f10935ee768153acd5608aaad4
 line_endings: lf
-sha256: 19b7f7ee0a4e784ccc35f4a51edf76d6bdcde1070ed3b53755de40af42f40fc3
+sha256: 5d6458fda5c3095f062ff7001a45a95c8b696fa7328d419759f112baf01d0bf0
