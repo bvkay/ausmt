@@ -64,6 +64,7 @@ absence is silent.
 | `release_notes` | recommended | list of mapping | [13 Release notes](#13-release-notes) |
 | `coordinate_resolution` | optional | mapping | [14 Coordinate resolution](#14-coordinate-resolution) |
 | `care` | optional | mapping | [15 CARE](#15-care) |
+| `station_ids` | optional | mapping | [16 Station identifiers](#16-station-identifiers) |
 
 A key the validator does not model warns as unknown but is carried through the curator editor's
 round-trip verbatim, so hand-edited YAML is never silently dropped.
@@ -734,6 +735,57 @@ exact match on `id`, so every member survey must spell it identically. Naming ru
 
 No automated check blocks publication on CARE grounds. A curator reviews the block; see
 [Submission](../operations/submission.md#care-considerations).
+
+---
+
+## 16 Station identifiers
+
+By default the station identifier AusMT publishes is the EDI `DATAID`. That is right for data AusMT
+or its partners collected, where the field numbering is the identifier everyone already uses. It is
+wrong for a third-party release whose contractor numbering is not usable as a public identifier, and
+AusMT serves third-party files byte for byte, so the identifier cannot be corrected by editing the
+EDI. `station_ids` declares the identifier to publish instead, per source file.
+
+### 16.1 station_ids
+
+| | |
+|---|---|
+| Definition | The station identifier AusMT publishes for a given source file, overriding that file's `DATAID`. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | mapping with members `source` and `map` |
+| Allowed values | `source` is `filename`; `map` is a mapping of source file name to published identifier |
+| Default | absent means the `DATAID` is authoritative for every station, which is how the whole existing corpus builds |
+| Example | see below |
+
+```yaml
+station_ids:
+  source: filename                    # only `filename` is defined today
+  map:
+    "92.edi": "RD18-092"
+    "92_S1.edi": "RD18-092-S1"
+    "49R stage 1.edi": "RD18-049-S1"  # quote any name with a space or a bracket
+```
+
+Rules, all of which fail the survey rather than guessing:
+
+| Situation | Outcome |
+|---|---|
+| a key naming a file the package does not contain | `FAIL`; the survey is dropped and the key is named |
+| two keys mapping to the same identifier | `FAIL`; both keys are named |
+| a key carrying a path separator or `..` | `FAIL` |
+| an identifier outside `A-Z a-z 0-9 . _ -`, or starting with `.` or `-` | `FAIL`; AusMT will not publish a mangled form of an identifier you declared |
+| a file in `transfer_functions/edi/` with no entry | not an error; that station keeps its `DATAID` |
+
+A partial map is therefore legal, and the override applies before same-identifier records are
+disambiguated. That ordering is the point of the feature. In the GSSA and BHP Roxby Downs 2018
+delivery the contractor reused 56 station numbers across two acquisition stages, the furthest
+colliding pair 58.5 km apart. Without the override those pairs would publish as processing variants
+of one station, `92.v1` and `92.s1`, which says two processings of one site and is false. With it,
+each file carries its own identifier and no variant tag is created.
+
+The source file is never modified. Its own `DATAID` is kept as the station's `site_name`, so the
+identifier the custodian's file carries stays recoverable from the catalogue.
 
 ---
 

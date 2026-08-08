@@ -44,6 +44,7 @@ import _mth5 as m5                   # noqa: E402  (MTH5 reader; optional, needs
 import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_params/drho/dphase/EMPTY_TF)
 import _conventions as conv         # noqa: E402  (C25 convention gates: frame guard + quadrant check)
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
+import _stationids as stnids        # noqa: E402  (survey.yaml station-id override for third-party data)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + MTCAT schema version)
 
@@ -1319,7 +1320,17 @@ def _mini_yaml(text: str) -> dict:
         toks.append((len(ln) - len(ln.lstrip(" ")), ln.strip()))
     n = len(toks)
     pos = [0]
-    key_re = re.compile(r"^([\w.\-]+):\s*(.*)$")
+    # A mapping key: bare, or QUOTED. The quoted form is not a nicety: the `station_ids.map` keys are
+    # source FILENAMES, and real ones carry spaces and parentheses ("49R stage 1.edi", "53(RR).edi"),
+    # which YAML can express only quoted. Before this alternation the fallback matched neither and
+    # silently dropped the whole map, so a no-PyYAML build published the raw contractor DATAIDs.
+    # The closing quote must be followed IMMEDIATELY by ':', so a quoted list-item SCALAR that happens
+    # to contain a colon (- "a: b") is still a scalar, not a one-key map (pinned by test).
+    key_re = re.compile(r"""^("[^"]+"|'[^']+'|[\w.\-]+):\s*(.*)$""")
+
+    def _key(k: str) -> str:
+        """Unquote a matched mapping key; a bare key passes through unchanged."""
+        return k[1:-1] if (len(k) >= 2 and k[0] == k[-1] and k[0] in "\"'") else k
 
     def _block_scalar(min_indent, style=">"):
         buf = []
@@ -1346,7 +1357,7 @@ def _mini_yaml(text: str) -> dict:
                 m = key_re.match(item)
                 if m:
                     sub = {}
-                    k, val = m.group(1), m.group(2).strip()
+                    k, val = _key(m.group(1)), m.group(2).strip()
                     if val in (">", "|", ">-", "|-"):
                         pos[0] += 1; sub[k] = _block_scalar(indent + 2, val)
                     elif val == "":
@@ -1359,7 +1370,7 @@ def _mini_yaml(text: str) -> dict:
                         if i2 == indent + 2 and not c2.startswith("- "):
                             m2 = key_re.match(c2)
                             if m2:
-                                k2, v2 = m2.group(1), m2.group(2).strip()
+                                k2, v2 = _key(m2.group(1)), m2.group(2).strip()
                                 if v2 in (">", "|", ">-", "|-"):
                                     pos[0] += 1; sub[k2] = _block_scalar(indent + 4, v2)
                                 elif v2 == "":
@@ -1380,7 +1391,7 @@ def _mini_yaml(text: str) -> dict:
                 node = {}
             if not isinstance(node, dict):
                 break
-            k, val = m.group(1), m.group(2).strip()
+            k, val = _key(m.group(1)), m.group(2).strip()
             if val in (">", "|", ">-", "|-"):
                 pos[0] += 1; node[k] = _block_scalar(indent + 1, val)
             elif val == "":
@@ -1501,7 +1512,7 @@ def _parse_one_edi(p):
 
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
-                 cache=None, survey_digest="", report=None):
+                 cache=None, survey_digest="", report=None, station_ids=None):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
     mt_metadata is the SOLE engine (the dependency-free regex extractor + _spectra were retired in
@@ -1522,7 +1533,16 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
     output) is content-addressed by the source EDI sha + salt, so an unchanged EDI on a warm rebuild
     reads the parse from cache instead of re-invoking mt_metadata. The restored value feeds the SAME
     survey-scoped finalisation below, so the emitted rows are byte-identical to a fresh parse (a
-    cached gate-skip replays identically too)."""
+    cached gate-skip replays identically too).
+
+    `station_ids` is the survey's {source filename: published station id} override map (see
+    extract/_stationids.py; empty/None for every survey that declares no `station_ids` block, which
+    is the whole existing corpus). It is applied AFTER the DATAID parse and BEFORE _disambiguate, so
+    the disambiguator sees already-unique ids and cannot invent a processing-variant tag for two
+    genuinely different physical sites that the custodian numbered alike. NOT part of the C18 cache
+    key namespace and deliberately applied OUTSIDE _parse_one_edi: the cached unit stays the pure
+    per-file parse, and the map lives in survey.yaml, whose digest already keys every entry, so a map
+    edit re-derives the survey either way."""
     stations, tf_rows, sci_rows = [], [], []
     _email_hits = []   # curator signal (C3): source filenames whose raw >INFO block carries an email
     if not mtm.available():
@@ -1580,7 +1600,18 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             continue
         r["survey"] = survey_label
         r["org"] = org
-        r["id"] = safe_component(r.get("id"))          # untrusted DATAID -> no traversal / XSS
+        # STATION-ID OVERRIDE (owner ruling 2026-08-08): for a third-party release the contractor's
+        # DATAID is not a usable public identifier, and the EDI must be served byte-identical, so the
+        # published id is declared per SOURCE FILE in survey.yaml instead. Applied HERE - after the
+        # DATAID parse, before safe_component and before _disambiguate below - so the disambiguator
+        # sees already-unique ids (Roxby Downs 2018: 56 reused numbers whose furthest colliding pair
+        # is 58.5 km apart, which a `.v1`/`.s1` variant tag would misreport as one re-processed site).
+        # A file with no map entry is untouched and keeps DATAID behaviour (partial maps are legal).
+        # apply_override retains the EDI's own DATAID as site_name via the SAME mechanism the DATAID
+        # overwrite in _parse_one_edi uses, so the catalogue keeps one convention for a displayed id
+        # that differs from the source's.
+        stnids.apply_override(r, p, station_ids)
+        r["id"] = safe_component(r.get("id"))          # untrusted DATAID/override -> no traversal / XSS
         r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
         r["comps"] = "".join(r.get("components") or [])
         r["frame"] = parsed.get("frame")               # C25 frame facts -> station.json
@@ -3153,8 +3184,16 @@ def discover_work(a, ap, validator):
     is a SECOND id derivation and hence a divergence risk (the probe-e hole: a stem∪DATAID∪prefix
     candidate set validated keys the mask never applied). They are validated in main()'s build loop at
     the point the REAL parsed station ids exist — for both EDI and MTH5 inputs, before any of that
-    survey's bytes are emitted — with the SAME matcher station_policy applies with."""
-    work, survey_extent, coord_policy = [], {}, {}
+    survey's bytes are emitted, with the SAME matcher station_policy applies with.
+
+    Station-id override (owner ruling 2026-08-08): also returns station_ids = {label: {source
+    filename: published station id}}, the survey.yaml `station_ids` block parsed by
+    extract/_stationids.py. Same SIDE-CHANNEL discipline as coord_policy (it is an ingest instruction,
+    not survey metadata, so it never reaches surveys.json) and the same validation SPLIT: the block's
+    SHAPE is checked here, where a bad enum or a traversal-shaped key drops just this survey loudly;
+    the keys are checked against the package's REAL files in the build loop, before any of that
+    survey's bytes are emitted. A survey with no block yields {} and takes no override path at all."""
+    work, survey_extent, coord_policy, station_ids = [], {}, {}, {}
     if a.surveys:
         for d in sorted(Path(a.surveys).iterdir()):
             if not d.is_dir() or d.name.startswith("_"):
@@ -3229,6 +3268,19 @@ def discover_work(a, ap, validator):
                 print(f"SKIP {d.name}: coordinate-access policy INVALID — {_cpe}", file=sys.stderr)
                 survey_extent.pop(label, None)
                 continue
+            # Station-id override: parse the block's SHAPE now (unknown key, bad `source`, a key that
+            # is not a bare filename, a value the sanitiser would mangle, colliding values). Same
+            # fail-closed, survey-granularity posture as the coordinate policy above: this package is
+            # dropped loudly and the rest of the corpus builds. Key EXISTENCE is checked in the build
+            # loop against the survey's real EDI files.
+            try:
+                _stn_source, station_ids[label] = stnids.parse_station_ids(y.get("station_ids"))
+            except stnids.StationIdError as _sie:
+                print(f"SKIP {d.name}: station_ids block INVALID: {_sie}", file=sys.stderr)
+                survey_extent.pop(label, None)
+                coord_policy.pop(label, None)
+                station_ids.pop(label, None)
+                continue
             work.append((label, smeta["org"], inputs, kind, smeta, d, slug, sy_digest))
     elif a.raw:
         coll = json.loads(Path(a.collections).read_text()) if a.collections else \
@@ -3254,7 +3306,7 @@ def discover_work(a, ap, validator):
                 work.append((label, seed.get(label, {}).get("org", org), edis, "edi", seed.get(label), None, slugify(label), ""))
     else:
         ap.error("pass --surveys or --raw")
-    return work, survey_extent, coord_policy
+    return work, survey_extent, coord_policy, station_ids
 
 
 def main(argv=None):
@@ -3405,7 +3457,7 @@ def main(argv=None):
     # cache, duration_seconds}}. Populated per survey in the loop; assembled + written alongside
     # build_provenance.json below. Public build metadata for the (planned) curator serve-state UI.
     build_report_surveys: dict = {}
-    work, survey_extent, coord_policy = discover_work(a, ap, validator)
+    work, survey_extent, coord_policy, station_ids_by_survey = discover_work(a, ap, validator)
 
     # === provenance block (traceability: input -> software/params -> output) ===
     PROV = _build_prov(a.extractor)
@@ -3496,6 +3548,9 @@ def main(argv=None):
         # for a survey with no policy field and for every --raw entry). Drives the per-station byte gate
         # at the copy/emit sites below AND the post-QC mask seam. ONE source for both.
         _coord_default, _coord_overrides = coord_policy.get(label, ("exact", {}))
+        # Station-id override map for THIS survey (side-channel from discover_work; {} for a survey
+        # with no `station_ids` block and for every --raw entry, which is the whole existing corpus).
+        _station_ids = station_ids_by_survey.get(label, {})
         # C18 cache key component: this survey's WHOLE survey.yaml digest (§2.5, provably
         # over-invalidating — any yaml edit re-derives just this survey; "" for --raw entries, which
         # are cache-excluded anyway). Amendment A4: the digest is CARRIED from discover_work, computed
@@ -3518,9 +3573,21 @@ def main(argv=None):
             # station's ingest source in this build (never a second guess from `kind`).
             _edi_in = [_p for _p in inputs if Path(_p).suffix.lower() == ".edi"]
             _xml_in = [_p for _p in inputs if Path(_p).suffix.lower() == ".xml"]
+            # Station-id override KEY validation, at the point the survey's real EDI set is known and
+            # BEFORE a single byte of it is parsed or emitted. A key naming no file in the package is
+            # fail-closed: ignoring it would publish that station under its raw DATAID while the
+            # custodian believed it renamed, which is precisely the mis-identification the block
+            # exists to prevent. THIS survey alone is dropped loudly (rc stays 0, per the C42
+            # survey-granularity precedent) and the rest of the corpus builds.
+            if _station_ids:
+                try:
+                    stnids.validate_station_ids(_station_ids, _edi_in)
+                except stnids.StationIdError as _sie:
+                    print(f"SKIP {slug}: station_ids block INVALID: {_sie}", file=sys.stderr)
+                    continue
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
-                                                       report=_gate_report) \
+                                                       report=_gate_report, station_ids=_station_ids) \
                 if _edi_in else ([], [], [])
             if _xml_in:
                 # OWNER PRECEDENCE RULING (2026-08-03): EDI wins per station. The exclusion set is the
