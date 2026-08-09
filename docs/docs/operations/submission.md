@@ -85,7 +85,10 @@ without this nobody learns about them.
 The pre-flight is **advice, never a gate**. It cannot fail a submission and never changes a file.
 A stray comma in a metadata field is something you should be told about, not something that should
 stop your data being preserved. Its findings appear in the preview summary on the submission status
-page, and the full per-station list goes to the curator.
+page: the files a reader cannot open at all first, then the rest, capped at a dozen stations so the
+page stays readable. The complete per-station list is written on the server alongside the
+validator's report. It is not rendered in the browser, so a curator who wants the full detail reads
+that file on the server, or runs the pre-flight over the package themselves.
 
 Validation produces one of three outcomes:
 

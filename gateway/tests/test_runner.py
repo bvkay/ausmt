@@ -1108,3 +1108,49 @@ def test_a_package_that_will_not_read_still_reaches_validated(tmp_path, monkeypa
     assert payload["report_refs"]["edi_preflight"] == f"reports/{runner.PREFLIGHT_REPORT}"
     summary = json.loads((quarantine / "reports" / "preview-summary.json").read_text(encoding="utf-8"))
     assert any("EDI pre-flight" in w for w in summary["warnings"]), summary
+
+
+def test_the_persisted_preflight_report_is_bounded_and_says_so(tmp_path, monkeypatch):
+    # proven failing 2026-08-09 on abc82d2: the JSON written into the quarantine volume stored EVERY
+    # damaged value for every file, with no ceiling at all, while the sentences beside it were capped
+    # at twelve. Measured on the Western Gawler 312: 1.68 MB holding 35,880 records, about 5.4 KB a
+    # file. The upload cap (DEFAULT_MAX_UPLOAD_MB x MAX_TOTAL_UNCOMPRESSED_FACTOR) allows roughly
+    # 13,500 EDIs of that size, i.e. a ~70 MB report. Failure criterion: fails if the persisted list
+    # grows without bound, or if the truncation is silent, or if it changes the ADVICE.
+    _reach_preflight(monkeypatch)
+    package_dir = _package_with(tmp_path, _UNREADABLE_EDI.read_bytes())
+    reports = tmp_path / "reports"
+    reports.mkdir()
+
+    advisories = runner._edi_preflight(package_dir, reports)
+    report = json.loads((reports / runner.PREFLIGHT_REPORT).read_text(encoding="utf-8"))
+    finding = report["findings"][0]
+
+    stored = len(finding["delimited_values"])
+    assert stored < 141, f"the persisted list is still unbounded ({stored} records for one file)"
+    assert finding.get("delimited_values_total") == 141, "the count must survive the truncation"
+    assert finding.get("delimited_values_truncated") is True, "a truncated list must say so"
+    assert stored == runner.PREFLIGHT_REPORT_SAMPLES
+    # The totals a reader reconciles against, and the advice itself, are computed from the FULL
+    # report and are unchanged by the cap.
+    assert report["summary"]["delimited_values"] == 141
+    assert "141 metadata values across 1 files" in "\n".join(advisories)
+
+
+def test_a_small_preflight_report_is_not_truncated(tmp_path, monkeypatch):
+    # The control for the cap: a package with less than the sample count of damaged values keeps
+    # every one of them and carries no truncation marker, so the test above cannot pass on a runner
+    # that simply throws the list away.
+    _reach_preflight(monkeypatch)
+    edi = (b'>HEAD\n  DATAID=S01\n>INFO\n  {\n  "sitename": "Coober Pedy",\n  "survey": "X"\n  }\n'
+           b'>=DEFINEMEAS\n>END\n')
+    package_dir = _package_with(tmp_path, edi)
+    reports = tmp_path / "reports"
+    reports.mkdir()
+
+    runner._edi_preflight(package_dir, reports)
+    finding = json.loads((reports / runner.PREFLIGHT_REPORT).read_text(encoding="utf-8"))["findings"][0]
+    assert finding["delimited_values"], "the control has nothing to keep; it proves nothing"
+    assert "delimited_values_truncated" not in finding
+    assert "delimited_values_total" not in finding
+    assert len(finding["delimited_values"]) < runner.PREFLIGHT_REPORT_SAMPLES

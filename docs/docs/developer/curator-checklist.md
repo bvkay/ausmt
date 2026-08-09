@@ -69,6 +69,11 @@ conceptual rationale is in [Review and Curation](../operations/review.md); this 
     Only the first is a reason to hold a package. The other two are reasons to write to the
     custodian, and the pre-flight is the only thing that will tell you they are there.
 
+    The bounded summary is ordered worst first, so any "will not read" station is named on the
+    submission page before the twelve-line cap can reach it. `reports/edi-preflight.json` holds the
+    full per-station detail on the server; it keeps the first few damaged-value samples per file
+    plus the true count, and marks any finding it truncated. The CLI above prints every one.
+
 **Coordinates** (the common real-world problem)
 
 - [ ] Station locations were confirmed on the Add Survey map; any HEAD/INFO DMS conflict is resolved

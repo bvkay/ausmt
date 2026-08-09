@@ -36,6 +36,16 @@ _DEFAULT_TIMEOUT_S = 900
 # count that points at the JSON.
 PREFLIGHT_REPORT = "edi-preflight.json"
 PREFLIGHT_ADVISORY_LINES = 12
+# ... and the same reasoning applied to the artifact that lands on disk, which it was not at first.
+# A finding carries one record per metadata value damaged on the way in, and the Western Gawler 312
+# measure 35,880 of them: 1.68 MB, about 5.4 KB a file. The upload cap
+# (DEFAULT_MAX_UPLOAD_MB x MAX_TOTAL_UNCOMPRESSED_FACTOR) allows roughly 13,500 EDIs of that size,
+# so an unbounded report is a ~70 MB write into the quarantine volume. Nothing reads more than a
+# few samples anyway (`_advisory_lines` and the CLI report both show three), so the persisted copy
+# keeps the first few plus the true count, and SAYS it was truncated rather than quietly shrinking.
+# The CLI keeps the full list: somebody running it has chosen the package and is not writing into a
+# shared volume.
+PREFLIGHT_REPORT_SAMPLES = 5
 
 
 class JobTimeout(Exception):
@@ -482,10 +492,34 @@ def _edi_preflight(package_dir: Path, reports_dir: Path) -> list[str]:
     try:
         preflight_tree, advisory_summary = _import_preflight()
         report = preflight_tree(_single_package_root(package_dir))
-        (reports_dir / PREFLIGHT_REPORT).write_text(json.dumps(report), encoding="utf-8")
-        return advisory_summary(report, limit=PREFLIGHT_ADVISORY_LINES)
+        # The ADVICE is derived from the whole report, before anything is capped, so the sentences
+        # and the summary counts are the real ones.
+        advisories = advisory_summary(report, limit=PREFLIGHT_ADVISORY_LINES)
+        (reports_dir / PREFLIGHT_REPORT).write_text(json.dumps(_bounded_report(report)),
+                                                    encoding="utf-8")
+        return advisories
     except Exception:  # noqa: BLE001 -- advisory only; a failure must not fail the job
         return []
+
+
+def _bounded_report(report: dict) -> dict:
+    """The pre-flight report with each finding's per-value list capped for persistence.
+
+    Only `delimited_values` can grow with the data (one record per damaged value); the other two
+    lists are bounded by the number of fields the module models. A capped finding carries the true
+    count and a truncation flag, so the file is self-describing and reconciles against the summary
+    totals, which are left exactly as computed."""
+    findings = []
+    for finding in report.get("findings", []):
+        values = finding.get("delimited_values") or []
+        if len(values) > PREFLIGHT_REPORT_SAMPLES:
+            findings.append({**finding,
+                             "delimited_values": values[:PREFLIGHT_REPORT_SAMPLES],
+                             "delimited_values_total": len(values),
+                             "delimited_values_truncated": True})
+        else:
+            findings.append(finding)
+    return {**report, "findings": findings}
 
 
 def _validator_file(validator_path: str) -> Path:
