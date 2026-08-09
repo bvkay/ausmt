@@ -46,8 +46,12 @@ DECL = FIX / "LineNo__StationNo_11.edi"        # JSON >INFO + "Declination": 5, 
 STOCKJSON = FIX / "LineNo__StationNo_104.edi"  # JSON >INFO + trailing commas, NO empower token
 NODECL = FIX / "LineNo__StationNo_39.edi"      # plain-text >INFO, nothing wrong with it
 
-# Every EDI this repository ships that is a real instrument/processing dialect, which between them
-# cover all three >INFO branches mt_metadata has (standard, Empower, Phoenix).
+# Every EDI this repository ships that is a real instrument/processing dialect. MEASURED
+# 2026-08-09, because an earlier version of this comment claimed more than the files deliver: of
+# the six, exactly one takes the Empower branch (LineNo__StationNo_11) and the other five take the
+# standard branch. NOTHING here takes the Phoenix branch, and two of the three real_dialects files
+# carry no >INFO block at all. The Empower and Phoenix branches are therefore each pinned by their
+# own grafted test below, against the real library.
 ALL_REAL_EDIS = sorted(FIX.glob("*.edi")) + sorted(DIALECTS.glob("*.edi"))
 
 # capricorn-2010 CP3B21.edi's doubled minus, the one pre-existing failure in the selected corpus and
@@ -172,6 +176,30 @@ def test_the_other_empower_triggers_and_the_value_cleanup_are_mirrored_too(tmp_p
     assert real_info["run.ex.dipole_length"] == "100"
     assert real_info["run.ex.ac.end"] == "12"
     assert real_info["run.ex.contact_resistance.start"] == "2.5 kilo-ohms"
+
+
+def test_the_phoenix_branch_is_mirrored_too(tmp_path):
+    """The third >INFO branch, which NO EDI in this repository reaches: `read_info` flips the whole
+    block to `_parse_phoenix_info` on the words "run information", and nothing here says them. One
+    grafted marker line is enough, because the plain-text fixture's own block is already Phoenix
+    shaped: read that way it exercises the two-pairs-per-line column split, the `pot resist` trim,
+    the `AC=..,DC=..` voltage split and the sensor manufacturer/type synthesis, all at once.
+
+    Without this the branch was mirrored on nobody's authority but the author's reading of the
+    source, which is exactly the thing the rest of this file refuses to accept anywhere else."""
+    path = tmp_path / "phoenix_block.edi"
+    path.write_bytes(NODECL.read_bytes().replace(b">INFO", b">INFO\n    RUN INFORMATION", 1))
+
+    real_info, real_dialect = _info_dict_of(path)
+    mine, dialect, _trigger = pf.scrape_info(path.read_bytes())
+    assert real_dialect == dialect == "phoenix"
+    assert _comparable(mine) == _comparable(real_info)
+    # Spelled out, so a mirror that matched an EMPTY dict could not pass: the split halves of a
+    # two-column line, a resistance with its units trimmed off, and a synthesised sensor make.
+    assert real_info["run.ex.contact_resistance.start"] == "142.1"
+    assert real_info["run.ex.ac.start"] == "12.8"
+    assert real_info["hx.sensor.manufacturer"] == "Phoenix Geophysics"
+    assert pf.preflight_file(path)["outcome"] == _engine_outcome(path)
 
 
 def test_an_empower_block_reports_the_resistance_that_will_be_lost(tmp_path):
@@ -299,6 +327,155 @@ def test_the_normalisation_model_is_the_engine_fallback_byte_for_byte():
     for path in ALL_REAL_EDIS:
         raw = path.read_bytes()
         assert pf._drop_trailing_delimiters(raw) == m.normalise_info_json_delimiters(raw), path.name
+
+
+# =============================================================================================
+# ADVERSARIAL CASES the six shipped EDIs do not exercise.
+#
+# The corpus-scale agreement proof needs corpora this repository cannot ship, so it skips by
+# default. Everything below is a case CONSTRUCTED to break the prediction, checked against the real
+# reader on every run, so a mirror gap the six real files happen not to contain still turns the
+# suite red. "Not filled in" is the first class that belongs here: it is the commonest thing a
+# metadata field carries, and it reaches every one of the six fields the module calls fatal.
+# =============================================================================================
+
+def _null_ish_cases() -> list[tuple[str, bytes]]:
+    """Every field `_FATAL_INFO_FIELDS` models, carrying the ordinary ways a file says "empty".
+
+    Three of them come through a JSON >INFO block, because that is what the Western Gawler shape
+    actually produces and the sanitiser turns `"declination": "",` into `declination: ,` before any
+    parser sees it. The rest are grafted into the plain-text fixture, one field at a time."""
+    decl = DECL.read_bytes()
+    plain = NODECL.read_bytes()
+    cases = [
+        ("json_declination_empty_last_member",
+         decl.replace(b'"Declination": 5,', b'"Declination": ""')),
+        ("json_declination_empty_mid_object",
+         decl.replace(b'"Declination": 5,', b'"Declination": "",')),
+        ("json_declination_json_null",
+         decl.replace(b'"Declination": 5,', b'"Declination": null')),
+    ]
+    for key in sorted(pf._FATAL_INFO_FIELDS):
+        for tag, value in (("empty", b""), ("the_word_None", b"None")):
+            cases.append((f"{key}_{tag}",
+                          plain.replace(b">INFO", b">INFO\n    " + key.encode() + b": " + value, 1)))
+    return cases
+
+
+@pytest.mark.parametrize("case", _null_ish_cases(), ids=lambda c: c[0])
+def test_a_null_ish_value_in_a_fatal_field_is_not_a_false_alarm(case, tmp_path):
+    """proven failing 2026-08-09 on abc82d2: all 15 of these were predicted `will_not_read` while
+    the reader opened every one of them, because the prediction did not mirror the NULL_VALUES skip
+    `edi.py::station_metadata` performs before it assigns anything.
+
+    A false alarm is the expensive direction for this module: the sentence shipped to the curator
+    and to the submitter's status page said `magnetic declination is written as "", which is not a
+    number, so no reader can open this file` about a file that opens today. Checked against the
+    engine rather than against an expectation, so this cannot go green on a wrong belief."""
+    name, raw = case
+    path = tmp_path / f"{name}.edi"
+    path.write_bytes(raw)
+    predicted = pf.preflight_file(path)
+    engine = _engine_outcome(path)
+    assert predicted["outcome"] == engine, (
+        f"{name}: predicted {predicted['outcome']}, the reader did {engine} "
+        f"({predicted['reason'] or 'no reason given'})")
+
+
+def test_the_null_value_list_is_pinned_to_the_one_mt_metadata_actually_uses():
+    """The skip above is only right while the two lists agree. A tripwire, in the same spirit as the
+    version pin: if mt_metadata adds a null-ish spelling, the mirror has to learn it rather than
+    quietly start reporting that spelling fatal."""
+    from mt_metadata import NULL_VALUES  # noqa: PLC0415
+    assert pf._NULL_VALUES == tuple(NULL_VALUES)
+
+
+def test_mt_metadata_really_skips_a_null_ish_value_before_it_reaches_a_field(tmp_path):
+    """The rule both detectors mirror, OBSERVED instead of read off the source. `station_metadata`
+    drops every info_dict entry whose value is in NULL_VALUES before it assigns anything, so the
+    literal string "None" never lands in a field. The control carries the identical line with a real
+    value, so the assertion cannot pass on a graft that never reached the field at all."""
+    def _with_site_name(name: str, value: bytes) -> Path:
+        path = tmp_path / name
+        path.write_bytes(NODECL.read_bytes().replace(
+            b">INFO", b">INFO\n    station.geographic_name: " + value, 1))
+        return path
+
+    skipped = _mtm().read(_with_site_name("null_ish.edi", b"None")).station_metadata
+    assert skipped.geographic_name != "None", "the null-ish value reached the field after all"
+
+    kept = _mtm().read(_with_site_name("real.edi", b"Coober Pedy")).station_metadata
+    assert kept.geographic_name == "Coober Pedy", "the control never reached the field; the graft is wrong"
+
+
+def test_an_empty_channel_number_is_not_blamed_on_its_units(tmp_path):
+    """proven failing 2026-08-09 on abc82d2: an empty contact resistance produced the sentence
+    `the file supplies ""; the units make it unreadable as a number`.
+
+    The silent class is about a value that CARRIES ITS UNITS into a number field, and the sentence
+    says so. A field nobody filled in is skipped by the reader before it is ever assigned, so there
+    is nothing to report and certainly no units to blame. The control keeps the units case reporting,
+    so this cannot go green by silencing the whole detector."""
+    def _with_resistance(name: str, value: bytes) -> Path:
+        path = tmp_path / name
+        path.write_bytes(NODECL.read_bytes().replace(
+            b">INFO", b">INFO\n    run.ex.contact_resistance.start = " + value, 1))
+        return path
+
+    blank = pf.preflight_file(_with_resistance("blank.edi", b""))
+    assert blank["silent_numeric_fields"] == [], (
+        "an empty field was reported as units: " + " | ".join(pf._advisory_lines(blank)))
+    assert blank["outcome"] == pf.READS == _engine_outcome(_with_resistance("blank2.edi", b""))
+
+    units = pf.preflight_file(_with_resistance("units.edi", b"2.5 kilo-ohms"))
+    assert [s["value"] for s in units["silent_numeric_fields"]] == ["2.5 kilo-ohms"]
+
+
+def test_a_number_written_in_non_ascii_digits_is_predicted_unreadable_and_really_is(tmp_path):
+    """proven failing 2026-08-09 on abc82d2: predicted `reads`, the reader raised.
+
+    The FALSE-CLEAN direction, and the only one measured anywhere in this module. `float()` accepts
+    any Unicode decimal digit, so `float("١٢٣")` is 123.0, but the reader's scalar
+    validator refuses the same string. The control is a non-breaking space around an ASCII 5, which
+    both sides accept: without it this test would pass just as happily on a predictor that called
+    every non-ASCII value unreadable."""
+    def _with_declination(name: str, value: str) -> Path:
+        path = tmp_path / name
+        line = "\n    station.location.declination.value: " + value
+        path.write_bytes(NODECL.read_bytes().replace(b">INFO", b">INFO" + line.encode("utf-8"), 1))
+        return path
+
+    for name, value in (("arabic_indic.edi", "١٢٣"),
+                        ("devanagari.edi", "१२३"),
+                        ("fullwidth.edi", "５")):
+        path = _with_declination(name, value)
+        assert pf.preflight_file(path)["outcome"] == pf.WILL_NOT_READ == _engine_outcome(path), name
+
+    padded = _with_declination("nbsp_padded.edi", " 5 ")
+    assert pf.preflight_file(padded)["outcome"] == pf.READS == _engine_outcome(padded)
+
+
+def test_the_bounded_advisory_names_a_file_that_will_not_read_even_when_it_sorts_last(tmp_path):
+    """proven failing 2026-08-09 on abc82d2: the one verdict that is a reason to HOLD a package was
+    pushed off the end of the bounded list by files whose only problem is a stray comma.
+
+    `preflight_tree` returns findings in path order, and the gateway advisory sliced the first
+    `limit` off that list, so a will-not-read station whose filename sorts late was never named
+    anywhere the submitter or the curator can see. The only trace left was the count on line one,
+    which does not say WHICH file. The CLI report has always ordered worst first; this is the
+    bounded surface catching up with it."""
+    package = tmp_path / "package"
+    package.mkdir()
+    for i in range(14):
+        (package / f"A{i:02d}.edi").write_bytes(DECL.read_bytes())
+    (package / "ZZZ_broken.edi").write_bytes(NODECL.read_bytes().replace(
+        b"REFLAT=", f"REFLAT={DOUBLED_MINUS_REFLAT}#".encode(), 1))
+
+    report = pf.preflight_tree(package)
+    assert report["summary"] == {**report["summary"], "needs_repair": 14, "will_not_read": 1}
+    lines = pf.advisory_summary(report, limit=12)
+    assert any("ZZZ_broken.edi" in line for line in lines), (
+        "the one file that must be fixed upstream is never named: " + " | ".join(lines))
 
 
 # =============================================================================================

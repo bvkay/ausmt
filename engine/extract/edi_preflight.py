@@ -72,6 +72,10 @@ WILL_NOT_READ = "will_not_read"      # no code path in AusMT reads this file; it
 # newer-volcanic-province-2019 EDIs write exactly that key, 49 of them). Each entry carries the
 # plain-language field name the report shows a geophysicist.
 #
+# A key here is only fatal when it actually carries a value: `station_metadata` applies
+# mt_metadata's own `NULL_VALUES` skip to every info_dict entry before it assigns anything, and
+# `_fatal_info_problems` mirrors that skip. See `_NULL_VALUES` below for the seam it comes from.
+#
 # BOUNDARY, stated rather than hidden: `transfer_function.processed_date` is the one other unguarded
 # field an >INFO scrape can reach that raises on junk, but it is a DATE, not a number, and it was
 # measured to accept a trailing comma happily ('2023-03-06,' reads fine). Predicting it would mean
@@ -126,8 +130,17 @@ _SILENT_NUMERIC_CHANNEL_FIELDS = {
 # selected corpus trip it on the phrase "bad electrics" in a note about the site.
 _EMPOWER_TOKENS = ("empower", "electrics", "magnetics")
 
-# `mt_metadata.NULL_VALUES`. `read_measurement` skips a reference position carrying any of these
-# before it ever reaches the validator, so neither must the prediction flag them.
+# `mt_metadata.NULL_VALUES`, verbatim, and pinned against the installed library by the test suite.
+#
+# It gates TWO seams, and both are mirrored below because missing either one invents a failure that
+# does not exist:
+#   * `read_measurement` skips a reference position carrying any of these before the validator runs;
+#   * `edi.py::station_metadata` (1.0.9, line 1092) skips EVERY info_dict entry whose value is in
+#     this list -- `for key, value in self.Info.info_dict.items(): ... if value in NULL_VALUES:
+#     continue` -- BEFORE any `update_attribute` call, so a field nobody filled in never reaches
+#     pydantic at all and cannot raise, cannot be logged, and cannot be blamed on its units.
+# `""` is the commonest of these by far: the sanitiser turns a JSON `"declination": ""` into
+# `declination:` and every unset EDI key looks the same way.
 _NULL_VALUES = (None, "", "null", "None", "NONE", "NULL", "Null", "none",
                 "1980-01-01T00:00:00", "1980-01-01T00:00:00+00:00")
 
@@ -571,15 +584,29 @@ def _station_name_is_readable(raw_dataid: str) -> bool:
 
 
 def _is_number(value: object) -> bool:
-    """Can pydantic coerce this to a float? A plain `float()` is the same test its scalar validator
-    applies, so `'5,'` (a JSON member separator left behind) and `'2.5 kilo-ohms'` (a unit carried
-    into a number field) both answer no, which is exactly why they break."""
+    """Can pydantic coerce this to a float? A plain `float()` is very nearly the same test its scalar
+    validator applies, so `'5,'` (a JSON member separator left behind) and `'2.5 kilo-ohms'` (a unit
+    carried into a number field) both answer no, which is exactly why they break.
+
+    The one place the two tests disagree is Unicode: `float()` accepts any decimal digit, so
+    `float("١٢٣")` is 123.0, while the reader's validator refuses that string.
+    Measured 2026-08-09 over 26 numeric-coercion strings pushed through a real declination: the
+    Arabic-Indic, Devanagari and full-width digit forms were the only disagreements, and every
+    ASCII form (`nan`, `inf`, `1e400`, `1_000`, `'5.'`, `'+5'`, `' 5 '`, non-breaking spaces
+    either side) agreed. So non-ASCII is rejected before `float()` is asked, which closes the only
+    FALSE-CLEAN path measurement could find -- the direction that matters most, because a file
+    predicted readable and then refused by the build is the one that costs a person their morning.
+    The `.strip()` runs first so ordinary whitespace, including a non-breaking space around an
+    otherwise fine number, is not caught by the guard."""
     if isinstance(value, (int, float)):
         return True
     if not isinstance(value, str):
         return False
+    stripped = value.strip()
+    if not stripped.isascii():
+        return False
     try:
-        float(value.strip())
+        float(stripped)
     except ValueError:
         return False
     return True
@@ -612,10 +639,14 @@ def _drop_trailing_delimiters(raw: bytes) -> bytes:
 
 def _fatal_info_problems(info: dict[str, object]) -> list[dict]:
     """Every scraped >INFO value bound for a numerically-typed field that mt_metadata sets WITHOUT a
-    try/except and that will not coerce. Each one stops the read."""
+    try/except and that will not coerce. Each one stops the read.
+
+    The `_NULL_VALUES` test comes FIRST because that is the order `station_metadata` performs it in:
+    a field nobody filled in is skipped before assignment, so it can never raise. Without this the
+    prediction reported the commonest encoding of "not filled in" as a file no reader can open."""
     problems = []
     for key, plain in _FATAL_INFO_FIELDS.items():
-        if key in info and not _is_number(info[key]):
+        if key in info and info[key] not in _NULL_VALUES and not _is_number(info[key]):
             problems.append({"field": key, "field_plain": plain, "value": info[key]})
     return problems
 
@@ -623,7 +654,10 @@ def _fatal_info_problems(info: dict[str, object]) -> list[dict]:
 def _silent_numeric_problems(info: dict[str, object]) -> list[dict]:
     """Values bound for a numerically-typed CHANNEL field that will not coerce. mt_metadata catches
     the error and logs it, so the read succeeds and the field is simply never populated. Nothing in
-    AusMT tells anyone about these today."""
+    AusMT tells anyone about these today.
+
+    Same `_NULL_VALUES` skip, same reason, and here it also keeps the SENTENCE honest: this report
+    blames the units, and an empty field has no units to blame."""
     problems = []
     for key, value in info.items():
         if not key.startswith("run.") or not isinstance(value, str):
@@ -631,7 +665,7 @@ def _silent_numeric_problems(info: dict[str, object]) -> list[dict]:
         rest = key[len("run."):]
         component, _, attribute = rest.partition(".")
         plain = _SILENT_NUMERIC_CHANNEL_FIELDS.get(attribute)
-        if plain and not _is_number(value):
+        if plain and value not in _NULL_VALUES and not _is_number(value):
             problems.append({"field": key, "field_plain": plain,
                              "component": component.upper(), "value": value})
     return problems
@@ -807,9 +841,18 @@ def advisory_summary(report: dict, *, limit: int = 12) -> list[str]:
     if not lines:
         return []
 
-    detail = [f for f in report["findings"] if f["outcome"] in (WILL_NOT_READ, NEEDS_REPAIR)]
-    detail += [f for f in report["findings"]
-               if f["outcome"] == READS and f["silent_numeric_fields"]]
+    # WORST FIRST, then by file. `preflight_tree` returns findings in path order, and slicing the
+    # limit off a path-ordered list drops rows by filename rather than by how much they matter: a
+    # will-not-read station called ZZZ.edi sitting behind fourteen stray-comma stations was never
+    # named at all, and "will not read" is the ONE verdict the curator checklist calls a reason to
+    # hold a package. The count on the first line still said one file would not open; it could not
+    # say which. `render()` has always ordered the CLI report this way; this is the bounded surface
+    # catching up with it.
+    _SEVERITY = {WILL_NOT_READ: 0, NEEDS_REPAIR: 1}
+    detail = [f for f in report["findings"]
+              if f["outcome"] in (WILL_NOT_READ, NEEDS_REPAIR)
+              or (f["outcome"] == READS and f["silent_numeric_fields"])]
+    detail.sort(key=lambda f: (_SEVERITY.get(f["outcome"], 2), f["file"]))
     for finding in detail[:limit]:
         reason = finding["reason"] or "; ".join(_advisory_lines(finding))
         lines.append(f"{finding['file']} (station {finding['station']}): {reason}")
