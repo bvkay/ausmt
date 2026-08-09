@@ -30,6 +30,23 @@ from .safeextract import ExtractionTimeout, cap_for, safe_extract
 # in the runner container it points at the in-image validator copy.
 _DEFAULT_TIMEOUT_S = 900
 
+# The >INFO pre-flight report, written beside validate.json so a curator can read the whole finding
+# list, and the cap on how many of its sentences reach the status page. The Western Gawler delivery
+# would otherwise put 246 lines on a page nobody then reads to the end; the rest are rolled into a
+# count that points at the JSON.
+PREFLIGHT_REPORT = "edi-preflight.json"
+PREFLIGHT_ADVISORY_LINES = 12
+# ... and the same reasoning applied to the artifact that lands on disk, which it was not at first.
+# A finding carries one record per metadata value damaged on the way in, and the Western Gawler 312
+# measure 35,880 of them: 1.68 MB, about 5.4 KB a file. The upload cap
+# (DEFAULT_MAX_UPLOAD_MB x MAX_TOTAL_UNCOMPRESSED_FACTOR) allows roughly 13,500 EDIs of that size,
+# so an unbounded report is a ~70 MB write into the quarantine volume. Nothing reads more than a
+# few samples anyway (`_advisory_lines` and the CLI report both show three), so the persisted copy
+# keeps the first few plus the true count, and SAYS it was truncated rather than quietly shrinking.
+# The CLI keeps the full list: somebody running it has chosen the package and is not writing into a
+# shared volume.
+PREFLIGHT_REPORT_SAMPLES = 5
+
 
 class JobTimeout(Exception):
     """The job exceeded its wall-clock budget. Quarantines with a 'could not complete' reason."""
@@ -219,10 +236,18 @@ def _do_work(cfg: RunnerConfig, zip_path: Path, package_dir: Path, reports_dir: 
     if vresult is False:
         return jobs.OUTCOME_QUARANTINED, "validator reported FAIL", {"validate": "reports/validate.json"}
 
+    # The >INFO pre-flight (engine extract/edi_preflight.py). ADVISORY, never a gate: it says what an
+    # EDI's >INFO block will do to the metadata AusMT can read, and a stray comma in a metadata field
+    # must tell the submitter about it rather than refuse their data. It runs here, after the
+    # validator has agreed the package is well formed, and its sentences ride into the preview
+    # summary's `warnings`: the one surface BOTH the submitter status page and the curator's reports
+    # panel already render, so nothing new has to be plumbed to either.
+    advisories = _edi_preflight(package_dir, reports_dir)
+
     preview_dir = reports_dir / "preview-data"
     summary_path = reports_dir / "preview-summary.json"
     try:
-        ok = _run_preview(cfg, package_dir, preview_dir, summary_path, deadline)
+        ok = _run_preview(cfg, package_dir, preview_dir, summary_path, deadline, advisories=advisories)
     except JobTimeout as exc:
         return jobs.OUTCOME_QUARANTINED, f"preview build could not complete: {exc}", {}
     if not ok:
@@ -230,6 +255,8 @@ def _do_work(cfg: RunnerConfig, zip_path: Path, package_dir: Path, reports_dir: 
 
     slug = _slug_from_package(package_dir)
     refs = {"validate": "reports/validate.json", "preview": "reports/preview-summary.json"}
+    if (reports_dir / PREFLIGHT_REPORT).is_file():
+        refs["edi_preflight"] = f"reports/{PREFLIGHT_REPORT}"
     if slug:
         refs["slug"] = slug
     return jobs.OUTCOME_VALIDATED, "validated + preview built", refs
@@ -312,7 +339,7 @@ def _preview_env(cfg: RunnerConfig) -> dict[str, str]:
 
 
 def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summary_path: Path,
-                 deadline: float) -> bool:
+                 deadline: float, *, advisories: list[str] | None = None) -> bool:
     """Run the engine preview build of the single package into preview_dir, then write a compact
     preview-summary.json (station count, types, coord flags, warnings). Returns True on success.
 
@@ -329,6 +356,7 @@ def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summar
       build's stderr said precisely why ('SKIP Olympic-Dam-2004: validation FAILED (1 fails)': the
       in-build validator re-run failed the slug-charset gate and dropped the survey, empty-output
       guard exited rc=2) but the runner discarded it and the curator saw only the generic string."""
+    advisories = list(advisories or [])
     surveys_root = package_dir
     survey_dirs = ([p for p in surveys_root.iterdir()
                     if p.is_dir() and (p / "survey.yaml").is_file()]
@@ -350,11 +378,16 @@ def _run_preview(cfg: RunnerConfig, package_dir: Path, preview_dir: Path, summar
         env=_preview_env(cfg),
     )
     if proc.returncode != 0:
+        # The pre-flight advisories go in HERE too, and deliberately: a build that failed is exactly
+        # when "246 of these 312 files need the >INFO repair" is the sentence somebody needs. They
+        # follow the failure details, which stay first because existing consumers match on them.
         _write_summary(summary_path, {
             "station_count": 0,
-            "warnings": _build_failure_details(proc.stdout, proc.stderr, str(package_dir))})
+            "warnings": _build_failure_details(proc.stdout, proc.stderr, str(package_dir)) + advisories})
         return False
-    _write_summary(summary_path, _summarise_preview(preview_dir))
+    summary = _summarise_preview(preview_dir)
+    summary["warnings"] = list(summary.get("warnings") or []) + advisories
+    _write_summary(summary_path, summary)
     return True
 
 
@@ -429,6 +462,64 @@ def _generate_intake_files(package_dir: Path) -> list[str]:
         return intake.generate_intake_files(_single_package_root(package_dir))
     except Exception:  # noqa: BLE001 -- best-effort generation; a failure must not fail the job
         return []
+
+
+def _import_preflight():
+    """Resolve the engine's stdlib-only `edi_preflight` leaf, the same way `intake` resolves
+    `_license_text` (C34/D2): on the engine image `extract` is an installed package, and a sibling
+    checkout with engine/extract on sys.path resolves the bare name.
+
+    This is an IMPORT, not a subprocess, and that is the deliberate exception the runner already
+    makes once. The house rule exists so the runner never pulls the scientific stack (mt_metadata /
+    mth5 / numpy) into itself; `edi_preflight` is stdlib-only by construction and pinned that way by
+    its own test, so importing it costs nothing the rule is protecting against. Lazy, so the gateway
+    test lane can import this module with no engine present at all."""
+    try:
+        from extract.edi_preflight import advisory_summary, preflight_tree
+    except ImportError:  # pragma: no cover - sibling-on-sys.path fallback (engine cwd / dev checkout)
+        from edi_preflight import advisory_summary, preflight_tree  # type: ignore[no-redef]
+    return preflight_tree, advisory_summary
+
+
+def _edi_preflight(package_dir: Path, reports_dir: Path) -> list[str]:
+    """Run the >INFO pre-flight over the extracted package, persist the full report beside the
+    validator's, and return the BOUNDED advisory sentences for the preview summary.
+
+    Best-effort in exactly the sense `_generate_intake_files` is: a failure here must NEVER change
+    the outcome of a submission. The pre-flight is advice; a package whose advice could not be
+    computed is still a package the validator passed, and quarantining it for that would be absurd.
+    Returns [] on any failure, and [] for a package with nothing to report."""
+    try:
+        preflight_tree, advisory_summary = _import_preflight()
+        report = preflight_tree(_single_package_root(package_dir))
+        # The ADVICE is derived from the whole report, before anything is capped, so the sentences
+        # and the summary counts are the real ones.
+        advisories = advisory_summary(report, limit=PREFLIGHT_ADVISORY_LINES)
+        (reports_dir / PREFLIGHT_REPORT).write_text(json.dumps(_bounded_report(report)),
+                                                    encoding="utf-8")
+        return advisories
+    except Exception:  # noqa: BLE001 -- advisory only; a failure must not fail the job
+        return []
+
+
+def _bounded_report(report: dict) -> dict:
+    """The pre-flight report with each finding's per-value list capped for persistence.
+
+    Only `delimited_values` can grow with the data (one record per damaged value); the other two
+    lists are bounded by the number of fields the module models. A capped finding carries the true
+    count and a truncation flag, so the file is self-describing and reconciles against the summary
+    totals, which are left exactly as computed."""
+    findings = []
+    for finding in report.get("findings", []):
+        values = finding.get("delimited_values") or []
+        if len(values) > PREFLIGHT_REPORT_SAMPLES:
+            findings.append({**finding,
+                             "delimited_values": values[:PREFLIGHT_REPORT_SAMPLES],
+                             "delimited_values_total": len(values),
+                             "delimited_values_truncated": True})
+        else:
+            findings.append(finding)
+    return {**report, "findings": findings}
 
 
 def _validator_file(validator_path: str) -> Path:

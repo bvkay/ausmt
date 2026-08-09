@@ -4503,6 +4503,18 @@ def _submitter_panel(*, name: str, email: str, orcid: str | None) -> str:
     )
 
 
+def _preview_value(value) -> str:
+    """One preview-summary value as table-cell HTML, escaped. A LIST becomes list items rather than
+    `str(the_list)`: `warnings` is the only key that ever holds one, and since the >INFO pre-flight
+    it holds up to a dozen sentences the curator reads to decide whether to hold a package. Python's
+    repr delivered them as a single unbroken run. Mirrors `statuspage._preview_value`, minus the
+    absolute-path strip, which this page deliberately does not apply (design §6 gates the PUBLIC
+    page; a curator is entitled to see the server path in a build message)."""
+    if isinstance(value, list):
+        return ("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in value) + "</ul>") if value else ""
+    return _esc(value)
+
+
 def _reports_panel(*, validate_report: dict | None, preview_summary: dict | None) -> str:
     parts = ['<div class="panel"><h2>Report bundle</h2>']
     items = (validate_report or {}).get("items") if isinstance(validate_report, dict) else None
@@ -4521,7 +4533,8 @@ def _reports_panel(*, validate_report: dict | None, preview_summary: dict | None
         rows = []
         for key in ("station_count", "types", "coord_flags", "warnings"):
             if key in preview_summary:
-                rows.append(f'<tr><td class="k">{_esc(key)}</td><td>{_esc(preview_summary[key])}</td></tr>')
+                rows.append(f'<tr><td class="k">{_esc(key)}</td>'
+                            f'<td>{_preview_value(preview_summary[key])}</td></tr>')
         if rows:
             parts.append("<h2>Preview summary</h2><table>" + "".join(rows) + "</table>")
     parts.append("</div>")

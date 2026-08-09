@@ -76,3 +76,52 @@ def test_note_renders_only_for_submitter_intended_states():
         html = statuspage.render(submission_id="01ABC", state=st, updated_utc="t", note=note)
         assert "PII-ACK" not in html and "private curator note" not in html, (
             f"curator/audit note leaked publicly for state {st}")
+
+
+# The >INFO pre-flight advisory arrives as a LIST of plain sentences written for a geophysicist.
+# Before the pre-flight lane the `warnings` key only ever held a 2-4 item build-failure list, or the
+# empty list `_summarise_preview` hardcodes, so nobody noticed the cell renders `str(the_list)`.
+
+_ADVISORY = [
+    "EDI pre-flight: 246 of 312 files need AusMT's >INFO repair to be read at all",
+    'S01.edi (station 1_001): magnetic declination is scraped as "5," so a stock reader refuses it',
+    "None of the above blocks this submission.",
+]
+
+
+def test_preview_warnings_render_as_a_list_not_a_python_repr():
+    # proven failing 2026-08-09 on abc82d2: the whole advisory arrived in ONE table cell as a Python
+    # list repr, a single unbroken 4,027-character run beginning `[&quot;EDI pre-flight: ...` with
+    # the sentences separated by `&#x27;, &#x27;` and the quote style flipping mid-list wherever a
+    # sentence contained a double quote. Prose written for a geophysicist, delivered as a debug dump.
+    # Failure criterion: fails if a list value is stringified instead of becoming list items.
+    page = statuspage.render(submission_id="01ABC", state=states.VALIDATED, updated_utc="t",
+                             preview_summary={"station_count": 312, "warnings": _ADVISORY})
+    assert page.count("<li>") == len(_ADVISORY), "each sentence must be its own list item"
+    assert "[&quot;" not in page and "[&#x27;" not in page, "still a Python list repr"
+    assert "&#x27;, &#x27;" not in page, "sentences separated by repr punctuation, not by markup"
+    # Escaping is unchanged: the >INFO in the sentence is still inert.
+    assert "&gt;INFO repair" in page
+    assert "magnetic declination is scraped as &quot;5,&quot;" in page
+
+
+def test_preview_warning_items_are_still_escaped_and_path_stripped():
+    # The list rendering must not become a hole in either §6 control. Failure criterion: fails if a
+    # hostile warning renders live markup, or if a build path survives inside a list item.
+    page = statuspage.render(
+        submission_id="01ABC", state=states.VALIDATED, updated_utc="t",
+        preview_summary={"warnings": ["<script>alert(1)</script>",
+                                      "build wrote /srv/ausmt/gateway/quarantine/01/reports"]})
+    assert "<script>alert(1)</script>" not in page
+    assert "&lt;script&gt;" in page
+    assert "/srv/ausmt/gateway" not in page
+    assert "[path]" in page
+
+
+def test_a_non_list_preview_value_still_renders_as_a_plain_cell():
+    # The control for the two tests above: everything that is not a list is unchanged, so the fix
+    # cannot go green by turning every preview value into a bullet list.
+    page = statuspage.render(submission_id="01ABC", state=states.VALIDATED, updated_utc="t",
+                             preview_summary={"station_count": 3, "warnings": "one plain string"})
+    assert "one plain string" in page
+    assert "<li>" not in page

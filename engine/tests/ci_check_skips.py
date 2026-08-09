@@ -98,6 +98,15 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # sibling-validator skip above. The synthetic gate pins in test_convention_gates.py RUN
     # everywhere — this entry never excuses those.
     "realdata corpus not present (AUSMT_REALDATA unset)",
+    # test_edi_preflight.py's corpus-scale arm re-proves the predictor-versus-engine agreement over a
+    # real directory of EDIs (the Western Gawler delivery, or the ausmt-surveys corpus) by running the
+    # REAL mt_metadata reader per file and diffing it against the prediction. No CI lane can supply
+    # that input: build-products.yml checks out this monorepo only, and pointing the arm at the sibling
+    # corpus would need the private-repo secret, which is unavailable on fork PRs. Same dev-box-only
+    # class as the two entries above. The invariant is NOT unguarded in CI as a result: the 21
+    # constructed adversarial cases in the same module assert the identical property against the real
+    # reader on every run, so this entry excuses the scale of the proof, never the proof itself.
+    "set AUSMT_PREFLIGHT_CORPUS to a directory of EDIs",
 ]
 
 # `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token

@@ -423,3 +423,43 @@ def test_pii_absent_from_served_preview(tmp_path):
             served = await client.get(f"/gateway/curator/preview/{sid}/index.html")
             assert PII_EMAIL not in served.text  # the preview product does not carry it
     run(_body())
+
+
+def test_reports_panel_renders_the_preflight_advisory_as_a_list():
+    # proven failing 2026-08-09 on abc82d2: the curator's report bundle rendered the >INFO pre-flight
+    # advisory as `_esc(the_list)`: one table cell holding a Python list repr, quote style flipping
+    # mid-list wherever a sentence contained a double quote. Same defect as the submitter status page
+    # and the same fix; the curator reads these sentences to decide whether to hold a package.
+    # Failure criterion: fails if a list preview value is stringified instead of becoming list items.
+    from gateway import checklist as checklist_mod
+    from gateway import curatorpage
+
+    advisory = [
+        "EDI pre-flight: 1 of 312 files will not open in the reader AusMT uses",
+        'S01.edi (station 1_001): magnetic declination is scraped as "5,"',
+    ]
+    cl = checklist_mod.Checklist(checks=[
+        checklist_mod.Check("structure", "Package structure", checklist_mod.PASS, "ok",
+                            blocking=False)])
+    html_out = curatorpage.render_detail(
+        submission_id="01ABCDEFGHIJKLMNOPQRSTUVWX", state=states.VALIDATED, updated_utc="now",
+        submitter_name="N", submitter_email="submitter@example.org", submitter_orcid=None,
+        validate_report={"items": []},
+        preview_summary={"station_count": 312, "warnings": advisory},
+        cl=cl, csrf_token="tok", note="", has_preview=False)
+
+    assert html_out.count("<li>") == len(advisory), "each sentence must be its own list item"
+    assert "[&#x27;" not in html_out and "[&quot;" not in html_out, "still a Python list repr"
+    assert "will not open in the reader AusMT uses" in html_out
+    assert "magnetic declination is scraped as &quot;5,&quot;" in html_out
+    # Escaping is unchanged, and a non-list value is still a plain cell (the control).
+    hostile = curatorpage.render_detail(
+        submission_id="01ABCDEFGHIJKLMNOPQRSTUVWX", state=states.VALIDATED, updated_utc="now",
+        submitter_name="N", submitter_email="submitter@example.org", submitter_orcid=None,
+        validate_report={"items": []},
+        preview_summary={"station_count": 1, "warnings": ["<script>alert(1)</script>"],
+                         "types": "impedance"},
+        cl=cl, csrf_token="tok", note="", has_preview=False)
+    assert "<script>alert(1)</script>" not in hostile
+    assert "&lt;script&gt;" in hostile
+    assert "<td>impedance</td>" in hostile, "a non-list preview value must stay a plain cell"

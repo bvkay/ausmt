@@ -138,6 +138,21 @@ def _validator_section(report: dict) -> str:
             "<th>Message</th></tr>" + "".join(body) + "</table></div>")
 
 
+def _preview_value(value) -> str:
+    """One preview-summary value as table-cell HTML, escaped and absolute-path-stripped.
+
+    A LIST becomes list items rather than `str(the_list)`. The `warnings` key is the only one that
+    ever holds a list, and since the >INFO pre-flight it holds up to a dozen sentences written for a
+    geophysicist; Python's repr delivered them as one unbroken run with `', '` between them and the
+    quote style flipping wherever a sentence contained a double quote. Before that it only ever held
+    a short build-failure list, which is why nobody had noticed. Every item still goes through the
+    same two controls the scalar path uses."""
+    if isinstance(value, list):
+        return ("<ul>" + "".join(f"<li>{_esc(_strip_abs_paths(str(item)))}</li>" for item in value)
+                + "</ul>") if value else ""
+    return _esc(_strip_abs_paths(str(value)))
+
+
 def _preview_section(summary: dict) -> str:
     if not summary:
         return ""
@@ -147,7 +162,7 @@ def _preview_section(summary: dict) -> str:
             # Strip absolute paths from preview values too (review #11) — warnings can echo a build
             # path; the strip keeps design §6's "no absolute paths in the status page" invariant
             # uniform across validator rows, the AV note, AND preview values.
-            value = _esc(_strip_abs_paths(str(summary[key])))
+            value = _preview_value(summary[key])
             items.append(f"<tr><td class=\"k\">{_esc(key)}</td><td>{value}</td></tr>")
     if not items:
         return ""
