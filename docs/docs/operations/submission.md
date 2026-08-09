@@ -75,6 +75,18 @@ Checks include:
 There is no separate provenance validation: submitter-side provenance lives in `survey.yaml`'s
 `processing.*` and free-text fields and is checked structurally with the rest of the metadata.
 
+Alongside validation, and separate from it, every submission gets an **EDI `>INFO` pre-flight**.
+It reports what each file's `>INFO` block will do to the metadata AusMT can read: whether the file
+opens in a standard reader at all, whether it needs the repair AusMT applies to a temporary copy,
+how many metadata values will be stored with a stray comma, and which number fields carry their
+units in the value and will therefore publish empty. Those last two are silent everywhere else, so
+without this nobody learns about them.
+
+The pre-flight is **advice, never a gate**. It cannot fail a submission and never changes a file.
+A stray comma in a metadata field is something you should be told about, not something that should
+stop your data being preserved. Its findings appear in the preview summary on the submission status
+page, and the full per-station list goes to the curator.
+
 Validation produces one of three outcomes:
 
 ```text

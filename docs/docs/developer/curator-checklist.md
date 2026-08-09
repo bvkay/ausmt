@@ -41,6 +41,33 @@ conceptual rationale is in [Review and Curation](../operations/review.md); this 
 - [ ] No `xml_failures` rows in the preview `build_report.json`. A station supplied only as EMTF
       XML that fails the canonical round trip serves nothing at all, so it must be fixed upstream
       rather than published with a gap.
+- [ ] The EDI `>INFO` pre-flight was read. Gateway submissions carry it already: the runner writes
+      `reports/edi-preflight.json` and puts a bounded summary into the preview warnings on the
+      submission page. For a direct-PR contribution, or any package on disk, run it yourself:
+
+    ```
+    python -m extract.edi_preflight <package-or-directory> --json preflight.json
+    ```
+
+    It reads only, changes nothing, and always exits 0. It is advice, not a gate. It reports three
+    things per station:
+
+    - **will not read.** The file does not open in the reader AusMT uses, and has to be fixed by
+      whoever produced it. A reference latitude written `--26.0322667` (a doubled minus) is the
+      real example; `capricorn-2010`'s `CP3B21.edi` still carries it.
+    - **needs the `>INFO` repair.** AusMT can read the file, but only via the parse-only fallback
+      recorded in
+      [`source_parse_fallbacks`](../reference/build-report-schema.md#211-surveyssource_parse_fallbacks).
+      246 of the 312 EDIs in the GSSA Western Gawler 2023 delivery are in this state. Worth telling
+      the custodian about, because every other tool reading their file hits the same wall.
+    - **reads, but damage on the way in.** These build green and nothing else will ever mention
+      them. Two classes: metadata values stored with a trailing comma (JSON punctuation the reader
+      keeps; 141 of 159 scraped values on one Western Gawler station), and number fields that carry
+      their units in the value, such as a contact resistance written `2.5 kilo-ohms`, which are
+      dropped in silence and publish empty.
+
+    Only the first is a reason to hold a package. The other two are reasons to write to the
+    custodian, and the pre-flight is the only thing that will tell you they are there.
 
 **Coordinates** (the common real-world problem)
 

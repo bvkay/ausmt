@@ -954,3 +954,157 @@ def test_poll_once_returns_false_when_no_submission_pending(tmp_path):
     cfg = _runner_cfg(tmp_path)
     jobs.ensure_dirs(cfg.jobs_dir)
     assert runner.poll_once(cfg) is False
+
+
+# =================================================================================================
+# The >INFO pre-flight advisory (engine extract/edi_preflight.py), surfaced through the preview
+# summary that BOTH the submitter status page and the curator reports panel already render.
+# =================================================================================================
+
+_PREFLIGHT_FIXTURES = _ENGINE_DIR / "tests" / "fixtures" / "edi-info-json"
+# The Western Gawler vector: a JSON >INFO block whose declination keeps a trailing comma, so a stock
+# mt_metadata reader refuses it and AusMT's fallback rescues it. The exact shape a submitter would
+# upload straight out of the contractor's export.
+_UNREADABLE_EDI = _PREFLIGHT_FIXTURES / "LineNo__StationNo_11.edi"
+
+
+def _package_with(tmp_path, edi_bytes: bytes | None) -> Path:
+    """An extracted-package tree (package/<slug>/...), the shape safe_extract leaves behind."""
+    pkg = tmp_path / "package" / "mysurvey"
+    (pkg / "transfer_functions" / "edi").mkdir(parents=True)
+    (pkg / "survey.yaml").write_text("slug: mysurvey\n", encoding="utf-8")
+    if edi_bytes is not None:
+        (pkg / "transfer_functions" / "edi" / "S01.edi").write_bytes(edi_bytes)
+    return tmp_path / "package"
+
+
+def _reach_preflight(monkeypatch):
+    """Put engine/extract on sys.path so runner._import_preflight resolves through its documented
+    sibling-checkout fallback. On the engine image `extract` is an installed package and the first
+    branch wins; the gateway test lane has no engine installed, which is precisely the case the
+    fallback exists for."""
+    monkeypatch.syspath_prepend(str(_ENGINE_DIR / "extract"))
+
+
+def test_preflight_advisories_reach_the_submitter_and_the_curator(tmp_path, monkeypatch):
+    # proven failing 2026-08-09 on main beb3373: a package of EDIs that a stock mt_metadata reader
+    # cannot open produced a preview summary with NO warnings at all, and nothing anywhere told the
+    # submitter or the curator. FAILS IF the pre-flight stops riding into preview-summary.json, which
+    # is the single surface both pages already render.
+    _reach_preflight(monkeypatch)
+    cfg = _runner_cfg(tmp_path)
+    package_dir = _package_with(tmp_path, _UNREADABLE_EDI.read_bytes())
+    reports = tmp_path / "reports"
+    reports.mkdir()
+
+    advisories = runner._edi_preflight(package_dir, reports)
+    assert advisories, "the pre-flight produced no advice about a package that will not read"
+    joined = "\n".join(advisories)
+    assert "need AusMT's >INFO repair" in joined
+    assert "magnetic declination" in joined                  # the field, in words
+    assert "None of the above blocks this submission" in joined
+
+    # The full finding list is persisted beside validate.json for the curator.
+    report = json.loads((reports / runner.PREFLIGHT_REPORT).read_text(encoding="utf-8"))
+    assert report["summary"]["needs_repair"] == 1
+
+    def fake_engine(cmd, *, cwd, deadline, env=None):
+        out_dir = Path(cmd[cmd.index("--out") + 1])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "catalogue.json").write_text(json.dumps([["s1"]]), encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner, "_run_subprocess", fake_engine)
+    summary_path = tmp_path / "preview-summary.json"
+    assert runner._run_preview(cfg, package_dir, tmp_path / "preview", summary_path,
+                               deadline=10**12, advisories=advisories) is True
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["station_count"] == 1, "the advisory must not displace the real summary"
+    assert "need AusMT's >INFO repair" in "\n".join(summary["warnings"])
+
+
+def test_preflight_advisories_survive_a_failed_preview_build(tmp_path, monkeypatch):
+    # The case where the advice matters MOST: the build fell over, and "these files will not read"
+    # is the sentence that explains it. The existing failure details stay FIRST because consumers
+    # match on them. FAILS IF the advisories are dropped on the failure path.
+    _reach_preflight(monkeypatch)
+    cfg = _runner_cfg(tmp_path)
+    package_dir = _package_with(tmp_path, _UNREADABLE_EDI.read_bytes())
+
+    monkeypatch.setattr(runner, "_run_subprocess",
+                        lambda cmd, *, cwd, deadline, env=None: subprocess.CompletedProcess(
+                            cmd, 2, stdout="built 0 stations across 0 surveys\n", stderr="ERROR: boom\n"))
+    summary_path = tmp_path / "preview-summary.json"
+    assert runner._run_preview(cfg, package_dir, tmp_path / "preview", summary_path,
+                               deadline=10**12, advisories=["EDI pre-flight: 1 of 1 files need it"]) is False
+    warnings = json.loads(summary_path.read_text(encoding="utf-8"))["warnings"]
+    assert warnings[0] == "preview build failed", "the generic marker must stay first"
+    assert warnings[-1] == "EDI pre-flight: 1 of 1 files need it"
+
+
+def test_preflight_says_nothing_about_a_clean_package(tmp_path, monkeypatch):
+    # A check that always prints something trains people to skip it. A package whose >INFO block is
+    # fine must add NO lines at all. FAILS IF the advisory becomes unconditional noise.
+    _reach_preflight(monkeypatch)
+    package_dir = _package_with(tmp_path, b">HEAD\n  DATAID=S01\n>=DEFINEMEAS\n>END\n")
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    assert runner._edi_preflight(package_dir, reports) == []
+
+
+def test_preflight_is_advice_and_can_never_fail_a_submission(tmp_path, monkeypatch):
+    # The invariant that makes this safe to turn on: a pre-flight that raises must be swallowed
+    # whole. The validator is the authority; a package it passed must not quarantine because an
+    # ADVISORY could not be computed. FAILS IF the pre-flight is ever allowed to propagate.
+    _reach_preflight(monkeypatch)
+
+    def explode():
+        raise RuntimeError("the pre-flight fell over")
+
+    monkeypatch.setattr(runner, "_import_preflight", explode)
+    package_dir = _package_with(tmp_path, _UNREADABLE_EDI.read_bytes())
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    assert runner._edi_preflight(package_dir, reports) == []
+    assert not (reports / runner.PREFLIGHT_REPORT).exists()
+
+
+def test_a_package_that_will_not_read_still_reaches_validated(tmp_path, monkeypatch):
+    # End to end, with the whole point of the lane stated as an assertion: a delivery whose EDIs a
+    # stock reader refuses is VALIDATED, not quarantined, and the person is TOLD. A trailing comma in
+    # a metadata field must never block a submission.
+    _reach_preflight(monkeypatch)
+    cfg = _runner_cfg(tmp_path)
+    jobs.ensure_dirs(cfg.jobs_dir)
+    sid = "01PREFLIGHT"
+    quarantine = cfg.quarantine_dir / sid
+    zpath = cfg.incoming_dir / f"{sid}.zip"
+    zpath.parent.mkdir(parents=True, exist_ok=True)
+    zpath.write_bytes(make_zip({
+        "mysurvey/survey.yaml": b"survey:\n  slug: mysurvey\n",
+        "mysurvey/transfer_functions/edi/S01.edi": _UNREADABLE_EDI.read_bytes(),
+    }))
+    running = cfg.jobs_dir / "running" / f"{sid}.json"
+    running.write_text(json.dumps({
+        "submission_id": sid, "zip_path": str(zpath), "quarantine_dir": str(quarantine),
+    }), encoding="utf-8")
+
+    def fake_sub(cmd, *, cwd, deadline, env=None):
+        if any("validate_survey.py" in c for c in cmd):
+            _emulate_real_validator(cmd, {"items": [{"level": "PASS", "check": "metadata",
+                                                     "message": "ok"}]})
+            return subprocess.CompletedProcess(cmd, 0, stdout="[PASS   ] metadata ok", stderr="")
+        _assert_engine_surveys_level(cmd)
+        out_dir = Path(cmd[cmd.index("--out") + 1])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "catalogue.json").write_text(json.dumps([["s1"]]), encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner, "_run_subprocess", fake_sub)
+    runner.process_job(cfg, running)
+
+    payload = json.loads((cfg.jobs_dir / "done" / f"{sid}.json").read_text(encoding="utf-8"))
+    assert payload["outcome"] == jobs.OUTCOME_VALIDATED, "an advisory must never quarantine"
+    assert payload["report_refs"]["edi_preflight"] == f"reports/{runner.PREFLIGHT_REPORT}"
+    summary = json.loads((quarantine / "reports" / "preview-summary.json").read_text(encoding="utf-8"))
+    assert any("EDI pre-flight" in w for w in summary["warnings"]), summary
