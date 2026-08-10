@@ -1,14 +1,20 @@
 # AusMT
 
+**Australia's Magnetotelluric Data Portal**: live at **[ausmt.au](https://ausmt.au)** ·
+documentation at **[ausmt.readthedocs.io](https://ausmt.readthedocs.io)**
+
 [![engine](https://github.com/bvkay/ausmt/actions/workflows/build-products.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/build-products.yml)
 [![portal](https://github.com/bvkay/ausmt/actions/workflows/portal-ci.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/portal-ci.yml)
 [![gateway](https://github.com/bvkay/ausmt/actions/workflows/gateway-ci.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/gateway-ci.yml)
 [![images](https://github.com/bvkay/ausmt/actions/workflows/deploy-images.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/deploy-images.yml)
 
-Australian magnetotelluric (MT) data infrastructure — the **framework monorepo** (see
-`maintainer/ADR-001-repo-structure.md`). An offline build engine, a static portal, and a
-curated submission gateway: survey packages (EDI + `survey.yaml`) are validated, parsed with
-the community mt_metadata/mth5 toolchain, and served as a browsable, citable catalogue.
+An AuScope-funded initiative with the Australian MT community: a national catalogue of
+magnetotelluric transfer functions, carrying the provenance, licence and citation details of
+each one. This is the **framework monorepo** (see `maintainer/ADR-001-repo-structure.md`): an
+offline build engine, a static portal, and a curated submission gateway. Survey packages
+(EDI + `survey.yaml`) are validated, parsed with the community mt_metadata/mth5 toolchain, and
+served as a browsable, citable catalogue. Development happens at `bvkay/ausmt`;
+`AuScope/ausmt` is the release mirror.
 
 | Dir | What it is |
 |-----|------------|
