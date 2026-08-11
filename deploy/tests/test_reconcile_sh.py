@@ -690,3 +690,135 @@ def test_force_full_rebuild_flag_sets_cache_refresh(tmp_path):
     modes = [ln for ln in rec.read_text(encoding="utf-8").splitlines() if ln.strip()]
     assert modes[0] == "MODE=[refresh]", f"full:true must set cache-refresh, got {modes}"
     assert modes[1] in ("MODE=[]", "MODE=[<unset>]"), f"a plain request must NOT force refresh, got {modes}"
+
+
+# ===================================================================================================
+# 2026-08-11 incident: systemd's TimeoutStartSec SIGTERMed a 60-minute-plus rebuild once an hour.
+# The script had no signal handler and the Makefile prunes only after a SUCCESSFUL swap, so every
+# killed attempt (a) wrote no status, leaving the curator panel showing the last CLEAN outcome and the
+# loop guard unarmed, and (b) abandoned its half-written builds/<ts> forever.
+# ===================================================================================================
+
+def _seed_builds(tree: dict, names: list[str], served: str) -> Path:
+    """Create builds/<name> dirs with strictly increasing mtimes (so `ls -1t` order is deterministic,
+    newest LAST in `names`), and mark one of them as the SERVED build by giving it a byte-identical
+    copy of current/build.json — which is how the script identifies it when `current` is not a
+    resolvable symlink (MSYS `ln -s` silently makes a COPY on Windows, so the symlink path is not
+    reliably exercisable here). Returns the builds dir."""
+    import time
+    bdir = tree["data"] / "site-data" / "builds"
+    bdir.mkdir(parents=True, exist_ok=True)
+    base = time.time() - 10_000
+    for i, n in enumerate(names):
+        d = bdir / n
+        d.mkdir(exist_ok=True)
+        (d / "filler.txt").write_text("x", encoding="utf-8")
+        os.utime(d, (base + i * 60, base + i * 60))
+    served_json = (tree["site"] / "build.json").read_bytes()
+    (bdir / served / "build.json").write_bytes(served_json)
+    # writing build.json bumped that dir's mtime; restore it so `ls -1t` order stays as declared
+    idx = names.index(served)
+    os.utime(bdir / served, (base + idx * 60, base + idx * 60))
+    return bdir
+
+
+def test_prune_runs_on_entry_even_when_the_pass_fails(tmp_path):
+    """PRUNE-ON-ENTRY. Stale build dirs are collected at the START of every pass, so a RUN OF FAILURES
+    cannot leak disk — the exact 2026-08-11 shape, where an hourly killed rebuild left ~0.5 GB behind
+    each time and the Makefile's own prune (inside the swap step) was never reached.
+    FAILS IF a failing pass leaves more than KEEP_BUILDS build dirs behind, or prunes nothing at all."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    _advance_head(tree)
+    names = [f"2026081{i}T000000Z" for i in range(8)]     # 8 dirs, oldest first
+    served = names[-1]                                    # the newest is the one being served
+    bdir = _seed_builds(tree, names, served=served)
+    assert len(list(bdir.iterdir())) == 8
+
+    # The pass FAILS (shim exits 1) — the prune must still have happened, because it runs on entry.
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", "AUSMT_RECONCILE_KEEP_BUILDS": "3"})
+    left = sorted(p.name for p in bdir.iterdir() if p.is_dir())
+    assert _status(tree)["action"] == "failed", "precondition: this pass really did fail"
+    # served (skipped, uncounted) + the 3 newest non-served
+    expected = sorted([served] + names[-4:-1])
+    assert left == expected, f"expected {expected} after a FAILED pass, got {left} (rc={r.returncode})"
+
+
+def test_prune_never_deletes_the_build_being_served(tmp_path):
+    """PRUNE SAFETY. The build `current` points at is skipped unconditionally, before any retention
+    arithmetic — even when it is the OLDEST dir and far outside the keep window. Deleting it would
+    take the portal down, which is strictly worse than keeping a few stale dirs.
+    FAILS IF the served build is pruned."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    _advance_head(tree)
+    names = [f"2026082{i}T000000Z" for i in range(7)]
+    served = names[0]                                     # the OLDEST — normally first to go
+    bdir = _seed_builds(tree, names, served=served)
+
+    _run(tree, env_extra={"SHIM_FAIL": "1", "AUSMT_RECONCILE_KEEP_BUILDS": "2"})
+    left = sorted(p.name for p in bdir.iterdir() if p.is_dir())
+    assert served in left, f"the SERVED build {served} was pruned — left={left}"
+    expected = sorted([served] + names[-2:])              # served + the 2 newest
+    assert left == expected, f"served + KEEP_BUILDS=2 newest expected {expected}, got {left}"
+
+
+def test_prune_refuses_when_the_served_build_cannot_be_identified(tmp_path):
+    """PRUNE FAIL-SAFE. If neither `current`'s symlink nor a build.json match identifies the served
+    build, the prune does NOTHING and says why. Keeping stale directories is recoverable; deleting the
+    live build takes the portal down.
+    FAILS IF an unidentifiable layout still deletes build dirs, or does so silently."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    _advance_head(tree)
+    names = [f"2026083{i}T000000Z" for i in range(6)]
+    bdir = tree["data"] / "site-data" / "builds"
+    bdir.mkdir(parents=True, exist_ok=True)
+    for n in names:                                       # NO build.json anywhere => unidentifiable
+        (bdir / n).mkdir(exist_ok=True)
+
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", "AUSMT_RECONCILE_KEEP_BUILDS": "1"})
+    left = sorted(p.name for p in bdir.iterdir() if p.is_dir())
+    assert left == sorted(names), f"nothing may be pruned when the served build is unknown, lost: {set(names)-set(left)}"
+    assert "cannot identify the served build" in (r.stdout + r.stderr), \
+        "the refusal must be stated, not silent"
+
+
+def test_sigterm_mid_build_records_failed_status(tmp_path):
+    """SIGNAL TRAP. A pass killed mid-build (systemd TimeoutStartSec, or an operator stop) must still
+    write reconcile-status.json with action=failed, naming the log and saying it was terminated.
+    Without it the panel keeps showing the last clean outcome and the loop guard never arms, which is
+    how the 2026-08-11 hourly retry loop stayed invisible for hours.
+    FAILS IF no status is written, if the action is not `failed`, or if the detail does not say the run
+    was terminated. Driven through a shell wrapper so a REAL SIGTERM is delivered on this box too,
+    rather than skipping to CI."""
+    tree = _make_tree(tmp_path, source_commit="aaaaaaa")
+    _advance_head(tree)
+    slow = tmp_path / "slow_shim.sh"
+    slow.write_text("#!/bin/sh\necho 'shim: build started'\nsleep 30\n", encoding="utf-8")
+    slow.chmod(0o755)
+    logdir = tree["data"] / "site-data" / "logs"
+
+    killer = tmp_path / "killer.sh"
+    killer.write_text(
+        "#!/bin/sh\n"
+        f'sh "{_SCRIPT.as_posix()}" &\n'
+        "p=$!\n"
+        # wait (bounded) for the build log to appear => the build has started
+        f'i=0; while [ $i -lt 150 ]; do ls "{logdir.as_posix()}"/*.build.log >/dev/null 2>&1 && break; '
+        "i=$((i+1)); sleep 0.1; done\n"
+        "sleep 0.5\n"
+        "kill -TERM $p 2>/dev/null\n"
+        "wait $p\n"
+        'echo "rc=$?"\n',
+        encoding="utf-8")
+    killer.chmod(0o755)
+
+    env = dict(tree["env"])
+    env["AUSMT_RECONCILE_MAKE"] = f"sh {slow.as_posix()}"
+    r = subprocess.run([_SH, str(killer)], capture_output=True, text=True, env=env, timeout=120)
+
+    st = _status(tree)
+    assert st is not None, f"a terminated pass wrote NO status at all\nstdout={r.stdout}\nstderr={r.stderr}"
+    assert st["action"] == "failed", f"expected action=failed after SIGTERM, got {st['action']}"
+    assert st.get("log_file"), "the status must name the build log so the failure is debuggable"
+    tail = st.get("log_tail") or ""
+    assert "TERMINATED by SIG" in tail, f"the detail must say the run was terminated, got: {tail[:200]!r}"
+    assert "TimeoutStartSec" in tail, "the detail must point at the likely cause (the unit's timeout)"

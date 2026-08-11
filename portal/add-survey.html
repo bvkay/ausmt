@@ -165,9 +165,15 @@
   details.tier[open]>summary .tk::before{content:"▾ "}
   /* slug chip: the auto-derived folder name, editable inline */
   .slugchip{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);
-    border-radius:20px;padding:3px 6px 3px 12px}
+    border-radius:20px;padding:3px 6px 3px 12px;max-width:100%}
   .slugchip .pre{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
-  .slugchip input{background:transparent;border:none;border-radius:16px;padding:4px 8px;font-family:var(--mono);font-size:13px}
+  /* Wide enough to show a full-length folder name (SLUG_MAX = 40 mono characters) without scrolling -
+     the submitter has to be able to READ what they are about to publish, since the slug becomes
+     au.<slug>.<station> in every id and URL and is expensive to change once a DOI is minted.
+     ch units track the mono font, so the field fits the cap rather than a guessed pixel width;
+     max-width keeps it inside the flex row on a narrow viewport instead of overflowing the card. */
+  .slugchip input{background:transparent;border:none;border-radius:16px;padding:4px 8px;font-family:var(--mono);font-size:13px;
+    width:42ch;min-width:16ch;max-width:100%;flex:1 1 auto}
   .slugchip input:focus{outline:1px solid var(--copper)}
   #t0mapwrap{margin-top:12px;display:none}
   #t0map{height:300px;border-radius:8px;border:1px solid var(--line)}
@@ -768,7 +774,35 @@ function isSemver(s){ return /^\d+\.\d+\.\d+$/.test(String(s||"").trim()); }
 // spaces, underscores, dots, slashes, leading/trailing hyphens) is silently rewritten by the pipeline's
 // safe_component() and forks the survey identity, a server-side hard FAIL. Mirroring it here catches
 // the most common first-timer mistake before a wasted quarantine cycle. Keep in sync with that line.
-function slugValid(s){ return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(String(s==null?"":s).trim()); }
+//
+// SLUG_MAX is the LENGTH half of the same rule. A slug longer than this survives validation and
+// publication and then breaks the station-MTH5 tier HOURS later, at build time: the producer passes
+// the slug through verbatim as the MTH5 survey id (build_portal.py, normalize(survey_id=slug)), the
+// HDF5 survey group name comes back TRUNCATED AT 45 CHARACTERS, and the round-trip gate then cannot
+// find the group it just wrote, so it withholds every station .h5 in the survey. Observed live
+// 2026-08-11 on a 54-character slug: the gate reported the group as slug[:45], exactly.
+// 40 is the cap with margin under that 45, and every survey in the corpus at the time was 9-30.
+// Enforced HERE (blocking, via validateSurvey) and derived-to-fit in deriveSlug, so the form cannot
+// mint one; the server-side validator carries the matching check for hand-edited packages.
+const SLUG_MAX=40;
+function slugValid(s){ const v=String(s==null?"":s).trim();
+  return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(v) && v.length<=SLUG_MAX; }
+// deriveSlug: the project name -> the auto folder name shown in the slug chip. Capped at SLUG_MAX so
+// the AUTO value is always submittable - a long project name ("AusLAMP EFTF Phase 1 - Northern
+// Territory and Queensland (Geoscience Australia)") otherwise derives a 54-character slug that passes
+// every gate and then withholds every station MTH5 at build time, which is the live 2026-08-11 case
+// this cap exists to prevent. The cut lands on a HYPHEN BOUNDARY when one falls in the last third of
+// the budget, so the result reads as whole words ("auslamp-eftf-phase-1-northern-territory") rather
+// than a severed one ("auslamp-eftf-phase-1-northern-territor"); trailing hyphens are stripped after
+// the cut so the output still satisfies slugValid's charset rule. Pure, and exported for the tests.
+function deriveSlug(name){
+  const s=String(name==null?"":name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+  if(s.length<=SLUG_MAX) return s;
+  const cut=s.slice(0,SLUG_MAX);
+  const lastDash=cut.lastIndexOf("-");
+  const out=(lastDash>=Math.floor(SLUG_MAX*2/3))?cut.slice(0,lastDash):cut;
+  return out.replace(/-+$/,"");
+}
 // emtfxmlLooksReal: the browser-side anti-masquerade check for a submitted EMTF XML, the sibling of the
 // validator's magic-byte gate for binary TF types and its NUL-byte gate for .edi. EMTF XML is text, and
 // its root element is <EM_TF> (the EarthScope schema), so a .xml that never opens that element is not a
@@ -792,7 +826,14 @@ function validateSurvey(meta, edis, mth5s, xmls){
   // Slug charset gate, mirrors the authoritative server-side FAIL (validate_survey.py:331), so a
   // malformed slug is caught HERE instead of after a full quarantine cycle. Only when a slug is present
   // (the REQUIRED loop above already FAILs an empty slug; we do not double-report it).
-  if(meta.slug&&!slugValid(meta.slug))
+  // The two halves are reported SEPARATELY: "too long" and "wrong characters" are different mistakes
+  // with different fixes, and a single merged message sends the submitter hunting for a bad character
+  // that is not there.
+  if(meta.slug&&String(meta.slug).trim().length>SLUG_MAX)
+    add("FAIL","slug","slug '"+meta.slug+"' is "+String(meta.slug).trim().length+" characters; the limit is "
+      +SLUG_MAX+". A longer slug publishes, then silently withholds every station MTH5 at build time "
+      +"(the HDF5 survey group name truncates at 45). Shorten it, e.g. auslamp-nt-qld-2016-19");
+  else if(meta.slug&&!slugValid(meta.slug))
     add("FAIL","slug","slug '"+meta.slug+"' must be lowercase-hyphenated [a-z0-9-] (no spaces, dots, "
       +"slashes, underscores, uppercase, or leading/trailing hyphens), other characters fork the survey identity downstream");
   // submitter + declarations (submission envelope; email stays private, never published)
@@ -1180,7 +1221,7 @@ function stationCountsByName(catalogue){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,emtfxmlLooksReal,relatedIdentifiersEmit,creditRowsEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES,NAME_TYPES,CONTRIBUTOR_ROLES};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,emtfxmlLooksReal,relatedIdentifiersEmit,creditRowsEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,deriveSlug,SLUG_MAX,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES,NAME_TYPES,CONTRIBUTOR_ROLES};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -1515,9 +1556,8 @@ if(typeof document!=="undefined"&&document.getElementById){
   // themselves it stops tracking the name (slugTouched). Inline validation mirrors the authoritative
   // validator FAIL so the most common first-timer mistake is caught at the field, not after a quarantine
   // cycle. The blocking gate itself lives in validateSurvey (slugValid), this is just the field-level cue.
-  function deriveSlug(name){
-    return String(name==null?"":name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
-  }
+  // deriveSlug lives in the pure-logic section above (beside slugValid, which it must always satisfy)
+  // so the node tests can exercise the SLUG_MAX cap directly.
   (function(){
     const nameInp=$("m_name"), inp=$("m_slug"), ok=$("slugOk");
     if(!inp||!ok) return;
@@ -1535,6 +1575,7 @@ if(typeof document!=="undefined"&&document.getElementById){
     }
     const render=()=>{ const v=inp.value.trim();
       if(!v){ ok.textContent=""; ok.className="orcidok"; return; }
+      if(v.length>SLUG_MAX){ ok.textContent="✗ "+v.length+" characters — the limit is "+SLUG_MAX+". A longer folder name withholds every station MTH5 at build time."; ok.className="orcidok bad"; return; }
       if(!slugValid(v)){ ok.textContent="✗ lowercase letters, digits and single hyphens only (no spaces, _ or uppercase)"; ok.className="orcidok bad"; return; }
       // charset-valid: check the collision set (exists-with-context). Never blocks, only informs.
       const hit=SERVED_SLUGS[v];
