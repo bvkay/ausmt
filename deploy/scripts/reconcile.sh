@@ -87,8 +87,82 @@ MAKE_CMD="${AUSMT_RECONCILE_MAKE:-make -C $AUSMT_CODE_DIR/deploy rebuild-data}"
 PAUSE_FLAG="$STATE_DIR/pause.flag"
 ROLLBACK_PIN="$STATE_DIR/rollback.pin"
 PAUSE_EXPIRY_MIN="${AUSMT_RECONCILE_PAUSE_EXPIRY_MIN:-360}"   # 6 h (record D8/D13)
+BUILDS_DIR="$SITE_DATA/builds"
+# How many build dirs to keep besides the one `current` points at. Matches the Makefile's own
+# `ls -1t | tail -n +6` retention so the two cannot drift into different answers.
+KEEP_BUILDS="${AUSMT_RECONCILE_KEEP_BUILDS:-5}"
 
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# prune_builds: drop stale build dirs, ON ENTRY to every pass.
+#
+# WHY ON ENTRY. The Makefile prunes inside its SWAP step, which only runs after build AND verify both
+# succeed. A rebuild that never finishes therefore leaves its half-written builds/<ts> behind forever.
+# Observed live 2026-08-11: TimeoutStartSec killed the rebuild at 60 minutes, once an hour, and each
+# killed attempt left ~0.5 GB of partial products (bundled EDIs + per-station MTH5) that nothing ever
+# collected. A run of failures must not become a disk leak, so the cleanup runs where it is reachable
+# whatever the outcome — not only on the happy path.
+#
+# SAFETY. The build `current` points at is skipped UNCONDITIONALLY, before any retention arithmetic,
+# so this can never delete what is being served. Newest-first, keep KEEP_BUILDS, drop the rest.
+#
+# IDENTIFYING THE SERVED BUILD is deliberately NOT just `readlink current`. In production `current` is
+# a symlink (the Makefile's swap step makes one), but a layout where it is a plain directory — a test
+# fixture, a hand-repaired box, a filesystem without symlinks — would leave readlink empty and every
+# candidate unprotected, which is precisely the wrong way for this to fail. So: readlink first (cheap,
+# exact), then fall back to matching build.json byte-for-byte against each candidate, and if NEITHER
+# resolves, prune NOTHING and say so. Keeping stale dirs is recoverable; deleting the live build is not.
+prune_builds() {
+  [ -d "$BUILDS_DIR" ] || return 0
+  # readlink gives e.g. "builds/20260810T010541Z"; keep only the final segment.
+  _cur=$(readlink "$SITE_DATA/current" 2>/dev/null || true)
+  _cur=${_cur##*/}
+  if [ -z "$_cur" ] && [ -f "$BUILD_JSON" ]; then
+    for _c in "$BUILDS_DIR"/*; do
+      [ -d "$_c" ] && [ -f "$_c/build.json" ] || continue
+      if cmp -s "$BUILD_JSON" "$_c/build.json"; then _cur=${_c##*/}; break; fi
+    done
+  fi
+  if [ -z "$_cur" ]; then
+    printf 'reconcile: cannot identify the served build (current is neither a resolvable symlink nor '
+    printf 'matched by build.json) — skipping the build prune rather than risk deleting it\n'
+    return 0
+  fi
+  ls -1t "$BUILDS_DIR" 2>/dev/null | { _n=0; while IFS= read -r _b; do
+    [ -n "$_b" ] && [ -d "$BUILDS_DIR/$_b" ] || continue
+    if [ -n "$_cur" ] && [ "$_b" = "$_cur" ]; then continue; fi   # never the served build
+    _n=$((_n + 1))
+    [ "$_n" -le "$KEEP_BUILDS" ] && continue
+    printf 'reconcile: pruning stale build %s\n' "$_b"
+    rm -rf -- "$BUILDS_DIR/$_b"
+  done; }
+}
+
+# The signal trap (2026-08-11). systemd's TimeoutStartSec SIGTERMs a rebuild that overruns, and the
+# script had no handler: it died mid-build WITHOUT writing reconcile-status.json. Two consequences,
+# both observed live — the curator panel kept showing the last CLEAN outcome while hours of rebuilds
+# were failing, and the loop guard (which arms off a WRITTEN action=failed) never armed, so the timer
+# retried every hour indefinitely. Recording the termination is what makes both self-correcting.
+# TRAP_* carry what run_pass knows at the moment of the kill; they stay empty until it knows it.
+TRAP_HEAD=""; TRAP_BUILT=""; TRAP_LOG=""
+on_signal() {
+  _sig="$1"
+  printf 'reconcile: SIG%s received — recording action=failed before exit\n' "$_sig" >&2
+  if [ "${DRY_RUN:-0}" -eq 0 ]; then
+    _t=""
+    [ -n "$TRAP_LOG" ] && [ -f "$TRAP_LOG" ] && _t=$(tail -n 25 "$TRAP_LOG" 2>/dev/null || true)
+    write_status "failed" "$TRAP_HEAD" "$TRAP_BUILT" "$(read_build_id)" "$TRAP_LOG" \
+"TERMINATED by SIG$_sig before the rebuild finished. The previous build is still being served.
+If this repeats every run at the same interval, the rebuild needs longer than TimeoutStartSec in
+ausmt-reconcile.service (a cold-cache rebuild of the full corpus has been measured at ~93 minutes).
+--- last lines of ${TRAP_LOG:-<no log>} ---
+$_t"
+  fi
+  exit 143    # 128 + SIGTERM, the conventional shell encoding of "killed by signal"
+}
+trap 'on_signal TERM' TERM
+trap 'on_signal INT' INT
+trap 'on_signal HUP' HUP
 
 # python3 for the two structured reads (build.json parse, JSON-safe status write). Fragile grep
 # would misparse a reordered/whitespace-varied JSON; python is on the deploy host (preflight/backup
@@ -245,6 +319,10 @@ PYEOF
 # critical section — never two builds at once. The caller below takes the lock on fd 9 and then
 # calls run_pass IN-PROCESS while the fd is held (no re-exec); the fd closes on exit, releasing it.
 run_pass() {
+  # 0a. Collect stale build dirs FIRST, so the cleanup happens on every pass — including a pass that
+  #     goes on to noop, fail, or be killed. See prune_builds for why this cannot live only after a
+  #     successful swap. Cheap (a readlink, a listing) and never touches the served build.
+  [ "$DRY_RUN" -eq 0 ] && prune_builds
   # 0. PAUSE + ROLLBACK-PIN state (record D9.7). Computed FIRST so EVERY status write below surfaces
   #    it (an authenticated attacker must not be able to keep serving frozen silently). PAUSED == a
   #    pause.flag within its expiry window (honoured); PAUSE_EXPIRED == a stale flag that is IGNORED
@@ -493,6 +571,9 @@ PYEOF
   # (build -> verify -> swap current): a failure leaves the OLD build serving (§4). The script runs
   # under `set -u` (not `-e`), so a non-zero make exit does NOT abort — we capture rc and still write
   # a status document either way.
+  # Hand the signal trap everything it needs to write an honest status if systemd kills us mid-build:
+  # without these it can still record action=failed, but not WHICH commits or WHICH log to look at.
+  TRAP_HEAD="$head"; TRAP_BUILT="$built"; TRAP_LOG="$log_file"
   # shellcheck disable=SC2086 -- MAKE_CMD is an intentional word-split command (default or shim).
   AUSMT_BUILD_CACHE_MODE="$_cache_mode" $MAKE_CMD > "$log_file" 2>&1
   rc=$?

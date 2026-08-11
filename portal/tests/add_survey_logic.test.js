@@ -81,11 +81,12 @@ ok(M.slugValid("example_survey") === false, "slugValid: underscore rejected");
 ok(M.slugValid("-example") === false && M.slugValid("example-") === false, "slugValid: leading/trailing hyphen rejected");
 ok(M.slugValid("") === false, "slugValid: empty rejected");
 // the derive helper is charset-safe: whatever the project name, the derived slug passes slugValid.
-ok(/function deriveSlug/.test(html), "the page carries a deriveSlug() that auto-fills the folder slug from the name");
+// deriveSlug is EXPORTED (it moved into the pure-logic section when the SLUG_MAX cap landed), so this
+// exercises the real function rather than re-evaluating a copy scraped out of the HTML — the scrape
+// broke the moment deriveSlug referenced a module-scope constant.
+ok(typeof M.deriveSlug === "function", "the page exports a deriveSlug() that auto-fills the folder slug from the name");
 for (const name of ["Example MT Survey 2026", "AusLAMP: SA (block 4)!", "  spaced  &  odd  "]) {
-  const der = html.match(/function deriveSlug\(name\)\{[\s\S]*?\}/)[0];
-  const dfn = new Function("name", der.replace(/^function deriveSlug\(name\)\{/, "").replace(/\}$/, ""));
-  const slug = dfn(name);
+  const slug = M.deriveSlug(name);
   ok(slug === "" || M.slugValid(slug), "deriveSlug('" + name + "') = '" + slug + "' is slug-valid or empty");
 }
 const badSlug = M.validateSurvey({ ...base, slug: "Bad_Slug", locations_confirmed: true }, cleanEdis, []);
@@ -596,6 +597,45 @@ const badXml = M.validateSurvey({ ...base, locations_confirmed: true }, [], [],
 ok(badXml.items.some(i => i.check === "emtfxml" && i.level === "FAIL" && /EM_TF/.test(i.message)),
    "a .xml that is not an EMTF transfer function is a blocking FAIL, not a silent pass");
 ok(badXml.counts.FAIL > 0, "the masquerading .xml blocks submission");
+
+// ============================ SLUG LENGTH CAP (the 2026-08-11 MTH5 truncation) ============================
+// A slug over 45 characters is truncated to slug[:45] as the MTH5 survey group name, and the round-trip
+// gate then withholds every station .h5 in the survey — observed live on a real 54-character slug.
+// SLUG_MAX caps the DERIVED value and blocks a hand-typed one. These tests fail if either half regresses.
+const LONG_NAME = "AusLAMP EFTF Phase 1 - Northern Territory and Queensland (Geoscience Australia)";
+const OBSERVED_BAD = "auslamp-eftf-phase-1-northern-territory-and-queensland";  // 54 chars, the live case
+
+ok(M.SLUG_MAX === 40, "SLUG_MAX is 40 (kept under the 45-character MTH5 group-name truncation)");
+ok(M.SLUG_MAX < 45, "SLUG_MAX leaves margin under the observed truncation point");
+
+const derived = M.deriveSlug(LONG_NAME);
+ok(derived.length <= M.SLUG_MAX, `deriveSlug caps at SLUG_MAX (got ${derived.length}: ${derived})`);
+ok(M.slugValid(derived), "the derived slug is always submittable (charset + length)");
+ok(!/-$/.test(derived), "no trailing hyphen after the cut");
+ok(!/--/.test(derived), "no doubled hyphen after the cut");
+ok(derived !== OBSERVED_BAD.slice(0, M.SLUG_MAX) || !derived.endsWith("-"),
+   "the cut prefers a hyphen boundary over severing a word");
+ok(M.deriveSlug(OBSERVED_BAD).length <= M.SLUG_MAX, "re-deriving from the live bad slug also caps");
+
+// short names are untouched — the cap must not alter the existing corpus's derivations
+["auslamp-tas", "ccmt-2017", "vulcan-2022", "auslamp-sa-north-flinders-2013"].forEach(s => {
+  ok(M.deriveSlug(s) === s, `short slug '${s}' passes through deriveSlug unchanged`);
+});
+
+ok(!M.slugValid(OBSERVED_BAD), "the live 54-character slug is now INVALID (it was accepted before)");
+ok(M.slugValid("auslamp-nt-qld-2016-19"), "a sensible short slug stays valid");
+ok(!M.slugValid("a".repeat(41)), "41 characters is rejected");
+ok(M.slugValid("a".repeat(40)), "40 characters is accepted (boundary)");
+
+// and the blocking gate reports it as a LENGTH problem, not a charset one
+const longSlugRes = M.validateSurvey({ ...base, slug: OBSERVED_BAD, locations_confirmed: true },
+                                     cleanEdis, []);
+const slugItem = longSlugRes.items.find(i => i.check === "slug");
+ok(!!slugItem && slugItem.level === "FAIL", "an over-long slug is a blocking FAIL");
+ok(!!slugItem && /54 characters/.test(slugItem.message), "the message names the actual length");
+ok(!!slugItem && /limit is 40/.test(slugItem.message), "the message names the limit");
+ok(!!slugItem && !/lowercase-hyphenated/.test(slugItem.message),
+   "a too-long but charset-clean slug is NOT misreported as a charset problem");
 
 // R3 harvest tests are async (harvestDoi returns a Promise); run them, THEN report + exit.
 r3HarvestTests().then(() => {
