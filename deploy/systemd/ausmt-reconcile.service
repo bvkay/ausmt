@@ -30,8 +30,14 @@ EnvironmentFile=__ENV_FILE__
 WorkingDirectory=__DEPLOY_DIR__
 # The script is one pass; --dry-run is NOT passed here (that is an operator's manual invocation).
 ExecStart=__DEPLOY_DIR__/scripts/reconcile.sh
-# A rebuild can take minutes on a cold cache; give it room but bound a wedged build.
-TimeoutStartSec=3600
+# Bound a wedged build, but leave real headroom over a COLD-CACHE rebuild of the whole corpus.
+# 3600 was set when "a rebuild takes minutes" was true. It is not any more: a measured cold rebuild of
+# 22 surveys / 1730 stations (bundled EDIs + per-survey and per-station MTH5) took ~93 MINUTES, and on
+# 2026-08-11 systemd killed the rebuild at exactly 60 minutes, once an hour, indefinitely — each
+# attempt abandoning a half-written builds/<ts>. The C18 cache colds on every image rebuild (its salt
+# is the baked engine commit), so the slow path is the NORMAL path after any deploy, not an outlier.
+# 4 h leaves room for corpus growth while still catching a genuinely stuck build.
+TimeoutStartSec=14400
 
 [Install]
 WantedBy=multi-user.target
