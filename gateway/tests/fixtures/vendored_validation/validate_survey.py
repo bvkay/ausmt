@@ -85,6 +85,22 @@ STATION_IDS_KEY_RE = re.compile(r"(?m)^station_ids[ \t]*:")
 # through THIS validator and asserts zero unknown-key warnings (the care-field drift lesson: an
 # unvalidated new section rots). SOURCE_PROFILES is the custodian attribution-profile vocab.
 SCHEMA_VERSIONS = ("0.2", "0.3")
+# SLUG_MAX_LEN: the LENGTH half of the slug rule (the charset half is the regex at the slug gate).
+#
+# WHY IT EXISTS. The station-MTH5 producer passes the slug through verbatim as the MTH5 survey id
+# (engine build_portal.py -> normalize(survey_id=slug)); the HDF5 survey group name comes back
+# TRUNCATED AT 45 CHARACTERS, and the round-trip gate then cannot find the group it just wrote, so it
+# withholds every station .h5 in the survey. Observed live 2026-08-11 on a 54-character slug: the gate
+# named the missing group as slug[:45], exactly. Nothing before it had exceeded 45 (the corpus ran
+# 9-30), so the ceiling had never been reached.
+#
+# WHY A WARNING AND NOT A FAIL. An over-long slug is not WRONG the way a bad charset is — it does not
+# fork the survey's identity, it degrades one product tier — and hard-failing would block an
+# already-published package from validating at all, including the very validation run that checks its
+# rename. --strict (the publication gate) escalates it to a failure, so it still cannot SHIP; and the
+# Add Survey form caps the derived slug at the same number, so the normal path cannot mint one. This
+# is the backstop for a hand-edited package.
+SLUG_MAX_LEN = 40
 ATTRIBUTION_KEYS = frozenset({"custodian", "custodian_ror", "statement", "changes_made",
                               "changes_summary", "declared_by", "declared_date"})
 SOURCE_KEYS = frozenset({"title", "custodian", "identifier", "licence", "retrieved", "statement",
@@ -850,6 +866,16 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
             r.add("FAIL", "metadata",
                   f"slug '{slug_val}' must be lowercase-hyphenated [a-z0-9-] (no spaces, dots, slashes, "
                   f"underscores or uppercase) — other characters fork the survey identity downstream")
+        # Length gate (see SLUG_MAX_LEN). Reported SEPARATELY from the charset gate: "too long" and
+        # "wrong characters" are different mistakes with different fixes, and merging them sends a
+        # curator hunting for a bad character that is not there.
+        if len(str(slug_val)) > SLUG_MAX_LEN:
+            r.add("WARNING", "metadata",
+                  f"slug '{slug_val}' is {len(str(slug_val))} characters; the limit is {SLUG_MAX_LEN}. "
+                  f"A longer slug validates and publishes, then silently withholds every station MTH5 "
+                  f"at build time — the HDF5 survey group name truncates at 45 characters, so the "
+                  f"round-trip gate cannot find the group it wrote. Shorten it (the folder must be "
+                  f"renamed to match); --strict treats this as a failure")
     lic = meta.get("license", "")
     if str(lic).startswith("TBD"):
         r.add("WARNING", "metadata", "license is 'TBD' — must be set before publication")
