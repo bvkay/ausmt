@@ -84,15 +84,18 @@ Source of truth: `CATALOGUE_COLUMNS` in `extract/build_portal.py`.
 Source of truth: `SCI_COLUMNS` in `extract/_edi_science.py`. All values are **automated, indicative**
 diagnostics, not curated ratings. The `rr`, `sw` and `alg` fields are best-effort scrapes of the
 EDI free text; mt_metadata exposes no structured processing metadata for these files, so absence
-means "not stated", not "not used". Richer processing detail (remote site, per-station notes)
-lives in each station's `station.json` `processing` block, outside the positional contract.
+means "not stated", not "not used". In particular `sw` is the program that PROCESSED the transfer
+function, never the one that wrote the file — the EDI header's program stamp names an exporter
+(Geotools, WinGLink, MTpy) on most of the corpus, and that identity is published separately. Richer
+processing detail (remote site, the file's writer, per-station notes) lives in each station's
+`station.json` `processing` block, outside the positional contract.
 
 | Index | Name | Type | Meaning |
 |---|---|---|---|
 | `sc[0]` | `q` | number\|null | completeness/smoothness diagnostic, 0–5 (NOT a quality ranking) |
 | `sc[1]` | `qb` | string | basis of `q`: `"e"` error-based, `"s"` shape-based |
 | `sc[2]` | `rr` | 0\|1 | remote reference stated in the EDI |
-| `sc[3]` | `sw` | string\|null | processing software (scraped) |
+| `sc[3]` | `sw` | string\|null | the program that **processed** the transfer function (mined from the file's free text; the program that WROTE the file is a different fact, published as `processing.file_written_by` in `station.json`) |
 | `sc[4]` | `alg` | string\|null | processing algorithm (scraped) |
 | `sc[5]` | `dim` | string\|null | dimensionality: `1-D`/`2-D`/`3-D`/`indeterminate`/null (phase-tensor screening) |
 | `sc[6]` | `p3d` | integer\|null | % of periods with \|β\| > 3° |

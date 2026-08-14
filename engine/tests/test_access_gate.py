@@ -432,12 +432,16 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
         assert sj["distribution"]["edi_available"] is False and sj.get("survey")
 
     # OPEN control: the served survey in the SAME build keeps its full science + dimensionality.json.
+    # The dimensionality CALL is asserted where it now lives (dimensionality.json — station.json stopped
+    # restating it); station.json's own retained science is its median error + completeness diagnostic.
     for slug in sorted(served):
         oj = json.loads((prod / slug / "A1" / "station.json").read_text(encoding="utf-8"))
-        assert "diagnostics" in oj and oj["diagnostics"].get("dimensionality"), \
+        assert "diagnostics" in oj and oj["diagnostics"].get("completeness_smoothness_diagnostic"), \
             "the OPEN survey's products must retain their TF-derived science"
-        assert (prod / slug / "A1" / "dimensionality.json").exists(), \
-            "the OPEN survey must still emit dimensionality.json"
+        dj = prod / slug / "A1" / "dimensionality.json"
+        assert dj.exists(), "the OPEN survey must still emit dimensionality.json"
+        assert json.loads(dj.read_text(encoding="utf-8"))["classification"], \
+            "the OPEN survey's dimensionality.json must carry the classification"
 
 
 def _reconstruct_prefix_station_json(sci_science_present=True):

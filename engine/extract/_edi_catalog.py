@@ -4,8 +4,10 @@
 After the regex retirement mt_metadata builds the per-station record; what remains here are the
 small, stdlib-only helpers the build pipeline (extract.build_portal) still needs and that
 mt_metadata does NOT provide: coordinate reads + QC (coords_of / info_coords / parse_angle /
-detect_coord_issue), the AU-state facet (state_of), and the Phoenix DATAID /
-processing-note scrape (parse_dataid / proc_note). Fast across thousands of files; no install.
+detect_coord_issue), the AU-state facet (state_of), the Phoenix DATAID /
+processing-note scrape (parse_dataid / proc_note), and the LINEAGE split between the program that
+WROTE the file and the program that PROCESSED the transfer function (writer_from_text /
+is_known_writer / mine_processor). Fast across thousands of files; no install.
 """
 import math
 import re
@@ -188,3 +190,140 @@ def proc_note(text, dataid=None):
         r = _REF_STATION.search(text)
         remote = r.group(1) if r else None
     return (note or None), remote
+
+
+# --- LINEAGE: the file WRITER is not the transfer-function PROCESSOR --------------------------
+# The EDI HEAD's PROGNAME/PROGVERS names the program that SERIALISED the file. For most of the
+# corpus that is a database/plotting exporter (Geotools, WinGLink, MTpy) which did no processing at
+# all: measured 2026-08-14 over the GA AusLAMP holdings, 1743 files say `PROGVERS="WINGLINK EDI
+# 1.0.22"` and 337 say `PROGVERS="Geotools 4.0.5.12583"`, while the program that actually estimated
+# the transfer function is named ONLY in the >INFO free text ("Processing code: LEMIMT" on 296 of
+# those Geotools files; "processing.software.name = ['Birrp 5.0', ' 5.2']" on the MTpy-written
+# AusLAMP SA files). Publishing PROGVERS as "processing software" therefore stated something false
+# about how the science was made, on the majority of the corpus.
+#
+# So the two identities are derived SEPARATELY and neither is ever synthesised from the other:
+#   writer_from_text  — WHO WROTE THE FILE (PROGNAME/PROGVERS, verbatim, split into name+version)
+#   mine_processor    — WHO PROCESSED THE TF (evidence mined from the >INFO free text ONLY)
+# A file that names no processor gets None. Absence is reported as absence; nothing is inferred
+# from the writer's identity, and no version is ever invented.
+
+# Writers: programs known to EXPORT transfer functions they did not estimate. Matched as a
+# case-insensitive SUBSTRING of the writer name, so "WINGLINK EDI" and "Geotools 4.0.5" both hit.
+# Mirrored client-side in portal/src/drawer.js (KNOWN_WRITERS) — keep the two in step.
+KNOWN_WRITERS = ("geotools", "winglink", "mtpy")
+
+# TF processors, canonical name -> the case-insensitive pattern that evidences it. Ordered: a more
+# specific name is tried BEFORE the one it contains (EMTF-FCU before EMTF), and an overlapping later
+# match is discarded, so "EMTF-FCU" is never also reported as a bare "EMTF".
+_PROC_VOCAB = (
+    ("EMTF-FCU", r"emtf[\s_-]*fcu"),
+    ("BIRRP", r"birrp"),
+    ("EMTF", r"emtf|egbert"),        # Egbert's EMTF is named either way in practice
+    ("Aurora", r"aurora"),
+    ("LEMIMT", r"lemimt"),
+    ("Lemigraph", r"lemigraph"),
+    ("Razorback", r"razorback"),
+    ("SSMT2000", r"ssmt\s*2000"),
+    ("EMPower", r"empower"),
+    ("MAnTiS", r"mantis"),
+    ("FFMT", r"ffmt"),
+)
+# An OPTIONAL version token immediately adjacent to the name ("Birrp 5.0", "aurora v0.3.1"). Only
+# what the text already carries is captured; a name with no adjacent version stays bare.
+_VER = r"(?:[\s:=]*(?:v(?:er(?:sion)?)?\.?\s*)?\d[\w.]*)?"
+_PROC_RE = tuple((n, re.compile("(?:" + p + ")" + _VER, re.I)) for n, p in _PROC_VOCAB)
+# WinGLink is a KNOWN WRITER, so its name alone is not processing evidence. It counts ONLY where the
+# text explicitly says the data were processed with it.
+_WGL_PROC = re.compile(r"process(?:ed|ing)[^\n]{0,60}?winglink|winglink[^\n]{0,30}?process(?:ed|ing)", re.I)
+# Processing language on the SAME line — what a hit that merely echoes the writer's own name needs
+# before it may count as processor evidence.
+_PROC_CONTEXT = re.compile(r"process|algorithm", re.I)
+# PROGVERS is "<name> [<version>]" ("Geotools 4.0.5.12583", "WINGLINK EDI 1.0.22", "EMpower
+# v1.54.2.5", "MTpy"). The version begins at the first token that STARTS like one; everything before
+# it is the name. A value with no such token is all name (MTpy), one that starts with one is all
+# version (a bare "1.0" is not a program name).
+_VER_TOKEN = re.compile(r"^v?\d", re.I)
+
+
+def is_known_writer(name) -> bool:
+    """True where `name` names a program that WRITES transfer-function files it did not process
+    (KNOWN_WRITERS, case-insensitive substring). Empty/None -> False."""
+    n = (name or "").strip().lower()
+    return bool(n) and any(w in n for w in KNOWN_WRITERS)
+
+
+def writer_from_text(raw):
+    """{name, version} for the program that WROTE this EDI, from the HEAD's PROGNAME/PROGVERS.
+
+    Verbatim: the recorded strings are split, never rewritten. PROGNAME (where a dialect writes one)
+    is the name and PROGVERS the version; with PROGVERS alone it is split at its first version-like
+    token. Returns {"name": None, "version": None} when the header states neither."""
+    prog = (grab(raw, "PROGNAME") or "").strip() or None
+    vers = (grab(raw, "PROGVERS") or "").strip() or None
+    if prog:
+        return {"name": prog, "version": vers}
+    if not vers:
+        return {"name": None, "version": None}
+    toks = vers.split()
+    cut = next((i for i, t in enumerate(toks) if _VER_TOKEN.match(t)), len(toks))
+    name = " ".join(toks[:cut]).strip() or None
+    version = " ".join(toks[cut:]).strip() or None
+    return {"name": name, "version": version}
+
+
+def _line_of(text, pos):
+    a = text.rfind("\n", 0, pos) + 1
+    b = text.find("\n", pos)
+    return text[a:(b if b >= 0 else len(text))].strip()
+
+
+def mine_processor(info_text, writer_name=None):
+    """(software, evidence) — the TF PROCESSOR named in an EDI's >INFO free text, or (None, None).
+
+    `software` is the matched phrase(s) kept as the file wrote them (name plus any immediately
+    adjacent version token: "Birrp 5.0", "LEMIMT", "aurora v0.3.1"), DISTINCT hits joined with
+    " + " in the order they appear in the text. `evidence` is the source line(s) the match came
+    from, joined with " | ", so the claim is auditable against the file.
+
+    `writer_name` is the identity from writer_from_text/mt_metadata. A hit that merely repeats the
+    writer's own name is not evidence that it processed anything, so such a hit is kept only where
+    its line also carries processing language. NOTHING is invented: no vocabulary entry is inferred
+    from the writer, and no version is synthesised."""
+    text = info_text or ""
+    if not text.strip():
+        return (None, None)
+    hits, spans = [], []
+    for canon, rx in _PROC_RE:
+        for m in rx.finditer(text):
+            if any(m.start() < e and s < m.end() for (s, e) in spans):
+                continue        # already claimed by a more specific name (EMTF-FCU vs EMTF)
+            phrase = m.group(0).strip().strip(":=,;'\"[]").strip()
+            if not phrase:
+                continue
+            # A name that is the writer's own is not evidence that it processed anything, so it
+            # needs processing language on its line. `is_known_writer(canon)` is INERT today (no
+            # KNOWN_WRITERS entry is in _PROC_VOCAB — WinGLink is handled by _WGL_PROC below); it is
+            # a structural guard over the table, so adding an exporter to the vocabulary later
+            # cannot reintroduce the very conflation this module exists to remove.
+            echoes_writer = bool(writer_name) and canon.lower() in (writer_name or "").lower()
+            if (is_known_writer(canon) or echoes_writer) and not _PROC_CONTEXT.search(_line_of(text, m.start())):
+                continue
+            spans.append((m.start(), m.end()))
+            hits.append((m.start(), canon, phrase, _line_of(text, m.start())))
+            break               # one hit per vocabulary entry is enough to name it
+    m = _WGL_PROC.search(text)
+    if m and not any(h[1] == "WinGLink" for h in hits):
+        hits.append((m.start(), "WinGLink", "WinGLink", _line_of(text, m.start())))
+    if not hits:
+        return (None, None)
+    hits.sort(key=lambda h: h[0])
+    seen, names, lines = set(), [], []
+    for _pos, canon, phrase, line in hits:
+        if canon in seen:
+            continue
+        seen.add(canon)
+        names.append(phrase)
+        if line and line not in lines:
+            lines.append(line)
+    return (" + ".join(names), " | ".join(lines) or None)

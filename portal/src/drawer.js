@@ -456,6 +456,23 @@ function processingSoftwareText(m,sc){
   if(st)return st;
   const sv=((m&&m.software)||"").toString().trim();
   return sv||"not stated in EDI";}
+// LINEAGE: programs that WRITE transfer-function files they did not process. MIRRORED from the engine's
+// _edi_catalog.KNOWN_WRITERS — keep the two in step. Matched as a case-insensitive substring, so
+// "WINGLINK EDI 1.0.22" and "Geotools 4.0.5.12583" both hit.
+const KNOWN_WRITERS=["geotools","winglink","mtpy"];
+function isKnownWriter(name){const n=String(name==null?"":name).trim().toLowerCase();
+  return !!n&&KNOWN_WRITERS.some(w=>n.indexOf(w)>=0);}
+// The lineage's "File written by" cell: the program that SERIALISED this station's file, from
+// station.json's processing.file_written_by. This node exists because the row ABOVE it used to carry this
+// value under the heading "Processing software" — the reader was told Geotools/WinGLink/MTpy processed the
+// data when those tools only exported a file somebody else's code had estimated. Naming the exporter under
+// its own heading is the honest half of that fix, and a known exporter is annotated so the distinction is
+// legible without the reader having to know the tool. PURE (no DOM); the caller escapes it.
+function fileWrittenByText(fwb){
+  const name=String((fwb&&fwb.name)==null?"":fwb.name).trim();
+  if(!name)return "not stated in EDI";
+  const ver=String((fwb&&fwb.version)==null?"":fwb.version).trim();
+  return name+(ver?" "+ver:"")+(isKnownWriter(name)?" (database/file export)":"");}
 // Card-lane polish (owner): the formats AusMT actually distributes for THIS STATION, dot-separated with no
 // ticks and no "(pipeline)" qualifier. It renders inside the station drawer's lineage graph, so every input
 // must be station-scoped. Availability comes from the SAME sources the Files tab reads: ediDescriptor for
@@ -521,8 +538,24 @@ function provGraph(s){const m=SMETA[s.survey]||{},sc=sciRow(s.i);
     nodes.push(["Source dataset",idv?`${lbl} · ${pidLink(idv)}`:lbl]);}
   nodes.push(
    ["Raw time series",m.ts==="ok"?tsCollectionCell(m):"not located in source archives"],
-   ["Processing software",esc(processingSoftwareText(m,sc))],
-   ["Method",methodGate||(sc[SC.alg]?esc(sc[SC.alg]):(sc[SC.rr]?"remote reference (stated)":"not stated"))],
+   ["Processing software",esc(processingSoftwareText(m,sc))]);
+  // "Method" used to render unconditionally and read "not stated" on almost every station, because the
+  // structured algorithm/remote-reference fields it draws on are empty for most EDI dialects. A row that
+  // says nothing on nearly the whole corpus is noise in a six-row graph, and it crowded out the rows that
+  // do carry lineage. It renders only where the source file actually states one of the two — or while
+  // sci.json is still in flight, where the honest answer is that the answer is not known yet.
+  if(methodGate||sc[SC.alg]||sc[SC.rr])
+    nodes.push(["Method",methodGate||(sc[SC.alg]?esc(sc[SC.alg]):"remote reference (stated)")]);
+  // The file-WRITER, under its own heading, next to the processor it is not. Read from station.json
+  // (loadStationFrameLine's fetch), so the cell is a placeholder the async resolve fills in; on a re-render
+  // the cache answers synchronously. Rendered only where that fetch actually runs: for a non-open survey
+  // no station.json science is served, and a permanent loading cell would be its own small lie.
+  if(isOpenAccess(m)){
+    const _fw=stationFactsOf(s);
+    nodes.push(["File written by",
+      `<span id="lineage-fwb" data-ausmt="${escAttr(s.ausmt_id)}">${_fw?esc(_fw.writer):"loading…"}</span>`]);
+  }
+  nodes.push(
    ["Transfer function",`${s.nper} periods · ${esc(s.comps.split("").join("+"))||"–"}`],
    ["Distributed formats",esc(distributedFormatsText(s,m))],
    ["Publication (interpretation)",publicationCell(m)]
@@ -601,27 +634,40 @@ function frameLineText(frame){
 // identical station.json requests per drawer open. Cache the RESOLVED LINE per station instead: "" covers
 // every no-line outcome (absent station.json, no frame block, nothing worth saying, an offline/file:// error)
 // so a station that produced no line is not re-requested either.
-const _frameLineCache=new Map();                          // ausmt_id -> the resolved line ("" = no line)
-function _injectFrameLine(s,txt){
-  if(!txt) return;
+// The SAME fetch also resolves the lineage's "File written by" cell (station.json
+// processing.file_written_by), for the same reason and at the same cost: it is a per-station fact with no
+// catalogue column. One request answers both; the cache holds {line, writer} so a re-render re-injects both
+// without re-requesting. The entry appears only once the request SETTLES, and it settles either way: an
+// unreadable/absent station.json resolves `writer` to the honest failure cell, so the placeholder the graph
+// renders can never stand as a permanent loading state — which would be its own false claim.
+const _frameLineCache=new Map();                          // ausmt_id -> {line, writer} ("" line = no line)
+function _injectStationFacts(s,facts){
+  if(!facts) return;
   const el=document.getElementById("frameline");
-  if(el&&el.dataset.ausmt===s.ausmt_id){                  // guard: drawer may have moved on (async)
-    el.textContent=txt;
+  if(facts.line&&el&&el.dataset.ausmt===s.ausmt_id){       // guard: drawer may have moved on (async)
+    el.textContent=facts.line;
     el.style.cssText="font-size:12px;color:var(--muted);margin:2px 0 10px;line-height:1.4";
   }
+  ["lineage-fwb","provtop-fwb"].forEach(id=>{           // two cells in one tab, one fetch, same guard
+    const w=document.getElementById(id);
+    if(w&&w.dataset.ausmt===s.ausmt_id) w.textContent=facts.writer;
+  });
 }
+function stationFactsOf(s){return _frameLineCache.get(s&&s.ausmt_id);}
 function loadStationFrameLine(s){
   const slug=s.slug||((SMETA[s.survey]||{}).slug);
   if(!slug||!s.id) return Promise.resolve();              // cannot locate station.json — skip
-  if(_frameLineCache.has(s.ausmt_id)){_injectFrameLine(s,_frameLineCache.get(s.ausmt_id));return Promise.resolve();}
+  if(_frameLineCache.has(s.ausmt_id)){_injectStationFacts(s,_frameLineCache.get(s.ausmt_id));return Promise.resolve();}
   const url=dataUrl("products/"+encodeURIComponent(slug)+"/"+encodeURIComponent(s.id)+"/station.json");
   // The catch sits on the FETCH, not on the whole chain, so a withheld/offline/file:// station caches its
   // no-line outcome (and is not re-requested) while a throw in the render step below caches nothing and is
   // simply retried, exactly as before.
   return fetch(url).then(r=>r.ok?r.json():null).catch(()=>null).then(doc=>{   // withheld / offline / file:// => no line
-    const txt=(doc&&doc.frame)?(frameLineText(doc.frame)||""):"";
-    _frameLineCache.set(s.ausmt_id,txt);
-    _injectFrameLine(s,txt);
+    const facts={line:(doc&&doc.frame)?(frameLineText(doc.frame)||""):"",
+                 writer:doc?fileWrittenByText((doc.processing||{}).file_written_by)
+                           :"could not be loaded"};
+    _frameLineCache.set(s.ausmt_id,facts);
+    _injectStationFacts(s,facts);
   }).catch(()=>{});
 }
 // UX8 (X5): the five Screening indicators, each derived ONLY from a quantity the pipeline already computes.
@@ -826,8 +872,14 @@ function openStation(i,opts){
   // h5 of its own inside a survey that has a bundle showed a green MTH5 badge two tabs away from a Files
   // row reading "not currently available". A badge in a station drawer answers about the station.
   const _fmtH5Art=_arts.some(a=>a.format==="mth5");
+  // The writer row rides alongside the processing-software row for the same reason it does in the lineage
+  // graph: this table is the OTHER surface in this tab that names software, and leaving the exporter out of
+  // it would put the two back in disagreement — the failure processingSoftwareText was factored to prevent.
+  // Same cache, same async fill, own element id (two injection targets, one fetch).
+  const _fwTop=stationFactsOf(s);
   const provTop=`<table class="meta prov-top">`+
     `<tr><td>Processing software</td><td>${esc(processingSoftwareText(m,sc))}</td></tr>`+
+    (isOpenAccess(m)?`<tr><td>File written by</td><td><span id="provtop-fwb" data-ausmt="${escAttr(s.ausmt_id)}">${_fwTop?esc(_fwTop.writer):"loading…"}</span></td></tr>`:"")+
     `<tr><td>Transfer function</td><td>${esc(s.file)}${s.sha?` · <code title="${escAttr(s.sha)}">${esc(s.sha.slice(0,16))}…</code>`:" · <span class='prov'>no checksum</span>"}</td></tr>`+
     `<tr><td>Source archive</td><td>${_srcArchive}</td></tr></table>`;
   const metaTable=`<table class="meta">`+
