@@ -322,7 +322,9 @@ def test_metadata_inline_email_field_error(tmp_path):
             r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
             # The retired lead-name input is gone; the flag surfaces inside the People & credit form.
             assert 'name="s_lead_investigator_name"' not in r.text
-            people = r.text.split('data-hub-section-form="people"', 1)[1].split("</form>", 1)[0]
+            # HUB-SINGLE-SAVE (2026-08-14): the sections are <section> blocks inside ONE form, so a
+            # block ends at </section> (it used to end at </form>).
+            people = r.text.split('data-hub-section-form="people"', 1)[1].split("</section>", 1)[0]
             # Assert against the SOURCE contract copy (avoids re-typing its em dash + guards copy drift).
             expected = f'<p class="fielderr">{curatorpage._esc(curatorpage._CITATION_EMAIL_ERROR)}</p>'
             assert expected in people, people
