@@ -230,6 +230,15 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // fails there with a precise message, instead of dying at this api hook with a ReferenceError.
   "processingSoftwareText:(m,sc)=>processingSoftwareText(m,sc),pubShortCite:(p)=>pubShortCite(p)," +
   "setManifest:(mf)=>{MANIFEST=mf;}," +
+  // Lineage split hooks (writer vs processor). fileWrittenByText is the PURE writer-cell derivation;
+  // setSciRow/restoreSciRows patch one station's sci row BY NAME (projected through SCI_COLUMNS, so a
+  // contract append cannot silently mis-place the patch) and put the fixture back, which is how the
+  // Method-node omission is driven — that node's inputs live in sci.json, not in SMETA.
+  "fileWrittenByText:(f)=>fileWrittenByText(f)," +
+  "setSciRow:(id,patch)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(!s)return;" +
+  "  if(!window.__sciBackup)window.__sciBackup=SCI.map(r=>r.slice());" +
+  "  const r=SCI[s.i].slice();Object.keys(patch).forEach(k=>{r[SCI_COLUMNS.indexOf(k)]=patch[k];});SCI[s.i]=r;}," +
+  "restoreSciRows:()=>{if(window.__sciBackup){SCI=window.__sciBackup;window.__sciBackup=null;}}," +
   // CVD amendment hook: qColor (the completeness ramp) so the sequential-ramp pins drive it directly.
   "qColor," +
   // UX9 item 2 (map off-centre fix) hooks. The off-centre-on-load bug is a fitBounds computed at a
@@ -2812,6 +2821,49 @@ async function bootFreshWindow(dataMap, url) {
   const lgPubNone = lineageValue(doc.getElementById("dp-provenance"), "Publication (interpretation)");
   ok(lgPubNone && lgPubNone.textContent.trim() === "none recorded",
     "PUB: a survey with no publications must still read 'none recorded', got: " + JSON.stringify(lgPubNone && lgPubNone.textContent.trim()));
+
+  // (e) LINEAGE: the file WRITER is not the PROCESSOR. The graph used to publish the EDI HEAD's program
+  //     stamp under "Processing software" — Geotools / WinGLink / MTpy, i.e. whatever SERIALISED the file,
+  //     which for most of the corpus estimated nothing. The writer now has its OWN row, read from
+  //     station.json (the same fetch as the frame line), and a known exporter is annotated as one.
+  //     PURE derivation first, then the rendered row.
+  ok(A.fileWrittenByText({ name: "Geotools", version: "4.0.5.12583" }) === "Geotools 4.0.5.12583 (database/file export)",
+    "WRITER: a known exporter must render with its version and the export annotation, got: " +
+    JSON.stringify(A.fileWrittenByText({ name: "Geotools", version: "4.0.5.12583" })));
+  ok(A.fileWrittenByText({ name: "EMpower", version: "v1.54.2.5" }) === "EMpower v1.54.2.5",
+    "WRITER: a program that is not a known exporter carries no annotation (it may have done the processing)");
+  ok(A.fileWrittenByText({}) === "not stated in EDI",
+    "WRITER: a file that names no writer says so; nothing is inferred from the processor");
+  A.openStationById("nz.gamma.G1");
+  const lgWriter = lineageValue(doc.getElementById("dp-provenance"), "File written by");
+  ok(lgWriter, "WRITER: the lineage must carry a 'File written by' node distinct from 'Processing software'");
+  // The fixture serves no products/ tree, so the station.json fetch cannot resolve — which must read as a
+  // load failure, never as a claim about what the file states.
+  ok(/loading…|could not be loaded/.test(lgWriter.textContent),
+    "WRITER: with no station.json served the cell must read as loading/unloadable, got: " +
+    JSON.stringify(lgWriter.textContent.trim()));
+  // An EMBARGOED station serves no station.json science at all, so the row is ABSENT rather than
+  // permanently loading — the same absence discipline the withheld download affordance uses.
+  A.openStationById("au.delta.D1");
+  ok(!lineageValue(doc.getElementById("dp-provenance"), "File written by"),
+    "WRITER: an embargoed station must not carry a writer row that can never resolve");
+  // (f) METHOD: the row rendered unconditionally and read "not stated" on nearly every station, because
+  //     the structured fields behind it are empty for most EDI dialects. It renders only where the source
+  //     states an algorithm or remote reference. Gamma's fixture row states both, so it is PRESENT there;
+  //     a station whose sci row states neither drops the row instead of printing noise.
+  A.openStationById("nz.gamma.G1");
+  ok(lineageValue(doc.getElementById("dp-provenance"), "Method"),
+    "METHOD: a station whose sci row states an algorithm must keep the Method node");
+  A.setSciRow("nz.gamma.G1", { alg: null, rr: 0 });
+  A.openStationById("nz.gamma.G1");
+  const lgMethodGone = doc.getElementById("dp-provenance");
+  ok(!lineageValue(lgMethodGone, "Method"),
+    "METHOD: with neither an algorithm nor a stated remote reference the node must be OMITTED, not 'not stated'");
+  ok(lgMethodGone.textContent.indexOf("not stated</div>") < 0 && !/>not stated</.test(lgMethodGone.innerHTML),
+    "METHOD: the retired 'not stated' cell must survive nowhere in the lineage");
+  ok(lineageValue(lgMethodGone, "Processing software"),
+    "METHOD: dropping the Method node must not disturb the rows around it");
+  A.restoreSciRows();
   doc.getElementById("drawer").classList.remove("open");
 
   // OO. CVD-SAFE COMPLETENESS RAMP (UX8 amendment). The old red→amber→green ramp's endpoints measured

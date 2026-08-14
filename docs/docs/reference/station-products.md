@@ -90,14 +90,14 @@ declares no `station_ids` provenance carries no `provenance.source`.
     "median_relative_error": 0.041,
     "remote_reference": false,
     "tipper_available": false,
-    "dimensionality": "2-D",
-    "skew_beta_median_deg": 0.7,
     "completeness_smoothness_diagnostic": {
       "value": 3.4, "basis": "e",
       "note": "not a quality or geological-value judgement" }
   },
-  "processing": { "software": "Geotools 4.0.5", "algorithm": null,
-                  "remote_reference": false, "remote_site": null, "note": null },
+  "processing": { "software": "Birrp 5.0", "algorithm": null,
+                  "remote_reference": false, "remote_site": null,
+                  "file_written_by": { "name": "MTpy", "version": null },
+                  "note": null },
   "distribution": { "edi_available": true, "license": "CC-BY-4.0",
                     "edi_path": "edi/vulcan-2022/Vulcan_A1.edi" },
   "provenance": { "pipeline": "ausmt/extract.build_portal", "input_file": "Vulcan_A1.edi",
@@ -204,9 +204,12 @@ declares no `station_ids` provenance carries no `provenance.source`.
 | `median_relative_error` | number or null | median relative apparent-resistivity error |
 | `remote_reference` | boolean | whether the source file states remote reference processing |
 | `tipper_available` | boolean | whether a tipper is present |
-| `dimensionality` | string or null | `1-D`, `2-D`, `3-D`, `indeterminate` or null |
-| `skew_beta_median_deg` | number or null | median absolute phase-tensor skew, degrees |
 | `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
+
+The dimensionality classification and its skew statistic are **not** members of this block. They are
+the whole content of the `dimensionality.json` emitted beside this document (§2), which carries them
+with the method and the screening caveat that qualifies them; restating them here produced a second
+copy without that caveat.
 
 The full definitions of these diagnostics are in
 [Quality metrics](../science/quality-metrics.md) and [Dimensionality](../science/dimensionality.md).
@@ -223,11 +226,20 @@ The full definitions of these diagnostics are in
 
 | Member | Type | Definition |
 |---|---|---|
-| `software` | string or null | processing software |
+| `software` | string or null | the program that **processed** the transfer function |
 | `algorithm` | string or null | processing algorithm |
 | `remote_reference` | boolean | whether remote reference is stated |
 | `remote_site` | string or null | the named reference station, where the header encodes one |
+| `file_written_by` | object | `{name, version}` — the program that **wrote** the file, verbatim from its header; either member is null where the header does not state it |
 | `note` | string or null | the arrangement detail from the source file's free text |
+
+`software` and `file_written_by` are two different facts and are usually two different programs. An
+EDI HEAD's `PROGNAME`/`PROGVERS` names whatever serialised the file, which across most of the corpus
+is a database or plotting exporter (Geotools, WinGLink, MTpy) that estimated nothing; the program
+that produced the transfer function is named only in the file's free text ("Processing code:
+LEMIMT", "processing.software.name = ['Birrp 5.0', ' 5.2']"). `software` is mined from that text and
+is null where the file names no processor — which means *not stated*, never *not used*. The writer
+is reported separately under `file_written_by` rather than being published as the processor.
 
 ### 1.10 distribution
 

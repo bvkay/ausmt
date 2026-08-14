@@ -1525,10 +1525,27 @@ def _parse_one_edi(p):
     r["processing_note"], r["remote_site"] = cat.proc_note(_raw, _did)
     # Processing metadata (sw/alg/remote-ref): mt_metadata leaves these EMPTY for many EDI dialects,
     # so supplement with the kept text scrape so this best-effort facet survives.
-    _pm, _pt = mtm.proc_info_from_tf(tfobj), sci.proc_info(_raw)
-    proc = (_pm[0] or _pt[0] or cat.grab(_raw, "PROGVERS"),   # sw: scrape, else PROGVERS
+    _pm, _pt = mtm.proc_info_from_tf(tfobj, with_writer=True), sci.proc_info(_raw)
+    # LINEAGE: the program that WROTE the file and the program that PROCESSED the TF are two facts,
+    # and `sw` is the second one. It used to fall back to the HEAD's PROGVERS, which published the
+    # WRITER as the processor across most of the corpus ("Geotools 4.0.5.12583", "WINGLINK EDI
+    # 1.0.22", "MTpy") while the real processor sat unread in the >INFO free text. PROGVERS is now
+    # carried as file_written_by instead, and the processor is MINED from the note, with the
+    # writer's identity passed in so a hit that merely echoes it is not mistaken for evidence.
+    # The miner also returns the source LINE it matched; it is not carried into the product because
+    # the line is already published verbatim inside processing.note (the whole >INFO block), so the
+    # mined claim is auditable against the served document without a second key stating it twice.
+    _writer = _pm[3] if _pm[3].get("name") else cat.writer_from_text(_raw)
+    _mined = cat.mine_processor(r.get("processing_note") or "", _writer.get("name"))[0]
+    # Fallback order, strongest evidence first: the mined >INFO phrase; the explicit
+    # "Processing code:" declaration; and finally a stated writer that is NOT a known exporter (an
+    # EDI written directly by its processor, e.g. LEMIMT or Phoenix EMpower). A known writer never
+    # becomes the processor, and nothing is invented — no evidence leaves sw None.
+    _sw_writer = _writer.get("name") if not cat.is_known_writer(_writer.get("name")) else None
+    proc = (_mined or _pt[0] or _pm[0] or _sw_writer,           # sw: THE PROCESSOR
             _pm[1] or _pt[1],                                  # alg: scrape
             _pm[2] or _pt[2] or (1 if r.get("remote_site") else 0))  # rr: ...or remote_site found
+    r["file_written_by"] = _writer
     per, comp = mtm.components_from_tf(tfobj)
     tf = tfmod.tf_from_components(per, comp) if per else ep.EMPTY_TF
     srow = sci.science_from_components(per, comp, proc) if per \
@@ -1874,9 +1891,13 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
         r["comps"] = "".join(r.get("components") or [])
         per, comp = mtm.components_from_tf(tfobj)
         # Processing metadata comes from the TF's own structured fields: an EMTF XML has no EDI
-        # >INFO block, so the EDI text scrape has nothing to read here and is not run.
-        _pm = mtm.proc_info_from_tf(tfobj)
+        # >INFO block, so neither the EDI text scrape nor the processor evidence miner has anything
+        # to read here and neither is run. proc_info_from_tf still splits WRITER from PROCESSOR, so
+        # a file stamped by a known exporter yields file_written_by and a null processor rather
+        # than naming the exporter as one.
+        _pm = mtm.proc_info_from_tf(tfobj, with_writer=True)
         proc = (_pm[0], _pm[1], _pm[2])
+        r["file_written_by"] = _pm[3]
         tf = tfmod.tf_from_components(per, comp) if per else ep.EMPTY_TF
         srow = sci.science_from_components(per, comp, proc) if per \
             else sci.science_from_components(None, {}, None)
@@ -2043,9 +2064,15 @@ def _write_station_products(job, prov):
         "location": {"lat": r["lat"], "lon": r["lon"]},
         "data": {"type": r.get("type"), "n_periods": r.get("n_periods"),
                  "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
+        # The dimensionality CLASSIFICATION and its skew statistic are NOT restated here: they are
+        # the whole content of this station's dimensionality.json, emitted a few lines below, which
+        # carries them with the method and the "screening diagnostic, not an interpretation product"
+        # caveat that gives them their meaning. Two copies of a derived call in one directory is a
+        # drift surface with no reader: whichever one a consumer happened to read, the caveat only
+        # travelled with one of them. dimensionality.json is the single home; sci.json and the
+        # science pipeline are unchanged.
         "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
                         "tipper_available": "T" in (r.get("comps") or ""),
-                        "dimensionality": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
                         "completeness_smoothness_diagnostic": {
                             "value": srow[_SC["q"]], "basis": srow[_SC["qb"]],
                             "note": "not a quality or geological-value judgement"}},
@@ -2053,9 +2080,14 @@ def _write_station_products(job, prov):
         # structured fields are empty for most dialects). The remote_reference arrangement
         # detail lives in `note` (the EDI INFO block); remote_site is the named reference
         # station where derivable (Phoenix 'P=x R=y' DATAID / REFERENCE section).
+        # LINEAGE: `software` is the program that PROCESSED the transfer function (mined from the
+        # source file's own free text), `file_written_by` the program that SERIALISED the file. They
+        # are usually different programs and were previously conflated under `software`, which named
+        # the exporter. A null software means the file states no processor — not that none was used.
         "processing": {"software": srow[_SC["sw"]], "algorithm": srow[_SC["alg"]],
                        "remote_reference": bool(srow[_SC["rr"]]),
                        "remote_site": r.get("remote_site"),
+                       "file_written_by": r.get("file_written_by") or {"name": None, "version": None},
                        "note": r.get("processing_note")},
         # C42: edi_served folds in the per-station coordinate byte-gate — a non-exact station is NOT
         # distributed even inside a served survey, so its station.json must not advertise an EDI.

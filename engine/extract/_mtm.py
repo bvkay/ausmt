@@ -407,20 +407,47 @@ def components(path: Path):
     return components_from_tf(_read(path))
 
 
-def proc_info_from_tf(tf):
-    """(software, algorithm, remote_reference) from an already-parsed TF object."""
+def proc_info_from_tf(tf, with_writer=False):
+    """(software, algorithm, remote_reference[, file_written_by]) from an already-parsed TF object.
+
+    LINEAGE (2026-08-14): `software` is the program that PROCESSED the transfer function, which is
+    NOT the same fact as mt_metadata's `transfer_function.software`. That field is populated from
+    the source file's own program stamp (an EDI HEAD's PROGNAME/PROGVERS), i.e. from whatever WROTE
+    the file — for most of the corpus a database/plotting exporter that estimated nothing (see
+    _edi_catalog.KNOWN_WRITERS). So a known writer is NOT returned as the processor; it is returned
+    separately as `file_written_by`. A software name that is NOT a known writer is a program that
+    plausibly did the processing (an EDI written directly by LEMIMT), and stands as `software`.
+
+    `with_writer=True` appends file_written_by = {"name", "version"} — mt_metadata's software block
+    VERBATIM, None where the field is empty (which it is for most EDI dialects; the build layer
+    supplements it from the HEAD via _edi_catalog.writer_from_text). The default 3-tuple keeps the
+    signature every existing caller unpacks (the `proc` argument of
+    _edi_science.science_from_components) unchanged.
+
+    The writer vocabulary is imported HERE, not at module scope. `_mtm` is reached BOTH ways in
+    this tree: by bare name (build_portal, which puts extract/ on sys.path) and as `extract._mtm`
+    (ausmt_science.ingest.normalize, by package path with engine/ as the root, for read_with_fallback
+    alone). A module-level `import _edi_catalog` resolves under the first and raises under the
+    second — measured — which would break normalize for a caller that only wants the reader. Inside
+    the try it also fails SAFE: no vocabulary means no software claim, never a wrong one."""
     try:
+        import _edi_catalog as cat  # noqa: PLC0415  (see the docstring: import shape, not laziness)
         tfm = tf.station_metadata.transfer_function
-        sw = getattr(getattr(tfm, "software", None), "name", None)
+        swobj = getattr(tfm, "software", None)
+        name = (getattr(swobj, "name", None) or "").strip() or None
+        version = (getattr(swobj, "version", None) or "").strip() or None
         rr = 1 if (tfm.processing_type and "remote" in str(tfm.processing_type).lower()) else 0
-        return (sw or None, str(tfm.processing_type) or None if tfm.processing_type else None, rr)
+        alg = str(tfm.processing_type) if tfm.processing_type else None
+        sw = None if (name is None or cat.is_known_writer(name)) else name
+        out = (sw, alg, rr)
+        return out + ({"name": name, "version": version},) if with_writer else out
     except Exception:  # noqa: BLE001
-        return (None, None, 0)
+        return (None, None, 0, {"name": None, "version": None}) if with_writer else (None, None, 0)
 
 
-def proc_info(path: Path):
-    """(software, algorithm, remote_reference) from mt_metadata where present."""
+def proc_info(path: Path, with_writer=False):
+    """(software, algorithm, remote_reference[, file_written_by]) from mt_metadata where present."""
     try:
-        return proc_info_from_tf(_read(path))
+        return proc_info_from_tf(_read(path), with_writer=with_writer)
     except Exception:  # noqa: BLE001
-        return (None, None, 0)
+        return (None, None, 0, {"name": None, "version": None}) if with_writer else (None, None, 0)

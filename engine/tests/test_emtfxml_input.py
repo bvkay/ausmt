@@ -93,8 +93,11 @@ def test_emtfxml_only_survey_builds_and_serves_the_full_product_set(tmp_path):
         assert sj["distribution"]["edi_path"] == f"edi/{SLUG}/{st}.edi", sj["distribution"]
         # provenance stays honest about what was actually ingested
         assert sj["provenance"]["input_file"] == f"{st}.xml", sj["provenance"]
-        assert sj["data"]["n_periods"] > 0 and sj["diagnostics"]["dimensionality"], sj
-        assert (prod / SLUG / st / "dimensionality.json").is_file()
+        assert sj["data"]["n_periods"] > 0, sj
+        # the dimensionality CALL lives in dimensionality.json only — station.json stopped restating it
+        dj = prod / SLUG / st / "dimensionality.json"
+        assert dj.is_file()
+        assert json.loads(dj.read_text(encoding="utf-8"))["classification"], dj
 
     rows = {(f["station"], f["format"]) for f in d["manifest"]["files"]}
     assert rows == {("EXAMPLE01", "edi"), ("EXAMPLE01", "emtfxml"),
