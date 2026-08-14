@@ -120,12 +120,18 @@ def detect_coord_issue(head_lat, head_lon, info_lat, info_lon, lat, lon):
     return coord_flag, candidates, coord_conflict
 
 
+INFO_ANGLE = NUM + r"(?::\d+(?:\.\d+)?){0,2}"
+
+
 def info_coords(raw):
-    """Decimal INFO-block coordinates (Geotools style: 'LATITUDE: -29.3675'), or (None, None)."""
-    mi_lat = re.search(r"LATITUDE\s*:\s*(" + NUM + ")", raw)
-    mi_lon = re.search(r"LONGITUDE\s*:\s*(" + NUM + ")", raw)
-    return (float(mi_lat.group(1)) if mi_lat else None,
-            float(mi_lon.group(1)) if mi_lon else None)
+    """INFO-block coordinates, decimal (Geotools style: 'LATITUDE: -29.3675') or DMS
+    ('LATITUDE : -28:31:33.45', NSW re-export style), or (None, None). A decimal-only
+    match here truncated DMS values at the first colon and manufactured whole-degree
+    HEAD/INFO conflicts (~0.5 deg / ~55 km) on every DMS-INFO file."""
+    mi_lat = re.search(r"LATITUDE\s*:\s*(" + INFO_ANGLE + ")", raw)
+    mi_lon = re.search(r"LONGITUDE\s*:\s*(" + INFO_ANGLE + ")", raw)
+    return (parse_angle(mi_lat.group(1)) if mi_lat else None,
+            parse_angle(mi_lon.group(1)) if mi_lon else None)
 
 
 def coords_of(path: Path):

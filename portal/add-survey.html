@@ -573,11 +573,13 @@ function parseEdi(text){
     const per=nums.map(f=>f?1/f:null).filter(p=>p&&p>0); nper=per.length;
     if(per.length){pmin=Math.min.apply(null,per);pmax=Math.max.apply(null,per);} }
   const dataid=grab("DATAID");
-  // INFO-block decimal coords (Geotools style) + DMS sign-bug detection. Mirrors the backend
-  // _edi_catalog.detect_coord_issue: head == 2*floor(info) - info is the floored-DMS signature, so
-  // the HEAD coordinate may be ~tens-to-hundreds of km wrong while the INFO decimal is correct.
-  const im=raw.match(/LATITUDE\s*:\s*([-+]?\d+(?:\.\d+)?)/), io=raw.match(/LONGITUDE\s*:\s*([-+]?\d+(?:\.\d+)?)/);
-  const info_lat=im?parseFloat(im[1]):null, info_lon=io?parseFloat(io[1]):null;
+  // INFO-block coords, decimal (Geotools style) or DMS ('LATITUDE : -28:31:33.45', NSW
+  // re-export style) + DMS sign-bug detection. Mirrors the backend _edi_catalog: a decimal-only
+  // match truncated DMS INFO values at the first colon, manufacturing whole-degree (~55 km)
+  // HEAD/INFO conflicts. head == 2*floor(info) - info is the floored-DMS signature, so the
+  // HEAD coordinate may be ~tens-to-hundreds of km wrong while the INFO decimal is correct.
+  const im=raw.match(/LATITUDE\s*:\s*([-+]?\d+(?:\.\d+)?(?::\d+(?:\.\d+)?){0,2})/), io=raw.match(/LONGITUDE\s*:\s*([-+]?\d+(?:\.\d+)?(?::\d+(?:\.\d+)?){0,2})/);
+  const info_lat=im?parseAngle(im[1]):null, info_lon=io?parseAngle(io[1]):null;
   let coord_flag=null;
   if(lat!=null&&info_lat!=null&&info_lat<0&&Math.abs(lat-info_lat)>0.01){
     const sd=Math.abs(lat-(2*Math.floor(info_lat)-info_lat));

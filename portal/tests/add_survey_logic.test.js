@@ -32,6 +32,15 @@ ok(Math.abs(p.info_lat - (-29.3675)) < 1e-3, "INFO lat parsed (~ -29.3675)");
 ok(p.coord_flag === "dms_sign_ambiguous", "DMS HEAD/INFO conflict flagged");
 ok(M.parseEdi(CLEAN).coord_flag == null, "clean decimal EDI not flagged");
 
+// DMS-format INFO block (NSW re-export style): HEAD and INFO genuinely agree to ~4 m. A
+// decimal-only INFO regex truncated '-28:31:33.45' to -28, manufacturing a ~0.53 deg (~55 km)
+// phantom conflict at every such station.
+const NSW_DMS = '>HEAD\nDATAID="A23"\nLAT=-28:31:33.593\nLONG=+152:1:33.241\n\n>INFO\n  LATITUDE    :   -28:31:33.45\n  LONGITUDE   :   152:01:34.43\n\n>FREQ\n1 10 100\n>ZXYR\n1 2 3\n';
+const pn = M.parseEdi(NSW_DMS);
+ok(Math.abs(pn.info_lat - (-(28 + 31 / 60 + 33.45 / 3600))) < 1e-6, "DMS INFO lat parsed, not truncated at the colon");
+ok(Math.abs(pn.info_lon - (152 + 1 / 60 + 34.43 / 3600)) < 1e-6, "DMS INFO lon parsed");
+ok(Math.abs(pn.lat - pn.info_lat) < 1e-3, "HEAD and DMS INFO agree to metres");
+ok(pn.coord_flag == null, "agreeing DMS blocks not flagged as a conflict");
 const base = { name: "X", slug: "x", organisation: "O", country: "Australia", license: "CC-BY-4.0", access: "open",
                uploader_name: "n", uploader_email: "a@b.co", authority_to_submit: true, license_declaration: true };
 

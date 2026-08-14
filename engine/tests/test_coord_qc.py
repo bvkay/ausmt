@@ -60,3 +60,33 @@ def test_resolution_swaps_to_info_only_when_declared():
     # survey declares trust-HEAD -> keep HEAD value, mark resolved (no swap)
     s = station(); bp._apply_coord_resolution(s, {"dms_sign": "head"})
     assert s[0][1]["lat"] == hlat and s[0][1]["coord_flag"] == "dms_sign_resolved"
+
+
+# ---- DMS-format INFO blocks (NSW re-export style) --------------------------------------------
+# A decimal-only INFO regex truncated 'LATITUDE : -28:31:33.45' at the first colon (-> -28.0),
+# manufacturing a whole-degree (~55 km) HEAD/INFO conflict at every station. The INFO parser must
+# accept DMS and agree with HEAD to metres on files whose two blocks genuinely agree.
+
+NSW_DMS_EDI = (
+    '>HEAD\nDATAID="A23"\nLAT=-28:31:33.593\nLONG=+152:1:33.241\n\n'
+    ">INFO\n  LATITUDE    :   -28:31:33.45\n  LONGITUDE   :   152:01:34.43\n\n"
+    ">FREQ\n1 10 100\n>ZXYR\n1 2 3\n"
+)
+
+
+def test_info_coords_parses_dms(tmp_path):
+    ilat, ilon = cat.info_coords(NSW_DMS_EDI)
+    assert ilat is not None and abs(ilat - (-(28 + 31 / 60 + 33.45 / 3600))) < 1e-6
+    assert ilon is not None and abs(ilon - (152 + 1 / 60 + 34.43 / 3600)) < 1e-6
+    # decimal Geotools style still parses unchanged
+    dlat, dlon = cat.info_coords("LATITUDE :  -29.3675\nLONGITUDE: 132.7536\n")
+    assert dlat == -29.3675 and dlon == 132.7536
+
+
+def test_dms_info_agreeing_head_raises_no_conflict():
+    hlat = cat.parse_angle("-28:31:33.593")
+    hlon = cat.parse_angle("+152:1:33.241")
+    ilat, ilon = cat.info_coords(NSW_DMS_EDI)
+    flag, cand, conflict = cat.detect_coord_issue(hlat, hlon, ilat, ilon, hlat, hlon)
+    assert flag is None, f"agreeing DMS blocks must not flag, got {flag!r}"
+    assert conflict is None, f"agreeing DMS blocks must not report a conflict, got {conflict!r}"
