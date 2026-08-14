@@ -108,6 +108,15 @@ def _diff_changed(text: str) -> list[str]:
             if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
 
 
+def _section_html(body: str, key: str) -> str:
+    """The rendered HTML of ONE hub Metadata section block. HUB-SINGLE-SAVE (2026-08-14): the sections
+    are <section> blocks inside ONE form, so a block ends at </section> (it used to end at </form>).
+    Splitting on the wrong terminator would swallow every following section and quietly hollow out the
+    per-section assertions built on this helper."""
+    assert f'data-hub-section-form="{key}"' in body, f"no section block for {key!r}"
+    return body.split(f'data-hub-section-form="{key}"', 1)[1].split("</section>", 1)[0]
+
+
 def _canon(value) -> str:
     """A hidden o_<section> snapshot value (any valid JSON of the original; the round-trip compare is
     order-independent). Mirrors what the rendered form embeds."""
@@ -371,7 +380,7 @@ def test_hub_metadata_identifiers_consolidated_one_section(tmp_path):
             # The consolidated FORM carries BOTH groups' widgets + BOTH round-trip snapshots — the identifiers
             # map (project_raid) and the typed related_identifiers list rows — so one section post round-trips
             # both. The existing stored values are prefilled.
-            form_html = body.split('data-hub-section-form="identifiers"', 1)[1].split("</form>", 1)[0]
+            form_html = _section_html(body, "identifiers")
             assert 'name="s_identifiers_project_raid"' in form_html
             assert "10.1234/OLDRAID" in form_html                                # existing map value prefilled
             assert 'name="l_related_identifiers_0_identifier"' in form_html
@@ -424,10 +433,12 @@ def test_hub_consolidated_section_round_trips_both_groups(tmp_path):
     run(_body())
 
 
-def test_hub_metadata_tab_per_section_forms(tmp_path):
-    """The Metadata tab renders a section TOC + one FORM per section (each posting only its own
-    widgets to the preview route) + a per-section commit tray. FAILS IF the tab reverts to one giant
-    form (per-section submit is the point) or drops the TOC / commit tray."""
+def test_hub_metadata_tab_single_form_all_sections(tmp_path):
+    """HUB-SINGLE-SAVE STRUCTURE PIN (2026-08-14). The Metadata tab renders a section TOC + ONE form
+    carrying EVERY section as a <section> block + ONE commit tray. FAILS IF the tab reverts to a form
+    per section (that is exactly what cost the curator a merge job / version bump / preview / confirm
+    per section), or drops the TOC / the single tray. RED against the pre-change hub, which rendered
+    N forms and N trays."""
     async def _body():
         surveys_live = _hub_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -436,28 +447,73 @@ def test_hub_metadata_tab_per_section_forms(tmp_path):
             await curator_login(client)
             r = await client.get("/gateway/curator/survey/hub-survey-2026?tab=metadata")
             assert r.status_code == 200
-            forms = re.findall(r'data-hub-section-form="([^"]+)"', r.text)
-            # Scalars + each (possibly merged) sidebar section is its own form. SIDEBARMERGE: organisation
-            # and instruments are folded into the "Core fields" (_scalars) form and are NOT standalone;
-            # CONTRIBUTOR-CREDIT-SPEC §6: the unified "People & credit" form is keyed "people".
-            assert "_scalars" in forms and "people" in forms
-            assert "organisation" not in forms, \
-                "organisation must be folded into the merged Core fields form, not a standalone form"
-            assert "lead_investigator" not in forms and "creators" not in forms, \
-                "the retired investigator/creator panels must be folded into the People & credit form"
-            assert len(forms) >= 6, forms
+            sections = re.findall(r'data-hub-section-form="([^"]+)"', r.text)
+            # Scalars + each (possibly merged) sidebar section is its own BLOCK. SIDEBARMERGE:
+            # organisation and instruments are folded into the "Core fields" (_scalars) block and are
+            # NOT standalone; CONTRIBUTOR-CREDIT-SPEC §6: the unified People & credit block is "people".
+            assert "_scalars" in sections and "people" in sections
+            assert "organisation" not in sections, \
+                "organisation must be folded into the merged Core fields block, not a standalone one"
+            assert "lead_investigator" not in sections and "creators" not in sections, \
+                "the retired investigator/creator panels must be folded into the People & credit block"
+            assert len(sections) >= 6, sections
             assert 'class="toc"' in r.text                       # sticky section TOC
-            assert "Only this section is submitted" in r.text     # commit-tray copy
-            assert r.text.count(
-                'action="/gateway/curator/edit/hub-survey-2026/preview"') == len(forms)
+            # ONE form, ONE action, ONE tray, ONE required release note, ONE bump radio group — the
+            # whole point: every section is saved together as a single edit.
+            assert r.text.count('action="/gateway/curator/edit/hub-survey-2026/preview"') == 1, \
+                "the Metadata tab must post every section through ONE form"
+            assert r.text.count('id="hub-metadata-form"') == 1
+            assert r.text.count('id="hub-commit-tray"') == 1
+            assert r.text.count('name="note"') == 1 and r.text.count('value="patch"') == 1
+            assert "Every section is saved together as ONE edit" in r.text   # commit-tray copy
+            assert "Only this section is submitted" not in r.text            # the retired promise
+            # Each section block is a <section>, not a <form> — no nested/sibling form can smuggle a
+            # second save button back in.
+            for key in sections:
+                assert f'<section class="hub-section" id="sec-{key}"' in r.text, key
+            # The TOC entries are ordinary in-page anchors (they work with no JS at all).
+            for key in sections:
+                assert f'href="#sec-{key}" data-hub-section="{key}"' in r.text, key
+    run(_body())
+
+
+def test_hub_enter_key_defaults_to_save_not_the_legacy_convert(tmp_path):
+    """IMPLICIT-SUBMISSION PIN (2026-08-14). A form's default button — the one Enter in a text field
+    activates — is the FIRST submit button in tree order. The People & credit panel's legacy
+    "Convert lead_investigator" is a NAMED submit, so folding every section into ONE form would make a
+    destructive legacy-key retirement the default action for every text input on the tab. An unnamed
+    submit must therefore come first, so Enter is a plain Save that posts no extra field.
+    FAILS IF the first submit inside the metadata form carries a name (people_convert or anything
+    else), or if the guard is missing / focusable."""
+    async def _body():
+        surveys_live = _hub_client(tmp_path)   # HUB_SURVEY carries a legacy lead_investigator
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            body = (await client.get("/gateway/curator/survey/hub-survey-2026?tab=metadata")).text
+            # The hazard is real on this survey: the legacy Convert submit IS rendered.
+            assert 'name="people_convert" value="lead_investigator"' in body
+            form = _one_form_html(body)
+            first = re.search(r'<button[^>]*type="submit"[^>]*>', form)
+            assert first, "no submit button in the metadata form"
+            assert "name=" not in first.group(0), \
+                f"the form's default button is a NAMED action: {first.group(0)}"
+            assert 'tabindex="-1"' in first.group(0) and 'aria-hidden="true"' in first.group(0), \
+                "the default-submit guard must stay out of the tab order and the a11y tree"
+            # It is off-screen, NOT display:none (display:none is skipped for implicit submission in
+            # some engines, which would hand the default straight back to Convert).
+            assert "display:none" not in first.group(0), first.group(0)
     run(_body())
 
 
 def test_hub_per_section_submit_is_section_scoped(tmp_path):
-    """PER-SECTION PATCH PIN (flow). Submit ONLY the organisation section's widgets (name unchanged,
-    ror set) — the exact fields that section's form carries — and the preview diff changes organisation
-    WITHOUT rewriting the untouched lead_investigator section. FAILS IF a per-section submit leaks a
-    sibling section into the patch/diff (the wiring must deliver a section-scoped patch)."""
+    """SECTION-SCOPED PATCH PIN (flow). Submit ONLY the organisation section's widgets (name unchanged,
+    ror set) and the preview diff changes organisation WITHOUT rewriting the untouched
+    lead_investigator section. HUB-SINGLE-SAVE (2026-08-14): still the load-bearing pin under the one
+    combined form — a save now carries every section, and the no-clobber promise rests entirely on
+    assemble_section returning _OMIT for a section that round-trips to its o_<section> snapshot.
+    FAILS IF a submit leaks a section the curator did not touch into the patch/diff."""
     async def _body():
         surveys_live = _hub_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
@@ -528,7 +584,7 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             assert forms.count("identifiers") == 1
 
             def _form(key):
-                return body.split(f'data-hub-section-form="{key}"', 1)[1].split("</form>", 1)[0]
+                return _section_html(body, key)
 
             # M3 Core fields: three grouped headings + all three constituents' widgets + o_ snapshots.
             core = _form("_scalars")
@@ -742,4 +798,214 @@ def test_hub_identifiers_edit_preserves_time_series_legacy_key(tmp_path):
             for needle in ("LEGACYTS", "collection_pid", "levels_available", "existing-doi"):
                 assert not any(needle in ln for ln in changed), \
                     f"identifiers edit clobbered the folded time_series/related legacy data ({needle!r}):\n{changed}"
+    run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# HUB-SINGLE-SAVE (2026-08-14) — one save across every section; the JS-hidden spare rows
+# --------------------------------------------------------------------------------------------------
+def _hub_form_fields(body: str) -> dict:
+    """The exact name/value pairs a browser would submit for the hub's ONE metadata form. Isolated by
+    id="hub-metadata-form" (NOT "the first form on the page" — the nav shell's context bar renders a
+    Request-rebuild form above it). Reuses the full-form harvester's parsing on the isolated slice."""
+    from gateway.tests.test_editor_form_flow import _harvest_form_fields
+    start = body.index('<form id="hub-metadata-form"')
+    end = body.index("</form>", start)
+    # _harvest_form_fields isolates on '<form method="post"' — hand it a slice already shaped that way.
+    return _harvest_form_fields('<form method="post"' + body[start:end] + "</form>")
+
+
+def _one_form_html(body: str) -> str:
+    start = body.index('<form id="hub-metadata-form"')
+    return body[start:body.index("</form>", start)]
+
+
+def test_hub_single_save_spans_two_sections_in_one_merge_job(tmp_path):
+    """HUB-SINGLE-SAVE COMBINED-SAVE PIN (2026-08-14). The curator edits TWO sidebar sections — Core
+    fields (a top-level scalar) and Access (the access map) — and clicks Save ONCE. The whole hub form
+    is submitted as a browser would submit it, producing exactly ONE merge job whose patch carries BOTH
+    sections and exactly ONE version bump (1.0.0 -> 1.0.1).
+
+    NON-VACUITY — what the OLD per-section hub could not satisfy:
+      * the page must contain exactly ONE form posting to the preview route (the old hub rendered one
+        form per section, ten of them, each with its own action);
+      * BOTH sections' widgets must live inside that ONE form (in the old hub the scalar and access
+        widgets were in DIFFERENT forms — no browser submit could ever have carried both);
+      * exactly ONE merge job for the whole edit (the old flow needed two saves = two merge jobs = two
+        bumps, 1.0.1 then 1.0.2 = two release notes, two previews, two confirms).
+    FAILS IF the tab regresses to per-section forms, if either section drops out of the combined patch,
+    or if one save produces more than one merge job / more than one version bump."""
+    async def _body():
+        surveys_live = _hub_client(tmp_path)
+        seam = inproc_edit_runner(surveys_live)
+        merge_jobs: list[dict] = []
+
+        def counting_seam(job: dict) -> dict:
+            if job.get("kind") == "merge":
+                merge_jobs.append(job)
+            return seam(job)
+
+        async with app_client(tmp_path, git_runner=FakeGit(), edit_runner=counting_seam,
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            body = (await client.get("/gateway/curator/survey/hub-survey-2026?tab=metadata")).text
+
+            # (1) ONE form for the whole tab.
+            assert body.count('action="/gateway/curator/edit/hub-survey-2026/preview"') == 1, \
+                "the Metadata tab must render exactly ONE form posting to the preview route"
+
+            # (2) BOTH sections' widgets are inside that ONE form — the structural fact the per-section
+            #     hub could not provide.
+            one_form = _one_form_html(body)
+            assert 'name="f_project_name"' in one_form, "Core fields widgets are not in the one form"
+            assert 'name="s_access_level"' in one_form, "Access widgets are not in the one form"
+
+            # (3) submit the WHOLE form, as the browser does, with a change in EACH section.
+            fields = _hub_form_fields(body)
+            assert "f_project_name" in fields and "s_access_level" in fields, sorted(fields)
+            fields["f_project_name"] = "Hub Survey Renamed"        # section A: Core fields
+            fields["s_access_level"] = "embargoed"                 # section B: Access
+            fields["note"] = "rename + embargo in one edit"
+            fields["bump"] = "patch"
+            fields["csrf_token"] = csrf
+            r = await client.post("/gateway/curator/edit/hub-survey-2026/preview",
+                                  data=fields, follow_redirects=False)
+            assert r.status_code == 200, r.text[:800]
+
+            # ONE merge job for the whole two-section edit.
+            assert len(merge_jobs) == 1, \
+                f"one Save must enqueue ONE merge job, got {len(merge_jobs)}"
+            patch = merge_jobs[0].get("patch") or {}
+            assert "access" in patch, f"section B (access) missing from the combined patch: {patch}"
+            assert patch["access"].get("level") == "embargoed", patch["access"]
+            assert patch.get("project_name") == "Hub Survey Renamed", \
+                f"section A (project_name) missing from the combined patch: {patch}"
+
+            # ONE version bump for the whole edit (not one per section).
+            assert "new version 1.0.1" in r.text, r.text[:800]
+            assert "1.0.2" not in r.text
+            blob = "\n".join(ln for ln in _diff_changed(r.text) if ln.startswith("+"))
+            assert "Hub Survey Renamed" in blob, "section A missing from the one diff:\n" + blob
+            assert "embargoed" in blob, "section B missing from the one diff:\n" + blob
+    run(_body())
+
+
+def test_hub_spare_rows_carry_the_marker_and_editor_js_hides_them(tmp_path):
+    """SPARE-ROW MARKER PIN (2026-08-14). The server still renders the no-JS spare blank rows (a
+    deliberate degradation invariant) but stamps them data-spare-row="1", and editor.js hides exactly
+    those on init. The rows a curator actually has — and the template editor.js clones for +Add — must
+    NOT carry the marker, or a real row (or every JS-added row) would render invisible.
+
+    NON-VACUITY: the pre-change renderer emitted NO data-spare-row attribute anywhere and editor.js had
+    no hide step, so every assertion below is red against it. FAILS IF the marker is dropped (the blank
+    panels come back), stamped on a populated or template row, or if editor.js stops hiding them."""
+    from gateway import curatorpage as _cp
+
+    async def _body():
+        surveys_live = _merge_client(tmp_path)   # carries a populated instruments row
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            body = (await client.get("/gateway/curator/survey/merge-survey-2026?tab=metadata")).text
+            core = _section_html(body, "_scalars")
+            # Count the LIVE rows only — the <template> row editor.js clones for +Add lives in the same
+            # block and is asserted separately below.
+            live = re.sub(r"<template\b.*?</template>", "", core, flags=re.S)
+            rows = re.findall(r'<div class="editor-row" data-editor-row([^>]*)>', live)
+            # instruments: 1 populated row + _SPARE_BLANK_ROWS spare ones.
+            marked = [a for a in rows if 'data-spare-row="1"' in a]
+            assert len(marked) == _cp._SPARE_BLANK_ROWS, \
+                f"expected {_cp._SPARE_BLANK_ROWS} marked spare rows, got {len(marked)} of {rows}"
+            assert len(rows) - len(marked) == 1, \
+                "the survey's ONE populated instruments row must NOT be marked spare"
+            # The populated row (the one carrying the stored value) is unmarked.
+            populated = core.split("Phoenix", 1)[0].rsplit('<div class="editor-row"', 1)[-1]
+            assert "data-spare-row" not in populated, populated[:200]
+            # The template editor.js clones for +Add is never marked — a cloned row must be visible.
+            tpl = body.split('<template data-editor-template="instruments">', 1)[1].split(
+                "</template>", 1)[0]
+            assert "data-spare-row" not in tpl, "the +Add template row must not be marked spare"
+            # Every repeatable section renders marked spares (five sections x two blank panels was the
+            # complaint), including the People & credit and related_identifiers custom row builders.
+            for key, needle in (("people", 'name="l_people_'),
+                                ("identifiers", 'name="l_related_identifiers_'),
+                                ("publications", 'name="l_publications_'),
+                                ("funding", 'name="l_funding_')):
+                block = _section_html(body, key)
+                assert 'data-spare-row="1"' in block, f"{key} lost its spare-row markers"
+                assert needle in block, key
+            # editor.js hides exactly the marked rows on init.
+            js = (await client.get("/gateway/curator/editor.js")).text
+            assert "[data-editor-row][data-spare-row]" in js, \
+                "editor.js must hide the marked spare rows on init"
+            assert "row.style.display = 'none'" in js
+    run(_body())
+
+
+def test_hub_combined_save_field_error_keeps_other_sections_values(tmp_path):
+    """COMBINED-SAVE ERROR PIN (2026-08-14). A per-field parse failure in section B (a malformed ORCID
+    in People & credit) re-renders the HUB Metadata tab with the error beside its owning section AND
+    section A's typed-but-unsaved values intact — nothing the curator entered anywhere in the one form
+    is discarded, and they stay on the tab they were editing.
+
+    NON-VACUITY: the pre-change handler bounced EVERY failed save to the standalone full form
+    (render_edit_form) — a different page with no hub tab strip and no section blocks — so the
+    'lands back on the hub' assertions are red against it; and with a form per section there was no
+    such thing as 'section A's values' surviving a section B failure, because the two could not be
+    submitted together. FAILS IF the error re-render leaves the hub, loses a typed value from a
+    section other than the failing one, or drops the per-section error annotation."""
+    async def _body():
+        surveys_live = _hub_client(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
+            await curator_login(client)
+            csrf = csrf_for_session(client)
+            body = (await client.get("/gateway/curator/survey/hub-survey-2026?tab=metadata")).text
+            fields = _hub_form_fields(body)
+            fields["f_project_name"] = "Kept Across The Failure"      # section A: a good edit
+            fields["s_access_level"] = "embargoed"                    # section A': another good edit
+            fields["l_people_0_name"] = "Ada Lovelace"                # section B: the failing row
+            fields["l_people_0_name_type"] = "person"
+            fields["l_people_0_orcid"] = "not-an-orcid"               # the parse failure
+            fields["note"] = "should not commit"
+            fields["bump"] = "patch"
+            fields["csrf_token"] = csrf
+            r = await client.post("/gateway/curator/edit/hub-survey-2026/preview",
+                                  data=fields, follow_redirects=False)
+            assert r.status_code == 200
+            out = r.text
+            # Nothing previewed/committed.
+            assert "new version" not in out, "a failed parse must not reach the preview"
+            # We are back on the HUB Metadata tab (not the standalone full form).
+            assert 'id="hub-metadata-form"' in out and 'data-hub-section-form="people"' in out
+            assert "?tab=history" in out, "the hub tab strip is missing — this is not the hub"
+            assert "<h1>Edit metadata" not in out, "bounced to the standalone full form"
+            # The error is annotated on its OWNING section (the _section_error_html list), and the
+            # offending value is preserved there so the curator can see and fix what they typed.
+            people = _section_html(out, "people")
+            assert "not-an-orcid" in people, "the curator's own bad value was discarded"
+            assert "is not a valid ORCID" in people, \
+                "the per-field ORCID error is not rendered on its owning section"
+            # ...and NOT smeared over a section that did not fail.
+            assert "is not a valid ORCID" not in _section_html(out, "_scalars")
+            # Section A's typed values survived the section-B failure.
+            core = _section_html(out, "_scalars")
+            assert 'value="Kept Across The Failure"' in core, \
+                "section A's typed value was discarded by a section B failure"
+            access = _section_html(out, "access")
+            assert re.search(r'<option value="embargoed"[^>]*\bselected', access) or \
+                re.search(r'\bselected[^>]*value="embargoed"', access), \
+                "section A's access edit was discarded by a section B failure"
+            # The error round-trip must NOT convert the hidden spare rows into visible empty ones (and
+            # then append two more behind them) — the panels would fill with blanks on every retry.
+            # Every rebuilt row that carries nothing is re-marked spare, so only the row the curator
+            # actually typed into stays unmarked.
+            live = re.sub(r"<template\b.*?</template>", "", people, flags=re.S)
+            rows = re.findall(r'<div class="editor-row" data-editor-row([^>]*)>', live)
+            unmarked = [a for a in rows if "data-spare-row" not in a]
+            assert len(unmarked) == 1, \
+                f"expected only the typed people row to be visible, got {len(unmarked)} of {len(rows)}"
     run(_body())

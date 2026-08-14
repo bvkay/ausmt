@@ -107,11 +107,21 @@ _HEAD = """<!doctype html>
  .chip .dot{width:.55rem;height:.55rem;border-radius:50%;background:$muted}
  .chip.current .dot{background:$ok}.chip.behind .dot{background:$warn}
  .ctxbar .spacer{flex:1 1 auto}
- /* one-section-at-a-time metadata TOC (S1-2 Metadata tab) */
+ /* metadata section TOC (S1-2 Metadata tab). HUB-SINGLE-SAVE 2026-08-14: the TOC is now SCROLL
+    NAVIGATION over one form carrying every section (it used to show one section and hide the rest);
+    .on marks the section currently in view, set by survey-hub.js and seeded server-side. */
  .toc{position:sticky;top:.5rem}
  .toc a{display:block;padding:.25rem .5rem;color:$muted;text-decoration:none;font-size:.85rem;
    border-radius:6px}
  .toc a.on{background:#1B2C3A;color:$ink;font-weight:600}
+ /* Anchor targets sit under the sticky context bar without the heading hiding beneath it. */
+ .hub-section{display:block;scroll-margin-top:4rem}
+ /* HUB-SINGLE-SAVE: the ONE commit tray for the whole form, pinned to the foot of the field column
+    so Save is reachable from any scroll position. Sticky (not fixed) so it stays inside the capped
+    field measure and never overlays the TOC; without CSS support it is simply the last panel. */
+ .hub-committray{position:sticky;bottom:0;z-index:5;border:1px solid #2E4254;
+   box-shadow:0 -4px 12px rgba(0,0,0,.35)}
+ .hub-committray textarea{min-height:2.6rem}
  .tabs{display:flex;gap:.25rem;border-bottom:1px solid #2E4254;margin:0 0 1rem}
  .tabs a{padding:.5rem .9rem;color:$muted;text-decoration:none;font-size:.9rem;
    border-bottom:2px solid transparent}
@@ -462,6 +472,17 @@ EDITOR_UI_JS = """
       return;
     }
   });
+
+  // HUB-SINGLE-SAVE (2026-08-14): hide the server-rendered SPARE blank rows. They exist so a curator
+  // WITHOUT JS can still add entries (a deliberate invariant — the server keeps rendering them); with
+  // JS the "+ Add row" button covers that, so five repeatable sections x two blank panels was pure
+  // wasted space. Hidden, NOT removed: they stay in the form and still submit empty, which the server
+  // already drops (assemble_list ignores an all-empty row) — so the round-trip semantics are untouched
+  // and a no-JS browser sees exactly what it saw before. This script is `defer`red, so the DOM is
+  // parsed by the time the IIFE runs.
+  document.querySelectorAll('[data-editor-row][data-spare-row]').forEach(function (row) {
+    row.style.display = 'none';
+  });
 })();
 """
 
@@ -745,8 +766,11 @@ CONTEXT_BAR_JS = """
 #      and the serve screen), the "Needs attention" SEVERITY ROWS (red fail / amber warn / blue info;
 #      terse diagnosis with the full gate text in a title attr; same-class prefix runs >=3 CLUSTERED
 #      onto one row), the refused-package note ONCE, and the conditioning summary table.
-#   3. METADATA tab — enhance the sticky TOC to show ONE section at a time (#hub-toc / .hub-section).
-#      Without this script the server renders every section stacked and fully functional (graceful).
+#   3. METADATA tab — highlight the sticky TOC entry whose section is in view (#hub-toc /
+#      .hub-section). HUB-SINGLE-SAVE (2026-08-14): this used to SHOW ONE SECTION AND HIDE THE REST,
+#      which is what forced a separate save per section; the TOC is now plain scroll navigation over
+#      the one metadata form. Without this script the anchors are ordinary in-page links and every
+#      section is stacked and fully functional (graceful — nothing here gates editing or saving).
 #
 # DATA HONESTY (owner rulings 2026-07-11, contract C43-HUB):
 #   * QA flags = the sum of counts over the survey.frame CONVENTION-WARN entries ("served with note"
@@ -768,30 +792,46 @@ CONTEXT_BAR_JS = """
 # value goes in via textContent (never innerHTML) so a build-report string cannot inject markup.
 SURVEY_HUB_JS = r"""
 (function () {
-  // ---- Metadata TOC: one section visible at a time (progressive enhancement) ----
+  // ---- Metadata TOC: SCROLL NAVIGATION over the one metadata form (HUB-SINGLE-SAVE 2026-08-14) ----
+  // It used to show ONE section and hide the rest, which forced one save per section. Every section
+  // now lives in a single form; the TOC links are ordinary in-page anchors (they work with NO JS at
+  // all — that is the whole degradation story) and this enhancement only HIGHLIGHTS the entry whose
+  // section is currently in view. Nothing here is load-bearing for editing or saving.
   var toc = document.getElementById('hub-toc');
   var host = document.getElementById('hub-sections');
   if (toc && host) {
-    var forms = host.querySelectorAll('.hub-section');
-    var links = toc.querySelectorAll('[data-hub-section]');
-    function show(key) {
-      forms.forEach(function (f) {
-        f.style.display = (f.getAttribute('data-hub-section-form') === key) ? '' : 'none';
+    var blocks = Array.prototype.slice.call(host.querySelectorAll('.hub-section'));
+    var links = Array.prototype.slice.call(toc.querySelectorAll('[data-hub-section]'));
+    // The section currently "in view" = the LAST one whose top has passed the marker line (a little
+    // below the sticky context bar), falling back to the first. Pure arithmetic over measured tops so
+    // it behaves identically for a short section list and a very long one.
+    function activeKey(tops, markerY) {
+      var key = tops.length ? tops[0].key : null;
+      for (var i = 0; i < tops.length; i++) {
+        if (tops[i].top <= markerY) key = tops[i].key;
+      }
+      return key;
+    }
+    function highlight() {
+      var tops = blocks.map(function (b) {
+        return {key: b.getAttribute('data-hub-section-form'),
+                top: b.getBoundingClientRect().top};
       });
+      var key = activeKey(tops, 96);
       links.forEach(function (a) {
         if (a.getAttribute('data-hub-section') === key) a.classList.add('on');
         else a.classList.remove('on');
       });
     }
-    links.forEach(function (a) {
-      a.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        show(a.getAttribute('data-hub-section'));
-      });
-    });
-    var first = links[0] && links[0].getAttribute('data-hub-section');
-    var onlink = toc.querySelector('[data-hub-section].on');
-    show(onlink ? onlink.getAttribute('data-hub-section') : first);
+    var ticking = false;
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(function () { ticking = false; highlight(); });
+    }
+    window.addEventListener('scroll', onScroll, {passive: true});
+    window.addEventListener('resize', onScroll, {passive: true});
+    highlight();
   }
 
   // ================================================================================================
@@ -5038,14 +5078,15 @@ _REVIEW_CHIP_HTML = (
 
 def _list_row_html(section: str, index: int, subfields, values: dict | None,
                    row_suffix_html: str = "", *, reorderable: bool = False,
-                   needs_review: bool = False) -> str:
+                   needs_review: bool = False, spare: bool = False) -> str:
     """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
     submit just leaves an empty row, which the server drops). `values` prefills an existing row.
     `row_suffix_html` (IDCONS D5) is inserted before the remove button — used to attach the per-identifier
     resolution status chip to related_identifiers rows; it rides the row template so a JS-added row carries
     it too. Default empty, so every other list section renders byte-identically.
     `reorderable` (CONTRIBUTOR-CREDIT-SPEC §6) adds up/down move buttons (creators). `needs_review` adds the
-    INFERRED-REVIEW chip to a migration-seeded row."""
+    INFERRED-REVIEW chip to a migration-seeded row. `spare` stamps the no-JS add-fallback marker
+    (_SPARE_ROW_ATTR) that editor.js hides on init — see the constant's note."""
     from . import editor_form
     cells = []
     if needs_review:
@@ -5082,13 +5123,49 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
     remove = ('<p style="margin:.15rem 0"><button type="button" class="b-bad" '
               'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
               'Remove row</button></p>')
-    return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
+    return (f'<div class="editor-row" data-editor-row{_spare_attr(spare)} '
+            f'style="border:1px solid #2E4254;'
             f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{row_suffix_html}'
             f'{reorder}{remove}</div>')
 
 
 # Spare blank rows rendered when JS is unavailable so a curator can still add entries (deliverable 3).
 _SPARE_BLANK_ROWS = 2
+
+# HUB-SINGLE-SAVE (2026-08-14): the spare rows stay SERVER-RENDERED — the no-JS add fallback is a
+# deliberate invariant, and nothing about their markup, names, or empty-row-dropped assembly changes.
+# They now carry this marker so editor.js can HIDE them on init: a JS curator has the +Add button, so
+# five repeatable sections x two blank panels was pure wasted space (the maintainer's complaint).
+# Without JS the marker is inert and every spare row stays visible and functional.
+_SPARE_ROW_ATTR = ' data-spare-row="1"'
+
+
+def _spare_attr(spare: bool) -> str:
+    """The no-JS spare-row marker attribute (empty for a real/template row). A TEMPLATE row must never
+    carry it — editor.js clones the template for +Add, and a cloned row has to be VISIBLE."""
+    return _SPARE_ROW_ATTR if spare else ""
+
+
+def _blank_row(values) -> bool:
+    """True when a RESUBMITTED row carries no curator input at all — every scalar empty, every flag off.
+
+    Such a row assembles to nothing (the assemblers already drop an all-empty row), so on an error
+    re-render it is functionally another spare: marked, hidden for JS curators, visible and usable
+    without JS. Without this, a failed save would turn the two hidden spares into VISIBLE empty rows
+    and append two fresh spares behind them — growing the panel by two blanks on every round trip.
+    Applied only to rows rebuilt from `submitted`; a stored row is never re-classified."""
+    if not values:
+        return True
+    for v in values.values():
+        if isinstance(v, bool):
+            if v:
+                return False
+        elif isinstance(v, (list, tuple, set)):
+            if v:
+                return False
+        elif str(v if v is not None else "").strip():
+            return False
+    return True
 
 # The literal index placeholder inside a section's <template> row. editor.js substitutes a fresh
 # unique index for it. It sits BETWEEN underscores in the field name (l_<section>_<TOKEN>_<subkey>)
@@ -5139,12 +5216,14 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
         if row is None:
             continue  # non-dict item handled via advanced JSON
         rendered.append(_list_row_html(section, idx, subfields, row, row_suffix_html=row_suffix,
-                                       reorderable=reorderable, needs_review=orig_pos in review_set))
+                                       reorderable=reorderable, needs_review=orig_pos in review_set,
+                                       spare=from_submitted and _blank_row(row)))
         idx += 1
-    # Spare blank rows so add-without-JS works.
+    # Spare blank rows so add-without-JS works. Marked (data-spare-row) so editor.js hides them for
+    # the JS curator, who has +Add — the no-JS path is byte-identical apart from the inert attribute.
     for _ in range(_SPARE_BLANK_ROWS):
         rendered.append(_list_row_html(section, idx, subfields, None, row_suffix_html=row_suffix,
-                                       reorderable=reorderable))
+                                       reorderable=reorderable, spare=True))
         idx += 1
     add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
                f'data-editor-add-row="{_esc(section)}">+ Add row</button></p>')
@@ -5278,7 +5357,7 @@ def _people_review_chip(label: str) -> str:
 
 
 def _people_row_html(index, row: dict | None, *, needs_review: bool = False,
-                     review_label: str = "") -> str:
+                     review_label: str = "", spare: bool = False) -> str:
     """ONE unified People & credit row. `row` prefills an existing/merged row; None is a spare/template
     row (name_type defaults to person). Reuses the delegated add/remove/reorder JS (data-editor-row /
     data-editor-move-row) so a JS-added row and a reorder both work. ORCID (people) / ROR (orgs) are
@@ -5322,7 +5401,8 @@ def _people_row_html(index, row: dict | None, *, needs_review: bool = False,
     remove = ('<p style="margin:.15rem 0"><button type="button" class="b-bad" '
               'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
               'Remove person</button></p>')
-    return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
+    return (f'<div class="editor-row" data-editor-row{_spare_attr(spare)} '
+            f'style="border:1px solid #2E4254;'
             f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{remove}</div>')
 
 
@@ -5444,13 +5524,22 @@ def _people_credit_inner(slug: str, fields: dict, submitted: dict | None, err_ma
     heading.append(_people_typeahead_html())
 
     rows_meta = _people_rows_for_render(fields, submitted, review_flags)
+    # A row rebuilt from `submitted` that carries nothing was one of the spares (or an untouched
+    # JS-added row) — re-mark it so an error round-trip does not turn the hidden spares into visible
+    # empty person panels. Blankness here MIRRORS the assembler exactly: _people_rows_from_form drops
+    # a row with no NAME, and only that (the name_type <select> always posts a value, so a generic
+    # all-fields-empty test would never fire). Stored rows are never re-classified.
+    people_from_submitted = submitted is not None and any(
+        k.startswith(f"l_{_PEOPLE_SECTION}_") for k in submitted)
     rendered = []
     idx = 0
     for row, needs_review, label in rows_meta:
-        rendered.append(_people_row_html(idx, row, needs_review=needs_review, review_label=label))
+        nameless = not str((row or {}).get("name") or "").strip()
+        rendered.append(_people_row_html(idx, row, needs_review=needs_review, review_label=label,
+                                         spare=people_from_submitted and nameless))
         idx += 1
     for _ in range(_SPARE_BLANK_ROWS):
-        rendered.append(_people_row_html(idx, None))
+        rendered.append(_people_row_html(idx, None, spare=True))
         idx += 1
     add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
                f'data-editor-add-row="{_PEOPLE_SECTION}">+ Add person</button></p>')
@@ -5509,7 +5598,7 @@ _ACQUISITION_ROW_FIELDS = (
 )
 
 
-def _related_identifier_row_html(index, values: dict | None) -> str:
+def _related_identifier_row_html(index, values: dict | None, *, spare: bool = False) -> str:
     """D-L (SPEC §9.6): one related_identifiers row. The `identifies` level <select> is FIRST; the DataCite
     relation is HIDDEN-OR-DERIVED — the relation control renders ONLY for a legacy row (an explicit relation
     but no identifies, backward compatible), because on an identifies row the relation derives server-side
@@ -5558,7 +5647,8 @@ def _related_identifier_row_html(index, values: dict | None) -> str:
     remove = ('<p style="margin:.15rem 0"><button type="button" class="b-bad" '
               'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
               'Remove row</button></p>')
-    return (f'<div class="editor-row" data-editor-row style="border:1px solid #2E4254;'
+    return (f'<div class="editor-row" data-editor-row{_spare_attr(spare)} '
+            f'style="border:1px solid #2E4254;'
             f'border-radius:6px;padding:.5rem;margin:.4rem 0">{"".join(cells)}{_PID_CHIP_HTML}{remove}</div>')
 
 
@@ -5572,7 +5662,8 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
     section = "related_identifiers"
     subfields = editor_form.LIST_SECTIONS[section]
     existing: list[dict | None] = []
-    if submitted is not None and any(k.startswith(f"l_{section}_") for k in submitted):
+    from_submitted = submitted is not None and any(k.startswith(f"l_{section}_") for k in submitted)
+    if from_submitted:
         for i in _submitted_row_indices(submitted, section):
             existing.append({sk: submitted.get(f"l_{section}_{i}_{sk}") for sk, *_ in subfields})
     else:
@@ -5586,10 +5677,11 @@ def _related_identifiers_group(fields: dict, submitted: dict | None, err_map: di
     for row in existing:
         if row is None:
             continue
-        rendered.append(_related_identifier_row_html(idx, row))
+        rendered.append(_related_identifier_row_html(
+            idx, row, spare=from_submitted and _blank_row(row)))
         idx += 1
     for _ in range(_SPARE_BLANK_ROWS):
-        rendered.append(_related_identifier_row_html(idx, None))
+        rendered.append(_related_identifier_row_html(idx, None, spare=True))
         idx += 1
     add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
                f'data-editor-add-row="{section}">+ Add row</button></p>')
@@ -5809,17 +5901,25 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
 # One hub per survey, two tabs: Overview & QA (landing) and Metadata. A Stations entry in the tab
 # strip LINKS to the existing removal page (labelled). NO History tab (Stage 2). The Overview tab is
 # populated BROWSER-side from same-origin /data/build_report.json + /data/build.json filtered to this
-# survey (the serve-panel pattern — zero new gateway privileges). The Metadata tab splits the editor
-# into a sticky section TOC + per-section forms, each POSTing ONLY its own section's widgets to the
-# unchanged /edit/{slug}/preview route (the merge seam already scopes the patch to the widgets present
-# — verified: a form carrying one section's s_/l_/c_ inputs + its o_<section> snapshot assembles to a
-# single-section patch, so no runner-side section-scoped mode is needed).
+# survey (the serve-panel pattern — zero new gateway privileges). The Metadata tab renders the editor
+# as a sticky section TOC + ONE form carrying every section, POSTing to the unchanged
+# /edit/{slug}/preview route (HUB-SINGLE-SAVE 2026-08-14 — it previously rendered one form per section
+# with one save each). The merge seam needs no change either way: build_section_patch assembles
+# whichever s_/l_/c_ widgets + o_<section> snapshots a form carries, and a section that round-trips to
+# its snapshot assembles to _OMIT — so the combined form's patch names exactly the sections the
+# curator actually touched, and untouched sections stay byte-for-byte alone.
 
 # C43 Stage 2a: Stations and History are now REAL in-hub tabs (Stage 1 shipped them as a link-out and
 # nothing). The tab ORDER matches record D4: Overview & QA (landing) / Stations / Metadata / History.
 _HUB_TABS = (("overview", "Overview & QA"), ("stations", "Stations"),
              ("metadata", "Metadata"), ("history", "History"))
 _HUB_TAB_KEYS = frozenset(k for k, _ in _HUB_TABS)
+
+# HUB-SINGLE-SAVE (2026-08-14): the hidden marker the hub's ONE metadata form posts. It carries no
+# authority (it is not a token and gates nothing) — it only tells the preview handler WHICH surface to
+# re-render when a parse fails, so the curator lands back on the hub tab beside their own values
+# instead of on the standalone full form. Absent => the legacy full-form re-render, unchanged.
+HUB_FORM_FIELD = "hub_form"
 
 
 # C43-HUB (Q3 ruling, 2026-07-11): the ONE display-layer email heuristic behind all three
@@ -6069,12 +6169,27 @@ def _toc_state_hint(section: str, fields: dict, flagged_section: str | None) -> 
 
 def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_token: str,
                        field_errors=None, submitted: dict | None = None,
-                       active_section: str | None = None, review_flags: dict | None = None) -> str:
-    """The Metadata tab body: a sticky section TOC + one per-section form per section, each with its
-    OWN commit tray (bump + required note + Preview) so "only this section is submitted" is literally
-    true — the form carries only that section's widgets, and the merge seam scopes the patch to them.
+                       active_section: str | None = None, review_flags: dict | None = None,
+                       error: str = "") -> str:
+    """The Metadata tab body: a sticky section TOC + ONE form carrying EVERY section, with ONE commit
+    tray (bump + required note + Preview) at its foot.
+
+    HUB-SINGLE-SAVE (2026-08-14, C43 amendment): this used to render one <form> PER section, each with
+    its own tray — so a curator cleaning up four sections paid four merge jobs, four version bumps,
+    four release notes, four diff previews and four confirms. The sections are now <section> blocks
+    inside ONE form: a single Save assembles a combined patch across every section
+    (editor_form.build_section_patch already iterates EVERY widget section and assembles whichever
+    widgets + o_<section> snapshots the form carries — that is exactly what the merged Core fields /
+    Identifiers & PIDs forms already relied on, now taken to its conclusion), and the UNCHANGED
+    preview/confirm path gives ONE version bump, ONE release note, ONE diff, ONE content-hash confirm.
+    The no-clobber promise is preserved by the same machinery: a section whose widgets round-trip to
+    its o_<section> snapshot assembles to _OMIT and contributes nothing to the patch.
+
+    The TOC is now SCROLL NAVIGATION (plain anchor links to each section + a scroll-position
+    highlight in survey-hub.js) instead of show-one-hide-the-rest.
+
     Every section keeps its advanced-JSON override (inside its panel). Server renders ALL sections
-    (fully functional without JS); survey-hub.js enhances the TOC to show one section at a time.
+    fully functional without JS (the anchors are ordinary in-page links).
     C43-HUB H4: TOC entries carry render-time state hints (_toc_state_hint), and the section the
     citation-email heuristic flags renders the mockup's inline field error — DISPLAY-LAYER only,
     the same citation_author_email helper the Overview info row uses (they can never disagree)."""
@@ -6162,32 +6277,49 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     for section, title, hint in _EDIT_JSON_ONLY:
         sections.append((section, title, _json_only_panel(section, title, hint, fields, err_map)))
 
-    # The commit tray reused inside EVERY section form (bump + required note + Preview). Its own note
-    # + bump per section keeps the submit self-contained ("only this section is submitted").
+    # HUB-SINGLE-SAVE: ONE commit tray for the WHOLE form (bump + required note + Save), pinned to the
+    # bottom of the field column so it is reachable from any scroll position. One logical edit — however
+    # many sections it spans — is one bump, one release note, one diff, one confirm (the C31 §0.3
+    # discipline is unchanged; it just no longer fires once per section).
     patch_v, minor_v, major_v = (_suggest_bump(cur, k) for k in ("patch", "minor", "major"))
-
-    def _tray() -> str:
-        return (
-            '<div style="border-top:1px solid #2E4254;margin-top:.75rem;padding-top:.75rem">'
-            '<p><label class="k">Version bump (a content edit requires a semver-greater version)</label>'
-            f'<label><input type="radio" name="bump" value="patch" checked style="width:auto"> patch '
-            f'&rarr; {_esc(patch_v)}</label> '
-            f'<label><input type="radio" name="bump" value="minor" style="width:auto"> minor '
-            f'&rarr; {_esc(minor_v)}</label> '
-            f'<label><input type="radio" name="bump" value="major" style="width:auto"> major '
-            f'&rarr; {_esc(major_v)}</label></p>'
-            '<p><label class="k">Release note (required)</label>'
-            '<textarea name="note" placeholder="What changed and why" required></textarea></p>'
-            '<p class="sub">Only this section is submitted — Preview shows the exact YAML diff and the '
-            'validator verdict before anything commits.</p>'
-            '<p><button class="b-accent" type="submit">Preview diff &amp; validate</button></p>'
-            '</div>')
+    tray = (
+        '<div class="hub-committray panel" id="hub-commit-tray">'
+        '<p><label class="k">Version bump (a content edit requires a semver-greater version)</label>'
+        f'<label><input type="radio" name="bump" value="patch" checked style="width:auto"> patch '
+        f'&rarr; {_esc(patch_v)}</label> '
+        f'<label><input type="radio" name="bump" value="minor" style="width:auto"> minor '
+        f'&rarr; {_esc(minor_v)}</label> '
+        f'<label><input type="radio" name="bump" value="major" style="width:auto"> major '
+        f'&rarr; {_esc(major_v)}</label></p>'
+        '<p><label class="k">Release note (required)</label>'
+        '<textarea name="note" rows="2" placeholder="What changed and why" required></textarea></p>'
+        '<p class="sub">Every section is saved together as ONE edit — one version bump, one release '
+        'note. Preview shows the exact YAML diff and the validator verdict before anything commits; '
+        'sections you did not touch are left byte-for-byte alone.</p>'
+        '<p><button class="b-accent" type="submit">Preview diff &amp; validate</button></p>'
+        '</div>')
 
     csrf = f'<input type="hidden" name="{CSRF_FIELD}" value="{_esc(csrf_token)}">'
+    # HUB-SINGLE-SAVE: marks the POST as coming from the hub so a failed parse (or a runner refusal)
+    # re-renders THIS tab with the errors beside their owning sections and the curator's typed values
+    # intact — instead of bouncing to the standalone full form, which loses the curator's place.
+    hub_marker = f'<input type="hidden" name="{HUB_FORM_FIELD}" value="1">'
+    # IMPLICIT-SUBMISSION GUARD. A form's DEFAULT button (the one Enter-in-a-text-field activates) is the
+    # FIRST submit button in tree order. The People & credit panel's legacy "Convert lead_investigator"
+    # action is a named submit, so without this it would become the default for the WHOLE form — pressing
+    # Enter in, say, the project name would silently retire a legacy key. (The hazard existed inside the
+    # old per-section people form; folding every section into one form would widen it to every input.)
+    # This UNNAMED submit sits first, so Enter means a plain Save and posts no extra field. It is moved
+    # off-screen rather than display:none — a display:none button is skipped for implicit submission in
+    # some engines, which would hand the default straight back to Convert — and taken out of the tab
+    # order + the accessibility tree, so keyboard and screen-reader users only ever meet the real Save.
+    default_submit = ('<button type="submit" tabindex="-1" aria-hidden="true" '
+                      'style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">'
+                      'Save</button>')
     default_key = active_section or sections[0][0]
 
     toc_links = []
-    forms = []
+    blocks = []
     for key, title, inner in sections:
         sec_id = f"sec-{_esc(key)}"
         on = " on" if key == default_key else ""
@@ -6200,14 +6332,17 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         hint = _toc_state_hint(key, fields, eff_flag)
         toc_links.append(f'<a class="tocitem{on}" href="#{sec_id}" data-hub-section="{_esc(key)}">'
                          f'{_esc(title)}{hint}</a>')
-        forms.append(
-            f'<form class="hub-section" id="{sec_id}" data-hub-section-form="{_esc(key)}" '
-            f'method="post" action="/gateway/curator/edit/{_esc(slug)}/preview">'
-            f'<div class="panel">{inner}{_tray()}{csrf}</div>'
-            '</form>')
+        # A <section>, no longer a <form>: data-hub-section-form keeps its name so every existing hook
+        # (tests, the CSP sweep, the TOC pairing) still addresses a section block by its key.
+        blocks.append(
+            f'<section class="hub-section" id="{sec_id}" data-hub-section-form="{_esc(key)}">'
+            f'<div class="panel">{inner}</div>'
+            '</section>')
 
     err = ""
-    if err_map:
+    if error:
+        err = f'<p class="sub" style="color:{_PALETTE["bad"]}">{_esc(error)}</p>'
+    elif err_map:
         err = (f'<p class="sub" style="color:{_PALETTE["bad"]}">Some fields need attention — see the '
                'highlighted section(s).</p>')
     return (
@@ -6220,7 +6355,11 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         '<div style="display:flex;gap:1.25rem;align-items:flex-start">'
         f'<nav class="toc" id="hub-toc" style="flex:0 0 12rem">{"".join(toc_links)}</nav>'
         f'<div style="flex:1 1 auto;min-width:0;max-width:52rem" id="hub-sections">'
-        f'{"".join(forms)}</div>'
+        f'<form id="hub-metadata-form" method="post" '
+        f'action="/gateway/curator/edit/{_esc(slug)}/preview">'
+        f'{default_submit}{"".join(blocks)}{tray}{csrf}{hub_marker}'
+        '</form>'
+        '</div>'
         '</div>'
         # C41 D2: the danger zone lives at the BOTTOM of the Metadata tab (destructive ops beside the
         # editing surface; History stays read-only), collapsed + visually separated.
@@ -6257,7 +6396,7 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
                       nav: "NavContext", field_errors=None, submitted: dict | None = None,
                       active_section: str | None = None, commits: list | None = None,
                       history_error: str = "", build_lag: dict | None = None,
-                      review_flags: dict | None = None) -> str:
+                      review_flags: dict | None = None, error: str = "") -> str:
     """The per-survey hub (C43 Stage 1 S1-2 + Stage 2a + the C43-HUB mockup treatment). `tab`
     selects Overview & QA (default) / Stations / Metadata / History. Rendered inside the nav shell
     under ONE mockup-shaped header for every tab — the survey title + slug chip + orientation line
@@ -6276,7 +6415,8 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     if tab == "metadata":
         inner = _hub_metadata_body(slug=slug, version=version, fields=fields, csrf_token=csrf_token,
                                    field_errors=field_errors, submitted=submitted,
-                                   active_section=active_section, review_flags=review_flags)
+                                   active_section=active_section, review_flags=review_flags,
+                                   error=error)
     elif tab == "stations":
         inner = _hub_stations_body(slug, fields=fields, csrf_token=csrf_token, build_lag=build_lag)
     elif tab == "history":

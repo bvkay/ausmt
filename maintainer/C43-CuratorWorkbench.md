@@ -634,6 +634,59 @@ region), the **data panel on the RIGHT**, and **panel-first stacking on narrow**
 is DOM-first so it stacks above the list at one column with no `order` needed). Codified so the
 frozen record matches `gateway/curatorpage.py` `.stations-split` as deployed.
 
+### D4 amendment (metadata tab — one save for the whole survey, 2026-08-14)
+
+The Metadata tab above specifies "one section shown at a time, **per-section submit**". As shipped
+that meant a `<form>` per sidebar section, each with its own commit tray, and the TOC hiding every
+section but one. Maintainer report from live curation: it makes the tab **unusable for the work
+curators actually do**. A cleanup that touches four sections costs four merge jobs, four version
+bumps, four mandatory release notes, four diff previews and four confirms — so the curator either
+batches unrelated fixes into one section's note (dishonest history) or avoids the multi-section
+cleanup entirely. Per-section submit optimised for a narrow patch; it taxed the common case.
+
+**Amended:** the Metadata tab renders **ONE form carrying every section** (`<section>` blocks inside
+it, keyed exactly as before) and **ONE commit tray** — one Save, one merge job, one version bump, one
+release note, one unified diff, one content-hash confirm. The TOC becomes **scroll navigation**:
+plain in-page anchors plus a scroll-position highlight, replacing show-one-hide-the-rest.
+
+Rationale beyond throughput: **one logical edit is now one version bump**, which is what the C31 §0.3
+discipline was always describing. Splitting a single curatorial change across four semver bumps and
+four release notes made the version history narrate the UI's shape rather than the curator's intent.
+
+Nothing in the seam changed, and nothing had to. `editor_form.build_section_patch` already iterates
+EVERY widget section and assembles whichever `s_`/`l_`/`c_` widgets plus `o_<section>` snapshots the
+posted form carries — the property the merged Core fields and Identifiers & PIDs entries already
+relied on. The **no-clobber promise is unchanged and still load-bearing**: a section whose widgets
+round-trip to its `o_<section>` snapshot assembles to `_OMIT` and contributes nothing, so a combined
+save's patch names exactly the sections the curator touched. Preserved intact: CSRF, the `o_<section>`
+snapshots and exact round-trip semantics, per-field errors annotated on their owning section with
+every typed value re-prefilled, the validator gate, and the §0.6 hash pinning.
+
+Two consequences worth recording:
+
+* A failed save from the hub now re-renders **the hub tab** (hidden `hub_form` marker) instead of
+  bouncing to the standalone full form. The marker carries no authority — session and CSRF have
+  already run; it only selects a renderer.
+* The People & credit panel's legacy **Convert** action is a *named* submit. In one form spanning
+  every section it would have become the form's default button, so Enter in any text field would
+  retire a legacy key. An unnamed off-screen submit is rendered first so Enter means a plain Save.
+
+**Spare rows (same round).** Every repeatable section renders `_SPARE_BLANK_ROWS = 2` blank rows as
+the no-JS add fallback. That degradation is deliberate and **stays** — the server still renders them.
+They now carry `data-spare-row="1"` and `editor.js` hides them on init, since a JS curator has the
+`+ Add` button; five repeatable sections times two blank panels was the wasted space the maintainer
+was scrolling past. Hidden, not removed: they still submit empty and the assembler still drops them,
+so round-trip semantics are untouched and a no-JS browser sees exactly what it saw before.
+
+One consequence had to be handled: on an error re-render the rows come back from `submitted`, so the
+two hidden spares would return as VISIBLE empty rows with two fresh spares behind them — the panel
+gaining two blanks per retry. A row rebuilt from `submitted` that carries no curator input is
+therefore re-marked spare. Blankness mirrors the assembler exactly, per section: a **people** row is
+blank when it has no `name` (what `_people_rows_from_form` drops on — its `name_type` select always
+posts a value, so a generic all-fields-empty test would never fire there), a **list** row when no
+modelled sub-field carries a value (what `_assemble_list`'s `any_value` drops on). Stored rows are
+never re-classified.
+
 ## Provenance
 
 Mockup v4 approved and locked by the owner 2026-07-10 after four live review rounds; archived at

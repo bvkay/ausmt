@@ -1355,14 +1355,21 @@ class Gateway:
         return self._html(curatorpage.render_edit_list(
             curator_name=name, slugs=slugs, csrf_token=csrf, nav=nav))
 
-    def handle_survey_hub(self, request: Request, slug: str, tab: str = "overview") -> Response:
+    def handle_survey_hub(self, request: Request, slug: str, tab: str = "overview", *,
+                          error: str = "", field_errors: list | None = None,
+                          submitted: dict | None = None) -> Response:
         """The per-survey hub (C43 Stage 1 S1-2; C43-HUB header treatment). Overview & QA (default) /
         Stations / Metadata / History, inside the nav shell. EVERY tab runs the metadata read-job so
         the mockup's header (title + slug chip + orientation line) renders hub-wide — strict on the
         Metadata tab (the editor is useless without fields, so a failure bounces to the list),
         DEGRADABLE elsewhere (header falls back to the slug). Tab content beyond the header stays
         browser-populated from /data (Overview/Stations) or runner read-jobs (History). Sync `def`
-        route -> the seam's bounded blocking poll runs in Starlette's threadpool."""
+        route -> the seam's bounded blocking poll runs in Starlette's threadpool.
+
+        `error`/`field_errors`/`submitted` (HUB-SINGLE-SAVE 2026-08-14) re-render the Metadata tab
+        after a failed save from the hub's one metadata form: the per-section errors annotate their
+        owning sections and `submitted` re-prefills EVERY section's widgets, so a bad ORCID in one
+        section never discards what the curator typed in the other nine."""
         name = self._require_session(request)
         if isinstance(name, Response):
             return name
@@ -1423,7 +1430,8 @@ class Gateway:
         return self._html(curatorpage.render_survey_hub(
             slug=slug, tab=tab, version=version, fields=fields, csrf_token=csrf, nav=nav,
             commits=commits, history_error=history_error, build_lag=build_lag,
-            review_flags=review_flags))
+            review_flags=review_flags, error=error, field_errors=field_errors,
+            submitted=submitted))
 
     def handle_collections_index(self, request: Request) -> Response:
         """GET /gateway/curator/collections (C43 Stage 3a, record D5-A). Enqueue the whole-corpus
@@ -1739,6 +1747,25 @@ class Gateway:
         published = serve_state.read_published_head(self._git_runner, self.cfg.surveys_live_dir)
         return {"published_head": published.short if published.available else None}
 
+    def _edit_error_surface(self, request: Request, slug: str, form: dict, *, error: str = "",
+                            field_errors: list | None = None) -> Response:
+        """HUB-SINGLE-SAVE (2026-08-14): re-render the surface the failed save CAME FROM.
+
+        The hub's one metadata form posts a hidden HUB_FORM_FIELD marker; when it is present the
+        curator goes back to the hub Metadata tab with the errors beside their owning sections and
+        every typed value re-prefilled, instead of being bounced to the standalone full form (which
+        used to lose their place — harmless when a save was one section, actively bad now that a save
+        can span ten). Without the marker (the standalone full form) the legacy re-render is
+        unchanged. The marker carries NO authority: it is not a token, gates nothing, and the CSRF +
+        session checks have already run — it only selects a renderer."""
+        if form.get(curatorpage.HUB_FORM_FIELD):
+            return self.handle_survey_hub(request, slug, "metadata", error=error,
+                                          field_errors=field_errors, submitted=form)
+        # The standalone full form keeps its exact prior behaviour: typed values are re-prefilled on a
+        # per-field parse failure, and a runner error/refusal re-seeds from the read-job as it always did.
+        return self.handle_edit_form(request, slug, error=error, field_errors=field_errors,
+                                     submitted=form if field_errors else None)
+
     def handle_edit_form(self, request: Request, slug: str, error: str = "",
                          field_errors: list | None = None, submitted: dict | None = None) -> Response:
         """Open the edit form for a published survey (C31 §1.2): the gateway enqueues a `read`
@@ -1815,9 +1842,9 @@ class Gateway:
             # re-render the form with each error rather than a blanket failure (C31 §2, deliverable
             # 12). The errors carry the section so the renderer can annotate the right widget block,
             # and the submitted form is passed back so the curator's typed values survive the round
-            # (never silently discarded — the old blanket path lost them).
-            return self.handle_edit_form(request, slug, field_errors=patch_errors,
-                                         submitted=form)
+            # (never silently discarded — the old blanket path lost them). HUB-SINGLE-SAVE: the
+            # re-render lands on whichever surface posted (hub Metadata tab / standalone full form).
+            return self._edit_error_surface(request, slug, form, field_errors=patch_errors)
         # The runner alone loads the current version; it resolves the bump KIND to a concrete semver
         # and enforces semver-greater (all version logic stays runner-side, C31 §0.3). The gateway
         # passes only the bump kind, so preview and confirm reproduce identical bytes deterministically.
@@ -1827,10 +1854,11 @@ class Gateway:
             result = await asyncio.to_thread(self._edit_runner, merge)
         except metaedit.EditRunnerError as exc:
             logger.warning("edit merge-job failed for %s: %s", slug, exc)
-            return self.handle_edit_form(request, slug,
-                                         error=f"the edit could not be processed: {exc}")
+            return self._edit_error_surface(request, slug, form,
+                                            error=f"the edit could not be processed: {exc}")
         if not result.get("ok"):
-            return self.handle_edit_form(request, slug, error=result.get("error") or "edit refused")
+            return self._edit_error_surface(request, slug, form,
+                                            error=result.get("error") or "edit refused")
         csrf = curator_auth.csrf_token_for(raw)
         nav = self._nav_context(
             request, active="surveys",

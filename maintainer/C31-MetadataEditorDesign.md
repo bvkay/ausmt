@@ -94,3 +94,37 @@ from the curator page in v1).
 - ≤ ~450 net non-test lines across gateway/ + runner/. No portal changes, no new containers, no
   DB migration, no submissions-state-machine change. STOP and escalate if any of those look
   necessary.
+
+## Amendment 2026-08-14 — one save per logical edit (curator hub Metadata tab)
+
+C43's survey hub shipped the §1 flow as a **form per section**, each with its own commit tray. §0.3
+was therefore charged once per SECTION rather than once per edit: a maintainer cleaning up four
+sections of one survey paid four merge jobs, four bumps, four release notes, four previews and four
+confirms. Reported from live curation as the reason multi-section cleanups get avoided.
+
+**Amended:** the hub's Metadata tab renders **ONE form over every section** with **ONE commit tray**.
+A save assembles a combined patch across all sections and enters the **unchanged** §1.3–§1.5 path —
+one `merge` job, one semver-greater bump, one appended `release_notes` entry, one unified diff, one
+§0.6 hash-pinned confirm. The standalone full form (`render_edit_form`) was already one submit and is
+untouched; the two edit surfaces now agree.
+
+This **strengthens** §0.3 rather than relaxing it. The invariant is "every edit that changes content
+requires a bump and a release note" — one logical edit is one bump. Charging four bumps for one
+curatorial change made the version history describe the editor's layout instead of the curator's
+intent, and pushed curators toward writing one section's release note to cover four sections' work.
+
+**Unchanged and still enforced:** §0.1 (the gateway parses no yaml — assembly is form fields only),
+§0.2 round-trip fidelity, §0.3 semver + mandatory note, §0.4 CSRF/session per action, §0.5 fail-closed
+git, §0.6 no-TOCTOU hash pinning, §0.7 one survey per edit. The **no-clobber** property that makes a
+combined save safe is the pre-existing one: `editor_form.assemble_section` returns `_OMIT` for any
+section whose widgets round-trip to its `o_<section>` snapshot, so an untouched section contributes
+nothing to the patch and its bytes (including comments and unknown keys) are preserved exactly as §0.2
+requires. Per-field errors (§2, deliverable 12) still annotate their owning section and still re-prefill
+the curator's typed values — now across every section of the one form, so a bad ORCID in one section
+never discards work done in another.
+
+Rendering detail recorded for the freeze: the repeatable sections keep their `_SPARE_BLANK_ROWS = 2`
+server-rendered blank rows (the no-JS add fallback is an invariant, not an accident) but mark them
+`data-spare-row="1"`, and `editor.js` hides them on init because a JS curator has `+ Add`. Hidden, not
+removed — they still submit empty and are still dropped by assembly, so nothing about round-trip
+behaviour or the no-JS experience changes.
