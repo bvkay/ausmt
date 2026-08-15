@@ -2263,7 +2263,10 @@ def _build_prov(extractor):
               "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"}
     return {"pipeline": "ausmt/extract.build_portal", "pipeline_version": _dist_version(),
             "extractor": "mt_metadata (community canonical)",  # the sole engine since the regex retirement
-            "software": {"python": _pf.python_version()},
+            # Named software carries its version (the mt_metadata Provenance rule: software.version
+            # is required). lib_versions() is the C32 single source, so this can never drift from
+            # the versions mtcat.json / build_provenance.json declare.
+            "software": {"python": _pf.python_version(), **lib_versions()},
             "git_commit": _git_commit(),
             "parameters": params,
             "generated": _dt.datetime.now(_dt.timezone.utc).isoformat()}
