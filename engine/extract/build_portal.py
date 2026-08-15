@@ -108,6 +108,23 @@ def _dist_version(default="0.2.1"):
         return default
 
 
+def peak_rss_mib():
+    """The build process's memory high-water mark in MiB, from resource.getrusage (a cheap kernel
+    counter, no sampling): what build_report.json records as `peak_rss_mib` so every real build carries
+    its own peak and an operator can see the trend BEFORE the box runs out (the 2026-08-15 P350 OOM
+    kills were the first anyone heard of 13.7 GB). ru_maxrss is KiB on Linux and bytes on macOS; both
+    are normalised here. None where the counter is unavailable (Windows), never a guess."""
+    try:
+        import resource  # noqa: PLC0415  (POSIX only)
+        v = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:  # noqa: BLE001  (no resource module, or a platform without ru_maxrss)
+        return None
+    if v <= 0:
+        return None
+    nbytes = v if sys.platform == "darwin" else v * 1024
+    return round(nbytes / (1024 * 1024), 1)
+
+
 def lib_versions() -> dict:
     """C32 §2: the ONE source of truth for the mt_metadata / mth5 library versions the build ran
     against. Returns {"mt_metadata": <ver>, "mth5": <ver>} with a key present only when that library
@@ -4435,18 +4452,28 @@ def main(argv=None):
     import datetime as _dt_report  # noqa: PLC0415 (house style: local import where used)
     _report_stations_built = sum(s["stations_built"] for s in build_report_surveys.values())
     _report_warnings = sum(len(s["warnings"]) for s in build_report_surveys.values())
+    # peak_rss_mib: the process high-water mark at this point, i.e. after the survey loop (where all
+    # the memory is: parse, XML, MTH5) and the station products; the corpus-wide emissions that follow
+    # (manifest, mtcat, schema self-check, feed) were measured at ~10 MiB on 1,418 stations. Recorded so
+    # the trend is visible build over build and the memory regression pin has a number to read.
+    _peak_rss = peak_rss_mib()
     build_report = {
         "generated": _dt_report.datetime.now(_dt_report.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "engine_commit": BUILD_ID["engine_commit"],
         "source_commit": BUILD_ID["source_commit"],
         "build_id": BUILD_ID["build_id"],
         "pipeline_version": PROV["pipeline_version"],
+        "peak_rss_mib": _peak_rss,
         "surveys": build_report_surveys,
         "totals": {"surveys": len(build_report_surveys),
                    "stations_built": _report_stations_built,
                    "warnings": _report_warnings},
     }
     (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
+    if _peak_rss is not None:
+        # One log line an operator can read off the tail: the number the kernel's OOM killer would
+        # have quoted, before it has to.
+        print(f"build peak RSS: {_peak_rss:.0f} MiB ({_report_stations_built} stations built)", file=sys.stderr)
 
     # C18b (A3): the digest-stamp sidecar. out/products/survey_digests.json maps each served survey's
     # slug -> {yaml_digest_current, xml_digest_stamped:{station_id:digest}}. This is the independent

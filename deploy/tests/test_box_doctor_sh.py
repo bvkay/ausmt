@@ -52,6 +52,16 @@ case "$*" in
   *) exit 0 ;;
 esac
 """
+# The kernel-journal stand-in for the OOM check: records its argv, prints nothing (a quiet kernel) unless
+# JOURNAL_OOM=1, in which case it prints the P350 incident's real kernel line among ordinary noise.
+_JOURNALCTL_STUB = """#!/bin/sh
+echo "$*" >> "${JOURNAL_QUERIES:-/dev/null}"
+if [ "${JOURNAL_OOM:-0}" = "1" ]; then
+  echo "2026-08-15T02:41:06+0000 p350 kernel: python invoked oom-killer: gfp_mask=0x140dca, order=0"
+  echo "2026-08-15T02:41:07+0000 p350 kernel: Out of memory: Killed process 398616 (python) total-vm:16632004kB, anon-rss:13740244kB, file-rss:0kB, shmem-rss:0kB, UID:10001 pgtables:27404kB oom_score_adj:0"
+fi
+exit "${JOURNAL_RC:-0}"
+"""
 
 
 def _git(sl: Path, *args: str) -> None:
@@ -92,7 +102,8 @@ def _make_tree(tmp_path: Path, *, extra_commit: bool = False, dirty: bool = Fals
 def _env(tmp_path: Path, data: Path, **extra) -> dict:
     b = tmp_path / "bin"
     b.mkdir()
-    for name, body in (("docker", _DOCKER_STUB), ("curl", _CURL_STUB), ("systemctl", _SYSTEMCTL_STUB)):
+    for name, body in (("docker", _DOCKER_STUB), ("curl", _CURL_STUB), ("systemctl", _SYSTEMCTL_STUB),
+                       ("journalctl", _JOURNALCTL_STUB)):
         p = b / name
         p.write_text(body, encoding="utf-8")
         p.chmod(0o755)
@@ -105,6 +116,7 @@ def _env(tmp_path: Path, data: Path, **extra) -> dict:
         "AUSMT_DOCTOR_DOCKER": str(b / "docker"),
         "AUSMT_DOCTOR_CURL": str(b / "curl"),
         "AUSMT_DOCTOR_SYSTEMCTL": str(b / "systemctl"),
+        "AUSMT_DOCTOR_JOURNALCTL": str(b / "journalctl"),
         "AUSMT_DOCTOR_ENV": str(envf),
         "AUSMT_DOCTOR_COMPOSE": str(tmp_path / "compose.yaml"),
     })
@@ -176,3 +188,47 @@ def test_reconcile_timer_absent_fails(tmp_path):
     assert any(ln.startswith("FAIL reconcile:") and "NOT installed" in ln for ln in r.stdout.splitlines()), (
         f"an uninstalled reconcile timer must FAIL:\n{r.stdout}")
     assert r.returncode != 0
+
+
+# ---- kernel OOM kills named by name (incident 2026-08-15) --------------------------------------------
+
+def test_kernel_oom_kill_fails_and_names_the_process(tmp_path):
+    """The P350 incident: the engine build was OOM-killed by the kernel five nights running and every
+    one reached the operator as "rebuild FAILED". When the kernel journal holds an out-of-memory kill in
+    the window, the doctor must FAIL, say KILLED ... FOR RUNNING OUT OF MEMORY, and quote the kernel line
+    (process, uid, size), having asked the KERNEL journal (-k) for a bounded --since window. FAILS IF the
+    kill is reported green, or the line is not quoted, or the whole journal was scanned unbounded."""
+    data = _make_tree(tmp_path)
+    q = tmp_path / "journal.queries"
+    r = _run(_env(tmp_path, data, JOURNAL_OOM="1", JOURNAL_QUERIES=str(q)))
+    lines = r.stdout.splitlines()
+    oom = [ln for ln in lines if ln.startswith("FAIL oom:")]
+    assert oom, f"a kernel OOM kill must FAIL the oom check:\n{r.stdout}"
+    assert "OUT OF MEMORY" in oom[0] and "Killed process 398616 (python)" in oom[0] \
+        and "anon-rss:13740244kB" in oom[0] and "UID:10001" in oom[0], oom[0]
+    assert r.returncode != 0, "an OOM kill must make the doctor exit non-zero"
+    query = q.read_text(encoding="utf-8").splitlines()[-1].split()
+    assert "-k" in query and "--since" in query, query
+
+
+def test_quiet_kernel_journal_passes(tmp_path):
+    """No kill in the window => PASS, by name, so the healthy report says the check RAN (Invariant 10:
+    a check that did not look must not read as green)."""
+    data = _make_tree(tmp_path)
+    r = _run(_env(tmp_path, data))
+    assert any(ln.startswith("PASS oom:") and "no kernel out-of-memory kills" in ln
+               for ln in r.stdout.splitlines()), r.stdout
+
+
+def test_unreadable_kernel_journal_warns_not_passes(tmp_path):
+    """journalctl present but the kernel journal unreadable (not in systemd-journal) => WARN naming the
+    fix, never a PASS over an unread journal; and a host with NO journalctl at all => WARN likewise."""
+    data = _make_tree(tmp_path)
+    r = _run(_env(tmp_path, data, JOURNAL_RC="1"))
+    assert any(ln.startswith("WARN oom:") and "systemd-journal" in ln for ln in r.stdout.splitlines()), r.stdout
+    assert not any(ln.startswith("PASS oom:") for ln in r.stdout.splitlines())
+    second = tmp_path / "second"
+    second.mkdir()
+    r2 = _run(_env(second, data, AUSMT_DOCTOR_JOURNALCTL=str(tmp_path / "no-such-journalctl")))
+    assert any(ln.startswith("WARN oom:") and "no journalctl" in ln for ln in r2.stdout.splitlines()), r2.stdout
+

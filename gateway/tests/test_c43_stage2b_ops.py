@@ -373,3 +373,57 @@ def test_paused_and_pinned_states_render_their_detail():
     html = _reconcile_status_block({"action": "paused", "last_run": "2026-07-12T00:00:00Z",
                                     "log_tail": "auto-rebuild PAUSED by a curator pause.flag"})
     assert "PAUSED" in html, "the paused detail must be surfaced"
+
+
+# --------------------------------------------------------------------------------------------------
+# Build memory on the ops floor (incident 2026-08-15: five kernel OOM kills at 13.7 GB, surfaced only as
+# "rebuild FAILED"). Two pins: the failed-status block NAMES an OOM kill when reconcile flagged one, and
+# the build inventory shows each build's own high-water mark (build_report.json peak_rss_mib via
+# alert.sh) so the trend is visible before the box runs out.
+# --------------------------------------------------------------------------------------------------
+def test_failed_status_with_oom_kill_is_named_by_name():
+    """A failed reconcile status carrying oom_kill=true must lead with KILLED BY THE KERNEL FOR RUNNING
+    OUT OF MEMORY (red), keep the kernel-line detail visible, and a plain failed status must NOT claim
+    it. FAILS IF the OOM cause is buried under the generic 'did not serve' lead, or a plain failure is
+    dressed up as an OOM."""
+    from gateway.curatorpage import _PALETTE, _reconcile_status_block
+    html = _reconcile_status_block({
+        "action": "failed", "last_run": "2026-08-15T02:45:00Z", "head": "abc1234", "oom_kill": True,
+        # the detail carries ONLY the kernel line here, so the wording can come from nowhere but the lead
+        "log_tail": "kernel: Out of memory: Killed process 398616 (python) anon-rss:13740244kB UID:10001"})
+    assert "KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY" in html, "the LEAD must name the cause"
+    assert "Killed process 398616 (python)" in html, "the kernel line (log_tail) must stay visible"
+    assert _PALETTE["bad"] in html
+    plain = _reconcile_status_block({"action": "failed", "last_run": "2026-08-15T02:45:00Z",
+                                     "head": "abc1234", "oom_kill": False, "log_tail": "boom"})
+    assert "KILLED BY THE KERNEL" not in plain and "boom" in plain
+
+
+def test_builds_table_and_detail_show_peak_rss(tmp_path):
+    """The build inventory renders each build's memory high-water mark (ops-status builds[].peak_rss_mib,
+    lifted from build_report.json) as a Peak RSS column and a build-detail fact, in MiB under a GiB and
+    GiB above; a build without the figure (pre-fix report) shows '-'. FAILS IF the figure is dropped, or
+    a missing figure breaks the render."""
+    from gateway.curatorpage import _peak_rss_cell
+    assert _peak_rss_cell(913.4) == "913 MiB"
+    assert _peak_rss_cell(13418.2) == "13.1 GiB"
+    assert _peak_rss_cell(None) == "-" and _peak_rss_cell("x") == "-" and _peak_rss_cell(True) == "-"
+
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            ops = _fresh_ops()
+            ops["builds"][0]["peak_rss_mib"] = 913.4
+            ops["builds"].append({"dir": "20260701T000000Z", "build_id": "old", "engine_commit": "aaa1111",
+                                  "source_commit": "bbb2222", "stations": 8, "serving": False, "cache": {}})
+            _write_ops(cfg, ops)
+            r = await client.get("/gateway/curator/serve")
+            assert r.status_code == 200
+            assert "Peak RSS" in r.text and "913 MiB" in r.text, "the inventory must show the figure"
+            r2 = await client.get("/gateway/curator/serve/build/20260710T032000Z")
+            assert r2.status_code == 200
+            assert '<span class="fk">Peak RSS</span><span class="fv">913 MiB</span>' in r2.text
+            r3 = await client.get("/gateway/curator/serve/build/20260701T000000Z")
+            assert r3.status_code == 200
+            assert '<span class="fk">Peak RSS</span><span class="fv">-</span>' in r3.text
+    run(_body())

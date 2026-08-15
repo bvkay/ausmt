@@ -29,6 +29,7 @@ Where this page and the schema disagree, the schema is right.
 | `source_commit` | recommended | string or null | survey-repository commit the build read |
 | `build_id` | recommended | string | the build identity string |
 | `pipeline_version` | recommended | string | engine distribution version |
+| `peak_rss_mib` | recommended | number or null | the build process's memory high-water mark, in MiB |
 | `surveys` | mandatory | object | per-survey entries, keyed by slug |
 | `totals` | mandatory | object | corpus totals |
 
@@ -42,6 +43,7 @@ the three documents cannot disagree about which commits produced a build.
  "source_commit": "2a6624e",
  "build_id": "0d705ea…-2a6624e-2026-07-27T08:08:07.007756+00:00",
  "pipeline_version": "0.9.0",
+ "peak_rss_mib": 913.4,
  "surveys": {
   "vulcan-2022": {
    "stations_built": 34,
@@ -134,6 +136,17 @@ the three documents cannot disagree about which commits produced a build.
 | Occurrence | 1 |
 | Type | object, values as in [section 2](#2-a-survey-entry) |
 | Note | A survey the build skipped has no entry. |
+
+### 1.8 peak_rss_mib
+
+| | |
+|---|---|
+| Definition | The build process's memory high-water mark, in MiB. |
+| Obligation | recommended |
+| Occurrence | 0-1 |
+| Type | number or null |
+| Example | `913.4` |
+| Note | Read from `resource.getrusage(RUSAGE_SELF).ru_maxrss` (KiB on Linux, bytes on macOS, normalised) at the moment the report is written: after the survey loop and the per-station products, before the corpus-wide manifest, MTCAT and feed emissions, which measure at about 10 MiB. `null` where the counter is unavailable (Windows). Recorded so every build carries its own peak and the trend is visible before a box runs out of memory: the 2026-08-15 kernel OOM kills at 13.7 GB were the first sign anyone had. The engine's memory is bounded per station, not per corpus (`engine/tests/test_build_memory.py` pins the slope), so a value that climbs build over build at a steady corpus is a regression to chase. |
 
 ---
 

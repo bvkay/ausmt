@@ -39,6 +39,8 @@
 #   AUSMT_RECONCILE_MAKE  (optional) override the rebuild command (test shim); default:
 #                                    `make -C $AUSMT_CODE_DIR/deploy rebuild-data`
 #   AUSMT_RECONCILE_LOCK  (optional) lock-file path override; default $AUSMT_DATA_DIR/reconcile.lock
+#   AUSMT_RECONCILE_JOURNALCTL (optional) the journalctl command used to ask the KERNEL journal whether
+#                                    a failed rebuild was OOM-killed (test shim); default `journalctl`
 #
 # FLAGS:
 #   --dry-run  print the decision and take NO actions (no request-file consume, no build, no status
@@ -78,6 +80,7 @@ REQUEST_FILE="$STATE_DIR/rebuild.request"
 STATUS_FILE="$STATE_DIR/reconcile-status.json"
 LOCK_FILE="${AUSMT_RECONCILE_LOCK:-$AUSMT_DATA_DIR/reconcile.lock}"
 MAKE_CMD="${AUSMT_RECONCILE_MAKE:-make -C $AUSMT_CODE_DIR/deploy rebuild-data}"
+JOURNALCTL="${AUSMT_RECONCILE_JOURNALCTL:-journalctl}"
 # C43 S2b-ii (record D8/D9/D13): the curator "pause auto-rebuild" flag + the "serve this build"
 # rollback pin — both host-written by the actions agent (deploy/scripts/actions.sh) / the gateway, and
 # RESPECTED here (this agent never writes them). A FRESH pause.flag suppresses the drift rebuild; a
@@ -246,6 +249,29 @@ except Exception:
 PYEOF
 }
 
+# oom_kills_since <since>: echo the kernel's out-of-memory KILL lines logged since <since> (a journalctl
+# --since expression), oldest first, at most the last 5; empty when there were none, OR when the kernel
+# journal cannot be read here (no journalctl, a non-systemd host, or the operator is not in the
+# systemd-journal/adm group). Never fails the script.
+#
+# WHY (incident 2026-08-15, P350): the engine build was OOM-killed by the kernel five nights running
+# ("Out of memory: Killed process 398616 (python) ... anon-rss:13740244kB ... UID:10001") and every one
+# of them reached the operator as "rebuild FAILED (rc=2), see log tail". The log tail ends mid-survey
+# with no error at all, because the process was killed, not failed: the truth was two layers down, in
+# `journalctl -k`, and nobody looked there for a week. The kernel line names the process (python), the
+# uid (10001, the engine container's user), and the size it had reached; that is the sentence that
+# tells an operator what to do (more RAM or swap, or a corpus the engine can build in the RAM it has),
+# so a failed rebuild now asks the kernel journal for its own build window and SAYS SO by name.
+# `-k` is the kernel ring; `-o short-iso` gives an unambiguous UTC-able timestamp per line. Both the
+# modern "Out of memory: Killed process" and the older "Out of memory: Kill process" wordings match, as
+# does a docker memory-limit "Memory cgroup out of memory: Killed process".
+oom_kills_since() {
+  command -v "$JOURNALCTL" >/dev/null 2>&1 || return 0
+  "$JOURNALCTL" -k --since "$1" --no-pager -q -o short-iso 2>/dev/null \
+    | grep -E 'ut of memory: Kill(ed)? process' | tail -n 5
+  return 0
+}
+
 # write_status <action> <head> <built> <build_id> <log_file> [detail]: build reconcile-status.json in
 # a temp file then mv it over the target — an atomic rename so the gateway panel never reads a
 # half-written file. Values are passed as argv (never interpolated into the JSON) so a stray
@@ -272,6 +298,7 @@ write_status() {
   AUSMT_RS_PAUSED="${PAUSED:-0}" AUSMT_RS_PAUSE_EXPIRED="${PAUSE_EXPIRED:-0}" \
   AUSMT_RS_PAUSE_SINCE="${PAUSE_SINCE:-}" \
   AUSMT_RS_PINNED="${PINNED:-0}" AUSMT_RS_PINNED_BUILD="${PINNED_BUILD:-}" \
+  AUSMT_RS_OOM_KILL="${OOM_KILL:-0}" \
   "$PY" - > "$_tmp" <<'PYEOF'
 import json, os
 action = os.environ["AUSMT_RS_ACTION"]
@@ -308,6 +335,10 @@ doc = {
     "pause_since": orval("AUSMT_RS_PAUSE_SINCE"),
     "pinned": os.environ.get("AUSMT_RS_PINNED") == "1",
     "pinned_build": orval("AUSMT_RS_PINNED_BUILD"),
+    # True when a FAILED rebuild coincided with a kernel out-of-memory kill in its own build window
+    # (oom_kills_since); the kernel lines themselves lead log_tail. False on every other outcome, so
+    # a consumer (alert.sh, the ops floor) can name the cause without parsing prose.
+    "oom_kill": os.environ.get("AUSMT_RS_OOM_KILL") == "1",
 }
 print(json.dumps(doc, indent=1))
 PYEOF
@@ -574,6 +605,9 @@ PYEOF
   # Hand the signal trap everything it needs to write an honest status if systemd kills us mid-build:
   # without these it can still record action=failed, but not WHICH commits or WHICH log to look at.
   TRAP_HEAD="$head"; TRAP_BUILT="$built"; TRAP_LOG="$log_file"
+  # The build window's opening edge, in the form journalctl --since accepts, so a failure can ask the
+  # kernel journal about THIS build and not last week's (--since is inclusive to the second).
+  build_started=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
   # shellcheck disable=SC2086 -- MAKE_CMD is an intentional word-split command (default or shim).
   AUSMT_BUILD_CACHE_MODE="$_cache_mode" $MAKE_CMD > "$log_file" 2>&1
   rc=$?
@@ -601,6 +635,27 @@ PYEOF
   # Build/verify failed: the atomic swap left the OLD build serving. Report failed + the log tail so
   # the panel shows why WITHOUT the operator needing shell access; the request file is already
   # consumed, so there is no crash-loop (§4). Exit 1 so `systemctl status`/monitoring flags it.
+  # FIRST ask the kernel journal whether the build was OOM-KILLED in its own window (incident
+  # 2026-08-15: six "rebuild FAILED, see log tail" while the cause was a kernel kill two layers down).
+  # If it was, say so BY NAME, kernel lines first, then the log tail; and flag oom_kill in the status.
+  _oom=$(oom_kills_since "$build_started")
+  if [ -n "$_oom" ]; then
+    _t=$(tail -n 25 "$log_file" 2>/dev/null || true)
+    OOM_KILL=1
+    write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file" \
+"KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY. The build did not fail on its own: the kernel's
+out-of-memory killer terminated the build process (python, the engine container's uid 10001)
+during this rebuild, so the box does not have enough free RAM for the current corpus. The previous
+build is still being served. Kernel journal for this build window (since $build_started):
+$_oom
+What to do: check build_report.json peak_rss_mib on the last GOOD build for the trend; give the box
+more RAM or a swap file as a bridge; and if a healthy build already needs most of the box, the
+engine's per-station memory bound has regressed (engine/tests/test_build_memory.py).
+--- last lines of $log_file ---
+$_t"
+    printf 'reconcile: rebuild FAILED (rc=%s): KILLED BY THE KERNEL for running out of memory (see the kernel lines in reconcile-status.json); old build still serving. Log: %s\n' "$rc" "$log_file" >&2
+    return 1
+  fi
   write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file"
   printf 'reconcile: rebuild FAILED (rc=%s) — old build still serving. Log: %s\n' "$rc" "$log_file" >&2
   return 1
