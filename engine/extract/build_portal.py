@@ -2890,6 +2890,35 @@ def _tensor_max_abs_diff(a, b):
     return float(np.nanmax(diff)) if diff.size else 0.0
 
 
+def _release_mth5_metadata_classes() -> None:
+    """Emit-and-release for the MTH5 arm. Called after EVERY station-sized unit of MTH5 work (each
+    add_transfer_function in the writers, each get_transfer_function in the round-trip gate).
+
+    WHY (measured, 2026-08-15, the P350 OOM incident: 5 kernel kills at anon-rss 13.7 GB on a 14 GB box
+    at ~2,580 stations). The build was not holding the corpus. On the pinned stack every mth5 0.6.8
+    group/dataset instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
+    pydantic model class via create_model (about 75 classes per served station across the tier-1
+    file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then memoises each
+    class's field tree in the module-global, class-KEYED dict
+    mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE. A class-keyed memo of classes that are never
+    reused can never hit; it only pins every class, its ~300 KB json tree and its pydantic-core
+    validator/serializer for the life of the process. Profiled at 7.6 MiB per served station, linear
+    and unbounded, 78% of the peak footprint, all of it inside _write_tf_mth5; parsing, the C18 cache,
+    the XML arm, the zips and the corpus-wide emissions are flat.
+
+    The library's own clear_field_caches() empties that memo; the classes then have no owner and the
+    ordinary cyclic GC frees them. Cost: the next lookup of a STATIC class re-reads its tree from
+    mt_metadata's on-disk cache (the same source the memo was filled from), so the served bytes cannot
+    change; measured full-corpus build time did not rise. Guarded so a future mt_metadata without the
+    helper degrades to the old behaviour rather than failing the build (the memory regression pin in
+    tests/test_build_memory.py would then go RED, which is the right way to learn about it)."""
+    try:
+        from mt_metadata.base.pydantic_helpers import clear_field_caches  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo to release)
+        return
+    clear_field_caches()
+
+
 def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     """SPEC §6 BLOCKING gate. Reopen a built survey MTH5 and compare every stored TF's impedance tensor
     (and tipper) + coordinates to a FRESH parse of its source EDI, exact-or-tolerance. Also asserts the
@@ -2931,6 +2960,10 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
             report["mismatches"].append({"station": "*",
                                          "reason": f"time-series samples present (n_samples={_max_samples})"})
         for _, row in tfs.iterrows():
+            # Release the PREVIOUS station's dynamically created metadata classes before reading the
+            # next one, so a 764-station bundle's gate runs flat instead of holding every reopened TF's
+            # class tree until the file closes (see _release_mth5_metadata_classes).
+            _release_mth5_metadata_classes()
             sid = row["station"]
             src = by_key.get((row.get("survey"), sid)) or by_key.get((None, sid))
             if src is None:
@@ -2972,6 +3005,7 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
         report["mismatches"].append({"station": "*", "reason": f"{type(ex).__name__}: {str(ex)[:80]}"})
     finally:
         m.close_mth5()
+        _release_mth5_metadata_classes()   # the last station's classes + the reopen's own group classes
     ok = report["tf_only"] and not report["mismatches"]
     return ok, report
 
@@ -3025,6 +3059,11 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
                 n += 1
             except Exception as ex:  # noqa: BLE001
                 print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+            finally:
+                # Emit-and-release, per station, INSIDE the open file: the memory bound is then one
+                # station's transient, not one bundle's (a 764-station survey stays flat). See
+                # _release_mth5_metadata_classes for the measured why.
+                _release_mth5_metadata_classes()
     finally:
         m.close_mth5()
     if not n:
@@ -3173,6 +3212,8 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                     all_stations.append((p, {**r, "_survey": slug}))
                 except Exception as ex:  # noqa: BLE001
                     print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+                finally:
+                    _release_mth5_metadata_classes()   # per station, same bound as _write_tf_mth5
     finally:
         m.close_mth5()
     if not n:
