@@ -113,7 +113,14 @@ def peak_rss_mib():
     counter, no sampling): what build_report.json records as `peak_rss_mib` so every real build carries
     its own peak and an operator can see the trend BEFORE the box runs out (the 2026-08-15 P350 OOM
     kills were the first anyone heard of 13.7 GB). ru_maxrss is KiB on Linux and bytes on macOS; both
-    are normalised here. None where the counter is unavailable (Windows), never a guess."""
+    are normalised here. None where the counter is unavailable (Windows), never a guess.
+
+    SCOPE (for the survey-parallel build lane, which composes with this): RUSAGE_SELF is THIS process
+    only, and RUSAGE_CHILDREN reports the largest single waited-for descendant, never the sum over
+    concurrent workers. With N worker processes the box-level footprint is about N times what either
+    counter reports. That lane must report max(RUSAGE_SELF, RUSAGE_CHILDREN) together with the worker
+    count (or per-worker peaks) in build_report, and restate tests/test_build_memory.py's pin as a
+    per-worker bound times workers, so the field keeps meaning "what the box needed"."""
     try:
         import resource  # noqa: PLC0415  (POSIX only)
         v = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
@@ -2928,7 +2935,14 @@ def _release_mth5_metadata_classes() -> None:
     mt_metadata's on-disk cache (the same source the memo was filled from), so the served bytes cannot
     change; measured full-corpus build time did not rise. Guarded so a future mt_metadata without the
     helper degrades to the old behaviour rather than failing the build (the memory regression pin in
-    tests/test_build_memory.py would then go RED, which is the right way to learn about it)."""
+    tests/test_build_memory.py would then go RED, which is the right way to learn about it).
+
+    CONCURRENCY (for the survey-parallel build lane): this clears a PROCESS-GLOBAL memo. On the pinned
+    mt_metadata 1.0.9 its RLock is held from the cycle-breaking sentinel write through the final store
+    (get_all_fields_serializable's whole body is one `with _CACHE_LOCK`), so a clear from another
+    thread cannot split a computation; but with THREAD workers one worker's release evicts what
+    another is about to look up again, and the per-unit bound this gives is per process, not per
+    thread. Worker PROCESSES each own their memo and keep the bound; that lane should use processes."""
     try:
         from mt_metadata.base.pydantic_helpers import clear_field_caches  # noqa: PLC0415
     except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo to release)

@@ -249,10 +249,12 @@ except Exception:
 PYEOF
 }
 
-# oom_kills_since <since>: echo the kernel's out-of-memory KILL lines logged since <since> (a journalctl
-# --since expression), oldest first, at most the last 5; empty when there were none, OR when the kernel
-# journal cannot be read here (no journalctl, a non-systemd host, or the operator is not in the
-# systemd-journal/adm group). Never fails the script.
+# oom_kills_since <since>: set OOM_KILLS to the kernel's out-of-memory KILL lines logged since <since>
+# (a journalctl --since expression), oldest first, at most the last 5; empty when there were none. Never
+# fails the script. ALSO sets OOM_JOURNAL_UNREADABLE: empty when the kernel journal was actually READ (so
+# an empty answer is a real negative), else a one-line reason it was not, so the caller can say "an OOM
+# kill cannot be ruled out" instead of silently reporting a plain failure over an unread journal. Both
+# are globals (not echoed) because a $(...) caller would run this in a subshell and lose the second one.
 #
 # WHY (incident 2026-08-15, P350): the engine build was OOM-killed by the kernel five nights running
 # ("Out of memory: Killed process 398616 (python) ... anon-rss:13740244kB ... UID:10001") and every one
@@ -265,10 +267,34 @@ PYEOF
 # `-k` is the kernel ring; `-o short-iso` gives an unambiguous UTC-able timestamp per line. Both the
 # modern "Out of memory: Killed process" and the older "Out of memory: Kill process" wordings match, as
 # does a docker memory-limit "Memory cgroup out of memory: Killed process".
+#
+# UNREADABLE is not only a non-zero exit. On modern systemd a user outside systemd-journal/adm whose OWN
+# user journal is readable gets exit 0 and an EMPTY kernel view, with only a stderr hint ("You are
+# currently not seeing messages from other users and the system ... Pass -q to turn off this notice");
+# with -q that hint is gone too and the unread journal is indistinguishable from a quiet kernel. So: no
+# -q, stderr is kept, and the hint (or "insufficient permissions" / "No journal files were found") means
+# unreadable. A kill line that IS present wins over the hint (a partly readable journal that shows the
+# kill is a positive answer).
+OOM_KILLS=""
+OOM_JOURNAL_UNREADABLE=""
 oom_kills_since() {
-  command -v "$JOURNALCTL" >/dev/null 2>&1 || return 0
-  "$JOURNALCTL" -k --since "$1" --no-pager -q -o short-iso 2>/dev/null \
-    | grep -E 'ut of memory: Kill(ed)? process' | tail -n 5
+  OOM_KILLS=""
+  OOM_JOURNAL_UNREADABLE=""
+  if ! command -v "$JOURNALCTL" >/dev/null 2>&1; then
+    OOM_JOURNAL_UNREADABLE="no journalctl on this host"
+    return 0
+  fi
+  _jout=$("$JOURNALCTL" -k --since "$1" --no-pager -o short-iso 2>&1)
+  _jrc=$?
+  OOM_KILLS=$(printf '%s\n' "$_jout" | grep -E 'ut of memory: Kill(ed)? process' | tail -n 5)
+  if [ -n "$OOM_KILLS" ]; then
+    return 0
+  fi
+  if [ "$_jrc" -ne 0 ]; then
+    OOM_JOURNAL_UNREADABLE="journalctl -k exited $_jrc: $(printf '%s' "$_jout" | grep -v '^$' | head -n 2 | tr '\n' ' ')"
+  elif printf '%s\n' "$_jout" | grep -qiE 'not seeing messages from|insufficient permissions|No journal files were found|Permission denied'; then
+    OOM_JOURNAL_UNREADABLE="journalctl -k: $(printf '%s' "$_jout" | grep -iE 'not seeing messages from|insufficient permissions|No journal files were found|Permission denied' | head -n 1)"
+  fi
   return 0
 }
 
@@ -638,7 +664,10 @@ PYEOF
   # FIRST ask the kernel journal whether the build was OOM-KILLED in its own window (incident
   # 2026-08-15: six "rebuild FAILED, see log tail" while the cause was a kernel kill two layers down).
   # If it was, say so BY NAME, kernel lines first, then the log tail; and flag oom_kill in the status.
-  _oom=$(oom_kills_since "$build_started")
+  # If the journal could NOT be read by this user (journalctl present, no access), say THAT: a plain
+  # "failed" over an unread journal is exactly how the incident hid for a week.
+  oom_kills_since "$build_started"
+  _oom="$OOM_KILLS"
   if [ -n "$_oom" ]; then
     _t=$(tail -n 25 "$log_file" 2>/dev/null || true)
     OOM_KILL=1
@@ -654,6 +683,24 @@ engine's per-station memory bound has regressed (engine/tests/test_build_memory.
 --- last lines of $log_file ---
 $_t"
     printf 'reconcile: rebuild FAILED (rc=%s): KILLED BY THE KERNEL for running out of memory (see the kernel lines in reconcile-status.json); old build still serving. Log: %s\n' "$rc" "$log_file" >&2
+    return 1
+  fi
+  # journalctl is on the host but this user could not read the kernel journal (not in systemd-journal /
+  # adm): the negative above is NOT evidence. Keep the ordinary failed status (oom_kill=false: nothing
+  # was seen) but lead the detail with the fact that a kill cannot be ruled out and how to make it
+  # visible. A host with no journalctl at all (non-systemd, cron/PBS) keeps the plain path unchanged.
+  if [ -n "$OOM_JOURNAL_UNREADABLE" ] && [ "$OOM_JOURNAL_UNREADABLE" != "no journalctl on this host" ]; then
+    _t=$(tail -n 30 "$log_file" 2>/dev/null || true)
+    write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file" \
+"rebuild FAILED (rc=$rc); the previous build is still being served.
+NOTE: the KERNEL JOURNAL COULD NOT BE READ by this user ($OOM_JOURNAL_UNREADABLE),
+so a kernel out-of-memory kill during this build CANNOT BE RULED OUT (incident 2026-08-15: five
+OOM-killed builds that all read as plain failures). Add the user this agent runs as
+($(id -un 2>/dev/null || echo '?')) to the systemd-journal group (deploy/README.md, 'Serve reconcile'
+install step 0c) so the next failure can be named by cause.
+--- last lines of $log_file ---
+$_t"
+    printf 'reconcile: rebuild FAILED (rc=%s); kernel journal unreadable by this user, an OOM kill is NOT ruled out (add %s to systemd-journal). Old build still serving. Log: %s\n' "$rc" "$(id -un 2>/dev/null || echo '?')" "$log_file" >&2
     return 1
   fi
   write_status "failed" "$head" "$built" "$(read_build_id)" "$log_file"

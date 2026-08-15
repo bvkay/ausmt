@@ -19,7 +19,7 @@ What is pinned here, and what each pin fails on:
     live pydantic model classes is what it was after the FIRST unit. FAILS on unmodified code with
     the memo at ~25 entries and ~50 classes per station and climbing.
   * the bound, end to end: two synthetic corpora built by the real CLI with the production flag set,
-    the SAME largest survey in each and 5x the surveys in the second, and the peak RSS of the two
+    the SAME largest survey in each and 10x the surveys in the second, and the peak RSS of the two
     child processes (os.wait4 rusage, independent of anything the engine reports) must not grow with
     the station count faster than SLOPE_MAX_MIB_PER_STATION. This is the guard against the next
     feature quietly re-materialising the world. The measured constant and slope are recorded below.
@@ -53,18 +53,24 @@ from test_coord_access import _stage_survey  # noqa: E402
 
 # ---- the regression pin's recorded numbers (measured 2026-08-15 on the fixed engine, macOS, the pinned
 # mt_metadata 1.0.9 / mth5 0.6.8 stack; a Linux glibc box measures lower absolute peaks) ----
-# corpora: A = 2 surveys x 10 stations (20), B = 10 surveys x 10 stations (100); same largest survey.
-MEMPIN_SIZES = os.environ.get("AUSMT_MEMPIN_SIZES", "2x10,10x10")   # "<surveys>x<stations>,..." (2 corpora)
+# corpora: A = 2 surveys x 10 stations (20), B = 20 surveys x 10 stations (200); same largest survey.
+# The 180-station delta halves the slope's noise against the 80-station delta first used (two runs of
+# 2x10,10x10 on the fixed engine read 0.138 and 0.025 MiB/station: about +-0.06 of noise for the cost
+# of one 10 MiB wobble in a peak); 2x10,20x10 read 0.114 with the same constant.
+MEMPIN_SIZES = os.environ.get("AUSMT_MEMPIN_SIZES", "2x10,20x10")   # "<surveys>x<stations>,..." (2 corpora)
 # The pin: peak RSS may grow by at most this much per extra station between the two corpora. The
 # leak this guards against measured 7.6 MiB per served station on the real corpus (5.3 MB/station in
 # production at 2,580 stations) and 9.1 MiB per station on these small fixtures (unmodified engine:
-# 428 MiB at 20 stations -> 1,158 MiB at 100); the fixed engine measures 0.14 (recorded below), so
-# 1.0 sits a whole leak-class below the fault and seven times above the fixed slope's noise.
-SLOPE_MAX_MIB_PER_STATION = 1.0
+# 428 MiB at 20 stations -> 1,158 MiB at 100); the fixed engine measures 0.11 (recorded below). A
+# lighter retention than the fault also fails: keeping every TF object alive for the build (a
+# module-level list of tf in _write_tf_mth5) measured 1.56 MiB/station on these fixtures, three times
+# this limit; the limit itself is 0.5 = 3.9 GiB at 8,000 stations, over four times the measured slope
+# and eight times its noise, so a machine's malloc wobble cannot fail it and half a TF per station can.
+SLOPE_MAX_MIB_PER_STATION = 0.5
 # Recorded fixed-engine measurements (for the reader; not asserted, the machine varies): the run that
-# landed this test measured 267 MiB at 20 stations and 278 MiB at 100, i.e. peak = constant + slope*N:
-MEASURED_CONSTANT_MIB = 265            # the corpus-independent floor: interpreter + libraries + one survey
-MEASURED_SLOPE_MIB_PER_STATION = 0.138  # the corpus-wide index (catalogue rows, records) per station
+# set these sizes measured 266 MiB at 20 stations and 287 MiB at 200, i.e. peak = constant + slope*N:
+MEASURED_CONSTANT_MIB = 264            # the corpus-independent floor: interpreter + libraries + one survey
+MEASURED_SLOPE_MIB_PER_STATION = 0.114  # the corpus-wide index (catalogue rows, records) per station
 
 
 def _live_model_classes() -> int:
@@ -107,11 +113,23 @@ def test_mth5_unit_releases_metadata_classes(tmp_path):
     assert n == 2
     memo_after.append(_memo_len())
     classes_after.append(_live_model_classes())
+    # the MTH5-INPUT arm (a survey shipping transfer_functions/mth5/*.h5, read by process_mth5 through
+    # _mth5.records_and_components, one get_transfer_function per station): the same leak class, so
+    # the same per-station release. Read the bundle just written and census after every station.
+    import _mth5 as m5  # noqa: PLC0415
+    n_read = 0
+    for _rec, _per, _comp in m5.records_and_components(out / "bundle-tf.h5"):
+        n_read += 1
+        memo_after.append(_memo_len())
+        classes_after.append(_live_model_classes())
+    assert n_read == 2, "the reader must yield both stations of the bundle"
+    memo_after.append(_memo_len())            # after the reader closed the file
+    classes_after.append(_live_model_classes())
     assert all(m == 0 for m in memo_after), (
-        f"mt_metadata's class-keyed field-tree memo must be released after every MTH5 unit; "
-        f"observed sizes per unit: {memo_after}")
+        f"mt_metadata's class-keyed field-tree memo must be released after every MTH5 unit "
+        f"(written OR read); observed sizes per unit: {memo_after}")
     assert max(classes_after) <= classes_after_first, (
-        f"live pydantic model classes must not grow with the number of MTH5 units written "
+        f"live pydantic model classes must not grow with the number of MTH5 units written or read "
         f"(after first unit: {classes_after_first}; per unit: {classes_after})")
 
 
@@ -158,8 +176,8 @@ def _sizes():
 
 @pytest.mark.skipif(not hasattr(os, "wait4"), reason="os.wait4 (POSIX rusage) not available on this platform")
 def test_peak_rss_is_bounded_per_survey_not_per_corpus(tmp_path):
-    """THE REGRESSION PIN. Two synthetic corpora with the same largest survey, the second holding 5x
-    the surveys (5x the stations); both built by the real CLI with the production flags (tier-1 and
+    """THE REGRESSION PIN. Two synthetic corpora with the same largest survey, the second holding 10x
+    the surveys (10x the stations); both built by the real CLI with the production flags (tier-1 and
     tier-2 MTH5, EDI bundles, products). Peak RSS of each child (os.wait4) must not grow faster than
     SLOPE_MAX_MIB_PER_STATION per extra station: the build's memory is bounded by ONE survey plus a
     small corpus-wide index, never by the corpus. FAILS on unmodified code, where the MTH5 arm holds

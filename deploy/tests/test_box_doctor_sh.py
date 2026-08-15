@@ -60,6 +60,14 @@ if [ "${JOURNAL_OOM:-0}" = "1" ]; then
   echo "2026-08-15T02:41:06+0000 p350 kernel: python invoked oom-killer: gfp_mask=0x140dca, order=0"
   echo "2026-08-15T02:41:07+0000 p350 kernel: Out of memory: Killed process 398616 (python) total-vm:16632004kB, anon-rss:13740244kB, file-rss:0kB, shmem-rss:0kB, UID:10001 pgtables:27404kB oom_score_adj:0"
 fi
+if [ "${JOURNAL_HINT:-0}" = "1" ]; then
+  # what modern journalctl does for a user OUTSIDE systemd-journal/adm whose own user journal exists:
+  # exit 0, an EMPTY kernel view on stdout, and only this notice on stderr (suppressed by -q).
+  echo "-- No entries --"
+  echo "Hint: You are currently not seeing messages from other users and the system." >&2
+  echo "      Users in groups 'adm', 'systemd-journal' can see all messages." >&2
+  echo "      Pass -q to turn off this notice." >&2
+fi
 exit "${JOURNAL_RC:-0}"
 """
 
@@ -231,4 +239,36 @@ def test_unreadable_kernel_journal_warns_not_passes(tmp_path):
     second.mkdir()
     r2 = _run(_env(second, data, AUSMT_DOCTOR_JOURNALCTL=str(tmp_path / "no-such-journalctl")))
     assert any(ln.startswith("WARN oom:") and "no journalctl" in ln for ln in r2.stdout.splitlines()), r2.stdout
+
+
+def test_exit_zero_empty_journal_with_permission_hint_warns_not_passes(tmp_path):
+    """The REAL production shape of "unreadable": modern journalctl gives a user outside systemd-journal
+    /adm exit 0 and an EMPTY kernel view, with only the stderr notice "You are currently not seeing
+    messages from other users and the system ... Pass -q to turn off this notice". A doctor that passes
+    -q (or ignores stderr) reads that as a quiet kernel and prints a false PASS over the very incident
+    the check exists for. It must WARN, quote the notice, and name the fix (systemd-journal group, this
+    user). FAILS IF: PASS is printed, or the WARN does not name the group."""
+    data = _make_tree(tmp_path)
+    q = tmp_path / "journal.queries"
+    r = _run(_env(tmp_path, data, JOURNAL_HINT="1", JOURNAL_QUERIES=str(q)))
+    lines = r.stdout.splitlines()
+    assert not any(ln.startswith("PASS oom:") for ln in lines), (
+        f"an unread kernel journal (exit 0, empty, permission hint) must not PASS:\n{r.stdout}")
+    warn = [ln for ln in lines if ln.startswith("WARN oom:")]
+    assert warn, f"must WARN on the permission hint:\n{r.stdout}"
+    assert "not seeing messages from" in warn[0] and "systemd-journal" in warn[0] \
+        and "usermod -aG systemd-journal" in warn[0], warn[0]
+    # the query must not silence the notice it relies on
+    query = q.read_text(encoding="utf-8").splitlines()[-1].split()
+    assert "-q" not in query, f"-q would suppress the only sign of an unread journal: {query}"
+
+
+def test_permission_hint_does_not_hide_a_kill_that_is_visible(tmp_path):
+    """A partly readable journal (hint printed AND a kill line present) is a POSITIVE answer: the kill
+    wins over the hint. FAILS IF: the hint downgrades a visible kill to a WARN."""
+    data = _make_tree(tmp_path)
+    r = _run(_env(tmp_path, data, JOURNAL_HINT="1", JOURNAL_OOM="1"))
+    lines = r.stdout.splitlines()
+    assert any(ln.startswith("FAIL oom:") and "Killed process 398616 (python)" in ln for ln in lines), r.stdout
+    assert not any(ln.startswith("WARN oom:") for ln in lines), r.stdout
 

@@ -254,17 +254,31 @@ check_oom_kills() {
 		warn "oom: no journalctl on this host - cannot check the kernel journal for out-of-memory kills (a killed build would surface only as 'rebuild FAILED')"
 		return
 	fi
-	if ! out="$($JOURNALCTL -k --since "$OOM_SINCE" --no-pager -q -o short-iso 2>&1)"; then
-		warn "oom: cannot read the kernel journal (journalctl -k: ${out:-no output}) - add this user to the systemd-journal group so OOM kills are visible here"
-		return
-	fi
+	# No -q: on modern systemd a user outside systemd-journal/adm whose OWN journal is readable gets exit
+	# 0 and an EMPTY kernel view, and the only sign is journalctl's stderr hint ("You are currently not
+	# seeing messages from other users and the system ... Pass -q to turn off this notice"). With -q that
+	# hint is suppressed and an unread journal is indistinguishable from a quiet kernel (a false PASS over
+	# the very incident this check exists for). So stderr is kept and read: a non-zero exit OR the hint
+	# means unreadable => WARN naming the fix. A kill line that IS present wins over the hint.
+	out="$($JOURNALCTL -k --since "$OOM_SINCE" --no-pager -o short-iso 2>&1)"
+	jrc=$?
 	kills="$(printf '%s\n' "$out" | grep -E 'ut of memory: Kill(ed)? process' | tail -n 3)"
 	if [ -n "$kills" ]; then
 		n="$(printf '%s\n' "$kills" | grep -c .)"
 		fail "oom: the KERNEL KILLED $n process(es) FOR RUNNING OUT OF MEMORY in the last ${OOM_SINCE#-} - a build that was running then did not fail, it was killed: $(printf '%s' "$kills" | tr '\n' ' | ')"
-	else
-		pass "oom: no kernel out-of-memory kills in the last ${OOM_SINCE#-}"
+		return
 	fi
+	me="$(id -un 2>/dev/null || echo '?')"
+	if [ "$jrc" -ne 0 ]; then
+		warn "oom: cannot read the kernel journal (journalctl -k exited $jrc: $(printf '%s' "$out" | grep -v '^$' | head -n 2 | tr '\n' ' ')) - add this user to the systemd-journal group (sudo usermod -aG systemd-journal $me, then re-login) so OOM kills are visible here and to the reconcile agent"
+		return
+	fi
+	if printf '%s\n' "$out" | grep -qiE 'not seeing messages from|insufficient permissions|No journal files were found|Permission denied'; then
+		hint="$(printf '%s' "$out" | grep -iE 'not seeing messages from|insufficient permissions|No journal files were found|Permission denied' | head -n 1)"
+		warn "oom: the kernel journal is NOT readable by this user (journalctl -k said: $hint) so an OOM kill would be INVISIBLE here - add this user to the systemd-journal group (sudo usermod -aG systemd-journal $me, then re-login) so OOM kills are visible here and to the reconcile agent"
+		return
+	fi
+	pass "oom: no kernel out-of-memory kills in the last ${OOM_SINCE#-}"
 }
 
 printf 'AusMT box doctor (profile=%s) - %s\n' "$PROFILE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
