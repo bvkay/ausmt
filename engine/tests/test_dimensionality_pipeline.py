@@ -67,3 +67,21 @@ def test_provenance_params_match_science_source_of_truth():
     assert dim["min_usable_period_frac"] == sci.MIN_USABLE_PERIOD_FRAC
     assert dim["skew_aggregation"] == sci.SKEW_AGGREGATION
     assert dim["min_rez_row_sine"] == ep.PT_MIN_REZ_ROW_SINE
+
+
+def test_provenance_names_extractor_version():
+    """Named software carries its version: the provenance block cites mt_metadata as the
+    extractor, so it must also state WHICH mt_metadata (and mth5, when importable) — from
+    lib_versions(), the C32 single source, so station.json provenance can never disagree with
+    mtcat.json's mt_metadata_version. FAILS if the software dict regresses to python-only."""
+    import build_portal as bp   # noqa: PLC0415
+    sw = bp._build_prov("mt_metadata")["software"]
+    assert "python" in sw
+    expected = bp.lib_versions()
+    for lib, ver in expected.items():
+        assert sw.get(lib) == ver, f"provenance software block missing {lib} {ver}"
+    try:
+        import mt_metadata  # noqa: F401, PLC0415
+        assert "mt_metadata" in sw, "mt_metadata importable but not versioned in provenance"
+    except ImportError:
+        pass
