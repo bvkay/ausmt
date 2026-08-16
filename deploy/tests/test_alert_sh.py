@@ -244,6 +244,29 @@ def test_reconcile_action_failed_pings_fail(tmp_path):
     _assert_fail_ping(tree, r, "action=failed")
 
 
+def test_reconcile_action_failed_oom_kill_pings_fail_naming_the_kernel(tmp_path):
+    """reconcile-status.json with action=failed AND oom_kill=true (reconcile.sh found a kernel
+    out-of-memory kill in the failed build's own window; incident 2026-08-15, five nights of
+    "rebuild FAILED" whose cause sat in `journalctl -k`) => the fail ping SAYS the build was KILLED BY
+    THE KERNEL FOR RUNNING OUT OF MEMORY, so the operator's first read names the cause. FAILS IF: the
+    ping is the generic 'action=failed' (the incident's silence), or an oom_kill=false status is dressed
+    up as an OOM (a false alarm sends an operator shopping for RAM)."""
+    tree = _make_tree(tmp_path, reconcile_action="failed")
+    (tree["state"] / "reconcile-status.json").write_text(
+        '{"last_run":"%s","action":"failed","oom_kill":true,'
+        '"log_tail":"KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY. ..."}' % _now_iso(), encoding="utf-8")
+    r = _run(tree)
+    _assert_fail_ping(tree, r, "KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY")
+    # and the negative: an ordinary failure stays an ordinary failure
+    tree2 = _make_tree(tmp_path / "plain", reconcile_action="failed")
+    (tree2["state"] / "reconcile-status.json").write_text(
+        '{"last_run":"%s","action":"failed","oom_kill":false,"log_tail":"boom"}' % _now_iso(),
+        encoding="utf-8")
+    r2 = _run(tree2)
+    _assert_fail_ping(tree2, r2, "action=failed")
+    assert "KILLED BY THE KERNEL" not in _curl_calls(tree2)[0]
+
+
 def test_reconcile_action_untracked_blocked_pings_fail_naming_dir(tmp_path):
     """reconcile-status.json with action=untracked_blocked (the reconcile agent REFUSED to rebuild
     because surveys-live has untracked survey dirs — incident 2026-07-11) => a fail ping quoting the
@@ -404,6 +427,26 @@ def test_ops_status_builds_carry_a4_cache_forensics_producer_truth(tmp_path):
     assert got["salt_fp"] == real_cache["salt_fp"], (got, real_cache)
     assert got["write_errors"] == real_cache["write_errors"], (got, real_cache)
     assert got["read_errors"] == real_cache["read_errors"], (got, real_cache)
+
+
+def test_ops_status_builds_carry_peak_rss_from_build_report(tmp_path):
+    """The ops floor's build inventory carries each retained build's memory high-water mark, lifted
+    from build_report.json's `peak_rss_mib` (the field the engine records so the trend is visible before
+    a box runs out; the 2026-08-15 OOM kills at 13.7 GB were the first sign). A pre-fix report without
+    the field yields null, never a crash or a fabricated number. FAILS IF: the value is dropped, read
+    from the wrong file, or a missing field breaks the inventory."""
+    tree = _make_tree(tmp_path)
+    bdir = _add_retained_build(tree)
+    rep = json.loads((bdir / "build_report.json").read_text(encoding="utf-8"))
+    rep["peak_rss_mib"] = 913.4
+    (bdir / "build_report.json").write_text(json.dumps(rep), encoding="utf-8")
+    old = _add_retained_build(tree, dir_name="20260701T000000Z", serving=False)   # a pre-fix report
+    assert "peak_rss_mib" not in json.loads((old / "build_report.json").read_text(encoding="utf-8"))
+    r = _run(tree)
+    assert r.returncode == 0, r.stderr
+    by_dir = {b["dir"]: b for b in _ops_doc(tree)["builds"]}
+    assert by_dir["20260710T032000Z"]["peak_rss_mib"] == 913.4, by_dir
+    assert by_dir["20260701T000000Z"]["peak_rss_mib"] is None, by_dir
 
 
 def test_ops_status_written_when_alerting_unconfigured(tmp_path):

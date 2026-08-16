@@ -12,6 +12,7 @@
     "source_commit": {"type": ["string", "null"], "description": "short HEAD of the ausmt-surveys checkout, or null for --raw / non-git --surveys (mirrors build.json)"},
     "build_id": {"type": "string", "description": "the opaque C12 build id (mirrors build.json)"},
     "pipeline_version": {"type": "string", "description": "the engine distribution version (mirrors build_provenance.json's pipeline_version)"},
+    "peak_rss_mib": {"type": ["number", "null"], "minimum": 0, "description": "the build process's memory high-water mark in MiB, read from resource.getrusage(RUSAGE_SELF).ru_maxrss (KiB on Linux, bytes on macOS, normalised) at the moment this report is written: after the survey loop and the per-station products, before the corpus-wide manifest/mtcat/feed emissions (measured at ~10 MiB). Recorded so every real build carries its own peak and the trend is visible before a box runs out of memory (the 2026-08-15 OOM kills at 13.7 GB were the first sign). null where the counter is unavailable (Windows). Optional for pre-fix reports."},
     "surveys": {
       "type": "object",
       "additionalProperties": {"$ref": "#/definitions/survey"},

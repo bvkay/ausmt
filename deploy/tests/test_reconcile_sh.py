@@ -822,3 +822,174 @@ def test_sigterm_mid_build_records_failed_status(tmp_path):
     tail = st.get("log_tail") or ""
     assert "TERMINATED by SIG" in tail, f"the detail must say the run was terminated, got: {tail[:200]!r}"
     assert "TimeoutStartSec" in tail, "the detail must point at the likely cause (the unit's timeout)"
+
+
+# ---- kernel OOM kill named by name (incident 2026-08-15) --------------------------------------------
+# The engine build was OOM-killed by the kernel five nights running and every one reached the operator
+# as "rebuild FAILED, see log tail" while the cause sat in `journalctl -k`. A failed rebuild must ask
+# the kernel journal for ITS OWN build window and, when a kill is there, say so by name. Driven through
+# a journalctl SHIM (AUSMT_RECONCILE_JOURNALCTL) that records the exact query it was asked and prints a
+# real kernel line when SHIM_OOM=1, so the pin is on what the script ASKS and what it SAYS, never on the
+# script's self-report.
+
+_KERNEL_OOM_LINE = ("2026-08-15T02:41:07+0000 p350 kernel: Out of memory: Killed process 398616 (python) "
+                    "total-vm:16632004kB, anon-rss:13740244kB, file-rss:0kB, shmem-rss:0kB, UID:10001 "
+                    "pgtables:27404kB oom_score_adj:0")
+
+
+def _journalctl_shim(tmp_path: Path) -> tuple[Path, Path]:
+    """A journalctl stand-in: appends its argv to a query log, and prints the P350 kernel line (plus a
+    non-OOM kernel line as noise) when SHIM_OOM=1, else nothing. Returns (shim, query_log)."""
+    qlog = tmp_path / "journalctl.queries"
+    shim = tmp_path / "journalctl.sh"
+    shim.write_text(
+        "#!/bin/sh\n"
+        f'echo "$*" >> "{qlog.as_posix()}"\n'
+        'if [ "${SHIM_OOM:-0}" = "1" ]; then\n'
+        '  echo "2026-08-15T02:41:06+0000 p350 kernel: python invoked oom-killer: gfp_mask=0x140dca, order=0"\n'
+        f'  echo "{_KERNEL_OOM_LINE}"\n'
+        "fi\n"
+        # SHIM_HINT=1: what modern journalctl does for a user OUTSIDE systemd-journal/adm whose own user
+        # journal exists: exit 0, an EMPTY kernel view on stdout, only this notice on stderr (which -q
+        # suppresses). SHIM_RC overrides the exit code (the older hard-denial shape).
+        'if [ "${SHIM_HINT:-0}" = "1" ]; then\n'
+        '  echo "-- No entries --"\n'
+        '  echo "Hint: You are currently not seeing messages from other users and the system." >&2\n'
+        '  echo "      Users in groups \'adm\', \'systemd-journal\' can see all messages." >&2\n'
+        '  echo "      Pass -q to turn off this notice." >&2\n'
+        "fi\n"
+        'exit "${SHIM_RC:-0}"\n', encoding="utf-8")
+    shim.chmod(0o755)
+    return shim, qlog
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_failed_build_oom_killed_is_named_by_name(tmp_path):
+    """A failed rebuild whose build window holds a kernel OOM kill => the status says KILLED BY THE
+    KERNEL FOR RUNNING OUT OF MEMORY, carries the kernel line itself, flags oom_kill=true, and STILL
+    ends with the build log tail; the journal was asked for THIS build's window (-k, --since a UTC
+    timestamp taken this run). FAILS IF: the failure is reported as a plain build failure (the incident),
+    the kernel line is not shown, oom_kill is missing/false, the log tail is lost, or the script asked
+    for the whole journal rather than the build window."""
+    import datetime as _dt
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    shim, qlog = _journalctl_shim(tmp_path)
+    t0 = _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0)
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_OOM": "1",
+                              "AUSMT_RECONCILE_JOURNALCTL": f"{shim.as_posix()}"})
+    assert r.returncode == 1, f"a failed build must still exit 1; got {r.returncode}"
+    st = _status(tree)
+    assert st is not None and st["action"] == "failed", st
+    assert st.get("oom_kill") is True, f"status must flag the kill: {st}"
+    tail = st.get("log_tail") or ""
+    assert "KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY" in tail, tail[:300]
+    assert "Killed process 398616 (python)" in tail and "anon-rss:13740244kB" in tail, tail
+    assert "simulated build failure" in tail, "the build log tail must still follow the kernel lines"
+    assert "KILLED BY THE KERNEL" in r.stderr, "the console line must name the cause too"
+    # what was asked: the KERNEL journal (-k), since a UTC timestamp inside this run
+    queries = qlog.read_text(encoding="utf-8").splitlines()
+    assert queries, "the kernel journal was never consulted"
+    q = queries[-1]
+    assert "-k" in q.split() and "--since" in q.split(), q
+    since = q.split("--since", 1)[1].split("--no-pager")[0].strip()
+    when = _dt.datetime.strptime(since, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=_dt.timezone.utc)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    assert t0 <= when <= now, f"--since must be this run's build start, got {since!r} (run began {t0})"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_failed_build_without_oom_is_a_plain_failure(tmp_path):
+    """The journal was consulted but holds NO kill in the window => the ordinary failed status:
+    oom_kill=false and a log_tail that is the build log, with no kernel wording. FAILS IF: an OOM is
+    claimed without evidence (a false alarm sends an operator shopping for RAM), or oom_kill is absent."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    shim, qlog = _journalctl_shim(tmp_path)
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", "AUSMT_RECONCILE_JOURNALCTL": f"{shim.as_posix()}"})
+    assert r.returncode == 1
+    st = _status(tree)
+    assert st is not None and st["action"] == "failed", st
+    assert st.get("oom_kill") is False, st
+    tail = st.get("log_tail") or ""
+    assert "simulated build failure" in tail
+    assert "KILLED BY THE KERNEL" not in tail and "Out of memory" not in tail
+    assert qlog.exists(), "the journal must still have been asked (a plain failure is a negative answer)"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_failed_build_with_no_journalctl_degrades_to_plain_failure(tmp_path):
+    """No journalctl on the host (a non-systemd box, or the shim path does not exist) => the failure is
+    still recorded exactly as before, oom_kill=false, exit 1. FAILS IF: a missing journalctl breaks or
+    changes the failure path (the reporting must never depend on the diagnostic)."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    r = _run(tree, env_extra={"SHIM_FAIL": "1",
+                              "AUSMT_RECONCILE_JOURNALCTL": str(tmp_path / "no-such-journalctl")})
+    assert r.returncode == 1
+    st = _status(tree)
+    assert st is not None and st["action"] == "failed" and st.get("oom_kill") is False, st
+    assert "simulated build failure" in (st.get("log_tail") or "")
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_failed_build_with_unreadable_journal_says_oom_not_ruled_out(tmp_path):
+    """The REAL production shape of an unread journal: journalctl is present, the unit's user is outside
+    systemd-journal/adm, so `journalctl -k` exits 0 with an EMPTY kernel view and only a stderr notice
+    ("You are currently not seeing messages from other users and the system ... Pass -q to turn off
+    this notice"). With -q, or with stderr thrown away, that is indistinguishable from a quiet kernel and
+    the incident's OOM kill is recorded as a plain "rebuild FAILED" (exactly how it hid for a week). The
+    failure must stay action=failed / oom_kill=false (nothing was SEEN), exit 1, keep the build log tail,
+    but the detail must say the kernel journal could not be read, that an OOM kill CANNOT BE RULED OUT,
+    and name the systemd-journal group fix; the console line must say so too; and the query must not
+    pass -q. FAILS IF: the status is the plain failure with no such note, oom_kill is claimed true
+    (nothing was seen), the log tail is lost, or -q is passed."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    shim, qlog = _journalctl_shim(tmp_path)
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_HINT": "1",
+                              "AUSMT_RECONCILE_JOURNALCTL": f"{shim.as_posix()}"})
+    assert r.returncode == 1
+    st = _status(tree)
+    assert st is not None and st["action"] == "failed", st
+    assert st.get("oom_kill") is False, f"nothing was seen, so oom_kill must not be claimed: {st}"
+    tail = st.get("log_tail") or ""
+    assert "KERNEL JOURNAL COULD NOT BE READ" in tail, tail[:400]
+    assert "CANNOT BE" in tail and "RULED OUT" in tail, tail[:400]
+    assert "not seeing messages from" in tail, "the detail must quote journalctl's own notice"
+    assert "systemd-journal" in tail, "the detail must name the fix"
+    assert "simulated build failure" in tail, "the build log tail must still follow the note"
+    assert "KILLED BY THE KERNEL" not in tail, "an unread journal is not evidence of a kill"
+    assert "NOT ruled out" in r.stderr and "systemd-journal" in r.stderr, r.stderr
+    q = qlog.read_text(encoding="utf-8").splitlines()[-1].split()
+    assert "-q" not in q, f"-q would suppress the only sign of an unread journal: {q}"
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_failed_build_with_journalctl_denied_says_oom_not_ruled_out(tmp_path):
+    """The older hard-denial shape: journalctl exits non-zero ("No journal files were opened due to
+    insufficient permissions."). Same contract as the exit-0 hint: failed, oom_kill=false, note that a
+    kill cannot be ruled out, log tail kept."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    shim, _ = _journalctl_shim(tmp_path)
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_HINT": "1", "SHIM_RC": "1",
+                              "AUSMT_RECONCILE_JOURNALCTL": f"{shim.as_posix()}"})
+    assert r.returncode == 1
+    st = _status(tree)
+    assert st is not None and st["action"] == "failed" and st.get("oom_kill") is False, st
+    tail = st.get("log_tail") or ""
+    assert "KERNEL JOURNAL COULD NOT BE READ" in tail and "exited 1" in tail, tail[:400]
+    assert "simulated build failure" in tail
+
+
+@pytest.mark.skipif(not _HAS_GIT, reason="git required for the reconcile fake tree")
+def test_permission_hint_does_not_hide_a_visible_kill(tmp_path):
+    """A partly readable journal (notice printed AND the kill line present) is a POSITIVE answer: the
+    kill is named by name, oom_kill=true. FAILS IF: the notice downgrades a visible kill to "not ruled
+    out"."""
+    tree = _make_tree(tmp_path, source_commit="deadbeef")
+    shim, _ = _journalctl_shim(tmp_path)
+    r = _run(tree, env_extra={"SHIM_FAIL": "1", "SHIM_HINT": "1", "SHIM_OOM": "1",
+                              "AUSMT_RECONCILE_JOURNALCTL": f"{shim.as_posix()}"})
+    assert r.returncode == 1
+    st = _status(tree)
+    assert st is not None and st.get("oom_kill") is True, st
+    tail = st.get("log_tail") or ""
+    assert "KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY" in tail and "Killed process 398616 (python)" in tail
+    assert "COULD NOT BE READ" not in tail

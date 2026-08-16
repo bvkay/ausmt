@@ -337,6 +337,15 @@ action = doc.get("action")
 last_run = doc.get("last_run")
 
 if action == "failed":
+    if doc.get("oom_kill") is True:
+        # reconcile.sh found a kernel out-of-memory kill inside the failed build window (incident
+        # 2026-08-15: five nights of "rebuild FAILED" whose cause was in the kernel journal). Name it,
+        # so the dead-man ping tells the operator what to do (RAM/swap) instead of "see log tail".
+        # NOTE: no apostrophes or backticks in this heredoc (it sits inside a $(...) substitution and
+        # the POSIX sh on macOS cannot parse them there).
+        print(f"action=failed - the build was KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY (OOM kill in "
+              f"the build window; kernel lines in reconcile-status.json log_tail; last_run={last_run})")
+        raise SystemExit(0)
     print(f"action=failed (last build/verify failed; last_run={last_run})")
     raise SystemExit(0)
 
@@ -825,12 +834,16 @@ if site_data:
                     stations = sum(int(s.get("stations_built") or 0) for s in surveys.values())
                 except Exception:
                     stations = None
+            _peak = rep.get("peak_rss_mib")
             builds.append({
                 "dir": name,
                 "build_id": bj.get("build_id"),
                 "engine_commit": bj.get("engine_commit"),
                 "source_commit": bj.get("source_commit"),
                 "stations": stations,
+                # the build's own memory high-water mark (build_report.json peak_rss_mib, MiB); null
+                # for a pre-fix report. Lifted so the ops floor can show the trend build over build.
+                "peak_rss_mib": _peak if isinstance(_peak, (int, float)) else None,
                 "serving": (name == serving_dir),
                 # C18-A4 cache forensics live in build_provenance.json's top-level `cache` block —
                 # NOT in build.json/build_report.json (verified against build_portal.py). Render what

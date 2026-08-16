@@ -2624,6 +2624,11 @@ def _reconcile_status_block(status: dict | None) -> str:
         colour = _PALETTE["bad"] if hard else _PALETTE["warn"]
         lead = ("Last build did not serve — old data still live. Detail:" if hard
                 else "Auto-rebuild is being held. Detail:")
+        if action == "failed" and status.get("oom_kill") is True:
+            # reconcile.sh found a kernel out-of-memory kill in the failed build's own window (incident
+            # 2026-08-15): the operator's first read must name the cause, not "see log tail".
+            lead = ("Last build was KILLED BY THE KERNEL FOR RUNNING OUT OF MEMORY (not a build error): "
+                    "old data still live; the box needs more RAM or swap for this corpus. Detail:")
         tail = (f'<p class="sub" style="color:{colour};font-weight:600">{lead}</p>'
                 f'<pre>{_esc(status.get("log_tail"))}</pre>')
     return table + tail
@@ -3088,10 +3093,23 @@ def _builds_table(ops, ops_stale: bool, generated_at, *, csrf_token: str = "",
             f'<td>{_esc(b.get("engine_commit") or "-")}</td>'
             f'<td>{_esc(b.get("source_commit") or "-")}</td>'
             f'<td>{_esc(b.get("stations")) if b.get("stations") is not None else "-"}</td>'
+            f'<td>{_peak_rss_cell(b.get("peak_rss_mib"))}</td>'
             f'<td><a href="{href}">detail</a>{act}</td>'
             "</tr>")
-    return ('<table><tr><th>Build (dir)</th><th>Engine</th><th>Source</th><th>Stations</th><th></th></tr>'
+    return ('<table><tr><th>Build (dir)</th><th>Engine</th><th>Source</th><th>Stations</th>'
+            '<th title="the build process memory high-water mark (build_report.json peak_rss_mib)">Peak RSS</th>'
+            '<th></th></tr>'
             + "".join(rows) + "</table>")
+
+
+def _peak_rss_cell(v) -> str:
+    """The build's memory high-water mark (build_report.json peak_rss_mib, lifted into ops-status by
+    alert.sh) as a human figure: MiB under a GiB, else GiB to one decimal. '-' for a pre-fix build with
+    no figure. Shown so an operator sees the trend build over build BEFORE the box runs out (the
+    2026-08-15 kernel OOM kills at 13.7 GB were the first sign anyone had)."""
+    if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+        return "-"
+    return f"{v / 1024:.1f} GiB" if v >= 1024 else f"{v:.0f} MiB"
 
 
 def _backups_table(ops, ops_stale: bool, generated_at, *, actions: bool = False) -> str:
@@ -3315,6 +3333,7 @@ def render_build_detail(*, build, generated_at, log_tail, ops_stale: bool, nav: 
         _fact("Engine commit", _esc(build.get("engine_commit") or "-")),
         _fact("Source commit", _esc(build.get("source_commit") or "-")),
         _fact("Stations", _esc(build.get("stations")) if build.get("stations") is not None else "-"),
+        _fact("Peak RSS", _peak_rss_cell(build.get("peak_rss_mib"))),
         _fact("Serving", "yes" if build.get("serving") else "no"),
     ]
     cacherows = [

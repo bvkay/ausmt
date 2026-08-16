@@ -45,6 +45,24 @@ def available() -> bool:
     return HAVE_MTH5
 
 
+def _release_metadata_classes() -> None:
+    """Emit-and-release for every station-sized unit of MTH5 work here, the same bound
+    build_portal._release_mth5_metadata_classes gives the writers and the round-trip gate (its
+    docstring has the measured why: the P350 OOM incident, 2026-08-15). On the pinned stack every mth5
+    0.6.8 group instantiation creates a fresh pydantic model class, and mt_metadata 1.0.9's to_dict
+    memoises each class's field tree in the module-global, class-KEYED
+    mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE, so a reader that walks a survey's MTH5
+    station by station (get_transfer_function per station) pins about a MiB per station for the life
+    of the build unless the memo is released per unit. The memo is a pure cache of trees the library
+    re-reads from its own disk cache, so what is read cannot change. Guarded: a mt_metadata without the
+    helper degrades to the old behaviour (the memory pin in tests/test_build_memory.py goes red)."""
+    try:
+        from mt_metadata.base.pydantic_helpers import clear_field_caches  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo to release)
+        return
+    clear_field_caches()
+
+
 def build_mth5_from_edis(edi_paths, out_h5: Path, survey_id: str = "ausmt_preview") -> int:
     """EDI -> TF -> MTH5. Returns the number of transfer functions written."""
     out_h5 = Path(out_h5)
@@ -61,6 +79,7 @@ def build_mth5_from_edis(edi_paths, out_h5: Path, survey_id: str = "ausmt_previe
                 tf.survey_metadata.id = survey_id
             m.add_transfer_function(tf)
             n += 1
+            _release_metadata_classes()   # per station, inside the open file (a bundle stays flat)
     finally:
         m.close_mth5()
     return n
@@ -84,6 +103,10 @@ def records_and_components(h5_path: Path):
             label = f"{h5_path.name}::{survey}/{station_id}"
             rec = _mtm.record_from_tf(tf, label, extractor="mth5")
             per, comp = _mtm.components_from_tf(tf)
+            # The record and components are plain data now; drop the TF and release the class-keyed
+            # memo BEFORE yielding, so a survey read from MTH5 is bounded per station like the writers.
+            del tf
+            _release_metadata_classes()
             yield rec, per, comp
     finally:
         m.close_mth5()

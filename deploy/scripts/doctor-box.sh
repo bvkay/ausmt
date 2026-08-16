@@ -16,6 +16,10 @@
 #      serve a publish automatically — its absence is a live suspect for a stale wall)
 #   6. disk headroom on the data dir
 #   7. the served-build source_commit vs surveys-live HEAD (a staleness hint: served != published)
+#   8. the kernel journal for out-of-memory KILLS in the last 24 h (incident 2026-08-15: the engine
+#      build was OOM-killed five nights running and every one surfaced only as "rebuild FAILED"; the
+#      kernel line naming the process, its uid and its size is the fact an operator needs, so this
+#      check reads it and says it by name; WARN when the journal is unreadable, never a silent PASS)
 #
 # CONFIG (env; overridable for testability + portability):
 #   AUSMT_DOCTOR_ENV        path to deploy/.env (default: ../.env relative to this script) — sources
@@ -30,6 +34,8 @@
 #   AUSMT_DOCTOR_READER_PORT the loopback reader/public-subset port (default: 8445)
 #   AUSMT_DOCTOR_RECONCILE_TIMER the timer unit name (default: ausmt-reconcile.timer)
 #   AUSMT_DOCTOR_DISK_WARN_PCT disk use percent that trips a WARN (default: 85)
+#   AUSMT_DOCTOR_JOURNALCTL journalctl command (default: journalctl) - the kernel-journal OOM check
+#   AUSMT_DOCTOR_OOM_SINCE  journalctl --since window for the OOM check (default: -24h)
 
 set -u
 
@@ -46,6 +52,8 @@ GETFACL="${AUSMT_DOCTOR_GETFACL:-getfacl}"
 READER_PORT="${AUSMT_DOCTOR_READER_PORT:-8445}"
 RECONCILE_TIMER="${AUSMT_DOCTOR_RECONCILE_TIMER:-ausmt-reconcile.timer}"
 DISK_WARN_PCT="${AUSMT_DOCTOR_DISK_WARN_PCT:-85}"
+JOURNALCTL="${AUSMT_DOCTOR_JOURNALCTL:-journalctl}"
+OOM_SINCE="${AUSMT_DOCTOR_OOM_SINCE:--24h}"
 PROFILE="${PROFILE:-portal}"
 
 FAILS=0
@@ -235,6 +243,44 @@ check_served_staleness() {
 	fi
 }
 
+check_oom_kills() {
+	# The kernel's own record of a process it killed for memory: `journalctl -k` lines of the form
+	# "Out of memory: Killed process 398616 (python) total-vm:..., anon-rss:13740244kB, ... UID:10001".
+	# Match the modern "Killed process", the older "Kill process" and a docker cgroup "Memory cgroup out
+	# of memory" alike. FAIL (not WARN) when a kill is present: a build that cannot complete needs an
+	# operator today, and this is the line that says what to do (RAM/swap, or the engine's memory bound
+	# has regressed - see build_report.json peak_rss_mib and engine/tests/test_build_memory.py).
+	if ! command -v "$JOURNALCTL" >/dev/null 2>&1; then
+		warn "oom: no journalctl on this host - cannot check the kernel journal for out-of-memory kills (a killed build would surface only as 'rebuild FAILED')"
+		return
+	fi
+	# No -q: on modern systemd a user outside systemd-journal/adm whose OWN journal is readable gets exit
+	# 0 and an EMPTY kernel view, and the only sign is journalctl's stderr hint ("You are currently not
+	# seeing messages from other users and the system ... Pass -q to turn off this notice"). With -q that
+	# hint is suppressed and an unread journal is indistinguishable from a quiet kernel (a false PASS over
+	# the very incident this check exists for). So stderr is kept and read: a non-zero exit OR the hint
+	# means unreadable => WARN naming the fix. A kill line that IS present wins over the hint.
+	out="$($JOURNALCTL -k --since "$OOM_SINCE" --no-pager -o short-iso 2>&1)"
+	jrc=$?
+	kills="$(printf '%s\n' "$out" | grep -E 'ut of memory: Kill(ed)? process' | tail -n 3)"
+	if [ -n "$kills" ]; then
+		n="$(printf '%s\n' "$kills" | grep -c .)"
+		fail "oom: the KERNEL KILLED $n process(es) FOR RUNNING OUT OF MEMORY in the last ${OOM_SINCE#-} - a build that was running then did not fail, it was killed: $(printf '%s' "$kills" | tr '\n' ' | ')"
+		return
+	fi
+	me="$(id -un 2>/dev/null || echo '?')"
+	if [ "$jrc" -ne 0 ]; then
+		warn "oom: cannot read the kernel journal (journalctl -k exited $jrc: $(printf '%s' "$out" | grep -v '^$' | head -n 2 | tr '\n' ' ')) - add this user to the systemd-journal group (sudo usermod -aG systemd-journal $me, then re-login) so OOM kills are visible here and to the reconcile agent"
+		return
+	fi
+	if printf '%s\n' "$out" | grep -qiE 'not seeing messages from|insufficient permissions|No journal files were found|Permission denied'; then
+		hint="$(printf '%s' "$out" | grep -iE 'not seeing messages from|insufficient permissions|No journal files were found|Permission denied' | head -n 1)"
+		warn "oom: the kernel journal is NOT readable by this user (journalctl -k said: $hint) so an OOM kill would be INVISIBLE here - add this user to the systemd-journal group (sudo usermod -aG systemd-journal $me, then re-login) so OOM kills are visible here and to the reconcile agent"
+		return
+	fi
+	pass "oom: no kernel out-of-memory kills in the last ${OOM_SINCE#-}"
+}
+
 printf 'AusMT box doctor (profile=%s) - %s\n' "$PROFILE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '=====================================================\n'
 check_containers
@@ -244,6 +290,7 @@ check_surveys_live
 check_reconcile_timer
 check_disk
 check_served_staleness
+check_oom_kills
 printf '=====================================================\n'
 if [ "$FAILS" -gt 0 ]; then
 	printf 'RESULT: FAIL (%s failed, %s warned) - the box needs attention. See deploy/README.md.\n' "$FAILS" "$WARNS"

@@ -108,6 +108,30 @@ def _dist_version(default="0.2.1"):
         return default
 
 
+def peak_rss_mib():
+    """The build process's memory high-water mark in MiB, from resource.getrusage (a cheap kernel
+    counter, no sampling): what build_report.json records as `peak_rss_mib` so every real build carries
+    its own peak and an operator can see the trend BEFORE the box runs out (the 2026-08-15 P350 OOM
+    kills were the first anyone heard of 13.7 GB). ru_maxrss is KiB on Linux and bytes on macOS; both
+    are normalised here. None where the counter is unavailable (Windows), never a guess.
+
+    SCOPE (for the survey-parallel build lane, which composes with this): RUSAGE_SELF is THIS process
+    only, and RUSAGE_CHILDREN reports the largest single waited-for descendant, never the sum over
+    concurrent workers. With N worker processes the box-level footprint is about N times what either
+    counter reports. That lane must report max(RUSAGE_SELF, RUSAGE_CHILDREN) together with the worker
+    count (or per-worker peaks) in build_report, and restate tests/test_build_memory.py's pin as a
+    per-worker bound times workers, so the field keeps meaning "what the box needed"."""
+    try:
+        import resource  # noqa: PLC0415  (POSIX only)
+        v = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:  # noqa: BLE001  (no resource module, or a platform without ru_maxrss)
+        return None
+    if v <= 0:
+        return None
+    nbytes = v if sys.platform == "darwin" else v * 1024
+    return round(nbytes / (1024 * 1024), 1)
+
+
 def lib_versions() -> dict:
     """C32 §2: the ONE source of truth for the mt_metadata / mth5 library versions the build ran
     against. Returns {"mt_metadata": <ver>, "mth5": <ver>} with a key present only when that library
@@ -2890,6 +2914,42 @@ def _tensor_max_abs_diff(a, b):
     return float(np.nanmax(diff)) if diff.size else 0.0
 
 
+def _release_mth5_metadata_classes() -> None:
+    """Emit-and-release for the MTH5 arm. Called after EVERY station-sized unit of MTH5 work (each
+    add_transfer_function in the writers, each get_transfer_function in the round-trip gate).
+
+    WHY (measured, 2026-08-15, the P350 OOM incident: 5 kernel kills at anon-rss 13.7 GB on a 14 GB box
+    at ~2,580 stations). The build was not holding the corpus. On the pinned stack every mth5 0.6.8
+    group/dataset instantiation calls add_attributes_to_metadata_class_pydantic, which builds a FRESH
+    pydantic model class via create_model (about 75 classes per served station across the tier-1
+    file, the tier-2 bundle and the gate's reopen), and mt_metadata 1.0.9's to_dict then memoises each
+    class's field tree in the module-global, class-KEYED dict
+    mt_metadata.base.pydantic_helpers._FIELDS_TREE_CACHE. A class-keyed memo of classes that are never
+    reused can never hit; it only pins every class, its ~300 KB json tree and its pydantic-core
+    validator/serializer for the life of the process. Profiled at 7.6 MiB per served station, linear
+    and unbounded, 78% of the peak footprint, all of it inside _write_tf_mth5; parsing, the C18 cache,
+    the XML arm, the zips and the corpus-wide emissions are flat.
+
+    The library's own clear_field_caches() empties that memo; the classes then have no owner and the
+    ordinary cyclic GC frees them. Cost: the next lookup of a STATIC class re-reads its tree from
+    mt_metadata's on-disk cache (the same source the memo was filled from), so the served bytes cannot
+    change; measured full-corpus build time did not rise. Guarded so a future mt_metadata without the
+    helper degrades to the old behaviour rather than failing the build (the memory regression pin in
+    tests/test_build_memory.py would then go RED, which is the right way to learn about it).
+
+    CONCURRENCY (for the survey-parallel build lane): this clears a PROCESS-GLOBAL memo. On the pinned
+    mt_metadata 1.0.9 its RLock is held from the cycle-breaking sentinel write through the final store
+    (get_all_fields_serializable's whole body is one `with _CACHE_LOCK`), so a clear from another
+    thread cannot split a computation; but with THREAD workers one worker's release evicts what
+    another is about to look up again, and the per-unit bound this gives is per process, not per
+    thread. Worker PROCESSES each own their memo and keep the bound; that lane should use processes."""
+    try:
+        from mt_metadata.base.pydantic_helpers import clear_field_caches  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  (a different mt_metadata layout: no memo to release)
+        return
+    clear_field_caches()
+
+
 def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     """SPEC §6 BLOCKING gate. Reopen a built survey MTH5 and compare every stored TF's impedance tensor
     (and tipper) + coordinates to a FRESH parse of its source EDI, exact-or-tolerance. Also asserts the
@@ -2931,6 +2991,10 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
             report["mismatches"].append({"station": "*",
                                          "reason": f"time-series samples present (n_samples={_max_samples})"})
         for _, row in tfs.iterrows():
+            # Release the PREVIOUS station's dynamically created metadata classes before reading the
+            # next one, so a 764-station bundle's gate runs flat instead of holding every reopened TF's
+            # class tree until the file closes (see _release_mth5_metadata_classes).
+            _release_mth5_metadata_classes()
             sid = row["station"]
             src = by_key.get((row.get("survey"), sid)) or by_key.get((None, sid))
             if src is None:
@@ -2972,6 +3036,7 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
         report["mismatches"].append({"station": "*", "reason": f"{type(ex).__name__}: {str(ex)[:80]}"})
     finally:
         m.close_mth5()
+        _release_mth5_metadata_classes()   # the last station's classes + the reopen's own group classes
     ok = report["tf_only"] and not report["mismatches"]
     return ok, report
 
@@ -3025,6 +3090,11 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
                 n += 1
             except Exception as ex:  # noqa: BLE001
                 print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+            finally:
+                # Emit-and-release, per station, INSIDE the open file: the memory bound is then one
+                # station's transient, not one bundle's (a 764-station survey stays flat). See
+                # _release_mth5_metadata_classes for the measured why.
+                _release_mth5_metadata_classes()
     finally:
         m.close_mth5()
     if not n:
@@ -3173,6 +3243,8 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                     all_stations.append((p, {**r, "_survey": slug}))
                 except Exception as ex:  # noqa: BLE001
                     print(f"  [h5] WARN {p.name}: {type(ex).__name__}: {str(ex)[:120]}", file=sys.stderr)
+                finally:
+                    _release_mth5_metadata_classes()   # per station, same bound as _write_tf_mth5
     finally:
         m.close_mth5()
     if not n:
@@ -4394,18 +4466,28 @@ def main(argv=None):
     import datetime as _dt_report  # noqa: PLC0415 (house style: local import where used)
     _report_stations_built = sum(s["stations_built"] for s in build_report_surveys.values())
     _report_warnings = sum(len(s["warnings"]) for s in build_report_surveys.values())
+    # peak_rss_mib: the process high-water mark at this point, i.e. after the survey loop (where all
+    # the memory is: parse, XML, MTH5) and the station products; the corpus-wide emissions that follow
+    # (manifest, mtcat, schema self-check, feed) were measured at ~10 MiB on 1,418 stations. Recorded so
+    # the trend is visible build over build and the memory regression pin has a number to read.
+    _peak_rss = peak_rss_mib()
     build_report = {
         "generated": _dt_report.datetime.now(_dt_report.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "engine_commit": BUILD_ID["engine_commit"],
         "source_commit": BUILD_ID["source_commit"],
         "build_id": BUILD_ID["build_id"],
         "pipeline_version": PROV["pipeline_version"],
+        "peak_rss_mib": _peak_rss,
         "surveys": build_report_surveys,
         "totals": {"surveys": len(build_report_surveys),
                    "stations_built": _report_stations_built,
                    "warnings": _report_warnings},
     }
     (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
+    if _peak_rss is not None:
+        # One log line an operator can read off the tail: the number the kernel's OOM killer would
+        # have quoted, before it has to.
+        print(f"build peak RSS: {_peak_rss:.0f} MiB ({_report_stations_built} stations built)", file=sys.stderr)
 
     # C18b (A3): the digest-stamp sidecar. out/products/survey_digests.json maps each served survey's
     # slug -> {yaml_digest_current, xml_digest_stamped:{station_id:digest}}. This is the independent
