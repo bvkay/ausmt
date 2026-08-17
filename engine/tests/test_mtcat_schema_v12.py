@@ -188,6 +188,12 @@ def test_schema_self_identifies_as_v12_at_its_served_url():
     AusMT does not own, so the canonical identifier of the published schema was unresolvable by anyone
     who tried to dereference it. Owner ruling: the identifier is the served location.
 
+    Identifier migration (owner ruling 2026-08-18): the served location moved from ausmt.au to the
+    canonical ausmt.auscope.org.au, and the $id moved WITH it, in the demo phase, while no DOI is
+    minted and no external consumer of the v1.2 $id exists; the old URL keeps resolving through the
+    permanent legacy 301. The version did NOT bump: v1.2 stays v1.2, because nothing but the
+    identifier changed (see docs/docs/reference/mtcat-schema.md, "Identifier migration note").
+
     The "1.2" literals here are DELIBERATE and are not the hardcoded-default class that
     test_mtcat_version_parity.py eliminates: this module is the v1.2 acceptance suite (its corpus
     document, its 45 RED mutations and these assertions are all written against that release), so it
@@ -195,7 +201,7 @@ def test_schema_self_identifies_as_v12_at_its_served_url():
     to it. The MOVING version, the one every emitter and config derives, lives in the schema title and
     is pinned across every surface by test_mtcat_version_parity.py. Do not "fix" these into a read of
     the title: a suite that reads its subject's version from its subject asserts nothing."""
-    assert SCHEMA["$id"] == "https://ausmt.au/data/mtcat.schema.json"
+    assert SCHEMA["$id"] == "https://ausmt.auscope.org.au/data/mtcat.schema.json"
     assert SCHEMA["title"].startswith("MTCAT v1.2:")
     assert "1.2" in SCHEMA["description"]
     # the deliberate openness posture must be STATED, not left for a reader to infer from the keywords

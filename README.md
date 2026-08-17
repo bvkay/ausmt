@@ -1,6 +1,6 @@
 # AusMT
 
-**Australia's Magnetotelluric Data Portal**: live at **[ausmt.au](https://ausmt.au)** ·
+**Australia's Magnetotelluric Data Portal**: live at **[ausmt.auscope.org.au](https://ausmt.auscope.org.au)** ·
 documentation at **[ausmt.readthedocs.io](https://ausmt.readthedocs.io)**
 
 [![engine](https://github.com/bvkay/ausmt/actions/workflows/build-products.yml/badge.svg)](https://github.com/bvkay/ausmt/actions/workflows/build-products.yml)

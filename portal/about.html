@@ -268,7 +268,7 @@
     <p>Cite the survey wherever its data appears in your work (the data availability or methods section is
     the usual home) and make sure the survey's citation lands in your reference list, not only in the text.
     Please also acknowledge AusMT:</p>
-    <pre class="code">Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric Data Portal (https://ausmt.au), an AuScope-funded initiative.</pre>
+    <pre class="code">Magnetotelluric transfer functions were accessed through AusMT, Australia's Magnetotelluric Data Portal (https://ausmt.auscope.org.au), an AuScope-funded initiative.</pre>
   </section>
 
   <section id="contribute">
@@ -293,7 +293,7 @@
     slug is what the download bundles are named after. This lists the catalogue, then pulls one survey's
     EDIs down as a single zip.</p>
     <pre class="code">import json, urllib.request
-BASE = "https://ausmt.au"
+BASE = "https://ausmt.auscope.org.au"
 cat = json.load(urllib.request.urlopen(f"{BASE}/data/mtcat.json"))
 for s in cat["surveys"]:
     print(s["survey_id"], s["access"], s["license"], s["title"])

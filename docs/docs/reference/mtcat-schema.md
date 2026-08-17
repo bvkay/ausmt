@@ -21,7 +21,7 @@ bytes is specified in [Publication](../operations/publication.md#access-levels-a
 |---|---|
 | Normative artifact | `engine/schema/mtcat.schema.json`, JSON Schema draft-07 |
 | Served location | `/data/mtcat.schema.json`, beside the document it describes |
-| `$id` | `https://ausmt.au/data/mtcat.schema.json` |
+| `$id` | `https://ausmt.auscope.org.au/data/mtcat.schema.json` |
 | Schema version | 1.2, declared in the schema `title` |
 | Document version | declared per document in `portal.version` |
 | Validated | the build validates its emitted `mtcat.json` against the shipped schema before publishing, and copies that schema byte for byte to the served location |
@@ -35,6 +35,20 @@ consumer need is met without encoding the version in the path: the document stat
 `portal.version`, the schema states its version in its `title`, and the served URL always resolves to
 the current schema. A producer that wants older schema releases to stay addressable publishes them
 alongside under whatever names it likes; the unversioned URL keeps resolving to the current one.
+
+### Identifier migration note (2026-08-18)
+
+The `$id` moved from `https://ausmt.au/data/mtcat.schema.json` to
+`https://ausmt.auscope.org.au/data/mtcat.schema.json` when `ausmt.auscope.org.au` became the
+canonical public name (owner ruling, 2026-08-18). The move happened in the demonstration phase,
+deliberately: no DOI had been minted, no cut-release had been issued, and no external consumer of
+the v1.2 `$id` existed, so the identifier could still follow the served location without breaking
+anyone. The durable-identity argument runs the other way at this stage: `ausmt.au` is a personally
+renewed domain, while the AuScope name carries institutional persistence. The old URL keeps
+resolving: `ausmt.au` answers with a permanent (301) redirect that preserves the path, so
+`https://ausmt.au/data/mtcat.schema.json` still dereferences to the schema. The schema version did
+not change with the identifier: v1.2 stays v1.2, because an identifier-only change alters no field,
+type or vocabulary, and v1.3 keeps its queued substantive scope.
 
 ## Document structure
 

@@ -251,8 +251,12 @@ AUSMT_SMTP_PORT=587
 AUSMT_SMTP_USER=submissions@ausmt.au
 AUSMT_SMTP_PASS=your-mailbox-password        # SECRET — dropped from the startup config dump, never logged
 AUSMT_MAIL_FROM=submissions@ausmt.au
-AUSMT_SUBMIT_PAGE_URL=https://ausmt.au/submit
+AUSMT_SUBMIT_PAGE_URL=https://ausmt.auscope.org.au/add-survey.html
 ```
+
+The mailbox stays on the owner-controlled `ausmt.au` mail domain on purpose: mail is unrelated to the
+web canonical name, and moving the mailbox would break delivery for no benefit. The submit-page URL,
+by contrast, is a WEB link woven into the issued-key email, so it follows the canonical public name.
 
 With `AUSMT_SMTP_HOST` or `AUSMT_MAIL_FROM` unset the endpoint still `202`s but mints nothing and
 logs `issuance disabled`. The mail is plain text (the key, its expiry and allowance, the submit-page
@@ -1107,12 +1111,15 @@ local or LAN-internal deploy.
 
 ## Public bridge redeploy (VPS front door + box reader listener)
 
-The public demo name (`ausmt.au`) is served through the C47 public bridge: a VPS **front door** on the
-tailnet in front of the box's dedicated `:8081` reader/public-subset listener. The full go-live,
-verification, and rollback procedure is **`deploy/frontdoor/RUNBOOK.md`**; design record and rationale
-are `maintainer/C47-PublicBridge.md`. This section is the short **redeploy after a wall change** (for
-example, opening or closing a public route, per the 2026-07-24 owner ruling that made the Add Survey
-contribution flow public while the curator workbench stays walled).
+The canonical public name (`ausmt.auscope.org.au`; owner ruling 2026-08-18) is served through the C47
+public bridge: a VPS **front door** on the tailnet in front of the box's dedicated `:8081`
+reader/public-subset listener. The retired name `ausmt.au` is kept, optionally, as a permanent (301)
+redirect to the canonical name with path and query preserved (`AUSMT_LEGACY_REDIRECT_NAME` in the
+front door's `.env`). The full go-live, verification, and rollback procedure is
+**`deploy/frontdoor/RUNBOOK.md`**; design record and rationale are `maintainer/C47-PublicBridge.md`.
+This section is the short **redeploy after a wall change** (for example, opening or closing a public
+route, per the 2026-07-24 owner ruling that made the Add Survey contribution flow public while the
+curator workbench stays walled).
 
 **Both walls are independent allowlists of the same public subset.** The reader, `/data`, the Add
 Survey page (`GET /add-survey.html`), and the four public gateway routes (`POST /gateway/submit`,
@@ -1139,8 +1146,9 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8445/gateway/curator/
 The `200`s on the public routes with a `404` on `/gateway/curator/*` are wall 2 proving itself: it
 proxies only the four public gateway routes to the gateway container and refuses the workbench.
 
-**2. VPS front door.** Re-apply with the documented install script, which validates the Caddyfile
-against a real Caddy (failing loudly on any slip) before it brings the one-service stack up:
+**2. VPS front door.** Re-apply with the documented install script, which renders the Caddyfile
+(legacy redirect block in or out on the `.env` state) and validates the rendering against a real
+Caddy (failing loudly on any slip) before it brings the one-service stack up:
 
 ```sh
 # on the VPS, in the deploy/frontdoor/ subtree (its own .env already filled -- see RUNBOOK step 6):
@@ -1148,10 +1156,13 @@ cd deploy/frontdoor
 git pull
 ./install-frontdoor.sh
 # confirm from OUTSIDE (the public wall), with DNS + TLS already live:
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html            # 200 (public)
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/healthz            # 200 (public)
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/submit             # 404 (GET is the wrong verb)
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue      # 404 (walled)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/add-survey.html            # 200 (public)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/healthz            # 200 (public)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/submit             # 404 (GET is the wrong verb)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/curator/queue      # 404 (walled)
+# legacy redirect (only when AUSMT_LEGACY_REDIRECT_NAME is set): permanent, path + query preserved
+curl -sSI 'https://ausmt.au/data/mtcat.schema.json?v=1.2' | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/data/mtcat.schema.json?v=1.2
 ```
 
 `install-frontdoor.sh` is idempotent and reversible; rollback (withdraw public exposure entirely) is
