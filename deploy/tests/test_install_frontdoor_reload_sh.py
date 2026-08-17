@@ -55,7 +55,7 @@ def _setup(tmp_path: Path) -> tuple[Path, dict]:
     (work / "Caddyfile").write_text("# stub\n", encoding="utf-8")
     (work / "compose.yaml").write_text("services: {}\n", encoding="utf-8")
     (work / ".env").write_text(
-        "AUSMT_PUBLIC_NAME=ausmt.au\n"
+        "AUSMT_PUBLIC_NAME=ausmt.auscope.org.au\n"
         "AUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445\n"
         "AUSMT_ACME_EMAIL=x@y.org\n", encoding="utf-8")
     bindir = tmp_path / "bin"
@@ -118,3 +118,94 @@ def test_fresh_install_neither_reloads_nor_restarts(tmp_path):
     assert "caddy reload" not in calls, f"a fresh install must not reload; docker calls:\n{calls}"
     assert "restart frontdoor" not in calls, f"a fresh install must not restart; docker calls:\n{calls}"
     assert "up -d" in calls, "a fresh install must still bring the stack up"
+
+
+# --------------------------------------------------------------------------------------------------
+# The canonical-name lane: the installer TEMPLATES the legacy redirect block in or out ([A2]).
+# These run the REAL script against the REAL repo Caddyfile (not the stub), because the property
+# under test is the render of the shipped template: legacy var unset -> Caddyfile.rendered carries
+# exactly ONE site block and no legacy reference (an empty `{$VAR}` site address would be a Caddy
+# parse error on exactly the deploy with no legacy name); legacy var set -> both blocks survive
+# verbatim. The rendered file, not the template, must be what `caddy validate` is pointed at.
+# --------------------------------------------------------------------------------------------------
+_REAL_CADDYFILE = _REPO / "deploy" / "frontdoor" / "Caddyfile"
+
+
+def _setup_real_caddyfile(tmp_path: Path, *, legacy: str | None) -> tuple[Path, dict]:
+    work, env = _setup(tmp_path)
+    shutil.copy(_REAL_CADDYFILE, work / "Caddyfile")
+    if legacy is not None:
+        with (work / ".env").open("a", encoding="utf-8") as fh:
+            fh.write(f"AUSMT_LEGACY_REDIRECT_NAME={legacy}\n")
+    return work, env
+
+
+def _site_addresses(text: str) -> list[str]:
+    """Depth-0 site-block addresses (the global options block, a bare '{', excluded)."""
+    out, depth = [], 0
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if depth == 0 and line.endswith("{") and line[:-1].strip():
+            out.append(line[:-1].strip())
+        depth += line.count("{") - line.count("}")
+    return out
+
+
+def test_render_with_legacy_unset_strips_to_exactly_one_site_block(tmp_path):
+    """[A2] Legacy var UNSET: the installer must write Caddyfile.rendered with the marker range
+    stripped: exactly the canonical site block, zero legacy references, and the validate call must
+    mount the RENDERED file. FAILS IF the legacy block (or any reference to its var) survives, or
+    validate still points at the tracked template."""
+    work, env = _setup_real_caddyfile(tmp_path, legacy=None)
+    r = _run(work, env)
+    assert r.returncode == 0, f"installer failed: {r.stdout}\n{r.stderr}"
+    rendered = work / "Caddyfile.rendered"
+    assert rendered.is_file(), "the installer must write Caddyfile.rendered"
+    text = rendered.read_text(encoding="utf-8")
+    assert _site_addresses(text) == ["{$AUSMT_PUBLIC_NAME}"], (
+        f"the empty-var rendering must carry exactly the canonical site block, got "
+        f"{_site_addresses(text)}")
+    assert "AUSMT_LEGACY_REDIRECT_NAME" not in text, (
+        "no legacy reference may survive the empty-var rendering")
+    calls = Path(env["STUB_LOG"]).read_text(encoding="utf-8")
+    validate = [c for c in calls.splitlines() if "caddy validate" in c]
+    assert validate and "Caddyfile.rendered:/etc/caddy/Caddyfile:ro" in validate[0], (
+        f"caddy validate must run over the rendered file; calls:\n{calls}")
+
+
+def test_render_with_legacy_set_keeps_both_blocks_and_the_permanent_redir(tmp_path):
+    """[A2] Legacy var SET: the rendering must keep BOTH site blocks, canonical first, with the
+    legacy block still carrying its single permanent {uri}-preserving redir. FAILS IF the strip
+    fires anyway, the order flips, or the redir softens."""
+    work, env = _setup_real_caddyfile(tmp_path, legacy="ausmt.au")
+    r = _run(work, env)
+    assert r.returncode == 0, f"installer failed: {r.stdout}\n{r.stderr}"
+    text = (work / "Caddyfile.rendered").read_text(encoding="utf-8")
+    assert _site_addresses(text) == ["{$AUSMT_PUBLIC_NAME}", "{$AUSMT_LEGACY_REDIRECT_NAME}"], (
+        f"the set-var rendering must keep canonical then legacy blocks, got {_site_addresses(text)}")
+    assert "redir https://{$AUSMT_PUBLIC_NAME}{uri} permanent" in text, (
+        "the legacy block must keep its permanent {uri}-preserving redir")
+    assert r.stdout.count("rendering Caddyfile.rendered WITH the legacy redirect block") == 1
+
+
+def test_closing_log_names_both_names_only_when_legacy_is_set(tmp_path):
+    """The closing log line names BOTH hostnames when the legacy var is set (the operator is about
+    to watch TWO ACME issuances) and only the canonical one when it is not. FAILS IF either closing
+    line loses its name(s). The legacy fixture name is distinct from the fixture public name so each
+    is unambiguously attributable in the output."""
+    work, env = _setup_real_caddyfile(tmp_path, legacy="old.example.org")
+    r = _run(work, env)
+    assert r.returncode == 0, r.stderr
+    assert "canonical ausmt.auscope.org.au" in r.stdout, (
+        f"the closing line must name the canonical hostname; stdout:\n{r.stdout}")
+    assert "legacy old.example.org as a permanent 301" in r.stdout, (
+        f"the closing line must name the legacy hostname; stdout:\n{r.stdout}")
+    solo_root = tmp_path / "solo"
+    solo_root.mkdir()
+    work2, env2 = _setup_real_caddyfile(solo_root, legacy=None)
+    r2 = _run(work2, env2)
+    assert r2.returncode == 0, r2.stderr
+    assert "no legacy redirect name configured" in r2.stdout, (
+        f"the canonical-only closing line must say no legacy name is configured; stdout:\n{r2.stdout}")

@@ -36,12 +36,29 @@ case "$*" in
   *) exit 0 ;;
 esac
 """
-_CURL_STUB = '#!/bin/sh\necho "${CURL_CODE:-200}"\n'
+# The curl stub answers per-invocation: the redirect leg (recognisable by its `%{redirect_url}`
+# format string) gets "${REDIR_OUT}" (default: the correct 301 to the canonical schema URL), every
+# other probe gets the plain "${CURL_CODE}" body. Argv is recorded so a test can pin WHAT was probed
+# (the https:// scheme of the redirect leg is itself a load-bearing property).
+_CURL_STUB = """#!/bin/sh
+printf '%s\\n' "$*" >> "${CURL_ARGV_LOG:-/dev/null}"
+case "$*" in
+  *redirect_url*) printf '%s' "${REDIR_OUT:-301 https://ausmt.auscope.org.au/data/mtcat.schema.json}" ;;
+  *) echo "${CURL_CODE:-200}" ;;
+esac
+"""
 _TAILSCALE_STUB = '#!/bin/sh\ncase "$1" in status) echo "100.1.2.3 ausmt-box linux -"; exit 0;; esac\n'
+# With NO_LEGACY_CERT set, the s_client leg for the LEGACY name returns nothing (no cert served).
+# The match is END-ANCHORED (`*"-servername ausmt.au"`, no trailing *): ausmt.au is a PREFIX of
+# ausmt.auscope.org.au, so a substring match would knock out the canonical name's cert too.
 _OPENSSL_STUB = """#!/bin/sh
 case "$*" in
-  *s_client*) echo CERT ;;
-  *x509*enddate*) echo "notAfter=${CERT_ENDDATE:-Jul 25 12:00:00 2027 GMT}" ;;
+  *s_client*)
+    case "$*" in
+      *"-servername ausmt.au") [ -n "${NO_LEGACY_CERT:-}" ] && exit 0 ;;
+    esac
+    echo CERT ;;
+  *x509*enddate*) read -r line || true; [ -n "$line" ] && echo "notAfter=${CERT_ENDDATE:-Jul 25 12:00:00 2027 GMT}" ;;
 esac
 """
 _DIG_STUB = '#!/bin/sh\necho "${DIG_IP:-203.0.113.9}"\n'
@@ -67,11 +84,17 @@ def _bindir(tmp_path: Path) -> Path:
     return b
 
 
-def _env(tmp_path: Path, caddyfile: Path, **extra) -> dict:
+def _env(tmp_path: Path, caddyfile: Path, *, legacy: str | None = "ausmt.au", **extra) -> dict:
+    """The doctor's .env fixture mirrors the canonical-name deploy: the AuScope name is canonical
+    and (by default) ausmt.au is the legacy redirect name, so the legacy legs RUN in the default
+    fixtures. Pass legacy=None for the canonical-only deploy (the legs must then SKIP)."""
     b = _bindir(tmp_path)
     envf = tmp_path / ".env"
-    envf.write_text("AUSMT_PUBLIC_NAME=ausmt.au\nAUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445\n",
-                    encoding="utf-8")
+    lines = ["AUSMT_PUBLIC_NAME=ausmt.auscope.org.au",
+             "AUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445"]
+    if legacy is not None:
+        lines.append(f"AUSMT_LEGACY_REDIRECT_NAME={legacy}")
+    envf.write_text("\n".join(lines) + "\n", encoding="utf-8")
     env = dict(os.environ)
     env.update({
         "AUSMT_DOCTOR_DOCKER": str(b / "docker"),
@@ -174,3 +197,131 @@ def test_upstream_down_fails(tmp_path):
     assert any(ln.startswith("FAIL upstream:") for ln in r.stdout.splitlines()), (
         f"a 502 upstream must FAIL:\n{r.stdout}")
     assert r.returncode != 0
+
+
+# --------------------------------------------------------------------------------------------------
+# Canonical-name lane: the legacy-name legs (certificate for BOTH names; the legacy 301; skip-clean).
+# --------------------------------------------------------------------------------------------------
+def _hash_env(tmp_path, cf, **extra):
+    return _env(tmp_path, cf, FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest(), **extra)
+
+
+def test_legacy_legs_pass_when_cert_and_301_are_right(tmp_path):
+    """GREEN side of the legacy legs (proves the FAIL pins below are non-vacuous): with a legacy
+    cert served and the redirect answering 301 to the canonical schema URL, tls-legacy and redirect
+    both PASS and the run exits 0."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf), "report")
+    assert r.returncode == 0, f"all-green with legacy set should exit 0:\n{r.stdout}\n{r.stderr}"
+    assert any(ln.startswith("PASS tls-legacy: certificate for ausmt.au") for ln in r.stdout.splitlines()), (
+        f"the legacy certificate leg must PASS and name the legacy host:\n{r.stdout}")
+    assert any(ln.startswith("PASS redirect:") and "301s to" in ln for ln in r.stdout.splitlines()), (
+        f"the redirect leg must PASS on a correct 301:\n{r.stdout}")
+
+
+def test_missing_legacy_certificate_is_a_fail_not_a_warn(tmp_path):
+    """A legacy name with NO served certificate means the https:// leg of every old link is dead:
+    the check must FAIL (never WARN) and the run must exit non-zero, while the canonical cert
+    (whose name the legacy one prefixes) stays PASS. FAILS IF the missing cert is soft-pedalled."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf, NO_LEGACY_CERT="1"), "report")
+    lines = r.stdout.splitlines()
+    assert any(ln.startswith("FAIL tls-legacy: no certificate served for ausmt.au") for ln in lines), (
+        f"a missing legacy certificate must FAIL:\n{r.stdout}")
+    assert not any(ln.startswith("WARN tls-legacy:") for ln in lines), "FAIL, not WARN"
+    assert any(ln.startswith("PASS tls: certificate for ausmt.auscope.org.au") for ln in lines), (
+        f"the canonical certificate must still PASS (prefix names must not cross-trip):\n{r.stdout}")
+    assert r.returncode != 0
+
+
+def test_redirect_leg_requires_301_exactly(tmp_path):
+    """A 302 (or any non-301) from the legacy name must FAIL the redirect leg: a temporary status
+    would tell crawlers the move is temporary, which breaks the permanent contract."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf,
+                       REDIR_OUT="302 https://ausmt.auscope.org.au/data/mtcat.schema.json"), "report")
+    assert any(ln.startswith("FAIL redirect:") for ln in r.stdout.splitlines()), (
+        f"a 302 must FAIL the redirect leg:\n{r.stdout}")
+    assert r.returncode != 0
+
+
+def test_redirect_leg_requires_the_canonical_target_with_path_preserved(tmp_path):
+    """A 301 to the WRONG place (host or path) must FAIL: the leg pins the Location, not just the
+    status, so a redirect that drops the path or points off the canonical name cannot pass."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf, REDIR_OUT="301 https://ausmt.auscope.org.au/"), "report")
+    assert any(ln.startswith("FAIL redirect:") for ln in r.stdout.splitlines()), (
+        f"a 301 that drops the path must FAIL:\n{r.stdout}")
+    assert r.returncode != 0
+
+
+def test_redirect_leg_probes_the_https_url_of_the_schema_id(tmp_path):
+    """The redirect probe must be the EXPLICIT https:// leg on the old schema $id path: Caddy's
+    automatic HTTP->HTTPS hop answers any http:// probe with a redirect, so only an https:// probe
+    proves the legacy SITE BLOCK is doing the redirecting. FAILS IF the probe scheme or path drifts."""
+    cf = _caddyfile(tmp_path)
+    argv_log = tmp_path / "curl.argv"
+    r = _run(_hash_env(tmp_path, cf, CURL_ARGV_LOG=str(argv_log)), "report")
+    assert r.returncode == 0, r.stdout
+    redirect_calls = [ln for ln in argv_log.read_text(encoding="utf-8").splitlines()
+                      if "redirect_url" in ln]
+    assert len(redirect_calls) == 1, f"exactly one redirect probe expected: {redirect_calls}"
+    assert "https://ausmt.au/data/mtcat.schema.json" in redirect_calls[0], (
+        f"the probe must be the https:// URL of the old schema $id; argv: {redirect_calls[0]}")
+    assert "--resolve ausmt.au:443:127.0.0.1" in redirect_calls[0], (
+        f"the probe must pin the legacy name to this host; argv: {redirect_calls[0]}")
+
+
+def test_unset_legacy_var_skips_both_legs_cleanly(tmp_path):
+    """Canonical-only deploy (no legacy var): both legacy legs must be SKIPPED, not failed, the skip
+    must be visible (an explicit labelled line each), and the run must exit 0."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_env(tmp_path, cf, legacy=None,
+                  FAKE_HASH=hashlib.sha256(cf.read_bytes()).hexdigest()), "report")
+    assert r.returncode == 0, f"the canonical-only deploy must stay green:\n{r.stdout}\n{r.stderr}"
+    lines = r.stdout.splitlines()
+    assert any(ln.startswith("PASS tls-legacy: skipped") for ln in lines), (
+        f"the legacy cert leg must visibly skip:\n{r.stdout}")
+    assert any(ln.startswith("PASS redirect: skipped") for ln in lines), (
+        f"the redirect leg must visibly skip:\n{r.stdout}")
+    assert not any(ln.startswith(("FAIL tls-legacy", "FAIL redirect")) for ln in lines)
+
+
+def test_config_check_agrees_with_the_installers_rendering(tmp_path):
+    """CROSS-IMPLEMENTATION DRIFT GUARD. install-frontdoor.sh renders Caddyfile.rendered; doctor.sh
+    independently re-renders the repo template for its hash compare. Run the REAL installer (docker
+    stubbed) over the REAL repo Caddyfile in both var states, then feed each rendering's hash to the
+    doctor as the container-mounted file: the config leg must PASS both ways. FAILS IF the two
+    renderers ever diverge (the sed ranges are meant to be identical)."""
+    real_cf = _REPO / "deploy" / "frontdoor" / "Caddyfile"
+    install = _REPO / "deploy" / "frontdoor" / "install-frontdoor.sh"
+    for label, legacy in (("unset", None), ("set", "ausmt.au")):
+        work = tmp_path / f"install-{label}"
+        work.mkdir(parents=True)
+        shutil.copy(install, work / "install-frontdoor.sh")
+        shutil.copy(real_cf, work / "Caddyfile")
+        (work / "compose.yaml").write_text("services: {}\n", encoding="utf-8")
+        envtext = ("AUSMT_PUBLIC_NAME=ausmt.auscope.org.au\n"
+                   "AUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445\n"
+                   "AUSMT_ACME_EMAIL=x@y.org\n")
+        if legacy:
+            envtext += f"AUSMT_LEGACY_REDIRECT_NAME={legacy}\n"
+        (work / ".env").write_text(envtext, encoding="utf-8")
+        bindir = work / "bin"
+        bindir.mkdir()
+        (bindir / "docker").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        (bindir / "sudo").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        for f in ("docker", "sudo"):
+            (bindir / f).chmod(0o755)
+        ienv = dict(os.environ)
+        ienv["PATH"] = f"{bindir}:{ienv['PATH']}"
+        ri = subprocess.run([_SH, str(work / "install-frontdoor.sh")], capture_output=True,
+                            text=True, env=ienv, cwd=str(work))
+        assert ri.returncode == 0, f"installer ({label}) failed: {ri.stdout}\n{ri.stderr}"
+        rendered_hash = hashlib.sha256((work / "Caddyfile.rendered").read_bytes()).hexdigest()
+        doctor_root = tmp_path / f"doctor-{label}"
+        doctor_root.mkdir()
+        denv = _env(doctor_root, real_cf, legacy=legacy, FAKE_HASH=rendered_hash)
+        rd = _run(denv, "report")
+        assert any(ln.startswith("PASS config:") for ln in rd.stdout.splitlines()), (
+            f"doctor's fresh render ({label}) must hash-match the installer's rendering:\n{rd.stdout}")
