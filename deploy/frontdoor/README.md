@@ -1,10 +1,19 @@
 # deploy/frontdoor — AusMT public bridge (C47)
 
 The VPS **front door** that exposes the AusMT reader, and the public submission subset, at the public
-demo name. Public traffic enters a small Sydney VPS (public IP, DNS at the registrar), which terminates
-TLS, takes the masked access log, allows only the public subset, and reverse-proxies it to the box
-**over the tailnet**. The box gets no inbound internet exposure and no firewall change. The
-curator/admin workbench stays tailnet-only.
+name. Public traffic enters a small Sydney VPS (public IP), which terminates TLS, takes the masked
+access log, allows only the public subset, and reverse-proxies it to the box **over the tailnet**.
+The box gets no inbound internet exposure and no firewall change. The curator/admin workbench stays
+tailnet-only.
+
+Canonical-name ruling (2026-08-18): the CANONICAL public name is `ausmt.auscope.org.au`
+(`AUSMT_PUBLIC_NAME`); the retired `ausmt.au` may be kept as `AUSMT_LEGACY_REDIRECT_NAME`, a
+redirect-only site block answering every request with a permanent 301 to the same path and query on
+the canonical name. The legacy block carries no proxy, no log (the analytics feed counts a visit
+once, on the canonical block) and no headers, and it is TEMPLATED by `install-frontdoor.sh`: with
+the legacy var empty the block is rendered out entirely, because an empty `{$VAR}` site address
+would be a Caddy parse error. The container mounts the rendered file (`Caddyfile.rendered`,
+gitignored), never the tracked template.
 
 Since the 2026-07-24 owner ruling, the **Add Survey contribution flow is public** (an MT user who
 clicks Add Survey must reach the page and lodge a survey): the public subset is the reader plus
@@ -18,10 +27,10 @@ rollback): `maintainer/C47-PublicBridge.md`. Step-by-step owner procedure: **`RU
 
 | File | Runs where | Purpose |
 |------|-----------|---------|
-| `Caddyfile` | VPS | Public edge: auto-TLS for the demo name, HTTP→HTTPS, masked access log (the analytics feed), a method-scoped **allowlist** of the public subset (`GET /add-survey.html`, `POST /gateway/submit`, `POST /gateway/request-key`, `GET /gateway/healthz`, `GET /gateway/status/*`) reverse-proxied to the box, and a deny-by-default `404` for every other `/gateway` path in both slash forms (wall 1). |
-| `compose.yaml` | VPS | The one-service Caddy stack (host networking so it dials the box over the tailnet). |
-| `.env.example` | VPS | The only place the public name + box upstream live (config-side; `.env` is gitignored). |
-| `install-frontdoor.sh` | VPS | Single apply script: validate the Caddyfile against real Caddy, then `compose up -d`. |
+| `Caddyfile` | VPS | Public edge TEMPLATE: auto-TLS per served name, HTTP→HTTPS, masked access log (the analytics feed, canonical block only), a method-scoped **allowlist** of the public subset (`GET /add-survey.html`, `POST /gateway/submit`, `POST /gateway/request-key`, `GET /gateway/healthz`, `GET /gateway/status/*`) reverse-proxied to the box, a deny-by-default `404` for every other `/gateway` path in both slash forms (wall 1), and the marker-delimited legacy redirect block (permanent 301 to the canonical name; templated in or out by the installer). |
+| `compose.yaml` | VPS | The one-service Caddy stack (host networking so it dials the box over the tailnet); mounts `Caddyfile.rendered`. |
+| `.env.example` | VPS | The only place the canonical name, optional legacy redirect name + box upstream live (config-side; `.env` is gitignored). |
+| `install-frontdoor.sh` | VPS | Single apply script: render `Caddyfile.rendered` (legacy block in or out on the .env state), validate it against real Caddy, then `compose up -d` (+ in-place reload when already running). |
 | `acl-policy.hujson` | Tailscale admin | The exact ACL stanza to paste: the dedicated `tag:ausmt-frontdoor` and the port-granular fence (reader port only) — wall 2. |
 | `ship-frontdoor-logs.sh` | **box** | Pulls the masked front-door logs off the VPS over the tailnet into the dir the C45 aggregator reads. |
 | `ausmt-frontdoor-logs.{service,timer}` | **box** | systemd oneshot+timer that runs the shipper daily, ahead of the C45 fold. |

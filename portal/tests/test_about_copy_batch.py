@@ -265,7 +265,8 @@ def test_the_citation_placement_advice_and_the_copyable_acknowledgement():
     assert "\n" not in ack, (
         "the acknowledgement is copied verbatim out of a <pre>, so it must be a single line")
     assert ack == ("Magnetotelluric transfer functions were accessed through AusMT, Australia's "
-                   "Magnetotelluric Data Portal (https://ausmt.au), an AuScope-funded initiative."), (
+                   "Magnetotelluric Data Portal (https://ausmt.auscope.org.au), an AuScope-funded "
+                   "initiative."), (
         f"the acknowledgement must read exactly as dictated, got: {ack!r}")
 
 

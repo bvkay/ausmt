@@ -8,11 +8,20 @@
 #
 # The default run covers the whole edge:
 #   1. frontdoor container is up
-#   2. the RUNNING edge config matches the repo Caddyfile (hash the container-mounted file vs the repo
-#      file next to this script — this catches the O1 stale-config trap: a Caddyfile that changed on
-#      disk while the container kept an old copy / an uncommitted hand-edit on the VPS)
+#   2. the RUNNING edge config matches a FRESH RENDER of the repo Caddyfile (install-frontdoor.sh
+#      mounts Caddyfile.rendered, the repo template with the legacy redirect block templated in or
+#      out on AUSMT_LEGACY_REDIRECT_NAME; this check re-renders the same way and hash-compares the
+#      container-mounted file against it, catching the O1 stale-config trap: a template that changed
+#      on disk while the container kept an old rendering / an uncommitted hand-edit on the VPS)
 #   3. the box reader upstream is reachable over the tailnet (curl AUSMT_BOX_READER_UPSTREAM)
 #   4. the public TLS certificate is present and not near expiry
+#   4b. when AUSMT_LEGACY_REDIRECT_NAME is set: the LEGACY certificate is present and not near
+#       expiry (a missing legacy certificate is a FAIL, not a WARN: the redirect contract is down),
+#       and the legacy name answers the EXPLICIT HTTPS leg with a 301 to the canonical name, path
+#       preserved (probed on /data/mtcat.schema.json, the pre-migration schema $id, so the old
+#       identifier is proven to keep resolving; the https:// probe means Caddy's automatic
+#       HTTP->HTTPS hop can never be what passes the check). When the var is unset both legacy legs
+#       are SKIPPED, not failed.
 #   5. tailscale is up and the box peer is visible
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
 #   7. disk headroom on the data path
@@ -24,8 +33,8 @@
 #                          so the leaking parent is NAMED, and print the likely fixes. Read-only.
 #
 # CONFIG (env; every external command + path is overridable so the checks are testable and portable):
-#   AUSMT_DOCTOR_ENV         path to the front-door .env (default: ./.env) — sources AUSMT_PUBLIC_NAME
-#                            and AUSMT_BOX_READER_UPSTREAM
+#   AUSMT_DOCTOR_ENV         path to the front-door .env (default: ./.env) - sources AUSMT_PUBLIC_NAME,
+#                            AUSMT_BOX_READER_UPSTREAM and (optional) AUSMT_LEGACY_REDIRECT_NAME
 #   AUSMT_DOCTOR_CADDYFILE   the repo Caddyfile to hash the running config against (default: ./Caddyfile)
 #   AUSMT_DOCTOR_COMPOSE     the compose file (default: ./compose.yaml)
 #   AUSMT_DOCTOR_DOCKER      the docker command            (default: docker)
@@ -161,7 +170,18 @@ check_running_config() {
 		warn "config: repo Caddyfile not found at $CADDYFILE_REPO (cannot hash-compare)"
 		return
 	fi
-	want="$(_sha256 "$CADDYFILE_REPO")"
+	# The container mounts the RENDERED Caddyfile (install-frontdoor.sh templates the legacy redirect
+	# block in or out between the legacy-redirect markers), so the expected hash is a FRESH render of
+	# the repo template under the current .env state, not the raw repo file. Keep this sed identical
+	# to the installer's render step: the cross-check test drives both and fails on drift.
+	tmp_render="$(mktemp)" || { warn "config: mktemp failed (cannot render the expected config)"; return; }
+	if [ -n "${AUSMT_LEGACY_REDIRECT_NAME:-}" ]; then
+		cat "$CADDYFILE_REPO" > "$tmp_render"
+	else
+		sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' "$CADDYFILE_REPO" > "$tmp_render"
+	fi
+	want="$(_sha256 "$tmp_render")"
+	rm -f "$tmp_render"
 	if [ -z "$want" ]; then
 		warn "config: no sha256 tool (sha256sum/shasum) available to hash-compare the config"
 		return
@@ -174,9 +194,9 @@ check_running_config() {
 		return
 	fi
 	if [ "$got" = "$want" ]; then
-		pass "config: running edge Caddyfile matches the repo file (sha256 $(printf '%.12s' "$want")...)"
+		pass "config: running edge Caddyfile matches the rendered repo file (sha256 $(printf '%.12s' "$want")...)"
 	else
-		fail "config: running edge Caddyfile DIFFERS from the repo file (running $got vs repo $want) - re-run install-frontdoor.sh to reload"
+		fail "config: running edge Caddyfile DIFFERS from the rendered repo file (running $got vs rendered $want) - re-run install-frontdoor.sh to re-render and reload"
 	fi
 }
 
@@ -194,18 +214,19 @@ check_upstream() {
 	fi
 }
 
-check_tls() {
-	name="${AUSMT_PUBLIC_NAME:-}"
-	if [ -z "$name" ]; then
-		warn "tls: AUSMT_PUBLIC_NAME unset in $ENV_FILE (cannot check the public certificate)"
-		return
-	fi
+# Certificate presence + expiry for ONE name, shared by the canonical and legacy TLS legs. `label` is
+# the check label the PASS/WARN/FAIL line carries ("tls" canonical, "tls-legacy" legacy). A missing
+# certificate is a FAIL for BOTH names: for the canonical name the edge is down, for the legacy name
+# the redirect contract (every old link, including the pre-migration schema $id) is down.
+_check_cert_for() {
+	label="$1"
+	name="$2"
 	# Pull the served leaf cert's notAfter via a local TLS handshake with SNI. -servername drives SNI so
 	# Caddy serves the right cert; connecting to 127.0.0.1:443 keeps it on-box.
 	notafter="$(printf '' | $OPENSSL s_client -connect 127.0.0.1:443 -servername "$name" 2>/dev/null \
 		| $OPENSSL x509 -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
 	if [ -z "$notafter" ]; then
-		fail "tls: no certificate served for $name on :443 (not issued yet, or the edge is down)"
+		fail "$label: no certificate served for $name on :443 (not issued yet, or the edge is down)"
 		return
 	fi
 	# notAfter looks like 'Jul 25 12:00:00 2026 GMT'. GNU date parses it with -d; BSD/macOS date needs
@@ -214,16 +235,67 @@ check_tls() {
 	exp_epoch="$(date -u -d "$notafter" +%s 2>/dev/null || date -u -jf '%b %d %H:%M:%S %Y %Z' "$notafter" +%s 2>/dev/null)"
 	now_epoch="$(date -u +%s)"
 	if [ -z "$exp_epoch" ]; then
-		warn "tls: certificate present for $name but its expiry date ($notafter) could not be parsed"
+		warn "$label: certificate present for $name but its expiry date ($notafter) could not be parsed"
 		return
 	fi
 	days=$(( (exp_epoch - now_epoch) / 86400 ))
 	if [ "$days" -lt 0 ]; then
-		fail "tls: certificate for $name has EXPIRED ($notafter)"
+		fail "$label: certificate for $name has EXPIRED ($notafter)"
 	elif [ "$days" -lt "$CERT_WARN_DAYS" ]; then
-		warn "tls: certificate for $name expires in $days days ($notafter) - inside the renewal window"
+		warn "$label: certificate for $name expires in $days days ($notafter) - inside the renewal window"
 	else
-		pass "tls: certificate for $name valid, $days days to expiry ($notafter)"
+		pass "$label: certificate for $name valid, $days days to expiry ($notafter)"
+	fi
+}
+
+check_tls() {
+	name="${AUSMT_PUBLIC_NAME:-}"
+	if [ -z "$name" ]; then
+		warn "tls: AUSMT_PUBLIC_NAME unset in $ENV_FILE (cannot check the public certificate)"
+		return
+	fi
+	_check_cert_for "tls" "$name"
+}
+
+check_tls_legacy() {
+	legacy="${AUSMT_LEGACY_REDIRECT_NAME:-}"
+	if [ -z "$legacy" ]; then
+		# SKIPPED, not failed: an empty legacy var is the supported canonical-only deploy.
+		pass "tls-legacy: skipped (AUSMT_LEGACY_REDIRECT_NAME unset - no legacy name is served)"
+		return
+	fi
+	# A missing legacy certificate is a FAIL, not a WARN (_check_cert_for fails on absence): with no
+	# cert the https:// leg of every legacy link is dead, so the redirect contract is not being kept.
+	_check_cert_for "tls-legacy" "$legacy"
+}
+
+check_redirect() {
+	legacy="${AUSMT_LEGACY_REDIRECT_NAME:-}"
+	name="${AUSMT_PUBLIC_NAME:-}"
+	if [ -z "$legacy" ]; then
+		pass "redirect: skipped (AUSMT_LEGACY_REDIRECT_NAME unset - no legacy name is served)"
+		return
+	fi
+	if [ -z "$name" ]; then
+		warn "redirect: AUSMT_PUBLIC_NAME unset in $ENV_FILE (cannot verify the redirect target)"
+		return
+	fi
+	# THE HTTPS LEG, EXPLICITLY: an https:// URL with SNI = the legacy name, resolved to this host.
+	# Probing http:// would be answered by Caddy's AUTOMATIC HTTP->HTTPS hop (a redirect on any
+	# hostname site), which would pass even if the legacy site block were missing; the https:// probe
+	# is answered by the legacy block itself or not at all. The probe path is the pre-migration
+	# schema $id (/data/mtcat.schema.json), so a PASS also proves the old identifier keeps resolving
+	# with its path preserved.
+	probe_path="/data/mtcat.schema.json"
+	out="$($CURL -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 8 \
+		--resolve "$legacy:443:127.0.0.1" "https://$legacy$probe_path" 2>/dev/null)"
+	code="${out%% *}"
+	loc="${out#* }"
+	want="https://$name$probe_path"
+	if [ "$code" = "301" ] && [ "$loc" = "$want" ]; then
+		pass "redirect: https://$legacy$probe_path 301s to $want (permanent, path preserved)"
+	else
+		fail "redirect: https://$legacy$probe_path -> ${code:-no-response} ${loc:-no-location} (want 301 -> $want)"
 	fi
 }
 
@@ -298,6 +370,8 @@ run_report() {
 	check_running_config
 	check_upstream
 	check_tls
+	check_tls_legacy
+	check_redirect
 	check_tailscale
 	check_zombies
 	check_disk

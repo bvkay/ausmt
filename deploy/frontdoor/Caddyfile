@@ -178,3 +178,30 @@
 		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
 	}
 }
+
+# >>> legacy-redirect
+# ---- Legacy-name permanent redirect (canonical-name ruling, 2026-08-18) -------------------------
+# {$AUSMT_LEGACY_REDIRECT_NAME} (the retired public name, e.g. ausmt.au) answers every request with
+# a 301 to the SAME path and query on {$AUSMT_PUBLIC_NAME} (the canonical AuScope name). The block
+# is REDIRECT-ONLY by design: no reverse_proxy (a request must never reach the reader wall under
+# the legacy identity), no log (the masked access log stays on the canonical block ONLY, so a
+# redirect hop is never counted as a visit and a legacy hit cannot double-count), and no headers
+# (deliberately no HSTS here: the block stays minimal and the canonical site sets HSTS once the
+# client lands there). The bare hostname address turns on automatic HTTPS for this name too, so the
+# edge holds certificates for BOTH names and the https:// leg itself 301s.
+#
+# THIS BLOCK IS TEMPLATED, NOT ALWAYS-ON. Caddyfile `{$VAR}` interpolation cannot conditionally
+# omit a site block: with AUSMT_LEGACY_REDIRECT_NAME unset the address would render EMPTY, which is
+# a parse error, i.e. Caddy would fail to start on exactly the deploy that has no legacy name.
+# install-frontdoor.sh therefore renders Caddyfile.rendered from this file, stripping everything
+# from the `# >>> legacy-redirect` marker to the `# <<< legacy-redirect` marker when the var is
+# unset, and compose mounts the RENDERED file. Keep the whole block (and these comments) inside the
+# two markers, and never edit the markers themselves.
+{$AUSMT_LEGACY_REDIRECT_NAME} {
+	# Permanent (301) by contract: crawlers must learn the move is final, so `permanent` may never
+	# soften. {uri} carries the full request URI, path AND query, so a deep link like
+	# /data/mtcat.schema.json?v=1.2 (the schema $id served before the canonical-name migration)
+	# keeps resolving through the redirect.
+	redir https://{$AUSMT_PUBLIC_NAME}{uri} permanent
+}
+# <<< legacy-redirect

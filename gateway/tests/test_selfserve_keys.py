@@ -83,9 +83,11 @@ class _FakeSMTPSSL(_FakeSMTP):
 def _mail_cfg(tmp_path, **over):
     """A make_config with SMTP configured so the real mailer path (mail_configured True) is exercised
     in the mailer-unit tests."""
+    # The mailbox fixtures stay on the owner-controlled ausmt.au MAIL domain (mail is unrelated to
+    # the web canonical name); the submit-page URL is a WEB link, so it follows the canonical name.
     base = dict(smtp_host="smtp.example.org", smtp_port=587, smtp_user="submissions@ausmt.au",
                 smtp_pass="a-secret-pw", mail_from="submissions@ausmt.au",
-                submit_page_url="https://ausmt.au/submit")
+                submit_page_url="https://ausmt.auscope.org.au/add-survey.html")
     base.update(over)
     return make_config(tmp_path, **base)
 
@@ -498,7 +500,8 @@ def test_mailer_body_has_no_em_dash_and_carries_reply_to(tmp_path, monkeypatch):
     assert msg["Reply-To"] == "submissions@ausmt.au"
     body = msg.get_content()
     assert "—" not in body, "no em dash in a user-facing email body"
-    assert "https://ausmt.au/submit" in body, "the submit-page link must appear when configured"
+    assert "https://ausmt.auscope.org.au/add-survey.html" in body, (
+        "the submit-page link must appear when configured")
     assert msg["Subject"]
 
 
