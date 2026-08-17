@@ -26,6 +26,10 @@ services:
       AUSMT_PUBLIC_NAME: ${AUSMT_PUBLIC_NAME:?set AUSMT_PUBLIC_NAME in deploy/frontdoor/.env}
       AUSMT_BOX_READER_UPSTREAM: ${AUSMT_BOX_READER_UPSTREAM:?set AUSMT_BOX_READER_UPSTREAM in deploy/frontdoor/.env}
       AUSMT_ACME_EMAIL: ${AUSMT_ACME_EMAIL:?set AUSMT_ACME_EMAIL in deploy/frontdoor/.env}
+      # OPTIONAL (empty default, unlike the three required vars above): the legacy name whose only
+      # job is a permanent 301 to the canonical name. When empty, install-frontdoor.sh renders the
+      # legacy site block out entirely, so its placeholder never appears in the mounted file.
+      AUSMT_LEGACY_REDIRECT_NAME: ${AUSMT_LEGACY_REDIRECT_NAME:-}
     # Health = Caddy is up and answering locally on :80 (the ACME/redirect listener). Uses the image's
     # BusyBox wget, like the box portal healthcheck.
     healthcheck:
@@ -35,8 +39,12 @@ services:
       retries: 3
       start_period: 10s
     volumes:
-      # The shipped front-door Caddyfile, read-only.
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The RENDERED front-door Caddyfile, read-only. install-frontdoor.sh writes it from the
+      # tracked Caddyfile (templating the legacy redirect block in or out on the state of
+      # AUSMT_LEGACY_REDIRECT_NAME), because a `{$VAR}` site address cannot render empty without a
+      # parse error. Never mount the tracked file directly, and never hand-edit the rendered one:
+      # re-run install-frontdoor.sh instead (it validates, then reloads the running edge in place).
+      - ./Caddyfile.rendered:/etc/caddy/Caddyfile:ro
       # ACME certificate + key material and Caddy's own state — MUST persist across restarts so a
       # bounce does not re-request a certificate every time (Let's Encrypt rate limits).
       - caddy_data:/data

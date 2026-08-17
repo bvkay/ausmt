@@ -10,7 +10,8 @@
 # dedicated tag, the tailnet ACL stanza is pasted, and deploy/frontdoor/.env is filled in.
 #
 # CONFIG (deploy/frontdoor/.env - see .env.example): AUSMT_PUBLIC_NAME, AUSMT_BOX_READER_UPSTREAM,
-# AUSMT_ACME_EMAIL.
+# AUSMT_ACME_EMAIL, and optionally AUSMT_LEGACY_REDIRECT_NAME (the retired name kept as a permanent
+# 301 to the canonical one; empty means no legacy site block is rendered at all).
 
 set -eu
 
@@ -30,25 +31,45 @@ set -a
 # shellcheck disable=SC1091
 . ./.env
 set +a
-[ -n "${AUSMT_PUBLIC_NAME:-}" ] || die "AUSMT_PUBLIC_NAME is empty in .env (the public demo name)."
+[ -n "${AUSMT_PUBLIC_NAME:-}" ] || die "AUSMT_PUBLIC_NAME is empty in .env (the canonical public name)."
 [ -n "${AUSMT_BOX_READER_UPSTREAM:-}" ] || die "AUSMT_BOX_READER_UPSTREAM is empty in .env (the box reader upstream)."
 [ -n "${AUSMT_ACME_EMAIL:-}" ] || die "AUSMT_ACME_EMAIL is empty in .env (ACME contact email)."
+# The legacy redirect name is OPTIONAL: empty is a valid, fully supported state (canonical only).
+AUSMT_LEGACY_REDIRECT_NAME="${AUSMT_LEGACY_REDIRECT_NAME:-}"
+export AUSMT_LEGACY_REDIRECT_NAME
+
+# ----- render the Caddyfile (the legacy redirect block in or out) --------------------------------
+# Caddyfile `{$VAR}` interpolation cannot conditionally omit a SITE BLOCK: with the legacy var
+# unset, the legacy block's address would render EMPTY, a parse error, so Caddy would fail to start
+# on exactly the deploy that has no legacy name. The installer therefore templates the block: the
+# tracked Caddyfile carries it between the `# >>> legacy-redirect` / `# <<< legacy-redirect`
+# markers, and this step writes Caddyfile.rendered (gitignored; compose mounts it) with the marked
+# range kept (var set) or stripped (var empty). doctor.sh re-renders the same way for its
+# running-config hash compare, so keep the two sed expressions identical.
+if [ -n "$AUSMT_LEGACY_REDIRECT_NAME" ]; then
+	log "rendering Caddyfile.rendered WITH the legacy redirect block ($AUSMT_LEGACY_REDIRECT_NAME -> $AUSMT_PUBLIC_NAME)"
+	cp Caddyfile Caddyfile.rendered
+else
+	log "rendering Caddyfile.rendered WITHOUT the legacy redirect block (AUSMT_LEGACY_REDIRECT_NAME empty)"
+	sed '/^# >>> legacy-redirect/,/^# <<< legacy-redirect/d' Caddyfile > Caddyfile.rendered
+fi
 
 # ----- log directory the masked access log + the box-side shipper use ----------------------------
 # Caddy writes /var/log/caddy/access-frontdoor.json here; ship-frontdoor-logs.sh (on the box) pulls it.
 log "ensuring /var/log/caddy exists (masked access log destination)"
 sudo mkdir -p /var/log/caddy
 
-# ----- validate the shipped Caddyfile against a real Caddy ----------------------------------------
-# Fail the deploy on any config slip BEFORE serving. Mount the log dir so the file-log writer opens
-# cleanly during adapt, and pass the .env placeholders through.
-log "validating Caddyfile against caddy:2-alpine"
+# ----- validate the RENDERED Caddyfile against a real Caddy ---------------------------------------
+# Fail the deploy on any config slip BEFORE serving. The rendered file is what the container mounts,
+# so it is what gets validated. Mount the log dir so the file-log writer opens cleanly during adapt,
+# and pass the .env placeholders through (the legacy var included, so the set-var rendering resolves).
+log "validating Caddyfile.rendered against caddy:2-alpine"
 docker run --rm \
-	-e AUSMT_PUBLIC_NAME -e AUSMT_BOX_READER_UPSTREAM -e AUSMT_ACME_EMAIL \
-	-v "$HERE/Caddyfile:/etc/caddy/Caddyfile:ro" \
+	-e AUSMT_PUBLIC_NAME -e AUSMT_BOX_READER_UPSTREAM -e AUSMT_ACME_EMAIL -e AUSMT_LEGACY_REDIRECT_NAME \
+	-v "$HERE/Caddyfile.rendered:/etc/caddy/Caddyfile:ro" \
 	-v /var/log/caddy:/var/log/caddy \
 	caddy:2-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile \
-	|| die "caddy validate rejected the front-door Caddyfile - fix it before deploying."
+	|| die "caddy validate rejected the rendered front-door Caddyfile - fix it before deploying."
 
 # ----- apply the stack ----------------------------------------------------------------------------
 # Was the edge ALREADY running before this apply? If so, a `compose up -d` that sees no image/compose
@@ -89,6 +110,12 @@ if [ -n "$WAS_RUNNING" ]; then
 	fi
 fi
 
-log "done. Next: watch the certificate issue for $AUSMT_PUBLIC_NAME -"
+if [ -n "$AUSMT_LEGACY_REDIRECT_NAME" ]; then
+	log "done. Serving canonical $AUSMT_PUBLIC_NAME with legacy $AUSMT_LEGACY_REDIRECT_NAME as a permanent 301 to it."
+	log "Next: watch BOTH certificates issue (one ACME obtain per name) -"
+else
+	log "done. Serving canonical $AUSMT_PUBLIC_NAME (no legacy redirect name configured)."
+	log "Next: watch the certificate issue for $AUSMT_PUBLIC_NAME -"
+fi
 log "  docker compose -f compose.yaml logs -f frontdoor    # look for a successful certificate obtain"
-log "Then run the verification checklist in RUNBOOK.md (content check FIRST, then TLS, refuse checks, logs)."
+log "Then run the verification checklist in RUNBOOK.md (content check FIRST, then TLS, refuse checks, redirect leg, logs)."

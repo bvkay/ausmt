@@ -12,3 +12,9 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# The rendered front-door Caddyfile: a VPS deploy artifact install-frontdoor.sh writes from the
+# tracked frontdoor/Caddyfile (legacy redirect block templated in or out on the .env state). It can
+# carry deployment-specific structure, so it never belongs in git; a `git add -A` on the VPS must
+# not stage it.
+frontdoor/Caddyfile.rendered

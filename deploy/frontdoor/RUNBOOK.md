@@ -1,7 +1,15 @@
 # Owner runbook — AusMT public bridge (C47)
 
-The numbered, self-contained procedure to expose the AusMT reader at the public demo name via a VPS
+The numbered, self-contained procedure to expose the AusMT reader at the public name via a VPS
 front door on the tailnet, and to withdraw it again. Design + rationale: `maintainer/C47-PublicBridge.md`.
+
+Canonical-name ruling (2026-08-18): the CANONICAL public name is `ausmt.auscope.org.au` (the
+institutional AuScope name; its DNS record lives in a zone AuScope administers and already points at
+the VPS). The retired personal name `ausmt.au` is kept, optionally, as a PERMANENT (301) redirect to
+the canonical name with path and query preserved. In `.env` terms: `AUSMT_PUBLIC_NAME` is the
+canonical name and `AUSMT_LEGACY_REDIRECT_NAME` is the legacy one (empty = serve the canonical name
+only; install-frontdoor.sh renders the redirect site block out entirely in that case). With the
+legacy name set the edge holds a certificate for EACH name, so expect TWO ACME issuances in the log.
 
 **You (the owner) run every VPS / DNS / tailnet step personally.** The repo produces the files and this
 runbook; nothing here is automated against your infrastructure. Topology in one line:
@@ -26,7 +34,9 @@ public since the 2026-07-24 owner ruling; the curator workbench is not.
 
 - The box already runs the AusMT stack on the tailnet (per `deploy/README.md`).
 - You have Tailscale admin access (to add a tag + ACL rule and mint an auth key).
-- You control the registrar DNS for the public demo name (e.g. `ausmt.au`).
+- The DNS for each served name points (or can be pointed) at the VPS: the canonical
+  `ausmt.auscope.org.au` record lives in a zone AuScope administers, and the legacy `ausmt.au`
+  record (only if you keep the redirect) at your registrar.
 - The capricorn-2010 `lead_investigator` citation-metadata fix is merged and built into the corpus
   the box currently serves (its serve-verification is step 7 — the content-clean gate, run BEFORE the
   DNS cutover).
@@ -191,7 +201,8 @@ sudo systemctl enable --now ausmt-frontdoor-logs.timer
 6.1  Put the C47 `deploy/frontdoor/` subtree on the VPS (clone the repo or copy the subtree). In
      `deploy/frontdoor/`, create `.env` from `.env.example`:
 ```sh
-AUSMT_PUBLIC_NAME=ausmt.au
+AUSMT_PUBLIC_NAME=ausmt.auscope.org.au
+AUSMT_LEGACY_REDIRECT_NAME=ausmt.au          # optional: empty = no legacy redirect block at all
 AUSMT_BOX_READER_UPSTREAM=http://ausmt-box:8445
 AUSMT_ACME_EMAIL=you@example.org
 ```
@@ -233,7 +244,7 @@ Optionally exercise the full front-door path before DNS by overriding the public
 one request (the public cert cannot issue yet, so `-k` accepts the temporary self-signed cert — this is
 why it is only a supplementary check, not the gate):
 ```sh
-curl -sk --resolve ausmt.au:443:<VPS_PUBLIC_IP> https://ausmt.au/data/catalogue.json | grep -i capricorn
+curl -sk --resolve ausmt.auscope.org.au:443:<VPS_PUBLIC_IP> https://ausmt.auscope.org.au/data/catalogue.json | grep -i capricorn
 ```
 **If the fix is not visibly served, STOP** — rebuild/serve the corrected corpus on the box (step 1) and
 re-run this gate. Do NOT create the DNS record until this passes: the record invariant is content-clean
@@ -243,14 +254,18 @@ BEFORE DNS cutover, not after.
 
 ## 8. Create the DNS record at the registrar
 
-8.1  At your registrar, create an **A** record for the public name → the VPS public IPv4 (and an
-     **AAAA** → the VPS IPv6 if you have one). Low TTL (e.g. 300s) for the first cutover so a rollback
-     propagates fast.
-8.2  Wait for propagation: `dig +short ausmt.au` returns the VPS IP.
+8.1  Every SERVED name needs an **A** record pointing at the VPS public IPv4 (and an **AAAA** if you
+     have IPv6). The canonical `ausmt.auscope.org.au` record lives in the AuScope-administered zone
+     (verified pointing at the VPS 2026-08-18; ask AuScope IT for any change). The legacy `ausmt.au`
+     record, if you keep the redirect, is at your registrar; low TTL (e.g. 300s) for a first cutover
+     so a rollback propagates fast.
+8.2  Wait for propagation: `dig +short ausmt.auscope.org.au` (and `dig +short ausmt.au` when the
+     legacy redirect is kept) returns the VPS IP.
 
-Once DNS resolves to the VPS, Caddy obtains the Let's Encrypt certificate automatically. Watch it:
+Once DNS resolves to the VPS, Caddy obtains the Let's Encrypt certificates automatically: ONE ACME
+issuance per served name, so with the legacy redirect configured watch for TWO obtains. Watch it:
 ```sh
-docker compose -f deploy/frontdoor/compose.yaml logs -f frontdoor    # look for a certificate obtained
+docker compose -f deploy/frontdoor/compose.yaml logs -f frontdoor    # look for a certificate obtained per name
 ```
 
 ---
@@ -259,32 +274,51 @@ docker compose -f deploy/frontdoor/compose.yaml logs -f frontdoor    # look for 
 
 The content-clean gate already passed pre-DNS (step 7); these confirm the public path itself.
 
-9.1  **TLS issued + HTTP redirects.**
+9.1  **TLS issued + HTTP redirects (canonical name).**
 ```sh
-curl -sSI https://ausmt.au/ | head -1                       # expect HTTP/2 200
-curl -sSI http://ausmt.au/  | grep -i location              # expect a 301/308 to https://
+curl -sSI https://ausmt.auscope.org.au/ | head -1           # expect HTTP/2 200
+curl -sSI http://ausmt.auscope.org.au/  | grep -i location  # expect a 301/308 to https://
 ```
 
 9.2  **Reader + /data served (and still content-clean on the PUBLIC path).**
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/                      # 200
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/data/catalogue.json   # 200
-curl -s https://ausmt.au/data/catalogue.json | grep -i capricorn                 # re-confirm the fix serves publicly
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/                      # 200
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/data/catalogue.json   # 200
+curl -s https://ausmt.auscope.org.au/data/catalogue.json | grep -i capricorn     # re-confirm the fix serves publicly
+```
+
+9.2b **Legacy redirect leg (only when AUSMT_LEGACY_REDIRECT_NAME is set).** The legacy name must
+     301 (permanent, never 302) to the canonical name with the path AND query preserved, on the
+     HTTPS leg itself. The deep-path probe below is the pre-migration schema `$id`, so it also
+     proves the old identifier keeps resolving. `./doctor.sh` runs the same 301 check as a gate.
+```sh
+# the https:// leg 301s with path + query preserved (Location shows both halves):
+curl -sSI 'https://ausmt.au/data/mtcat.schema.json?v=1.2' | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/data/mtcat.schema.json?v=1.2
+# following the hop lands on the canonical name with a 200:
+curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n' -L https://ausmt.au/data/mtcat.schema.json
+#   expect: 200 https://ausmt.auscope.org.au/data/mtcat.schema.json
+# plain-HTTP legacy traffic takes TWO hops by design (automatic HTTP->HTTPS on the legacy name,
+# THEN the permanent 301 to the canonical name) - expected, not a misconfiguration:
+curl -sSI http://ausmt.au/ | grep -i location               # hop 1: https://ausmt.au/
 ```
 
 9.3  **Wall checks from OUTSIDE (the public wall).** The public subset must be served; every other
      `/gateway` path (the curator workbench) must refuse.
 ```sh
 # PUBLIC subset -- must be served:
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html          # expect 200 (public page)
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/add-survey.html/         # expect 200 (trailing slash)
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/healthz          # expect 200 (public, gateway up)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/add-survey.html          # expect 200 (public page)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/add-survey.html/         # expect 200 (trailing slash)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/healthz          # expect 200 (public, gateway up)
 # WALLED -- must refuse (the whole curator/admin workbench, in both slash forms):
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway                  # expect 404 (bare)
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue    # expect 404
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/         # expect 404
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway                  # expect 404 (bare)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/curator/queue    # expect 404
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/curator/         # expect 404
 # method-aware: a public route hit with the WRONG verb still refuses:
-curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/submit           # expect 404 (GET is wrong verb)
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.auscope.org.au/gateway/submit           # expect 404 (GET is wrong verb)
+# a walled path through the LEGACY name 301s (redirect-only block: it never reaches the reader
+# wall under the legacy identity; the refusal happens on the canonical name after the hop):
+curl -sS -o /dev/null -w '%{http_code}\n' https://ausmt.au/gateway/curator/queue                # expect 301
 ```
      If a WALLED path returns anything but `404`, or the wrong-verb `/gateway/submit` is served, STOP
      and roll back (section 10): a wall is breached. If a PUBLIC path does not return `200`, the
@@ -368,14 +402,18 @@ fail the exit). Neither mutates anything.
 cd deploy/frontdoor
 ./doctor.sh
 ```
-Covers: the frontdoor container is up; the RUNNING config matches the repo Caddyfile (it hashes the
-container-mounted `/etc/caddy/Caddyfile` against the repo file, catching the O1 stale-config trap and any
-uncommitted hand-edit); the box reader upstream answers over the tailnet; the public TLS certificate is
-present with days-to-expiry (WARN inside the renewal window); tailscale is up and the box peer is visible;
-the zombie count is under threshold (section 13); disk headroom; and the public DNS A record still
-resolves to this host (set `AUSMT_DOCTOR_EXPECT_IP` to the VPS public IP to verify the target, otherwise
-that check WARNs). Every external command and path is overridable by an `AUSMT_DOCTOR_*` env var (see the
-script header).
+Covers: the frontdoor container is up; the RUNNING config matches a fresh render of the repo Caddyfile
+(install-frontdoor.sh mounts the RENDERED file, legacy block in or out, so the doctor re-renders the
+same way and hashes the container-mounted `/etc/caddy/Caddyfile` against that, catching the O1
+stale-config trap and any uncommitted hand-edit); the box reader upstream answers over the tailnet; the
+canonical TLS certificate is present with days-to-expiry (WARN inside the renewal window); when
+`AUSMT_LEGACY_REDIRECT_NAME` is set, the LEGACY certificate too (missing = FAIL, the redirect contract
+is down) plus the explicit HTTPS 301 leg (the legacy name must answer `https://.../data/mtcat.schema.json`
+with a 301 to the same path on the canonical name; both legs are skipped cleanly when the var is
+unset); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);
+disk headroom; and the public DNS A record still resolves to this host (set `AUSMT_DOCTOR_EXPECT_IP`
+to the VPS public IP to verify the target, otherwise that check WARNs). Every external command and
+path is overridable by an `AUSMT_DOCTOR_*` env var (see the script header).
 
 **On the box (the builder/server):**
 ```sh
