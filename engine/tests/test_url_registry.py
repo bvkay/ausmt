@@ -31,6 +31,23 @@ from extract import url_registry as ur   # noqa: E402
 
 _COMMITTED = ROOT.parent / "portal" / "data" / "url_registry.json"
 
+# Image-topology guard, the test_mtcat_version_parity.py pattern exactly: the engine image COPYs
+# engine/ (+ one unrelated portal file), so the checked-in registry legitimately does not exist
+# there. Probe a SET of OTHER portal surfaces -- if none is present this is the image and the
+# committed-registry test skips with the allow-listed reason; if ANY is present a portal tree is
+# meant to be here, the guard opens, and a missing registry FAILS loudly (a broken checkout must
+# never skip). The registry itself is deliberately NOT in the probe set.
+_PORTAL_TREE_PROBES = (
+    ROOT.parent / "portal" / "portal.config.yaml",
+    ROOT.parent / "portal" / "config.js",
+    ROOT.parent / "portal" / "index.html",
+)
+IMAGE_TOPOLOGY_SKIP_REASON = ("engine image build: portal tree not shipped "
+                              "(designed topology; the committed registry is pinned from "
+                              "checkout lanes)")
+portal_tree = pytest.mark.skipif(not any(p.is_file() for p in _PORTAL_TREE_PROBES),
+                                 reason=IMAGE_TOPOLOGY_SKIP_REASON)
+
 _MTCAT = {
     "surveys": [{"survey_id": "vulcan-2022"}, {"survey_id": "olympic-dam-2004"}],
     "stations": [{"station_id": "au.vulcan-2022.MBV07"},
@@ -188,11 +205,13 @@ def test_cli_check_without_a_registry_refuses(tmp_path):
     assert r.returncode == 2 and "seed it with --update" in r.stderr
 
 
+@portal_tree
 def test_committed_registry_is_well_formed_and_carries_the_cross_pinned_ids():
     """The CHECKED-IN registry: all three kinds present, non-empty, sorted, station ids in the
     au.<slug>.<station> shape, and the two ids other pins rely on are frozen (doctor.sh probes
     /surveys/vulcan-2022; the collection pages ship auslamp). FAILS IF the registry is missing,
-    empty, unsorted, or loses either cross-pinned id."""
+    empty, unsorted, or loses either cross-pinned id. Skips ONLY in the engine image (no portal
+    tree at all); on any checkout a missing registry fails loudly."""
     assert _COMMITTED.is_file(), "portal/data/url_registry.json must be checked in"
     reg = json.loads(_COMMITTED.read_text(encoding="utf-8"))
     for kind in ("surveys", "stations", "collections"):
