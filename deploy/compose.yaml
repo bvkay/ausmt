@@ -23,6 +23,12 @@ services:
   portal:
     image: ghcr.io/${OWNER:?set OWNER in .env}/ausmt-portal:${TAG:-latest}
     restart: unless-stopped
+    # init: tini reaps the healthcheck's exited children. Caddy runs as PID 1 and never
+    # wait()s, so without this every 30-second wget probe leaves one Z-state process behind
+    # (measured on the VPS front door 2026-08-18: exactly one zombie per interval). Same
+    # reasoning on the gateway and clamd services below; gw-runner has no healthcheck and
+    # its loop reaps its own job children, so it needs nothing.
+    init: true
     # Health = Caddy is up and serving the portal shell on its internal :8080 (the same definition
     # `make smoke` uses). caddy:2-alpine ships BusyBox `wget`; `--spider` makes a real HEAD/GET and
     # exits non-zero on any status but 2xx/3xx, so this FAILS (=> unhealthy) if Caddy dies, the
@@ -100,6 +106,8 @@ services:
     image: ghcr.io/${OWNER:?set OWNER in .env}/ausmt-gateway:${TAG:-latest}
     profiles: ["gateway"]
     restart: unless-stopped
+    init: true   # healthcheck-zombie reaping — see the portal service's init comment
+
     # Health = uvicorn is up and the app answers GET /gateway/healthz (200 {"ok": true}) on its
     # internal :8000. The gateway image is python:3.12-slim with NO curl/wget, so probe via stdlib
     # urllib (always present). This FAILS (=> unhealthy) if uvicorn died, the app crashed on a bad
@@ -248,6 +256,8 @@ services:
     image: clamav/clamav:stable
     profiles: ["gateway"]
     restart: unless-stopped
+    init: true   # healthcheck-zombie reaping — see the portal service's init comment
+
     # Health = clamd is listening on :3310 AND has finished loading its signature database. The
     # INSTREAM PING is the daemon's own readiness contract: it replies PONG only once the DB is
     # loaded and it is ready to scan — a clamd that is up but still loading (the cold-start case,

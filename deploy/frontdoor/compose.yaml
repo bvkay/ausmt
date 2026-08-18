@@ -19,6 +19,11 @@ services:
     # the host's tailnet by name.) The VPS's own firewall/security-group allows only :80 + :443
     # inbound from the internet — see RUNBOOK.md hardening.
     network_mode: host
+    # init: Docker's tini becomes PID 1 and reaps exited children. Without it Caddy is PID 1
+    # and never wait()s, so every 30-second healthcheck wget leaves one Z-state process behind
+    # (measured live on the VPS 2026-08-18: container up 48 min = 96 intervals = 97 zombies,
+    # tripping doctor.sh's zombie threshold). One line, no behaviour change for Caddy itself.
+    init: true
     env_file:
       - .env
     environment:
