@@ -1845,6 +1845,19 @@ async function bootFreshWindow(dataMap, url) {
   ok([...ssDetails.querySelectorAll(".ssg-h")].every(h => h.textContent !== "Data checks"),
     "R4: the Station summary must NOT carry the removed 'Data checks' group");
   ok(ssDetails.innerHTML.indexOf("TF error") < 0, "R4: the removed 'TF error' row must be gone");
+  // SURVEY-DRAWER LANE, amendment 2 (owner): the "Transfer function / Download" TILE is removed from the
+  // Station summary - it duplicated the Files tab's Level 2 EDI row and blurred the summary-vs-downloads
+  // separation. The summary states facts; the Files tab serves bytes. The EDI itself is untouched: it is
+  // still offered by the sticky-header action and the Files tab, both asserted below.
+  ok(!ssDetails.querySelector(".prodgrid") && !ssDetails.querySelector(".prod"),
+    "amendment 2: the Station summary must carry NO download tile:\n" + ssDetails.innerHTML);
+  ok(!/Transfer function<small>/.test(ssDetails.innerHTML),
+    "amendment 2: the 'Transfer function' download tile must be gone from the Station summary");
+  ok(ssDetails.innerHTML.indexOf("data-prod=") < 0 && ssDetails.innerHTML.indexOf("data-avail=") < 0,
+    "amendment 2: no download affordance may remain in the Station summary");
+  // NOT a regression in disguise: the EDI is still downloadable from the surface that owns the action.
+  ok(doc.querySelector("#drawer .dl-edi"),
+    "amendment 2: removing the summary tile must NOT remove the sticky-header Download EDI action");
   // R4: the Station group ADDS rows — data type, ausmt_id, and (A1 carries site_name 'A_1' != id 'A1')
   // the "site name" row. The collection row is omitted here (Alpha is in the AusLAMP collection, so it
   // renders); ausmt_id is always present.

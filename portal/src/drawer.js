@@ -133,12 +133,11 @@ function headerDownloadBtn(s,m){
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
-// Overview "primary download" tile - the same gated descriptor rendered as a single product tile (disabled
-// where the gate refuses, so it states the embargo rather than offering bytes).
-function overviewDownload(s,m){const e=ediDescriptor(s,m);
-  const attrs=e.d?Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
-  const st=e.st==="ok"?"ok":e.st==="part"?"part":e.st==="no"?"no":"unk";
-  return `<div class="prodgrid"><div class="prod ${e.d?"":"dis"}" ${attrs}><span class="pdot" style="background:var(--${st})"></span><div>Transfer function<small>${esc(e.sub)}</small></div></div></div>`;}
+// (Survey-drawer lane, amendment 2: the Overview "primary download" tile - overviewDownload(), the gated
+// descriptor rendered as a single product tile inside the Station summary - is REMOVED by owner ruling. It
+// duplicated the Files tab's Level 2 EDI row and blurred the summary-vs-downloads separation the tabs draw.
+// ediDescriptor() above is unaffected and still gates BOTH surviving download surfaces: the sticky-header
+// Download EDI action and the Files tab's EDI sub-row.)
 
 function apa(m,doi){return `${esc(m.au)} (${esc(m.yr||"n.d.")}). ${esc(m.ti)}${m.ve?" ("+esc(m.ve)+")":""} [Data set]. ${esc(m.pb)}.`+(doi?` https://doi.org/${esc(doi)}`:"");}
 // R3: the DISPLAY-ONLY APA citation rendered inside the Cite box. Identical to apa() except the trailing
@@ -727,7 +726,13 @@ function stationSummaryDetails(s,m,sc){
   stationRows.push(["data type",esc(s.type||"–")]);   // no long-form gloss exists in the corpus yet; show the code
   stationRows.push(["ausmt_id",esc(s.ausmt_id)]);
   if(m.collection&&m.collection.id)stationRows.push(["collection",esc(m.collection.title||m.collection.id)]);
-  const station=_ssGroup("Station",stationRows,overviewDownload(s,m));
+  // Survey-drawer lane, amendment 2 (owner, the ONE scoped exception to "station drawers untouched"): the
+  // "Transfer function / Download" tile is REMOVED from this summary group. It duplicated the Files tab's
+  // Level 2 EDI row and blurred the summary-vs-downloads separation the tabs exist to draw: a summary
+  // states facts, the Files tab serves bytes. overviewDownload() is deleted with its only call site (dead
+  // code is the trap tests/test_no_dead_prov_feature.py enforces against); the EDI stays downloadable from
+  // the sticky header action and the Files tab. _ssGroup keeps its optional `extra` slot for future groups.
+  const station=_ssGroup("Station",stationRows);
   // Two-phase boot: periods/components/tipper are catalogue columns (phase 1, honest at first paint);
   // "remote reference" and the Processing group read the sci row (PHASE 2), whose absent-value renderings
   // ("not recorded", "not stated in EDI") are claims about the source EDI. Those two wait.
