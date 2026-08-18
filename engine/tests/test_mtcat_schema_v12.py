@@ -361,8 +361,14 @@ RED_CASES = [
 ]
 
 
+# The _DELETE sentinel needs an EXPLICIT id: repr(object()) embeds the process-local memory address,
+# and pytest-xdist refuses to run when workers collect different test ids (each worker is its own
+# process, so the address, and with it the generated id, differed per worker). A stable "<DELETE>"
+# keeps every id deterministic; all other cases keep their repr-derived id, truncated as before.
 @pytest.mark.parametrize(("path", "value", "why"), RED_CASES,
-                         ids=[".".join(str(p) for p in c[0]) + f"={c[1]!r}"[:40] for c in RED_CASES])
+                         ids=[".".join(str(p) for p in c[0])
+                              + ("=<DELETE>" if c[1] is _DELETE else f"={c[1]!r}"[:40])
+                              for c in RED_CASES])
 def test_red_wrong_value_fails_validation(path, value, why):
     """RED proof: the described fields CONSTRAIN, they do not merely document. Every case here rode
     through v1.1 untouched (the enclosing objects are all additionalProperties:true), so each assertion
