@@ -41,6 +41,12 @@ CI runs gateway and deploy together from the repo root
 (`python -m pytest -q -rs gateway/tests deploy/tests`, `gateway-ci.yml`), so run them that way
 when you are reproducing a CI failure.
 
+Both CI engine runs use `pytest -n 4` (pytest-xdist, in `engine/requirements-dev.txt`): the full
+suite inside the shipped image (`deploy-images.yml` engine-full-tests) and the host lane
+(`build-products.yml`, which since 2026-08-18 runs a 12-file product/equivalence/schema subset on
+pull requests and the full suite on push/dispatch; the subset is enumerated in that workflow).
+Add `-n 4` when reproducing a CI failure; drop it to rule parallelism in or out.
+
 Lint, exactly as CI runs it:
 
 ```

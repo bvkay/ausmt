@@ -99,21 +99,89 @@ jobs:
         if: ${{ vars.DECOMP_COMMIT != '' }}
         run: pip install "mtpy-v2 @ git+https://github.com/bvkay/mtpy-v2.git@${{ vars.DECOMP_COMMIT }}"
 
+      # THE PER-PR RUN IS A GATE SUBSET; THE FULL HOST-ENV SUITE RUNS ON PUSH AND DISPATCH.
+      # (ci/engine-suite-speed, 2026-08-18.) Measured per-job Actions timings showed PR CI's ~37 min
+      # wall-clock was ONE ~650-test suite run twice, single-threaded: 36.1 min HERE on the host
+      # runner and 34.3 min inside the shipped image (deploy-images.yml's engine-full-tests). The
+      # in-image run is the trust-invariant one (it tests the artifact that ships), so THAT keeps
+      # the full suite on every PR; THIS lane's per-PR run narrows to the subset that gates what
+      # this workflow's own steps do and rely on (the product/equivalence/schema set):
+      #   tests/test_build_cache.py           C18 cache seams incl. the section-4.5 warm-vs-refresh
+      #                                       byte-equivalence guard and the stale-cache refusal the
+      #                                       "Build-cache smoke" step below leans on
+      #   tests/test_ingest_normalize.py      canonical-ingest round-trip gate (named above)
+      #   tests/test_canonical_parity.py      science parity through the canonical store (the old
+      #                                       extractor-parity job's coverage, named above)
+      #   tests/test_canonical_store.py       the --canonical-dir emission gate (named above)
+      #   tests/test_mth5_roundtrip.py        EDI->MTH5->products equivalence; partner of the
+      #                                       "MTH5 ingestion round-trip (evidence)" step below
+      #   tests/test_mtcat.py                 mtcat.json product emission against the schema
+      #   tests/test_mtcat_schema_v12.py      the schema that constrains the served catalogue
+      #   tests/test_mtcat_version_parity.py  the same-PR portal-surface pin: the reason this
+      #                                       workflow watches the five portal paths at all
+      #   tests/test_empty_build.py           the empty-input default-products contract behind the
+      #                                       build step's "fails on empty output" guarantee
+      #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
+      #   tests/test_golden_edi.py            golden pins on the sole engine's product outputs
+      #   tests/test_mini_yaml_parity.py      PyYAML-vs-_mini_yaml survey.yaml projection parity
+      # (12 files, 151 tests of the suite's 656 at 2026-08-18; the counts move with the suite.)
+      #
+      # RESIDUAL RISK, STATED HONESTLY: a HOST-ENV-ONLY failure in an out-of-subset test now
+      # surfaces on the push-to-main full run, not on the PR. Accepted because the in-image full
+      # suite still gates every PR (deploy-images.yml engine-full-tests) and the two environments
+      # rarely diverge: both install the same committed lock, so slipping through needs a
+      # host-runner quirk the image misses AND that only an out-of-subset test can see. The full
+      # host-env run still lands on every push to main and on workflow_dispatch: those are this
+      # repo's existing trigger conventions (none of the four workflows uses cron, and this one
+      # already carries both triggers), so main coverage costs no new trigger surface.
+      #
+      # -n 4 on both forms: pytest-xdist from requirements-dev.txt (installed above, constrained by
+      # the lock). ubuntu-latest exposes 4 vCPUs and the suite is CPU-bound (dev box, 2026-08-18:
+      # 656 tests, 673s serial vs 185s under -n 4, a 3.6x speedup). Parallel safety was proven on
+      # the dev box first: identical per-test outcomes serial and under -n 4, zero xdist-only
+      # failures, zero xdist_group serial pins (the one defect found was a nondeterministic
+      # parametrize id in test_mtcat_schema_v12.py, fixed at its source), and the -rs skip-line
+      # format was proven to survive xdist against ci_check_skips.py (green and red legs) at the
+      # pinned pytest 8.2.0 + pytest-xdist 3.8.0.
+      #
+      # -rs surfaces every skip reason (M5): ~20 files importorskip mt_metadata/mth5, so if the pinned
+      # lock ever silently stopped installing that stack the release gate would go green over a
+      # hollowed-out suite. The tripwire fails on any skip not on tests/ci_check_skips.py's
+      # allow-list. In THIS lane the mt_metadata/mth5 stack IS installed (the lock above) and there is
+      # no sibling ausmt-surveys checkout, so the only legitimate skips are the allow-listed
+      # dev-box-only ones (realdata corpus / preflight corpus); the subset contains none of those
+      # files, so its expected skip count is zero.
+      - name: Tests, PR gate subset (product/equivalence/schema; with skip accounting)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -o pipefail
+          pytest -q -rs -n 4 \
+            tests/test_build_cache.py \
+            tests/test_ingest_normalize.py \
+            tests/test_canonical_parity.py \
+            tests/test_canonical_store.py \
+            tests/test_mth5_roundtrip.py \
+            tests/test_mtcat.py \
+            tests/test_mtcat_schema_v12.py \
+            tests/test_mtcat_version_parity.py \
+            tests/test_empty_build.py \
+            tests/test_proc_note_email_scrub.py \
+            tests/test_golden_edi.py \
+            tests/test_mini_yaml_parity.py \
+            | tee /tmp/pytest-engine.out
+          python tests/ci_check_skips.py < /tmp/pytest-engine.out
+
       # Full suite. With mt_metadata present the canonical-ingest / parity / canonical-store /
       # mth5-roundtrip gates RUN (they importorskip only when the stack is absent), so this single
-      # job now covers what the old separate extractor-parity job did. C18: this suite also carries
+      # job covers what the old separate extractor-parity job did. C18: this suite also carries
       # the build-cache tests (tests/test_build_cache.py), INCLUDING the §4.5 warm-vs-refresh
       # byte-equivalence guard and the ★ stale-cache refusal — so a cache change that altered output
       # bytes fails CI here.
-      # -rs surfaces every skip reason (M5): ~20 files importorskip mt_metadata/mth5, so if the pinned
-      # lock ever silently stopped installing that stack the release gate would go green over a
-      # hollowed-out suite. The tripwire below fails on any skip not on tests/ci_check_skips.py's
-      # allow-list. In THIS lane the mt_metadata/mth5 stack IS installed (the lock above) and there is
-      # no sibling ausmt-surveys checkout, so the ONLY legitimate skip is the validator-gate one.
-      - name: Tests (with skip accounting)
+      - name: Tests, full suite (push and dispatch; with skip accounting)
+        if: github.event_name != 'pull_request'
         run: |
           set -o pipefail
-          pytest -q -rs tests | tee /tmp/pytest-engine.out
+          pytest -q -rs -n 4 tests | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out
 
       # C18: exercise the incremental cache end-to-end in CI while the checkout is still CLEAN (this
@@ -121,7 +189,9 @@ jobs:
       # git status non-empty -> a degenerate salt that self-disables the cache). A full --cache-mode
       # refresh build POPULATES a scratch cache; a warm rw build must then HIT it with zero misses.
       # The build succeeds either way; the byte-EQUIVALENCE between refresh and warm is asserted by
-      # the §4.5 equivalence test inside `pytest tests` above. This scratch cache is throwaway and is
+      # the §4.5 equivalence test inside the Tests step above (BOTH its forms run
+      # tests/test_build_cache.py: the PR subset carries it by name, the full suite by inclusion).
+      # This scratch cache is throwaway and is
       # NOT the published products (those come from the non-incremental build step below).
       - name: Build-cache smoke (refresh populate -> warm hit; clean-checkout salt)
         run: |
