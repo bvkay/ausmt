@@ -36,13 +36,17 @@ case "$*" in
   *) exit 0 ;;
 esac
 """
-# The curl stub answers per-invocation: the redirect leg (recognisable by its `%{redirect_url}`
-# format string) gets "${REDIR_OUT}" (default: the correct 301 to the canonical schema URL), every
-# other probe gets the plain "${CURL_CODE}" body. Argv is recorded so a test can pin WHAT was probed
-# (the https:// scheme of the redirect leg is itself a load-bearing property).
+# The curl stub answers per-invocation: the path-URL contract leg (recognisable by its pinned
+# /surveys/vulcan-2022 probe path) gets "${PATHURL_OUT}" header text (default: the correct 301 with
+# the fragment-route Location; `-` not `:-` so an EMPTY value models the unreachable edge); the
+# redirect leg (recognisable by its `%{redirect_url}` format string) gets "${REDIR_OUT}" (default:
+# the correct 301 to the canonical schema URL); every other probe gets the plain "${CURL_CODE}"
+# body. Argv is recorded so a test can pin WHAT was probed (the https:// scheme of the redirect and
+# pathurl legs is itself a load-bearing property).
 _CURL_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "${CURL_ARGV_LOG:-/dev/null}"
 case "$*" in
+  *"/surveys/vulcan-2022"*) printf '%b' "${PATHURL_OUT-HTTP/1.1 301 Moved Permanently\\nlocation: https://ausmt.auscope.org.au/#/survey/vulcan-2022\\n}" ;;
   *redirect_url*) printf '%s' "${REDIR_OUT:-301 https://ausmt.auscope.org.au/data/mtcat.schema.json}" ;;
   *) echo "${CURL_CODE:-200}" ;;
 esac
@@ -325,3 +329,67 @@ def test_config_check_agrees_with_the_installers_rendering(tmp_path):
         rd = _run(denv, "report")
         assert any(ln.startswith("PASS config:") for ln in rd.stdout.splitlines()), (
             f"doctor's fresh render ({label}) must hash-match the installer's rendering:\n{rd.stdout}")
+
+
+# --------------------------------------------------------------------------------------------------
+# Path-URL contract lane (2026-08-18): the /surveys/<slug> 301 leg.
+# --------------------------------------------------------------------------------------------------
+def test_pathurl_leg_passes_on_the_contract_301(tmp_path):
+    """GREEN side (proves the FAIL pins below are non-vacuous): with the edge answering the pinned
+    /surveys/vulcan-2022 probe with a 301 whose Location is the exact fragment route, the pathurl
+    leg PASSES and the run exits 0."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf), "report")
+    assert r.returncode == 0, f"all-green should exit 0:\n{r.stdout}\n{r.stderr}"
+    assert any(ln.startswith("PASS pathurl:") and "301s to" in ln
+               for ln in r.stdout.splitlines()), (
+        f"the pathurl leg must PASS on the contract 301:\n{r.stdout}")
+
+
+def test_pathurl_leg_fails_on_a_non_301(tmp_path):
+    """An edge that answers the path shape with anything but a 301 (here a 200, i.e. the redirect
+    section is missing and the reader swallowed the path) must FAIL the leg and the run."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf, PATHURL_OUT="HTTP/1.1 200 OK\\n"), "report")
+    assert any(ln.startswith("FAIL pathurl:") for ln in r.stdout.splitlines()), (
+        f"a non-301 must FAIL the pathurl leg:\n{r.stdout}")
+    assert r.returncode != 0
+
+
+def test_pathurl_leg_fails_on_a_wrong_location(tmp_path):
+    """A 301 to the WRONG place (a Location that is not the fragment route for the probed slug)
+    must FAIL: the leg pins the Location, not just the status."""
+    cf = _caddyfile(tmp_path)
+    wrong = "HTTP/1.1 301 Moved Permanently\\nlocation: https://ausmt.auscope.org.au/\\n"
+    r = _run(_hash_env(tmp_path, cf, PATHURL_OUT=wrong), "report")
+    assert any(ln.startswith("FAIL pathurl:") for ln in r.stdout.splitlines()), (
+        f"a 301 to the wrong Location must FAIL the pathurl leg:\n{r.stdout}")
+    assert r.returncode != 0
+
+
+def test_pathurl_leg_skips_cleanly_when_unreachable(tmp_path):
+    """No response at all from the probe (edge down or unreachable): the leg SKIPS cleanly with a
+    visible PASS-labelled line (the container check is the authority on a down edge) and the run
+    stays green. FAILS IF an unreachable edge turns the leg into a FAIL."""
+    cf = _caddyfile(tmp_path)
+    r = _run(_hash_env(tmp_path, cf, PATHURL_OUT=""), "report")
+    assert r.returncode == 0, f"an unreachable probe must not fail the run:\n{r.stdout}\n{r.stderr}"
+    assert any(ln.startswith("PASS pathurl: skipped") for ln in r.stdout.splitlines()), (
+        f"the pathurl leg must visibly skip when unreachable:\n{r.stdout}")
+
+
+def test_pathurl_leg_probes_the_pinned_slug_over_https(tmp_path):
+    """The probe must be the EXPLICIT https:// path-shape URL for the pinned vulcan-2022 slug on
+    the canonical name, resolved to this host (--resolve), so the leg exercises the canonical
+    block's own mapping and never a DNS detour. FAILS IF the scheme, slug, or resolve pin drifts."""
+    cf = _caddyfile(tmp_path)
+    argv_log = tmp_path / "curl.argv"
+    r = _run(_hash_env(tmp_path, cf, CURL_ARGV_LOG=str(argv_log)), "report")
+    assert r.returncode == 0, r.stdout
+    calls = [ln for ln in argv_log.read_text(encoding="utf-8").splitlines()
+             if "/surveys/vulcan-2022" in ln]
+    assert len(calls) == 1, f"exactly one pathurl probe expected: {calls}"
+    assert "https://ausmt.auscope.org.au/surveys/vulcan-2022" in calls[0], (
+        f"the probe must be the https:// path-shape URL on the canonical name; argv: {calls[0]}")
+    assert "--resolve ausmt.auscope.org.au:443:127.0.0.1" in calls[0], (
+        f"the probe must pin the canonical name to this host; argv: {calls[0]}")

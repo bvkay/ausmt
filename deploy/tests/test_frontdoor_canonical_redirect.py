@@ -76,10 +76,16 @@ def _strip_legacy(text: str) -> str:
     return "".join(out)
 
 
+_PLACEHOLDER_TOKEN = re.compile(r"\{[^{}\s]+\}")
+
+
 def _site_openers(text: str) -> list[str]:
     """The addresses of every TOP-LEVEL site block: a depth-0 non-comment line ending in '{' whose
     address part is non-empty (the global options block, a bare '{', is excluded). Brace depth is
-    tracked over non-comment lines so `{$ENV}` tokens inside comments cannot fool the count."""
+    tracked over non-comment lines with PLACEHOLDER tokens removed first: `{$ENV}` in comments was
+    already excluded, and a directive line like `map {http.request.uri} {dest} {` carries balanced
+    placeholder braces beside ONE structural opener, so counting raw braces would inflate the depth
+    permanently and hide every later site opener (the path-url contract lane added such lines)."""
     openers: list[str] = []
     depth = 0
     for raw in text.splitlines():
@@ -90,7 +96,8 @@ def _site_openers(text: str) -> list[str]:
             addr = line[:-1].strip()
             if addr:
                 openers.append(addr)
-        depth += line.count("{") - line.count("}")
+        structural = _PLACEHOLDER_TOKEN.sub("", line)
+        depth += structural.count("{") - structural.count("}")
     return openers
 
 
