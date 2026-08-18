@@ -15,7 +15,6 @@
 <script src="src/analytics-shim.js"></script><!-- external (not inline) so CSP stays script-src 'self' -->
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="vendor/MarkerCluster.min.css">
 <link rel="stylesheet" href="vendor/leaflet.draw.css">
 <style>
   :root{
@@ -188,6 +187,22 @@
   .prod.dis{opacity:.45;cursor:default}.prod.dis:hover{border-color:var(--line)}
   .prod .pdot{width:8px;height:8px;border-radius:50%;flex:none}
   .prod small{display:block;color:var(--muted);font-size:12px}
+  /* Survey-drawer lane (ruling 2): the survey drawer's header is STICKY, so "View on map" and Close stay
+     reachable from anywhere in a long survey record. Mirrors the station drawer's .dtop treatment - the
+     negative margins let the bar span the drawer's own 16/18px padding. */
+  .dhead.svhead{position:sticky;top:-16px;z-index:6;background:var(--panel);margin:-16px -18px 6px;
+    padding:16px 18px 10px;border-bottom:1px solid var(--line)}
+  .dhead .dhead-act{font-size:12px;padding:4px 10px;white-space:nowrap}
+  /* Ruling 4: the survey data-level tile grid. Tiles reuse .prod/.prodgrid verbatim (the Downloads
+     treatment); only the level-specific states are new. An UNRECORDED level is muted but visible via the
+     shared .prod.dis rule plus a HOLLOW dot, so the six-slot chain keeps the same shape on every survey. */
+  .prod .pdot.hollow{background:transparent;border:1.5px solid var(--muted);box-sizing:border-box}
+  .dl-tile{align-items:flex-start}
+  .dl-tile .dl-state{font-style:italic}
+  .dl-tile .dl-id{word-break:break-all;margin-top:2px}
+  .sechead .dl-count{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
+  .dl-cite{font-size:11.5px;color:var(--muted);margin-top:6px}
+  .dl-instr{font-size:12px;color:var(--muted);margin-top:4px}
   /* R5: the Files tab NCI-level list — single column of full-width rows (not the 2-col tile grid). */
   .filelist{display:flex;flex-direction:column;gap:6px}
   .filelist .prod{width:100%}
@@ -412,15 +427,18 @@
     .hzone{flex:1 1 100%;justify-content:flex-start}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
-  /* Custom marker-cluster icons (AusMT visual language; replaces missing Default plugin CSS) */
-  .ausmt-cluster{background:transparent;border:none}
-  .ausmt-cluster div{display:flex;align-items:center;justify-content:center;width:100%;height:100%;
+  /* Change 6: SURVEY BADGE icons (AusMT visual language, inherited from the retired proximity-cluster
+     bubbles so the map keeps its dialect). A badge is a CONTROL - it opens its survey's drawer - so unlike
+     the old bubble it carries a pointer cursor and a hover state. Sizes ramp with the station count. */
+  .ausmt-badge{background:transparent;border:none;cursor:pointer}
+  .ausmt-badge div{display:flex;align-items:center;justify-content:center;width:100%;height:100%;
     border-radius:50%;font-family:var(--mono);font-weight:700;color:#12202b;
     border:2px solid rgba(232,237,241,.4);box-shadow:0 2px 7px rgba(0,0,0,.45)}
-  .ausmt-cluster span{line-height:1}
-  .ausmt-cluster.cluster-small div{background:#5BAE6A;font-size:12px}
-  .ausmt-cluster.cluster-medium div{background:#D9A23B;font-size:13px}
-  .ausmt-cluster.cluster-large div{background:#EF7256;font-size:14px}
+  .ausmt-badge:hover div{border-color:var(--copper)}
+  .ausmt-badge span{line-height:1}
+  .ausmt-badge.svbadge-small div{background:#5BAE6A;font-size:12px}
+  .ausmt-badge.svbadge-medium div{background:#D9A23B;font-size:13px}
+  .ausmt-badge.svbadge-large div{background:#EF7256;font-size:14px}
 .emptyoverlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
   background:rgba(11,15,18,.55);backdrop-filter:blur(1px);pointer-events:none;padding:24px}
 .emptyoverlay .emptystate{pointer-events:auto}
@@ -561,7 +579,9 @@
     text-align:left;cursor:pointer;font-size:12px;font-family:var(--sans)}
   .maplegend-body{padding:9px 11px;display:flex;flex-direction:column;gap:6px}
   .maplegend .legrow{display:flex;align-items:center;gap:8px;line-height:1.3}
-  .maplegend .legcluster{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
+  /* Change 6: the legend's badge swatch (was .legcluster, when the thing it stood for was a proximity
+     bubble). Same swatch, renamed with the object, so a stylesheet reader cannot think clusters still ship. */
+  .maplegend .legbadge{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
     border-radius:50%;background:rgba(239,114,86,.45);color:#12202b;font-family:var(--mono);font-weight:700;
     font-size:10px;flex:none;border:2px solid rgba(232,237,241,.4)}
   /* The four TYPE rows are real toggle BUTTONS proxying the rail's #typeBoxes checkboxes (main.js
@@ -859,7 +879,6 @@
 <div id="toast" role="status"></div>
 
 <script src="vendor/leaflet.js"></script>
-<script src="vendor/leaflet.markercluster.min.js"></script>
 <script src="vendor/leaflet.draw.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/au-outline.js"></script><!-- UX6 Wave E (E6): simplified AU coastline+states for the collection footprint (public domain; see file header) -->

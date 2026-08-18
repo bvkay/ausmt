@@ -24,12 +24,32 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
          "custodian": "NCI", "identifies": "collection"},
         {"identifier": "10.25914/whole", "identifier_type": "DOI", "relation": "IsVariantFormOf",
          "custodian": "GA", "identifies": "entire"}]}
-    _station, story, _card = _render(tmp_path, extra)
-    assert "Raw time series: " in story, "the raw_packed row is not labelled by its level:\n" + story
-    assert "Collection: " in story, "the collection row is not labelled by its level:\n" + story
-    assert "Entire dataset: " in story, "the entire row is not labelled by its level:\n" + story
+    station, story, _card = _render(tmp_path, extra)
+    # The rollup block moved to the STATION drawer with the survey-drawer lane (ruling 4); it is unchanged.
+    assert "Raw time series: " in station, "the raw_packed row is not labelled by its level:\n" + station
+    assert "Collection: " in station, "the collection row is not labelled by its level:\n" + station
+    assert "Entire dataset: " in station, "the entire row is not labelled by its level:\n" + station
     # the level label REPLACES the relation label for an identifies row
-    assert "Derived from: " not in story, "an identifies row still showed the relation label:\n" + story
+    assert "Derived from: " not in station, "an identifies row still showed the relation label:\n" + station
+    # ---- SURVEY GRID SLOT MAPPING (ruling 4 + the slot-mapping ruling) -------------------------------
+    # collection -> slot 1, raw_packed -> slot 2. `entire` maps to NO slot, so it must NOT consume one and
+    # must NOT vanish: it renders as an EXTRA tile below the six, and the header count stays 2 of 6.
+    tiles = re.findall(r'<div class="prod[^"]*dl-tile"[^>]*>.*?</div></div>', story, re.S)
+    assert len(tiles) == 7, f"expected the six fixed slots plus ONE extra tile, got {len(tiles)}:\n{story}"
+    assert tiles[0].startswith('<div class="prod dl-tile"') and "10.25914/parent" in tiles[0], \
+        "slot 1 (Collection) did not take the collection-identified row:\n" + tiles[0]
+    assert "Collection<" in tiles[0], "slot 1 is not the Collection slot:\n" + tiles[0]
+    assert "10.25914/raw" in tiles[1] and "Packed Raw Data<" in tiles[1], \
+        "slot 2 (Packed Raw Data) did not take the raw_packed-identified row:\n" + tiles[1]
+    # slots 3-6 (Level 0..Level 3) record nothing here and must still be VISIBLE, muted.
+    for i, name in ((2, "Level 0"), (3, "Level 1"), (4, "Level 2"), (5, "Level 3")):
+        assert f"{name}<" in tiles[i] and "not yet recorded" in tiles[i] and "dis" in tiles[i], \
+            f"slot {i + 1} ({name}) must render muted-but-visible:\n" + tiles[i]
+    # the unmapped `entire` row is the 7th tile, labelled by the level vocabulary, and NOT counted in the six
+    assert "Entire dataset" in tiles[6] and "10.25914/whole" in tiles[6], \
+        "the unmapped `entire` row was dropped instead of rendering as an extra tile:\n" + story
+    assert "2 of 6 recorded" in story, \
+        "the header count must tally only the SIX fixed slots (extras excluded):\n" + story
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
@@ -38,8 +58,13 @@ def test_legacy_row_without_identifies_falls_back_to_relation_label(tmp_path):
     labelling breaks a legacy relation-only row."""
     extra = {"related_identifiers": [
         {"identifier": "10.25914/legacy", "identifier_type": "DOI", "relation": "Cites", "custodian": "GA"}]}
-    _station, story, _card = _render(tmp_path, extra)
-    assert "Cites: " in story, "a legacy relation-only row lost its relation label:\n" + story
+    station, story, _card = _render(tmp_path, extra)
+    assert "Cites: " in station, "a legacy relation-only row lost its relation label:\n" + station
+    # On the survey grid a level-less legacy row maps to no slot, so it rides the extra-tile rule with its
+    # relation label intact - the count stays 0 of 6 because no FIXED slot is recorded.
+    assert "Cites" in story and "10.25914/legacy" in story, \
+        "a legacy relation-only row was dropped from the survey grid:\n" + story
+    assert "0 of 6 recorded" in story, "an extra tile must not be counted as one of the six slots:\n" + story
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
