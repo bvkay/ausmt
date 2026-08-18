@@ -483,10 +483,24 @@ jobs:
           # the parity module's ENGINE-side assertions still run here, which is the point: the release
           # gate proves the IMAGE's own coherence. Any other skip (e.g. the stack silently missing from
           # the image) reds the release gate here.
+          # -n 4 (ci/engine-suite-speed, 2026-08-18): pytest-xdist, shipped in the image via
+          # requirements-dev.txt's lock-constrained tooling install in engine.Dockerfile. Single
+          # threaded this job was PR CI's long pole (34.3 min measured; ~650 tests on a 4-vCPU
+          # runner); the suite is CPU-bound, so four workers buy roughly the core count back
+          # (dev box, 2026-08-18: 656 tests, 673s serial vs 185s under -n 4, a 3.6x speedup).
+          # Parallel safety was proven on the dev box BEFORE this flag landed: the full engine
+          # suite produced IDENTICAL per-test outcomes serial and under -n 4 (zero xdist-only
+          # failures, zero xdist_group serial pins; the one defect found was a nondeterministic
+          # parametrize id in test_mtcat_schema_v12.py, fixed at its source), and the -rs skip
+          # lines plus the terminal summary were proven to survive xdist unchanged against
+          # ci_check_skips.py (green and red legs) at the pinned pytest 8.2.0 + pytest-xdist
+          # 3.8.0. This job KEEPS the full suite on every PR: it tests
+          # the artifact that ships, so it is the run the per-PR dedup must never narrow
+          # (build-products.yml carries the subset half of the same change).
           # No pipe (the image's /bin/sh is dash — no `pipefail`): redirect to a file so pytest's own
           # exit code is preserved, echo it for the log, fail on pytest failure, THEN run the tripwire.
           docker run --rm --entrypoint sh "$IMG" -c \
-            'python -m pytest -q -rs tests > /tmp/pytest-engine.out 2>&1; rc=$?; cat /tmp/pytest-engine.out; [ $rc -eq 0 ] || exit $rc; python tests/ci_check_skips.py < /tmp/pytest-engine.out'
+            'python -m pytest -q -rs -n 4 tests > /tmp/pytest-engine.out 2>&1; rc=$?; cat /tmp/pytest-engine.out; [ $rc -eq 0 ] || exit $rc; python tests/ci_check_skips.py < /tmp/pytest-engine.out'
 
   # ---------------------------------------------------------------------------------------------
   # Compose file validation — both compose.yaml alone and combined with compose.dev.yaml (the dev
