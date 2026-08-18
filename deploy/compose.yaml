@@ -106,7 +106,7 @@ services:
     image: ghcr.io/${OWNER:?set OWNER in .env}/ausmt-gateway:${TAG:-latest}
     profiles: ["gateway"]
     restart: unless-stopped
-    init: true   # healthcheck-zombie reaping — see the portal service's init comment
+    init: true   # healthcheck-zombie reaping - see the portal service's init comment
 
     # Health = uvicorn is up and the app answers GET /gateway/healthz (200 {"ok": true}) on its
     # internal :8000. The gateway image is python:3.12-slim with NO curl/wget, so probe via stdlib
@@ -256,7 +256,7 @@ services:
     image: clamav/clamav:stable
     profiles: ["gateway"]
     restart: unless-stopped
-    init: true   # healthcheck-zombie reaping — see the portal service's init comment
+    init: true   # healthcheck-zombie reaping - see the portal service's init comment
 
     # Health = clamd is listening on :3310 AND has finished loading its signature database. The
     # INSTREAM PING is the daemon's own readiness contract: it replies PONG only once the DB is

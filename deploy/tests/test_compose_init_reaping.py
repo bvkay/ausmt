@@ -6,7 +6,7 @@ never wait()s for orphaned children. Measured live: container up 48 minutes = 96
 97 zombies, tripping doctor.sh's zombie threshold (warn at 50). `init: true` puts Docker's
 tini in front as PID 1, which reaps; nothing else about the service changes.
 
-This pin fails when a healthchecked service in either compose file lacks `init: true` — so
+This pin fails when a healthchecked service in either compose file lacks `init: true` - so
 a future service (or a revert) cannot quietly reintroduce the leak. Services WITHOUT a
 healthcheck are exempt: gw-runner has none deliberately (see its comment in compose.yaml)
 and its loop reaps its own job children.
