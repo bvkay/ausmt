@@ -113,8 +113,12 @@ def test_build_feed_xml_well_formed_and_sorted():
     assert titles == ["New Survey", "Old Survey"]
     ids = [e.find(f"{ATOM_NS}id").text for e in root.findall(f"{ATOM_NS}entry")]
     assert ids == ["tag:ausmt:new", "tag:ausmt:old"]
+    # RE-PINNED for the path-URL contract (owner ruling 2026-08-18): entry links carry the
+    # published path form <base>surveys/<slug>, not the retired fragment form <base>#/survey/<slug>
+    # (this line RED-failed against the old form before being re-pinned; the fragment-free pin
+    # lives in test_sitemap_pathurls.py).
     links = [e.find(f"{ATOM_NS}link").get("href") for e in root.findall(f"{ATOM_NS}entry")]
-    assert links == ["https://org.github.io/ausmt/#/survey/new", "https://org.github.io/ausmt/#/survey/old"]
+    assert links == ["https://org.github.io/ausmt/surveys/new", "https://org.github.io/ausmt/surveys/old"]
     feed_updated = root.find(f"{ATOM_NS}updated").text
     assert feed_updated == "2023-05-10T00:00:00Z"        # max entry date, NOT wall-clock time
 

@@ -27,7 +27,9 @@ function buildState(){
   const _cp=(typeof COORD_POLICY!=="undefined"&&COORD_POLICY)||{};
   ST.forEach(s=>{s.coordPolicy=_cp[s.ausmt_id]||null;});
   surveys=[...new Set(ST.map(s=>s.survey))].sort();
-  // slug -> survey label, for the #/survey/<slug> route (the sitemap emits these; ausmt_id is
+  // slug -> survey label, for the #/survey/<slug> route (the published /surveys/<slug> path URLs
+  // the sitemap now emits 301 into this route at the front door - path-URL contract 2026-08-18;
+  // ausmt_id is
   // au.<slug>.<station> — mirrors the engine's own slug_of derivation in extract/build_portal.py
   // rather than re-slugifying the label, so it stays correct even if a label's slugification is
   // irregular). Prefer the authoritative SMETA[survey].slug; fall back to deriving it from a

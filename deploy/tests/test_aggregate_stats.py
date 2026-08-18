@@ -2185,3 +2185,43 @@ def test_the_bulk_export_copy_describes_every_flow_that_writes_the_flag():
         "the runbook must state the bulk figure and the format breakdown are INDEPENDENT totals: "
         "stats.json holds no select-by-format cross-tab, and claiming the format split separates "
         "the three flows invites the exact misreading this pin exists to prevent")
+
+
+# --------------------------------------------------------------------------------------------------
+# Path-URL contract lane (owner ruling 2026-08-18): the tier-1 redirect hop stays OUT of the counts.
+# --------------------------------------------------------------------------------------------------
+def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
+    """PATH-URL ANALYTICS DECISION, pinned. The tier-1 301 hop (/surveys|/stations|/collections at
+    the canonical block) lands in the masked access log (the canonical block logs; runtime pin in
+    test_frontdoor_pathurl_contract.py), so a path-link visit writes TWO log lines: the hop and the
+    SPA boot that follows. It must be counted ONCE. No filter needed adding: TWO independent,
+    pre-existing filters each exclude the hop, and both are pinned here with a sensitivity control
+    so this pin can fail:
+
+      * PATH CLASS: classify() counts only /data/* paths, so a path-shape URI is `ignore` at ANY
+        status (control: the hop path at status 200 still counts nothing);
+      * STATUS: a visit admits only 200/304 (a download only 200/206), so even a 301 on the visit
+        path itself is excluded (this line never occurs live; it pins the filter).
+
+    FAILS IF a redirect hop (or any 301 line) leaks into visits, downloads, API requests or the
+    unattributed bucket, i.e. if a path-link visit ever starts double-counting."""
+    rmap = {}
+    geoip = AGG.GeoIP()
+    hop_lines = [
+        _line("/surveys/vulcan-2022", "203.0.113.0", status=301, size=0),
+        _line("/stations/au.vulcan-2022.MBV07", "203.0.113.0", status=301, size=0),
+        _line("/collections/auslamp", "203.0.113.0", status=301, size=0),
+        _line("/surveys/vulcan-2022", "203.0.113.0", status=200, size=0),   # path-class control
+        _line("/data/catalogue.json", "203.0.113.0", status=301, size=0),   # status-filter pin
+    ]
+    boot = [_line("/data/catalogue.json", "203.0.113.0", status=200, size=500)]
+    stats = AGG.aggregate(None, hop_lines + boot, rmap, geoip, _RUN)
+    t = stats["totals"]
+    assert t["visits"] == 1, (
+        f"a path-link visit must count ONCE (the SPA boot), got {t['visits']}: a redirect hop leaked")
+    assert t["downloads"] == 0 and t["api_requests"] == 0 and t["unattributed"] == 0, (
+        f"a redirect hop leaked into a non-visit class: {t}")
+    # SENSITIVITY CONTROL (the pin can fail): one more admitted visit line moves the counter, so
+    # the ==1 above is measuring the filters, not a dead counter (visits are never deduped).
+    stats2 = AGG.aggregate(None, hop_lines + boot + boot, rmap, geoip, _RUN)
+    assert stats2["totals"]["visits"] == 2, "the visit counter must move on an admitted line"

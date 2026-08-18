@@ -924,7 +924,8 @@ async function bootFreshWindow(dataMap, url) {
     "F3: Esc did not clear the query and close the dropdown");
   // find.value is now "" and refresh() has re-run — later sections (year/downloadable-only/etc) assume no active Find query
 
-  // F. SURVEY route: #/survey/<slug> (the form the sitemap emits — 1463 links in the real build) must
+  // F. SURVEY route: #/survey/<slug> (the route the published /surveys/<slug> path URLs 301 into
+  //    at the front door - path-URL contract 2026-08-18; the sitemap advertises the path form) must
   //    resolve the slug back to its survey label and open the survey story drawer (openSurvey), same as
   //    clicking a "Survey story" button does. Before this route existed, routeFromHash() silently fell
   //    through for #/survey/... (only #/collection/ and #/station/ were handled) — a sitemap deep-link

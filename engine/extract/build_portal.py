@@ -556,8 +556,10 @@ def build_feed_xml(surveys_meta: dict, base_url: str = None):
     "build time" value is <feed><updated>, set to the MAX entry date (not wall-clock time), so two
     builds of the same surveys_meta are byte-identical regardless of when they run.
     `base_url`: passed a's --sitemap-base (rstrip("/") + "/") when set; entry <link> is that base +
-    '#/survey/<slug>', or OMITTED (no <link> element) when base_url is None — the feed is still valid
-    Atom without it, just not clickable outside the portal's own context."""
+    'surveys/<slug>' (the PATH-URL contract form, owner ruling 2026-08-18: the path shape is the
+    published URL and the front door maps it into the SPA), or OMITTED (no <link> element) when
+    base_url is None (the feed is still valid Atom without it, just not clickable outside the
+    portal's own context)."""
     from xml.sax.saxutils import escape as _xesc
     entries = feed_entries(surveys_meta)
     if not entries:
@@ -566,7 +568,7 @@ def build_feed_xml(surveys_meta: dict, base_url: str = None):
     feed_updated = f"{entries[0]['date']}T00:00:00Z"   # newest entry's date = the whole feed's <updated>
     items = []
     for e in entries:
-        link = f'\n    <link href="{_xesc(base + "#/survey/" + e["slug"])}"/>' if base else ""
+        link = f'\n    <link href="{_xesc(base + "surveys/" + e["slug"])}"/>' if base else ""
         items.append(
             "  <entry>\n"
             f'    <id>tag:ausmt:{_xesc(e["slug"])}</id>\n'
@@ -4559,19 +4561,32 @@ def main(argv=None):
         return 2
 
     # ---- optional sitemap.xml (discoverability) ----
-    # CAVEAT: the portal is a hash-routed SPA (#/station/<id>); most crawlers ignore the
-    # fragment, so these deep links collapse to the base URL for indexing. The sitemap is
-    # emitted for completeness/tooling; real per-page SEO needs path-based routing + prerender.
+    # PATH-URL CONTRACT (owner ruling 2026-08-18): the published URL for each entity is the PATH
+    # form - <base>/surveys/<slug>, <base>/stations/<ausmt_id>, <base>/collections/<id> - which the
+    # front door 301s into the SPA's hash routes (tier 1, deploy/frontdoor/Caddyfile). The sitemap
+    # advertises ONLY the path form: it is the published contract, and crawlers ignore fragments
+    # anyway, so the old #/... entries never indexed as pages. Collections join the sitemap here
+    # (previously no collection link was emitted at all). Honesty note carried over from the old
+    # caveat: tier 1 still lands a crawler on a redirect into a fragment, so real per-page indexing
+    # needs tier 3 (prerendered per-entity landing pages at these same paths); the CONTRACT is what
+    # this advertises, and it will not change when tier 2/3 come.
     if a.sitemap_base:
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc
         locs = [base]
-        locs += [f"{base}#/survey/{slugify(lbl)}" for lbl in sorted(surveys_meta)]
-        locs += [f"{base}#/station/{r['ausmt_id']}" for (_p, r) in all_stations]
+        # The AUTHORITATIVE slug (smeta_entry["slug"], the same one ausmt_id / product paths / the
+        # portal router use), never a re-slugified display label: a declared slug that differs from
+        # slugify(label) would otherwise advertise an id the portal cannot resolve. slugify(lbl)
+        # remains only as the fallback for raw-mode builds whose smeta carries no slug.
+        locs += [f"{base}surveys/{(surveys_meta.get(lbl) or {}).get('slug') or slugify(lbl)}"
+                 for lbl in sorted(surveys_meta)]
+        locs += [f"{base}stations/{r['ausmt_id']}" for (_p, r) in all_stations]
+        locs += [f"{base}collections/{cid}" for cid in sorted(coll_by_id)]
         body = "\n".join(f"  <url><loc>{_xesc(u)}</loc></url>" for u in locs)
         (out / "sitemap.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<!-- hash-routed SPA: fragment deep links are not separately indexed by most crawlers -->\n'
+            '<!-- path-URL contract (tier 1): these path forms 301 into the portal SPA; '
+            'prerendered per-entity pages (tier 3) will serve them at the same URLs -->\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + body + "\n</urlset>\n",
             encoding="utf-8")
         print(f"  sitemap.xml -> {out}/sitemap.xml ({len(locs)} urls)")

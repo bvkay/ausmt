@@ -163,6 +163,73 @@
 		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
 	}
 
+	# ---- PATH-URL CONTRACT (tier 1, owner ruling 2026-08-18) ----------------------------------------
+	# /surveys/<slug>, /stations/<ausmt_id> and /collections/<id> are the PUBLISHED URL contract for
+	# the portal's three entity kinds: the path SHAPE is what gets published (emails, talks, papers,
+	# programme pages, eventually DOI metadata and RAiD landing links); the machinery behind it can
+	# upgrade without breaking a link. Tier 1 (this section) maps each shape onto the SPA's hash route
+	# with a PERMANENT redirect; tier 2 (real SPA path routes) and tier 3 (prerendered per-entity
+	# pages at these same paths) are documented as deferred in RUNBOOK.md and change no published URL
+	# when they come. 302/temporary is FORBIDDEN here: these are contracts, so crawlers must learn the
+	# mapping is permanent.
+	#
+	# MECHANISM. Caddy cannot substitute a captured path segment into a fragment with a plain redir
+	# matcher, so each shape is a handle_path: it strips the one-segment prefix off the URI before its
+	# body runs (updating the RAW escaped path in lock-step with the decoded one, so the remainder is
+	# preserved byte-for-byte and never decoded or re-encoded), and the redir target is rebuilt from
+	# two LAZILY-evaluated maps over the stripped URI:
+	#   {ausmt_pathurl_rest}  the raw remainder up to (not including) any '?': the ENTITY ID ONLY,
+	#                         leading slash included;
+	#   {ausmt_qs}            "?<query>" when the request carries a query, "" when not.
+	# handle_path rather than a handle wrapping its own strip: inside a handle the default directive
+	# order sorts redir AHEAD of the rewrite directives, so the redirect would fire on the UNSTRIPPED
+	# URI; handle_path performs its strip before its body by construction. The maps are declared here
+	# but Caddy orders map ahead of every handle, and their SOURCE is read lazily at redirect time,
+	# after the strip.
+	#
+	# QUERY DECISION (pinned, not accidental): a query on a path-shaped link is PRESERVED onto the
+	# target BEFORE the fragment (/surveys/x?utm=1 -> /?utm=1#/survey/x). Placed after the '#' it
+	# would be swallowed into the fragment and break the route; dropped it would silently eat what
+	# the link author wrote. A BARE /surveys or /surveys/ (and the station/collection twins) has no
+	# id to map and redirects to the portal root, never to a broken empty-fragment URL.
+	#
+	# These handles are CANONICAL surface (both renderings keep them): a legacy-name request to
+	# /surveys/x first 301s to the canonical host with the path preserved (the legacy block's {uri}
+	# redir), THEN this section maps it - two hops for legacy deep paths, one for canonical. A hop at
+	# THIS block lands in the masked access log above (this block logs, the legacy one does not); the
+	# analytics fold already excludes it twice over (aggregate_stats.py counts only /data/* paths,
+	# and 301 sits outside every admitted status set) - pinned in deploy/tests.
+	map {http.request.uri} {ausmt_pathurl_rest} {
+		~^([^?]*) "${1}"
+		default ""
+	}
+	map {http.request.uri} {ausmt_qs} {
+		~\?(.*)$ "?${1}"
+		default ""
+	}
+	@surveys_bare path /surveys /surveys/
+	handle @surveys_bare {
+		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent
+	}
+	handle_path /surveys/* {
+		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs}#/survey{ausmt_pathurl_rest} permanent
+	}
+	@stations_bare path /stations /stations/
+	handle @stations_bare {
+		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent
+	}
+	handle_path /stations/* {
+		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs}#/station{ausmt_pathurl_rest} permanent
+	}
+	@collections_bare path /collections /collections/
+	handle @collections_bare {
+		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent
+	}
+	handle_path /collections/* {
+		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs}#/collection{ausmt_pathurl_rest} permanent
+	}
+	# ---- end path-url contract ----------------------------------------------------------------------
+
 	# Deny-by-default: every other /gateway path (both slash forms) AND any non-GET /add-survey.html is
 	# an explicit 404, never proxied. Listed AFTER the allow handles so the public subset wins; a
 	# curator/admin path, a bare /gateway, or a wrong-method public route lands here.

@@ -14,6 +14,7 @@ on the gateway-ci ubuntu lane it RUNS with nothing skipped, so the skip tripwire
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -140,8 +141,14 @@ def _setup_real_caddyfile(tmp_path: Path, *, legacy: str | None) -> tuple[Path, 
     return work, env
 
 
+_PLACEHOLDER_TOKEN = re.compile(r"\{[^{}\s]+\}")
+
+
 def _site_addresses(text: str) -> list[str]:
-    """Depth-0 site-block addresses (the global options block, a bare '{', excluded)."""
+    """Depth-0 site-block addresses (the global options block, a bare '{', excluded). Depth counts
+    braces with PLACEHOLDER tokens removed first: a directive line like `map {src} {dest} {` (the
+    path-url contract lane) carries balanced placeholder braces beside one structural opener, and
+    counting raw braces would inflate the depth permanently and hide every later site address."""
     out, depth = [], 0
     for raw in text.splitlines():
         line = raw.strip()
@@ -149,7 +156,8 @@ def _site_addresses(text: str) -> list[str]:
             continue
         if depth == 0 and line.endswith("{") and line[:-1].strip():
             out.append(line[:-1].strip())
-        depth += line.count("{") - line.count("}")
+        structural = _PLACEHOLDER_TOKEN.sub("", line)
+        depth += structural.count("{") - structural.count("}")
     return out
 
 

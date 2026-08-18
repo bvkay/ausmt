@@ -22,6 +22,11 @@
 #       identifier is proven to keep resolving; the https:// probe means Caddy's automatic
 #       HTTP->HTTPS hop can never be what passes the check). When the var is unset both legacy legs
 #       are SKIPPED, not failed.
+#   4c. the PATH-URL CONTRACT (owner ruling 2026-08-18): /surveys/<slug> on the canonical name
+#       answers a 301 whose Location is the fragment route /#/survey/<slug> (probed on the pinned
+#       vulcan-2022 slug; explicit https:// with --resolve so the canonical block's own mapping is
+#       what answers). Skipped cleanly when the edge gives no response at all (the container check
+#       is the authority on a down edge).
 #   5. tailscale is up and the box peer is visible
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
 #   7. disk headroom on the data path
@@ -299,6 +304,39 @@ check_redirect() {
 	fi
 }
 
+check_pathurl_redirect() {
+	name="${AUSMT_PUBLIC_NAME:-}"
+	if [ -z "$name" ]; then
+		warn "pathurl: AUSMT_PUBLIC_NAME unset in $ENV_FILE (cannot probe the path-URL contract)"
+		return
+	fi
+	# vulcan-2022 is PINNED as the probe slug: it is the owner's published Vulcan 2022 survey, in
+	# the served corpus since the portal's first public build, and its slug is frozen by the
+	# url-registry freeze test (portal/data/url_registry.json), so the probe cannot rot silently.
+	# The mapping under test is mechanical (any /surveys/<x> must 301 to /#/survey/<x>), but probing
+	# a REAL published slug means a PASS also proves a link someone actually holds keeps resolving.
+	slug="vulcan-2022"
+	# Explicit https:// with --resolve to loopback, exactly like the legacy redirect leg: the
+	# canonical block's own mapping must be what answers, never a DNS detour or the automatic
+	# HTTP->HTTPS hop. -I (headers only), no -L: the FIRST hop is the contract.
+	hdrs="$($CURL -sSI --max-time 8 --resolve "$name:443:127.0.0.1" \
+		"https://$name/surveys/$slug" 2>/dev/null | tr -d '\r')"
+	if [ -z "$hdrs" ]; then
+		# No response AT ALL (edge down/unreachable): skip cleanly - the container/tls checks are
+		# the authority on a down edge, and a FAIL here would double-report the same outage.
+		pass "pathurl: skipped (no response from https://$name/surveys/$slug - edge unreachable; see the container check)"
+		return
+	fi
+	code="$(printf '%s\n' "$hdrs" | awk 'NR==1{print $2}')"
+	loc="$(printf '%s\n' "$hdrs" | awk 'tolower($1)=="location:"{print $2; exit}')"
+	want="https://$name/#/survey/$slug"
+	if [ "$code" = "301" ] && [ "$loc" = "$want" ]; then
+		pass "pathurl: https://$name/surveys/$slug 301s to $want (permanent, path-URL contract)"
+	else
+		fail "pathurl: https://$name/surveys/$slug -> ${code:-no-code} ${loc:-no-location} (want 301 -> $want)"
+	fi
+}
+
 check_tailscale() {
 	if ! $TAILSCALE status >/dev/null 2>&1; then
 		fail "tailscale: not up (tailscale status failed) - the edge cannot reach the box"
@@ -372,6 +410,7 @@ run_report() {
 	check_tls
 	check_tls_legacy
 	check_redirect
+	check_pathurl_redirect
 	check_tailscale
 	check_zombies
 	check_disk

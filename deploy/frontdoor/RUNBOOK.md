@@ -303,6 +303,29 @@ curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n' -L https://ausmt.au/d
 curl -sSI http://ausmt.au/ | grep -i location               # hop 1: https://ausmt.au/
 ```
 
+9.2c **Path-URL contract legs (tier 1, owner ruling 2026-08-18).** The three published shapes must
+     each answer a permanent 301 into the portal's hash route on the canonical name. These are the
+     PUBLISHED URL contract (`/surveys/<slug>`, `/stations/<ausmt_id>`, `/collections/<id>`), the
+     form that goes into emails, talks, papers and programme pages. `./doctor.sh` runs the survey
+     leg as a gate (pinned on vulcan-2022).
+```sh
+curl -sSI https://ausmt.auscope.org.au/surveys/vulcan-2022 | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/survey/vulcan-2022
+curl -sSI https://ausmt.auscope.org.au/stations/au.vulcan-2022.MBV07 | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/station/au.vulcan-2022.MBV07
+curl -sSI https://ausmt.auscope.org.au/collections/auslamp | grep -iE '^(HTTP|location)'
+#   expect: HTTP/2 301  and  location: https://ausmt.auscope.org.au/#/collection/auslamp
+# a query on a path-shaped link is preserved BEFORE the fragment, never eaten:
+curl -sSI 'https://ausmt.auscope.org.au/surveys/vulcan-2022?utm=1' | grep -i location
+#   expect: location: https://ausmt.auscope.org.au/?utm=1#/survey/vulcan-2022
+# a bare prefix (no id) lands on the portal root, not a broken empty-fragment URL:
+curl -sSI https://ausmt.auscope.org.au/surveys/ | grep -i location
+#   expect: location: https://ausmt.auscope.org.au/
+# a LEGACY-name path link takes two hops by design (host 301 with the path preserved, THEN the
+# canonical block's fragment mapping) and ends at the hash route:
+curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n' -L 'https://ausmt.au/surveys/vulcan-2022'
+```
+
 9.3  **Wall checks from OUTSIDE (the public wall).** The public subset must be served; every other
      `/gateway` path (the curator workbench) must refuse.
 ```sh
@@ -336,6 +359,50 @@ sudo systemctl start ausmt-stats.service
 ```
 
 The bridge is live once step 7 (pre-DNS gate) and 9.1–9.4 all pass.
+
+---
+
+## 9P. The path-URL contract (owner ruling 2026-08-18)
+
+Path-shaped URLs are the PUBLISHED CONTRACT for the portal's three entity kinds:
+
+```
+/surveys/<slug>        -> the portal with that survey's view open
+/stations/<ausmt_id>   -> the portal with that station's drawer open
+/collections/<id>      -> the portal with that collection page open
+```
+
+Pre-DOI is the cheapest moment to fix URL shape forever: the shape is what gets published (emails,
+talks, papers, programme pages, eventually DOI metadata and RAiD landing links); the machinery
+behind it can upgrade without breaking a link.
+
+**Tier 1 (LIVE, this stack):** the canonical site block 301s each shape into the SPA's hash route
+(`/surveys/x` -> `/#/survey/x`, likewise station/collection). The redirects are canonical surface:
+a legacy-name (`ausmt.au`) request to a path-shaped URL takes **two hops** by design - the legacy
+block's host 301 with path and query preserved, then the canonical block's fragment mapping - while
+a canonical-name request takes one. A query on a path-shaped link is preserved onto the target
+**before the fragment** (`/surveys/x?utm=1` -> `/?utm=1#/survey/x`); a bare `/surveys` or
+`/surveys/` (no id) lands on the portal root. The entity id itself rides byte-for-byte (the
+mechanism never decodes or re-encodes it). All of it is `permanent` (301): these are contracts, so
+`temporary`/302 may never appear. The redirect hop lands in the masked access log (the canonical
+block logs); the analytics fold does NOT count it - aggregate_stats.py counts only `/data/*` paths
+and admits no 301 in any counted class, so a path-link visit is counted once, at the SPA boot that
+follows the hop (pinned in deploy/tests).
+
+**Tier 2 (deferred): real SPA path routes.** The app is served AT the path, the router reads
+`location.pathname`, and the pretty URL persists in the address bar instead of collapsing to the
+hash form. Purely a portal/router upgrade behind the same shapes: **no published URL changes when
+it comes** - the tier-1 redirects simply retire from mapping duty.
+
+**Tier 3 (deferred, DOI time): prerendered per-entity landing pages** at the same paths, giving
+each survey/station/collection real crawlable HTML (the build's own caveat names this: real
+per-page SEO needs path-based routing + prerender). Again **no published URL changes when it
+comes**: the paths stop redirecting and start serving, and every link ever published keeps
+resolving.
+
+The id vocabulary behind these URLs is FROZEN in `portal/data/url_registry.json` (every published
+survey slug, station ausmt_id and collection id): an id that would move fails the registry check
+with instructions to add a redirect entry and a dated registry note instead of renaming silently.
 
 ---
 
@@ -410,7 +477,9 @@ canonical TLS certificate is present with days-to-expiry (WARN inside the renewa
 `AUSMT_LEGACY_REDIRECT_NAME` is set, the LEGACY certificate too (missing = FAIL, the redirect contract
 is down) plus the explicit HTTPS 301 leg (the legacy name must answer `https://.../data/mtcat.schema.json`
 with a 301 to the same path on the canonical name; both legs are skipped cleanly when the var is
-unset); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);
+unset); the path-URL contract leg (`https://<canonical>/surveys/vulcan-2022` must 301 to
+`/#/survey/vulcan-2022`; skipped cleanly if the edge gives no response at all, since the container
+check already owns a down edge); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);
 disk headroom; and the public DNS A record still resolves to this host (set `AUSMT_DOCTOR_EXPECT_IP`
 to the VPS public IP to verify the target, otherwise that check WARNs). Every external command and
 path is overridable by an `AUSMT_DOCTOR_*` env var (see the script header).

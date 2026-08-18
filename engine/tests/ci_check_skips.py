@@ -107,6 +107,15 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # constructed adversarial cases in the same module assert the identical property against the real
     # reader on every run, so this entry excuses the scale of the proof, never the proof itself.
     "set AUSMT_PREFLIGHT_CORPUS to a directory of EDIs",
+    # test_url_registry.py's real-build arm re-runs the slug/id freeze check against an actual BUILT
+    # data tree (mtcat.json), named by AUSMT_URL_REGISTRY_DATA - a built corpus exists on the dev box
+    # and on the deployed box, never in a CI engine lane (the lanes build no corpus). Same
+    # dev-box-only class as the three entries above. The freeze invariant is NOT unguarded in CI:
+    # the fixture tests in the same module prove the checker's fail/pass/refuse behaviour on every
+    # run, and the committed registry file itself is validated structurally; this entry excuses the
+    # real-corpus leg only. (Added when the path-URL contract lane's first CI run tripped this
+    # tripwire on the new skip - the tripwire working exactly as designed.)
+    "AUSMT_URL_REGISTRY_DATA does not name a built data dir",
 ]
 
 # `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token
