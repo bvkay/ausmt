@@ -103,14 +103,18 @@ code += "\nwindow.__api={" +
   "setup:(c,t,s,sv,coll,cp)=>{CAT=c;TFD=t;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;COORD_POLICY=cp||{};buildState();buildTree();}," +
   "idxOf:(id)=>ST.findIndex(s=>s.id===id)," +
   "buildMarkersRun:()=>{buildMarkers();return {marker:ST.map(s=>({id:s.id,has:s.marker!==undefined}))};}," +
-  // driveRefresh runs the REAL refresh() (which routes partitionMarkers(visible.filter(hasPosition)) into the
-  // map layers) and reports what actually reached them — routed markers, any undefined (an addLayers(undefined)
-  // crash), and the `visible` ids (counts must still include the withheld station). UX8 (X3): the non-AusLAMP
-  // markers now route through the per-survey cluster facade (_survClusters[sv]), so aggregate across those
-  // sub-groups plus the unclustered lpmtLayer, rather than reading the old single group's _layers.
+  // driveRefresh runs the REAL refresh() (which routes routeVisibleToLayers() into the map layers) and
+  // reports what actually reached them - routed markers, any undefined (an addLayer(undefined) crash), and
+  // the `visible` ids (counts must still include the withheld station). Change 6: proximity clustering and
+  // its per-survey cluster facade are gone, so read the ONE dot container plus the badge layer. A badge
+  // stands for a whole survey's stations, so a station routed into a badge is NOT in dotLayer - count the
+  // badged stations too, or a badged survey would look like stations that went missing.
   "driveRefresh:()=>{buildMarkers();refresh();" +
-  "const all=[].concat(...Object.keys(_survClusters).map(sv=>_survClusters[sv]._layers||[]),(lpmtLayer._layers||[]));" +
-  "return {routedCount:all.length,undef:all.filter(m=>m===undefined).length,vis:visible.map(s=>s.id)};}," +
+  "const dots=(dotLayer._layers||[]);const badges=(badgeLayer._layers||[]);" +
+  "const badged=partitionForDisplay(visible.filter(hasPosition),curZoom(),{auslampSet:AUSLAMP_SET,badgesEnabled:badgesEnabledForMode()})" +
+  ".badges.reduce((a,b)=>a+b.count,0);" +
+  "return {routedCount:dots.length+badged,dotCount:dots.length,badgeCount:badges.length," +
+  "undef:dots.filter(m=>m===undefined).length,vis:visible.map(s=>s.id)};}," +
   "footprints:()=>{buildFootprints();return true;}," +
   "recolorRun:()=>{recolor();return true;}," +
   "openDrawer:(i)=>{try{openStation(i);return {ok:true,html:document.getElementById('drawer').innerHTML};}catch(e){return {ok:false,err:String(e&&e.stack||e)};}}," +

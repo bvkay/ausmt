@@ -379,7 +379,11 @@ function maybeShowIntro(){if(tourRequested()){startTourSafe();dropTourParam();re
 // store: a legend click flips the SAME checkbox the rail owns and dispatches its change event, so the one
 // existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the header
 // counts, the surveys-view decoupling and the select-lens semantics - exactly as a rail click does.
-// The "stations (zoom to expand)" cluster row is NOT a control and stays an inert div.
+// Change 6: the survey-BADGE row ("n survey (click to open; zoom to expand)") is NOT a control and stays an
+// inert div. Its wording changed with the thing it describes: it used to read "stations (zoom to expand)",
+// which described a proximity cluster - a count of stations that happened to be near each other. A badge is
+// a SURVEY, it opens that survey's drawer on click, and it expands past its zoom threshold, so the row now
+// states both of the things a reader can do with it and stops naming an object that no longer exists.
 //
 // Resolve a rail type checkbox by its type key (LPMT / BBMT / AMT / GDS - the keys passesCore compares
 // against s.type). Read live from the DOM on each call: the rail is the single source of truth.
@@ -412,7 +416,7 @@ function buildLegend(){
   // where the eye lands first, without adding a heading the desktop layout never had.
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
     `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>`+
-    `<div class="legrow"><span class="legcluster">n</span> stations (zoom to expand)</div>${rows}</div>`;
+    `<div class="legrow"><span class="legbadge">n</span> survey (click to open; zoom to expand)</div>${rows}</div>`;
   host.appendChild(el);
   const toggle=el.querySelector("#mapLegendToggle");
   if(toggle)toggle.addEventListener("click",()=>{const ex=el.classList.toggle("expanded");toggle.setAttribute("aria-expanded",String(ex));});

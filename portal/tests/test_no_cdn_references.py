@@ -2,8 +2,13 @@
 
 index.html loaded Leaflet, Leaflet.markercluster, Leaflet.draw and JSZip from cdnjs.cloudflare.com at
 page-load time: a CDN outage, block, or supply-chain compromise there could silently break or tamper
-with every page load. All four libraries are now vendored under portal/vendor/ and referenced by
-relative path (see portal/vendor/README.md for upstream URLs + sha256 provenance).
+with every page load. The libraries are now vendored under portal/vendor/ and referenced by relative
+path (see portal/vendor/README.md for upstream URLs + sha256 provenance).
+
+Change 6 (owner, 2026-08-18) RETIRED Leaflet.markercluster: proximity clustering was replaced by
+per-survey badges, so the plugin, its stylesheet and both vendored files are gone. The vendored set below
+is therefore the THREE remaining libraries. tests/test_map_badges.py owns the assertion that no
+markercluster asset or reference comes back.
 
 Fails if: `cdnjs.cloudflare.com` reappears anywhere in the shipped HTML entry points, OR any vendored
 script/link tag in index.html points somewhere other than `vendor/`.
@@ -27,15 +32,15 @@ def test_no_cdnjs_reference_in_html():
 
 def test_leaflet_and_jszip_assets_are_vendored():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    for tag_src in ("vendor/leaflet.css", "vendor/MarkerCluster.min.css", "vendor/leaflet.draw.css",
-                     "vendor/leaflet.js", "vendor/leaflet.markercluster.min.js", "vendor/leaflet.draw.js",
+    for tag_src in ("vendor/leaflet.css", "vendor/leaflet.draw.css",
+                     "vendor/leaflet.js", "vendor/leaflet.draw.js",
                      "vendor/jszip.min.js"):
         assert tag_src in html, f"expected index.html to reference {tag_src}"
 
 
 def test_vendor_files_present_and_nonempty():
-    for name in ("leaflet.js", "leaflet.css", "jszip.min.js", "leaflet.markercluster.min.js",
-                 "MarkerCluster.min.css", "leaflet.draw.js", "leaflet.draw.css"):
+    for name in ("leaflet.js", "leaflet.css", "jszip.min.js",
+                 "leaflet.draw.js", "leaflet.draw.css"):
         p = ROOT / "vendor" / name
         assert p.exists(), f"missing vendored asset {p}"
         assert p.stat().st_size > 0, f"vendored asset {p} is empty"

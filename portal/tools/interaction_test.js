@@ -189,7 +189,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // explicit sets; setColorMode drives the colour-mode assertions. The ST-poke + selectSurvey/selCount
   // hooks verify draw/select flows still COUNT a re-classified station (which may move map containers) —
   // the counting logic reads `visible`/ST, not layer membership, so it stays membership-agnostic.
-  "partitionMarkers,isAuslampSurvey,radiusForZoom,weightForZoom,markerColor,tooltipText,buildAuslampSet," +
+  "isAuslampSurvey,radiusForZoom,weightForZoom,markerColor,tooltipText,buildAuslampSet," +
+  // Change 6 hooks: the badge rule + router (pure), the layer containers' contents, and the mode gate.
+  "shouldBadgeSurvey,partitionForDisplay,mercatorPixelSpan,surveyCentroid,badgesEnabledForMode," +
+  "routeVisibleToLayers,routePasses:()=>_routePasses,lastRoute:()=>_lastRoute," +
   "auslampSet:()=>AUSLAMP_SET,setAuslampSet:(arr)=>{AUSLAMP_SET=new Set(arr);}," +
   "setColorMode:(m)=>{colorMode=m;},selectSurvey,renderCards,openSurvey," +
   // Survey-drawer lane hooks. focusSurvey drives the header "View on map" path; drawerFitOptions is the
@@ -228,7 +231,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // buckets markers by their _survey stamp (the per-survey cluster split); licBadgeState/licIsOpen/
   // attributionText are the W3b licence/attribution helpers; setSMETA patches a survey's metadata so the
   // driver can drive the attribution/sources render paths that the base fixture doesn't carry.
-  "screeningIndicators,maturityModel,groupMarkersBySurvey,licBadgeState,licIsOpen,attributionText," +
+  "screeningIndicators,maturityModel,licBadgeState,licIsOpen,attributionText," +
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
   // Card-lane polish hooks. processingSoftwareText/pubShortCite are the PURE lineage derivations (the
   // most-specific software string, and a publication reduced to a short cite without fabricating an
@@ -717,32 +720,42 @@ async function bootFreshWindow(dataMap, url) {
   ];
   const _explicit = new Set(["as1", "as1b"]);
   A.setAuslampSet([..._explicit]);
-  const _part = A.partitionMarkers(_sampleStations);
-  ok(_part.unclustered.length === 2 && _part.unclustered.every(s => _explicit.has(s.slug)),
-    "partitionMarkers must route ONLY AusLAMP-member stations to the unclustered layer, got slugs: " +
-    JSON.stringify(_part.unclustered.map(s => s.slug)));
-  ok(_part.clustered.length === 4 && _part.clustered.every(s => !_explicit.has(s.slug)),
-    "partitionMarkers must cluster every non-member — INCLUDING legacy non-AusLAMP LPMT (the UX4 change), got slugs: " +
-    JSON.stringify(_part.clustered.map(s => s.slug)));
-  // The load-bearing new-only assertion: a NON-member LPMT is in the CLUSTERED bucket (pre-UX4 it was unclustered).
-  ok(_part.clustered.some(s => s.slug === "legacy-lp" && s.type === "LPMT"),
-    "a legacy (non-AusLAMP) LPMT station must now CLUSTER — this is the UX4 D2 behaviour that fails on base");
-  // Empty AUSLAMP_SET => graceful degrade: EVERYTHING clusters (nothing is AusLAMP).
+  // CHANGE 6 SUPERSEDES the two-container partition: proximity clustering is gone, so there is no
+  // "clustered vs unclustered" layer split to route into any more. What SURVIVED is the decision the split
+  // existed to protect - AusLAMP members are never collapsed - and it now lives in shouldBadgeSurvey. So
+  // this asserts the surviving RULE on the same sample: a member never badges, a legacy non-AusLAMP LPMT
+  // is treated like any other survey (the UX4-D2 behaviour that fails on pre-UX4 code), and an empty set
+  // degrades gracefully. The router's own pins (one-badge-per-survey, centroid, conservation) live in
+  // tools/map_badges_test.js, which drives the pure functions on plain objects.
+  const _compact = { w: 140, e: 140.05, so: -31, no: -30.95 };   // small enough to badge at national zoom
+  const _rule = (slug) => A.shouldBadgeSurvey({
+    count: 20, zoom: 4, bbox: _compact, badgesEnabled: true,
+    isAuslamp: A.isAuslampSurvey(slug, A.auslampSet()) });
+  ok(_rule("as1") === false && _rule("as1b") === false,
+    "an AusLAMP member must NEVER collapse into a badge (the never-cluster privilege the partition protected)");
+  ok(_rule("legacy-lp") === true,
+    "a legacy (non-AusLAMP) LPMT survey must be treated like any other survey - this is the UX4 D2 behaviour that fails on base");
+  ok(_rule("bb") === true && _rule("gds") === true && _rule("am") === true,
+    "a compact non-member survey of any type must badge at national zoom");
+  // Empty AUSLAMP_SET => graceful degrade: nothing is AusLAMP, so nothing gets the privilege.
   A.setAuslampSet([]);
-  const _degrade = A.partitionMarkers(_sampleStations);
-  ok(_degrade.unclustered.length === 0 && _degrade.clustered.length === _sampleStations.length,
-    "empty AUSLAMP_SET must degrade to all-clustered, got unclustered=" + _degrade.unclustered.length);
-  // No station dropped or duplicated across the two containers.
-  ok(_part.unclustered.length + _part.clustered.length === _sampleStations.length,
-    "partitionMarkers dropped or duplicated a station across the two containers");
+  ok(A.shouldBadgeSurvey({ count: 20, zoom: 4, bbox: _compact, badgesEnabled: true,
+      isAuslamp: A.isAuslampSurvey("as1", A.auslampSet()) }) === true,
+    "an empty AUSLAMP_SET must degrade to 'nothing is AusLAMP' (no member privilege), not to a crash");
   A.buildAuslampSet();   // restore the boot-built set for the rest of the run
 
-  // UX4 (D4) ZOOM-SCALED RADII. radiusForZoom/weightForZoom are pure step functions: pinned values +
-  // monotone non-decreasing in z. If either drifts from the frozen table this fails.
-  ok(A.radiusForZoom(3) === 2.5 && A.radiusForZoom(4) === 2.5, "radiusForZoom(z<=4) must be 2.5");   // O5: every tier one step smaller
-  ok(A.radiusForZoom(5) === 3.5, "radiusForZoom(5) must be 3.5");
-  ok(A.radiusForZoom(6) === 4.5, "radiusForZoom(6) must be 4.5");
-  ok(A.radiusForZoom(7) === 5 && A.radiusForZoom(12) === 5, "radiusForZoom(z>=7) must be 5");
+  // CHANGE 6 ZOOM-SCALED RADII. The UX4-D4 four-step ladder (2.5/3.5/4.5/5) is replaced by a CONTINUOUS,
+  // TYPE-AWARE ramp with a floor and a ceiling. The pinned PROPERTY is unchanged and still asserted here
+  // (monotone non-decreasing in z); the exact curve, its bounds and the LP-under-BB relation are pinned in
+  // tools/map_badges_test.js against the named constants.
+  for (let z = 0; z < 16; z++) {
+    ok(A.radiusForZoom(z + 1) >= A.radiusForZoom(z),
+      "radiusForZoom must stay monotone non-decreasing in z (z=" + z + ")");
+  }
+  ok(A.radiusForZoom(4, "LPMT") < A.radiusForZoom(4, "BBMT"),
+    "the LP fabric must render SMALLER than a BB dot at national zoom (change 6: texture beneath, surveys above)");
+  ok(A.radiusForZoom(4) === A.radiusForZoom(4, "BBMT"),
+    "radiusForZoom with no type must take the standard ramp (back-compatible call form)");
   ok(A.weightForZoom(4) === 1.0 && A.weightForZoom(0) === 1.0, "weightForZoom(z<=4) must be 1.0");
   ok(A.weightForZoom(5) === 1.5 && A.weightForZoom(9) === 1.5, "weightForZoom(z>=5) must be 1.5");
   for (let z = 0; z < 12; z++) {
@@ -1006,6 +1019,83 @@ async function bootFreshWindow(dataMap, url) {
   ok(A.bgClickShouldClose(false, null) === false, "ruling 5: a background click with no drawer open is a no-op");
   ok(A.bgClickShouldClose(true, "rectangle") === false,
     "ruling 5: a background click while a draw is ARMED is placing a corner, not dismissing the drawer");
+
+  // F4. CHANGE 6: MAP DECLUTTER - the wiring jsdom can actually observe.
+  //     HONESTY: Leaflet is stubbed, so a badge here is a Proxy in a stubbed layer group, not a rendered
+  //     marker. What is proven below is the ROUTING (which surveys the app decides to badge, through the
+  //     shipped router, against the real fixture) and the MODE GATE. The pure rule, the centroid, the
+  //     threshold crossing, the conservation invariant and the radius curve are all proven for real -
+  //     on plain objects, against shipped code - in tools/map_badges_test.js. What NOTHING automated
+  //     proves: that a rendered badge is clickable and lands where the centroid says. That is the
+  //     architect's browser click-through.
+  A.closeDrawer();
+  A.setSidebarMode("browse"); A.setView("map"); A.refresh();
+  // The fixture's surveys are compact (Alpha's two stations are ~1.4 deg apart, Beta/Gamma/Delta single),
+  // so the routing decision is exercised on real app state rather than a hand-built list.
+  const _routed = A.routeVisibleToLayers();
+  ok(Array.isArray(_routed.badges) && Array.isArray(_routed.dots),
+    "change 6: routeVisibleToLayers must return the badge/dot split it painted");
+  // CONSERVATION on the live fixture: every positioned station is either a dot or inside exactly one badge.
+  const _accounted = _routed.dots.length + _routed.badges.reduce((a, b) => a + b.count, 0);
+  ok(_accounted === A.visIds().length,
+    "change 6: every visible station must be accounted for exactly once as a dot or inside a badge, got " +
+    _accounted + " vs " + A.visIds().length);
+  // ONE BADGE PER SURVEY on the live fixture, not just on synthetic input.
+  const _svNames = _routed.badges.map(b => b.survey);
+  ok(_svNames.length === new Set(_svNames).size,
+    "change 6: no survey may appear twice in the badge list, got " + JSON.stringify(_svNames));
+  // The shared fixture cannot badge as-is, and that is itself worth stating: Alpha and Beta are AusLAMP
+  // members (never badge, by ruling) and Gamma/Delta hold a single station each (below BADGE_MIN_STATIONS).
+  // So every badge assertion below FIRST clears AUSLAMP_SET, which makes Alpha - two stations ~1 degree
+  // apart, well inside the 64px span at national zoom - the one badging survey. Without this the mode legs
+  // would "pass" against zero badges in both modes, which proves nothing at all.
+  A.setAuslampSet([]);
+  const _bRouted = A.routeVisibleToLayers();
+  ok(_bRouted.badges.length === 1 && _bRouted.badges[0].survey === "Alpha Survey",
+    "change 6: with the AusLAMP privilege lifted, compact Alpha must badge, got " +
+    JSON.stringify(_bRouted.badges.map(b => b.survey)));
+  ok(_bRouted.badges[0].count === 2, "change 6: the badge must carry Alpha's 2 stations, got " + _bRouted.badges[0].count);
+  ok(_bRouted.dots.length + 2 === A.visIds().length,
+    "change 6: the badged survey's stations must leave the dot list exactly once, got " + _bRouted.dots.length);
+  // MODE GATE (owner item 4): Select & export expands every badge so a lasso can reach the stations.
+  ok(A.badgesEnabledForMode() === true, "change 6: Browse mode must allow badges");
+  A.setSidebarMode("select");
+  ok(A.badgesEnabledForMode() === false, "change 6: Select & export must disable badging");
+  const _selRouted = A.routeVisibleToLayers();
+  ok(_selRouted.badges.length === 0,
+    "change 6 (item 4): Select & export must expand EVERY badge to dots, got " + _selRouted.badges.length);
+  ok(_selRouted.dots.length === A.visIds().length,
+    "change 6 (item 4): in Select mode every visible station must be an individually selectable dot, got " +
+    _selRouted.dots.length + " of " + A.visIds().length);
+  // Selection must actually be able to capture the stations of a survey that WAS badged in Browse.
+  A.setSelected(A.visIds());
+  ok(A.selCount() === A.visIds().length,
+    "change 6 (item 4): Select mode must capture every station of a previously-badged survey, got " + A.selCount());
+  A.setSelected([]);
+  // RETURNING TO BROWSE MUST RE-BADGE THE LAYERS, not merely re-enable the gate. Those are two different
+  // claims and the first version of this leg only made the second, which is how a real defect shipped past
+  // it: setSidebarMode skipped re-routing on select->browse because restoreSelectLens() was assumed to
+  // refresh - but it returns early unless a lens is actually live, and a visitor who just clicks Select then
+  // Browse never opens one. The map then stayed expanded with no badge until something unrelated refreshed.
+  // Caught by clicking the real page. This drives that exact NO-LENS path and asserts the painted layer.
+  // Observed through the ROUTER's own telemetry, not the layer contents: a stubbed Leaflet layer group's
+  // _layers is an unreadable Proxy, so "what the map now holds" is not inspectable here. What IS honest and
+  // sufficient is that the action CAUSED a routing pass and what that pass decided.
+  A.setSidebarMode("browse");                       // the leg above left us in Select; start from Browse
+  const _badgesBeforeSelect = A.routeVisibleToLayers().badges.length;
+  ok(_badgesBeforeSelect > 0, "change 6 setup: Browse at the fixture's zoom must route at least one badge");
+  A.setSidebarMode("select");
+  ok(A.lastRoute().badges.length === 0,
+    "change 6: entering Select must re-route with every badge expanded, got " + A.lastRoute().badges.length);
+  const _passesBeforeBrowse = A.routePasses();
+  A.setSidebarMode("browse");                       // NO lens was ever entered - the defect's exact path
+  ok(A.badgesEnabledForMode() === true, "change 6: returning to Browse must re-enable badging");
+  ok(A.routePasses() > _passesBeforeBrowse,
+    "change 6: returning to Browse must TRIGGER a re-route (the no-lens path did not, and badges stayed expanded)");
+  ok(A.lastRoute().badges.length === _badgesBeforeSelect,
+    "change 6: returning to Browse must REPAINT the badges (not just re-enable the gate), got " +
+    A.lastRoute().badges.length + " vs " + _badgesBeforeSelect + " before");
+  A.buildAuslampSet(); A.refresh();       // restore the boot-built membership for the rest of the run
 
   // G. WELCOME POPUP (UX7b U7): on first visit a small CENTRED MODAL (#introWelcome) shows — successor to
   // the Wave D corner strip (which is GONE). role=dialog, focus-managed; "Take the 2-minute tour" starts
@@ -2197,7 +2287,14 @@ async function bootFreshWindow(dataMap, url) {
   // the dots reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (a hard-coded hex would fail).
   const legend = doc.getElementById("mapLegend");
   ok(legend, "D6: #mapLegend was not built");
-  ok(/stations \(zoom to expand\)/.test(legend.textContent), "D6: the cluster-bubble legend row is missing");
+  // Change 6: the legend row describes a survey BADGE now, not a proximity bubble. RED-first: the old
+  // "stations (zoom to expand)" wording fails here, because it named an object the map no longer draws and
+  // omitted the thing a badge mainly does (open its survey).
+  ok(/survey \(click to open; zoom to expand\)/.test(legend.textContent),
+    "change 6: the legend must describe the survey badge as 'survey (click to open; zoom to expand)', got: " +
+    JSON.stringify(legend.textContent));
+  ok(!/stations \(zoom to expand\)/.test(legend.textContent),
+    "change 6: the retired proximity-cluster legend wording must be GONE");
   const legDots = [...legend.querySelectorAll(".legrow .dot")];
   ok(legDots.length === 4, "D6: expected 4 data-type legend dots, got " + legDots.length);
   ["--lpmt", "--bbmt", "--amt", "--gds"].forEach(tok =>
@@ -2504,16 +2601,34 @@ async function bootFreshWindow(dataMap, url) {
   ok(legEl && legEl.parentElement && legEl.parentElement.id === "map",
     "X2: the map legend must be parented INTO the map container (#map), got parent: " + (legEl && legEl.parentElement && legEl.parentElement.id));
 
-  // X3. PER-SURVEY CLUSTER GROUPING. groupMarkersBySurvey buckets markers by their _survey stamp; TWO
-  // surveys => TWO buckets (=> two separate bubbles), and reassigning one marker's survey MOVES it between
-  // buckets. PURE (jsdom can't render Leaflet bubbles) — driven with plain-object markers with real string _survey.
-  const mkr = (id, sv) => ({ id, _survey: sv });
-  const gA = A.groupMarkersBySurvey([mkr("a", "Burra"), mkr("b", "Burra"), mkr("c", "Robertstown")]);
-  ok(Object.keys(gA).length === 2, "X3: two nearby surveys must produce TWO buckets (two bubbles), got " + Object.keys(gA).length);
-  ok(gA["Burra"].length === 2 && gA["Robertstown"].length === 1, "X3: a bucket must hold ONLY its own survey's markers (clusters never mix surveys)");
-  const gB = A.groupMarkersBySurvey([mkr("a", "Burra"), mkr("b", "Robertstown"), mkr("c", "Robertstown")]);
-  ok(gB["Burra"].length === 1 && gB["Robertstown"].length === 2,
-    "X3: reassigning a marker's _survey must move it between buckets (grouping is by survey, falsifiably)");
+  // X3 CARRIED FORWARD INTO CHANGE 6. The UX8-X3 ruling was "a grouped map object never mixes surveys",
+  // which groupMarkersBySurvey enforced for cluster bubbles. Clustering is gone, and the ruling is now
+  // STRUCTURAL rather than enforced: partitionForDisplay keys by survey, so a badge is a survey by
+  // construction. Two nearby COMPACT surveys must therefore still give TWO badges (never one merged
+  // object), and a station reassigned to another survey must move with it. Driven pure, on plain objects.
+  const st = (id, sv, lat, lon) => ({ id, survey: sv, slug: sv.toLowerCase(), lat, lon });
+  const twoNearby = [
+    st("a", "Burra", -33.700, 138.900), st("b", "Burra", -33.710, 138.910),
+    st("c", "Robertstown", -33.750, 138.960), st("d", "Robertstown", -33.760, 138.970),
+  ];
+  const gA = A.partitionForDisplay(twoNearby, 4, { auslampSet: new Set(), badgesEnabled: true });
+  ok(gA.badges.length === 2,
+    "X3/change 6: two nearby compact surveys must produce TWO badges, never one merged object, got " + gA.badges.length);
+  ok(gA.badges.every(b => b.count === 2),
+    "X3/change 6: a badge must count ONLY its own survey's stations (badges never mix surveys), got " +
+    JSON.stringify(gA.badges.map(b => [b.survey, b.count])));
+  // Reassigning a station's survey moves it between badges - the grouping key is the survey, falsifiably.
+  // Moving "d" to Burra also drops Robertstown to ONE station, which is below BADGE_MIN_STATIONS, so it
+  // correctly stops badging and renders as a plain dot. Both halves are asserted: the count follows the
+  // reassignment, AND the min-stations rule fires on the survey that was left too small to badge.
+  const moved = twoNearby.map(s => s.id === "d" ? { ...s, survey: "Burra", slug: "burra" } : s);
+  const gB = A.partitionForDisplay(moved, 4, { auslampSet: new Set(), badgesEnabled: true });
+  const byName = Object.fromEntries(gB.badges.map(b => [b.survey, b.count]));
+  ok(byName["Burra"] === 3,
+    "X3/change 6: reassigning a station's survey must move it between badges, got " + JSON.stringify(byName));
+  ok(byName["Robertstown"] === undefined && gB.dots.length === 1 && gB.dots[0].survey === "Robertstown",
+    "X3/change 6: a survey left with a single station must stop badging and render as a dot, got dots=" +
+    JSON.stringify(gB.dots.map(s => s.id)));
 
   // X5. SCREENING INDICATORS — the five-row list is derived ONLY from computed quantities; each field->state
   // mapping is FALSIFIABLE (flip one input, exactly one indicator flips). An all-good baseline, then perturb.
@@ -3190,11 +3305,13 @@ async function bootFreshWindow(dataMap, url) {
     "LEG: the legend rows must carry the EXACT rail type keys, in rail order, got " + JSON.stringify(legBtns.map(b => b.dataset.type)));
   ok(legBtns.every(b => b.getAttribute("aria-pressed") === "true"),
     "LEG: every legend type must read aria-pressed=true while its rail checkbox is checked");
-  // The cluster row is NOT a control - it stays exactly as it was.
-  const clusterRow = [...legB.querySelectorAll(".legrow")].find(r => r.querySelector(".legcluster"));
-  ok(clusterRow && clusterRow.tagName === "DIV" && !clusterRow.classList.contains("legtype") &&
-     clusterRow.getAttribute("aria-pressed") === null && !clusterRow.hasAttribute("data-type"),
-    "LEG: the 'stations (zoom to expand)' cluster row must keep NO button semantics");
+  // The BADGE row is a legend KEY, not a control: the clickable thing is the badge on the map, not this
+  // swatch. It must therefore keep no button semantics even though its copy now says "click to open".
+  const badgeRow = [...legB.querySelectorAll(".legrow")].find(r => r.querySelector(".legbadge"));
+  ok(badgeRow && badgeRow.tagName === "DIV" && !badgeRow.classList.contains("legtype") &&
+     badgeRow.getAttribute("aria-pressed") === null && !badgeRow.hasAttribute("data-type"),
+    "LEG: the survey-badge legend row must keep NO button semantics (it describes the map object, it is not one)");
+  ok(!legB.querySelector(".legcluster"), "change 6: the retired .legcluster swatch must be gone");
   // Affordance copy, in place of where a 'Legend' title would have gone (the box has no desktop title).
   const legHint = legB.querySelector(".leghint");
   ok(legHint && /click a type to show or hide it/i.test(legHint.textContent),
