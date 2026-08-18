@@ -88,17 +88,32 @@ def test_curator_survey_related_block_and_doi_badge(tmp_path):
                                       "relation": "IsDerivedFrom", "custodian": "NCI"}],
              "instrument_pid": "10.82388/bt6orvhn"}
     station, story, card = _render(tmp_path, extra)
-    # The Related identifiers block renders on the survey story (identifiersHtml rollup).
-    assert "Related identifiers:" in story, "the Related identifiers block did not render:\n" + story
+    # SURFACE MOVED (survey-drawer lane, ruling 4): the identifiersHtml rollup left the survey story, which
+    # is now the six-slot data-level grid. The rollup itself is UNCHANGED and still renders on the STATION
+    # drawer, so its pins assert there; the survey-side pins below assert the grid carries the same facts.
+    assert "Related identifiers:" in station, "the Related identifiers block did not render:\n" + station
     # relation -> human label, identifier -> doi.org anchor, custodian -> muted text.
-    assert 'href="https://doi.org/10.25914/sv5r-zw68"' in story, \
-        "the DOI-typed identifier is not a doi.org anchor:\n" + story
-    assert "Derived from:" in story, "the relation is not rendered as a human label:\n" + story
-    assert "(NCI)" in story, "the custodian is not rendered:\n" + story
+    assert 'href="https://doi.org/10.25914/sv5r-zw68"' in station, \
+        "the DOI-typed identifier is not a doi.org anchor:\n" + station
+    assert "Derived from:" in station, "the relation is not rendered as a human label:\n" + station
+    assert "(NCI)" in station, "the custodian is not rendered:\n" + station
     # survey-level instrument/platform PID renders its own doi.org-linked line.
-    assert "Platform/instrument PID:" in story, "the survey-level instrument PID line is missing:\n" + story
+    assert "Platform/instrument PID:" in station, "the survey-level instrument PID line is missing:\n" + station
+    assert 'href="https://doi.org/10.82388/bt6orvhn"' in station, \
+        "the instrument PID is not a doi.org anchor:\n" + station
+    # SURVEY GRID: this row carries no `identifies`, so it maps to NO fixed slot and must appear as an EXTRA
+    # tile below the six rather than being silently dropped - the rule that keeps a growing vocabulary safe.
+    assert "Derived from" in story, \
+        "an unmapped related identifier was dropped from the survey grid:\n" + story
+    assert 'href="https://doi.org/10.25914/sv5r-zw68"' in story, \
+        "the unmapped identifier lost its link on the survey grid:\n" + story
+    assert "NCI" in story, "the custodian repository tag is missing from the survey grid:\n" + story
+    # The instruments stay on the survey drawer as ONE compact footer line under the grid (owner ruling 4).
+    assert 'class="dl-instr"' in story, "the instruments footer line is missing from the survey drawer:\n" + story
     assert 'href="https://doi.org/10.82388/bt6orvhn"' in story, \
-        "the instrument PID is not a doi.org anchor:\n" + story
+        "the platform PID is missing from the instruments footer line:\n" + story
+    # The six fixed slots are present and unrecorded (this fixture records no levelled identifier at all).
+    assert "0 of 6 recorded" in story, "the survey grid header count is wrong:\n" + story
     # R8: the station format-availability DOI badge is dropped (dataset-DOI presence is conveyed by the
     # maturity star + identifiers block). The survey-card DOI badge remains and lights "ok" for a
     # typed-DOI-only survey (the typed DOI satisfies the provenance-chain reading).

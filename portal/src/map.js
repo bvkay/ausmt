@@ -40,10 +40,30 @@ const DISABLE_CLUSTERING_AT_ZOOM=7;   // grouped at continental (z<=4) AND state
 // (individual sites from regional zoom down), the count-driven icon and the marker radii/tooltips/colour
 // modes are unchanged. maxClusterRadius is generous (80): per-survey groups can never cross-merge, so a
 // large radius simply collapses one survey to a single bubble at clustered zooms rather than fragmenting it.
+// Survey-drawer lane (ruling 2): each survey's cluster bubbles render into their OWN map pane. A cluster
+// bubble is a divIcon, so setStyle cannot dim it the way it dims a circleMarker - but a pane is a plain DOM
+// element, and one opacity write dims a whole survey's bubbles. Panes are cheap (an empty absolutely
+// positioned div) and are created once per survey, beside the default markerPane in the same z-order.
+// Name is keyed by index, never by the survey label, because a pane name reaches a CSS class + querySelector
+// and a survey label is custodian-supplied text (spaces, quotes, brackets are all real in the corpus).
+const _survPaneName={};let _survPaneN=0;
+function _survPaneFor(survey){
+  if(!_survPaneName[survey]){
+    const nm="ausmt-sv-"+(_survPaneN++);
+    _survPaneName[survey]=nm;
+    try{const p=map.createPane(nm);if(p&&p.style)p.style.zIndex=600;}catch(e){}   // 600 = Leaflet's markerPane
+  }
+  return _survPaneName[survey];}
+// The pane ELEMENT (or null under the headless stubs, where getPane returns a Proxy rather than a node).
+function _survPane(survey){
+  const nm=_survPaneName[survey];if(!nm)return null;
+  let el=null;try{el=map.getPane(nm);}catch(e){return null;}
+  return (el&&typeof el==="object"&&el.style&&typeof el.style==="object")?el:null;}
 function makeSurveyCluster(survey){
   return L.markerClusterGroup({
     maxClusterRadius:80, disableClusteringAtZoom:DISABLE_CLUSTERING_AT_ZOOM, spiderfyOnMaxZoom:false,
     zoomToBoundsOnClick:true, showCoverageOnHover:false, chunkedLoading:true,
+    clusterPane:_survPaneFor(survey),
     iconCreateFunction:c=>clusterIcon(c,survey)});
 }
 // PURE partition: bucket a marker list by the _survey stamped on each marker at build time (buildMarkers).
@@ -185,6 +205,35 @@ function markerColor(s){
   if(!hydrUsable("sci")&&(colorMode==="quality"||colorMode==="dim"))return TYPE_COL[s.type]||"#999";
   return colorMode==="quality"?qColor(s.q):colorMode==="dim"?(DIM_COL[s.dim]||"#5A6E7D"):(TYPE_COL[s.type]||"#999");}
 function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // C42: withheld-coord stations have no marker
+// ---- survey-drawer lane (ruling 2, Option A): the survey FOCUS DIM ------------------------------------
+// "View on map" with a survey open frames that survey while the rest of the catalogue STAYS ON THE MAP,
+// dimmed. The rejected alternative (what shipped before) filtered every other survey out of the layers, so
+// the reader lost the national context that makes a survey's position meaningful, and the map stayed
+// filtered after the drawer shut. This is OPACITY ONLY: no layer is added, removed, cleared or rebuilt, so
+// there is nothing to reload when the focus lifts - clearSurveyDim just puts the opacities back.
+// The focused survey, or null when nothing is focused. Read by applySurveyDim on every re-application.
+let _dimFocusSurvey=null;
+// Full-strength values are the ones buildMarkers paints with; the dimmed pair keeps a marker legible as a
+// PRESENCE (you can still see the coverage) without competing with the focused survey.
+const MARKER_FILL_OPACITY=.92,MARKER_DIM_FILL=.16,MARKER_DIM_STROKE=.3;
+// PURE: the opacity pair a marker should carry given the focused survey. Leaflet-free and side-effect-free
+// so the jsdom driver can pin the DECISION (which survey dims, and by how much) without a real map.
+function dimStyleFor(surveyOfMarker,focus){
+  return (!focus||surveyOfMarker===focus)
+    ? {fillOpacity:MARKER_FILL_OPACITY,opacity:1}
+    : {fillOpacity:MARKER_DIM_FILL,opacity:MARKER_DIM_STROKE};}
+// Apply the current focus to every marker AND to each per-survey cluster group's pane. Markers are canvas
+// circleMarkers (preferCanvas), so setStyle carries their opacity; a CLUSTER BUBBLE is a divIcon, which
+// setStyle cannot reach, so each survey's cluster group renders into its OWN pane (makeSurveyCluster) and
+// the pane element's opacity dims the bubble with its markers. setStyle here passes ONLY the opacity keys,
+// so it composes with recolor()/restyleForZoom() (colour and radius) instead of fighting them.
+function applySurveyDim(){
+  ST.forEach(s=>{if(s.marker&&s.marker.setStyle)s.marker.setStyle(dimStyleFor(s.survey,_dimFocusSurvey));});
+  Object.keys(_survClusters).forEach(sv=>{
+    const el=_survPane(sv);
+    if(el&&el.style)el.style.opacity=(!_dimFocusSurvey||sv===_dimFocusSurvey)?"":String(MARKER_DIM_FILL);});}
+function setSurveyDim(sv){_dimFocusSurvey=sv||null;applySurveyDim();}
+function clearSurveyDim(){if(_dimFocusSurvey===null)return;_dimFocusSurvey=null;applySurveyDim();}
 // O4 (owner, 2026-07-12): the station hover tooltip is SLIMMED to station name + survey name ONLY —
 // the TF completeness/smoothness diagnostic (Q) and the type/AusLAMP label were removed. The
 // AusLAMP/legacy distinction stays in the D2 clustering split; the diagnostic stays in the click
@@ -223,6 +272,13 @@ function buildMarkers(){const z=curZoom(),r=radiusForZoom(z),w=weightForZoom(z);
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
   s.marker=L.circleMarker([s.lat,s.lon],{radius:r,weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
   s.marker._survey=s.survey;   // UX8 (X3): the per-survey cluster facade buckets markers by this stamp
+  // Survey-drawer lane (ruling 5): a marker click OPENS that station and must never ALSO read as a
+  // background click that closes the drawer. L.Path defaults bubblingMouseEvents to TRUE, so without this
+  // a marker click would fire the marker handler and then bubble to the map's click handler below - the
+  // drawer would open and immediately close. DOM-target discrimination cannot do this job here: the map is
+  // preferCanvas, so every marker and the background share ONE canvas element as e.target. Leaflet's own
+  // layer hit-testing is the discriminator, and this flag is how it is expressed.
+  s.marker.options.bubblingMouseEvents=false;
   s.marker.bindTooltip(tooltipText(s),{className:"qtip",direction:"top",offset:[0,-4]});   // O4: hover shows station + survey only
   s.marker.on("click",()=>openStation(s.i));});
   // Home frame once data is in. Owner round 2 (2026-07-22): re-fit to the FIXED Australia box
@@ -282,6 +338,19 @@ function _scheduleDeferredHomeRefit(){
 // movestart is deliberately NOT used — it also fires on the app's own programmatic moves.
 let _mapUserInteracted=false;
 function _mapMarkInteracted(){_mapUserInteracted=true;}
+// Survey-drawer lane (ruling 5): a click on the MAP BACKGROUND closes an open drawer (survey OR station).
+// Leaflet only routes a click here when its hit-testing found no interactive layer under the pointer:
+// station markers set bubblingMouseEvents:false (buildMarkers) and cluster bubbles / drawn shapes are
+// L.Marker / L.Path targets that consume their own click, so "reached this handler" IS "landed on the
+// background". PURE decision split out as _bgClickShouldClose so the jsdom driver can pin the RULE; note
+// that the pointer/capture semantics themselves are Leaflet's and are only exercised in a real browser.
+// An ARMED DRAW is excluded: mid-rectangle the click is placing a corner, not dismissing a panel.
+function _bgClickShouldClose(drawerOpen,armedMode){return !!drawerOpen&&!armedMode;}
+map.on("click",()=>{
+  const d=document.getElementById("drawer");
+  const open=!!(d&&d.classList&&d.classList.contains("open"));
+  if(_bgClickShouldClose(open,armedDrawMode)&&typeof closeDrawer==="function")closeDrawer();
+});
 map.on("dragstart",_mapMarkInteracted);
 const _mapCont=(typeof map.getContainer==="function")?map.getContainer():null;
 if(_mapCont&&_mapCont.addEventListener){

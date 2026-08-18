@@ -188,6 +188,22 @@
   .prod.dis{opacity:.45;cursor:default}.prod.dis:hover{border-color:var(--line)}
   .prod .pdot{width:8px;height:8px;border-radius:50%;flex:none}
   .prod small{display:block;color:var(--muted);font-size:12px}
+  /* Survey-drawer lane (ruling 2): the survey drawer's header is STICKY, so "View on map" and Close stay
+     reachable from anywhere in a long survey record. Mirrors the station drawer's .dtop treatment - the
+     negative margins let the bar span the drawer's own 16/18px padding. */
+  .dhead.svhead{position:sticky;top:-16px;z-index:6;background:var(--panel);margin:-16px -18px 6px;
+    padding:16px 18px 10px;border-bottom:1px solid var(--line)}
+  .dhead .dhead-act{font-size:12px;padding:4px 10px;white-space:nowrap}
+  /* Ruling 4: the survey data-level tile grid. Tiles reuse .prod/.prodgrid verbatim (the Downloads
+     treatment); only the level-specific states are new. An UNRECORDED level is muted but visible via the
+     shared .prod.dis rule plus a HOLLOW dot, so the six-slot chain keeps the same shape on every survey. */
+  .prod .pdot.hollow{background:transparent;border:1.5px solid var(--muted);box-sizing:border-box}
+  .dl-tile{align-items:flex-start}
+  .dl-tile .dl-state{font-style:italic}
+  .dl-tile .dl-id{word-break:break-all;margin-top:2px}
+  .sechead .dl-count{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
+  .dl-cite{font-size:11.5px;color:var(--muted);margin-top:6px}
+  .dl-instr{font-size:12px;color:var(--muted);margin-top:4px}
   /* R5: the Files tab NCI-level list — single column of full-width rows (not the 2-col tile grid). */
   .filelist{display:flex;flex-direction:column;gap:6px}
   .filelist .prod{width:100%}

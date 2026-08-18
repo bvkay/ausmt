@@ -133,7 +133,7 @@ function headerDownloadBtn(s,m){
   const e=ediDescriptor(s,m);if(!e.d)return"";
   const attrs=Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" ");
   return `<button class="primary dl-edi" ${attrs}>Download EDI</button>`;}
-// Overview "primary download" tile — the same gated descriptor rendered as a single product tile (disabled
+// Overview "primary download" tile - the same gated descriptor rendered as a single product tile (disabled
 // where the gate refuses, so it states the embargo rather than offering bytes).
 function overviewDownload(s,m){const e=ediDescriptor(s,m);
   const attrs=e.d?Object.entries(e.d).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
@@ -977,6 +977,11 @@ function openStation(i,opts){
   if(!rehydrate)_focusDrawer();                    // E7: move focus into the dialog (never on a hydration re-render)
   if(isOpenAccess(m)) loadStationFrameLine(s);     // C25-V3: inject the frame line if this station declares one
 }
+// Survey-drawer lane (ruling 5): the hash prefixes that describe SOMETHING OPEN IN THE DRAWER, and which a
+// close must therefore hand back to the plain root. #/collection is deliberately absent: it addresses a
+// full-width PAGE that outlives the drawer (openCollectionPage closes the drawer on its way in), so clearing
+// it on close would blank the URL of a view still on screen.
+const HASH_ROUTES_CLEARED_ON_CLOSE=["#/station","#/survey"];
 // Two-phase boot: re-render whatever the drawer is currently showing, IN PLACE, because a phase-2 product
 // just landed and one of its sections was rendering a loading state. A no-op when the drawer is closed, or
 // when it is showing something that reads no phase-2 product (the strike rose writes its own markup and
@@ -990,7 +995,16 @@ function rehydrateOpenDrawer(){
 function closeDrawer(){const wasOpen=drawer.classList.contains&&drawer.classList.contains("open");
   _drawerSubject=null;                                 // nothing to rehydrate once it is shut
   drawer.classList.remove("open");hideDrawerScrim();   // D: drop the dim backdrop
-  if(location.hash.startsWith("#/station"))history.replaceState(null,"",location.pathname+location.search);
+  // Survey-drawer lane (ruling 5): the SURVEY hash is cleaned up on exactly the same terms the station hash
+  // always was. It used to be left behind, so after closing a survey the address bar still claimed
+  // #/survey/<slug> while nothing was open: reload or Back re-opened a drawer the reader had deliberately
+  // shut, and a copied URL shared a state the page was not in. One list, both prefixes, so the two routes
+  // cannot drift apart again. Every close path goes through here (the close control, the map-background
+  // click, the scrim, Escape, a view switch), so this is the single seam that has to be right.
+  if(HASH_ROUTES_CLEARED_ON_CLOSE.some(p=>location.hash.startsWith(p)))history.replaceState(null,"",location.pathname+location.search);
+  // Ruling 2 (Option A): the survey focus dim is a VIEW state owned by the open drawer, so it lifts with it.
+  // Opacity only, never a layer rebuild, so nothing reloads on close.
+  if(typeof clearSurveyDim==="function")clearSurveyDim();
   if(wasOpen)_restoreDrawerFocus();}               // E7: return focus to the invoking element (only if it was open)
 async function fetchEdi(file,avail,survey){
   // C7: this EDI isn't redistributable here. Its dataset DOI (m.doi), when the survey has one, is the
@@ -1348,9 +1362,29 @@ function clearDiscoveryFilters(){
   if(s&&s.value)s.value="";
   renderCards();
   if(typeof updateCounts==="function")updateCounts();}
-function focusSurvey(sv){tree.querySelectorAll('input[value]').forEach(c=>c.checked=(c.value===sv));setView("map");refresh();
+// Ruling 2: "View on map" from the survey drawer header. It used to CHECK ONLY this survey in the rail tree
+// and refresh(), which removed every other survey from the map: the reader lost all context for where the
+// survey sits in the national coverage, and closing the drawer left the map still filtered. The owner chose
+// Option A instead - other surveys STAY VISIBLE BUT DIMMED. So this no longer touches the tree or the filter
+// state at all; it dims (opacity only, see setSurveyDim in map.js) and frames. Nothing to reload on close.
+function focusSurvey(sv){
+  setView("map");
+  if(typeof setSurveyDim==="function")setSurveyDim(sv);
   // C42: fit only POSITIONED stations — a withheld-coord station has no [lat,lon] to bound (avoids NaN bounds).
-  const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15));}
+  const _fb=ST.filter(s=>s.survey===sv&&hasPosition(s)).map(s=>[s.lat,s.lon]);
+  if(_fb.length)map.fitBounds(L.latLngBounds(_fb).pad(0.15),drawerFitOptions());}
+// The drawer is position:absolute over the RIGHT of the map (index.html #drawer, z-index 1100), so a plain
+// fitBounds centres the survey in the full container and lands half of it under the panel. Pad the fit's
+// bottom-right by the drawer's CURRENT rendered width (it is user-resizable, so this is measured, never the
+// 420px default) to frame the extent in the map area the drawer does NOT cover. Returns a plain array
+// padding, which Leaflet's toPoint accepts, so the value is inspectable by the jsdom driver. Width 0 (drawer
+// shut, or the headless DOM's zero-size boxes) degrades to today's unpadded fit.
+function drawerFitOptions(){
+  let w=0;
+  try{ if(drawer&&drawer.classList&&drawer.classList.contains("open")&&drawer.getBoundingClientRect)
+        w=Math.round(drawer.getBoundingClientRect().width)||0; }catch(e){w=0;}
+  if(!(w>0&&isFinite(w)))w=0;
+  return {paddingTopLeft:[0,0],paddingBottomRight:[w,0]};}
 function selectSurvey(sv){
   // Stage B (selection-state isolation): scoping the map to one survey is a TEMPORARY LENS. Snapshot the
   // tree BEFORE mutating it (enterSelectLens, filters.js) and enter Select & export so the exports this
@@ -1391,12 +1425,12 @@ function miniScatter(ss){
   const box=`<rect x="${bx0}" y="${by0}" width="${bw}" height="${bh}" fill="none" stroke="var(--line)"/>`;
   return `<svg viewBox="0 0 ${W2} ${H2}" width="100%" role="img" style="max-width:${W2}px;background:#16242f;border:1px solid var(--line);border-radius:6px">`+
     box+latTicks+lonTicks+dots+`</svg>`;}
-function relatedSurveys(sv){const m=SMETA[sv]||{},b=bbox(ST.filter(s=>s.survey===sv));
-  return surveys.filter(o=>o!==sv).map(o=>{const os=ST.filter(s=>s.survey===o),ob=bbox(os);
-    const sameOrg=(SMETA[o]||{}).org===m.org;
-    const overlap=!(ob.w>b.e||ob.e<b.w||ob.so>b.no||ob.no<b.so);
-    const sameCountry=(SMETA[o]||{}).country===m.country;
-    return {o,score:(sameOrg?2:0)+(overlap?2:0)+(sameCountry?1:0)};}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,4).map(x=>x.o);}
+// Survey-drawer lane (ruling 3): the "Related surveys" section and its relatedSurveys() scorer are REMOVED
+// (owner). The score mixed same-org, bbox-overlap and same-country into one unexplained ranking, so the
+// section asserted a relationship the corpus does not record; a reader could not tell why a survey was
+// listed. Related PUBLICATIONS (a declared, citable relation) stay exactly as they were. Deleted rather
+// than commented out because nothing else called it and a dead scorer is a maintenance trap (the same
+// posture tests/test_no_dead_prov_feature.py enforces for dead survey-metadata branches).
 // Survey-level summary (10-second view): aggregates of already-computed per-station values + survey metadata only 
 function surveySummary(ss,m){
   // UX3 item 7c: the "dimensionality mix (screening only)" row was removed from this table (dimensionality
@@ -1461,23 +1495,102 @@ function surveyBundleTiles(slug){
       `<span class="pdot" style="background:var(--ok)"></span><div>${esc(L[0])}<small>${esc(L[1])}${r.size?" · "+esc(fmtBytes(r.size)):""}</small></div></div>`;
   }).join("");
 }
-// UX6 Wave E (E2): persistent-identifier rollup count for the survey detail. IDCONS D2: the retired "Survey
-// PID" (m.pid) slot is dropped — it is no longer a displayed row, so counting it would tally a slot the
-// curator cannot see. The count now tracks the three single-value slots identifiersHtml still renders
-// (dataset DOI, organisation ROR, project RAiD); a slot counts as recorded when it is truthy and not a
-// "TODO…" placeholder (the same convention pidLink uses). The typed Related identifiers rows have their own
-// visible block below. Drives the "Persistent identifiers: N of M recorded" summary.
-function pidRollup(m){const has=v=>!!(v&&!String(v).startsWith("TODO"));
-  const fields=[(m||{}).doi,(m||{}).org_ror,(m||{}).raid];
-  return {have:fields.filter(has).length,total:fields.length};}
+// ---- survey-drawer lane (ruling 4, amended 2026-08-18): the survey PERSISTENT IDENTIFIERS tile grid ------
+// The block used to be a collapsed <details> of whatever single-value identifier rows happened to be
+// recorded, so its LENGTH varied per survey and a reader could not see what a survey had NOT deposited.
+// It is now a DATA-LEVEL grid: six fixed slots, always all six, rendered in the Downloads tile treatment.
+// The vocabulary is the citable NCI scheme of Rees et al. 2019 - the same family the STATION Files tab
+// already speaks - and the slot keys ARE the shipped `identifies` enum (engine/schema/mtcat.schema.json),
+// so a slot can never drift from what the survey validator permits to publish. There is deliberately no
+// "Level 4 / models" slot: models ARE level3 in the canonical scheme.
+const REES_LEVELS_DOI="https://doi.org/10.1080/22020586.2019.12073015";
+// [identifies key, tile name, one-line description]. WORDING RULE (owner amendment): where a slot names the
+// same level as a station Files-tab row (relatedProducts -> tsLevelRow/level2), the description carries that
+// row's gloss VERBATIM, so the two surfaces read as one vocabulary rather than two paraphrases:
+//   level0 -> "instrument-recorded, full resolution"   level1 -> "calibrated, resampled, filtered"
+//   level2 -> "transfer functions"
+// Level 1 names its MTH5 TIME-SERIES holding explicitly, because the Downloads grid separately offers
+// "Survey MTH5 (transfer functions) / TFs only" - level-2 CONTENT in the same container format. The two
+// must never read as the same object, so one says "time series" and the other keeps saying "TFs only".
+const DATA_LEVEL_SLOTS=[
+  ["collection","Collection","the umbrella record for everything this survey deposited"],
+  ["raw_packed","Packed Raw Data","raw time series: telemetry data streamed from site loggers"],
+  ["level0","Level 0","edited time series: instrument-recorded, full resolution"],
+  ["level1","Level 1","transformed time series (MTH5): calibrated, resampled, filtered"],
+  ["level2","Level 2","derived frequency-domain processed data: transfer functions"],
+  ["level3","Level 3","derived modelling inputs and outputs"],
+];
+// One tile. UNRECORDED is the owner's explicit ruling: muted BUT VISIBLE (.prod.dis + a hollow dot +
+// "not yet recorded"), never omitted, so the deposit chain has the same shape on every survey and a gap is
+// legible as a gap. RECORDED renders the identifier with the SAME resolution honesty every other identifier
+// surface in this file uses (reserved -> inert plain text + note, never a dead link) and the custodian as
+// the repository tag. SCHEME GUARD, mirroring the Files tab: only an http(s) href becomes the tile's ACTION,
+// because a URL-typed identifier is relatedIdHref's raw value and a javascript:/data: value would otherwise
+// route straight into window.open; such a row still SHOWS its value, it simply carries no action.
+function dataLevelTile(name,desc,row){
+  const head=`${esc(name)}<small>${esc(desc)}</small>`;
+  if(!row||!row.identifier)
+    return `<div class="prod dis dl-tile"><span class="pdot hollow"></span><div>${head}<small class="dl-state">not yet recorded</small></div></div>`;
+  const tag=row.custodian?` <span class="prov">${esc(row.custodian)}</span>`:"";
+  if(row.resolution==="reserved")
+    return `<div class="prod dis dl-tile"><span class="pdot" style="background:var(--part)"></span><div>${head}<small class="dl-id">${reservedText(row.identifier)}${tag}</small></div></div>`;
+  const href=relatedIdHref(row.identifier,row.identifier_type);
+  const act=(href&&/^https?:/i.test(href))?{prod:"open",url:href}:null;
+  const attrs=act?Object.entries(act).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
+  return `<div class="prod dl-tile" ${attrs}><span class="pdot" style="background:var(--ok)"></span>`+
+    `<div>${head}<small class="dl-id">${relatedIdLink(row.identifier,row.identifier_type)}${tag}</small></div></div>`;}
+// The whole section: the six fixed slots, then any identifier that maps to NO slot as an EXTRA tile below
+// them. Nothing is ever silently dropped - the `identifies` vocabulary may grow, and a row this build does
+// not model must still be visible rather than vanishing between releases. "N of 6" counts the six FIXED
+// slots only (an extra tile is not one of the six), per the slot-mapping ruling.
+function surveyDataLevelsHtml(m){
+  m=m||{};
+  const rels=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object"&&r.identifier);
+  const rowFor=k=>rels.find(r=>r.identifies===k);
+  const have=DATA_LEVEL_SLOTS.filter(([k])=>!!rowFor(k)).length;
+  const tiles=DATA_LEVEL_SLOTS.map(([k,name,desc])=>dataLevelTile(name,desc,rowFor(k))).join("");
+  // Unmapped rows: an out-of-slot `identifies` (e.g. `entire`, one record covering all levels) or a legacy
+  // row that predates the level model and carries only a DataCite relation. Labelled by the same tables the
+  // retired Related-identifiers block used, so the label vocabulary is unchanged for these rows.
+  const slotKeys=DATA_LEVEL_SLOTS.map(([k])=>k);
+  const extras=rels.filter(r=>slotKeys.indexOf(r.identifies)<0).map(r=>{
+    const label=(r.identifies&&IDENTIFIES_LABELS[r.identifies])||RELATION_LABELS[r.relation]||(r.relation?String(r.relation):"Related identifier");
+    return dataLevelTile(label,"recorded identifier outside the six data levels",r);}).join("");
+  // The project RAiD is a PROJECT identifier, not a data level, so it has no slot - but it was visible in
+  // the block this grid replaces, and dropping it silently would lose a recorded identifier. It rides the
+  // same extra-tile mechanism, which is the section's one rule for "recorded, but not one of the six".
+  const raidRow=(m.raid&&!String(m.raid).startsWith("TODO"))?{identifier:String(m.raid),identifier_type:"URL"}:null;
+  const raid=raidRow?dataLevelTile("Project RAiD","the research activity this survey was acquired under",raidRow):"";
+  return `<div class="sechead">Persistent identifiers: <span class="dl-count">${have} of 6 recorded</span></div>`+
+    `<div class="prodgrid">${tiles}${extras}${raid}</div>`+
+    // The citability IS the point of using a published scheme, so the grid says which one, in print.
+    `<div class="dl-cite">Levels per <a href="${escUrl(REES_LEVELS_DOI)}" target="_blank" rel="noopener noreferrer">Rees et al. 2019</a></div>`+
+    surveyInstrumentsLine(m);}
+// Owner ruling 4: the instruments stay, as ONE compact footer line under the grid (models + platform PID) -
+// not a slot, because an instrument is not a data level. "" when the survey declares neither.
+function surveyInstrumentsLine(m){
+  m=m||{};
+  const parts=[];
+  if(m.instrument_model)parts.push(esc(m.instrument_model));
+  if(m.instrument_pid)parts.push(instrumentPidLink(m.instrument_pid));
+  const perInstrument=((m.instruments||[]).filter(i=>i&&i.pid).map(i=>{
+    const label=[i.manufacturer,i.model].filter(Boolean).map(esc).join(" ")||"instrument";
+    return `${label}: ${instrumentPidLink(i.pid)}`;}));
+  const all=parts.concat(perInstrument);
+  if(!all.length)return "";
+  return `<div class="dl-instr">Instruments: ${all.join(" · ")}</div>`;}
 // Two-phase boot: `opts.rehydrate` has the same meaning as in openStation: a re-render driven by a phase-2
 // product landing, which keeps the reader's scroll position and does not touch focus.
 function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{};
   const rehydrate=!!(opts&&opts.rehydrate);
   const keepScroll=rehydrate?(drawer.scrollTop||0):0;
   const keepOpen=rehydrate?_openDetailsKeys():[];     // expanders the reader opened mid-hydration stay open
-  const rel=relatedSurveys(sv),pr=pidRollup(m);
   if(!rehydrate)_rememberDrawerOpener();              // E7: capture the invoking element before the rewrite
+  // Survey-drawer lane (ruling 5, the "opening something else" close path): the survey drawer now OWNS its
+  // route the way openStation always has. Without this, opening survey B over survey A left #/survey/<A> in
+  // the address bar - the same stale-URL defect the close path had, one step further along. Skipped on a
+  // hydration re-render (which must never rewrite the URL) and on a survey with no slug to address.
+  if(!rehydrate&&m.slug)location.hash="#/survey/"+encodeURIComponent(m.slug);
   _drawerSubject={kind:"survey",sv};                  // what rehydrateOpenDrawer re-renders when a gate settles
   // UX6 Wave E (E4): section order — (1) title+description, (2) geographic footprint, (3) station count +
   // period-range stats, (4) licence + downloads, (5) acquisition + processing, (6) contributors + funding,
@@ -1487,7 +1600,12 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
   // below Downloads, they sit inside the ATTRIBUTION block directly beneath the attribution box.
   // Downloads move up ahead of funding/publications/identifiers; release history moves last.
   drawer.innerHTML=
-   `<div class="dhead"><span class="sid" style="font-size:18px">${esc(sv)}</span><button class="close" aria-label="Close">✕</button></div>`+
+   // Ruling 2: "View on map" is a NAVIGATION action, not a download, so it leaves the Downloads grid and
+   // sits in the header beside the survey name. The header is sticky (.svhead), so the control stays
+   // reachable from anywhere in a long survey record instead of scrolling away with the tiles.
+   `<div class="dhead svhead"><span class="sid" style="font-size:18px">${esc(sv)}</span>`+
+     `<button class="dhead-act" data-act="focus" data-survey="${escAttr(sv)}">View on map</button>`+
+     `<button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${orgNameLink(m.org||"custodian unknown",m.org_ror)} · ${esc(m.country||"")}${m.region?" · "+esc(m.region):""} · ${esc(m.dates||"dates n/a")}</div>`+
    collLine(m)+
    `<div class="dim" style="margin-top:10px">${esc(m.blurb||"Survey description to be provided by the uploader.")}</div>`+
@@ -1502,10 +1620,11 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    (attributionText(m)?`<div class="sechead">Attribution ${roleChip("Source data")}</div>`+attributionBoxHtml(m):"")+
    contributorsHtml(m)+
    sourcesListHtml(m)+
+   // Ruling 1: Downloads is the THREE whole-survey bundles (surveyBundleTiles) and nothing else that
+   // competes with them. "All EDIs (select & download)" is gone - the EDI bundle already covers the whole
+   // survey, and per-station selection belongs to the station drawers; "View on map" moved to the header.
    `<div class="sechead">Downloads</div><div class="prodgrid">`+
      surveyBundleTiles(m.slug)+
-     `<div class="prod" data-act="select" data-survey="${escAttr(sv)}"><span class="pdot" style="background:var(--ok)"></span><div>All EDIs<small>select & download</small></div></div>`+
-     `<div class="prod" data-act="focus" data-survey="${escAttr(sv)}"><span class="pdot" style="background:var(--lpmt)"></span><div>View on map<small>zoom to extent</small></div></div>`+
      // IDCONS D4: a reserved dataset DOI is shown as an inert, honestly-labelled chip — never a green
      // "source archive" tile that opens a doi.org 404.
      (m.doi?(m.doi_resolution==="reserved"
@@ -1514,10 +1633,12 @@ function openSurvey(sv,opts){const ss=ST.filter(s=>s.survey===sv),m=SMETA[sv]||{
    `</div>`+
    `<div class="sechead">Funding</div><div class="surveymeta">${(m.funders||[]).map(funderHtml).join(" · ")||"–"}</div>`+
    `<div class="sechead">Related publications</div>`+pubsHtml(m)+
-   `<details class="prov-d survey-ids"><summary>Persistent identifiers: ${pr.have} of ${pr.total} recorded</summary><div class="prov-dbody">`+identifiersHtml(m)+`</div></details>`+
-   releaseNotesHtml(m)+
-   `<div class="sechead">Related surveys</div><div class="surveymeta">`+
-     (rel.length?rel.map(o=>`<a href="#" data-act="story" data-survey="${escAttr(o)}">${esc(o)}</a>`).join(" · "):"<span class='prov'>none nearby</span>")+`</div>`;
+   // Ruling 4: the collapsed identifiers rollup becomes the always-open DATA-LEVEL tile grid. The
+   // Organisation ROR row is gone with it (owner) - the custodian's ROR still reaches the reader as the
+   // link on the organisation name in the header subline above (orgNameLink) and on the About page.
+   // identifiersHtml() itself is untouched and still serves the STATION drawer's identifiers expander.
+   surveyDataLevelsHtml(m)+
+   releaseNotesHtml(m);   // ruling 3: the "Related surveys" section is removed; release notes are last
   drawer.setAttribute("aria-label",sv+", survey details");
   drawer.classList.add("open");drawer.scrollTop=keepScroll;showDrawerScrim();   // D: dim backdrop on non-map views
   _restoreOpenDetails(keepOpen);                      // and the expanders they had open (empty on a real open)

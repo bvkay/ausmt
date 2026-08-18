@@ -192,6 +192,14 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "partitionMarkers,isAuslampSurvey,radiusForZoom,weightForZoom,markerColor,tooltipText,buildAuslampSet," +
   "auslampSet:()=>AUSLAMP_SET,setAuslampSet:(arr)=>{AUSLAMP_SET=new Set(arr);}," +
   "setColorMode:(m)=>{colorMode=m;},selectSurvey,renderCards,openSurvey," +
+  // Survey-drawer lane hooks. focusSurvey drives the header "View on map" path; drawerFitOptions is the
+  // PURE fit padding (asserted against a stubbed drawer width); dimStyleFor is the PURE Option-A dim
+  // decision; setSurveyDim/clearSurveyDim + dimFocus expose the focus STATE so a leg can prove the dim
+  // lifts on close. _bgClickShouldClose is the pure background-click rule (see the honesty note at its
+  // leg: Leaflet is STUBBED here, so the pointer/hit-testing semantics themselves are not exercised).
+  "focusSurvey,drawerFitOptions,dimStyleFor,setSurveyDim,clearSurveyDim," +
+  "dimFocus:()=>_dimFocusSurvey,bgClickShouldClose:_bgClickShouldClose," +
+  "surveyDataLevelsHtml,DATA_LEVEL_SLOTS," +
   // UX4 D5 hook: the tree-demo step's resolved survey label (kalkaroo-2022 preferred, first-survey
   // degrade) — a REAL observable for the graceful-degrade assertion, not just "didn't crash".
   "tourTreeTarget:()=>_tourTreeTarget," +
@@ -937,6 +945,67 @@ async function bootFreshWindow(dataMap, url) {
   doc.getElementById("drawer").classList.remove("open");
   win.location.hash = "#/survey/does-not-exist"; A.routeFromHash();
   ok(!doc.getElementById("drawer").classList.contains("open"), "unknown survey slug must not open the drawer");
+
+  // F2. SURVEY-DRAWER HASH CLEANUP (survey-drawer lane, ruling 5). closeDrawer() cleared ONLY
+  //     "#/station..." - a survey opened by the #/survey/<slug> route left that hash in the address bar
+  //     after the drawer shut, so the URL claimed a survey was open when nothing was, Back/reload
+  //     re-opened a drawer the reader had deliberately closed, and copying the URL shared a state the
+  //     page was not in. RED-proven before the fix: this leg failed on the pre-fix closeDrawer.
+  //     The STATION behaviour is asserted alongside it so the fix cannot regress the path it mirrors.
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  ok(doc.getElementById("drawer").classList.contains("open"), "F2 setup: #/survey/alpha did not open the drawer");
+  A.closeDrawer();
+  ok(win.location.hash === "", "F2: closing the survey drawer must CLEAR the #/survey/<slug> hash back to the plain root, got: " + JSON.stringify(win.location.hash));
+  // The station path already cleaned up; it must still.
+  win.location.hash = "#/station/au.alpha.A1"; A.routeFromHash();
+  ok(doc.getElementById("drawer").classList.contains("open"), "F2 setup: #/station route did not open the drawer");
+  A.closeDrawer();
+  ok(win.location.hash === "", "F2: the station hash cleanup must be PRESERVED, got: " + JSON.stringify(win.location.hash));
+
+  // F3. SURVEY-DRAWER LANE: "View on map" - FIT PADDING + OPTION-A DIM (ruling 2).
+  //     HONESTY NOTE, and it is the important part of this block: Leaflet is STUBBED in this harness
+  //     (win.L = stub()), so nothing here exercises Leaflet's real projection, hit-testing or pointer
+  //     capture. What IS proven: the ARGUMENTS the app hands the map (mapCalls records fitBounds with its
+  //     real options object), and the PURE decision functions. The rendered dim and the real
+  //     background-vs-marker pointer semantics are only exercised in a browser.
+  // (a) the fit is padded on the RIGHT by the drawer's width, so the extent lands in the map area the
+  //     drawer does not cover. Pre-change focusSurvey called fitBounds with NO options at all.
+  win.location.hash = "#/survey/alpha"; A.routeFromHash();
+  const _fbBeforeFocus = mapCalls.filter(c => c.fn === "fitBounds").length;
+  // jsdom lays nothing out, so give the drawer a measurable width the way a real browser would.
+  const _focusDrawerEl = doc.getElementById("drawer");
+  _focusDrawerEl.getBoundingClientRect = () => ({ width: 420, height: 800, top: 0, left: 860, right: 1280, bottom: 800 });
+  ok(A.drawerFitOptions().paddingBottomRight[0] === 420,
+    "ruling 2: the fit padding must equal the drawer's MEASURED width (it is user-resizable), got: " + JSON.stringify(A.drawerFitOptions()));
+  A.focusSurvey("Alpha Survey");
+  const _fits = mapCalls.filter(c => c.fn === "fitBounds");
+  ok(_fits.length === _fbBeforeFocus + 1, "ruling 2: View on map must fit the survey extent exactly once");
+  const _fitOpts = _fits[_fits.length - 1].args[1];
+  ok(_fitOpts && Array.isArray(_fitOpts.paddingBottomRight) && _fitOpts.paddingBottomRight[0] === 420,
+    "ruling 2: fitBounds must be padded right by the drawer width, got: " + JSON.stringify(_fitOpts));
+  ok(_fitOpts.paddingBottomRight[1] === 0 && _fitOpts.paddingTopLeft[0] === 0,
+    "ruling 2: only the RIGHT edge is padded (the drawer covers no other edge), got: " + JSON.stringify(_fitOpts));
+  // (b) OPTION A: other surveys stay VISIBLE but dimmed. The rejected behaviour filtered them off the map,
+  //     so the strongest pin is that the visible station set is UNCHANGED by focusing one survey.
+  ok(A.visIds().length === 5,
+    "ruling 2 (Option A): focusing a survey must NOT remove other surveys from the map, got " + A.visIds().length);
+  ok(A.dimFocus() === "Alpha Survey", "ruling 2: focusing must record the focused survey, got: " + JSON.stringify(A.dimFocus()));
+  // the PURE dim decision: the focused survey full strength, everything else dimmed but non-zero (visible).
+  const _onSty = A.dimStyleFor("Alpha Survey", "Alpha Survey"), _offSty = A.dimStyleFor("Beta Survey", "Alpha Survey");
+  ok(_onSty.fillOpacity > _offSty.fillOpacity, "ruling 2: a non-focused survey must be DIMMER than the focused one");
+  ok(_offSty.fillOpacity > 0, "ruling 2 (Option A): a non-focused survey must stay VISIBLE, not hidden (opacity > 0)");
+  const _noFocus = A.dimStyleFor("Beta Survey", null);
+  ok(_noFocus.fillOpacity === _onSty.fillOpacity, "ruling 2: with no focus every survey renders at full strength");
+  // (c) the dim LIFTS on close, with no layer reload (closeDrawer only restores opacities).
+  A.closeDrawer();
+  ok(A.dimFocus() === null, "ruling 2: closing the drawer must clear the survey focus dim");
+  ok(A.visIds().length === 5, "ruling 2: clearing the dim must not disturb the visible set");
+  // (d) the background-click RULE (ruling 5). Only the pure predicate is provable here: whether a click
+  //     actually REACHES it is Leaflet hit-testing, which the stub does not implement.
+  ok(A.bgClickShouldClose(true, null) === true, "ruling 5: a background click with the drawer open must close it");
+  ok(A.bgClickShouldClose(false, null) === false, "ruling 5: a background click with no drawer open is a no-op");
+  ok(A.bgClickShouldClose(true, "rectangle") === false,
+    "ruling 5: a background click while a draw is ARMED is placing a corner, not dismissing the drawer");
 
   // G. WELCOME POPUP (UX7b U7): on first visit a small CENTRED MODAL (#introWelcome) shows — successor to
   // the Wave D corner strip (which is GONE). role=dialog, focus-managed; "Take the 2-minute tour" starts
@@ -2241,35 +2310,85 @@ async function bootFreshWindow(dataMap, url) {
   ok(drwE.classList.contains("open"), "E2/E4: #/survey/alpha did not open the survey detail");
   ok(drwE.getAttribute("role") === "dialog", "E7: the drawer must carry role=dialog");
   ok(/Alpha Survey/.test(drwE.getAttribute("aria-label") || ""), "E7: the survey drawer aria-label must name the survey, got: " + JSON.stringify(drwE.getAttribute("aria-label")));
-  // E2: the identifiers block is a collapsed <details> summarising 'N of M recorded'. IDCONS D2: the retired
-  // Survey PID slot is dropped from the rollup (3 slots: dataset DOI / org ROR / project RAiD), so Alpha
-  // (doi only) reads 1 of 3.
-  const idDetails = [...drwE.querySelectorAll("details")].find(d => /Persistent identifiers:/.test(d.querySelector("summary") ? d.querySelector("summary").textContent : ""));
-  ok(idDetails, "E2: the survey detail must carry a <details> whose summary is the identifiers rollup");
-  ok(/Persistent identifiers: 1 of 3 recorded/.test(idDetails.querySelector("summary").textContent),
-    "E2: the rollup summary must read 'Persistent identifiers: 1 of 3 recorded' for Alpha (doi only, pid slot retired), got: " + idDetails.querySelector("summary").textContent);
-  // E2/R7 (owner ruling): the rollup now renders ONLY rows that carry a value — the honest 'not recorded'
-  // and '(no PID)' noise is gone. Alpha declares a DOI (+ instruments) but no ROR/RAiD, so those empty rows
-  // are OMITTED. The collapsed body still carries the present rows (Dataset DOI); the empty ones are absent.
-  ok(/Dataset DOI/.test(idDetails.innerHTML),
-    "E2: the collapsed body must still contain the present identifier rows (Dataset DOI)");
-  ok(!/not recorded/.test(idDetails.innerHTML) && !/Organisation ROR/.test(idDetails.innerHTML),
-    "R7: empty identifier rows (Organisation ROR / 'not recorded') must be omitted, got: " + idDetails.innerHTML);
-  ok(!/Survey PID:/.test(idDetails.innerHTML), "IDCONS D2: the retired 'Survey PID' row must be gone from the rollup body");
+  // E2 SUPERSEDED by the survey-drawer lane (ruling 4): the identifiers block is no longer a collapsed
+  // <details> of whatever rows happened to be recorded. It is an always-open DATA-LEVEL tile grid of SIX
+  // FIXED slots in the Rees et al. 2019 / NCI scheme, so the deposit chain has the same shape on every
+  // survey. Alpha records no related_identifiers at all, which is exactly the case the old surface hid and
+  // this one must state: 0 of 6, six MUTED-BUT-VISIBLE tiles, none of them omitted.
+  ok(![...drwE.querySelectorAll("details")].some(d => /Persistent identifiers:/.test(d.querySelector("summary") ? d.querySelector("summary").textContent : "")),
+    "ruling 4: the identifiers rollup must NO LONGER be a collapsed <details> - it is an open tile grid");
+  const idHead = [...drwE.querySelectorAll(".sechead")].find(h => /Persistent identifiers:/.test(h.textContent));
+  ok(idHead, "ruling 4: the survey detail must carry a 'Persistent identifiers:' section head");
+  ok(/Persistent identifiers:\s*0 of 6 recorded/.test(idHead.textContent),
+    "ruling 4: the header count must read '0 of 6 recorded' for Alpha (no related_identifiers), got: " + JSON.stringify(idHead.textContent));
+  const idGrid = idHead.nextElementSibling;
+  ok(idGrid && idGrid.classList.contains("prodgrid"), "ruling 4: the identifiers head must be followed by a .prodgrid (the Downloads tile treatment)");
+  const idTiles = [...idGrid.querySelectorAll(".prod")];
+  ok(idTiles.length === 6, "ruling 4: Alpha must render exactly the SIX fixed slots (no extras), got: " + idTiles.length);
+  // The six slot names, in the canonical Table-1 order. Order is part of the ruling: the chain reads
+  // collection -> raw -> L0 -> L1 -> L2 -> L3 the same way on every survey.
+  const SLOTS = ["Collection", "Packed Raw Data", "Level 0", "Level 1", "Level 2", "Level 3"];
+  SLOTS.forEach((nm, i) => ok(idTiles[i].textContent.indexOf(nm) === 0,
+    "ruling 4: slot " + (i + 1) + " must be '" + nm + "', got: " + JSON.stringify(idTiles[i].textContent.slice(0, 40))));
+  // Owner ruling: an unrecorded level is MUTED BUT VISIBLE (never dropped) - .prod.dis + a hollow dot +
+  // the honest state word. This is the assertion that would fail if a future change went back to hiding them.
+  idTiles.forEach((t, i) => {
+    ok(t.classList.contains("dis"), "ruling 4: unrecorded slot " + (i + 1) + " must render MUTED (.prod.dis), not hidden");
+    ok(t.querySelector(".pdot.hollow"), "ruling 4: unrecorded slot " + (i + 1) + " must carry the hollow dot");
+    ok(/not yet recorded/.test(t.textContent), "ruling 4: unrecorded slot " + (i + 1) + " must say 'not yet recorded'");
+  });
+  // The Organisation ROR row leaves the drawer with the old rollup (owner). The org name in the header
+  // subline still carries its ROR link, so the identifier itself is not lost to the reader.
+  ok(!/Organisation ROR/.test(drwE.innerHTML), "ruling 4: the 'Organisation ROR' row must be gone from the survey drawer");
+  // The citation line is the POINT of using a published scheme: the vocabulary has to be checkable.
+  const citeLine = drwE.querySelector(".dl-cite");
+  ok(citeLine && /Levels per\s+Rees et al\. 2019/.test(citeLine.textContent),
+    "ruling 4: the grid must carry the 'Levels per Rees et al. 2019' citation line, got: " + JSON.stringify(citeLine && citeLine.textContent));
+  ok(citeLine.querySelector('a[href="https://doi.org/10.1080/22020586.2019.12073015"]'),
+    "ruling 4: the citation must link the Rees et al. 2019 DOI");
+  // Instruments stay, as ONE compact footer line under the grid (models + platform PID), not as a slot.
+  const instrLine = drwE.querySelector(".dl-instr");
+  ok(instrLine && /LEMI 423; Phoenix MTU-5C/.test(instrLine.textContent),
+    "ruling 4: the instruments footer line must carry the declared models, got: " + JSON.stringify(instrLine && instrLine.textContent));
   // E4: section order. Description before footprint; downloads ahead of funding/publications/identifiers;
-  // release history last (before the extra Related-surveys block).
+  // release notes last. Ruling 3: the trailing "Related surveys" block is REMOVED.
   const H = drwE.innerHTML, at = s => H.indexOf(s);
   const oDesc = at('class="dim"'), oScatter = at("<svg"), oSummary = at("Survey summary"), oDl = at(">Downloads<"),
         oFund = at(">Funding<"), oPubs = at("Related publications"), oIds = at("Persistent identifiers:"),
-        oRel = at("Release notes"), oRelated = at("Related surveys");
+        oRel = at("Release notes");
   ok(oDesc >= 0 && oScatter > oDesc, "E4: description (1) must come before the geographic footprint (2)");
   ok(oScatter < oSummary, "E4: footprint (2) must come before the station/period stats (3)");
   ok(oSummary < oDl, "E4: stats (3) must come before Downloads (4)");
   ok(oDl < oFund, "E4: Downloads (4) must come before Funding (6)");
   ok(oFund < oPubs, "E4: Funding (6) must come before Publications (7)");
-  ok(oPubs < oIds, "E4: Publications (7) must come before the identifiers rollup (8)");
-  ok(oIds < oRel, "E4: the identifiers rollup (8) must come before Release history (9)");
-  ok(oRel < oRelated, "E4: Release history (9) must precede the trailing Related-surveys block");
+  ok(oPubs < oIds, "E4: Publications (7) must come before the identifiers grid (8)");
+  ok(oIds < oRel, "E4: the identifiers grid (8) must come before Release notes (9)");
+  ok(at("Related surveys") < 0, "ruling 3: the 'Related surveys' section must be REMOVED from the survey drawer");
+  ok(!/data-act="story"/.test(H), "ruling 3: no related-survey links may remain in the survey drawer");
+
+  // ---- SURVEY-DRAWER LANE: HEADER ACTION + DOWNLOADS TRIM (rulings 1 + 2) --------------------------
+  // Ruling 2: "View on map" is in the drawer HEADER beside the survey name, not in Downloads. The header
+  // is sticky so the control does not scroll away from a long record.
+  const svHead = drwE.querySelector(".dhead.svhead");
+  ok(svHead, "ruling 2: the survey drawer header must carry the sticky .svhead treatment");
+  const mapBtn = svHead.querySelector('[data-act="focus"]');
+  ok(mapBtn && mapBtn.textContent === "View on map",
+    "ruling 2: the header must carry the 'View on map' action, got: " + JSON.stringify(mapBtn && mapBtn.textContent));
+  ok(svHead.querySelector(".close"), "ruling 2: the header must keep its Close control");
+  ok(svHead.querySelector(".sid").textContent === "Alpha Survey", "ruling 2: the header must still name the survey");
+  // Ruling 1: the Downloads grid is the whole-survey BUNDLES only. Neither of the two removed tiles may
+  // survive there: "All EDIs (select & download)" is gone outright, and "View on map" moved to the header.
+  const dlHead = [...drwE.querySelectorAll(".sechead")].find(h => h.textContent.trim() === "Downloads");
+  ok(dlHead, "ruling 1: the Downloads section head is missing");
+  const dlGrid = dlHead.nextElementSibling;
+  ok(dlGrid && dlGrid.classList.contains("prodgrid"), "ruling 1: Downloads must render a .prodgrid");
+  ok(!dlGrid.querySelector('[data-act="select"]'),
+    "ruling 1: the 'All EDIs (select & download)' tile must be REMOVED from Downloads");
+  ok(!dlGrid.querySelector('[data-act="focus"]'),
+    "ruling 1: the 'View on map' tile must have LEFT Downloads (it lives in the header now)");
+  ok(!/All EDIs/.test(H), "ruling 1: the 'All EDIs' copy must not survive anywhere in the survey drawer");
+  ok(H.indexOf("View on map") === H.lastIndexOf("View on map"),
+    "ruling 2: 'View on map' must appear EXACTLY ONCE in the survey drawer (the header), not also in Downloads");
   drwE.classList.remove("open");
 
   // DD. E5 COLLECTIONS LANDING (cleanup wave E): the intro paragraph is DELETED; ONE rich card style at
@@ -2938,10 +3057,24 @@ async function bootFreshWindow(dataMap, url) {
   ok(!doc.getElementById("drawer").classList.contains("open"), "D: clicking the scrim must close the drawer");
   ok(scrim.classList.contains("hidden"), "D: closing via the scrim must hide the scrim");
 
-  // XX. STAGE B - SELECTION-STATE ISOLATION. Owner bug: the survey drawer's "All EDIs (select & download)"
-  // tile scoped the shared rail tree to its one survey, which (a) emptied the Surveys catalogue with the
-  // rail (the only undo) hidden on that view, and (b) left the map tree stuck scoped. Fix: the catalogue is
-  // decoupled from the rail tree, and the tile's map scoping is a temporary lens restored on exit.
+  // XX. STAGE B - SELECTION-STATE ISOLATION. Owner bug: the "select & download this survey" control scoped
+  // the shared rail tree to its one survey, which (a) emptied the Surveys catalogue with the rail (the only
+  // undo) hidden on that view, and (b) left the map tree stuck scoped. Fix: the catalogue is decoupled from
+  // the rail tree, and the control's map scoping is a temporary lens restored on exit.
+  // SURFACE MOVED (survey-drawer lane, ruling 1): the survey drawer's "All EDIs (select & download)" TILE is
+  // removed - Downloads is the three whole-survey bundles, and per-station selection lives on the station
+  // drawers. The lens machinery (selectSurvey) is unchanged and still reached from the survey CARD's
+  // "Download" button, so this section now drives that surface. The BEHAVIOUR under test is identical; only
+  // the control that triggers it moved. A leg below separately pins that the drawer tile is gone.
+  // The button only exists on the RICH card (the compact .srow row carries no per-survey actions), so force
+  // the cards layout before reading it - earlier sections drive the layout toggle and must not leak in here.
+  const selectCtl = () => {
+    const cardsBtn = doc.getElementById("layoutSeg") && doc.getElementById("layoutSeg").querySelector('[data-layout="cards"]');
+    if (cardsBtn) cardsBtn.click(); else A.renderCards();
+    const el = doc.querySelector('#cardGrid [data-act="select"][data-survey="Alpha Survey"]');
+    ok(el, "StageB: the survey card's Download (select & download) button is missing for Alpha Survey");
+    return el;
+  };
   // Clean baseline: drawer closed, all surveys checked, map view, Browse mode.
   doc.getElementById("drawer").classList.remove("open");
   [...doc.querySelectorAll("#tree input")].forEach(c => { c.checked = true; });
@@ -2950,14 +3083,12 @@ async function bootFreshWindow(dataMap, url) {
   ok(A.visIds().length === 5, "StageB setup: expected the clean 5-station baseline, got " + A.visIds().length);
   ok(treeChecked().length === 4, "StageB setup: all 4 survey boxes must start checked, got " + JSON.stringify(treeChecked()));
 
-  // (1) DECOUPLE (RED-proof). Drive the REAL All-EDIs tile from the survey drawer. It scopes the map tree to
-  // its one survey (checks only that box). With the tree scoped, and WITHOUT leaving the map, the Surveys
-  // catalogue must STILL render every survey card: it is filtered ONLY by its own discovery controls, never
-  // by the rail tree. Pre-change renderCards read passesCore and rendered a single card.
-  A.openSurvey("Alpha Survey");
-  const ediTile = doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]');
-  ok(ediTile, "StageB: the All-EDIs tile is missing from the Alpha survey drawer");
-  ediTile.click();
+  // (1) DECOUPLE (RED-proof). Drive the REAL select-and-download control (the survey card's Download
+  // button). It scopes the map tree to its one survey (checks only that box). With the tree scoped, and
+  // WITHOUT leaving the map, the Surveys catalogue must STILL render every survey card: it is filtered ONLY
+  // by its own discovery controls, never by the rail tree. Pre-change renderCards read passesCore and
+  // rendered a single card.
+  selectCtl().click();
   ok(treeChecked().length === 1 && treeChecked()[0] === "Alpha Survey",
     "StageB: the All-EDIs tile must scope the map tree to its one survey, got " + JSON.stringify(treeChecked()));
   A.renderCards();
@@ -2978,8 +3109,7 @@ async function bootFreshWindow(dataMap, url) {
   // (the exact step in the owner's repro). The catalogue count is coherent - both #surveyCount and #nVis read
   // the discovery-filtered set of 4, never the scoped tree - AND leaving the map releases the lens so the map
   // tree is restored.
-  A.openSurvey("Alpha Survey");
-  doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]').click();
+  selectCtl().click();
   ok(treeChecked().length === 1, "StageB: re-scope setup failed, got " + JSON.stringify(treeChecked()));
   A.setView("surveys");
   ok(doc.getElementById("surveyCount").textContent === "4 surveys" && doc.getElementById("nVis").textContent === "4 surveys",
@@ -3103,14 +3233,14 @@ async function bootFreshWindow(dataMap, url) {
 
   // (f) SELECT-AND-EXPORT LENS. enterSelectLens/restoreSelectLens snapshot ONLY the tree's survey
   // checkboxes (`tree.querySelectorAll('input[value]')`, filters.js) - they never read #typeBoxes. So a
-  // hand-toggled TYPE (rail or legend: the same checkbox) is a DURABLE Browse filter that the All-EDIs tile
-  // flow neither captures nor restores, exactly like the hand-toggled tree box in StageB GUARD above.
+  // hand-toggled TYPE (rail or legend: the same checkbox) is a DURABLE Browse filter that the select-and-
+  // download flow neither captures nor restores, exactly like the hand-toggled tree box in StageB GUARD.
+  // Driven from the survey CARD's Download button since the survey drawer's tile was removed (ruling 1).
   gdRow.click();
   ok(typeBox("GDS").checked === false, "LEG lens setup: GDS must be off before entering the lens");
-  A.openSurvey("Alpha Survey");
-  doc.querySelector('#drawer [data-act="select"][data-survey="Alpha Survey"]').click();   // enters the lens
+  selectCtl().click();                                                                    // enters the lens
   ok(typeBox("GDS").checked === false && gdRow.getAttribute("aria-pressed") === "false",
-    "LEG lens: entering the All-EDIs select lens must not touch a legend/rail TYPE toggle");
+    "LEG lens: entering the select lens must not touch a legend/rail TYPE toggle");
   A.setSidebarMode("browse");                                                             // leaves it -> restoreSelectLens()
   ok(typeBox("GDS").checked === false && gdRow.getAttribute("aria-pressed") === "false",
     "LEG lens: leaving the lens must NOT restore over a legend/rail TYPE toggle (the lens snapshots the tree only)");
