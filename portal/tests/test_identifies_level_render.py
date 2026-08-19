@@ -32,8 +32,10 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
     # the level label REPLACES the relation label for an identifies row
     assert "Derived from: " not in station, "an identifies row still showed the relation label:\n" + station
     # ---- SURVEY GRID SLOT MAPPING (ruling 4 + the slot-mapping ruling) -------------------------------
-    # collection -> slot 1, raw_packed -> slot 2. `entire` maps to NO slot, so it must NOT consume one and
-    # must NOT vanish: it renders as an EXTRA tile below the six, and the header count stays 2 of 6.
+    # collection -> slot 1, raw_packed -> slot 2. This fixture carries BOTH `collection` and `entire`, so
+    # the drawer-polish COLLISION RULE applies (owner, 2026-08-19): `entire` is an ALIAS for the Collection
+    # slot, but the exact `collection` match wins the slot and `entire` falls to the extra-tile bucket -
+    # nothing silently dropped, and the header count tallies the SLOT (2 of 6), never both rows.
     tiles = re.findall(r'<div class="prod[^"]*dl-tile"[^>]*>.*?</div></div>', story, re.S)
     assert len(tiles) == 7, f"expected the six fixed slots plus ONE extra tile, got {len(tiles)}:\n{story}"
     assert tiles[0].startswith('<div class="prod dl-tile"') and "10.25914/parent" in tiles[0], \
@@ -45,11 +47,90 @@ def test_related_block_labels_by_level_when_identifies_present(tmp_path):
     for i, name in ((2, "Level 0"), (3, "Level 1"), (4, "Level 2"), (5, "Level 3")):
         assert f"{name}<" in tiles[i] and "not yet recorded" in tiles[i] and "dis" in tiles[i], \
             f"slot {i + 1} ({name}) must render muted-but-visible:\n" + tiles[i]
-    # the unmapped `entire` row is the 7th tile, labelled by the level vocabulary, and NOT counted in the six
+    # the collision-losing `entire` row is the 7th tile, labelled by the level vocabulary, not dropped
     assert "Entire dataset" in tiles[6] and "10.25914/whole" in tiles[6], \
-        "the unmapped `entire` row was dropped instead of rendering as an extra tile:\n" + story
+        "the collision-losing `entire` row was dropped instead of rendering as an extra tile:\n" + story
     assert "2 of 6 recorded" in story, \
         "the header count must tally only the SIX fixed slots (extras excluded):\n" + story
+    # A row can never be BOTH a slot and an extra: the collision-losing identifier must occupy exactly ONE
+    # tile. FAILS IF a future alias change double-renders the row it did not consume. (Counted over TILES,
+    # not substring hits - one tile carries its identifier three times: data-url, href and link text.)
+    assert sum("10.25914/whole" in t for t in tiles) == 1, \
+        "the collision-losing `entire` row occupies more than one tile (slot AND extra):\n" + story
+
+
+# ---- drawer-polish lane (owner, 2026-08-19): `entire` FILLS the Collection slot ----------------------
+# `entire` is the umbrella record - one deposit covering all levels - which is exactly what the Collection
+# slot names. It used to fall through to the extra-tile bucket, so Gawler Phase 2 (its GSSA/SARIG landing
+# page + a level3 models record) read "1 of 6 recorded" with an orphan tile hanging under the grid. These
+# two pins are the owner's stated acceptance shape.
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
+def test_entire_only_survey_fills_the_collection_slot(tmp_path):
+    """Gawler-Phase-2-shaped: an `entire` row and NO `collection` row. The `entire` row FILLS slot 1
+    (Collection), the count reads 2 of 6 with its Level 3, and NO extra tile hangs below the six.
+    FAILS (RED before the alias) IF `entire` still lands in the extra-tile bucket -> '1 of 6' + an orphan."""
+    extra = {"related_identifiers": [
+        {"identifier": "https://pid.sarig.sa.gov.au/dataset/mesac487", "identifier_type": "URL",
+         "relation": "IsVariantFormOf", "custodian": "GSSA/SARIG", "identifies": "entire"},
+        {"identifier": "https://pid.sarig.sa.gov.au/dataset/mesac525", "identifier_type": "URL",
+         "relation": "IsSourceOf", "custodian": "GSSA/SARIG", "identifies": "level3"}]}
+    _station, story, _card = _render(tmp_path, extra)
+    tiles = re.findall(r'<div class="prod[^"]*dl-tile"[^>]*>.*?</div></div>', story, re.S)
+    assert len(tiles) == 6, \
+        f"the `entire` row must FILL a slot, leaving exactly the six tiles, got {len(tiles)}:\n{story}"
+    assert "Collection<" in tiles[0] and "mesac487" in tiles[0], \
+        "slot 1 (Collection) did not take the `entire` row:\n" + tiles[0]
+    assert "dis" not in tiles[0].split(">")[0], \
+        "the Collection slot still renders MUTED despite the `entire` row filling it:\n" + tiles[0]
+    assert "Level 3<" in tiles[5] and "mesac525" in tiles[5], \
+        "slot 6 (Level 3) did not take the level3 row:\n" + tiles[5]
+    assert "2 of 6 recorded" in story, \
+        "the count must read '2 of 6 recorded' once `entire` fills the Collection slot:\n" + story
+    # the orphan is gone: `entire`'s own vocabulary label must no longer head a tile of its own
+    assert "Entire dataset" not in story, \
+        "the `entire` row rendered as an extra tile as well as filling the Collection slot:\n" + story
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
+def test_collection_and_entire_collision_gives_the_slot_to_collection(tmp_path):
+    """COLLISION RULE: a survey carrying BOTH `collection` and `entire` gives slot 1 to `collection` (the
+    exact match beats the alias) and renders `entire` as an EXTRA tile - nothing silently dropped, and the
+    count stays 1 of 6 (one SLOT recorded, not two rows). FAILS IF the alias steals the slot from the exact
+    match, IF the losing row vanishes, or IF the count double-tallies the pair."""
+    extra = {"related_identifiers": [
+        {"identifier": "10.25914/umbrella", "identifier_type": "DOI", "relation": "IsVariantFormOf",
+         "custodian": "GA", "identifies": "entire"},
+        {"identifier": "10.25914/exact-collection", "identifier_type": "DOI", "relation": "IsPartOf",
+         "custodian": "NCI", "identifies": "collection"}]}
+    _station, story, _card = _render(tmp_path, extra)
+    tiles = re.findall(r'<div class="prod[^"]*dl-tile"[^>]*>.*?</div></div>', story, re.S)
+    assert len(tiles) == 7, f"expected the six slots plus ONE extra tile, got {len(tiles)}:\n{story}"
+    # declared `entire` FIRST in the list, so a naive "first matching row wins" would hand it the slot
+    assert "Collection<" in tiles[0] and "10.25914/exact-collection" in tiles[0], \
+        "the exact `collection` row must win slot 1 over the `entire` alias:\n" + tiles[0]
+    assert "10.25914/umbrella" not in tiles[0], "the `entire` alias took the slot from the exact match:\n" + tiles[0]
+    assert "Entire dataset" in tiles[6] and "10.25914/umbrella" in tiles[6], \
+        "the collision-losing `entire` row was dropped instead of rendering as an extra tile:\n" + story
+    assert "1 of 6 recorded" in story, \
+        "the count must tally the SLOT (1 of 6), never both colliding rows:\n" + story
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
+def test_data_level_section_header_copy(tmp_path):
+    """Owner-approved wording from the design mockup: the grid's section head reads 'Data at every level:
+    N of 6 recorded', not the old 'Persistent identifiers:'. The STATION drawer's own identifiers block
+    keeps its name - that surface is explicitly untouched. FAILS (RED before the copy change) IF the survey
+    grid still heads 'Persistent identifiers:' or IF the station block loses its heading."""
+    _station, story, _card = _render(tmp_path, {})
+    assert "Data at every level: " in story, "the grid's section head did not take the approved wording:\n" + story
+    assert "Persistent identifiers:" not in story, \
+        "the old 'Persistent identifiers:' head survives on the survey drawer:\n" + story
+    # non-vacuous: the STATION rollup keeps the old name, so the string is not simply gone from the portal
+    station2, _s2, _c2 = _render(tmp_path, {"related_identifiers": [
+        {"identifier": "10.25914/x", "identifier_type": "DOI", "relation": "IsPartOf",
+         "identifies": "collection"}]})
+    assert re.search(r"Persistent identifiers (&amp;|&) instruments", station2), \
+        "the untouched STATION identifiers block lost its heading:\n" + station2
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")

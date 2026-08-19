@@ -2321,7 +2321,11 @@ async function bootFreshWindow(dataMap, url) {
   ok(/DOI/.test(cardA1) && cardA1.indexOf("licence ?") >= 0, "E1: slim card must keep the licence + DOI badges");
   // absent (moved to detail): identifiers rollup, APA cite block, spatial extent, coord-QC stats,
   // per-format availability matrix (EDI/time-series/MTH5 badges), the completeness/smoothness check.
+  // Both header strings are pinned absent: the station rollup's "Persistent identifiers & instruments"
+  // (what the card used to carry) AND the survey grid's "Data at every level" head, which the drawer-polish
+  // lane renamed it to. Pinning only the old string would have gone vacuous the moment it was renamed.
   ok(cardA1.indexOf("Persistent identifiers") < 0, "E1: the identifiers block must NOT be on the slim card");
+  ok(cardA1.indexOf("Data at every level") < 0, "E1: the data-level grid must NOT be on the slim card");
   ok(cardA1.indexOf('class="cite"') < 0, "E1: the APA citation block must NOT be on the slim card");
   ok(cardA1.indexOf("extent") < 0, "E1: the spatial extent must NOT be on the slim card");
   ok(cardA1.indexOf("coord QC") < 0, "E1: the coordinate-QC flag stat must NOT be on the slim card");
@@ -2425,11 +2429,16 @@ async function bootFreshWindow(dataMap, url) {
   // FIXED slots in the Rees et al. 2019 / NCI scheme, so the deposit chain has the same shape on every
   // survey. Alpha records no related_identifiers at all, which is exactly the case the old surface hid and
   // this one must state: 0 of 6, six MUTED-BUT-VISIBLE tiles, none of them omitted.
-  ok(![...drwE.querySelectorAll("details")].some(d => /Persistent identifiers:/.test(d.querySelector("summary") ? d.querySelector("summary").textContent : "")),
+  // COPY (drawer-polish lane, owner 2026-08-19): the head reads "Data at every level: N of 6 recorded".
+  // The old "Persistent identifiers:" wording is pinned GONE from the survey drawer below, so this rename
+  // cannot silently revert; the station drawer's own identifiers block is untouched and keeps its name.
+  ok(![...drwE.querySelectorAll("details")].some(d => /Data at every level:/.test(d.querySelector("summary") ? d.querySelector("summary").textContent : "")),
     "ruling 4: the identifiers rollup must NO LONGER be a collapsed <details> - it is an open tile grid");
-  const idHead = [...drwE.querySelectorAll(".sechead")].find(h => /Persistent identifiers:/.test(h.textContent));
-  ok(idHead, "ruling 4: the survey detail must carry a 'Persistent identifiers:' section head");
-  ok(/Persistent identifiers:\s*0 of 6 recorded/.test(idHead.textContent),
+  const idHead = [...drwE.querySelectorAll(".sechead")].find(h => /Data at every level:/.test(h.textContent));
+  ok(idHead, "drawer-polish: the survey detail must carry a 'Data at every level:' section head");
+  ok(!/Persistent identifiers:/.test(drwE.innerHTML),
+    "drawer-polish: the old 'Persistent identifiers:' head must be GONE from the survey drawer");
+  ok(/Data at every level:\s*0 of 6 recorded/.test(idHead.textContent),
     "ruling 4: the header count must read '0 of 6 recorded' for Alpha (no related_identifiers), got: " + JSON.stringify(idHead.textContent));
   const idGrid = idHead.nextElementSibling;
   ok(idGrid && idGrid.classList.contains("prodgrid"), "ruling 4: the identifiers head must be followed by a .prodgrid (the Downloads tile treatment)");
@@ -2464,7 +2473,7 @@ async function bootFreshWindow(dataMap, url) {
   // release notes last. Ruling 3: the trailing "Related surveys" block is REMOVED.
   const H = drwE.innerHTML, at = s => H.indexOf(s);
   const oDesc = at('class="dim"'), oScatter = at("<svg"), oSummary = at("Survey summary"), oDl = at(">Downloads<"),
-        oFund = at(">Funding<"), oPubs = at("Related publications"), oIds = at("Persistent identifiers:"),
+        oFund = at(">Funding<"), oPubs = at("Related publications"), oIds = at("Data at every level:"),
         oRel = at("Release notes");
   ok(oDesc >= 0 && oScatter > oDesc, "E4: description (1) must come before the geographic footprint (2)");
   ok(oScatter < oSummary, "E4: footprint (2) must come before the station/period stats (3)");
@@ -3749,6 +3758,93 @@ async function bootFreshWindow(dataMap, url) {
     JSON.stringify([xmlBtn.textContent, h5Btn.textContent, ediBtn.textContent]));
   A.setSelected([]);
 
+  // ---- DP. DRAWER-POLISH LANE (owner feedback 2026-08-19): slot mapping + the grid's link treatment ----
+  // Driven on Delta, which every earlier section has finished with, so nothing above is perturbed.
+  //
+  // (1) `entire` FILLS the Collection slot. `entire` means ONE record covering all levels - the umbrella
+  //     record the Collection slot names - so it belongs in that slot, not in the extra-tile bucket it used
+  //     to fall into. The fixture is Gawler Phase 2's real shape: a GSSA/SARIG umbrella landing page
+  //     (identifies: entire, NO `collection` row) plus its level3 models record. RED on the pre-lane build:
+  //     the Collection tile stayed muted, the head read "1 of 6 recorded", and the umbrella record hung
+  //     below the grid as an orphan seventh tile.
+  A.setSMETA("Delta Survey", { instrument_pid: "10.82388/bt6orvhn", related_identifiers: [
+    { identifier: "https://pid.sarig.sa.gov.au/dataset/mesac487", identifier_type: "URL", relation: "IsVariantFormOf", custodian: "GSSA/SARIG", identifies: "entire" },
+    { identifier: "https://pid.sarig.sa.gov.au/dataset/mesac525", identifier_type: "URL", relation: "IsSourceOf", custodian: "GSSA/SARIG", identifies: "level3" },
+  ] });
+  A.openSurvey("Delta Survey");
+  const drwDP = doc.getElementById("drawer");
+  const dpHead = () => [...drwDP.querySelectorAll(".sechead")].find(h => /Data at every level:/.test(h.textContent));
+  const dpTiles = () => [...dpHead().nextElementSibling.querySelectorAll(".prod")];
+  ok(dpHead(), "SLOT: the survey drawer must carry the 'Data at every level:' section head");
+  ok(/2 of 6 recorded/.test(dpHead().textContent),
+    "SLOT: an `entire`-only survey must count 2 of 6 (Collection + Level 3), got: " + JSON.stringify(dpHead().textContent));
+  ok(dpTiles().length === 6,
+    "SLOT: `entire` must FILL the Collection slot, leaving exactly six tiles and no orphan extra, got " + dpTiles().length);
+  ok(!dpTiles()[0].classList.contains("dis") && /mesac487/.test(dpTiles()[0].innerHTML),
+    "SLOT: slot 1 (Collection) must be filled by the `entire` umbrella record, got: " + JSON.stringify(dpTiles()[0].textContent.slice(0, 60)));
+  ok(/mesac525/.test(dpTiles()[5].innerHTML), "SLOT: slot 6 (Level 3) must still take the level3 row");
+  ok(!/Entire dataset/.test(drwDP.innerHTML),
+    "SLOT: a row that filled a slot must not ALSO render as an extra tile");
+
+  // (2) COLLISION RULE: a survey carrying BOTH `collection` and `entire` gives the slot to the EXACT key;
+  //     the alias renders as an extra tile (nothing is ever silently dropped) and "N of 6" tallies the
+  //     SLOT, never the pair. `entire` is declared FIRST here on purpose: an implementation that took the
+  //     first row matching either key would hand it the slot and fail this pin visibly.
+  A.setSMETA("Delta Survey", { related_identifiers: [
+    { identifier: "10.25914/umbrella", identifier_type: "DOI", relation: "IsVariantFormOf", custodian: "GA", identifies: "entire" },
+    { identifier: "10.25914/exact", identifier_type: "DOI", relation: "IsPartOf", custodian: "NCI", identifies: "collection" },
+  ] });
+  A.openSurvey("Delta Survey");
+  ok(/1 of 6 recorded/.test(dpHead().textContent),
+    "COLLISION: the count must tally the SLOT (1 of 6), not both colliding rows, got: " + JSON.stringify(dpHead().textContent));
+  ok(dpTiles().length === 7, "COLLISION: six slots plus the collision-losing extra tile, got " + dpTiles().length);
+  // Match on the FULL identifier, not the bare word: the Collection slot's own description ("the umbrella
+  // record for everything this survey deposited") carries the word `umbrella` and would false-positive.
+  ok(/10\.25914\/exact/.test(dpTiles()[0].innerHTML) && !/10\.25914\/umbrella/.test(dpTiles()[0].innerHTML),
+    "COLLISION: the exact `collection` row must win slot 1 over the `entire` alias");
+  ok(/Entire dataset/.test(dpTiles()[6].textContent) && /10\.25914\/umbrella/.test(dpTiles()[6].innerHTML),
+    "COLLISION: the losing `entire` row must survive as an extra tile, never be dropped");
+
+  // (3) LINK TREATMENT. index.html is the REAL page in this harness, so this asserts the CASCADE rather
+  //     than a string: for every anchor the grid renders, some rule in the document's own stylesheet that
+  //     sets the accent colour must SELECT that anchor - and the :visited form of the rule must exist too,
+  //     so a followed DOI can never fall back to the browser's purple. RED before this lane: NO rule in
+  //     the sheet selected these anchors at all, so the DOIs, the Rees citation and the platform PID
+  //     rendered in the UA's dark blue on the navy tiles (the owner's screenshot). jsdom resolves no
+  //     custom properties, so this proves SELECTION and the declared value, not the painted pixel.
+  A.setSMETA("Delta Survey", { instrument_pid: "10.82388/bt6orvhn", related_identifiers: [
+    { identifier: "10.25914/link-collection", identifier_type: "DOI", relation: "IsPartOf", custodian: "NCI", identifies: "collection" },
+  ] });
+  A.openSurvey("Delta Survey");
+  const sheetRules = [...doc.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch (e) { return []; } });
+  const accentRules = sheetRules.filter(r => r.style && /var\(--copper\)/.test(r.style.color || ""));
+  ok(accentRules.length > 0, "LINKCSS: no rule in index.html sets color:var(--copper) at all - the probe is broken, not the sheet");
+  // jsdom (like a real browser) refuses to match :visited from script, so strip the pseudo-class before
+  // matching and require it in the SELECTOR TEXT instead - the two halves together are the real claim.
+  const selectedBy = (el, wantVisited) => accentRules.some(r => String(r.selectorText).split(",").some(sel => {
+    sel = sel.trim();
+    if (wantVisited !== (sel.indexOf(":visited") >= 0)) return false;
+    try { return el.matches(sel.replace(/:visited/g, "")); } catch (e) { return false; }
+  }));
+  const gridRoot = dpHead().parentElement;
+  const gridAnchors = [...gridRoot.querySelectorAll(".dl-id a, .dl-cite a, .dl-instr a")];
+  ok(gridAnchors.length === 3,
+    "LINKCSS: expected the three grid link sites (tile identifier, Rees citation, platform PID), got " + gridAnchors.length);
+  gridAnchors.forEach(a => {
+    const where = a.parentElement.className || a.parentElement.tagName;
+    ok(selectedBy(a, false), "LINKCSS: no accent rule selects the grid anchor in '" + where + "' (" + a.getAttribute("href") + ")");
+    ok(selectedBy(a, true), "LINKCSS: no accent :visited rule selects the grid anchor in '" + where + "' - it may go browser-purple once followed");
+  });
+  // The negative: an unrecorded level's state text is a statement, not a link, and no accent rule may take it.
+  A.setSMETA("Delta Survey", { instrument_pid: null, related_identifiers: [] });
+  A.openSurvey("Delta Survey");
+  const stateSpans = [...dpHead().parentElement.querySelectorAll(".dl-state")];
+  ok(stateSpans.length === 6, "LINKCSS: expected six muted 'not yet recorded' states, got " + stateSpans.length);
+  stateSpans.forEach(s => {
+    ok(!s.querySelector("a"), "LINKCSS: the 'not yet recorded' state must never be a link");
+    ok(!selectedBy(s, false), "LINKCSS: the muted state text must not be painted the link accent");
+  });
+
   console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
@@ -3761,6 +3857,7 @@ async function bootFreshWindow(dataMap, url) {
     "all-four-off empty map reads '0 shown' and restores, inert cluster row, affordance hint at the top, select-lens never captures a type toggle), " +
     "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore, " +
     "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted), " +
-    "CARD-POLISH one-attribution-box(single .attn, names ORCID/ROR-linked in place, text == attributionText) + contributors-above-Downloads + lineage software(station-level-wins/survey-fallback/no-invented-version, node == prov row) + AusMT-Provenance-title + formats(served-only, no ticks/(pipeline), embargoed claims nothing) + publication-node-from-pubs(short cite + N-more, no fabricated et al., none-recorded when empty))");
+    "CARD-POLISH one-attribution-box(single .attn, names ORCID/ROR-linked in place, text == attributionText) + contributors-above-Downloads + lineage software(station-level-wins/survey-fallback/no-invented-version, node == prov row) + AusMT-Provenance-title + formats(served-only, no ticks/(pipeline), embargoed claims nothing) + publication-node-from-pubs(short cite + N-more, no fabricated et al., none-recorded when empty), " +
+    "DRAWER-POLISH slot-alias(`entire` fills Collection: 2-of-6 + six tiles + no orphan) + collision-rule(exact `collection` wins the slot, alias survives as an extra, count tallies the slot) + 'Data at every level' head + LINKCSS accent rule SELECTS all three grid link sites incl. :visited, muted state text excluded)");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

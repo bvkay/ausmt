@@ -203,6 +203,19 @@
   .sechead .dl-count{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
   .dl-cite{font-size:11.5px;color:var(--muted);margin-top:6px}
   .dl-instr{font-size:12px;color:var(--muted);margin-top:4px}
+  /* Drawer-polish lane (owner, 2026-08-19). The grid's three link sites - the tile identifiers (.dl-id),
+     the Rees et al. 2019 citation (.dl-cite) and the instruments platform PID (.dl-instr) - had NO colour
+     rule of their own and fell back to the user agent's link colours: a near-invisible dark blue on the
+     navy tiles, going purple once followed. Exactly the defect the .meta td a rule above fixed for the
+     summary tables, and it takes exactly that treatment - the site accent, underline on hover only, the
+     same value .dsub a.orglink and .surveymeta a already use. Nothing new is invented here.
+     :visited is stated EXPLICITLY rather than left to the cascade: an identifier is not "consumed" by
+     being clicked, so a followed DOI must read identically to an unfollowed one, and saying so keeps the
+     rule true if a later edit ever narrows the base selector. The muted tiles' "not yet recorded" text is
+     NOT a link and is deliberately absent from these selectors - it stays --muted. */
+  .dl-id a,.dl-cite a,.dl-instr a{color:var(--copper);text-decoration:none}
+  .dl-id a:visited,.dl-cite a:visited,.dl-instr a:visited{color:var(--copper)}
+  .dl-id a:hover,.dl-cite a:hover,.dl-instr a:hover{text-decoration:underline}
   /* R5: the Files tab NCI-level list — single column of full-width rows (not the 2-col tile grid). */
   .filelist{display:flex;flex-direction:column;gap:6px}
   .filelist .prod{width:100%}

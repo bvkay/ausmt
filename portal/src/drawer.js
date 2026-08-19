@@ -1500,7 +1500,7 @@ function surveyBundleTiles(slug){
       `<span class="pdot" style="background:var(--ok)"></span><div>${esc(L[0])}<small>${esc(L[1])}${r.size?" · "+esc(fmtBytes(r.size)):""}</small></div></div>`;
   }).join("");
 }
-// ---- survey-drawer lane (ruling 4, amended 2026-08-18): the survey PERSISTENT IDENTIFIERS tile grid ------
+// ---- survey-drawer lane (ruling 4, amended 2026-08-18): the survey DATA AT EVERY LEVEL tile grid --------
 // The block used to be a collapsed <details> of whatever single-value identifier rows happened to be
 // recorded, so its LENGTH varied per survey and a reader could not see what a survey had NOT deposited.
 // It is now a DATA-LEVEL grid: six fixed slots, always all six, rendered in the Downloads tile treatment.
@@ -1525,6 +1525,18 @@ const DATA_LEVEL_SLOTS=[
   ["level2","Level 2","derived frequency-domain processed data: transfer functions"],
   ["level3","Level 3","derived modelling inputs and outputs"],
 ];
+// SLOT ALIASES (drawer-polish lane, owner 2026-08-19). `entire` - ONE record covering all levels, the
+// shape the survey template gives a state-survey landing page - IS the umbrella record the Collection
+// slot names, so it FILLS that slot instead of falling through to the extra-tile bucket. Gawler Phase 2
+// is the case that forced this: its only umbrella identifier is the GSSA/SARIG record (identifies:
+// entire), so the drawer read "1 of 6 recorded" with an empty Collection tile and an orphan hanging
+// under the grid, when the survey plainly HAS deposited its umbrella record.
+// COLLISION RULE: when a survey carries BOTH `collection` and `entire`, the EXACT key takes the slot and
+// the alias renders as an EXTRA tile below the six. Two properties this preserves, in order: nothing is
+// ever silently dropped (the extra-tile rule is the section's one answer to "recorded, but not one of the
+// six"), and "N of 6" counts SLOTS, so a colliding pair tallies one, never two. Declaration order in the
+// survey.yaml is irrelevant - the exact match wins wherever it sits in the list.
+const SLOT_ALIASES={collection:["entire"]};
 // One tile. UNRECORDED is the owner's explicit ruling: muted BUT VISIBLE (.prod.dis + a hollow dot +
 // "not yet recorded"), never omitted, so the deposit chain has the same shape on every survey and a gap is
 // legible as a gap. RECORDED renders the identifier with the SAME resolution honesty every other identifier
@@ -1544,21 +1556,31 @@ function dataLevelTile(name,desc,row){
   const attrs=act?Object.entries(act).map(([k,v])=>`data-${k}="${escAttr(v)}"`).join(" "):"";
   return `<div class="prod dl-tile" ${attrs}><span class="pdot" style="background:var(--ok)"></span>`+
     `<div>${head}<small class="dl-id">${relatedIdLink(row.identifier,row.identifier_type)}${tag}</small></div></div>`;}
-// The whole section: the six fixed slots, then any identifier that maps to NO slot as an EXTRA tile below
-// them. Nothing is ever silently dropped - the `identifies` vocabulary may grow, and a row this build does
+// The whole section: the six fixed slots, then any identifier NO slot claimed (directly or through
+// SLOT_ALIASES) as an EXTRA tile below them. Nothing is ever silently dropped - the `identifies`
+// vocabulary may grow, and a row this build does
 // not model must still be visible rather than vanishing between releases. "N of 6" counts the six FIXED
 // slots only (an extra tile is not one of the six), per the slot-mapping ruling.
 function surveyDataLevelsHtml(m){
   m=m||{};
   const rels=(m.related_identifiers||[]).filter(r=>r&&typeof r==="object"&&r.identifier);
-  const rowFor=k=>rels.find(r=>r.identifies===k);
-  const have=DATA_LEVEL_SLOTS.filter(([k])=>!!rowFor(k)).length;
-  const tiles=DATA_LEVEL_SLOTS.map(([k,name,desc])=>dataLevelTile(name,desc,rowFor(k))).join("");
-  // Unmapped rows: an out-of-slot `identifies` (e.g. `entire`, one record covering all levels) or a legacy
-  // row that predates the level model and carries only a DataCite relation. Labelled by the same tables the
-  // retired Related-identifiers block used, so the label vocabulary is unchanged for these rows.
-  const slotKeys=DATA_LEVEL_SLOTS.map(([k])=>k);
-  const extras=rels.filter(r=>slotKeys.indexOf(r.identifies)<0).map(r=>{
+  // Resolve the six slots ONCE, recording which rows they consumed. With aliases in play, "this row's
+  // identifies is not a slot key" is no longer a safe proxy for "no slot took it", and getting that wrong
+  // would either drop a row or render it twice - so the consumed set is tracked explicitly and the extras
+  // bucket is derived from it. `taken` also makes single-consumption structural: no row can fill two slots.
+  const taken=[],slotRows=[];
+  DATA_LEVEL_SLOTS.forEach(([k])=>{
+    const pick=key=>rels.find(r=>r.identifies===key&&taken.indexOf(r)<0);
+    const row=pick(k)||(SLOT_ALIASES[k]||[]).map(pick).find(Boolean)||null;   // exact key first, then aliases
+    if(row)taken.push(row);
+    slotRows.push(row);});
+  const have=slotRows.filter(Boolean).length;
+  const tiles=DATA_LEVEL_SLOTS.map(([,name,desc],i)=>dataLevelTile(name,desc,slotRows[i])).join("");
+  // Unclaimed rows: an out-of-slot `identifies`, the alias that LOST a collision (a survey declaring both
+  // `collection` and `entire`), or a legacy row that predates the level model and carries only a DataCite
+  // relation. Labelled by the same tables the retired Related-identifiers block used, so the label
+  // vocabulary is unchanged for these rows.
+  const extras=rels.filter(r=>taken.indexOf(r)<0).map(r=>{
     const label=(r.identifies&&IDENTIFIES_LABELS[r.identifies])||RELATION_LABELS[r.relation]||(r.relation?String(r.relation):"Related identifier");
     return dataLevelTile(label,"recorded identifier outside the six data levels",r);}).join("");
   // The project RAiD is a PROJECT identifier, not a data level, so it has no slot - but it was visible in
@@ -1566,7 +1588,10 @@ function surveyDataLevelsHtml(m){
   // same extra-tile mechanism, which is the section's one rule for "recorded, but not one of the six".
   const raidRow=(m.raid&&!String(m.raid).startsWith("TODO"))?{identifier:String(m.raid),identifier_type:"URL"}:null;
   const raid=raidRow?dataLevelTile("Project RAiD","the research activity this survey was acquired under",raidRow):"";
-  return `<div class="sechead">Persistent identifiers: <span class="dl-count">${have} of 6 recorded</span></div>`+
+  // Owner-approved wording from the design mockup (2026-08-19): the head names what the grid is FOR - the
+  // deposit chain, level by level - rather than the identifier machinery it happens to be made of. The
+  // STATION drawer's own "Persistent identifiers & instruments" block (identifiersHtml) keeps its name.
+  return `<div class="sechead">Data at every level: <span class="dl-count">${have} of 6 recorded</span></div>`+
     `<div class="prodgrid">${tiles}${extras}${raid}</div>`+
     // The citability IS the point of using a published scheme, so the grid says which one, in print.
     `<div class="dl-cite">Levels per <a href="${escUrl(REES_LEVELS_DOI)}" target="_blank" rel="noopener noreferrer">Rees et al. 2019</a></div>`+
