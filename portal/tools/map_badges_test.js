@@ -32,14 +32,16 @@ const WANT = [
                         "shouldBadgeSurvey", "partitionForDisplay", "radiusForZoom", "hasPosition",
                         "isAuslampSurvey", "dimStyleFor", "declutterBadges"] },
 ];
-let code = "";
-for (const name of WANT[0].names) {
+// NOTE for anyone adding a name here: the brace matcher below treats a quote character as a string
+// delimiter WITHOUT skipping comments first, so an apostrophe inside a comment in an extracted function
+// swallows the rest of the file and extraction fails (loudly). Keep extracted functions apostrophe-free.
+function grabConst(name) {
   // map.js declares some of these singly and some comma-chained on one line, so accept either form.
   const m = new RegExp("(?:const\\s+|,\\s*)" + name + "\\s*=\\s*([^;,]+)\\s*[;,]").exec(mapSrc);
   if (!m) { console.error("MAP BADGES FAILED: const " + name + " not found in map.js"); process.exit(1); }
-  code += "const " + name + "=" + m[1].trim() + ";\n";
+  return "const " + name + "=" + m[1].trim() + ";\n";
 }
-for (const name of WANT[1].names) {
+function grabFn(name) {
   // Grab `function name(...) { ... }` by brace-matching from the header.
   const start = mapSrc.search(new RegExp("^function\\s+" + name + "\\s*\\(", "m"));
   if (start < 0) { console.error("MAP BADGES FAILED: function " + name + " not found in map.js"); process.exit(1); }
@@ -52,8 +54,12 @@ for (const name of WANT[1].names) {
     else if (c === "}") { depth--; if (depth === 0) { end = j + 1; break; } }
   }
   if (end < 0) { console.error("MAP BADGES FAILED: could not extract " + name); process.exit(1); }
-  code += mapSrc.slice(start, end) + "\n";
+  return mapSrc.slice(start, end) + "\n";
 }
+function buildCode(consts, fns) {
+  return consts.map(grabConst).join("") + fns.map(grabFn).join("");
+}
+const code = buildCode(WANT[0].names, WANT[1].names);
 const ctx = { Math, console, Set, Map, Array, Object, Number, isFinite, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
@@ -330,6 +336,171 @@ ok(impOut.some((p, i) => {
 }), "the cap must be a REAL limit: an unresolvable pile is expected to end up still overlapping, " +
     "which is the stated trade (accepted overlap beats a badge far from its survey)");
 ok(impOut.every(p => isFinite(p.x) && isFinite(p.y)), "an unresolvable pile must not produce NaN positions");
+
+// ---- THE RENDER PATH ITSELF (gate finding, 2026-08-19) ------------------------------------------
+// Everything above tests declutterBadges as a PURE function, and the python side scanned map.js for the
+// PRESENCE of the call. Neither proved the layout RESULT reaches the badge markers and the leader polyline.
+// It did not: neutering _badgeLayout to return true centroids with no tails, and disabling the tail draw
+// with `if(false&&at.tail)`, both left the whole suite green. The honesty content of the feature - a
+// displaced badge admits it with a leader back to its survey - was unguarded.
+//
+// So drive the REAL render path. renderBadges and _badgeLayout are extracted from the shipped source and
+// run against a recording Leaflet stub whose map.project/unproject are the ACTUAL Web Mercator transforms
+// (not stubs that return proxies), so the pixel space the declutter reasons in is the real one. What is
+// asserted is what actually landed in the layer: marker positions, polyline vertices, panes and options.
+//
+// STILL NOT PROVEN HERE (browser facts, unchanged): that Leaflet paints the marker where the LatLng says,
+// that a pointer reaches a displaced badge, or that the tail is visible against the basemap.
+const RENDER_CONSTS = ["BADGE_GAP_PX", "BADGE_MAX_SHIFT_PX", "BADGE_DECLUTTER_PASSES", "BADGE_TAIL_MIN_PX",
+                       "BADGE_TAIL_COLOR", "BADGE_TAIL_OPACITY"];
+const RENDER_FNS = ["mercatorY", "declutterBadges", "badgeSizePx", "badgeIcon", "curZoom",
+                    "_badgeLayout", "renderBadges"];
+// Real Web Mercator, the transform Leaflet's own project/unproject implement at 256px tiles.
+const _merY = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI / 360));
+function renderEnv(zoom) {
+  const added = [];
+  const scale = 256 * Math.pow(2, zoom);
+  const env = {
+    Math, console, isFinite, Array, Object, Number, JSON, Set, Map,
+    added,
+    escAttr: (s) => String(s === undefined ? "" : s),
+    _survPaneFor: (s) => "pane:" + s,
+    badgeLayer: { clearLayers() { added.length = 0; }, addLayer(o) { added.push(o); } },
+    map: {
+      getZoom: () => zoom,
+      project(ll, z) {
+        const sc = 256 * Math.pow(2, z === undefined ? zoom : z);
+        return { x: (ll[1] + 180) / 360 * sc, y: (Math.PI - _merY(ll[0])) / (2 * Math.PI) * sc };
+      },
+      unproject(p, z) {
+        const sc = 256 * Math.pow(2, z === undefined ? zoom : z);
+        const lng = p[0] / sc * 360 - 180;
+        const m = Math.PI - p[1] / sc * 2 * Math.PI;
+        return { lat: (2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180 / Math.PI, lng };
+      },
+    },
+    L: {
+      point: (x, y) => ({ x, y }),
+      divIcon: (o) => ({ kind: "divIcon", opts: o }),
+      polyline: (latlngs, opts) => ({ kind: "polyline", latlngs, opts }),
+      marker: (latlng, opts) => ({ kind: "marker", latlng, opts, on() { return this; } }),
+    },
+    scale,
+  };
+  env.globalThis = env;
+  vm.createContext(env);
+  vm.runInContext(buildCode(RENDER_CONSTS, RENDER_FNS) +
+    "\nglobalThis.__r={renderBadges,_badgeLayout,badgeSizePx,declutterBadges};", env);
+  return env;
+}
+
+// A colliding pile in REAL coordinates: five surveys within ~0.3 deg near the Curnamona, which at z5 is a
+// few pixels - the shape of the case the owner reported. Counts deliberately out of order.
+const RZ = 5;
+const saLL = [
+  { survey: "Kalkaroo 2026", slug: "kalk", lat: -32.00, lon: 138.00, count: 312 },
+  { survey: "CCMT 2017", slug: "ccmt", lat: -32.05, lon: 138.15, count: 20 },
+  { survey: "Jupiter 2021", slug: "jup", lat: -31.95, lon: 137.90, count: 216 },
+  { survey: "Burra 2017-18", slug: "burra", lat: -32.10, lon: 138.05, count: 53 },
+  { survey: "Tumby Bay 2018-19", slug: "tumby", lat: -31.90, lon: 138.20, count: 83 },
+];
+const renv = renderEnv(RZ);
+renv.__r.renderBadges(saLL);
+const rAdded = renv.added;
+
+// The EXPECTATION is computed independently of _badgeLayout: project the true centroids with the same
+// Mercator transform, run the pure declutter, and require the layer to carry exactly that. This is what
+// makes a neutered _badgeLayout fail - the expectation does not come from the code path under test.
+const rProj = saLL.map(b => renv.map.project([b.lat, b.lon], RZ));
+const rExpect = renv.__r.declutterBadges(saLL.map((b, i) =>
+  ({ x: rProj[i].x, y: rProj[i].y, r: renv.__r.badgeSizePx(b.count) / 2, count: b.count })));
+const nDisplaced = rExpect.filter(e => e.displaced).length;
+// Non-vacuous by construction: if this fixture stopped colliding there would be nothing to prove.
+ok(nDisplaced > 0,
+  "RENDER fixture is vacuous: no badge is displaced at z" + RZ + ", so the tail pins would prove nothing");
+ok(nDisplaced < saLL.length, "RENDER fixture should leave the anchor badge in place, got all " + nDisplaced + " displaced");
+
+// Walk the layer in order. renderBadges emits, per badge: the leader tail (only when displaced) and then
+// the marker. Walking rather than filtering pins THREE things at once - the count, the pairing, and the
+// z-order (tail first, so the badge draws over its own leader).
+let ri = 0, tails = 0;
+saLL.forEach((b, i) => {
+  const wantTail = rExpect[i].displaced;
+  if (wantTail) {
+    const pl = rAdded[ri++];
+    ok(pl && pl.kind === "polyline",
+      "RENDER: displaced badge " + b.count + " must emit a leader polyline BEFORE its marker, got " +
+      JSON.stringify(pl && pl.kind));
+    if (pl && pl.kind === "polyline") {
+      tails++;
+      // the tail ENDS at the true centroid: this is the claim the whole feature exists to keep
+      const last = pl.latlngs[pl.latlngs.length - 1];
+      ok(near(last[0], b.lat, 1e-9) && near(last[1], b.lon, 1e-9),
+        "RENDER: the leader for " + b.survey + " must END at its TRUE centroid " +
+        JSON.stringify([b.lat, b.lon]) + ", got " + JSON.stringify(last));
+      ok(!(near(pl.latlngs[0][0], b.lat, 1e-9) && near(pl.latlngs[0][1], b.lon, 1e-9)),
+        "RENDER: the leader for " + b.survey + " starts at the centroid too - it points at nothing");
+      ok(pl.opts && pl.opts.interactive === false,
+        "RENDER: the leader polyline must be interactive:false, got " + JSON.stringify(pl.opts));
+      ok(pl.opts && pl.opts.pane === "pane:" + b.survey,
+        "RENDER: the leader must ride its own survey pane so the focus dim covers it, got " +
+        JSON.stringify(pl.opts && pl.opts.pane));
+    }
+  }
+  const mk = rAdded[ri++];
+  ok(mk && mk.kind === "marker", "RENDER: badge " + b.count + " must emit a marker, got " + JSON.stringify(mk && mk.kind));
+  if (mk && mk.kind === "marker") {
+    // THE CENTRAL PIN: the marker sits at the DECLUTTERED position, not at the centroid. Re-project what
+    // actually reached the layer and compare against the pure function's answer, in pixels.
+    const back = renv.map.project([mk.latlng[0], mk.latlng[1]], RZ);
+    ok(near(back.x, rExpect[i].x, 1e-6) && near(back.y, rExpect[i].y, 1e-6),
+      "RENDER: badge " + b.count + " (" + b.survey + ") was placed at pixel " +
+      JSON.stringify([+back.x.toFixed(2), +back.y.toFixed(2)]) + " but the declutter says " +
+      JSON.stringify([+rExpect[i].x.toFixed(2), +rExpect[i].y.toFixed(2)]) +
+      " (centroid is " + JSON.stringify([+rProj[i].x.toFixed(2), +rProj[i].y.toFixed(2)]) + ")");
+    if (wantTail) {
+      const off = Math.hypot(back.x - rProj[i].x, back.y - rProj[i].y);
+      ok(off > A.BADGE_TAIL_MIN_PX,
+        "RENDER: badge " + b.count + " is flagged displaced but landed " + off.toFixed(3) +
+        "px from its centroid - the layout result never reached the marker");
+    }
+    ok(mk.opts && mk.opts.pane === "pane:" + b.survey, "RENDER: a badge marker must ride its survey pane");
+    ok(mk.opts && mk.opts.bubblingMouseEvents === false,
+      "RENDER: a badge marker must keep bubblingMouseEvents:false through the declutter change");
+  }
+});
+ok(ri === rAdded.length,
+  "RENDER: the layer holds " + rAdded.length + " objects but the walk accounted for " + ri +
+  " - something extra (or missing) was added");
+ok(tails === nDisplaced,
+  "RENDER: expected exactly " + nDisplaced + " leader tails (one per displaced badge), got " + tails);
+// The anchor: the largest survey must be drawn exactly at its centroid, with no tail.
+const rBigIdx = saLL.reduce((a, b, i) => (b.count > saLL[a].count ? i : a), 0);
+ok(rExpect[rBigIdx].displaced === false, "RENDER fixture: the largest badge should be the anchor");
+const bigMk = rAdded.filter(o => o.kind === "marker")[rBigIdx];
+ok(near(bigMk.latlng[0], saLL[rBigIdx].lat, 1e-9) && near(bigMk.latlng[1], saLL[rBigIdx].lon, 1e-9),
+  "RENDER: the anchor badge must be drawn at its exact centroid, got " + JSON.stringify(bigMk.latlng));
+
+// A NON-colliding pile must emit NO tails at all: the disclosure only appears when there is something to
+// disclose. (This is also what would catch a change that drew leaders unconditionally.)
+const spreadLL = [
+  { survey: "A", slug: "a", lat: -32.0, lon: 130.0, count: 40 },
+  { survey: "B", slug: "b", lat: -25.0, lon: 145.0, count: 300 },
+];
+const renv2 = renderEnv(RZ);
+renv2.__r.renderBadges(spreadLL);
+ok(renv2.added.filter(o => o.kind === "polyline").length === 0,
+  "RENDER: badges that do not collide must draw NO leader tails");
+ok(renv2.added.filter(o => o.kind === "marker").length === 2, "RENDER: both non-colliding badges must still render");
+renv2.added.filter(o => o.kind === "marker").forEach((mk, i) =>
+  ok(near(mk.latlng[0], spreadLL[i].lat, 1e-9) && near(mk.latlng[1], spreadLL[i].lon, 1e-9),
+    "RENDER: a non-colliding badge must sit exactly at its centroid"));
+
+// A SINGLE badge cannot collide, so the layout short-circuits before projecting: still one marker, no tail.
+const renv3 = renderEnv(RZ);
+renv3.__r.renderBadges([{ survey: "Solo", slug: "s", lat: -30, lon: 140, count: 7 }]);
+ok(renv3.added.length === 1 && renv3.added[0].kind === "marker",
+  "RENDER: a lone badge must render as exactly one marker with no tail");
 
 // ---- composition with change 2 ------------------------------------------------------------------
 // Badges live in their survey's pane, so the dim decision is the SAME function for both. Pin that the

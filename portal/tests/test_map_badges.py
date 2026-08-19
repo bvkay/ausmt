@@ -26,7 +26,10 @@ FAILS IF:
   type at the same size (the per-type split was removed 2026-08-19: size encodes zoom, colour encodes type);
 - the badge collision declutter stops separating overlapping badges, moves the largest badge of a colliding
   set, exceeds its travel cap, loses determinism, or renders a displaced badge without the leader tail back
-  to its true centroid.
+  to its true centroid. That LAST clause is carried by the driver's render-path section, which drives the
+  real renderBadges against a recording Leaflet stub and asserts on what reached the layer. It has to be
+  behavioural: the source-shape pins here cannot see whether a computed layout is actually USED, and a gate
+  review caught exactly that gap (two mutations that emptied the render path left everything green).
 """
 import re
 import shutil
@@ -137,15 +140,27 @@ def test_the_per_type_radius_split_is_gone():
         f"colour. A `type` parameter is how the split returns.")
 
 
-def test_badge_declutter_is_wired_and_its_leader_cannot_swallow_clicks():
-    """Badge collision declutter (owner, 2026-08-19). SOURCE pins, for the same reason the click pins above
-    are source pins: under a stubbed Leaflet nothing projects, so the wiring is only readable off the source.
-    COMMENT-STRIPPED, because the narration above renderBadges contains these very words and a raw scan
-    would pass on the prose alone (the lesson the earlier vacuous click pin taught this file).
+def test_badge_declutter_source_shape():
+    """Badge collision declutter (owner, 2026-08-19): SOURCE-SHAPE pins, and ONLY source shape.
 
-    FAILS IF the render path stops running the declutter, IF the leader tail becomes interactive (it would
-    intercept clicks meant for the badge or for the map background), or IF the tail stops running from the
-    displaced position back to the TRUE centroid, which is the entire honesty content of the feature."""
+    SCOPE CORRECTED after the gate review (2026-08-19). An earlier version of this test claimed it would
+    fail if "the render path stops running the declutter", or if "the tail stops running from the displaced
+    position back to the TRUE centroid". It would not, and the gate proved it: neutering _badgeLayout to
+    return true centroids with no tails, and disabling the tail draw with `if(false&&at.tail)`, each left
+    this file AND the node driver fully green. A textual scan can see that a call is WRITTEN; it can never
+    see that the result is USED. The docstring was making a claim the assertions did not support, which is
+    the failure mode this repo treats as worse than no test at all.
+
+    Those behavioural claims now belong to tools/map_badges_test.js, which drives the real renderBadges
+    against a recording Leaflet stub with genuine Web Mercator project/unproject, and asserts on what
+    actually reached the layer: marker positions equal to the DECLUTTERED pixels (not the centroids), one
+    leader per displaced badge, each ending at its true centroid, tail before marker. Both gate mutations
+    fail there with 12 assertions each.
+
+    FAILS IF, and only if, the named pieces go missing from the source: declutterBadges deleted, the layout
+    pass no longer feeding it the badge list, renderBadges no longer calling _badgeLayout, or the leader
+    polyline losing interactive:false or its literal endpoint expression. COMMENT-STRIPPED, because the
+    narration above renderBadges contains these very words and a raw scan would pass on the prose alone."""
     src = _map_src()
     code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("//"))
     flat = code.replace(" ", "")
