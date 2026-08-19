@@ -23,7 +23,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 DRIVER = ROOT / "tools" / "interaction_test.js"
-COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text())
+COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text(encoding="utf-8"))
 
 
 def _row(cols, vals):
@@ -156,7 +156,7 @@ def test_portal_interactions(tmp_path):
     (data / "build.json").write_text(json.dumps({"build_id": "eng-src-2020", "engine_commit": "eng",
                                                  "source_commit": "src", "generated": "2020-01-15T00:00:00+00:00"}))
 
-    r = subprocess.run(["node", str(DRIVER), str(data)], capture_output=True, text=True, cwd=str(ROOT))
+    r = subprocess.run(["node", str(DRIVER), str(data)], capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
     out = r.stdout + r.stderr
     if r.returncode == 2:
         pytest.skip("jsdom dev-dependency not installed (run `npm ci` in portal/)")

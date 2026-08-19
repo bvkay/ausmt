@@ -20,7 +20,7 @@ DRIVER = ROOT / "tools" / "add_survey_submit_test.js"
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_add_survey_submit_flow():
     assert DRIVER.exists(), "add_survey_submit_test.js missing"
-    r = subprocess.run(["node", str(DRIVER)], capture_output=True, text=True, cwd=str(ROOT))
+    r = subprocess.run(["node", str(DRIVER)], capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
     out = r.stdout + r.stderr
     if r.returncode == 2:
         pytest.skip("jsdom dev-dependency not installed (run `npm ci` in portal/)")

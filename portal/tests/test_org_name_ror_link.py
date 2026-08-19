@@ -19,7 +19,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 SRC = ROOT / "src"
-COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text())
+COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text(encoding="utf-8"))
 
 DRIVER = r"""
 const fs=require("fs"),vm=require("vm"),path=require("path");

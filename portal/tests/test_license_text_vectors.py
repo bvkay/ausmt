@@ -15,7 +15,7 @@ TEST_JS = Path(__file__).resolve().parent / "license_text_vectors.test.js"
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_license_text_vectors():
     assert TEST_JS.exists(), "license_text_vectors.test.js missing"
-    r = subprocess.run(["node", str(TEST_JS)], capture_output=True, text=True, cwd=str(ROOT))
+    r = subprocess.run(["node", str(TEST_JS)], capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
     out = r.stdout + r.stderr
     assert r.returncode == 0, out
     assert "ALL PASSED" in out, out
