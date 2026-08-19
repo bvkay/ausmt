@@ -26,7 +26,12 @@
        in about.html and add-survey.html — keep the five values in sync across all three. */
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
     --text:#E8EDF1; --muted:#8FA3B0; --copper:#EF7256;
-    --lpmt:#2E8FA3; --bbmt:#5E5ED6; --amt:#CDA1EC; --gds:#C255A0;
+    /* Data-type palette. These MUST equal src/state.js TYPE_COL byte-for-byte - a legend swatch and its map
+       dot are the same claim, and they are two files, so parity is gated rather than hoped for
+       (tests/test_type_palette_separability.py, which also gates the pairwise separability floors).
+       --bbmt moved #5E5ED6 -> #3730B8 on 2026-08-19: the owner reported LP and BB as too similar at
+       site-dot size; the old pair separated by hue across only 9 L*. The reasoning is in state.js. */
+    --lpmt:#2E8FA3; --bbmt:#3730B8; --amt:#CDA1EC; --gds:#C255A0;
     /* UX6 Wave F (F2): --no lightened #A85454 -> #E2938B so it clears WCAG AA (4.5:1) as TEXT on the
        panels it renders on (.badge.no on --panel = 5.98:1, on --panel-2 = 5.00:1; both were ~2.3-2.8:1).
        Hue-preserving danger red, distinct from --part amber and --copper. (The old --q0/--q3/--q5

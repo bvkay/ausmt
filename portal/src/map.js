@@ -20,9 +20,13 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{at
 // cluster bubbles (same sizes, same palette ramp) so the map does not change dialect, but the MEANING is
 // different and the tooltip says so: a bubble was "some stations that happen to be near each other", a
 // badge is "this survey". Escaped, because Leaflet sets divIcon html via innerHTML.
+// PURE: a badge's on-screen diameter in px, by station count. Shared by badgeIcon (which draws it) and the
+// declutter pass (which has to know how big the thing it is separating actually is) - two readings of one
+// number, so they cannot drift into a layout that separates badges by the wrong distance.
+function badgeSizePx(n){return n<10?34:n<100?42:52;}
 function badgeIcon(survey,n){
   const cls=n<10?"svbadge-small":n<100?"svbadge-medium":"svbadge-large";
-  const size=n<10?34:n<100?42:52;
+  const size=badgeSizePx(n);
   const tip=(survey?survey+" · ":"")+n+" station"+(n===1?"":"s")+" · click to open";
   return L.divIcon({html:`<div title="${escAttr(tip)}"><span>${n}</span></div>`,className:"ausmt-badge "+cls,iconSize:L.point(size,size)});
 }
@@ -140,6 +144,75 @@ function partitionForDisplay(stations,zoom,opts){
     if(!c){ss.forEach(s=>dots.push(s));return;}            // no position to badge at: degrade to dots
     badges.push({survey:sv,slug:(ss[0]&&ss[0].slug)||"",lat:c.lat,lon:c.lon,count:positioned.length});});
   return {dots,badges};}
+// ---- BADGE COLLISION DECLUTTER (owner, 2026-08-19, on the deployed map) -------------------------------
+// The SA deposit surveys pile up: 312 / 20 / 216 / 53 / 83 / 78 / 36 badges stacked near Adelaide and the
+// Curnamona, overlapping into an unreadable heap at national zoom. Badges are placed at CENTROIDS, and
+// several small surveys genuinely share a neighbourhood, so the placement is not wrong - it is just
+// unreadable. Standard cartographic label declutter applies: displace the labels, and DRAW THE LEADER.
+//
+// The leader tail is the whole ethical content of this feature. A badge that moves without one is a badge
+// that LIES about where its survey is, and this portal does not make absence claims by omission anywhere
+// else either. So: displaced badge -> thin line back to its true centroid, always, above the tail
+// threshold. Below that threshold the displacement is sub-pixel-ish and there is nothing to disclose.
+//
+// TWO RULES SHAPE THE ALGORITHM, both stated rather than tuned:
+//   1. COUNT-DESCENDING ANCHORING. Readers navigate by the big badges, so the big ones are the fixed
+//      points and the small ones travel. In any colliding pair only the LOWER-count badge moves, which
+//      makes "the largest badge in a set never moves" structural rather than emergent.
+//   2. A TRAVEL CAP. Past BADGE_MAX_SHIFT_PX we ACCEPT the overlap. A badge 200px from its survey is a
+//      worse lie than two badges touching, and a leader tail that long stops reading as an annotation.
+// Determinism is a pinned property, not an accident: the ordering tie-break is the original index, the
+// coincident-centroid fan-out angle is derived from rank, and nothing reads a clock or a random source.
+const BADGE_GAP_PX=4;              // clear air between two badge rims once separated
+const BADGE_MAX_SHIFT_PX=88;       // hard cap on how far a badge may travel from its true centroid
+// Bounded relaxation. Resolving one pair can disturb an already-resolved one, so this iterates and stops
+// early once a whole pass moves nothing. MEASURED on the owner reported SA pile (312/20/216/53/83/78/36):
+// converged to machine precision within 8 passes, max travel 55.8px, largest badge anchored. A denser
+// synthetic pile needed 16. 24 is that measurement plus headroom, and the cost is trivial - a handful of
+// badges, so this is a few hundred distance checks on a zoom notch. A BOUNDED iteration cannot promise
+// exactness on adversarial input, which is why the pins assert separation to a stated sub-pixel tolerance
+// rather than pretending the fixed point is always reached.
+const BADGE_DECLUTTER_PASSES=24;
+const BADGE_TAIL_MIN_PX=2;         // under this, a displacement is invisible and draws no leader
+// The tail is drawn in the portal's INK, not in the badge's own rim colour (rgba(232,237,241,.4)). The rim
+// is a light-on-coloured-disc treatment: it reads because it sits on a saturated badge. A tail crosses the
+// CARTO light_all basemap, where a near-white 1px line is simply invisible, so it takes the same ink every
+// station dot is already outlined with. Subtle, and actually present.
+const BADGE_TAIL_COLOR="#11182D",BADGE_TAIL_OPACITY=.45;
+// PURE: [{x,y,r,count}] (projected pixels) -> [{x,y,displaced}], index-aligned with the input. No Leaflet,
+// no DOM, no clock, no randomness - the whole layout decision is unit-testable on plain objects, which is
+// the same split shouldBadgeSurvey/partitionForDisplay already use. Never mutates its input: the caller's
+// entries carry the TRUE centroid the leader tail is drawn back to, so corrupting them would corrupt the
+// honesty mechanism itself.
+function declutterBadges(entries){
+  const src=(entries||[]).map((e,i)=>({i,
+    x:(e&&isFinite(e.x))?+e.x:0, y:(e&&isFinite(e.y))?+e.y:0,
+    r:(e&&isFinite(e.r)&&e.r>0)?+e.r:0, count:(e&&isFinite(e.count))?+e.count:0}));
+  const pos=src.map(e=>({x:e.x,y:e.y}));
+  // Count DESC; original index breaks ties so two equal-count badges resolve identically on every run.
+  const order=src.slice().sort((a,b)=>(b.count-a.count)||(a.i-b.i));
+  for(let pass=0;pass<BADGE_DECLUTTER_PASSES;pass++){
+    let moved=false;
+    for(let ai=0;ai<order.length;ai++)for(let bi=ai+1;bi<order.length;bi++){
+      const a=order[ai],b=order[bi];                       // a outranks b, so only b may move
+      const pa=pos[a.i],pb=pos[b.i],need=a.r+b.r+BADGE_GAP_PX;
+      let dx=pb.x-pa.x,dy=pb.y-pa.y,d=Math.hypot(dx,dy);
+      if(d>=need-1e-9)continue;                            // already clear
+      if(d<1e-9){                                          // exactly coincident: no away-vector exists, so
+        const th=2*Math.PI*bi/order.length;                // fan the lower-ranked badges by RANK, not chance
+        dx=Math.cos(th);dy=Math.sin(th);d=1;}
+      const tx=pa.x+dx/d*need,ty=pa.y+dy/d*need;
+      // Clamp the TOTAL travel of b, measured from its own true centroid - not from wherever a previous
+      // pass happened to leave it, which would let repeated nudges walk a badge past the cap.
+      // (No apostrophes in this function: tools/map_badges_test.js extracts it by brace-matching and
+      // treats a quote character as a string delimiter, comments included.)
+      const ox=src[b.i].x,oy=src[b.i].y,vx=tx-ox,vy=ty-oy,td=Math.hypot(vx,vy);
+      const k=(td>BADGE_MAX_SHIFT_PX)?BADGE_MAX_SHIFT_PX/td:1;
+      const nx=ox+vx*k,ny=oy+vy*k;
+      if(Math.abs(nx-pb.x)>1e-9||Math.abs(ny-pb.y)>1e-9){pb.x=nx;pb.y=ny;moved=true;}}
+    if(!moved)break;}                                      // stable: nothing left to separate
+  return src.map((e,i)=>({x:pos[i].x,y:pos[i].y,
+    displaced:Math.hypot(pos[i].x-e.x,pos[i].y-e.y)>BADGE_TAIL_MIN_PX}));}
 // ---- change 6: the badge LAYER (the only Leaflet-touching half) ---------------------------------------
 // One layer group holding the current badge markers. Each badge marker is created into ITS SURVEY'S PANE
 // (_survPaneFor), which is what makes the change-2 focus dim apply to badges exactly as it does to dots:
@@ -151,10 +224,41 @@ map.addLayer(badgeLayer);
 // bubblingMouseEvents:false is set EXPLICITLY even though L.Marker already defaults to it: change 5's
 // background-click handler closes the drawer, and a badge that let its click bubble would open the drawer
 // and instantly close it. This is the guarantee, not the default, so it is written down.
+// The declutter's Leaflet-touching half: project every badge centroid to pixels at the CURRENT zoom, run
+// the pure separation pass in that space, unproject the results. Pixels are the only space this decision
+// can be made in - "overlapping" is a screen fact, and it changes with zoom, which is why this re-runs on
+// zoomend through reflowForZoom -> routeVisibleToLayers like the badge rule itself.
+// PROJECTION IS THE ONE THING THAT CAN FAIL: the headless harnesses stub Leaflet, so map.project returns a
+// Proxy whose .x is not a number. Any non-finite projection degrades the WHOLE pass to "every badge at its
+// true centroid, no tails" - the exact pre-declutter behaviour, never a half-decluttered layout.
+function _badgeLayout(list){
+  const plain=(list||[]).map(b=>({lat:b.lat,lon:b.lon,tail:null}));
+  if(plain.length<2||!map||typeof map.project!=="function")return plain;
+  const z=curZoom(),pts=[];
+  for(const b of list){
+    let p=null;
+    try{p=map.project([b.lat,b.lon],z);}catch(e){p=null;}
+    if(!p||!isFinite(p.x)||!isFinite(p.y))return plain;
+    pts.push(p);}
+  const laid=declutterBadges(list.map((b,i)=>({x:pts[i].x,y:pts[i].y,r:badgeSizePx(b.count)/2,count:b.count})));
+  return list.map((b,i)=>{
+    if(!laid[i].displaced)return {lat:b.lat,lon:b.lon,tail:null};
+    let ll=null;
+    try{ll=map.unproject([laid[i].x,laid[i].y],z);}catch(e){ll=null;}
+    if(!ll||!isFinite(ll.lat)||!isFinite(ll.lng))return {lat:b.lat,lon:b.lon,tail:null};
+    // The tail runs from where the badge NOW SITS back to where its survey ACTUALLY IS.
+    return {lat:ll.lat,lon:ll.lng,tail:[[ll.lat,ll.lng],[b.lat,b.lon]]};});}
 function renderBadges(list){
   badgeLayer.clearLayers();
-  (list||[]).forEach(b=>{
-    const m=L.marker([b.lat,b.lon],{pane:_survPaneFor(b.survey),icon:badgeIcon(b.survey,b.count),
+  const layout=_badgeLayout(list||[]);
+  (list||[]).forEach((b,i)=>{
+    const at=layout[i];
+    // The leader goes down FIRST so the badge draws over its own tail, and it is interactive:false. That is
+    // load-bearing twice over: a displaced badge must stay clickable across its whole face, and the tail
+    // must never intercept a click meant for the map background (change 5 closes the drawer on those).
+    if(at.tail)badgeLayer.addLayer(L.polyline(at.tail,{pane:_survPaneFor(b.survey),color:BADGE_TAIL_COLOR,
+      weight:1,opacity:BADGE_TAIL_OPACITY,interactive:false}));
+    const m=L.marker([at.lat,at.lon],{pane:_survPaneFor(b.survey),icon:badgeIcon(b.survey,b.count),
       bubblingMouseEvents:false,keyboard:false});
     m.on("click",()=>{if(typeof openSurvey==="function")openSurvey(b.survey);});
     badgeLayer.addLayer(m);});}
@@ -322,34 +426,38 @@ function tooltipText(s){return `${esc(s.id)} · ${esc(s.survey)}`;}
 // tier's old value (z5 4.5->3.5, z6 5->4.5, z>=7 6->5) and the smallest tier drops by the bottom step
 // (z<=4 3.5->2.5, the 1.0 gap that separated it from the z5 tier). Still monotone non-decreasing in z.
 // Cluster bubbles untouched (count-driven); weightForZoom left as-is — a 1.0 stroke does not overwhelm a 2.5 fill.
-// Change 6: CONTINUOUS, TYPE-AWARE dot radii, replacing the four-step ladder (2.5 / 3.5 / 4.5 / 5).
-// Two things the ladder could not do:
-//   1. The LP fabric and a BB survey rendered at the SAME size, so at national zoom the AusLAMP grid - which
-//      is background texture, the thing you read the country's coverage from - competed with the surveys a
-//      reader is actually looking for. LPMT now starts a full pixel smaller and stays proportionally under.
-//   2. A step ladder jumps: a zoom notch changed every dot's size by a visible 1px in one frame. A linear
-//      ramp in zoom is continuous across the range and monotone non-decreasing (the pinned property).
+// Change 6: CONTINUOUS dot radii, replacing the four-step ladder (2.5 / 3.5 / 4.5 / 5). A step ladder
+// jumps: a zoom notch changed every dot's size by a visible 1px in one frame. A linear ramp in zoom is
+// continuous across the range and monotone non-decreasing (the pinned property).
+// UNIFORM SITE DOT SIZE (owner, 2026-08-19): "the same size as the icons set for the AusLAMP sites". The
+// per-type base split change 6 introduced (LP 2.0 / everything else 3.0) is REMOVED. It was solving a
+// problem the badge change had already solved from the other end: the LP fabric only competed with surveys
+// while a survey WAS a scatter of same-sized dots, and a compact survey is now one BADGE. The size split
+// therefore bought nothing and cost the map a second visual variable encoding the same fact as colour.
+// Data type is carried by COLOUR; size carries ZOOM. One variable, one meaning. The surviving base is the
+// LP one, so BB/AMT/GDS come DOWN to the AusLAMP texture size rather than the fabric coming up; the default
+// national zoom is unchanged (owner: "the original zoom level is good for the icon + survey clusters").
 // FLOOR and CEILING are both load-bearing and mean different things. The floor stops a dot going sub-pixel
 // at far-out zooms, where an invisible dot reads as "no coverage here" - a false claim about the corpus.
 // The ceiling stops close zooms growing discs that overlap into one blob and hide the site spacing, which
 // at site zoom IS the information. Between them the ramp is 0.5px per zoom level.
 const DOT_R_FLOOR=1.8, DOT_R_CEIL=6.5, DOT_R_SLOPE=0.5, DOT_R_Z0=4;
-const DOT_R_BASE_LP=2.0, DOT_R_BASE_STD=3.0;   // at z4 (national): LP ~2px texture, BB/AMT/GDS ~3px above it
-// PURE. `type` is optional: an unknown/absent type takes the standard (non-fabric) ramp, so a corpus that
-// grows a new data type renders prominently rather than silently joining the background.
-function radiusForZoom(z,type){
-  const base=(type==="LPMT")?DOT_R_BASE_LP:DOT_R_BASE_STD;
-  return Math.min(DOT_R_CEIL,Math.max(DOT_R_FLOOR,base+DOT_R_SLOPE*((typeof z==="number"?z:DOT_R_Z0)-DOT_R_Z0)));}
+const DOT_R_BASE=2.0;          // at z4 (national): every site dot is ~2px, the AusLAMP LP texture size
+// PURE, and a function of ZOOM ALONE. A caller that still passes a data type is harmless: the argument is
+// not read, so a call site missed in the removal cannot quietly resurrect the per-type split. That
+// inertness is itself pinned (tools/map_badges_test.js) rather than left as an accident of JS arity.
+function radiusForZoom(z){
+  return Math.min(DOT_R_CEIL,Math.max(DOT_R_FLOOR,DOT_R_BASE+DOT_R_SLOPE*((typeof z==="number"?z:DOT_R_Z0)-DOT_R_Z0)));}
 function weightForZoom(z){return z<=4?1.0:1.5;}
 // current map zoom as a finite number — the headless smoke/interaction stubs' map.getZoom() returns a
 // Proxy (not a number), and even Number(proxy) throws ("cannot convert object to primitive"), so read it
 // defensively and default to 4 (national) when it isn't already a finite number.
 function curZoom(){const z=map.getZoom();return typeof z==="number"&&Number.isFinite(z)?z:4;}
-// Change 6: radius is per-TYPE now, so this restyles each marker against its own station's type rather
-// than stamping one radius across the map. Re-routing rides along, because the badge rule is zoom-dependent
-// (a zoom notch alone can collapse a survey into a badge or dissolve one back into dots).
-function restyleForZoom(){const z=curZoom(),w=weightForZoom(z);
-  ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:radiusForZoom(z,s.type),weight:w});});}
+// One radius for every marker on the map (the per-type split is gone), so this stamps the same zoom-derived
+// size across the set. Re-routing rides along, because the badge rule is zoom-dependent (a zoom notch alone
+// can collapse a survey into a badge or dissolve one back into dots).
+function restyleForZoom(){const z=curZoom(),w=weightForZoom(z),r=radiusForZoom(z);
+  ST.forEach(s=>{if(s.marker)s.marker.setStyle({radius:r,weight:w});});}
 function reflowForZoom(){restyleForZoom();routeVisibleToLayers();}
 // UX9 item 2: the home frame buildMarkers fits to, remembered module-level so the setView("map") 60ms
 // corrector can re-fit to it (null until data is in). Owner round 2: this is now the FIXED Australia frame
@@ -366,7 +474,7 @@ function _mapSizeDegenerate(size){return !(size&&typeof size.x==="number"&&typeo
 function _mapRefitGate(st){return !!st&&!st.userInteracted&&!!st.fitDegenerate;}
 function buildMarkers(){const z=curZoom(),w=weightForZoom(z);ST.forEach(s=>{
   if(!hasPosition(s))return;   // C42: a withheld-coordinate station has no position — no (0,0) phantom marker, no crash
-  s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z,s.type),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
+  s.marker=L.circleMarker([s.lat,s.lon],{radius:radiusForZoom(z),weight:w,color:"#11182D",fillColor:markerColor(s),fillOpacity:.92});
   s.marker._survey=s.survey;   // UX8 (X3): the per-survey cluster facade buckets markers by this stamp
   // Survey-drawer lane (ruling 5): a marker click OPENS that station and must never ALSO read as a
   // background click that closes the drawer. L.Path defaults bubblingMouseEvents to TRUE, so without this
