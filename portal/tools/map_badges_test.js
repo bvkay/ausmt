@@ -27,10 +27,13 @@ const WANT = [
   { kind: "const", names: ["BADGE_MAX_ZOOM", "BADGE_SPAN_PX", "BADGE_MIN_STATIONS",
                            "DOT_R_FLOOR", "DOT_R_CEIL", "DOT_R_SLOPE", "DOT_R_Z0", "DOT_R_BASE",
                            "BADGE_GAP_PX", "BADGE_MAX_SHIFT_PX", "BADGE_DECLUTTER_PASSES", "BADGE_TAIL_MIN_PX",
+                           "BADGE_TAIL_OPACITY", "BADGE_SIZE_SCALE",
+                           "SURV_PANE_Z", "BADGE_TAIL_PANE", "BADGE_TAIL_PANE_Z", "_decorationPanes",
                            "MARKER_FILL_OPACITY", "MARKER_DIM_FILL", "MARKER_DIM_STROKE"] },
   { kind: "fn", names: ["mercatorY", "mercatorPixelSpan", "_badgeBbox", "surveyCentroid",
                         "shouldBadgeSurvey", "partitionForDisplay", "radiusForZoom", "hasPosition",
-                        "isAuslampSurvey", "dimStyleFor", "declutterBadges"] },
+                        "isAuslampSurvey", "dimStyleFor", "declutterBadges", "badgeSizePx",
+                        "tailOpacityFor", "_decorationPaneViolation"] },
 ];
 // NOTE for anyone adding a name here: the brace matcher below treats a quote character as a string
 // delimiter WITHOUT skipping comments first, so an apostrophe inside a comment in an extracted function
@@ -66,6 +69,8 @@ vm.createContext(ctx);
 vm.runInContext(code + "\nglobalThis.__api={BADGE_MAX_ZOOM,BADGE_SPAN_PX,BADGE_MIN_STATIONS," +
   "DOT_R_FLOOR,DOT_R_CEIL,DOT_R_BASE," +
   "BADGE_GAP_PX,BADGE_MAX_SHIFT_PX,BADGE_DECLUTTER_PASSES,BADGE_TAIL_MIN_PX," +
+  "BADGE_TAIL_OPACITY,BADGE_SIZE_SCALE,SURV_PANE_Z,BADGE_TAIL_PANE,BADGE_TAIL_PANE_Z,_decorationPanes," +
+  "MARKER_DIM_FILL,badgeSizePx,tailOpacityFor,_decorationPaneViolation," +
   "mercatorPixelSpan,surveyCentroid,shouldBadgeSurvey,partitionForDisplay,radiusForZoom,dimStyleFor," +
   "declutterBadges};", ctx);
 const A = ctx.__api;
@@ -352,9 +357,9 @@ ok(impOut.every(p => isFinite(p.x) && isFinite(p.y)), "an unresolvable pile must
 // STILL NOT PROVEN HERE (browser facts, unchanged): that Leaflet paints the marker where the LatLng says,
 // that a pointer reaches a displaced badge, or that the tail is visible against the basemap.
 const RENDER_CONSTS = ["BADGE_GAP_PX", "BADGE_MAX_SHIFT_PX", "BADGE_DECLUTTER_PASSES", "BADGE_TAIL_MIN_PX",
-                       "BADGE_TAIL_COLOR", "BADGE_TAIL_OPACITY"];
+                       "BADGE_TAIL_COLOR", "BADGE_TAIL_OPACITY", "BADGE_SIZE_SCALE", "MARKER_DIM_FILL"];
 const RENDER_FNS = ["mercatorY", "declutterBadges", "badgeSizePx", "badgeIcon", "curZoom",
-                    "_badgeLayout", "renderBadges"];
+                    "tailOpacityFor", "_badgeLayout", "renderBadges"];
 // Real Web Mercator, the transform Leaflet's own project/unproject implement at 256px tiles.
 const _merY = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI / 360));
 function renderEnv(zoom) {
@@ -365,6 +370,11 @@ function renderEnv(zoom) {
     added,
     escAttr: (s) => String(s === undefined ? "" : s),
     _survPaneFor: (s) => "pane:" + s,
+    // The tail pane is ONE pane for every leader, which is exactly the property the owner change rests on:
+    // the stub takes no survey argument, so a per-survey tail pane could not even be expressed here.
+    _badgeTailPane: () => A.BADGE_TAIL_PANE,
+    _badgeTails: [],            // the registry applySurveyDim walks; renderBadges refills it every pass
+    _dimFocusSurvey: null,      // no survey focused (a `let` in map.js, so supplied rather than extracted)
     badgeLayer: { clearLayers() { added.length = 0; }, addLayer(o) { added.push(o); } },
     map: {
       getZoom: () => zoom,
@@ -390,7 +400,7 @@ function renderEnv(zoom) {
   env.globalThis = env;
   vm.createContext(env);
   vm.runInContext(buildCode(RENDER_CONSTS, RENDER_FNS) +
-    "\nglobalThis.__r={renderBadges,_badgeLayout,badgeSizePx,declutterBadges};", env);
+    "\nglobalThis.__r={renderBadges,_badgeLayout,badgeSizePx,declutterBadges,tailOpacityFor};", env);
   return env;
 }
 
@@ -442,9 +452,30 @@ saLL.forEach((b, i) => {
         "RENDER: the leader for " + b.survey + " starts at the centroid too - it points at nothing");
       ok(pl.opts && pl.opts.interactive === false,
         "RENDER: the leader polyline must be interactive:false, got " + JSON.stringify(pl.opts));
-      ok(pl.opts && pl.opts.pane === "pane:" + b.survey,
-        "RENDER: the leader must ride its own survey pane so the focus dim covers it, got " +
-        JSON.stringify(pl.opts && pl.opts.pane));
+      // OWNER 2026-08-19: leaders ON TOP. Every leader rides the ONE dedicated tail pane, never its own
+      // survey pane - that is what stops a leader being painted under some other survey's badge.
+      ok(pl.opts && pl.opts.pane === A.BADGE_TAIL_PANE,
+        "RENDER: the leader must ride the dedicated tail pane (" + A.BADGE_TAIL_PANE +
+        ") so it paints above EVERY badge, got " + JSON.stringify(pl.opts && pl.opts.pane));
+      // The dim the tail lost when it left the survey pane is re-applied per tail, at the undimmed value
+      // here because this fixture focuses no survey.
+      ok(pl.opts && Math.abs(pl.opts.opacity - renv.__r.tailOpacityFor(b.survey, null)) < 1e-12,
+        "RENDER: an unfocused leader must carry the full tail opacity, got " +
+        JSON.stringify(pl.opts && pl.opts.opacity));
+      // THE RIM TRIM: the leader starts at the badge RIM, not at the badge centre, so a leader that now
+      // paints ABOVE its own badge does not lay a spoke across the disc and its number. Measured in pixels
+      // against the badge radius the declutter itself separated by.
+      const _startPx = renv.map.project([pl.latlngs[0][0], pl.latlngs[0][1]], RZ);
+      const _badgePx = rExpect[i], _rBadge = renv.__r.badgeSizePx(b.count) / 2;
+      const _gap = Math.hypot(_startPx.x - _badgePx.x, _startPx.y - _badgePx.y);
+      const _travel = Math.hypot(_badgePx.x - rProj[i].x, _badgePx.y - rProj[i].y);
+      ok(_gap >= Math.min(_rBadge, Math.max(0, _travel - 1)) - 1e-6,
+        "RENDER: the leader for " + b.survey + " starts " + _gap.toFixed(2) +
+        "px from the badge centre but the badge radius is " + _rBadge.toFixed(2) +
+        "px - it would be drawn across its own disc");
+      ok(_gap <= _travel + 1e-6,
+        "RENDER: the leader for " + b.survey + " was trimmed past its own centroid (start " +
+        _gap.toFixed(2) + "px out, centroid is " + _travel.toFixed(2) + "px out)");
     }
   }
   const mk = rAdded[ri++];
@@ -501,6 +532,115 @@ const renv3 = renderEnv(RZ);
 renv3.__r.renderBadges([{ survey: "Solo", slug: "s", lat: -30, lon: 140, count: 7 }]);
 ok(renv3.added.length === 1 && renv3.added[0].kind === "marker",
   "RENDER: a lone badge must render as exactly one marker with no tail");
+
+// ---- LEADERS ABOVE EVERY BADGE (owner, 2026-08-19) ----------------------------------------------
+// The owner complaint was not "a leader is under its own badge" but "a leader is under SOME OTHER cluster".
+// The invariant that answers it is a pairwise one: for ANY two badges, a displaced badge's leader paints
+// above both. Paint order between panes IS their z-index order, so with ONE tail pane above every badge
+// pane the pairwise claim reduces to two facts, and both are asserted against the shipped source: every
+// leader is in the tail pane and no badge is, and the tail pane's z sits above the badge panes' z.
+// (What a browser adds and this cannot: that the canvas actually rasterises in that order. The z-order is
+// the mechanism, and it is what the render harness can honestly observe.)
+const _tailPls = rAdded.filter(o => o.kind === "polyline");
+const _badgeMks = rAdded.filter(o => o.kind === "marker");
+ok(_tailPls.length > 1,
+  "leaders-on-top fixture is vacuous: fewer than two leaders, so no PAIR of badges is exercised");
+ok(_tailPls.every(p => p.opts.pane === A.BADGE_TAIL_PANE),
+  "leaders-on-top: every leader must be in the single tail pane, got " +
+  JSON.stringify([...new Set(_tailPls.map(p => p.opts.pane))]));
+ok(new Set(_tailPls.map(p => p.opts.pane)).size === 1,
+  "leaders-on-top: one tail pane, not one per survey - per-survey tail panes would re-create the " +
+  "z-order-by-pane-creation accident the owner is complaining about");
+ok(_badgeMks.every(m => m.opts.pane !== A.BADGE_TAIL_PANE),
+  "leaders-on-top: a badge must NOT share the tail pane, or the leader/badge order becomes an accident again");
+ok(A.BADGE_TAIL_PANE_Z > A.SURV_PANE_Z,
+  "leaders-on-top: the tail pane z (" + A.BADGE_TAIL_PANE_Z + ") must sit ABOVE every badge pane z (" +
+  A.SURV_PANE_Z + ") - that ordering IS the owner requirement");
+// Every badge pane in the fixture carries the SAME z, so "above every badge pane" is one comparison and not
+// a per-survey one. Pinned so a future per-survey z ramp cannot slip a badge above the leaders.
+ok(new Set(_badgeMks.map(m => m.opts.pane)).size === _badgeMks.length,
+  "leaders-on-top setup: each badge should still ride its own survey pane (that is what carries the dim)");
+// THE DIM TRADE, pinned as a value rather than as prose: a leader whose survey is not the focused one must
+// end up at exactly the opacity the old pane-inherited composition produced (tail alpha times the pane dim).
+ok(Math.abs(A.tailOpacityFor("Other", "Focused") - A.BADGE_TAIL_OPACITY * A.MARKER_DIM_FILL) < 1e-12,
+  "the per-tail dim must reproduce the pane composition exactly (" + A.BADGE_TAIL_OPACITY + " * " +
+  A.MARKER_DIM_FILL + "), got " + A.tailOpacityFor("Other", "Focused"));
+ok(A.tailOpacityFor("Focused", "Focused") === A.BADGE_TAIL_OPACITY,
+  "the FOCUSED survey's leader must stay at full tail opacity");
+ok(A.tailOpacityFor("Anything", null) === A.BADGE_TAIL_OPACITY,
+  "with no focus every leader is at full tail opacity");
+ok(A.tailOpacityFor("Other", "Focused") > 0,
+  "Option A: a dimmed leader must stay VISIBLE, never hidden - a hidden leader would un-disclose a moved badge");
+// The tail registry is what lets applySurveyDim reach leaders that no longer inherit a pane dim. If it were
+// not refilled, a focus change with no re-render would leave every leader undimmed.
+ok(renv._badgeTails.length === _tailPls.length,
+  "every leader must be registered for the dim walk, got " + renv._badgeTails.length +
+  " registered vs " + _tailPls.length + " drawn");
+ok(renv._badgeTails.every(t => typeof t.survey === "string" && t.survey),
+  "each registered leader must carry the survey its dim is keyed on");
+ok(renv3._badgeTails.length === 0,
+  "the registry must be CLEARED by a re-render, or leaders from a previous pass keep being dimmed");
+
+// ---- THE PANE GUARD (production regression, 2026-08-19) -----------------------------------------
+// A survey pane held only divIcons until a leader tail - an L.Path - was added to it, at which point
+// Leaflet built a full-map-size canvas renderer inside it at z 600, above the station canvas at z 400, and
+// no station on the map could be clicked. The guard makes that class of edit fail loudly instead of
+// silently. Driven here as the PURE decision (pane name, is-it-a-path, interactive), which is exactly the
+// three facts the runtime hook extracts from a layer.
+A._decorationPanes.add("ausmt-sv-0");            // a survey pane, as _makeDecorationPane would have registered it
+A._decorationPanes.add(A.BADGE_TAIL_PANE);
+// (1) THE REGRESSION ITSELF: an interactive path in a survey pane must be refused.
+const _viol = A._decorationPaneViolation("ausmt-sv-0", true, true);
+ok(_viol && /INTERACTIVE path/.test(_viol),
+  "the guard must refuse an interactive path in a survey pane (this is the shipped regression), got " +
+  JSON.stringify(_viol));
+ok(/ausmt-sv-0/.test(_viol), "the guard message must name the offending pane, got " + JSON.stringify(_viol));
+// Leaflet's own default is interactive:true, i.e. OMITTED. The regression shipped with the flag omitted on
+// nothing - the tail set it false - but a future edit is far more likely to omit it than to set it true.
+ok(A._decorationPaneViolation("ausmt-sv-0", true, undefined),
+  "an omitted interactive option is Leaflet's interactive:TRUE default and must be refused too");
+// (2) The tail pane is guarded on the same terms: it is also a canvas pane over the stations.
+ok(A._decorationPaneViolation(A.BADGE_TAIL_PANE, true, true),
+  "the tail pane must be guarded exactly as the survey panes are - it carries a canvas over the stations too");
+// (3) WHAT IS ALLOWED, so the guard is a rule and not a blanket refusal.
+ok(A._decorationPaneViolation("ausmt-sv-0", true, false) === "",
+  "a NON-interactive path is exactly what these panes are for and must pass");
+ok(A._decorationPaneViolation("ausmt-sv-0", false, true) === "",
+  "a DOM marker icon is interactive by design in these panes (Leaflet gives it pointer-events back) and must pass");
+ok(A._decorationPaneViolation("overlayPane", true, true) === "",
+  "the guard must not fire outside the decoration panes - station circleMarkers are interactive paths in overlayPane");
+ok(A._decorationPaneViolation(undefined, true, true) === "",
+  "a layer with no pane goes to Leaflet's defaults and is not this rule's business");
+// (4) NON-VACUITY: the panes the guard protects are the ones the shipped code actually creates. Both names
+//     come from the source, not from this file, so a rename cannot leave the guard pointing at nothing.
+ok(A._decorationPanes.has(A.BADGE_TAIL_PANE),
+  "the tail pane must be registered as a decoration pane by the shipped source");
+
+// ---- BADGE CIRCLE SIZE (owner, 2026-08-19: 10% smaller circles, SAME label size) ------------------
+// The owner asked for the circle and only the circle. This function sizes the DISC (it feeds iconSize);
+// the label size is a CSS font-size on .ausmt-badge.svbadge-*, a separate authority, and the python side
+// pins that those font sizes did not move. Here: the scale is real, it is applied to every tier, and the
+// tier BOUNDARIES (which pick both the disc size and the CSS class, so the label) are untouched.
+ok(A.BADGE_SIZE_SCALE === 0.90,
+  "owner 2026-08-19: the badge circles are 10% smaller, so the scale is 0.90, got " + A.BADGE_SIZE_SCALE);
+[[5, 34], [9, 34], [10, 42], [99, 42], [100, 52], [312, 52]].forEach(([n, base]) => {
+  ok(Math.abs(A.badgeSizePx(n) - base * 0.90) < 1e-9,
+    "a " + n + "-station badge must be 10% under its " + base + "px base, got " + A.badgeSizePx(n));
+});
+// Monotone non-decreasing in count, as it was before the scale (a bigger survey never gets a smaller disc).
+ok(A.badgeSizePx(5) < A.badgeSizePx(50) && A.badgeSizePx(50) < A.badgeSizePx(500),
+  "the badge size ramp must stay monotone in station count after the scale");
+// The three-digit worst case, which is what the owner asked to be checked. Counts of 100+ land in the LARGE
+// tier by construction, so the widest label always gets the widest disc - a three-digit count can never fall
+// into the small tier. Pinned as an ordering fact rather than as a font measurement (that is the browser's
+// business and is reported separately): the label is unchanged, so the only question is which disc it lands
+// in, and the answer is the biggest one.
+ok(A.badgeSizePx(100) === A.badgeSizePx(999) && A.badgeSizePx(999) > A.badgeSizePx(99),
+  "every three-digit count must land in the LARGEST badge tier, so the widest label gets the widest disc");
+// The declutter separates by these radii, so a smaller disc must mean a smaller separation requirement -
+// this is why the overlap counts move at all, and it is asserted rather than assumed.
+ok(A.badgeSizePx(312) / 2 < 52 / 2,
+  "the declutter radius must follow the smaller disc, or the badges would still be separated by the old size");
 
 // ---- composition with change 2 ------------------------------------------------------------------
 // Badges live in their survey's pane, so the dim decision is the SAME function for both. Pin that the

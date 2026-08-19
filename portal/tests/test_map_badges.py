@@ -175,9 +175,17 @@ def test_badge_declutter_source_shape():
     assert re.search(r"L\.polyline\(at\.tail\s*,\s*\{[^}]*interactive:\s*false", code), \
         "the leader tail polyline must itself set interactive:false, or it will intercept clicks meant " \
         "for the badge it points at or for the map background (which closes the drawer)"
-    # the tail runs displaced -> true centroid, in that order
-    assert re.search(r"tail:\s*\[\s*\[\s*ll\.lat\s*,\s*ll\.lng\s*\]\s*,\s*\[\s*b\.lat\s*,\s*b\.lon\s*\]\s*\]", code), \
-        "the leader tail must run from the DISPLACED position back to the survey's TRUE centroid"
+    # The tail runs displaced -> true centroid, in that order. Since the leaders moved above every badge
+    # (owner, 2026-08-19) the START is trimmed to the badge rim, so the first vertex is `from` rather than
+    # the displaced lat/lng literally - but `from` still STARTS at the displaced position and is only ever
+    # walked TOWARD the centroid. The end vertex is unchanged and is the claim the feature exists to keep.
+    # The geometry itself (start on the rim, never past the centroid) is behavioural and is pinned in the
+    # driver's render section, which measures it in pixels.
+    assert re.search(r"tail:\s*\[\s*from\s*,\s*\[\s*b\.lat\s*,\s*b\.lon\s*\]\s*\]", code), \
+        "the leader tail must run from the badge back to the survey's TRUE centroid"
+    assert re.search(r"let\s+from\s*=\s*\[\s*ll\.lat\s*,\s*ll\.lng\s*\]", code), \
+        "the tail start must DEFAULT to the displaced badge position, so a failed trim degrades to the " \
+        "un-trimmed leader rather than to no leader or to a wrong one"
 
 
 @pytest.mark.parametrize("name,value", [("BADGE_GAP_PX", "4"),
@@ -192,6 +200,107 @@ def test_declutter_constants_are_named_with_the_stated_values(name, value):
     assert m.group(1) == value, (
         f"{name} must be {value}; found {m.group(1)}. Change it only deliberately, and change this pin in "
         f"the same commit so the decision stays written down.")
+
+
+def test_decoration_panes_are_created_pointer_dead():
+    """PRODUCTION REGRESSION (2026-08-19): no station on the deployed map could be opened, and only two of
+    thirteen survey badges answered a click.
+
+    CAUSE, measured in a real browser against the live corpus: the per-survey panes sit at z-index 600 and
+    used to hold only divIcon badges. The declutter lane added leader tails as L.polyline, and adding an
+    L.Path to a pane makes Leaflet build a CANVAS RENDERER inside it - a full-map-size <canvas> with the
+    default pointer-events:auto. Station dots are circleMarkers on the default canvas in overlayPane at
+    z-index 400, so ten such canvases ended up over the station canvas. Every click was captured by the
+    topmost survey canvas, hit-tested against that survey's own non-interactive layers, and stopped there.
+
+    This pins the FIX AT ITS PLACEMENT: pane creation, not a stylesheet rule keyed on the generated pane
+    class (which is one rename from lapsing silently). FAILS IF the pointer rule is dropped from the pane
+    factory, if a pane is created outside that factory, or if the z-order it relies on stops being named.
+    What it cannot prove is the browser behaviour itself - that a pointer now reaches the station canvas is
+    a real-browser fact, measured and reported by the lane, not asserted here."""
+    src = _map_src()
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("//"))
+    flat = code.replace(" ", "")
+    assert re.search(r"function\s+_makeDecorationPane\s*\(", code), \
+        "map.js must funnel decoration-pane creation through _makeDecorationPane, so the pointer rule has " \
+        "exactly one place to live"
+    assert 'p.style.pointerEvents="none"' in flat, \
+        "a decoration pane must be created pointer-dead: its canvas renderer would otherwise swallow every " \
+        "click meant for the station layer beneath it"
+    # createPane must not be called anywhere else: a second call site is a pane without the rule.
+    assert code.count("map.createPane(") == 1, (
+        f"map.createPane must be called ONLY inside _makeDecorationPane (found "
+        f"{code.count('map.createPane(')} call sites); a pane created elsewhere carries no pointer rule")
+    for name in ("SURV_PANE_Z", "BADGE_TAIL_PANE_Z"):
+        assert re.search(rf"const\s+{name}\s*=\s*(\d+)\s*[;,]", src), \
+            f"{name} must be a named constant: the whole defect was a z-order relationship nobody had written down"
+
+
+def test_the_pane_guard_is_wired_to_layeradd():
+    """The guard that stops the regression coming back. A future edit that adds an interactive Path to a
+    decoration pane rebuilds the same blinding canvas, so the invariant is checked at runtime rather than
+    trusted. FAILS IF the guard stops being wired to the map event that sees every layer, or if the check
+    stops reading the pane REGISTRY (pattern-matching a pane name instead would drift with the name)."""
+    src = _map_src()
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("//"))
+    assert re.search(r'map\.on\(\s*"layeradd"\s*,', code), \
+        'the pane guard must be wired to map.on("layeradd"), the one event every layer passes through ' \
+        "(a LayerGroup on the map delegates its adds to Map.addLayer)"
+    assert re.search(r"function\s+_decorationPaneViolation\s*\(", code), \
+        "the guard decision must be a named pure function, so it is testable without Leaflet or a DOM"
+    assert "_decorationPanes.has(" in code, \
+        "the guard must consult the pane REGISTRY the factory writes, not a pattern over pane names"
+
+
+def test_leader_tails_ride_one_pane_above_every_badge():
+    """OWNER (2026-08-19), on the SA pile-up: "what about the arrow type pointers for the clusters? they
+    should really be on top, not underneath some clusters." A leader used to be created into its own
+    survey's pane, so whether it painted above another survey's badge depended on the order those surveys
+    first reached the router. ONE tail pane above every badge pane makes it structural.
+
+    FAILS IF a leader goes back into a survey pane, or if the tail pane stops sitting above the badge panes.
+    The pairwise invariant itself (for any two badges, a leader paints above both) is asserted in the driver
+    against what actually reached the layer."""
+    src = _map_src()
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("//"))
+    assert re.search(r"L\.polyline\(at\.tail\s*,\s*\{\s*pane:\s*_badgeTailPane\(\)", code), \
+        "the leader must be created into the dedicated tail pane, never into _survPaneFor(...) again"
+    zs = {n: int(re.search(rf"const\s+{n}\s*=\s*(\d+)\s*[;,]", src).group(1))
+          for n in ("SURV_PANE_Z", "BADGE_TAIL_PANE_Z")}
+    assert zs["BADGE_TAIL_PANE_Z"] > zs["SURV_PANE_Z"], (
+        f"the tail pane z ({zs['BADGE_TAIL_PANE_Z']}) must be ABOVE every badge pane z "
+        f"({zs['SURV_PANE_Z']}) - that ordering IS the owner requirement")
+    # Leaving the survey pane costs the tails the pane-inherited focus dim, so the dim must be re-applied
+    # per tail. Without this the "View on map" focus would leave every leader at full strength.
+    assert re.search(r"function\s+tailOpacityFor\s*\(", code), \
+        "the tails no longer inherit the pane dim, so a per-tail opacity rule must exist"
+    assert re.search(r"_badgeTails\.forEach\s*\(", code), \
+        "applySurveyDim must walk the tail registry, or a focus change with no re-render leaves leaders undimmed"
+
+
+def test_badge_circles_shrank_but_the_label_did_not():
+    """OWNER (2026-08-19): "make the cluster circles 10% smaller, the text inside can stay the same size."
+
+    Two separate authorities, which is what makes this expressible at all: badgeSizePx sizes the DISC (it
+    feeds the divIcon iconSize), and the LABEL size is a CSS font-size on .ausmt-badge.svbadge-* in
+    index.html. FAILS IF the scale is not the ruled 0.90, if the disc ramp is re-inlined as three new
+    numbers, or if a badge font-size moves with it."""
+    src = _map_src()
+    m = re.search(r"const\s+BADGE_SIZE_SCALE\s*=\s*([\d.]+)\s*[;,]", src)
+    assert m, "map.js must define `const BADGE_SIZE_SCALE = <n>;` (the owner's 10% reduction, named not baked in)"
+    assert float(m.group(1)) == 0.90, (
+        f"BADGE_SIZE_SCALE must be 0.90 (circles 10% smaller); found {m.group(1)}. Change it only with the "
+        f"owner's ruling, and change this pin in the same commit.")
+    assert "(n<10?34:n<100?42:52)*BADGE_SIZE_SCALE" in src.replace(" ", ""), \
+        "the disc ramp must stay the 34/42/52 base times the named scale, so the reduction reads as a " \
+        "reduction rather than as three new magic numbers"
+    # The LABEL is the half the owner said not to touch. These are the shipped font sizes; they must not
+    # move with the circle.
+    html = INDEX.read_text(encoding="utf-8")
+    for cls, size in (("svbadge-small", "12px"), ("svbadge-medium", "13px"), ("svbadge-large", "14px")):
+        assert re.search(rf"\.ausmt-badge\.{cls} div\{{[^}}]*font-size:{size}", html), (
+            f"the {cls} label must stay at {size}: the owner shrank the CIRCLE and said the text stays the "
+            f"same size, so a font change here is out of contract")
 
 
 # ------------------------------------------------------------- behaviour pins

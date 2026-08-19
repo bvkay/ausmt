@@ -54,11 +54,116 @@ const stub = () => new Proxy(function () {}, {
   apply: () => stub(), construct: () => stub(),
 });
 
+// ---- RECORDING LEAFLET FACADE (badge/pane lane, 2026-08-19) --------------------------------------
+// The blanket stub above answers every property with another stub, which is right for "the map layer is
+// irrelevant here" but makes three things unobservable that a production regression has now proved matter:
+// which PANES the app creates and with what style, which LAYERS it puts in them, and what a marker's click
+// handler DOES. So the few Leaflet factories the map module actually builds with are recorded, and
+// everything else degenerates to the same stub as before - no existing leg changes behaviour.
+//
+// HONESTY, stated once and repeated at the legs: this records the app's CALLS. jsdom has no layout, no
+// compositor and no canvas hit-testing, so nothing here proves that a pointer reaches a layer, that pane
+// z-order resolves the way the browser resolves it, or that pointer-events actually stops a canvas
+// swallowing a click. Those are browser facts, measured separately by the lane and reported as such.
+const recProxy = (own) => {
+  const px = new Proxy(function () { }, {
+    get: (t, p) => {
+      if (p === "then") return undefined;
+      if (p === Symbol.iterator) return function* () { };
+      if (Object.prototype.hasOwnProperty.call(own, p)) return own[p];
+      return stub();
+    },
+    // A real set trap, so a stamp the app writes onto a layer (map.js writes marker._survey) reads back as
+    // itself instead of as a fresh stub.
+    set: (t, p, v) => { own[p] = v; return true; },
+    apply: () => stub(), construct: () => stub(),
+  });
+  own.__self = px; own.__rec = own;
+  return px;
+};
+// A layer. `isPath` models the ONE Leaflet API difference the shipped pane guard duck-types on: every
+// L.Path carries setStyle+redraw and L.Marker carries neither. A recorder that answered every property
+// would make every layer look like a Path, the guard would fire on the badge markers themselves, and the
+// guard leg below would be worse than vacuous - it would be wrong. So the two shapes are modelled honestly.
+const recLayer = (kind, geom, opts, isPath) => {
+  const own = Object.create(null);
+  own.kind = kind; own.geom = geom; own.options = opts || {}; own.handlers = Object.create(null);
+  own.on = (ev, fn) => {
+    if (typeof ev === "string") ev.split(/\s+/).forEach(e => (own.handlers[e] = own.handlers[e] || []).push(fn));
+    return own.__self;
+  };
+  own.setStyle = isPath ? (s) => { own.style = Object.assign({}, own.style, s); return own.__self; } : undefined;
+  own.redraw = isPath ? () => own.__self : undefined;
+  return recProxy(own);
+};
+// Leaflet's LayerGroup.addLayer delegates to Map.addLayer when the group is on a map, which is what makes
+// ONE map-level layeradd hook see everything the app draws. Reproduced here, because that delegation is
+// exactly the path the shipped pane guard relies on.
+const layersAdded = [];
+const mapEvents = Object.create(null);
+function mapAddLayer(l) {
+  layersAdded.push(l);
+  (mapEvents.layeradd || []).forEach(fn => { try { fn({ layer: l }); } catch (e) { /* a guard must not break a render */ } });
+}
+const recGroup = () => {
+  const own = Object.create(null);
+  own.kind = "layerGroup"; own.layers = []; own.options = {};
+  own.setStyle = undefined; own.redraw = undefined;
+  own.addLayer = (l) => { own.layers.push(l); mapAddLayer(l); return own.__self; };
+  own.clearLayers = () => { own.layers.length = 0; return own.__self; };
+  own.eachLayer = (fn) => { own.layers.forEach(fn); return own.__self; };
+  return recProxy(own);
+};
+// The panes the app creates, by name, with the style object the app writes into. A plain object is enough:
+// what is being recorded is which properties the shipped code SETS at creation.
+const panesMade = Object.create(null);
+// Real Web Mercator at 256px tiles - the transform Leaflet's own project/unproject implement. The blanket
+// stub returned a Proxy here, which forced _badgeLayout to degrade to "true centroids, no tails" and made
+// the whole declutter path unreachable in this harness. getZoom is deliberately NOT recorded: curZoom()
+// still falls back to 4 exactly as it did, so no existing routing assertion moves.
+const _mY = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI / 360));
+const mapOwn = Object.create(null);
+mapOwn.createPane = (nm) => (panesMade[nm] = panesMade[nm] || { style: {}, name: nm });
+mapOwn.getPane = (nm) => panesMade[nm] || null;
+mapOwn.on = (ev, fn) => {
+  if (typeof ev === "string") ev.split(/\s+/).forEach(e => (mapEvents[e] = mapEvents[e] || []).push(fn));
+  return mapOwn.__self;
+};
+mapOwn.addLayer = (l) => { mapAddLayer(l); return mapOwn.__self; };
+mapOwn.project = (ll, z) => {
+  const sc = 256 * Math.pow(2, typeof z === "number" ? z : 4);
+  return { x: (ll[1] + 180) / 360 * sc, y: (Math.PI - _mY(ll[0])) / (2 * Math.PI) * sc };
+};
+mapOwn.unproject = (p, z) => {
+  const sc = 256 * Math.pow(2, typeof z === "number" ? z : 4);
+  const m = Math.PI - p[1] / sc * 2 * Math.PI;
+  return { lat: (2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180 / Math.PI, lng: p[0] / sc * 360 - 180 };
+};
+["setView", "fitBounds", "invalidateSize"].forEach(fn => {
+  mapOwn[fn] = (...args) => { mapCalls.push({ fn, args }); return mapOwn.__self; };
+});
+const mapFacade = recProxy(mapOwn);
+
 // Boot the real page DOM in jsdom with NO page scripts (we run the modules ourselves, in order).
 const html = fs.readFileSync(path.join(PORTAL, "index.html"), "utf8");
 const dom = new JSDOM(html, { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
 const win = dom.window;
-win.L = stub();
+// The five factories map.js builds its layers with are recorded; every other L member is the old stub, so
+// leaflet.draw, tile layers, icons and bounds behave exactly as they did.
+win.L = new Proxy(function () { }, {
+  get: (t, p) => {
+    if (p === "then") return undefined;
+    if (p === Symbol.iterator) return function* () { };
+    if (p === "map") return () => mapFacade;
+    if (p === "circleMarker") return (ll, o) => recLayer("circleMarker", ll, o, true);
+    if (p === "marker") return (ll, o) => recLayer("marker", ll, o, false);
+    if (p === "polyline") return (lls, o) => recLayer("polyline", lls, o, true);
+    if (p === "layerGroup") return () => recGroup();
+    return stub();
+  },
+  set: (t, p, v) => { t[p] = v; return true; },
+  apply: () => stub(), construct: () => stub(),
+});
 // JSZip RECORDER. jsdom writes no real archive, but WHICH entries a selection export puts in one is
 // exactly the claim the export pins make ("the zip holds a file per station that has this format, and a
 // LICENSE.txt beside them"), and the old blanket stub swallowed every z.file() call, so no such claim
@@ -194,6 +299,16 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   "shouldBadgeSurvey,partitionForDisplay,mercatorPixelSpan,surveyCentroid,badgesEnabledForMode," +
   "routeVisibleToLayers,routePasses:()=>_routePasses,lastRoute:()=>_lastRoute," +
   "auslampSet:()=>AUSLAMP_SET,setAuslampSet:(arr)=>{AUSLAMP_SET=new Set(arr);}," +
+  // Pane/pointer lane hooks (production regression, 2026-08-19). survPaneFor + badgeTailPane are the two
+  // pane FACTORIES, exposed so the driver can read back what the shipped code wrote onto a pane it really
+  // created; the two z constants let the leader-above-badge ordering be asserted against the source values.
+  // paneGuardViolations is the guard's own record and decorationPaneViolation its pure decision.
+  // stationMarker reaches a real station's recorded layer, which is how the station-click leg fires the
+  // handler the app actually bound rather than a re-implementation of it.
+  "survPaneFor:_survPaneFor,badgeTailPane:_badgeTailPane,badgeSizePx,tailOpacityFor," +
+  "SURV_PANE_Z,BADGE_TAIL_PANE,BADGE_TAIL_PANE_Z," +
+  "paneGuardViolations:()=>_paneGuardViolations.slice(),decorationPaneViolation:_decorationPaneViolation," +
+  "stationMarker:(id)=>{const s=ST.find(x=>x.id===id);return s&&s.marker;}," +
   "setColorMode:(m)=>{colorMode=m;},selectSurvey,renderCards,openSurvey," +
   // Survey-drawer lane hooks. focusSurvey drives the header "View on map" path; drawerFitOptions is the
   // PURE fit padding (asserted against a stubbed drawer width); dimStyleFor is the PURE Option-A dim
@@ -1097,6 +1212,101 @@ async function bootFreshWindow(dataMap, url) {
   ok(A.lastRoute().badges.length === _badgesBeforeSelect,
     "change 6: returning to Browse must REPAINT the badges (not just re-enable the gate), got " +
     A.lastRoute().badges.length + " vs " + _badgesBeforeSelect + " before");
+
+  // F5. THE PANE POINTER RULE, THE GUARD, AND A STATION CLICK WITH BADGES ON THE MAP.
+  //     (production regression, 2026-08-19: no station on the deployed portal could be opened, and only
+  //     two of thirteen survey badges answered a click.)
+  //
+  //     WHAT THIS PROVES: the shipped code creates every decoration pane pointer-dead and at the z-order
+  //     the leader-on-top rule needs; the guard is WIRED to the map event every layer passes through, is
+  //     silent on a real render, and does fire on the exact shape that caused the outage; and a station
+  //     marker's OWN click handler still opens that station while a badge is on the map.
+  //
+  //     WHAT THIS CANNOT PROVE, and what only a real browser can: that a pointer event actually reaches the
+  //     station layer. jsdom has no compositor, no canvas hit-testing and no pane stacking - the click leg
+  //     below INVOKES a recorded handler, it does not dispatch a pointer at a pixel. The defect being fixed
+  //     lived entirely in that gap: every handler was correctly bound the whole time, and every station was
+  //     still unclickable. The browser half was measured separately (station dot pixel opens its station;
+  //     badge hit-reachability 2/13 before, 13/13 after) and is reported by the lane, not by this file.
+  A.setSidebarMode("browse"); A.setAuslampSet([]); A.refresh();
+  const _f5 = A.routeVisibleToLayers();
+  ok(_f5.badges.length > 0 && _f5.dots.length > 0,
+    "F5 setup is vacuous: this section needs badges AND dots on the map at once, got " +
+    _f5.badges.length + " badges / " + _f5.dots.length + " dots");
+  // (a) EVERY SURVEY PANE IS CREATED POINTER-DEAD. Read back off the pane the shipped factory really made
+  //     for a survey that really badged - not off a name this file invented.
+  const _f5pane = A.survPaneFor(_f5.badges[0].survey);
+  const _f5rec = panesMade[_f5pane];
+  ok(_f5rec, "F5: the badging survey must have had a pane created for it, got none for " + JSON.stringify(_f5pane));
+  ok(_f5rec.style.pointerEvents === "none",
+    "F5: a survey pane must be created with pointer-events:none. Leaflet builds a full-map-size CANVAS " +
+    "inside any pane that receives a Path, and at z " + A.SURV_PANE_Z + " that canvas covers the station " +
+    "canvas at z 400 and swallows every click. Got " + JSON.stringify(_f5rec.style.pointerEvents));
+  ok(String(_f5rec.style.zIndex) === String(A.SURV_PANE_Z),
+    "F5: a survey pane must be created at the named z (" + A.SURV_PANE_Z + "), got " + _f5rec.style.zIndex);
+  // (b) THE TAIL PANE, same rule, one z above. Forced into existence here because this fixture routes a
+  //     single badge and so draws no leader; the pane FACTORY is what is under test, and it is the shipped
+  //     one. The leader geometry itself is driven for real in tools/map_badges_test.js.
+  const _f5tail = A.badgeTailPane();
+  ok(_f5tail === A.BADGE_TAIL_PANE, "F5: the tail pane factory must return the named pane, got " + _f5tail);
+  const _f5trec = panesMade[_f5tail];
+  ok(_f5trec && _f5trec.style.pointerEvents === "none",
+    "F5: the tail pane must ALSO be pointer-dead - it is a Path pane, so it gets a canvas too, and it now " +
+    "sits above every badge pane. Got " + JSON.stringify(_f5trec && _f5trec.style.pointerEvents));
+  ok(Number(_f5trec.style.zIndex) > Number(_f5rec.style.zIndex),
+    "F5 (owner: leaders on top): the tail pane must be created ABOVE the badge panes, got tail z " +
+    _f5trec.style.zIndex + " vs badge pane z " + _f5rec.style.zIndex);
+  // (c) THE GUARD. Silent on a real render, and armed: firing the map's own layeradd with the exact shape
+  //     that caused the outage (an INTERACTIVE path in a survey pane) must be caught. Firing the event is
+  //     what makes this a wiring test - the pure decision alone would pass with the hook deleted.
+  ok(A.paneGuardViolations().length === 0,
+    "F5: the guard must be silent on a real badge render, got " + JSON.stringify(A.paneGuardViolations()));
+  ok((mapEvents.layeradd || []).length > 0,
+    "F5: the pane guard must be wired to the map's layeradd event; no handler was registered");
+  const _f5path = (pane, interactive) => ({ options: { pane, interactive }, setStyle() { }, redraw() { } });
+  // The guard shouts on stderr, which is the point of it - but the shout below is DELIBERATE, so capture it
+  // rather than let a green run print an alarm. Capturing also lets the operator-facing half be asserted:
+  // a violation that is only recorded in an array nobody reads is not a warning.
+  const _f5said = [];
+  const _f5ce = win.console.error;
+  win.console.error = (...a) => { _f5said.push(a.join(" ")); };
+  mapAddLayer(_f5path(_f5pane, true));
+  // ...and the two shapes that are legitimate in these panes must NOT be caught, or the guard is a blanket
+  // refusal rather than the stated rule.
+  mapAddLayer(_f5path(_f5pane, false));                       // non-interactive decoration: the leader tails
+  mapAddLayer({ options: { pane: _f5pane, interactive: true } });   // a DOM marker icon: no setStyle/redraw
+  win.console.error = _f5ce;
+  const _f5v = A.paneGuardViolations();
+  ok(_f5v.length === 1 && /INTERACTIVE path/.test(_f5v[0]) && _f5v[0].indexOf(_f5pane) >= 0,
+    "F5: an interactive path added to a survey pane must be caught by the guard and must name the pane, got " +
+    JSON.stringify(_f5v));
+  ok(_f5said.length === 1 && /INTERACTIVE path/.test(_f5said[0]),
+    "F5: the guard must also SAY so on the console - a violation recorded only in an array warns nobody. Got " +
+    JSON.stringify(_f5said));
+  ok(A.paneGuardViolations().length === 1,
+    "F5: the guard must accept a non-interactive path and a marker in a decoration pane, got " +
+    JSON.stringify(A.paneGuardViolations()));
+  // (d) A STATION CLICK STILL OPENS THAT STATION, WITH A BADGE ON THE MAP. The handler invoked is the one
+  //     map.js bound in buildMarkers, reached through the recorded layer - not a re-implementation.
+  A.closeDrawer();
+  win.location.hash = "";
+  const _f5dot = _f5.dots.find(s => s.id === "B1") || _f5.dots[0];
+  const _f5mk = A.stationMarker(_f5dot.id);
+  ok(_f5mk && _f5mk.handlers && (_f5mk.handlers.click || []).length === 1,
+    "F5: a station marker must carry exactly one bound click handler, got " +
+    ((_f5mk && _f5mk.handlers && (_f5mk.handlers.click || []).length) + ""));
+  ok(_f5mk.options && _f5mk.options.pane === undefined,
+    "F5: a station marker must stay in Leaflet's DEFAULT overlay pane. The whole outage was decoration " +
+    "panes stacked over that layer, so a station that moved INTO one would be unreachable by construction.");
+  _f5mk.handlers.click[0]({});
+  ok(doc.getElementById("drawer").classList.contains("open"),
+    "F5: a station marker click must open the station drawer while badges are on the map");
+  ok(/#\/station\//.test(win.location.hash),
+    "F5: a station marker click must leave the station route in the URL, got " + JSON.stringify(win.location.hash));
+  ok(doc.getElementById("drawer").innerHTML.indexOf(_f5dot.id) >= 0,
+    "F5: the drawer must show the station that was clicked (" + _f5dot.id + ")");
+  A.closeDrawer();
+
   A.buildAuslampSet(); A.refresh();       // restore the boot-built membership for the rest of the run
 
   // G. WELCOME POPUP (UX7b U7): on first visit a small CENTRED MODAL (#introWelcome) shows — successor to

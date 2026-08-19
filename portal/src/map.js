@@ -23,7 +23,15 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{at
 // PURE: a badge's on-screen diameter in px, by station count. Shared by badgeIcon (which draws it) and the
 // declutter pass (which has to know how big the thing it is separating actually is) - two readings of one
 // number, so they cannot drift into a layout that separates badges by the wrong distance.
-function badgeSizePx(n){return n<10?34:n<100?42:52;}
+// OWNER (2026-08-19): "make the cluster circles 10% smaller, the text inside can stay the same size". The
+// DISC and the LABEL are already separate authorities and that is what makes this a one-constant change:
+// this function sizes the disc alone (it feeds iconSize, i.e. the divIcon box the CSS circle fills), while
+// the label size is the font-size on .ausmt-badge.svbadge-* in index.html and is deliberately NOT touched.
+// Scaling here therefore shrinks the circle and leaves the number exactly as legible as it was. The base
+// ramp (34/42/52) is left verbatim beside the scale so the reduction stays readable as a reduction rather
+// than being baked into three new magic numbers.
+const BADGE_SIZE_SCALE=0.90;    // owner 2026-08-19: circles 10% smaller; the label keeps its own size
+function badgeSizePx(n){return (n<10?34:n<100?42:52)*BADGE_SIZE_SCALE;}
 function badgeIcon(survey,n){
   const cls=n<10?"svbadge-small":n<100?"svbadge-medium":"svbadge-large";
   const size=badgeSizePx(n);
@@ -66,12 +74,51 @@ const BADGE_MIN_STATIONS=2;  // never badge a lone station
 // absolutely positioned div), created once per survey, beside the default markerPane in the same z-order.
 // Name is keyed by index, never by the survey label, because a pane name reaches a CSS class + querySelector
 // and a survey label is custodian-supplied text (spaces, quotes, brackets are all real in the corpus).
+//
+// DECORATION PANES AND THE POINTER RULE (production regression, fixed 2026-08-19). A per-survey pane held
+// ONLY divIcon badges while it was invented, so it held no <canvas> and nothing about it was in front of
+// anything. Then the declutter lane added leader tails as L.polyline - an L.Path - and putting a Path in a
+// pane makes Leaflet instantiate a CANVAS RENDERER inside that pane: a full-map-size <canvas> with the
+// default pointer-events:auto, at THIS z-index. Station dots are circleMarkers drawn by the default canvas
+// in overlayPane at z-index 400. 600 > 400, so twelve full-size survey canvases ended up covering the
+// station canvas: every map click was captured by the topmost survey canvas, hit-tested against that
+// survey's own (non-interactive) layers, matched nothing, and never reached the stations underneath. NO
+// STATION WAS CLICKABLE ANYWHERE, and only the badges in the last-created pane still answered, because a
+// badge is a DOM node while the panes below it were covered by the canvases above. MEASURED on the real
+// corpus before the fix: 2 of 13 badges hit-reachable, 0 stations.
+//
+// THE INVARIANT THIS ENCODES: a decoration pane carries DOM badge icons and NON-INTERACTIVE paths, and
+// nothing else. Anything that needs a pointer must live in a pane that is not stacked over the station
+// layer. It is enforced at pane CREATION rather than by a stylesheet rule keyed on the pane class, because
+// the pane name is generated here and a CSS selector written against it is one rename away from silently
+// lapsing - and because this is the only place that knows a pane is a decoration pane at all.
+//
+// WHY pointer-events ON THE PANE DOES NOT COST THE BADGES THEIR CLICKS: Leaflet's own stylesheet carries
+//   .leaflet-marker-icon.leaflet-interactive { pointer-events: auto; }
+// and an interactive L.Marker's icon element gets both classes. A property set ON the element beats what it
+// would inherit, so the badge icons keep their pointer events while everything that merely INHERITS from the
+// pane - the canvas renderer above all - loses them. That is Leaflet's published marker contract, not a
+// portal class name, so the exemption cannot drift with our markup. VERIFIED IN A REAL BROWSER against the
+// live corpus: pane pointer-events none -> survey canvases computed pointer-events none, badge icons still
+// computed auto, 13 of 13 badges hit-reachable, and a click on a station dot pixel opened that station.
+const SURV_PANE_Z=600;          // 600 = Leaflet's markerPane: a badge is a marker and belongs at marker depth
+// Every pane this module creates for decoration, by name. The registry is written by the ONE function that
+// creates them, so it cannot fall out of step with the set of panes that actually exist, and the guard below
+// reads it rather than pattern-matching a pane name.
+const _decorationPanes=new Set();
+// Create (once) a pane that may never swallow a pointer event. Registered BEFORE the Leaflet call so the
+// headless harnesses - where createPane throws or returns a Proxy - still record the pane as a decoration
+// pane and still run the guard.
+function _makeDecorationPane(nm,z){
+  _decorationPanes.add(nm);
+  try{const p=map.createPane(nm);if(p&&p.style){p.style.zIndex=z;p.style.pointerEvents="none";}}catch(e){}
+  return nm;}
 const _survPaneName={};let _survPaneN=0;
 function _survPaneFor(survey){
   if(!_survPaneName[survey]){
     const nm="ausmt-sv-"+(_survPaneN++);
     _survPaneName[survey]=nm;
-    try{const p=map.createPane(nm);if(p&&p.style)p.style.zIndex=600;}catch(e){}   // 600 = Leaflet's markerPane
+    _makeDecorationPane(nm,SURV_PANE_Z);
   }
   return _survPaneName[survey];}
 // The pane ELEMENT (or null under the headless stubs, where getPane returns a Proxy rather than a node).
@@ -79,6 +126,40 @@ function _survPane(survey){
   const nm=_survPaneName[survey];if(!nm)return null;
   let el=null;try{el=map.getPane(nm);}catch(e){return null;}
   return (el&&typeof el==="object"&&el.style&&typeof el.style==="object")?el:null;}
+// ---- THE GUARD: nothing interactive may land in a decoration pane ------------------------------------
+// The regression was invisible because it was a SIDE EFFECT: nobody added a canvas, somebody added a
+// polyline, and Leaflet added the canvas. Any future edit that puts another Path in one of these panes
+// brings the same full-map-size canvas back, so the invariant is checked at runtime rather than trusted.
+// A decoration pane is pointer-dead by construction now, which means the failure mode of a future edit has
+// TWO halves and this catches both: an interactive path there would be silently unclickable AND (before the
+// pointer rule, or if it were ever relaxed) would blind the station layer beneath.
+//
+// PURE, so the decision is testable without Leaflet, a map or a DOM. Returns the operator-facing message,
+// or "" when the layer is where it belongs.
+function _decorationPaneViolation(paneName,isPath,interactive){
+  if(!paneName||!_decorationPanes.has(paneName))return "";      // not our pane: not our rule
+  if(!isPath)return "";                                         // a DOM marker icon is exactly what these panes are for
+  if(interactive===false)return "";                             // non-interactive decoration is the other allowed content
+  return "AusMT map invariant broken: an INTERACTIVE path was added to decoration pane "+paneName+
+    ". That pane sits above the station layer and is pointer-dead by design, so the path cannot be clicked "+
+    "and its canvas renderer would blind the stations underneath. Put interactive layers in a pane that is "+
+    "not stacked over the stations, or set interactive:false.";}
+// Every layer that reaches the map passes through Leaflet's layeradd, including layers added through a
+// LayerGroup that is itself on the map (LayerGroup.addLayer delegates to Map.addLayer), so this one hook
+// sees the badge layer's contents as well as anything added to the map directly.
+const _paneGuardViolations=[];
+// Path-ness is DUCK-TYPED rather than `instanceof L.Path` so this same code runs under the headless
+// harnesses, which stub L entirely. Every L.Path (polyline, polygon, circle, circleMarker) carries both
+// setStyle and redraw; L.Marker, L.Tooltip and L.LayerGroup carry neither, and L.GeoJSON has setStyle but
+// no redraw - so the pair is what separates "will make a canvas renderer" from "will not".
+function _paneGuardInspect(layer){
+  const o=(layer&&layer.options)||{};
+  const isPath=!!(layer&&typeof layer.setStyle==="function"&&typeof layer.redraw==="function");
+  const msg=_decorationPaneViolation(o.pane,isPath,o.interactive);
+  if(msg){_paneGuardViolations.push(msg);
+    if(typeof console!=="undefined"&&console.error)console.error(msg);}
+  return msg;}
+map.on("layeradd",e=>_paneGuardInspect(e&&e.layer));
 // ---- change 6: the PURE badge core (no Leaflet, no DOM - the jsdom driver runs all of it directly) -----
 // Web Mercator pixel span of a lat/lon box at a zoom, in the 256px-tile scheme Leaflet uses. Re-derived
 // here rather than borrowed from map.project() because the DECISION must be testable without a live map:
@@ -179,6 +260,38 @@ const BADGE_TAIL_MIN_PX=2;         // under this, a displacement is invisible an
 // CARTO light_all basemap, where a near-white 1px line is simply invisible, so it takes the same ink every
 // station dot is already outlined with. Subtle, and actually present.
 const BADGE_TAIL_COLOR="#11182D",BADGE_TAIL_OPACITY=.45;
+// ---- LEADERS ON TOP (owner, 2026-08-19) --------------------------------------------------------------
+// Owner, on the SA pile-up (badges 100/20/63/56/216/58/83/53): "what about the arrow type pointers for the
+// clusters? they should really be on top, not underneath some clusters." The complaint is exact. A leader
+// used to be created into ITS OWN SURVEY'S pane, so its paint order against OTHER badges was decided by the
+// order those surveys happened to get panes - which is the order the router first saw them, i.e. an
+// accident. In a pile the low-pane leaders were painted under the high-pane badges and simply vanished, and
+// which ones vanished changed with the filter state. That is the inconsistency.
+//
+// ONE dedicated tail pane, stacked ABOVE every survey pane, makes "a leader paints over every badge"
+// structural instead of emergent: there is one pane for all leaders and it is higher than all of the panes
+// that hold badges, so no pairing of two badges can order a leader underneath either of them. It is also a
+// decoration pane, so its canvas - a Path pane always gets one, which is precisely the regression above -
+// is pointer-dead and cannot blind the stations it now sits over.
+//
+// THE DIMMING TRADE, stated. A tail used to inherit the per-survey focus dim for free, because it rode its
+// survey's pane and the dim is one opacity write on that pane element. Leaving the pane gives that up, so
+// the dim is re-applied PER TAIL through setStyle (tailOpacityFor below), at the same product the pane
+// composition produced: BADGE_TAIL_OPACITY * MARKER_DIM_FILL. The visual result is unchanged; what changed
+// is that it is now computed rather than inherited, which is why applySurveyDim has to reach the tails
+// explicitly and why the tails are held in a registry for it to walk. The alternative - one tail pane PER
+// survey, keeping the free dim - would have reinstated exactly the "z-order by pane creation accident" the
+// owner is complaining about, so it loses the point of the change.
+const BADGE_TAIL_PANE="ausmt-badge-tails";
+const BADGE_TAIL_PANE_Z=610;    // above every survey pane (600), below Leaflet's tooltipPane (650)
+let _tailPaneMade=false;
+function _badgeTailPane(){
+  if(!_tailPaneMade){_tailPaneMade=true;_makeDecorationPane(BADGE_TAIL_PANE,BADGE_TAIL_PANE_Z);}
+  return BADGE_TAIL_PANE;}
+// PURE: the opacity a leader carries given the focused survey. Reproduces exactly what the pane-inherited
+// dim used to compose to, so the focus view looks the same as it did before the tails left the survey panes.
+function tailOpacityFor(surveyOfTail,focus){
+  return (!focus||surveyOfTail===focus)?BADGE_TAIL_OPACITY:BADGE_TAIL_OPACITY*MARKER_DIM_FILL;}
 // PURE: [{x,y,r,count}] (projected pixels) -> [{x,y,displaced}], index-aligned with the input. No Leaflet,
 // no DOM, no clock, no randomness - the whole layout decision is unit-testable on plain objects, which is
 // the same split shouldBadgeSurvey/partitionForDisplay already use. Never mutates its input: the caller's
@@ -246,18 +359,41 @@ function _badgeLayout(list){
     let ll=null;
     try{ll=map.unproject([laid[i].x,laid[i].y],z);}catch(e){ll=null;}
     if(!ll||!isFinite(ll.lat)||!isFinite(ll.lng))return {lat:b.lat,lon:b.lon,tail:null};
-    // The tail runs from where the badge NOW SITS back to where its survey ACTUALLY IS.
-    return {lat:ll.lat,lon:ll.lng,tail:[[ll.lat,ll.lng],[b.lat,b.lon]]};});}
+    // The tail runs from where the badge NOW SITS back to where its survey ACTUALLY IS, and it now STARTS AT
+    // THE BADGE RIM rather than at the badge centre. That trim exists because the leaders moved above every
+    // badge (see BADGE_TAIL_PANE): a leader drawn from the centre would lay a dark spoke straight across its
+    // own disc and its own number. Trimming by the badge radius keeps the drawn line to exactly the part
+    // that was ever visible - the part OUTSIDE the disc - so the owner-visible change is "leaders stop
+    // disappearing behind other badges", not "badges grew a spoke". The claim the leader makes is untouched:
+    // it still ENDS at the true centroid. The trim is capped at d-1px so a badge sitting almost on top of
+    // its own centroid still draws a line rather than one that overshoots and points backwards.
+    const dx=pts[i].x-laid[i].x,dy=pts[i].y-laid[i].y,d=Math.hypot(dx,dy);
+    let from=[ll.lat,ll.lng];
+    if(d>1e-9){
+      const cut=Math.min(badgeSizePx(b.count)/2,Math.max(0,d-1));
+      let tl=null;
+      try{tl=map.unproject([laid[i].x+dx/d*cut,laid[i].y+dy/d*cut],z);}catch(e){tl=null;}
+      if(tl&&isFinite(tl.lat)&&isFinite(tl.lng))from=[tl.lat,tl.lng];}
+    return {lat:ll.lat,lon:ll.lng,tail:[from,[b.lat,b.lon]]};});}
+// The leaders currently on the map, with the survey each belongs to. Held because the focus dim can be
+// applied WITHOUT a re-render (setSurveyDim from the drawer), and a tail no longer inherits it from a pane.
+const _badgeTails=[];
 function renderBadges(list){
   badgeLayer.clearLayers();
+  _badgeTails.length=0;
   const layout=_badgeLayout(list||[]);
   (list||[]).forEach((b,i)=>{
     const at=layout[i];
-    // The leader goes down FIRST so the badge draws over its own tail, and it is interactive:false. That is
-    // load-bearing twice over: a displaced badge must stay clickable across its whole face, and the tail
-    // must never intercept a click meant for the map background (change 5 closes the drawer on those).
-    if(at.tail)badgeLayer.addLayer(L.polyline(at.tail,{pane:_survPaneFor(b.survey),color:BADGE_TAIL_COLOR,
-      weight:1,opacity:BADGE_TAIL_OPACITY,interactive:false}));
+    // The leader is created BEFORE its own marker (the layer walk in tools/map_badges_test.js pins that
+    // pairing) but it no longer draws underneath it: leaders live in BADGE_TAIL_PANE, above every badge
+    // pane, which is the owner change. interactive:false stays load-bearing for two reasons - a tail must
+    // never intercept a click meant for a badge or for the map background (change 5 closes the drawer on
+    // those), and an interactive path in a decoration pane is exactly what the pane guard refuses.
+    if(at.tail){
+      const t=L.polyline(at.tail,{pane:_badgeTailPane(),color:BADGE_TAIL_COLOR,
+        weight:1,opacity:tailOpacityFor(b.survey,_dimFocusSurvey),interactive:false});
+      _badgeTails.push({survey:b.survey,layer:t});
+      badgeLayer.addLayer(t);}
     const m=L.marker([at.lat,at.lon],{pane:_survPaneFor(b.survey),icon:badgeIcon(b.survey,b.count),
       bubblingMouseEvents:false,keyboard:false});
     m.on("click",()=>{if(typeof openSurvey==="function")openSurvey(b.survey);});
@@ -410,7 +546,14 @@ function applySurveyDim(){
   // a badge, so a badge can never render outside the surface the dim reaches.
   Object.keys(_survPaneName).forEach(sv=>{
     const el=_survPane(sv);
-    if(el&&el.style)el.style.opacity=(!_dimFocusSurvey||sv===_dimFocusSurvey)?"":String(MARKER_DIM_FILL);});}
+    if(el&&el.style)el.style.opacity=(!_dimFocusSurvey||sv===_dimFocusSurvey)?"":String(MARKER_DIM_FILL);});
+  // The LEADERS are the one thing the pane write no longer covers: they moved to BADGE_TAIL_PANE so they
+  // paint above every badge, which also took them out of their survey's pane. tailOpacityFor reproduces the
+  // exact product the pane composition used to give, so the focus view is unchanged; this loop is what makes
+  // the dim reach them when the focus changes WITHOUT a re-render (drawer "View on map" is that path).
+  _badgeTails.forEach(t=>{
+    if(t&&t.layer&&typeof t.layer.setStyle==="function")
+      t.layer.setStyle({opacity:tailOpacityFor(t.survey,_dimFocusSurvey)});});}
 function setSurveyDim(sv){_dimFocusSurvey=sv||null;applySurveyDim();}
 function clearSurveyDim(){if(_dimFocusSurvey===null)return;_dimFocusSurvey=null;applySurveyDim();}
 // O4 (owner, 2026-07-12): the station hover tooltip is SLIMMED to station name + survey name ONLY —
