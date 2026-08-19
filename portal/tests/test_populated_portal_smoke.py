@@ -20,7 +20,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 SMOKE = ROOT / "tools" / "smoke.js"
-COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text())
+COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text(encoding="utf-8"))
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")

@@ -16,7 +16,7 @@ SMOKE = ROOT / "tools" / "smoke.js"
 def test_empty_portal_smoke():
     assert SMOKE.exists(), "tools/smoke.js missing"
     r = subprocess.run(["node", str(SMOKE), str(ROOT / "data")],
-                       capture_output=True, text=True, cwd=str(ROOT))
+                       capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
     out = r.stdout + r.stderr
     assert r.returncode == 0, out
     assert "SMOKE PASSED" in out, out

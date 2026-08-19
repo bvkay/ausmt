@@ -41,7 +41,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent                 # portal/
 SRC = ROOT / "src"
-COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text())
+COLS = json.loads((ROOT.parent / "contract" / "columns.json").read_text(encoding="utf-8"))
 
 # The literal the fixture must NOT contain, assembled so this test file's own source never carries the
 # fictional path (test_no_fictional_api_paths.py greps the portal tree for it).

@@ -358,7 +358,7 @@ def test_releases_page_behaviour():
     structure, citation text, the two DOI outcomes, and the honesty states. Skips when the jsdom
     dev-dependency is absent (CI runs `npm ci` in portal/ first)."""
     assert DRIVER.exists(), "tools/releases_test.js missing"
-    r = subprocess.run(["node", str(DRIVER)], cwd=str(ROOT), capture_output=True, text=True)
+    r = subprocess.run(["node", str(DRIVER)], cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8")
     if "Cannot find module 'jsdom'" in (r.stderr or ""):
         pytest.skip("jsdom not installed (run `npm ci` in portal/)")
     assert r.returncode == 0, f"releases driver failed:\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"

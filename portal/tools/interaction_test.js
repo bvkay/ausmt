@@ -465,7 +465,7 @@ async function bootFreshWindow(dataMap, url) {
     "an in-flight product makes its controls aria-busy, so a screen reader is told a wait is under way");
   const _a1 = A.station("A1");
   A.setColorMode("quality");
-  ok(A.markerColor(_a1) === "#5E5ED6",
+  ok(A.markerColor(_a1) === "#3730B8",
     "honesty: with sci.json in flight the completeness colour mode must fall back to the data-type colour, never the 'not evaluated' grey, got " + A.markerColor(_a1));
   A.setColorMode("type");
   A.setQMin(4.5);                                    // stricter than every fixture station's q (4.0)
@@ -636,7 +636,7 @@ async function bootFreshWindow(dataMap, url) {
     "honesty: the completeness filter must be INERT on a FAILED sci.json; emptying the map reads as 'no station meets this threshold', got " + sfA.nVisCount());
   sfA.setQMin(0); sfA.refresh();
   sfA.setColorMode("quality");
-  ok(sfA.markerColor(sfA.station("A1")) === "#5E5ED6",
+  ok(sfA.markerColor(sfA.station("A1")) === "#3730B8",
     "honesty: a FAILED sci.json must not paint the map in the 'not evaluated' grey, got " + sfA.markerColor(sfA.station("A1")));
   sfA.setColorMode("type");
   // An export leaves the page. remote_ref:!!undefined is a POSITIVE claim that these stations were not
@@ -744,18 +744,20 @@ async function bootFreshWindow(dataMap, url) {
     "an empty AUSLAMP_SET must degrade to 'nothing is AusLAMP' (no member privilege), not to a crash");
   A.buildAuslampSet();   // restore the boot-built set for the rest of the run
 
-  // CHANGE 6 ZOOM-SCALED RADII. The UX4-D4 four-step ladder (2.5/3.5/4.5/5) is replaced by a CONTINUOUS,
-  // TYPE-AWARE ramp with a floor and a ceiling. The pinned PROPERTY is unchanged and still asserted here
-  // (monotone non-decreasing in z); the exact curve, its bounds and the LP-under-BB relation are pinned in
-  // tools/map_badges_test.js against the named constants.
+  // ZOOM-SCALED RADII. The UX4-D4 four-step ladder (2.5/3.5/4.5/5) became a CONTINUOUS ramp with a floor
+  // and a ceiling; the drawer-polish lane (owner, 2026-08-19) then removed the per-TYPE base, so ONE curve
+  // serves every data type - "the same size as the icons set for the AusLAMP sites". The pinned PROPERTY is
+  // unchanged and still asserted here (monotone non-decreasing in z); the exact curve, its bounds and the
+  // type-uniformity are pinned in tools/map_badges_test.js against the named constants.
   for (let z = 0; z < 16; z++) {
     ok(A.radiusForZoom(z + 1) >= A.radiusForZoom(z),
       "radiusForZoom must stay monotone non-decreasing in z (z=" + z + ")");
   }
-  ok(A.radiusForZoom(4, "LPMT") < A.radiusForZoom(4, "BBMT"),
-    "the LP fabric must render SMALLER than a BB dot at national zoom (change 6: texture beneath, surveys above)");
+  ok(A.radiusForZoom(4, "LPMT") === A.radiusForZoom(4, "BBMT"),
+    "uniform site dots: LP and BB must render the SAME size (type is carried by colour, never by size), got " +
+    A.radiusForZoom(4, "LPMT") + " / " + A.radiusForZoom(4, "BBMT"));
   ok(A.radiusForZoom(4) === A.radiusForZoom(4, "BBMT"),
-    "radiusForZoom with no type must take the standard ramp (back-compatible call form)");
+    "the retired `type` argument must be INERT: passing one may not change the radius");
   ok(A.weightForZoom(4) === 1.0 && A.weightForZoom(0) === 1.0, "weightForZoom(z<=4) must be 1.0");
   ok(A.weightForZoom(5) === 1.5 && A.weightForZoom(9) === 1.5, "weightForZoom(z>=5) must be 1.5");
   for (let z = 0; z < 12; z++) {

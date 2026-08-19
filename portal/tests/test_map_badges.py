@@ -22,8 +22,14 @@ FAILS IF:
 - the threshold crossing does not expand a survey (compact -> badge, zoomed in -> dots);
 - an AusLAMP member ever badges, or a lone station badges;
 - Select & export leaves anything badged;
-- the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops keeping the LP
-  fabric under the BB/AMT dots.
+- the radius curve stops being monotone in zoom, breaches its floor/ceiling, or stops rendering EVERY data
+  type at the same size (the per-type split was removed 2026-08-19: size encodes zoom, colour encodes type);
+- the badge collision declutter stops separating overlapping badges, moves the largest badge of a colliding
+  set, exceeds its travel cap, loses determinism, or renders a displaced badge without the leader tail back
+  to its true centroid. That LAST clause is carried by the driver's render-path section, which drives the
+  real renderBadges against a recording Leaflet stub and asserts on what reached the layer. It has to be
+  behavioural: the source-shape pins here cannot see whether a computed layout is actually USED, and a gate
+  review caught exactly that gap (two mutations that emptied the render path left everything green).
 """
 import re
 import shutil
@@ -113,8 +119,79 @@ def test_badge_click_opens_the_survey_and_never_bubbles():
 
 def test_radius_curve_is_named_not_inlined():
     src = _map_src()
-    for name in ("DOT_R_FLOOR", "DOT_R_CEIL", "DOT_R_SLOPE", "DOT_R_BASE_LP", "DOT_R_BASE_STD"):
+    for name in ("DOT_R_FLOOR", "DOT_R_CEIL", "DOT_R_SLOPE", "DOT_R_BASE"):
         assert re.search(rf"\b{name}\b\s*=", src), f"the radius curve constant {name} must be named in map.js"
+
+
+def test_the_per_type_radius_split_is_gone():
+    """Uniform site dot size (owner, 2026-08-19). The per-type bases are REMOVED, not merely equalised: a
+    surviving DOT_R_BASE_LP/DOT_R_BASE_STD pair is exactly the shape a future edit would re-diverge. FAILS
+    IF either name comes back, or if radiusForZoom regains a second parameter."""
+    src = _map_src()
+    for gone in ("DOT_R_BASE_LP", "DOT_R_BASE_STD"):
+        assert gone not in src, (
+            f"{gone} must be gone: data type is carried by COLOUR now, and a per-type radius constant is "
+            f"the seam a future edit would widen back into two sizes.")
+    m = re.search(r"function\s+radiusForZoom\s*\(([^)]*)\)", src)
+    assert m, "map.js must define radiusForZoom"
+    params = [p.strip() for p in m.group(1).split(",") if p.strip()]
+    assert params == ["z"], (
+        f"radiusForZoom must take ZOOM ALONE, got parameters {params}. Size encodes zoom; type encodes "
+        f"colour. A `type` parameter is how the split returns.")
+
+
+def test_badge_declutter_source_shape():
+    """Badge collision declutter (owner, 2026-08-19): SOURCE-SHAPE pins, and ONLY source shape.
+
+    SCOPE CORRECTED after the gate review (2026-08-19). An earlier version of this test claimed it would
+    fail if "the render path stops running the declutter", or if "the tail stops running from the displaced
+    position back to the TRUE centroid". It would not, and the gate proved it: neutering _badgeLayout to
+    return true centroids with no tails, and disabling the tail draw with `if(false&&at.tail)`, each left
+    this file AND the node driver fully green. A textual scan can see that a call is WRITTEN; it can never
+    see that the result is USED. The docstring was making a claim the assertions did not support, which is
+    the failure mode this repo treats as worse than no test at all.
+
+    Those behavioural claims now belong to tools/map_badges_test.js, which drives the real renderBadges
+    against a recording Leaflet stub with genuine Web Mercator project/unproject, and asserts on what
+    actually reached the layer: marker positions equal to the DECLUTTERED pixels (not the centroids), one
+    leader per displaced badge, each ending at its true centroid, tail before marker. Both gate mutations
+    fail there with 12 assertions each.
+
+    FAILS IF, and only if, the named pieces go missing from the source: declutterBadges deleted, the layout
+    pass no longer feeding it the badge list, renderBadges no longer calling _badgeLayout, or the leader
+    polyline losing interactive:false or its literal endpoint expression. COMMENT-STRIPPED, because the
+    narration above renderBadges contains these very words and a raw scan would pass on the prose alone."""
+    src = _map_src()
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("//"))
+    flat = code.replace(" ", "")
+    assert "functiondeclutterBadges(" in flat, "map.js must define declutterBadges"
+    assert "declutterBadges(list.map(" in flat, "the layout pass must feed the badge list to declutterBadges"
+    assert re.search(r"function\s+renderBadges\s*\([^)]*\)\s*\{[^}]*_badgeLayout\s*\(", code), \
+        "renderBadges must call _badgeLayout, or badges would render un-decluttered at their centroids"
+    assert "L.polyline(at.tail" in flat, "the leader tail must be drawn as a polyline from the layout"
+    # SCOPED to the polyline's OWN option bag. A bare `"interactive:false" in src` was vacuous: the survey
+    # footprint polygon and the geoJSON overlay each carry one too, so the pin passed with the tail's flag
+    # deleted. (Found by the control battery, which is the second time this file has caught itself.)
+    assert re.search(r"L\.polyline\(at\.tail\s*,\s*\{[^}]*interactive:\s*false", code), \
+        "the leader tail polyline must itself set interactive:false, or it will intercept clicks meant " \
+        "for the badge it points at or for the map background (which closes the drawer)"
+    # the tail runs displaced -> true centroid, in that order
+    assert re.search(r"tail:\s*\[\s*\[\s*ll\.lat\s*,\s*ll\.lng\s*\]\s*,\s*\[\s*b\.lat\s*,\s*b\.lon\s*\]\s*\]", code), \
+        "the leader tail must run from the DISPLACED position back to the survey's TRUE centroid"
+
+
+@pytest.mark.parametrize("name,value", [("BADGE_GAP_PX", "4"),
+                                        ("BADGE_MAX_SHIFT_PX", "88"),
+                                        ("BADGE_TAIL_MIN_PX", "2")])
+def test_declutter_constants_are_named_with_the_stated_values(name, value):
+    """The declutter's three geometry decisions are stated numbers, not literals buried in the loop. The
+    travel cap especially: it is the point where the design ACCEPTS overlap rather than moving a badge
+    further from its survey, so it has to be visible to a reader and changeable only on purpose."""
+    m = re.search(rf"const\s+{name}\s*=\s*(\d+)\s*[;,]", _map_src())
+    assert m, f"map.js must define `const {name} = <n>;`"
+    assert m.group(1) == value, (
+        f"{name} must be {value}; found {m.group(1)}. Change it only deliberately, and change this pin in "
+        f"the same commit so the decision stays written down.")
 
 
 # ------------------------------------------------------------- behaviour pins
