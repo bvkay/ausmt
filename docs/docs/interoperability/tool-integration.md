@@ -119,8 +119,11 @@ The survey group carries rights and credit as attributes. `Experiment/Surveys/<s
 coordinates. Do not read `time_period.end_date` off the survey group: it is `1980-01-01`, the library's
 epoch default, on 22 of the 25 bundles; `time_period.start_date` is correct on all 25. Take acquisition
 dates from the survey's `mtcat.json` record (`year_start`, `year_end`). Unlike the EMTF XML, the
-bundle's `survey` field is the AusMT slug and the station ids are the AusMT station ids. The file's own
-HDF5 attributes record the `mth5` and `mt_metadata` versions it was written with.
+bundle's `survey` field is the AusMT slug and the station ids are the AusMT station ids. The library
+versions the bundles were written with are in the download index: `/data/manifest.json` carries
+`mth5_version` and `mt_metadata_version` at its top level, beside the rows that carry each bundle's
+size and digest. The file's own root attribute `mth5.software.version` carries the `mth5` version
+only; there is no `mt_metadata` version attribute in the file.
 
 ---
 

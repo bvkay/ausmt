@@ -229,12 +229,17 @@ against `engine/schema/manifest.schema.json` (JSON Schema draft-07, `$id`
 `https://ausmt.org/schema/manifest-1.0.schema.json`) before publishing it. The portal's own download
 resolver reads the same document. Where this page and the schema disagree, the schema is right.
 
-Four top-level keys: `generated_count` (integer, `len(files) + len(bundles)`, a cheap sanity check after
-parsing), `base_url` (optional string, `""` meaning portal-relative), `files` (one row per downloadable
-file per station) and `bundles` (one row per pre-built per-survey download). An empty deployment emits
-`{ "generated_count": 0, "base_url": "", "files": [], "bundles": [] }`. Rows are closed
-(`additionalProperties: false`), so an unrecognised key in a row is a validation failure rather than a
-local extension; the document root stays open.
+The schema defines four top-level keys: `generated_count` (integer, `len(files) + len(bundles)`, a
+cheap sanity check after parsing), `base_url` (optional string, `""` meaning portal-relative), `files`
+(one row per downloadable file per station) and `bundles` (one row per pre-built per-survey download).
+The document root is open, and the build adds two keys beside them: `mth5_version` and
+`mt_metadata_version` (each a string, or `null` when the library was not importable in the build
+environment, as in an EDI-only build), the versions of the `mth5` and `mt_metadata` libraries the served
+MTH5 files and bundles were written with. A consumer of a `<slug>-tf.h5` reads the exact library
+version from the same index that carries its size and digest. An empty deployment emits
+`{ "generated_count": 0, "base_url": "", "mth5_version": ..., "mt_metadata_version": ..., "files": [],
+"bundles": [] }`. Rows are closed (`additionalProperties: false`), so an unrecognised key in a row is a
+validation failure rather than a local extension.
 
 | Key | In | Type | Meaning |
 |---|---|---|---|
