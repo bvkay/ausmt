@@ -410,68 +410,16 @@ does not attempt.
 }
 ```
 
-### 2.1 classification
+The members, as the build writes them today. Treat the classification as a filter, not as a finding.
 
-| | |
-|---|---|
-| Definition | The dimensionality class the screening assigned. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string or null |
-| Allowed values | `1-D`, `2-D`, `3-D`, `indeterminate` |
-| Example | `"2-D"` |
-| Note | `indeterminate` is returned when fewer than half the periods are usable. The thresholds are stated at the top of this section. |
-
-### 2.2 skew_beta_median_deg
-
-| | |
-|---|---|
-| Definition | Median absolute phase-tensor skew across usable periods, in degrees. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | number or null |
-| Example | `0.7` |
-
-### 2.3 pct_periods_3d
-
-| | |
-|---|---|
-| Definition | Percentage of usable periods whose absolute skew exceeds the three-dimensional threshold. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | integer or null |
-| Example | `0` |
-
-### 2.4 method
-
-| | |
-|---|---|
-| Definition | The method the classification came from. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Example | `"phase-tensor (Caldwell 2004)"` |
-
-### 2.5 screening_diagnostic
-
-| | |
-|---|---|
-| Definition | Marks the payload as a screening result rather than an interpretation. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | boolean |
-| Example | `true` |
-
-### 2.6 note
-
-| | |
-|---|---|
-| Definition | The caveat that travels with the payload. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Example | `"screening diagnostic, not an interpretation product"` |
-| Note | Treat the classification as a filter, not as a finding. |
+| Member | Type | Definition |
+|---|---|---|
+| `classification` | string or null | the screening class: `1-D`, `2-D`, `3-D` or `indeterminate`; `indeterminate` when fewer than half the periods are usable |
+| `skew_beta_median_deg` | number or null | median absolute phase-tensor skew across usable periods, in degrees |
+| `pct_periods_3d` | integer or null | percentage of usable periods whose absolute skew exceeds the three-dimensional threshold |
+| `method` | string | the method the classification came from, `phase-tensor (Caldwell 2004)` |
+| `screening_diagnostic` | boolean | marks the payload as a screening result rather than an interpretation |
+| `note` | string | the caveat that travels with the payload |
 
 ---
 

@@ -54,8 +54,10 @@ Not served; they define what the served documents are built from.
 ## Reading the field entries
 
 The numbered field entries on [MTCAT schema](mtcat-schema.md), the
-[survey.yaml reference](survey-yaml.md), [Per-station products](station-products.md) and the
-[Releases tier](releases.md) carry the same rows.
+[survey.yaml reference](survey-yaml.md) and section 1 of
+[Per-station products](station-products.md#1-stationjson) (the `station.json` contract) carry the
+same rows. The tables on the [Releases tier](releases.md) and in section 2 of Per-station products
+describe served-but-uncontracted documents and carry Member, Type and Definition only.
 
 | Row | Meaning |
 |---|---|
