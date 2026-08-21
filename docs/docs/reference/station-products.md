@@ -336,7 +336,7 @@ is reported separately under `file_written_by` rather than being published as th
 | Type | string |
 | Allowed values | `generalised`, `withheld` |
 | Default | absent means `exact` |
-| Note | Emitted only for a non-exact station, which keeps an exact station's record byte-unchanged. The boot-time surface the portal reads is [`coord_policy.json`](portal-documents.md#coord_policyjson). |
+| Note | Emitted only for a non-exact station, which keeps an exact station's record byte-unchanged. The boot-time surface the portal reads is [`coord_policy.json`](../developer/portal-documents.md#coord_policyjson). |
 
 ### 1.16 The withheld record
 

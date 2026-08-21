@@ -172,7 +172,7 @@ Credit fields on each record:
 `{"name": "AusMT", "name_type": "organisation", "role": "HostingInstitution"}`. A survey never declares
 that role for itself.
 
-The full field set is in [Served documents](../reference/portal-documents.md#surveysjson), and the
+The full field set is in [Portal-internal documents](../developer/portal-documents.md#surveysjson), and the
 `survey.yaml` these records are generated from is specified in the
 [survey.yaml reference](../reference/survey-yaml.md).
 
@@ -240,11 +240,25 @@ BASE=${AUSMT_BASE:?the portal root you are reading from}
 ogr2ogr -f GPKG stations.gpkg "/vsicurl/$BASE/data/stations.geojson"
 ```
 
-Each feature carries seven flat properties, chosen to be joinable and to keep the file small:
-`ausmt_id`, `station`, `survey` (the display name), `survey_id` (the slug), `data_type`,
-`period_min_s` and `period_max_s`. Join on `ausmt_id` to the download manifest, or on `survey_id` to
-`mtcat.json`, for anything else. Licence and credit are deliberately not repeated per feature: they
-are survey-level facts and live in `surveys.json` and `mtcat.json`.
+The document is a `FeatureCollection` whose members are `type` and `features`; a build with no
+positioned stations emits `{"type": "FeatureCollection", "features": []}`. Each feature is
+`{"type": "Feature", "geometry": {"type": "Point", "coordinates": [longitude, latitude]}, "properties": {...}}`,
+and the geometry is never null. The properties are seven flat members, chosen to be joinable and to
+keep the file small:
+
+| Property | Type | Definition |
+|---|---|---|
+| `ausmt_id` | string | the station identifier, the join key to the download manifest and to `station.json` |
+| `station` | string | station id within its survey |
+| `survey` | string | survey display name |
+| `survey_id` | string or null | survey slug, the join key to `mtcat.json` |
+| `data_type` | string or null | band classification, for example `BBMT` |
+| `period_min_s` | number or null | shortest period in the transfer function, seconds |
+| `period_max_s` | number or null | longest period, seconds |
+
+Properties are flat and few because a GIS attribute table cannot render nesting. Licence and credit are
+deliberately not repeated per feature: they are survey-level facts, and `mtcat.json` owns them. Join on
+`ausmt_id` or `survey_id` for anything else.
 
 Two membership rules, and they are the same rules the catalogue follows:
 
@@ -269,7 +283,7 @@ pointing back through `surveys[].collection_id`. One difference will catch you o
 its own bbox.
 
 The field reference is in
-[Served documents](../reference/portal-documents.md#collectionsjson).
+[Portal-internal documents](../developer/portal-documents.md#collectionsjson).
 
 ### `build.json` and `build_provenance.json`
 
@@ -283,17 +297,34 @@ distribution flags in force and the build cache statistics. Use it when you need
 exactly what produced the numbers you used.
 
 Both are documented field by field in
-[Served documents](../reference/portal-documents.md#buildjson).
+[Portal-internal documents](../developer/portal-documents.md#buildjson).
 
 ### `feed.xml`
 
 A minimal Atom 1.0 feed at `/data/feed.xml`, not at the site root. One entry per dated survey, newest
-first, 27 entries in the current corpus. The entry id carries the slug, so resolve the survey from
-there; entries carry no `<link>` element, because the build emits one only when it is given a site base
-URL and the production invocation is not.
+first, 27 entries in the current corpus:
 
-The element reference and the date rule are in
-[Served documents](../reference/portal-documents.md#feedxml).
+```xml
+<entry>
+  <id>tag:ausmt:vulcan-2022</id>
+  <title>Vulcan 2022</title>
+  <updated>2026-07-27T00:00:00Z</updated>
+</entry>
+```
+
+| Element | Obligation | Definition |
+|---|---|---|
+| `entry/id` | mandatory | `tag:ausmt:<slug>`, so the entry id carries the survey slug |
+| `entry/title` | mandatory | the survey display name |
+| `entry/updated` | mandatory | the survey's date, as an ISO 8601 timestamp |
+| `entry/link` | optional | emitted only when the build is given a site base URL |
+
+The entry id carries the slug, so resolve the survey from there; entries carry no `<link>` element,
+because the production invocation supplies no site base URL. A survey's date is the latest of its
+release-note dates and its rights declaration date, falling back to 31 December of its last acquisition
+year; a survey with no date at all is omitted rather than given an invented one. The feed's own
+`updated` is the newest entry date, not the build time, so two builds of the same surveys produce a
+byte-identical feed.
 
 ---
 

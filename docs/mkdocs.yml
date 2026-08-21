@@ -38,7 +38,6 @@ nav:
       - MTCAT schema: reference/mtcat-schema.md
       - survey.yaml reference: reference/survey-yaml.md
       - Per-station products: reference/station-products.md
-      - Served documents: reference/portal-documents.md
       - Releases tier: reference/releases.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
@@ -50,6 +49,7 @@ nav:
       - Architecture (start here): developer/architecture.md
       - Build lifecycle: developer/build-lifecycle.md
       - Portal data files (contract): developer/data-files.md
+      - Portal-internal documents: developer/portal-documents.md
       - How to extend: developer/extending.md
       - Conventions: developer/conventions.md
       - Collection IDs: developer/collection-ids.md

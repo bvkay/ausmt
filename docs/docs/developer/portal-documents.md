@@ -1,14 +1,17 @@
-# Served documents without a schema artifact
+# Portal-internal documents
 
-Seven JSON documents, one GeoJSON document and one feed are served under `/data/` with no JSON-Schema
-artifact behind them. Their shape is defined by the build that writes them (the GeoJSON additionally by
-RFC 7946), and this page is their field reference.
+Not a public surface. The documents on this page are fetched by the portal's own browser code and by
+the curator workbench; they carry no contract and no stability promise, and any build may change or
+drop them. The public metadata contracts are `mtcat.json` and `station.json` (with `survey-metadata.json`
+to come), documented under [Reference](../reference/index.md); the download index is `manifest.json`,
+documented in the [data reference](../interoperability/api-reference.md#download-inventory-manifestjson).
+Read this page to work on the portal or the engine, not to build a consumer: a consumer reads the
+contracts.
 
-The documents that do have a schema artifact are covered by [MTCAT schema](mtcat-schema.md), the
-[download inventory](../interoperability/api-reference.md#download-inventory-manifestjson) and
-[the build report](../developer/build-lifecycle.md#the-build-report). The
-positional arrays are covered by [Portal data files](../developer/data-files.md), which is the
-authoritative definition of the column contract.
+Five JSON documents are served under `/data/` with no JSON-Schema artifact behind them. Their shape is
+defined by the build that writes them, and this page is their field reference. The positional arrays
+`catalogue.json`, `sci.json` and `tf.json` are covered by [Portal data files](data-files.md), the
+engine-to-portal column contract.
 
 ## Normative artifact
 
@@ -25,24 +28,19 @@ Where this page and the build disagree, the build is right.
 |---|---|---|
 | [`surveys.json`](#surveysjson) | `/data/surveys.json` | always |
 | [`collections.json`](#collectionsjson) | `/data/collections.json` | always |
-| [`stations.geojson`](#stationsgeojson) | `/data/stations.geojson` | always |
 | [`build.json`](#buildjson) | `/data/build.json` | always |
 | [`build_provenance.json`](#build_provenancejson) | `/data/build_provenance.json` | always |
 | [`coord_policy.json`](#coord_policyjson) | `/data/coord_policy.json` | only when a station is not exact |
-| [`base_ids.json`](#base_idsjson) | `/data/base_ids.json` | only when a station carries a variant tag |
-| [`qc_report.json`](#qc_reportjson) | `/data/qc_report.json` | always |
-| [`feed.xml`](#feedxml) | `/data/feed.xml` | always |
 
-Two of these are emitted only when they would carry information, so a consumer must read an absent file
-as a statement rather than an error. The rule for each is on its own entry below.
+`coord_policy.json` is emitted only when it would carry information, so a consumer must read an absent
+file as a statement rather than an error. The rule is on its entry below.
 
 ---
 
 ## surveys.json
 
-Full per-survey metadata, and the place to go for citation and credit. It is generated from each
-survey's `survey.yaml`; that file is the field-by-field owner and is documented in the
-[survey.yaml reference](survey-yaml.md).
+The full per-survey metadata the portal renders, generated from each survey's `survey.yaml`; that file is the field-by-field owner and is documented in the
+[survey.yaml reference](../reference/survey-yaml.md).
 
 ### Structure
 
@@ -153,67 +151,10 @@ pointing back through `surveys[].collection_id`.
 
 ---
 
-## stations.geojson
-
-The corpus as a point layer, so a GIS can open the catalogue without a script. It is an RFC 7946
-`FeatureCollection` in WGS84, which is the only coordinate reference system GeoJSON has, so there is
-nothing to configure at the reading end. A worked QGIS and `ogr2ogr` example is in the
-[data reference](../interoperability/api-reference.md#stationsgeojson).
-
-### Structure
-
-| | |
-|---|---|
-| Definition | An RFC 7946 `FeatureCollection` of `Point` features, one per station that has a position. |
-| Type | object |
-| Members | `type` (always `"FeatureCollection"`) and `features` (array) |
-| Default | `{"type": "FeatureCollection", "features": []}` on a build with no positioned stations |
-
-### Feature members
-
-| Member | Type | Definition |
-|---|---|---|
-| `type` | string | always `"Feature"` |
-| `geometry` | object | `{"type": "Point", "coordinates": [longitude, latitude]}`; never null |
-| `properties` | object | the flat attribute row below |
-
-### Feature properties
-
-| Member | Type | Definition |
-|---|---|---|
-| `ausmt_id` | string | the station identifier, the join key to the download manifest and the catalogue |
-| `station` | string | station id within its survey |
-| `survey` | string | survey DISPLAY name, as `surveys.json` keys it |
-| `survey_id` | string or null | survey slug, the join key to `mtcat.json` |
-| `data_type` | string or null | band classification, for example `BBMT` |
-| `period_min_s` | number or null | shortest period in the transfer function, seconds |
-| `period_max_s` | number or null | longest period, seconds |
-
-### Notes
-
-Properties are flat and deliberately few: a GIS attribute table cannot render nesting, and licence and
-credit are survey-level facts with one owner each (`surveys.json`, `mtcat.json`). Join on `ausmt_id` or
-`survey_id` for anything not listed above.
-
-Membership follows the same coordinate-access rules as the catalogue, because it is built from the same
-masked records.
-
-A station whose position is **withheld** is ABSENT from this document rather than present with a null
-geometry: a null-geometry feature is valid GeoJSON that no GIS draws, so it would be an invisible row.
-The station is not hidden by this; it keeps its catalogue row, its `mtcat.json` entry and its
-`station.json`, and [`coord_policy.json`](#coord_policyjson) records that its position is withheld.
-
-A station whose position is **generalised** is present at the same 0.1° cell the catalogue serves. No
-position is rounded a second time here.
-
-An embargoed survey's stations ARE present. An embargo withholds bytes, never discovery, and this
-document carries no bytes.
-
----
-
 ## build.json
 
-The small standalone identity document. It is what a polling client fetches.
+The small standalone identity document the portal footer reads. A consumer polls `mtcat.json`'s
+`portal.generated_at` (or its `ETag`) instead.
 
 ```json
 {
@@ -295,81 +236,4 @@ A compact map of `ausmt_id` to coordinate policy, for the stations whose policy 
 | Type | object, string values |
 | Allowed values | `generalised`, `withheld` |
 | Emitted | only when at least one station in the corpus is not exact |
-| Note | Absence of the file means every served position is exact. It carries no coordinate, only the policy string. The per-station product carries the same value as [`coordinate_policy`](station-products.md#115-coordinate_policy); this file is the boot-time surface the portal drawer reads so it can badge a position without fetching a station record. |
-
----
-
-## base_ids.json
-
-A compact map of `ausmt_id` to base station id, for the stations that carry a processing-variant tag.
-
-```json
-{"au.example-2021.S07.zrr": "S07"}
-```
-
-| | |
-|---|---|
-| Definition | The physical station id behind a served id that carries a processing-variant suffix. |
-| Type | object, string values |
-| Emitted | only when the corpus holds a variant station |
-| Note | Absence of the file, or of a station from it, means the station is its own base. The curator workbench uses it so that a per-station coordinate override is keyed by the base station id, which is what `access.coordinate_overrides` expects. Its membership differs from `coord_policy.json`: that file lists non-exact stations, this one lists variant stations. |
-
----
-
-## qc_report.json
-
-Build-time quality-control findings over the assembled catalogue. It is curator-facing; the portal
-runtime does not read it.
-
-| Member | Type | Definition |
-|---|---|---|
-| `n_stations` | integer | stations in the build |
-| `duplicate_ausmt_ids` | array | ids that appeared more than once |
-| `near_duplicate_locations` | array | stations at nearly the same position across surveys or years |
-| `coord_flags` | array | stations whose coordinate parse raised a flag |
-| `coord_conflicts` | array | stations whose `HEAD` and `INFO` coordinates disagree |
-| `outside_declared_extent` | array | stations outside their own survey's declared extent |
-| `stations_without_survey_extent` | integer | stations whose survey declares no extent, counted rather than listed |
-
-### Notes
-
-A duplicate `ausmt_id` is the only hard failure: non-unique ids corrupt the URL, export and catalogue
-contract. Everything else is advisory. Re-occupation of a site across surveys or years is legitimate for
-MT, so a near duplicate is a notice rather than a defect.
-
-`outside_declared_extent` is not an Australia bounding-box test. Ocean-bottom, overseas and Antarctic
-sites are expected, so a station is noted only when it falls outside the extent its own survey declares.
-
----
-
-## feed.xml
-
-A minimal Atom 1.0 feed of surveys, newest first, served at `/data/feed.xml` and not at the site root.
-
-```xml
-<entry>
-  <id>tag:ausmt:vulcan-2022</id>
-  <title>Vulcan 2022</title>
-  <updated>2026-07-27T00:00:00Z</updated>
-</entry>
-```
-
-| Element | Obligation | Definition |
-|---|---|---|
-| `entry/id` | mandatory | `tag:ausmt:<slug>`, so the entry id carries the survey slug |
-| `entry/title` | mandatory | the survey display name |
-| `entry/updated` | mandatory | the survey's date, as an ISO 8601 timestamp |
-| `entry/link` | optional | emitted only when the build is given a site base URL |
-
-### Notes
-
-One entry per dated survey. A survey with no date at all is omitted rather than given an invented one.
-
-A survey's date is the latest of its release-note dates and its rights declaration date, falling back to
-31 December of its last acquisition year.
-
-The feed's own `updated` is the newest entry date, not the build time, so two builds of the same surveys
-produce a byte-identical feed.
-
-The production invocation supplies no site base URL, so entries carry no `link` element. Resolve the
-slug from the entry id.
+| Note | Absence of the file means every served position is exact. It carries no coordinate, only the policy string. The per-station product carries the same value as [`coordinate_policy`](../reference/station-products.md#115-coordinate_policy); this file is the boot-time surface the portal drawer reads so it can badge a position without fetching a station record. |

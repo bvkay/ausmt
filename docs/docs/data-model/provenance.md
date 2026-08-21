@@ -29,7 +29,7 @@ the format, creation date, processing software and version. For legacy datasets 
 
 1. Every build-generated product carries `input_file` and `input_sha256` alongside the pipeline's
    parameters and version. The build-wide record is
-   [`build_provenance.json`](../reference/portal-documents.md#build_provenancejson); the per-station
+   [`build_provenance.json`](../developer/portal-documents.md#build_provenancejson); the per-station
    record is [`station.json`](../reference/station-products.md#111-provenance).
 2. Submitter-side provenance lives in `survey.yaml` (the `processing` block and its free-text notes)
    and in the transfer-function headers, which the build reads for processing metadata. There is no

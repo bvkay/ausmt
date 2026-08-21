@@ -41,8 +41,10 @@ declared in the survey package and recorded in provenance.
 | `base_ids.json` | `extract/build_portal.py` (`_coordaccess.base_station_id`) | the curator workbench, so a per-station coordinate override is keyed by the base station id |
 
 `coord_policy.json` and `base_ids.json` are emitted only when they would carry information; a consumer
-treats an absent file as "every station is exact" or "every station is its own base". Both are in
-[Served documents](../reference/portal-documents.md#coord_policyjson).
+treats an absent file as "every station is exact" or "every station is its own base". `coord_policy.json`
+is in [Portal-internal documents](portal-documents.md#coord_policyjson); `base_ids.json`,
+`qc_report.json` and `build_report.json` are operator-only and have no public documentation beyond this
+table and [the build report](build-lifecycle.md#the-build-report).
 
 ## `catalogue.json`: one array per station, `r[0..15]`
 
@@ -156,7 +158,7 @@ bars and its `q` falls back to the shape basis.
 
 `surveys.json` is `{ "<survey name>": { …SMETA… } }`, produced by `survey_meta_from_yaml`; key-based,
 so safe to extend, and a key is absent rather than null when a survey declares nothing
-([Served documents](../reference/portal-documents.md#surveysjson)).
+([Portal-internal documents](portal-documents.md#surveysjson)).
 
 `manifest.json` is the key-based download index beside the positional catalogue
 ([Download inventory](../interoperability/api-reference.md#download-inventory-manifestjson)). Download metadata is added beside the
@@ -185,8 +187,8 @@ or interpretation caveat, a `provenance` block and any companion assets; the ste
 reuses the identity helpers `build.json` uses, so the recorded commits cannot drift between the two, and
 one shared function produces both its `conditioning` array and the build's `[xml] NOTICE` log lines.
 `build_provenance.json` records the dimensionality thresholds by reading the named constants in
-`_edi_science`, so the recorded parameters cannot drift from the code that ran. `collections.json` and
-`qc_report.json` are in [Served documents](../reference/portal-documents.md).
+`_edi_science`, so the recorded parameters cannot drift from the code that ran. `collections.json` is in
+[Portal-internal documents](portal-documents.md#collectionsjson).
 
 ## Interpretation-sensitive operations
 

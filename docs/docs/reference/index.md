@@ -1,8 +1,8 @@
 # Reference
 
-Every machine-readable surface AusMT publishes, with the artifact that defines it and the page that
-documents it field by field. Paths are relative to the portal root: `/data/mtcat.json` means
-`<portal root>/data/mtcat.json`.
+The machine-readable surfaces AusMT publishes, in two tiers: the public contracts, each with the
+artifact that defines it and the page that documents it field by field, and the download surface.
+Paths are relative to the portal root: `/data/mtcat.json` means `<portal root>/data/mtcat.json`.
 
 ## Documentation versions
 
@@ -14,37 +14,34 @@ tags are the version list; nothing in the repository enumerates them.
 `/data/mtcat.json` to see which schema version a deployment serves; where a deployment serves a
 different version, the served document is the authority for that deployment.
 
-## Served documents
+## Public contracts
 
-| Document | Served path | Normative artifact | Version | Reference |
+Three metadata documents are contracts: their shape is promised, schema-versioned and documented field
+by field. Nothing else under `/data` is.
+
+| Contract | Served path | Normative artifact | Version | Reference |
 |---|---|---|---|---|
-| MTCAT catalogue | `/data/mtcat.json`, `/data/products/mtcat.json` | `engine/schema/mtcat.schema.json` | 2.0 | [MTCAT schema](mtcat-schema.md) |
+| MTCAT catalogue | `/data/mtcat.json` | `engine/schema/mtcat.schema.json` | 2.0 | [MTCAT schema](mtcat-schema.md) |
 | MTCAT schema | `/data/mtcat.schema.json`, `/data/schemas/mtcat/2.0/mtcat.schema.json` | itself | 2.0 | [MTCAT schema](mtcat-schema.md#normative-artifact) |
-| Download manifest | `/data/manifest.json` | `engine/schema/manifest.schema.json` | 1.0 | [Download inventory](../interoperability/api-reference.md#download-inventory-manifestjson) |
-| Build report | `/data/build_report.json` | `engine/schema/build_report.schema.json` | 1.0 | [Build lifecycle](../developer/build-lifecycle.md#the-build-report) |
-| Station catalogue | `/data/catalogue.json`, `/data/products/catalogue.json` | `contract/columns.json` | 16 columns | [Portal data files](../developer/data-files.md) |
-| Science diagnostics | `/data/sci.json` | `contract/columns.json` | 12 columns | [Portal data files](../developer/data-files.md) |
-| Transfer-function curves | `/data/tf.json` | `contract/columns.json` | 18 columns | [Portal data files](../developer/data-files.md) |
-| Survey metadata | `/data/surveys.json`, `/data/products/surveys.json` | `survey_meta_from_yaml` in the build | none declared | [Served documents](portal-documents.md#surveysjson) |
-| Collections | `/data/collections.json` | `collections_document` in the build | none declared | [Served documents](portal-documents.md#collectionsjson) |
-| Stations GeoJSON | `/data/stations.geojson`, `/data/products/stations.geojson` | RFC 7946 | none declared | [Served documents](portal-documents.md#stationsgeojson) |
-| Build identity | `/data/build.json` | the build | none declared | [Served documents](portal-documents.md#buildjson) |
-| Build provenance | `/data/build_provenance.json` | the build | none declared | [Served documents](portal-documents.md#build_provenancejson) |
-| Coordinate policy | `/data/coord_policy.json`, `/data/products/coord_policy.json` | the build | none declared | [Served documents](portal-documents.md#coord_policyjson) |
-| Base station ids | `/data/base_ids.json` | the build | none declared | [Served documents](portal-documents.md#base_idsjson) |
-| QC report | `/data/qc_report.json`, `/data/products/qc_report.json` | the build | none declared | [Served documents](portal-documents.md#qc_reportjson) |
-| Survey feed | `/data/feed.xml` | Atom 1.0 (RFC 4287) | none declared | [Served documents](portal-documents.md#feedxml) |
-| Digest stamp sidecar | `/data/products/survey_digests.json` | the build | none declared | [Build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step) |
-| Per-station record | `/data/products/<slug>/<station>/station.json` | the build | none declared | [Per-station products](station-products.md#1-stationjson) |
-| Dimensionality screening | `/data/products/<slug>/<station>/dimensionality.json` | the build | none declared | [Per-station products](station-products.md#2-dimensionalityjson) |
-| Releases index | `/data/releases/releases.json` | `cut_release` | 1.0 | [Releases tier](releases.md#1-releasesjson) |
-| Release record | `/data/releases/<tag>/release.json` | `cut_release` | none declared | [Releases tier](releases.md#2-releasejson) |
-| DataCite record | `/data/releases/<tag>/datacite.json` | DataCite Metadata Schema 4 | kernel-4 | [Releases tier](releases.md#3-datacitejson) |
+| Per-station record | `/data/products/<slug>/<station>/station.json` | the build's product emitter; its schema artifact arrives with the station promotion lane | none declared | [Per-station products](station-products.md#1-stationjson) |
+| Survey metadata | `survey-metadata.json`, not yet served | arrives with the survey-metadata lane | | the survey record's owner; until it ships, the survey-level facts are the ones `mtcat.json` carries |
 
-The digest stamp sidecar is operational rather than scientific. It maps each served survey's slug to
-`{yaml_digest_current, xml_digest_stamped}`: the digest of the `survey.yaml` the build read, and the
-digest each served station XML was produced under. `engine/scripts/verify.py` compares those stamps
-against the live sources, so a product served from a stale cache entry fails verification.
+## Download surface
+
+Public by nature and documented as downloads, never as metadata contracts. The download index promises
+its row shape (`url`, `size`, `sha256`, `format`, `tier`, `license`) and nothing more.
+
+| Surface | Served path | Reference |
+|---|---|---|
+| Download index | `/data/manifest.json` | [Download inventory](../interoperability/api-reference.md#download-inventory-manifestjson) |
+| Transfer-function files | `/data/edi/<slug>/<file>.edi`, `/data/xml/<slug>/<station>.xml`, `/data/h5/<slug>/<station>.h5`, paths read from the index | [Per-station fetch](../interoperability/api-reference.md#per-station-fetch-through-the-manifest) |
+| Survey bundles | `/data/bundles/<slug>-edi.zip`, `-xml.zip`, `-tf.h5` | [Whole-survey bundles](../interoperability/api-reference.md#whole-survey-bundles) |
+| Survey feed | `/data/feed.xml`, Atom 1.0 (RFC 4287) | [feed.xml](../interoperability/api-reference.md#feedxml) |
+| Stations GeoJSON | `/data/stations.geojson`, a GIS export (RFC 7946) | [stations.geojson](../interoperability/api-reference.md#stationsgeojson) |
+| Releases tier | `/data/releases/releases.json`, `/data/releases/<tag>/` | [Releases tier](releases.md) |
+
+Everything else under `/data` is portal-internal or operator-only: served because the site needs it,
+with no contract and no stability promise, and documented only in the Developer section.
 
 ## Source documents
 
@@ -53,7 +50,6 @@ Not served; they define what the served documents are built from.
 | Document | Location | Normative artifact | Version | Reference |
 |---|---|---|---|---|
 | Survey metadata record | `survey.yaml`, one per survey package | the survey validator | `schema_version` 0.2 or 0.3 | [survey.yaml reference](survey-yaml.md) |
-| Positional column order | `contract/columns.json` | itself | append-only | [Portal data files](../developer/data-files.md) |
 
 ## Reading the field entries
 
@@ -71,10 +67,6 @@ The numbered field entries on [MTCAT schema](mtcat-schema.md), the
 | Default | The value assumed when the field is absent, where one applies. |
 | Example | A value from the served corpus. |
 | Note | Non-normative guidance. Every other row is normative. |
-
-[Served documents](portal-documents.md) uses a compact `Member | Type | Definition` table instead. Those
-documents declare no schema and no obligations, so whether a member is present is stated in its
-Definition. `Note` means the same thing there.
 
 ## Other reference pages
 

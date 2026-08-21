@@ -48,9 +48,8 @@ station id, the build keeps both. It appends a processing-variant tag, so the re
 `<station>.<variant>` with `ausmt_id` `au.<slug>.<station>.<variant>`, each with its own product path
 and portal route. The tag is the part of the filename beyond the station id, lowercased and sanitised
 (`MBV20_LemiGraph` beside `MBV20_Ohmega` gives `MBV20.lemigraph` and `MBV20.ohmega`), or a positional
-`v1`, `v2` where the filename leaves nothing to use. The physical site behind a tagged record is
-published in [`base_ids.json`](../reference/portal-documents.md#base_idsjson), so a per-station
-coordinate override keys on the site. A variant tag is an identity, not a version: nothing marks one
+`v1`, `v2` where the filename leaves nothing to use. The build records the physical site behind a
+tagged record for the curator workbench, so a per-station coordinate override keys on the site. A variant tag is an identity, not a version: nothing marks one
 current and the other superseded. Reprocessings in the corpus today arrive under their own station id
 (the marker rides in the source file's `DATAID`, the `...r` and `..._BxReplaced` files), so no station
 currently carries a variant tag.
