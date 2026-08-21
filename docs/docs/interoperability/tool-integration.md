@@ -139,6 +139,9 @@ print(len(doc["surveys"]), "surveys,", len(doc["stations"]), "stations")
 # 27 surveys, 2625 stations
 ```
 
+That output is the merged engine's MTCAT 2.0 document; a deployment whose data build predates the 2.0
+engine still serves 1.2 until its next rebuild, so branch on `portal.version`.
+
 `portal.schema_url` resolves next to `mtcat.json`, so validation needs no off-site resolution; the
 schema's own `$id` is the immutable version-specific copy `/data/schemas/mtcat/2.0/mtcat.schema.json`,
 the one to cache by. An optional key the producer cannot honestly state is omitted, never `null` or an
