@@ -1,48 +1,49 @@
 # Build lifecycle and invariants
 
-This page describes what one build run does, how it reports failure, and the invariants that
-operational changes must preserve. The system-level picture is in
-[Developer architecture](architecture.md).
+What one build run does, how it reports failure, and the invariants operational changes must preserve.
+The system-level picture is in [Developer architecture](architecture.md).
 
 ## The build, step by step
 
-`python -m extract.build_portal --surveys <dir> --out <data> --products <dir> --bundle-edi --survey-h5
---station-h5`
-(the production invocation in `deploy/Makefile`; `--bundle-edi` gates the entire served-download
-surface, per-survey EDI copies and manifest rows included, `--survey-h5` enables the tier-2
-MTH5 bundles and `--station-h5` the tier-1 per-station MTH5 files. The engine image ships without the
-portal config, so these CLI flags, not `portal.config.yaml`, are the production enables):
+The production invocation, from `deploy/Makefile`:
 
-1. Parse arguments; create the output directories; resolve the survey validator
-   (`AUSMT_VALIDATOR_PATH` or the documented search path). An unresolvable validator aborts
-   the build rather than ingesting packages unvalidated.
+```text
+python -m extract.build_portal --surveys <dir> --out <data> --products <dir> --bundle-edi --survey-h5 --station-h5
+```
+
+`--bundle-edi` gates the entire served-download surface, per-survey EDI copies and manifest rows
+included; `--survey-h5` enables the per-survey MTH5 bundles and `--station-h5` the per-station MTH5
+files. The engine image ships without the portal config, so these CLI flags, not `portal.config.yaml`,
+are the production enables.
+
+1. Parse arguments; create the output directories; resolve the survey validator (`AUSMT_VALIDATOR_PATH`
+   or the documented search path). An unresolvable validator aborts the build.
 2. Discover survey packages: one folder per survey containing `survey.yaml` and
-   `transfer_functions/edi|emtfxml|mth5/`. Folders prefixed `_` are skipped; a package that
-   fails validation is skipped and reported.
+   `transfer_functions/edi|emtfxml|mth5/`. Folders prefixed `_` are skipped; a package that fails
+   validation is skipped and reported.
 3. Record provenance: git commit, versions, extractor, dimensionality parameters.
-4. Extract: mt_metadata parses each input once into a canonical record and component dict.
-   Standard and Phoenix SPECTRA EDI dialects are read natively; EMTF XML and MTH5 input go
-   through the same component dict. Where a station is supplied as both an EDI and an EMTF XML
-   the EDI wins and the XML is not ingested; `build_report.json` records the source per station.
-5. Derive: TF rows, science diagnostics, catalogue rows; coordinate QC and declared
-   coordinate resolutions applied; station-id variants disambiguated.
-6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings are reported and
-   written to `qc_report.json`.
-7. Emit: the JSON product set, per-station products, canonical EMTF XML, bundles, the
-   SHA-256 manifest and the digest sidecar (`products/survey_digests.json`, which
-   `scripts/verify.py` reads by name in step 8).
-8. Verify (`scripts/verify.py`, run separately by the deployment Makefile): schema checks
-   plus the cache-independent consistency check of served XML against current survey.yaml.
+4. Extract: mt_metadata parses each input once into a canonical record and component dict. Standard
+   and Phoenix SPECTRA EDI dialects are read natively; EMTF XML and MTH5 input go through the same
+   component dict. Where a station is supplied as both an EDI and an EMTF XML the EDI wins;
+   `build_report.json` records the source per station.
+5. Derive: TF rows, science diagnostics, catalogue rows; coordinate QC and declared coordinate
+   resolutions applied; station-id variants disambiguated.
+6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings are written to
+   `qc_report.json`.
+7. Emit: the JSON product set, per-station products, canonical EMTF XML, bundles, the SHA-256 manifest
+   and the digest sidecar (`products/survey_digests.json`).
+8. Verify (`scripts/verify.py`, run separately by the deployment Makefile): schema checks plus the
+   cache-independent consistency check of served XML against current survey.yaml, which reads the
+   digest sidecar by name.
 
-With `--incremental --cache-dir`, unchanged stations are served from the build cache. The cache
-keys station products on the EDI bytes, the engine commit, library versions, the column
-contract and the `survey.yaml` digest, so it can only affect build speed, never output bytes; a
-degenerate salt (an unknown or dirty engine commit) disables it for that build. The
-verification step is cache-independent by design.
+With `--incremental --cache-dir`, unchanged stations are served from the build cache. The cache keys
+station products on the EDI bytes, the engine commit, library versions, the column contract and the
+`survey.yaml` digest, so it can only affect build speed, never output bytes; a degenerate salt (an
+unknown or dirty engine commit) disables it for that build.
 
-Two run modes: survey-package mode (`--surveys`, the standard loop) and raw/bulk mode (`--raw`
-with `--collections` and `--seed-meta`) for regenerating a seed from loose EDI folders. Raw mode
-is excluded from caching; see [How to extend](extending.md#bulk-and-seed-mode).
+Two run modes: survey-package mode (`--surveys`) and raw/bulk mode (`--raw` with `--collections` and
+`--seed-meta`) for regenerating a seed from loose EDI folders. Raw mode is excluded from caching; see
+[How to extend](extending.md#bulk-and-seed-mode).
 
 ## Exit codes
 
@@ -52,37 +53,28 @@ is excluded from caching; see [How to extend](extending.md#bulk-and-seed-mode).
 | 2 | duplicate `ausmt_id`; or an empty build without `--allow-empty`; or an argument error |
 | nonzero via `sys.exit(message)` | the required mt_metadata/mth5 stack is absent, or MTH5 input was requested without `mth5` |
 
-An empty build fails loudly by design: a green run that produced nothing would make every
-other green check meaningless.
+An empty build fails by design: a green run that produced nothing would make every other green check
+meaningless.
 
 ## Invariants
 
-- **Parity.** The component dict feeds the same downstream mathematics whether the transfer
-  function came from an EDI, an EMTF XML, or an MTH5 file. Any difference between input formats
-  is parsing or storage round-trip, never science. `tests/test_canonical_parity.py` and
-  `tests/test_emtfxml_input.py` pin this.
-- **Traceability.** Every published value traces to a source file (`r[10]`), a content hash
-  (`r[14]`), a unique identifier (`r[12]`), and `build_provenance.json`. Changes must keep
-  the chain intact.
-- **Build/render decoupling.** The portal renders whatever product set its `data_base_url`
-  serves. The committed `portal/data/` files are the empty template; real data comes from a
-  build output directory (in deployment, `site-data/current`, swapped atomically after
-  verification).
-- **Package resolution.** `extract` and `ausmt_science` are installed packages (editable
-  locally, pip-installed in the engine image); module resolution does not depend on the
-  working directory. The runner invokes the engine with an explicit working directory
-  (`AUSMT_ENGINE_DIR`) all the same, so the invocation is self-describing.
+- **Parity.** The component dict feeds the same mathematics whether the transfer function came from an
+  EDI, an EMTF XML or an MTH5 file; any difference between input formats is parsing or storage
+  round-trip, never science. `tests/test_canonical_parity.py` and `tests/test_emtfxml_input.py` pin it.
+- **Traceability.** Every published value traces to a source file (`r[10]`), a content hash (`r[14]`),
+  a unique identifier (`r[12]`) and `build_provenance.json`.
+- **Build/render decoupling.** The portal renders whatever product set its `data_base_url` serves. The
+  committed `portal/data/` files are the empty template; real data comes from a build output directory
+  (in deployment, `site-data/current`, swapped atomically after verification).
+- **Package resolution.** `extract` and `ausmt_science` are installed packages (editable locally,
+  pip-installed in the engine image); module resolution does not depend on the working directory. The
+  runner still invokes the engine with an explicit `AUSMT_ENGINE_DIR`.
 
-## Render
+## Render and submission
 
-The portal loads its scripts in fixed concatenation order, fetches the required products
-(catalogue, tf, sci, surveys) and the optional ones (provenance, collections, build), joins
-them by array index into the station table, and renders. All exports are client-side and the
-portal serves archive pointers, not raw time series.
-
-## Submission
-
-Submissions flow through the gateway (upload, scan, validation, curation, publication), not
-through direct pull requests; see [Developer architecture](architecture.md) and
-[Submission Workflow](../operations/submission.md). Published packages enter `ausmt-surveys`,
-and the next build serves them.
+The portal loads its scripts in fixed order, fetches the required products (catalogue, tf, sci,
+surveys) and the optional ones (provenance, collections, build), joins them by array index into the
+station table, and renders. All exports are client-side. Submissions flow through the gateway (upload,
+scan, validation, curation, publication), not through direct pull requests; see
+[Submission](../operations/submission.md). Published packages enter `ausmt-surveys`, and the next build
+serves them.

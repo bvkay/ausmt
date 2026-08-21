@@ -1,35 +1,29 @@
-# Portal data files (the producer ↔ consumer contract)
+# Portal data files (the producer and consumer contract)
 
-This page is the **authoritative definition** of the JSON files that the `engine` generates and the
-`portal` reads. It is the single most important document for anyone changing how data flows
-through AusMT.
+The authoritative definition of the JSON files the `engine` generates and the `portal` reads.
 
-> **⚠ These are POSITIONAL arrays — read by index, not by key.**
-> `catalogue.json`, `sci.json` and `tf.json` are arrays of bare arrays (no field names) for
-> compactness. The producer writes them by position and the portal reads them by the **same**
-> hard-coded index, in a different subdirectory and language. **Adding or reordering a column shifts
-> every consumer and silently corrupts the portal** — there is no key to protect you.
->
-> The single source of truth is **`contract/columns.json`**. To change a column: (1) edit
-> `contract/columns.json`, (2) run `python contract/generate.py` (regenerates the engine's
-> `engine/extract/_contract.py` and the portal's `portal/src/contract.js` named index maps), (3) update
-> this page, and (4) extend any consumer that needs the new field. CI's `generate.py --check` fails on
-> drift, and the build asserts each row's width — but an equal-width *reorder* is only safe because the
-> regenerated indices move in lockstep, so still **append, never reorder**.
+`catalogue.json`, `sci.json` and `tf.json` are POSITIONAL arrays, read by index, not by key: arrays of
+bare arrays with no field names, written by position and read by the same hard-coded index in a
+different subdirectory and language. Adding or reordering a column shifts every consumer and silently
+corrupts the portal. The single source of truth is `contract/columns.json`. To change a column:
+(1) edit `contract/columns.json`, (2) run `python contract/generate.py`, which regenerates the engine's
+`engine/extract/_contract.py` and the portal's `portal/src/contract.js` named index maps, (3) update
+this page, (4) extend any consumer that needs the new field. CI's `generate.py --check` fails on drift,
+and the build asserts each row's width; an equal-width reorder passes that assert and corrupts every
+consumer, so append, never reorder.
 
 ## Row alignment, metadata and observations
 
-`catalogue[i]`, `tf[i]` and `sci[i]` describe the same station: alignment is by array index
-only, with no key on the wire. Preserving that alignment is the central data-integrity
-invariant of the product set.
+`catalogue[i]`, `tf[i]` and `sci[i]` describe the same station: alignment is by array index only, with
+no key on the wire. Preserving that alignment is the central data-integrity invariant of the product
+set.
 
-Two kinds of value flow through these files. Observations are measured physics: the impedance
-tensor and tipper per period with their errors, from the transfer-function files, which become
-`tf.json` and the phase-tensor fields of `sci.json`. Metadata is asserted and human-curated:
-everything in `survey.yaml`, plus processing strings scraped from EDI text. Metadata can be
-wrong, stale or absent, and must never silently overwrite an observation; where a metadata
-assertion corrects an observation (see Coordinate resolution below), the correction is
-declared in the survey package and recorded in provenance.
+Two kinds of value flow through these files. Observations are measured physics: the impedance tensor
+and tipper per period with their errors, which become `tf.json` and the phase-tensor fields of
+`sci.json`. Metadata is asserted and human-curated: everything in `survey.yaml`, plus processing
+strings scraped from EDI text. Metadata must never silently overwrite an observation; where a metadata
+assertion corrects an observation (coordinate resolution below), the correction is declared in the
+survey package and recorded in provenance.
 
 ## Who produces and consumes what
 
@@ -48,15 +42,13 @@ declared in the survey package and recorded in provenance.
 | `coord_policy.json` | `extract/build_portal.py` (the coordinate mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position |
 | `base_ids.json` | `extract/build_portal.py` (`_coordaccess.base_station_id`) | the curator workbench, so a per-station coordinate override is keyed by the base station id |
 
-`coord_policy.json` maps `ausmt_id` to its coordinate policy for the stations whose policy is not
-`exact`, and `base_ids.json` maps `ausmt_id` to base station id for the stations that carry a
-processing-variant tag. Both are emitted **only when they would carry information**, so a corpus
-with no coordinate policies and no variant stations produces neither file, and a consumer must
-treat an absent file as "every station is exact" or "every station is its own base". Both are
-documented field by field in
+`coord_policy.json` maps `ausmt_id` to coordinate policy for the stations whose policy is not `exact`,
+and `base_ids.json` maps `ausmt_id` to base station id for the stations that carry a processing-variant
+tag. Both are emitted only when they would carry information, so a consumer treats an absent file as
+"every station is exact" or "every station is its own base". Both are documented field by field in
 [Served documents](../reference/portal-documents.md#coord_policyjson).
 
-## `catalogue.json` — one array per station, `r[0..15]`
+## `catalogue.json`: one array per station, `r[0..15]`
 
 Source of truth: `CATALOGUE_COLUMNS` in `extract/build_portal.py`.
 
@@ -71,47 +63,47 @@ Source of truth: `CATALOGUE_COLUMNS` in `extract/build_portal.py`.
 | `r[6]` | `n_periods` | integer | number of periods |
 | `r[7]` | `comps` | string | components present, e.g. `"ZT"` (Z and tipper) |
 | `r[8]` | `type` | string | band: `AMT` / `BBMT` / `LPMT` / `GDS` / `unknown` |
-| `r[9]` | `region` | string | survey-driven region facet (`survey.yaml` `region` → `country` → `"?"`) |
+| `r[9]` | `region` | string | survey-driven region facet (`survey.yaml` `region`, else `country`, else `"?"`) |
 | `r[10]` | `file` | string | source transfer-function filename |
 | `r[11]` | `coord_flag` | bool | true if the coordinate was flagged/resolved (HEAD/INFO conflict) |
 | `r[12]` | `ausmt_id` | string | globally unique id `au.<slug>.<station>[.<variant>]`; keys URLs, exports, products |
 | `r[13]` | `edi_available` | 0\|1 | 1 if the EDI is redistributably licensed and bundled for download |
 | `r[14]` | `sha256` | string | SHA-256 of the source file (provenance/anti-tamper) |
-| `r[15]` | `site_name` | string\|null | original pre-sanitisation station/site name, emitted only when it differs from `r[0]` (`id`); null otherwise. Lets the drawer show the source station/site name for sanitised-id cases (e.g. `SA28_2B` → `SA282B`) |
+| `r[15]` | `site_name` | string\|null | original pre-sanitisation station/site name, emitted only when it differs from `r[0]` (e.g. `SA28_2B` beside `SA282B`); null otherwise |
 
-## `sci.json` — one array per station (aligned to `catalogue.json` order), `sc[0..11]`
+## `sci.json`: one array per station (aligned to `catalogue.json`), `sc[0..11]`
 
-Source of truth: `SCI_COLUMNS` in `extract/_edi_science.py`. All values are **automated, indicative**
-diagnostics, not curated ratings. The `rr`, `sw` and `alg` fields are best-effort scrapes of the
-EDI free text; mt_metadata exposes no structured processing metadata for these files, so absence
-means "not stated", not "not used". In particular `sw` is the program that PROCESSED the transfer
-function, never the one that wrote the file — the EDI header's program stamp names an exporter
-(Geotools, WinGLink, MTpy) on most of the corpus, and that identity is published separately. Richer
-processing detail (remote site, the file's writer, per-station notes) lives in each station's
-`station.json` `processing` block, outside the positional contract.
+Source of truth: `SCI_COLUMNS` in `extract/_edi_science.py`. All values are automated, indicative
+diagnostics, not curated ratings. `rr`, `sw` and `alg` are best-effort scrapes of the EDI free text;
+mt_metadata exposes no structured processing metadata for these files, so absence means "not stated",
+not "not used". `sw` is the program that PROCESSED the transfer function, never the one that wrote the
+file; the EDI header's program stamp names an exporter (Geotools, WinGLink, MTpy) on most of the corpus
+and is published separately as `processing.file_written_by` in `station.json`. Richer processing detail
+(remote site, the file's writer, per-station notes) lives in each station's `station.json` `processing`
+block, outside the positional contract.
 
 | Index | Name | Type | Meaning |
 |---|---|---|---|
-| `sc[0]` | `q` | number\|null | completeness/smoothness diagnostic, 0–5 (NOT a quality ranking) |
+| `sc[0]` | `q` | number\|null | completeness/smoothness diagnostic, 0-5 (NOT a quality ranking); defined under [`station.json` 1.8](../reference/station-products.md#18-diagnostics) |
 | `sc[1]` | `qb` | string | basis of `q`: `"e"` error-based, `"s"` shape-based |
 | `sc[2]` | `rr` | 0\|1 | remote reference stated in the EDI |
-| `sc[3]` | `sw` | string\|null | the program that **processed** the transfer function (mined from the file's free text; the program that WROTE the file is a different fact, published as `processing.file_written_by` in `station.json`) |
+| `sc[3]` | `sw` | string\|null | the program that processed the transfer function (mined from the file's free text) |
 | `sc[4]` | `alg` | string\|null | processing algorithm (scraped) |
-| `sc[5]` | `dim` | string\|null | dimensionality: `1-D`/`2-D`/`3-D`/`indeterminate`/null (phase-tensor screening) |
+| `sc[5]` | `dim` | string\|null | dimensionality: `1-D`/`2-D`/`3-D`/`indeterminate`/null (phase-tensor screening; thresholds under [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson)) |
 | `sc[6]` | `p3d` | integer\|null | % of periods with \|β\| > 3° |
-| `sc[7]` | `gd` | 0\|1 | galvanic/static-shift heuristic |
+| `sc[7]` | `gd` | 0\|1 | galvanic/static-shift heuristic: resistivity modes offset by a near-constant factor in log space while phases coincide; the station drawer shows a warning |
 | `sc[8]` | `ellip` | number\|null | median phase-tensor ellipticity |
 | `sc[9]` | `skew` | number\|null | median \|β\| (degrees) |
-| `sc[10]` | `mre` | number\|null | median relative apparent-resistivity error (= 2× the relative impedance error — from `drho/rho = 2·|dZ|/|Z|`) |
+| `sc[10]` | `mre` | number\|null | median relative apparent-resistivity error (2× the relative impedance error, from `drho/rho = 2·|dZ|/|Z|`) |
 | `sc[11]` | `decades` | number | period coverage, log10 decades |
 
-## `tf.json` — one entry per station (aligned to `catalogue.json`), each a list of 18 column-arrays
+## `tf.json`: one entry per station (aligned to `catalogue.json`), each a list of 18 column-arrays
 
-Source of truth: `TF_COLUMNS` in `contract/columns.json` (imported into `extract/_edi_tf.py`). Each entry
-is `[col0, col1, …, col17]`, where each `colN` is an array thinned to the SAME ≤ 32-period axis (nulls
-where data are absent/invalid/masked). Columns are APPEND-only; `t[0]…t[9]` keep their positions and
-values byte-for-byte (including `t[5] tip_mag`, retained for compatibility even though the portal no
-longer plots it).
+Source of truth: `TF_COLUMNS` in `contract/columns.json` (imported into `extract/_edi_tf.py`). Each
+entry is `[col0, col1, …, col17]`, where each `colN` is an array thinned to the SAME axis of at most 32
+periods (nulls where data are absent, invalid or masked). Columns are append-only; `t[0]…t[9]` keep
+their positions and values byte for byte, including `t[5] tip_mag`, retained for compatibility even
+though the portal no longer plots it.
 
 | Index | Name | Meaning |
 |---|---|---|
@@ -136,163 +128,141 @@ longer plots it).
 
 ### Error propagation (columns `t[10]…t[13]`)
 
-Both the apparent-resistivity and phase errors are the standard small-error **linear propagation** from
-the single per-component impedance-error magnitude `|dZ|` (mt_metadata's `impedance_error`, a real std;
+Both the apparent-resistivity and phase errors are the standard small-error linear propagation from the
+single per-component impedance-error magnitude `|dZ|` (mt_metadata's `impedance_error`, a real std;
 for an EDI this is `√VAR`). With `ρ = 0.2·T·|Z|²` and `φ = atan2(Im Z, Re Z)`:
 
 - `rho_*_err = 0.4·T·|Z|·|dZ|`
 - `phs_*_err = degrees(|dZ| / |Z|)`
 
-Because both come from the one `|dZ|`, the ρ- and φ-error columns cannot diverge. Errors are `null` where
-the source carried no impedance error, and (for ρ) only attach where the ρ value itself renders.
-
-These are **one-standard-error** bars (σ, from the EDI's variance blocks via `√VAR`), not confidence
-intervals — an inversion error-floor policy should read them as 1σ. Note the relative ρ error is
-algebraically **twice** the relative impedance error (`drho/rho = 2·|dZ|/|Z|`); the `mre` diagnostic in
-`sci.json` is the median of the *resistivity*-relative quantity.
+Because both come from the one `|dZ|`, the ρ- and φ-error columns cannot diverge. Errors are `null`
+where the source carried no impedance error, and (for ρ) only attach where the ρ value itself renders.
+These are one-standard-error bars (σ, from the EDI's variance blocks via `√VAR`), not confidence
+intervals; an inversion error-floor policy should read them as 1σ. The relative ρ error is
+algebraically twice the relative impedance error, and the `mre` diagnostic in `sci.json` is the median
+of the resistivity-relative quantity. The complete VAR blocks for all components remain in the served
+EDI.
 
 ### Tipper frame and placeholder rule (columns `t[14]…t[17]`)
 
-The tipper components are the transfer-function elements `Tx = Hz/Hx` and `Ty = Hz/Hy` **as read** — no
-sign changes at the data layer (any convention reversal is a presentation concern; see the arrow panel
-below). The source-data frame is **x = north, y = east**, so `Tx` couples the vertical field to the
-NORTH horizontal field and `Ty` to the EAST field.
+The tipper components are the transfer-function elements `Tx = Hz/Hx` and `Ty = Hz/Hy` as read, with no
+sign changes at the data layer; any convention reversal is a presentation concern. The source-data frame
+is x = north, y = east, so `Tx` couples the vertical field to the NORTH horizontal field and `Ty` to
+the EAST field.
 
-**Placeholder tippers.** Some EDIs carry an unphysical placeholder tipper, observed as `|T|`
-identically 1.0 at every period, one component ≈ 1e-17 (a filler, not an estimate). At extraction, a
-tipper with ≥ 4 present periods whose `|T|` is FLAT (`max|T|−min|T| < 1e-6`) AND AT UNITY
-(`||T|−1| < 1e-3` at every period) is masked WHOLESALE — all four `tzx/tzy` series and `tip_mag` become
-`null` — and a build NOTICE names the station. Real (varying, or off-unity) tippers are untouched. This
-composes with the fill and exact-zero masking.
+Some EDIs carry an unphysical placeholder tipper: `|T|` identically 1.0 at every period, one component
+near 1e-17. At extraction, a tipper with 4 or more present periods whose `|T|` is FLAT
+(`max|T| − min|T| < 1e-6`) AND AT UNITY (`||T| − 1| < 1e-3` at every period) is masked wholesale (all
+four `tzx/tzy` series and `tip_mag` become `null`) and a build NOTICE names the station. Real tippers
+are untouched. This composes with the fill and exact-zero masking.
 
 ### Induction-arrow panel and error bars (portal)
 
-The station drawer replaces the `|T|`-magnitude plot with an **induction-arrow panel** rendered below the
-phase-tensor plot. Per thinned period, from the log-period axis: a REAL arrow in the **Parkinson
-convention** — screen `(east, north) = (−tzy_re, −tzx_re)` (real arrows point toward conductors) — and an
-IMAGINARY arrow **unreversed** — `(tzy_im, tzx_im)`, drawn lighter — at a fixed scale with a `|T| = 0.5`
-corner reference. Stations with an absent/masked tipper show the no-tipper state (no panel). The ρ and φ
-curves gain error bars from `t[10]…t[13]` (ρ in the log domain clipped at a small positive floor; φ in
-degrees), drawn only where the error is present.
+The station drawer renders an induction-arrow panel below the phase-tensor plot. Per thinned period: a
+REAL arrow in the Parkinson convention, screen `(east, north) = (−tzy_re, −tzx_re)` (real arrows point
+toward conductors), and an IMAGINARY arrow unreversed, `(tzy_im, tzx_im)`, drawn lighter, at a fixed
+scale with a `|T| = 0.5` corner reference. Stations with an absent or masked tipper show no panel. The
+ρ and φ curves gain error bars from `t[10]…t[13]` (ρ in the log domain clipped at a small positive
+floor; φ in degrees), drawn only where the error is present; a station whose EDI carries no error
+blocks shows no bars and its `q` falls back to the shape basis.
 
-## `surveys.json` — object keyed by survey label
+## `surveys.json`: object keyed by survey label
 
-`{ "<survey name>": { …SMETA… } }`, produced by `survey_meta_from_yaml`. Unlike the arrays above this
-is **key-based** (safe to extend), and a key is absent rather than null when a survey declares
-nothing, so adding a field leaves every existing entry byte-identical.
-
-The member reference is
-[Served documents](../reference/portal-documents.md#surveysjson); `survey_meta_from_yaml` is the
-producer and the definition.
+`{ "<survey name>": { …SMETA… } }`, produced by `survey_meta_from_yaml`. Key-based, so safe to extend,
+and a key is absent rather than null when a survey declares nothing. The member reference is
+[Served documents](../reference/portal-documents.md#surveysjson).
 
 ## `manifest.json`: the key-based download index beside the positional catalogue
 
-The field-by-field reference is [Download manifest schema](../reference/manifest-schema.md), and
-the fetch patterns are in the
-[data reference](../interoperability/api-reference.md#per-station-fetch-through-the-manifest).
-What matters on the producer side:
+The field-by-field reference is [Download manifest schema](../reference/manifest-schema.md), and the
+fetch patterns are in the
+[data reference](../interoperability/api-reference.md#per-station-fetch-through-the-manifest). On the
+producer side:
 
-- **It is key-based on purpose.** Download metadata is added *beside* the positional arrays, never
-  as new `catalogue`/`sci`/`tf` columns, so extending it costs the index-reading consumers nothing.
-  Extend `manifest.json` by adding keys.
-- **It is written to both** the portal data dir **and** the `--products` dir.
-- **`sha256` is of the SERVED bytes.** The served EDIs and the per-survey EDI zip are
-  byte-reproducible across builds (given a fixed zlib and, for generated EDIs, a fixed
-  mt_metadata: the writer stamps PROGVERS into the HEAD block, so a toolchain bump moves every
-  generated digest with no data change), the generated ones included: a copied
-  custodian EDI carries no build clock, and `_reproducible_derived_edi` stamps the one field
-  mt_metadata would clock-stamp in a generated one from the source document's own date. EMTF XML,
-  the EMTF-XML zip and the transfer-function MTH5 embed timestamps and UUIDs and are **not**: their
-  digest is a per-build integrity hash, not a cross-build invariant. Do not write a test that
+- It is key-based on purpose. Download metadata is added beside the positional arrays, never as new
+  `catalogue`/`sci`/`tf` columns. Extend `manifest.json` by adding keys.
+- It is written to both the portal data dir and the `--products` dir.
+- `sha256` is of the SERVED bytes. The served EDIs and the per-survey EDI zip are byte-reproducible
+  across builds (given a fixed zlib and, for generated EDIs, a fixed mt_metadata: the writer stamps
+  PROGVERS into the HEAD block, so a toolchain bump moves every generated digest with no data change);
+  a copied custodian EDI carries no build clock, and `_reproducible_derived_edi` stamps the one field
+  mt_metadata would clock-stamp in a generated one from the source document's own date. EMTF XML, the
+  EMTF-XML zip and the transfer-function MTH5 embed timestamps and UUIDs and are not reproducible:
+  their digest is a per-build integrity hash, not a cross-build invariant. Do not write a test that
   asserts otherwise.
-- **A row exists only for what AusMT serves.** A non-served station has no row at all; the portal
-  routes it to the source DOI archive via the catalogue's `edi_available` bit (`r[13] = 0`).
-- **The bundle set is flag-gated** by `flags:` in `portal/portal.config.yaml`, mirrored to
-  `config.js` and read by the build, and recorded in `build_provenance.json` under
-  `distribution_flags`. The EDI zip and the EMTF-XML zip are unconditional for a served survey.
+- A row exists only for what AusMT serves. A non-served station has no row; the portal routes it to the
+  source DOI archive via the catalogue's `edi_available` bit (`r[13] = 0`).
+- The bundle set is flag-gated by `flags:` in `portal/portal.config.yaml`, mirrored to `config.js` and
+  read by the build, and recorded in `build_provenance.json` under `distribution_flags`. The EDI zip
+  and the EMTF-XML zip are unconditional for a served survey.
 
 ## Derived-product files
 
-The engine also writes per-station product files under `products/<survey-slug>/<station>/` (the
-`--products` dir): `station.json` and `dimensionality.json`. These are key-based, not positional, and
-their field reference is [Per-station products](../reference/station-products.md).
+The engine writes per-station product files under `products/<survey-slug>/<station>/` (the
+`--products` dir): `station.json` and `dimensionality.json`. They are key-based, and their field
+reference is [Per-station products](../reference/station-products.md). On the producer side:
 
-What matters on the producer side:
+- `coordinate_qc` and `canonical_conditioning` are `null` unless the parse flagged something, so an
+  unflagged station is never implied to have been touched. `coordinate_policy` is present only when the
+  station's policy is not `exact`.
+- `--products` is a served surface in a deployment, so it rides the same access gate as
+  `tf.json`/`sci.json`. A station in a non-served survey gets a withheld record with `"withheld": true`,
+  no derived science, and no `dimensionality.json` at all.
+- Every product carries a `provenance` block (input file, sha256, pipeline and parameters).
 
-- `coordinate_qc` and `canonical_conditioning` are `null` unless the parse actually flagged
-  something, so an unflagged station is never implied to have been touched. `coordinate_policy` is
-  present only when the station's coordinate policy is not `exact`, which keeps an exact station's
-  file byte-unchanged.
-- `--products` **is** a served surface in a deployment, so it rides the same access gate as
-  `tf.json`/`sci.json`. A station in a non-served survey gets a withheld record carrying only the
-  discovery-safe identity the public catalogue already exposes, with `"withheld": true`, no derived
-  science, and no `dimensionality.json` at all.
-- Every product MUST carry a `provenance` block (input file, sha256, pipeline and parameters) so it
-  is traceable to its source. That is non-negotiable for reproducibility.
-
-**New products** follow the same conventions: emit
-`products/<survey>/<station>/<product>.json` with a `method`/citation field, a
-`screening_diagnostic` or interpretation caveat where relevant, a `provenance` block, and any
-companion assets (an SVG, say) alongside the JSON. The wiring steps are in
-[How to extend](extending.md#2-add-a-new-derived-science-product-eg-wire-up-strike) and the
-reference pattern is `ausmt_science/decomposition/`. Which products exist today and which are
-planned is owned by [Science products](../science/science-products.md).
+New products follow the same conventions: emit `products/<survey>/<station>/<product>.json` with a
+`method`/citation field, a `screening_diagnostic` or interpretation caveat where relevant, a
+`provenance` block, and any companion assets beside the JSON. The wiring steps are in
+[How to extend](extending.md#2-add-a-new-derived-science-product-eg-wire-up-strike) and the reference
+pattern is `ausmt_science/decomposition/`. Which products exist today is owned by
+[Science products](../science/science-products.md).
 
 ## Interpretation-sensitive operations
 
-Changes to any of the following alter scientific interpretation, not just presentation, and
-need corresponding review:
+Changes to any of the following alter scientific interpretation and need corresponding review:
 
-1. **Dimensionality classification** (`sc[5]`, `_edi_science.py`). Named threshold constants:
-   3-D if median |β| exceeds `SKEW_3D_DEG` or the `p3d` share exceeds its threshold; 2-D if
-   median ellipticity exceeds `ELLIP_2D_DEG`; otherwise 1-D; `indeterminate` when fewer than
-   half the periods are usable. The classifier is the most interpretation-sensitive output in
-   the product set.
+1. **Dimensionality classification** (`sc[5]`, `_edi_science.py`). Named threshold constants
+   (`SKEW_3D_DEG`, `PCT_PERIODS_3D_THRESHOLD`, `ELLIP_2D_DEG`, `BETA_PHYSICAL_CAP_DEG`,
+   `MIN_USABLE_PERIOD_FRAC`); the classifier is the most interpretation-sensitive output in the set.
 2. **Phase-tensor mathematics** (`_ediparse.pt_params`, Caldwell et al. 2004). The single
-   implementation for every consumer. Its near-singular guard (`PT_MIN_REZ_ROW_SINE`) decides
-   which periods are trusted; changing it changes β, azimuth and therefore dimensionality.
-3. **Phoenix SPECTRA input**. mt_metadata solves Z from the spectra cross-powers. The
-   single-station form of that solve is noise-biased toward zero; this is a property of the
-   source data's processing. A stated remote site is recorded where the header encodes one,
-   but its absence does not prove single-station processing.
-4. **Apparent-resistivity and phase fallback** (`_ediparse`). Computed from Z when the EDI
-   lacks ρ/φ blocks. Computed and file-provided values are not distinguished downstream.
-5. **Period thinning** (`_edi_tf`, ≤ 32 periods). A display reduction only. Science is
-   computed from the full-resolution component dict; thinning must never feed back into it.
+   implementation for every consumer. Its near-singular guard (`PT_MIN_REZ_ROW_SINE`) decides which
+   periods are trusted; changing it changes β, azimuth and therefore dimensionality.
+3. **Phoenix SPECTRA input.** mt_metadata solves Z from the spectra cross-powers. The single-station form
+   of that solve is noise-biased toward zero, a property of the source data's processing. A stated
+   remote site is recorded where the header encodes one, but its absence does not prove single-station
+   processing.
+4. **Apparent-resistivity and phase fallback** (`_ediparse`). Computed from Z when the EDI lacks ρ/φ
+   blocks. Computed and file-provided values are not distinguished downstream.
+5. **Period thinning** (`_edi_tf`, at most 32 periods). A display reduction only. Science is computed
+   from the full-resolution component dict; thinning must never feed back into it.
 
 ## Coordinate resolution
 
-Some legacy EDIs carry a floored-DMS HEAD coordinate that conflicts with a decimal INFO
-coordinate (a sign-handling bug in historic processing software, worth ~1° of latitude).
-The build detects the specific arithmetic signature and flags the station. The coordinate is
-replaced only when the survey package explicitly declares a resolution
-(`coordinate_resolution` in `survey.yaml`); the applied choice, its basis and its source are
-recorded, and `r[11]` marks the row. An undeclared conflict stays flagged rather than being
-silently auto-picked.
+Some legacy EDIs carry a floored-DMS HEAD coordinate that conflicts with a decimal INFO coordinate (a
+sign-handling bug in historic processing software, worth about 1° of latitude). The build detects the
+arithmetic signature and flags the station. The coordinate is replaced only when the survey package
+declares a resolution (`coordinate_resolution` in `survey.yaml`); the applied choice, its basis and its
+source are recorded, and `r[11]` marks the row. An undeclared conflict stays flagged rather than being
+auto-picked.
 
-## `mtcat.json`, `collections.json`, `build_provenance.json`, `build_report.json`, `qc_report.json`
+## The other documents
 
-- **`mtcat.json`**: the MTCAT discovery/federation document; its shape is fixed by
-  [`schema/mtcat.schema.json`](../reference/mtcat-schema.md) and validated in tests. The document
-  declares which schema version it is in its own `portal.version` field, so read it there rather than
-  from any prose page. This is the recommended integration point for external systems (key-based,
-  schema-versioned).
-- **`collections.json`** — `{ <collection_id>: { id, title, type, surveys[], n_surveys, n_stations,
-  bbox, centroid, … } }`; empty `{}` when no survey declares collection membership. Member reference:
+- `mtcat.json`: the MTCAT discovery document, shape fixed by
+  [`schema/mtcat.schema.json`](../reference/mtcat-schema.md) and validated in tests. It declares its
+  schema version in `portal.version`; read it there. The recommended integration point for external
+  systems.
+- `collections.json`: `{ <collection_id>: { id, title, type, surveys[], n_surveys, n_stations, bbox,
+  centroid, … } }`; `{}` when no survey declares membership. Reference:
   [Served documents](../reference/portal-documents.md#collectionsjson).
-- **`build_provenance.json`**: the `PROV` block plus the corpus counts, the distribution flags and the
-  cache statistics. Optional: the portal loads without it. The dimensionality thresholds it records are
-  read from the named constants in `_edi_science`, never re-typed, so the recorded parameters cannot
-  drift from the code that ran. Provenance describes what actually executed. Member reference:
+- `build_provenance.json`: the `PROV` block plus corpus counts, distribution flags and cache statistics.
+  Optional to the portal. The dimensionality thresholds it records are read from the named constants in
+  `_edi_science`, so the recorded parameters cannot drift from the code that ran. Reference:
   [Served documents](../reference/portal-documents.md#build_provenancejson).
-- **`build_report.json`** — structured per-survey build metadata, written alongside
-  `build_provenance.json`. It reuses the same identity helpers `build.json` uses, so the recorded
-  commits cannot drift between the two. One shared function produces both its `conditioning` array and
-  the build's survey-level `[xml] NOTICE` log lines, so the human log and the machine report cannot
-  disagree; the per-station notes stay in each `station.json`'s `canonical_conditioning` and in the
-  canonical store's own provenance record. Shape fixed by `engine/schema/build_report.schema.json` and
-  documented in [Build report schema](../reference/build-report-schema.md); validated in the build
-  self-check and re-checked by `engine/scripts/verify.py`. The portal runtime does not consume it.
-- **`qc_report.json`** — curator-facing QC findings (duplicate ids, coord flags, near-duplicates,
-  out-of-extent); not consumed by the portal runtime. Member reference:
-  [Served documents](../reference/portal-documents.md#qc_reportjson).
+- `build_report.json`: structured per-survey build metadata. It reuses the identity helpers `build.json`
+  uses, so the recorded commits cannot drift between the two; one shared function produces both its
+  `conditioning` array and the build's survey-level `[xml] NOTICE` log lines. Shape fixed by
+  `engine/schema/build_report.schema.json`, documented in
+  [Build report schema](../reference/build-report-schema.md), validated in the build self-check and
+  re-checked by `engine/scripts/verify.py`. The portal runtime does not consume it.
+- `qc_report.json`: curator-facing QC findings (duplicate ids, coord flags, near-duplicates,
+  out-of-extent). Reference: [Served documents](../reference/portal-documents.md#qc_reportjson).
