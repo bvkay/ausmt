@@ -1,5 +1,14 @@
 # Portal data files (the producer and consumer contract)
 
+Not a public surface. The files on this page (`catalogue.json`, `sci.json`, `tf.json`, `surveys.json`,
+`collections.json`, `build_provenance.json`, `coord_policy.json`, `base_ids.json`, the portal-side use of
+`manifest.json`, and the operator-only `build_report.json` and `qc_report.json`) are portal-internal or
+operator-only: they carry no public contract and no stability promise, and any build may change or drop
+them. This page is the engine-to-portal positional contract, for people working on the portal or the
+engine. A consumer reads the public contracts, `mtcat.json` and `station.json`, documented under
+[Reference](../reference/index.md), and the download index `manifest.json`, documented in the
+[data reference](../interoperability/api-reference.md#download-inventory-manifestjson).
+
 The authoritative definition of the JSON files the `engine` generates and the `portal` reads.
 
 `catalogue.json`, `sci.json` and `tf.json` are POSITIONAL arrays, read by index, not by key: bare
