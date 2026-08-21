@@ -115,8 +115,8 @@ there is a transparent record of what was checked.
 **Validation is not a quality measure.** A package can pass while containing noisy data, sparse
 coverage or thin interpretation, and a historically important dataset can generate warnings
 purely because its records are incomplete. Structure and metadata are what validation assesses.
-Scientific judgement stays with the user, and the diagnostics that support it are in
-[Quality metrics](../science/quality-metrics.md).
+Scientific judgement stays with the user, and the diagnostics that support it are defined in
+[Per-station products](../reference/station-products.md#18-diagnostics).
 
 Validation requirements will change as fields, product types and standards evolve. Changes
 should stay backwards compatible where they can.

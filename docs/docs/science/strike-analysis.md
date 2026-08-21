@@ -4,7 +4,7 @@ Strike is the preferred orientation of subsurface conductivity structure. For an
 two-dimensional Earth the impedance tensor can be rotated into a coordinate system where the
 diagonal elements are minimised and the off-diagonal elements carry most of the response
 (Swift, 1967), and estimating that direction is part of many MT workflows: assessing
-[dimensionality](dimensionality.md), guiding interpretation, supporting 2-D inversion,
+dimensionality, guiding interpretation, supporting 2-D inversion,
 comparing neighbouring stations, and identifying regional structural trends. It also flags the
 cases where a 2-D approximation is unlikely to be appropriate.
 

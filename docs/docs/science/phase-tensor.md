@@ -33,8 +33,8 @@ increasing departure from two-dimensional behaviour (Caldwell et al., 2004). Ske
 read alone; it is most useful alongside the other diagnostics.
 
 AusMT serves per-period β in the transfer-function data product, and the median |β| is the
-primary input to the shipped dimensionality classification. The thresholds are disclosed in
-[Dimensionality](dimensionality.md#the-shipped-classification).
+primary input to the shipped dimensionality classification. The thresholds are stated with the
+served document, [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson).
 
 ## What AusMT publishes
 

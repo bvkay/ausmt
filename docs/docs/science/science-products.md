@@ -17,10 +17,12 @@ data products:
 - Apparent resistivity and phase, with per-period error bars where the EDI supplies them
 - [Phase tensor](phase-tensor.md), per-period parameters
 - Tipper, magnitude and full complex components
-- The [dimensionality](dimensionality.md) screening diagnostic and the median skew
+- The dimensionality screening diagnostic and the median skew, served in
+  [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson)
 - Selection-level [strike](strike-analysis.md) rose, drawn in the browser from served
   phase-tensor azimuths
-- The [`q` screening scalar](quality-metrics.md#the-q-screening-scalar)
+- The `q` completeness-and-smoothness scalar, defined under
+  [`station.json` diagnostics](../reference/station-products.md#18-diagnostics)
 
 The station drawer renders four response plots: apparent resistivity, phase, phase tensor, and
 Parkinson-convention induction arrows. The per-station screening panel that displayed the
@@ -33,8 +35,8 @@ GeoJSON exports.
 and is not yet generated. Do not assume these are present:
 
 - [Strike analyses](strike-analysis.md)
-- [Distortion and decomposition products](distortion-and-dimensionality.md) (Groom-Bailey and
-  related)
+- Distortion and decomposition products (Groom-Bailey and related): `ausmt_science/decomposition`,
+  an optional MTpy-v2-backed stub
 - Quicklook image products
 
 Derived products are a portal capability. They are never written back into the survey package,

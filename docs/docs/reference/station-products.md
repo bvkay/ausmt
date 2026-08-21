@@ -211,8 +211,28 @@ the whole content of the `dimensionality.json` emitted beside this document (§2
 with the method and the screening caveat that qualifies them; restating them here produced a second
 copy without that caveat.
 
-The full definitions of these diagnostics are in
-[Quality metrics](../science/quality-metrics.md) and [Dimensionality](../science/dimensionality.md).
+#### 1.8.1 How the completeness-smoothness diagnostic is computed
+
+`completeness_smoothness_diagnostic.value` is the 0-5 scalar the catalogue serves as `sci.json`
+column `q`, computed by `engine/extract/_edi_science.py`. It exists so a reader screening hundreds of
+stations can spot incomplete or rough transfer functions quickly. It is not a data-quality or
+geological-value ranking, and AusMT ranks no station or survey. Its inputs:
+
+| Input | Definition |
+|---|---|
+| completeness | fraction of periods with a positive apparent resistivity and a phase, xy mode |
+| coverage | decades of period coverage divided by 4, clamped to [0, 1] |
+| smoothness | 1 minus (median second-difference roughness of the xy phase curve) / 25 degrees, clamped; 0.5 when fewer than three phases exist |
+| errscore | where per-period resistivity errors exist: the median relative error `mre` over both off-diagonal modes, mapped log-linearly from 30% or worse (0) to 2% or better (1) |
+
+With errors (`basis` `e`): `value = 5 × (0.45·errscore + 0.18·coverage + 0.15·completeness + 0.22·smoothness)`.
+Without usable error blocks (`basis` `s`): `value = 5 × (0.40·coverage + 0.30·completeness + 0.30·smoothness)`.
+`median_relative_error` is that same `mre`, rounded to three decimals, and is null on the shape basis.
+
+Limitations: smoothness uses the xy phase mode only; the error basis uses off-diagonal resistivity
+errors only; there is no normalisation across instrument classes, so a long-period and a broadband
+station score on the same scale. Read the value with the period range and the phase-tensor
+diagnostics, never alone.
 
 ### 1.9 processing
 
@@ -354,7 +374,25 @@ the derived science is withheld here.
 ## 2 dimensionality.json
 
 The phase-tensor screening result for one station. It is never written for a station in a withheld
-survey.
+survey. The same classification and statistics are served positionally in `sci.json` (`dim`, `p3d`,
+`skew`, `ellip`).
+
+The classification is assigned by `engine/extract/_edi_science.py` from the per-period phase tensor
+(Caldwell et al., 2004), with every threshold a named constant that `build_provenance.json` records:
+
+1. Periods whose absolute skew is 15 degrees or more (`BETA_PHYSICAL_CAP_DEG`) are excluded as
+   non-physical: a dead channel or a near-singular tensor drives skew toward its ceiling, which is
+   evidence of bad data, not of 3-D structure.
+2. If fewer than half (`MIN_USABLE_PERIOD_FRAC`) of the impedance-bearing periods survive, the class
+   is `indeterminate`: the data do not support a call.
+3. Otherwise the class is `3-D` if the median absolute skew exceeds 5 degrees (`SKEW_3D_DEG`) or more
+   than 40% (`PCT_PERIODS_3D_THRESHOLD`) of usable periods have absolute skew above 3 degrees
+   (`BETA_PER_PERIOD_DEG`); else `2-D` if the median ellipticity exceeds 0.10 (`ELLIP_2D_DEG`); else
+   `1-D`.
+
+Skew and ellipticity are defined on the [phase tensor](../science/phase-tensor.md) page. The result is
+a screening product for survey triage, not period-by-period dimensionality analysis, which the build
+does not attempt.
 
 ```json
 {
@@ -377,7 +415,7 @@ survey.
 | Type | string or null |
 | Allowed values | `1-D`, `2-D`, `3-D`, `indeterminate` |
 | Example | `"2-D"` |
-| Note | `indeterminate` is returned when fewer than half the periods are usable. The thresholds are stated in [Dimensionality](../science/dimensionality.md#the-shipped-classification). |
+| Note | `indeterminate` is returned when fewer than half the periods are usable. The thresholds are stated at the top of this section. |
 
 ### 2.2 skew_beta_median_deg
 
