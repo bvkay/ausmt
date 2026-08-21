@@ -38,6 +38,9 @@ import pytest
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SCHEMA = json.loads((ROOT / "schema" / "mtcat.schema.json").read_text(encoding="utf-8"))
+# The version the schema's title displays (the display of the single-source constant; the full
+# cross-surface pin lives in test_mtcat_version_parity.py).
+SCHEMA_VERSION = re.match(r"^MTCAT v(\d+\.\d+):", SCHEMA["title"]).group(1)
 
 
 def _validator():
@@ -450,9 +453,10 @@ def test_derived_facets_are_honest_when_there_is_nothing_to_derive():
                           generated_at="2026-01-01T00:00:00Z")["surveys"][0]
     assert e["n_stations"] == 1
     assert e["data_types"] == {"unknown": 1}, "an unnamed band is counted, never silently dropped"
-    assert e["period_min_s"] is None and e["period_max_s"] is None
+    # 2.0: a bound/year with nothing to derive from is OMITTED, never emitted null.
+    assert "period_min_s" not in e and "period_max_s" not in e
     assert e["n_stations_tipper"] == 0
-    assert e["year_start"] is None and e["year_end"] is None
+    assert "year_start" not in e and "year_end" not in e
 
 
 def test_formats_are_read_off_the_manifest_and_are_empty_for_a_withheld_survey():
@@ -470,41 +474,25 @@ def test_formats_are_read_off_the_manifest_and_are_empty_for_a_withheld_survey()
     by_id = {s["survey_id"]: s for s in bp.mtcat_document(
         meta, stations, generated_at="2026-01-01T00:00:00Z", manifest_doc=manifest)["surveys"]}
     assert by_id["open"]["formats"] == ["edi", "edi-zip", "emtfxml", "mth5"]
-    assert by_id["held"]["formats"] == [], "a withheld survey distributes nothing, and says so"
+    # 2.0 (owner finding 62): the withheld survey OMITS the key - an empty list would falsely
+    # assert that no formats are KNOWN when the holdings exist and are merely withheld.
+    assert "formats" not in by_id["held"], "a withheld survey omits formats under 2.0"
     assert by_id["held"]["embargo_until"] == "2027-01-01"
     assert by_id["open"]["n_stations"] == 1, "discovery stays universal even where bytes are withheld"
     assert "embargo_until" not in by_id["open"]
 
 
-def test_formats_absence_is_documented_as_a_foreign_producer_case_not_an_ausmt_one():
-    """The `formats` key has TWO honest states and the schema must not confuse them.
-
-      * EMPTY  = this build distributes nothing for this survey. True of a withheld survey, and equally
-        true of a build run with no distribution flags, where the manifest is written but carries zero
-        rows. It is a statement about the build, never 'unknown'.
-      * ABSENT = the producer had no manifest at all, so it cannot say (proved separately by
-        test_formats_key_is_omitted_when_there_is_no_manifest_to_derive_from). Reachable through the
-        public mtcat_document() signature, whose manifest_doc defaults to None, but NOT through AusMT's
-        own build: main() writes the manifest first and always passes it, so an AusMT document always
-        carries the key. The schema now says exactly that, rather than implying AusMT ever omits it.
-
-    Fix round. The description previously said only 'absent when the producer had no manifest', which read
-    as a state an AusMT consumer might meet. It cannot: a build with every distribution flag off emits
-    `formats: []` for all 21 surveys, and a consumer must read that as 'nothing distributed', not 'unknown'."""
+def test_formats_key_never_appears_empty():
+    """MTCAT 2.0 removed the empty-array state for formats entirely (the owner's original omission
+    ruling, schema-enforced by minItems 1 in the ratified artifact): the key is present ONLY when at
+    least one format is distributed. A manifest that exists but carries zero rows for a survey
+    (withheld holdings, or a build with every distribution flag off) OMITS the key for it."""
     bp = _bp()
     stations = [_station("S", "A1", -30.0, 137.0, "BBMT", 0.01, 100.0, "ZT")]
     meta = {"S": {"org": "Org", "access": "open"}}
-    # a manifest that exists but distributes nothing: a build run with no --bundle-edi / --survey-h5,
-    # which is what main() hands over when every distribution flag is off. The key must still be there.
     e = bp.mtcat_document(meta, stations, generated_at="2026-01-01T00:00:00Z",
                           manifest_doc={"generated_count": 0, "files": [], "bundles": []})["surveys"][0]
-    assert e["formats"] == [], "an empty manifest means nothing distributed, and the key stays present"
-    desc = SCHEMA["properties"]["surveys"]["items"]["properties"]["formats"]["description"]
-    assert "ALWAYS PRESENT" in desc, (
-        "the schema must state that an AusMT document always carries formats, so a consumer does not "
-        "write an absence branch it will never reach")
-    assert "never means 'unknown'" in desc, (
-        "the schema must state that an EMPTY list is a fact about the build, not a missing value")
+    assert "formats" not in e, "an empty derivation must OMIT the key (2.0 forbids the [] state)"
 
 
 def test_access_description_names_no_phantom_level():
@@ -605,11 +593,10 @@ def test_emitted_document_validates_against_the_v12_schema():
                                            "relation": "IsDerivedFrom", "custodian": "NCI",
                                            "identifies": "raw_packed", "resolution": "ok"}]}}
     doc = bp.mtcat_document(meta, stations, generated_at="2026-01-01T00:00:00Z",
-                            manifest_doc={"files": [{"survey": "S", "format": "edi"}], "bundles": []},
-                            lib_vers={"mt_metadata": "1.0.9", "mth5": "0.6.8"})
+                            manifest_doc={"files": [{"survey": "S", "format": "edi"}], "bundles": []})
     errs = sorted(_validator().iter_errors(doc), key=lambda e: list(e.path))
     assert not errs, "\n".join(f"{list(e.path)}: {e.message}" for e in errs)
-    assert doc["portal"]["version"] == "1.2"
+    assert doc["portal"]["version"] == SCHEMA_VERSION
     s = doc["surveys"][0]
     assert s["contributors"][-1]["role"] == "HostingInstitution", "the export row still rides last"
     assert s["data_types"] == {"BBMT": 1, "GDS": 1}

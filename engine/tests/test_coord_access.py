@@ -429,8 +429,9 @@ def test_bbox_lone_withheld_station_yields_no_footprint(tmp_path):
     assert r.returncode == 0, r.stderr
     mtcat = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
     sv = next(s for s in mtcat["surveys"] if s["title"] == "Coord Access Sweep Survey")
-    assert sv["bbox"] is None and sv["centroid"] is None, \
-        f"lone-withheld survey must have NO footprint, got bbox={sv['bbox']} centroid={sv['centroid']}"
+    # MTCAT 2.0: no footprint is expressed by OMITTING the keys (null-as-undeclared is gone).
+    assert "bbox" not in sv and "centroid" not in sv, \
+        f"lone-withheld survey must have NO footprint, got bbox={sv.get('bbox')} centroid={sv.get('centroid')}"
     # and the whole tree carries none of the withheld station's true bytes
     assert not _sweep_tree_for_value(out, HID["lat"], label="HID.lat"), "lone-withheld true lat leaked"
     assert not _sweep_tree_for_value(out, HID["lon"], label="HID.lon"), "lone-withheld true lon leaked"

@@ -48,10 +48,12 @@ def test_empty_build_generates_valid_json(tmp_path):
     assert {k: manifest[k] for k in ("generated_count", "base_url", "files", "bundles")} == \
         {"generated_count": 0, "base_url": "", "files": [], "bundles": []}
     assert "mth5_version" in manifest and "mt_metadata_version" in manifest
-    assert manifest["mth5_version"] == mtcat["mth5_version"], "manifest + mtcat pin the same mth5 version"
+    # MTCAT 2.0 dropped the document-level library-version keys (manifest/build docs keep theirs)
+    # and the empty-collections state: no collections => no key.
+    assert "mth5_version" not in mtcat and "mt_metadata_version" not in mtcat
     assert mtcat["surveys"] == []
     assert mtcat["stations"] == []
-    assert mtcat["collections"] == []
+    assert "collections" not in mtcat
     assert mtcat["portal"]["portal_id"]       # MTCAT still carries a valid portal block
     assert mtcat["portal"]["schema"] == "mtcat"
 

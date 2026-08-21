@@ -96,4 +96,6 @@ def test_no_collection_is_backwards_compatible(tmp_path):
     colls = json.loads((out / "collections.json").read_text(encoding="utf-8"))
     assert colls == {}                      # no collections emitted
     mt = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
-    assert mt.get("collections") == []      # MTCAT collections always present (empty list when none)
+    # MTCAT 2.0: the collections key exists only when at least one collection does (the ratified
+    # schema forbids the empty-array state, minItems 1); no collections => no key.
+    assert "collections" not in mt
