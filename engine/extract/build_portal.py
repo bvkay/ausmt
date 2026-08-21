@@ -670,25 +670,86 @@ def _formats_by_survey(manifest_doc):
     return {k: sorted(v) for k, v in out.items()}
 
 
+def _canonical_sample_rates(values) -> list:
+    """The ONE sample-rate canonicaliser (ratified, deterministic, RED-proven against a
+    float-artefact fixture): round each explicit rate to 6 SIGNIFICANT figures, dedupe, sort
+    ascending. Integral canonical values are emitted as integers (the spec example's [10, 150,
+    24000] shape); binary-float noise on the same physical rate (149.99999999999997 vs
+    150.00000000000003) collapses to one mode. Non-positive/unparseable inputs are dropped - a
+    rate is EXPLICIT acquisition metadata or it is nothing."""
+    out = set()
+    for v in values or ():
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if not f > 0:
+            continue
+        c = float(f"{f:.6g}")
+        out.add(int(c) if c.is_integer() and abs(c) < 1e15 else c)
+    return sorted(out)
+
+
+def _omit_none(node):
+    """MTCAT 2.0 omit-when-undeclared: recursively drop every None-valued dict key (the exact
+    clean() of the ratified migrate_12_to_20 transform). List elements are cleaned in place-order;
+    scalars pass through. Callers apply this to surveys[]/collections[]/portal - NEVER to
+    stations[], whose paired latitude/longitude nulls are the one defined null."""
+    if isinstance(node, dict):
+        return {k: _omit_none(v) for k, v in node.items() if v is not None}
+    if isinstance(node, list):
+        return [_omit_none(v) for v in node]
+    return node
+
+
+def _coordinates_state(policies, declared_default):
+    """The ratified aggregation rule over a survey's per-station effective coordinate policies:
+    all exact => exact; all withheld => withheld; any other mixture => generalised (the
+    conservative reading). A survey with no stations falls back to its DECLARED survey default
+    (today's survey-level policy makes every case trivial; the rule is implemented anyway)."""
+    states = set(policies or ())
+    if not states:
+        return declared_default or "exact"
+    if states == {"exact"}:
+        return "exact"
+    if states == {"withheld"}:
+        return "withheld"
+    return "generalised"
+
+
 def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = None,
-                   portal: dict = None, coll_by_id: dict = None, lib_vers: dict = None,
+                   portal: dict = None, coll_by_id: dict = None,
                    manifest_doc: dict = None) -> dict:
     """Build an MTCAT discovery/federation document (see docs/docs/reference/mtcat-schema.md and
-    schema/mtcat.schema.json; the old docs/MTCAT_v1.0.md pointer this docstring carried does not exist).
+    schema/mtcat.schema.json).
     Portal owns its data; MTCAT is the shared, minimal metadata other
     portals could harvest. Derived purely from already-computed catalogue data — no new science.
     `coll_by_id` may be passed in so the (single) collection grouping is shared with
     collections_document instead of being recomputed here.
 
-    MTCAT 1.2 adds the per-survey DISCOVERY FACETS every consumer previously had to re-derive by walking
-    stations[] itself (n_stations, data_types, period_min_s/period_max_s, n_stations_tipper) plus the
-    distributed `formats` read off the download manifest and the declared year range. All of it is PURE
-    derivation or verbatim pass-through of metadata the build already holds: this function still computes
-    no science and reads no new source. `manifest_doc` is the manifest built earlier in the same run; when
-    it is not supplied the `formats` key is OMITTED rather than emitted empty (see _formats_by_survey)."""
+    MTCAT 2.0 (the ratified migrate_12_to_20 transform implemented AT THE SOURCE):
+
+      * omit-when-undeclared everywhere (see _omit_none); the paired station position nulls are
+        the one defined null.
+      * formats emitted only when at least one format is distributed - an embargoed/withheld
+        survey OMITS the key (owner finding 62), and no manifest at all omits it corpus-wide
+        ("not known" is never served as "nothing distributed"; see _formats_by_survey).
+      * sources[]/changes are NEVER emitted: sources rows map to related_identifiers rows; a row
+        carrying rights content (statement/licence/retrieved/profile) HARD-STOPS the build so the
+        content is captured in survey-metadata rather than silently deleted.
+      * the top-level mt_metadata_version/mth5_version keys are gone (legacy 1.x, removed in 2.0).
+      * NEW: description (discovery_description, else the abstract when already <= 1200 - never
+        truncated by the engine), subjects[] verbatim, sample_rates_hz[] from explicit run
+        metadata only (canonicalised, see _canonical_sample_rates), coordinates_state projected
+        from the survey's DECLARED access.coordinates policy (see _coordinates_state).
+      * stations[].has_time_series / surveys[].n_stations_time_series_verified are schema-defined
+        for the later projection lane and emitted NOWHERE here.
+
+    `manifest_doc` is the manifest built earlier in the same run."""
     from datetime import datetime, timezone
     slug_of, bbox_of = {}, {}
     n_of, types_of, per_of, tip_of = {}, {}, {}, {}
+    rates_of, pol_of = {}, {}
     fmt_of = _formats_by_survey(manifest_doc)
     for (_p, r) in all_stations:
         lbl, aid, sid = r["survey"], r["ausmt_id"], r["id"]
@@ -700,7 +761,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
             b = bbox_of.setdefault(lbl, [r["lon"], r["lat"], r["lon"], r["lat"]])  # w,s,e,n
             b[0] = min(b[0], r["lon"]); b[1] = min(b[1], r["lat"])
             b[2] = max(b[2], r["lon"]); b[3] = max(b[3], r["lat"])
-        # MTCAT 1.2 derived facets, accumulated in the walk that was already happening (no second pass and
+        # Derived facets, accumulated in the walk that was already happening (no second pass and
         # no new upstream computation): station count, band mix, period range and tipper count.
         n_of[lbl] = n_of.get(lbl, 0) + 1
         _t = r.get("type")
@@ -713,6 +774,12 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         for _i, _v in ((0, r.get("period_min_s")), (1, r.get("period_max_s"))):
             if _v is not None:                # each bound guarded separately: a half-populated row still counts
                 _pr[_i] = _v if _pr[_i] is None else (min(_pr[_i], _v) if _i == 0 else max(_pr[_i], _v))
+        # MTCAT 2.0: the survey's explicit sample-rate modes (record_from_tf attaches the key ONLY
+        # when a run declared a rate) and the per-station effective coordinate policy (stamped on
+        # non-exact records by the one mask seam; an unstamped record is exact by construction).
+        if r.get("sample_rates_hz"):
+            rates_of.setdefault(lbl, set()).update(r["sample_rates_hz"])
+        pol_of.setdefault(lbl, set()).add(r.get("coord_policy") or "exact")
     surveys = []
     for lbl, meta in sorted(surveys_meta.items()):
         bb = bbox_of.get(lbl)
@@ -720,84 +787,132 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         entry = {
             "survey_id": slug_of.get(lbl, slugify(lbl)), "title": lbl,
             "organisation": m.get("org", "unknown"),
-            # C7: additive optional federation fields (schema/mtcat.schema.json) — the organisation's ROR
-            # and the project's RAiD, when the survey declares them; None when not (schema allows null).
+            # C7: additive optional federation fields - the organisation's ROR and the project's
+            # RAiD, when the survey declares them; None here is DROPPED by the _omit_none pass.
             "organisation_ror": m.get("org_ror"),
             "raid": m.get("raid"),
             "country": m.get("country", "Australia"),
             "version": m.get("version"),
             "collection_id": (m.get("collection") or {}).get("id"),
             "doi": m.get("doi"), "license": m.get("lic"),
-            # C1: emit the NORMALISED access level (a plain string — mtcat.schema.json's access is string|null).
-            # SMETA already normalises it; normalise again so a raw-mode seed value stays a clean scalar.
+            # C1: emit the NORMALISED access level. SMETA already normalises it; normalise again so
+            # a raw-mode seed value stays a clean scalar.
             "access": normalise_access_level(m.get("access", "open")),
             "bbox": ({"west": round(bb[0], 6), "south": round(bb[1], 6),
                       "east": round(bb[2], 6), "north": round(bb[3], 6)} if bb else None),
             "centroid": ({"latitude": round((bb[1] + bb[3]) / 2, 6),
                           "longitude": round((bb[0] + bb[2]) / 2, 6)} if bb else None),
-            # MTCAT 1.2 (schema/mtcat.schema.json): the DERIVED discovery facets. Emitted for EVERY survey
-            # (a survey with no station serves 0 / {} / null, never a missing key) so a harvester can size,
-            # band and band-limit a survey without walking stations[] itself. n_stations is a convenience
-            # over stations[], which stays authoritative; the schema says so.
+            # The DERIVED discovery facets. Counts are emitted for every survey (0 is a real count);
+            # the band mix and period bounds are emitted only when there is something to state
+            # (2.0 forbids the empty-object/null states). n_stations is a convenience over
+            # stations[], which stays authoritative; the schema says so.
             "n_stations": n_of.get(lbl, 0),
-            "data_types": _type_mix(types_of.get(lbl)),
+            "data_types": _type_mix(types_of.get(lbl)) or None,
             "period_min_s": per_of.get(lbl, [None, None])[0],
             "period_max_s": per_of.get(lbl, [None, None])[1],
             "n_stations_tipper": tip_of.get(lbl, 0),
-            # MTCAT 1.2: the declared acquisition year range, a verbatim SMETA pass-through (ints or null,
-            # never inferred from file timestamps). Until now a harvester got NO temporal facet at all.
+            # The declared acquisition year range, a verbatim SMETA pass-through (never inferred
+            # from file timestamps); undeclared drops out in the _omit_none pass.
             "year_start": m.get("year_start"),
             "year_end": m.get("year_end")}
-        # C46-W3a (schema 1.1): the attribution/sources/changes rights blocks, PRESENT ONLY when the
-        # survey declares them in SMETA — a survey without them keeps a byte-identical entry (the whole
-        # existing corpus). Emitted verbatim from SMETA (mtcat.schema.json is additionalProperties:true).
-        for k in ("attribution", "sources", "changes"):
-            if m.get(k) is not None:
-                entry[k] = m[k]
-        # §2a (identifiers design): the typed provenance relations, PRESENT ONLY when the survey declares
-        # any — a survey without them keeps a byte-identical entry (mtcat.schema.json is additionalProperties
-        # :true). SMETA carries this as always-a-list ([] when absent); emit only the non-empty list so the
-        # posture matches the sources/attribution/changes blocks above rather than shipping empty arrays.
-        if m.get("related_identifiers"):
-            entry["related_identifiers"] = m["related_identifiers"]
-        # CONTRIBUTOR-CREDIT-SPEC C1/§4: the credit surface for the DataCite/federation export. creators[]
-        # rides through verbatim when the survey declares it (omitted otherwise, byte-identical for the
-        # pre-migration corpus). contributors[] is the EXPORT form: the survey's own contributors PLUS
-        # AusMT as the HostingInstitution, added automatically on export only (never a curator field, never
-        # in survey.yaml). Emitted for every record because AusMT hosts them all (mtcat.schema.json's
-        # surveys.items is additionalProperties:true, so these additive keys need no schema-version bump).
+        # MTCAT 2.0: the concise discovery text. The explicit survey.yaml discovery_description
+        # wins; else the UNCAPPED abstract rides through only when it is already within the
+        # ratified 1200-char discovery budget. The engine NEVER truncates: an over-long abstract
+        # with no discovery text is a surveys-side validation failure, not an engine edit.
+        _desc = m.get("discovery_description")
+        if not _desc:
+            _blurb = m.get("blurb")
+            if isinstance(_blurb, str) and _blurb and len(_blurb) <= 1200:
+                _desc = _blurb
+        if _desc:
+            entry["description"] = _desc
+        # MTCAT 2.0: subjects[] VERBATIM from survey.yaml (curation asserts, the engine never
+        # invents); absent means no assertion.
+        if m.get("subjects"):
+            entry["subjects"] = m["subjects"]
+        # MTCAT 2.0: the explicit acquisition sample-rate modes across this survey's stations,
+        # canonicalised (6 significant figures, deduped, ascending). Emitted only when at least one
+        # run DECLARED a rate; never inferred from instrument model or period coverage.
+        _rates = _canonical_sample_rates(rates_of.get(lbl))
+        if _rates:
+            entry["sample_rates_hz"] = _rates
+        # MTCAT 2.0: coordinates_state, projected ONLY when the survey DECLARES an
+        # access.coordinates policy (the state is public, the reason stays private; absence makes
+        # no assertion). Aggregated over the per-station effective policies; a withheld state
+        # forbids bbox/centroid (already absent by construction - a withheld survey's stations
+        # carry no published positions - and asserted by the invariant suite + schema).
+        if m.get("coord_policy_declared"):
+            _state = _coordinates_state(pol_of.get(lbl), m.get("coord_policy_default"))
+            entry["coordinates_state"] = _state
+            if _state == "withheld":
+                entry["bbox"] = None
+                entry["centroid"] = None
+        # C46-W3a: the attribution rights block, PRESENT ONLY when the survey declares it, emitted
+        # verbatim from SMETA. MTCAT 2.0 REMOVED the sources/changes blocks: a sources row maps to
+        # a related_identifiers row below, and the changes facts already live inside attribution
+        # (SMETA's changes descriptor is derived FROM attribution, so nothing is lost).
+        if m.get("attribution") is not None:
+            entry["attribution"] = m["attribution"]
+        # §2a: the typed provenance relations, PRESENT ONLY when the survey declares any. SMETA
+        # carries this as always-a-list ([] when absent); emit only the non-empty list (2.0 forbids
+        # empty arrays). A legacy sources[] row is MAPPED here (spec 6.9, the ratified transform):
+        # its identifier keys become a relationship row; rights content in a row is a HARD STOP
+        # because it must be captured in survey-metadata, never silently deleted.
+        _rel = list(m.get("related_identifiers") or [])
+        for _row in (m.get("sources") or []):
+            if any(_row.get(k) for k in ("statement", "licence", "retrieved", "profile")):
+                raise NotImplementedError(
+                    f"survey '{lbl}': a sources[] row carries statement/licence/retrieved/profile "
+                    f"content; capture it in survey-metadata before this survey can emit under "
+                    f"MTCAT 2.0 (the transform hard-stops rather than silently deleting rights text)")
+            _mapped = {k: _row[k] for k in ("identifier", "identifier_type", "relation",
+                                            "identifies", "custodian") if _row.get(k) is not None}
+            if _mapped.get("identifier"):
+                _rel.append(_mapped)
+        if _rel:
+            entry["related_identifiers"] = _rel
+        # CONTRIBUTOR-CREDIT-SPEC C1/§4: the credit surface for the DataCite/federation export.
+        # creators[] rides through verbatim when the survey declares it. contributors[] is the
+        # EXPORT form: the survey's own contributors PLUS AusMT as the HostingInstitution, added
+        # automatically on export only (never a curator field, never in survey.yaml).
         if m.get("creators"):
             entry["creators"] = m["creators"]
         entry["contributors"] = _export_contributors_of(m)
-        # MTCAT 1.2: what is ACTUALLY distributed for this survey, off the download manifest (the one
-        # authority). Emitted for every survey the moment a manifest exists, INCLUDING the empty list a
-        # withheld survey honestly derives; OMITTED entirely when no manifest was supplied, because an
-        # unknown distribution must not be served as an empty one.
-        if fmt_of is not None:
-            entry["formats"] = fmt_of.get(lbl, [])
-        # MTCAT 1.2: the embargo end date, present ONLY when the survey declares one (absent means "no
-        # declared end date", NOT "not embargoed" - `access` above is the state of record). Pure copy.
+        # MTCAT 2.0 formats: what is ACTUALLY distributed, off the download manifest (the one
+        # authority) - emitted ONLY when at least one format is distributed. An embargoed/withheld
+        # survey OMITS the key (owner finding 62: under represented-holdings semantics, [] would
+        # falsely assert that no formats are KNOWN when the holdings exist and are merely
+        # withheld). No manifest at all also omits it: "not known" is never served as "nothing
+        # distributed".
+        if fmt_of is not None and fmt_of.get(lbl):
+            entry["formats"] = fmt_of[lbl]
+        # The embargo end date, present ONLY when the survey declares one (absent means "no
+        # declared end date", NOT "not embargoed" - `access` above is the state of record).
         if m.get("embargo_until"):
             entry["embargo_until"] = m["embargo_until"]
-        surveys.append(entry)
+        # MTCAT 2.0 omit-when-undeclared: drop every remaining None-valued key, at every depth
+        # (relationship rows included - the 110-error class). The stations[] rows below are NOT
+        # cleaned: their paired latitude/longitude nulls are the one defined null.
+        surveys.append(_omit_none(entry))
     stations = [{"station_id": r["ausmt_id"], "survey_id": slug_of.get(r["survey"], slugify(r["survey"])),
                  "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"]}
                 for (_p, r) in all_stations]
     if coll_by_id is None:
         coll_by_id, _ = _group_collections(surveys_meta, all_stations)
-    collections = [{"collection_id": c["id"], "title": c["title"], "type": c["type"],
-                    "status": c.get("status"), "start_year": c.get("start_year"),
-                    "last_updated": c.get("last_updated"), "description": c.get("description"),
-                    "n_surveys": c["n_surveys"], "n_stations": c["n_stations"],
-                    "bbox": c["bbox"], "centroid": c["centroid"]}
+    collections = [_omit_none({"collection_id": c["id"], "title": c["title"], "type": c["type"],
+                               "status": c.get("status"), "start_year": c.get("start_year"),
+                               "last_updated": c.get("last_updated"), "description": c.get("description"),
+                               "n_surveys": c["n_surveys"], "n_stations": c["n_stations"],
+                               "bbox": c["bbox"], "centroid": c["centroid"]})
                    for c in sorted(coll_by_id.values(), key=lambda x: x["id"])]
     p = portal or {}
     doc = {
-        "portal": {"portal_id": p.get("portal_id", "ausmt"),
+        "portal": _omit_none(
+                  {"portal_id": p.get("portal_id", "ausmt"),
                    "portal_name": p.get("portal_name", "AusMT — Australia's Magnetotelluric Data Portal"),
                    # The version is NEVER a literal here: MTCAT_SCHEMA_VERSION is generated from the
-                   # schema's OWN title (contract/generate.py), so this document cannot claim a version
-                   # the schema served beside it does not declare.
+                   # single-source MTCAT_VERSION constant (contract/generate.py), so this document
+                   # cannot claim a version the schema served beside it does not display.
                    "schema": "mtcat", "version": str(p.get("schema_version", MTCAT_SCHEMA_VERSION)),
                    # FAIR-I: point harvesters at the schema served BESIDE this document (relative to the
                    # data dir — the build copies schema/mtcat.schema.json to out/mtcat.schema.json), so a
@@ -807,15 +922,15 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
                    # licences). CC0 by recommendation; overridable via portal.config.yaml pending owner
                    # sign-off on the catalogue-metadata licence.
                    "metadata_license": p.get("metadata_license", "CC0-1.0"),
-                   "generated_at": generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
-        "surveys": surveys, "stations": stations,
-        "collections": collections}      # always present (empty list when none) for a stable shape
-    # C32 §2: additive document-level served-tool versions (mtcat.schema.json is additionalProperties:
-    # true at the top level, so no schema-version bump — same posture as the C7 optional fields). A key
-    # is None when that library was not importable in the build environment.
-    _lv = lib_vers or {}
-    doc["mt_metadata_version"] = _lv.get("mt_metadata")
-    doc["mth5_version"] = _lv.get("mth5")
+                   "generated_at": generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}),
+        "surveys": surveys, "stations": stations}
+    # collections joins the document only when at least one exists (2.0 forbids the empty-array
+    # state; schema minItems 1). The 1.2 always-present-empty-list shape is gone with the version.
+    if collections:
+        doc["collections"] = collections
+    # MTCAT 2.0 removed the top-level mt_metadata_version/mth5_version keys (legacy 1.x, SHOULD NOT
+    # be newly adopted): build.json / build_provenance.json / manifest.json remain the homes of the
+    # served-tool versions.
     return doc
 
 
@@ -1240,6 +1355,31 @@ def survey_meta_from_yaml(y: dict) -> dict:
     contributors = _contributors_of(y)
     if contributors:
         sm["contributors"] = contributors
+    # MTCAT 2.0 curation fields, each ADDITIVE and absent-to-absent (default stability: a survey
+    # that declares none of them yields a byte-identical SMETA entry, i.e. the whole pre-2.0 corpus).
+    #   * discovery_description: the explicit <= 1200-char discovery text (the abstract stays
+    #     UNCAPPED in `blurb`; the emitter prefers this key and never truncates either).
+    #   * subjects[]: the controlled thematic classification rows, passed through VERBATIM.
+    #   * coord_policy_declared/_default: whether the survey DECLARES an access.coordinates policy
+    #     (including override-only declarations) and its survey default - the mtcat emitter projects
+    #     coordinates_state from these plus the per-station post-mask stamps. Parse errors are left
+    #     to the discovery phase's fail-closed parse (discover_work raises CoordinatePolicyError);
+    #     here an unparseable block simply declares nothing.
+    dd = y.get("discovery_description")
+    if isinstance(dd, str) and dd.strip():
+        sm["discovery_description"] = dd
+    subjects = y.get("subjects")
+    if isinstance(subjects, list) and subjects:
+        sm["subjects"] = subjects
+    if isinstance(acc_raw, dict) and (acc_raw.get("coordinates") not in (None, "")
+                                      or acc_raw.get("coordinate_overrides") not in (None, "", {})):
+        try:
+            _cp_default, _ = coordacc.parse_coordinate_policy(acc_raw)
+        except coordacc.CoordinatePolicyError:
+            pass   # invalid policy: discover_work fails the survey loudly; SMETA asserts nothing
+        else:
+            sm["coord_policy_declared"] = True
+            sm["coord_policy_default"] = _cp_default
     return sm
 
 
@@ -4536,15 +4676,24 @@ def main(argv=None):
     # ACTUALLY distributed for it. The manifest is already complete at this point (both writers below and
     # the file above consume the same object), so this costs one dict pass and no new derivation.
     mtcat = mtcat_document(surveys_meta, all_stations, portal=load_portal_config(a.portal_config),
-                           coll_by_id=coll_by_id, lib_vers=LIB_VERSIONS, manifest_doc=manifest_doc)
+                           coll_by_id=coll_by_id, manifest_doc=manifest_doc)
     (out / "mtcat.json").write_text(_jdump(mtcat, indent=1), encoding="utf-8")
-    # FAIR-I: serve the schema beside the data so mtcat.json's schema_url ("mtcat.schema.json")
-    # resolves relative to the catalogue itself — a harvester can validate without reaching the
-    # (custody-pending) canonical $id host. Byte-copy of the in-tree schema; skipped (noted, not
-    # fatal) if it is unreadable so a schema-path glitch never fails an otherwise-good build.
+    # FAIR-I: serve the schema beside the data at BOTH published routes (the ratified $id policy,
+    # MTCAT 2.0): data/schemas/mtcat/<version>/mtcat.schema.json is the VERSION-SPECIFIC IMMUTABLE
+    # route the schema's own $id names, and data/mtcat.schema.json is the latest-convenience copy
+    # that mtcat.json's relative schema_url ("mtcat.schema.json") resolves to - so a harvester can
+    # validate without reaching the canonical host, and a pinned consumer can fetch the exact
+    # version forever. Byte-copies of the in-tree schema (identical at both routes by
+    # construction); skipped (noted, not fatal) if unreadable so a schema-path glitch never fails
+    # an otherwise-good build. The version segment derives from MTCAT_SCHEMA_VERSION (the
+    # generated mirror of the single-source constant), never a literal.
     _mtcat_schema = HERE.parent / "schema" / "mtcat.schema.json"
     try:
-        (out / "mtcat.schema.json").write_bytes(_mtcat_schema.read_bytes())
+        _schema_bytes = _mtcat_schema.read_bytes()
+        (out / "mtcat.schema.json").write_bytes(_schema_bytes)
+        _versioned_dir = out / "schemas" / "mtcat" / MTCAT_SCHEMA_VERSION
+        _versioned_dir.mkdir(parents=True, exist_ok=True)
+        (_versioned_dir / "mtcat.schema.json").write_bytes(_schema_bytes)
     except OSError as _e:
         print(f"note: mtcat schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
 

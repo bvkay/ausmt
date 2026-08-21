@@ -91,6 +91,12 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # (a checkout missing one of them fails the read rather than skipping; the guard opens as soon as
     # any pinned portal file is present).
     "engine image build: portal tree not shipped",    # test_mtcat_version_parity.py, image lanes only
+    # test_mtcat_version_parity.py again, the SAME designed-topology class, for the docs tree: the
+    # ratified MTCAT 2.0 version machinery added a pin on the docs current-version display
+    # (docs/docs/reference/index.md), and engine.Dockerfile does not COPY docs/ either, so in the
+    # image lane that one test skips with the exact reason below. INERT on checkout lanes, where the
+    # docs tree is always present and the pin asserts.
+    "engine image build: docs tree not shipped",      # test_mtcat_version_parity.py docs pin, image lanes only
     # C25: test_convention_gates_realdata.py — the real-corpus convention-gate pins (the three
     # named USArray negative controls, the ccmt-2017 de-rotation acceptance, the AusLAMP-SA
     # custodian-twin proof) run only where the .audit/realdata harness exists (the dev box; the
@@ -116,6 +122,16 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # real-corpus leg only. (Added when the path-URL contract lane's first CI run tripped this
     # tripwire on the new skip - the tripwire working exactly as designed.)
     "AUSMT_URL_REGISTRY_DATA does not name a built data dir",
+    # test_mtcat20_invariants.py's corpus arms: the zero-null/zero-empty + reference-invariant
+    # scans over a REAL full-corpus build (AUSMT_MTCAT20_DATA) and the 1.2 -> 2.0 emitter
+    # equivalence dict-test against a pre-2.0 baseline document (AUSMT_MTCAT20_BASELINE). A built
+    # corpus exists on the dev box and the deployed box, never in a CI engine lane (the lanes
+    # build no corpus). Same dev-box-only class as the entries above; the invariants are NOT
+    # unguarded in CI - the same checks run against the committed fixtures and a real build of the
+    # vendored fixture surveys on every run; these arms extend the identical assertions to corpus
+    # scale.
+    "AUSMT_MTCAT20_DATA does not name a built corpus data dir",
+    "AUSMT_MTCAT20_BASELINE does not name a pre-2.0 corpus mtcat.json",
 ]
 
 # `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token

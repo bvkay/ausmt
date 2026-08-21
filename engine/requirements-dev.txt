@@ -11,4 +11,7 @@ pytest-xdist==3.8.0   # parallel test runs: both CI engine lanes run `pytest -n 
                       # Installed -c the lock everywhere it matters (engine.Dockerfile, build-products.yml),
                       # so its one dependency (execnet) can never move the science stack.
 jsonschema>=4    # mtcat.schema.json validation in tests
+rfc3339-validator>=0.1.4   # activates jsonschema FormatChecker's date-time check; without it the
+                           # MTCAT 2.0 format-checking gates (malformed generated_at) pass vacuously.
+                           # test_mtcat_schema_v20._validator asserts the checker is genuinely active.
 ruff==0.15.17    # lint gate (broad E/F/PL/BLE; config + documented ignores in pyproject.toml [tool.ruff])

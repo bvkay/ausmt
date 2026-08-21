@@ -1,14 +1,14 @@
-"""MTCAT v1.2 emission.
+"""MTCAT emission (2.0 semantics; the field-level 2.0 pins live in test_mtcat20_emission.py).
 
 The build emits mtcat.json — the portal-owned discovery document other portals could harvest.
 This validates structure against schema/mtcat.schema.json with a dependency-free checker (jsonschema
 is optional; a small recursive validator keeps the core test suite stdlib-only) and confirms the
 required Portal / Survey / Station objects are populated from real data.
 
-v1.2 additions covered here: the DERIVED per-survey discovery facets reconcile with the stations[] and
-manifest the same build wrote, the document-level served tool versions are present, and the version the
-portal block stamps is the one the served schema declares in its own title (its single source; the full
-cross-surface pin lives in test_mtcat_version_parity.py).
+Covered here: the DERIVED per-survey discovery facets reconcile with the stations[] and manifest the
+same build wrote, the legacy top-level tool-version keys stay GONE (removed in 2.0), and the version
+the portal block stamps is the one the single-source constant declares (the full cross-surface pin
+lives in test_mtcat_version_parity.py).
 """
 import json
 import re
@@ -158,8 +158,9 @@ def test_mtcat_derived_facets_agree_with_the_document_they_ride_in(tmp_path):
                  if cat_by_ausmt[st["station_id"]][4] is not None]
         pmaxs = [cat_by_ausmt[st["station_id"]][5] for st in rows
                  if cat_by_ausmt[st["station_id"]][5] is not None]
-        assert s["period_min_s"] == (min(pmins) if pmins else None)
-        assert s["period_max_s"] == (max(pmaxs) if pmaxs else None)
+        # 2.0: a bound with nothing to derive from is OMITTED, never null.
+        assert s.get("period_min_s") == (min(pmins) if pmins else None)
+        assert s.get("period_max_s") == (max(pmaxs) if pmaxs else None)
         assert s["n_stations_tipper"] == sum(
             1 for st in rows if "T" in (cat_by_ausmt[st["station_id"]][7] or ""))
         assert 0 <= s["n_stations_tipper"] <= s["n_stations"]
@@ -179,8 +180,14 @@ def test_mtcat_formats_match_the_download_manifest(tmp_path):
     for row in man["files"] + man["bundles"]:
         expected.setdefault(row["survey"], set()).add(row["format"])
     for s in doc["surveys"]:
-        assert s["formats"] == sorted(expected.get(title_of[s["survey_id"]], set())), s["survey_id"]
-    assert any(s["formats"] for s in doc["surveys"]), "this build distributes something, so prove it"
+        want = sorted(expected.get(title_of[s["survey_id"]], set()))
+        if want:
+            assert s["formats"] == want, s["survey_id"]
+        else:
+            # 2.0 (owner finding 62): a survey with nothing distributed OMITS the key - [] would
+            # falsely assert that no formats are KNOWN for withheld holdings.
+            assert "formats" not in s, s["survey_id"]
+    assert any(s.get("formats") for s in doc["surveys"]), "this build distributes something, so prove it"
 
 
 def test_mtcat_schema_served_beside_data(tmp_path):
@@ -198,6 +205,12 @@ def test_mtcat_schema_served_beside_data(tmp_path):
     assert served.exists(), "schema must be served beside the data"
     # the served copy is the in-tree schema, byte-for-byte
     assert served.read_bytes() == (ROOT / "schema" / "mtcat.schema.json").read_bytes()
+    # MTCAT 2.0 $id policy: the build ALSO serves the version-specific immutable route
+    # data/schemas/mtcat/<version>/mtcat.schema.json (what the schema's own $id names), byte-identical
+    # to the latest-convenience copy. The version segment is the emitted portal.version, no literal.
+    versioned = out / "schemas" / "mtcat" / doc["portal"]["version"] / "mtcat.schema.json"
+    assert versioned.exists(), "the versioned immutable schema route must be served"
+    assert versioned.read_bytes() == served.read_bytes()
 
 
 def test_mtcat_carries_metadata_license(tmp_path):
@@ -207,32 +220,15 @@ def test_mtcat_carries_metadata_license(tmp_path):
     assert doc["portal"]["metadata_license"] == "CC0-1.0"
 
 
-def test_mtcat_carries_served_tool_versions(tmp_path):
-    """C32 §2: the MTCAT document gains additive document-level mt_metadata_version / mth5_version keys
-    (mtcat.schema.json is additionalProperties:true at the top level, so no schema-version bump). This
-    build runs the real stack, so both must be present and equal the installed library __version__ (an
-    independent observable). FAILS if a key is missing/None here or disagrees with the library."""
-    import mt_metadata
-    import mth5
+def test_mtcat_carries_no_top_level_tool_versions(tmp_path):
+    """MTCAT 2.0 removed the legacy document-level mt_metadata_version / mth5_version keys (the
+    decision register: legacy 1.x, SHOULD NOT be newly adopted, removed from core in 2.0). A real
+    stack-backed build must emit NEITHER; the served-tool versions still live in build.json /
+    build_provenance.json / manifest.json, which other tests pin."""
     doc = _build_mtcat(tmp_path)
-    _check(doc, SCHEMA)   # additive keys must not break schema conformance
-    assert doc.get("mt_metadata_version") == mt_metadata.__version__
-    assert doc.get("mth5_version") == mth5.__version__
-
-
-def test_mtcat_builder_passes_through_lib_versions():
-    """Unit-level: mtcat_document folds a supplied lib_vers dict into document-level keys, and defaults
-    both to None when not supplied (a --raw/no-stack build) — never crashing, never fabricating."""
-    sys.path.insert(0, str(ROOT / "extract"))
-    import build_portal as bp
-    stations = [(Path("a.edi"), {"survey": "Demo Survey", "ausmt_id": "au.demo-survey.A1", "id": "A1",
-                                 "lat": -30.1, "lon": 137.0, "type": "BBMT"})]
-    meta = {"Demo Survey": {"org": "UoX", "country": "Australia", "lic": "CC-BY-4.0", "access": "open"}}
-    doc = bp.mtcat_document(meta, stations, generated_at="2026-01-01T00:00:00Z",
-                           lib_vers={"mt_metadata": "9.9.9", "mth5": "8.8.8"})
-    assert doc["mt_metadata_version"] == "9.9.9" and doc["mth5_version"] == "8.8.8"
-    doc2 = bp.mtcat_document(meta, stations, generated_at="2026-01-01T00:00:00Z")   # no lib_vers
-    assert doc2["mt_metadata_version"] is None and doc2["mth5_version"] is None
+    _check(doc, SCHEMA)
+    assert "mt_metadata_version" not in doc
+    assert "mth5_version" not in doc
 
 
 def test_mtcat_station_survey_linkage(tmp_path):
@@ -267,9 +263,10 @@ def test_mtcat_builder_unit():
     assert s["bbox"] == {"west": 137.0, "south": -30.3, "east": 137.4, "north": -30.1}
     assert s["centroid"] == {"latitude": -30.2, "longitude": 137.2}
     assert doc["portal"]["generated_at"] == "2026-01-01T00:00:00Z"
-    # C7: organisation_ror/raid are additive+optional — absent here, must be null, not missing/crash.
-    assert s.get("organisation_ror") is None
-    assert s.get("raid") is None
+    # 2.0: undeclared optional keys are OMITTED (null-as-undeclared is gone).
+    assert "organisation_ror" not in s
+    assert "raid" not in s
+    assert "doi" not in s
 
 
 def test_mtcat_builder_emits_org_ror_and_raid_when_declared():

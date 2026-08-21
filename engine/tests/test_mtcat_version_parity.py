@@ -8,29 +8,32 @@ branch, and a fourth in portal/tools/gen_config.py still defaulting to "1.0" two
 asserted that the sites agreed, so each fix left the next one undiscovered until a human happened to
 read it.
 
-SINGLE SOURCE: engine/schema/mtcat.schema.json's own `title`. The schema is the artifact being
-versioned, its `$id` is deliberately unversioned (docs/docs/reference/mtcat-schema.md), and the same
-page already tells harvesters that a fetched schema identifies its version through the title. Every
-other site derives from there: contract/generate.py:mtcat_schema_version() is the one parser, it emits
-MTCAT_SCHEMA_VERSION into engine/extract/_contract.py (the same generated-constant mechanism the
-positional column contract uses, gated by `generate.py --check` in both CI lanes), and the four former
-default sites read that constant or call that parser.
+SINGLE SOURCE: the MTCAT_VERSION constant in contract/generate.py (the ratified MTCAT 2.0 version
+machinery: "the machine-readable version source becomes a constant; the title displays the version;
+it is no longer parsed as the source"). The schema artifact's `title` is a DISPLAY surface generated
+from the constant and verified against it; contract/generate.py:mtcat_schema_version() returns the
+constant after that verification and emits MTCAT_SCHEMA_VERSION into engine/extract/_contract.py
+(the same generated-constant mechanism the positional column contract uses, gated by
+`generate.py --check` in both CI lanes), and every former default site reads that constant or calls
+that function.
 
 THIS MODULE reads the version back off every surface that states one, INDEPENDENTLY of the shared
-parser (it re-reads the title with its own regex, so the pin cannot agree with itself vacuously), and
-asserts they are all the same string:
+function (it re-reads the constant with its own regex over the generate.py source, so the pin cannot
+agree with itself vacuously), and asserts they are all the same string:
 
-  1. the schema title                          (the authority)
-  2. contract/generate.py:mtcat_schema_version()   (the one parser)
-  3. engine/extract/_contract.py                (the generated engine constant)
-  4. portal/portal.config.yaml                  (the human-editable portal config)
-  5. portal/config.js                           (the generated browser reflection)
-  6. portal/data/mtcat.json                     (the committed empty boot document)
+  1. contract/generate.py MTCAT_VERSION        (the authority, read raw from the source text)
+  2. the schema title                          (the DISPLAY, generated from the constant)
+  3. contract/generate.py:mtcat_schema_version()   (the one accessor)
+  4. engine/extract/_contract.py               (the generated engine constant)
+  5. portal/config.js                          (the generated browser reflection)
+  6. portal/data/mtcat.json                    (the committed empty boot document)
   7. portal/tools/gen_config.py build_config()  (a config that OMITS the key: the re-used-portal path)
-  8. a REAL BUILD's emitted mtcat.json portal block (the version a harvester is actually served)
+  8. the docs current-version display           (docs/docs/reference/index.md)
+  9. a REAL BUILD's emitted mtcat.json portal block (the version a harvester is actually served)
 
-plus a guard that forbids the CLASS itself: no MAJOR.MINOR literal may sit next to `schema_version` in
-build_portal.py, gen_config.py or version.js ever again.
+plus TWO class guards: no MAJOR.MINOR literal may sit next to `schema_version` in build_portal.py,
+gen_config.py or version.js ever again, and portal/portal.config.yaml may not re-declare a
+schema_version key (the config surface is generated, never hand-stated, since the inversion).
 
 Two surfaces are pinned elsewhere and deliberately not repeated here: about.html's prose statement, in
 portal/tests/test_mtcat_machine_contract.py (the lane that triggers on portal/** and engine/schema/**),
@@ -100,14 +103,24 @@ portal_surface = pytest.mark.skipif(not any(p.is_file() for p in PORTAL_SURFACES
 # ---------------------------------------------------------------- the surfaces, read one by one
 
 def _authority() -> str:
-    """The version as the SCHEMA declares it, parsed here with this module's own regex.
+    """The version as the SINGLE SOURCE declares it: the MTCAT_VERSION constant in
+    contract/generate.py, parsed here with this module's own regex over the raw source text.
 
-    Deliberately not contract/generate.py's parser: if the pin asked the shared parser what the version
-    is and then checked the shared parser's own output against itself, a parser that read the wrong
-    field would still pass. This reads the raw title."""
+    Deliberately not an import of the shared accessor: if the pin asked mtcat_schema_version() what
+    the version is and then checked that function's own output against itself, an accessor that read
+    the wrong thing would still pass. This reads the raw constant."""
+    src = (REPO / "contract" / "generate.py").read_text(encoding="utf-8")
+    m = re.search(r'^MTCAT_VERSION\s*=\s*"(\d+\.\d+)"', src, flags=re.M)
+    assert m, "contract/generate.py must declare MTCAT_VERSION = \"<MAJOR>.<MINOR>\" (the single source)"
+    return m.group(1)
+
+
+def _schema_title_display() -> str:
+    """The version the schema artifact DISPLAYS in its title (a generated display surface since the
+    ratified inversion, verified here against the constant like every other surface)."""
     title = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))["title"]
     m = re.match(r"^MTCAT v(\d+\.\d+):", title)
-    assert m, f"the schema must declare its version in its title as 'MTCAT v<MAJOR>.<MINOR>: ...'; got {title!r}"
+    assert m, f"the schema must display its version in its title as 'MTCAT v<MAJOR>.<MINOR>: ...'; got {title!r}"
     return m.group(1)
 
 
@@ -123,9 +136,14 @@ def _generated_engine_constant() -> str:
     return _contract.MTCAT_SCHEMA_VERSION
 
 
-def _portal_config_yaml() -> str:
-    m = re.search(r"^\s*schema_version:\s*\"([^\"]+)\"", PORTAL_CFG.read_text(encoding="utf-8"), flags=re.M)
-    assert m, f"could not read portal.schema_version from {PORTAL_CFG}"
+def _docs_display() -> str:
+    """The docs current-version display: the reference index states which schema version the
+    documentation describes. This surface previously lacked a pin (the version-literal class has
+    bitten three times); it has one now, so a version bump cannot leave the docs describing the
+    previous release."""
+    docs_index = REPO / "docs" / "docs" / "reference" / "index.md"
+    m = re.search(r"describes schema version (\d+\.\d+)", docs_index.read_text(encoding="utf-8"))
+    assert m, f"could not find the current-version display ('describes schema version X.Y') in {docs_index}"
     return m.group(1)
 
 
@@ -164,12 +182,13 @@ def _assert_agrees(want: str, stated: dict):
 
 
 def test_every_engine_surface_that_states_the_mtcat_version_agrees():
-    """Statements 1-3: the authority, the one parser, the generated constant. All three ship in the
-    engine image, so this runs there too and the release gate proves the image's own coherence: the
-    _contract.py constant baked into it really is what the schema baked in beside it declares."""
+    """Statements 1-4: the authority constant, the schema title display, the one accessor, the
+    generated constant. All four ship in the engine image, so this runs there too and the release
+    gate proves the image's own coherence: the _contract.py constant baked into it really is what
+    the constant baked in beside it declares, and the schema's displayed title agrees."""
     want = _authority()
     _assert_agrees(want, {
-        "engine/schema/mtcat.schema.json (title)": want,
+        "engine/schema/mtcat.schema.json (displayed title)": _schema_title_display(),
         "contract/generate.py mtcat_schema_version()": _shared_parser(),
         "engine/extract/_contract.py MTCAT_SCHEMA_VERSION": _generated_engine_constant(),
     })
@@ -177,26 +196,54 @@ def test_every_engine_surface_that_states_the_mtcat_version_agrees():
 
 @portal_surface
 def test_every_portal_surface_that_states_the_mtcat_version_agrees():
-    """Statements 4-7, checked against the same authority (the schema title, read here even in the
-    image lane's absence of these files, because the authority is an ENGINE file). Skipped where the
-    portal tree is not shipped; asserted on every checkout lane, which is where these files change."""
+    """Statements 5-7, checked against the same authority (the constant, read here even in the
+    image lane's absence of these files, because the authority lives in contract/). Skipped where
+    the portal tree is not shipped; asserted on every checkout lane, which is where these files
+    change."""
     want = _authority()
     _assert_agrees(want, {
-        "portal/portal.config.yaml portal.schema_version": _portal_config_yaml(),
         "portal/config.js AUSMT_CONFIG.schema_version": _generated_config_js(),
         "portal/data/mtcat.json portal.version": _placeholder_document(),
         "portal/tools/gen_config.py build_config() on an omitted key": _gen_config_default(),
     })
 
 
-def test_the_schema_id_stays_unversioned_so_it_cannot_become_another_surface():
-    """The $id is the one place a version could plausibly be reintroduced without anyone calling it a
-    duplicate. It is unversioned on purpose (a versioned identifier nobody serves is worse than none),
-    and keeping it that way is what leaves the title as the single declaration."""
+@portal_surface
+def test_portal_config_yaml_does_not_redeclare_the_version():
+    """Since the ratified inversion the portal config carries NO schema_version key: the value is
+    GENERATED into config.js from the constant, and a re-declared key here would be the duplicated
+    literal returning under its old name (the class that bit three review rounds running)."""
+    assert not re.search(r"^\s*schema_version\s*:", PORTAL_CFG.read_text(encoding="utf-8"), flags=re.M), (
+        "portal/portal.config.yaml re-declares portal.schema_version; delete the key - the version is "
+        "generated from contract/generate.py's MTCAT_VERSION constant, never hand-stated in config")
+
+
+DOCS_INDEX = REPO / "docs" / "docs" / "reference" / "index.md"
+
+
+@pytest.mark.skipif(not DOCS_INDEX.is_file(),
+                    reason="engine image build: docs tree not shipped "
+                           "(designed topology; the docs surface is pinned from checkout lanes)")
+def test_docs_current_version_display_agrees():
+    """Statement 8: the docs reference index states which schema version the documentation
+    describes. This surface previously had no pin at all; a version bump could leave the whole
+    reference tree describing the previous release with nothing failing. Skipped only where the
+    docs tree is not shipped (the engine image); asserted on every checkout lane."""
+    want = _authority()
+    _assert_agrees(want, {"docs/docs/reference/index.md current-version display": _docs_display()})
+
+
+def test_the_schema_id_is_the_versioned_immutable_uri():
+    """The $id IS a version surface now, and it is pinned like every other one. The ratified MTCAT
+    2.0 $id policy (final walk-through s49) supersedes the 1.2-era unversioned-$id ruling: the
+    canonical identifier is the version-specific immutable URI under /data/schemas/mtcat/<version>/,
+    with the unversioned /data/mtcat.schema.json kept as the latest-convenience route (still what
+    portal.schema_url names; the build serves BOTH). The version segment must equal the
+    single-source constant, so a bump that forgets the $id fails here."""
     schema_id = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))["$id"]
-    assert not re.search(r"\d+\.\d+", schema_id.rsplit("/", 1)[-1]), (
-        f"the schema $id filename must stay unversioned so the title is the only version declaration; "
-        f"got {schema_id}")
+    want = f"https://ausmt.auscope.org.au/data/schemas/mtcat/{_authority()}/mtcat.schema.json"
+    assert schema_id == want, (
+        f"the schema $id must be the version-specific immutable URI {want}; got {schema_id}")
 
 
 def _assert_no_version_literal(files):

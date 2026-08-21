@@ -215,6 +215,26 @@ def classify(pmin, has_z, has_t):
     return "LPMT"
 
 
+def explicit_sample_rates_from_tf(tf) -> list:
+    """The station's EXPLICIT acquisition sample rates in Hz, read off the parsed run metadata
+    (tf.station_metadata.runs - populated from MTH5 run tables, EMTF-XML field-notes runs, or any
+    EDI dialect the pinned mt_metadata actually parses a run rate from). MTCAT 2.0 rule: a rate is
+    explicit ONLY when a run declares it > 0; mt_metadata's Run.sample_rate default is 0.0
+    (undeclared) and is never emitted, and nothing here reads instrument models or period coverage
+    (never inferred - the ratified sample_rates_hz source rule). Returns a sorted deduped list of
+    floats; [] when no run declares a rate, which the record builder maps to NO key at all."""
+    rates = set()
+    for run in (getattr(getattr(tf, "station_metadata", None), "runs", None) or []):
+        sr = getattr(run, "sample_rate", None)
+        try:
+            sr = float(sr) if sr is not None else None
+        except (TypeError, ValueError):
+            sr = None
+        if sr is not None and sr > 0:
+            rates.add(sr)
+    return sorted(rates)
+
+
 def record_from_tf(tf, file_label: str, *, extractor: str = "mt_metadata") -> dict:
     """Per-station catalogue record (the canonical key set the build pipeline consumes) from a parsed
     TF object — reusable whether the TF came from an EDI or from an MTH5 file."""
@@ -230,7 +250,7 @@ def record_from_tf(tf, file_label: str, *, extractor: str = "mt_metadata") -> di
         comps.append("T")
     lat = tf.latitude
     lon = tf.longitude
-    return {
+    record = {
         "id": tf.station or Path(file_label).stem,
         "file": file_label,
         "lat": round(lat, 6) if lat is not None else None,
@@ -244,6 +264,13 @@ def record_from_tf(tf, file_label: str, *, extractor: str = "mt_metadata") -> di
         "coord_flag": None,
         "extractor": extractor,
     }
+    # MTCAT 2.0 sample_rates_hz: the key exists ONLY when a run declares an explicit rate (absent to
+    # absent, so an EDI corpus with no parsed run rates keeps byte-identical records everywhere the
+    # record is serialised - the default-stability discipline).
+    rates = explicit_sample_rates_from_tf(tf)
+    if rates:
+        record["sample_rates_hz"] = rates
+    return record
 
 
 def parse_edi(path: Path) -> dict:

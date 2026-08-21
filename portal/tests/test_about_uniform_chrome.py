@@ -215,7 +215,7 @@ def test_mtcat_link_in_footer_not_header_across_pages():
     KEEPING the wrong number on the page. The title is now version-free on all three, and the pin also
     asserts NO version number appears in it, so nobody re-introduces a hard-coded one. The version a
     reader needs is already on screen: version.js renders the data-ver-chip from config.js, whose
-    schema_version is generated from portal.config.yaml."""
+    schema_version is generated from the single-source MTCAT_VERSION constant in contract/generate.py."""
     for path in (INDEX, ABOUT, ADD):
         header_hits = [a for (tag, a, inh) in _parse(path)
                        if tag == "a" and inh and "apilink" in _classes(a)]

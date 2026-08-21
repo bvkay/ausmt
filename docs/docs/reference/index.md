@@ -13,7 +13,7 @@ schema version, as an annotated `docs-mtcat-<version>` tag on the commit the sch
 at, so the pages behind a cut describe every surface as that schema version serves it. The tags are
 the version list; nothing in the repository enumerates them, so a cut needs no file change.
 
-**The current documentation describes schema version 1.2.** Check `portal.version` in
+**The current documentation describes schema version 2.0.** Check `portal.version` in
 `/data/mtcat.json` to see which schema version a deployment serves. Where a deployment serves a
 different version, the served document is the authority for that deployment.
 
@@ -21,8 +21,8 @@ different version, the served document is the authority for that deployment.
 
 | Document | Served path | Normative artifact | Version | Reference |
 |---|---|---|---|---|
-| MTCAT catalogue | `/data/mtcat.json`, `/data/products/mtcat.json` | `engine/schema/mtcat.schema.json` | 1.2 | [MTCAT schema](mtcat-schema.md) |
-| MTCAT schema | `/data/mtcat.schema.json` | itself | 1.2 | [MTCAT schema](mtcat-schema.md#normative-artifact) |
+| MTCAT catalogue | `/data/mtcat.json`, `/data/products/mtcat.json` | `engine/schema/mtcat.schema.json` | 2.0 | [MTCAT schema](mtcat-schema.md) |
+| MTCAT schema | `/data/mtcat.schema.json`, `/data/schemas/mtcat/2.0/mtcat.schema.json` | itself | 2.0 | [MTCAT schema](mtcat-schema.md#normative-artifact) |
 | Download manifest | `/data/manifest.json`, `/data/products/manifest.json` | `engine/schema/manifest.schema.json` | 1.0 | [Download manifest schema](manifest-schema.md) |
 | Build report | `/data/build_report.json` | `engine/schema/build_report.schema.json` | 1.0 | [Build report schema](build-report-schema.md) |
 | Station catalogue | `/data/catalogue.json`, `/data/products/catalogue.json` | `contract/columns.json` | 16 columns | [Portal data files](../developer/data-files.md) |

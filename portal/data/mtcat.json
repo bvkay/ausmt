@@ -3,14 +3,11 @@
   "portal_id": "ausmt",
   "portal_name": "AusMT \u2014 Australia's Magnetotelluric Data Portal",
   "schema": "mtcat",
-  "version": "1.2",
+  "version": "2.0",
   "schema_url": "mtcat.schema.json",
   "metadata_license": "CC0-1.0",
-  "generated_at": "2026-07-28T00:00:00Z"
+  "generated_at": "2026-08-21T00:00:00Z"
  },
  "surveys": [],
- "stations": [],
- "collections": [],
- "mt_metadata_version": null,
- "mth5_version": null
+ "stations": []
 }

@@ -1,0 +1,67 @@
+{
+  "_comment": "The MTCAT 2.0 interchange-spec example document (ratified fixture suite T3/T4), committed so CI owns it permanently. The survey is the spec's example-basin worked example; the two stations sit inside its bbox and exercise the has_time_series true-or-absent pair.",
+  "portal": {
+    "portal_id": "example-portal",
+    "portal_name": "Example National MT Portal",
+    "schema": "mtcat",
+    "version": "2.0",
+    "schema_url": "mtcat.schema.json",
+    "metadata_license": "CC0-1.0",
+    "generated_at": "2026-08-22T00:00:00Z"
+  },
+  "surveys": [
+    {
+      "survey_id": "example-basin-2024",
+      "title": "Example Basin Broadband MT Survey",
+      "organisation": "Example Geological Survey",
+      "country": "Example Country",
+      "license": "CC-BY-4.0",
+      "access": "open",
+      "coordinates_state": "exact",
+      "bbox": {"west": 135.0, "south": -31.5, "east": 137.25, "north": -29.25},
+      "centroid": {"latitude": -30.375, "longitude": 136.125},
+      "n_stations": 2,
+      "n_stations_tipper": 2,
+      "data_types": {"BBMT": 2},
+      "period_min_s": 0.0025,
+      "period_max_s": 3200.0,
+      "sample_rates_hz": [10, 150, 24000],
+      "formats": ["edi", "emtfxml", "mth5"],
+      "year_start": 2024,
+      "year_end": 2024,
+      "version": "1.0.0",
+      "description": "Broadband magnetotelluric survey of the Example Basin.",
+      "subjects": [
+        {"code": "370602", "scheme": "ANZSRC-FoR-2020",
+         "label": "Electrical and electromagnetic methods in geophysics",
+         "uri": "https://linked.data.gov.au/def/anzsrc-for/2020/370602"}
+      ],
+      "n_stations_time_series_verified": 1,
+      "creators": [
+        {"name": "Example Geological Survey", "name_type": "organisation"}
+      ],
+      "contributors": [
+        {"name": "Example Acquisition Contractor Pty Ltd", "name_type": "organisation",
+         "role": "DataCollector"}
+      ],
+      "related_identifiers": [
+        {"identifier": "https://repository.example.org/releases/example-basin-2024",
+         "identifier_type": "URL", "relation": "References",
+         "custodian": "Example Geological Survey", "identifies": "entire", "resolution": "ok"}
+      ],
+      "attribution": {
+        "custodian": "Example Geological Survey",
+        "changes_made": true,
+        "changes_summary": "Source EDIs served byte-identical.",
+        "declared_by": "A. Curator",
+        "declared_date": "2026-08-22"
+      }
+    }
+  ],
+  "stations": [
+    {"station_id": "ex.example-basin-2024.EB014", "survey_id": "example-basin-2024",
+     "latitude": -30.2, "longitude": 136.4, "data_type": "BBMT"},
+    {"station_id": "ex.example-basin-2024.EB077", "survey_id": "example-basin-2024",
+     "latitude": -29.9, "longitude": 135.7, "data_type": "BBMT", "has_time_series": true}
+  ]
+}

@@ -116,7 +116,9 @@ jobs:
       #   tests/test_mth5_roundtrip.py        EDI->MTH5->products equivalence; partner of the
       #                                       "MTH5 ingestion round-trip (evidence)" step below
       #   tests/test_mtcat.py                 mtcat.json product emission against the schema
-      #   tests/test_mtcat_schema_v12.py      the schema that constrains the served catalogue
+      #   tests/test_mtcat_schema_v20.py      the schema that constrains the served catalogue
+      #   tests/test_mtcat20_emission.py      the 2.0 emitter semantics (migrate_12_to_20 at source)
+      #   tests/test_mtcat20_invariants.py    the ratified invariant suite (schema, scans, rollups)
       #   tests/test_mtcat_version_parity.py  the same-PR portal-surface pin: the reason this
       #                                       workflow watches the five portal paths at all
       #   tests/test_empty_build.py           the empty-input default-products contract behind the
@@ -124,7 +126,7 @@ jobs:
       #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
       #   tests/test_golden_edi.py            golden pins on the sole engine's product outputs
       #   tests/test_mini_yaml_parity.py      PyYAML-vs-_mini_yaml survey.yaml projection parity
-      # (12 files, 151 tests of the suite's 656 at 2026-08-18; the counts move with the suite.)
+      # (14 files at 2026-08-21; the counts move with the suite.)
       #
       # RESIDUAL RISK, STATED HONESTLY: a HOST-ENV-ONLY failure in an out-of-subset test now
       # surfaces on the push-to-main full run, not on the PR. Accepted because the in-image full
@@ -140,7 +142,7 @@ jobs:
       # 656 tests, 673s serial vs 185s under -n 4, a 3.6x speedup). Parallel safety was proven on
       # the dev box first: identical per-test outcomes serial and under -n 4, zero xdist-only
       # failures, zero xdist_group serial pins (the one defect found was a nondeterministic
-      # parametrize id in test_mtcat_schema_v12.py, fixed at its source), and the -rs skip-line
+      # parametrize id in the schema suite, then test_mtcat_schema_v12.py, fixed at its source), and the -rs skip-line
       # format was proven to survive xdist against ci_check_skips.py (green and red legs) at the
       # pinned pytest 8.2.0 + pytest-xdist 3.8.0.
       #
@@ -162,7 +164,9 @@ jobs:
             tests/test_canonical_store.py \
             tests/test_mth5_roundtrip.py \
             tests/test_mtcat.py \
-            tests/test_mtcat_schema_v12.py \
+            tests/test_mtcat_schema_v20.py \
+            tests/test_mtcat20_emission.py \
+            tests/test_mtcat20_invariants.py \
             tests/test_mtcat_version_parity.py \
             tests/test_empty_build.py \
             tests/test_proc_note_email_scrub.py \
