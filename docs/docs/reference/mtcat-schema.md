@@ -1001,8 +1001,9 @@ that will populate them.
 ### One survey, two key names
 
 MTCAT keys a survey by `survey_id`, which is the slug (`vulcan-2022` and the like). The download
-manifest names surveys by display name in `files[].survey` but by slug in `bundles[].slug`, and that
-`slug` is the same value as `survey_id`.
+manifest names surveys by display name in `files[].survey` but by slug in `bundles[].slug`. The
+portal-internal `/data/surveys.json` (no contract, documented under Developer) is keyed by the survey's
+display NAME and carries that same slug under `slug`.
 
 Below the survey, the stable join is the station. `ausmt_id` is the one identifier the station record
 and the manifest row both carry.
