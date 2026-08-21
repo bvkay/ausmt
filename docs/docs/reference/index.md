@@ -1,20 +1,17 @@
 # Reference
 
 Every machine-readable surface AusMT publishes, with the artifact that defines it and the page that
-documents it field by field.
-
-Paths in the Reference section are relative to the portal root: `/data/mtcat.json` means
-`<portal root>/data/mtcat.json`. Join them onto the deployment you are reading from.
+documents it field by field. Paths are relative to the portal root: `/data/mtcat.json` means
+`<portal root>/data/mtcat.json`.
 
 ## Documentation versions
 
-This documentation is versioned with the MTCAT schema. A documentation version is cut per MTCAT
-schema version, as an annotated `docs-mtcat-<version>` tag on the commit the schema version changed
-at, so the pages behind a cut describe every surface as that schema version serves it. The tags are
-the version list; nothing in the repository enumerates them, so a cut needs no file change.
+This documentation is versioned with the MTCAT schema: a documentation version is cut per schema
+version, as an annotated `docs-mtcat-<version>` tag on the commit the schema version changed at. The
+tags are the version list; nothing in the repository enumerates them.
 
 **The current documentation describes schema version 2.0.** Check `portal.version` in
-`/data/mtcat.json` to see which schema version a deployment serves. Where a deployment serves a
+`/data/mtcat.json` to see which schema version a deployment serves; where a deployment serves a
 different version, the served document is the authority for that deployment.
 
 ## Served documents
@@ -47,12 +44,11 @@ different version, the served document is the authority for that deployment.
 The digest stamp sidecar is operational rather than scientific. It maps each served survey's slug to
 `{yaml_digest_current, xml_digest_stamped}`: the digest of the `survey.yaml` the build read, and the
 digest each served station XML was produced under. `engine/scripts/verify.py` compares those stamps
-against the live sources, so a product served from a stale cache entry fails verification. It is
-listed here because it is served, not because a consumer is expected to read it.
+against the live sources, so a product served from a stale cache entry fails verification.
 
 ## Source documents
 
-These are not served. They define what the served documents are built from.
+Not served; they define what the served documents are built from.
 
 | Document | Location | Normative artifact | Version | Reference |
 |---|---|---|---|---|
@@ -77,10 +73,9 @@ schema](manifest-schema.md), [Build report schema](build-report-schema.md), the
 | Example | A value from the served corpus. |
 | Note | Non-normative guidance. Every other row is normative. |
 
-[Served documents](portal-documents.md) uses a compact `Member | Type | Definition` table instead. The
-documents on that page declare no schema and no obligations, so whether a member is present is stated in
-its Definition rather than in an Obligation row. `Note` means the same thing there: non-normative, and
-everything outside it normative.
+[Served documents](portal-documents.md) uses a compact `Member | Type | Definition` table instead. Those
+documents declare no schema and no obligations, so whether a member is present is stated in its
+Definition. `Note` means the same thing there.
 
 ## Other reference pages
 
