@@ -5,6 +5,11 @@ served, cut into `/data/releases/<tag>/` with a provenance document and a DataCi
 exists so a paper can cite a specific state of the corpus: build directories are pruned and the current
 build moves on every rebuild, so neither is a citable target.
 
+No release has been cut yet. `/data/releases/releases.json` returns `404` on the live site and the
+portal's Releases page says so. This page documents a served-but-not-yet-populated tier: the layout
+below is what `engine/extract/cut_release.py` writes, and `release.json` and `datacite.json` have no
+JSON Schema artifact yet.
+
 ```text
 /data/releases/releases.json          the newest-first index
 /data/releases/<tag>/release.json     that release's own record
@@ -27,24 +32,21 @@ The fetch semantics, including what a `404` on the index means, are in the
 | Index version | 1.0, declared in `releases.json` as `schema` and `version` |
 | DataCite profile | DataCite Metadata Schema 4, `http://datacite.org/schema/kernel-4` |
 
-There is no JSON Schema artifact for these documents. Where this page and the tool disagree, the tool is
-right.
+Where this page and the tool disagree, the tool is right.
 
 ## Properties of a cut
 
-A release directory is immutable. An existing tag is never overwritten; re-running a cut on a tag that
-exists is a hard error. The one path allowed to touch an existing tag stamps a minted DOI into
-`release.json` and regenerates `datacite.json`, and re-copies no data.
+A release directory is immutable. An existing tag is never overwritten, and re-running a cut on a tag
+that exists is a hard error. The one path allowed to touch an existing tag stamps a minted DOI into
+`release.json` and regenerates `datacite.json`; it re-copies no data.
 
 Every copied bundle is re-hashed from the bytes that landed in the release directory and checked against
 the download manifest's own SHA-256 claim. Any mismatch, and any repository-tier bundle the manifest
-claims but the build does not hold, fails the cut and leaves nothing behind. A citation has to resolve
-to bytes that match their recorded digests.
+claims but the build does not hold, fails the cut and leaves nothing behind. A tag is a single safe path
+component, matching `^[A-Za-z0-9][A-Za-z0-9._-]*$`, because it becomes both a directory name and a git
+tag suffix.
 
-A tag is a single safe path component, matching `^[A-Za-z0-9][A-Za-z0-9._-]*$`, because it becomes both
-a directory name and a git tag suffix.
-
-The tool mints nothing. It has no network access, no DataCite credentials and no git write path. It
+The tool mints nothing. It has no network access, no DataCite credentials and no git write path; it
 prints the corpus tag commands for an operator to run.
 
 ---
@@ -66,184 +68,46 @@ The newest-first index of every cut release.
 }
 ```
 
-### 1.1 schema
-
-| | |
-|---|---|
-| Definition | Names the index format. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Allowed values | `ausmt-releases` |
-
-### 1.2 version
-
-| | |
-|---|---|
-| Definition | Version of the index format. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Example | `"1.0"` |
-
-### 1.3 updated_at
-
-| | |
-|---|---|
-| Definition | When the index was last written. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string or null |
-| Format | ISO 8601 with a `Z` suffix |
-| Default | `null` in a freshly initialised index with no releases |
-
-### 1.4 releases[]
-
-| | |
-|---|---|
-| Definition | One row per cut release, newest first. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | array of object |
-| Default | `[]` before the first cut |
-| Note | Sorted by cut time descending, with the tag as the tie-break, so two cuts inside the same second still order deterministically. Sorting rather than prepending keeps the order true after a hand edit or an out-of-order cut. |
-
-Row members:
-
 | Member | Type | Definition |
+|---|---|---|
+| `schema` | string | always `ausmt-releases` |
+| `version` | string | the index format version, `"1.0"` |
+| `updated_at` | string or null | when the index was last written, ISO 8601 with a `Z` suffix; `null` in a freshly initialised index |
+| `releases` | array | one row per cut release, newest first; `[]` before the first cut |
+
+Rows are sorted by cut time descending with the tag as the tie-break, so two cuts inside the same second
+still order deterministically, and the order stays true after a hand edit or an out-of-order cut.
+
+| Row member | Type | Definition |
 |---|---|---|
 | `tag` | string | the release tag, which is also its directory name |
 | `cut` | string or null | wall-clock time the release was frozen |
 | `doi` | string or null | the minted DOI, or null until one exists |
 | `note` | string or null | the one-line note the cut carried |
 | `build_id` | string or null | identity of the build the release was frozen from |
-| `n_surveys` | integer or null | surveys in the frozen catalogue |
-| `n_stations` | integer or null | stations in the frozen catalogue |
+| `n_surveys`, `n_stations` | integer or null | surveys and stations in the frozen catalogue |
 | `path` | string | `releases/<tag>/`, relative to the data root |
 
-The index row's `cut` is a scalar. The release document's own `cut_at` is a two-timestamp object. The
-names are kept distinct so no consumer meets one key carrying two different types across the two files.
+The index row's `cut` is a scalar; the release document's own `cut_at` is a two-timestamp object. The
+names are distinct so no consumer meets one key carrying two types across the two files.
 
 ---
 
 ## 2 release.json
 
-One release's own record, written inside its directory.
+One release's own record, written inside its directory. Every member is mandatory.
 
-```json
-{
- "tag": "2026-Q3",
- "cut_at": {"build_generated": "2026-07-27T08:08:07.007756+00:00", "cut": "2026-08-01T02:14:00Z"},
- "build_id": "0d705ea…-2a6624e-2026-07-27T08:08:07.007756+00:00",
- "engine_commit": "0d705eaaa22ded1564f6d36e349ef5d5761b3e69",
- "source_commit": "2a6624e",
- "n_surveys": 21,
- "n_stations": 1418,
- "files": [{"path": "mtcat.json", "size": 275587, "sha256": "0d70…"}],
- "doi": null,
- "note": "first citable snapshot"
-}
-```
-
-### 2.1 tag
-
-| | |
-|---|---|
-| Definition | The release tag. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Format | `^[A-Za-z0-9][A-Za-z0-9._-]*$` |
-| Example | `"2026-Q3"` |
-
-### 2.2 cut_at
-
-| | |
-|---|---|
-| Definition | Both clocks the snapshot depends on. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | object with members `build_generated` and `cut` |
-| Note | `build_generated` is when the bytes were built, taken from the build's own identity document. `cut` is when they were frozen. They differ whenever a release is cut some time after the rebuild, which is the normal case. |
-
-### 2.3 build_id
-
-| | |
-|---|---|
-| Definition | Identity of the build this release was frozen from. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Note | A build with no `build_id` fails the cut. A snapshot whose commits cannot be named is not citable provenance. |
-
-### 2.4 engine_commit
-
-| | |
-|---|---|
-| Definition | Engine commit the frozen build ran at. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string or null |
-
-### 2.5 source_commit
-
-| | |
-|---|---|
-| Definition | Survey-repository commit the frozen build read. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string or null |
-| Note | The commit an operator tags in the survey repository as `ausmt-release-<tag>`. `null` for a raw or non-git build, in which case the cut prints that the tag step was skipped. |
-
-### 2.6 n_surveys
-
-| | |
-|---|---|
-| Definition | Surveys in the frozen catalogue. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | integer |
-| Note | Counted off the copied `mtcat.json`, so the release record can never disagree with the catalogue shipped beside it. |
-
-### 2.7 n_stations
-
-| | |
-|---|---|
-| Definition | Stations in the frozen catalogue. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | integer |
-
-### 2.8 files[]
-
-| | |
-|---|---|
-| Definition | Every file frozen into the release directory, with its integrity. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | array of object with members `path`, `size` and `sha256` |
-| Example | `{"path": "bundles/vulcan-2022-edi.zip", "size": 1841022, "sha256": "9c31…"}` |
-| Note | `path` is relative to the release directory. `sha256` is recomputed from the bytes that landed there, not copied from the manifest. |
-
-### 2.9 doi
-
-| | |
-|---|---|
-| Definition | The minted DOI for this release. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string or null |
-| Default | `null` until a DOI is minted and stamped back in |
-| Note | Render a null as plain text. Nothing in the tooling mints a DOI, so a resolver link built from a null would be dead. |
-
-### 2.10 note
-
-| | |
-|---|---|
-| Definition | The one-line note the cut carried. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string or null |
+| Member | Type | Definition |
+|---|---|---|
+| `tag` | string | the release tag, `^[A-Za-z0-9][A-Za-z0-9._-]*$` |
+| `cut_at` | object | `{build_generated, cut}`: when the bytes were built and when they were frozen, which differ whenever a release is cut some time after the rebuild |
+| `build_id` | string | identity of the frozen build; a build with no `build_id` fails the cut, because a snapshot whose commits cannot be named is not citable provenance |
+| `engine_commit` | string or null | engine commit the frozen build ran at |
+| `source_commit` | string or null | survey-repository commit the frozen build read, the commit an operator tags as `ausmt-release-<tag>`; `null` for a raw or non-git build, in which case the cut prints that the tag step was skipped |
+| `n_surveys`, `n_stations` | integer | counted off the copied `mtcat.json`, so the record cannot disagree with the catalogue shipped beside it |
+| `files` | array | every file frozen into the release directory as `{path, size, sha256}`; `path` is relative to the release directory and `sha256` is recomputed from the bytes that landed there, not copied from the manifest |
+| `doi` | string or null | `null` until a DOI is minted and stamped back in; render a null as plain text, because nothing in the tooling mints one and a resolver link built from it would be dead |
+| `note` | string or null | the one-line note the cut carried |
 
 ---
 
@@ -268,24 +132,13 @@ A DataCite Metadata Schema 4 record for one release, in the shape the DataCite R
 | `formats` | mandatory | array | the distinct artifact formats in the frozen manifest |
 | `relatedIdentifiers` | mandatory | array | one `HasPart` row per survey DOI in the frozen catalogue, plus an `IsNewVersionOf` row when a prior release has a DOI |
 | `descriptions` | mandatory | array | an `Abstract`, an `Other` licensing note, and a `TechnicalInfo` entry when the cut carried a note |
-| `doi` | optional | string | present only once a DOI is minted |
-| `identifiers` | optional | array | present only once a DOI is minted |
+| `doi`, `identifiers` | optional | string, array | present only once a DOI is minted; both appear together |
 
-### Notes
-
-A release is the aggregate work of the corpus, not of any one survey's authors. Each survey keeps its
-own creators and its own DOI in the frozen catalogue, and the release's `relatedIdentifiers` point at
-them.
-
-`rightsList` is derived from the licences actually present in the frozen download manifest, so it states
-what the corpus is licensed under at that cut. A row carries an SPDX identifier and scheme only for a
-licence id AusMT holds a deed URL for, so a non-SPDX corpus value is never dressed up as an SPDX id it
-is not.
-
-`IsNewVersionOf` is emitted only against a real prior DOI, chaining past any number of releases that
-have not been minted. A null related identifier is invalid DataCite, and a placeholder would be a claim
-about an identifier that does not exist.
-
-While `release.json`'s `doi` is null the DataCite record carries no `doi` and no `identifiers` key at
-all. Both appear together once a DOI is stamped in. Everything else in the record is final on the day of
-the cut.
+A release is the aggregate work of the corpus, not of any one survey's authors: each survey keeps its
+own creators and its own DOI in the frozen catalogue, and `relatedIdentifiers` points at them.
+`rightsList` is derived from the licences present in the frozen manifest, and a row carries an SPDX
+identifier and scheme only for a licence id AusMT holds a deed URL for, so a non-SPDX value is never
+dressed up as an SPDX id. `IsNewVersionOf` is emitted only against a real prior DOI, chaining past any
+number of unminted releases, because a null related identifier is invalid DataCite and a placeholder
+would claim an identifier that does not exist. Everything other than `doi` and `identifiers` is final on
+the day of the cut.
