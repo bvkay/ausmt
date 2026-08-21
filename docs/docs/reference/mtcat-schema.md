@@ -879,8 +879,7 @@ The breaking list:
    mechanically: that rights detail moves to the per-survey metadata document, and the transform
    refuses (hard stop) rather than deleting it silently.
 4. THE TOP-LEVEL `mt_metadata_version`/`mth5_version` KEYS ARE REMOVED. They were legacy 1.x
-   additions; the served-tool versions remain in `build.json`, `build_provenance.json` and
-   `manifest.json`.
+   additions; the catalogue no longer publishes tool versions.
 
 The additions (all optional, none breaking): `surveys[].description`, `surveys[].subjects[]`,
 `surveys[].sample_rates_hz[]`, `surveys[].coordinates_state`, and the defined-but-not-yet-emitted
@@ -1001,9 +1000,10 @@ that will populate them.
 
 ### One survey, two key names
 
-MTCAT keys a survey by `survey_id`, which is the slug (`vulcan-2022` and the like).
-`/data/surveys.json` is keyed by the survey's display NAME and carries that same slug under `slug`. The
-download manifest names surveys by display name in `files[].survey` but by slug in `bundles[].slug`.
+MTCAT keys a survey by `survey_id`, which is the slug (`vulcan-2022` and the like). The download
+manifest names surveys by display name in `files[].survey` but by slug in `bundles[].slug`. The
+portal-internal `/data/surveys.json` (no contract, documented under Developer) is keyed by the survey's
+display NAME and carries that same slug under `slug`.
 
-Below the survey, the stable join is the station. `ausmt_id` is the one identifier the catalogue row and
-the manifest row both carry.
+Below the survey, the stable join is the station. `ausmt_id` is the one identifier the station record
+and the manifest row both carry.

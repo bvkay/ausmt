@@ -900,22 +900,25 @@ function openStation(i,opts){
   // api-docs lane: the section used to advertise a "Read API (planned)" over three paths under an /api
   // prefix (station json, survey json, station edi). No such tier has ever existed on any AusMT
   // deployment; those three lines were fiction. What the site actually serves is read-only static JSON
-  // under /data/, so the section now lists the LIVE endpoints for the station in front of the reader:
-  //   * the per-station products, keyed by the survey slug + the station id (the same path
+  // under /data/, so the section lists the LIVE public surface for the station in front of the reader.
+  // Public-surface audit (2026-08-22), owner ruling: the only public metadata contracts are mtcat.json
+  // and station.json (survey-metadata.json to come); manifest.json is the download index; everything
+  // else under /data is portal-internal and carries no contract, so the drawer must not advertise it.
+  // The rows are therefore:
+  //   * this station's station.json, keyed by the survey slug + the station id (the same path
   //     loadStationFrameLine() already fetches, so it is provably the real product location).
   //     station.json is emitted for EVERY station: a non-served one gets a withheld stub that states
-  //     the access level, so the line resolves and is worth pointing at. dimensionality.json is NOT:
-  //     it is a pure interpretation of the withheld transfer function, so the engine returns before
-  //     writing it for a non-served survey (build_portal._write_station_products) and the live site
-  //     404s that path for every embargoed / metadata_only station. It is therefore gated on the SAME
-  //     predicate the engine gates emission on, access.level == "open" (isOpenAccess). Advertising it
-  //     unconditionally would reintroduce, at ~17% of the catalogue, exactly the dead-endpoint defect
-  //     this section was rewritten to remove;
+  //     the access level, so the line resolves and is worth pointing at. dimensionality.json is NOT
+  //     listed: it is served alongside station.json but is not a contract (its fate, folding into
+  //     station.json or staying a feature file, is the owner's pending decision), and it 404s for every
+  //     embargoed / metadata_only station;
   //   * this station's OWN served EDI, taken from its manifest artifact row. The url is READ, never
   //     templated: the served filename is genuinely not derivable from the station id (live corpus:
   //     station A1 of vulcan-2022 is served as edi/vulcan-2022/Vulcan_A1.edi). No row => no line,
-  //     which is exactly the embargo case (withheld by construction, so there is nothing to link).
-  //   * the two survey-level documents every consumer starts from.
+  //     which is exactly the embargo case (withheld by construction, so there is nothing to link);
+  //   * /data/manifest.json, the download index every artifact is located through. The former
+  //     /data/products/manifest.json twin and /data/surveys.json rows are gone: the twin is retired and
+  //     surveys.json is portal-internal (superseded as a contract by survey-metadata.json).
   // Docs wave, stage 2 (owner ruling 3): the trailing pointer used to send readers to About's
   // "Fetching data via API". About is now a front door carrying a quickstart, and the worked
   // patterns (per-station manifest fetch, bounding box, checksum verification) live on the docs site's
@@ -924,15 +927,13 @@ function openStation(i,opts){
   const _apiSlug=s.slug||((SMETA[s.survey]||{}).slug)||"";
   const _apiEdi=_arts.find(a=>a.format==="edi");
   const _apiRows=[];
-  if(_apiSlug&&s.id){const _pp="/data/products/"+encodeURIComponent(_apiSlug)+"/"+encodeURIComponent(s.id)+"/";
-    _apiRows.push(_pp+"station.json");
-    if(isOpenAccess(m))_apiRows.push(_pp+"dimensionality.json");}
+  if(_apiSlug&&s.id)_apiRows.push("/data/products/"+encodeURIComponent(_apiSlug)+"/"+encodeURIComponent(s.id)+"/station.json");
   if(_apiEdi&&_apiEdi.url)_apiRows.push(apiArtifactPath(_apiEdi.url));
-  _apiRows.push("/data/surveys.json","/data/products/manifest.json");
+  _apiRows.push("/data/manifest.json");
   // Two-phase boot: the per-station EDI line is READ from a manifest row, and "no row => no line" is a
   // deliberate embargo signal. Before the manifest lands there is no row for ANY station, so the list would
   // silently under-state itself; the loading line says which line is still to come rather than omitting it
-  // in silence. The four survey/product paths above are static and stay listed immediately.
+  // in silence. The station.json and manifest.json rows above are static and stay listed immediately.
   const apiBlock=`<div class="api">Read-only static JSON on the hosted site, no key required:<br>`+
     _apiRows.map(u=>`GET <b>${esc(u)}</b>`).join("<br>")+
     (_manGate?`<br>${_manGate}`:"")+

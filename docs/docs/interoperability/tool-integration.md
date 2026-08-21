@@ -1,31 +1,24 @@
 # Tool integration
 
-This page is for people writing software that reads AusMT. An mtpy or MTH5 workflow, a reader module,
-a federating catalogue, a plotting tool. It covers what to consume, what the artifacts are actually
-like, and where the sharp edges are.
-
-The mechanics of fetching are in the [data reference](api-reference.md). This page assumes you have the
-bytes and asks what to do with them.
+For people writing software that reads AusMT: an mtpy or MTH5 workflow, a reader module, a federating
+catalogue, a plotting tool. The mechanics of fetching are in the [data reference](api-reference.md);
+this page assumes you have the bytes.
 
 ---
 
 ## What an AusMT reader consumes
 
-Three documents and one artifact family. That is the whole surface:
-
 ```text
-data/mtcat.json      discovery: what surveys and stations exist, where, and under what licence
-data/manifest.json   the artifact index: every fetchable file with its size and sha256
-data/surveys.json    credit and citation, keyed by survey display name
-data/<url>           the artifact itself, joined from a manifest row
+data/mtcat.json                              discovery, credit and citation: what surveys and stations exist, where, under what licence, by whom
+data/manifest.json                           the download index: every fetchable file with its size and sha256
+data/products/<slug>/<station>/station.json  the per-station record: identity, diagnostics, distribution state, provenance
+data/<url>                                   the artifact itself, joined from a manifest row
 ```
 
 A reader that goes through those four things needs no knowledge of how AusMT is organised internally.
-It reads paths instead of building them, so it never guesses a filename. It has no authorisation
-failure to handle either, because a withheld survey has no manifest rows to fail on.
-
-The artifact paths carry `Content-Disposition: attachment`, which matters only if you are fetching from
-a browser. A command-line or library client is unaffected.
+It reads paths instead of building them, and has no authorisation failure to handle, because a withheld
+survey has no manifest rows. The artifact paths carry `Content-Disposition: attachment`, which matters
+only when fetching from a browser.
 
 ---
 
@@ -35,34 +28,26 @@ a browser. A command-line or library client is unaffected.
 |---|---|---|
 | EDI | per station | The custodian's original file, served byte for byte, unless the station was submitted only as EMTF XML |
 | EMTF XML | per station | Derived, written by mt_metadata from the same transfer function |
-| MTH5 | per survey | Transfer functions only, one HDF5 file per survey |
+| MTH5 | per survey and per station | Transfer functions only, one HDF5 file per survey and one per station |
 
 ### EDI is the citable artifact
 
-For a station submitted as EDI, the served EDI is the file the custodian submitted, unmodified. You
-can check that without trusting this page. `catalogue.json` column 14 is the SHA-256 of the source
+For a station submitted as EDI, the served EDI is the file the custodian submitted, and you can check
+that: the station's `station.json` carries `provenance.input_sha256`, the SHA-256 of the source
 transfer-function file, and the manifest's `edi` row for the same station carries the SHA-256 of the
-bytes the server hands you. For an EDI-sourced station those are the same file, so the digests agree.
-Across the live corpus that comparison currently holds for all 1,182 served EDIs, with no mismatches.
-That is a statement about the corpus as it stands, and the stations below are not part of it.
+bytes the server hands you. For an EDI-sourced station the two agree; across the live corpus they agree
+for all 2,389 served EDIs.
 
-A station can also arrive as EMTF XML alone, and then there is no original EDI to serve. Its EDI is
-written by mt_metadata from the same transfer function, and its XML is a re-emission of the submitted
-one, so column 14, the digest of the file the custodian actually sent, matches neither served file.
-That is a different provenance, not a tampered download, and the check above should not be read as if
-it were. `build_report.json` records the source format for every station under `ingest_sources`, and
-it is the only place that fact is published, so it is where to look before drawing a conclusion from a
-digest that does not match. Where a station arrives in both formats the EDI wins and is served as an
-original.
-
-That is the point of keeping EDI in the distribution wherever there is an original to keep. Every
-other representation is derived, and a derived file is only as trustworthy as the derivation. The
-original is there so you can check.
+A station can also arrive as EMTF XML alone. Then its EDI is written by mt_metadata from the same
+transfer function, its XML is a re-emission of the submitted one, and `provenance.input_sha256`, the
+digest of the file the custodian sent, matches neither served file. That is a different provenance,
+not a tampered download, and the digest comparison is how a reader tells the two cases apart. Where a
+station arrives in both formats the EDI wins.
 
 ### EMTF XML is derived
 
-The served EMTF XML is written through mt_metadata's EMTFXML writer, so it carries the same `EM_TF`
-serialisation that EarthScope's SPUD archive publishes, and the same library reads it back:
+The served EMTF XML is written through mt_metadata's EMTFXML writer, the same `EM_TF` serialisation
+EarthScope's SPUD archive publishes, and the same library reads it back:
 
 ```python
 from mt_metadata.transfer_functions.core import TF
@@ -72,57 +57,39 @@ print(tf.station, tf.period.size, tf.has_impedance(), tf.has_tipper())
 # A1 62 True False
 ```
 
-The reader emits warnings about `external_url`, field notes and remote info being absent. Those elements
-are optional in EMTF XML and the source EDIs do not carry them, so the warnings are correct and not a
-sign of a broken file.
+The reader warns that `external_url`, field notes and remote info are absent; those elements are
+optional and the source EDIs do not carry them. The impedance survives the derivation exactly
+(`numpy.allclose(...) == True` between the served EDI and XML of one station): `normalize()` runs a
+round-trip check on every station at build time and raises on a mismatch, so a station whose impedance
+did not survive is never published in either format.
 
-The impedance survives the derivation exactly. Reading the served EDI and the served XML for the same
-station and comparing gives `numpy.allclose(...) == True`. That is not luck. `normalize()` runs a
-round-trip check on every station at build time and **raises** on a mismatch, so a station whose
-impedance did not survive is never published in either format.
+What the derivation had to change is visible in the file:
 
-What the derivation had to change is worth knowing, because some of it is visible in the file:
-
-- **mt_metadata's writer emits metadata its own reader rejects.** Six separate cases, from an enum
-  serialised as a Python repr to identifier patterns that reject a real station id. AusMT works around
-  each one at write time. The workarounds are listed with their symptoms at the top of
-  `engine/ausmt_science/ingest/normalize.py`, which numbers a seventh item as well. That one is the
-  library-default category described in the last bullet below, not another writer/reader mismatch.
-- **Identifier fields are sanitised.** `Site/Id` is restricted to `^[a-zA-Z0-9]*$`, so a station id like
-  `SA225_2` is written as `SA2252`. The unsanitised id is preserved inside the artifact, in the free-text
-  `Site/Name` element, which for that station reads `AusLAMP South Australia ausmt_src_id:SA225_2`.
-  Recover it with `source_station_id_from_geographic_name()` in the same module, or by matching
-  `ausmt_src_id:(\S+)`.
-- **`Site/Survey` and `Site/Project` carry the source file's own naming, not the AusMT slug.** For an
-  AusLAMP station `Site/Survey` reads `AusLAMP South Australia` while `Site/Project` reads
-  `AusLAMP_South_Australia` (underscored, because the `Site.project` pattern forbids spaces); for a
-  Vulcan station `Site/Survey` reads `A1`, which came from the EDI. Get survey membership from the manifest row or from `mtcat.json`, never from
-  the XML.
-- **Some values in the file are library defaults the source never stated.** For EDI-sourced stations
-  that covers the sign convention, the declination epoch and model, and degenerate-geometry channel
-  orientations. The writer requires them, so they are present, but AusMT records a machine-readable
-  conditioning note for each one and surfaces it in that station's `station.json` under
-  `canonical_conditioning`. A rotation angle that the source did not assert is zero-filled and noted as
-  not asserted, rather than published as a claimed 0°.
-
-Read `canonical_conditioning` before treating any of those fields as an observation. It is the list of
-things the file states that the source did not.
+- **mt_metadata's writer emits metadata its own reader rejects**, six separate cases, worked around at
+  write time and listed with their symptoms at the top of `engine/ausmt_science/ingest/normalize.py`.
+- **Identifier fields are sanitised.** `Site/Id` is restricted to `^[a-zA-Z0-9]*$`, so `SA225_2` is
+  written as `SA2252`. The unsanitised id is preserved in the free-text `Site/Name` element
+  (`AusLAMP South Australia ausmt_src_id:SA225_2`); recover it with
+  `source_station_id_from_geographic_name()` in the same module, or by matching `ausmt_src_id:(\S+)`.
+- **`Site/Survey` and `Site/Project` carry the source file's own naming, not the AusMT slug** (for an
+  AusLAMP station `AusLAMP South Australia` and `AusLAMP_South_Australia`; for a Vulcan station
+  `Site/Survey` reads `A1`). Get survey membership from the manifest row or from `mtcat.json`.
+- **Some values are library defaults the source never stated**: for EDI-sourced stations the sign
+  convention, the declination epoch and model, and degenerate-geometry channel orientations. Each is
+  recorded as a conditioning note in that station's `station.json` under `canonical_conditioning`; a
+  rotation angle the source did not assert is zero-filled and noted as not asserted. Read
+  `canonical_conditioning` before treating any of those fields as an observation.
 
 ### MTH5 comes two ways, transfer functions only
 
 One HDF5 file per survey at `data/bundles/<slug>-tf.h5`, and one per station at
-`data/h5/<slug>/<station>.h5`. Both are built EDI to mt_metadata TF to MTH5 by the same writer, so a
-station reads identically out of either; the survey file simply holds all of them. Neither carries time
-series.
+`data/h5/<slug>/<station>.h5`, built EDI to mt_metadata TF to MTH5 by the same writer, so a station
+reads identically out of either. Neither carries time series. A single-station MTH5 is not a small
+file: HDF5 pays its structural cost once per file.
 
-Take the survey file when you want the survey. Take the station file when you want one station and the
-survey file would be an oversized fetch. Note that a single-station MTH5 is not a small file: HDF5 pays
-its structural cost once per file, so the per-station files together are several times the size of the
-one bundle that holds the same transfer functions.
-
-In the manifest, `mth5` therefore appears in BOTH lists, and the list is what tells them apart: a
-`files[]` row with `format: "mth5"` is one station, a `bundles[]` row with the same token is the whole
-survey. Filter on the list first.
+In the manifest, `mth5` appears in BOTH lists, and the list is what tells them apart: a `files[]` row
+with `format: "mth5"` is one station, a `bundles[]` row with the same token is the whole survey. Filter
+on the list first.
 
 ```python
 from mth5.mth5 import MTH5
@@ -140,41 +107,30 @@ print(s(r["survey"]), s(r["station"]), tf.period.size, tf.has_impedance(), tf.ha
 m.close_mth5()
 ```
 
-Two practical notes from running that.
+Read `m.tf_summary.array` directly rather than calling `summarize()`, which needs write access and
+fails on a file opened `mode="r"` with `KeyError: "Couldn't delete link (no write intent on file)"`.
+The bundles need a current HDF5 library: h5py 3.12.1 against libhdf5 1.12.1 cannot open the
+`tf_summary` table (`KeyError: 'Unable to open object (bad version number for datatype message)'`);
+h5py 3.16.0 against libhdf5 2.0.0 opens it.
 
-Read `m.tf_summary.array` directly rather than calling `summarize()`. `summarize()` rebuilds the table
-and needs write access, so it fails on a file opened `mode="r"` with
-`KeyError: "Couldn't delete link (no write intent on file)"`.
-
-The bundles need a reasonably current HDF5 library. h5py 3.12.1 built against libhdf5 1.12.1 cannot
-open the `tf_summary` table at all (`KeyError: 'Unable to open object (bad version number for datatype
-message)'`), while h5py 3.16.0 against libhdf5 2.0.0 opens it. If you see that error, upgrade h5py
-before assuming the file is damaged.
-
-The survey group carries the rights and credit metadata as attributes, so a workflow can pick them up
-without a second request. `Experiment/Surveys/<slug>` holds `release_license`, which is `CC-BY-4.0` on
-all 19 bundles in the live corpus, along with `acquired_by.organization`, `project_lead.author` with an
-ORCID in `project_lead.url`, `funding_source.organization` and the corner coordinates.
-
-Do not read `time_period.end_date` off the survey group. It is `1980-01-01`, the library's epoch
-default, on 16 of the 19 bundles; only three carry a real end date. `time_period.start_date` is
-correct on all 19. Take acquisition dates from `surveys.json`, where `year_start` and `year_end` are
-what the survey declares.
-
-Unlike the EMTF XML, the MTH5 bundle's `survey` field **is** the AusMT slug, and the station ids are the
-AusMT station ids. The bundle is built by AusMT rather than round-tripped through a format with its own
-naming rules, so nothing had to be sanitised.
-
-`data/build.json` records the `mth5_version` and `mt_metadata_version` the bundles were written with, so
-a workflow can record them without guessing.
+The survey group carries rights and credit as attributes. `Experiment/Surveys/<slug>` holds
+`release_license` (`CC-BY-4.0` on all 25 bundles in the live corpus), `acquired_by.organization`,
+`project_lead.author` with an ORCID in `project_lead.url`, `funding_source.organization` and the corner
+coordinates. Do not read `time_period.end_date` off the survey group: it is `1980-01-01`, the library's
+epoch default, on 22 of the 25 bundles; `time_period.start_date` is correct on all 25. Take acquisition
+dates from the survey's `mtcat.json` record (`year_start`, `year_end`). Unlike the EMTF XML, the
+bundle's `survey` field is the AusMT slug and the station ids are the AusMT station ids. The library
+versions the bundles were written with are in the download index: `/data/manifest.json` carries
+`mth5_version` and `mt_metadata_version` at its top level, beside the rows that carry each bundle's
+size and digest. The file's own root attribute `mth5.software.version` carries the `mth5` version
+only; there is no `mt_metadata` version attribute in the file.
 
 ---
 
 ## MTCAT as a harvest surface
 
-If you are building a catalogue rather than a processing workflow, `mtcat.json` is the thing to harvest.
-It is one request, it is schema-versioned, and it is designed so that another portal could serve the
-same shape.
+If you are building a catalogue rather than a processing workflow, `mtcat.json` is the thing to harvest:
+one request, schema-versioned, designed so that another portal could serve the same shape.
 
 ```python
 import json, os, urllib.request
@@ -182,71 +138,49 @@ BASE = os.environ["AUSMT_BASE"]             # the portal root you are reading fr
 doc = json.load(urllib.request.urlopen(f"{BASE}/data/mtcat.json"))
 print(doc["portal"]["schema"], doc["portal"]["version"], doc["portal"]["generated_at"])
 print(len(doc["surveys"]), "surveys,", len(doc["stations"]), "stations")
-# mtcat 1.2 2026-07-27T08:29:39Z
-# 21 surveys, 1418 stations
+# mtcat 2.0 2026-08-21T04:12:19Z
+# 27 surveys, 2625 stations
 ```
 
-Four things make it harvestable rather than merely readable.
+That output is the merged engine's MTCAT 2.0 document; a deployment whose data build predates the 2.0
+engine still serves 1.2 until its next rebuild, so branch on `portal.version`.
 
-**The schema travels with the document.** `portal.schema_url` resolves next to `mtcat.json`, and the
-schema's own `$id` is that same URL, so validation needs no off-site resolution and no version guessing.
-Every field, type and controlled vocabulary carries a `description` in the schema itself.
-
-**Unknown keys are safe.** `additionalProperties` is true on every record object, deliberately, so a
-consumer written against one minor version reads a later one without changes. There is one exception,
-`surveys[].data_types`, which is a map of band to count. An unexpected key there is an unknown band and
-not a local extension, so the schema pins the key names.
-
-**The vocabularies are enum-pinned where a wrong value would publish a false claim.** Contributor roles,
-name types, identifier types, relation types and the NCI data-level vocabulary are all fixed lists in the
-schema, and AusMT validates its own emitted document against that schema on every build. An enum there
-is a build gate rather than documentation. Two fields are deliberately not pinned, `surveys[].access` and
-`collections[].status`, because the producer passes an unrecognised value through on purpose and fails
-closed at serve time; pinning them would turn a metadata typo into a failed build rather than a withheld
-survey.
-
-**Metadata licensing is stated.** `portal.metadata_license` is `CC0-1.0`, which covers the catalogue
-metadata only. A survey's data licence is the `license` field on its own record. Do not conflate them
-when you re-publish.
-
-For harvesting credit, `creators[]` order is the citation author order and must be preserved verbatim by
-anything that re-renders a citation. `contributors[]` order carries no meaning. The exported
-`contributors[]` always ends with AusMT as `HostingInstitution`, appended by the export rather than
-declared by the survey, so strip it if you are re-hosting rather than citing.
-
-The field-by-field guide is the [MTCAT schema reference](../reference/mtcat-schema.md), and the
-normative artifact is `/data/mtcat.schema.json` itself.
+`portal.schema_url` resolves next to `mtcat.json`, so validation needs no off-site resolution; the
+schema's own `$id` is the immutable version-specific copy `/data/schemas/mtcat/2.0/mtcat.schema.json`,
+the one to cache by. An optional key the producer cannot honestly state is omitted, never `null` or an
+empty array, so test for key presence. `additionalProperties` is true on every record object, and the
+vocabularies that would publish a false claim if wrong (roles, name types, identifier types, relation
+types, data levels, `coordinates_state`) are enum-pinned and validated on every build; `surveys[].access`
+and `collections[].status` are deliberately not pinned, because the producer passes an unrecognised
+value through and fails closed at serve time. `portal.metadata_license` (`CC0-1.0`) covers the
+catalogue metadata only; a survey's data licence is its own `license`. `creators[]` order is the
+citation author order and must be preserved; the exported `contributors[]` always ends with AusMT as
+`HostingInstitution`, so strip it if you are re-hosting rather than citing. The field-by-field guide,
+including how to read absence, credit, relations and access, is the
+[MTCAT schema reference](../reference/mtcat-schema.md).
 
 ---
 
 ## Things that will bite you
 
-A short list, all of them observed rather than imagined.
-
-**`surveys.json` is keyed by display name.** `"Vulcan 2022"`, not `"vulcan-2022"`. Build your own
-slug index from the `slug` field on each record.
-
-**Manifest rows name the survey by display name too.** `"survey": "Vulcan 2022"`. If you are filtering
-by slug, test `ausmt_id.startswith("au." + slug + ".")` instead.
+**Manifest `files[]` rows name the survey by display name.** `"Vulcan 2022"`, not `"vulcan-2022"`. To
+filter by slug, test `ausmt_id.startswith("au." + slug + ".")`; `bundles[]` rows carry the slug.
 
 **A served filename is not the station id.** Station `A1` of `vulcan-2022` is served as
-`edi/vulcan-2022/Vulcan_A1.edi`. Always read the `url` from the manifest.
+`edi/vulcan-2022/Vulcan_A1.edi`. Read the `url` from the manifest.
 
-**Station filenames collide across surveys.** Exactly one collision exists in the live corpus:
-`SA225_2.edi` is served under both `auslamp-musgraves-apy-2016` and `auslamp-sa-ne-2014`. One is enough.
-If you flatten manifest paths to basenames when downloading across surveys, one file overwrites the
-other and you will not be told.
+**Station filenames collide across surveys.** 108 EDI basenames in the live corpus are served under
+more than one survey (`SA225_2.edi` under both `auslamp-musgraves-apy-2016` and `auslamp-sa-ne-2014`,
+`B1.edi` under two others). Flatten manifest paths to basenames across surveys and one file overwrites
+the other silently.
 
-**`catalogue.json`, `sci.json` and `tf.json` are aligned by index and nothing else.** There is no key
-on the wire. If you filter one, carry the indices.
-
-**A withheld station is still in the catalogue.** Its `tf.json` entry is 18 empty arrays and its
-`sci.json` science fields are null, but the row exists and the width is preserved. Test for empty rather
-than assuming a missing station.
+A withheld station is still in the catalogue. Its `mtcat.json` record and its `station.json` exist;
+the `station.json` carries `"withheld": true` and no derived science, and there is no manifest row.
 
 **Coordinates may be generalised or absent.** A generalised position is rounded to 0.1°, roughly 11 km.
-A withheld one is `null`. Guard for null before any numeric comparison. In JavaScript a null compares as
-0, which silently places the station at 0°, 0° instead of excluding it.
+A withheld one is `null`; guard for it before any numeric comparison, because JavaScript compares null
+as 0 and places the station at 0°, 0°.
 
 **`dimensionality.json` is absent for a withheld station, but `station.json` is not.** Gate the first
-request on the survey's access level rather than treating the `404` as an error.
+request on the survey's access level rather than treating the `404` as an error. It is served alongside
+`station.json` and is not a contract; do not build on its shape.

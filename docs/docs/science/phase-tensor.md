@@ -1,65 +1,59 @@
 # Phase Tensor
 
-The phase tensor, introduced by Caldwell, Bibby and Brown (2004), represents the impedance
-phase relationships in a form that is independent of galvanic distortion. That property is why
-it became a standard part of MT interpretation: apparent resistivity curves are often dominated
-by near-surface conductivity variations, which makes station-to-station comparison and regional
-interpretation difficult, while the phase tensor stays sensitive to the deeper structure
-without carrying those local effects.
+The phase tensor (Caldwell, Bibby & Brown, 2004) represents the impedance phase relationships in a form
+that is independent of galvanic distortion. Apparent resistivity curves are often dominated by
+near-surface conductivity variations; the phase tensor stays sensitive to deeper structure without
+carrying those local effects, which is why it is the basis of AusMT's screening diagnostics.
 
 ## Definition
 
-Writing the impedance tensor as `Z = X + iY`, with `X` the real component and `Y` the
-imaginary component, the phase tensor is:
+Writing the impedance tensor as `Z = X + iY`, the phase tensor is:
 
 ```text
 Φ = X⁻¹ Y
 ```
 
-(Caldwell et al., 2004)
-
-It is usually drawn as an **ellipse**, one per period, described by its major and minor axes,
-its orientation and its skew angle. Those parameters carry information about structural
-directionality, dimensionality and lateral conductivity contrasts.
-
-The two **principal phases**, `Φmax` and `Φmin`, are the maximum and minimum phase responses the
-tensor represents. The difference between them describes the anisotropy of the response.
+It is drawn as an ellipse, one per period, described by its major and minor axes, its orientation and
+its skew angle. The principal phases `Φmax` and `Φmin` are the maximum and minimum phase responses the
+tensor represents; their difference describes the anisotropy of the response. AusMT's ellipticity is
+`|Φmax - Φmin| / (|Φmax| + |Φmin|)`.
 
 ## Skew
 
-Phase tensor skew (β) indicates three-dimensional behaviour. In a perfectly one- or
-two-dimensional Earth it is expected to be small, and increasing values generally indicate
-increasing departure from two-dimensional behaviour (Caldwell et al., 2004). Skew should not be
-read alone; it is most useful alongside the other diagnostics.
+Skew (β) indicates three-dimensional behaviour. In a one- or two-dimensional Earth it is small;
+increasing values indicate increasing departure from two-dimensional behaviour. Skew should be read with
+the other diagnostics, not alone.
 
-AusMT serves per-period β in the transfer-function data product, and the median |β| is the
-primary input to the shipped dimensionality classification. The thresholds are disclosed in
-[Dimensionality](dimensionality.md#the-shipped-classification).
+## Dimensionality
+
+Dimensionality describes how far a response approximates 1-D (conductivity varies with depth only),
+2-D (depth and one horizontal direction) or 3-D behaviour. It cannot be observed directly, different
+diagnostics can disagree, and it varies with period: short periods respond to near-surface structure,
+long periods to lithospheric structure, so a survey can be 3-D at short periods and 2-D at long ones.
+Treat any dimensionality assessment as an indicator, not a verdict.
+
+AusMT assigns each station one screening class from its phase tensor, using the median absolute skew,
+the share of high-skew periods and the median ellipticity. The thresholds are stated with the served
+file, [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson), which rides
+beside `station.json` and is not a contract. It is a triage product; period-by-period dimensionality analysis is not attempted.
 
 ## What AusMT publishes
 
-Shipped today, for every station:
+For every served station: per-period `Φmin`, `Φmax`, azimuth and skew β in the transfer-function data
+product; a phase-tensor plot in the station drawer; and the azimuths, which feed the dimensionality
+classification and the selection-level [strike rose](strike-analysis.md). Not generated: phase tensor
+ellipse maps per period or period band, and survey-level summaries.
 
-- Per-period phase tensor parameters in the transfer-function data product: `Φmin`, `Φmax`,
-  azimuth and skew β
-- A phase-tensor plot in the portal's station drawer
-- The azimuths, which feed the dimensionality classification and the selection-level
-  [strike rose](strike-analysis.md)
-
-Not generated today: phase tensor ellipse maps per period or period band, and survey-level phase
-tensor summaries.
-
-## Interpretation
-
-Phase tensor products are diagnostic tools, not geological interpretations. Similar phase
-tensor responses can arise from different conductivity structures, so read them alongside the
-transfer functions, strike products and regional geology. Dimensionality indicators derived
-from them are guides, not classifications of the Earth.
+Phase tensor products are diagnostic tools, not geological interpretations. Similar responses can arise
+from different conductivity structures, so read them alongside the transfer functions, strike products
+and regional geology.
 
 ## References
 
-Caldwell, T. G., Bibby, H. M., & Brown, C. (2004). The magnetotelluric phase tensor. Geophysical Journal International, 158(2), 457–469.
+Caldwell, T. G., Bibby, H. M., & Brown, C. (2004). The magnetotelluric phase tensor. Geophysical Journal International, 158(2), 457-469.
 
-Bibby, H. M., Caldwell, T. G., & Brown, C. (2005). Determinable and non-determinable parameters of galvanic distortion in magnetotellurics. Geophysical Journal International, 163(3), 915–930.
+Bibby, H. M., Caldwell, T. G., & Brown, C. (2005). Determinable and non-determinable parameters of galvanic distortion in magnetotellurics. Geophysical Journal International, 163(3), 915-930.
+
+Booker, J. R. (2014). The magnetotelluric phase tensor: A critical review. Surveys in Geophysics, 35, 7-40.
 
 Chave, A. D., & Jones, A. G. (2012). The Magnetotelluric Method: Theory and Practice. Cambridge University Press.

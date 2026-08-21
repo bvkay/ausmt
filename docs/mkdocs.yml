@@ -1,5 +1,7 @@
 
 site_name: AusMT Documentation
+validation:
+  anchors: warn
 copyright: "Copyright © 2026 AuScope and the AusMT contributors. The AusMT framework (everything other than the survey data it serves) is licensed under Apache-2.0; the magnetotelluric survey data is licensed separately by its custodians (typically CC-BY-4.0)."
 nav:
   - Home: index.md
@@ -19,10 +21,7 @@ nav:
       - Science products: science/science-products.md
       - Transfer functions: science/transfer-functions.md
       - Phase tensor: science/phase-tensor.md
-      - Dimensionality: science/dimensionality.md
       - Strike analysis: science/strike-analysis.md
-      - Distortion & decomposition: science/distortion-and-dimensionality.md
-      - Quality metrics: science/quality-metrics.md
   - Using the data:
       - Overview: interoperability/overview.md
       - How AusMT serves data: interoperability/api-overview.md
@@ -37,11 +36,8 @@ nav:
   - Reference:
       - Machine-readable surfaces: reference/index.md
       - MTCAT schema: reference/mtcat-schema.md
-      - Download manifest schema: reference/manifest-schema.md
-      - Build report schema: reference/build-report-schema.md
       - survey.yaml reference: reference/survey-yaml.md
       - Per-station products: reference/station-products.md
-      - Served documents: reference/portal-documents.md
       - Releases tier: reference/releases.md
       - Glossary: reference/glossary.md
       - License: reference/license.md
@@ -53,6 +49,7 @@ nav:
       - Architecture (start here): developer/architecture.md
       - Build lifecycle: developer/build-lifecycle.md
       - Portal data files (contract): developer/data-files.md
+      - Portal-internal documents: developer/portal-documents.md
       - How to extend: developer/extending.md
       - Conventions: developer/conventions.md
       - Collection IDs: developer/collection-ids.md

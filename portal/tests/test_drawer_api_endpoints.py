@@ -17,11 +17,14 @@ served EDI artifact for the station - and render openStation() for each:
   * FICTIONAL-PATH ABSENCE - FAILS if "(planned)" or any /api/ path survives in the rendered drawer.
     RED-proven against the pre-change drawer.js: that build renders all three fictional paths plus the
     "(planned)" hedge, so it fails this assertion.
-  * REAL-ENDPOINT PRESENCE - FAILS if the per-station product endpoints (station.json,
-    dimensionality.json, both templated with the station's OWN slug and id), the survey-level
-    surveys.json + products/manifest.json, or the About pointer link are missing. This is the
-    non-vacuous half: a build that merely deleted the API section would pass the absence pin and
-    fail here.
+  * REAL-ENDPOINT PRESENCE - FAILS if the station's station.json (templated with the station's OWN
+    slug and id), the download index /data/manifest.json, or the docs pointer link are missing. This
+    is the non-vacuous half: a build that merely deleted the API section would pass the absence pin
+    and fail here. Public-surface audit (2026-08-22), owner ruling: the only public metadata
+    contracts are mtcat.json and station.json; manifest.json is the download index; everything else
+    under /data is portal-internal. So the section must NOT advertise /data/surveys.json (no
+    contract; superseded by survey-metadata.json), /data/products/manifest.json (the retired twin of
+    the download index) or dimensionality.json (served alongside station.json, not a contract).
   * ARTIFACT-BEARING vs EMBARGOED - FAILS if the station's own EDI line is absent when the manifest
     carries an EDI row for it, or PRESENT when it does not (an embargoed survey is withheld by
     construction - it has no manifest rows at all, so there is no url to advertise).
@@ -131,10 +134,13 @@ def test_drawer_api_section_drops_the_fictional_api_tier(tmp_path):
 def test_drawer_api_section_lists_the_real_endpoints(tmp_path):
     html = _render(tmp_path, _fixture(served=True, access="open"), "served")
     for endpoint in ("/data/products/vulcan-2022/A1/station.json",
-                     "/data/products/vulcan-2022/A1/dimensionality.json",
-                     "/data/surveys.json",
-                     "/data/products/manifest.json"):
+                     "/data/manifest.json"):
         assert endpoint in html, f"the drawer API section must list {endpoint}; rendered:\n{html[-2500:]}"
+    for gone in ("/data/surveys.json", "/data/products/manifest.json"):
+        assert gone not in html, (
+            f"the drawer API section must not advertise {gone}: surveys.json is portal-internal with no "
+            f"contract, and the products/ twin of the manifest is retired (public-surface audit, "
+            f"2026-08-22); rendered:\n{html[-2500:]}")
     # Docs wave, stage 2 (owner ruling 3): the depth pointer is the docs site's API reference, and it must
     # be the SAME url About links, so a reader is never sent to two different "for depth" pages. Read off
     # about.html rather than typed twice, which is what makes the two surfaces provably agree.
@@ -169,27 +175,28 @@ def test_drawer_edi_line_absent_for_an_embargoed_station(tmp_path):
     assert "/data/edi/" not in html, (
         "an embargoed station has no manifest artifact row, so the API section must render NO EDI "
         f"endpoint line; rendered:\n{html[-2500:]}")
-    assert "/data/products/manifest.json" in html, (
-        "the survey-level endpoints must survive for an embargoed station (its record is still public)")
+    assert "/data/manifest.json" in html, (
+        "the download index must survive for an embargoed station (its record is still public)")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
-@pytest.mark.parametrize("access", ["embargoed", "metadata_only"])
-def test_drawer_omits_dimensionality_for_a_non_served_station(tmp_path, access):
-    """A NON-SERVED survey (embargoed with any date, or metadata_only) gets a WITHHELD station.json and
-    NO dimensionality.json at all: the engine returns before writing it (build_portal.py
-    _write_station_products, "no dimensionality.json for a non-served survey"), because a dimensionality
-    classification is pure interpretation of the embargoed transfer function. Advertising that path here
-    would hand ~17% of catalogue stations a GET line that 404s, which is the same fictional-endpoint
-    defect this module exists to prevent, only smaller.
+@pytest.mark.parametrize("access", ["open", "embargoed", "metadata_only"])
+def test_drawer_never_advertises_dimensionality_and_always_lists_station_json(tmp_path, access):
+    """dimensionality.json is served alongside station.json and is NOT a contract (public-surface audit,
+    2026-08-22; its fate, folding into station.json or staying a feature file, is the owner's pending
+    decision), so the API section never advertises it, for any access level. It used to be listed for
+    an open survey only, because the engine returns before writing it for a non-served survey
+    (build_portal.py _write_station_products, "no dimensionality.json for a non-served survey"); the
+    open-survey row is gone too now.
 
-    station.json is the OTHER half and must SURVIVE: it is emitted for a non-served survey as a withheld
-    stub that names the access state, so it resolves and is worth pointing at. Asserting both directions
-    keeps the fix from being satisfied by deleting the per-station block outright."""
-    html = _render(tmp_path, _fixture(served=False, access=access), "nonserved_" + access)
+    station.json is the OTHER half and must SURVIVE for every access level: it is a public contract,
+    and it is emitted for a non-served survey as a withheld stub that names the access state, so it
+    resolves and is worth pointing at. Asserting both directions keeps the fix from being satisfied by
+    deleting the per-station block outright."""
+    html = _render(tmp_path, _fixture(served=(access == "open"), access=access), "dim_" + access)
     assert "dimensionality.json" not in html, (
-        f"access={access}: the engine emits NO dimensionality.json for a non-served survey, so the API "
-        f"section must not advertise one; rendered:\n{html[-2500:]}")
+        f"access={access}: dimensionality.json is not a contract, so the API section must not advertise "
+        f"it; rendered:\n{html[-2500:]}")
     assert "/data/products/vulcan-2022/A1/station.json" in html, (
-        f"access={access}: station.json IS emitted for a non-served survey (a withheld stub stating the "
-        f"access state), so the per-station line must stay")
+        f"access={access}: station.json is the per-station contract and is emitted for every station, so "
+        f"the per-station line must stay")

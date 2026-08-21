@@ -2933,10 +2933,17 @@ async function bootFreshWindow(dataMap, url) {
   ok(matP.textContent.indexOf(_noApiTier) < 0, "X8: the API expander must advertise no fictional API-tier path");
   ok(/\/data\/products\/alpha\/A1\/station\.json/.test(matP.textContent),
     "X8: the API expander must list this station's own products/<slug>/<id>/station.json endpoint");
-  ok(/\/data\/products\/alpha\/A1\/dimensionality\.json/.test(matP.textContent),
-    "X8: the API expander must list this station's own dimensionality.json endpoint");
-  ok(/\/data\/surveys\.json/.test(matP.textContent) && /\/data\/products\/manifest\.json/.test(matP.textContent),
-    "X8: the API expander must list the two survey-level documents");
+  // Public-surface audit (2026-08-22), owner ruling: the only public metadata contracts are mtcat.json and
+  // station.json; manifest.json is the download index; everything else under /data is portal-internal.
+  // So the expander lists station.json + the download index, and must NOT advertise dimensionality.json
+  // (served alongside station.json, not a contract), surveys.json (no contract) or the retired
+  // products/manifest.json twin. tests/test_drawer_api_endpoints.py pins the same rows against fixtures.
+  ok(!/dimensionality\.json/.test(matP.textContent),
+    "X8: the API expander must not advertise dimensionality.json (served alongside station.json; not a contract)");
+  ok(/\/data\/manifest\.json/.test(matP.textContent),
+    "X8: the API expander must list /data/manifest.json, the download index");
+  ok(!/\/data\/surveys\.json/.test(matP.textContent) && !/\/data\/products\/manifest\.json/.test(matP.textContent),
+    "X8: the API expander must not advertise surveys.json or the retired products/manifest.json twin");
   // This fixture ships NO manifest (see the distributed-formats block below), so the station has no
   // served EDI artifact row and the expander must therefore render NO EDI endpoint line: the url can
   // only ever be read from a manifest row, never invented.

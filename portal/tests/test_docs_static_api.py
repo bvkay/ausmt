@@ -27,11 +27,14 @@ Four groups of claim.
     one station, a bundles[] row is the whole survey, and a token-keyed check could not tell the two
     apart or notice that only one of them had been documented.
 
-(3) THE CATALOGUE COLUMN TABLE MATCHES THE CONTRACT. catalogue.json rows are positional, so the
-    reference reproduces the column table. A stale table is the worst kind of documentation bug: a
-    reader takes an index, gets the wrong column, and the result looks plausible. The table is
+(3) THE CATALOGUE COLUMN TABLE MATCHES THE CONTRACT. catalogue.json rows are positional, so the page
+    that documents them reproduces the column table. A stale table is the worst kind of documentation
+    bug: a reader takes an index, gets the wrong column, and the result looks plausible. The table is
     compared name-by-name and index-by-index against contract/columns.json, which is the single
-    source the generated maps come from.
+    source the generated maps come from. Public-surface audit (2026-08-22): catalogue.json is
+    portal-internal, not a contract, so the table lives on developer/data-files.md (the engine-to-
+    portal positional contract) and the public data reference no longer carries it; the pin follows
+    the table.
 
 (4) THE HONESTY CLAIMS ARE BACKED BY CODE. Three of them, each pinned to the line in
     build_portal.py that implements it: the three access levels, the withheld station.json marker,
@@ -47,6 +50,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent   # portal/
 REPO = ROOT.parent                              # the ausmt monorepo root
 DOCS = REPO / "docs" / "docs" / "interoperability"
+DATAFILES = REPO / "docs" / "docs" / "developer" / "data-files.md"
 
 OVERVIEW = DOCS / "api-overview.md"
 REFERENCE = DOCS / "api-reference.md"
@@ -181,12 +185,12 @@ def test_the_two_mth5_granularities_are_documented_as_two_things():
 # ---------------------------------------------------------------- (3) the catalogue column table
 
 def _documented_catalogue_columns():
-    """The reference's own catalogue table, as {index: name}, parsed out of its markdown rows."""
-    body = _text(REFERENCE)
-    section = body.split("### `catalogue.json`", 1)
-    assert len(section) == 2, "the reference must carry a catalogue.json subsection"
-    rows = re.findall(r"^\|\s*(\d+)\s*\|\s*`([a-z0-9_]+)`\s*\|", section[1], flags=re.M)
-    assert rows, "the catalogue subsection must carry the positional column table"
+    """The data-files page's own catalogue table, as {index: name}, parsed out of its `r[i]` rows."""
+    body = _text(DATAFILES)
+    section = body.split("## `catalogue.json`", 1)
+    assert len(section) == 2, "developer/data-files.md must carry a catalogue.json section"
+    rows = re.findall(r"^\|\s*`r\[(\d+)\]`\s*\|\s*`([a-z0-9_]+)`\s*\|", section[1], flags=re.M)
+    assert rows, "the catalogue section must carry the positional column table"
     return {int(i): name for i, name in rows}
 
 
@@ -197,16 +201,40 @@ def test_catalogue_column_table_matches_the_contract():
     documented = _documented_catalogue_columns()
     expected = dict(enumerate(contract))
     assert documented == expected, (
-        "the reference's catalogue column table disagrees with contract/columns.json.\n"
+        "developer/data-files.md's catalogue column table disagrees with contract/columns.json.\n"
         f"  documented: {documented}\n  contract:   {expected}")
 
 
-def test_the_reference_says_the_rows_are_positional_and_names_the_map():
-    flat = _flat(REFERENCE)
-    assert "positional arrays, not objects" in flat, (
+def test_the_data_files_page_says_the_rows_are_positional_and_names_the_map():
+    flat = _flat(DATAFILES)
+    assert "positional arrays, read by index" in flat.lower(), (
         "a reader who treats catalogue rows as objects gets nothing; say it plainly")
-    assert "/src/contract.js" in flat, (
-        "the reference must point at the generated column map rather than only quoting indices")
+    assert "src/contract.js" in flat, (
+        "the page must point at the generated column map rather than only quoting indices")
+
+
+def test_the_public_reference_documents_no_portal_internal_document():
+    """Public-surface audit (2026-08-22): the only public metadata contracts are mtcat.json (with its
+    schema routes) and station.json, with survey-metadata.json to come; manifest.json is the download
+    index. catalogue.json, sci.json, tf.json, surveys.json, collections.json, build.json,
+    build_provenance.json and coord_policy.json are portal-internal and documented only under
+    Developer; build_report.json, qc_report.json and base_ids.json are operator-only. FAILS if the
+    data reference or the architecture page recipes or lists any of them again, or revives the
+    /data/products/ mirror of the manifest."""
+    internal = ("catalogue.json", "sci.json", "tf.json", "surveys.json", "collections.json",
+                "build.json", "build_provenance.json", "coord_policy.json", "build_report.json",
+                "qc_report.json", "base_ids.json", "/data/products/manifest.json")
+    hits = []
+    for p in (OVERVIEW, REFERENCE):
+        for lineno, line in enumerate(_text(p).splitlines(), start=1):
+            if "/data/releases/<tag>/" in line:
+                continue          # the release layout lists the frozen copies by filename
+            for name in internal:
+                if name in line:
+                    hits.append(f"{p.name}:{lineno}: {name}: {line.strip()[:120]}")
+    assert not hits, (
+        "the public data pages document contracts and downloads only; portal-internal and operator-only "
+        "documents live under Developer:\n" + "\n".join(hits))
 
 
 # ---------------------------------------------------------------- (4) honesty claims, backed by code

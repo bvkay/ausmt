@@ -1,6 +1,9 @@
 # Per-station products
 
-Each station has a small product directory holding two key-based JSON documents.
+Each station has a small product directory holding two key-based JSON documents. `station.json` is the
+per-station record and a public contract. `dimensionality.json` is served alongside it and is not a
+contract: whether it folds into `station.json` or stays a feature file is an open decision, so do not
+build on its shape.
 
 ```text
 /data/products/<slug>/<station>/station.json
@@ -8,7 +11,7 @@ Each station has a small product directory holding two key-based JSON documents.
 ```
 
 There is no index of product directories and directory listing is off. Build the paths from the slug and
-the station id read out of `catalogue.json` or `mtcat.json`. That is safe here because the product path
+the station id read out of `mtcat.json` (`survey_id`, and the station part of `station_id`). That is safe here because the product path
 uses the station id verbatim, unlike an artifact filename.
 
 Those two are the derived RECORDS. A served station also has downloadable transfer-function FILES, which
@@ -22,10 +25,11 @@ than built from the station id.
 | Canonical transfer function | `/data/xml/<slug>/<station>.xml` | EMTF XML, derived by the build |
 | Station MTH5 | `/data/h5/<slug>/<station>.h5` | MTH5, transfer functions only, derived by the build |
 
-Only the first row is ever a submitted file, and only for a station submitted as EDI.
-`build_report.json`'s `ingest_sources` says which source format a station arrived in, and [EDI is the
-citable artifact](../interoperability/tool-integration.md#edi-is-the-citable-artifact) says what that
-means for a digest check.
+Only the first row is ever a submitted file, and only for a station submitted as EDI. The record says
+which: `provenance.input_sha256` (section 1.11) equals the manifest `edi` row's `sha256` exactly when
+the served EDI is the custodian's file, and [EDI is the citable
+artifact](../interoperability/tool-integration.md#edi-is-the-citable-artifact) says what that means
+for a digest check.
 
 The EDI filename is not derivable from the station id, so take all three paths from the manifest rather
 than templating them. The MTH5 and EMTF XML paths do use the station id, but the manifest is still the
@@ -45,10 +49,11 @@ carries the survey's licence and credit inside the file (`Experiment/Surveys/<sl
 | Normative artifact | the build's product emitter, `engine/extract/build_portal.py` |
 | Served location | `/data/products/<slug>/<station>/` |
 | Version | none declared; the documents are additive and key-based |
-| Access | the product tree is a served surface, so it rides the same access gate as `tf.json` and `sci.json` |
+| Status | `station.json` is a public contract whose schema artifact arrives with the station promotion lane; `dimensionality.json` is served alongside it and is not a contract |
+| Access | the product tree is a served surface, so it rides the same access gate as the download files |
 
-There is no JSON Schema artifact for either document. Where this page and the emitter disagree, the
-emitter is right.
+There is no JSON Schema artifact for either document yet. Where this page and the emitter disagree,
+the emitter is right.
 
 ## Gating
 
@@ -206,13 +211,33 @@ declares no `station_ids` provenance carries no `provenance.source`.
 | `tipper_available` | boolean | whether a tipper is present |
 | `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
 
-The dimensionality classification and its skew statistic are **not** members of this block. They are
-the whole content of the `dimensionality.json` emitted beside this document (§2), which carries them
+The dimensionality classification and its skew statistic are not members of this block. They are the
+whole content of the `dimensionality.json` served beside this document (section 2), which carries them
 with the method and the screening caveat that qualifies them; restating them here produced a second
 copy without that caveat.
 
-The full definitions of these diagnostics are in
-[Quality metrics](../science/quality-metrics.md) and [Dimensionality](../science/dimensionality.md).
+#### 1.8.1 How the completeness-smoothness diagnostic is computed
+
+`completeness_smoothness_diagnostic.value` is the 0-5 scalar the catalogue serves as `sci.json`
+column `q`, computed by `engine/extract/_edi_science.py`. It exists so a reader screening hundreds of
+stations can spot incomplete or rough transfer functions quickly. It is not a data-quality or
+geological-value ranking, and AusMT ranks no station or survey. Its inputs:
+
+| Input | Definition |
+|---|---|
+| completeness | fraction of periods with a positive apparent resistivity and a phase, xy mode |
+| coverage | decades of period coverage divided by 4, clamped to [0, 1] |
+| smoothness | 1 minus (median second-difference roughness of the xy phase curve) / 25 degrees, clamped; 0.5 when fewer than three phases exist |
+| errscore | where per-period resistivity errors exist: the median relative error `mre` over both off-diagonal modes, mapped log-linearly from 30% or worse (0) to 2% or better (1) |
+
+With errors (`basis` `e`): `value = 5 × (0.45·errscore + 0.18·coverage + 0.15·completeness + 0.22·smoothness)`.
+Without usable error blocks (`basis` `s`): `value = 5 × (0.40·coverage + 0.30·completeness + 0.30·smoothness)`.
+`median_relative_error` is that same `mre`, rounded to three decimals, and is null on the shape basis.
+
+Limitations: smoothness uses the xy phase mode only; the error basis uses off-diagonal resistivity
+errors only; there is no normalisation across instrument classes, so a long-period and a broadband
+station score on the same scale. Read the value with the period range and the phase-tensor
+diagnostics, never alone.
 
 ### 1.9 processing
 
@@ -230,7 +255,7 @@ The full definitions of these diagnostics are in
 | `algorithm` | string or null | processing algorithm |
 | `remote_reference` | boolean | whether remote reference is stated |
 | `remote_site` | string or null | the named reference station, where the header encodes one |
-| `file_written_by` | object | `{name, version}` — the program that **wrote** the file, verbatim from its header; either member is null where the header does not state it |
+| `file_written_by` | object | `{name, version}`, the program that **wrote** the file, verbatim from its header; either member is null where the header does not state it |
 | `note` | string or null | the arrangement detail from the source file's free text |
 
 `software` and `file_written_by` are two different facts and are usually two different programs. An
@@ -238,7 +263,7 @@ EDI HEAD's `PROGNAME`/`PROGVERS` names whatever serialised the file, which acros
 is a database or plotting exporter (Geotools, WinGLink, MTpy) that estimated nothing; the program
 that produced the transfer function is named only in the file's free text ("Processing code:
 LEMIMT", "processing.software.name = ['Birrp 5.0', ' 5.2']"). `software` is mined from that text and
-is null where the file names no processor — which means *not stated*, never *not used*. The writer
+is null where the file names no processor, which means *not stated*, never *not used*. The writer
 is reported separately under `file_written_by` rather than being published as the processor.
 
 ### 1.10 distribution
@@ -316,7 +341,7 @@ is reported separately under `file_written_by` rather than being published as th
 | Type | string |
 | Allowed values | `generalised`, `withheld` |
 | Default | absent means `exact` |
-| Note | Emitted only for a non-exact station, which keeps an exact station's record byte-unchanged. The boot-time surface the portal reads is [`coord_policy.json`](portal-documents.md#coord_policyjson). |
+| Note | Emitted only for a non-exact station, which keeps an exact station's record byte-unchanged. The boot-time surface the portal reads is [`coord_policy.json`](../developer/portal-documents.md#coord_policyjson). |
 
 ### 1.16 The withheld record
 
@@ -327,10 +352,10 @@ public catalogue already exposes.
 {
   "ausmt_id": "au.kalkaroo-2022.KD-C3",
   "station": "KD-C3",
-  "survey": "Kalkaroo 2022",
+  "survey": "Kalkaroo 2020-21",
   "country": "Australia",
-  "organisation": "…",
-  "access": { "level": "embargoed", "embargo_until": null, "served": false },
+  "organisation": "Adelaide University",
+  "access": { "level": "embargoed", "embargo_until": "2027-02-01", "served": false },
   "distribution": { "edi_available": false, "license": "…", "edi_path": null },
   "withheld": true,
   "note": "This survey's access state withholds its derived science products …"
@@ -353,8 +378,26 @@ the derived science is withheld here.
 
 ## 2 dimensionality.json
 
-The phase-tensor screening result for one station. It is never written for a station in a withheld
-survey.
+The phase-tensor screening result for one station, served alongside `station.json`; not a contract. It
+is never written for a station in a withheld survey. Its members are documented here so a reader can
+interpret what is served, not as a promise about its shape.
+
+The classification is assigned by `engine/extract/_edi_science.py` from the per-period phase tensor
+(Caldwell et al., 2004), with every threshold a named constant that `build_provenance.json` records:
+
+1. Periods whose absolute skew is 15 degrees or more (`BETA_PHYSICAL_CAP_DEG`) are excluded as
+   non-physical: a dead channel or a near-singular tensor drives skew toward its ceiling, which is
+   evidence of bad data, not of 3-D structure.
+2. If fewer than half (`MIN_USABLE_PERIOD_FRAC`) of the impedance-bearing periods survive, the class
+   is `indeterminate`: the data do not support a call.
+3. Otherwise the class is `3-D` if the median absolute skew exceeds 5 degrees (`SKEW_3D_DEG`) or more
+   than 40% (`PCT_PERIODS_3D_THRESHOLD`) of usable periods have absolute skew above 3 degrees
+   (`BETA_PER_PERIOD_DEG`); else `2-D` if the median ellipticity exceeds 0.10 (`ELLIP_2D_DEG`); else
+   `1-D`.
+
+Skew and ellipticity are defined on the [phase tensor](../science/phase-tensor.md) page. The result is
+a screening product for survey triage, not period-by-period dimensionality analysis, which the build
+does not attempt.
 
 ```json
 {
@@ -367,68 +410,16 @@ survey.
 }
 ```
 
-### 2.1 classification
+The members, as the build writes them today. Treat the classification as a filter, not as a finding.
 
-| | |
-|---|---|
-| Definition | The dimensionality class the screening assigned. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string or null |
-| Allowed values | `1-D`, `2-D`, `3-D`, `indeterminate` |
-| Example | `"2-D"` |
-| Note | `indeterminate` is returned when fewer than half the periods are usable. The thresholds are stated in [Dimensionality](../science/dimensionality.md#the-shipped-classification). |
-
-### 2.2 skew_beta_median_deg
-
-| | |
-|---|---|
-| Definition | Median absolute phase-tensor skew across usable periods, in degrees. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | number or null |
-| Example | `0.7` |
-
-### 2.3 pct_periods_3d
-
-| | |
-|---|---|
-| Definition | Percentage of usable periods whose absolute skew exceeds the three-dimensional threshold. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | integer or null |
-| Example | `0` |
-
-### 2.4 method
-
-| | |
-|---|---|
-| Definition | The method the classification came from. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Example | `"phase-tensor (Caldwell 2004)"` |
-
-### 2.5 screening_diagnostic
-
-| | |
-|---|---|
-| Definition | Marks the payload as a screening result rather than an interpretation. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | boolean |
-| Example | `true` |
-
-### 2.6 note
-
-| | |
-|---|---|
-| Definition | The caveat that travels with the payload. |
-| Obligation | mandatory |
-| Occurrence | 1 |
-| Type | string |
-| Example | `"screening diagnostic, not an interpretation product"` |
-| Note | Treat the classification as a filter, not as a finding. |
+| Member | Type | Definition |
+|---|---|---|
+| `classification` | string or null | the screening class: `1-D`, `2-D`, `3-D` or `indeterminate`; `indeterminate` when fewer than half the periods are usable |
+| `skew_beta_median_deg` | number or null | median absolute phase-tensor skew across usable periods, in degrees |
+| `pct_periods_3d` | integer or null | percentage of usable periods whose absolute skew exceeds the three-dimensional threshold |
+| `method` | string | the method the classification came from, `phase-tensor (Caldwell 2004)` |
+| `screening_diagnostic` | boolean | marks the payload as a screening result rather than an interpretation |
+| `note` | string | the caveat that travels with the payload |
 
 ---
 

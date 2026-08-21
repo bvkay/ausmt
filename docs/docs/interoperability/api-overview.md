@@ -26,7 +26,7 @@ $ BASE=${AUSMT_BASE:?the portal root you are reading from}
 $ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/data/mtcat.json"
 405
 $ curl -s -o /dev/null -w '%{size_download}\n' "$BASE/data/mtcat.json?survey=vulcan-2022"
-275587
+511363
 $ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/data/"
 404
 ```
@@ -54,9 +54,9 @@ Responses are gzipped when the client asks for it, and byte ranges are supported
 answers `206`), so a large bundle download can resume.
 
 No `Cache-Control` header is set. A proxy or CDN in front of the site therefore applies its own
-heuristic freshness rather than an instruction from us, and a cached copy can be stale for a while. If
-being current matters to your workflow, read `data/build.json` and compare its `build_id` rather than
-trusting a cache.
+heuristic freshness rather than an instruction from the server, and a cached copy can be stale for a while. If
+being current matters to your workflow, fetch `/data/mtcat.json` with a conditional request and compare
+its `portal.generated_at` rather than trusting a cache.
 
 Builds land in timestamped directories under the data root, at `builds/<timestamp>/`, and a `current`
 symlink is moved across them with `mv -T`, which is a real `rename(2)`. There is no window in which
@@ -65,8 +65,8 @@ effect on the next request with no restart. A build that fails, or that passes b
 step, leaves `current` pointing at the previous build.
 
 What the swap does not protect is a client reading several documents across a rebuild boundary. That
-client can straddle two builds. Read `build.json` before and after if the documents have to agree with
-each other.
+client can straddle two builds. Read `mtcat.json`'s `portal.generated_at` before and after if the
+documents have to agree with each other.
 
 ---
 
@@ -80,20 +80,20 @@ $ curl -sI "$BASE/data/mtcat.json" | grep -i access-control
 access-control-allow-origin: *
 ```
 
-The header is scoped to `/data` by that handler and nothing else carries it. `/src/contract.js`, for
-instance, is a portal page asset and answers with no CORS header, so a browser application on another
-origin has to fetch it server-side or hard-code the values it needs.
+The header is scoped to `/data` by that handler and nothing else carries it. The portal's own page
+assets answer with no CORS header, so a browser application on another origin reads the `/data`
+documents and nothing else.
 
 There is no preflight handler. An `OPTIONS` request answers `405`. A plain `fetch()` for JSON never
 preflights, so this costs you nothing in practice, but a request that sets a custom header will
-preflight and then fail. Don't set one.
+preflight and then fail. Do not set one.
 
 ---
 
 ## Integrity
 
 Every artifact row in the download manifest carries the `size` and the `sha256` of the bytes the server
-will hand you, so a download is checkable end to end without asking us anything:
+will hand you, so a download is checkable end to end without a second request:
 
 ```bash
 curl -sO "$BASE/data/bundles/vulcan-2022-edi.zip"
@@ -106,12 +106,11 @@ print(row["sha256"] == hashlib.sha256(open("vulcan-2022-edi.zip", "rb").read()).
 PY
 ```
 
-The same digest appears in two other places. `catalogue.json` carries the source transfer-function
-file's SHA-256 in column 14, which for a station submitted as EDI is the same file and so the same
-digest; for one submitted only as EMTF XML the served EDI is generated rather than original, and
-column 14 is the digest of the submitted XML instead. Each station's `station.json` records
+The same digest appears in one other place. Each station's `station.json` records
 `provenance.input_file` and `provenance.input_sha256` for the file its derived products were computed
-from, which is the source file either way. [EDI is the citable
+from. For a station submitted as EDI that is the served file, so the two digests agree; for one
+submitted only as EMTF XML the served EDI is generated rather than original, and `input_sha256` is the
+digest of the submitted XML instead. [EDI is the citable
 artifact](tool-integration.md#edi-is-the-citable-artifact) sets out what that means for a check.
 
 ---
@@ -139,9 +138,9 @@ search index built from the catalogue shows the survey exists and says who to as
 
 Per-station products follow the same rule with one wrinkle. `station.json` is written for every
 station, and a withheld one carries `"withheld": true`, an `access` block giving the level and the
-embargo date, and no derived science. `dimensionality.json` is not written at all for a withheld
-station, because it is a pure interpretation of the transfer function being withheld, so that path
-answers `404`.
+embargo date, and no derived science. `dimensionality.json`, served alongside it and not a contract, is
+not written at all for a withheld station, because it is a pure interpretation of the transfer function
+being withheld, so that path answers `404`.
 
 For a client this means there is no authorisation branch to write. If a byte exists, it is in the
 manifest. If it is not in the manifest, no request will produce it.
@@ -163,15 +162,15 @@ Nor is there any authentication. That is not an omission waiting to be fixed. Th
 public subset by construction, so a private survey is withheld by having no bytes on the server rather
 than by having a guard in front of them. There is nothing for a credential to unlock.
 
-Both of those are choices about scale. The live corpus is 21 surveys, 1,418 stations and 2,421
-downloadable artifacts: a 276 kB discovery document, a 320 kB station catalogue and an 828 kB
-download manifest. A client can hold all three in memory and filter them in a loop faster than a
+Both of those are choices about scale. The live corpus is 27 surveys, 2,625 stations and 6,996
+downloadable artifacts: a 511 kB discovery document and a 2.5 MB download manifest. A client can hold
+both in memory and filter them in a loop faster than a
 query API would finish its TLS handshake. A query tier would add an always-on service to keep
 alive, an invalidation story for its cache, and a second place where every access rule has to be
 implemented correctly, and none of that buys a reader anything measurable at this size. The corpus
 that would change the answer is one where the catalogue no longer fits in a client's memory or a
 single request; AusMT is roughly two orders of magnitude away, and this page should be rewritten
-when it isn't.
+when it is not.
 
 There is an upside worth naming. Nothing here can fail separately from the files. There is no service
 to run out of connections and no index that can fall behind the data it indexes. Load changes how fast
