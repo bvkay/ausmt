@@ -77,8 +77,9 @@ PROFILES = {
     }
 }
 
-# The MTCAT schema version, read from engine/schema/mtcat.schema.json's own title by
-# contract/generate.py:mtcat_schema_version(). The schema file is the SINGLE SOURCE; this is a
+# The MTCAT schema version, generated from contract/generate.py's MTCAT_VERSION constant (THE
+# single source; the schema artifact's title DISPLAYS it and is verified against it). This is a
 # generated mirror so build_portal's emitter and config defaults hold no version literal of their
-# own. To bump: edit the schema title, then regenerate; never hand-edit here.
+# own. To bump: change MTCAT_VERSION and the schema's displayed title, then regenerate; never
+# hand-edit here.
 MTCAT_SCHEMA_VERSION = '1.2'

@@ -8,8 +8,8 @@ TRUE of the artifact it describes:
   * the schema a page links must be the one the build actually copies beside the data (a documented path
     nobody serves is the failure mode this whole lane exists to avoid);
   * the version and the metadata licence About states must equal the values their single sources produce
-    (the schema's own self-identifying title, which portal.config.yaml must match, and the emitter's
-    metadata_license default), not values typed by hand;
+    (the MTCAT_VERSION constant in contract/generate.py, which the schema's displayed title must match,
+    and the emitter's metadata_license default), not values typed by hand;
   * every vocabulary the field guide lists must match the schema's enum SET-FOR-SET, in both directions. A
     missing token would send a consumer looking for a level or a role that exists in the data and is not
     documented; an extra token would document one the build hard-fails on. Both are silent until someone
@@ -45,7 +45,6 @@ ABOUT = ROOT / "about.html"
 GUIDE = REPO / "docs" / "docs" / "reference" / "mtcat-schema.md"
 SCHEMA = REPO / "engine" / "schema" / "mtcat.schema.json"
 BUILDER = REPO / "engine" / "extract" / "build_portal.py"
-PORTAL_CFG = ROOT / "portal.config.yaml"
 
 GUIDE_HEADING = "## Reading a served survey record"
 
@@ -173,9 +172,15 @@ def _schema_version() -> str:
     return m.group(1)
 
 
-def _config_schema_version() -> str:
-    m = re.search(r"^\s*schema_version:\s*\"([^\"]+)\"", PORTAL_CFG.read_text(encoding="utf-8"), flags=re.M)
-    assert m, "could not read portal.schema_version from portal/portal.config.yaml"
+def _constant_schema_version() -> str:
+    """The MTCAT version as its SINGLE SOURCE declares it since the ratified 2.0 inversion: the
+    MTCAT_VERSION constant in contract/generate.py, read raw from the source text (this suite is
+    deliberately import-light). portal.config.yaml no longer declares a schema_version key at all -
+    config.js is GENERATED from this constant, and the engine parity suite pins that the key never
+    returns."""
+    src = (REPO / "contract" / "generate.py").read_text(encoding="utf-8")
+    m = re.search(r'^MTCAT_VERSION\s*=\s*"(\d+\.\d+)"', src, flags=re.M)
+    assert m, "contract/generate.py must declare MTCAT_VERSION (the single source)"
     return m.group(1)
 
 
@@ -227,11 +232,11 @@ def test_committed_placeholder_document_declares_the_current_schema_version():
     from the initial public release through 1.1 and 1.2, which made the one file a reader is most
     likely to open as reference output the one file advertising a retired schema version.
 
-    Pinned to portal.config.yaml rather than to a literal, so a future bump fails here until the
-    placeholder is regenerated. It is emitter-produced, not hand-typed, so it stays a truthful example
-    of an empty document rather than a hand-maintained approximation of one."""
+    Pinned to the single-source constant rather than to a literal, so a future bump fails here until
+    the placeholder is regenerated. It is emitter-produced, not hand-typed, so it stays a truthful
+    example of an empty document rather than a hand-maintained approximation of one."""
     doc = json.loads((ROOT / "data" / "mtcat.json").read_text(encoding="utf-8"))
-    version = _config_schema_version()
+    version = _constant_schema_version()
     assert doc["portal"]["version"] == version, (
         f'portal/data/mtcat.json declares MTCAT {doc["portal"]["version"]}, but the current schema '
         f"version is {version}; regenerate the placeholder rather than leaving a stale one committed")
@@ -249,12 +254,12 @@ def test_stated_schema_name_version_and_licence_track_their_single_sources():
     assert _schema()["properties"]["portal"]["properties"]["schema"]["const"] in codes, (
         "the paragraph must name the schema by the value the document actually carries in portal.schema")
 
-    version = _config_schema_version()
+    version = _constant_schema_version()
     assert version == _schema_version(), (
-        f"portal.config.yaml says schema_version {version} but the schema declares {_schema_version()}; "
-        "the page cannot be right about both")
+        f"contract/generate.py MTCAT_VERSION is {version} but the schema title displays "
+        f"{_schema_version()}; the page cannot be right about both")
     assert version in codes, (
-        f"the paragraph states the MTCAT version, which is {version} per portal.config.yaml; "
+        f"the paragraph states the MTCAT version, which is {version} per the single-source constant; "
         f"the code spans in it were {sorted(codes)}")
 
     licence = _emitter_default("metadata_license")
