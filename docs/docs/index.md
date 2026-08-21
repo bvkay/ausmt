@@ -59,7 +59,7 @@ screening diagnostics and writes the data products, canonical EMTF XML and downl
 
 **Using the data.** [How AusMT serves data](interoperability/api-overview.md), the
 [data reference](interoperability/api-reference.md), [tool integration](interoperability/tool-integration.md),
-and the [Reference section](reference/index.md) for every served document field by field.
+and the [Reference section](reference/index.md) for the contracts field by field.
 
 **Contributing a survey.** [Data lifecycle](introduction/data-lifecycle.md),
 [Submission](operations/submission.md), and the [survey.yaml reference](reference/survey-yaml.md).

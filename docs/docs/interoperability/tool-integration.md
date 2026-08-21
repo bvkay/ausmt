@@ -9,10 +9,10 @@ this page assumes you have the bytes.
 ## What an AusMT reader consumes
 
 ```text
-data/mtcat.json      discovery: what surveys and stations exist, where, and under what licence
-data/manifest.json   the artifact index: every fetchable file with its size and sha256
-data/surveys.json    credit and citation, keyed by survey display name
-data/<url>           the artifact itself, joined from a manifest row
+data/mtcat.json                              discovery, credit and citation: what surveys and stations exist, where, under what licence, by whom
+data/manifest.json                           the download index: every fetchable file with its size and sha256
+data/products/<slug>/<station>/station.json  the per-station record: identity, diagnostics, distribution state, provenance
+data/<url>                                   the artifact itself, joined from a manifest row
 ```
 
 A reader that goes through those four things needs no knowledge of how AusMT is organised internally.
@@ -33,15 +33,16 @@ only when fetching from a browser.
 ### EDI is the citable artifact
 
 For a station submitted as EDI, the served EDI is the file the custodian submitted, and you can check
-that: `catalogue.json` column 14 is the SHA-256 of the source transfer-function file, and the manifest's
-`edi` row for the same station carries the SHA-256 of the bytes the server hands you. For an EDI-sourced
-station the two agree; across the live corpus they agree for all 2,389 served EDIs.
+that: the station's `station.json` carries `provenance.input_sha256`, the SHA-256 of the source
+transfer-function file, and the manifest's `edi` row for the same station carries the SHA-256 of the
+bytes the server hands you. For an EDI-sourced station the two agree; across the live corpus they agree
+for all 2,389 served EDIs.
 
 A station can also arrive as EMTF XML alone. Then its EDI is written by mt_metadata from the same
-transfer function, its XML is a re-emission of the submitted one, and column 14, the digest of the file
-the custodian sent, matches neither served file. That is a different provenance, not a tampered
-download. `build_report.json` records the source format for every station under `ingest_sources`, the
-only place that fact is published. Where a station arrives in both formats the EDI wins.
+transfer function, its XML is a re-emission of the submitted one, and `provenance.input_sha256`, the
+digest of the file the custodian sent, matches neither served file. That is a different provenance,
+not a tampered download, and the digest comparison is how a reader tells the two cases apart. Where a
+station arrives in both formats the EDI wins.
 
 ### EMTF XML is derived
 
@@ -117,9 +118,9 @@ The survey group carries rights and credit as attributes. `Experiment/Surveys/<s
 `project_lead.author` with an ORCID in `project_lead.url`, `funding_source.organization` and the corner
 coordinates. Do not read `time_period.end_date` off the survey group: it is `1980-01-01`, the library's
 epoch default, on 22 of the 25 bundles; `time_period.start_date` is correct on all 25. Take acquisition
-dates from `surveys.json` (`year_start`, `year_end`). Unlike the EMTF XML, the bundle's `survey` field
-is the AusMT slug and the station ids are the AusMT station ids. `data/build.json` records the
-`mth5_version` and `mt_metadata_version` the bundles were written with.
+dates from the survey's `mtcat.json` record (`year_start`, `year_end`). Unlike the EMTF XML, the
+bundle's `survey` field is the AusMT slug and the station ids are the AusMT station ids. The file's own
+HDF5 attributes record the `mth5` and `mt_metadata` versions it was written with.
 
 ---
 
@@ -156,11 +157,8 @@ including how to read absence, credit, relations and access, is the
 
 ## Things that will bite you
 
-**`surveys.json` is keyed by display name.** `"Vulcan 2022"`, not `"vulcan-2022"`. Build your own slug
-index from the `slug` field on each record.
-
-**Manifest rows name the survey by display name too.** To filter by slug, test
-`ausmt_id.startswith("au." + slug + ".")`.
+**Manifest `files[]` rows name the survey by display name.** `"Vulcan 2022"`, not `"vulcan-2022"`. To
+filter by slug, test `ausmt_id.startswith("au." + slug + ".")`; `bundles[]` rows carry the slug.
 
 **A served filename is not the station id.** Station `A1` of `vulcan-2022` is served as
 `edi/vulcan-2022/Vulcan_A1.edi`. Read the `url` from the manifest.
@@ -170,11 +168,8 @@ more than one survey (`SA225_2.edi` under both `auslamp-musgraves-apy-2016` and 
 `B1.edi` under two others). Flatten manifest paths to basenames across surveys and one file overwrites
 the other silently.
 
-**`catalogue.json`, `sci.json` and `tf.json` are aligned by index and nothing else.** If you filter
-one, carry the indices.
-
-**A withheld station is still in the catalogue.** Its `tf.json` entry is 18 empty arrays and its
-`sci.json` science fields are null, but the row exists and the width is preserved.
+**A withheld station is still in the catalogue.** Its `mtcat.json` record and its `station.json` exist;
+the record carries `"withheld": true` and no derived science, and there is no manifest row.
 
 **Coordinates may be generalised or absent.** A generalised position is rounded to 0.1°, roughly 11 km.
 A withheld one is `null`; guard for it before any numeric comparison, because JavaScript compares null
