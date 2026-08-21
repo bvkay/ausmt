@@ -1,7 +1,7 @@
 # Governance and Operation
 
 Who operates AusMT, how to reach them, and where responsibility for the data sits. The portal's About
-page carries the same content in summary form.
+page carries the same content in shorter form.
 
 ## Who runs AusMT
 

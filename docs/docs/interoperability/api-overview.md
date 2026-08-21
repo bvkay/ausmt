@@ -54,7 +54,7 @@ Responses are gzipped when the client asks for it, and byte ranges are supported
 answers `206`), so a large bundle download can resume.
 
 No `Cache-Control` header is set. A proxy or CDN in front of the site therefore applies its own
-heuristic freshness rather than an instruction from us, and a cached copy can be stale for a while. If
+heuristic freshness rather than an instruction from the server, and a cached copy can be stale for a while. If
 being current matters to your workflow, read `data/build.json` and compare its `build_id` rather than
 trusting a cache.
 
@@ -86,14 +86,14 @@ origin has to fetch it server-side or hard-code the values it needs.
 
 There is no preflight handler. An `OPTIONS` request answers `405`. A plain `fetch()` for JSON never
 preflights, so this costs you nothing in practice, but a request that sets a custom header will
-preflight and then fail. Don't set one.
+preflight and then fail. Do not set one.
 
 ---
 
 ## Integrity
 
 Every artifact row in the download manifest carries the `size` and the `sha256` of the bytes the server
-will hand you, so a download is checkable end to end without asking us anything:
+will hand you, so a download is checkable end to end without a second request:
 
 ```bash
 curl -sO "$BASE/data/bundles/vulcan-2022-edi.zip"
@@ -171,7 +171,7 @@ alive, an invalidation story for its cache, and a second place where every acces
 implemented correctly, and none of that buys a reader anything measurable at this size. The corpus
 that would change the answer is one where the catalogue no longer fits in a client's memory or a
 single request; AusMT is roughly two orders of magnitude away, and this page should be rewritten
-when it isn't.
+when it is not.
 
 There is an upside worth naming. Nothing here can fail separately from the files. There is no service
 to run out of connections and no index that can fall behind the data it indexes. Load changes how fast

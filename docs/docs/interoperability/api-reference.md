@@ -392,11 +392,11 @@ for r in man["files"]:
     open(r["url"].split("/")[-1], "wb").write(body)
 ```
 
-Note that the `files` filter above matches on the survey DISPLAY name, which is what a manifest row
-carries, not the slug. `au.<slug>.` as a prefix test on `ausmt_id` works too and is less fragile.
+The `files` filter above matches on the survey DISPLAY name, which is what a manifest row carries,
+not the slug. `au.<slug>.` as a prefix test on `ausmt_id` works too and is less fragile.
 
 An embargoed survey has no rows in the manifest at all. Its bytes are withheld by construction, so
-there's nothing to request and no access error to handle, while its catalogue record stays public.
+there is nothing to request and no access error to handle, while its catalogue record stays public.
 
 ### Bounding-box fetch
 
@@ -487,7 +487,7 @@ The two files are gated differently, and the difference matters if you loop over
 | `dimensionality.json` | Full record | `404`, never written |
 
 So `station.json` always resolves and is worth requesting for any station; `dimensionality.json` should
-only be requested when the survey's `access` is `open`. Check `mtcat.json` first, and don't treat that
+only be requested when the survey's `access` is `open`. Check `mtcat.json` first, and do not treat that
 `404` as a transport error.
 
 There is no index of product directories. Directory listing is off. Build the paths from the slug and

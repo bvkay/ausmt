@@ -250,7 +250,7 @@ diagnostics, never alone.
 | `algorithm` | string or null | processing algorithm |
 | `remote_reference` | boolean | whether remote reference is stated |
 | `remote_site` | string or null | the named reference station, where the header encodes one |
-| `file_written_by` | object | `{name, version}` — the program that **wrote** the file, verbatim from its header; either member is null where the header does not state it |
+| `file_written_by` | object | `{name, version}`, the program that **wrote** the file, verbatim from its header; either member is null where the header does not state it |
 | `note` | string or null | the arrangement detail from the source file's free text |
 
 `software` and `file_written_by` are two different facts and are usually two different programs. An
@@ -258,7 +258,7 @@ EDI HEAD's `PROGNAME`/`PROGVERS` names whatever serialised the file, which acros
 is a database or plotting exporter (Geotools, WinGLink, MTpy) that estimated nothing; the program
 that produced the transfer function is named only in the file's free text ("Processing code:
 LEMIMT", "processing.software.name = ['Birrp 5.0', ' 5.2']"). `software` is mined from that text and
-is null where the file names no processor — which means *not stated*, never *not used*. The writer
+is null where the file names no processor, which means *not stated*, never *not used*. The writer
 is reported separately under `file_written_by` rather than being published as the processor.
 
 ### 1.10 distribution
