@@ -69,3 +69,34 @@ surveys) and the optional ones (provenance, collections, build), joins them by a
 station table, and renders; all exports are client-side. Submissions flow through the gateway, not
 through direct pull requests ([Submission](../operations/submission.md)); published packages enter
 `ausmt-surveys`, and the next build serves them.
+
+## The build report
+
+`build_report.json` is the structured per-survey record of what a build produced: stations built and
+stations dropped (each with the gate's reason), the survey-scoped warnings, EMTF-XML emission failures,
+the ingest source of each station (`edi`, `emtfxml` or `mth5`), the served-bytes integrity result for
+copied EDIs, the parse-only fallbacks, the canonical-conditioning and frame notes aggregated by distinct
+note, the build-cache counters, per-survey wall time, and the build's peak RSS. Its identity fields
+come from the helpers that write `build.json`, so the two cannot disagree about which commits produced
+a build.
+
+It is not a public surface. The curator workbench reads it over the private listener, and
+`scripts/verify.py`, the alert and doctor scripts read it from disk. It carries no stability promise and
+is not a contract. Its schema is `engine/schema/build_report.schema.json` (JSON Schema draft-07, `$id`
+`https://ausmt.org/schema/build-report-1.0.schema.json`); the build validates the document in its
+self-check and the verify step re-checks its presence, its schema and a station-count cross-check
+against the download manifest. Every survey entry is a closed object; `totals` is
+`{surveys, stations_built, warnings}`.
+
+Three things it states that nothing else does. `ingest_sources` is the only record of which stations
+the EDI-wins rule resolved to EDI and which came from EMTF XML; an `emtfxml` station's served EDI is
+generated, so the digest of the file the custodian supplied matches neither of its manifest rows.
+`source_integrity` is the evidence that a copied custodian EDI landed byte for byte: a mismatch removes
+the served file, drops its manifest row and raises a counted warning. `source_parse_fallbacks` lists
+the files read through a normalised temporary copy (the mt_metadata 1.0.9 `>INFO` JSON defect); the
+copy is never served or hashed, and the custodian's bytes are what is served.
+
+An `xml_failures` entry means different things by source. An `edi`-sourced station falls back to its
+custodian EDI and loses only its XML download; an `emtfxml`-sourced station has no custodian file
+behind it and serves nothing, and the build removes the two unverified files. Every such entry is also
+counted into `warnings`, so a green build cannot hide it.

@@ -297,6 +297,73 @@ The element reference and the date rule are in
 
 ---
 
+## Download inventory: manifest.json
+
+`/data/manifest.json` is the index of every downloadable artifact: what exists for a station or a
+survey, in which format, where it is served, and with what size and SHA-256. It is the download index,
+not a metadata contract. What it promises is the row shape: every row of `files[]` and of `bundles[]`
+carries `url`, `size`, `sha256`, `format`, `tier` and `license`, and the build validates the document
+against `engine/schema/manifest.schema.json` (JSON Schema draft-07, `$id`
+`https://ausmt.org/schema/manifest-1.0.schema.json`) before publishing it. The portal's own download
+resolver reads the same document. Where this page and the schema disagree, the schema is right.
+
+Four top-level keys: `generated_count` (integer, `len(files) + len(bundles)`, a cheap sanity check after
+parsing), `base_url` (optional string, `""` meaning portal-relative), `files` (one row per downloadable
+file per station) and `bundles` (one row per pre-built per-survey download). An empty deployment emits
+`{ "generated_count": 0, "base_url": "", "files": [], "bundles": [] }`. Rows are closed
+(`additionalProperties: false`), so an unrecognised key in a row is a validation failure rather than a
+local extension; the document root stays open.
+
+| Key | In | Type | Meaning |
+|---|---|---|---|
+| `url` | both | string or null | where the artifact is served. A `repo` row is a portal-relative path joined onto `base_url`; an `nci` row is an absolute THREDDS file-server URL; `null` only when an `nci` survey has no resolvable base. A served filename is not derivable from the station id, so read the path rather than templating one. |
+| `size` | both | integer | bytes of the served artifact |
+| `sha256` | both | string, 64 hex | SHA-256 of the bytes the server hands you |
+| `format` | both | string | `edi`, `emtfxml` or `mth5` in `files[]`; `edi-zip`, `xml-zip` or `mth5` in `bundles[]`. `mth5` in `files[]` is one station's transfer function; in `bundles[]` it is the whole survey's. |
+| `tier` | both | string | `repo` or `nci` |
+| `license` | both | string | the survey's licence as declared. A row exists only for a redistributably licensed survey, so it is always a redistributable one. A `LICENSE.txt` carrying it rides inside each zip; the MTH5 bundle carries it as `release_license` on `Experiment/Surveys/<slug>`. |
+| `canon_license` | both, optional | string | the de-aliased licence id; group and compare on this, not on `license` |
+| `custodian` | both, optional | string or null | custodian of record, falling back to the survey's organisation |
+| `survey` | both | string | the survey's display name, not the slug |
+| `ausmt_id` | `files[]` | string | `au.<slug>.<station>[.<variant>]`, the join key to `mtcat.json` `stations[].station_id` and to `station.json`. To filter by slug, test for the prefix `au.<slug>.` |
+| `station` | `files[]` | string | station id within the survey |
+| `slug` | `bundles[]` | string | the survey slug, the key used in bundle filenames; group bundles per survey on this |
+| `n_stations` | `bundles[]` | integer | stations inside the bundle |
+
+Four rules govern how to read it.
+
+URLs are portal-relative by default. The served forms are `edi/<slug>/<file>.edi`,
+`xml/<slug>/<station>.xml`, `h5/<slug>/<station>.h5`, `bundles/<slug>-edi.zip`, `bundles/<slug>-xml.zip`
+and `bundles/<slug>-tf.h5`. The portal joins each url onto its configured data base, so moving a tier
+to NCI is a manifest change with no consumer edits. Handle both tiers by checking whether the `url`
+already starts with a scheme.
+
+Integrity across builds. Every digest is of the served bytes. A served EDI and the per-survey EDI zip
+are byte-reproducible across builds given a fixed zlib and, for a generated EDI, a fixed mt_metadata:
+the writer stamps its own name and version into the EDI's HEAD block, so a toolchain bump moves the
+digest of every generated EDI without any change to the transfer function, and a copied custodian EDI
+is unaffected. The only clock-dependent field an EMTF-XML-sourced station's EDI would carry is its
+`FILEDATE`, and the build stamps that from the date the source document declares. Within those pins the
+SHA-256 is a stable cross-build invariant. EMTF XML, the EMTF-XML zip and the transfer-function MTH5
+embed timestamps and UUIDs and are not byte-reproducible: their SHA-256 is a per-build
+download-integrity hash, not a cross-build invariant.
+
+The manifest lists only what AusMT serves. Only redistributably licensed surveys with an open access
+level appear. A non-served station has no row and the portal routes it to the source archive; an
+embargoed survey has no rows at all, so there is no access error to handle and no request to make. The
+manifest is also the only statement of which formats a station has.
+
+The MTH5 products are flag-gated. The deployment's `flags:` configuration enables them:
+`survey_h5_enabled` produces the per-survey transfer-function MTH5 bundle and `station_h5_enabled` the
+per-station MTH5 files, and both ship enabled; the collection-level producer and its portal tile ship
+disabled. The EDI, the EMTF XML, the EDI zip and the EMTF-XML zip are unconditional for a served
+survey. The manifest is authoritative for what a build produced, whatever its configuration says.
+
+The schema id carries the version. A minor update may add optional keys; an incompatible change bumps
+the major version and ships as a separate schema file, mirroring the MTCAT policy.
+
+---
+
 ## Fetching data today
 
 These are the patterns for the current build, as opposed to the frozen snapshots described under

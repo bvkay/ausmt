@@ -20,8 +20,8 @@ different version, the served document is the authority for that deployment.
 |---|---|---|---|---|
 | MTCAT catalogue | `/data/mtcat.json`, `/data/products/mtcat.json` | `engine/schema/mtcat.schema.json` | 2.0 | [MTCAT schema](mtcat-schema.md) |
 | MTCAT schema | `/data/mtcat.schema.json`, `/data/schemas/mtcat/2.0/mtcat.schema.json` | itself | 2.0 | [MTCAT schema](mtcat-schema.md#normative-artifact) |
-| Download manifest | `/data/manifest.json`, `/data/products/manifest.json` | `engine/schema/manifest.schema.json` | 1.0 | [Download manifest schema](manifest-schema.md) |
-| Build report | `/data/build_report.json` | `engine/schema/build_report.schema.json` | 1.0 | [Build report schema](build-report-schema.md) |
+| Download manifest | `/data/manifest.json` | `engine/schema/manifest.schema.json` | 1.0 | [Download inventory](../interoperability/api-reference.md#download-inventory-manifestjson) |
+| Build report | `/data/build_report.json` | `engine/schema/build_report.schema.json` | 1.0 | [Build lifecycle](../developer/build-lifecycle.md#the-build-report) |
 | Station catalogue | `/data/catalogue.json`, `/data/products/catalogue.json` | `contract/columns.json` | 16 columns | [Portal data files](../developer/data-files.md) |
 | Science diagnostics | `/data/sci.json` | `contract/columns.json` | 12 columns | [Portal data files](../developer/data-files.md) |
 | Transfer-function curves | `/data/tf.json` | `contract/columns.json` | 18 columns | [Portal data files](../developer/data-files.md) |
@@ -57,8 +57,7 @@ Not served; they define what the served documents are built from.
 
 ## Reading the field entries
 
-The numbered field entries on [MTCAT schema](mtcat-schema.md), [Download manifest
-schema](manifest-schema.md), [Build report schema](build-report-schema.md), the
+The numbered field entries on [MTCAT schema](mtcat-schema.md), the
 [survey.yaml reference](survey-yaml.md), [Per-station products](station-products.md) and the
 [Releases tier](releases.md) carry the same rows.
 

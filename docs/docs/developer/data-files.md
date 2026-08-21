@@ -159,14 +159,14 @@ so safe to extend, and a key is absent rather than null when a survey declares n
 ([Served documents](../reference/portal-documents.md#surveysjson)).
 
 `manifest.json` is the key-based download index beside the positional catalogue
-([Download manifest schema](../reference/manifest-schema.md)). Download metadata is added beside the
+([Download inventory](../interoperability/api-reference.md#download-inventory-manifestjson)). Download metadata is added beside the
 positional arrays, never as new `catalogue`/`sci`/`tf` columns; extend it by adding keys. It is written
 to both the portal data dir and the `--products` dir. A row exists only for what AusMT serves; a
 non-served station has no row and the portal routes it to the source archive via `r[13] = 0`. The
 bundle set is flag-gated by `flags:` in `portal/portal.config.yaml`, mirrored to `config.js`, read by
 the build and recorded in `build_provenance.json` under `distribution_flags`; the EDI zip and the
 EMTF-XML zip are unconditional for a served survey. Which digests are cross-build invariants is stated
-under [Integrity across builds](../reference/manifest-schema.md#integrity-across-builds); do not write a
+in the [download inventory](../interoperability/api-reference.md#download-inventory-manifestjson); do not write a
 test that asserts otherwise.
 
 The per-station products `station.json` and `dimensionality.json` under
@@ -181,7 +181,7 @@ or interpretation caveat, a `provenance` block and any companion assets; the ste
 `ausmt_science/decomposition/`.
 
 `mtcat.json` ([MTCAT schema](../reference/mtcat-schema.md)) declares its schema version in
-`portal.version`. `build_report.json` ([Build report schema](../reference/build-report-schema.md))
+`portal.version`. `build_report.json` ([the build report](build-lifecycle.md#the-build-report))
 reuses the identity helpers `build.json` uses, so the recorded commits cannot drift between the two, and
 one shared function produces both its `conditioning` array and the build's `[xml] NOTICE` log lines.
 `build_provenance.json` records the dimensionality thresholds by reading the named constants in

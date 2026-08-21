@@ -4,8 +4,9 @@ Seven JSON documents, one GeoJSON document and one feed are served under `/data/
 artifact behind them. Their shape is defined by the build that writes them (the GeoJSON additionally by
 RFC 7946), and this page is their field reference.
 
-The documents that do have a schema artifact are covered by [MTCAT schema](mtcat-schema.md),
-[Download manifest schema](manifest-schema.md) and [Build report schema](build-report-schema.md). The
+The documents that do have a schema artifact are covered by [MTCAT schema](mtcat-schema.md), the
+[download inventory](../interoperability/api-reference.md#download-inventory-manifestjson) and
+[the build report](../developer/build-lifecycle.md#the-build-report). The
 positional arrays are covered by [Portal data files](../developer/data-files.md), which is the
 authoritative definition of the column contract.
 

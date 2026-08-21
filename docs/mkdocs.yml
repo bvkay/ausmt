@@ -36,8 +36,6 @@ nav:
   - Reference:
       - Machine-readable surfaces: reference/index.md
       - MTCAT schema: reference/mtcat-schema.md
-      - Download manifest schema: reference/manifest-schema.md
-      - Build report schema: reference/build-report-schema.md
       - survey.yaml reference: reference/survey-yaml.md
       - Per-station products: reference/station-products.md
       - Served documents: reference/portal-documents.md
