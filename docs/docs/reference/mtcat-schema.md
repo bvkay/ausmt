@@ -885,9 +885,10 @@ The breaking list:
 The additions (all optional, none breaking): `surveys[].description`, `surveys[].subjects[]`,
 `surveys[].sample_rates_hz[]`, `surveys[].coordinates_state`, and the defined-but-not-yet-emitted
 `stations[].has_time_series` / `surveys[].n_stations_time_series_verified` pair. The
-`related_identifiers[].relation` vocabulary widened to nine values (HasMetadata joined, with a
-`scheme` member for such rows); AusMT emits no HasMetadata row yet because no genuine metadata target
-exists until the per-survey metadata document lands.
+`related_identifiers[].relation` vocabulary widened to nine values: `References`,
+`IsIdenticalTo` and `HasMetadata` join the six 1.2 values (HasMetadata rows may carry a `scheme`
+member naming the metadata family at the target); AusMT emits no HasMetadata row yet because no
+genuine metadata target exists until the per-survey metadata document lands.
 
 For a consumer, the practical migration is: stop special-casing nulls and empty arrays (test for key
 PRESENCE instead), stop reading the top-level library versions, and read upstream-source links from
