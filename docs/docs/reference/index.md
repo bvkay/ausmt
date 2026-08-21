@@ -1,7 +1,8 @@
 # Reference
 
-The machine-readable surfaces AusMT publishes, in two tiers: the public contracts, each with the
-artifact that defines it and the page that documents it field by field, and the download surface.
+The machine-readable surfaces AusMT publishes: the public contracts, each with the artifact that
+defines it and the page that documents it field by field, and the download surface. Nothing else
+under `/data` is a public surface.
 Paths are relative to the portal root: `/data/mtcat.json` means `<portal root>/data/mtcat.json`.
 
 ## Documentation versions

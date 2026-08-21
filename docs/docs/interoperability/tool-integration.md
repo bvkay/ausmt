@@ -174,8 +174,8 @@ more than one survey (`SA225_2.edi` under both `auslamp-musgraves-apy-2016` and 
 `B1.edi` under two others). Flatten manifest paths to basenames across surveys and one file overwrites
 the other silently.
 
-**A withheld station is still in the catalogue.** Its `mtcat.json` record and its `station.json` exist;
-the record carries `"withheld": true` and no derived science, and there is no manifest row.
+A withheld station is still in the catalogue. Its `mtcat.json` record and its `station.json` exist;
+the `station.json` carries `"withheld": true` and no derived science, and there is no manifest row.
 
 **Coordinates may be generalised or absent.** A generalised position is rounded to 0.1°, roughly 11 km.
 A withheld one is `null`; guard for it before any numeric comparison, because JavaScript compares null

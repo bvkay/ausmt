@@ -29,7 +29,7 @@ the production enables.
    resolutions applied; station-id variants disambiguated.
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings go to `qc_report.json`.
 7. Emit: the JSON product set, per-station products, canonical EMTF XML, bundles, the SHA-256 manifest
-   and the digest sidecar verify reads (operator-only, never a served surface).
+   and the digest sidecar that verify reads (operator-only, never a served surface).
 8. Verify (`scripts/verify.py`, run separately by the deployment Makefile): schema checks plus the
    cache-independent consistency check of served XML against current survey.yaml, read off the digest
    sidecar.
