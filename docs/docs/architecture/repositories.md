@@ -15,30 +15,26 @@ ausmt/deploy      Container images and deployment configuration
 ausmt/maintainer  Design and security decision records
 ```
 
-The `ausmt` subdirectories are released together. `ausmt-surveys` has its own lifecycle.
-
 ## Component roles
 
 **ausmt-surveys** holds the published scientific record: one folder per survey under `surveys/`, plus
 the package template, a worked example, the survey validator and the migration scripts for retired
-`survey.yaml` fields. It holds published products only, no raw time series and no processing
-environment. See [Survey package](../data-model/survey-package.md).
+`survey.yaml` fields. No raw time series and no processing environment. See
+[Survey package](../data-model/survey-package.md).
 
 **engine** is the offline build. It parses packages with mt_metadata, computes the screening
-diagnostics (apparent resistivity and phase, tipper, phase tensor, dimensionality), and writes the
-portal's data products, the canonical EMTF XML and the download bundles. Its dependencies are
-mt_metadata, MTH5, numpy and a YAML parser; heavier libraries are adopted only when a derived product
-needs them, and none reach the portal. See [Build lifecycle](../developer/build-lifecycle.md).
+diagnostics, and writes the portal's data products, the canonical EMTF XML and the download bundles.
+Its dependencies are mt_metadata, MTH5, numpy and a YAML parser; none reach the portal. See
+[Build lifecycle](../developer/build-lifecycle.md).
 
 **gateway** receives uploads into quarantine, scans them, validates them, builds a preview, and
-publishes an approved package as a git commit. A reviewed commit is its only output. See
+publishes an approved package as a git commit, its only output. See
 [Submission](../operations/submission.md).
 
 **portal** is the public discovery and access interface: map, collection, survey and station views,
 downloads, citation export, and the machine-readable JSON products. It reads generated products and
-computes nothing scientific; it may display a phase-tensor plot but must not compute one from an EDI at
-request time. That keeps the site free of the scientific Python stack and every published number
-reproducible from a build.
+computes nothing scientific (it may display a phase-tensor plot; it must not compute one from an EDI at
+request time), which keeps every published number reproducible from a build.
 
 ## Information flow
 
@@ -46,17 +42,14 @@ reproducible from a build.
 submissions -> ausmt/gateway -> ausmt-surveys -> ausmt/engine -> generated products -> ausmt/portal
 ```
 
-The engine reads survey packages and writes generated products into the portal's data directory. It
-does not write back into the survey repository. The only component that writes to `ausmt-surveys` is
-the gateway's publish step. Nothing downstream modifies what is published upstream.
+The engine writes generated products into the portal's data directory and never back into the survey
+repository; the only component that writes to `ausmt-surveys` is the gateway's publish step. Nothing
+downstream modifies what is published upstream.
 
-## Why the data lives in its own repository
-
-Code, documentation and the website share a release cycle. Published survey products have a different
-audience, release cycle and access rules, so they stay separate, and the private embargo boundary is a
-repository boundary rather than a convention. One repository per survey would multiply permissions,
-workflows and places for metadata to drift; a folder per survey inside `ausmt-surveys` is enough for
-almost every case.
+Code, documentation and the website share a release cycle; published survey products have a different
+audience, release cycle and access rules, so they stay in their own repository, and the embargo boundary
+is a repository boundary rather than a convention. A folder per survey inside `ausmt-surveys` is enough
+for almost every case.
 
 ## Trust boundaries
 

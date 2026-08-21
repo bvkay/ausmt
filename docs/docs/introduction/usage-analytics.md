@@ -2,43 +2,39 @@
 
 AusMT records anonymous, aggregate usage of the served data (how much is downloaded, which datasets,
 from which countries, how many portal visits) for research-infrastructure reporting to AuScope and for
-custodian conversations ("your survey was downloaded N times from M countries"). There are no cookies,
-no cross-site tracking and no per-user identity. Only aggregate counts are stored.
+custodian conversations. There are no cookies, no cross-site tracking and no per-user identity. Only
+aggregate counts are stored.
 
 ## What is measured
 
 | Metric | Source |
 | --- | --- |
-| Downloads by survey, station and format | Server access-log paths (`/data/edi`, `/data/xml`, `/data/bundles`, `/data/releases/<tag>/bundles`) resolved through the build's `manifest.json`. A release bundle matches by filename and keeps its own row. |
+| Downloads by survey, station and format | Access-log paths (`/data/edi`, `/data/xml`, `/data/bundles`, `/data/releases/<tag>/bundles`) resolved through the build's `manifest.json`. A release bundle matches by filename and keeps its own row. |
 | Download volume | The response size the log records, summed per survey and per artifact. |
 | Single-station file vs whole-survey bundle | Whether the manifest resolved the path to a per-station artifact or a survey package, globally and per survey. |
-| Countries per survey | How many distinct countries downloaded a survey. Only the count is reported; a named survey beside a named country is a small enough cell to identify a group. |
-| Portal visits | One `catalogue.json` fetch per single-page-app boot, the only server-observable visit signal. |
-| API requests | Fetches of `/data/products/manifest.json`, `/data/mtcat.json`, `/data/mtcat.schema.json` and `/data/stations.geojson`, the machine-readable entry points the portal itself never fetches. A path class and an upper bound: a person can click the footer link. Counted as documents, so both published paths of one document count. |
-| Distinct networks per day, peak per month | Masked networks (/24 or /48) seen that day; the addresses exist only in memory while the day is folded. One network can be an institution, so this is reach, not people. |
-| Requests by country, Australian requests by state | The masked address resolved to a country, and for Australia to a state or territory. Reported as a request count and as a split into downloads, visits, API requests and volume. State is the finest grain. |
-| Client class | The user-agent resolves to crawler, scripted or browser while the day is folded and is never stored. Crawlers are excluded from every figure; scripted clients (`curl`, `wget`, `python-requests`, no user-agent) are counted and their share reported separately, because they are programmatic scientific use. |
-| Bulk map exports vs single downloads | The file requests a map export was going to make anyway carry a query flag (`sel=bulk`). Reported as a file count and as an export-event proxy (distinct masked networks per day, a floor). |
+| Countries per survey | How many distinct countries downloaded a survey. Only the count: a named survey beside a named country is a small enough cell to identify a group. |
+| Portal visits | One `catalogue.json` fetch per single-page-app boot. |
+| API requests | Fetches of `/data/products/manifest.json`, `/data/mtcat.json`, `/data/mtcat.schema.json` and `/data/stations.geojson`, the entry points the portal itself never fetches. An upper bound (a person can click the footer link), counted as documents. |
+| Distinct networks per day, peak per month | Masked networks (/24 or /48) seen that day; addresses exist only in memory while the day is folded. One network can be an institution. |
+| Requests by country, Australian requests by state | The masked address resolved to a country, and for Australia to a state or territory, as a request count and a split into downloads, visits, API requests and volume. State is the finest grain. |
+| Client class | The user-agent resolves to crawler, scripted or browser while the day is folded and is never stored. Crawlers are excluded from every figure; scripted clients (`curl`, `wget`, `python-requests`, no user-agent) are counted and their share reported separately. |
+| Bulk map exports vs single downloads | The file requests a map export was going to make anyway carry a query flag (`sel=bulk`). Reported as a file count and as an export-event proxy (distinct masked networks per day). |
 | Downloads by collection | The `collection_id` of the survey, from the served catalogue document. |
 | Daily series and calendar-month rollups | Downloads, volume, formats, visits, API requests and networks per UTC day, accumulated per month as each day folds. |
 
-A download is counted once per day, per masked network, per file, and a request counts whether the
-server returned the whole file (200) or a range of it (206). One download action does not produce one
-log line: a browser requests, cancels on the attachment header and re-requests from its download
-manager; a resumed transfer writes one line per range. Bytes of every request still sum. Visits and API
-requests are not de-duplicated.
-
-Per-station and per-survey page views are not counted and cannot be: the portal loads the catalogue
-once and renders every view in the browser with no further server request. User identification,
-sessions and funnels are never collected.
+A download is counted once per day, per masked network, per file, whether the server returned the whole
+file (200) or a range (206), because one download action does not produce one log line: a browser
+re-requests from its download manager, and a resumed transfer writes one line per range. Bytes of every
+request still sum. Visits and API requests are not de-duplicated. Per-station and per-survey page views
+cannot be counted: the portal loads the catalogue once and renders every view in the browser. User
+identification, sessions and funnels are never collected.
 
 ## Privacy design
 
-- IP addresses are masked at the edge. The web server truncates every client address at write time
-  (IPv4 to a /24, IPv6 to a /48). Address-bearing headers (`X-Forwarded-For`, `X-Real-IP`,
-  `Forwarded`, `Referer`) and credentials (`Cookie`, `Authorization`) are dropped from the log.
-- Only aggregates are retained. The published `stats.json` contains no address, masked or otherwise,
-  and no user-agent string.
+- IP addresses are masked at the edge: the web server truncates every client address at write time
+  (IPv4 to a /24, IPv6 to a /48), and drops address-bearing headers (`X-Forwarded-For`, `X-Real-IP`,
+  `Forwarded`, `Referer`) and credentials (`Cookie`, `Authorization`) from the log.
+- Only aggregates are retained. The published `stats.json` contains no address and no user-agent string.
 - The raw log rotates with about seven days of retention; it is for debugging, not the database.
 - One label, and only one. When you export a map selection the portal adds `sel=bulk` to the file
   requests it was already making. No separate request is made for the label, and
@@ -52,33 +48,31 @@ sessions and funnels are never collected.
 | Record | Kept for | Why |
 | --- | --- | --- |
 | Raw access log (masked) | about 7 days | debugging only |
-| Daily aggregate rows | 92 days | a rolling operational view without fine-grained history |
+| Daily aggregate rows | 92 days | a rolling operational view |
 | Monthly rollup rows | indefinitely | pure counts with no address, path or identity; quarterly and year-over-year reporting |
 | Daily aggregate archive | indefinitely | one line of pure counts per folded day, no geography, never served or rendered |
 
 Each month is accumulated as its days fold, so expiring a daily row never loses the month. Each month
 records how many days it covers, how many predate the detailed dimensions, how many were folded under
-the current counting rules, and how many contributed a country; those figures travel in the monthly CSV
+the current counting rules and how many contributed a country; those figures travel in the monthly CSV
 export. Nothing is backfilled: a breakdown starts from the day it was added, an older day carries no
-network count (absent, not zero), and a month with no detailed days reads "not measured" rather than
-zero. The bulk-versus-single split records its own start date in the aggregate, and the screen names
-that day.
+network count (absent, not zero), and a month with no detailed days reads "not measured". The
+bulk-versus-single split records its own start date and the screen names that day.
 
 ## Australian traffic by state, and why not by city
 
-Australia is the reporting audience, so beneath the AU row the screen can show a breakdown by state or
-territory. It stops at state, deliberately. A /24 or /48 prefix cannot place a request in a city (mobile
-carriers and CGNAT pools serve an entire state from one prefix), and a city cell would be
-quasi-identifying in a research community this small. There is no city dimension anywhere in the
-pipeline; the city and coordinate columns of the source dataset are read only to be discarded. Country
-and state counts exist at the monthly and cumulative grains only, and the daily archive carries no
-geography.
+Beneath the AU row the screen can show a breakdown by state or territory, and it stops there. A /24 or
+/48 prefix cannot place a request in a city (mobile carriers and CGNAT pools serve a state from one
+prefix), and a city cell would be quasi-identifying in a research community this small. There is no city
+dimension anywhere in the pipeline; the city and coordinate columns of the source dataset are read only
+to be discarded. Country and state counts exist at the monthly and cumulative grains only, and the daily
+archive carries no geography.
 
 The request count always reconciles with its parent: an Australian request the state table does not
-cover lands in a "Not in the state table" row, and requests counted before state data existed get their
-own row, so the state rows add up to the AU figure exactly. The download, visit, API and volume columns
-began later than the request count and read "not measured" where they predate it. Where the state table
-is absent the screen shows no state section, because eight zeroes would read as "no traffic".
+cover lands in a "Not in the state table" row, requests counted before state data existed get their own
+row, and the state rows add up to the AU figure exactly. The download, visit, API and volume columns
+began later and read "not measured" where they predate the request count. Where the state table is
+absent the screen shows no state section.
 
 ## Geolocation data attribution
 
@@ -89,13 +83,13 @@ Australian state table is derived from DB-IP's IP to City Lite database, both un
 > from <https://db-ip.com>, licensed under
 > [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/).
 
-Both are monthly CSVs of IP ranges read by a small standard-library lookup; AusMT uses no MaxMind
-tooling and holds no licence key. If the country CSV is absent or out of date, country resolves to
-`unknown` and every other metric is unaffected. The City Lite CSV is never retained: a preparation
-script distils an Australia-only `start_ip,end_ip,state_code` table and the download is deleted.
+Both are monthly CSVs of IP ranges read by a standard-library lookup; AusMT uses no MaxMind tooling and
+holds no licence key. If the country CSV is absent or out of date, country resolves to `unknown` and
+every other metric is unaffected. The City Lite CSV is never retained: a preparation script distils an
+Australia-only `start_ip,end_ip,state_code` table and the download is deleted.
 
 ## Operating it
 
 The aggregator runs as a daily host timer and the workbench Analytics screen (under Operations) renders
 the result. Installing the timer, refreshing the DB-IP Country CSV and rebuilding the state table are
-operator chores documented in `deploy/README.md` under "Usage analytics".
+documented in `deploy/README.md` under "Usage analytics".

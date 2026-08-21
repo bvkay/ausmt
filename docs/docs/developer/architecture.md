@@ -1,9 +1,8 @@
 # Developer architecture
 
-The entry point for maintaining or extending the AusMT code: where everything lives, how data flows,
-and the boundaries changes must respect.
+Where everything lives, how data flows, and the boundaries changes must respect.
 
-## Repositories and top-level layout
+## Layout
 
 ```text
 ausmt-surveys/    curated survey packages: survey.yaml + transfer_functions/ per survey,
@@ -43,12 +42,12 @@ survey.yaml + transfer_functions/
               products
 ```
 
-Steps, exit codes, run modes, the incremental cache and the verification step are in
+Steps, exit codes, run modes, the cache and the verification step are in
 [Build lifecycle](build-lifecycle.md).
 
 ## The submission pipeline
 
-The gateway is three containers (compose profile `gateway`):
+Three containers (compose profile `gateway`):
 
 ```text
 gateway     FastAPI intake + curator UI. Streams uploads to quarantine, enforces size and
@@ -61,15 +60,9 @@ gw-runner   the engine image with the gateway package bind-mounted, network disa
 
 States are fail-closed: RECEIVED, SCANNED, VALIDATED, QUARANTINED, REJECTED_AV, RETURNED, REJECTED,
 PUBLISHING, PUBLISH_FAILED, PUBLISHED. Publishing is a git commit and push to `ausmt-surveys`; serving
-the result requires a separate engine rebuild by the operator. The curator metadata editor round-trips
-survey.yaml through the runner (ruamel.yaml), enforces a semantic-version bump with release notes, and
-commits through the same publish path.
-
-## The positional data contract
-
-`catalogue.json`, `sci.json` and `tf.json` are bare arrays decoded by index in two languages, from one
-source of order (`contract/columns.json`). Read [Portal data files](data-files.md) before touching any
-of the three, and follow the recipes in [How to extend](extending.md).
+the result requires a separate engine rebuild. The curator metadata editor round-trips survey.yaml
+through the runner (ruamel.yaml), enforces a semantic-version bump with release notes, and commits
+through the same publish path.
 
 ## Module map
 
@@ -92,51 +85,35 @@ Engine (`engine/extract/`):
 | `_contract.py` | generated column constants; do not edit by hand |
 
 `engine/ausmt_science/` holds `ingest.normalize` (the canonical EMTF XML store) and planned product
-stubs (`strike`, `distortion`, `decomposition`, `exports`, `provenance`, `quicklooks`) that are not
-wired into the build.
+stubs (`strike`, `distortion`, `decomposition`, `exports`, `provenance`, `quicklooks`) not wired into
+the build.
 
 Gateway (`gateway/`): `app.py` (intake + curator routes), `upload.py` (streamed, capped intake),
 `states.py`, `db.py`, `checklist.py`, `publish.py` (preflight, commit, push, rollback), `orcid.py`,
-`clamd.py`, and `runner/` (the job loop, safe extraction, validation, preview, metadata edit), which
-the gw-runner container executes.
+`clamd.py`, and `runner/` (the job loop, safe extraction, validation, preview, metadata edit).
 
-Portal (`portal/src/`): plain JavaScript with no module system and no build step. `index.html` loads
-scripts in dependency order: `contract, security, state, data, plots, map, filters, drawer, exports,
-main, tour`, with `analytics-shim` loaded separately in the head so the page keeps a
-`script-src 'self'` policy. `add-survey.html` loads `security`, `contract` and `doi_harvest`, the last
-shared byte for byte with the curator editor.
+Portal (`portal/src/`): plain JavaScript, no module system, no build step. `index.html` loads scripts
+in dependency order: `contract, security, state, data, plots, map, filters, drawer, exports, main,
+tour`, with `analytics-shim` loaded separately in the head so the page keeps a `script-src 'self'`
+policy. `add-survey.html` loads `security`, `contract` and `doi_harvest`, the last shared byte for byte
+with the curator editor.
 
-## Ownership boundaries
+## Ownership and trust boundaries
 
 - `ausmt-surveys` owns the definition of a survey and the source bytes. A survey slug is permanent.
-- `engine/` owns all computation and the column order; no raw time series, no presentation logic.
-- `gateway/` owns intake, curation state and publication; it holds no science.
-- `portal/` owns presentation; it computes nothing scientific and owns no source of truth.
-- `contract/` owns the column order. Both generated forms are committed and CI-checked.
+- `engine/` owns all computation and the column order. `_mtm` owns parsing; `_ediparse` owns the
+  phase-tensor math. `extract/` ships; `ausmt_science/` (except `ingest`) is scaffolding.
+- `gateway/` owns intake, curation state and publication, and holds no science.
+- `portal/` owns presentation and no source of truth.
+- `contract/` owns the column order; both generated forms are committed and CI-checked.
 - `docs/` owns the human specification. Where documentation and code disagree, code wins on contracts
   and formulas; documentation wins on governance principles.
-- Within the engine, `extract/` is the shipping path and `ausmt_science/` (except `ingest`) is
-  scaffolding. `_mtm` owns parsing; `_ediparse` owns the phase-tensor math. Do not re-implement either.
 
-## Trust boundaries
+Content parsing happens only in the network-disabled runner container, and `safe_component` sanitises
+DATAID and slug values before they touch paths or markup. Submitter contact details live only in the
+gateway database and never enter the package tree, reports, logs or git. The deployment binds all
+published ports to loopback; external access is by the operator's reverse proxy or tailnet
+(`deploy/README.md`). What must not break is listed in [Conventions](conventions.md).
 
-The four boundaries are stated in [Architecture](../architecture/repositories.md#trust-boundaries).
-Here: content parsing happens only in the network-disabled runner container, and `safe_component`
-sanitises DATAID and slug values before they touch paths or markup. Submitter contact details live only
-in the gateway database and never enter the package tree, reports, logs or git. The deployment binds
-all published ports to loopback; external access is by the operator's reverse proxy or tailnet
-(`deploy/README.md`).
-
-## What must not break
-
-1. Column order and row alignment of `catalogue`, `sci` and `tf`.
-2. Uniqueness and stability of `ausmt_id`; it keys URLs, exports and products.
-3. The single-source status of `_ediparse.pt_params` and of `contract/columns.json`.
-4. The `extract/` and `ausmt_science/` separation.
-5. Provenance fidelity: `build_provenance.json` describes what ran.
-6. Fail-closed behaviour: gateway states, validator resolution, embargo and licence gates refuse rather
-   than guess.
-
-The repository root `RUNBOOK-DEV.md` has the test-suite commands, the local portal server and the
-development environment; `deploy/README.md` is the operator runbook. [How to extend](extending.md) has
-the ordered recipes.
+The repository root `RUNBOOK-DEV.md` has the test-suite commands and the local portal server;
+`deploy/README.md` is the operator runbook; [How to extend](extending.md) has the ordered recipes.

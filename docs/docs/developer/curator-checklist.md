@@ -4,8 +4,6 @@ The validator (`ausmt-surveys/_validation/validate_survey.py`) checks structure 
 the human review a curator does before a survey is published. The rationale is in
 [Review](../operations/review.md).
 
-## Before approving a survey package
-
 **Automated gate**
 
 - [ ] Validation passed with no `FAIL` (gateway submissions: the validator report in the curator queue;
@@ -35,36 +33,30 @@ the human review a curator does before a survey is published. The rationale is i
 - [ ] The transfer functions sit under `transfer_functions/edi|emtfxml|mth5/` and are the format their
       extension claims. `.zmm`/`.zrr`/`.j` need `--allow-optin-formats` and are stored rather than
       parsed.
-- [ ] Where a station is supplied in more than one format, the EDI is what gets served. Check
+- [ ] Where a station is supplied in more than one format, the EDI is what gets served; check
       `build_report.json`'s `ingest_sources` for the preview build.
 - [ ] No `xml_failures` rows in the preview `build_report.json`. A station supplied only as EMTF XML
-      that fails the canonical round trip serves nothing, so it must be fixed upstream.
-- [ ] The EDI `>INFO` pre-flight was read. Gateway submissions carry it already: the runner writes
-      `reports/edi-preflight.json` and puts a bounded summary into the preview warnings. For a direct-PR
-      contribution, or any package on disk:
+      that fails the canonical round trip serves nothing and must be fixed upstream.
+- [ ] The EDI `>INFO` pre-flight was read. Gateway submissions carry it already (the runner writes
+      `reports/edi-preflight.json` and puts a bounded, worst-first summary into the preview warnings).
+      For a direct-PR contribution, or any package on disk:
 
     ```
     python -m extract.edi_preflight <package-or-directory> --json preflight.json
     ```
 
-    It reads only, changes nothing, always exits 0, and reports three things per station:
-
-    - **will not read.** The file does not open in the reader AusMT uses and has to be fixed by whoever
-      produced it. A reference latitude written `--26.0322667` (a doubled minus) is the real example;
-      `capricorn-2010`'s `CP3B21.edi` carries it.
-    - **needs the `>INFO` repair.** AusMT reads the file only via the parse-only fallback recorded in
-      [`source_parse_fallbacks`](../reference/build-report-schema.md#211-surveyssource_parse_fallbacks).
-      246 of the 312 EDIs in the GSSA Western Gawler 2023 delivery are in this state. Worth telling the
-      custodian, because every other tool reading their file hits the same wall.
-    - **reads, but damage on the way in.** These build green and nothing else mentions them: metadata
-      values stored with a trailing comma (141 of 159 scraped values on one Western Gawler station), and
-      number fields that carry their units in the value, such as a contact resistance written
-      `2.5 kilo-ohms`, which are dropped in silence and publish empty.
-
-    Only the first is a reason to hold a package. The other two are reasons to write to the custodian.
-    The bounded summary is ordered worst first; `reports/edi-preflight.json` holds the full per-station
-    detail on the server, keeping the first few damaged-value samples per file plus the true count. The
-    CLI prints every one.
+    It reads only, changes nothing, always exits 0, and reports three classes per station. **Will not
+    read**: the file does not open in the reader AusMT uses and has to be fixed by whoever produced it
+    (a reference latitude written `--26.0322667`, a doubled minus, is the real example;
+    `capricorn-2010`'s `CP3B21.edi` carries it). **Needs the `>INFO` repair**: AusMT reads the file only
+    via the parse-only fallback recorded in
+    [`source_parse_fallbacks`](../reference/build-report-schema.md#211-surveyssource_parse_fallbacks);
+    246 of the 312 EDIs in the GSSA Western Gawler 2023 delivery are in this state. **Reads, but damage
+    on the way in**: metadata values stored with a trailing comma (141 of 159 scraped values on one
+    Western Gawler station), and number fields that carry their units in the value (a contact resistance
+    written `2.5 kilo-ohms`), which are dropped in silence and publish empty. Only the first is a reason
+    to hold a package; the other two are reasons to write to the custodian. `reports/edi-preflight.json`
+    holds the full per-station detail on the server; the CLI prints every finding.
 
 **Coordinates**
 
@@ -82,7 +74,7 @@ the human review a curator does before a survey is published. The rationale is i
 **Provenance**
 
 - [ ] Dataset-level identifiers are typed `related_identifiers[]` rows with the right `identifies`
-      level, not flat `dataset_doi`/`collection_pid` values. Run `_tools/migrate_identifiers.py` if the
+      level, not flat `dataset_doi`/`collection_pid` values; run `_tools/migrate_identifiers.py` if the
       deprecation warnings fire.
 - [ ] The survey has at least one provenance identifier, or the absence is acknowledged.
 - [ ] Processing software and method are recorded where known.
