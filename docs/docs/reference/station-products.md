@@ -347,10 +347,10 @@ public catalogue already exposes.
 {
   "ausmt_id": "au.kalkaroo-2022.KD-C3",
   "station": "KD-C3",
-  "survey": "Kalkaroo 2022",
+  "survey": "Kalkaroo 2020-21",
   "country": "Australia",
-  "organisation": "…",
-  "access": { "level": "embargoed", "embargo_until": null, "served": false },
+  "organisation": "Adelaide University",
+  "access": { "level": "embargoed", "embargo_until": "2027-02-01", "served": false },
   "distribution": { "edi_available": false, "license": "…", "edi_path": null },
   "withheld": true,
   "note": "This survey's access state withholds its derived science products …"

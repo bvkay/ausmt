@@ -5,8 +5,8 @@ getting bytes out. [How AusMT serves data](api-overview.md) covers the architect
 [Tool integration](tool-integration.md) covers reading the artifacts from MT software, and the
 [Reference section](../reference/index.md) documents every document field by field.
 
-Counts and sizes quoted here describe a corpus of 21 surveys and 1,418 stations and move with the
-corpus. The shapes and the rules do not.
+Counts and sizes quoted here describe the live corpus on 2026-08-21, 27 surveys and 2,625 stations,
+and move with the corpus. The shapes and the rules do not.
 
 ---
 
@@ -47,75 +47,96 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 
 | URL | Bytes | What it is |
 |---|---|---|
-| `/data/mtcat.json` | 276 kB | The discovery document. Portal identity, surveys, stations, collections. Start here. |
-| `/data/mtcat.schema.json` | 7.8 kB | The JSON Schema the document above validates against. |
-| `/data/surveys.json` | 54 kB | Full per-survey metadata, including credit and citation. |
-| `/data/catalogue.json` | 320 kB | One positional row per station. |
-| `/data/stations.geojson` | 390 kB | Every station that has a position, as a GeoJSON point layer. Open it in a GIS. |
-| `/data/sci.json` | 93 kB | Per-station derived diagnostics, aligned to the catalogue by index. |
-| `/data/tf.json` | 3.2 MB | Per-station transfer-function curves, thinned, aligned by index. |
-| `/data/collections.json` | 1.8 kB | Programme groupings. |
-| `/data/manifest.json` | 828 kB | The download manifest: every fetchable artifact with size and SHA-256. |
-| `/data/products/manifest.json` | 975 kB | The same document, indented. |
+| `/data/mtcat.json` | 511 kB | The discovery document. Portal identity, surveys, stations, collections. Start here. |
+| `/data/mtcat.schema.json` | 21 kB | The JSON Schema the document above validates against; the same bytes sit at `/data/schemas/mtcat/2.0/mtcat.schema.json`. |
+| `/data/surveys.json` | 78 kB | Full per-survey metadata, including credit and citation. |
+| `/data/catalogue.json` | 621 kB | One positional row per station. |
+| `/data/stations.geojson` | 773 kB | Every station that has a position, as a GeoJSON point layer. Open it in a GIS. |
+| `/data/sci.json` | 165 kB | Per-station derived diagnostics, aligned to the catalogue by index. |
+| `/data/tf.json` | 7.1 MB | Per-station transfer-function curves, thinned, aligned by index. |
+| `/data/collections.json` | 1.9 kB | Programme groupings. |
+| `/data/manifest.json` | 2.5 MB | The download manifest: every fetchable artifact with size and SHA-256. |
+| `/data/products/manifest.json` | 2.9 MB | The same document, indented. |
 | `/data/build.json` | 300 B | Build identity and library versions. |
 | `/data/build_provenance.json` | 1.3 kB | How this build was produced and with what parameters. |
-| `/data/feed.xml` | 3.3 kB | Atom feed of surveys, newest first. |
+| `/data/feed.xml` | 4.2 kB | Atom feed of surveys, newest first. |
 
 `/data/manifest.json` and `/data/products/manifest.json` parse to identical content. The build writes
-one compact and one indented, so the compact form is 147 kB smaller as raw bytes and the indented one
-is readable in a browser. Don't pick on size. Gzipped they are 126 kB and 127 kB, under 1 kB apart, so
-the choice costs nothing either way. The portal's own resolver reads `/data/manifest.json`.
+one compact and one indented, so the compact form is 427 kB smaller as raw bytes and the indented one
+is readable in a browser. Do not pick on size. Gzipped they are both 362 kB, under 1 kB apart, so the
+choice costs nothing either way. The portal's own resolver reads `/data/manifest.json`.
 
 ### `mtcat.json`
 
 MTCAT is the document to harvest. It is small, schema-versioned and designed to be read by a catalogue
-that is not AusMT. Four top-level keys carry the payload, plus two that record the library versions the
-build ran against:
+that is not AusMT. Four top-level keys carry the payload, and nothing else is emitted at the top level:
 
 ```json
 {
   "portal": { "portal_id": "ausmt", "portal_name": "...", "schema": "mtcat",
               "version": "2.0", "schema_url": "mtcat.schema.json",
-              "metadata_license": "CC0-1.0", "generated_at": "2026-07-27T08:29:39Z" },
+              "metadata_license": "CC0-1.0", "generated_at": "2026-08-21T04:12:19Z" },
   "surveys":     [ ... ],
   "stations":    [ ... ],
-  "collections": [ ... ],
-  "mt_metadata_version": "1.0.9",
-  "mth5_version": "0.6.8"
+  "collections": [ ... ]
 }
 ```
 
-Read the schema version off `portal.version` rather than assuming one, and mean it. This page describes
-**2.0**, which is what the current engine writes; a deployment serving an older build serves fewer keys.
-`additionalProperties` stays true on every record object, so a consumer written against one minor
-version reads another without changes as long as it treats an absent key as absent rather than as empty.
+Read the schema version off `portal.version` rather than assuming one. This page describes **2.0**, which
+is what the merged engine writes. 2.0 is a MAJOR version: the 1.x document served `null` for every
+undeclared optional key, served `formats: []` for a withheld survey, carried `surveys[].sources[]` and
+`surveys[].changes`, and carried the library versions `mt_metadata_version` and `mth5_version` at the
+top level. All four are gone. A deployment whose data build predates the change still serves a `1.2`
+document with those shapes, so branch on `portal.version` if you read more than one deployment. The
+library versions remain in `build.json` and `build_provenance.json`.
+
+The 2.0 rule is absence: an optional key the producer cannot honestly state is omitted, never `null`
+and never an empty array or object. The one defined null is a station's paired `latitude`/`longitude`,
+meaning the position is not published. `collections` is present only when at least one collection
+exists. Test for key presence, not for `null`. `additionalProperties` stays true on every record object,
+so a consumer written against one minor version reads a later one without changes.
 
 `portal.schema_url` is served next to the document, so a harvester can validate without resolving
-anything off-site. `portal.metadata_license` is `CC0-1.0` and covers the catalogue metadata only; a
+anything off-site; the schema's immutable `$id` is `/data/schemas/mtcat/2.0/mtcat.schema.json`, the
+copy to cache by. `portal.metadata_license` is `CC0-1.0` and covers the catalogue metadata only; a
 survey's data licence is the separate `license` field on its own record and varies by survey.
 
 Survey records are identified by `survey_id` (the survey's slug). Required on every record are `survey_id`,
-`title`, `organisation` and `country`. Six more facets are derived from the document's own `stations[]`
-and from the build's download manifest, so a harvester can size and band-filter a survey without walking
-the station list:
+`title`, `organisation` and `country`. These facets are derived from the document's own `stations[]`,
+from the build's download manifest and from explicit run metadata, so a harvester can size and filter a
+survey without walking the station list:
 
 | Field | Derived from | Note |
 |---|---|---|
 | `n_stations` | `stations[]` | `stations[]` stays authoritative if the two ever disagree. |
-| `data_types` | `stations[].data_type` | A map of band to station count, in the order BBMT, LPMT, AMT, GDS. |
-| `period_min_s`, `period_max_s` | per-station period ranges | `null` when no station reports a range. |
+| `data_types` | `stations[].data_type` | A map of band to station count, in the order BBMT, LPMT, AMT, GDS; omitted for a survey with no stations. |
+| `period_min_s`, `period_max_s` | per-station period ranges | Omitted when no station reports a range. |
 | `n_stations_tipper` | per-station component lists | Compare against `n_stations` to read tipper coverage. |
-| `formats` | the download manifest | The formats actually served. Empty for a survey whose bytes are withheld. |
+| `sample_rates_hz` | explicit run metadata | Distinct acquisition rates in Hz, sorted ascending; omitted when no run declares one. Never inferred from instrument type or period coverage. |
+| `formats` | the download manifest | The formats distributed for this survey; omitted when none is. |
 | `year_start`, `year_end` | the survey's declared dates | Passed through, never inferred from file timestamps. |
+| `coordinates_state` | the declared coordinate policy | `exact`, `generalised` or `withheld`; omitted when the survey declares no policy. A `withheld` state forbids `bbox` and `centroid`. |
 
 `formats` is not curated. It is read off the manifest the same build has just written, so an embargoed
-survey serves `[]`. Empty means "this build distributes nothing for this survey"; it never means
-"unknown".
+or metadata-only survey OMITS the key: its holdings and their formats are known, they are simply not
+distributed, and an empty list would have said "no formats known". Absence is "no distribution
+statement", never "unknown holdings".
+
+Two curated fields join the facets in 2.0: `description`, a discovery blurb (the survey's explicit
+discovery text, else its abstract when within 1200 characters, never truncated by the engine), and
+`subjects[]`, rows of `{code, scheme, label?, uri?}` passed through verbatim from curation. The relation
+vocabulary on `related_identifiers[]` is nine values, `References`, `IsIdenticalTo` and `HasMetadata`
+having joined the 1.x six; a HasMetadata row may carry a `scheme` naming the metadata family at the
+target.
 
 Station records are flat and small: `station_id` (the `ausmt_id`), `survey_id`, `latitude`, `longitude`
 and `data_type`. `data_type` is one of `AMT`, `BBMT`, `LPMT`, `GDS` or `unknown`, derived from the
 station's shortest period and which transfer functions are present. The survey does not declare it.
-Latitude and longitude are nullable, because a custodian can withhold a position.
+Latitude and longitude are nullable, paired, because a custodian can withhold a position. The schema
+also defines `stations[].has_time_series` (the constant `true`, present only when the catalogue has
+verified that a time-series resource exists) and its survey count `n_stations_time_series_verified`;
+the engine emits neither yet, so both are absent everywhere, which under the absence rule asserts
+nothing.
 
 Every field, including the credit and provenance blocks and the access fields, is documented field by
 field in the [MTCAT schema reference](../reference/mtcat-schema.md), which also explains how to read a
@@ -157,7 +178,7 @@ The full field set is in [Served documents](../reference/portal-documents.md#sur
 
 ### `catalogue.json`
 
-One row per station, 1,418 rows in the live corpus. **The rows are positional arrays, not objects.**
+One row per station, 2,625 rows in the live corpus. **The rows are positional arrays, not objects.**
 There are no field names in the file. You read by index.
 
 The authoritative column map is `/src/contract.js`, generated from `contract/columns.json`, which is
@@ -184,7 +205,7 @@ Columns are only ever appended, never reordered.
 | 15 | `site_name` | string or null | Original pre-sanitisation site name, when it differs from index 0 |
 
 `sci.json` and `tf.json` are aligned to this file **by array index only**, with no key on the wire.
-`catalogue[i]`, `sci[i]` and `tf[i]` describe the same station. All three have 1,418 entries in the
+`catalogue[i]`, `sci[i]` and `tf[i]` describe the same station. All three have 2,625 entries in the
 live corpus. Their columns are enumerated in
 [Portal Data Files](../developer/data-files.md), which is the authoritative definition.
 
@@ -193,8 +214,8 @@ Two facts about withheld surveys, both verifiable on `au.kalkaroo-2022.KD-C3`:
 - its `tf.json` entry is 18 empty arrays, one per column, so the width and the index alignment hold;
 - its `sci.json` entry has the science-derived fields nulled but keeps the processing metadata that
   exists at source, because that describes how the data were processed rather than what the data
-  say. For this station that means `rr` is 0 and `sw` is `"Geotools 4.0.5.12583"`, both public;
-  `alg` is null here because no Kalkaroo station declares one, withheld or not.
+  say. For this station `rr` is 0 and `sw` and `alg` are null, because no Kalkaroo file states a
+  processor; the withheld `vulcan-2024-25` stations carry `sw` `"LEMIMT"`, which is public.
 
 The catalogue row itself stays complete apart from `edi_available`, which is 0. The band, the period
 range and the component list of an embargoed station are public; the curves are not.
@@ -239,8 +260,8 @@ this document carries no bytes.
 
 ### `collections.json`
 
-Programme groupings, keyed by collection id. One entry in the current corpus, `auslamp`, holding nine
-surveys and 459 stations.
+Programme groupings, keyed by collection id. One entry in the current corpus, `auslamp`, holding 14
+surveys and 1,354 stations.
 
 `mtcat.json` carries the same groupings under `collections[]`, keyed the same way, with member surveys
 pointing back through `surveys[].collection_id`. One difference will catch you out. A collection's
@@ -267,7 +288,7 @@ Both are documented field by field in
 ### `feed.xml`
 
 A minimal Atom 1.0 feed at `/data/feed.xml`, not at the site root. One entry per dated survey, newest
-first, 21 entries in the current corpus. The entry id carries the slug, so resolve the survey from
+first, 27 entries in the current corpus. The entry id carries the slug, so resolve the survey from
 there; entries carry no `<link>` element, because the build emits one only when it is given a site base
 URL and the production invocation is not.
 
@@ -310,8 +331,8 @@ the funding source.
 To find a slug, read `/data/mtcat.json`. Its survey records carry the slug under `survey_id`, and
 `/data/surveys.json` carries the same value under `slug`.
 
-Nineteen of the 21 live surveys have bundles, three each, which is the 57 rows in the manifest's
-`bundles` list. The two that don't are the embargoed ones.
+25 of the 27 live surveys have bundles, three each, which is the 75 rows in the manifest's `bundles`
+list. The two that do not are the embargoed ones.
 
 ### Per-station fetch through the manifest
 
@@ -323,7 +344,7 @@ Go through the manifest rather than building paths yourself. A served filename i
 station id, so the manifest is the only correct way to locate one station's file. In the current corpus,
 station A1 of `vulcan-2022` is served as `edi/vulcan-2022/Vulcan_A1.edi`.
 
-A served station has three rows, one per format:
+A served station has up to three rows, one per distributed format:
 
 ```text
 /data/edi/<slug>/<file>.edi     the station's transfer function as EDI
@@ -334,7 +355,9 @@ A served station has three rows, one per format:
 The EDI is the custodian's own file for a station submitted as EDI, and one mt_metadata generated from
 the same transfer function for a station submitted only as EMTF XML. `build_report.json`'s
 `ingest_sources` says which, per station; [EDI is the citable
-artifact](tool-integration.md#edi-is-the-citable-artifact) says what it means for a digest check.
+artifact](tool-integration.md#edi-is-the-citable-artifact) says what it means for a digest check. The
+manifest is also the only statement of which of the three a station has: in the live corpus 246
+stations of one survey have an EDI and an EMTF XML but no per-station MTH5.
 
 `mth5` is the one token that means two different things depending on which list it came from. A
 `files[]` row with `format: "mth5"` is ONE station; a `bundles[]` row with the same token is the whole
@@ -505,12 +528,12 @@ per_survey = collections.Counter(b["format"] for b in man["bundles"])
 print(per_station, per_survey)
 ```
 
-That prints `Counter({'edi': 1182, 'emtfxml': 1182, 'mth5': 1182})` and
-`Counter({'edi-zip': 19, 'xml-zip': 19, 'mth5': 19})` against the current corpus. To ask the same
+That prints `Counter({'edi': 2389, 'emtfxml': 2389, 'mth5': 2143})` and
+`Counter({'edi-zip': 25, 'xml-zip': 25, 'mth5': 25})` against the current corpus. To ask the same
 question per survey, group `bundles` by `slug`.
 
 MTCAT carries a shortcut. Each survey record has a `formats` list derived from that same manifest during
-the same build, so a harvester can filter without fetching 828 kB:
+the same build, so a harvester can filter without fetching 2.5 MB:
 
 ```python
 import json, os, urllib.request
@@ -521,10 +544,11 @@ for s in cat["surveys"]:
         print(s["survey_id"])
 ```
 
-Absence of the key means "not known" rather than "nothing served"; an empty list means the opposite, and
-is what an embargoed survey serves. An AusMT build always derives the key from a manifest it has just
-written, so an AusMT document always carries it. Absence is reserved for a producer with no manifest to
-derive from.
+The key is present only when at least one format is distributed. An embargoed or metadata-only survey
+OMITS it: its holdings and their formats are known, they are simply not served, and MTCAT 2.0 has no
+empty-array state to say so with. A producer with no manifest to derive from omits it too. So absence
+means "no distribution statement", never "nothing exists", and the example above reads a missing key
+as an empty list only because it is selecting surveys to download from.
 
 ---
 

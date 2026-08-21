@@ -43,7 +43,7 @@ For a station submitted as EDI, the served EDI is the file the custodian submitt
 can check that without trusting this page. `catalogue.json` column 14 is the SHA-256 of the source
 transfer-function file, and the manifest's `edi` row for the same station carries the SHA-256 of the
 bytes the server hands you. For an EDI-sourced station those are the same file, so the digests agree.
-Across the live corpus that comparison currently holds for all 1,182 served EDIs, with no mismatches.
+Across the live corpus that comparison currently holds for all 2,389 served EDIs, with no mismatches.
 That is a statement about the corpus as it stands, and the stations below are not part of it.
 
 A station can also arrive as EMTF XML alone, and then there is no original EDI to serve. Its EDI is
@@ -182,15 +182,16 @@ BASE = os.environ["AUSMT_BASE"]             # the portal root you are reading fr
 doc = json.load(urllib.request.urlopen(f"{BASE}/data/mtcat.json"))
 print(doc["portal"]["schema"], doc["portal"]["version"], doc["portal"]["generated_at"])
 print(len(doc["surveys"]), "surveys,", len(doc["stations"]), "stations")
-# mtcat 1.2 2026-07-27T08:29:39Z
-# 21 surveys, 1418 stations
+# mtcat 2.0 2026-08-21T04:12:19Z
+# 27 surveys, 2625 stations
 ```
 
 Four things make it harvestable rather than merely readable.
 
-**The schema travels with the document.** `portal.schema_url` resolves next to `mtcat.json`, and the
-schema's own `$id` is that same URL, so validation needs no off-site resolution and no version guessing.
-Every field, type and controlled vocabulary carries a `description` in the schema itself.
+**The schema travels with the document.** `portal.schema_url` resolves next to `mtcat.json`, so
+validation needs no off-site resolution and no version guessing. The schema's own `$id` is the immutable
+version-specific copy, `/data/schemas/mtcat/2.0/mtcat.schema.json`, which is what to cache by. Every
+field, type and controlled vocabulary carries a `description` in the schema itself.
 
 **Unknown keys are safe.** `additionalProperties` is true on every record object, deliberately, so a
 consumer written against one minor version reads a later one without changes. There is one exception,

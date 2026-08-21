@@ -26,7 +26,7 @@ $ BASE=${AUSMT_BASE:?the portal root you are reading from}
 $ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/data/mtcat.json"
 405
 $ curl -s -o /dev/null -w '%{size_download}\n' "$BASE/data/mtcat.json?survey=vulcan-2022"
-275587
+511363
 $ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/data/"
 404
 ```
@@ -163,8 +163,8 @@ Nor is there any authentication. That is not an omission waiting to be fixed. Th
 public subset by construction, so a private survey is withheld by having no bytes on the server rather
 than by having a guard in front of them. There is nothing for a credential to unlock.
 
-Both of those are choices about scale. The live corpus is 21 surveys, 1,418 stations and 2,421
-downloadable artifacts: a 276 kB discovery document, a 320 kB station catalogue and an 828 kB
+Both of those are choices about scale. The live corpus is 27 surveys, 2,625 stations and 6,996
+downloadable artifacts: a 511 kB discovery document, a 621 kB station catalogue and a 2.5 MB
 download manifest. A client can hold all three in memory and filter them in a loop faster than a
 query API would finish its TLS handshake. A query tier would add an always-on service to keep
 alive, an invalidation story for its cache, and a second place where every access rule has to be
