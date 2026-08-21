@@ -14,7 +14,7 @@ aggregate counts are stored.
 | Single-station file vs whole-survey bundle | Whether the manifest resolved the path to a per-station artifact or a survey package, globally and per survey. |
 | Countries per survey | How many distinct countries downloaded a survey. Only the count: a named survey beside a named country is a small enough cell to identify a group. |
 | Portal visits | One `catalogue.json` fetch per single-page-app boot. |
-| API requests | Fetches of `/data/products/manifest.json`, `/data/mtcat.json`, `/data/mtcat.schema.json` and `/data/stations.geojson`, the entry points the portal itself never fetches. An upper bound (a person can click the footer link), counted as documents. |
+| API requests | Fetches of `/data/products/manifest.json`, `/data/mtcat.json`, `/data/mtcat.schema.json` and `/data/stations.geojson`, the entry points the portal itself never fetches. An upper bound (a person can click the footer link), counted as documents: a document served both at the data root and under `/data/products/` is one entry point, and both of its published paths count. |
 | Distinct networks per day, peak per month | Masked networks (/24 or /48) seen that day; addresses exist only in memory while the day is folded. One network can be an institution. |
 | Requests by country, Australian requests by state | The masked address resolved to a country, and for Australia to a state or territory, as a request count and a split into downloads, visits, API requests and volume. State is the finest grain. |
 | Client class | The user-agent resolves to crawler, scripted or browser while the day is folded and is never stored. Crawlers are excluded from every figure; scripted clients (`curl`, `wget`, `python-requests`, no user-agent) are counted and their share reported separately. |
@@ -56,8 +56,9 @@ Each month is accumulated as its days fold, so expiring a daily row never loses 
 records how many days it covers, how many predate the detailed dimensions, how many were folded under
 the current counting rules and how many contributed a country; those figures travel in the monthly CSV
 export. Nothing is backfilled: a breakdown starts from the day it was added, an older day carries no
-network count (absent, not zero), and a month with no detailed days reads "not measured". The
-bulk-versus-single split records its own start date and the screen names that day.
+network count (absent, not zero), and a month with no detailed days reads "not measured". The exports
+leave an unmeasured cell empty rather than writing a zero into it. The bulk-versus-single split records
+its own start date and the screen names that day.
 
 ## Australian traffic by state, and why not by city
 
@@ -86,7 +87,8 @@ Australian state table is derived from DB-IP's IP to City Lite database, both un
 Both are monthly CSVs of IP ranges read by a standard-library lookup; AusMT uses no MaxMind tooling and
 holds no licence key. If the country CSV is absent or out of date, country resolves to `unknown` and
 every other metric is unaffected. The City Lite CSV is never retained: a preparation script distils an
-Australia-only `start_ip,end_ip,state_code` table and the download is deleted.
+Australia-only `start_ip,end_ip,state_code` table and the download is deleted. The derived table carries
+the DB-IP attribution in its own header, because a file outlives the terminal it was made in.
 
 ## Operating it
 
