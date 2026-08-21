@@ -1,787 +1,679 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://ausmt.auscope.org.au/data/mtcat.schema.json",
-  "title": "MTCAT v1.2: Magnetotelluric Catalogue interchange document",
-  "description": "MTCAT is an open JSON schema for magnetotelluric catalogue discovery. An MTCAT document provides a machine-readable description of the surveys, stations, collections, and metadata exposed by a portal, enabling interoperable discovery across independent MT catalogue systems. v1.2 closes the description gap: every key AusMT actually serves is now typed here (the credit lists creators/contributors, the typed related_identifiers with their level and resolution vocabularies, the collection rollup facets, the document-level tool versions), and it adds the purely DERIVED per-survey discovery facets a harvester previously had to re-derive station by station (n_stations, data_types, period range, tipper count, distributed formats, year range). No new curation and no new science: every added survey field is computed from data the document already carried, or passed through verbatim from metadata the portal already held. Every change is additive and additionalProperties stays true on every record object (see $comment), so v1.0 and v1.1 consumers are unaffected.",
-  "$comment": "ADDITIONALPROPERTIES POLICY (deliberate, not an oversight). Every RECORD-shaped object here keeps additionalProperties:true so that a v1.2 consumer never breaks on a document written to a later minor version, and so that a portal may carry local extensions. There is exactly one exception, surveys[].data_types, which is a MAP and not a record: there `additionalProperties` types the VALUES and `propertyNames` pins the keys, because an unexpected key in a map of band counts is not an extension, it is an unknown band. The schema is therefore PERMISSIVE about unknown keys and STRICT about known ones: a described field is fully typed and, where the value comes from a ratified fail-closed vocabulary, enum-pinned, so a wrong type or an out-of-vocabulary token is a hard validation failure rather than something that rides through unnoticed. AusMT validates its own emitted mtcat.json against this file on every build, so an enum here is a build gate, not documentation. Two deliberate exceptions to enum-pinning are called out on the fields themselves: surveys[].access and collections[].status are described but NOT enum-pinned, because the producer passes an unrecognised value through on purpose and fails closed at serve time, and pinning them here would convert a metadata typo into a failed build rather than a withheld survey. VOCABULARY PROVENANCE: name_type, the contributor roles, identifier_type, relation and identifies are the ratified fail-closed vocabularies enforced upstream at submission; the values are reproduced here so an external harvester can validate without access to the submission tooling. NO $ref IS USED anywhere in this schema, by choice: the document is read by humans and by minimal embedded validators as well as by full draft-07 implementations, so every shape is written out in full even where that repeats a bbox or a credit row.",
-  "type": "object",
-  "required": [
-    "portal",
-    "surveys",
-    "stations"
-  ],
-  "additionalProperties": true,
-  "properties": {
-    "portal": {
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "$id": "https://ausmt.auscope.org.au/data/schemas/mtcat/2.0/mtcat.schema.json",
+ "title": "MTCAT v2.0: Magnetotelluric Catalogue interchange document",
+ "description": "Discovery interchange document for magnetotelluric survey and station holdings. Semantics are defined by the MTCAT specification; this schema enforces the machine-checkable layer. Record objects keep additionalProperties true so later minor versions and local extensions never break validation; described fields are strictly typed and vocabulary fields are enum-pinned.",
+ "type": "object",
+ "required": [
+  "portal",
+  "surveys",
+  "stations"
+ ],
+ "additionalProperties": true,
+ "properties": {
+  "portal": {
+   "type": "object",
+   "description": "identity of the portal that produced this document",
+   "required": [
+    "portal_id",
+    "portal_name",
+    "schema",
+    "version",
+    "generated_at"
+   ],
+   "additionalProperties": true,
+   "properties": {
+    "portal_id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "stable opaque identity token of the producing catalogue; never changes across rebuilds or host migrations, and global keys pair it with survey_id or station_id"
+    },
+    "portal_name": {
+     "type": "string",
+     "description": "human-readable catalogue name; presentational"
+    },
+    "schema": {
+     "type": "string",
+     "const": "mtcat",
+     "description": "document self-identification"
+    },
+    "version": {
+     "type": "string",
+     "pattern": "^[0-9]+\\.[0-9]+$",
+     "description": "schema version this document conforms to, as major.minor"
+    },
+    "schema_url": {
+     "type": "string",
+     "description": "location of this schema served beside the document, relative or absolute, so a harvester can validate without resolving the canonical $id"
+    },
+    "metadata_license": {
+     "type": "string",
+     "description": "licence of the catalogue metadata itself, distinct from per-survey data licences, e.g. an SPDX identifier"
+    },
+    "generated_at": {
+     "type": "string",
+     "description": "UTC build timestamp of this document, ISO 8601",
+     "format": "date-time"
+    }
+   }
+  },
+  "surveys": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "survey_id",
+     "title",
+     "organisation",
+     "country"
+    ],
+    "additionalProperties": true,
+    "properties": {
+     "survey_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "stable discovery identifier of this survey record within the producing catalogue"
+     },
+     "title": {
+      "type": "string",
+      "description": "human-readable survey dataset title"
+     },
+     "organisation": {
+      "type": "string",
+      "description": "organisation with primary custodial responsibility for the represented dataset"
+     },
+     "country": {
+      "type": "string",
+      "description": "country of the holdings"
+     },
+     "doi": {
+      "type": "string",
+      "description": "persistent DOI of the exact dataset or release this record represents, bare form; never a containing collection, report, or activity identifier"
+     },
+     "license": {
+      "type": "string",
+      "description": "licence of the survey's data"
+     },
+     "access": {
+      "type": "string",
+      "description": "normalised access level; open, metadata_only and embargoed are the well-known values. Deliberately not enum-pinned: an unrecognised value means a withheld survey, not a broken document"
+     },
+     "embargo_until": {
+      "type": "string",
+      "description": "date a declared embargo lapses; absent means no declared end date, not open access",
+      "format": "date"
+     },
+     "bbox": {
       "type": "object",
-      "description": "identity of the portal that produced this document",
+      "description": "geographic footprint derived from published station coordinates; omitted when no station is located",
       "required": [
-        "portal_id",
-        "portal_name",
-        "schema",
-        "version",
-        "generated_at"
+       "west",
+       "south",
+       "east",
+       "north"
       ],
       "additionalProperties": true,
       "properties": {
-        "portal_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "portal_name": {
-          "type": "string"
-        },
-        "schema": {
-          "type": "string",
-          "const": "mtcat"
-        },
-        "version": {
-          "type": "string",
-          "pattern": "^[0-9]+\\.[0-9]+$",
-          "description": "MAJOR.MINOR version of the MTCAT schema this document was written against, e.g. '1.2'"
-        },
-        "schema_url": {
-          "type": "string",
-          "description": "location of the MTCAT schema served beside this document, so a harvester can validate mtcat.json without resolving the canonical $id. Relative (e.g. 'mtcat.schema.json') or absolute."
-        },
-        "metadata_license": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "licence of the catalogue metadata itself (distinct from per-survey data licences), e.g. an SPDX identifier such as CC0-1.0"
-        },
-        "generated_at": {
-          "type": "string",
-          "description": "UTC build timestamp of this document, e.g. 2026-07-27T08:29:39Z"
-        }
+       "west": {
+        "type": "number"
+       },
+       "south": {
+        "type": "number"
+       },
+       "east": {
+        "type": "number"
+       },
+       "north": {
+        "type": "number"
+       }
       }
-    },
-    "surveys": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "survey_id",
-          "title",
-          "organisation",
-          "country"
-        ],
-        "additionalProperties": true,
-        "properties": {
-          "survey_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "title": {
-            "type": "string"
-          },
-          "organisation": {
-            "type": "string"
-          },
-          "country": {
-            "type": "string"
-          },
-          "doi": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "license": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "access": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "normalised access level of this survey. AusMT emits exactly one of open, metadata_only or embargoed (the three-value ACCESS_LEVELS tuple the emitter, the curator editor and the survey validator all share). NOT enum-pinned on purpose: the producer normalises but does not coerce an unrecognised level, and anything other than 'open' fails closed at serve time (the bytes are withheld), so an unexpected token here means a withheld survey, not a broken document."
-          },
-          "embargo_until": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "MTCAT 1.2: ISO date the declared embargo lapses, when the survey declares one. Present only for a survey that declares it, so absence means 'no declared end date', not 'not embargoed' (read access for that). An embargo does NOT hide the survey: discovery metadata, station locations and the footprint stay public, only the data bytes are withheld."
-          },
-          "bbox": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "geographic footprint DERIVED from this survey's served station coordinates; null when the survey has no located station",
-            "required": [
-              "west",
-              "south",
-              "east",
-              "north"
-            ],
-            "additionalProperties": true,
-            "properties": {
-              "west": {
-                "type": "number"
-              },
-              "south": {
-                "type": "number"
-              },
-              "east": {
-                "type": "number"
-              },
-              "north": {
-                "type": "number"
-              }
-            }
-          },
-          "centroid": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "centre of the bbox above (not a station density weighting); null when the survey has no located station",
-            "required": [
-              "latitude",
-              "longitude"
-            ],
-            "additionalProperties": true,
-            "properties": {
-              "latitude": {
-                "type": "number"
-              },
-              "longitude": {
-                "type": "number"
-              }
-            }
-          },
-          "n_stations": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "MTCAT 1.2: count of this survey's stations in this document's stations[] array. DERIVED, so it always agrees with stations[]; it exists so a harvester can size a survey without walking every station row.",
-            "$comment": "The station list is authoritative. A consumer that disagrees with this count should trust stations[]."
-          },
-          "data_types": {
-            "type": "object",
-            "description": "MTCAT 1.2: the survey's band mix as {data_type: station count}, DERIVED by counting this survey's stations[] entries. Keys use the same vocabulary as stations[].data_type. A survey with no stations serves an empty object. Emitted in the canonical band order BBMT, LPMT, AMT, GDS.",
-            "propertyNames": {
-              "type": "string",
-              "enum": [
-                "AMT",
-                "BBMT",
-                "LPMT",
-                "GDS",
-                "unknown"
-              ]
-            },
-            "additionalProperties": {
-              "type": "integer",
-              "minimum": 0
-            }
-          },
-          "period_min_s": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "description": "MTCAT 1.2: shortest period in seconds across this survey's stations, DERIVED as the minimum of the per-station period minima. null when no station reports a period range.",
-            "exclusiveMinimum": 0
-          },
-          "period_max_s": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "description": "MTCAT 1.2: longest period in seconds across this survey's stations, DERIVED as the maximum of the per-station period maxima. null when no station reports a period range.",
-            "exclusiveMinimum": 0
-          },
-          "n_stations_tipper": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "MTCAT 1.2: how many of this survey's stations carry a tipper (vertical magnetic transfer function), DERIVED from the per-station component list. Always less than or equal to n_stations; compare the two to read tipper availability across the survey."
-          },
-          "formats": {
-            "type": "array",
-            "description": "MTCAT 1.2: the distribution formats actually served for this survey, DERIVED from the build's download manifest and therefore honest by construction: a survey whose bytes are withheld (embargoed or metadata-only) has no manifest rows and so serves an empty array. Sorted for stability, and a set rather than a tally: a format appears once however many files carry it. EMPTY means 'this build distributes nothing for this survey', which covers a withheld survey and equally a metadata-only build that produced no download artifacts at all; it never means 'unknown'. AusMT's own build always derives from the manifest it has just written, so the key is ALWAYS PRESENT in an AusMT document. Absence is reserved for a producer that has no manifest to derive from, and there means 'not known' rather than 'nothing served'.",
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "enum": [
-                "edi",
-                "edi-zip",
-                "emtfxml",
-                "mth5",
-                "xml-zip"
-              ]
-            }
-          },
-          "year_start": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "description": "MTCAT 1.2: first year of acquisition the survey declares; null when the survey declares no date. Passed through from the survey's declared date range, never inferred from file timestamps."
-          },
-          "year_end": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "description": "MTCAT 1.2: last year of acquisition the survey declares; null when the survey declares no date, and equal to year_start for a single-season survey."
-          },
-          "version": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "survey semantic version, e.g. 1.0.0"
-          },
-          "collection_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "id of the collection/programme this survey belongs to, if any. Matches a collections[].collection_id in this document when the collection is published here."
-          },
-          "organisation_ror": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "ROR (Research Organization Registry) identifier of the custodian organisation, if declared"
-          },
-          "raid": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "RAiD (Research Activity Identifier) of the project, if declared, e.g. https://raid.org/10.12345/AB1234"
-          },
-          "creators": {
-            "type": "array",
-            "description": "MTCAT 1.2 (described; served since the credit model landed): the citation authors of this release, as DataCite creators. ORDER IS SEMANTICALLY LOAD-BEARING: it is the citation author order and must be preserved verbatim by any consumer that re-renders a citation. Present only when the survey declares creators; a survey without them serves no key (absent means undeclared, not empty).",
-            "items": {
-              "type": "object",
-              "required": [
-                "name"
-              ],
-              "additionalProperties": true,
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "the creator as cited, e.g. 'Kay, Ben' for a person or the full legal name for an organisation"
-                },
-                "name_type": {
-                  "type": "string",
-                  "enum": [
-                    "person",
-                    "organisation"
-                  ],
-                  "description": "which kind of actor this is (DataCite nameType). Ratified fail-closed vocabulary."
-                },
-                "orcid": {
-                  "type": "string",
-                  "description": "ORCID iD of a person creator, bare (0000-0002-9738-7277) or as a full https://orcid.org/ URL. Omitted when the row declares none: a creator without an ORCID carries no orcid key rather than a null."
-                },
-                "ror": {
-                  "type": "string",
-                  "description": "ROR identifier of an organisation creator. Omitted when the row declares none."
-                }
-              }
-            }
-          },
-          "contributors": {
-            "type": "array",
-            "description": "MTCAT 1.2 (described; served since the credit model landed): who did what on this release, as DataCite contributors. This is the EXPORT form of the list: the survey's own declared contributors in their declared order, followed by the hosting portal appended automatically with role HostingInstitution. Emitted for every survey, because every survey in this document is hosted. Unlike creators[], order here carries no citation meaning.",
-            "items": {
-              "type": "object",
-              "required": [
-                "name"
-              ],
-              "additionalProperties": true,
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "name_type": {
-                  "type": "string",
-                  "enum": [
-                    "person",
-                    "organisation"
-                  ],
-                  "description": "which kind of actor this is (DataCite nameType). Ratified fail-closed vocabulary."
-                },
-                "role": {
-                  "type": "string",
-                  "enum": [
-                    "ProjectLeader",
-                    "ProjectMember",
-                    "DataCollector",
-                    "ContactPerson",
-                    "DataCurator",
-                    "Sponsor",
-                    "RightsHolder",
-                    "Distributor",
-                    "HostingInstitution"
-                  ],
-                  "description": "what this contributor did, as a DataCite contributorType. The first eight are the ratified fail-closed vocabulary a survey may declare; HostingInstitution is reserved for the portal row this export appends and is not a value a survey declares for itself. A mis-typed role publishes a wrong provenance claim, so this vocabulary blocks rather than ships."
-                },
-                "orcid": {
-                  "type": "string",
-                  "description": "ORCID iD of a person contributor, bare or as a full URL. Omitted when the row declares none."
-                },
-                "ror": {
-                  "type": "string",
-                  "description": "ROR identifier of an organisation contributor. Omitted when the row declares none."
-                }
-              }
-            }
-          },
-          "related_identifiers": {
-            "type": "array",
-            "description": "MTCAT 1.2 (described; served since the typed-identifiers model landed): the survey's typed provenance links to related records, chiefly the upstream time-series holdings a transfer-function release derives from. Present only when the survey declares at least one; a survey without any serves no key.",
-            "items": {
-              "type": "object",
-              "additionalProperties": true,
-              "properties": {
-                "identifier": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "the identifier itself, e.g. the bare DOI 10.25914/bzd5-n780"
-                },
-                "identifier_type": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "enum": [
-                    "DOI",
-                    "Handle",
-                    "URL",
-                    "RAiD",
-                    null
-                  ],
-                  "description": "what kind of identifier this is. Ratified fail-closed vocabulary; null on a legacy row that declared none."
-                },
-                "relation": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "enum": [
-                    "IsDerivedFrom",
-                    "IsVariantFormOf",
-                    "IsSupplementTo",
-                    "Cites",
-                    "IsPartOf",
-                    "IsSourceOf",
-                    null
-                  ],
-                  "description": "how THIS survey relates to the identified record, as a DataCite relationType (read it as 'this survey <relation> that record'). Derived upstream from `identifies` where that is declared. Ratified fail-closed vocabulary; null on a legacy row that predates the typed model."
-                },
-                "custodian": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "who holds the identified record, e.g. NCI. Free text, because the custodian may be any archive."
-                },
-                "identifies": {
-                  "type": "string",
-                  "enum": [
-                    "collection",
-                    "raw_packed",
-                    "level0",
-                    "level1",
-                    "level2",
-                    "level3",
-                    "entire"
-                  ],
-                  "description": "WHAT the identifier points at, in NCI data-level terms: collection = the parent record; raw_packed = raw/packed time series; level0 = edited time series; level1 = transformed time series; level2 = processed frequency-domain data (EDI, transfer functions); level3 = models; entire = one record covering all levels. Ratified fail-closed vocabulary. Omitted on a legacy row that predates the level model, so absence means 'level not stated', not 'no level applies'."
-                },
-                "resolution": {
-                  "type": "string",
-                  "enum": [
-                    "ok",
-                    "reserved"
-                  ],
-                  "description": "whether this identifier currently resolves, from a cached check the build consumes but never performs: ok = resolves today; reserved = registered but not yet active (the registrar returns not-found). ABSENT means unknown, never 'broken': a consumer should still link an identifier with no resolution key. Never null, because unknown is expressed by omitting the key."
-                }
-              }
-            }
-          },
-          "attribution": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "rights of THIS release: custodian of record, the verbatim required attribution statement, and the CC-BY changes-made flag and summary. Present only when the survey declares it. MTCAT 1.2 types the inner keys, which v1.1 carried but left opaque; the object stays open because the declaring vocabulary may add keys ahead of this schema.",
-            "additionalProperties": true,
-            "properties": {
-              "custodian": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "rights holder of record for this release, which may differ from the acquiring organisation"
-              },
-              "custodian_ror": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "ROR identifier of the custodian above, when declared"
-              },
-              "statement": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "the attribution statement to reproduce VERBATIM when the upstream licence prescribes wording. Reproduce it as given; do not reformat or abbreviate it."
-              },
-              "changes_made": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
-                "description": "whether this release changed the upstream material (CC-BY 4.0 section 3(a) requires indicating modification)"
-              },
-              "changes_summary": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "plain-language summary of what was changed, when changes_made is true"
-              },
-              "declared_by": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "who recorded this rights declaration"
-              },
-              "declared_date": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "ISO date the rights declaration was recorded, e.g. 2026-07-25. This is the date of the DECLARATION, not of the data."
-              }
-            }
-          },
-          "sources": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "description": "upstream source datasets this release was built from, one entry per obtained dataset. Present only when the survey declares them. MTCAT 1.2 types the row keys, which v1.1 carried but left opaque.",
-            "items": {
-              "type": "object",
-              "additionalProperties": true,
-              "properties": {
-                "title": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "title of the upstream dataset as obtained"
-                },
-                "custodian": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "who published the upstream dataset"
-                },
-                "identifier": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "identifier of the upstream dataset, e.g. a DOI or a catalogue id"
-                },
-                "identifier_type": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "enum": [
-                    "DOI",
-                    "Handle",
-                    "URL",
-                    "RAiD",
-                    null
-                  ],
-                  "description": "what kind of identifier the row carries. Same ratified vocabulary as related_identifiers[].identifier_type."
-                },
-                "relation": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "enum": [
-                    "IsDerivedFrom",
-                    "IsVariantFormOf",
-                    "IsSupplementTo",
-                    "Cites",
-                    "IsPartOf",
-                    "IsSourceOf",
-                    null
-                  ],
-                  "description": "how this release relates to the source. Same ratified vocabulary as related_identifiers[].relation."
-                },
-                "identifies": {
-                  "type": "string",
-                  "enum": [
-                    "collection",
-                    "raw_packed",
-                    "level0",
-                    "level1",
-                    "level2",
-                    "level3",
-                    "entire"
-                  ],
-                  "description": "which data level the source identifier points at. Same ratified vocabulary as related_identifiers[].identifies."
-                },
-                "licence": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "licence the source dataset was obtained under (note the spelling: this key is `licence`, unlike the survey-level `license`)"
-                },
-                "retrieved": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "when the source was obtained, at whatever precision is known, e.g. 2016-05"
-                },
-                "statement": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "attribution wording the source custodian prescribes, to be reproduced verbatim"
-                },
-                "profile": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "which custodian attribution profile applies when composing the notice, e.g. ga or generic"
-                }
-              }
-            }
-          },
-          "changes": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "the survey's declared changes descriptor (CC-BY 4.0 section 3(a)). Present only when the survey declares changes_made. MTCAT 1.2 types the inner keys, which v1.1 carried but left opaque.",
-            "additionalProperties": true,
-            "properties": {
-              "made": {
-                "type": "boolean",
-                "description": "whether the upstream material was changed in producing this release"
-              },
-              "summary": {
-                "type": "string",
-                "description": "plain-language summary of the changes; empty string when changes were declared without a summary"
-              }
-            }
-          }
-        }
-      }
-    },
-    "stations": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "station_id",
-          "survey_id",
-          "latitude",
-          "longitude",
-          "data_type"
-        ],
-        "additionalProperties": true,
-        "properties": {
-          "station_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "globally unique station identifier"
-          },
-          "survey_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "the surveys[].survey_id this station belongs to"
-          },
-          "latitude": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "minimum": -90,
-            "maximum": 90,
-            "description": "WGS84 latitude in decimal degrees. A published position may be deliberately generalised where site access requires it, so treat it as the position the custodian chose to publish, not necessarily the surveyed position."
-          },
-          "longitude": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "minimum": -180,
-            "maximum": 180,
-            "description": "WGS84 longitude in decimal degrees; see the latitude note on generalised positions"
-          },
-          "data_type": {
-            "type": "string",
-            "enum": [
-              "AMT",
-              "BBMT",
-              "LPMT",
-              "GDS",
-              "unknown"
-            ],
-            "description": "MTCAT 1.2 pins the band vocabulary this key always carried: AMT = audio-magnetotelluric (shortest period under 1e-3 s); BBMT = broadband (shortest period under 1 s); LPMT = long period; GDS = geomagnetic depth sounding, a tipper-only station with no impedance; unknown = no period range could be read. The band is DERIVED from the station's shortest period and which transfer functions are present, not declared by the survey. Canonical presentation order is BBMT, LPMT, AMT, GDS."
-          }
-        }
-      }
-    },
-    "collections": {
-      "type": "array",
-      "description": "optional collections/programmes grouping multiple surveys (e.g. AusLAMP); rollup only. A collection holds no transfer functions of its own: all scientific provenance stays with its member surveys.",
-      "items": {
-        "type": "object",
-        "additionalProperties": true,
-        "required": [
-          "collection_id",
-          "title"
-        ],
-        "properties": {
-          "collection_id": {
-            "type": "string",
-            "description": "id member surveys point at via surveys[].collection_id. Grouping is an EXACT string match."
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "e.g. programme"
-          },
-          "status": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "MTCAT 1.2: lifecycle state of the programme. AusMT emits active, completed or archived, and emits null where member surveys declared a value outside that set. NOT enum-pinned on purpose, for the same reason as surveys[].access: the producer already reduces an unrecognised value to null and warns, so pinning it here would add nothing but a way to fail a build."
-          },
-          "start_year": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "description": "MTCAT 1.2: year the programme began, as declared by its member surveys; null when none declares one"
-          },
-          "last_updated": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "MTCAT 1.2: ISO date the programme record was last updated, e.g. 2026-07-12. This is a curation date for the programme description, NOT the acquisition date of any survey and NOT this document's generated_at."
-          },
-          "description": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "MTCAT 1.2: prose description of the programme, as declared by its member surveys"
-          },
-          "n_surveys": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "how many surveys belong to this collection"
-          },
-          "n_stations": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "how many stations the member surveys hold in total"
-          },
-          "bbox": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "MTCAT 1.2 types the inner keys, which v1.1 left as a bare object: the footprint across every member survey's stations, same shape as surveys[].bbox. null when no member station is located.",
-            "required": [
-              "west",
-              "south",
-              "east",
-              "north"
-            ],
-            "additionalProperties": true,
-            "properties": {
-              "west": {
-                "type": "number"
-              },
-              "south": {
-                "type": "number"
-              },
-              "east": {
-                "type": "number"
-              },
-              "north": {
-                "type": "number"
-              }
-            }
-          },
-          "centroid": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "description": "MTCAT 1.2 types the inner keys, which v1.1 left as a bare object. NOTE the difference from surveys[].centroid: a collection centroid is the MEAN of its member station positions, not the centre of its bbox. null when no member station is located.",
-            "required": [
-              "latitude",
-              "longitude"
-            ],
-            "additionalProperties": true,
-            "properties": {
-              "latitude": {
-                "type": "number"
-              },
-              "longitude": {
-                "type": "number"
-              }
-            }
-          }
-        }
-      }
-    },
-    "mt_metadata_version": {
-      "type": [
-        "string",
-        "null"
+     },
+     "centroid": {
+      "type": "object",
+      "description": "centre of the bbox; omitted when no station is located",
+      "required": [
+       "latitude",
+       "longitude"
       ],
-      "description": "MTCAT 1.2 (described; served since the tool-version keys landed): version of the mt_metadata library the producing build ran against, e.g. 1.0.9. null when that library was not available to the build, which is the honest answer rather than an omission."
-    },
-    "mth5_version": {
-      "type": [
-        "string",
-        "null"
+      "additionalProperties": true,
+      "properties": {
+       "latitude": {
+        "type": "number"
+       },
+       "longitude": {
+        "type": "number"
+       }
+      }
+     },
+     "n_stations": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "count of this survey's station records in stations[]"
+     },
+     "data_types": {
+      "type": "object",
+      "description": "band mix as counts per data_type, using the stations[].data_type vocabulary; omitted when the survey has no stations",
+      "propertyNames": {
+       "type": "string",
+       "enum": [
+        "AMT",
+        "BBMT",
+        "LPMT",
+        "GDS",
+        "unknown"
+       ]
+      },
+      "additionalProperties": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "minProperties": 1
+     },
+     "period_min_s": {
+      "type": "number",
+      "description": "shortest period in seconds across the represented transfer functions; omitted when none reports a range",
+      "exclusiveMinimum": 0
+     },
+     "period_max_s": {
+      "type": "number",
+      "description": "longest period in seconds across the represented transfer functions; omitted when none reports a range",
+      "exclusiveMinimum": 0
+     },
+     "n_stations_tipper": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "how many of this survey's stations carry a tipper; at most n_stations"
+     },
+     "formats": {
+      "type": "array",
+      "description": "distribution formats this catalogue currently serves for the survey; emitted only when at least one format is distributed, omitted otherwise (no empty-array state)",
+      "uniqueItems": true,
+      "items": {
+       "type": "string",
+       "enum": [
+        "edi",
+        "edi-zip",
+        "emtfxml",
+        "mth5",
+        "xml-zip"
+       ]
+      },
+      "minItems": 1
+     },
+     "year_start": {
+      "type": "integer",
+      "description": "first declared year of acquisition; omitted when undeclared, never inferred from file timestamps"
+     },
+     "year_end": {
+      "type": "integer",
+      "description": "last declared year of acquisition; equal to year_start for a single season"
+     },
+     "version": {
+      "type": "string",
+      "description": "semantic version of the represented dataset release"
+     },
+     "collection_id": {
+      "type": "string",
+      "description": "collection this survey belongs to, matching a collections[].collection_id"
+     },
+     "organisation_ror": {
+      "type": "string",
+      "description": "ROR identifier of the custodian organisation"
+     },
+     "raid": {
+      "type": "string",
+      "description": "identifier of the related research activity, emitted only when exactly one activity is asserted; surveys with several related activities omit it and express them in richer linked metadata"
+     },
+     "creators": {
+      "type": "array",
+      "description": "citation authors of the release, in citation order; the order is preserved verbatim by consumers",
+      "items": {
+       "type": "object",
+       "required": [
+        "name"
+       ],
+       "additionalProperties": true,
+       "properties": {
+        "name": {
+         "type": "string",
+         "minLength": 1,
+         "description": "the creator as cited"
+        },
+        "name_type": {
+         "type": "string",
+         "enum": [
+          "person",
+          "organisation"
+         ],
+         "description": "person or organisation"
+        },
+        "orcid": {
+         "type": "string",
+         "description": "ORCID iD of a person creator, bare or as a full URL; omitted when none"
+        },
+        "ror": {
+         "type": "string",
+         "description": "ROR identifier of an organisation creator; omitted when none"
+        }
+       }
+      },
+      "minItems": 1
+     },
+     "contributors": {
+      "type": "array",
+      "description": "who did what on the release, as DataCite contributors, in declared order; a hosting-portal row with role HostingInstitution may be appended by the producer",
+      "items": {
+       "type": "object",
+       "required": [
+        "name"
+       ],
+       "additionalProperties": true,
+       "properties": {
+        "name": {
+         "type": "string",
+         "minLength": 1
+        },
+        "name_type": {
+         "type": "string",
+         "enum": [
+          "person",
+          "organisation"
+         ],
+         "description": "person or organisation"
+        },
+        "role": {
+         "type": "string",
+         "enum": [
+          "ProjectLeader",
+          "ProjectMember",
+          "DataCollector",
+          "ContactPerson",
+          "DataCurator",
+          "Sponsor",
+          "RightsHolder",
+          "Distributor",
+          "HostingInstitution"
+         ],
+         "description": "DataCite contributorType; HostingInstitution is reserved for the appended portal row and is not declared by a survey"
+        },
+        "orcid": {
+         "type": "string",
+         "description": "ORCID iD of a person contributor, bare or as a full URL; omitted when none"
+        },
+        "ror": {
+         "type": "string",
+         "description": "ROR identifier of an organisation contributor; omitted when none"
+        }
+       }
+      },
+      "minItems": 1
+     },
+     "related_identifiers": {
+      "type": "array",
+      "description": "typed links to related records; present only when the survey declares at least one",
+      "items": {
+       "type": "object",
+       "additionalProperties": true,
+       "properties": {
+        "identifier": {
+         "type": "string",
+         "description": "the identifier itself, bare form for DOIs",
+         "minLength": 1
+        },
+        "identifier_type": {
+         "type": "string",
+         "enum": [
+          "DOI",
+          "Handle",
+          "URL",
+          "RAiD"
+         ],
+         "description": "kind of identifier; omitted when undeclared"
+        },
+        "relation": {
+         "type": "string",
+         "enum": [
+          "IsDerivedFrom",
+          "IsVariantFormOf",
+          "IsSupplementTo",
+          "Cites",
+          "IsPartOf",
+          "IsSourceOf",
+          "References",
+          "IsIdenticalTo",
+          "HasMetadata"
+         ],
+         "description": "DataCite relationType, read as 'this survey, relation, that record', chosen case by case for the true relation; a HasMetadata target must genuinely provide metadata about the dataset, never an inventory or manifest; omitted when undeclared"
+        },
+        "custodian": {
+         "type": "string",
+         "description": "who holds the identified record"
+        },
+        "identifies": {
+         "type": "string",
+         "enum": [
+          "collection",
+          "raw_packed",
+          "level0",
+          "level1",
+          "level2",
+          "level3",
+          "entire"
+         ],
+         "description": "what the identifier points at, in data-level terms: collection is the parent record, raw_packed is raw or packed time series, level0 edited time series, level1 transformed time series, level2 processed frequency-domain data, level3 models, entire one record covering all levels; absent on legacy rows means level not stated"
+        },
+        "resolution": {
+         "type": "string",
+         "enum": [
+          "ok",
+          "reserved"
+         ],
+         "description": "whether the identifier currently resolves: ok, or reserved (registered but not yet active); absent means unknown, never broken"
+        },
+        "scheme": {
+         "type": "string",
+         "description": "for HasMetadata rows, the metadata family at the target, e.g. mt_metadata, ISO19115, DataCite"
+        }
+       },
+       "required": [
+        "identifier"
+       ]
+      },
+      "minItems": 1
+     },
+     "attribution": {
+      "type": "object",
+      "description": "rights declaration of this release; present only when declared",
+      "additionalProperties": true,
+      "properties": {
+       "custodian": {
+        "type": "string",
+        "description": "rights holder of record, which may differ from the acquiring organisation"
+       },
+       "custodian_ror": {
+        "type": "string",
+        "description": "ROR identifier of the custodian"
+       },
+       "statement": {
+        "type": "string",
+        "description": "attribution wording to reproduce verbatim, never reformatted or abbreviated"
+       },
+       "changes_made": {
+        "type": "boolean",
+        "description": "whether this release changed the upstream material"
+       },
+       "changes_summary": {
+        "type": "string",
+        "description": "plain-language summary of the changes, when changes_made is true"
+       },
+       "declared_by": {
+        "type": "string",
+        "description": "who recorded the declaration"
+       },
+       "declared_date": {
+        "type": "string",
+        "description": "date of the declaration, not of the data",
+        "format": "date"
+       }
+      }
+     },
+     "description": {
+      "type": "string",
+      "description": "concise discovery blurb for the dataset this record represents; complements, never replaces, the source's own documentation"
+     },
+     "subjects": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": true,
+       "required": [
+        "code",
+        "scheme"
+       ],
+       "properties": {
+        "code": {
+         "type": "string",
+         "minLength": 1,
+         "description": "the classification code within the named scheme, e.g. 370602"
+        },
+        "scheme": {
+         "type": "string",
+         "minLength": 1,
+         "description": "explicit scheme token; registered tokens bind the token to a scheme URI so code and scheme pairs compare across producers"
+        },
+        "label": {
+         "type": "string",
+         "description": "human-readable label of the concept, for consumers that cannot resolve the scheme"
+        },
+        "uri": {
+         "type": "string",
+         "description": "stable concept URI governed by the scheme's authority, where one exists"
+        }
+       },
+       "description": "one thematic subject as a controlled, optionally labelled, optionally resolvable concept"
+      },
+      "description": "thematic classification of the represented dataset for discovery and cross-catalogue mapping; absent means no assertion",
+      "minItems": 1
+     },
+     "sample_rates_hz": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "description": "distinct acquisition sample rates known to be represented in the survey, in Hz; discrete modes, never an extent, taken only from explicit acquisition metadata and never inferred from instrument capability or period coverage; canonicalised and sorted ascending",
+      "minItems": 1
+     },
+     "n_stations_time_series_verified": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "count of this survey's station records carrying has_time_series true; a count of verified existence, stable across access transitions, never subtracted from n_stations to infer absence"
+     },
+     "coordinates_state": {
+      "type": "string",
+      "enum": [
+       "exact",
+       "generalised",
+       "withheld"
       ],
-      "description": "MTCAT 1.2 (described; served since the tool-version keys landed): version of the mth5 library the producing build ran against, e.g. 0.6.8. null when that library was not available to the build."
+      "description": "how published coordinates relate to acquisition positions; over mixed per-station states: all exact means exact, all withheld means withheld, any other mixture means generalised. The state is public, the reason need not be; absence makes no assertion. A withheld state forbids bbox and centroid (they would republish the withheld footprint)"
+     }
+    },
+    "if": {
+     "properties": {
+      "coordinates_state": {
+       "const": "withheld"
+      }
+     },
+     "required": [
+      "coordinates_state"
+     ]
+    },
+    "then": {
+     "properties": {
+      "bbox": false,
+      "centroid": false
+     }
     }
+   }
+  },
+  "stations": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "station_id",
+     "survey_id",
+     "latitude",
+     "longitude",
+     "data_type"
+    ],
+    "additionalProperties": true,
+    "properties": {
+     "station_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "identifier of this published station record, unique within the document"
+     },
+     "survey_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the surveys[].survey_id this station belongs to"
+     },
+     "latitude": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "minimum": -90,
+      "maximum": 90,
+      "description": "WGS84 latitude in decimal degrees; may be deliberately generalised per the survey's coordinates_state. Null is defined: the position is not published (withheld under policy, or unlocated)"
+     },
+     "longitude": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "minimum": -180,
+      "maximum": 180,
+      "description": "WGS84 longitude in decimal degrees; see the latitude note; null means the position is not published"
+     },
+     "data_type": {
+      "type": "string",
+      "enum": [
+       "AMT",
+       "BBMT",
+       "LPMT",
+       "GDS",
+       "unknown"
+      ],
+      "description": "band class derived from the shortest period and the transfer functions present: AMT under 1e-3 s, BBMT under 1 s, LPMT long period, GDS tipper-only with no impedance, unknown when no period range could be read"
+     },
+     "has_time_series": {
+      "const": true,
+      "description": "present with value true when the producing catalogue has positively verified that a time-series resource for this station exists; existence semantics, with access a separate question; absence makes no assertion and false is never emitted"
+     }
+    },
+    "oneOf": [
+     {
+      "properties": {
+       "latitude": {
+        "type": "number"
+       },
+       "longitude": {
+        "type": "number"
+       }
+      }
+     },
+     {
+      "properties": {
+       "latitude": {
+        "type": "null"
+       },
+       "longitude": {
+        "type": "null"
+       }
+      }
+     }
+    ],
+    "description": "one published station record; latitude and longitude are either both numeric or both null (a half-null position is invalid) - both null means the position is not published"
+   }
+  },
+  "collections": {
+   "type": "array",
+   "description": "optional groupings of related surveys, e.g. a programme; discovery rollup only, with all scientific provenance staying on member surveys",
+   "items": {
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+     "collection_id",
+     "title"
+    ],
+    "properties": {
+     "collection_id": {
+      "type": "string",
+      "description": "id member surveys reference via surveys[].collection_id, by exact string match"
+     },
+     "title": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "description": "e.g. programme"
+     },
+     "status": {
+      "type": "string",
+      "description": "lifecycle state; active, completed and archived are the well-known values; deliberately not enum-pinned"
+     },
+     "start_year": {
+      "type": "integer",
+      "description": "year the programme began, as declared by member surveys; omitted when none declares one"
+     },
+     "last_updated": {
+      "type": "string",
+      "description": "curation date of the programme description, not an acquisition date and not this document's generated_at",
+      "format": "date"
+     },
+     "description": {
+      "type": "string",
+      "description": "prose description of the programme"
+     },
+     "n_surveys": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "how many surveys belong to this collection"
+     },
+     "n_stations": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "total stations across the member surveys"
+     },
+     "bbox": {
+      "type": "object",
+      "description": "footprint across every member survey's stations; omitted when none is located",
+      "required": [
+       "west",
+       "south",
+       "east",
+       "north"
+      ],
+      "additionalProperties": true,
+      "properties": {
+       "west": {
+        "type": "number"
+       },
+       "south": {
+        "type": "number"
+       },
+       "east": {
+        "type": "number"
+       },
+       "north": {
+        "type": "number"
+       }
+      }
+     },
+     "centroid": {
+      "type": "object",
+      "description": "mean of member station positions, unlike a survey centroid which is the centre of its bbox; omitted when none is located",
+      "required": [
+       "latitude",
+       "longitude"
+      ],
+      "additionalProperties": true,
+      "properties": {
+       "latitude": {
+        "type": "number"
+       },
+       "longitude": {
+        "type": "number"
+       }
+      }
+     }
+    }
+   },
+   "minItems": 1
   }
+ }
 }

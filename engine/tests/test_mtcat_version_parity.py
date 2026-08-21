@@ -233,14 +233,17 @@ def test_docs_current_version_display_agrees():
     _assert_agrees(want, {"docs/docs/reference/index.md current-version display": _docs_display()})
 
 
-def test_the_schema_id_stays_unversioned_so_it_cannot_become_another_surface():
-    """The $id is the one place a version could plausibly be reintroduced without anyone calling it a
-    duplicate. It is unversioned on purpose (a versioned identifier nobody serves is worse than none),
-    and keeping it that way is what leaves the title as the single declaration."""
+def test_the_schema_id_is_the_versioned_immutable_uri():
+    """The $id IS a version surface now, and it is pinned like every other one. The ratified MTCAT
+    2.0 $id policy (final walk-through s49) supersedes the 1.2-era unversioned-$id ruling: the
+    canonical identifier is the version-specific immutable URI under /data/schemas/mtcat/<version>/,
+    with the unversioned /data/mtcat.schema.json kept as the latest-convenience route (still what
+    portal.schema_url names; the build serves BOTH). The version segment must equal the
+    single-source constant, so a bump that forgets the $id fails here."""
     schema_id = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))["$id"]
-    assert not re.search(r"\d+\.\d+", schema_id.rsplit("/", 1)[-1]), (
-        f"the schema $id filename must stay unversioned so the title is the only version declaration; "
-        f"got {schema_id}")
+    want = f"https://ausmt.auscope.org.au/data/schemas/mtcat/{_authority()}/mtcat.schema.json"
+    assert schema_id == want, (
+        f"the schema $id must be the version-specific immutable URI {want}; got {schema_id}")
 
 
 def _assert_no_version_literal(files):

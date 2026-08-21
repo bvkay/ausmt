@@ -52,7 +52,7 @@ _TITLE_RE = re.compile(r"^MTCAT v(\d+\.\d+):")
 # engine/tests/test_mtcat_version_parity.py). To bump: change this constant, update the schema
 # artifact's displayed title to match, then regenerate (`python contract/generate.py --write` and
 # `python3 portal/tools/gen_config.py`).
-MTCAT_VERSION = "1.2"
+MTCAT_VERSION = "2.0"
 
 
 def mtcat_schema_version() -> str:

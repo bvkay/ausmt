@@ -7,7 +7,7 @@ window.AUSMT_CONFIG = {
   "short_name": "AusMT",
   "region": "Australia",
   "schema": "MTCAT",
-  "schema_version": "1.2",
+  "schema_version": "2.0",
   "version": "0.2.1",
   "pages_base_url": "",
   "mtcat_url": "",

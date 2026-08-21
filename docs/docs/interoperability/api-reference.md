@@ -75,7 +75,7 @@ build ran against:
 ```json
 {
   "portal": { "portal_id": "ausmt", "portal_name": "...", "schema": "mtcat",
-              "version": "1.2", "schema_url": "mtcat.schema.json",
+              "version": "2.0", "schema_url": "mtcat.schema.json",
               "metadata_license": "CC0-1.0", "generated_at": "2026-07-27T08:29:39Z" },
   "surveys":     [ ... ],
   "stations":    [ ... ],
@@ -86,7 +86,7 @@ build ran against:
 ```
 
 Read the schema version off `portal.version` rather than assuming one, and mean it. This page describes
-**1.2**, which is what the current engine writes; a deployment serving an older build serves fewer keys.
+**2.0**, which is what the current engine writes; a deployment serving an older build serves fewer keys.
 `additionalProperties` stays true on every record object, so a consumer written against one minor
 version reads another without changes as long as it treats an absent key as absent rather than as empty.
 

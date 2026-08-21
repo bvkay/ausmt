@@ -4678,13 +4678,22 @@ def main(argv=None):
     mtcat = mtcat_document(surveys_meta, all_stations, portal=load_portal_config(a.portal_config),
                            coll_by_id=coll_by_id, manifest_doc=manifest_doc)
     (out / "mtcat.json").write_text(_jdump(mtcat, indent=1), encoding="utf-8")
-    # FAIR-I: serve the schema beside the data so mtcat.json's schema_url ("mtcat.schema.json")
-    # resolves relative to the catalogue itself — a harvester can validate without reaching the
-    # (custody-pending) canonical $id host. Byte-copy of the in-tree schema; skipped (noted, not
-    # fatal) if it is unreadable so a schema-path glitch never fails an otherwise-good build.
+    # FAIR-I: serve the schema beside the data at BOTH published routes (the ratified $id policy,
+    # MTCAT 2.0): data/schemas/mtcat/<version>/mtcat.schema.json is the VERSION-SPECIFIC IMMUTABLE
+    # route the schema's own $id names, and data/mtcat.schema.json is the latest-convenience copy
+    # that mtcat.json's relative schema_url ("mtcat.schema.json") resolves to - so a harvester can
+    # validate without reaching the canonical host, and a pinned consumer can fetch the exact
+    # version forever. Byte-copies of the in-tree schema (identical at both routes by
+    # construction); skipped (noted, not fatal) if unreadable so a schema-path glitch never fails
+    # an otherwise-good build. The version segment derives from MTCAT_SCHEMA_VERSION (the
+    # generated mirror of the single-source constant), never a literal.
     _mtcat_schema = HERE.parent / "schema" / "mtcat.schema.json"
     try:
-        (out / "mtcat.schema.json").write_bytes(_mtcat_schema.read_bytes())
+        _schema_bytes = _mtcat_schema.read_bytes()
+        (out / "mtcat.schema.json").write_bytes(_schema_bytes)
+        _versioned_dir = out / "schemas" / "mtcat" / MTCAT_SCHEMA_VERSION
+        _versioned_dir.mkdir(parents=True, exist_ok=True)
+        (_versioned_dir / "mtcat.schema.json").write_bytes(_schema_bytes)
     except OSError as _e:
         print(f"note: mtcat schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
 

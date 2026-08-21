@@ -82,4 +82,4 @@ PROFILES = {
 # generated mirror so build_portal's emitter and config defaults hold no version literal of their
 # own. To bump: change MTCAT_VERSION and the schema's displayed title, then regenerate; never
 # hand-edit here.
-MTCAT_SCHEMA_VERSION = '1.2'
+MTCAT_SCHEMA_VERSION = '2.0'

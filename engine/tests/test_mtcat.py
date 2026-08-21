@@ -205,6 +205,12 @@ def test_mtcat_schema_served_beside_data(tmp_path):
     assert served.exists(), "schema must be served beside the data"
     # the served copy is the in-tree schema, byte-for-byte
     assert served.read_bytes() == (ROOT / "schema" / "mtcat.schema.json").read_bytes()
+    # MTCAT 2.0 $id policy: the build ALSO serves the version-specific immutable route
+    # data/schemas/mtcat/<version>/mtcat.schema.json (what the schema's own $id names), byte-identical
+    # to the latest-convenience copy. The version segment is the emitted portal.version, no literal.
+    versioned = out / "schemas" / "mtcat" / doc["portal"]["version"] / "mtcat.schema.json"
+    assert versioned.exists(), "the versioned immutable schema route must be served"
+    assert versioned.read_bytes() == served.read_bytes()
 
 
 def test_mtcat_carries_metadata_license(tmp_path):
