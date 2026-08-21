@@ -34,8 +34,8 @@ Treat any dimensionality assessment as an indicator, not a verdict.
 
 AusMT assigns each station one screening class from its phase tensor, using the median absolute skew,
 the share of high-skew periods and the median ellipticity. The thresholds are stated with the served
-document, [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson). It is a
-triage product; period-by-period dimensionality analysis is not attempted.
+file, [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson), which rides
+beside `station.json` and is not a contract. It is a triage product; period-by-period dimensionality analysis is not attempted.
 
 ## What AusMT publishes
 

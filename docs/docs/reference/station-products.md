@@ -1,6 +1,9 @@
 # Per-station products
 
-Each station has a small product directory holding two key-based JSON documents.
+Each station has a small product directory holding two key-based JSON documents. `station.json` is the
+per-station record and a public contract. `dimensionality.json` is served alongside it and is not a
+contract: whether it folds into `station.json` or stays a feature file is an open decision, so do not
+build on its shape.
 
 ```text
 /data/products/<slug>/<station>/station.json
@@ -8,7 +11,7 @@ Each station has a small product directory holding two key-based JSON documents.
 ```
 
 There is no index of product directories and directory listing is off. Build the paths from the slug and
-the station id read out of `catalogue.json` or `mtcat.json`. That is safe here because the product path
+the station id read out of `mtcat.json` (`survey_id`, and the station part of `station_id`). That is safe here because the product path
 uses the station id verbatim, unlike an artifact filename.
 
 Those two are the derived RECORDS. A served station also has downloadable transfer-function FILES, which
@@ -22,10 +25,11 @@ than built from the station id.
 | Canonical transfer function | `/data/xml/<slug>/<station>.xml` | EMTF XML, derived by the build |
 | Station MTH5 | `/data/h5/<slug>/<station>.h5` | MTH5, transfer functions only, derived by the build |
 
-Only the first row is ever a submitted file, and only for a station submitted as EDI.
-`build_report.json`'s `ingest_sources` says which source format a station arrived in, and [EDI is the
-citable artifact](../interoperability/tool-integration.md#edi-is-the-citable-artifact) says what that
-means for a digest check.
+Only the first row is ever a submitted file, and only for a station submitted as EDI. The record says
+which: `provenance.input_sha256` (section 1.11) equals the manifest `edi` row's `sha256` exactly when
+the served EDI is the custodian's file, and [EDI is the citable
+artifact](../interoperability/tool-integration.md#edi-is-the-citable-artifact) says what that means
+for a digest check.
 
 The EDI filename is not derivable from the station id, so take all three paths from the manifest rather
 than templating them. The MTH5 and EMTF XML paths do use the station id, but the manifest is still the
@@ -45,10 +49,11 @@ carries the survey's licence and credit inside the file (`Experiment/Surveys/<sl
 | Normative artifact | the build's product emitter, `engine/extract/build_portal.py` |
 | Served location | `/data/products/<slug>/<station>/` |
 | Version | none declared; the documents are additive and key-based |
-| Access | the product tree is a served surface, so it rides the same access gate as `tf.json` and `sci.json` |
+| Status | `station.json` is a public contract whose schema artifact arrives with the station promotion lane; `dimensionality.json` is served alongside it and is not a contract |
+| Access | the product tree is a served surface, so it rides the same access gate as the download files |
 
-There is no JSON Schema artifact for either document. Where this page and the emitter disagree, the
-emitter is right.
+There is no JSON Schema artifact for either document yet. Where this page and the emitter disagree,
+the emitter is right.
 
 ## Gating
 
@@ -206,8 +211,8 @@ declares no `station_ids` provenance carries no `provenance.source`.
 | `tipper_available` | boolean | whether a tipper is present |
 | `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
 
-The dimensionality classification and its skew statistic are **not** members of this block. They are
-the whole content of the `dimensionality.json` emitted beside this document (§2), which carries them
+The dimensionality classification and its skew statistic are not members of this block. They are the
+whole content of the `dimensionality.json` served beside this document (section 2), which carries them
 with the method and the screening caveat that qualifies them; restating them here produced a second
 copy without that caveat.
 
@@ -373,9 +378,9 @@ the derived science is withheld here.
 
 ## 2 dimensionality.json
 
-The phase-tensor screening result for one station. It is never written for a station in a withheld
-survey. The same classification and statistics are served positionally in `sci.json` (`dim`, `p3d`,
-`skew`, `ellip`).
+The phase-tensor screening result for one station, served alongside `station.json`; not a contract. It
+is never written for a station in a withheld survey. Its members are documented here so a reader can
+interpret what is served, not as a promise about its shape.
 
 The classification is assigned by `engine/extract/_edi_science.py` from the per-period phase tensor
 (Caldwell et al., 2004), with every threshold a named constant that `build_provenance.json` records:

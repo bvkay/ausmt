@@ -171,8 +171,8 @@ EMTF-XML zip are unconditional for a served survey. Which digests are cross-buil
 in the [download inventory](../interoperability/api-reference.md#download-inventory-manifestjson); do not write a
 test that asserts otherwise.
 
-The per-station products `station.json` and `dimensionality.json` under
-`products/<survey-slug>/<station>/` are key-based
+The per-station products `station.json` (a public contract) and `dimensionality.json` (served alongside
+it; not a contract) under `products/<survey-slug>/<station>/` are key-based
 ([Per-station products](../reference/station-products.md)). `coordinate_qc` and
 `canonical_conditioning` are `null` unless the parse flagged something; `coordinate_policy` is present
 only when the policy is not `exact`. `--products` is a served surface, so it rides the same access gate
