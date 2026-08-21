@@ -8,7 +8,7 @@ It rides beside the positional `catalogue.json` / `sci.json` / `tf.json` arrays.
 never added as new positional columns, so adding or changing it costs the index-reading consumers
 nothing. The portal's download resolver is the primary consumer; the fetch patterns are in the
 [data reference](../interoperability/api-reference.md#per-station-fetch-through-the-manifest) and the
-producer-side rules are in [Portal data files](../developer/data-files.md#manifestjson-the-key-based-download-index-beside-the-positional-catalogue).
+producer-side rules are in [Portal data files](../developer/data-files.md#the-key-based-documents).
 
 ## Normative artifact
 

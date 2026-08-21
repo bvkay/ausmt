@@ -38,4 +38,4 @@ Planned, as scaffolding in `engine/ausmt_science/` that is not wired into the bu
 
 Derived products are a portal capability. They are never written back into the survey package, so they
 can be regenerated and improved without touching the published record. The file shape each product must
-take is in [Portal data files](../developer/data-files.md#derived-product-files).
+take is in [Per-station products](../reference/station-products.md#new-products).
