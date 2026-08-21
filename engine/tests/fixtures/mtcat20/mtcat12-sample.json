@@ -1,0 +1,116 @@
+{
+  "_comment": "A corpus-shaped MTCAT 1.2 document (nulls-as-undeclared, empty formats on the embargoed survey, sources/changes rights blocks, top-level tool versions), committed as the migration input fixture: migrate_12_to_20() over THIS document must yield a valid 2.0 document, which is the ratified T2b check and the reference for the emitter-equivalence proof.",
+  "portal": {
+    "portal_id": "ausmt",
+    "portal_name": "AusMT, Australia's Magnetotelluric Data Portal",
+    "schema": "mtcat",
+    "version": "1.2",
+    "schema_url": "mtcat.schema.json",
+    "metadata_license": "CC0-1.0",
+    "generated_at": "2026-07-28T00:00:00Z"
+  },
+  "surveys": [
+    {
+      "survey_id": "auslamp-sa-gawler-2014",
+      "title": "AusLAMP South Australia Gawler 2014",
+      "organisation": "Geological Survey of South Australia",
+      "organisation_ror": "https://ror.org/00892tw58",
+      "raid": null,
+      "country": "Australia",
+      "version": "1.0.0",
+      "collection_id": "auslamp",
+      "doi": "10.25914/example",
+      "license": "CC-BY-4.0",
+      "access": "open",
+      "bbox": {"west": 133.0, "south": -32.0, "east": 137.0, "north": -29.0},
+      "centroid": {"latitude": -30.5, "longitude": 135.0},
+      "n_stations": 2,
+      "data_types": {"BBMT": 1, "LPMT": 1},
+      "period_min_s": 0.0005,
+      "period_max_s": 12000.0,
+      "n_stations_tipper": 1,
+      "year_start": 2014,
+      "year_end": 2015,
+      "creators": [
+        {"name": "Kay, Ben", "name_type": "person", "orcid": "0000-0002-9738-7277"}
+      ],
+      "contributors": [
+        {"name": "Thiel, Stephan", "name_type": "person", "role": "ProjectLeader"},
+        {"name": "AusMT", "name_type": "organisation", "role": "HostingInstitution"}
+      ],
+      "related_identifiers": [
+        {"identifier": "10.25914/bzd5-n780", "identifier_type": "DOI",
+         "relation": "IsDerivedFrom", "custodian": "NCI",
+         "identifies": "raw_packed", "resolution": "ok"},
+        {"identifier": "10.25914/legacy", "identifier_type": "DOI",
+         "relation": null, "custodian": "NCI"}
+      ],
+      "attribution": {
+        "custodian": "Geological Survey of South Australia",
+        "changes_made": true,
+        "changes_summary": "Reprocessed to a common period band.",
+        "declared_by": "Ben Kay",
+        "declared_date": "2026-07-25"
+      },
+      "sources": [
+        {"identifier": "10.25914/abc123", "identifier_type": "DOI",
+         "relation": "IsDerivedFrom", "identifies": "raw_packed",
+         "custodian": "Geoscience Australia"}
+      ],
+      "changes": {"made": true, "summary": "Reprocessed to a common period band."},
+      "formats": ["edi", "emtfxml"]
+    },
+    {
+      "survey_id": "embargoed-survey-2025",
+      "title": "Embargoed Survey 2025",
+      "organisation": "Example University",
+      "organisation_ror": null,
+      "raid": null,
+      "country": "Australia",
+      "version": null,
+      "collection_id": null,
+      "doi": null,
+      "license": "CC-BY-4.0",
+      "access": "embargoed",
+      "embargo_until": "2027-01-01",
+      "bbox": {"west": 140.0, "south": -38.0, "east": 141.0, "north": -37.0},
+      "centroid": {"latitude": -37.5, "longitude": 140.5},
+      "n_stations": 1,
+      "data_types": {"GDS": 1},
+      "period_min_s": 8.0,
+      "period_max_s": 4096.0,
+      "n_stations_tipper": 1,
+      "year_start": 2025,
+      "year_end": 2025,
+      "contributors": [
+        {"name": "AusMT", "name_type": "organisation", "role": "HostingInstitution"}
+      ],
+      "formats": []
+    }
+  ],
+  "stations": [
+    {"station_id": "au.auslamp-sa-gawler-2014.SA084", "survey_id": "auslamp-sa-gawler-2014",
+     "latitude": -30.1, "longitude": 135.0, "data_type": "LPMT"},
+    {"station_id": "au.auslamp-sa-gawler-2014.SA085", "survey_id": "auslamp-sa-gawler-2014",
+     "latitude": -31.0, "longitude": 134.0, "data_type": "BBMT"},
+    {"station_id": "au.embargoed-survey-2025.E01", "survey_id": "embargoed-survey-2025",
+     "latitude": -37.5, "longitude": 140.5, "data_type": "GDS"}
+  ],
+  "collections": [
+    {
+      "collection_id": "auslamp",
+      "title": "AusLAMP",
+      "type": "programme",
+      "status": "active",
+      "start_year": 2013,
+      "last_updated": "2026-07-12",
+      "description": "Australia's national long-period magnetotelluric programme.",
+      "n_surveys": 1,
+      "n_stations": 2,
+      "bbox": {"west": 133.0, "south": -32.0, "east": 137.0, "north": -29.0},
+      "centroid": {"latitude": -30.2, "longitude": 135.166667}
+    }
+  ],
+  "mt_metadata_version": "1.0.9",
+  "mth5_version": "0.6.8"
+}

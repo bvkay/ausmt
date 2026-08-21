@@ -122,6 +122,16 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # real-corpus leg only. (Added when the path-URL contract lane's first CI run tripped this
     # tripwire on the new skip - the tripwire working exactly as designed.)
     "AUSMT_URL_REGISTRY_DATA does not name a built data dir",
+    # test_mtcat20_invariants.py's corpus arms: the zero-null/zero-empty + reference-invariant
+    # scans over a REAL full-corpus build (AUSMT_MTCAT20_DATA) and the 1.2 -> 2.0 emitter
+    # equivalence dict-test against a pre-2.0 baseline document (AUSMT_MTCAT20_BASELINE). A built
+    # corpus exists on the dev box and the deployed box, never in a CI engine lane (the lanes
+    # build no corpus). Same dev-box-only class as the entries above; the invariants are NOT
+    # unguarded in CI - the same checks run against the committed fixtures and a real build of the
+    # vendored fixture surveys on every run; these arms extend the identical assertions to corpus
+    # scale.
+    "AUSMT_MTCAT20_DATA does not name a built corpus data dir",
+    "AUSMT_MTCAT20_BASELINE does not name a pre-2.0 corpus mtcat.json",
 ]
 
 # `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token
