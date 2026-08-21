@@ -38,15 +38,16 @@ Three groups of claim are pinned here.
     The bounding-box pattern is pinned to two things it cannot be allowed to drift from, because both
     would be silently wrong rather than visibly broken:
 
-      * THE COLUMN INDICES. catalogue.json rows are positional, so a bbox example has to name indices, and
-        a documented index that no longer matches contract/columns.json points a reader at the wrong
-        column (lat at 3 rather than 2 yields a plausible-looking, entirely wrong result set). The indices
-        in the prose are compared against the GENERATED src/contract.js, so a reorder fails here.
+      * THE STATION FIELDS. Public-surface audit (2026-08-22): catalogue.json is portal-internal and not
+        a contract, so the bbox pattern selects from mtcat.json's stations[] (station_id, survey_id,
+        latitude, longitude), which IS the contract. Every field the example reads is checked against
+        engine/schema/mtcat.schema.json, so a field nobody writes cannot be documented.
       * THE TWO COORDINATE-HONESTY CAVEATS. A withheld station carries null lat/lon and a generalised one
         is rounded to a 0.1deg cell; an example that compares without a null guard either raises (Python)
         or, worse, treats null as 0 (JavaScript) and places a withheld station at 0,0. The published
         example must carry the guard and the prose must carry both caveats.
 """
+import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -55,7 +56,7 @@ ROOT = Path(__file__).resolve().parent.parent   # portal/
 REPO = ROOT.parent                              # the ausmt monorepo root
 ABOUT = ROOT / "about.html"
 APIDOC = REPO / "docs" / "docs" / "interoperability" / "api-reference.md"
-CONTRACT_JS = ROOT / "src" / "contract.js"
+MTCAT_SCHEMA = REPO / "engine" / "schema" / "mtcat.schema.json"
 BUILDER = REPO / "engine" / "extract" / "build_portal.py"
 
 DOCS_API_URL = "https://ausmt.readthedocs.io/en/latest/interoperability/api-reference/"
@@ -256,7 +257,10 @@ def test_docs_document_the_bundle_forms_with_a_worked_command():
 
 def test_docs_document_the_manifest_flow():
     sub = _docs_sub("manifest.json", "jq -r")
-    assert "/data/products/manifest.json" in sub, "the per-station pattern starts at the products manifest"
+    assert "/data/manifest.json" in sub, "the per-station pattern starts at the download index"
+    assert "/data/products/manifest.json" not in sub, (
+        "the products/ mirror of the manifest is retired (public-surface audit, 2026-08-22); the download "
+        "index is /data/manifest.json")
     assert "sha256" in sub, "the per-station pattern must tell the reader to verify the sha256"
     for fmt in ("`edi`", "`emtfxml`"):
         assert fmt in sub, f"the per-station pattern must name the format {fmt}"
@@ -292,7 +296,7 @@ def test_docs_state_embargo_by_omission():
 
 
 def _bbox():
-    return _docs_sub("catalogue.json", "coord_policy.json")
+    return _docs_sub("mtcat.json", "coordinates_state")
 
 
 def _bbox_example():
@@ -301,79 +305,78 @@ def _bbox_example():
     return blocks[0]
 
 
-def _contract_indices():
-    """The catalogue column map as GENERATED into src/contract.js from contract/columns.json."""
-    src = CONTRACT_JS.read_text(encoding="utf-8")
-    m = re.search(r"^var C\s*=\s*\{(.*?)\};", src, flags=re.M | re.S)
-    assert m, "could not find the `var C = {...}` catalogue index map in src/contract.js"
-    idx = {k: int(v) for k, v in re.findall(r"(\w+):\s*(\d+)", m.group(1))}
-    assert {"lat", "lon", "ausmt_id"} <= set(idx), f"contract.js C map looks wrong: {idx}"
-    return idx
+def _mtcat_station_fields():
+    """The station record's properties as the MTCAT schema defines them."""
+    schema = json.loads(MTCAT_SCHEMA.read_text(encoding="utf-8"))
+    return set(schema["properties"]["stations"]["items"]["properties"])
 
 
 def test_docs_document_the_bounding_box_pattern():
     frag = _flat(_bbox())
-    assert "/data/catalogue.json" in frag, "the pattern starts from the positional station catalogue"
-    assert "POSITIONAL" in frag and "read by index" in frag, (
-        "a reader who treats catalogue rows as objects gets nothing; the docs must say the rows are "
-        "positional arrays read by index")
+    assert "/data/mtcat.json" in frag, "the pattern starts from the MTCAT discovery document"
+    assert "`stations[]`" in frag, (
+        "the pattern selects from the catalogue's station records; say which list")
     ex = _bbox_example()
-    assert "/data/products/manifest.json" in ex, (
-        "the pattern joins the catalogue selection to the products manifest")
+    assert "/data/manifest.json" in ex, (
+        "the pattern joins the station selection to the download index")
+    assert "/data/products/manifest.json" not in ex, "the products/ mirror of the manifest is retired"
     assert 'row["sha256"]' in ex and "hashlib.sha256" in ex, (
         "the pattern fetches artifact bytes, so it must verify them")
     assert 'row["ausmt_id"] not in ids' in ex, "the manifest join must be on ausmt_id"
 
 
-def test_bbox_column_indices_match_the_generated_contract():
-    """catalogue.json carries no field names, so the pattern has to state indices. A stated index that no
-    longer matches contract/columns.json is the worst kind of documentation bug: it produces a plausible
-    result set from the wrong column. Compared against the generated map, both in the prose and in the
-    example's own constants."""
-    idx = _contract_indices()
+def test_bbox_reads_station_fields_the_mtcat_schema_defines():
+    """mtcat.json is the contract the pattern reads, so every station field the example and the prose
+    name must be a real property of stations[].items, or a reader is told to read a key nobody
+    writes."""
+    fields = _mtcat_station_fields()
+    for name in ("station_id", "survey_id", "latitude", "longitude"):
+        assert name in fields, f"the pattern reads stations[].{name}; the schema does not define it"
     frag = _flat(_bbox())
-    for name in ("lat", "lon", "ausmt_id"):
-        assert f"`{name}` at index **{idx[name]}**" in frag, (
-            f"the docs must state {name} at index {idx[name]} (per src/contract.js); the prose disagrees")
-    assert "/src/contract.js" in frag, (
-        "the prose must point at src/contract.js as the authoritative column map, not just quote indices")
+    for name in ("station_id", "survey_id", "latitude", "longitude"):
+        assert f"`{name}`" in frag, f"the prose must name the station field {name}"
     ex = _bbox_example()
-    assert f"LAT, LON, AUSMT_ID = {idx['lat']}, {idx['lon']}, {idx['ausmt_id']}" in ex, (
-        "the example's own index constants must agree with src/contract.js")
+    assert 'st["station_id"]' in ex and 'cat["stations"]' in ex, (
+        "the example must select station_id out of mtcat.json's stations[]")
 
 
 def test_bbox_null_guards_withheld_coordinates():
-    """A custodian-withheld station is served with null lat/lon. Comparing null numerically either raises
-    (Python) or coerces to 0 (JavaScript, which silently relocates the station to 0,0 and can pull it INTO
-    a box). The published example must guard both columns, and the prose must say why."""
+    """A custodian-withheld station is served with paired null latitude/longitude. Comparing null
+    numerically either raises (Python) or coerces to 0 (JavaScript, which silently relocates the station
+    to 0,0 and can pull it INTO a box). The published example must guard both fields, and the prose must
+    say why."""
     ex = _bbox_example()
-    assert "r[LAT] is not None and r[LON] is not None" in ex, (
-        "the example must test BOTH coordinate columns for null before comparing them")
+    assert 'st["latitude"] is not None and st["longitude"] is not None' in ex, (
+        "the example must test BOTH coordinate fields for null before comparing them")
     frag = _flat(_bbox())
-    assert "withholds" in frag and "`null` in the lat and lon columns" in frag, (
+    assert "withholds" in frag and "`null` in `latitude` and `longitude`" in frag, (
         "the prose must state that a withheld position is served as null")
     assert "0°, 0°" in frag, (
         "the prose must name the JavaScript failure mode concretely: null compares as 0, which places a "
         "withheld station at 0,0 rather than excluding it")
 
 
-def test_bbox_states_the_generalisation_caveat_and_its_marker_file():
+def test_bbox_states_the_generalisation_caveat_and_its_contract_fields():
     """A generalised position is rounded to a 0.1deg cell by the engine's single rounding function
     (_coordaccess.round_generalised, 1 dp), so a box edge is approximate to within half a cell. The prose
-    must say so, and the marker file it names must be one the build really writes."""
+    must say so, and the fields it names for WHICH positions are non-exact must be the contract's own:
+    surveys[].coordinates_state in mtcat.json and coordinate_policy in station.json, both written by the
+    emitter."""
     frag = _flat(_bbox())
     assert "generalised" in frag and "0.1°" in frag, (
         "the prose must state that a generalised position is rounded to a 0.1 degree cell")
     assert "0.05°" in frag, (
         "half a 0.1 degree cell is the actual edge error; state it rather than leaving a reader to derive it")
-    assert "coord_policy.json" in frag, (
-        "the prose should name the artifact that tells a consumer WHICH stations are non-exact")
-    assert "absent when every served position" in frag, (
-        "coord_policy.json is emitted only when a station is non-exact, so its absence is meaningful and "
-        "must not read as a missing file")
+    assert "`coordinates_state`" in frag and "`coordinate_policy`" in frag, (
+        "the prose should name the contract fields that tell a consumer WHICH positions are non-exact")
+    schema = json.loads(MTCAT_SCHEMA.read_text(encoding="utf-8"))
+    state = schema["properties"]["surveys"]["items"]["properties"]["coordinates_state"]
+    assert set(state["enum"]) == {"exact", "generalised", "withheld"}, state
+    for value in ("`exact`", "`generalised`", "`withheld`"):
+        assert value in frag, f"the prose must name the coordinates_state value {value}"
     src = BUILDER.read_text(encoding="utf-8")
-    assert '(out / "coord_policy.json").write_text(' in src, (
-        "the docs name data/coord_policy.json, so the build must actually write it")
+    assert '_doc["coordinate_policy"] = _cp' in src, (
+        "the docs name station.json's coordinate_policy, so the emitter must actually write it")
 
 
 def test_bbox_does_not_flatten_manifest_paths_across_surveys():
