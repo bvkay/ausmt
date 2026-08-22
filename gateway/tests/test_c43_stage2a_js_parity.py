@@ -336,7 +336,8 @@ process.stdout.write(JSON.stringify(out));
         "tf": engine_corpus["tf"], "slugs": slugs})
     for slug in slugs:
         label = engine_corpus["surveys"][slug]
-        built = sorted(p.name for p in (engine_corpus["products"] / slug).iterdir())
+        # station dirs only: products/<slug>/ also holds survey-metadata.json (a file)
+        built = sorted(p.name for p in (engine_corpus["products"] / slug).iterdir() if p.is_dir())
         assert built, f"fixture sanity: the engine built no stations for {slug}"
         rows = got[slug]
         assert sorted(r["id"] for r in rows) == built, (
@@ -445,6 +446,8 @@ def _real_frames(engine_corpus) -> list:
     frames = []
     for slug in engine_corpus["surveys"]:
         for sdir in sorted((engine_corpus["products"] / slug).iterdir()):
+            if not sdir.is_dir():
+                continue  # products/<slug>/survey-metadata.json is a file, not a station
             doc = json.loads((sdir / "station.json").read_text(encoding="utf-8"))
             fr = doc.get("frame")
             if fr:
