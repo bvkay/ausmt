@@ -1,0 +1,46 @@
+{
+ "schema": "ausmt-survey-metadata",
+ "version": "0.1",
+ "survey_id": "example-legacy-2004",
+ "title": "Example Legacy Broadband MT Survey 2004",
+ "dates": {
+  "coverage": {
+   "year_start": 2004,
+   "year_end": 2004
+  }
+ },
+ "abstract": "A legacy university survey with no persistent identifier; cited by the custodian's own bibliographic wording (synthetic fixture).",
+ "subjects": [
+  {
+   "code": "370602",
+   "scheme": "ANZSRC-FoR-2020"
+  }
+ ],
+ "creators": [
+  {
+   "name": "Example Researcher",
+   "name_type": "person"
+  }
+ ],
+ "organisations": [
+  {
+   "name": "Example University",
+   "roles": [
+    "custodian"
+   ],
+   "primary_custodian": true
+  }
+ ],
+ "citation": {
+  "preferred_text": "Example Researcher (2004). Example legacy broadband MT survey data package. Example University.",
+  "text_source": "source_provided"
+ },
+ "rights": {
+  "license": "CC-BY-4.0",
+  "access": "open"
+ },
+ "provenance": {
+  "generated": "2026-08-22T00:00:00Z",
+  "generator": "ausmt/extract.build_portal 0.2.1"
+ }
+}

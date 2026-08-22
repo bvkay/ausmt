@@ -169,6 +169,7 @@ jobs:
             tests/test_mtcat20_invariants.py \
             tests/test_mtcat_version_parity.py \
             tests/test_survey_metadata_version_parity.py \
+            tests/test_survey_metadata_schema_v01.py \
             tests/test_empty_build.py \
             tests/test_proc_note_email_scrub.py \
             tests/test_golden_edi.py \

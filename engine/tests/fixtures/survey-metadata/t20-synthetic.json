@@ -1,0 +1,109 @@
+{
+ "schema": "ausmt-survey-metadata",
+ "version": "0.1",
+ "survey_id": "example-basin-2024",
+ "title": "Example Basin Broadband MT Survey",
+ "dataset_version": "1.0.0",
+ "dates": {
+  "coverage": {
+   "year_start": 2024,
+   "year_end": 2024
+  },
+  "issued": "2026-03-01"
+ },
+ "identifiers": [
+  {
+   "scheme": "URL",
+   "identifier": "https://repository.example.org/releases/example-basin-2024"
+  }
+ ],
+ "activities": [
+  {
+   "identifier": "https://raid.org/10.99999/example",
+   "scheme": "RAiD"
+  }
+ ],
+ "abstract": "Full uncapped abstract of the Example Basin survey dataset...",
+ "subjects": [
+  {
+   "code": "370602",
+   "scheme": "ANZSRC-FoR-2020"
+  }
+ ],
+ "creators": [
+  {
+   "name": "Example Geological Survey",
+   "name_type": "organisation"
+  }
+ ],
+ "organisations": [
+  {
+   "name": "Example Geological Survey",
+   "roles": [
+    "custodian",
+    "publisher"
+   ],
+   "primary_custodian": true
+  },
+  {
+   "name": "Example Repository",
+   "roles": [
+    "distributor"
+   ]
+  }
+ ],
+ "funders": [
+  {
+   "name": "Example Government Exploration Initiative"
+  }
+ ],
+ "citation": {
+  "preferred_identifier": {
+   "scheme": "URL",
+   "identifier": "https://repository.example.org/releases/example-basin-2024"
+  },
+  "text_source": "ausmt_generated",
+  "additional": [
+   {
+    "identifier": {
+     "scheme": "DOI",
+     "identifier": "10.99999/level1-collection"
+    },
+    "reason": "repository_product"
+   }
+  ]
+ },
+ "acknowledgements": [
+  {
+   "text": "Data were accessed through the AusMT national magnetotelluric data portal.",
+   "type": "access_provider"
+  }
+ ],
+ "rights": {
+  "license": "CC-BY-4.0",
+  "access": "open"
+ },
+ "extent": {
+  "bbox": {
+   "west": 135.0,
+   "south": -31.5,
+   "east": 137.25,
+   "north": -29.25
+  }
+ },
+ "relationships": [
+  {
+   "identifier": "10.99999/source-release",
+   "identifier_type": "DOI",
+   "relation": "IsDerivedFrom"
+  }
+ ],
+ "attribution": {
+  "changes_made": true,
+  "changes_summary": "EMTF XML and MTH5 renditions are producer-derived."
+ },
+ "provenance": {
+  "generated": "2026-08-22T00:00:00Z",
+  "generator": "ausmt/emit-survey-metadata"
+ }
+}
