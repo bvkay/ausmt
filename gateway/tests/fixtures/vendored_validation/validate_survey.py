@@ -104,7 +104,7 @@ SLUG_MAX_LEN = 40
 ATTRIBUTION_KEYS = frozenset({"custodian", "custodian_ror", "statement", "changes_made",
                               "changes_summary", "declared_by", "declared_date"})
 SOURCE_KEYS = frozenset({"title", "custodian", "identifier", "licence", "retrieved", "statement",
-                         "profile", "relation", "identifier_type", "identifies"})
+                         "profile", "relation", "identifier_type", "identifies", "scope"})
 SOURCE_PROFILES = frozenset({"ga", "generic"})
 # §2a (identifiers design — the related-identifiers model): the model TYPES the C46 sources[] object.
 # It adds a `relation` + an `identifier_type` to the untyped upstream-dataset identifier sources[]
@@ -117,6 +117,15 @@ SOURCE_PROFILES = frozenset({"ga", "generic"})
 RELATION_TYPES = frozenset({"IsDerivedFrom", "IsVariantFormOf", "IsSupplementTo", "Cites",
                             "IsPartOf", "IsSourceOf"})
 IDENTIFIER_TYPES = frozenset({"DOI", "Handle", "URL", "RAiD"})
+# Entity scope of an external identifier (METADATA-INTERFACE-CONTRACT section 2, survey-metadata
+# lane S1): `scope` states the KIND of thing a related identifier identifies, so a collection DOI
+# never presents as a file DOI, a report DOI never as a dataset DOI, a RAiD never as dataset
+# identity. Ordered as the contract lists them; the frozenset is the fail-closed membership set
+# (beside identifier_type). scope is NEVER an identity designation: which identifiers ARE this
+# dataset/release is curated in identity_classification (represents / own_identifiers), not here.
+IDENTIFIER_SCOPES = ("dataset", "release", "collection", "resource", "report", "publication",
+                     "activity", "instrument", "repository_record")
+IDENTIFIER_SCOPE_TYPES = frozenset(IDENTIFIER_SCOPES)
 # "Identifiers by data level" (owner-ratified 2026-07-23). A related_identifiers row gains an
 # `identifies` key stating WHAT the identifier points at, expressed in NCI Table 1 data-level terms
 # (reusing the time_series level names). IDENTIFIES_LEVELS is the ORDERED vocab (Table 1 order); the
@@ -163,6 +172,74 @@ CONTRIBUTOR_ROLES_ORDERED = ("ProjectLeader", "ProjectMember", "DataCollector", 
 CONTRIBUTOR_ROLES = frozenset(CONTRIBUTOR_ROLES_ORDERED)
 CREATOR_KEYS = frozenset({"name", "name_type", "orcid", "ror"})
 CONTRIBUTOR_KEYS = frozenset({"name", "name_type", "role", "orcid", "ror"})
+# MTCAT 2.0 core, surveys side (LANE-CONTRACT-MTCAT-20-CORE S1; ratified unified design,
+# 2026-08-22). survey.yaml gains homes for the curated facts the survey-metadata emitter will
+# project - the emitter NEVER invents curated facts. Every field is OPTIONAL at entry
+# (required-ness arrives with the censuses) and SILENT when absent, so the existing corpus's
+# report is byte-unchanged. The vocabularies below are FROZEN and FAIL-CLOSED byte-identically
+# to the access.coordinates / relation / role posture: an out-of-vocab value publishes a wrong
+# public claim, so it blocks rather than ships. Structure problems WARN (the credit-row shape).
+#
+# subjects[]: rows {code, scheme, label?, uri?} (MTCAT-20-INTERCHANGE-SPEC 6.6). scheme is
+# REQUIRED and explicit (the spec designates NO default scheme); SUBJECT_SCHEMES is the
+# registered scheme-token registry (spec Appendix B - deliberately small at 2.0 release), and
+# THIS producer-side gate is fail-closed on unknown tokens (the spec's forward tolerance is a
+# consumer posture, not a licence for this corpus to mint unregistered tokens). The code format
+# is checked per scheme: ANZSRC FoR codes are 2, 4 or 6 digits (division/group/field).
+SUBJECT_SCHEMES = ("ANZSRC-FoR-2020",)
+SUBJECT_CODE_FORMATS = {"ANZSRC-FoR-2020": re.compile(r"^\d{2}(?:\d{2}(?:\d{2})?)?$")}
+SUBJECT_KEYS = frozenset({"code", "scheme", "label", "uri"})
+# The ratified discovery-text gate (decision register: "abstract UNCAPPED; discovery-text gate
+# (abstract <= 1200 OR discovery_description)"). 1200 is producer policy, spec uncapped; the
+# engine never truncates, so an over-cap discovery_description is a surveys-side FAIL here.
+DISCOVERY_DESCRIPTION_MAX = 1200
+# Interface contract section 1: every survey record is Case A (represents the SAME dataset/
+# release as a cited source identifier) or Case B (a DISTINCT AusMT-published release).
+# OPTIONAL until the Case A/B census completes (fail-closed but never red-on-arrival).
+IDENTITY_CLASSIFICATIONS = ("case_a", "case_b")
+# The classification is a MAPPING (survey-metadata lane D12, owner GO 2026-08-22): the
+# designation travels WITH the classification because Case A is DEFINED as sameness with a
+# cited source identifier. {case: case_a|case_b (fail-closed), represents: [{scheme,
+# identifier}] (case_a only: every row MUST equal a related_identifiers row, scheme ==
+# identifier_type and identifier == identifier, exact), own_identifiers: [{scheme, identifier}]
+# (case_b only: identifiers OF the distinct AusMT release; need not be related rows)}. A
+# present list is non-empty (absent-not-empty); the retired scalar string form FAILs. The
+# emitter projects identifiers[] = represents (case_a) or own_identifiers (case_b) and
+# citation.preferred_identifier MUST equal one of them (interface contract section 3, T25).
+IDENTITY_CLASSIFICATION_KEYS = frozenset({"case", "represents", "own_identifiers"})
+IDENTITY_DESIGNATION_KEY = {"case_a": "represents", "case_b": "own_identifiers"}
+# Citation block (interface contract section 3): preference/guidance over the identifier set,
+# never a duplicate bibliographic record. preferred_identifier carries BOTH scheme and
+# identifier when present (a half-declared identifier makes the doi/primary/preferred
+# cross-layer invariant untestable); text_source states where preferred_text came from
+# (fail-closed - a wrong value mis-states provenance of citation wording); additional[] rows
+# REQUIRE a reason (the reason makes the layer semantically non-opaque).
+CITATION_KEYS = frozenset({"preferred_identifier", "preferred_text", "text_source", "additional"})
+CITATION_TEXT_SOURCES = frozenset({"source_provided", "ausmt_generated"})
+CITATION_ADDITIONAL_KEYS = frozenset({"identifier", "preferred_text", "reason"})
+PREFERRED_IDENTIFIER_KEYS = frozenset({"scheme", "identifier"})
+# acknowledgements[] rows {text, type?, source?}: text REQUIRED non-empty (authority wording is
+# the row's whole payload, preserved VERBATIM - a textless row says nothing and cannot ship).
+# type is the contract's CANDIDATE vocabulary ("validated against real holdings before freeze"),
+# so an unknown type WARNs rather than blocks - the one deliberately-soft vocab here.
+ACKNOWLEDGEMENT_KEYS = frozenset({"text", "type", "source"})
+ACKNOWLEDGEMENT_TYPES = frozenset({"required_source", "custodian", "community",
+                                   "traditional_owners", "field_support", "infrastructure",
+                                   "access_provider"})
+# organisations[]: role-typed organisation rows {name, ror?, roles[], primary_custodian?}
+# fitted to the existing organisation/credit model (survey scope section 3). The scalar
+# organisation: block keeps its ratified meaning (primary custodial responsibility, the
+# discovery projection); organisations[] is the FULL role statement where parties genuinely
+# differ (industry-collected government releases make collector/custodian/publisher/distributor
+# different parties). PUBLISHER is explicit - structured citation generation fails closed
+# without one and a publisher is never inferred. primary_custodian: true on AT MOST one row
+# (mtcat's organisation is a DETERMINISTIC projection of the explicitly curated primary
+# custodian, never "first element of an array"), and only on a row whose roles include
+# custodian (the selection selects among custodians).
+ORG_ROLES_ORDERED = ("publisher", "custodian", "distributor", "data_collector",
+                     "rights_holder", "hosting_institution")
+ORG_ROLES = frozenset(ORG_ROLES_ORDERED)
+ORGANISATION_ROW_KEYS = frozenset({"name", "ror", "roles", "primary_custodian"})
 # The template/example ship the retired fields with the « REPLACE » sentinel (not null); a value-based
 # deprecation (and the migration) must treat that sentinel as a placeholder so the shipped reference
 # stays clean, exactly as the identifier-lane deprecation keeps the all-null example silent.
@@ -340,6 +417,15 @@ def _check_typed_relation(r, container: str, idx: int, entry: dict) -> None:
     if it not in (None, "") and str(it).strip() not in IDENTIFIER_TYPES:
         r.add("FAIL", container,
               f"{container}[{idx}].identifier_type '{it}' is not one of {tuple(sorted(IDENTIFIER_TYPES))}")
+    # Entity scope (interface contract section 2): fail-closed beside identifier_type. Absent is
+    # silent (scope is optional); a value outside the contract's list cannot ship.
+    sc = entry.get("scope")
+    if sc not in (None, "") and str(sc).strip() not in IDENTIFIER_SCOPE_TYPES:
+        r.add("FAIL", container,
+              f"{container}[{idx}].scope '{sc}' is not one of {IDENTIFIER_SCOPES}; scope is the "
+              f"KIND of thing the identifier identifies (its entity scope), never an identity "
+              f"designation (which identifiers ARE this dataset/release is curated in "
+              f"identity_classification), so an out-of-vocab scope cannot ship")
     # "Identifiers by data level" (D-L1/D-L2): `identifies` states WHAT the identifier points at, in
     # NCI Table 1 level terms. FAIL-CLOSED like relation/identifier_type above: an out-of-vocab level
     # would auto-derive a wrong (or no) relation, so a mis-typed value publishes a wrong provenance
@@ -375,6 +461,368 @@ def _is_typed_provenance_entry(entry) -> bool:
     rel = entry.get("relation")
     return (ident not in (None, "", "TBD", "TODO")
             and rel not in (None, "") and str(rel).strip() in RELATION_TYPES)
+
+
+def _http_s(u) -> bool:
+    """True when a value is an http(s) URL (scheme check only - resolvability is not this
+    dependency-light validator's job)."""
+    return str(u).strip().lower().startswith(("http://", "https://"))
+
+
+def _check_identifier_pair(r, check: str, label: str, entry) -> None:
+    """MTCAT 2.0 identifier pair {scheme, identifier}: BOTH keys required non-empty when the
+    object is present (interface contract section 3 - the doi/primary/preferred chain is only
+    mechanically testable over complete pairs). Unknown keys WARN."""
+    if not isinstance(entry, dict):
+        r.add("WARNING", check, f"{label} must be a mapping {{scheme, identifier}}")
+        return
+    for k in entry:
+        if k not in PREFERRED_IDENTIFIER_KEYS:
+            r.add("WARNING", check, f"{label}.{k} is not a recognised key (allowed: identifier, scheme)")
+    missing = [k for k in ("scheme", "identifier") if entry.get(k) in (None, "", "TBD", "TODO")]
+    if missing:
+        r.add("FAIL", check,
+              f"{label} requires BOTH scheme and identifier (missing: {', '.join(missing)}) - a "
+              f"half-declared identifier cannot anchor the citation invariant")
+
+
+_IC_SHAPE = ("a mapping {case: case_a | case_b, represents: [{scheme, identifier}, ...] "
+             "(case_a only), own_identifiers: [{scheme, identifier}, ...] (case_b only)}")
+
+
+def _check_identity_classification(meta: dict, r, ic) -> list:
+    """identity_classification (interface contract section 1; survey-metadata lane D12): the
+    mapping that carries the Case A/B classification AND the identifier designation. Returns
+    the list of well-formed designated {scheme, identifier} pairs (represents for case_a,
+    own_identifiers for case_b; [] when none) for the citation chain check. Silent when absent;
+    fail-closed once stated."""
+    if ic in (None, ""):
+        return []
+    if not isinstance(ic, dict):
+        r.add("FAIL", "identity",
+              f"identity_classification '{ic}' is not a mapping (the scalar string form is retired); "
+              f"identity_classification is now {_IC_SHAPE} - case_a: this record represents the SAME "
+              f"dataset/release as the "
+              f"cited source identifier(s) listed in represents; case_b: a DISTINCT AusMT-published "
+              f"release whose own identifiers are listed in own_identifiers")
+        return []
+    for k in ic:
+        if k not in IDENTITY_CLASSIFICATION_KEYS:
+            r.add("WARNING", "identity",
+                  f"identity_classification.{k} is not a recognised key (allowed: "
+                  f"{', '.join(sorted(IDENTITY_CLASSIFICATION_KEYS))})")
+    case = ic.get("case")
+    if case in (None, ""):
+        r.add("FAIL", "identity",
+              f"identity_classification has no case - case is REQUIRED, one of "
+              f"{IDENTITY_CLASSIFICATIONS} (case_a: represents the SAME dataset/release as a cited "
+              f"source identifier; case_b: a DISTINCT AusMT-published release)")
+        return []
+    case = str(case).strip()
+    if case not in IDENTITY_CLASSIFICATIONS:
+        r.add("FAIL", "identity",
+              f"identity_classification.case '{case}' is not one of {IDENTITY_CLASSIFICATIONS} - "
+              f"case_a: represents the SAME dataset/release as a cited source identifier; "
+              f"case_b: a DISTINCT AusMT-published release. Optional until the census "
+              f"completes, fail-closed once stated")
+        return []
+    key = IDENTITY_DESIGNATION_KEY[case]
+    other = "own_identifiers" if key == "represents" else "represents"
+    if ic.get(other) is not None:
+        r.add("FAIL", "identity",
+              f"identity_classification.{other} is present under case {case}, but {other} belongs "
+              f"to {'case_b' if other == 'own_identifiers' else 'case_a'} only (case_a designates "
+              f"represents: the cited source identifiers this record is the SAME dataset/release "
+              f"as; case_b designates own_identifiers: identifiers OF the distinct AusMT release). "
+              f"Use {key} under {case}")
+    rows = ic.get(key)
+    if rows is None:
+        return []
+    if not isinstance(rows, list) or not rows:
+        r.add("FAIL", "identity",
+              f"identity_classification.{key} must be a NON-EMPTY list of {{scheme, identifier}} rows "
+              f"when present (absent-not-empty: omit the key when no identifier is designated yet)")
+        return []
+    # represents rows are checked against the survey's own related_identifiers rows, exactly
+    # (scheme == identifier_type, identifier == identifier, whitespace-trimmed; the validator
+    # applies no DOI normalisation, so the row is cited and designated in one form).
+    related = meta.get("related_identifiers")
+    cited = set()
+    if isinstance(related, list):
+        for ri in related:
+            if isinstance(ri, dict) and ri.get("identifier") not in (None, "") \
+                    and ri.get("identifier_type") not in (None, ""):
+                cited.add((str(ri["identifier_type"]).strip(), str(ri["identifier"]).strip()))
+    designated = []
+    for idx, row in enumerate(rows):
+        label = f"identity_classification.{key}[{idx}]"
+        if not isinstance(row, dict):
+            r.add("FAIL", "identity", f"{label} must be a mapping {{scheme, identifier}}")
+            continue
+        missing = [k for k in ("scheme", "identifier") if row.get(k) in (None, "", "TBD", "TODO")]
+        if missing:
+            r.add("FAIL", "identity",
+                  f"{label} requires BOTH scheme and identifier (missing: {', '.join(missing)}) - "
+                  f"a half-declared designation cannot anchor identifiers[] or the citation chain")
+            continue
+        for k in row:
+            if k not in PREFERRED_IDENTIFIER_KEYS:
+                r.add("WARNING", "identity",
+                      f"{label}.{k} is not a recognised key (allowed: identifier, scheme)")
+        pair = (str(row["scheme"]).strip(), str(row["identifier"]).strip())
+        if key == "represents" and pair not in cited:
+            r.add("FAIL", "identity",
+                  f"{label} {pair[0]}:{pair[1]} does not equal any related_identifiers row (a "
+                  f"represents row must match a related_identifiers row exactly: scheme == "
+                  f"identifier_type and identifier == identifier). case_a designates sameness with "
+                  f"a CITED source identifier, so cite the identifier as a related_identifiers row "
+                  f"first (or correct the represents row)")
+            continue
+        designated.append(pair)
+    return designated
+
+
+def _check_mtcat20_fields(meta: dict, r) -> None:
+    """MTCAT 2.0 core survey.yaml field homes (LANE-CONTRACT-MTCAT-20-CORE S1). Every field is
+    optional and SILENT when absent; values are fail-closed per the frozen vocabularies, structure
+    WARNs (the credit-row posture). See the constants block above for the design citations."""
+    # --- subjects[] (interchange spec 6.6 + Appendix B) ---
+    subjects = meta.get("subjects")
+    if subjects is not None:
+        if not isinstance(subjects, list):
+            r.add("WARNING", "subjects",
+                  "subjects must be a LIST of {code, scheme, label?, uri?} rows")
+        else:
+            for idx, s in enumerate(subjects):
+                if not isinstance(s, dict):
+                    r.add("WARNING", "subjects",
+                          f"subjects[{idx}] must be a mapping (code/scheme/label?/uri?)")
+                    continue
+                for k in s:
+                    if k not in SUBJECT_KEYS:
+                        r.add("WARNING", "subjects",
+                              f"subjects[{idx}].{k} is not a recognised key (allowed: "
+                              f"{', '.join(sorted(SUBJECT_KEYS))})")
+                scheme = s.get("scheme")
+                if scheme in (None, ""):
+                    r.add("FAIL", "subjects",
+                          f"subjects[{idx}] has no scheme - scheme is REQUIRED and explicit "
+                          f"(no default scheme exists; registered: {', '.join(SUBJECT_SCHEMES)})")
+                    scheme = None
+                elif str(scheme).strip() not in SUBJECT_SCHEMES:
+                    r.add("FAIL", "subjects",
+                          f"subjects[{idx}].scheme '{scheme}' is not a registered scheme token "
+                          f"({', '.join(SUBJECT_SCHEMES)}) - this producer gate is fail-closed; "
+                          f"an unregistered token cannot ship from this corpus")
+                    scheme = None
+                code = s.get("code")
+                if code in (None, ""):
+                    r.add("FAIL", "subjects",
+                          f"subjects[{idx}] has no code - a subject row is (code, scheme)")
+                elif scheme is not None:
+                    fmt = SUBJECT_CODE_FORMATS.get(str(scheme).strip())
+                    if fmt is not None and not fmt.match(str(code).strip()):
+                        r.add("FAIL", "subjects",
+                              f"subjects[{idx}].code '{code}' is not a valid {str(scheme).strip()} "
+                              f"code (expected 2, 4 or 6 digits, e.g. 37 / 3706 / 370602)")
+                uri = s.get("uri")
+                if uri not in (None, "") and not _http_s(uri):
+                    r.add("FAIL", "subjects",
+                          f"subjects[{idx}].uri '{uri}' is not an http(s) URI - a subject uri is "
+                          f"a governed, resolvable concept URI")
+    # --- discovery_description (the ratified discovery-text gate) ---
+    dd_text = meta.get("discovery_description")
+    if dd_text is not None:
+        if not isinstance(dd_text, str):
+            r.add("WARNING", "discovery", "discovery_description must be a string")
+        elif len(dd_text.strip()) > DISCOVERY_DESCRIPTION_MAX:
+            r.add("FAIL", "discovery",
+                  f"discovery_description is {len(dd_text.strip())} characters; the discovery-text "
+                  f"policy cap is {DISCOVERY_DESCRIPTION_MAX}. The engine never truncates - shorten "
+                  f"it here (the full story belongs in abstract, which is uncapped)")
+    # --- the discovery-text gate itself: abstract <= 1200 OR discovery_description ---
+    # (ratified: the abstract is UNCAPPED and never truncated by the engine; a long abstract
+    # simply requires an explicit concise discovery_description for the discovery layer)
+    abstract_text = meta.get("abstract")
+    if (dd_text in (None, "") and isinstance(abstract_text, str)
+            and len(abstract_text.strip()) > DISCOVERY_DESCRIPTION_MAX):
+        r.add("FAIL", "discovery",
+              f"abstract is {len(abstract_text.strip())} characters and no discovery_description "
+              f"is declared; the discovery-text gate requires abstract <= "
+              f"{DISCOVERY_DESCRIPTION_MAX} OR an explicit discovery_description <= "
+              f"{DISCOVERY_DESCRIPTION_MAX}. The abstract itself stays uncapped - add a concise "
+              f"discovery_description rather than cutting the abstract")
+    # --- identity_classification (interface contract section 1; survey-metadata lane D12) ---
+    # The mapping {case, represents | own_identifiers}; `designated` collects the well-formed
+    # designated identifier pairs for the citation chain check below.
+    ic = meta.get("identity_classification")
+    designated = _check_identity_classification(meta, r, ic)
+    # --- dates.issued (interface contract section 6: never inferred; unknown = absent) ---
+    dates = meta.get("dates")
+    if isinstance(dates, dict):
+        issued = dates.get("issued")
+        if issued not in (None, "") and not _iso_date_ok(issued):
+            r.add("FAIL", "dates",
+                  f"dates.issued '{issued}' is not an ISO calendar date (YYYY-MM-DD). issued is "
+                  f"the PUBLICATION/RELEASE date of the dataset/release - never acquisition "
+                  f"coverage, never a bare year; when the publication date is unknown, leave it "
+                  f"absent (it is never inferred)")
+    # --- citation block (interface contract section 3) ---
+    cit = meta.get("citation")
+    if cit is not None:
+        if not isinstance(cit, dict):
+            r.add("WARNING", "citation",
+                  "citation must be a mapping (preferred_identifier/preferred_text/text_source/"
+                  "additional) - guidance over the identifier set, never a bibliographic record")
+        else:
+            for k in cit:
+                if k not in CITATION_KEYS:
+                    r.add("WARNING", "citation",
+                          f"citation.{k} is not a recognised key (allowed: "
+                          f"{', '.join(sorted(CITATION_KEYS))})")
+            pref = cit.get("preferred_identifier")
+            if pref is not None:
+                _check_identifier_pair(r, "citation", "citation.preferred_identifier", pref)
+                # The citation chain (interface contract section 3, T25; D20 FAIL): a complete
+                # preferred_identifier MUST equal one of the designated identifiers - represents
+                # (case_a) or own_identifiers (case_b) in identity_classification. Nothing
+                # designated (home absent, case only, or every row malformed) fails the same way.
+                if isinstance(pref, dict) and pref.get("scheme") not in (None, "", "TBD", "TODO") \
+                        and pref.get("identifier") not in (None, "", "TBD", "TODO"):
+                    pair = (str(pref["scheme"]).strip(), str(pref["identifier"]).strip())
+                    if pair not in designated:
+                        r.add("FAIL", "citation",
+                              f"citation.preferred_identifier {pair[0]}:{pair[1]} does not equal any "
+                              f"designated identifier of this survey; the designation home is "
+                              f"identity_classification (represents for case_a, own_identifiers "
+                              f"for case_b) and it currently designates "
+                              f"{', '.join(f'{s}:{i}' for s, i in designated) or 'nothing'}. Designate the "
+                              f"identifier there (a represents row must also be a "
+                              f"related_identifiers row) or change preferred_identifier; mtcat doi, "
+                              f"the primary identifier and the preferred citation identifier are "
+                              f"ONE mechanically testable chain, so this fails closed")
+            tsrc = cit.get("text_source")
+            if tsrc not in (None, "") and str(tsrc).strip() not in CITATION_TEXT_SOURCES:
+                r.add("FAIL", "citation",
+                      f"citation.text_source '{tsrc}' is not one of "
+                      f"{tuple(sorted(CITATION_TEXT_SOURCES))} - where citation wording came from "
+                      f"is a fail-closed provenance claim")
+            add = cit.get("additional")
+            if add is not None:
+                if not isinstance(add, list):
+                    r.add("WARNING", "citation",
+                          "citation.additional must be a LIST of {identifier?, preferred_text?, "
+                          "reason} rows")
+                else:
+                    for idx, row in enumerate(add):
+                        if not isinstance(row, dict):
+                            r.add("WARNING", "citation",
+                                  f"citation.additional[{idx}] must be a mapping")
+                            continue
+                        for k in row:
+                            if k not in CITATION_ADDITIONAL_KEYS:
+                                r.add("WARNING", "citation",
+                                      f"citation.additional[{idx}].{k} is not a recognised key "
+                                      f"(allowed: {', '.join(sorted(CITATION_ADDITIONAL_KEYS))})")
+                        if row.get("reason") in (None, "", "TBD", "TODO"):
+                            r.add("FAIL", "citation",
+                                  f"citation.additional[{idx}] has no reason - the reason (e.g. "
+                                  f"derived_product, repository_product, required_source_credit, "
+                                  f"companion_release) is REQUIRED; it makes the additional-"
+                                  f"citation layer semantically non-opaque")
+                        if row.get("identifier") is not None:
+                            _check_identifier_pair(r, "citation",
+                                                   f"citation.additional[{idx}].identifier",
+                                                   row.get("identifier"))
+    # --- acknowledgements[] (interface contract section 3: plural, verbatim, never citation) ---
+    acks = meta.get("acknowledgements")
+    if acks is not None:
+        if not isinstance(acks, list):
+            r.add("WARNING", "acknowledgements",
+                  "acknowledgements must be a LIST of {text, type?, source?} rows")
+        else:
+            for idx, a in enumerate(acks):
+                if not isinstance(a, dict):
+                    r.add("WARNING", "acknowledgements",
+                          f"acknowledgements[{idx}] must be a mapping (text/type?/source?)")
+                    continue
+                for k in a:
+                    if k not in ACKNOWLEDGEMENT_KEYS:
+                        r.add("WARNING", "acknowledgements",
+                              f"acknowledgements[{idx}].{k} is not a recognised key (allowed: "
+                              f"{', '.join(sorted(ACKNOWLEDGEMENT_KEYS))})")
+                text = a.get("text")
+                if text in (None, "") or not str(text).strip():
+                    r.add("FAIL", "acknowledgements",
+                          f"acknowledgements[{idx}] has no text - the (verbatim) wording IS the "
+                          f"row; a textless acknowledgement says nothing and cannot ship")
+                atype = a.get("type")
+                if atype not in (None, "") and str(atype).strip() not in ACKNOWLEDGEMENT_TYPES:
+                    r.add("WARNING", "acknowledgements",
+                          f"acknowledgements[{idx}].type '{atype}' is not a candidate type "
+                          f"({', '.join(sorted(ACKNOWLEDGEMENT_TYPES))}) - the type vocabulary is "
+                          f"validated against real holdings, so unknown types WARN, never block")
+    # --- organisations[] (survey scope section 3: role-typed rows; explicit primary custodian) ---
+    orgs = meta.get("organisations")
+    if orgs is not None:
+        if not isinstance(orgs, list):
+            r.add("WARNING", "organisations",
+                  "organisations must be a LIST of {name, ror?, roles[], primary_custodian?} rows "
+                  "(the scalar organisation: block stays the custodial discovery value)")
+        else:
+            primaries = []
+            for idx, o in enumerate(orgs):
+                if not isinstance(o, dict):
+                    r.add("WARNING", "organisations",
+                          f"organisations[{idx}] must be a mapping (name/ror?/roles/primary_custodian?)")
+                    continue
+                for k in o:
+                    if k not in ORGANISATION_ROW_KEYS:
+                        r.add("WARNING", "organisations",
+                              f"organisations[{idx}].{k} is not a recognised key (allowed: "
+                              f"{', '.join(sorted(ORGANISATION_ROW_KEYS))})")
+                if not _has_real_value(o.get("name")):
+                    r.add("WARNING", "organisations",
+                          f"organisations[{idx}] has no name - a role-typed organisation needs a name")
+                roles = o.get("roles")
+                if roles in (None, "", []):
+                    r.add("WARNING", "organisations",
+                          f"organisations[{idx}] has no roles - state what this organisation is "
+                          f"({', '.join(ORG_ROLES_ORDERED)})")
+                elif not isinstance(roles, list):
+                    r.add("WARNING", "organisations",
+                          f"organisations[{idx}].roles must be a LIST of role tokens")
+                else:
+                    for role in roles:
+                        if str(role).strip() not in ORG_ROLES:
+                            r.add("FAIL", "organisations",
+                                  f"organisations[{idx}].roles value '{role}' is not one of "
+                                  f"{ORG_ROLES_ORDERED}; an organisation role is a fail-closed "
+                                  f"vocab (a mis-typed role publishes a wrong claim about who "
+                                  f"holds/publishes/collected the data)")
+                oror = o.get("ror")
+                if oror not in (None, "", "TBD", "TODO") and not ror_format_ok(oror):
+                    r.add("WARNING", "organisations",
+                          f"organisations[{idx}].ror '{oror}' does not look like a ROR id "
+                          f"(expected a bare 9-char id or https://ror.org/<id>)")
+                pc = o.get("primary_custodian")
+                if pc is not None and not isinstance(pc, bool):
+                    r.add("WARNING", "organisations",
+                          f"organisations[{idx}].primary_custodian must be boolean true/false, "
+                          f"got '{pc}'")
+                elif pc is True:
+                    primaries.append(idx)
+                    row_roles = roles if isinstance(roles, list) else []
+                    if "custodian" not in [str(x).strip() for x in row_roles]:
+                        r.add("FAIL", "organisations",
+                              f"organisations[{idx}] is flagged primary_custodian but its roles "
+                              f"do not include custodian - the explicit primary-custodian "
+                              f"selection selects among custodial rows")
+            if len(primaries) > 1:
+                r.add("FAIL", "organisations",
+                      f"organisations rows {primaries} are ALL flagged primary_custodian: true - "
+                      f"mtcat's organisation is a deterministic projection of ONE explicitly "
+                      f"curated primary custodian, so at most one row may carry the flag")
 
 
 def parse_angle(tok: str):
@@ -1042,6 +1490,9 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         else:
             for idx, c in enumerate(contributors):
                 _check_credit_row(r, "contributors", idx, c, roled=True)
+    # MTCAT 2.0 core field homes (S1): subjects[], discovery_description, identity_classification,
+    # dates.issued, citation, acknowledgements[], organisations[]. All optional, silent when absent.
+    _check_mtcat20_fields(meta, r)
     # §2b (identifiers design): identifiers.instrument_pid — the ONE survey/platform-level instrument PID
     # (PIDINST, e.g. 10.82388/<id>), the survey-layer counterpart to the deep per-serial EDI DOIs. Same
     # light format posture as instruments[].pid / RAiD above: an https:// URL or a bare handle/DOI,
