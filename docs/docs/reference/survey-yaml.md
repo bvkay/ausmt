@@ -868,8 +868,10 @@ agency publishes.
 |---|---|
 | Obligation | optional |
 | Type | list of mapping |
-| Row keys | `name` (required), `ror`, `roles` (list), `primary_custodian` (boolean) |
+| Row keys | `name` (required), `ror`, `roles` (list, required, at least one token), `primary_custodian` (boolean) |
 | Roles | `publisher`, `custodian`, `distributor`, `data_collector`, `rights_holder`, `hosting_institution` |
+
+A row with no `roles` is warned by the validator and dropped from the published survey-metadata.json rather than served; the contribution form drops such a row before packaging.
 
 ```yaml
 organisations:

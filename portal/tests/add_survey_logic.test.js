@@ -611,6 +611,10 @@ ok(/- name: "Geoscience Australia"[\s\S]*?roles:\s*\n\s*- publisher\s*\n\s*- dis
 ok(/- name: "GSSA"\s*\n\s*roles:\s*\n\s*- custodian\s*\n\s*- data_collector\s*\n\s*primary_custodian: true/.test(yOrgRows),
    "naming the essential organisation again MERGES its roles into the seeded custodian row");
 ok((yOrgRows.match(/- name: "/g) || []).length === 2, "a nameless organisation row is dropped");
+const yOrgNoRole = M.buildSurveyYaml({ ...base, organisation: "GSSA", organisations: [
+  { name: "Roleless Org", ror: "https://ror.org/04ge02x20", roles: [] }] });
+ok(!/Roleless Org/.test(yOrgNoRole) && (yOrgNoRole.match(/- name: "/g) || []).length === 1,
+   "a named organisation row with no role ticked is dropped (it states nothing; the engine would drop it silently)");
 const yOrgGuard = M.buildSurveyYaml({ ...base, organisation: "O",
   organisations: [{ name: "X", roles: ["owner\ninjected: true", "publisher"] }] });
 ok(!/injected:/.test(yOrgGuard) && !/- owner/.test(yOrgGuard),

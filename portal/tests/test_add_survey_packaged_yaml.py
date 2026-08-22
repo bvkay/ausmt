@@ -16,7 +16,6 @@ because the vendored copy is committed - so it FAILS rather than skips. The one 
 driver reporting exit 2 (jsdom absent), matching test_add_survey_submit.py.
 """
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -44,7 +43,6 @@ def _validator_py() -> Path:
         "committed, so this is a BROKEN CHECKOUT, not a legitimate skip.")
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not available")
 def test_every_packaged_survey_yaml_validates_with_zero_fails(tmp_path):
     assert DRIVER.exists(), "packaged_yaml_dump.js missing"
     out_dir = tmp_path / "packaged"
