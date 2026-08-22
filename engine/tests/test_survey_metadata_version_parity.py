@@ -18,13 +18,15 @@ function (its own regex over the generate.py source, so the pin cannot agree wit
   3. contract/generate.py:survey_metadata_schema_version()  (the one accessor)
   4. engine/extract/_contract.py                         (the generated engine constant)
   5. the schema $id                                      (the version-specific immutable URI)
+  6. a REAL BUILD's served schema routes and every emitted document's `version`
 
-The served routes of a real build (the emitter lane) and the docs current-version display (the docs
-lane) join this module with their own commits; the docs read sits behind the designed-topology skip
-test_mtcat_version_parity.py takes for the docs tree (allow-listed in tests/ci_check_skips.py).
+The docs current-version display (the docs lane) joins this module with its own commit; that read
+sits behind the designed-topology skip test_mtcat_version_parity.py takes for the docs tree
+(allow-listed in tests/ci_check_skips.py).
 """
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,6 +36,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent                                  # engine/
 REPO = ROOT.parent                                  # the ausmt monorepo root
 SCHEMA_FILE = ROOT / "schema" / "ausmt-survey-metadata.schema.json"
+SURVEYS = HERE / "fixtures"                         # vendored, self-contained (as in test_mtcat.py)
 
 TITLE_RE = re.compile(r"^AusMT Survey Metadata (\d+\.\d+)(-draft)?:")
 
@@ -125,3 +128,36 @@ def test_the_generated_constant_is_not_a_hand_typed_literal_in_the_builder():
     src = (ROOT / "extract" / "build_portal.py").read_text(encoding="utf-8")
     hits = re.findall(r"SURVEY_METADATA[A-Z_]*[^\n]{0,60}?[\"']\d+\.\d+[\"']", src)
     assert not hits, f"a survey-metadata version literal sits beside the constant's name in build_portal.py: {hits}"
+    assert "SURVEY_METADATA_SCHEMA_VERSION" in src, "the builder must read the generated constant"
+
+
+# ---------------------------------------------------------------- the served routes and documents
+
+def _build(tmp_path):
+    out = tmp_path / "data"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(SURVEYS),
+                        "--out", str(out), "--no-validate"], cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return out
+
+
+def test_a_real_build_serves_the_schema_at_both_routes_and_stamps_the_version(tmp_path):
+    """Statement 6, the surface a consumer actually fetches: the build serves the schema at the
+    immutable versioned route and the latest route, byte-identical to the in-tree artifact, and every
+    emitted survey-metadata.json carries the single-source version."""
+    pytest.importorskip("mt_metadata")
+    out = _build(tmp_path)
+    want = _authority()
+    in_tree = SCHEMA_FILE.read_bytes()
+    latest = out / "ausmt-survey-metadata.schema.json"
+    versioned = out / "schemas" / "ausmt-survey-metadata" / want / "ausmt-survey-metadata.schema.json"
+    assert latest.is_file(), "the latest-convenience schema route must be served beside the data"
+    assert versioned.is_file(), f"the versioned immutable schema route {versioned} must be served"
+    assert latest.read_bytes() == in_tree and versioned.read_bytes() == in_tree
+    docs = sorted((out / "products").glob("*/survey-metadata.json"))
+    assert docs, "a build over the fixture surveys must emit at least one survey-metadata.json"
+    for d in docs:
+        doc = json.loads(d.read_text(encoding="utf-8"))
+        assert doc["version"] == want, f"{d} stamps {doc['version']!r}, the schema declares {want!r}"
+        assert doc["schema"] == "ausmt-survey-metadata"
+
