@@ -757,27 +757,58 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
       "R3: the collection still emits from the new card (id/title unchanged by the move)");
   }
 
-  // (8d) R4 PRINCIPAL INVESTIGATORS: add two rows, package, and inspect the survey.yaml principal_
-  //      investigators[] block (name + orcid; a blank orcid -> null). Remove drops a row.
+  // (8d) A3 THE PLAIN-LANGUAGE CREDIT QUESTIONS, driven through the LIVE DOM and inspected in the
+  //      PACKAGED survey.yaml: "Who led this survey?" -> one ProjectLeader contributors row; the citation
+  //      question -> preferred_text + a typed related_identifiers row under its curator note, and NEVER
+  //      citation.preferred_identifier; the organisations rows -> the marked seeded custodian plus a
+  //      role-ticked row; the acknowledgements rows -> verbatim wording. The two retired flat credit keys
+  //      must be absent from the packaged bytes entirely.
   {
     const e = await boot({ probe: probeAbsent });
     fillValidMeta(e.win);
     await addEdi(e.win, "S01.edi", EDI_TEXT);
-    e.doc.getElementById("addPi").onclick();
-    e.doc.getElementById("addPi").onclick();
-    const rows = e.doc.querySelectorAll("#piRows .pirow");
-    ok(rows.length === 2, "R4: two principal-investigator rows added; got " + rows.length);
-    rows[0].querySelector(".pi-name").value = "Ada Lovelace";
-    rows[0].querySelector(".pi-orcid").value = "0000-0002-1825-0097";
-    rows[1].querySelector(".pi-name").value = "Grace Hopper";   // no ORCID -> null
+    e.doc.getElementById("m_lead_name").value = "Duan, Jingming";
+    e.doc.getElementById("m_lead_orcid").value = "0000-0002-1825-0097";
+    e.doc.getElementById("m_cite_text").value = "GSSA (2016). AusLAMP South Australia. [Data set].";
+    e.doc.getElementById("m_cite_identifier").value = "https://doi.org/10.25914/abc";
+    e.doc.getElementById("addOrg").onclick();
+    e.doc.getElementById("addOrg").onclick();
+    const orgs = e.doc.querySelectorAll("#orgRows .orgrow");
+    ok(orgs.length === 2, "A3: two organisation rows added; got " + orgs.length);
+    orgs[0].querySelector(".og-name").value = "Geoscience Australia";
+    orgs[0].querySelector(".og-ror").value = "https://ror.org/04ge02x20";
+    orgs[0].querySelector('.og-role[value="publisher"]').checked = true;
+    e.doc.getElementById("addAck").onclick();
+    const acks = e.doc.querySelectorAll("#ackRows .ackrow");
+    ok(acks.length === 1, "A3: an acknowledgement row added; got " + acks.length);
+    acks[0].querySelector(".ak-text").value = "Data supplied by the GSSA.";
+    acks[0].querySelector(".ak-type").value = "custodian";
     await e.doc.getElementById("btnPackage").onclick();
     await new Promise((res) => setTimeout(res, 0));
     const y = await packagedSurveyYaml(e.win, e.record);
-    ok(/principal_investigators:\s*\n\s*- name: "Ada Lovelace"\s*\n\s*orcid: "0000-0002-1825-0097"\s*\n\s*- name: "Grace Hopper"\s*\n\s*orcid: null/.test(y),
-      "R4: the packaged survey.yaml carries both PIs (blank ORCID -> null); got: " + (y.match(/principal_investigators:[\s\S]*?(?=\n\w)/) || [""])[0]);
-    // remove the second row -> it drops out.
-    rows[1].querySelector(".pi-rm").onclick();
-    ok(e.doc.querySelectorAll("#piRows .pirow").length === 1, "R4: removing a PI row drops it (repeatable add/remove)");
+    ok(!/lead_investigator/.test(y) && !/principal_investigators/.test(y),
+      "A3: the packaged survey.yaml carries NEITHER retired flat credit key");
+    ok(/contributors:\s*\n\s*- name: "Duan, Jingming"\s*\n\s*name_type: person\s*\n\s*role: ProjectLeader\s*\n\s*orcid: "0000-0002-1825-0097"/.test(y),
+      "A3: 'Who led this survey?' packages ONE ProjectLeader contributors row; got: "
+      + (y.match(/contributors:[\s\S]*?(?=\n\w)/) || [""])[0]);
+    ok(/citation:\s*\n\s*preferred_text: "GSSA \(2016\)\. AusLAMP South Australia\. \[Data set\]\."\s*\n\s*text_source: source_provided/.test(y),
+      "A3: the citation question packages preferred_text + text_source");
+    ok(!/^\s*preferred_identifier:/m.test(y),
+      "A3: the packaged survey.yaml NEVER carries citation.preferred_identifier");
+    ok(/# CONTRIBUTOR: pasted as this dataset's citation identifier/.test(y)
+       && /- identifier: "10\.25914\/abc"\s*\n\s*identifier_type: DOI/.test(y),
+      "A3: the pasted DOI packages as a typed related row (normalised) under its curator note");
+    ok(/organisations:\s*\n\s*# INFERRED-REVIEW: custodian seeded from the essential organisation; confirm roles\s*\n\s*- name: "Test Org"\s*\n\s*roles:\s*\n\s*- custodian\s*\n\s*primary_custodian: true/.test(y),
+      "A3: the essential organisation packages as the MARKED seeded custodian row; got: "
+      + (y.match(/organisations:[\s\S]*?(?=\n\w)/) || [""])[0]);
+    ok(/- name: "Geoscience Australia"\s*\n\s*ror: "https:\/\/ror\.org\/04ge02x20"\s*\n\s*roles:\s*\n\s*- publisher/.test(y),
+      "A3: a role-ticked organisation row packages its ROR and its roles");
+    ok(/acknowledgements:\s*\n\s*- text: "Data supplied by the GSSA\."\s*\n\s*type: custodian/.test(y),
+      "A3: the required wording packages verbatim with its type");
+    // remove the second (empty) organisation row -> it drops out.
+    orgs[1].querySelector(".og-rm").onclick();
+    ok(e.doc.querySelectorAll("#orgRows .orgrow").length === 1,
+      "A3: removing an organisation row drops it (repeatable add/remove)");
   }
 
   // (8e) R5 DOI NORMALISATION on blur: a pasted resolver URL folds to the bare DOI in the publication DOI
@@ -925,7 +956,9 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
     "SUBMISSION.md sequential numbering both branches, per-row file remove: list + DMS conflict count + " +
     "removed file absent from packaged zip bytes, DATAID packaging: rename preview + DATAID-named zip entry + " +
     "MANIFEST source_filename + duplicate/missing DATAID blocks naming both filenames; round-2: slug-collision " +
-    "warn+degrade, zip-path visibility both probe states, collection card collapse + emission, principal_investigators " +
+    "warn+degrade, zip-path visibility both probe states, collection card collapse + emission, the A3 plain-language " +
+    "credit questions (ProjectLeader row, citation text + typed identifier row, seeded custodian + role rows, " +
+    "acknowledgements, no retired key) " +
     "emission, DOI normalisation matrix; credit: creators order + name_type + ORCID/ROR routing + quoted names, " +
     "contributors 8-token fail-closed role select, nameless-row drop)");
   process.exit(0);

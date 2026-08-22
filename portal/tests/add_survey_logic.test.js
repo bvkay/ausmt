@@ -506,29 +506,170 @@ ok(/matches the existing survey /.test(html) && /Continue if you are updating th
    "the collision warning copy informs (non-blocking), it does not wall");
 ok(/orcidok warn/.test(html), "the collision state uses a distinct 'warn' chip class (not the valid/invalid states)");
 
-// ---- R4: principal_investigators[] emission (schema shape {name, orcid}, mirrors the validator/editor). ----
-const yPI = M.buildSurveyYaml({ ...base, principal_investigators: [
-  { name: "Ada Lovelace", orcid: "0000-0002-1825-0097" },
-  { name: "Grace Hopper", orcid: "" },
-  { name: "", orcid: "0000-0001-0000-0000" }] });   // a nameless row is dropped
-ok(/principal_investigators:\s*\n\s*- name: "Ada Lovelace"\s*\n\s*orcid: "0000-0002-1825-0097"\s*\n\s*- name: "Grace Hopper"\s*\n\s*orcid: null/.test(yPI),
-   "principal_investigators emits {name, orcid} rows; a blank ORCID -> null");
-ok((yPI.match(/- name:/g) || []).length === 2, "a nameless principal_investigators row is dropped (name is the signal)");
-ok(!/principal_investigators:/.test(M.buildSurveyYaml({ ...base })), "no principal_investigators key when the list is empty (absent -> absent)");
-ok(!/principal_investigators:/.test(M.buildSurveyYaml({ ...base, principal_investigators: [{ name: "" }] })),
-   "an all-nameless principal_investigators list emits no key");
-// the lead-investigator block still precedes it (served-citation precedence: lead first, else this list).
-ok(yPI.indexOf("lead_investigator:") >= 0 && yPI.indexOf("lead_investigator:") < yPI.indexOf("principal_investigators:"),
-   "lead_investigator is emitted before principal_investigators");
-// the form carries the repeatable UI + the honest serving-precedence hint (mirrors the curator hub copy).
-ok(/id="piRows"/.test(html) && /id="addPi"/.test(html) && /readPrincipalInvestigators\(/.test(html),
-   "the form carries the repeatable principal-investigators UI (piRows + addPi) wired into readMeta");
-ok(/When a lead investigator is set the portal credits the lead; otherwise the principal investigators list is credited/
-   .test(html.replace(/\s+/g, " ")), "the serving-precedence hint mirrors the curator hub copy");
-// A2 (LANE-CONTRACT-FORM-CREDIT): the editor-parity pin for the retired principal_investigators row
-// spec is DELETED with the editor section it read. gateway/editor_form.py no longer models either
-// retired flat credit key, so this pin could only ever go red; the form's own emission of those keys
-// is retired in A3, with its own retired-keys-absent pin.
+// ============================ A3: the retired flat credit keys leave the public form ============
+// LANE-CONTRACT-FORM-CREDIT: the form stops writing lead_investigator/principal_investigators (the
+// migration deleted them corpus-wide and no reader survives), and the credit questions are rewritten
+// in plain language onto the ratified homes.
+const yRetired = M.buildSurveyYaml({ ...base, pi: "Ada Lovelace", pi_orcid: "0000-0002-1825-0097",
+  principal_investigators: [{ name: "Grace Hopper", orcid: "" }] });
+for (const retired of ["lead_investigator", "principal_investigators"]) {
+  ok(!yRetired.includes(retired),
+     "RETIRED credit key never emitted, even from a scripted meta that still carries it: " + retired);
+}
+ok(!/id="m_pi"/.test(html) && !/id="m_pi_orcid"/.test(html) && !/id="piRows"/.test(html)
+   && !/id="addPi"/.test(html) && !/readPrincipalInvestigators/.test(html),
+   "the lead/principal-investigator inputs, rows and reader are gone from the form");
+ok(!/When a lead investigator is set the portal credits the lead/.test(html.replace(/\s+/g, " ")),
+   "the FALSE served-citation precedence hint is deleted (the engine cites creators, else the org)");
+ok(/Leave blank and AusMT cites the organisation and the year/.test(html.replace(/\s+/g, " ")),
+   "the creators hint states the TRUE fallback (organisation + year)");
+ok(!/or the lead \/ principal investigators above/.test(html.replace(/\s+/g, " ")),
+   "the creators hint no longer points at the retired fields");
+
+// ---- tier 3 question set (the plain-language questions, in the ratified order) ----
+const flat = html.replace(/\s+/g, " ");
+for (const q of ["Who should the citation name, in order?", "Who led this survey?", "Who did what?",
+                 "Does this dataset already have a citation or DOI?",
+                 "Which organisations were involved, and how?",
+                 "Is there wording you must include?",
+                 "When was this dataset published?"]) {
+  ok(flat.includes(q), "tier 3 asks the ratified question: " + q);
+}
+ok(flat.indexOf("Who should the citation name, in order?") < flat.indexOf("Who led this survey?")
+   && flat.indexOf("Who led this survey?") < flat.indexOf("Who did what?"),
+   "the credit questions run citation names -> who led -> who did what");
+ok(flat.indexOf("Who did what?") < flat.indexOf("5. I know my metadata"),
+   "contributors (Who did what?) moved UP out of the advanced tier");
+
+// ---- "Who led this survey?" -> ONE ProjectLeader contributors row (D3) ----
+const yLead = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
+                                  lead_orcid: "0000-0002-1825-0097" });
+ok(/contributors:\s*\n\s*- name: "Duan, Jingming"\s*\n\s*name_type: person\s*\n\s*role: ProjectLeader\s*\n\s*orcid: "0000-0002-1825-0097"/.test(yLead),
+   "'Who led this survey?' emits ONE contributors row {name, name_type: person, role: ProjectLeader, orcid}");
+ok(!/lead_investigator/.test(yLead), "the lead question never writes a retired key");
+const yLeadNoOrcid = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming" });
+ok(!/orcid:/.test(yLeadNoOrcid.split("contributors:")[1] || ""),
+   "an ORCID-less lead emits no orcid key (absent -> absent)");
+ok(!/contributors:/.test(M.buildSurveyYaml({ ...base })), "no lead, no contributors key");
+const yLeadDup = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
+  contributors: [{ name: "Duan, Jingming", name_type: "person", role: "ProjectLeader" }] });
+ok((yLeadDup.match(/role: ProjectLeader/g) || []).length === 1,
+   "the lead row is deduped against an identical typed contributors row");
+const yLeadPlus = M.buildSurveyYaml({ ...base, lead_name: "Duan, Jingming",
+  contributors: [{ name: "Zonge Engineering", name_type: "organisation", role: "DataCollector" }] });
+ok(yLeadPlus.indexOf('- name: "Duan, Jingming"') < yLeadPlus.indexOf('- name: "Zonge Engineering"'),
+   "the lead row is FIRST in contributors, ahead of the typed rows");
+
+// ---- "Does this dataset already have a citation or DOI?" -> citation + ONE related row (D9/D18) ----
+const yCite = M.buildSurveyYaml({ ...base,
+  citation_text: "GSSA (2016). AusLAMP South Australia. [Data set].",
+  citation_identifier: "https://doi.org/10.25914/abc" });
+ok(/citation:\s*\n\s*preferred_text: "GSSA \(2016\)\. AusLAMP South Australia\. \[Data set\]\."\s*\n\s*text_source: source_provided/.test(yCite),
+   "a filled citation question emits preferred_text (quoted verbatim) + a bare text_source");
+ok(!/^\s*preferred_identifier:/m.test(yCite),
+   "the form NEVER writes citation.preferred_identifier (D18: designation is curation)");
+ok(/citation\.preferred_identifier/.test(yCite),
+   "...it names it only inside the curator note comment, which no parser ever sees");
+ok(/- identifier: "10\.25914\/abc"/.test(yCite),
+   "the related-row DOI equals the NORMALISED paste (the resolver URL is folded to the bare DOI)");
+ok(/identifier_type: DOI/.test(yCite), "a DOI-shaped paste types the row DOI");
+ok(!/identifies:/.test(yCite.split("related_identifiers:")[1] || ""),
+   "'curator decides' (the default) omits the identifies key");
+ok(/# CONTRIBUTOR: pasted as this dataset's citation identifier; curator: designate via identity_classification\.represents and citation\.preferred_identifier/.test(yCite),
+   "the pasted identifier carries the curator note as a YAML COMMENT above its row");
+const yCiteUrl = M.buildSurveyYaml({ ...base, citation_identifier: "https://ecat.ga.gov.au/geonetwork/x" });
+ok(/- identifier: "https:\/\/ecat\.ga\.gov\.au\/geonetwork\/x"\s*\n\s*identifier_type: URL/.test(yCiteUrl),
+   "an http(s) non-DOI paste types the row URL and keeps the URL whole");
+ok(!/citation:/.test(yCiteUrl), "an identifier with NO wording emits no citation block");
+const yCiteTextOnly = M.buildSurveyYaml({ ...base, citation_text: "Some wording" });
+ok(/text_source: source_provided/.test(yCiteTextOnly), "text_source rides a non-empty preferred_text");
+ok(!/text_source/.test(M.buildSurveyYaml({ ...base })),
+   "text_source is NEVER emitted without a preferred_text (D17)");
+const yCiteLevel = M.buildSurveyYaml({ ...base, citation_identifier: "10.25914/abc",
+                                       citation_identifies: "entire" });
+ok(/identifies: entire/.test(yCiteLevel), "a chosen data level emits the bare vocab token");
+const yCiteDedupe = M.buildSurveyYaml({ ...base, citation_identifier: "10.25914/abc",
+  related_identifiers: [{ identifier: "10.25914/abc", identifier_type: "DOI", identifies: "entire" }] });
+ok((yCiteDedupe.match(/- identifier:/g) || []).length === 1,
+   "the citation row is deduped against an existing 'This dataset elsewhere' row");
+
+// ---- "Which organisations were involved, and how?" -> organisations[] (+ the seeded custodian, D4) ----
+const yOrg = M.buildSurveyYaml({ ...base, organisation: "Geological Survey of South Australia",
+                                 ror: "https://ror.org/04y8k6r48" });
+ok(/organisations:\s*\n\s*# INFERRED-REVIEW: custodian seeded from the essential organisation; confirm roles\s*\n\s*- name: "Geological Survey of South Australia"\s*\n\s*ror: "https:\/\/ror\.org\/04y8k6r48"\s*\n\s*roles:\s*\n\s*- custodian\s*\n\s*primary_custodian: true/.test(yOrg),
+   "the essential Organisation + ROR seeds a MARKED custodian row with primary_custodian: true");
+ok(!/publisher/.test(yOrg), "publisher is NEVER inferred (only ticked)");
+const yOrgNoRor = M.buildSurveyYaml({ ...base, organisation: "Org" });
+ok(!/ror:\s*null/.test(yOrgNoRor.split("organisations:")[1] || ""),
+   "a blank ROR omits the key on the seeded row (never ror: null)");
+const yOrgRows = M.buildSurveyYaml({ ...base, organisation: "GSSA", organisations: [
+  { name: "Geoscience Australia", ror: "https://ror.org/04ge02x20", roles: ["publisher", "distributor"] },
+  { name: "GSSA", roles: ["data_collector"] },
+  { name: "", roles: ["publisher"] }] });
+ok(/- name: "Geoscience Australia"[\s\S]*?roles:\s*\n\s*- publisher\s*\n\s*- distributor/.test(yOrgRows),
+   "a named organisation row emits its ticked roles in vocabulary order");
+ok(/- name: "GSSA"\s*\n\s*roles:\s*\n\s*- custodian\s*\n\s*- data_collector\s*\n\s*primary_custodian: true/.test(yOrgRows),
+   "naming the essential organisation again MERGES its roles into the seeded custodian row");
+ok((yOrgRows.match(/- name: "/g) || []).length === 2, "a nameless organisation row is dropped");
+const yOrgGuard = M.buildSurveyYaml({ ...base, organisation: "O",
+  organisations: [{ name: "X", roles: ["owner\ninjected: true", "publisher"] }] });
+ok(!/injected:/.test(yOrgGuard) && !/- owner/.test(yOrgGuard),
+   "an out-of-vocab organisation role is dropped; a newline-injection role smuggles no YAML key");
+
+// ---- "Is there wording you must include?" -> acknowledgements[] ----
+const yAck = M.buildSurveyYaml({ ...base, acknowledgements: [
+  { text: "Data supplied by the GSSA.", type: "custodian", source: "GSSA licence deed" },
+  { text: "Plain wording." },
+  { text: "", type: "community" }] });
+ok(/acknowledgements:\s*\n\s*- text: "Data supplied by the GSSA\."\s*\n\s*type: custodian\s*\n\s*source: "GSSA licence deed"/.test(yAck),
+   "acknowledgements emit quoted text, a bare type token and a quoted source");
+ok(/- text: "Plain wording\."\s*\n(?!\s*type:)/.test(yAck), "type/source are omitted when blank");
+ok((yAck.match(/- text:/g) || []).length === 2, "a textless acknowledgement row is dropped");
+ok(!/acknowledgements:/.test(M.buildSurveyYaml({ ...base })), "no key when there is no wording");
+const yAckGuard = M.buildSurveyYaml({ ...base,
+  acknowledgements: [{ text: "W", type: "mystery\ninjected: true" }] });
+ok(!/injected:/.test(yAckGuard) && !/^\s+type:/m.test(yAckGuard),
+   "an out-of-vocab acknowledgement type is dropped, never emitted");
+
+// ---- "When was this dataset published?" -> dates.issued (bare ISO date) ----
+const yIssued = M.buildSurveyYaml({ ...base, date_issued: "2016-05-01" });
+ok(/dates: \{ issued: 2016-05-01 \}/.test(yIssued), "dates.issued emits as a BARE ISO date");
+const yIssuedBoth = M.buildSurveyYaml({ ...base, date_start: "2015", date_end: "2016",
+                                        date_issued: "2016-05-01" });
+ok(/dates: \{ start: 2015, end: 2016, issued: 2016-05-01 \}/.test(yIssuedBoth),
+   "issued rides alongside the acquisition window without disturbing it");
+ok(!/issued/.test(M.buildSurveyYaml({ ...base, date_issued: "2016" })),
+   "a bare YEAR is never emitted as issued (it is a publication DATE, never inferred)");
+ok(M.validateSurvey({ ...base, date_issued: "2016" }, cleanEdis, []).items
+    .some(i => i.check === "dates" && i.level === "FAIL"),
+   "a bare-year issued is a blocking FAIL client-side, the same class the validator uses");
+ok(!M.validateSurvey({ ...base, date_issued: "2016-05-01" }, cleanEdis, []).items
+    .some(i => i.check === "dates" && i.level === "FAIL"),
+   "a proper ISO issued raises no FAIL");
+
+// ---- vocab parity for the new questions, against the vendored validator + the curator editor ----
+const vOrgRoles = (validatorSrc.match(/ORG_ROLES_ORDERED\s*=\s*\(([\s\S]*?)\)/) || [])[1] || "";
+const vOrgRoleList = [...vOrgRoles.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+ok(JSON.stringify(M.ORG_ROLES_ORDERED) === JSON.stringify(vOrgRoleList),
+   "portal ORG_ROLES_ORDERED matches the vendored validator's tuple: " + JSON.stringify(vOrgRoleList));
+const eOrgRoles = (editorSrc.match(/ORG_ROLES_ORDERED\s*=\s*\(([\s\S]*?)\)/) || [])[1] || "";
+ok(JSON.stringify(M.ORG_ROLES_ORDERED) === JSON.stringify([...eOrgRoles.matchAll(/"([^"]+)"/g)].map(m => m[1])),
+   "portal ORG_ROLES_ORDERED matches gateway editor_form.ORG_ROLES_ORDERED");
+ok(M.ORG_ROLES_OFFERED.indexOf("hosting_institution") < 0 && M.ORG_ROLES_OFFERED.length === M.ORG_ROLES_ORDERED.length - 1,
+   "the form offers every organisation role EXCEPT hosting_institution (an AusMT export-side role)");
+const vAckTypes = (validatorSrc.match(/ACKNOWLEDGEMENT_TYPES\s*=\s*frozenset\(\{([\s\S]*?)\}\)/) || [])[1] || "";
+const vAckList = [...vAckTypes.matchAll(/"([^"]+)"/g)].map(m => m[1]).sort();
+ok(JSON.stringify([...M.ACKNOWLEDGEMENT_TYPES].sort()) === JSON.stringify(vAckList),
+   "portal ACKNOWLEDGEMENT_TYPES matches the vendored validator's set: " + JSON.stringify(vAckList));
+const eAckTypes = (editorSrc.match(/ACKNOWLEDGEMENT_TYPES\s*=\s*\(([\s\S]*?)\)/) || [])[1] || "";
+ok(JSON.stringify([...M.ACKNOWLEDGEMENT_TYPES].sort())
+   === JSON.stringify([...eAckTypes.matchAll(/"([^"]+)"/g)].map(m => m[1]).sort()),
+   "portal ACKNOWLEDGEMENT_TYPES matches gateway editor_form.ACKNOWLEDGEMENT_TYPES");
+const vTextSrc = (validatorSrc.match(/CITATION_TEXT_SOURCES\s*=\s*frozenset\(\{([\s\S]*?)\}\)/) || [])[1] || "";
+ok([...vTextSrc.matchAll(/"([^"]+)"/g)].map(m => m[1]).indexOf(M.CITATION_TEXT_SOURCE_FORM) >= 0,
+   "the fixed text_source the form writes is in the validator's CITATION_TEXT_SOURCES vocab");
+ok(M.CITATION_TEXT_SOURCE_FORM === "source_provided",
+   "a contributor's wording is ALWAYS source_provided (ausmt_generated is never a contributor value)");
 
 // ---- R5: DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). ----
 ok(M.normalizeDoi("https://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an https://doi.org/ URL to the bare DOI");

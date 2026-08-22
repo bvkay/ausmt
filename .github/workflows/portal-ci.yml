@@ -43,6 +43,10 @@ on:
       - ".readthedocs.yaml"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
+      # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
+      # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
+      # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.
+      - "gateway/tests/fixtures/vendored_validation/**"
       - ".github/workflows/portal-ci.yml"
   push:
     branches: [main]
@@ -55,6 +59,10 @@ on:
       - ".readthedocs.yaml"
       - "engine/schema/**"
       - "engine/extract/build_portal.py"
+      # A3: tests/test_add_survey_packaged_yaml.py runs the REAL surveys validator (the vendored
+      # pinned copy on CI) over every survey.yaml the form packages, so a validator refresh is an
+      # INPUT to this lane and must gate it, exactly as the docs/branding inputs above do.
+      - "gateway/tests/fixtures/vendored_validation/**"
       - ".github/workflows/portal-ci.yml"
 
 # C39 (CI minutes economy): cancel a superseded run of the SAME ref. Keyed on github.ref (not a
