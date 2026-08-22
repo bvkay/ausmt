@@ -22,8 +22,9 @@ dataset identifier states which data level it points at is in
 ## Required and recommended
 
 **Required** for publication: survey title, survey identifier, geographic location, transfer-function
-products. Missing any of these fails validation. **Recommended**: investigators, organisations,
-acquisition dates, publications, identifiers. Missing these produces warnings.
+products. Missing any of these fails validation. **Recommended**: credit (`creators[]` and
+`contributors[]`), organisations and their roles, acquisition dates, publications, identifiers.
+Missing these produces warnings.
 
 A historical survey with thin records is usually more valuable published with its gaps visible than
 withheld while someone tries to reconstruct them, so validation checks consistency, structure and

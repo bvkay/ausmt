@@ -65,6 +65,11 @@ absence is silent.
 | `coordinate_resolution` | optional | mapping | [14 Coordinate resolution](#14-coordinate-resolution) |
 | `care` | optional | mapping | [15 CARE](#15-care) |
 | `station_ids` | optional | mapping | [16 Station identifiers](#16-station-identifiers) |
+| `organisations` | optional | list of mapping | [17 Organisations and roles](#17-organisations-and-roles) |
+| `citation` | optional | mapping | [18 Citation](#18-citation) |
+| `acknowledgements` | optional | list of mapping | [19 Acknowledgements](#19-acknowledgements) |
+| `identity_classification` | optional | mapping | [20 Identity and designation](#20-identity-and-designation) |
+| `dates` | optional | mapping | [21 Dates](#21-dates) |
 
 A key the validator does not model warns as unknown but is carried through the curator editor's
 round-trip verbatim, so hand-edited YAML is never silently dropped.
@@ -846,20 +851,235 @@ build log both name it.
 
 ---
 
+## 17 Organisations and roles
+
+`organisations[]` is the full role statement for a survey: who published it, who holds it, who
+collected it, who serves it elsewhere, who owns the rights. The scalar `organisation` block above
+keeps its own meaning, the primary custodial responsibility that drives discovery, and it is not
+replaced by this list.
+
+Most surveys need only the scalar block. The list earns its place where the parties genuinely differ,
+which in Australian MT is common: a contractor collects, a state survey holds and releases, a national
+agency publishes.
+
+### 17.1 organisations[]
+
+| | |
+|---|---|
+| Obligation | optional |
+| Type | list of mapping |
+| Row keys | `name` (required), `ror`, `roles` (list), `primary_custodian` (boolean) |
+| Roles | `publisher`, `custodian`, `distributor`, `data_collector`, `rights_holder`, `hosting_institution` |
+
+```yaml
+organisations:
+  - name: "Geological Survey of South Australia"
+    ror: https://ror.org/04y8k6r48
+    roles:
+      - custodian
+    primary_custodian: true
+  - name: "Geoscience Australia"
+    roles:
+      - publisher
+      - distributor
+```
+
+`roles` is a fail-closed vocabulary: an unrecognised role blocks validation, because a wrong role
+publishes a false claim about who holds or released the data.
+
+**A publisher is never inferred.** Structured citation generation that needs a publisher fails closed
+when no row is marked one, rather than assuming the custodian also published. If a body published the
+release, say so.
+
+`primary_custodian: true` may appear on at most one row, and only on a row whose roles include
+`custodian`: the flag selects among custodial rows. It is the deterministic source of the
+`organisation` that MTCAT projects, which is why it is an explicit curated choice rather than "the
+first element of the array". Absence means "not the primary custodian"; the key is never written
+`false`.
+
+`ror` is omitted when unknown, never written as `null`. An absent ROR says "not recorded"; a null one
+would read as a claim that there is none.
+
+The Add Survey page seeds the first row from the organisation you name in the essentials, as the
+custodian, under an `INFERRED-REVIEW` comment. That comment is a YAML comment: no parser sees it and
+nothing is served from it. The curator editor surfaces it as a "needs review" chip, and saving the
+section clears it. See
+[survey-metadata.md 13 organisations[]](survey-metadata.md#13-organisations) for how the block is
+projected into the published record.
+
+## 18 Citation
+
+`citation` is preference and guidance over the survey's identifiers. It is never a second
+bibliographic record: title, year, version and authors already live in their own fields.
+
+### 18.1 citation.preferred_text and citation.text_source
+
+| | |
+|---|---|
+| Obligation | optional |
+| Type | string; `text_source` is `source_provided` or `ausmt_generated` |
+
+```yaml
+citation:
+  preferred_text: "GSSA (2016). AusLAMP South Australia. [Data set]."
+  text_source: source_provided
+```
+
+`preferred_text` is the wording a source or custodian supplied, reproduced **verbatim**. It is never
+rewritten, normalised or reconstructed from the other fields. A dataset with no persistent identifier
+is still citable by this text alone.
+
+`text_source` says where the wording came from and is fail-closed. It belongs to `preferred_text` and
+is meaningless without it, so a survey that carries one carries both. A contributor's wording is
+always `source_provided`; `ausmt_generated` describes wording AusMT composed.
+
+### 18.2 citation.preferred_identifier
+
+| | |
+|---|---|
+| Obligation | optional |
+| Type | mapping `{scheme, identifier}`, both required when present |
+
+```yaml
+citation:
+  preferred_identifier:
+    scheme: DOI
+    identifier: 10.25914/abc
+```
+
+The identifier the published citation should quote. Both halves are required: a half-declared
+identifier cannot anchor the invariant, so the validator refuses one.
+
+**It must equal an identifier this survey designates.** The designation home is
+[`identity_classification`](#20-identity-and-designation): `represents[]` under Case A,
+`own_identifiers[]` under Case B. A `preferred_identifier` that matches no designated pair is a
+validation FAILURE, not a warning, because MTCAT's `doi`, the primary identifier and the preferred
+citation identifier are one chain that must never disagree.
+
+This is why the Add Survey page never writes it. A contributor pastes the identifier their dataset
+already has, and it is recorded as a `related_identifiers[]` row with a comment saying what they meant
+by it. Turning that into a designation is a curator act, made in the editor beside
+`identity_classification` so both halves of the chain are set together.
+
+### 18.3 citation.additional[]
+
+| | |
+|---|---|
+| Obligation | optional |
+| Type | list of mapping `{identifier?, preferred_text?, reason}` |
+
+Further citations a user of the data should give: a derived product, the repository copy, a required
+source credit, a companion release. `reason` is required on every row, which is what keeps the layer
+readable rather than an opaque pile of identifiers. The curator editor has no widget for these rows
+yet; it carries them through every save untouched and offers the section's raw-JSON box for editing.
+
+## 19 Acknowledgements
+
+### 19.1 acknowledgements[]
+
+| | |
+|---|---|
+| Obligation | optional |
+| Type | list of mapping |
+| Row keys | `text` (required), `type`, `source` |
+| Types | `required_source`, `custodian`, `community`, `traditional_owners`, `field_support`, `infrastructure`, `access_provider` |
+
+```yaml
+acknowledgements:
+  - text: "Data supplied by the Geological Survey of South Australia."
+    type: custodian
+    source: "GSSA licence deed"
+```
+
+Wording AusMT is required to reproduce. It is preserved **verbatim** and is permanently distinct from
+citation: an acknowledgement never substitutes for citing the dataset, and citing the dataset never
+discharges an acknowledgement.
+
+`text` is the row. A textless row says nothing and fails validation. `type` is a candidate vocabulary
+still being validated against real holdings, so an unrecognised type warns rather than blocks; `source`
+is free text naming who requires the wording.
+
+The CARE `traditional_owner_acknowledgement` field ([15 CARE](#15-care)) stays where it is. The two
+homes coexist for now; a survey may use either or both.
+
+## 20 Identity and designation
+
+### 20.1 identity_classification
+
+| | |
+|---|---|
+| Obligation | optional |
+| Type | mapping `{case, represents[]` or `own_identifiers[]}` |
+| Cases | `case_a`, `case_b` |
+
+```yaml
+identity_classification:
+  case: case_a
+  represents:
+    - scheme: DOI
+      identifier: 10.25914/abc
+```
+
+Every survey record is one of two things, and the record has to say which.
+
+**Case A** means this record is the *same* dataset or release as one already published elsewhere:
+AusMT is serving a copy, not minting a new release. The identifiers it is the same as go in
+`represents[]`, and each of them must also appear as a `related_identifiers[]` row, exactly, scheme
+for `identifier_type` and identifier for identifier.
+
+**Case B** means this is a *distinct* AusMT-published release, whose own identifiers go in
+`own_identifiers[]`.
+
+`case` is fail-closed. A designation list, when present, is non-empty, and each row is a complete
+`{scheme, identifier}` pair. The list that does not belong to the declared case must be absent.
+
+This block is what [`citation.preferred_identifier`](#182-citationpreferred_identifier) is checked
+against, and what the published record's `identifiers[]` is projected from. It is curator-written: the
+Add Survey page never touches it.
+
+## 21 Dates
+
+### 21.1 dates
+
+| | |
+|---|---|
+| Obligation | optional |
+| Type | mapping |
+| Keys | `start`, `end`, `issued` |
+
+```yaml
+dates: { start: 2015-06-01, end: 2016-02-14, issued: 2016-05-01 }
+```
+
+`start` and `end` are the acquisition window and accept a bare year or an ISO date.
+
+`issued` is different in kind: it is the date the dataset or release was **published**, and it is a
+full ISO calendar date. A bare year is refused, and it is never inferred from the acquisition window,
+because "when the data were collected" and "when the data were released" are different facts and a
+guess at the second is a false claim. When the publication date is unknown, leave `issued` absent.
+
+---
+
 ## Retired keys
 
 These keys are not offered by the curator metadata editor. Each raises a deprecation warning when it
-carries a real value. Nine are listed below. Six are still read as fallbacks, so an un-migrated package
-publishes as before: `lead_investigator`, `principal_investigators`, `identifiers.dataset_doi`,
-`time_series.collection_pid`, `instruments[].pid` and `sources[]`. The other three,
-`identifiers.related_publication`, `identifiers.related_publication_doi` and `identifiers.project`, are
-read by nothing; the migration script deletes them, though the curator editor round-trips them
-verbatim until it runs. Migration scripts live in `ausmt-surveys/_tools/`.
+carries a real value. Nine are listed below. Four are still read as fallbacks, so an un-migrated
+package publishes as before: `identifiers.dataset_doi`, `time_series.collection_pid`,
+`instruments[].pid` and `sources[]`. The other five, `lead_investigator`,
+`principal_investigators`, `identifiers.related_publication`, `identifiers.related_publication_doi`
+and `identifiers.project`, are read by nothing; the migration scripts delete them, though the curator
+editor round-trips them verbatim until they run. Migration scripts live in `ausmt-surveys/_tools/`.
+
+`lead_investigator` and `principal_investigators` were the last two the engine still read, into a
+back-compat `investigators` facet that no interface rendered. That reader is gone: the migration seeds
+`creators[]`/`contributors[]` from them and deletes them, the Add Survey page no longer writes them,
+and the curator editor no longer models them. A package that still carries either is simply carrying
+an unmodelled key, byte-preserved and read by nothing.
 
 | Retired key | Replaced by | Migration |
 |---|---|---|
-| `lead_investigator` | a `contributors[]` row with `role: ProjectLeader` | `migrate_credit.py` |
-| `principal_investigators` | `creators[]` | `migrate_credit.py` |
+| `lead_investigator` | a `contributors[]` row with `role: ProjectLeader`; deleted by the migration, read by nothing | `migrate_credit.py` |
+| `principal_investigators` | `creators[]`; deleted by the migration, read by nothing | `migrate_credit.py` |
 | `identifiers.dataset_doi` | a `related_identifiers[]` row | `migrate_identifiers.py` |
 | `time_series.collection_pid` | a `related_identifiers[]` row; NCI-custodian rows gain `identifies: raw_packed` | `migrate_identifiers.py` moves the value; `migrate_identifies.py` infers the level for NCI rows and lists any other custodian for curator fill-in |
 | `identifiers.related_publication_doi` | `publications[]` | `migrate_identifiers.py` |

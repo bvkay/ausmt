@@ -92,12 +92,12 @@ The full per-survey metadata the portal renders, generated from each survey's `s
 | `release_notes` | array or null | the declared release notes |
 | `creators` | array | citation authors in citation order, present only when declared |
 | `contributors` | array | role-tagged contributors, present only when declared |
-| `investigators` | array | read from the retired lead and principal-investigator keys |
 
 ### Notes
 
-`creators` and `contributors` are what the citation and the credit rows read. `investigators` exists so
-an un-migrated package still renders; it never drives the citation line.
+`creators` and `contributors` are what the citation and the credit rows read. There is no
+`investigators` key: the back-compat facet that read the two retired flat credit keys has been
+removed along with its readers, rather than left in place as a key that is always empty.
 
 A key is absent rather than null when the survey declares nothing, which keeps a survey's record
 byte-identical when a field it does not use is added to the model.

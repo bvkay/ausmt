@@ -102,9 +102,16 @@ This crosses the positional contract; do all of these together.
 4. `engine/extract/build_portal.py`: read it in `survey_meta_from_yaml` (so it flows into
    `surveys.json`/SMETA) and/or in the per-station record if it affects the catalogue.
 5. `portal/src/drawer.js`: display it from `SMETA` if user-facing.
-6. The Add Survey page (`portal/add-survey.html`): add a form input and emit it in `buildSurveyYaml`,
-   if contributors should set it.
-7. Verify: validate `_example`, rebuild, check `surveys.json`, run the suites. Without PyYAML the
+6. The curator metadata editor (`gateway/editor_form.py` registries + `gateway/curatorpage.py`
+   rendering + `gateway/runner/edit.py` `EDITABLE_KEYS`): a curator has to be able to fix anything a
+   contributor or a migration can write. All three are needed, and the runner allow-list is the one
+   most easily forgotten: a widget that assembles a key missing from `EDITABLE_KEYS` produces a patch
+   the merge then refuses as a non-editable field.
+7. The Add Survey page (`portal/add-survey.html`): add a form input and emit it in `buildSurveyYaml`,
+   if contributors should set it. Ask a plain-language question; the schema key is the answer's home,
+   not the question. Emit absent when empty, bare for a guarded vocabulary token, quoted for free
+   text, and drop an out-of-vocabulary value rather than writing it.
+8. Verify: validate `_example`, rebuild, check `surveys.json`, run the suites. Without PyYAML the
    validator uses the `_mini_yaml` fallback; for a nested map or inline `{}`, confirm both parse it
    (`tests/test_mini_yaml_parity.py`).
 
