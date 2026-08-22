@@ -83,3 +83,9 @@ PROFILES = {
 # own. To bump: change MTCAT_VERSION and the schema's displayed title, then regenerate; never
 # hand-edit here.
 MTCAT_SCHEMA_VERSION = '2.0'
+
+# The survey-metadata schema version, generated from contract/generate.py's SURVEY_METADATA_VERSION
+# constant (THE single source; the schema artifact's title DISPLAYS it and is verified against it).
+# The emitter stamps this into every survey-metadata.json `version` and names the served schema
+# route segment from it; it holds no version literal of its own. Never hand-edit here.
+SURVEY_METADATA_SCHEMA_VERSION = '0.1'

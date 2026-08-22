@@ -1,0 +1,489 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "$id": "https://ausmt.auscope.org.au/data/schemas/ausmt-survey-metadata/0.1/ausmt-survey-metadata.schema.json",
+ "title": "AusMT Survey Metadata 0.1-draft: canonical public metadata for one survey dataset/release",
+ "description": "DRAFT (0.x): the canonical public metadata representation of one survey dataset/release, generated from the private curation source of truth. Open-world: absence of an optional property means no assertion; new properties never use null. Every property describes the DATASET/RELEASE unless its description names another entity. Frozen only when the freeze gates in AUSMT-SURVEY-METADATA-SCOPE.md pass.",
+ "type": "object",
+ "additionalProperties": true,
+ "required": [
+  "schema",
+  "version",
+  "survey_id",
+  "title"
+ ],
+ "definitions": {
+  "identifier_row": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "scheme",
+    "identifier"
+   ],
+   "properties": {
+    "scheme": {
+     "type": "string",
+     "minLength": 1,
+     "description": "lightly-controlled extensible token: DOI, ROR, Handle, URL, RAiD, local are recognised with format validation; unknown schemes are permitted"
+    },
+    "identifier": {
+     "type": "string",
+     "minLength": 1,
+     "description": "the identifier in canonical form; DOIs bare (10.x/...), never https://doi.org/-prefixed"
+    }
+   },
+   "description": "one generic identifier assertion; what it identifies is fixed by the property that carries it"
+  },
+  "subject_row": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "code",
+    "scheme"
+   ],
+   "properties": {
+    "code": {
+     "type": "string",
+     "minLength": 1
+    },
+    "scheme": {
+     "type": "string",
+     "minLength": 1
+    },
+    "label": {
+     "type": "string"
+    },
+    "uri": {
+     "type": "string"
+    }
+   },
+   "description": "SHARED DEFINITION: byte-equivalent with mtcat's subject_row; one thematic subject as controlled/labelled/resolvable concept"
+  },
+  "relationship_core": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "identifier"
+   ],
+   "properties": {
+    "identifier": {
+     "type": "string",
+     "minLength": 1
+    },
+    "identifier_type": {
+     "type": "string",
+     "enum": [
+      "DOI",
+      "Handle",
+      "URL",
+      "RAiD"
+     ]
+    },
+    "relation": {
+     "type": "string",
+     "description": "DataCite relationType, read 'this dataset <relation> that record'; chosen case-by-case for the true relation"
+    }
+   },
+   "description": "SHARED CLEAN CORE with mtcat relationship rows; MTCAT's legacy extensions (custodian/identifies/resolution) are deliberately NOT part of this schema"
+  },
+  "person_or_org": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "name"
+   ],
+   "properties": {
+    "name": {
+     "type": "string",
+     "minLength": 1
+    },
+    "name_type": {
+     "type": "string",
+     "enum": [
+      "person",
+      "organisation"
+     ]
+    },
+    "orcid": {
+     "type": "string",
+     "description": "person rows; omitted when none - never null"
+    },
+    "ror": {
+     "type": "string",
+     "description": "organisation rows; omitted when none"
+    }
+   }
+  }
+ },
+ "properties": {
+  "schema": {
+   "const": "ausmt-survey-metadata"
+  },
+  "version": {
+   "type": "string",
+   "description": "version of THIS schema the document conforms to (0.x while draft); never the dataset version"
+  },
+  "survey_id": {
+   "type": "string",
+   "minLength": 1,
+   "description": "the cross-layer joining identifier, identical with mtcat's surveys[].survey_id and station.json's survey_id"
+  },
+  "title": {
+   "type": "string",
+   "minLength": 1
+  },
+  "dataset_version": {
+   "type": "string",
+   "description": "the DATASET/RELEASE version: Case A = the represented source release's version (never incremented by metadata or representation work); Case B = the AusMT release's version. Never a schema or package version."
+  },
+  "dates": {
+   "type": "object",
+   "additionalProperties": true,
+   "properties": {
+    "coverage": {
+     "type": "object",
+     "additionalProperties": true,
+     "properties": {
+      "year_start": {
+       "type": "integer"
+      },
+      "year_end": {
+       "type": "integer"
+      }
+     },
+     "description": "acquisition/temporal coverage of the observations"
+    },
+    "issued": {
+     "type": "string",
+     "description": "publication/release date of the dataset/release (ISO date, at known precision); NEVER inferred from acquisition coverage; absent when unknown",
+     "format": "date"
+    }
+   }
+  },
+  "identifiers": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/identifier_row"
+   },
+   "description": "identifiers OF this dataset/release per its Case A/B identity classification; the curated PRIMARY dataset identifier among these anchors citation and the mtcat doi projection",
+   "minItems": 1
+  },
+  "activities": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+     "identifier",
+     "scheme"
+    ],
+    "properties": {
+     "identifier": {
+      "type": "string",
+      "minLength": 1
+     },
+     "scheme": {
+      "type": "string",
+      "minLength": 1,
+      "description": "e.g. RAiD"
+     },
+     "relation": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    }
+   },
+   "description": "related research activities (plural by design; never 1:1 with the dataset); the mtcat raid scalar projects only when exactly one activity row exists",
+   "minItems": 1
+  },
+  "abstract": {
+   "type": "string",
+   "description": "full dataset description, uncapped; the concise discovery text is mtcat's concern"
+  },
+  "subjects": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/subject_row"
+   },
+   "minItems": 1
+  },
+  "creators": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/person_or_org"
+   },
+   "description": "citation authors of the dataset/release per the creators policy (source citation authorship wins; institutional creators where the source credits the institution; AusMT never a creator). ORDER IS CITATION ORDER and is preserved verbatim.",
+   "minItems": 1
+  },
+  "contributors": {
+   "type": "array",
+   "items": {
+    "allOf": [
+     {
+      "$ref": "#/definitions/person_or_org"
+     }
+    ],
+    "properties": {
+     "role": {
+      "type": "string",
+      "enum": [
+       "ProjectLeader",
+       "ProjectMember",
+       "DataCollector",
+       "ContactPerson",
+       "DataCurator",
+       "Sponsor",
+       "RightsHolder",
+       "Distributor",
+       "HostingInstitution"
+      ]
+     }
+    }
+   },
+   "minItems": 1
+  },
+  "organisations": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+     "name",
+     "roles"
+    ],
+    "properties": {
+     "name": {
+      "type": "string",
+      "minLength": 1
+     },
+     "ror": {
+      "type": "string"
+     },
+     "roles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+       "type": "string",
+       "enum": [
+        "publisher",
+        "custodian",
+        "distributor",
+        "data_collector",
+        "rights_holder",
+        "hosting_institution"
+       ]
+      }
+     },
+     "primary_custodian": {
+      "const": true,
+      "description": "present-true on exactly one custodial row where curated; the deterministic source of mtcat's organisation projection"
+     }
+    }
+   },
+   "description": "role-typed organisations; publisher is explicit because structured citation generation fails closed without it (and a publisher is never inferred)",
+   "minItems": 1
+  },
+  "funders": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+     "name"
+    ],
+    "properties": {
+     "name": {
+      "type": "string",
+      "minLength": 1
+     },
+     "ror": {
+      "type": "string"
+     },
+     "award_number": {
+      "type": "string"
+     },
+     "award_uri": {
+      "type": "string"
+     },
+     "award_title": {
+      "type": "string"
+     }
+    }
+   },
+   "description": "DataCite-aligned funding; a name-only row is valid (award detail absent = not asserted, never inferred)",
+   "minItems": 1
+  },
+  "citation": {
+   "type": "object",
+   "additionalProperties": true,
+   "properties": {
+    "preferred_identifier": {
+     "$ref": "#/definitions/identifier_row",
+     "description": "INVARIANT: scheme+identifier MUST exactly match the designated primary entry in identifiers[] (emitter-side semantic validation; JSON Schema cannot express it)"
+    },
+    "preferred_text": {
+     "type": "string",
+     "description": "source/custodian-provided citation wording, preserved verbatim"
+    },
+    "text_source": {
+     "type": "string",
+     "enum": [
+      "source_provided",
+      "ausmt_generated"
+     ]
+    },
+    "additional": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+       "reason"
+      ],
+      "properties": {
+       "identifier": {
+        "$ref": "#/definitions/identifier_row"
+       },
+       "preferred_text": {
+        "type": "string"
+       },
+       "reason": {
+        "type": "string",
+        "description": "why this additional citation is required or recommended, e.g. derived_product, repository_product, required_source_credit, companion_release"
+       }
+      }
+     },
+     "minItems": 1
+    }
+   },
+   "description": "citation preference/guidance over the identifier set - never a duplicate bibliographic record; a dataset without a DOI remains citable"
+  },
+  "acknowledgements": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+     "text"
+    ],
+    "properties": {
+     "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "authority-supplied wording is preserved VERBATIM"
+     },
+     "type": {
+      "type": "string",
+      "description": "optional category, e.g. required_source, custodian, community, traditional_owners, field_support, infrastructure, access_provider"
+     },
+     "source": {
+      "type": "string"
+     }
+    }
+   },
+   "description": "plural acknowledgements, permanently distinct from citation; policy-gated like every assertion",
+   "minItems": 1
+  },
+  "rights": {
+   "type": "object",
+   "additionalProperties": true,
+   "properties": {
+    "license": {
+     "type": "string"
+    },
+    "access": {
+     "type": "string",
+     "description": "well-known values open, metadata_only, embargoed; not enum-pinned, unknown tokens fail closed at serve time"
+    },
+    "embargo_until": {
+     "type": "string",
+     "format": "date"
+    }
+   }
+  },
+  "extent": {
+   "type": "object",
+   "additionalProperties": true,
+   "properties": {
+    "bbox": {
+     "type": "object",
+     "additionalProperties": true,
+     "required": [
+      "west",
+      "south",
+      "east",
+      "north"
+     ],
+     "properties": {
+      "west": {
+       "type": "number"
+      },
+      "south": {
+       "type": "number"
+      },
+      "east": {
+       "type": "number"
+      },
+      "north": {
+       "type": "number"
+      }
+     },
+     "description": "WGS 84 (EPSG:4326) decimal degrees, same CRS rule as MTCAT"
+    }
+   }
+  },
+  "relationships": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/relationship_core"
+   },
+   "description": "typed links to source releases, collections, archives, reports; the clean shared core only - identifier entity scope is verified in curation, never inferred from resolution proximity",
+   "minItems": 1
+  },
+  "attribution": {
+   "type": "object",
+   "additionalProperties": true,
+   "properties": {
+    "custodian": {
+     "type": "string"
+    },
+    "custodian_ror": {
+     "type": "string"
+    },
+    "statement": {
+     "type": "string",
+     "description": "reproduced VERBATIM where the upstream licence prescribes wording"
+    },
+    "changes_made": {
+     "type": "boolean",
+     "description": "provenance of representation; NEVER an identity classifier or DOI trigger"
+    },
+    "changes_summary": {
+     "type": "string"
+    },
+    "declared_by": {
+     "type": "string"
+    },
+    "declared_date": {
+     "type": "string"
+    }
+   }
+  },
+  "provenance": {
+   "type": "object",
+   "additionalProperties": true,
+   "properties": {
+    "generated": {
+     "type": "string",
+     "description": "UTC timestamp this document was generated (document provenance, not dataset dates)",
+     "format": "date-time"
+    },
+    "generator": {
+     "type": "string"
+    }
+   },
+   "description": "presence rule applies: no library or template default is ever serialised as a source assertion"
+  }
+ }
+}
