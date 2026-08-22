@@ -1291,28 +1291,11 @@ def _org_of(y: dict):
     return org or "unknown", None
 
 
-def _investigators_of(y: dict) -> list:
-    """[{name, orcid}] combined NON-SUPPRESSIVELY from lead_investigator + principal_investigators.
-    CONTRIBUTOR-CREDIT-SPEC C3: the lead-hides-PIs suppression is DEAD - a survey that carries both a
-    lead AND principal_investigators now surfaces the lead AND every PI (lead first, then PIs in order,
-    deduped by name), where the pre-credit-model reader returned ONLY the lead and never read the PIs.
-    The retired lead/PI keys are read here purely as a graceful legacy fallback for this back-compat
-    'who' facet; creators[]/contributors[] are the primary credit surface (served separately). orcid is
-    None when a row omits it (both the '« REPLACE »' template default and pre-C7 surveys predate it)."""
-    rows = []
-    li = y.get("lead_investigator")
-    if isinstance(li, dict) and li.get("name"):
-        rows.append(li)
-    rows.extend(pi for pi in (y.get("principal_investigators") or [])
-                if isinstance(pi, dict) and pi.get("name"))
-    out, seen = [], set()
-    for r in rows:
-        nm = r["name"]
-        if nm in seen:
-            continue
-        seen.add(nm)
-        out.append({"name": nm, "orcid": (r.get("orcid") or None)})
-    return out
+# A1 (CONTRIBUTOR-CREDIT-SPEC C3, reader retirement): the back-compat 'who' facet that folded the two
+# retired flat credit keys into a served SMETA list is GONE, and with it the reader that built it. The
+# corpus migration seeded creators[]/contributors[] from those keys and deleted them, so nothing reads
+# them anywhere in the engine; a survey that still carries them (a pre-migration corpus) is simply
+# ignored, never served. creators[]/contributors[] are the credit surface (_creators_of/_contributors_of).
 
 
 # CONTRIBUTOR-CREDIT-SPEC C1/C2: the two typed credit lists passed through to SMETA VERBATIM from
@@ -1349,7 +1332,7 @@ def _citation_authors_of(y: dict):
     in order (joined '; ' so a 'Last, First' name stays unambiguous) when creators are present; else a
     hand-authored verbatim cite.au string when the survey carries a cite block with one; else None so the
     caller keeps the org-year synthesis (the existing default). No field suppresses another and the
-    retired lead_investigator/principal_investigators keys are NOT read here - the citation reads
+    retired flat credit keys are NOT read here (nor anywhere else in the engine) - the citation reads
     creators, never the retired fields (C3)."""
     creators = _creators_of(y)
     if creators:
@@ -1642,7 +1625,6 @@ def survey_meta_from_yaml(y: dict) -> dict:
         "instrument_model": _instrument_model_of(y),
         "dates": _date_range_of(y),
         "year_start": year_start, "year_end": year_end,   # S3: modeller year-range filter (ints|null)
-        "investigators": _investigators_of(y),
         "funders": _funders_of(y),
         "pubs": _publications_of(y),
         "blurb": y.get("abstract"),
@@ -3316,16 +3298,17 @@ def _mth5_doi_url(d):
 def _mth5_project_lead(smeta: dict):
     """The lead-most credited party for mth5 survey_metadata.project_lead (CONTRIBUTOR-CREDIT-SPEC): the
     first contributor whose role is ProjectLeader, else the lead-most creator (creators[0], the citation
-    lead), else the legacy investigators[0] fallback. Returns {name, orcid} or None. A project_lead may be
-    a person or an organisation (name_type is not consulted); only a person carries an ORCID, so an org
-    lead yields no url downstream."""
+    lead). Returns {name, orcid} or None. A1 retires the third rung: the back-compat facet built from the
+    retired flat credit keys no longer exists, so a survey with neither a ProjectLeader nor creators has
+    no project_lead rather than one recovered from a retired key. A project_lead may be a person or an
+    organisation (name_type is not consulted); only a person carries an ORCID, so an org lead yields no
+    url downstream."""
     for c in (smeta.get("contributors") or []):
         if isinstance(c, dict) and c.get("name") and str(c.get("role") or "").strip() == "ProjectLeader":
             return {"name": c["name"], "orcid": c.get("orcid")}
-    for group in ("creators", "investigators"):
-        for c in (smeta.get(group) or []):
-            if isinstance(c, dict) and c.get("name"):
-                return {"name": c["name"], "orcid": c.get("orcid")}
+    for c in (smeta.get("creators") or []):
+        if isinstance(c, dict) and c.get("name"):
+            return {"name": c["name"], "orcid": c.get("orcid")}
     return None
 
 

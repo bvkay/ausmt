@@ -41,16 +41,18 @@ def test_mini_yaml_parses_structured_lists():
 
 
 def test_mini_yaml_matches_pyyaml_on_pid_chain_fields():
-    """C7: the mini-yaml fallback must agree with PyYAML on lead_investigator.orcid,
-    organisation.ror, identifiers.project_raid and time_series.collection_pid too — the new SMETA
-    fields this contract adds, all of which are declared (non-null) in the pid-survey fixture."""
+    """C7: the mini-yaml fallback must agree with PyYAML on organisation.ror,
+    identifiers.project_raid and time_series.collection_pid too: the new SMETA
+    fields this contract adds, all of which are declared (non-null) in the pid-survey fixture.
+    A1: the retired lead_investigator key is still ON DISK in the fixture and is read by NEITHER
+    parser path, so the two SMETAs agree by both ignoring it."""
     yaml = pytest.importorskip("yaml")
     text = (HERE / "fixtures" / "pid-survey" / "survey.yaml").read_text(encoding="utf-8")
     smeta_pyyaml = bp.survey_meta_from_yaml(yaml.safe_load(text) or {})
     smeta_mini = bp.survey_meta_from_yaml(bp._mini_yaml(text))
     assert smeta_mini == smeta_pyyaml
     # sanity: the fields under test are actually populated (not both-None trivially matching)
-    assert smeta_pyyaml["investigators"] == [{"name": "A. Researcher", "orcid": "0000-0002-1825-0097"}]
+    assert "investigators" not in smeta_pyyaml and "investigators" not in smeta_mini
     assert smeta_pyyaml["org_ror"] == "https://ror.org/00892tw58"
     assert smeta_pyyaml["raid"] == "https://raid.org/10.12345/AB1234"
     assert smeta_pyyaml["ts_pid"] == "10.25914/pid-survey-ts"

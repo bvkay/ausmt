@@ -203,28 +203,29 @@ def test_citation_authors_are_the_survey_org_not_ausmt(tmp_path):
     assert "10.9999/vulcan" in str(rt.survey_metadata.citation_dataset.doi)
 
 
-def test_citation_prefers_named_investigators_over_org(tmp_path):
-    """FAILS IF: named investigators are present in survey_meta but the citation authors fall back to
-    the org (or worse, "AusMT"). Investigator attribution is stronger than the custodian org.
-    C7: SMETA.investigators is now [{name, orcid}, ...] (ORCID solicited by the schema, no longer
-    discarded); the citation author string is built from the names only."""
+def test_citation_prefers_named_creators_over_org(tmp_path):
+    """FAILS IF: named creators are present in survey_meta but the citation authors fall back to the org
+    (or worse, "AusMT"). creators[] is the ratified citation author list, joined with '; ' so a
+    'Last, First' name stays unambiguous."""
     sm = {"org": "Geoscience Australia",
-          "investigators": [{"name": "A. Researcher", "orcid": "0000-0002-1825-0097"},
-                            {"name": "B. Scientist", "orcid": None}],
+          "creators": [{"name": "A. Researcher", "orcid": "0000-0002-1825-0097"},
+                       {"name": "B. Scientist"}],
           "cite": {"ti": "Vulcan MT Survey"}}
     res = normalize(STANDARD, tmp_path, survey_id="vulcan", station_id="A1", survey_meta=sm)
     authors = _read_back(res).survey_metadata.citation_dataset.authors
-    assert authors == "A. Researcher, B. Scientist", authors
+    assert authors == "A. Researcher; B. Scientist", authors
 
 
-def test_citation_investigators_tolerates_legacy_bare_strings(tmp_path):
-    """Defensive: a caller (or stale data) passing the PRE-C7 bare-string investigators list must not
-    crash condition_tf — it still degrades to the same author string, not a stringified dict repr."""
-    sm = {"org": "Geoscience Australia", "investigators": ["A. Researcher", "B. Scientist"],
+def test_citation_ignores_a_stale_retired_investigators_facet(tmp_path):
+    """A1 (reader retirement): a stale SMETA still carrying the retired investigators facet and NO
+    creators must fall STRAIGHT to the custodian org. Pre-change the facet supplied the author line, so
+    this returned "A. Researcher, B. Scientist"."""
+    sm = {"org": "Geoscience Australia",
+          "investigators": [{"name": "A. Researcher"}, {"name": "B. Scientist"}],
           "cite": {"ti": "Vulcan MT Survey"}}
     res = normalize(STANDARD, tmp_path, survey_id="vulcan", station_id="A1", survey_meta=sm)
     authors = _read_back(res).survey_metadata.citation_dataset.authors
-    assert authors == "A. Researcher, B. Scientist", authors
+    assert authors == "Geoscience Australia", authors
 
 
 def test_citation_without_survey_meta_is_explicit_unknown_not_ausmt(tmp_path):

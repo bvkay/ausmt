@@ -29,7 +29,7 @@ def _stations():
 
 
 # A synthetic SMETA in the exact shape survey_meta_from_yaml emits (cite.ti / blurb / doi / pubs / org /
-# lic / investigators / funders). The dataset DOI is a BARE '10.…' on purpose — the producer must lift it
+# lic / creators / funders). The dataset DOI is a BARE '10.…' on purpose: the producer must lift it
 # to a resolvable URL before mt_metadata's HttpUrl-typed citation field will accept it (else it is lost).
 _SMETA = {
     "cite": {"ti": "Example MT Survey 2026"},
@@ -39,7 +39,7 @@ _SMETA = {
               "j": "Exploration Geophysics", "y": 2024}],
     "org": "Example Organisation",
     "lic": "CC-BY-4.0",
-    "investigators": [{"name": "Example Researcher", "orcid": "0000-0002-1825-0097"}],
+    "creators": [{"name": "Example Researcher", "orcid": "0000-0002-1825-0097"}],
     "funders": [{"name": "Australian Research Council", "grant_id": "DP000000"}],
 }
 
@@ -96,7 +96,7 @@ def test_project_lead_url_and_grant_id_round_trip(tmp_path):
     """CONTRIBUTOR-CREDIT-SPEC: the mth5 survey_metadata carries the lead-most credited party as
     project_lead (the ProjectLeader contributor, ahead of the lead creator), its ORCID as a full
     https://orcid.org/<id> project_lead.url, and the grant id in funding_source.grant_id. RED against the
-    pre-change producer: it seeded project_lead from investigators[0] and wrote the ORCID to a non-
+    pre-change producer: it seeded project_lead from the retired credit facet and wrote the ORCID to a non-
     serialised .id (so no url survived), and _funders_of never carried a grant id at all."""
     rel, hp, n = bp.emit_survey_mth5(_stations(), "credit-survey", "Credit", tmp_path, smeta=_CREDIT_SMETA)
     assert n == 2 and hp and hp.exists()
