@@ -665,7 +665,7 @@ const probeHtml200 = () => Promise.resolve({ status: 200, text: () => Promise.re
 
   // --------------------------------------------------------------------------------------------------
   // 8. ROUND 2 (owner-ruled 2026-07-24): slug-collision awareness, zip-path visibility, the collection
-  //    card, principal_investigators emission, DOI normalisation. Live-DOM behaviours the pure tests
+  //    card, the A3 credit questions' emission, DOI normalisation. Live-DOM behaviours the pure tests
   //    (add_survey_logic.test.js) cannot cover.
   const JSON_OK_BODY = { status: 200, text: () => Promise.resolve('{"ok":true}') };
   // A fetch router: routes the gateway healthz probe, data/surveys.json, and data/catalogue.json. A null
