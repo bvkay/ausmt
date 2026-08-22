@@ -125,6 +125,8 @@ jobs:
       #   tests/test_survey_metadata_schema_v01.py      the 0.1 schema that constrains survey-metadata.json
       #   tests/test_survey_metadata_emission.py        the survey-metadata emitter semantics, the T25 stop
       #                                       and the D20 loud skip
+      #   tests/test_survey_metadata_invariants.py      the survey-metadata invariant suite (built output:
+      #                                       identity chain, projection chains, scans, schema routes)
       #   tests/test_empty_build.py           the empty-input default-products contract behind the
       #                                       build step's "fails on empty output" guarantee
       #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
@@ -175,6 +177,7 @@ jobs:
             tests/test_survey_metadata_version_parity.py \
             tests/test_survey_metadata_schema_v01.py \
             tests/test_survey_metadata_emission.py \
+            tests/test_survey_metadata_invariants.py \
             tests/test_empty_build.py \
             tests/test_proc_note_email_scrub.py \
             tests/test_golden_edi.py \

@@ -1058,6 +1058,20 @@ def test_warm_build_byte_identical_to_populating_build(tmp_path, clean_salt):
         return json.dumps(m, sort_keys=True)
     assert _mtcat_norm(o_warm) == _mtcat_norm(o_pop), "mtcat.json differs beyond generated_at"
 
+    # The per-survey survey-metadata.json (the second public contract) is identical apart from its
+    # provenance.generated wall-clock stamp, warm vs populating, survey by survey (the cache never
+    # touches it either: it is built from the raw survey.yaml side channel, not from cached products).
+    def _survey_metadata_norm(o):
+        out = {}
+        for p in sorted((o / "products").glob("*/survey-metadata.json")):
+            d = json.loads(p.read_text(encoding="utf-8"))
+            d.get("provenance", {}).pop("generated", None)
+            out[p.parent.name] = d
+        return out
+    sm_warm, sm_pop = _survey_metadata_norm(o_warm), _survey_metadata_norm(o_pop)
+    assert sm_pop, "the populating build must emit a survey-metadata.json per survey"
+    assert sm_warm == sm_pop, "survey-metadata.json differs beyond provenance.generated warm-vs-populating"
+
 
 # --------------------------------------------------------------------------------------------------
 # 6. Deterministic hit/miss/write counters (design §4.6) — no wall-clock

@@ -132,6 +132,13 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # scale.
     "AUSMT_MTCAT20_DATA does not name a built corpus data dir",
     "AUSMT_MTCAT20_BASELINE does not name a pre-2.0 corpus mtcat.json",
+    # test_survey_metadata_invariants.py's corpus arm: the format-checked validation, zero-null /
+    # zero-empty, identity-chain and projection-chain scans over every products/<slug>/
+    # survey-metadata.json of a REAL full-corpus build (AUSMT_SURVEY_METADATA_DATA). Same dev-box-only
+    # class as the two MTCAT 2.0 entries above; the invariants are NOT unguarded in CI - the same
+    # checks run against the committed fixtures, two real builds of the vendored fixture surveys and
+    # the 3-survey D8 corpus on every run; this arm extends the identical assertions to corpus scale.
+    "AUSMT_SURVEY_METADATA_DATA does not name a built corpus data dir",
 ]
 
 # `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token
