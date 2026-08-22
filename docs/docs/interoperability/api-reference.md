@@ -50,6 +50,8 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 |---|---|---|
 | `/data/mtcat.json` | 511 kB | The discovery document and the contract to harvest. Portal identity, surveys, stations, collections. Start here. |
 | `/data/mtcat.schema.json` | 21 kB | The JSON Schema the document above validates against; the same bytes sit at `/data/schemas/mtcat/2.0/mtcat.schema.json`. |
+| `/data/products/<slug>/survey-metadata.json` | a few kB each | The per-survey metadata record, a contract: the full credit, funding, subject, identifier, citation and rights detail of one dataset/release. One per catalogued survey, embargoed ones included. |
+| `/data/ausmt-survey-metadata.schema.json` | 13 kB | The JSON Schema survey-metadata.json validates against; the same bytes sit at `/data/schemas/ausmt-survey-metadata/0.1/ausmt-survey-metadata.schema.json`. |
 | `/data/products/<slug>/<station>/station.json` | a few kB each | The per-station record, a contract: identity, location, band, diagnostics, distribution state and provenance. |
 | `/data/manifest.json` | 2.5 MB | The download index: every fetchable artifact with its size and SHA-256. |
 | `/data/stations.geojson` | 773 kB | Every station that has a position, as a GeoJSON point layer. A GIS export; open it in a GIS. |
@@ -59,8 +61,8 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 Other documents are served under `/data/` because the portal's own pages need them. They are
 portal-internal, carry no contract and no stability promise, and are documented only in the Developer
 section; a consumer that reads one is reading an implementation detail that can change with any
-build. The contracts above (`mtcat.json` with its schema, and `station.json`) and the download surface
-are the whole public surface.
+build. The contracts above (`mtcat.json` and `survey-metadata.json`, each with its schema, and
+`station.json`) and the download surface are the whole public surface.
 
 ### `mtcat.json`
 
@@ -616,5 +618,9 @@ The browser portal builds custom downloads from an arbitrary station selection, 
 and writes a citation pack (`CITATIONS.txt`, `citations.bib`, `citations.ris`) into the archive. That
 work happens in the browser, from the same documents listed above, and there is no server endpoint
 behind it. If you want the same result from a script, select from `mtcat.json`, fetch through the
-manifest, and assemble the citation from the survey record's `creators[]` (in citation order), `title`,
-`year_start`, `organisation` and `doi`.
+manifest, and take the citation from the survey's `/data/products/<slug>/survey-metadata.json`: its
+`citation` block names the identifier to cite (`preferred_identifier`) or carries the custodian's own
+wording (`preferred_text`), and its `creators[]` (in citation order), `title`, `dates.issued` and
+`organisations[]` (the publisher role) are the citation's parts. The block is specified in
+[Survey metadata](../reference/survey-metadata.md#the-citation-block). Where a survey carries no
+citation block yet, AusMT has made no assertion about its preferred citation.

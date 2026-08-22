@@ -5,8 +5,8 @@ Not a public surface. The files on this page (`catalogue.json`, `sci.json`, `tf.
 `manifest.json`, and the operator-only `build_report.json` and `qc_report.json`) are portal-internal or
 operator-only: they carry no public contract and no stability promise, and any build may change or drop
 them. This page is the engine-to-portal positional contract, for people working on the portal or the
-engine. A consumer reads the public contracts, `mtcat.json` and `station.json`, documented under
-[Reference](../reference/index.md), and the download index `manifest.json`, documented in the
+engine. A consumer reads the public contracts, `mtcat.json`, `survey-metadata.json` and `station.json`,
+documented under [Reference](../reference/index.md), and the download index `manifest.json`, documented in the
 [data reference](../interoperability/api-reference.md#download-inventory-manifestjson).
 
 The authoritative definition of the JSON files the `engine` generates and the `portal` reads.
@@ -44,6 +44,7 @@ declared in the survey package and recorded in provenance.
 | `build_provenance.json` | `build_portal.py` (`PROV`) | `data.js` (`PROV`), `drawer.js` provenance panel |
 | `build_report.json` | `build_portal.py` (per-survey report accumulator) | the curator serve-state view; validated against `schema/build_report.schema.json`; re-checked by `engine/scripts/verify.py` |
 | `mtcat.json` | `build_portal.mtcat_document` | external harvesters; validated against `schema/mtcat.schema.json` |
+| `products/<slug>/survey-metadata.json` | `build_portal.survey_metadata_document` | a public contract, not read by the portal; validated against `schema/ausmt-survey-metadata.schema.json`, see [Survey metadata](../reference/survey-metadata.md) |
 | `qc_report.json` | `build_portal.qc_pass` | curator-facing; not read by the portal runtime |
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
 | `coord_policy.json` | `extract/build_portal.py` (the coordinate mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position |

@@ -13,7 +13,9 @@ tags are the version list; nothing in the repository enumerates them.
 
 **The current documentation describes schema version 2.0.** Check `portal.version` in
 `/data/mtcat.json` to see which schema version a deployment serves; where a deployment serves a
-different version, the served document is the authority for that deployment.
+different version, the served document is the authority for that deployment. The same documentation
+describes survey-metadata schema version 0.1 (a draft; check `version` in any
+`/data/products/<survey_id>/survey-metadata.json`).
 
 ## Public contracts
 
@@ -24,8 +26,9 @@ by field. Nothing else under `/data` is.
 |---|---|---|---|---|
 | MTCAT catalogue | `/data/mtcat.json` | `engine/schema/mtcat.schema.json` | 2.0 | [MTCAT schema](mtcat-schema.md) |
 | MTCAT schema | `/data/mtcat.schema.json`, `/data/schemas/mtcat/2.0/mtcat.schema.json` | itself | 2.0 | [MTCAT schema](mtcat-schema.md#normative-artifact) |
+| Survey metadata | `/data/products/<survey_id>/survey-metadata.json`, one per survey | `engine/schema/ausmt-survey-metadata.schema.json` | 0.1 (draft) | [Survey metadata](survey-metadata.md) |
+| Survey metadata schema | `/data/ausmt-survey-metadata.schema.json`, `/data/schemas/ausmt-survey-metadata/0.1/ausmt-survey-metadata.schema.json` | itself | 0.1 (draft) | [Survey metadata](survey-metadata.md#normative-artifact) |
 | Per-station record | `/data/products/<slug>/<station>/station.json` | the build's product emitter; its schema artifact arrives with the station promotion lane | none declared | [Per-station products](station-products.md#1-stationjson) |
-| Survey metadata | `survey-metadata.json`, not yet served | arrives with the survey-metadata lane | | the survey record's owner; until it ships, the survey-level facts are the ones `mtcat.json` carries |
 
 ## Download surface
 
@@ -54,8 +57,8 @@ Not served; they define what the served documents are built from.
 
 ## Reading the field entries
 
-The numbered field entries on [MTCAT schema](mtcat-schema.md), the
-[survey.yaml reference](survey-yaml.md) and section 1 of
+The numbered field entries on [MTCAT schema](mtcat-schema.md), [Survey metadata](survey-metadata.md),
+the [survey.yaml reference](survey-yaml.md) and section 1 of
 [Per-station products](station-products.md#1-stationjson) (the `station.json` contract) carry the
 same rows. The tables on the [Releases tier](releases.md) and in section 2 of Per-station products
 describe served-but-uncontracted documents and carry Member, Type and Definition only.

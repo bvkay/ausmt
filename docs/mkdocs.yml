@@ -36,6 +36,7 @@ nav:
   - Reference:
       - Machine-readable surfaces: reference/index.md
       - MTCAT schema: reference/mtcat-schema.md
+      - Survey metadata: reference/survey-metadata.md
       - survey.yaml reference: reference/survey-yaml.md
       - Per-station products: reference/station-products.md
       - Releases tier: reference/releases.md

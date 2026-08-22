@@ -19,10 +19,11 @@ function (its own regex over the generate.py source, so the pin cannot agree wit
   4. engine/extract/_contract.py                         (the generated engine constant)
   5. the schema $id                                      (the version-specific immutable URI)
   6. a REAL BUILD's served schema routes and every emitted document's `version`
+  7. the docs current-version display                    (docs/docs/reference/index.md)
 
-The docs current-version display (the docs lane) joins this module with its own commit; that read
-sits behind the designed-topology skip test_mtcat_version_parity.py takes for the docs tree
-(allow-listed in tests/ci_check_skips.py).
+Surface 7 lives in docs/, a tree the engine image does not ship, so that read sits behind the same
+designed-topology skip test_mtcat_version_parity.py takes for the docs tree (allow-listed in
+tests/ci_check_skips.py). Everything else ships in the image and asserts there.
 """
 import json
 import re
@@ -37,6 +38,7 @@ ROOT = HERE.parent                                  # engine/
 REPO = ROOT.parent                                  # the ausmt monorepo root
 SCHEMA_FILE = ROOT / "schema" / "ausmt-survey-metadata.schema.json"
 SURVEYS = HERE / "fixtures"                         # vendored, self-contained (as in test_mtcat.py)
+DOCS_INDEX = REPO / "docs" / "docs" / "reference" / "index.md"
 
 TITLE_RE = re.compile(r"^AusMT Survey Metadata (\d+\.\d+)(-draft)?:")
 
@@ -161,3 +163,21 @@ def test_a_real_build_serves_the_schema_at_both_routes_and_stamps_the_version(tm
         assert doc["version"] == want, f"{d} stamps {doc['version']!r}, the schema declares {want!r}"
         assert doc["schema"] == "ausmt-survey-metadata"
 
+
+# ---------------------------------------------------------------- the docs display
+
+def _docs_display() -> str:
+    m = re.search(r"describes survey-metadata schema version (\d+\.\d+)",
+                  DOCS_INDEX.read_text(encoding="utf-8"))
+    assert m, ("could not find the survey-metadata current-version display ('describes "
+               f"survey-metadata schema version X.Y') in {DOCS_INDEX}")
+    return m.group(1)
+
+
+@pytest.mark.skipif(not DOCS_INDEX.is_file(),
+                    reason="engine image build: docs tree not shipped "
+                           "(designed topology; the docs surface is pinned from checkout lanes)")
+def test_docs_current_version_display_agrees():
+    """Statement 7: the docs reference index states which survey-metadata schema version the
+    documentation describes. Skipped only where the docs tree is not shipped (the engine image)."""
+    _assert_agrees(_authority(), {"docs/docs/reference/index.md survey-metadata display": _docs_display()})
