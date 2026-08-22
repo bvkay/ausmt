@@ -477,23 +477,23 @@ def test_hub_metadata_tab_single_form_all_sections(tmp_path):
     run(_body())
 
 
-def test_hub_enter_key_defaults_to_save_not_the_legacy_convert(tmp_path):
+def test_hub_enter_key_defaults_to_an_unnamed_save(tmp_path):
     """IMPLICIT-SUBMISSION PIN (2026-08-14). A form's default button — the one Enter in a text field
-    activates — is the FIRST submit button in tree order. The People & credit panel's legacy
-    "Convert lead_investigator" is a NAMED submit, so folding every section into ONE form would make a
-    destructive legacy-key retirement the default action for every text input on the tab. An unnamed
-    submit must therefore come first, so Enter is a plain Save that posts no extra field.
-    FAILS IF the first submit inside the metadata form carries a name (people_convert or anything
-    else), or if the guard is missing / focusable."""
+    activates, is the FIRST submit button in tree order. With every section folded into ONE form, any
+    NAMED submit anywhere on the tab would become that default and Enter in a text field would post an
+    extra field nobody asked for. (The retired legacy Convert action was exactly such a button; A2/D7
+    deleted it, and this guard stays because the hazard is structural.) An unnamed submit must come
+    first, so Enter is a plain Save. FAILS IF the first submit inside the metadata form carries a name,
+    or if the guard is missing / focusable."""
     async def _body():
-        surveys_live = _hub_client(tmp_path)   # HUB_SURVEY carries a legacy lead_investigator
+        surveys_live = _hub_client(tmp_path)
         async with app_client(tmp_path, git_runner=FakeGit(),
                               edit_runner=inproc_edit_runner(surveys_live),
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             body = (await client.get("/gateway/curator/survey/hub-survey-2026?tab=metadata")).text
-            # The hazard is real on this survey: the legacy Convert submit IS rendered.
-            assert 'name="people_convert" value="lead_investigator"' in body
+            # A2 (D7): no named submit is rendered anywhere on the tab any more.
+            assert "people_convert" not in body
             form = _one_form_html(body)
             first = re.search(r'<button[^>]*type="submit"[^>]*>', form)
             assert first, "no submit button in the metadata form"
@@ -571,7 +571,9 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
             # CREDIT-SPEC §6: the four investigator/creator/contributor panels collapse to ONE
             # "People & credit" entry.
             toc = re.findall(r'data-hub-section="[^"]+">([^<]+)', body)
-            assert toc == ["Core fields", "People &amp; credit", "Identifiers &amp; PIDs",
+            assert toc == ["Core fields", "People &amp; credit", "Organisations &amp; roles",
+                           "Identifiers &amp; PIDs", "Citation", "Identity &amp; designation",
+                           "Required acknowledgements",
                            "Publications", "Funding", "Access", "Attribution &amp; rights",
                            "Processing", "Collection", "CARE governance"], toc
             # No standalone entry/form for a merged-away or retired section.
@@ -593,21 +595,21 @@ def test_hub_sidebar_merges_one_entry_per_group(tmp_path):
                            'name="l_instruments_0_manufacturer"', 'name="o_instruments"'):
                 assert needle in core, f"Core fields form missing {needle}"
 
-            # §6 People & credit: ONE panel of unified rows + the ratified widgets, the short credit
-            # explainer (NOT the retired precedence sentence), and the legacy Convert notices for the
-            # survey's lead_investigator (Ada) + principal_investigators (Grace). (The o_creators/
-            # o_contributors round-trip anchors render only when the survey CARRIES those lists; this
-            # survey has neither, so their absence is correct - it keeps an empty panel absent -> _OMIT.)
+            # §6 People & credit: ONE panel of unified rows + the ratified widgets and the short
+            # credit explainer (NOT the retired precedence sentence). (The o_creators/o_contributors
+            # round-trip anchors render only when the survey CARRIES those lists; this survey has
+            # neither, so their absence is correct - it keeps an empty panel absent -> _OMIT.)
             people = _form("people")
             for needle in ('<h2>People &amp; credit</h2>', 'data-editor-rows="people"',
                            'name="l_people_0_name"', "data-people-nametype", 'name="l_people_0_cited"',
                            'name="l_people_0_role_ProjectLeader"', "Cited authors form the citation"):
                 assert needle in people, f"People & credit form missing {needle}"
             assert ("When a lead investigator is set the portal credits the lead") not in people
-            # Legacy Convert notices for both retired flat keys the survey still carries.
-            assert 'name="people_convert" value="lead_investigator"' in people
-            assert 'name="people_convert" value="principal_investigators"' in people
-            assert "Ada Lovelace" in people and "Grace Hopper" in people
+            # A2 (D7): the legacy Convert notices are GONE. The survey still carries both retired flat
+            # keys on disk; the editor models them with NOTHING, so they are never shown and never
+            # patched (byte-preserved as unmodelled keys).
+            assert "people_convert" not in people
+            assert "Ada Lovelace" not in people and "Grace Hopper" not in people
             # ONE advanced-JSON escape per underlying list.
             assert 'name="j_creators"' in people and 'name="j_contributors"' in people
 
@@ -655,31 +657,48 @@ def test_hub_core_fields_merge_round_trips_scalars_org_instruments(tmp_path):
     run(_body())
 
 
-def test_hub_investigators_merge_round_trips_lead_and_principals(tmp_path):
-    """SIDEBARMERGE M2 COMBINED-POST PIN. ONE post of the merged Investigators form round-trips BOTH the
-    Lead investigator map (name) AND a fresh Principal investigators row. FAILS IF the combined post
-    drops either group."""
+def test_hub_curated_homes_merge_round_trips_in_one_post(tmp_path):
+    """A2 COMBINED-POST PIN, replacing the retired M2 Investigators pin. ONE post of the metadata form
+    round-trips the citation map (preferred text + the nested preferred-identifier pair), the
+    identity_classification designation mapping, an organisations row with its role checkbox group and
+    its primary-custodian radio, AND an acknowledgements row. FAILS IF any of the four new panels drops
+    out of the combined post, or the non-scalar organisations controls do not assemble."""
     async def _body():
-        surveys_live = _hub_client(tmp_path)  # has lead (Ada); lacks principals
+        surveys_live = _hub_client(tmp_path)  # carries none of the curated homes
         async with app_client(tmp_path, git_runner=FakeGit(),
                               edit_runner=inproc_edit_runner(surveys_live),
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             csrf = csrf_for_session(client)
             data = {
-                "s_lead_investigator_name": "Charles Babbage",               # lead map change
-                "s_lead_investigator_orcid": "0000-0002-1825-0097",
-                "o_lead_investigator": _canon({"name": "Ada Lovelace", "orcid": "0000-0002-1825-0097"}),
-                "l_principal_investigators_0_name": "Grace Hopper",           # fresh principal row
-                "l_principal_investigators_0_orcid": "0000-0001-2345-6789",
-                "note": "swap lead + add principal", "bump": "patch", "csrf_token": csrf,
+                "s_citation_preferred_text": "GSSA (2016). AusLAMP South Australia.",
+                "s_citation_text_source": "source_provided",
+                "s_citation_preferred_identifier_scheme": "DOI",
+                "s_citation_preferred_identifier_identifier": "10.25914/hubdoi",
+                "s_identity_classification_case": "case_b",
+                "l_identity_classification_own_identifiers_0_scheme": "DOI",
+                "l_identity_classification_own_identifiers_0_identifier": "10.25914/hubdoi",
+                "l_organisations_0_name": "Geological Survey of South Australia",
+                "l_organisations_0_ror": "https://ror.org/04y8k6r48",
+                "c_organisations_0_custodian": "1",
+                "c_organisations_0_publisher": "1",
+                "c_organisations_primary": "0",
+                "l_acknowledgements_0_text": "Data supplied by the GSSA.",
+                "l_acknowledgements_0_type": "custodian",
+                "note": "curate the citation homes", "bump": "patch", "csrf_token": csrf,
             }
             r = await client.post("/gateway/curator/edit/hub-survey-2026/preview",
                                   data=data, follow_redirects=False)
             assert r.status_code == 200
             blob = "\n".join(ln for ln in _diff_changed(r.text) if ln.startswith("+"))
-            assert "Charles Babbage" in blob, "lead did not round-trip through the merged post:\n" + blob
-            assert "Grace Hopper" in blob, "principals did not round-trip through the merged post:\n" + blob
+            for needle in ("GSSA (2016). AusLAMP South Australia.", "text_source: source_provided",
+                           "preferred_identifier:", "10.25914/hubdoi", "case: case_b",
+                           "own_identifiers:", "Geological Survey of South Australia",
+                           "publisher", "custodian", "primary_custodian: true",
+                           "Data supplied by the GSSA."):
+                assert needle in blob, f"{needle!r} did not round-trip through the merged post:\n{blob}"
+            # The retired flat credit key the fixture still carries is untouched by the save.
+            assert "lead_investigator" not in blob, blob
     run(_body())
 
 

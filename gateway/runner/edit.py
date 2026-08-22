@@ -85,16 +85,22 @@ _EDI_SUBPATH = ("transfer_functions", "edi")
 # keys, comments) is NOT touched by a patch and round-trips byte-for-byte (C31 §0.2/§0.7). `version`
 # and `release_notes` are managed by the merge itself (C31 §0.3), not patched directly.
 EDITABLE_SCALARS = ("project_name", "name", "region", "abstract", "license")
+# A2 (LANE-CONTRACT-FORM-CREDIT): the retired flat credit map is GONE (the migration deleted it
+# corpus-wide and no reader survives), and the two MTCAT 2.0 curated MAP homes arrive - citation{} (preference and
+# guidance over the identifier set) and identity_classification{} (the designation mapping the citation
+# chain is checked against). Both are modelled MAP_SECTION widgets, so a changed value MUST be patchable
+# here or the curator's save is refused as a non-editable field.
 EDITABLE_MAPS = ("organisation", "identifiers", "collection", "processing", "access",
-                 "time_series", "care", "lead_investigator")
+                 "time_series", "care", "citation", "identity_classification")
 # IDCONS D1 (SPEC §2.2): related_identifiers is the SOLE dataset-PID editor — the consolidated
 # "Identifiers & PIDs" page writes dataset-level DOIs/PIDs here as typed rows. It is a modelled LIST_SECTION
 # widget (editor_form.LIST_SECTIONS), so a changed list MUST be patchable or the curator's edit is rejected
 # as non-editable. Added here so the widget round-trips end-to-end (an UNCHANGED list still assembles to
 # _OMIT and never reaches this allow-list; only a real change is patched, replacing the list wholesale like
 # the other editable lists). (sources[] is the sibling wave-2 widget with the same gap — tracked separately.)
-EDITABLE_LISTS = ("principal_investigators", "publications", "funding", "instruments",
-                  "related_identifiers", "creators", "contributors")
+EDITABLE_LISTS = ("publications", "funding", "instruments",
+                  "related_identifiers", "creators", "contributors",
+                  "organisations", "acknowledgements")
 # CONTRIBUTOR-CREDIT-SPEC (§6 editor typed rows): creators[] and contributors[] are modelled LIST_SECTION
 # widgets (editor_form.LIST_SECTIONS), so a changed list MUST be patchable here or the curator's edit is
 # REJECTED on save as a non-editable field ("patch contains non-editable field(s): creators"). This is the
@@ -104,14 +110,11 @@ EDITABLE_LISTS = ("principal_investigators", "publications", "funding", "instrum
 # editable lists (proven RED by test_editor_credit_roundtrip.py against this allow-list being absent).
 EDITABLE_KEYS = EDITABLE_SCALARS + EDITABLE_MAPS + EDITABLE_LISTS
 
-# CONTRIBUTOR-CREDIT-SPEC (§4/C3, the unified People & credit panel's legacy Convert): a patch may carry
-# the DELETE_DIRECTIVE key ("_delete_keys") whose value is a list of top-level keys to REMOVE (not null,
-# but delete the line entirely). It is NOT an editable field (it is a directive), so the merge's
-# non-editable-key gate skips it - but every key it names must be one of these legacy credit keys, so a
-# hand-crafted patch can only ever direct the retirement of a legacy flat field, never a delete of a live
-# editable key. lead_investigator/principal_investigators are the two retired flat credit fields (C3).
-DELETE_DIRECTIVE = "_delete_keys"
-_DELETABLE_LEGACY_KEYS = ("lead_investigator", "principal_investigators")
+# A2 (D7): the "_delete_keys" patch directive is GONE with the legacy Convert action that was its only
+# producer. The two retired flat credit keys it could name are deleted corpus-wide by the migration and
+# modelled by nothing, so there is no key left to retire through the editor - and therefore no delete
+# surface at all on the merge. A patch can now only ever carry values for EDITABLE_KEYS; anything else,
+# directive-shaped or not, is refused by the non-editable-key gate in run_merge_job.
 
 
 class EditError(Exception):
@@ -399,10 +402,7 @@ def apply_patch(data, patch: dict) -> list[str]:
     list has no stable per-element identity to merge against; a list edit re-emitting its own block is
     acceptable and matches the pre-C43 contract)."""
     changed = []
-    delete_keys = patch.get(DELETE_DIRECTIVE)
     for key, new_val in patch.items():
-        if key == DELETE_DIRECTIVE:
-            continue  # a directive, not a field - applied after the field loop below
         had = key in data
         old_val = data.get(key) if had else None
         # Compare on plain values so a CommentedMap old vs plain-dict new compares by data, not identity.
@@ -424,14 +424,6 @@ def apply_patch(data, patch: dict) -> list[str]:
         if key in _CREDIT_LIST_KEYS:
             _strip_inferred_review_comment(data, key)
         changed.append(key)
-    # LEGACY RETIREMENT (§4/C3): delete the converted flat credit key ENTIRELY (line and all), so the
-    # value-based deprecation WARNING stops firing and the served facet no longer reads it. Only a key
-    # that is actually present is deleted (an already-absent key is a silent no-op, so a re-run of a
-    # convert never errors); the caller (run_merge_job) has already gated the key set to legacy keys.
-    for key in (delete_keys or []):
-        if key in data:
-            del data[key]
-            changed.append(key)
     return changed
 
 
@@ -561,9 +553,14 @@ _INFERRED_REVIEW_MARK = "INFERRED-REVIEW"
 
 # The migration-seeded lists whose INFERRED-REVIEW markers are surfaced for adjudication AND stripped when
 # the curator saves an edit to them. (identifies-style inline markers on related_identifiers rows are NOT
-# surfaced here and are dropped naturally when that list is replaced; only these two carry the parent-key
+# surfaced here and are dropped naturally when that list is replaced; only these carry the parent-key
 # comment-above marker that survives a wholesale replace.)
-_CREDIT_LIST_KEYS = ("creators", "contributors")
+# A2: organisations[] joins them because the corpus-wide custodian seeding (T4) marks EVERY row it writes
+# ("custodian seeded from the essential organisation; confirm roles"), and acknowledgements[] because the
+# public form may seed a marked row; without the entry the chip would never appear and the curator would
+# never be asked to confirm. Stripping is PER LIST SECTION (D17), never per row: editing the list IS the
+# adjudication for that list, and a sibling list's marker is untouched.
+_CREDIT_LIST_KEYS = ("creators", "contributors", "organisations", "acknowledgements")
 
 
 def _iter_comment_tokens(slot):
@@ -666,8 +663,9 @@ def _strip_inferred_review_comment(node, key) -> None:
 
 def run_read_job(package_root: Path) -> dict:
     """Handle a `read` edit-job: load the survey.yaml and return the editable subset + version. Also
-    returns `review_flags` (CONTRIBUTOR-CREDIT-SPEC §6): the creators[]/contributors[] row indices the
-    credit migration marked INFERRED-REVIEW, so the editor can chip them for curator adjudication."""
+    returns `review_flags` (CONTRIBUTOR-CREDIT-SPEC §6, extended in A2): the row indices the migrations
+    marked INFERRED-REVIEW on each of _CREDIT_LIST_KEYS (creators, contributors, organisations,
+    acknowledgements), so the editor can chip them for curator adjudication."""
     survey_yaml = package_root / "survey.yaml"
     if not survey_yaml.is_file():
         raise EditError(f"survey.yaml not found under {package_root.name}")
@@ -677,7 +675,7 @@ def run_read_job(package_root: Path) -> dict:
     version = data.get("version")
     review_flags = {}
     parent_ca = getattr(getattr(data, "ca", None), "items", None) or {}
-    for key in ("creators", "contributors"):
+    for key in _CREDIT_LIST_KEYS:
         idxs = inferred_review_indices(data.get(key), parent_comment=parent_ca.get(key))
         if idxs:
             review_flags[key] = idxs
@@ -1180,17 +1178,9 @@ def run_merge_job(package_root: Path, *, patch: dict, bump: str, note: str, toda
     if not hasattr(data, "get"):
         raise EditError("survey.yaml is not a mapping")
 
-    unknown = [k for k in patch if k not in EDITABLE_KEYS and k != DELETE_DIRECTIVE]
+    unknown = [k for k in patch if k not in EDITABLE_KEYS]
     if unknown:
         raise EditError(f"patch contains non-editable field(s): {', '.join(sorted(unknown))}")
-    # The DELETE_DIRECTIVE may only name legacy credit keys (C3 retirement) - never a delete of a live
-    # editable field. Fail closed on anything else so the delete surface stays scoped to retirement.
-    del_keys = patch.get(DELETE_DIRECTIVE) or []
-    if not isinstance(del_keys, list):
-        raise EditError(f"{DELETE_DIRECTIVE} must be a list of keys")
-    bad_del = [k for k in del_keys if k not in _DELETABLE_LEGACY_KEYS]
-    if bad_del:
-        raise EditError(f"refusing to delete non-legacy key(s): {', '.join(sorted(map(str, bad_del)))}")
 
     old_version = data.get("version")
     changed = apply_patch(data, patch)

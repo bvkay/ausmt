@@ -317,27 +317,80 @@
 
       <div class="full"><label>Abstract</label><textarea id="m_abstract" placeholder="One paragraph: location, target, band."></textarea></div>
 
-      <div><label>Lead investigator (name)</label><input id="m_pi" placeholder="Full name"></div>
-      <div><label>Lead investigator ORCID</label><input id="m_pi_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="piOrcidOk"></span></div>
+      <div class="full"><label>When was this dataset published? <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional; the release date, not the fieldwork)</span></label>
+        <input id="m_date_issued" placeholder="2016-05-01">
+        <div class="hint" style="margin-top:4px">A full date, <code>YYYY-MM-DD</code>. Recorded as
+          <code>dates.issued</code>. If you do not know the exact release date, leave it blank: a
+          publication date is never guessed from when the data were collected.</div></div>
 
-      <div class="full"><label>Principal investigators <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(the science team; add a row per person, ORCID optional)</span></label>
-        <div id="piRows"></div>
-        <button type="button" class="act" id="addPi" style="margin-top:2px">+ Add principal investigator</button></div>
-      <div class="full"><div class="hint">When a lead investigator is set the portal credits the lead;
-        otherwise the principal investigators list is credited (the served-citation precedence, stated not
-        changed).</div></div>
-
-      <!-- Credit C1: the plain-language "who should be credited?" question -> creators[] (an ORDERED
-           citation list). Basic tier: just a name per row, with an Organisation checkbox that sets
-           name_type; ORCID/ROR is optional. Typed contributors (who did what) live in the advanced tier. -->
-      <div class="full"><label>Who should be credited?</label>
+      <!-- Credit C1: the plain-language citation-authorship question -> creators[] (an ORDERED citation
+           list). Basic tier: just a name per row, with an Organisation checkbox that sets name_type;
+           ORCID/ROR is optional. -->
+      <div class="full"><label>Who should the citation name, in order?</label>
         <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">The people
           or organisations named in this survey's citation, <b>in the order they should appear</b>. Add a row
           each; tick <b>Organisation</b> for a body such as a state survey or company. ORCID or ROR is optional.</p>
         <div id="creatorRows"></div>
         <button type="button" class="act" id="addCreator" style="margin-top:2px">+ Add creator</button>
         <div class="hint" style="margin-top:4px">Recorded as <code>creators</code>, the citation author line.
-          Leave blank to let AusMT credit the organisation and year, or the lead / principal investigators above.</div></div>
+          Leave blank and AusMT cites the organisation and the year.</div></div>
+
+      <!-- CONTRIBUTOR-CREDIT-SPEC §4 (D3): the ratified replacement for the retired flat lead field.
+           One plain-language question, ONE typed contributors row (role ProjectLeader). It is a
+           who-did-what fact, not a citation fact: it never touches creators[]. -->
+      <div><label>Who led this survey? <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(name)</span></label><input id="m_lead_name" placeholder="Family, Given"></div>
+      <div><label>Their ORCID <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input id="m_lead_orcid" placeholder="0000-0002-1825-0097"><span class="orcidok" id="leadOrcidOk"></span></div>
+      <div class="full"><div class="hint">Recorded as a <code>contributors</code> row with the DataCite role
+        <b>ProjectLeader</b>. Leading a survey and being named in its citation are separate facts: if this
+        person should also appear in the citation, add them above as well.</div></div>
+
+      <!-- Credit C2: contributors[] (who did what), moved UP from the advanced tier because with the
+           retired lead field gone this is the only home for "who led / collected / holds / distributes". -->
+      <div class="full"><label>Who did what?</label>
+        <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Optional, and
+          separate from the citation credit above. Record who collected in the field, who to contact,
+          who curated, who sponsored, who holds rights, or who distributes the data.</p>
+        <div id="contributorRows"></div>
+        <button type="button" class="act" id="addContributor" style="margin-top:2px">+ Add contributor</button>
+        <div class="hint" style="margin-top:4px">Recorded as <code>contributors</code>, each with a DataCite role.</div></div>
+
+      <!-- Citation block (interface contract section 3). TWO outputs, never a third: the custodian's own
+           wording verbatim, and a typed related_identifiers row for a pasted identifier. The form NEVER
+           writes citation.preferred_identifier: designating which identifier the citation should quote is
+           curation, and the curator does it beside identity_classification (D18). -->
+      <div class="full"><label>Does this dataset already have a citation or DOI?</label>
+        <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">If the data
+          were published somewhere before, paste the citation exactly as it is written and the DOI or link.
+          We reproduce your wording verbatim and never rewrite it.</p>
+        <textarea id="m_cite_text" placeholder="Paste the citation exactly as given, including punctuation."></textarea>
+        <div class="grid" style="margin-top:8px">
+          <div><label>DOI or link <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input id="m_cite_identifier" placeholder="10.25914/… or https://…"></div>
+          <div><label>What does it point at?</label><select id="m_cite_identifies"><option value="">Let the curator decide</option></select></div>
+        </div>
+        <div class="hint" style="margin-top:4px">The wording is recorded under <code>citation</code>; the
+          identifier is recorded as a row under <b>This dataset elsewhere</b>. A curator decides which
+          identifier the published citation should quote.</div></div>
+
+      <!-- organisations[] (survey scope section 3). The essential Organisation above stays the custodial
+           discovery value AND seeds the first row, marked for curator review; extra rows say who else was
+           involved and how. A publisher is NEVER inferred: it is written only when ticked. -->
+      <div class="full"><label>Which organisations were involved, and how?</label>
+        <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Only if
+          more than one body was involved. <b>The organisation you named above</b> is already recorded as the custodian; add a row
+          for anyone else, and tick what they did.</p>
+        <div id="orgRows"></div>
+        <button type="button" class="act" id="addOrg" style="margin-top:2px">+ Add organisation</button>
+        <div class="hint" style="margin-top:4px">Recorded as <code>organisations</code>. A curator confirms
+          the roles before publication.</div></div>
+
+      <!-- acknowledgements[] (interface contract section 3): plural, verbatim, never a citation. -->
+      <div class="full"><label>Is there wording you must include?</label>
+        <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Some
+          licences and agreements require an exact acknowledgement. Type it exactly as it must appear; we
+          reproduce it verbatim and never rewrite it.</p>
+        <div id="ackRows"></div>
+        <button type="button" class="act" id="addAck" style="margin-top:2px">+ Add wording</button>
+        <div class="hint" style="margin-top:4px">Recorded as <code>acknowledgements</code>.</div></div>
 
       <div class="full"><label>Related publications <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(one DOI per publication; we look up the citation for you)</span></label>
         <div id="pubRows"></div>
@@ -397,16 +450,8 @@
     <p class="tsub">Provenance identifiers, instruments, processing and data types. Leave these to the curator
       if you are unsure, server validation and curator review fill any gaps.</p>
 
-    <!-- Credit C2: contributors[] (who did what) - the ADVANCED typed rows. name_type and role are
-         FAIL-CLOSED vocab; the <select>s only ever offer the ratified tokens (NAME_TYPES /
-         CONTRIBUTOR_ROLES), so the form cannot author a value the server validator would block. -->
-    <label>Contributors <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(who did what; a role per person or organisation)</span></label>
-    <p class="tsub" style="border-left:3px solid var(--line);padding-left:.6rem;margin:8px 0">Optional, and
-      separate from the citation credit above. Record who led, who collected in the field, who to contact,
-      who curated, who sponsored, who holds rights, or who distributes the data.</p>
-    <div id="contributorRows"></div>
-    <button type="button" class="act" id="addContributor" style="margin-top:2px">+ Add contributor</button>
-    <div class="hint" style="margin-top:4px">Recorded as <code>contributors</code>, each with a DataCite role.</div>
+    <!-- Credit C2: contributors[] ("Who did what?") moved UP to tier 3, beside the citation-authorship
+         question, because with the retired lead field gone it is the only home for who led the survey. -->
 
     <!-- Identifiers by data level (mirrors the curator "This dataset elsewhere" editor). Each row states
          WHAT the identifier points at in NCI Table 1 data-level terms; the DataCite relation is DERIVED
@@ -709,6 +754,92 @@ function creditRowsEmit(list, roled){
     return out;
   });
 }
+// ---------- A3 (LANE-CONTRACT-FORM-CREDIT): the MTCAT 2.0 curated homes the plain-language tier-3
+// questions write. Every vocabulary is a BAKED copy kept byte-in-step with the surveys validator
+// (validate_survey.ORG_ROLES_ORDERED / ACKNOWLEDGEMENT_TYPES / CITATION_TEXT_SOURCES) and with
+// gateway/editor_form.py, pinned by tests/add_survey_logic.test.js. Out-of-vocab values are DROPPED at
+// emit time, never written, exactly as relatedIdentifiersEmit guards identifies/identifier_type.
+const ORG_ROLES_ORDERED=["publisher","custodian","distributor","data_collector","rights_holder",
+  "hosting_institution"];
+// hosting_institution is AusMT's own export-side role (who hosts the archive), never a contributor's
+// claim about their survey, so the form OFFERS every other role and simply does not show it.
+const ORG_ROLES_OFFERED=ORG_ROLES_ORDERED.filter(r=>r!=="hosting_institution");
+const ORG_ROLE_DISPLAY={publisher:"Published / released it",custodian:"Holds it (custodian)",
+  distributor:"Serves it at another archive",data_collector:"Collected it in the field",
+  rights_holder:"Owns the rights",hosting_institution:"Hosts the archive"};
+const ACKNOWLEDGEMENT_TYPES=["required_source","custodian","community","traditional_owners",
+  "field_support","infrastructure","access_provider"];
+const ACKNOWLEDGEMENT_TYPE_DISPLAY={required_source:"Required by the source",custodian:"Custodian wording",
+  community:"Community",traditional_owners:"Traditional owners",field_support:"Field support",
+  infrastructure:"Infrastructure",access_provider:"Access provider"};
+// A contributor's citation wording is ALWAYS source_provided: they are telling us how the dataset is
+// already cited. `ausmt_generated` describes wording AusMT composed and is never a contributor value.
+const CITATION_TEXT_SOURCE_FORM="source_provided";
+// The marker written above the row seeded from the essential Organisation, and the note written above a
+// pasted citation identifier. Both are YAML COMMENTS: invisible to every parser, never served, and
+// surfaced only by the curator editor's read job, which is exactly where they are meant to be answered.
+const ORG_SEED_MARKER="# INFERRED-REVIEW: custodian seeded from the essential organisation; confirm roles";
+const CITATION_ID_NOTE="# CONTRIBUTOR: pasted as this dataset's citation identifier; "+
+  "curator: designate via identity_classification.represents and citation.preferred_identifier";
+
+// organisationsEmit: the organisations[] rows to write. The essential Organisation ALWAYS seeds row 0 as
+// the marked custodian with primary_custodian: true (D4: the projection and the role statement cannot
+// disagree, and the marker keeps the mechanical seed distinguishable from a curated claim). A row naming
+// that same organisation MERGES its ticked roles into the seed rather than making a second row; every
+// other named row is appended. Roles are vocab-guarded and emitted in ORG_ROLES_ORDERED order. A publisher
+// is NEVER inferred: it appears only where it was ticked.
+function organisationsEmit(m){
+  const seedName=String(m.organisation==null?"":m.organisation).trim();
+  if(!seedName) return [];
+  const seedRor=String(m.ror==null?"":m.ror).trim();
+  const key=s=>String(s==null?"":s).trim().toLowerCase();
+  const seed={name:seedName,ror:seedRor,roles:["custodian"],primary:true,seeded:true};
+  const out=[seed];
+  (m.organisations||[]).map(r=>r||{}).forEach(r=>{
+    const name=String(r.name==null?"":r.name).trim();
+    if(!name) return;                              // a row needs a name to count
+    const roles=ORG_ROLES_ORDERED.filter(t=>(r.roles||[]).some(v=>String(v).trim()===t));
+    const hit=out.find(o=>key(o.name)===key(name));
+    if(hit){ roles.forEach(t=>{ if(hit.roles.indexOf(t)<0) hit.roles.push(t); });
+             if(!hit.ror) hit.ror=String(r.ror==null?"":r.ror).trim();
+             return; }
+    if(!roles.length) return;                      // a named row with no role ticked states nothing: dropped
+                                                   // like a nameless row (the validator only warns on it and
+                                                   // the engine would drop it silently from the published record)
+    out.push({name:name,ror:String(r.ror==null?"":r.ror).trim(),roles:roles,primary:false,seeded:false});
+  });
+  return out;
+}
+// acknowledgementsEmit: rows worth writing (the wording IS the row, so a textless row is dropped) with a
+// vocab-guarded bare type token and an optional quoted source.
+function acknowledgementsEmit(list){
+  return (list||[]).map(r=>r||{}).filter(r=>String(r.text==null?"":r.text).trim()).map(r=>{
+    const t=String(r.type==null?"":r.type).trim();
+    return {text:String(r.text).trim(),
+      type:ACKNOWLEDGEMENT_TYPES.indexOf(t)>=0?t:"",
+      source:String(r.source==null?"":r.source).trim()};
+  });
+}
+// citationIdentifierRow: the ONE related_identifiers row a pasted citation identifier becomes. The paste
+// is normalised FIRST (a resolver URL folds to the bare DOI, so the row's identifier equals what a
+// curator would type), then typed: a '10.' shape is a DOI, an http(s) string that is not a DOI is a URL,
+// and anything else is not emitted at all. `identifies` is the contributor's optional answer to "what
+// does it point at?"; the default ("let the curator decide") omits the key rather than guessing a level.
+// Returns null when there is nothing to write.
+function citationIdentifierRow(m){
+  const raw=String(m.citation_identifier==null?"":m.citation_identifier).trim();
+  if(!raw) return null;
+  const value=normalizeDoi(raw);
+  let type="";
+  if(looksLikeDoi(value)) type="DOI";
+  else if(/^https?:\/\//i.test(value)) type="URL";
+  else return null;                                // not an identifier shape we can type honestly
+  const lvl=String(m.citation_identifies==null?"":m.citation_identifies).trim();
+  return {identifier:value,identifier_type:type,
+    identifies:IDENTIFIES_LEVELS.indexOf(lvl)>=0?lvl:"",
+    custodian:"",citation_note:true};
+}
+
 // Required (browser/full submission): small set; everything else is a warning at most.
 const REQUIRED=["name","slug","organisation","country","license","access"];
 function isEmail(s){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s||"")); }
@@ -847,7 +978,15 @@ function validateSurvey(meta, edis, mth5s, xmls){
   if(!meta.data_types||!meta.data_types.length) add("WARNING","metadata","no data type selected (recommended)");
   if(!isSemver(meta.version)) add("WARNING","metadata","version should be semantic (e.g. 1.0.0), see release policy");
   if(!isOrcid(meta.uploader_orcid)) add("WARNING","submitter","uploader ORCID not in 0000-0000-0000-0000 format");
-  if(!isOrcid(meta.pi_orcid)) add("WARNING","attribution","lead-investigator ORCID not in 0000-0000-0000-0000 format");
+  if(!isOrcid(meta.lead_orcid)) add("WARNING","attribution","survey-lead ORCID not in 0000-0000-0000-0000 format");
+  // dates.issued is a PUBLICATION date (interface contract section 6): a full ISO date, never a bare
+  // year and never inferred from the acquisition window. Blocking, so the contributor fixes it here
+  // rather than meeting the same refusal from the server validator after upload.
+  var rawIssued=String(meta.date_issued==null?"":meta.date_issued).trim();
+  if(rawIssued && !/^\d{4}-\d{2}-\d{2}$/.test(rawIssued))
+    add("FAIL","dates","publication date '"+rawIssued+"' is not an ISO calendar date (YYYY-MM-DD). "
+      +"It is the date this dataset was PUBLISHED or released, never a bare year and never the "
+      +"fieldwork window; leave it blank if you do not know it");
   if(!meta.ror) add("WARNING","attribution","no organisation ROR (recommended)");
   // Provenance-identifier completeness: the hint now keys off the NEW carrier, the identifiers-by-level
   // related_identifiers list (the single place a dataset DOI / collection PID / archive handle is recorded,
@@ -926,7 +1065,7 @@ function previewSurvey(meta, edis){
 // (portal/src/contract.js LICENSES), never a hand-copied list. redistributable first, then
 // recognised-only (metadata-only display). Pure, so the jsdom test can pin it to the contract file.
 function licenseSelectIds(L){ L=L||{}; return [].concat(L.redistributable||[], L.recognised_only||[]); }
-// Structured survey.yaml (nested organisation / lead_investigator / data_types / funding / processing /
+// Structured survey.yaml (nested organisation / data_types / funding / processing /
 // instruments). `name` and a primary `data_type` are also emitted for backward compatibility.
 function buildSurveyYaml(m){
   const q=s=>'"'+String(s==null?"":s).replace(/"/g,'\\"')+'"';
@@ -943,10 +1082,18 @@ function buildSurveyYaml(m){
   // Identifiers-by-level (tier 2) + publications built from the T1 publication fields. A row/entry is
   // emitted only when it carries an identifier/DOI; empty tiers stay empty lists.
   const relIds=relatedIdentifiersEmit(m.related_identifiers);
+  // "Does this dataset already have a citation or DOI?" -> the pasted identifier becomes ONE typed
+  // related_identifiers row, deduped against an existing "This dataset elsewhere" row (a contributor who
+  // listed it in both places gets one row, not two).
+  const citeRow=citationIdentifierRow(m);
+  if(citeRow && !relIds.some(r=>r.identifier===citeRow.identifier)) relIds.push(citeRow);
+  const citeText=String(m.citation_text==null?"":m.citation_text).trim();
   const instrPid=String(m.instrument_pid==null?"":m.instrument_pid).trim();
   const pubs=pubRowsOf(m);
   // schema 0.3 is declared whenever a 0.3-era field is carried (attribution, related_identifiers,
   // survey instrument PID, or publications); a bare survey stays 0.2 (validator reads both).
+  const orgRows=organisationsEmit(m);
+  const acks=acknowledgementsEmit(m.acknowledgements);
   const emit03=emitAttribution||relIds.length>0||!!instrPid||pubs.length>0;
   const L=[];
   L.push("# AusMT survey package, generated by the Add Survey page. Review every value before submitting.");
@@ -960,22 +1107,11 @@ function buildSurveyYaml(m){
   L.push("organisation:");
   L.push("  name: "+q(m.organisation));
   L.push("  ror: "+(m.ror?q(m.ror):"null"));
-  L.push("lead_investigator:");
-  L.push("  name: "+(m.pi?q(m.pi):"null"));
-  L.push("  orcid: "+(m.pi_orcid?q(m.pi_orcid):"null"));
-  // R4: principal_investigators[] (the science team). Emission shape mirrors the validator/editor
-  // (gateway/editor_form.LIST_SECTIONS "principal_investigators" = [name, orcid]) and the engine's
-  // build_portal._investigators_of ([{name, orcid}]). A row needs a name to count; orcid is optional
-  // (null when blank). Absent -> absent (no empty list) so a survey without PIs stays byte-lean; the
-  // served-citation precedence (lead first, else this list) is stated in the form, not changed here.
-  const pis=(m.principal_investigators||[]).map(p=>p||{}).filter(p=>String(p.name==null?"":p.name).trim());
-  if(pis.length){
-    L.push("principal_investigators:");
-    pis.forEach(p=>{
-      L.push("  - name: "+q(String(p.name).trim()));
-      L.push("    orcid: "+(String(p.orcid==null?"":p.orcid).trim()?q(String(p.orcid).trim()):"null"));
-    });
-  }
+  // A3 (LANE-CONTRACT-FORM-CREDIT): the two RETIRED flat credit keys are NEVER written. The migration
+  // seeded creators[]/contributors[] from them and deleted them corpus-wide, the engine reads neither,
+  // and the curator editor models neither - so a form that still wrote them would be producing keys
+  // nobody can read or fix. "Who led this survey?" writes a ProjectLeader contributors row instead
+  // (D3), and the organisations[] block below carries the role statement.
   // Contributor credit model (CONTRIBUTOR-CREDIT-SPEC C1/C2): creators[] (ORDERED citation names, the
   // "who should be credited?" question) then contributors[] (the typed who-did-what rows). A row is
   // emitted only when it carries a name; absent -> absent (no empty list) so a bare survey stays lean, and
@@ -993,7 +1129,14 @@ function buildSurveyYaml(m){
       if(c.ror) L.push("    ror: "+q(c.ror));
     });
   }
-  const contributors=creditRowsEmit(m.contributors,true);
+  // "Who led this survey?" -> ONE ProjectLeader contributors row, FIRST (it is the question asked
+  // first), deduped against an identical typed row so naming the lead twice does not credit them twice.
+  const leadName=String(m.lead_name==null?"":m.lead_name).trim();
+  const typedContributors=creditRowsEmit(m.contributors,true);
+  const leadRow=leadName?{name:leadName,name_type:"person",role:"ProjectLeader",
+    orcid:String(m.lead_orcid==null?"":m.lead_orcid).trim(),ror:""}:null;
+  const alreadyLed=leadRow&&typedContributors.some(c=>c.name===leadRow.name&&c.role==="ProjectLeader");
+  const contributors=(leadRow&&!alreadyLed?[leadRow]:[]).concat(typedContributors);
   if(contributors.length){
     L.push("contributors:");
     contributors.forEach(c=>{
@@ -1016,7 +1159,17 @@ function buildSurveyYaml(m){
   const dq=v=>{v=String(v==null?"":v).trim(); if(!v) return null;
     return /^\d{4}$/.test(v)||/^\d{4}-\d{2}-\d{2}$/.test(v)?v:q(v);};
   const dStart=dq(m.date_start), dEnd=dq(m.date_end);
-  if(dStart||dEnd){ L.push("dates: { start: "+(dStart||"null")+", end: "+(dEnd||"null")+" }"); }
+  // dates.issued is the PUBLICATION/RELEASE date (interface contract section 6): a full ISO date, never
+  // a bare year, never inferred from the acquisition window. Anything else is not emitted at all (and
+  // validateSurvey FAILs it, so the contributor is told rather than silently trimmed).
+  const rawIssued=String(m.date_issued==null?"":m.date_issued).trim();
+  const dIssued=/^\d{4}-\d{2}-\d{2}$/.test(rawIssued)?rawIssued:"";
+  if(dStart||dEnd||dIssued){
+    const dparts=[];
+    if(dStart||dEnd){ dparts.push("start: "+(dStart||"null")); dparts.push("end: "+(dEnd||"null")); }
+    if(dIssued) dparts.push("issued: "+dIssued);
+    L.push("dates: { "+dparts.join(", ")+" }");
+  }
   L.push("data_types: ["+dts.map(q).join(", ")+"]");
   L.push("data_type: "+(dts.length?q(dts[0]):"null"));  // primary, backward-compatible
   // identifiers block, the CURRENT schema: only the two survey/platform-level PIDs a submitter sets
@@ -1031,12 +1184,51 @@ function buildSurveyYaml(m){
   if(relIds.length){
     L.push("related_identifiers:");
     relIds.forEach(r=>{
+      // The contributor's intent survives into curation as a COMMENT above the row: they told us this
+      // identifier is how the dataset is cited, and only a curator may turn that into a designation.
+      if(r.citation_note) L.push("  "+CITATION_ID_NOTE);
       L.push("  - identifier: "+q(r.identifier));
       if(r.identifies) L.push("    identifies: "+r.identifies);              // bare vocab scalar (guarded)
       if(r.identifier_type) L.push("    identifier_type: "+r.identifier_type); // bare vocab scalar (guarded)
       if(r.custodian) L.push("    custodian: "+q(r.custodian));
     });
   } else { L.push("related_identifiers: []"); }
+  // citation{} (interface contract section 3): the custodian's own wording, VERBATIM, plus where it came
+  // from. TWO keys, never a third: citation.preferred_identifier is a curated designation (D18) and the
+  // form never writes it. text_source rides a non-empty preferred_text and is meaningless without one
+  // (D17), so both appear together or not at all.
+  if(citeText){
+    L.push("citation:");
+    L.push("  preferred_text: "+q(citeText));
+    L.push("  text_source: "+CITATION_TEXT_SOURCE_FORM);   // bare guarded vocab token
+  }
+  // organisations[] (survey scope section 3). Row 0 is the marked custodian seeded from the essential
+  // Organisation; every other row is what the contributor ticked. ror is OMITTED when blank (never
+  // `ror: null`), roles ride as bare guarded vocab tokens, and primary_custodian: true appears on the
+  // seeded custodian only.
+  if(orgRows.length){
+    L.push("organisations:");
+    orgRows.forEach(o=>{
+      if(o.seeded) L.push("  "+ORG_SEED_MARKER);
+      L.push("  - name: "+q(o.name));
+      if(o.ror) L.push("    ror: "+q(o.ror));
+      if(o.roles.length){
+        L.push("    roles:");
+        o.roles.forEach(t=>L.push("      - "+t));         // bare vocab scalar (guarded)
+      }
+      if(o.primary) L.push("    primary_custodian: true");
+    });
+  }
+  // acknowledgements[] (interface contract section 3): plural, verbatim, never a citation. The wording is
+  // the row, so a textless row was already dropped; type is a bare guarded token and source is free text.
+  if(acks.length){
+    L.push("acknowledgements:");
+    acks.forEach(a=>{
+      L.push("  - text: "+q(a.text));
+      if(a.type) L.push("    type: "+a.type);              // bare vocab scalar (guarded)
+      if(a.source) L.push("    source: "+q(a.source));
+    });
+  }
   if(m.collection_id){
     L.push("collection:");
     L.push("  id: "+q(m.collection_id));
@@ -1223,7 +1415,7 @@ function stationCountsByName(catalogue){
 }
 
 if(typeof module!=="undefined"&&module.exports){
-  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,emtfxmlLooksReal,relatedIdentifiersEmit,creditRowsEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,deriveSlug,SLUG_MAX,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES,NAME_TYPES,CONTRIBUTOR_ROLES};
+  module.exports={normEdi,parseAngle,band,parseEdi,ediDataId,safeEdiComponent,packagedEdiName,deriveDataId,effectiveDataId,ediNameGate,emtfxmlLooksReal,relatedIdentifiersEmit,creditRowsEmit,validateSurvey,previewSurvey,buildSurveyYaml,recommendedExtractor,footprintFromStations,isEmail,isOrcid,isOrcidChecksum,slugValid,deriveSlug,SLUG_MAX,normalizeDoi,looksLikeDoi,parseCrossref,parseDatacite,formatCitation,harvestDoi,pubRowsOf,servedSlugMap,stationCountsByName,gatewayPresent,statusUrlSafe,submitResultMessage,submitFormFields,tsUTC,tsUTCDate,licenseSelectIds,rorMatchesFromResponse,IDENTIFIES_LEVELS,IDENTIFIES_DISPLAY,IDENTIFIER_TYPES,NAME_TYPES,CONTRIBUTOR_ROLES,ORG_ROLES_ORDERED,ORG_ROLES_OFFERED,ORG_ROLE_DISPLAY,ACKNOWLEDGEMENT_TYPES,ACKNOWLEDGEMENT_TYPE_DISPLAY,CITATION_TEXT_SOURCE_FORM,organisationsEmit,acknowledgementsEmit,citationIdentifierRow};
 }
 
 // ---------- UI wiring (browser only) ----------
@@ -1435,37 +1627,7 @@ if(typeof document!=="undefined"&&document.getElementById){
   $("addPub").onclick=()=>$("pubRows").appendChild(pubRow());
   $("pubRows").appendChild(pubRow());   // one publication row present by default
 
-  // ----- R4: principal investigators rows (name + optional ORCID). Repeatable, add/remove, matching the
-  // curator model where the PIs are the science team. Emitted as principal_investigators[] {name, orcid}
-  // by readMeta -> buildSurveyYaml (the schema shape the validator/editor use). Starts empty (the lead
-  // investigator above is the primary credit; PIs are the fallback list), a row is added on demand.
-  function piRow(){
-    const wrap=document.createElement("div"); wrap.className="pirow";
-    wrap.innerHTML=
-      '<div class="grid">'+
-      '<div><label>Name</label><input class="pi-name" placeholder="Given Family"></div>'+
-      '<div><label>ORCID <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>'+
-        '<input class="pi-orcid" placeholder="0000-0002-1825-0097"><span class="orcidok pi-orcidok"></span></div>'+
-      '<div style="display:flex;align-items:flex-end"><button type="button" class="act pi-rm">Remove</button></div>'+
-      '</div>';
-    wrap.querySelector(".pi-rm").onclick=()=>wrap.remove();
-    // format-only ORCID cue (no API/auth), same posture as wireOrcid on the lead/uploader fields.
-    const inp=wrap.querySelector(".pi-orcid"), okEl=wrap.querySelector(".pi-orcidok");
-    inp.addEventListener("input",()=>{ const v=inp.value.trim();
-      if(!v){ okEl.textContent=""; okEl.className="orcidok pi-orcidok"; }
-      else if(isOrcid(v)){ okEl.textContent="✓ valid format"; okEl.className="orcidok pi-orcidok good"; }
-      else { okEl.textContent="✗ expected 0000-0000-0000-0000"; okEl.className="orcidok pi-orcidok bad"; } });
-    return wrap;
-  }
-  function readPrincipalInvestigators(){
-    return Array.from(document.querySelectorAll("#piRows .pirow")).map(r=>({
-      name:(r.querySelector(".pi-name").value||"").trim(),
-      orcid:(r.querySelector(".pi-orcid").value||"").trim()
-    })).filter(x=>x.name);   // a row needs a name to count (orcid alone is not an investigator)
-  }
-  $("addPi").onclick=()=>$("piRows").appendChild(piRow());
-
-  // ----- Credit C1: creators[] (the plain-language "who should be credited?" question). Basic tier: an
+  // ----- Credit C1: creators[] (the plain-language citation-authorship question). Basic tier: an
   // ordered list of citation names, each a person or (org checkbox) an organisation, ORCID/ROR optional.
   // DOM order IS the citation order. Emitted as creators[] {name, name_type, orcid?/ror?} by readMeta ->
   // buildSurveyYaml. One empty row shows by default so the question is visible; a nameless row is dropped
@@ -1529,6 +1691,70 @@ if(typeof document!=="undefined"&&document.getElementById){
   }
   $("addContributor").onclick=()=>$("contributorRows").appendChild(contributorRow());
 
+  // ----- A3: organisations[] rows ("Which organisations were involved, and how?"). A name plus an
+  // optional ROR plus a role checkbox group over ORG_ROLES_OFFERED (every ratified role except
+  // hosting_institution, which is AusMT's own export-side role, never a contributor's claim). The
+  // checkboxes are the honest control: an organisation is often several things at once. The essential
+  // Organisation is NOT repeated here - organisationsEmit seeds it as the marked custodian row.
+  function orgRow(){
+    const wrap=document.createElement("div"); wrap.className="orgrow"; wrap.style.marginBottom="8px";
+    const boxes=ORG_ROLES_OFFERED.map(t=>
+      `<label class="check" style="margin:0 14px 0 0;text-transform:none;letter-spacing:0">`+
+      `<input type="checkbox" class="og-role" value="${escAttr(t)}"><span>${esc(ORG_ROLE_DISPLAY[t]||t)}</span></label>`).join("");
+    wrap.innerHTML=
+      '<div class="grid">'+
+      '<div><label>Organisation</label><input class="og-name" placeholder="e.g. Geoscience Australia"></div>'+
+      '<div><label>ROR <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input class="og-ror" placeholder="https://ror.org/…"></div>'+
+      '<div style="display:flex;align-items:flex-end"><button type="button" class="act og-rm">Remove</button></div>'+
+      '<div class="full"><label>What did they do?</label><div class="checkrow og-roles">'+boxes+'</div></div>'+
+      '</div>';
+    wrap.querySelector(".og-rm").onclick=()=>wrap.remove();
+    return wrap;
+  }
+  function readOrganisations(){
+    return Array.from(document.querySelectorAll("#orgRows .orgrow")).map(r=>({
+      name:(r.querySelector(".og-name").value||"").trim(),
+      ror:(r.querySelector(".og-ror").value||"").trim(),
+      roles:Array.from(r.querySelectorAll(".og-role:checked")).map(c=>c.value)
+    })).filter(o=>o.name);   // a row needs a name to count
+  }
+  $("addOrg").onclick=()=>$("orgRows").appendChild(orgRow());
+
+  // ----- A3: acknowledgements[] rows ("Is there wording you must include?"). The wording IS the row, so
+  // a textless row is dropped at emit time; the type <select> only offers the ratified candidate vocab.
+  function ackRow(){
+    const wrap=document.createElement("div"); wrap.className="ackrow"; wrap.style.marginBottom="8px";
+    const opts='<option value="">(type not stated)</option>'+ACKNOWLEDGEMENT_TYPES.map(t=>
+      `<option value="${escAttr(t)}">${esc(ACKNOWLEDGEMENT_TYPE_DISPLAY[t]||t)}</option>`).join("");
+    wrap.innerHTML=
+      '<div class="grid">'+
+      '<div class="full"><label>Wording <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(exactly as it must appear)</span></label><textarea class="ak-text" placeholder="Data supplied by …"></textarea></div>'+
+      '<div><label>Type</label><select class="ak-type">'+opts+'</select></div>'+
+      '<div><label>Who requires it <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label><input class="ak-source" placeholder="e.g. the licence deed"></div>'+
+      '<div style="display:flex;align-items:flex-end"><button type="button" class="act ak-rm">Remove</button></div>'+
+      '</div>';
+    wrap.querySelector(".ak-rm").onclick=()=>wrap.remove();
+    return wrap;
+  }
+  function readAcknowledgements(){
+    return Array.from(document.querySelectorAll("#ackRows .ackrow")).map(r=>({
+      text:(r.querySelector(".ak-text").value||"").trim(),
+      type:(r.querySelector(".ak-type").value||"").trim(),
+      source:(r.querySelector(".ak-source").value||"").trim()
+    })).filter(a=>a.text);   // the wording is the row
+  }
+  $("addAck").onclick=()=>$("ackRows").appendChild(ackRow());
+
+  // ----- A3: the citation question's "what does it point at?" <select>. Same NCI Table 1 vocabulary and
+  // labels as the tier-2 identifier rows; its DEFAULT is "let the curator decide", which omits the key
+  // rather than guessing a level on the contributor's behalf.
+  (function(){
+    const sel=$("m_cite_identifies"); if(!sel) return;
+    IDENTIFIES_LEVELS.forEach(lv=>{ const o=document.createElement("option");
+      o.value=lv; o.textContent=IDENTIFIES_DISPLAY[lv]||lv; sel.appendChild(o); });
+  })();
+  wireConditionalDoiBlur($("m_cite_identifier"), null);
+
   // ----- ORCID format check (format only; no API/auth) -----
   function wireOrcid(inputId, okId){
     const inp=$(inputId), ok=$(okId);
@@ -1538,7 +1764,7 @@ if(typeof document!=="undefined"&&document.getElementById){
       else { ok.textContent="✗ expected 0000-0000-0000-0000"; ok.className="orcidok bad"; }});
     inp.addEventListener("change",()=>{ if(inp.value.trim()) track("ORCIDFormatChecked",{result:isOrcid(inp.value.trim())?"valid":"invalid"}); }); // PII-free
   }
-  wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_pi_orcid","piOrcidOk");
+  wireOrcid("m_up_orcid","upOrcidOk"); wireOrcid("m_lead_orcid","leadOrcidOk");
 
   // ----- R5: DOI normalisation on blur. A contributor who pastes a full resolver URL (https://doi.org/
   // 10.x/y, dx.doi.org, http variants) into a DOI slot triggered the live validator's "publication DOI
@@ -1642,9 +1868,13 @@ if(typeof document!=="undefined"&&document.getElementById){
     date_start:$("m_date_start").value.trim(), date_end:$("m_date_end").value.trim(),
     data_types:Array.from(document.querySelectorAll(".dtype:checked")).map(c=>c.value),
     west:$("m_w").value, east:$("m_e").value, south:$("m_s").value, north:$("m_n").value,
-    pi:$("m_pi").value.trim(), pi_orcid:$("m_pi_orcid").value.trim(), ror:$("m_ror").value.trim(),
-    principal_investigators:readPrincipalInvestigators(),
+    date_issued:$("m_date_issued").value.trim(), ror:$("m_ror").value.trim(),
+    lead_name:$("m_lead_name").value.trim(), lead_orcid:$("m_lead_orcid").value.trim(),
     creators:readCreators(), contributors:readContributors(),
+    citation_text:$("m_cite_text").value.trim(),
+    citation_identifier:$("m_cite_identifier").value.trim(),
+    citation_identifies:$("m_cite_identifies").value,
+    organisations:readOrganisations(), acknowledgements:readAcknowledgements(),
     publications:readPublications(), raid:$("m_raid").value.trim(),
     instrument_pid:$("m_instrument_pid").value.trim(),
     related_identifiers:readRelatedIdentifiers(),

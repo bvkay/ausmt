@@ -1,7 +1,7 @@
-"""C7: PID chain completion — survey.yaml -> SMETA must carry investigator ORCIDs, the organisation
-ROR, project RAiD, the time-series collection PID, and a non-'(n.d.)' citation year/version.
+"""C7: PID chain completion. survey.yaml -> SMETA must carry the organisation ROR, project RAiD,
+the time-series collection PID, and a non-'(n.d.)' citation year/version.
 
-FAILS IF (pre-fix): investigators are bare name strings (ORCIDs discarded); SMETA has no 'raid' key;
+FAILS IF (pre-fix): SMETA has no 'raid' key;
 SMETA has no 'ts_pid' key; cite.yr/cite.ve are always empty strings so every citation prints "(n.d.)"
 even though the source survey.yaml declares a date range and a version.
 """
@@ -27,30 +27,13 @@ def _load():
     return yaml.safe_load(text) or {}
 
 
-def test_investigators_of_returns_name_and_orcid():
-    """FAILS IF: _investigators_of drops the orcid and returns bare name strings."""
-    y = _load()
-    invs = bp._investigators_of(y)
-    assert invs == [{"name": "A. Researcher", "orcid": "0000-0002-1825-0097"}], invs
-
-
-def test_investigators_of_tolerates_missing_orcid():
-    y = {"lead_investigator": {"name": "No Orcid Here"}}
-    assert bp._investigators_of(y) == [{"name": "No Orcid Here", "orcid": None}]
-
-
-def test_investigators_of_principal_investigators_list():
-    y = {"principal_investigators": [{"name": "First Person", "orcid": "0000-0002-1825-0097"},
-                                     {"name": "Second Person"}]}
-    assert bp._investigators_of(y) == [
-        {"name": "First Person", "orcid": "0000-0002-1825-0097"},
-        {"name": "Second Person", "orcid": None},
-    ]
-
-
-def test_smeta_investigators_shape():
+def test_smeta_carries_no_investigators_facet():
+    """A1 (reader retirement): the pid-survey fixture still carries the retired lead_investigator key on
+    disk, and the SMETA it produces carries NO investigators facet at all. Pre-change the facet was built
+    from the retired key, so this key was present and populated."""
     sm = bp.survey_meta_from_yaml(_load())
-    assert sm["investigators"] == [{"name": "A. Researcher", "orcid": "0000-0002-1825-0097"}]
+    assert "investigators" not in sm, sorted(sm)
+    assert not hasattr(bp, "_investigators_of"), "the retired-key reader is gone"
 
 
 def test_smeta_org_ror_carried():

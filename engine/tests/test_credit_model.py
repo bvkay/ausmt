@@ -38,17 +38,18 @@ def test_citation_names_all_creators_even_with_lead_and_pis():
     assert sm["cite"]["au"] != "University of X"   # NOT the org-year synthesis, and NOT the lead alone
 
 
-def test_investigators_facet_no_longer_suppresses_pis():
-    """RED-prove the suppression kill on the back-compat 'who' facet: with BOTH a lead and PIs, the served
-    investigators list carries the lead AND every PI (deduped). Pre-change _investigators_of returned ONLY
-    the lead and never read principal_investigators, so the PIs were silently dropped."""
-    y = {"lead_investigator": {"name": "Lead Person", "orcid": "0000-0002-1825-0097"},
-         "principal_investigators": [{"name": "Lead Person"},           # dup of the lead -> collapsed
-                                     {"name": "PI Two"}, {"name": "PI Three"}]}
-    invs = bp._investigators_of(y)
-    names = [i["name"] for i in invs]
-    assert names == ["Lead Person", "PI Two", "PI Three"], names
-    assert invs[0]["orcid"] == "0000-0002-1825-0097"
+def test_no_retired_credit_key_is_read_into_smeta():
+    """A1 (CONTRIBUTOR-CREDIT-SPEC C3, the reader retirement): a survey that still carries BOTH retired
+    keys and no creators serves NO investigators facet at all and cites the organisation and the year.
+    Pre-change survey_meta_from_yaml folded the retired keys into a back-compat 'investigators' SMETA key
+    (and _investigators_of existed to build it), so the retired values were still read and served."""
+    y = {"organisation": {"name": "University of X"},
+         "lead_investigator": {"name": "Lead Person", "orcid": "0000-0002-1825-0097"},
+         "principal_investigators": [{"name": "PI Two"}, {"name": "PI Three"}]}
+    sm = bp.survey_meta_from_yaml(y)
+    assert "investigators" not in sm, sorted(sm)
+    assert not hasattr(bp, "_investigators_of"), "the retired-key reader is gone"
+    assert sm["cite"]["au"] == "University of X", sm["cite"]["au"]
 
 
 # --------------------------------------------------------------- §2.1 citation-author precedence
@@ -161,9 +162,10 @@ def test_orcid_url_canonicalises_or_none():
     assert bp._orcid_url("not-an-orcid") is None
 
 
-def test_project_lead_prefers_projectleader_contributor_then_creator_then_investigator():
+def test_project_lead_prefers_projectleader_contributor_then_creator_and_never_a_retired_facet():
     """The mth5 project_lead is the lead-most credited party: a ProjectLeader contributor first, else the
-    lead creator, else the legacy investigator. name + ORCID ride through for the url."""
+    lead creator. A1 inverts the third rung: the retired investigators facet is NO LONGER a fallback, so a
+    SMETA carrying only that stale key yields None. Pre-change it returned {"name": "Inv, I"}."""
     proj = bp._mth5_project_lead({
         "creators": [{"name": "Creator, C", "orcid": "0000-0002-1825-0097"}],
         "contributors": [{"name": "Member, M", "role": "ProjectMember"},
@@ -173,17 +175,16 @@ def test_project_lead_prefers_projectleader_contributor_then_creator_then_invest
     # no ProjectLeader contributor -> the lead creator
     assert bp._mth5_project_lead({"creators": [{"name": "Creator, C"}],
                                   "investigators": [{"name": "Inv, I"}]})["name"] == "Creator, C"
-    # neither creators nor a ProjectLeader -> the legacy investigator fallback
-    assert bp._mth5_project_lead({"investigators": [{"name": "Inv, I"}]})["name"] == "Inv, I"
+    # neither creators nor a ProjectLeader -> None; the retired facet is not read
+    assert bp._mth5_project_lead({"investigators": [{"name": "Inv, I"}]}) is None
     assert bp._mth5_project_lead({}) is None
 
 
 # --------------------------------------------------------------- EDI/XML export attribution (normalize)
 
-def test_edi_export_attribution_reads_creators_over_investigators():
+def test_edi_export_attribution_reads_creators_over_a_stale_retired_facet():
     """SPEC §3 (scope: the EDI/EMTF-XML export attribution): _survey_meta_get assembles the citation-author
-    line from creators[] when present, ahead of the legacy investigators. Pre-change the author line read
-    investigators only, so it returned the investigator name even when creators disagreed."""
+    line from creators[] when present. A stale investigators key in a hand-built SMETA never competes."""
     authors, _title, _doi = _survey_meta_get({
         "org": "Custodian Org",
         "creators": [{"name": "Thiel, Stephan"}, {"name": "Geological Survey of South Australia"}],
@@ -191,11 +192,11 @@ def test_edi_export_attribution_reads_creators_over_investigators():
     assert authors == "Thiel, Stephan; Geological Survey of South Australia", authors
 
 
-def test_edi_export_attribution_falls_back_to_investigators_then_org():
-    """Back-compat: with no creators the export author still prefers named investigators over the org
-    (the pre-existing honest-attribution behaviour), and falls to the custodian org when neither exists.
-    Never the portal brand."""
+def test_edi_export_attribution_falls_straight_to_the_org_without_creators():
+    """A1: with no creators the export author falls STRAIGHT to the custodian org. The retired
+    investigators fallback is gone, so a stale facet in a hand-built SMETA is ignored rather than named.
+    Pre-change this returned "A. R, B. S". Never the portal brand."""
     a1, _, _ = _survey_meta_get({"org": "Org", "investigators": [{"name": "A. R"}, {"name": "B. S"}]})
-    assert a1 == "A. R, B. S"
+    assert a1 == "Org"
     a2, _, _ = _survey_meta_get({"org": "Custodian Org"})
     assert a2 == "Custodian Org"

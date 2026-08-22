@@ -26,7 +26,21 @@ the human review a curator does before a survey is published. The rationale is i
 - [ ] Every `contributors[]` role matches what that party did. A wrong role publishes a false claim.
 - [ ] ORCIDs sit on people and RORs on organisations.
 - [ ] Any surviving `lead_investigator`/`principal_investigators` values were migrated
-      (`_tools/migrate_credit.py`).
+      (`_tools/migrate_credit.py`). Nothing reads them any more, so an un-migrated survey loses the
+      names rather than mis-publishing them.
+- [ ] `organisations[]` states what each body actually did, and the seeded custodian row's
+      `INFERRED-REVIEW` marker has been confirmed and cleared by saving the section. A publisher is
+      only there if a publisher was named: it is never inferred.
+- [ ] `citation.preferred_text` is the source's own wording, character for character. Nothing was
+      tidied, re-punctuated or reconstructed from the other fields.
+- [ ] `citation.preferred_identifier` is written ONLY together with its designation. It must equal a
+      pair in `identity_classification.represents[]` (Case A) or `own_identifiers[]` (Case B), and a
+      `represents[]` row must also be a `related_identifiers[]` row. The validator FAILS the save
+      otherwise, so set both halves in the same edit.
+- [ ] A contributor's pasted citation identifier (the `# CONTRIBUTOR:` comment on a
+      `related_identifiers[]` row) has been adjudicated: designated, or deliberately left undesignated.
+- [ ] `acknowledgements[]` wording is verbatim, and `dates.issued` is a real publication date rather
+      than a year inferred from the fieldwork.
 
 **Transfer-function inputs**
 

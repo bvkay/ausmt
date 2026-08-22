@@ -15,8 +15,11 @@ Field-naming scheme (all rendered by curatorpage; all consumed here):
   f_<scalar>                       top-level scalars (project_name/name/region/license/abstract) —
                                    unchanged from the pre-widget form, still handled in app._build_patch.
   s_<section>_<subkey>             a map section's scalar sub-field (organisation.name, access.contact…)
-  l_<section>_<i>_<subkey>         row i of a repeatable list section (principal_investigators…)
+  l_<section>_<i>_<subkey>         row i of a repeatable list section (creators, organisations…)
   c_<section>_<value>             a checkbox in a set (time_series.levels_available)
+  c_<section>_<i>_<token>          a checkbox in a PER-ROW set (organisations roles[])
+  c_<section>_primary              a radio across a list section's rows, valued with the row index
+                                   (organisations primary_custodian: at most one row may carry it)
   o_<section>                      HIDDEN snapshot of the ORIGINAL section value as canonical JSON —
                                    the round-trip anchor: an unchanged submit reassembles to exactly
                                    this and the section is dropped from the patch (a true no-op, same
@@ -47,10 +50,6 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
     "organisation": [
         ("name", "Name", "University of Example", "text"),
         ("ror", "ROR id", "https://ror.org/03yghzc09", "ror"),
-    ],
-    "lead_investigator": [
-        ("name", "Name", "Given Family", "text"),
-        ("orcid", "ORCID", "0000-0002-1825-0097", "orcid"),
     ],
     # IDCONS D2 (SPEC §3): the flat dataset-identifier inputs are RETIRED from the editor UI. The typed
     # related_identifiers list (below, group (b) of the "Identifiers & PIDs" page) is now the ONLY place a
@@ -115,14 +114,30 @@ MAP_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("type", "Collection type", "programme", "text"),
         ("status", "Collection status", "active | completed | archived", "text"),
     ],
+    # A2 (interface contract section 3): the CITATION block - preference and guidance over the
+    # identifier set, never a duplicate bibliographic record. Only the two FLAT sub-keys are modelled
+    # as ordinary scalars here; preferred_identifier is the NESTED {scheme, identifier} pair (managed
+    # by _resolve_preferred_identifier, registered in _SPECIAL_MANAGED_KEYS so the carry-forward does
+    # not resurrect a deliberate removal) and additional[] rides the unmodelled-key carry-forward
+    # verbatim. Flat scheme/identifier sub-keys are NEVER written: the validator's CITATION_KEYS
+    # allow-list would WARN them as unrecognised.
+    "citation": [
+        ("preferred_text", "Preferred citation text (verbatim)",
+         "the custodian's own citation wording, exactly as given", "text"),
+        ("text_source", "Where that wording came from", "", "text_source"),
+    ],
+    # A2 (survey-metadata lane D12, owner GO 2026-08-22): identity_classification is the DESIGNATION
+    # HOME - the mapping {case, represents[] (case_a) | own_identifiers[] (case_b)} that says which
+    # identifiers this record IS. Only `case` is an ordinary scalar; the two pair LISTS are managed
+    # (_resolve_designation_rows) with the absent-vs-empty rule, because citation.preferred_identifier
+    # FAILs at the validator unless it equals one of the designated pairs.
+    "identity_classification": [
+        ("case", "Case", "", "identity_case"),
+    ],
 }
 
 # List (repeatable-row) sections: per-row scalar sub-fields.
 LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
-    "principal_investigators": [
-        ("name", "Name", "Given Family", "text"),
-        ("orcid", "ORCID", "0000-0002-1825-0097", "orcid"),
-    ],
     # CONTRIBUTOR-CREDIT-SPEC C1 (§6 editor typed rows): creators[] - who the citation names, an ORDERED
     # editorial list (order IS the citation author order, so the row renders with up/down reorder controls
     # in curatorpage). name_type is FAIL-CLOSED (person|organisation); orcid is people-only and ror
@@ -144,6 +159,28 @@ LIST_SECTIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("role", "Role (what they did)", "", "role"),
         ("orcid", "ORCID (people)", "0000-0002-1825-0097", "orcid"),
         ("ror", "ROR id (organisations)", "https://ror.org/03yghzc09", "ror"),
+    ],
+    # A2 (survey scope section 3): organisations[] is the FULL role statement where the parties
+    # genuinely differ (industry-collected government releases make collector / custodian / publisher /
+    # distributor different parties). The scalar organisation: block keeps its ratified meaning (primary
+    # custodial responsibility, the discovery projection). Two sub-fields are NOT plain scalars: roles
+    # is a PER-ROW checkbox group over ORG_ROLES_ORDERED (fail-closed) and primary_custodian is a radio
+    # ACROSS the rows (at most one, and only on a row that ticks custodian). PUBLISHER is explicit and
+    # never inferred.
+    "organisations": [
+        ("name", "Name", "e.g. Geological Survey of South Australia", "text"),
+        ("ror", "ROR id", "https://ror.org/04y8k6r48", "ror"),
+        ("roles", "What this organisation is", "", "org_roles"),
+        ("primary_custodian", "Primary custodian", "", "primary_custodian"),
+    ],
+    # A2 (interface contract section 3): acknowledgements[] rows {text, type?, source?}. The wording is
+    # the row's whole payload and is preserved VERBATIM; type is the contract's CANDIDATE vocabulary, so
+    # the validator WARNs rather than blocks an unknown token and the editor mirrors that (a stored
+    # out-of-vocab type must round-trip, not lock the curator out of the section).
+    "acknowledgements": [
+        ("text", "Wording (verbatim)", "the exact wording that must appear", "text"),
+        ("type", "Type", "", "ack_type"),
+        ("source", "Source", "who requires this wording", "text"),
     ],
     "publications": [
         ("author", "Author", "Family, G.", "text"),
@@ -213,7 +250,17 @@ _OPTIONAL_LIST_KEYS: dict[str, frozenset] = {
     # of gaining null orcid/ror keys that would break the byte-clean round-trip.
     "creators": frozenset({"orcid", "ror"}),
     "contributors": frozenset({"orcid", "ror"}),
+    # A2: acknowledgements type/source are optional (text is the row). An unfilled optional key is
+    # written back only when the original row carried it, so a text-only row round-trips byte-clean.
+    "acknowledgements": frozenset({"type", "source"}),
 }
+
+# A2: list-section sub-keys that are OMITTED OUTRIGHT when empty - stronger than _OPTIONAL_LIST_KEYS,
+# which writes null back when the original row carried the key. organisations[].ror is the one such
+# key: the schema makes it optional and the corpus migration is careful NEVER to write `ror: null`
+# (an absent ROR is "not recorded", a null ROR is a claim that there is none), so CLEARING a ror
+# removes the key rather than nulling it.
+_NEVER_NULL_LIST_KEYS: dict[str, frozenset] = {"organisations": frozenset({"ror"})}
 
 # access.level enum (validator/normalize; mirrors add-survey.html's <select>).
 ACCESS_LEVELS = ("open", "metadata_only", "embargoed")
@@ -304,6 +351,31 @@ NAME_TYPES = ("person", "organisation")
 CONTRIBUTOR_ROLES = ("ProjectLeader", "ProjectMember", "DataCollector", "ContactPerson",
                      "DataCurator", "Sponsor", "RightsHolder", "Distributor")
 
+# MTCAT 2.0 curated homes (A2). BAKED copies of the surveys validator's frozen vocabularies - the
+# gateway APP image is content-blind (it ships only gateway/, never the sibling validator), so a
+# runtime import is impossible; test_editor_form.py::test_mtcat20_vocabs_match_the_vendored_validator
+# pins every one of them (membership AND, where the validator declares an order, the order). The
+# POSTURE of each mirrors the validator exactly:
+#   ORG_ROLES_ORDERED       FAIL-CLOSED (a mis-typed role publishes a wrong claim about who holds,
+#                           publishes or collected the data).
+#   CITATION_TEXT_SOURCES   FAIL-CLOSED (where citation wording came from is a provenance claim).
+#   IDENTITY_CLASSIFICATIONS FAIL-CLOSED (the case decides which designation list is legal).
+#   ACKNOWLEDGEMENT_TYPES   WARN-only at the validator (a CANDIDATE vocabulary still being validated
+#                           against real holdings), so the editor does NOT fail-close on it either -
+#                           a stored unknown type must round-trip rather than lock the section.
+ORG_ROLES_ORDERED = ("publisher", "custodian", "distributor", "data_collector",
+                     "rights_holder", "hosting_institution")
+CITATION_TEXT_SOURCES = ("source_provided", "ausmt_generated")
+IDENTITY_CLASSIFICATIONS = ("case_a", "case_b")
+ACKNOWLEDGEMENT_TYPES = ("required_source", "custodian", "community", "traditional_owners",
+                         "field_support", "infrastructure", "access_provider")
+# The two sub-keys of every MTCAT 2.0 identifier pair (citation.preferred_identifier and each
+# identity_classification designation row). BOTH are required when the pair is present: a half-
+# declared identifier cannot anchor the doi/primary/preferred chain, so the editor fail-closes.
+IDENTIFIER_PAIR_KEYS = ("scheme", "identifier")
+# The two designation lists identity_classification may carry, and the case each belongs to.
+IDENTITY_DESIGNATION_LISTS = ("represents", "own_identifiers")
+
 # CONTRIBUTOR-CREDIT-SPEC (§6, the unified People & credit panel, owner ruling 2026-07-26 "one huge
 # list which makes no sense"): the served schema keeps creators[] (citation authors) and contributors[]
 # (who-did-what roles) as TWO ratified lists, but the editor presents them as ONE panel of unified rows
@@ -315,10 +387,10 @@ CONTRIBUTOR_ROLES = ("ProjectLeader", "ProjectMember", "DataCollector", "Contact
 # are NOT assembled by the generic build_section_patch loop (they are decomposed here instead).
 PEOPLE_SECTION = "people"
 _PEOPLE_DECOMPOSED = ("creators", "contributors")
-# The legacy flat credit keys the panel RETIRES (a notice + a Convert action seeds a unified row and
-# deletes the key on the same save). Both are value-based deprecations (never a FAIL); the migration and
-# the engine still read them until the follow-up wave, so an un-converted survey round-trips byte-clean.
-_LEGACY_CREDIT_KEYS = ("lead_investigator", "principal_investigators")
+# A2 (D7): the legacy Convert action is GONE. The corpus migration has run (creators/contributors are
+# seeded and the two retired flat keys deleted), the engine no longer reads them, and the editor no
+# longer models them - so there is nothing left to convert and no delete directive to carry. A survey
+# that somehow still carries a retired key is simply an unmodelled key: byte-preserved, never patched.
 
 # time_series.levels_available known values (docs example). A hinted free-text "other" is NOT offered
 # — the checkboxes plus the advanced JSON fallback cover the rest.
@@ -410,6 +482,15 @@ def _validate_scalar(section: str, subkey: str, kind: str, value: str) -> None:
                                     "(person or organisation)")
     if kind == "role" and value not in CONTRIBUTOR_ROLES:
         raise SectionError(section, f"role '{value}' is not one of {', '.join(CONTRIBUTOR_ROLES)}")
+    # A2 - the MTCAT 2.0 curated-home presets. Fail-closed exactly where the validator is: a wrong
+    # text_source mis-states the provenance of published citation wording, and a wrong case makes the
+    # designation list illegal. ack_type is deliberately NOT here (WARN-only at the validator).
+    if kind == "text_source" and value not in CITATION_TEXT_SOURCES:
+        raise SectionError(section, f"citation text source '{value}' is not one of "
+                                    f"{', '.join(CITATION_TEXT_SOURCES)}")
+    if kind == "identity_case" and value not in IDENTITY_CLASSIFICATIONS:
+        raise SectionError(section, f"identity classification case '{value}' is not one of "
+                                    f"{', '.join(IDENTITY_CLASSIFICATIONS)}")
 
 
 # ---- assembly -----------------------------------------------------------------------------------
@@ -441,7 +522,14 @@ _ABSENT = object()  # the section had no original value (distinct from a real nu
 # overrides is the one such key: _resolve_coordinate_overrides may deliberately DROP it (the C42 set-all-
 # to-inherit-removes-the-key path), so carrying it back from the snapshot would un-delete a curator's
 # removal. Every other section is fully covered by "modelled subfields ∪ nothing", so the map is sparse.
-_SPECIAL_MANAGED_KEYS: dict[str, set[str]] = {"access": {"coordinate_overrides"}}
+# A2 adds two more: citation.preferred_identifier (the nested pair, assembled both-or-neither by
+# _resolve_preferred_identifier, which may deliberately DROP the key) and identity_classification's two
+# designation lists (_resolve_designation_rows, same absent-vs-empty discipline).
+_SPECIAL_MANAGED_KEYS: dict[str, set[str]] = {
+    "access": {"coordinate_overrides"},
+    "citation": {"preferred_identifier"},
+    "identity_classification": {"represents", "own_identifiers"},
+}
 
 
 def _assemble_map(form: dict, section: str):
@@ -504,6 +592,27 @@ def _assemble_map(form: dict, section: str):
         if overrides:
             out["coordinate_overrides"] = overrides
 
+    # A2: citation.preferred_identifier is the NESTED {scheme, identifier} pair, assembled both-or-
+    # neither and resolved with the SAME absent-vs-empty discipline as coordinate_overrides (a form
+    # that does not render the pair PRESERVES the stored one; a rendered-and-emptied pair deletes it).
+    if section == "citation":
+        pref = _resolve_preferred_identifier(form, original)
+        if pref:
+            out["preferred_identifier"] = pref
+        # D17: text_source states where preferred_text came from, so it cannot stand alone.
+        if out.get("text_source") and not out.get("preferred_text"):
+            raise SectionError(section,
+                               "citation text source states where the preferred citation TEXT came "
+                               "from; add the preferred citation text, or clear the source")
+
+    # A2: identity_classification's two designation lists, same absent-vs-empty discipline. A present
+    # list is NON-EMPTY at the validator (absent-not-empty), so an emptied list drops its key.
+    if section == "identity_classification":
+        for key in IDENTITY_DESIGNATION_LISTS:
+            rows = _resolve_designation_rows(form, original, key)
+            if rows:
+                out[key] = rows
+
     # IDCONS D2 (SPEC §3) — carry forward UNMODELLED original keys verbatim. Any key the source section
     # carried that the widget no longer models (the retired flat identifier keys dataset_doi / project /
     # related_publication(_doi), OR any unknown/legacy key the editor never modelled) is re-emitted exactly
@@ -549,6 +658,117 @@ def _resolve_coordinate_overrides(form: dict, original) -> dict:
                 return dict(orig)
         return {}
     return _assemble_coordinate_overrides(form)
+
+
+def _resolve_preferred_identifier(form: dict, original) -> dict:
+    """citation.preferred_identifier, the NESTED {scheme, identifier} pair (D18, resolved: the emitter
+    lane's D12 designation mapping landed, so the curator editor writes the pair).
+
+    ABSENT-vs-EMPTY, the coordinate_overrides precedent: a form that does NOT render the pair inputs
+    (neither s_citation_preferred_identifier_scheme nor _identifier is in the POST) PRESERVES the
+    stored pair from the o_citation snapshot - load-bearing because apply_patch's surgical map merge
+    DELETES a sub-key the assembled map lacks, so an unrelated preferred_text edit would otherwise
+    silently un-declare the survey's preferred citation identifier. A rendered pair left EMPTY on both
+    halves returns {} so the key is dropped (the deliberate removal).
+
+    BOTH-OR-NEITHER: exactly one half filled is a SectionError. The validator FAILs a half-declared
+    pair ("a half-declared identifier cannot anchor the citation invariant"), and silently dropping the
+    typed half would lose curator input, so the form refuses it with a curator-facing message.
+
+    The pair is NOT checked against identity_classification here: that cross-section invariant is the
+    validator's (emitter D20 FAIL) and the runner refuses the merge with the validator's own message.
+    """
+    scheme_raw = form.get("s_citation_preferred_identifier_scheme")
+    ident_raw = form.get("s_citation_preferred_identifier_identifier")
+    if scheme_raw is None and ident_raw is None:
+        if isinstance(original, dict):
+            stored = original.get("preferred_identifier")
+            if isinstance(stored, dict) and stored:
+                return dict(stored)
+        return {}
+    scheme = _form_get(form, "s_citation_preferred_identifier_scheme")
+    identifier = _form_get(form, "s_citation_preferred_identifier_identifier")
+    if scheme and identifier:
+        return {"scheme": scheme, "identifier": identifier}
+    if scheme or identifier:
+        missing = "identifier" if scheme else "scheme"
+        raise SectionError("citation",
+                           f"preferred citation identifier: both scheme and identifier are required "
+                           f"(missing: {missing}); a half-declared identifier cannot anchor the "
+                           f"citation invariant. Fill both, or clear both.")
+    return {}
+
+
+def _resolve_designation_rows(form: dict, original, key: str) -> list:
+    """One identity_classification designation list (`represents` for case_a, `own_identifiers` for
+    case_b) as a list of complete {scheme, identifier} pairs.
+
+    ABSENT-vs-EMPTY, the coordinate_overrides precedent: a form carrying NO
+    l_identity_classification_<key>_* inputs did not render the list, so the stored designation is
+    PRESERVED verbatim (an unrelated case edit must never un-designate the survey - that would turn a
+    perfectly good citation.preferred_identifier into a validator FAIL). A rendered list whose rows are
+    all blank returns [] so the key is dropped (a present list is non-empty at the validator).
+
+    Each row is BOTH-OR-NEITHER: a wholly blank row is dropped (the spare-row degradation), a half row
+    is a SectionError (the validator FAILs it, and dropping it would lose curator input)."""
+    prefix = f"l_identity_classification_{key}_"
+    if not any(k.startswith(prefix) for k in form):
+        if isinstance(original, dict):
+            stored = original.get(key)
+            if isinstance(stored, list) and stored:
+                return [dict(r) if isinstance(r, dict) else r for r in stored]
+        return []
+    rows: list = []
+    for i in _row_indices(form, f"identity_classification_{key}"):
+        scheme = _form_get(form, f"{prefix}{i}_scheme")
+        identifier = _form_get(form, f"{prefix}{i}_identifier")
+        if not scheme and not identifier:
+            continue
+        if not (scheme and identifier):
+            missing = "identifier" if scheme else "scheme"
+            raise SectionError("identity_classification",
+                               f"{key} row {i + 1}: both scheme and identifier are required "
+                               f"(missing: {missing}); a designated identifier is a COMPLETE pair")
+        rows.append({"scheme": scheme, "identifier": identifier})
+    return rows
+
+
+def _collect_org_roles(form: dict, index: int, orig_row: dict) -> list:
+    """organisations[<index>].roles from the per-row c_organisations_<i>_<role> checkbox group.
+
+    FAIL-CLOSED: the rendered group offers ORG_ROLES_ORDERED only, so any other c_organisations_<i>_*
+    token in the POST is hand-crafted and is REFUSED (a mis-typed role publishes a wrong claim about
+    who holds, publishes or collected the data - the validator FAILs it, and so does the form).
+
+    ORDER: the roles the ORIGINAL row already listed keep their stored order (so an untouched row
+    reassembles equal to its snapshot and produces no diff); newly ticked roles are appended in the
+    canonical ORG_ROLES_ORDERED order."""
+    prefix = f"c_organisations_{index}_"
+    ticked = set()
+    for k in form:
+        if not k.startswith(prefix):
+            continue
+        token = k[len(prefix):]
+        if token not in ORG_ROLES_ORDERED:
+            raise SectionError("organisations",
+                               f"organisation role '{token}' is not one of "
+                               f"{', '.join(ORG_ROLES_ORDERED)}")
+        ticked.add(token)
+    stored = orig_row.get("roles")
+    stored_order = [str(r) for r in stored if isinstance(stored, list)] if isinstance(stored, list) else []
+    out = [r for r in stored_order if r in ticked]
+    out += [r for r in ORG_ROLES_ORDERED if r in ticked and r not in out]
+    return out
+
+
+def _org_primary_index(form: dict):
+    """The row index the organisations primary-custodian RADIO selected, or None. The radio is ONE
+    control across the whole list (mtcat's organisation is a deterministic projection of ONE explicitly
+    curated primary custodian), valued with the row index; an unselected group posts nothing."""
+    raw = _form_get(form, "c_organisations_primary")
+    if not raw.isdigit():
+        return None            # "" / the explicit "none" option / anything non-numeric: no selection
+    return int(raw)
 
 
 def _assemble_coordinate_overrides(form: dict) -> dict:
@@ -605,7 +825,9 @@ def _assemble_list(form: dict, section: str) -> list:
     subfields = LIST_SECTIONS[section]
     modelled = {sk for sk, *_ in subfields}
     optional = _OPTIONAL_LIST_KEYS.get(section, frozenset())
+    never_null = _NEVER_NULL_LIST_KEYS.get(section, frozenset())
     original = _original_snapshot(form, section)
+    primary_idx = _org_primary_index(form) if section == "organisations" else None
     rows: list[dict] = []
     for i in _row_indices(form, section):
         row: dict = {}
@@ -616,10 +838,32 @@ def _assemble_list(form: dict, section: str) -> list:
         orig_row = (original[i] if isinstance(original, list) and i < len(original)
                     and isinstance(original[i], dict) else {})
         for subkey, _label, _ph, kind in subfields:
+            # A2: two organisations sub-fields are not l_ scalars at all.
+            if kind == "org_roles":
+                roles = _collect_org_roles(form, i, orig_row)
+                if roles:
+                    row[subkey] = roles
+                    any_value = True
+                elif subkey in orig_row:
+                    row[subkey] = []       # the curator cleared every role on a row that had some
+                continue
+            if kind == "primary_custodian":
+                # Written ONLY on the selected row, and only as `true`. Never primary_custodian: false
+                # (the corpus never carries it and the validator reads absence as "not primary"), so
+                # unselecting the radio simply removes the key when the list is replaced. The flag does
+                # NOT count as row content: a spare blank row whose radio happens to be selected stays
+                # a spare and is dropped, rather than becoming a nameless organisation.
+                if primary_idx == i:
+                    row[subkey] = True
+                continue
             value = _form_get(form, f"l_{section}_{i}_{subkey}")
             if value:
                 _validate_scalar(section, subkey, kind, value)
                 any_value = True
+            # A2: a NEVER-NULL key (organisations[].ror) is omitted outright when blank - clearing it
+            # removes the key rather than writing `ror: null`.
+            if subkey in never_null and not value:
+                continue
             # D-L (SPEC §9): an OPTIONAL sub-key (identifies + the acquisition fields) is written back only
             # when it has a value OR the original row already carried it — never introduce an empty one the
             # source row lacked (mirrors the map scalar rule; keeps a corpus row's round-trip byte-clean).
@@ -648,6 +892,16 @@ def _assemble_list(form: dict, section: str) -> list:
                         any_value = True
         if any_value:
             rows.append(row)
+    # A2 (validate_survey.py: the primary-custodian selection selects AMONG custodial rows): the radio
+    # is refused on a row that does not tick custodian. Fail-closed at the form so the curator sees why,
+    # rather than meeting the validator FAIL only at preview.
+    if section == "organisations" and primary_idx is not None:
+        for row in rows:
+            if row.get("primary_custodian") is True and "custodian" not in (row.get("roles") or []):
+                raise SectionError(section,
+                                   f"'{row.get('name') or 'this organisation'}' is marked the primary "
+                                   f"custodian but is not ticked as a custodian; the primary-custodian "
+                                   f"selection selects among custodial rows")
     return rows
 
 
@@ -800,49 +1054,6 @@ def _people_rows_from_form(form: dict) -> list[dict]:
     return rows
 
 
-def convert_requested(form: dict) -> str:
-    """The legacy key the curator asked to CONVERT this save (people_convert), or "" for none. Only a
-    value in _LEGACY_CREDIT_KEYS is honoured, so a hand-crafted POST cannot direct a delete of anything
-    else (the delete surface is scoped to legacy credit retirement)."""
-    conv = _form_get(form, "people_convert")
-    return conv if conv in _LEGACY_CREDIT_KEYS else ""
-
-
-def _apply_legacy_convert(form: dict, rows: list[dict]) -> None:
-    """Seed the unified rows from the legacy field the curator chose to convert (the migration's own
-    transform, done in the editor): lead_investigator -> ONE row with the ProjectLeader (Led) role
-    ticked, cited only when no cited row exists yet; principal_investigators -> one CITED creator row
-    per person. The legacy payload rides hidden form fields (the render carries them from the survey).
-    Deleting the flat key is done by the caller via the _delete_keys directive on the SAME save."""
-    conv = convert_requested(form)
-    if not conv:
-        return
-    if conv == "lead_investigator":
-        name = _form_get(form, "people_legacy_lead_name")
-        if not name:
-            return
-        any_cited = any(r["cited"] for r in rows)
-        row = _new_people_row(name, "person", _form_get(form, "people_legacy_lead_orcid"), "")
-        row["roles"] = ["ProjectLeader"]
-        row["cited"] = not any_cited
-        rows.append(row)
-    elif conv == "principal_investigators":
-        raw = _form_get(form, "people_legacy_principal")
-        try:
-            people = json.loads(raw) if raw else []
-        except ValueError:
-            people = []
-        for pi in people if isinstance(people, list) else []:
-            if not isinstance(pi, dict):
-                continue
-            name = str(pi.get("name") or "").strip()
-            if not name:
-                continue
-            row = _new_people_row(name, "person", pi.get("orcid"), "")
-            row["cited"] = True
-            rows.append(row)
-
-
 def assemble_people(form: dict) -> tuple:
     """Assemble the unified People & credit panel into (creators_value, contributors_value), each the
     assembled value or the _OMIT sentinel. Precedence per underlying list: a non-empty j_<list> advanced
@@ -850,7 +1061,7 @@ def assemble_people(form: dict) -> tuple:
     is then snapshot-compared against its o_<list> anchor -> _OMIT when unchanged (the byte-clean
     round-trip). Raises SectionError on a bad name_type/orcid/ror or malformed advanced JSON.
 
-    A form that does NOT carry the panel (no l_people_* rows, no o_/j_ credit fields, no convert) yields
+    A form that does NOT carry the panel (no l_people_* rows, no o_/j_ credit fields) yields
     (_OMIT, _OMIT): the per-section hub posts one section at a time, so a non-people form must contribute
     nothing to creators/contributors (the no-clobber promise)."""
     decomposed: dict = {}
@@ -863,7 +1074,6 @@ def assemble_people(form: dict) -> tuple:
                 raise SectionError(key, f"the advanced JSON for {key} is not valid JSON")
     if len(decomposed) < len(_PEOPLE_DECOMPOSED):
         rows = _people_rows_from_form(form)
-        _apply_legacy_convert(form, rows)
         creators_asm, contributors_asm = _decompose_people(rows)
         decomposed.setdefault("creators", creators_asm)
         decomposed.setdefault("contributors", contributors_asm)
@@ -913,12 +1123,6 @@ def assemble_section(form: dict, section: str):
 _OMIT = object()  # assemble_section: this section contributes nothing to the patch
 
 
-# The patch directive that deletes top-level keys (used by the legacy-credit Convert action). Kept out
-# of the merge patch's normal editable-key gate; the runner validates that every listed key is a legacy
-# credit key it is allowed to retire. A JSON-representable list so it survives the file-queue transport.
-DELETE_DIRECTIVE = "_delete_keys"
-
-
 def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
     """Assemble every widget section into a patch fragment, collecting per-section errors instead of
     failing on the first. Returns (patch_fragment, errors). The caller (app._build_patch) merges this
@@ -926,7 +1130,8 @@ def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
 
     creators[]/contributors[] are NOT assembled in the generic loop: the unified People & credit panel
     (assemble_people) owns them, decomposing its unified rows back into the two ratified served lists.
-    A legacy Convert also emits the DELETE_DIRECTIVE for the flat key it converted (scoped, per save)."""
+    A2 (D7): there is no delete directive any more - the legacy Convert is gone with the keys it
+    converted, so a patch can only ever carry editable field values."""
     patch: dict = {}
     errors: list[SectionError] = []
     for section in WIDGET_SECTIONS:
@@ -947,10 +1152,4 @@ def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
             patch["contributors"] = contributors_val
     except SectionError as exc:
         errors.append(exc)
-    # LEGACY RETIREMENT (§4/C3): a Convert deletes the flat key on the SAME save. Only when the curator
-    # explicitly asked (people_convert) - an unrelated save never carries the directive, so lead_-
-    # investigator/principal_investigators are byte-preserved (absent-preserve semantics).
-    conv = convert_requested(form)
-    if conv:
-        patch[DELETE_DIRECTIVE] = [conv]
     return patch, errors

@@ -499,7 +499,7 @@ EDITOR_UI_JS = """
 #       quiet inline note on any failure - client-side only, no gateway proxying (the curator-page CSP
 #       connect-src allows the two hosts, scoped, per the Caddyfile @curatorHarvestPages matcher);
 #   (c) the "Reuse someone" typeahead: a directory built CLIENT-SIDE from the same-origin
-#       /data/surveys.json (aggregate every creators+contributors+investigators entry corpus-wide, dedupe
+#       /data/surveys.json (aggregate every creators+contributors entry corpus-wide, dedupe
 #       by ORCID else name, sort by frequency then name); selecting fills a fresh row. It stays HIDDEN
 #       until the directory loads, so a failed/absent fetch leaves manual entry intact (graceful).
 _PEOPLE_CREDIT_JS = r"""
@@ -601,7 +601,7 @@ _PEOPLE_CREDIT_JS = r"""
     var byKey = {};
     Object.keys(data || {}).forEach(function (label) {
       var rec = data[label] || {};
-      ['creators', 'contributors', 'investigators'].forEach(function (fld) {
+      ['creators', 'contributors'].forEach(function (fld) {
         (Array.isArray(rec[fld]) ? rec[fld] : []).forEach(function (p) {
           if (!p || !p.name) return;
           var orcid = bareOrcid(p.orcid);
@@ -778,9 +778,6 @@ CONTEXT_BAR_JS = """
 #   * The Frame card headline derives from the frame notes' DE-ROTATION entries ONLY (convention/
 #     quadrant warns are QA flags, not frame state); the sub-line uses the record's own vocabulary
 #     ("declared-zero reference" — never "geomagnetic", which the engine deliberately never asserts).
-#   * The citation-author info row renders ONLY when the server stamped data-citation-email on the
-#     scaffold (derived server-side from the SAME helper the Metadata tab's inline error uses) —
-#     never inferred by matching warning strings (the old /citation|author|email/ branch is deleted).
 #   * Warnings strings that MIRROR structured sources (the per-drop 'station X SKIPPED …' echo and
 #     the 'convention: …' aggregation echo) are filtered — the structured rows render them properly.
 #
@@ -1055,30 +1052,16 @@ SURVEY_HUB_JS = r"""
   var REFUSED_NOTE = 'Refused stations stay in the published package — they are withheld from '
                    + 'serving only. Fix is custodian-side re-export; each row carries the diagnosis.';
 
-  function truncEmail(v) {
-    var s = String(v || '');
-    var at = s.indexOf('@');
-    return at > 0 ? s.slice(0, at + 1) + '…' : s;
-  }
-  function metaInfoText(email, built) {
-    return 'citation author is an email address (' + truncEmail(email) + ') — baked into '
-         + (built != null ? 'all ' + built + ' served' : 'every served') + ' station XML';
-  }
-
   // The FULL render plan for Needs attention: fail rows, the package note ONCE (only when there
-  // are refusals), then warn rows, then the metadata info row (only when the server stamped the
-  // citation-email attribute). Pure: [{row}| {note}] entries, in render order.
-  function attentionPlan(survey, citationEmail) {
+  // are refusals), then warn rows. Pure: [{row}| {note}] entries, in render order.
+  // A2 (D19): the trailing citation-author metadata info row is gone with the server-side heuristic
+  // that stamped it; nothing else in the plan changes.
+  function attentionPlan(survey) {
     var rows = clusterWarnings(attentionItems(survey));
     var plan = [];
     rows.forEach(function (r) { if (r.kind === 'fail') plan.push({ row: r }); });
     if (plan.length) plan.push({ note: REFUSED_NOTE });
     rows.forEach(function (r) { if (r.kind !== 'fail') plan.push({ row: r }); });
-    if (citationEmail) {
-      plan.push({ row: { kind: 'info', sid: 'metadata',
-                         text: metaInfoText(citationEmail, survey && survey.stations_built),
-                         title: null, link: 'metadata', n: 1, ids: [] } });
-    }
     return plan;
   }
 
@@ -1207,7 +1190,6 @@ SURVEY_HUB_JS = r"""
   var qa = document.getElementById('survey-qa');
   if (!qa) return;
   var slug = qa.getAttribute('data-survey-slug') || '';
-  var citationEmail = qa.getAttribute('data-citation-email') || '';
 
   function attentionRowEl(row) {
     var div = el('div', null, 'qa ' + row.kind);
@@ -1254,9 +1236,8 @@ SURVEY_HUB_JS = r"""
       cards.appendChild(box);
     });
 
-    // Needs attention: severity rows from the pure plan (fail rows, ONE package note, warn rows,
-    // the metadata info row when stamped).
-    var plan = attentionPlan(survey, citationEmail);
+    // Needs attention: severity rows from the pure plan (fail rows, ONE package note, warn rows).
+    var plan = attentionPlan(survey);
     if (!plan.length) {
       attention.appendChild(el('p', 'Nothing needs attention — no refused stations or QA '
         + 'warnings in the current build.', 'sub'));
@@ -4717,17 +4698,25 @@ _EDIT_JSON_ONLY = (
 # now optional keys on a related_identifiers row, and the standalone sidebar entry + panel are gone. The
 # sources[] schema key stays byte-preserved on disk (never entered into any patch — it is no longer a
 # widget section, so build_section_patch never assembles it); the engine keeps reading it this wave.
+# A2 (LANE-CONTRACT-FORM-CREDIT): the two retired flat credit entries are GONE, and the ratified
+# MTCAT 2.0 curated homes arrive as their own panels - organisations[] (the full role statement),
+# citation{} (preferred wording + the preferred identifier), acknowledgements[] (verbatim required
+# wording) and identity_classification{} (the designation mapping the citation chain is checked
+# against). They sit next to the parties/credit material they belong with.
 _SECTION_TITLES = {
-    "organisation": "Organisation", "lead_investigator": "Lead investigator",
-    "principal_investigators": "Principal investigators", "identifiers": "Identifiers",
+    "organisation": "Organisation", "organisations": "Organisations & roles",
+    "identifiers": "Identifiers",
     "creators": "Creators (citation authors)", "contributors": "Contributors (roles)",
+    "citation": "Citation", "identity_classification": "Identity & designation",
+    "acknowledgements": "Required acknowledgements",
     "publications": "Publications", "funding": "Funding", "instruments": "Instruments",
     "time_series": "Time series", "access": "Access", "attribution": "Attribution & rights",
     "related_identifiers": "Related identifiers",
     "processing": "Processing", "collection": "Collection",
 }
-_SECTION_ORDER = ("organisation", "lead_investigator", "principal_investigators",
+_SECTION_ORDER = ("organisation", "organisations",
                   "creators", "contributors", "identifiers",
+                  "citation", "identity_classification", "acknowledgements",
                   "publications", "funding", "instruments", "time_series", "access", "attribution",
                   "related_identifiers", "processing", "collection")
 
@@ -4830,6 +4819,8 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
     from . import editor_form
     subfields = editor_form.MAP_SECTIONS[section]
     rows = [f'<h2>{_esc(title)}</h2>', _section_error_html(err_map.get(section))]
+    if section == "citation":
+        rows.append(_CITATION_HINT_HTML)
     for subkey, label, placeholder, kind in subfields:
         name = f"s_{section}_{subkey}"
         val = _sub_value(section, subkey, fields, submitted)
@@ -4860,10 +4851,33 @@ def _map_section_panel(section: str, title: str, fields: dict, submitted: dict |
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
                         f'{_text_input(name, val, placeholder, extra_hint=_ROR_HINT, css_class=bad)}'
                         f'{derr_html}</p>')
+        elif kind == "text_source":                 # A2 citation.text_source - fail-closed vocab
+            rows.append(_typed_vocab_select_widget(name, label, val,
+                                                   editor_form.CITATION_TEXT_SOURCES,
+                                                   display_labels=_TEXT_SOURCE_DISPLAY))
+        elif kind == "identity_case":               # A2 identity_classification.case - fail-closed
+            rows.append(_typed_vocab_select_widget(name, label, val,
+                                                   editor_form.IDENTITY_CLASSIFICATIONS,
+                                                   display_labels=_IDENTITY_CASE_DISPLAY))
         else:
             rows.append(f'<p><label class="k">{_esc(label)}</label>'
                         f'{_text_input(name, val, placeholder, css_class=bad)}'
                         f'{derr_html}</p>')
+    # A2: citation.preferred_identifier is the NESTED {scheme, identifier} pair, rendered here so the
+    # editor can WRITE it (D18, resolved). additional[] has no widget and rides the snapshot verbatim.
+    if section == "citation":
+        sec_val = fields.get(section)
+        rows.append(_identifier_pair_widget(
+            "s_citation_preferred_identifier", "Preferred citation identifier",
+            "The identifier the citation should quote. It must ALSO be designated below under "
+            "Identity & designation, or the save is refused.",
+            (sec_val or {}).get("preferred_identifier") if isinstance(sec_val, dict) else None,
+            submitted))
+        extra = (sec_val or {}).get("additional") if isinstance(sec_val, dict) else None
+        if extra:
+            rows.append('<p class="sub">This survey also carries '
+                        f'{len(extra)} additional citation row(s). They have no widget yet and are '
+                        'carried through every save untouched; edit them in the advanced JSON below.</p>')
     rows.append(_snapshot_hidden(section, fields))
     rows.append(_advanced_json_details(section, fields))
     return f'<div class="panel">{"".join(rows)}</div>'
@@ -5095,9 +5109,108 @@ _REVIEW_CHIP_HTML = (
 )
 
 
+# A2: human-facing option text for the MTCAT 2.0 vocabularies. The option VALUE is always the raw
+# token, so the POST stays byte-identical and every vocab stays fail-closed at the assembler.
+_ORG_ROLE_DISPLAY = {
+    "publisher": "Publisher (released it)",
+    "custodian": "Custodian (holds it)",
+    "distributor": "Distributor (serves it elsewhere)",
+    "data_collector": "Data collector (acquired it in the field)",
+    "rights_holder": "Rights holder (owns the rights)",
+    "hosting_institution": "Hosting institution (hosts the archive)",
+}
+_TEXT_SOURCE_DISPLAY = {
+    "source_provided": "The custodian gave us this wording",
+    "ausmt_generated": "AusMT composed it",
+}
+_IDENTITY_CASE_DISPLAY = {
+    "case_a": "Case A: the SAME dataset/release as a cited source identifier",
+    "case_b": "Case B: a DISTINCT AusMT-published release",
+}
+_ACK_TYPE_DISPLAY = {
+    "required_source": "Required by the source",
+    "custodian": "Custodian wording",
+    "community": "Community",
+    "traditional_owners": "Traditional owners",
+    "field_support": "Field support",
+    "infrastructure": "Infrastructure",
+    "access_provider": "Access provider",
+}
+
+
+def _org_roles_widget(section: str, index, label: str, value, submitted: dict | None) -> str:
+    """organisations[<i>].roles as a PER-ROW checkbox group (c_<section>_<i>_<role>) over the ratified
+    ORG_ROLES_ORDERED vocabulary. A list-valued sub-field has no scalar input, and the group is the
+    honest control: an organisation is often several things at once. Fail-closed by construction (only
+    ratified tokens are offered; the assembler REFUSES any other token in the POST). After a validation
+    error the ticks come from `submitted` so the curator's selection survives the round trip."""
+    from . import editor_form
+    prefix = f"c_{section}_{index}_"
+    if submitted is not None and any(k.startswith(prefix) for k in submitted):
+        checked = {r for r in editor_form.ORG_ROLES_ORDERED if f"{prefix}{r}" in submitted}
+    elif isinstance(value, list):
+        checked = {str(r).strip() for r in value}
+    else:
+        checked = set()
+    boxes = []
+    for role in editor_form.ORG_ROLES_ORDERED:
+        mark = " checked" if role in checked else ""
+        boxes.append(
+            f'<label style="display:block"><input type="checkbox" '
+            f'name="{_esc(prefix + role)}" value="1" style="width:auto"{mark}> '
+            f'{_esc(_ORG_ROLE_DISPLAY.get(role, role))}</label>')
+    stray = sorted(r for r in checked if r not in editor_form.ORG_ROLES_ORDERED)
+    note = ''
+    if stray:
+        # A stored role outside the vocabulary cannot be expressed by this group (and the validator
+        # FAILs it), so say so plainly rather than dropping it silently: the advanced JSON is the fix.
+        note = (f'<span class="fielderr">stored role(s) outside the vocabulary: '
+                f'{_esc(", ".join(stray))}: fix them in the advanced JSON below</span>')
+    return (f'<p style="margin:.15rem 0"><label class="k">{_esc(label)}</label>'
+            + "".join(boxes) + note + '</p>')
+
+
+def _primary_custodian_widget(section: str, index, value, submitted: dict | None) -> str:
+    """organisations[<i>].primary_custodian as one RADIO across the whole list (c_<section>_primary,
+    valued with the row index). mtcat's organisation is a deterministic projection of ONE explicitly
+    curated primary custodian, so at most one row may carry it - a radio says that structurally, where
+    per-row checkboxes would let a curator tick two. The panel renders a "(none)" option so the flag can
+    be cleared without JS. The assembler refuses the selection on a row that does not tick custodian."""
+    group = f"c_{section}_primary"
+    if submitted is not None and group in submitted:
+        checked = str(submitted.get(group)) == str(index)
+    else:
+        checked = value is True
+    mark = " checked" if checked else ""
+    return (f'<p style="margin:.15rem 0"><label style="display:inline-block">'
+            f'<input type="radio" name="{_esc(group)}" value="{_esc(str(index))}" '
+            f'style="width:auto"{mark}> this is the PRIMARY custodian</label></p>')
+
+
+def _identifier_pair_widget(prefix: str, label: str, hint: str, value,
+                            submitted: dict | None) -> str:
+    """One MTCAT 2.0 identifier pair {scheme, identifier} as two inputs named <prefix>_scheme and
+    <prefix>_identifier. BOTH are required when either is filled (the assembler fail-closes on a half
+    pair): a half-declared identifier cannot anchor the doi/primary/preferred citation chain."""
+    stored = value if isinstance(value, dict) else {}
+    def _v(sub):
+        key = f"{prefix}_{sub}"
+        if submitted is not None and key in submitted:
+            return submitted.get(key)
+        return stored.get(sub)
+    return (f'<p style="margin:.15rem 0"><label class="k">{_esc(label)}</label>'
+            f'<span class="sub">{_esc(hint)}</span>'
+            f'<label class="k">Scheme</label>'
+            f'{_text_input(prefix + "_scheme", _v("scheme"), "DOI / Handle / URL / RAiD")}'
+            f'<label class="k">Identifier</label>'
+            f'{_text_input(prefix + "_identifier", _v("identifier"), "10.25914/… or an https:// URL")}'
+            '</p>')
+
+
 def _list_row_html(section: str, index: int, subfields, values: dict | None,
                    row_suffix_html: str = "", *, reorderable: bool = False,
-                   needs_review: bool = False, spare: bool = False) -> str:
+                   needs_review: bool = False, spare: bool = False,
+                   submitted: dict | None = None) -> str:
     """One repeatable row: the per-subkey inputs + a remove button (data-attribute delegated; a no-JS
     submit just leaves an empty row, which the server drops). `values` prefills an existing row.
     `row_suffix_html` (IDCONS D5) is inserted before the remove button — used to attach the per-identifier
@@ -5105,7 +5218,9 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
     it too. Default empty, so every other list section renders byte-identically.
     `reorderable` (CONTRIBUTOR-CREDIT-SPEC §6) adds up/down move buttons (creators). `needs_review` adds the
     INFERRED-REVIEW chip to a migration-seeded row. `spare` stamps the no-JS add-fallback marker
-    (_SPARE_ROW_ATTR) that editor.js hides on init — see the constant's note."""
+    (_SPARE_ROW_ATTR) that editor.js hides on init, see the constant's note. `submitted` (A2) is the
+    raw POST, needed only by the two non-scalar organisations controls (the roles checkbox group and
+    the primary-custodian radio) so their state survives a validation-error re-render."""
     from . import editor_form
     cells = []
     if needs_review:
@@ -5133,6 +5248,17 @@ def _list_row_html(section: str, index: int, subfields, values: dict | None,
         if kind == "role":                          # §6 contributors[].role - 8-token vocab <select>
             cells.append(_typed_vocab_select_widget(name, label, val, editor_form.CONTRIBUTOR_ROLES,
                                                     display_labels=_ROLE_DISPLAY))
+            continue
+        if kind == "org_roles":                     # A2 organisations[].roles - per-row checkbox group
+            cells.append(_org_roles_widget(section, index, label, val, submitted))
+            continue
+        if kind == "primary_custodian":             # A2 organisations[] - one radio across the rows
+            cells.append(_primary_custodian_widget(section, index, val, submitted))
+            continue
+        if kind == "ack_type":                      # A2 acknowledgements[].type - CANDIDATE vocab
+            cells.append(_typed_vocab_select_widget(name, label, val,
+                                                    editor_form.ACKNOWLEDGEMENT_TYPES,
+                                                    display_labels=_ACK_TYPE_DISPLAY))
             continue
         itype = "email" if kind == "email" else "text"
         extra = _ROR_HINT if kind == "ror" else ""
@@ -5198,7 +5324,7 @@ _REORDERABLE_SECTIONS = frozenset({"creators"})
 
 def _list_section_panel(section: str, title: str, fields: dict, submitted: dict | None,
                         err_map: dict, display_error: str | None = None,
-                        review_indices: list | None = None) -> str:
+                        review_indices: list | None = None, intro_html: str = "") -> str:
     """`display_error` (C43-HUB H4): a DISPLAY-LAYER section-level error line (list rows have no
     single offending input to redden, so the message renders under the heading). Rendering only —
     the server validator and POST path are untouched. `review_indices` (CONTRIBUTOR-CREDIT-SPEC §6):
@@ -5236,13 +5362,13 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
             continue  # non-dict item handled via advanced JSON
         rendered.append(_list_row_html(section, idx, subfields, row, row_suffix_html=row_suffix,
                                        reorderable=reorderable, needs_review=orig_pos in review_set,
-                                       spare=from_submitted and _blank_row(row)))
+                                       spare=from_submitted and _blank_row(row), submitted=submitted))
         idx += 1
     # Spare blank rows so add-without-JS works. Marked (data-spare-row) so editor.js hides them for
     # the JS curator, who has +Add — the no-JS path is byte-identical apart from the inert attribute.
     for _ in range(_SPARE_BLANK_ROWS):
         rendered.append(_list_row_html(section, idx, subfields, None, row_suffix_html=row_suffix,
-                                       reorderable=reorderable, spare=True))
+                                       reorderable=reorderable, spare=True, submitted=submitted))
         idx += 1
     add_btn = ('<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
                f'data-editor-add-row="{_esc(section)}">+ Add row</button></p>')
@@ -5258,6 +5384,8 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
     heading = [f'<h2>{_esc(title)}</h2>', _section_error_html(err_map.get(section))]
     if display_error:
         heading.append(f'<p class="fielderr">{_esc(display_error)}</p>')
+    if intro_html:
+        heading.append(intro_html)
     return (f'<div class="panel" data-editor-section="{_esc(section)}">'
             + "".join(heading)
             + f'<div data-editor-rows="{_esc(section)}">{"".join(rendered)}</div>'
@@ -5265,6 +5393,113 @@ def _list_section_panel(section: str, title: str, fields: dict, submitted: dict 
             + _snapshot_hidden(section, fields)
             + _advanced_json_details(section, fields)
             + '</div>')
+
+
+# A2: the per-section explainers for the new panels, keyed by section so both edit surfaces (the
+# standalone full form and the hub Metadata tab) render identical copy from ONE place.
+_ORGANISATIONS_INTRO = (
+    '<p class="sub">Who is what for THIS release. The single <b>Organisation</b> above stays the '
+    'custodial discovery value; this list is the full role statement for the cases where the parties '
+    'genuinely differ - a contractor collected it, a state survey holds it, a national agency '
+    'published it, another archive distributes it.</p>'
+    '<p class="sub"><b>Publisher is never inferred.</b> If nobody is ticked publisher, structured '
+    'citation generation fails closed rather than guessing.</p>'
+    '<p style="margin:.15rem 0"><label style="display:inline-block">'
+    '<input type="radio" name="c_organisations_primary" value="none" style="width:auto" checked> '
+    'no primary custodian selected</label> '
+    '<span class="sub">Pick the primary custodian on exactly one custodial row below, or leave this '
+    'selected to record none.</span></p>')
+
+_ACKNOWLEDGEMENTS_INTRO = (
+    '<p class="sub">Wording AusMT is REQUIRED to reproduce, verbatim. This is not a citation and it '
+    'is never rewritten: type it exactly as the source gives it. A row with no wording says nothing '
+    'and cannot ship.</p>')
+
+_CITATION_HINT_HTML = (
+    '<p class="sub">Preference and guidance over this survey\'s identifiers - never a second '
+    'bibliographic record. <b>Preferred citation text</b> is the custodian\'s own wording, '
+    'reproduced verbatim; say where it came from beside it.</p>')
+
+_IDENTITY_INTRO = (
+    '<p class="sub">Every survey record is either the SAME dataset/release as a cited source '
+    'identifier (<b>Case A</b>: list those identifiers under <i>represents</i>, and each one must '
+    'ALSO be a row under Related identifiers) or a DISTINCT AusMT-published release (<b>Case B</b>: '
+    'list the release\'s own identifiers under <i>own identifiers</i>).</p>'
+    '<p class="sub">This is the DESIGNATION HOME: the preferred citation identifier must equal one '
+    'of the pairs listed here, or the save is refused.</p>')
+
+
+_LIST_SECTION_INTROS = {
+    "organisations": _ORGANISATIONS_INTRO,
+    "acknowledgements": _ACKNOWLEDGEMENTS_INTRO,
+}
+
+
+def _designation_rows_html(key: str, title: str, fields: dict, submitted: dict | None) -> str:
+    """One identity_classification designation list (represents / own_identifiers) as repeatable
+    {scheme, identifier} pair rows. The row-index namespace is `identity_classification_<key>`, which
+    is exactly what editor_form._resolve_designation_rows reads and what the generic editor.js add-row
+    machinery keys on, so a JS-added row assembles like a server-rendered one."""
+    ns = f"identity_classification_{key}"
+    stored = []
+    from_submitted = submitted is not None and any(k.startswith(f"l_{ns}_") for k in submitted)
+    if from_submitted:
+        for i in _submitted_row_indices(submitted, ns):
+            stored.append({"scheme": submitted.get(f"l_{ns}_{i}_scheme"),
+                           "identifier": submitted.get(f"l_{ns}_{i}_identifier")})
+    else:
+        sec = fields.get("identity_classification")
+        rows = sec.get(key) if isinstance(sec, dict) else None
+        if isinstance(rows, list):
+            stored = [r for r in rows if isinstance(r, dict)]
+
+    def _row(idx, value, spare=False):
+        return (f'<div class="editor-row" data-editor-row{_spare_attr(spare)} '
+                'style="border:1px solid #2E4254;border-radius:6px;padding:.5rem;margin:.4rem 0">'
+                f'<p style="margin:.15rem 0"><label class="k">Scheme</label>'
+                f'{_text_input(f"l_{ns}_{idx}_scheme", (value or {}).get("scheme"), "DOI")}</p>'
+                f'<p style="margin:.15rem 0"><label class="k">Identifier</label>'
+                f'{_text_input(f"l_{ns}_{idx}_identifier", (value or {}).get("identifier"), "10.25914/…")}</p>'
+                '<p style="margin:.15rem 0"><button type="button" class="b-bad" '
+                'style="padding:.2rem .6rem;font-size:.75rem" data-editor-remove-row>'
+                'Remove row</button></p></div>')
+
+    rendered = []
+    idx = 0
+    for value in stored:
+        rendered.append(_row(idx, value, spare=from_submitted and _blank_row(value)))
+        idx += 1
+    for _ in range(_SPARE_BLANK_ROWS):
+        rendered.append(_row(idx, None, spare=True))
+        idx += 1
+    return (f'<h3 class="k">{_esc(title)}</h3>'
+            f'<div data-editor-rows="{_esc(ns)}">{"".join(rendered)}</div>'
+            '<p><button type="button" class="b-accent" style="padding:.3rem .8rem" '
+            f'data-editor-add-row="{_esc(ns)}">+ Add row</button></p>'
+            f'<template data-editor-template="{_esc(ns)}">{_row(ROW_INDEX_TOKEN, None)}</template>')
+
+
+def _identity_classification_panel(fields: dict, submitted: dict | None, err_map: dict) -> str:
+    """A2: the identity_classification panel - the case <select> plus the two designation pair lists.
+    Not an ordinary map panel: two of its three sub-values are LISTS of {scheme, identifier} pairs.
+    Field names match editor_form exactly, so assembly, the absent-vs-empty preservation rule and the
+    o_<section> round-trip anchor all work through the generic build_section_patch path."""
+    from . import editor_form
+    section = "identity_classification"
+    case_val = _sub_value(section, "case", fields, submitted)
+    return (
+        f'<div class="panel" data-editor-section="{section}">'
+        f'<h2>{_esc(_SECTION_TITLES[section])}</h2>'
+        + _section_error_html(err_map.get(section))
+        + _IDENTITY_INTRO
+        + _typed_vocab_select_widget(f"s_{section}_case", "Case", case_val,
+                                     editor_form.IDENTITY_CLASSIFICATIONS,
+                                     display_labels=_IDENTITY_CASE_DISPLAY)
+        + _designation_rows_html("represents", "Represents (Case A only)", fields, submitted)
+        + _designation_rows_html("own_identifiers", "Own identifiers (Case B only)", fields, submitted)
+        + _snapshot_hidden(section, fields)
+        + _advanced_json_details(section, fields)
+        + '</div>')
 
 
 def _submitted_row_indices(submitted: dict, section: str) -> list[int]:
@@ -5464,49 +5699,6 @@ def _people_rows_for_render(fields: dict, submitted: dict | None,
     return out
 
 
-def _legacy_credit_notice(fields: dict) -> str:
-    """§6.3 LEGACY RETIREMENT. When a survey still carries lead_investigator (or the extinct
-    principal_investigators), render a single-line notice + a Convert action. Convert seeds a unified row
-    (lead -> Led role, cited when no cited author exists yet; each principal -> a cited creator) AND
-    deletes the flat key on the SAME save (via editor_form's people_convert directive + the runner's
-    _delete_keys). The legacy payload rides hidden fields so the convert is a plain server round-trip (no
-    JS required). Nothing renders when neither legacy key carries a real value."""
-    import json as _json
-    blocks = []
-    li = fields.get("lead_investigator")
-    if isinstance(li, dict) and str(li.get("name") or "").strip():
-        name = str(li["name"]).strip()
-        orcid = str(li.get("orcid") or "").strip()
-        blocks.append(
-            '<div class="people-legacy" style="border-left:3px solid #D9A23B;padding:.4rem .6rem;'
-            'margin:.4rem 0">'
-            f'<p class="sub">Legacy field: <code>lead_investigator</code> '
-            f'‘{_esc(name)}’. Convert it to a typed credit row (adds the Led role, cited when '
-            'no cited author is set yet) and remove the retired key on save.</p>'
-            f'<input type="hidden" name="people_legacy_lead_name" value="{_esc(name)}">'
-            f'<input type="hidden" name="people_legacy_lead_orcid" value="{_esc(orcid)}">'
-            '<p style="margin:.15rem 0"><button type="submit" name="people_convert" '
-            'value="lead_investigator" class="b-accent" style="padding:.3rem .8rem">'
-            'Convert lead_investigator</button></p></div>')
-    pis = fields.get("principal_investigators")
-    if isinstance(pis, list):
-        people = [{"name": str(p["name"]).strip(), "orcid": str(p.get("orcid") or "").strip()}
-                  for p in pis if isinstance(p, dict) and str(p.get("name") or "").strip()]
-        if people:
-            names = ", ".join(p["name"] for p in people)
-            blocks.append(
-                '<div class="people-legacy" style="border-left:3px solid #D9A23B;padding:.4rem .6rem;'
-                'margin:.4rem 0">'
-                f'<p class="sub">Legacy field: <code>principal_investigators</code> ({len(people)}): '
-                f'{_esc(names)}. Convert to cited creator rows and remove the retired key on save.</p>'
-                '<input type="hidden" name="people_legacy_principal" '
-                f'value="{_esc(_json.dumps(people))}">'
-                '<p style="margin:.15rem 0"><button type="submit" name="people_convert" '
-                'value="principal_investigators" class="b-accent" style="padding:.3rem .8rem">'
-                'Convert principal_investigators</button></p></div>')
-    return "".join(blocks)
-
-
 def _people_typeahead_html() -> str:
     """§6.4 REUSE DIRECTORY. An "Add person" typeahead whose directory is built CLIENT-SIDE from the
     same-origin /data/surveys.json (aggregate every creators+contributors entry corpus-wide, dedupe by
@@ -5525,21 +5717,21 @@ def _people_typeahead_html() -> str:
 
 
 def _people_credit_inner(slug: str, fields: dict, submitted: dict | None, err_map: dict,
-                         review_flags: dict | None = None, *, flagged_email: str | None = None) -> str:
+                         review_flags: dict | None = None) -> str:
     """The unified People & credit panel content (used by both the full editor form and the hub Metadata
-    tab). Renders the explainer, the legacy-retirement notice(s), the reuse typeahead, the merged unified
-    rows (+ spare rows + the JS-add template), and ONE collapsed advanced raw-JSON escape per underlying
-    list (creators, contributors) plus their o_<list> round-trip anchors. `flagged_email` is the display-
-    layer citation-email heuristic surface (§ retained from the retired lead panel): an explanatory line."""
+    tab). Renders the explainer, the reuse typeahead, the merged unified rows (+ spare rows + the JS-add
+    template), and ONE collapsed advanced raw-JSON escape per underlying list (creators, contributors)
+    plus their o_<list> round-trip anchors.
+
+    A2 (D7/D19): the legacy-retirement notice and its Convert action are GONE (the migration deleted the
+    two retired flat credit keys corpus-wide and nothing reads them), and so is the citation-author email
+    heuristic that read them."""
     heading = ['<h2>People &amp; credit</h2>']
     # A per-field error from the panel is keyed "people" (a bad name_type/orcid/ror); an advanced-JSON
     # override error is keyed by its underlying list. Surface all three so the message is never orphaned.
     for section in (_PEOPLE_SECTION, "creators", "contributors"):
         heading.append(_section_error_html(err_map.get(section)))
-    if flagged_email:
-        heading.append(f'<p class="fielderr">{_esc(_CITATION_EMAIL_ERROR)}</p>')
     heading.append(_PEOPLE_EXPLAINER)
-    heading.append(_legacy_credit_notice(fields))
     heading.append(_people_typeahead_html())
 
     rows_meta = _people_rows_for_render(fields, submitted, review_flags)
@@ -5851,30 +6043,32 @@ def render_edit_form(*, slug: str, version: str | None, fields: dict, csrf_token
     # submit, so no form-merge is needed for round-trip (every section already posts together); the mirror
     # is the panel ORDER + folds so the two edit surfaces present the same sections in the same sequence.
     # organisation/instruments sit contiguously (the merged Core fields group, after the scalar panel);
-    # lead_investigator/principal_investigators sit contiguously (the merged Investigators group);
     # time_series is folded into the Identifiers & PIDs panel (group d) and related_identifiers into
     # group b, so both are skipped as standalone panels. Field names are unchanged -> assembly is byte-
     # identical; the mirror is presentation-only.
     # CONTRIBUTOR-CREDIT-SPEC (§6, owner ruling 2026-07-26): the retired Lead/Principal investigator and
     # the separate Creators/Contributors panels are REPLACED by ONE unified "People & credit" panel
     # (keyword "people") that decomposes to the two ratified served lists on save.
-    _FULL_FORM_ORDER = ("organisation", "instruments", "people",
-                        "identifiers", "publications", "funding", "access", "attribution",
+    # A2: the three ratified curated homes plus the designation mapping join the order, next to the
+    # parties/credit material they belong with.
+    _FULL_FORM_ORDER = ("organisation", "instruments", "people", "organisations",
+                        "identifiers", "citation", "identity_classification", "acknowledgements",
+                        "publications", "funding", "access", "attribution",
                         "processing", "collection")
     rflags = review_flags or {}
-    flag = citation_author_email(fields)
-    flagged_email = flag[1] if flag else None
     for section in _FULL_FORM_ORDER:
         if section == "people":
-            panels.append(_people_credit_inner(slug, fields, submitted, err_map, review_flags=rflags,
-                                                flagged_email=flagged_email))
+            panels.append(_people_credit_inner(slug, fields, submitted, err_map, review_flags=rflags))
         elif section == "identifiers":
             panels.append(_identifiers_and_pids_panel(slug, fields, submitted, err_map))
+        elif section == "identity_classification":
+            panels.append(_identity_classification_panel(fields, submitted, err_map))
         elif section in editor_form.MAP_SECTIONS:
             panels.append(_map_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map))
         elif section in editor_form.LIST_SECTIONS:
             panels.append(_list_section_panel(section, _SECTION_TITLES[section], fields, submitted, err_map,
-                                              review_indices=rflags.get(section)))
+                                              review_indices=rflags.get(section),
+                                              intro_html=_LIST_SECTION_INTROS.get(section, "")))
     for section, title, hint in _EDIT_JSON_ONLY:
         panels.append(_json_only_panel(section, title, hint, fields, err_map))
 
@@ -5941,33 +6135,13 @@ _HUB_TAB_KEYS = frozenset(k for k, _ in _HUB_TABS)
 HUB_FORM_FIELD = "hub_form"
 
 
-# C43-HUB (Q3 ruling, 2026-07-11): the ONE display-layer email heuristic behind all three
-# citation-author surfaces — the Overview info row (data-citation-email scaffold attribute), the
-# Metadata TOC issue hint, and the Metadata inline field error — so they can never disagree.
-# DISPLAY-LAYER ONLY: the server validator and the preview/confirm POST path are untouched (pinned).
-_EMAIL_DISPLAY_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-# The contract's inline-error copy (H4), rendered verbatim wherever the heuristic fires.
-_CITATION_EMAIL_ERROR = ("This looks like an email address — citation authors are published "
-                         "verbatim in every station's XML. Use a name; keep the email in Contact.")
-
-
-def citation_author_email(fields: dict) -> tuple[str, str] | None:
-    """(owning_section, offending_value) when the survey's CITATION AUTHOR looks like an email
-    address, else None. Mirrors the engine's _investigators_of precedence EXACTLY (build_portal.py):
-    lead_investigator.name, when present, IS the citation author baked into every served station
-    XML — principal_investigators names are used only when there is no lead. A display heuristic,
-    never a validator: the runner-side validation rules are unchanged."""
-    li = fields.get("lead_investigator")
-    if isinstance(li, dict) and li.get("name"):
-        name = str(li["name"]).strip()
-        return ("lead_investigator", name) if _EMAIL_DISPLAY_RE.match(name) else None
-    for pi in (fields.get("principal_investigators") or []):
-        if isinstance(pi, dict) and pi.get("name"):
-            name = str(pi["name"]).strip()
-            if _EMAIL_DISPLAY_RE.match(name):
-                return ("principal_investigators", name)
-    return None
+# A2 (D19): the Q3 citation-author email heuristic is DELETED. It read the two retired flat credit
+# keys and nothing else, so with those keys migrated away corpus-wide and unreadable by the engine it
+# could only ever return None. Its three surfaces went with it: the Overview data-citation-email
+# scaffold attribute and its info row, the Metadata TOC issue chip, and the Metadata inline field
+# error. Re-pointing it at creators[0].name was considered and declined (the overturn recorded in the
+# lane contract): an email in a curated creators row is caught by the credit-row review, not by a
+# display-layer string match.
 
 
 def _hub_header(slug: str, *, fields: dict, version: str | None) -> str:
@@ -6020,17 +6194,15 @@ def _hub_tab_strip(slug: str, active: str) -> str:
     return "".join(parts)
 
 
-def _hub_overview_body(slug: str, *, citation_email: str | None = None) -> str:
+def _hub_overview_body(slug: str) -> str:
     """The Overview & QA tab body (C43-HUB H2 scaffold). Every value is populated BROWSER-side by
     survey-hub.js from /data/build_report.json filtered to THIS survey (data-survey-slug). The
     server renders only the scaffold + loading placeholders — it has no site-data mount, so it
-    cannot read the served corpus (the serve-panel constraint). `citation_email` (the Q3-ruled
-    server-side heuristic over the metadata read-job fields) is stamped as data-citation-email so
-    the JS can render the mockup's metadata info row from a SERVED fact, never a string-match
-    guess. The section sub-lines carry the mockup's framing copy."""
-    email_attr = f' data-citation-email="{_esc(citation_email)}"' if citation_email else ""
+    cannot read the served corpus (the serve-panel constraint). A2 (D19): the data-citation-email
+    scaffold attribute and the metadata info row it fed are gone with the heuristic behind them.
+    The section sub-lines carry the mockup's framing copy."""
     return (
-        f'<div id="survey-qa" data-survey-slug="{_esc(slug)}"{email_attr}>'
+        f'<div id="survey-qa" data-survey-slug="{_esc(slug)}">'
         '<div class="cards" id="qa-cards"><p class="sub">Loading survey health…</p></div>'
         '<div class="panel"><h2>Needs attention</h2>'
         '<p class="sub" style="margin:0 0 .5rem">from build_report, newest build</p>'
@@ -6167,13 +6339,11 @@ def _hub_history_body(*, slug: str, commits: list, error: str = "") -> str:
         f'<div class="panel">{table}</div>')
 
 
-def _toc_state_hint(section: str, fields: dict, flagged_section: str | None) -> str:
-    """The TOC state hint (C43-HUB H4): render-time facts only — the issue chip on the section the
-    citation-email heuristic flagged, entry COUNTS for list sections, and the access level /
-    collection id values. A section with nothing derivable gets no hint (never a placeholder)."""
+def _toc_state_hint(section: str, fields: dict) -> str:
+    """The TOC state hint (C43-HUB H4): render-time facts only: entry COUNTS for list sections, and
+    the access level / collection id values. A section with nothing derivable gets no hint (never a
+    placeholder). A2 (D19): the citation-email issue chip is gone with the heuristic that produced it."""
     from . import editor_form
-    if section == flagged_section:
-        return '<span class="state issue">1 issue</span>'
     val = fields.get(section)
     if section in editor_form.LIST_SECTIONS and isinstance(val, list) and val:
         return f'<span class="state">{len(val)}</span>'
@@ -6209,13 +6379,10 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
 
     Every section keeps its advanced-JSON override (inside its panel). Server renders ALL sections
     fully functional without JS (the anchors are ordinary in-page links).
-    C43-HUB H4: TOC entries carry render-time state hints (_toc_state_hint), and the section the
-    citation-email heuristic flags renders the mockup's inline field error — DISPLAY-LAYER only,
-    the same citation_author_email helper the Overview info row uses (they can never disagree)."""
+    C43-HUB H4: TOC entries carry render-time state hints (_toc_state_hint). A2 (D19): the
+    citation-email inline error and its TOC issue chip are gone with the heuristic they came from."""
     from . import editor_form
     err_map = _field_error_map(field_errors)
-    flag = citation_author_email(fields)
-    flagged_section = flag[0] if flag else None
     cur = version or "0.0.0"
 
     # The scalar panel is its own "section" (id: _scalars) so editing a top-level scalar submits only
@@ -6242,7 +6409,6 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # carrying several sections' fields round-trips them all in ONE submit; the sections a form does NOT
     # carry contribute nothing, so per-section scope and the no-clobber promise are preserved):
     #   M3 CORE FIELDS  = scalars (_scalars) + organisation + instruments, three grouped headings.
-    #   M2 INVESTIGATORS = lead_investigator (map) + principal_investigators (list), lead first.
     #   M1 IDENTIFIERS & PIDS folds time_series levels (group d) — done inside _identifiers_and_pids_inner.
     # The merged forms keep their per-section keys so each constituent's o_ snapshot / patch scoping is
     # unchanged; the merged sidebar ENTRY carries a human title while the FORM key stays a real section key.
@@ -6255,18 +6421,15 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     def _list_inner(section: str, derr: str | None = None) -> str:
         return _list_section_panel(section, _SECTION_TITLES[section], fields, submitted,
                                    err_map, display_error=derr,
-                                   review_indices=rflags.get(section))
+                                   review_indices=rflags.get(section),
+                                   intro_html=_LIST_SECTION_INTROS.get(section, ""))
 
     core_inner = (scalar_panel_inner + _map_inner("organisation") + _list_inner("instruments"))
     # CONTRIBUTOR-CREDIT-SPEC (§6, owner ruling 2026-07-26): ONE "People & credit" panel REPLACES the
     # retired Lead/Principal investigator + separate Creators/Contributors panels. It merges the two
     # served lists into unified rows and decomposes them back on save (build_section_patch owns the
-    # creators[]/contributors[] keys via assemble_people). The display-layer citation-email flag (still
-    # read from lead/principal by citation_author_email) surfaces here as an explanatory line + the
-    # People & credit TOC issue chip.
-    flagged_email = flag[1] if flag else None
-    people_inner = _people_credit_inner(slug, fields, submitted, err_map, review_flags=rflags,
-                                        flagged_email=flagged_email)
+    # creators[]/contributors[] keys via assemble_people).
+    people_inner = _people_credit_inner(slug, fields, submitted, err_map, review_flags=rflags)
 
     # (toc key, title, panel-inner-html). Order = the owner-ruled merged sidebar order.
     sections: list[tuple[str, str, str]] = [
@@ -6274,7 +6437,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
         (_PEOPLE_SECTION, "People & credit", people_inner),
     ]
     # The sections already folded into a merged entry above are skipped in the document-order sweep below.
-    _merged_away = {"organisation", "instruments", "lead_investigator", "principal_investigators",
+    _merged_away = {"organisation", "instruments",
                     "creators", "contributors", "related_identifiers", "time_series"}
     for section in _SECTION_ORDER:
         if section in _merged_away:
@@ -6287,12 +6450,14 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
             inner = _identifiers_and_pids_inner(slug, fields, submitted, err_map)
             sections.append(("identifiers", "Identifiers & PIDs", inner))
             continue
+        if section == "identity_classification":
+            sections.append((section, _SECTION_TITLES[section],
+                             _identity_classification_panel(fields, submitted, err_map)))
+            continue
         if section in editor_form.MAP_SECTIONS:
-            derrs = {"name": _CITATION_EMAIL_ERROR} if flagged_section == section else None
-            sections.append((section, _SECTION_TITLES[section], _map_inner(section, derrs)))
+            sections.append((section, _SECTION_TITLES[section], _map_inner(section)))
         elif section in editor_form.LIST_SECTIONS:
-            derr = _CITATION_EMAIL_ERROR if flagged_section == section else None
-            sections.append((section, _SECTION_TITLES[section], _list_inner(section, derr)))
+            sections.append((section, _SECTION_TITLES[section], _list_inner(section)))
     for section, title, hint in _EDIT_JSON_ONLY:
         sections.append((section, title, _json_only_panel(section, title, hint, fields, err_map)))
 
@@ -6324,14 +6489,14 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     # intact — instead of bouncing to the standalone full form, which loses the curator's place.
     hub_marker = f'<input type="hidden" name="{HUB_FORM_FIELD}" value="1">'
     # IMPLICIT-SUBMISSION GUARD. A form's DEFAULT button (the one Enter-in-a-text-field activates) is the
-    # FIRST submit button in tree order. The People & credit panel's legacy "Convert lead_investigator"
-    # action is a named submit, so without this it would become the default for the WHOLE form — pressing
-    # Enter in, say, the project name would silently retire a legacy key. (The hazard existed inside the
-    # old per-section people form; folding every section into one form would widen it to every input.)
-    # This UNNAMED submit sits first, so Enter means a plain Save and posts no extra field. It is moved
-    # off-screen rather than display:none — a display:none button is skipped for implicit submission in
-    # some engines, which would hand the default straight back to Convert — and taken out of the tab
-    # order + the accessibility tree, so keyboard and screen-reader users only ever meet the real Save.
+    # FIRST submit button in tree order. A NAMED submit anywhere in this one big form would become that
+    # default, so pressing Enter in, say, the project name would post an extra field nobody asked for.
+    # (The retired legacy Convert action was exactly such a named submit; the guard stays because the
+    # hazard is structural, not specific to that button.) This UNNAMED submit sits first, so Enter means
+    # a plain Save and posts no extra field. It is moved off-screen rather than display:none (a
+    # display:none button is skipped for implicit submission in some engines, which would hand the
+    # default straight back) and taken out of the tab order + the accessibility tree, so keyboard and
+    # screen-reader users only ever meet the real Save.
     default_submit = ('<button type="submit" tabindex="-1" aria-hidden="true" '
                       'style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">'
                       'Save</button>')
@@ -6342,13 +6507,7 @@ def _hub_metadata_body(*, slug: str, version: str | None, fields: dict, csrf_tok
     for key, title, inner in sections:
         sec_id = f"sec-{_esc(key)}"
         on = " on" if key == default_key else ""
-        # CONTRIBUTOR-CREDIT-SPEC (§6): the citation-email heuristic still reads the (retired-in-UI)
-        # lead/principal fields; its issue chip lights the People & credit entry, which now owns the
-        # citation-author surface. Map either legacy flag onto this key so the chip is never orphaned.
-        eff_flag = (_PEOPLE_SECTION if key == _PEOPLE_SECTION
-                    and flagged_section in ("lead_investigator", "principal_investigators")
-                    else flagged_section)
-        hint = _toc_state_hint(key, fields, eff_flag)
+        hint = _toc_state_hint(key, fields)
         toc_links.append(f'<a class="tocitem{on}" href="#{sec_id}" data-hub-section="{_esc(key)}">'
                          f'{_esc(title)}{hint}</a>')
         # A <section>, no longer a <form>: data-hub-section-form keeps its name so every existing hook
@@ -6430,7 +6589,6 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     fields = fields or {}
     head = _hub_header(slug, fields=fields, version=version)
     strip = _hub_tab_strip(slug, tab)
-    citation = citation_author_email(fields)
     if tab == "metadata":
         inner = _hub_metadata_body(slug=slug, version=version, fields=fields, csrf_token=csrf_token,
                                    field_errors=field_errors, submitted=submitted,
@@ -6441,7 +6599,7 @@ def render_survey_hub(*, slug: str, tab: str, version: str | None, fields: dict,
     elif tab == "history":
         inner = _hub_history_body(slug=slug, commits=commits or [], error=history_error)
     else:
-        inner = _hub_overview_body(slug, citation_email=citation[1] if citation else None)
+        inner = _hub_overview_body(slug)
     # EXTERNAL same-origin script, ONCE per page (strictPages CSP blocks inline JS). Degrades:
     # placeholders/scaffolds remain, the page never breaks.
     body = f'{head}{strip}{inner}<script src="/gateway/curator/survey-hub.js" defer></script>'

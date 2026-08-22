@@ -561,17 +561,20 @@ def test_time_series_levels_checkboxes():
 # ---- list sections: repeatable rows -------------------------------------------------------------
 
 def test_list_rows_assemble_and_blank_rows_dropped():
-    """principal_investigators assembles filled rows; an all-empty spare row is dropped. FAILS IF a
-    blank spare row lands in the yaml as a row of nulls (the no-JS degradation must be inert)."""
+    """A list section assembles filled rows; an all-empty spare row is dropped. FAILS IF a blank spare
+    row lands in the yaml as a row of nulls (the no-JS degradation must be inert). A2: retargeted off
+    the retired principal_investigators section onto publications, an all-scalar list of the same shape
+    (creators/contributors are assembled by the unified People panel, not this generic path)."""
     form = {
-        "l_principal_investigators_0_name": "Alice Example",
-        "l_principal_investigators_0_orcid": "0000-0002-1825-0097",
-        "l_principal_investigators_1_name": "",   # blank spare row
-        "l_principal_investigators_1_orcid": "",
-        **_snap("principal_investigators", []),
+        "l_publications_0_author": "Alice Example",
+        "l_publications_0_doi": "10.1234/x",
+        "l_publications_1_author": "",   # blank spare row
+        "l_publications_1_doi": "",
+        **_snap("publications", []),
     }
-    out = ef.assemble_section(form, "principal_investigators")
-    assert out == [{"name": "Alice Example", "orcid": "0000-0002-1825-0097"}]
+    out = ef.assemble_section(form, "publications")
+    assert out == [{"author": "Alice Example", "year": None, "title": None,
+                    "journal": None, "doi": "10.1234/x"}]
 
 
 def test_list_partial_row_kept_with_nulls():
@@ -589,14 +592,15 @@ def test_list_partial_row_kept_with_nulls():
 
 
 def test_list_bad_orcid_row_errors():
-    """A bad ORCID in a PI row surfaces a per-field error. FAILS IF a bad ORCID slips through."""
+    """A bad ORCID in a credit row surfaces a per-field error. FAILS IF a bad ORCID slips through."""
     form = {
-        "l_principal_investigators_0_name": "Alice",
-        "l_principal_investigators_0_orcid": "0000-0000-0000-0000",  # bad checksum
-        **_snap("principal_investigators", []),
+        "l_creators_0_name": "Alice",
+        "l_creators_0_name_type": "person",
+        "l_creators_0_orcid": "0000-0000-0000-0000",  # bad checksum
+        **_snap("creators", []),
     }
     with pytest.raises(ef.SectionError):
-        ef.assemble_section(form, "principal_investigators")
+        ef._assemble_list(form, "creators")
 
 
 def test_list_bad_doi_row_errors():
@@ -639,14 +643,15 @@ def test_build_section_patch_collects_multiple_errors():
     """build_section_patch collects EVERY section error rather than failing on the first. FAILS IF
     only the first bad field is reported (the curator would fix one, resubmit, hit the next)."""
     form = {
-        "s_lead_investigator_orcid": "0000-0000-0000-0000",  # bad orcid
+        "s_citation_preferred_text": "GSSA (2016).",
+        "s_citation_text_source": "guessed",                  # bad text_source vocab
         "s_access_level": "nope",                             # bad level
-        **_snap("lead_investigator", {"name": None, "orcid": None}),
+        **_snap("citation", {}),
         **_snap("access", {"level": "open"}),
     }
     patch, errors = ef.build_section_patch(form)
     sections = {e.section for e in errors}
-    assert "lead_investigator" in sections and "access" in sections
+    assert "citation" in sections and "access" in sections
 
 
 def test_build_section_patch_empty_form_is_empty_patch():
@@ -1021,3 +1026,379 @@ def test_instrument_pid_persists_and_round_trips():
             "s_identifiers_instrument_pid": "10.82388/abc",
             **_snap("identifiers", {"dataset_doi": "10.5281/zenodo.1", "instrument_pid": "10.82388/abc"})}
     assert ef.assemble_section(same, "identifiers") is ef._OMIT
+
+
+# ==================================================================================================
+# A2 (LANE-CONTRACT-FORM-CREDIT section 5): the retired flat credit keys leave the editor, and the
+# ratified MTCAT 2.0 curated homes arrive - citation{}, organisations[], acknowledgements[] and the
+# identity_classification designation mapping. Every vocab is pinned to the vendored surveys
+# validator (the fail-closed parity discipline), and the key-parity pin feeds a fully assembled
+# patch through the REAL validator so an editor key the validator does not recognise is caught
+# cross-repo rather than by a hand-typed expectation.
+# ==================================================================================================
+
+def test_retired_flat_credit_keys_are_no_longer_editor_sections():
+    """A2 (D14/D7): lead_investigator and principal_investigators are GONE from the editor registries,
+    and with them the legacy Convert surface (_LEGACY_CREDIT_KEYS / convert_requested /
+    _apply_legacy_convert / DELETE_DIRECTIVE). FAILS IF any of them survives - a curator control that
+    edits a key the migration deleted and the engine no longer reads."""
+    assert "lead_investigator" not in ef.MAP_SECTIONS
+    assert "principal_investigators" not in ef.LIST_SECTIONS
+    for gone in ("_LEGACY_CREDIT_KEYS", "convert_requested", "_apply_legacy_convert",
+                 "DELETE_DIRECTIVE"):
+        assert not hasattr(ef, gone), f"{gone} survived the retirement"
+    patch, errors = ef.build_section_patch({"people_convert": "lead_investigator",
+                                            "people_legacy_lead_name": "Heinson, Graham"})
+    assert patch == {} and errors == [], (patch, errors)
+
+
+# ---- citation{} (interface contract section 3) ---------------------------------------------------
+
+def test_citation_assembles_preferred_text_and_text_source():
+    """citation{preferred_text, text_source} assembles from the flat s_citation_* inputs. FAILS IF the
+    widget names are not read, or text_source is not vocab-checked."""
+    form = {"s_citation_preferred_text": "GSSA (2016). AusLAMP South Australia.",
+            "s_citation_text_source": "source_provided",
+            **_snap("citation", {})}
+    assert ef.assemble_section(form, "citation") == {
+        "preferred_text": "GSSA (2016). AusLAMP South Australia.",
+        "text_source": "source_provided"}
+
+
+def test_citation_text_source_out_of_vocab_fails_closed():
+    """text_source is a FAIL-CLOSED provenance claim at the validator, so an out-of-vocab POST is
+    rejected at the form. FAILS IF a hand-crafted value is assembled."""
+    form = {"s_citation_preferred_text": "X", "s_citation_text_source": "guessed",
+            **_snap("citation", {})}
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "citation")
+
+
+def test_citation_text_source_without_preferred_text_fails_closed():
+    """D17: text_source states where preferred_text came from, so it is meaningless without one.
+    FAILS IF a bare text_source assembles (it would claim provenance for wording that is not there)."""
+    form = {"s_citation_preferred_text": "", "s_citation_text_source": "source_provided",
+            **_snap("citation", {})}
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "citation")
+
+
+def test_citation_preferred_identifier_assembles_as_a_nested_pair():
+    """D18 (resolved): the editor writes citation.preferred_identifier ONLY as the NESTED
+    {scheme, identifier} pair. FAILS IF flat scheme/identifier sub-keys land on citation (the
+    validator WARNs them as unrecognised keys) or the pair is not nested."""
+    form = {"s_citation_preferred_text": "GSSA (2016).",
+            "s_citation_text_source": "source_provided",
+            "s_citation_preferred_identifier_scheme": "DOI",
+            "s_citation_preferred_identifier_identifier": "10.25914/abc",
+            **_snap("citation", {})}
+    out = ef.assemble_section(form, "citation")
+    assert out["preferred_identifier"] == {"scheme": "DOI", "identifier": "10.25914/abc"}
+    assert "scheme" not in out and "identifier" not in out
+
+
+def test_citation_preferred_identifier_is_both_or_neither():
+    """D18: a half-declared pair cannot anchor the citation invariant, so the editor fail-closes on one
+    half. FAILS IF a lone scheme (or a lone identifier) is assembled and shipped to the validator."""
+    for half in ({"s_citation_preferred_identifier_scheme": "DOI",
+                  "s_citation_preferred_identifier_identifier": ""},
+                 {"s_citation_preferred_identifier_scheme": "",
+                  "s_citation_preferred_identifier_identifier": "10.25914/abc"}):
+        with pytest.raises(ef.SectionError):
+            ef.assemble_section({**half, **_snap("citation", {})}, "citation")
+
+
+def test_citation_preferred_identifier_both_empty_writes_no_key():
+    """Both halves blank on a citation that never carried the pair writes NO key (never an empty
+    mapping). FAILS IF an empty preferred_identifier is introduced."""
+    form = {"s_citation_preferred_text": "GSSA (2016).",
+            "s_citation_preferred_identifier_scheme": "",
+            "s_citation_preferred_identifier_identifier": "",
+            **_snap("citation", {})}
+    assert ef.assemble_section(form, "citation") == {"preferred_text": "GSSA (2016)."}
+
+
+def test_citation_additional_and_preferred_identifier_survive_a_preferred_text_edit():
+    """CARRY-FORWARD (the load-bearing one, editor_form._assemble_map): additional[] is not modelled by
+    any widget and preferred_identifier is not rendered by this form, so BOTH must ride the snapshot
+    through an edit that only touches preferred_text. FAILS IF either is dropped - apply_patch's
+    surgical map merge DELETES a sub-key the assembled map lacks."""
+    stored = {"preferred_text": "Old wording", "text_source": "source_provided",
+              "preferred_identifier": {"scheme": "DOI", "identifier": "10.25914/abc"},
+              "additional": [{"identifier": {"scheme": "DOI", "identifier": "10.1/other"},
+                              "reason": "derived_product"}]}
+    form = {"s_citation_preferred_text": "New wording",
+            "s_citation_text_source": "source_provided",
+            **_snap("citation", stored)}   # NO s_citation_preferred_identifier_* keys rendered
+    out = ef.assemble_section(form, "citation")
+    assert out["preferred_text"] == "New wording"
+    assert out["preferred_identifier"] == {"scheme": "DOI", "identifier": "10.25914/abc"}
+    assert out["additional"] == stored["additional"]
+
+
+def test_citation_unchanged_round_trips_to_omit():
+    """An unchanged citation submit contributes nothing to the patch (no spurious diff)."""
+    stored = {"preferred_text": "GSSA (2016).", "text_source": "source_provided",
+              "preferred_identifier": {"scheme": "DOI", "identifier": "10.25914/abc"}}
+    form = {"s_citation_preferred_text": "GSSA (2016).",
+            "s_citation_text_source": "source_provided",
+            "s_citation_preferred_identifier_scheme": "DOI",
+            "s_citation_preferred_identifier_identifier": "10.25914/abc",
+            **_snap("citation", stored)}
+    assert ef.assemble_section(form, "citation") is ef._OMIT
+
+
+# ---- organisations[] (survey scope section 3) ----------------------------------------------------
+
+def test_organisations_row_assembles_roles_from_the_checkbox_group():
+    """organisations[] rows carry roles[] assembled from the c_organisations_<i>_<role> checkbox group
+    (:624 is scalar-only, so a plain list section cannot express this). FAILS IF roles is written as a
+    scalar or the ticked boxes are not collected into a list."""
+    form = {"l_organisations_0_name": "Geological Survey of South Australia",
+            "l_organisations_0_ror": "https://ror.org/04y8k6r48",
+            "c_organisations_0_custodian": "1",
+            "c_organisations_0_publisher": "1",
+            "c_organisations_primary": "0",
+            **_snap("organisations", [])}
+    out = ef.assemble_section(form, "organisations")
+    assert out == [{"name": "Geological Survey of South Australia",
+                    "ror": "https://ror.org/04y8k6r48",
+                    "roles": ["publisher", "custodian"],
+                    "primary_custodian": True}], out
+
+
+def test_organisations_unknown_role_fails_closed():
+    """An organisation role is a FAIL-CLOSED vocab at the validator (a mis-typed role publishes a wrong
+    claim about who holds/publishes/collected the data), so a hand-crafted out-of-vocab checkbox is
+    rejected at the form. FAILS IF the unknown token is silently dropped or assembled."""
+    form = {"l_organisations_0_name": "Org", "c_organisations_0_owner": "1",
+            **_snap("organisations", [])}
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "organisations")
+
+
+def test_organisations_primary_custodian_requires_a_custodian_row():
+    """validate_survey.py: primary_custodian selects AMONG custodial rows, so the radio is refused on a
+    row that does not tick custodian. FAILS IF the editor can assemble a primary non-custodian row."""
+    form = {"l_organisations_0_name": "Org", "c_organisations_0_publisher": "1",
+            "c_organisations_primary": "0", **_snap("organisations", [])}
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "organisations")
+
+
+def test_organisations_ror_is_omitted_when_blank_never_null():
+    """The ror key is OMITTED when blank, never written as ror: null (schema 108-112). FAILS IF a blank
+    ror lands as a null key - the exact shape the corpus migration is careful never to write."""
+    form = {"l_organisations_0_name": "Org", "l_organisations_0_ror": "",
+            "c_organisations_0_custodian": "1", **_snap("organisations", [])}
+    assert ef.assemble_section(form, "organisations") == [
+        {"name": "Org", "roles": ["custodian"]}]
+    cleared = {"l_organisations_0_name": "Org", "l_organisations_0_ror": "",
+               "c_organisations_0_custodian": "1",
+               **_snap("organisations", [{"name": "Org", "ror": "https://ror.org/04y8k6r48",
+                                          "roles": ["custodian"]}])}
+    assert ef.assemble_section(cleared, "organisations") == [
+        {"name": "Org", "roles": ["custodian"]}]
+
+
+def test_organisations_unchanged_round_trips_to_omit_and_keeps_role_order():
+    """An unchanged organisations submit contributes nothing to the patch, INCLUDING when the stored
+    row lists its roles in a non-canonical order (the assembler preserves the stored order for roles
+    still ticked). FAILS IF re-canonicalising the order manufactures a diff on an untouched row."""
+    stored = [{"name": "GSSA", "roles": ["custodian", "publisher"], "primary_custodian": True}]
+    form = {"l_organisations_0_name": "GSSA", "l_organisations_0_ror": "",
+            "c_organisations_0_custodian": "1", "c_organisations_0_publisher": "1",
+            "c_organisations_primary": "0", **_snap("organisations", stored)}
+    assert ef.assemble_section(form, "organisations") is ef._OMIT
+
+
+def test_organisations_primary_flag_cleared_removes_the_key():
+    """Unselecting the primary radio REMOVES primary_custodian from the row (never primary_custodian:
+    false). FAILS IF the flag is written false, which the validator reads as 'not primary' but the
+    corpus never carries."""
+    stored = [{"name": "GSSA", "roles": ["custodian"], "primary_custodian": True}]
+    form = {"l_organisations_0_name": "GSSA", "l_organisations_0_ror": "",
+            "c_organisations_0_custodian": "1", **_snap("organisations", stored)}
+    assert ef.assemble_section(form, "organisations") == [
+        {"name": "GSSA", "roles": ["custodian"]}]
+
+
+# ---- acknowledgements[] (interface contract section 3: plural, verbatim) -------------------------
+
+def test_acknowledgements_rows_assemble_with_optional_keys_omitted():
+    """acknowledgements[] rows {text, type?, source?}: the optional keys are written back only when
+    filled or already present. FAILS IF a text-only row gains null type/source keys (round-trip noise
+    on a block whose whole payload is verbatim wording)."""
+    form = {"l_acknowledgements_0_text": "Data supplied by GSSA under licence.",
+            "l_acknowledgements_0_type": "", "l_acknowledgements_0_source": "",
+            **_snap("acknowledgements", [])}
+    assert ef.assemble_section(form, "acknowledgements") == [
+        {"text": "Data supplied by GSSA under licence."}]
+
+
+def test_acknowledgements_type_vocab_is_warn_only_not_fail_closed():
+    """The acknowledgement type vocabulary is the contract's CANDIDATE list, validated against real
+    holdings before freeze, so the validator WARNs rather than blocks. The editor MIRRORS that posture:
+    a stored out-of-vocab type must round-trip rather than lock the curator out of the section. FAILS
+    IF the editor fail-closes on a vocab the validator itself only warns about."""
+    form = {"l_acknowledgements_0_text": "Wording", "l_acknowledgements_0_type": "legacy_type",
+            **_snap("acknowledgements", [])}
+    assert ef.assemble_section(form, "acknowledgements") == [
+        {"text": "Wording", "type": "legacy_type"}]
+
+
+# ---- identity_classification (survey-metadata lane D12; the designation home) --------------------
+
+def test_identity_classification_assembles_case_and_represents_rows():
+    """The designation mapping {case, represents[] | own_identifiers[]} assembles from the case select
+    plus its pair rows. FAILS IF the rows are not read (the citation chain would have nothing to
+    match) or the retired scalar-string form is emitted."""
+    form = {"s_identity_classification_case": "case_a",
+            "l_identity_classification_represents_0_scheme": "DOI",
+            "l_identity_classification_represents_0_identifier": "10.25914/abc",
+            "l_identity_classification_represents_1_scheme": "",
+            "l_identity_classification_represents_1_identifier": "",
+            **_snap("identity_classification", {})}
+    assert ef.assemble_section(form, "identity_classification") == {
+        "case": "case_a",
+        "represents": [{"scheme": "DOI", "identifier": "10.25914/abc"}]}
+
+
+def test_identity_classification_case_out_of_vocab_fails_closed():
+    form = {"s_identity_classification_case": "case_c",
+            **_snap("identity_classification", {})}
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "identity_classification")
+
+
+def test_identity_classification_half_pair_row_fails_closed():
+    """A designated identifier is a COMPLETE {scheme, identifier} pair; half a row cannot anchor the
+    chain. FAILS IF a half row is assembled and left for the validator to reject at merge."""
+    form = {"s_identity_classification_case": "case_a",
+            "l_identity_classification_represents_0_scheme": "DOI",
+            "l_identity_classification_represents_0_identifier": "",
+            **_snap("identity_classification", {})}
+    with pytest.raises(ef.SectionError):
+        ef.assemble_section(form, "identity_classification")
+
+
+def test_identity_classification_absent_rows_preserve_the_stored_designation():
+    """ABSENT-vs-EMPTY (the coordinate_overrides precedent, editor_form._resolve_coordinate_overrides):
+    a form that does NOT render the pair rows must PRESERVE the stored designation; a form that renders
+    them empty DELETES it. FAILS IF an unrelated case edit silently un-designates the survey's
+    identifiers (which would turn citation.preferred_identifier into a validator FAIL)."""
+    stored = {"case": "case_a", "represents": [{"scheme": "DOI", "identifier": "10.25914/abc"}]}
+    absent = {"s_identity_classification_case": "case_b",
+              **_snap("identity_classification", stored)}
+    assert ef.assemble_section(absent, "identity_classification") == {
+        "case": "case_b", "represents": [{"scheme": "DOI", "identifier": "10.25914/abc"}]}
+    emptied = {"s_identity_classification_case": "case_a",
+               "l_identity_classification_represents_0_scheme": "",
+               "l_identity_classification_represents_0_identifier": "",
+               **_snap("identity_classification", stored)}
+    assert ef.assemble_section(emptied, "identity_classification") == {"case": "case_a"}
+
+
+# ---- vocab parity pins against the vendored surveys validator ------------------------------------
+
+def test_mtcat20_vocabs_match_the_vendored_validator():
+    """PARITY PIN (A2): the editor's baked ORG_ROLES_ORDERED / ACKNOWLEDGEMENT_TYPES /
+    CITATION_TEXT_SOURCES / IDENTITY_CLASSIFICATIONS equal the surveys validator's FROZEN
+    vocabularies, and the modelled section keys equal its row allow-lists. FAILS IF a vocab or key set
+    is extended surveys-side and not mirrored here - the drift that publishes an unrecognised key or
+    fail-closes a value the validator accepts."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_mtcat20vocab")
+    assert set(ef.ORG_ROLES_ORDERED) == set(vv.ORG_ROLES), "editor ORG_ROLES drifted"
+    assert tuple(ef.ORG_ROLES_ORDERED) == tuple(vv.ORG_ROLES_ORDERED), "editor ORG_ROLES order drifted"
+    assert set(ef.ACKNOWLEDGEMENT_TYPES) == set(vv.ACKNOWLEDGEMENT_TYPES), \
+        "editor ACKNOWLEDGEMENT_TYPES drifted"
+    assert set(ef.CITATION_TEXT_SOURCES) == set(vv.CITATION_TEXT_SOURCES), \
+        "editor CITATION_TEXT_SOURCES drifted"
+    assert tuple(ef.IDENTITY_CLASSIFICATIONS) == tuple(vv.IDENTITY_CLASSIFICATIONS), \
+        "editor IDENTITY_CLASSIFICATIONS drifted"
+    # the modelled row/section key sets equal the validator's allow-lists
+    assert {sk for sk, *_ in ef.LIST_SECTIONS["organisations"]} == set(vv.ORGANISATION_ROW_KEYS)
+    assert {sk for sk, *_ in ef.LIST_SECTIONS["acknowledgements"]} == set(vv.ACKNOWLEDGEMENT_KEYS)
+    assert {sk for sk, *_ in ef.MAP_SECTIONS["citation"]} | {"preferred_identifier", "additional"} \
+        == set(vv.CITATION_KEYS)
+    assert {sk for sk, *_ in ef.MAP_SECTIONS["identity_classification"]} \
+        | {"represents", "own_identifiers"} == set(vv.IDENTITY_CLASSIFICATION_KEYS)
+
+
+_MTCAT20_FORM = {
+    "s_citation_preferred_text": "GSSA (2016). AusLAMP South Australia. [Data set].",
+    "s_citation_text_source": "source_provided",
+    "s_citation_preferred_identifier_scheme": "DOI",
+    "s_citation_preferred_identifier_identifier": "10.25914/abc",
+    "s_identity_classification_case": "case_a",
+    "l_identity_classification_represents_0_scheme": "DOI",
+    "l_identity_classification_represents_0_identifier": "10.25914/abc",
+    "l_organisations_0_name": "Geological Survey of South Australia",
+    "l_organisations_0_ror": "https://ror.org/04y8k6r48",
+    "c_organisations_0_custodian": "1",
+    "c_organisations_primary": "0",
+    "l_organisations_1_name": "Geoscience Australia",
+    "l_organisations_1_ror": "",
+    "c_organisations_1_publisher": "1",
+    "l_acknowledgements_0_text": "Data supplied by the Geological Survey of South Australia.",
+    "l_acknowledgements_0_type": "custodian",
+    "l_acknowledgements_0_source": "GSSA licence deed",
+    "l_related_identifiers_0_identifies": "entire",
+    "l_related_identifiers_0_identifier": "10.25914/abc",
+    "l_related_identifiers_0_identifier_type": "DOI",
+}
+
+
+def test_key_parity_mtcat20_patch_through_real_validator(tmp_path):
+    """KEY-PARITY PIN (A2, the important one): an editor-assembled citation + identity_classification +
+    organisations + acknowledgements patch, written to a survey.yaml and read back by the REAL vendored
+    surveys validator, produces ZERO unknown-key warnings AND ZERO FAILs - the editor's frozen section
+    keys equal the validator's allow-lists and the assembled citation chain is internally consistent.
+    MUTATION-PROOF below."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_mtcat20")
+    patch, errors = ef.build_section_patch(_MTCAT20_FORM)
+    assert not errors, errors
+    assert {"citation", "identity_classification", "organisations",
+            "acknowledgements"} <= set(patch), sorted(patch)
+    folder = tmp_path / "paritytest"          # the validator pins folder name == slug
+    _write_survey(folder, _survey_meta_with(patch))
+    rep = vv.validate(folder)
+    checks = ("citation", "identity_classification", "organisations", "acknowledgements")
+    unknown = [i for i in rep.items if i["check"] in checks and "not a recognised" in i["message"]]
+    assert not unknown, f"editor keys the validator does not recognise: {unknown}"
+    # No WARNING or FAIL at all on the four curated homes (the assembled citation chain is consistent).
+    noisy = [i for i in rep.items if i["check"] in checks and i["level"] in ("WARNING", "FAIL")]
+    assert not noisy, noisy
+
+
+def test_key_parity_mtcat20_mutation_proof(tmp_path):
+    """NON-VACUOUS proof: dropping the designation (identity_classification) makes the REAL validator
+    FAIL the assembled citation.preferred_identifier - the D20 citation-chain rule this lane relies on
+    to refuse an inconsistent curator save. FAILS IF the validator would accept an undesignated
+    preferred_identifier (which would make the parity pin above vacuous)."""
+    vv = _load_by_path(_VENDORED_VALIDATOR_PY, "_ausmt_vendored_mtcat20_mut")
+    patch, _ = ef.build_section_patch(_MTCAT20_FORM)
+    patch.pop("identity_classification")
+    folder = tmp_path / "paritytest"
+    _write_survey(folder, _survey_meta_with(patch))
+    rep = vv.validate(folder)
+    assert any(i["check"] == "citation" and i["level"] == "FAIL"
+               and "designated identifier" in i["message"] for i in rep.items), \
+        "validator did not FAIL an undesignated preferred_identifier - the parity pin would be vacuous"
+
+
+def test_gateway_carries_no_retired_credit_key_outside_tests():
+    """GREP PIN (A2): no retired flat credit key is read anywhere in the gateway package outside the
+    test tree and the vendored validator copy. The legitimate needles are the PII fixture in
+    test_intake_files.py and the round-trip fixture in test_edit_runner.py, both under tests/.
+    FAILS IF a reader, a registry entry or a rendered control survives the retirement."""
+    gateway_dir = Path(__file__).resolve().parents[1]
+    offenders = []
+    for path in sorted(gateway_dir.rglob("*.py")):
+        rel = path.relative_to(gateway_dir)
+        if rel.parts and rel.parts[0] == "tests":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "lead_investigator" in text or "principal_investigators" in text:
+            offenders.append(str(rel))
+    assert not offenders, f"retired credit keys still referenced: {offenders}"

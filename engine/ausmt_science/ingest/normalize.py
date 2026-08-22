@@ -14,7 +14,7 @@ distinct conditioning failures occur that way, and item 7 below is a different c
   1. enum serialization bug: `sub_type` is written as the repr "DataTypeEnum.MT_TF" instead of the
      value "MT_TF", which fails validation on read. Fixed by rewriting the XML post-write.
   2. Copyright.citation = None is rejected on read; we populate citation_dataset — HONESTLY, from the
-     survey SMETA (custodian org / investigators / survey title / DOI), NEVER the portal brand "AusMT"
+     survey SMETA (custodian org / creators / survey title / DOI), NEVER the portal brand "AusMT"
      (which would falsely assert the portal authored the custodian's data). Absent survey_meta => an
      explicit "unknown (not asserted by source)", not a fabricated value.
   3. Survey.id pattern: mt_metadata maps the free-text `geographic_name` into the restricted
@@ -128,28 +128,25 @@ def source_file_from_geographic_name(geographic_name: Optional[str]) -> Optional
 def _survey_meta_get(survey_meta: Optional[dict]):
     """Extract (authors, title_prefix, doi) intent from a survey SMETA dict, honestly. The EDI/EMTF-XML
     export attribution author line follows CONTRIBUTOR-CREDIT-SPEC §2.1: the creators[] names in order
-    when present, else the legacy named investigators (the retired lead/PI facet, tolerated as a graceful
-    fallback), else the custodian organisation; NEVER the portal brand. Returns (None,None,None) when
+    when present, else the custodian organisation; NEVER the portal brand. Returns (None,None,None) when
     survey_meta is absent so the caller can fall back to an explicit-unknown, not a fabricated value.
 
+    A1 (reader retirement): the middle rung - the back-compat facet built from the two retired flat
+    credit keys - is GONE. A stale or hand-built survey_meta that still carries that key is ignored and
+    the author line falls straight to the custodian org, so no retired value can reach a served XML.
+
     creators are joined with '; ' (a creator name may be 'Last, First', so a comma join would be
-    ambiguous); the legacy investigator fallback keeps its ', ' join. Both tolerate the PRE-C7 bare-string
-    investigator shape so a stale/hand-built survey_meta degrades to an author string, not a dict repr."""
+    ambiguous). Non-mapping creator rows are skipped, so an odd hand-built list degrades to the org
+    rather than a stringified dict repr."""
     if not survey_meta:
         return None, None, None
     creators = survey_meta.get("creators")
     creator_names = ([str((c or {}).get("name") or "").strip() for c in creators if isinstance(c, dict)]
                      if isinstance(creators, list) else [])
     creator_names = [n for n in creator_names if n]
-    invs_raw = survey_meta.get("investigators") or []
-    invs = [str(x.get("name") or "").strip() if isinstance(x, dict) else str(x).strip()
-            for x in invs_raw]
-    invs = [x for x in invs if x]
     org = (survey_meta.get("org") or "").strip() or None
     if creator_names:
         authors = "; ".join(creator_names)               # §2.1: creators[] are the citation authors
-    elif invs:
-        authors = ", ".join(invs)                        # legacy fallback: named lead/PI investigators
     else:
         authors = org                                    # else the custodian org (never the portal brand)
     cite = survey_meta.get("cite") if isinstance(survey_meta.get("cite"), dict) else {}
@@ -269,7 +266,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
                  source_provenance: Optional[dict] = None) -> list[str]:
     """Make an mt_metadata TF schema-valid for EMTF-XML write+read. Returns notes of what changed.
 
-    `survey_meta` (a survey SMETA dict: org, investigators, cite.ti/title, doi) sources the citation
+    `survey_meta` (a survey SMETA dict: org, creators, cite.ti/title, doi) sources the citation
     honestly — see the citation block below. When absent (bare API use), the citation is left unset or
     filled with an explicit-unknown, NEVER the portal brand "AusMT" (the historical fabrication defect).
 
@@ -422,7 +419,7 @@ def condition_tf(tf, *, survey_id: str, station_id: Optional[str] = None,
                      "mt_metadata 1.0.9 cannot serialise into EMTF-XML; source EDI retains them")
 
     # Issue #2: a None Copyright.citation is written but rejected on read. Populate it HONESTLY from the
-    # survey SMETA (authors = named investigators, else the custodian organisation; title = survey
+    # survey SMETA (authors = the named creators, else the custodian organisation; title = survey
     # title + station; the survey DOI when present). NEVER the portal brand "AusMT" — the survey
     # custodian, not the portal, authored the data (the historical fabrication defect). When no
     # survey_meta is supplied (bare API use) fall back to an EXPLICIT-unknown so the field is honest
@@ -552,7 +549,7 @@ def normalize(src: str | Path, out_dir: str | Path, *, survey_id: str,
               rtol: float = 1e-3, atol: float = 1e-6) -> NormalizeResult:
     """Read a TF (EDI/EMTF-XML) -> conditioned canonical EMTF XML + derived EDI, round-trip verified.
 
-    `survey_meta` (the survey's SMETA dict) sources the citation honestly (custodian org / investigators
+    `survey_meta` (the survey's SMETA dict) sources the citation honestly (custodian org / creators
     / survey title / DOI): see condition_tf. `source_provenance` is the per-station third-party ingest
     record the custodian declared (original filename, their opaque record id, the acquisition stage);
     only its original_filename reaches the artifact, as a Site <Name> marker, and only when declared.

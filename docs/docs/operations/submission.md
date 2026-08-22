@@ -6,7 +6,11 @@ is published is still usable long after the original project has ended.
 ## How submission works
 
 Submissions run through the AusMT submission gateway; the portal's Add survey page packages your files
-and uploads them directly. Every submission follows the same fail-closed pipeline:
+and uploads them directly. The page asks for metadata in plain language, one question at a time: who
+the citation should name and in what order, who led the survey, who did what, whether the dataset is
+already cited or has a DOI, which organisations were involved and how, whether there is wording that
+must be reproduced, and when the dataset was published. Everything past the essentials is optional,
+and anything you leave out a curator can add. Every submission follows the same fail-closed pipeline:
 
 1. **Upload.** The package is received into quarantine and assigned a tracking id with a private
    status link.
