@@ -213,8 +213,8 @@ def warn_report(tmp_path_factory):
 # --------------------------------------------------------------------------------------------------
 _HUB_FNS = ("isQuadrantWarnNote", "qaFlagCount", "hubCounts", "stationsChipText",
             "frameCardFacts", "signedDegStr", "terseDrop", "terseWarn", "attentionItems",
-            "idPrefix", "idOrder", "classSummary", "clusterWarnings", "truncEmail",
-            "metaInfoText", "attentionPlan", "attentionHref", "attentionLinkText",
+            "idPrefix", "idOrder", "classSummary", "clusterWarnings",
+            "attentionPlan", "attentionHref", "attentionLinkText",
             "durationText", "cacheWord", "cardsPlan", "conditioningScope")
 
 
@@ -237,7 +237,7 @@ const out = {
   counts: hubCounts(p.survey),
   chip: stationsChipText(hubCounts(p.survey)),
   cards: cardsPlan(p.survey, p.rep),
-  plan: attentionPlan(p.survey, p.citationEmail || ''),
+  plan: attentionPlan(p.survey),
   scopes: (p.survey.conditioning || []).map(function (c) {
     return conditioningScope(c, p.survey.stations_built);
   }),
@@ -252,10 +252,9 @@ process.stdout.write(JSON.stringify(out));
 """
 
 
-def _run_plan(tmp_path, warn_report, citation_email=""):
+def _run_plan(tmp_path, warn_report):
     return _run_node(tmp_path, _hub_driver(_PLAN_DRIVER_BODY),
-                     {"survey": warn_report["survey"], "rep": warn_report["rep"],
-                      "slug": SLUG, "citationEmail": citation_email})
+                     {"survey": warn_report["survey"], "rep": warn_report["rep"], "slug": SLUG})
 
 
 # --------------------------------------------------------------------------------------------------
@@ -407,25 +406,15 @@ def test_conditioning_scope_all_n_form(warn_report, tmp_path):
             assert str(entry["count"]) in scope or (entry["stations"] or []), (entry, scope)
 
 
-def test_info_row_only_when_server_stamped(warn_report, tmp_path):
-    """Q3 INFO-ROW PIN. The metadata info row appears ONLY when the server stamped the citation
-    email (attentionPlan's citationEmail argument = the data-citation-email attribute): with it,
-    ONE blue info row, last, 'citation author is an email address (graham.heinson@…) — baked
-    into all 6 served station XML', linking to the Metadata tab; without it, NO info row. FAILS
-    IF the row appears unstamped (the deleted string-matching would), the truncation leaks the
-    domain, or the count is invented."""
-    got = _run_plan(tmp_path, warn_report, citation_email="graham.heinson@adelaide.edu.au")
+def test_no_metadata_info_row_is_ever_planned(warn_report, tmp_path):
+    """A2 (D19) INFO-ROW PIN, inverted. The citation-author metadata info row is retired with the
+    server-side heuristic that stamped it, so attentionPlan now plans fail rows, ONE package note and
+    warn rows, and NEVER an info row. FAILS IF an info row (or the deleted email helpers) returns."""
+    got = _run_plan(tmp_path, warn_report)
     rows = [s["row"] for s in got["plan"] if "row" in s]
-    infos = [r for r in rows if r["kind"] == "info"]
-    assert len(infos) == 1
-    info = infos[0]
-    assert got["plan"][-1] == {"row": info}, "the info row renders last"
-    assert info["sid"] == "metadata" and info["link"] == "metadata"
-    assert info["text"] == ("citation author is an email address (graham.heinson@…) — baked "
-                            "into all 6 served station XML")
-    assert "adelaide" not in info["text"], "truncate at the @ — the domain is noise here"
-    got2 = _run_plan(tmp_path, warn_report)
-    assert not any(s["row"]["kind"] == "info" for s in got2["plan"] if "row" in s)
+    assert rows, "the fixture carries attention rows"
+    assert not [r for r in rows if r["kind"] == "info"], rows
+    assert {r["kind"] for r in rows} <= {"fail", "warn"}, rows
 
 
 def test_frame_card_derotation_headline_from_note_vocabulary(warn_report, tmp_path):

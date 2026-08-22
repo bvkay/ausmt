@@ -24,10 +24,12 @@ from gateway.tests.conftest import (
 )
 
 # A richly-populated block-style survey.yaml exercising EVERY structured section the widgets model:
-# a map with a null (organisation.ror), a lead_investigator, repeatable principal_investigators /
-# publications (dict form) / funding / instruments, a full identifiers map, time_series with a
-# levels list, access, processing, collection, and a care block (advanced-JSON-only section). An
-# unknown key + a comment prove the round-trip fidelity is unbroken by the widget rework.
+# a map with a null (organisation.ror), repeatable publications (dict form) / funding / instruments,
+# a full identifiers map, time_series with a levels list, access, processing, collection, and a care
+# block (advanced-JSON-only section). An unknown key + a comment prove the round-trip fidelity is
+# unbroken by the widget rework. A2: it ALSO keeps the two RETIRED flat credit keys on disk, which
+# the editor now models with nothing - so this fixture doubles as the pre-migration-corpus tolerance
+# proof (they must round-trip byte-clean through every unchanged submit).
 RICH_SURVEY = """\
 schema_version: "0.2"
 slug: rich-survey-2026
@@ -269,10 +271,21 @@ def test_form_renders_widgets_not_json_textareas(tmp_path):
             # The retired panels are GONE.
             assert 'name="s_lead_investigator_orcid"' not in body
             assert 'name="l_principal_investigators_0_name"' not in body
-            # The legacy fields the rich survey still carries surface as a Convert notice (not inputs).
-            assert "Legacy field" in body and "lead_investigator" in body
-            assert "Ada Lovelace" in body and "Grace Hopper" in body
-            assert 'name="people_convert" value="lead_investigator"' in body
+            # A2 (D7): so is the legacy Convert notice and its named submit. A pre-migration survey
+            # that still carries the retired keys shows NOTHING about them: they are unmodelled keys,
+            # byte-preserved through every save and read by nothing.
+            assert "Legacy field" not in body
+            assert "people_convert" not in body
+            assert "Ada Lovelace" not in body and "Grace Hopper" not in body
+            # A2: the ratified curated homes have their own controls.
+            assert 'name="l_organisations_0_name"' in body
+            assert 'name="c_organisations_0_custodian"' in body
+            assert 'name="c_organisations_primary"' in body
+            assert 'name="s_citation_preferred_text"' in body
+            assert 'name="s_citation_preferred_identifier_scheme"' in body
+            assert 'name="s_identity_classification_case"' in body
+            assert 'name="l_identity_classification_represents_0_identifier"' in body
+            assert 'name="l_acknowledgements_0_text"' in body
             # The prefilled values landed in the still-modelled widgets:
             assert 'value="University of Example"' in body
             # The advanced <details> JSON box exists but is the FALLBACK, not the primary input:

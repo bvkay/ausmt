@@ -132,6 +132,7 @@ def test_creators_assembled_order_follows_row_index():
 ruamel = pytest.importorskip("ruamel.yaml")
 
 from gateway.runner import edit  # noqa: E402  (only importable where ruamel is installed)
+from gateway.tests.conftest import require_validator_dir  # noqa: E402
 
 
 def test_people_panel_creators_save_is_accepted_by_the_runner(tmp_path):
@@ -425,58 +426,243 @@ def test_people_no_op_round_trip_is_a_runner_no_op(tmp_path):
                            today="2026-07-26", validator_path="", scratch_dir=tmp_path / "scratch")
 
 
-def test_legacy_convert_lead_seeds_a_row_and_deletes_the_key(tmp_path):
-    """§6.3 LEGACY CONVERT (RED-proven through the REAL save path). people_convert=lead_investigator
-    seeds a unified row (Led role, cited when no cited row exists yet) AND emits the _delete_keys
-    directive; run_merge_job DELETES the flat lead_investigator key entirely while landing the seeded
-    creators[]/contributors[]. RED before the delete mechanism: run_merge_job would reject the
-    _delete_keys directive as a non-editable field (or apply_patch would never remove the key)."""
+# ==================================================================================================
+# A2 (LANE-CONTRACT-FORM-CREDIT): the legacy Convert flow and its _delete_keys directive are GONE
+# (D7), and the three ratified curated homes plus the designation mapping round-trip end to end.
+# ==================================================================================================
+
+def test_the_legacy_convert_surface_is_gone(tmp_path):
+    """D7: with the corpus migration run and the retired keys deleted, there is nothing left to
+    convert. The people_convert submit, the hidden legacy payload fields and the _delete_keys patch
+    directive are all removed, so a hand-crafted convert POST contributes NOTHING and the runner has
+    no delete surface at all. FAILS IF any part of the retired mechanism still functions."""
+    assert not hasattr(ef, "DELETE_DIRECTIVE") and not hasattr(ef, "convert_requested")
+    assert not hasattr(edit, "DELETE_DIRECTIVE") and not hasattr(edit, "_DELETABLE_LEGACY_KEYS")
     form = _people_form([], people_convert="lead_investigator",
                         people_legacy_lead_name="Heinson, Graham",
                         people_legacy_lead_orcid="0000-0002-1825-0097")
     patch, errs = ef.build_section_patch(form)
     assert not errs, errs
-    assert patch[ef.DELETE_DIRECTIVE] == ["lead_investigator"]
-    assert patch["creators"] == [{"name": "Heinson, Graham", "name_type": "person",
-                                  "orcid": "0000-0002-1825-0097"}]   # cited (no cited row existed)
-    assert patch["contributors"][0]["role"] == "ProjectLeader"
-
-    pkg = _merge_pkg(tmp_path, b'name: Demo\nversion: 1.0.0\norganisation:\n  name: Uni\n'
-                               b'lead_investigator:\n  name: "Heinson, Graham"\n'
-                               b'  orcid: 0000-0002-1825-0097\n')
-    res = edit.run_merge_job(pkg, patch=patch, bump="minor", note="convert legacy lead",
-                             today="2026-07-26", validator_path="", scratch_dir=tmp_path / "scratch")
-    assert res["ok"] is True
-    assert "lead_investigator" not in res["new_yaml"], res["new_yaml"]
-    assert "lead_investigator" in res["changed"]           # the delete is a recorded change
-    assert "role: ProjectLeader" in res["new_yaml"]
-
-
-def test_delete_directive_is_gated_to_legacy_keys(tmp_path):
-    """The _delete_keys directive can only ever name a legacy credit key. run_merge_job REFUSES a
-    directive that names a live editable field, so the delete surface stays scoped to C3 retirement."""
+    assert patch == {}, patch
     pkg = _merge_pkg(tmp_path, b'name: Demo\nversion: 1.0.0\norganisation:\n  name: Uni\n')
-    with pytest.raises(edit.EditError, match="non-legacy"):
-        edit.run_merge_job(pkg, patch={edit.DELETE_DIRECTIVE: ["organisation"]}, bump="minor",
+    with pytest.raises(edit.EditError, match="non-editable"):
+        edit.run_merge_job(pkg, patch={"_delete_keys": ["organisation"]}, bump="minor",
                            note="hostile", today="2026-07-26", validator_path="",
                            scratch_dir=tmp_path / "scratch")
 
 
-def test_unrelated_save_preserves_the_legacy_lead_key(tmp_path):
-    """ABSENT-PRESERVE. A save that does NOT request a convert never carries the _delete_keys directive,
-    so an unrelated edit leaves lead_investigator byte-preserved (the assembler never deletes a legacy
-    key on an unrelated save). Here a plain scalar edit is patched; lead_investigator survives."""
-    # No people_convert; the people rows are empty -> creators/contributors are _OMIT.
-    form = _people_form([])
-    patch, errs = ef.build_section_patch(form)
-    assert not errs, errs
-    assert ef.DELETE_DIRECTIVE not in patch and "creators" not in patch and "contributors" not in patch
-    patch["region"] = "Renamed Region"    # an unrelated scalar edit
+def test_an_unmodelled_retired_key_is_byte_preserved_through_an_unrelated_save(tmp_path):
+    """A pre-migration survey that STILL carries a retired flat credit key is simply an unmodelled
+    key now: the editor never reads or patches it, so an unrelated edit leaves it byte-for-byte
+    alone. This is what lets the ausmt wave run clean against BOTH corpora."""
+    patch = {"region": "Renamed Region"}
     pkg = _merge_pkg(tmp_path, b'name: Demo\nversion: 1.0.0\nregion: Old\n'
                                b'lead_investigator:\n  name: "Heinson, Graham"\n'
                                b'  orcid: 0000-0002-1825-0097\n')
     res = edit.run_merge_job(pkg, patch=patch, bump="minor", note="rename region",
                              today="2026-07-26", validator_path="", scratch_dir=tmp_path / "scratch")
     assert res["ok"] is True
-    assert "lead_investigator" in res["new_yaml"], res["new_yaml"]      # preserved
+    assert "lead_investigator" in res["new_yaml"], res["new_yaml"]
     assert "Heinson, Graham" in res["new_yaml"]
+    assert "lead_investigator" not in res["changed"], res["changed"]
+
+
+# ---- the three curated homes + the designation mapping, end to end ------------------------------
+
+_MTCAT20_SECTION_FORM = {
+    "s_citation_preferred_text": "GSSA (2016). AusLAMP South Australia. [Data set].",
+    "s_citation_text_source": "source_provided",
+    "s_citation_preferred_identifier_scheme": "DOI",
+    "s_citation_preferred_identifier_identifier": "10.25914/abc",
+    "s_identity_classification_case": "case_a",
+    "l_identity_classification_represents_0_scheme": "DOI",
+    "l_identity_classification_represents_0_identifier": "10.25914/abc",
+    "l_organisations_0_name": "Geological Survey of South Australia",
+    "l_organisations_0_ror": "https://ror.org/04y8k6r48",
+    "c_organisations_0_custodian": "1",
+    "c_organisations_primary": "0",
+    "l_acknowledgements_0_text": "Data supplied by the Geological Survey of South Australia.",
+    "l_acknowledgements_0_type": "custodian",
+}
+
+
+def test_the_new_sections_are_editable_and_save_through_the_runner(tmp_path):
+    """THE EDITABLE_KEYS GATE (the exact gap the related_identifiers and credit lanes each shipped
+    with): the editor assembles citation / identity_classification / organisations / acknowledgements,
+    so all four MUST be patchable or run_merge_job refuses the curator's save as a non-editable field.
+    RED before they join EDITABLE_MAPS/EDITABLE_LISTS."""
+    patch, errs = ef.build_section_patch(_MTCAT20_SECTION_FORM)
+    assert not errs, errs
+    pkg = _merge_pkg(tmp_path, b'name: Demo\nversion: 1.0.0\norganisation:\n  name: Uni\n')
+    res = edit.run_merge_job(pkg, patch=patch, bump="minor", note="curate the citation homes",
+                             today="2026-07-26", validator_path="", scratch_dir=tmp_path / "scratch")
+    assert res["ok"] is True
+    for key in ("citation", "identity_classification", "organisations", "acknowledgements"):
+        assert key in res["changed"], res["changed"]
+    out = res["new_yaml"]
+    assert "preferred_identifier:" in out and "scheme: DOI" in out
+    assert "roles:" in out and "custodian" in out and "primary_custodian: true" in out
+    assert "Data supplied by the Geological Survey of South Australia." in out
+
+
+def test_the_new_sections_no_op_round_trip_is_byte_stable(tmp_path):
+    """ROUND-TRIP IDENTITY for the three new panels + the designation mapping: re-submitting a
+    survey's stored values UNCHANGED assembles to _OMIT for every one of them, so an unrelated edit
+    never rewrites, reorders or re-quotes a section the curator did not touch."""
+    yaml_bytes = (
+        b'name: Demo\nversion: 1.0.0\norganisation:\n  name: Uni\n'
+        b'citation:\n  preferred_text: "GSSA (2016). AusLAMP South Australia."\n'
+        b'  text_source: source_provided\n'
+        b'  preferred_identifier:\n    scheme: DOI\n    identifier: 10.25914/abc\n'
+        b'identity_classification:\n  case: case_a\n'
+        b'  represents:\n    - scheme: DOI\n      identifier: 10.25914/abc\n'
+        b'organisations:\n  - name: "Geological Survey of South Australia"\n'
+        b'    ror: https://ror.org/04y8k6r48\n    roles:\n      - custodian\n'
+        b'    primary_custodian: true\n'
+        b'acknowledgements:\n  - text: "Data supplied by the GSSA."\n    type: custodian\n')
+    pkg = _merge_pkg(tmp_path, yaml_bytes)
+    fields = edit.run_read_job(pkg)["fields"]
+    form = {
+        "s_citation_preferred_text": fields["citation"]["preferred_text"],
+        "s_citation_text_source": fields["citation"]["text_source"],
+        "s_citation_preferred_identifier_scheme":
+            fields["citation"]["preferred_identifier"]["scheme"],
+        "s_citation_preferred_identifier_identifier":
+            fields["citation"]["preferred_identifier"]["identifier"],
+        "o_citation": json.dumps(fields["citation"], sort_keys=True),
+        "s_identity_classification_case": fields["identity_classification"]["case"],
+        "l_identity_classification_represents_0_scheme":
+            fields["identity_classification"]["represents"][0]["scheme"],
+        "l_identity_classification_represents_0_identifier":
+            fields["identity_classification"]["represents"][0]["identifier"],
+        "o_identity_classification": json.dumps(fields["identity_classification"], sort_keys=True),
+        "l_organisations_0_name": fields["organisations"][0]["name"],
+        "l_organisations_0_ror": fields["organisations"][0]["ror"],
+        "c_organisations_0_custodian": "1",
+        "c_organisations_primary": "0",
+        "o_organisations": json.dumps(fields["organisations"], sort_keys=True),
+        "l_acknowledgements_0_text": fields["acknowledgements"][0]["text"],
+        "l_acknowledgements_0_type": fields["acknowledgements"][0]["type"],
+        "l_acknowledgements_0_source": "",
+        "o_acknowledgements": json.dumps(fields["acknowledgements"], sort_keys=True),
+    }
+    patch, errs = ef.build_section_patch(form)
+    assert not errs, errs
+    for key in ("citation", "identity_classification", "organisations", "acknowledgements"):
+        assert key not in patch, (key, patch.get(key))
+    with pytest.raises(edit.EditError, match="no changes"):
+        edit.run_merge_job(pkg, patch=patch, bump="patch", note="noop",
+                           today="2026-07-26", validator_path="", scratch_dir=tmp_path / "scratch")
+
+
+# ---- INFERRED-REVIEW handling extended to the two new marked lists ------------------------------
+
+_ORG_SEEDED_YAML = (
+    b'name: Demo\nversion: 1.0.0\norganisation:\n  name: Uni\n'
+    b'creators:\n'
+    b'  # INFERRED-REVIEW: confirm citation authorship\n'
+    b'  - name: "Thiel, Stephan"\n    name_type: person\n'
+    b'organisations:\n'
+    b'  # INFERRED-REVIEW: custodian seeded from the essential organisation; confirm roles\n'
+    b'  - name: "Geological Survey of South Australia"\n'
+    b'    roles:\n      - custodian\n    primary_custodian: true\n')
+
+
+def test_read_job_surfaces_organisations_review_flags(tmp_path):
+    """The corpus-wide custodian seeding (T4) marks every organisations row it writes, so the runner
+    read job must surface organisations markers exactly as it does creators/contributors. RED before
+    organisations joins _CREDIT_LIST_KEYS and the read job's loop: the chip would never appear and the
+    curator would never be asked to confirm the seeded roles."""
+    pkg = _merge_pkg(tmp_path, _ORG_SEEDED_YAML)
+    res = edit.run_read_job(pkg)
+    assert res["review_flags"] == {"creators": [0], "organisations": [0]}
+
+
+def test_saving_organisations_strips_its_marker_and_leaves_creators(tmp_path):
+    """Per-LIST-SECTION marker stripping (D17, no per-row stripping): editing organisations clears ITS
+    marker (the adjudication) and leaves the untouched creators marker alone."""
+    form = {
+        "l_organisations_0_name": "Geological Survey of South Australia",
+        "l_organisations_0_ror": "",
+        "c_organisations_0_custodian": "1",
+        "c_organisations_0_publisher": "1",
+        "c_organisations_primary": "0",
+        "o_organisations": json.dumps([{"name": "Geological Survey of South Australia",
+                                        "roles": ["custodian"], "primary_custodian": True}]),
+    }
+    patch, errs = ef.build_section_patch(form)
+    assert not errs, errs
+    assert "organisations" in patch
+    data = edit._load_bytes(_ORG_SEEDED_YAML)
+    edit.apply_patch(data, patch)
+    out = edit._dump_bytes(data).decode("utf-8")
+    assert "custodian seeded from the essential organisation" not in out, out
+    assert "confirm citation authorship" in out, out
+
+
+# ---- the entry gate: an inconsistent citation save is refused with the validator's message -------
+
+_VALIDATOR_DIR = str(require_validator_dir())
+
+
+def _package_for_validation(tmp_path, extra_yaml: bytes = b""):
+    pkg = tmp_path / "surveys" / "demo-survey-2026"
+    (pkg / "transfer_functions" / "edi").mkdir(parents=True)
+    (pkg / "survey.yaml").write_bytes(
+        b'schema_version: "0.3"\nname: Demo\nproject_name: Demo\nslug: demo-survey-2026\n'
+        b'version: 1.0.0\ncountry: Australia\nlicense: CC-BY-4.0\n'
+        b'organisation:\n  name: Uni\naccess:\n  level: open\n'
+        b'related_identifiers:\n  - identifier: 10.25914/abc\n    identifier_type: DOI\n'
+        b'    identifies: entire\n    relation: IsVariantFormOf\n' + extra_yaml)
+    # A parseable stub EDI: the validator's edi_parse check needs real LAT/LONG in HEAD, and the
+    # coordinates must sit inside the Australian bounding box it defaults to.
+    (pkg / "transfer_functions" / "edi" / "S01.edi").write_text(
+        ">HEAD\n  DATAID=S01\n  LAT=-34:55:00\n  LONG=138:36:00\n  ELEV=50\n"
+        ">FREQ NFREQ=1 // 1\n  1.0\n>END\n", encoding="utf-8")
+    (pkg / "README.md").write_text("# demo\n", encoding="utf-8")
+    (pkg / "LICENSE.md").write_text("# Licence\n\n**CC-BY-4.0**\n", encoding="utf-8")
+    return pkg
+
+
+def test_preferred_identifier_without_its_designation_is_refused_by_the_merge(tmp_path):
+    """ENTRY-GATE GUARD (D18 / emitter D20): the editor CAN write citation.preferred_identifier, and
+    the validator FAILs a pair that no designation matches. The merge surfaces that FAIL verbatim, so
+    an inconsistent curator save can never reach the engine. RED if the editor writes the pair and
+    nothing refuses it."""
+    patch, errs = ef.build_section_patch({
+        "s_citation_preferred_text": "GSSA (2016).",
+        "s_citation_text_source": "source_provided",
+        "s_citation_preferred_identifier_scheme": "DOI",
+        "s_citation_preferred_identifier_identifier": "10.25914/abc",
+    })
+    assert not errs, errs
+    assert patch["citation"]["preferred_identifier"] == {"scheme": "DOI",
+                                                         "identifier": "10.25914/abc"}
+    pkg = _package_for_validation(tmp_path)
+    res = edit.run_merge_job(pkg, patch=patch, bump="minor", note="prefer this identifier",
+                             today="2026-07-26", validator_path=_VALIDATOR_DIR,
+                             scratch_dir=tmp_path / "scratch")
+    assert res["has_fail"] is True, res["validator"]
+    fails = [i for i in res["validator"]["items"] if i["level"] == "FAIL"]
+    assert any(i["check"] == "citation" and "designated identifier" in i["message"] for i in fails), \
+        fails
+
+
+def test_preferred_identifier_with_its_designation_is_accepted_by_the_merge(tmp_path):
+    """The other half of the gate: the SAME pair, designated through identity_classification.represents
+    (which must itself match a related_identifiers row), validates clean and the save is accepted."""
+    patch, errs = ef.build_section_patch({
+        "s_citation_preferred_text": "GSSA (2016).",
+        "s_citation_text_source": "source_provided",
+        "s_citation_preferred_identifier_scheme": "DOI",
+        "s_citation_preferred_identifier_identifier": "10.25914/abc",
+        "s_identity_classification_case": "case_a",
+        "l_identity_classification_represents_0_scheme": "DOI",
+        "l_identity_classification_represents_0_identifier": "10.25914/abc",
+    })
+    assert not errs, errs
+    pkg = _package_for_validation(tmp_path)
+    res = edit.run_merge_job(pkg, patch=patch, bump="minor", note="prefer this identifier",
+                             today="2026-07-26", validator_path=_VALIDATOR_DIR,
+                             scratch_dir=tmp_path / "scratch")
+    assert res["has_fail"] is False, [i for i in res["validator"]["items"] if i["level"] == "FAIL"]

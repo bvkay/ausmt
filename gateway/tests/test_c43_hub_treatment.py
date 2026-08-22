@@ -9,10 +9,11 @@ Load-bearing pins:
     read-job fields, with a hidden browser-filled counts span; the tab strip carries the hidden
     Stations chip slot + the slug data attribute. The header DEGRADES to the slug when the
     read-job fails on a non-metadata tab (never a bounce, never a 500).
-  * H2 SCAFFOLD — the Overview scaffold stamps data-citation-email ONLY when the Q3-ruled
-    server-side heuristic fires on the read-job fields (the same helper the Metadata tab uses);
-    the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at JS-source
-    level here (executable form in the parity file).
+  * H2 SCAFFOLD: the four-cards / build-id-card-ABSENT and severity-row invariants are pinned at
+    JS-source level here (executable form in the parity file). A2 (D19): the Q3 citation-author
+    email heuristic and its three surfaces (the data-citation-email scaffold attribute, the TOC
+    issue chip and the Metadata inline field error) are DELETED with the retired flat credit keys
+    they read; the pins below assert their absence.
   * SEVERITY CSS — .qa.fail/.qa.warn/.qa.info map to the dark palette's bad/warn/info hues
     (red fail / amber warn / blue info — the mockup's severity semantics).
 
@@ -24,7 +25,7 @@ import re
 
 from gateway import curatorpage, metaedit
 from gateway.tests.conftest import (
-    FakeGit, app_client, csrf_for_session, curator_login, inproc_edit_runner, run,
+    FakeGit, app_client, curator_login, inproc_edit_runner, run,
     write_survey_live,
 )
 
@@ -40,9 +41,10 @@ version: 1.0.1
 region: Western Australia
 license: CC-BY-4.0
 
-lead_investigator:
-  name: Ada Lovelace
-  orcid: "0000-0002-1825-0097"
+creators:
+  - name: "Lovelace, Ada"
+    name_type: person
+    orcid: "0000-0002-1825-0097"
 
 access:
   level: open
@@ -61,9 +63,20 @@ publications:
     title: "Earlier interpretation"
 """
 
-# The same survey with the mockup's own H4 defect: the citation author is an email address.
-HUB_YAML_EMAIL_AUTHOR = HUB_YAML.replace("name: Ada Lovelace",
-                                         "name: graham.heinson@adelaide.edu.au")
+# A2 (D19): the H4 email-author variant is retired with the heuristic that read it. What replaces it
+# as the "this survey carries curated MTCAT 2.0 homes" fixture is a survey that actually carries them,
+# so the new panels have real values to render.
+HUB_YAML_CURATED = HUB_YAML + """
+organisations:
+  - name: "Geological Survey of South Australia"
+    ror: https://ror.org/04y8k6r48
+    roles:
+      - custodian
+    primary_custodian: true
+acknowledgements:
+  - text: "Data supplied by the Geological Survey of South Australia."
+    type: custodian
+"""
 
 SLUG = "capr-hub-2026"
 
@@ -166,48 +179,23 @@ def test_hub_header_degrades_when_read_job_fails(tmp_path):
 # --------------------------------------------------------------------------------------------------
 # H2 — overview scaffold + citation-email stamp (Q3 ruling)
 # --------------------------------------------------------------------------------------------------
-def test_overview_scaffold_stamps_citation_email_only_when_heuristic_fires(tmp_path):
-    """Q3 SINGLE-SOURCE PIN (scaffold half). The Overview scaffold carries data-citation-email
-    ONLY when the server-side heuristic (citation_author_email — the SAME helper the Metadata tab
-    uses) flags the citation author; a normal name stamps nothing. FAILS IF the attribute appears
-    for a name, is missing for an email author, or carries a different value than the field."""
-    async def _body():
-        live_email = _live(tmp_path, yaml_text=HUB_YAML_EMAIL_AUTHOR)
-        async with app_client(tmp_path, git_runner=FakeGit(),
-                              edit_runner=inproc_edit_runner(live_email),
-                              surveys_live_dir=live_email) as (client, _app, _gw, _cfg):
-            await curator_login(client)
-            r = await client.get(f"/gateway/curator/survey/{SLUG}")
-            assert 'data-citation-email="graham.heinson@adelaide.edu.au"' in r.text
-    run(_body())
+def test_overview_scaffold_never_stamps_a_citation_email(tmp_path):
+    """A2 (D19) SCAFFOLD PIN, inverted. The Q3 citation-author email heuristic read ONLY the two
+    retired flat credit keys, so with those migrated away it could never fire again; it and its
+    scaffold attribute are deleted outright. FAILS IF the attribute or the helper comes back."""
+    assert not hasattr(curatorpage, "citation_author_email")
+    assert not hasattr(curatorpage, "_CITATION_EMAIL_ERROR")
 
-    async def _body_clean(tmp2):
-        live_name = _live(tmp2)
-        async with app_client(tmp2, git_runner=FakeGit(),
-                              edit_runner=inproc_edit_runner(live_name),
-                              surveys_live_dir=live_name) as (client, _app, _gw, _cfg):
+    async def _body():
+        surveys_live = _live(tmp_path)
+        async with app_client(tmp_path, git_runner=FakeGit(),
+                              edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             r = await client.get(f"/gateway/curator/survey/{SLUG}")
             assert "data-citation-email" not in r.text
-    run(_body_clean(tmp_path / "clean"))
-
-
-def test_citation_author_email_mirrors_engine_precedence():
-    """Q3 HEURISTIC PIN. citation_author_email mirrors build_portal._investigators_of EXACTLY:
-    lead_investigator.name, when present, IS the citation author (principal_investigators are
-    consulted only when there is no lead). FAILS IF the helper flags a PI email while a lead
-    with a clean name exists (the engine would not cite the PI), misses a lead email, or flags
-    a plain name."""
-    fn = curatorpage.citation_author_email
-    assert fn({"lead_investigator": {"name": "a.b@x.org"}}) == ("lead_investigator", "a.b@x.org")
-    assert fn({"lead_investigator": {"name": "Ada Lovelace"}}) is None
-    # Lead present with a clean name: PI emails are NOT the citation author.
-    assert fn({"lead_investigator": {"name": "Ada Lovelace"},
-               "principal_investigators": [{"name": "x@y.org"}]}) is None
-    # No lead: the PI list is the citation-author list.
-    assert fn({"principal_investigators": [{"name": "Grace Hopper"}, {"name": "x@y.zt"}]}) \
-        == ("principal_investigators", "x@y.zt")
-    assert fn({}) is None
+            assert 'id="qa-cards"' in r.text        # the rest of the scaffold is untouched
+    run(_body())
 
 
 # --------------------------------------------------------------------------------------------------
@@ -229,18 +217,20 @@ def test_survey_hub_js_four_cards_and_no_build_id_card():
 
 def test_survey_hub_js_severity_rows_and_dead_branch_deleted():
     """SEVERITY-ROW + DEAD-BRANCH SOURCE PIN. The needs-attention rows are severity rows
-    ('qa ' + kind, with the terse text and the full diagnosis in a title attr), the refusal
-    boilerplate is a single REFUSED_NOTE constant appended once by the plan builder, and the old
-    string-matching metadata branch (/citation|author|email/…) is DELETED — the info row derives
-    only from the server-stamped data-citation-email. FAILS IF the dead regex branch returns, the
-    note constant multiplies, or the severity-row classes disappear."""
+    ('qa ' + kind, with the terse text and the full diagnosis in a title attr) and the refusal
+    boilerplate is a single REFUSED_NOTE constant appended once by the plan builder. Both the old
+    string-matching metadata branch (/citation|author|email/…) and the server-stamped
+    data-citation-email info row that replaced it are now DELETED (A2/D19). FAILS IF either
+    citation-author branch returns, the note constant multiplies, or the severity-row classes
+    disappear."""
     js = curatorpage.SURVEY_HUB_JS
     assert "'qa ' + row.kind" in js, "severity rows must carry the qa fail/warn/info classes"
     assert "setAttribute('title', row.title)" in js, "full diagnosis rides the title attr"
     assert js.count("var REFUSED_NOTE") == 1
     assert js.count("REFUSED_NOTE") == 2, "REFUSED_NOTE: one declaration + ONE plan use (once-only)"
     assert "citation|author|email" not in js, "the dead warning-string matcher must stay deleted"
-    assert "data-citation-email" in js, "the info row derives from the server-stamped attribute"
+    assert "data-citation-email" not in js, "the citation-email info row is retired (D19)"
+    assert "metaInfoText" not in js and "truncEmail" not in js
     # The CSP/XSS discipline extends to the rewritten constant.
     assert ".innerHTML" not in js and "<script" not in js.lower()
     assert not re.search(r"""\bon[a-z]{3,}\s*=\s*['"]""", js)
@@ -269,13 +259,14 @@ def test_station_panel_no_raw_json_outside_collapsed_details():
 # H4 — metadata TOC state hints + the inline citation-email field error (display-layer only)
 # --------------------------------------------------------------------------------------------------
 def test_metadata_toc_state_hints(tmp_path):
-    """H4 TOC-HINT PIN. The Metadata TOC entries carry render-time state hints: the red '1 issue'
-    chip on the section the citation-email heuristic flags, entry COUNTS on non-empty list
-    sections (publications: 2), and the access level / collection id values. A clean survey shows
-    NO issue chip. FAILS IF a hint is invented for an empty section, the issue chip misses the
-    flagged section (or fires clean), or a count drifts from the survey's own entries."""
+    """H4 TOC-HINT PIN. The Metadata TOC entries carry render-time state hints: entry COUNTS on
+    non-empty list sections (publications: 2, organisations: 1, acknowledgements: 1) and the access
+    level / collection id values. A2 (D19): there is no '1 issue' chip any more, because the only
+    thing that ever produced one was the deleted citation-email heuristic. FAILS IF a hint is
+    invented for an empty section, a count drifts from the survey's own entries, or the retired
+    issue chip returns."""
     async def _body():
-        surveys_live = _live(tmp_path, yaml_text=HUB_YAML_EMAIL_AUTHOR)
+        surveys_live = _live(tmp_path, yaml_text=HUB_YAML_CURATED)
         async with app_client(tmp_path, git_runner=FakeGit(),
                               edit_runner=inproc_edit_runner(surveys_live),
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
@@ -283,12 +274,13 @@ def test_metadata_toc_state_hints(tmp_path):
             r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
             assert r.status_code == 200
             toc = re.search(r'<nav class="toc"[^>]*>(.*?)</nav>', r.text, re.DOTALL).group(1)
-            # CONTRIBUTOR-CREDIT-SPEC §6: the citation-email heuristic (still read from the retired-in-UI
-            # lead/principal fields) lights the People & credit entry, which now owns citation authorship.
-            assert ('data-hub-section="people">People &amp; credit'
-                    '<span class="state issue">1 issue</span>') in toc
+            assert '<span class="state issue">' not in toc, "the citation-email issue chip is retired"
             assert ('data-hub-section="publications">Publications'
                     '<span class="state">2</span>') in toc
+            assert ('data-hub-section="organisations">Organisations &amp; roles'
+                    '<span class="state">1</span>') in toc
+            assert ('data-hub-section="acknowledgements">Required acknowledgements'
+                    '<span class="state">1</span>') in toc
             assert ('data-hub-section="access">Access'
                     '<span class="state">open</span>') in toc
             assert ('data-hub-section="collection">Collection'
@@ -297,78 +289,40 @@ def test_metadata_toc_state_hints(tmp_path):
             assert re.search(r'data-hub-section="funding">Funding</a>', toc), toc
     run(_body())
 
-    async def _clean(tmp2):
-        surveys_live = _live(tmp2)
-        async with app_client(tmp2, git_runner=FakeGit(),
-                              edit_runner=inproc_edit_runner(surveys_live),
-                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
-            await curator_login(client)
-            r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
-            assert '<span class="state issue">' not in r.text, "no issue chip on a clean survey"
-    run(_clean(tmp_path / "clean"))
 
-
-def test_metadata_inline_email_field_error(tmp_path):
-    """H4 INLINE-ERROR PIN, adapted for the retired lead panel (CONTRIBUTOR-CREDIT-SPEC §6). With an
-    email as the citation author, the People & credit panel carries the contract's explanatory copy in
-    a .fielderr line (the retired lead-name input no longer exists to redden); a clean survey renders
-    NEITHER. FAILS IF the error misses the email case, fires on a name, or the copy drifts."""
+def test_metadata_tab_renders_the_curated_home_panels(tmp_path):
+    """A2 PANEL PIN. The Metadata tab renders the three ratified curated homes plus the designation
+    mapping, prefilled from the survey's own values: the organisations role checkbox group with the
+    stored custodian ticked and its primary-custodian radio selected, the citation preferred-text and
+    nested preferred-identifier inputs, the acknowledgement wording, and the identity_classification
+    case select with both designation row groups. FAILS IF a curator cannot edit a key the public
+    form and the migration can write (the no-raw-JSON-escape rule, D2)."""
     async def _body():
-        surveys_live = _live(tmp_path, yaml_text=HUB_YAML_EMAIL_AUTHOR)
+        surveys_live = _live(tmp_path, yaml_text=HUB_YAML_CURATED)
         async with app_client(tmp_path, git_runner=FakeGit(),
                               edit_runner=inproc_edit_runner(surveys_live),
                               surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
             await curator_login(client)
             r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
-            # The retired lead-name input is gone; the flag surfaces inside the People & credit form.
-            assert 'name="s_lead_investigator_name"' not in r.text
-            # HUB-SINGLE-SAVE (2026-08-14): the sections are <section> blocks inside ONE form, so a
-            # block ends at </section> (it used to end at </form>).
-            people = r.text.split('data-hub-section-form="people"', 1)[1].split("</section>", 1)[0]
-            # Assert against the SOURCE contract copy (avoids re-typing its em dash + guards copy drift).
-            expected = f'<p class="fielderr">{curatorpage._esc(curatorpage._CITATION_EMAIL_ERROR)}</p>'
-            assert expected in people, people
-    run(_body())
-
-    async def _clean(tmp2):
-        surveys_live = _live(tmp2)
-        async with app_client(tmp2, git_runner=FakeGit(),
-                              edit_runner=inproc_edit_runner(surveys_live),
-                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
-            await curator_login(client)
-            r = await client.get(f"/gateway/curator/survey/{SLUG}?tab=metadata")
-            # class attributes, not the (always-present) .badinput/.fielderr CSS rules.
-            assert 'class="badinput"' not in r.text and 'class="fielderr"' not in r.text
-    run(_clean(tmp_path / "clean"))
-
-
-def test_metadata_email_error_is_display_layer_only(tmp_path):
-    """H4 POST-PATH-UNTOUCHED PIN. Submitting the Lead investigator section WITH the email value
-    still flows through the UNCHANGED preview path: 200, the normal preview page (diff + verdict
-    + confirm form — the seam validator passes), no gateway-side rejection. The heuristic is
-    display-layer ONLY; the server validator stays authoritative. FAILS IF the display check
-    leaks into the POST path (a 4xx, a re-rendered form, or a missing confirm)."""
-    async def _body():
-        surveys_live = _live(tmp_path)
-        async with app_client(tmp_path, git_runner=FakeGit(),
-                              edit_runner=inproc_edit_runner(surveys_live),
-                              surveys_live_dir=surveys_live) as (client, _app, _gw, _cfg):
-            await curator_login(client)
-            csrf = csrf_for_session(client)
-            data = {
-                "s_lead_investigator_name": "graham.heinson@adelaide.edu.au",
-                "s_lead_investigator_orcid": "0000-0002-1825-0097",
-                "o_lead_investigator":
-                    '{"name": "Ada Lovelace", "orcid": "0000-0002-1825-0097"}',
-                "note": "swap author for email (should preview fine — display-layer only)",
-                "bump": "patch", "csrf_token": csrf,
-            }
-            r = await client.post(f"/gateway/curator/edit/{SLUG}/preview",
-                                  data=data, follow_redirects=False)
-            assert r.status_code == 200
-            assert "Preview edit" in r.text
-            assert "graham.heinson@adelaide.edu.au" in r.text     # the change IS previewed
-            assert "Confirm &amp; commit" in r.text               # and not blocked
+            body = r.text
+            orgs = body.split('data-hub-section-form="organisations"', 1)[1].split("</section>", 1)[0]
+            assert 'value="Geological Survey of South Australia"' in orgs
+            assert 'name="c_organisations_0_custodian" value="1" style="width:auto" checked' in orgs
+            assert 'name="c_organisations_primary" value="0" style="width:auto" checked' in orgs
+            cit = body.split('data-hub-section-form="citation"', 1)[1].split("</section>", 1)[0]
+            assert 'name="s_citation_preferred_text"' in cit
+            assert 'name="s_citation_text_source"' in cit
+            assert 'name="s_citation_preferred_identifier_scheme"' in cit
+            assert 'name="s_citation_preferred_identifier_identifier"' in cit
+            idc = body.split('data-hub-section-form="identity_classification"', 1)[1] \
+                      .split("</section>", 1)[0]
+            assert 'name="s_identity_classification_case"' in idc
+            assert 'name="l_identity_classification_represents_0_scheme"' in idc
+            assert 'name="l_identity_classification_own_identifiers_0_identifier"' in idc
+            acks = body.split('data-hub-section-form="acknowledgements"', 1)[1] \
+                       .split("</section>", 1)[0]
+            assert 'value="Data supplied by the Geological Survey of South Australia."' in acks
+            assert 'name="l_acknowledgements_0_type"' in acks
     run(_body())
 
 

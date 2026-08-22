@@ -525,9 +525,10 @@ ok(/id="piRows"/.test(html) && /id="addPi"/.test(html) && /readPrincipalInvestig
    "the form carries the repeatable principal-investigators UI (piRows + addPi) wired into readMeta");
 ok(/When a lead investigator is set the portal credits the lead; otherwise the principal investigators list is credited/
    .test(html.replace(/\s+/g, " ")), "the serving-precedence hint mirrors the curator hub copy");
-// parity: the emitted PI keys match the vendored editor's principal_investigators row spec (name, orcid).
-ok(/"principal_investigators":\s*\[\s*\n\s*\("name"[\s\S]*?\("orcid"/.test(editorSrc),
-   "the editor's principal_investigators row spec is (name, orcid) - the emission shape mirrors it");
+// A2 (LANE-CONTRACT-FORM-CREDIT): the editor-parity pin for the retired principal_investigators row
+// spec is DELETED with the editor section it read. gateway/editor_form.py no longer models either
+// retired flat credit key, so this pin could only ever go red; the form's own emission of those keys
+// is retired in A3, with its own retired-keys-absent pin.
 
 // ---- R5: DOI normalisation (resolver URL -> bare DOI; bare + non-DOI + URL-typed left untouched). ----
 ok(M.normalizeDoi("https://doi.org/10.1093/gji/xyz") === "10.1093/gji/xyz", "normalizeDoi folds an https://doi.org/ URL to the bare DOI");
