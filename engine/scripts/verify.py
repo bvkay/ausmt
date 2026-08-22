@@ -3,7 +3,9 @@
 
   1. the test suite (pytest)
   2. a full build with mt_metadata (the sole extractor since the regex retirement)
-  3. mtcat.json schema validation for the build
+  3. mtcat.json schema validation for the build, the manifest and build_report checks, and the
+     survey-metadata gate (every products/<slug>/survey-metadata.json validates with format checking,
+     the slug set equals mtcat's surveys[], and the build skipped no survey: D20)
 
 mt_metadata is REQUIRED to build, so this fails loudly if it is not installed.
 
@@ -282,6 +284,97 @@ def _check_build_report(rep, man, jsonschema, rep_schema):
     return ok, lines
 
 
+def _scan_nulls_and_empties(doc):
+    """Every null and every empty array/object at any depth of one survey-metadata document (it
+    defines no null at all); paths as '$.a.b[0]'."""
+    nulls, empties = [], []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            if not node:
+                empties.append(path)
+            for k, v in node.items():
+                if v is None:
+                    nulls.append(f"{path}.{k}")
+                else:
+                    walk(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            if not node:
+                empties.append(path)
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(doc, "$")
+    return nulls, empties
+
+
+def _check_survey_metadata(base_dir: Path, mtc, rep, jsonschema, sm_schema):
+    """The survey-metadata gate (the second public contract), shared by --data-dir mode and the
+    self-building path. Three independent checks, any of which FAILs the run:
+
+      1. D20, the LOUD skip: build_report.json's `surveys_skipped_validation` must be PRESENT and EMPTY.
+         A non-empty list means the build skipped a survey the validator FAILed; the rest of the corpus
+         built and the build exited 0, but that survey is gone from EVERY public surface, so the swap
+         must not happen (make rebuild-data reads this exit code). An absent key means a build that
+         predates the gate, which cannot vouch for itself either.
+      2. every products/<slug>/survey-metadata.json validates against schema/ausmt-survey-metadata.
+         schema.json WITH FORMAT CHECKING (date / date-time), carries no null and no empty container,
+         and states the survey_id its directory names.
+      3. the set of document slugs equals mtcat.json's surveys[].survey_id exactly (one document per
+         catalogued survey, no stray document for a survey the catalogue does not list).
+
+    Returns (ok, lines). Reads the files on disk, never a build's in-memory state."""
+    ok = True
+    lines = []
+    skipped = (rep or {}).get("surveys_skipped_validation") if isinstance(rep, dict) else None
+    if skipped is None:
+        ok = False
+        lines.append("   survey-metadata: FAIL - build_report.json carries no surveys_skipped_validation list "
+                     "(build predates the loud-skip gate, or the report was not emitted); cannot vouch that "
+                     "no survey was silently skipped")
+    elif skipped:
+        ok = False
+        lines.append(f"   survey-metadata: FAIL - the build SKIPPED {len(skipped)} survey(s) the validator FAILed "
+                     f"({', '.join(str(s) for s in skipped)}); they are absent from every public surface. Fix the "
+                     f"survey.yaml (or withdraw the package deliberately) and rebuild; never swap this build in.")
+    docs = sorted((base_dir / "products").glob("*/survey-metadata.json")) if (base_dir / "products").is_dir() else []
+    validator = None
+    if jsonschema and sm_schema:
+        validator = jsonschema.Draft7Validator(sm_schema, format_checker=jsonschema.FormatChecker())
+    bad = []
+    slugs = set()
+    for p in docs:
+        slug = p.parent.name
+        slugs.add(slug)
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            bad.append(f"{slug}: unreadable ({type(e).__name__}: {e})")
+            continue
+        if not isinstance(doc, dict) or doc.get("survey_id") != slug:
+            bad.append(f"{slug}: survey_id {doc.get('survey_id') if isinstance(doc, dict) else doc!r} != directory")
+        nulls, empties = _scan_nulls_and_empties(doc)
+        bad.extend(f"{slug}: null at {n}" for n in nulls[:3])
+        bad.extend(f"{slug}: empty container at {n}" for n in empties[:3])
+        if validator is not None:
+            bad.extend(f"{slug}: {e.message[:80]} (at /{'/'.join(str(x) for x in e.absolute_path)})"
+                       for e in list(validator.iter_errors(doc))[:3])
+    if bad:
+        ok = False
+        lines.append(f"   survey-metadata: FAIL - {len(bad)} document violation(s): {bad[:5]}")
+    catalogued = {s.get("survey_id") for s in (mtc or {}).get("surveys", []) if isinstance(s, dict)}
+    if slugs != catalogued:
+        ok = False
+        lines.append(f"   survey-metadata: FAIL - document slug set != mtcat surveys[].survey_id "
+                     f"(documents without a catalogued survey: {sorted(slugs - catalogued)[:5]}; catalogued "
+                     f"surveys without a document: {sorted(catalogued - slugs)[:5]})")
+    if ok:
+        lines.append(f"   survey-metadata: PASS - {len(docs)} document(s) validated "
+                     f"({'format checking on' if validator is not None else 'schema unchecked'}), slug set == "
+                     f"mtcat surveys[], surveys_skipped_validation empty")
+    return ok, lines
+
+
 def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool:
     """The --data-dir check: mtcat.json schema-conformance + manifest.json integrity/schema, against an
     EXISTING build dir's own files — the same two checks the self-building path runs post-build (via
@@ -304,6 +397,7 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool
     schema = json.loads((ROOT / "schema" / "mtcat.schema.json").read_text(encoding="utf-8"))
     man_schema = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
     rep_schema = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
+    sm_schema = json.loads((ROOT / "schema" / "ausmt-survey-metadata.schema.json").read_text(encoding="utf-8"))
 
     cat, mtc, man, rep = _load_existing(data_dir)
     print(f"== data-dir check ({data_dir}) ==")
@@ -315,6 +409,10 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool
     for ln in rep_lines:
         print(ln)
     ok &= rep_ok
+    sm_ok, sm_lines = _check_survey_metadata(data_dir, mtc, rep, jsonschema, sm_schema)
+    for ln in sm_lines:
+        print(ln)
+    ok &= sm_ok
 
     # C18b consistency gate — armed only with --surveys.
     if surveys_root is not None:
@@ -383,6 +481,7 @@ def main(argv=None):
 
     man_schema = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
     rep_schema = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
+    sm_schema = json.loads((ROOT / "schema" / "ausmt-survey-metadata.schema.json").read_text(encoding="utf-8"))
 
     print("== build (mt_metadata) ==")
     rc, cat, mtc, man, rep, out = _build(bp, self_surveys, "mt_metadata")
@@ -398,6 +497,10 @@ def main(argv=None):
     for ln in rep_lines:
         print(ln)
     ok &= rep_ok
+    sm_ok, sm_lines = _check_survey_metadata(out, mtc, rep, jsonschema, sm_schema)
+    for ln in sm_lines:
+        print(ln)
+    ok &= sm_ok
 
     print("VERIFY:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

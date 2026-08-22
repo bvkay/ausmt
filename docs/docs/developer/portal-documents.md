@@ -2,8 +2,8 @@
 
 Not a public surface. The documents on this page are fetched by the portal's own browser code and by
 the curator workbench; they carry no contract and no stability promise, and any build may change or
-drop them. The public metadata contracts are `mtcat.json` and `station.json` (with `survey-metadata.json`
-to come), documented under [Reference](../reference/index.md); the download index is `manifest.json`,
+drop them. The public metadata contracts are `mtcat.json`, `survey-metadata.json` and `station.json`,
+documented under [Reference](../reference/index.md); the download index is `manifest.json`,
 documented in the [data reference](../interoperability/api-reference.md#download-inventory-manifestjson).
 Read this page to work on the portal or the engine, not to build a consumer: a consumer reads the
 contracts.

@@ -46,7 +46,7 @@ import _conventions as conv         # noqa: E402  (C25 convention gates: frame g
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import _stationids as stnids        # noqa: E402  (survey.yaml station-id override for third-party data)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
-from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + MTCAT schema version)
+from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the two public-contract schema versions)
 
 # Named sci-column access for the consumer side (mirrors the portal's contract.js SC map) so the product
 # writers below read sci fields BY NAME, not raw integer index. Built from the same generated SCI_COLUMNS,
@@ -932,6 +932,352 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     # be newly adopted): build.json / build_provenance.json / manifest.json remain the homes of the
     # served-tool versions.
     return doc
+
+
+# --- survey-metadata.json: the SECOND public contract (AusMT_2026/AUSMT-SURVEY-METADATA-SCOPE.md,
+# AUSMT-METADATA-INTERFACE-CONTRACT.md, schema/ausmt-survey-metadata.schema.json 0.1). One document per
+# survey at out/products/<survey_id>/survey-metadata.json (the served root, never the --products dir):
+# the canonical public metadata of one survey dataset/release, generated from the RAW survey.yaml
+# (a discovery side channel; SMETA and surveys.json are untouched, D18). The emitter never invents a
+# curated fact: every class is verbatim from survey.yaml when present and ABSENT otherwise (open-world;
+# no nulls, no empty containers, no library defaults as assertions). Discovery is universal, so a
+# non-served (embargoed / metadata_only) survey emits every curated class exactly as mtcat does (D8);
+# the only policy seam is the coordinate policy (a withheld state omits the curated extent, D7). ----------
+
+# The identifies -> DataCite relation derivation (owner ruling D-L2): the SAME table the surveys
+# validator (validate_survey.IDENTIFIES_RELATION) and the gateway editor (gateway/editor_form.py) carry.
+# A related_identifiers row states the data level it points at and the relation follows; an explicit
+# relation on the row stands when present.
+_IDENTIFIES_RELATION = {
+    "collection": "IsPartOf",       # the parent record (e.g. an NCI parent collection)
+    "raw_packed": "IsDerivedFrom",  # raw/packed time series
+    "level0": "IsDerivedFrom",      # edited time series
+    "level1": "IsDerivedFrom",      # transformed time series
+    "level2": "IsVariantFormOf",    # derived frequency-domain processed data (EDI/TF)
+    "level3": "IsSourceOf",         # models (the model derives FROM this dataset)
+    "entire": "IsVariantFormOf",    # a single record covering all levels (a GA eCAT / state landing page)
+}
+# The validator's placeholder semantics (validate_survey._has_real_value): None, "", TBD, TODO and the
+# survey.yaml template's REPLACE sentinel are "no value" and never become a public assertion.
+_SM_PLACEHOLDER_MARK = "« REPLACE »"
+# A DOI resolver prefix on a curated DOI is stripped at emission (the schema wants bare DOIs); the
+# DOI's own case is kept (DOIs are case-insensitive, and a Record DOI's curated form is the form cited).
+_SM_DOI_RESOLVER_RE = _re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", _re.IGNORECASE)
+# extent is emitted ONLY from a curated WGS 84 geographic_extent (D7: never station-derived; the
+# schema's CRS rule). GDA94/GDA2020 extents wait on an owner ruling and are omitted meanwhile.
+_SM_WGS84_DATUMS = {"WGS84", "EPSG:4326", "WGS-84"}
+
+
+def _sm_real(v) -> bool:
+    """True when a curated value is a real assertion: not None, not a blank/TBD/TODO/REPLACE string.
+    Booleans and numbers are always real (False is an assertion, 0 is a value)."""
+    if v is None:
+        return False
+    if isinstance(v, str):
+        s = v.strip()
+        return s not in ("", "TBD", "TODO") and _SM_PLACEHOLDER_MARK not in s
+    return True
+
+
+def _sm_plain(node):
+    """Prune a curated block for public emission: drop every placeholder scalar at every depth, then
+    every container that emptied; date/time values become ISO strings so the in-memory document is
+    plain JSON. Returns None when nothing real is left (the caller omits the key)."""
+    import datetime as _dt  # noqa: PLC0415 (house style: local import where used)
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            pv = _sm_plain(v)
+            if pv is not None:
+                out[k] = pv
+        return out or None
+    if isinstance(node, list):
+        out = [pv for pv in (_sm_plain(v) for v in node) if pv is not None]
+        return out or None
+    if isinstance(node, (_dt.date, _dt.time)):   # datetime subclasses date
+        return node.isoformat()
+    return node if _sm_real(node) else None
+
+
+def _sm_bare_identifier(scheme, identifier) -> str:
+    """The identifier in the form the schema wants: a DOI loses a resolver prefix (https://doi.org/,
+    http://dx.doi.org/), every other scheme is verbatim; surrounding whitespace is trimmed; case kept."""
+    s = str(identifier).strip()
+    if str(scheme or "").strip().upper() == "DOI":
+        s = _SM_DOI_RESOLVER_RE.sub("", s)
+    return s
+
+
+def _sm_pair(entry):
+    """A complete curated {scheme, identifier} pair in emission form, or None (half pairs and
+    placeholders are no assertion; the validator FAILs them at the entry gates anyway)."""
+    if not isinstance(entry, dict) or not (_sm_real(entry.get("scheme")) and _sm_real(entry.get("identifier"))):
+        return None
+    return {"scheme": str(entry["scheme"]).strip(),
+            "identifier": _sm_bare_identifier(entry["scheme"], entry["identifier"])}
+
+
+def _sm_designated_identifiers(y: dict) -> list:
+    """identifiers[] (the identifiers OF this dataset/release, D12): the identity_classification
+    MAPPING designates them - represents[] for case_a (the source identifiers this record is the SAME
+    dataset/release as), own_identifiers[] for case_b (the distinct AusMT release's own). Curated order,
+    exact duplicates dropped. An absent classification, or the legacy scalar form (unreachable in a
+    validated build since S1), designates nothing: identifiers[] is absent and every related row is a
+    relationship."""
+    ic = y.get("identity_classification")
+    if not isinstance(ic, dict):
+        return []
+    case = str(ic.get("case") or "").strip()
+    rows = ic.get("represents") if case == "case_a" else (ic.get("own_identifiers") if case == "case_b" else None)
+    out = []
+    for r in (rows or []) if isinstance(rows, list) else []:
+        pair = _sm_pair(r)
+        if pair is not None and pair not in out:
+            out.append(pair)
+    return out
+
+
+def _sm_relationships(y: dict, designated: list) -> list:
+    """relationships[]: every related_identifiers row that is NOT a designated identifier of this
+    dataset, reduced to the shared clean core {identifier, identifier_type, relation} (MTCAT's legacy
+    row extensions custodian/identifies/resolution are deliberately not inherited). relation is the
+    row's explicit relation, else the one its identifies level derives to, else absent; the resolver
+    prefix is stripped, case kept, exact duplicates dropped."""
+    keys = {(d["scheme"], d["identifier"]) for d in designated}
+    out = []
+    for r in (y.get("related_identifiers") or []):
+        if not isinstance(r, dict) or not _sm_real(r.get("identifier")):
+            continue
+        itype = str(r["identifier_type"]).strip() if _sm_real(r.get("identifier_type")) else None
+        ident = _sm_bare_identifier(itype, r["identifier"])
+        if itype is not None and (itype, ident) in keys:
+            continue
+        row = {"identifier": ident}
+        if itype is not None:
+            row["identifier_type"] = itype
+        rel = (str(r["relation"]).strip() if _sm_real(r.get("relation"))
+               else _IDENTIFIES_RELATION.get(str(r.get("identifies") or "").strip()))
+        if rel:
+            row["relation"] = rel
+        if row not in out:
+            out.append(row)
+    return out
+
+
+def _sm_rows(seq, required: tuple) -> list:
+    """Curated rows (creators, contributors, subjects, organisations, acknowledgements) VERBATIM after
+    the placeholder prune; a row missing a schema-required member is no assertion and is dropped (the
+    same tolerance _credit_rows applies; the validator WARNs on such rows at the entry gates)."""
+    out = []
+    for r in (seq or []) if isinstance(seq, list) else []:
+        if not isinstance(r, dict):
+            continue
+        pr = _sm_plain(r)
+        if not pr or any(k not in pr for k in required):
+            continue
+        out.append(pr)
+    return out
+
+
+def _sm_funders(y: dict) -> list:
+    """funders[] per D6 (DataCite-aligned): organisation -> name, organisation_ror -> ror, grant_id ->
+    award_number, grant_title -> award_title, funding_doi -> award_uri (https://doi.org/<bare>, ratified
+    at GO). A name-only row is valid; a row without a funder name is not a funder. The legacy
+    name/pid/id spellings _funders_of tolerates are read the same way."""
+    out = []
+    for f in (y.get("funding") or y.get("funders") or []):
+        if not isinstance(f, dict):
+            continue
+        name = f.get("organisation") if _sm_real(f.get("organisation")) else f.get("name")
+        if not _sm_real(name):
+            continue
+        row = {"name": name if isinstance(name, str) else str(name)}
+        ror = f.get("organisation_ror") if _sm_real(f.get("organisation_ror")) else f.get("pid")
+        if _sm_real(ror):
+            row["ror"] = ror if isinstance(ror, str) else str(ror)
+        gid = f.get("grant_id") if _sm_real(f.get("grant_id")) else f.get("id")
+        if _sm_real(gid):
+            row["award_number"] = gid if isinstance(gid, str) else str(gid)
+        if _sm_real(f.get("grant_title")):
+            row["award_title"] = f["grant_title"] if isinstance(f["grant_title"], str) else str(f["grant_title"])
+        if _sm_real(f.get("funding_doi")):
+            row["award_uri"] = "https://doi.org/" + _sm_bare_identifier("DOI", f["funding_doi"])
+        out.append(row)
+    return out
+
+
+def _sm_citation(y: dict):
+    """The citation block verbatim: preferred_identifier {scheme, identifier} (resolver prefix stripped
+    like every identifier, so T25 compares like with like), preferred_text, text_source, additional[]
+    rows {identifier?, preferred_text?, reason} (a row without a reason is no assertion)."""
+    cit = y.get("citation")
+    if not isinstance(cit, dict):
+        return None
+    out = {}
+    pref = _sm_pair(cit.get("preferred_identifier"))
+    if pref is not None:
+        out["preferred_identifier"] = pref
+    if _sm_real(cit.get("preferred_text")):
+        out["preferred_text"] = cit["preferred_text"]
+    if _sm_real(cit.get("text_source")):
+        out["text_source"] = str(cit["text_source"]).strip()
+    add = []
+    for row in (cit.get("additional") or []) if isinstance(cit.get("additional"), list) else []:
+        if not isinstance(row, dict) or not _sm_real(row.get("reason")):
+            continue
+        a = {}
+        ident = _sm_pair(row.get("identifier"))
+        if ident is not None:
+            a["identifier"] = ident
+        if _sm_real(row.get("preferred_text")):
+            a["preferred_text"] = row["preferred_text"]
+        a["reason"] = row["reason"] if isinstance(row["reason"], str) else str(row["reason"])
+        add.append(a)
+    if add:
+        out["additional"] = add
+    return out or None
+
+
+def _sm_extent(y: dict, coord_state):
+    """extent {bbox} from the curated geographic_extent ONLY (D7): emitted when the datum is WGS 84, the
+    four bounds are numbers and not the template's all-zero placeholder, and the survey's coordinate
+    state is not withheld (a withheld survey publishes no footprint, the mtcat rule)."""
+    if coord_state == "withheld":
+        return None
+    ext = y.get("geographic_extent")
+    if not isinstance(ext, dict):
+        return None
+    datum = str(ext.get("datum") or "").strip().upper().replace(" ", "")
+    if datum not in _SM_WGS84_DATUMS:
+        return None
+    try:
+        bbox = {k: float(ext.get(k)) for k in ("west", "south", "east", "north")}
+    except (TypeError, ValueError):
+        return None
+    if all(v == 0 for v in bbox.values()):
+        return None
+    return {"bbox": bbox}
+
+
+def _sm_dates(y: dict):
+    """dates: coverage {year_start, year_end} through the SAME year-range helper the portal filter and
+    mtcat use (_year_range_of; an unparseable year is simply absent), and issued VERBATIM as an ISO date
+    string (never derived from acquisition; unknown = absent)."""
+    import datetime as _dt  # noqa: PLC0415 (house style: local import where used)
+    ys, ye = _year_range_of(y)
+    out = {}
+    cov = {k: v for k, v in (("year_start", ys), ("year_end", ye)) if v is not None}
+    if cov:
+        out["coverage"] = cov
+    d = y.get("dates")
+    issued = d.get("issued") if isinstance(d, dict) else None
+    if isinstance(issued, _dt.datetime):
+        out["issued"] = issued.date().isoformat()
+    elif isinstance(issued, _dt.date):
+        out["issued"] = issued.isoformat()
+    elif _sm_real(issued):
+        out["issued"] = str(issued).strip()
+    return out or None
+
+
+def survey_metadata_document(label, y: dict, smeta: dict, served: bool, coord_state: str,
+                             prov: dict = None, generated_at: str = None) -> dict:
+    """Build one survey's survey-metadata.json (schema/ausmt-survey-metadata.schema.json 0.1, the
+    second public contract) from the RAW survey.yaml mapping `y` plus the SMETA entry (for the
+    authoritative slug and the normalised access state the byte gate used). Returns a plain-JSON dict
+    in the schema's property order; the caller serialises with _jdump(doc, indent=1).
+
+    `served` is the survey's access_serve_state["served"], captured at the emit site. Under D8 (no new
+    withholding: discovery is universal and this document carries no distribution facts) it gates NO
+    class - the argument is the policy-before-emission seam a per-class refinement for embargoed
+    surveys would plug into, never an invention of this emitter. `coord_state` is the aggregated
+    post-mask coordinate state (exact / generalised / withheld): a withheld survey emits no extent (D7).
+
+    The mapping (LANE-CONTRACT-SURVEY-METADATA D5-D13):
+      * title = project_name, else name (never the directory name); survey_id = the slug.
+      * abstract, subjects, creators, contributors, organisations, citation, acknowledgements,
+        dates.issued and attribution VERBATIM when present (placeholders pruned); no HostingInstitution
+        append (D9) and no engine-authored acknowledgement (D10); funders per D6.
+      * dates.coverage via _year_range_of; rights {license raw, access normalised, embargo_until}.
+      * extent from the curated WGS 84 geographic_extent only (D7); identifiers[] from the
+        identity_classification mapping and every other related_identifiers row to relationships[]
+        (D12); activities[] from identifiers.project_raid only (D13); dataset_version omitted (D5).
+      * provenance {generated, generator}; no nulls, no empty containers, ever."""
+    import datetime as _dt  # noqa: PLC0415 (house style: local import where used)
+    del label  # the display label is never a source of the title (it falls back to the directory name)
+    del served  # D8: nothing class-wise is withheld here (see the docstring)
+    prov = prov or {}
+    sm = smeta or {}
+    title = next((v for v in (y.get("project_name"), y.get("name")) if _sm_real(v)), None)
+    designated = _sm_designated_identifiers(y)
+    raid = _raid_of(y)
+    rights = {}
+    if _sm_real(y.get("license")):
+        rights["license"] = y["license"] if isinstance(y["license"], str) else str(y["license"])
+    rights["access"] = normalise_access_level(sm.get("access", "open"))
+    if _sm_real(sm.get("embargo_until")):
+        rights["embargo_until"] = str(sm["embargo_until"]).strip()
+    generator = " ".join(str(x) for x in (prov.get("pipeline"), prov.get("pipeline_version")) if x)
+    doc = {
+        "schema": "ausmt-survey-metadata",
+        # NEVER a literal: SURVEY_METADATA_SCHEMA_VERSION is generated from the single-source constant
+        # (contract/generate.py), so the document cannot claim a version the schema beside it does not.
+        "version": SURVEY_METADATA_SCHEMA_VERSION,
+        "survey_id": sm.get("slug") or safe_component(y.get("slug", "")),
+        "title": (title if isinstance(title, str) else (str(title) if title is not None else None)),
+        "dates": _sm_dates(y),
+        "identifiers": designated or None,
+        "activities": [{"identifier": raid, "scheme": "RAiD"}] if raid else None,
+        "abstract": (y["abstract"] if isinstance(y.get("abstract"), str) else str(y["abstract"]))
+        if _sm_real(y.get("abstract")) else None,
+        "subjects": _sm_rows(y.get("subjects"), ("code", "scheme")) or None,
+        "creators": _sm_rows(y.get("creators"), ("name",)) or None,
+        "contributors": _sm_rows(y.get("contributors"), ("name",)) or None,
+        "organisations": None,
+        "funders": _sm_funders(y) or None,
+        "citation": _sm_citation(y),
+        "acknowledgements": _sm_rows(y.get("acknowledgements"), ("text",)) or None,
+        "rights": rights,
+        "extent": _sm_extent(y, coord_state),
+        "relationships": _sm_relationships(y, designated) or None,
+        "attribution": _sm_plain(y.get("attribution")) if isinstance(y.get("attribution"), dict) else None,
+        "provenance": {"generated": generated_at or _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                       "generator": generator or None},
+    }
+    # organisations[]: verbatim role-typed rows {name, ror?, roles[], primary_custodian?}; the
+    # primary_custodian flag is emitted ONLY as the schema's present-true marker (a curated false is the
+    # absence of the marker, never a false assertion).
+    orgs = []
+    for o in _sm_rows(y.get("organisations"), ("name", "roles")):
+        if o.get("primary_custodian") is not True:
+            o.pop("primary_custodian", None)
+        orgs.append(o)
+    doc["organisations"] = orgs or None
+    return _sm_plain(doc) or {}
+
+
+def _sm_scan_nulls_and_empties(doc):
+    """The zero-null / zero-empty scan over one survey-metadata document (every null at any depth,
+    every empty array/object at any depth; this document defines no null at all)."""
+    nulls, empties = [], []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            if not node:
+                empties.append(path)
+            for k, v in node.items():
+                if v is None:
+                    nulls.append(f"{path}.{k}")
+                else:
+                    walk(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            if not node:
+                empties.append(path)
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(doc, "$")
+    return nulls, empties
 
 
 # --- survey.yaml -> SMETA: per-facet mappers (each small + independently testable; the assembler
@@ -3504,6 +3850,58 @@ def _validate_products(mtcat_doc, manifest_doc, build_report_doc=None):
     return errs
 
 
+def _validate_survey_metadata(docs_by_slug: dict) -> list:
+    """The survey-metadata.json self-check, the emitter's own last line (beside _validate_products):
+    every document {slug: doc} is validated against schema/ausmt-survey-metadata.schema.json WITH
+    FORMAT CHECKING (date / date-time; jsonschema optional => noted, not fatal, like the other
+    self-checks), scanned for nulls and empty containers (the document defines no null at all), and
+    checked for the citation invariant (T25): a citation.preferred_identifier with no EQUAL {scheme,
+    identifier} row in identifiers[] is a HARD STOP that RAISES naming the survey (the mtcat
+    sources[]-rights precedent), because a document whose preferred citation identifier is not one of
+    the dataset's own identifiers must never be published. In normal operation the surveys validator
+    FAILs such a survey at the entry gates and the build's loud skip (D20) records it; this raise is
+    reachable only in builds that run without a validator (--no-validate). Returns the list of
+    human-readable violations (empty = OK); validation reads the bytes that ship (_jdump round-trip)."""
+    for slug, doc in sorted(docs_by_slug.items()):
+        pref = (doc.get("citation") or {}).get("preferred_identifier")
+        if isinstance(pref, dict) and not any(
+                i.get("scheme") == pref.get("scheme") and i.get("identifier") == pref.get("identifier")
+                for i in (doc.get("identifiers") or [])):
+            raise ValueError(
+                f"survey-metadata: survey '{slug}' declares citation.preferred_identifier "
+                f"{pref.get('scheme')}:{pref.get('identifier')} but no equal {{scheme, identifier}} row is "
+                f"designated in identifiers[] (identity_classification.represents for case_a, "
+                f"own_identifiers for case_b); the preferred citation identifier must be one of the "
+                f"dataset's own identifiers (T25). Fix the designation in survey.yaml; the build refuses "
+                f"to publish this document.")
+    errs = []
+    validator = None
+    try:
+        import jsonschema  # noqa: PLC0415
+    except ImportError:
+        print("note: jsonschema not installed - survey-metadata schema self-check skipped", file=sys.stderr)
+    else:
+        try:
+            schema = json.loads((HERE.parent / "schema" / "ausmt-survey-metadata.schema.json").read_text())
+            validator = jsonschema.Draft7Validator(schema, format_checker=jsonschema.FormatChecker())
+        except Exception as e:  # noqa: BLE001  (missing/unreadable schema must not crash the build)
+            print(f"note: survey-metadata schema self-check skipped ({type(e).__name__}: {e})", file=sys.stderr)
+    for slug, doc in sorted(docs_by_slug.items()):
+        name = f"products/{slug}/survey-metadata.json"
+        try:
+            served = json.loads(_jdump(doc))
+        except (TypeError, ValueError) as e:
+            errs.append(f"{name}: cannot be serialised for validation ({type(e).__name__}: {e})")
+            continue
+        nulls, empties = _sm_scan_nulls_and_empties(served)
+        errs.extend(f"{name}: null value at {p} (this document defines no null)" for p in nulls)
+        errs.extend(f"{name}: empty container at {p} (absence is the only no-assertion state)" for p in empties)
+        if validator is not None:
+            errs.extend(f"{name}: {e.message} (at /{'/'.join(str(x) for x in e.absolute_path)})"
+                        for e in validator.iter_errors(served))
+    return errs
+
+
 def discover_work(a, ap, validator):
     """One work entry per survey, from --surveys packages or --raw EDI folders. Returns
     (work, survey_extent): work = [(label, org, inputs, kind, meta-or-None, pkgdir-or-None, slug,
@@ -3530,8 +3928,20 @@ def discover_work(a, ap, validator):
     not survey metadata, so it never reaches surveys.json) and the same validation SPLIT: the block's
     SHAPE is checked here, where a bad enum or a traversal-shaped key drops just this survey loudly;
     the keys are checked against the package's REAL files in the build loop, before any of that
-    survey's bytes are emitted. A survey with no block yields {} and takes no override path at all."""
+    survey's bytes are emitted. A survey with no block yields {} and takes no override path at all.
+
+    Survey metadata (the second public contract): also returns survey_yaml_by_label = {label: the RAW
+    parsed survey.yaml mapping}, the side channel survey_metadata_document reads (D18: SMETA and
+    surveys.json stay byte-identical; the emitter never widens the portal seam). --raw entries have no
+    survey.yaml and so no entry (a raw build emits no survey-metadata documents).
+
+    The loud skip (D20): also returns surveys_skipped_validation = [package directory name, ...] for
+    every package the validator FAILed and the build SKIPPED. The skip itself is unchanged (the rest of
+    the corpus builds, exit 0), but it is no longer silent: main() writes the list into
+    build_report.json and scripts/verify.py FAILs on a non-empty list, so `make rebuild-data` leaves
+    `current` untouched rather than letting a survey vanish from every public surface."""
     work, survey_extent, coord_policy, station_ids = [], {}, {}, {}
+    survey_yaml_by_label, surveys_skipped_validation = {}, []
     if a.surveys:
         for d in sorted(Path(a.surveys).iterdir()):
             if not d.is_dir() or d.name.startswith("_"):
@@ -3543,6 +3953,10 @@ def discover_work(a, ap, validator):
                 rep = validator.validate(d)
                 if rep.worst() == 2:
                     print(f"SKIP {d.name}: validation FAILED ({rep.counts()['FAIL']} fails)", file=sys.stderr)
+                    # D20: record the skip so build_report.json / verify.py make it LOUD. The package
+                    # directory name is the slug in every validated corpus (the validator FAILs a slug
+                    # that differs from its folder); the yaml is not parsed here because it just FAILed.
+                    surveys_skipped_validation.append(d.name)
                     continue
             # C18 Amendment A4 (single-read coherence): read survey.yaml's bytes ONCE and derive BOTH
             # the parsed metadata and the cache-key digest from them. The 2026-07-07 incident was a
@@ -3620,6 +4034,7 @@ def discover_work(a, ap, validator):
                 station_ids.pop(label, None)
                 continue
             work.append((label, smeta["org"], inputs, kind, smeta, d, slug, sy_digest))
+            survey_yaml_by_label[label] = y   # the raw mapping, for survey-metadata.json (D18 side channel)
     elif a.raw:
         coll = json.loads(Path(a.collections).read_text()) if a.collections else \
             {p.name: [p.name, "unknown"] for p in sorted(Path(a.raw).iterdir()) if p.is_dir()}
@@ -3644,7 +4059,7 @@ def discover_work(a, ap, validator):
                 work.append((label, seed.get(label, {}).get("org", org), edis, "edi", seed.get(label), None, slugify(label), ""))
     else:
         ap.error("pass --surveys or --raw")
-    return work, survey_extent, coord_policy, station_ids
+    return work, survey_extent, coord_policy, station_ids, survey_yaml_by_label, surveys_skipped_validation
 
 
 def main(argv=None):
@@ -3795,7 +4210,8 @@ def main(argv=None):
     # cache, duration_seconds}}. Populated per survey in the loop; assembled + written alongside
     # build_provenance.json below. Public build metadata for the (planned) curator serve-state UI.
     build_report_surveys: dict = {}
-    work, survey_extent, coord_policy, station_ids_by_survey = discover_work(a, ap, validator)
+    (work, survey_extent, coord_policy, station_ids_by_survey,
+     survey_yaml_by_label, surveys_skipped_validation) = discover_work(a, ap, validator)
 
     # === provenance block (traceability: input -> software/params -> output) ===
     PROV = _build_prov(a.extractor)
@@ -3860,6 +4276,12 @@ def main(argv=None):
     # reads (D3: "no per-emitter logic"). Nothing else in station.json depends on the mask, so deferral is
     # value-preserving for exact stations (proven by the default-stability pin).
     _station_product_jobs: list = []
+    # survey-metadata.json (the second public contract): ONE job per survey, keyed by label like
+    # surveys_meta (so the document set equals mtcat's surveys[] by construction), capturing the raw
+    # survey.yaml side channel, the SMETA entry and the survey's serve state (D8 seam). Emitted after
+    # the coordinate mask seam and the deferred station jobs, because the extent follows the post-mask
+    # coordinate state (D7), into out/products/<slug>/ (the served root, D2).
+    _survey_metadata_jobs: dict = {}
     # C1b: ausmt_ids whose survey is NOT served (embargoed/metadata_only/unrecognised level). The C1 gate
     # withholds the BYTES; C1b additionally withholds the DERIVED DISPLAY products (the thinned tf.json
     # curves + the science-derived sci.json fields) at EMISSION, because for an embargoed dataset the
@@ -4068,6 +4490,10 @@ def main(argv=None):
         for _w in _acc["warnings"]:
             print(f"WARNING: survey '{label}': {_w}", file=sys.stderr)
             _survey_warnings.append(_w)   # structured access-gate warnings -> build_report.json
+        # survey-metadata.json: capture this survey's emission job (raw yaml side channel + SMETA + the
+        # SAME serve state the byte gate uses, never re-derived). A --raw entry has no yaml and no job.
+        if label in survey_yaml_by_label:
+            _survey_metadata_jobs[label] = (slug, survey_yaml_by_label[label], smeta_entry, bool(_acc["served"]))
         # C1b: the DISPLAY-product gate keys on the ACCESS state ALONE (not can_serve). A survey may be
         # access=open yet non-redistributably licensed (or built with --no-bundle-edi): that survey's bytes
         # are withheld by the licence/flag gate but its curves SHOULD still plot (open-access preview). Only
@@ -4435,6 +4861,24 @@ def main(argv=None):
     # deployment). The jobs read the same shared records the mask mutated.
     for _job in _station_product_jobs:
         _write_station_products(_job, PROV)
+    # ---- survey-metadata.json (the second public contract): one document per survey, AFTER the mask
+    # seam (the extent follows the aggregated post-mask coordinate state, D7) and after the station jobs,
+    # into out/products/<slug>/ UNCONDITIONALLY (the served root in deployment, independent of
+    # --products, D2). The survey's coordinate state is aggregated over its post-mask station records
+    # with the SAME rule mtcat projects coordinates_state from (_coordinates_state). The documents are
+    # kept in memory for the self-check below (_validate_survey_metadata), which reads the bytes that
+    # ship and refuses to publish a non-conforming document.
+    _sm_policies: dict = {}
+    for (_p, _r) in all_stations:
+        _sm_policies.setdefault(_r["survey"], set()).add(_r.get("coord_policy") or "exact")
+    _survey_metadata_docs: dict = {}
+    for _lbl, (_slug, _y_raw, _smeta, _served) in _survey_metadata_jobs.items():
+        _state = _coordinates_state(_sm_policies.get(_lbl), coord_policy.get(_lbl, ("exact", {}))[0])
+        _sm_doc = survey_metadata_document(_lbl, _y_raw, _smeta, _served, _state, prov=PROV)
+        _sm_dir = out / "products" / _slug
+        _sm_dir.mkdir(parents=True, exist_ok=True)
+        (_sm_dir / "survey-metadata.json").write_text(_jdump(_sm_doc, indent=1), encoding="utf-8")
+        _survey_metadata_docs[_slug] = _sm_doc
     print("QC: "
           f"duplicate-ids {len(qc['duplicate_ausmt_ids'])} | coord-flagged {len(qc['coord_flags'])} | "
           f"coord-conflicts {len(qc['coord_conflicts'])} | near-duplicate-locations {len(qc['near_duplicate_locations'])} | "
@@ -4624,6 +5068,10 @@ def main(argv=None):
         "totals": {"surveys": len(build_report_surveys),
                    "stations_built": _report_stations_built,
                    "warnings": _report_warnings},
+        # D20, the LOUD skip: the packages the survey validator FAILed and the build skipped (see
+        # discover_work). Empty on a clean build; scripts/verify.py FAILs on a non-empty list so
+        # `make rebuild-data` never swaps a build that silently lost a survey from every surface.
+        "surveys_skipped_validation": sorted(surveys_skipped_validation),
     }
     (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
     if _peak_rss is not None:
@@ -4696,6 +5144,20 @@ def main(argv=None):
         (_versioned_dir / "mtcat.schema.json").write_bytes(_schema_bytes)
     except OSError as _e:
         print(f"note: mtcat schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
+    # The survey-metadata schema (the second public contract, D3): the SAME two routes, by the same
+    # rule - data/schemas/ausmt-survey-metadata/<version>/ausmt-survey-metadata.schema.json is the
+    # version-specific immutable route the schema's own $id names, data/ausmt-survey-metadata.schema.json
+    # the latest-convenience copy beside the data. Byte-copies of the in-tree artifact; the version
+    # segment derives from SURVEY_METADATA_SCHEMA_VERSION (the generated mirror), never a literal.
+    _sm_schema = HERE.parent / "schema" / "ausmt-survey-metadata.schema.json"
+    try:
+        _sm_schema_bytes = _sm_schema.read_bytes()
+        (out / "ausmt-survey-metadata.schema.json").write_bytes(_sm_schema_bytes)
+        _sm_versioned_dir = out / "schemas" / "ausmt-survey-metadata" / SURVEY_METADATA_SCHEMA_VERSION
+        _sm_versioned_dir.mkdir(parents=True, exist_ok=True)
+        (_sm_versioned_dir / "ausmt-survey-metadata.schema.json").write_bytes(_sm_schema_bytes)
+    except OSError as _e:
+        print(f"note: survey-metadata schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
 
     # ---- contract self-check: validate the emitted MTCAT + download manifest + build_report against
     # their OWN schemas (schema/*.schema.json), so a shape drift or a config typo (e.g. a non-MAJOR.MINOR
@@ -4707,6 +5169,13 @@ def main(argv=None):
     if _serrs:
         for _e in _serrs:
             print(f"ERROR: product schema self-check failed — {_e}", file=sys.stderr)
+        return 2
+    # The survey-metadata documents: format-checked schema validation, the zero-null / zero-empty
+    # scan and the T25 hard stop (raises naming the survey), beside the product self-check above.
+    _smerrs = _validate_survey_metadata(_survey_metadata_docs)
+    if _smerrs:
+        for _e in _smerrs:
+            print(f"ERROR: survey-metadata self-check failed: {_e}", file=sys.stderr)
         return 2
 
     # ---- optional sitemap.xml (discoverability) ----

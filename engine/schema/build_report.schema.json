@@ -18,6 +18,11 @@
       "additionalProperties": {"$ref": "#/definitions/survey"},
       "description": "keyed by survey slug"
     },
+    "surveys_skipped_validation": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "the LOUD skip (survey-metadata lane, D20): the package directory names the survey validator FAILed and the build SKIPPED (the build still exits 0 and the rest of the corpus builds). Empty on a clean build. scripts/verify.py FAILs on a non-empty list so `make rebuild-data` never swaps in a build that silently lost a survey from every public surface. Optional for reports that predate the gate; verify.py treats absence as unverifiable."
+    },
     "totals": {
       "type": "object",
       "required": ["surveys", "stations_built", "warnings"],
