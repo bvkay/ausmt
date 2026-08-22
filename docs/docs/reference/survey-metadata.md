@@ -232,7 +232,7 @@ Members:
 | Definition | Role-typed parties who contributed to the dataset/release. |
 | Obligation | optional |
 | Occurrence | 0-n |
-| Type | array of `{name, name_type?, role, orcid?, ror?}`, at least one entry when present; `role` is one of `ProjectLeader`, `ProjectMember`, `DataCollector`, `ContactPerson`, `DataCurator`, `Sponsor`, `RightsHolder`, `Distributor`, `HostingInstitution` |
+| Type | array of `{name, name_type?, role?, orcid?, ror?}`, at least one entry when present; `role`, when present, is one of `ProjectLeader`, `ProjectMember`, `DataCollector`, `ContactPerson`, `DataCurator`, `Sponsor`, `RightsHolder`, `Distributor`, `HostingInstitution` |
 | Note | Source: `survey.yaml` `contributors`, verbatim. Unlike the MTCAT export, no `HostingInstitution` row is appended by the engine: this document states only what curation states. |
 
 ## 13 organisations[]
@@ -254,7 +254,7 @@ Members:
 | Obligation | optional |
 | Occurrence | 0-n |
 | Type | array of `{name, ror?, award_number?, award_uri?, award_title?}`, at least one entry when present |
-| Example | `[{"name": "Geological Survey of South Australia", "award_uri": "https://doi.org/10.47486/XN002"}]` |
+| Example | `[{"name": "AuScope", "award_uri": "https://doi.org/10.47486/XN002"}]` |
 | Note | Source: `survey.yaml` `funding` rows: `organisation` becomes `name`, `organisation_ror` becomes `ror`, `grant_id` becomes `award_number`, `grant_title` becomes `award_title`, `funding_doi` becomes `award_uri` as `https://doi.org/<bare DOI>`. |
 
 ## 15 citation
