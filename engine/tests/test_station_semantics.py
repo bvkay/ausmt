@@ -1,0 +1,303 @@
+"""The station semantic layer: what JSON Schema cannot state, enforced in the build and again by verify.
+
+SCOPE:377-380 asks for emitter-side validation beyond the schema, and the lane contract names the set:
+referential integrity of a resource's run references, unique run and resource ids, `time_period.start
+<= end`, channel shape per component family, withheld-branch rejection, DOI syntax, and the 1.x pin
+that keeps `distribution.edi_path` and the served EDI resource row stating one path (SCOPE:71-73).
+
+TWO enforcement points, both pinned here, because either one alone is a hole:
+
+  * the build refuses to publish a violating document (`_validate_station_metadata`, the sibling of
+    `_validate_survey_metadata`) - exit 2, before any consumer ever sees it;
+  * `scripts/verify.py` re-checks the BUILT tree, at BOTH of its wiring sites. `--data-dir` is the
+    post-build gate deploy/Makefile reads before swapping `current`; the self-building path is the
+    one a developer runs. Wiring only the first leaves a self-building run passing a corpus the
+    deployment gate would reject, silently, so the self-building arm is proven armed here.
+
+A withheld record's rules restate the schema's closed-world branch on purpose: jsonschema is an
+optional dependency and both self-checks degrade to a note without it, so leak protection that rested
+on the schema alone would evaporate on a box that has no validator installed.
+"""
+import copy
+import json
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent                                  # engine/
+SURVEYS = HERE / "fixtures"                         # vendored, self-contained (as in test_mtcat.py)
+VERIFY = ROOT / "scripts" / "verify.py"
+sys.path.insert(0, str(ROOT / "extract"))
+
+import build_portal as bp  # noqa: E402
+
+# A full record carrying every member the semantic layer has an opinion about, so each mutation below
+# differs from a PASSING document by exactly the field under test (the ratified suite's Txxb pattern).
+CLEAN = {
+    "schema": "ausmt-station", "version": "0.1", "ausmt_id": "au.example-basin-2024.EB077",
+    "station": "EB077", "survey": "Example Basin MT", "survey_id": "example-basin-2024",
+    "distribution": {"edi_available": True, "license": "CC-BY-4.0",
+                     "edi_path": "edi/example-basin-2024/EB077.edi"},
+    "runs": [
+        {"id": "EB077-r01",
+         "time_period": {"start": "2024-05-01T00:00:00Z", "end": "2024-05-03T00:00:00Z"},
+         "sample_rate_hz": 10,
+         "data_logger": {"manufacturer": "LEMI", "model": "LEMI-423", "serial_number": "1234",
+                         "identifiers": [{"scheme": "DOI", "identifier": "10.82388/u3jf7ztm"}]},
+         "channels": [
+             {"component": "ex", "dipole_length_m": 43.0,
+              "contact_resistance": {"source_value": "1.82 kilo-ohms", "value": 1820.0, "unit": "ohm"}},
+             {"component": "hx", "measurement_azimuth_deg": 0.0,
+              "sensor": {"manufacturer": "LEMI", "model": "LEMI-120", "serial_number": "112"}}]},
+    ],
+    "resources": [
+        {"id": "edi", "kind": "transfer_function", "format": "edi", "provenance_role": "source",
+         "representation_role": "original", "path": "edi/example-basin-2024/EB077.edi",
+         "represents_runs": ["EB077-r01"],
+         "related_collection_identifiers": [{"scheme": "DOI", "identifier": "10.25914/bzd5-n780",
+                                             "identifies": "raw_packed"}]},
+        {"id": "emtfxml", "kind": "transfer_function", "format": "emtfxml", "provenance_role": "derived",
+         "representation_role": "alternate", "path": "xml/example-basin-2024/EB077.xml"},
+    ],
+}
+
+WITHHELD = {
+    "schema": "ausmt-station", "version": "0.1", "ausmt_id": "au.vulcan-2024-25.Vul24-13",
+    "station": "Vul24-13", "survey": "Vulcan 2024-25", "survey_id": "vulcan-2024-25",
+    "country": "Australia", "organisation": "University of Adelaide",
+    "access": {"level": "embargoed", "embargo_until": "2027-02-01", "served": False},
+    "distribution": {"edi_available": False, "license": "CC-BY-4.0", "edi_path": None},
+    "withheld": True, "note": "This survey's access state withholds its derived science products.",
+}
+
+
+def _drop_end(doc):
+    doc["runs"][0]["time_period"].pop("end")
+
+
+def _end_before_start(doc):
+    doc["runs"][0]["time_period"]["end"] = "2024-04-01T00:00:00Z"
+
+
+def _duplicate_run_id(doc):
+    doc["runs"].append(copy.deepcopy(doc["runs"][0]))
+
+
+def _duplicate_resource_id(doc):
+    doc["resources"][1]["id"] = "edi"
+
+
+def _dangling_run_reference(doc):
+    doc["resources"][0]["represents_runs"] = ["EB077-r09"]
+
+
+def _sensor_on_an_electric_channel(doc):
+    doc["runs"][0]["channels"][0]["sensor"] = {"model": "LEMI-120"}
+
+
+def _electrode_circuit_on_a_magnetic_channel(doc):
+    doc["runs"][0]["channels"][1]["dipole_length_m"] = 43.0
+
+
+def _resolver_prefixed_doi(doc):
+    doc["resources"][0]["related_collection_identifiers"][0]["identifier"] = \
+        "https://doi.org/10.25914/bzd5-n780"
+
+
+def _edi_path_disagrees_with_the_resource(doc):
+    doc["distribution"]["edi_path"] = "edi/example-basin-2024/OTHER.edi"
+
+
+def _edi_resource_without_the_legacy_path(doc):
+    doc["distribution"]["edi_path"] = None
+
+
+def _null_inside_a_run(doc):
+    doc["runs"][0]["data_logger"]["serial_number"] = None
+
+
+def _empty_channel_list(doc):
+    doc["runs"][0]["channels"] = []
+
+
+REJECTED = [
+    ("run time_period ends before it starts", _end_before_start),
+    ("duplicate run id", _duplicate_run_id),
+    ("duplicate resource id", _duplicate_resource_id),
+    ("a resource references a run the record does not publish", _dangling_run_reference),
+    ("an electric channel carries a sensor", _sensor_on_an_electric_channel),
+    ("a magnetic channel carries the electrode circuit", _electrode_circuit_on_a_magnetic_channel),
+    ("a DOI carries its resolver prefix", _resolver_prefixed_doi),
+    ("distribution.edi_path disagrees with the served EDI resource", _edi_path_disagrees_with_the_resource),
+    ("a served EDI resource with no legacy edi_path", _edi_resource_without_the_legacy_path),
+    ("a null inside runs[]", _null_inside_a_run),
+    ("an empty container inside runs[]", _empty_channel_list),
+]
+
+WITHHELD_REJECTED = [
+    ("injected runs[]", lambda d: d.update({"runs": [{"id": "001"}]})),
+    ("injected coordinates", lambda d: d.update({"location": {"lat": -31.0, "lon": 140.0}})),
+    ("bare latitude/longitude keys", lambda d: d.update({"latitude": -31.0, "longitude": 140.0})),
+    ("coordinates nested in access", lambda d: d["access"].update({"coords": [-31.0, 140.0]})),
+    ("runs under a renamed key", lambda d: d.update({"acquisitions": [{"id": "001"}]})),
+    ("a live edi_path", lambda d: d["distribution"].update({"edi_path": "edi/x/y.edi"})),
+]
+
+
+def _violations(doc):
+    """The build's own self-check over one document, which is the semantic layer's entry point."""
+    return bp._validate_station_metadata({"products/x/y/station.json": doc})
+
+
+# ---------------------------------------------------------------- the layer itself
+
+def test_a_clean_full_record_and_a_clean_withheld_stub_have_no_violations():
+    assert _violations(copy.deepcopy(CLEAN)) == []
+    assert _violations(copy.deepcopy(WITHHELD)) == []
+    # absence is the open-world statement, so a run with no `end` is clean, not a missing value
+    doc = copy.deepcopy(CLEAN)
+    _drop_end(doc)
+    assert _violations(doc) == []
+
+
+@pytest.mark.parametrize("why,mutate", REJECTED, ids=[w for w, _ in REJECTED])
+def test_the_full_branch_semantic_rejections(why, mutate):
+    doc = copy.deepcopy(CLEAN)
+    mutate(doc)
+    assert _violations(doc), why
+
+
+@pytest.mark.parametrize("why,mutate", WITHHELD_REJECTED, ids=[w for w, _ in WITHHELD_REJECTED])
+def test_the_withheld_branch_rejections_hold_without_a_schema_validator(why, mutate):
+    """The closed world is the leak protection, so it must not rest on an optional dependency."""
+    doc = copy.deepcopy(WITHHELD)
+    mutate(doc)
+    assert _violations(doc), why
+
+
+def test_the_violation_names_the_document_it_came_from():
+    doc = copy.deepcopy(CLEAN)
+    _duplicate_run_id(doc)
+    assert all(v.startswith("products/x/y/station.json: ") for v in _violations(doc))
+
+
+# ---------------------------------------------------------------- the build site
+
+def _build(tmp_path, surveys=SURVEYS, products=True):
+    out = tmp_path / "data"
+    argv = ["--surveys", str(surveys), "--out", str(out), "--bundle-edi", "--no-validate"]
+    if products:
+        argv += ["--products", str(out / "products")]
+    return out, argv
+
+
+def test_the_build_refuses_to_publish_a_violating_document(tmp_path, monkeypatch):
+    """The gate is ARMED in the build, not merely importable: a document the semantic layer rejects
+    exits 2 instead of shipping. The emitter is correct, so the violation is injected at the render
+    seam - which is exactly the class of regression this gate exists to catch."""
+    pytest.importorskip("mt_metadata")
+    real = bp.station_document
+
+    def _duplicating(*a, **kw):
+        doc = real(*a, **kw)
+        if doc.get("resources"):
+            doc["resources"].append(dict(doc["resources"][0]))
+        return doc
+
+    monkeypatch.setattr(bp, "station_document", _duplicating)
+    out, argv = _build(tmp_path)
+    assert bp.main(argv) == 2, "a duplicated resource id must fail the build"
+
+
+def test_the_clean_build_publishes_and_the_gate_stays_quiet(tmp_path, capsys):
+    pytest.importorskip("mt_metadata")
+    out, argv = _build(tmp_path)
+    assert bp.main(argv) == 0
+    err = capsys.readouterr().err
+    assert "station self-check failed" not in err, err
+    assert list((out / "products").rglob("station.json")), "the build published nothing to check"
+
+
+# ---------------------------------------------------------------- the verify.py sites
+
+def _distinct_slug_corpus(root: Path) -> Path:
+    """The two vendored packages with DISTINCT slugs. fixtures/filled-survey declares example-survey's
+    slug, which collides in the download manifest and FAILs the real validator, so a verify run over
+    the whole fixtures directory FAILs for reasons that have nothing to do with the station gate."""
+    surveys = root / "surveys"
+    surveys.mkdir()
+    for pkg in ("example-survey", "pid-survey"):
+        shutil.copytree(SURVEYS / pkg, surveys / pkg)
+    return surveys
+
+
+@pytest.fixture(scope="module")
+def built(tmp_path_factory):
+    pytest.importorskip("mt_metadata")
+    root = tmp_path_factory.mktemp("station-semantics")
+    out = root / "data"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys",
+                        str(_distinct_slug_corpus(root)), "--out", str(out),
+                        "--products", str(out / "products"), "--bundle-edi", "--no-validate"],
+                       cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return out
+
+
+def _verify_data_dir(data_dir: Path):
+    return subprocess.run([sys.executable, str(VERIFY), "--data-dir", str(data_dir)],
+                          cwd=str(ROOT), capture_output=True, text=True)
+
+
+def test_verify_data_dir_passes_a_clean_build_and_says_so(built):
+    v = _verify_data_dir(built)
+    assert v.returncode == 0, v.stdout + v.stderr
+    assert re.search(r"station-metadata: PASS", v.stdout), v.stdout
+
+
+def test_verify_data_dir_fails_a_tampered_station_document(built, tmp_path):
+    """The --data-dir gate is what deploy/Makefile reads before swapping `current`, so a corpus
+    carrying a duplicated run id must leave `current` untouched."""
+    tree = tmp_path / "tampered"
+    shutil.copytree(built, tree)
+    victim = sorted((tree / "products").rglob("station.json"))[0]
+    doc = json.loads(victim.read_text(encoding="utf-8"))
+    doc.setdefault("runs", [{"id": "x-r01"}])
+    doc["runs"].append(dict(doc["runs"][0]))
+    victim.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+    v = _verify_data_dir(tree)
+    assert v.returncode != 0, v.stdout
+    assert "station-metadata: FAIL" in v.stdout and "VERIFY: FAIL" in v.stdout, v.stdout
+
+
+def test_verify_data_dir_fails_a_withheld_document_carrying_a_coordinate(built, tmp_path):
+    """The leak case, over a BUILT document: a withheld stub that gains a position is rejected by the
+    gate itself, with no schema validator required for the verdict."""
+    tree = tmp_path / "leaky"
+    shutil.copytree(built, tree)
+    victim = sorted((tree / "products").rglob("station.json"))[0]
+    victim.write_text(json.dumps({**WITHHELD, "location": {"lat": -31.0, "lon": 140.0}}, indent=1),
+                      encoding="utf-8")
+    v = _verify_data_dir(tree)
+    assert v.returncode != 0, v.stdout
+    assert "station-metadata: FAIL" in v.stdout, v.stdout
+
+
+def test_verify_self_building_runs_the_station_gate(tmp_path):
+    """THE SECOND WIRING SITE. `_check_survey_metadata` is called twice, and so is this one: a
+    verify.py run that builds its own corpus must run the station gate too, or a developer's green
+    run means less than the deployment gate's.
+
+    The self-building path passes no --products, so this is also where A4a earns its keep: without the
+    unconditional served-root write there would be no station.json for the gate to read."""
+    pytest.importorskip("mt_metadata")
+    v = subprocess.run([sys.executable, str(VERIFY), "--skip-tests", "--surveys",
+                        str(_distinct_slug_corpus(tmp_path))],
+                       cwd=str(ROOT), capture_output=True, text=True)
+    assert "station-metadata: PASS" in v.stdout, v.stdout + v.stderr
+    assert v.returncode == 0, v.stdout + v.stderr

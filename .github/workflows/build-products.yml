@@ -130,12 +130,18 @@ jobs:
       #   tests/test_station_write_path.py    D7: station.json at the served root, with or without --products
       #   tests/test_station_version_parity.py  the station version single-source pin
       #   tests/test_station_schema_v01.py    the 0.1 schema that constrains the promoted station.json
+      #   tests/test_presence_rule.py         no mt_metadata default is ever emitted as a source assertion
+      #   tests/test_run_facts.py             the six >INFO dialect extractors for acquisition facts
+      #   tests/test_station_runs.py          runs[] emission: the D2 gate, the D9 channel rule
+      #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
+      #   tests/test_station_semantics.py     the semantic layer beyond JSON Schema, in the build and
+      #                                       at both of verify.py's wiring sites
       #   tests/test_empty_build.py           the empty-input default-products contract behind the
       #                                       build step's "fails on empty output" guarantee
       #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
       #   tests/test_golden_edi.py            golden pins on the sole engine's product outputs
       #   tests/test_mini_yaml_parity.py      PyYAML-vs-_mini_yaml survey.yaml projection parity
-      # (21 files at 2026-08-23; the counts move with the suite.)
+      # (26 files at 2026-08-23; the counts move with the suite.)
       #
       # RESIDUAL RISK, STATED HONESTLY: a HOST-ENV-ONLY failure in an out-of-subset test now
       # surfaces on the push-to-main full run, not on the PR. Accepted because the in-image full
@@ -188,6 +194,7 @@ jobs:
             tests/test_run_facts.py \
             tests/test_station_runs.py \
             tests/test_station_resources.py \
+            tests/test_station_semantics.py \
             tests/test_empty_build.py \
             tests/test_proc_note_email_scrub.py \
             tests/test_golden_edi.py \

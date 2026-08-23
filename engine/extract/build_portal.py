@@ -48,6 +48,7 @@ import _stationids as stnids        # noqa: E402  (survey.yaml station-id overri
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
 import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
 import _runids as runids            # noqa: E402  (the persistent per-survey run-id store)
+import _stationcheck as stcheck     # noqa: E402  (station semantics beyond JSON Schema; shared with scripts/verify.py)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
 
@@ -2878,6 +2879,9 @@ def _write_station_products(job, prov, served_root, products_dir,
     emitted after its station loop, so the per-survey archive rows do not exist yet when the job is
     queued.
 
+    Returns (served path, document) so main() can run the station self-check over the bytes it just
+    published without reading a served file back (SCOPE:289-290).
+
     D7: station.json is published under `served_root` (out/products) UNCONDITIONALLY, because it is a
     public contract and a build run without --products would otherwise ship a data tree with a
     documented contract missing from it. It is ALSO published under `products_dir` where that is a
@@ -2900,11 +2904,13 @@ def _write_station_products(job, prov, served_root, products_dir,
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
         (d / "station.json").write_text(payload, encoding="utf-8")
+    written = (f"products/{slug}/{r['id']}/station.json", doc)
     if not served or curated_dir is None:
-        return   # no dimensionality.json for a non-served survey (interpretation product = withheld science)
+        return written   # no dimensionality.json for a non-served survey (interpretation product = withheld science)
     curated_dir.mkdir(parents=True, exist_ok=True)
     (curated_dir / "dimensionality.json").write_text(_jdump(_dimensionality_document(srow), indent=1),
                                                      encoding="utf-8")
+    return written
 
 
 def qc_pass(all_stations, survey_extent):
@@ -4166,6 +4172,41 @@ def _validate_survey_metadata(docs_by_slug: dict) -> list:
     return errs
 
 
+def _validate_station_metadata(docs_by_path: dict) -> list:
+    """The station.json self-check, the emitter's own last line (beside _validate_survey_metadata):
+    every document {served path: doc} is validated against schema/ausmt-station.schema.json WITH
+    FORMAT CHECKING (the run time_period date-times; jsonschema optional => noted, not fatal, as in
+    the other self-checks) and against the SEMANTIC layer JSON Schema cannot state (_stationcheck:
+    run reference integrity, unique run and resource ids, time_period ordering, channel shape per
+    component family, withheld-branch closure, DOI syntax, the 1.x distribution.edi_path equivalence
+    pin). Returns the list of human-readable violations (empty = OK); validation reads the bytes that
+    ship (_jdump round-trip). scripts/verify.py runs the same layer over the BUILT tree, so a corpus
+    reaching a deployment gate is checked twice, from the emitter's state and from the served one."""
+    errs = []
+    validator = None
+    try:
+        import jsonschema  # noqa: PLC0415
+    except ImportError:
+        print("note: jsonschema not installed - station schema self-check skipped", file=sys.stderr)
+    else:
+        try:
+            schema = json.loads((HERE.parent / "schema" / "ausmt-station.schema.json").read_text())
+            validator = jsonschema.Draft7Validator(schema, format_checker=jsonschema.FormatChecker())
+        except Exception as e:  # noqa: BLE001  (missing/unreadable schema must not crash the build)
+            print(f"note: station schema self-check skipped ({type(e).__name__}: {e})", file=sys.stderr)
+    for name, doc in sorted(docs_by_path.items()):
+        try:
+            served = json.loads(_jdump(doc))
+        except (TypeError, ValueError) as e:
+            errs.append(f"{name}: cannot be serialised for validation ({type(e).__name__}: {e})")
+            continue
+        errs.extend(f"{name}: {v}" for v in stcheck.violations(served))
+        if validator is not None:
+            errs.extend(f"{name}: {e.message} (at /{'/'.join(str(x) for x in e.absolute_path)})"
+                        for e in validator.iter_errors(served))
+    return errs
+
+
 def discover_work(a, ap, validator):
     """One work entry per survey, from --surveys packages or --raw EDI folders. Returns
     (work, survey_extent): work = [(label, org, inputs, kind, meta-or-None, pkgdir-or-None, slug,
@@ -5184,9 +5225,13 @@ def main(argv=None):
     # station.json `location` carries the post-mask coordinate (D3: products/ is a served surface in
     # deployment). The jobs read the same shared records the mask mutated. D7: station.json lands under
     # out/products unconditionally and under --products as well where that is a different directory.
+    # The documents are kept for the self-check below (_validate_station_metadata), which reads the
+    # bytes that ship rather than the served file (SCOPE:289-290: no read-back of the public file).
+    _station_docs: dict = {}
     for _job in _station_product_jobs:
-        _write_station_products(_job, PROV, out / "products", prod,
-                                _served_formats, _bundle_formats, _collection_ids)
+        _st_name, _st_doc = _write_station_products(_job, PROV, out / "products", prod,
+                                                    _served_formats, _bundle_formats, _collection_ids)
+        _station_docs[_st_name] = _st_doc
     # ---- survey-metadata.json (the second public contract): one document per survey, AFTER the mask
     # seam (the extent follows the aggregated post-mask coordinate state, D7) and after the station jobs,
     # into out/products/<slug>/ UNCONDITIONALLY (the served root in deployment, independent of
@@ -5516,6 +5561,14 @@ def main(argv=None):
     if _smerrs:
         for _e in _smerrs:
             print(f"ERROR: survey-metadata self-check failed: {_e}", file=sys.stderr)
+        return 2
+    # The station documents: the same posture on the third public contract, plus the semantic layer
+    # JSON Schema cannot state (SCOPE:377-380). scripts/verify.py re-runs that layer over the built
+    # tree, so a non-zero exit there leaves a deployment's `current` untouched.
+    _sterrs = _validate_station_metadata(_station_docs)
+    if _sterrs:
+        for _e in _sterrs:
+            print(f"ERROR: station self-check failed: {_e}", file=sys.stderr)
         return 2
 
     # ---- optional sitemap.xml (discoverability) ----

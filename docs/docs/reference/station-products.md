@@ -52,9 +52,17 @@ carries the survey's licence and credit inside the file (`Experiment/Surveys/<sl
 | Version | 0.1 (draft) for `station.json`; `dimensionality.json` declares none and is additive and key-based |
 | Status | `station.json` is a public contract; `dimensionality.json` is served alongside it and is not a contract |
 | Access | the product tree is a served surface, so it rides the same access gate as the download files |
+| Validated | the build validates every emitted `station.json` against the shipped schema with format checking on, and against the semantic rules JSON Schema cannot state, and refuses to publish a document that fails; `scripts/verify.py` re-runs both over the built tree and checks that the set of published `ausmt_id` values equals the set of stations `mtcat.json` catalogues |
 
 `dimensionality.json` has no JSON Schema artifact. Where this page and the emitter disagree, the
 emitter is right.
+
+The semantic rules held above the schema, which a consumer may rely on without re-deriving them: run
+ids are unique within a record and so are resource ids; a resource that names a run names one this
+record publishes; `time_period` never ends before it starts; an electric channel carries the electrode
+circuit and never a `sensor`, a magnetic channel the reverse; a withheld record carries the stub
+members of section 1.18 and nothing else; every DOI is bare canonical; and `distribution.edi_path` and
+the served EDI resource state one path or neither states any.
 
 ## Gating
 

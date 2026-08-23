@@ -3,9 +3,11 @@
 
   1. the test suite (pytest)
   2. a full build with mt_metadata (the sole extractor since the regex retirement)
-  3. mtcat.json schema validation for the build, the manifest and build_report checks, and the
+  3. mtcat.json schema validation for the build, the manifest and build_report checks, the
      survey-metadata gate (every products/<slug>/survey-metadata.json validates with format checking,
-     the slug set equals mtcat's surveys[], and the build skipped no survey: D20)
+     the slug set equals mtcat's surveys[], and the build skipped no survey: D20) and the station gate
+     (every products/<slug>/<station>/station.json validates, holds the semantic layer beyond JSON
+     Schema, and its ausmt_id set equals mtcat's stations[])
 
 mt_metadata is REQUIRED to build, so this fails loudly if it is not installed.
 
@@ -39,6 +41,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "extract")]   # make ausmt_science.* and extract/_* importable
+
+import _stationcheck as stcheck  # noqa: E402  (stdlib-only; the station gate must not need the ingest stack)
 
 
 def _build(bp, surveys, extractor):
@@ -375,6 +379,71 @@ def _check_survey_metadata(base_dir: Path, mtc, rep, jsonschema, sm_schema):
     return ok, lines
 
 
+def _check_station_metadata(base_dir: Path, mtc, jsonschema, st_schema):
+    """The station gate (the third public contract), shared by --data-dir mode and the self-building
+    path. Two independent checks, either of which FAILs the run:
+
+      1. every products/<slug>/<station>/station.json validates against
+         schema/ausmt-station.schema.json WITH FORMAT CHECKING (the run time_period date-times),
+         states the survey_id and station its directory names, and holds the SEMANTIC layer JSON
+         Schema cannot state (extract/_stationcheck.py, the same one the build ran over the same
+         documents: run reference integrity, unique run and resource ids, time_period ordering,
+         channel shape per component family, withheld-branch closure, DOI syntax, the 1.x
+         distribution.edi_path equivalence pin);
+      2. the set of published ausmt_ids equals mtcat.json's stations[].station_id exactly, with no id
+         published twice (T33, the station half of the identity chain the sibling check pins for
+         surveys).
+
+    Returns (ok, lines). Reads the files on disk, never a build's in-memory state, which is what makes
+    it an independent second opinion on the bytes the build just wrote."""
+    ok = True
+    lines = []
+    products = base_dir / "products"
+    docs = sorted(products.glob("*/*/station.json")) if products.is_dir() else []
+    validator = None
+    if jsonschema and st_schema:
+        validator = jsonschema.Draft7Validator(st_schema, format_checker=jsonschema.FormatChecker())
+    bad, ids, dups = [], set(), []
+    for p in docs:
+        station, slug = p.parent.name, p.parent.parent.name
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            bad.append(f"{slug}/{station}: unreadable ({type(e).__name__}: {e})")
+            continue
+        if not isinstance(doc, dict):
+            bad.append(f"{slug}/{station}: not a JSON object")
+            continue
+        if doc.get("survey_id") != slug or doc.get("station") != station:
+            bad.append(f"{slug}/{station}: states survey_id={doc.get('survey_id')!r} "
+                       f"station={doc.get('station')!r}, which its directory does not name")
+        aid = doc.get("ausmt_id")
+        if aid in ids:
+            dups.append(aid)
+        ids.add(aid)
+        bad.extend(f"{slug}/{station}: {v}" for v in stcheck.violations(doc)[:3])
+        if validator is not None:
+            bad.extend(f"{slug}/{station}: {e.message[:80]} (at /{'/'.join(str(x) for x in e.absolute_path)})"
+                       for e in list(validator.iter_errors(doc))[:3])
+    if bad:
+        ok = False
+        lines.append(f"   station-metadata: FAIL - {len(bad)} document violation(s): {bad[:5]}")
+    if dups:
+        ok = False
+        lines.append(f"   station-metadata: FAIL - ausmt_id published more than once: {sorted(set(dups))[:5]}")
+    catalogued = {s.get("station_id") for s in (mtc or {}).get("stations", []) if isinstance(s, dict)}
+    if ids != catalogued:
+        ok = False
+        lines.append(f"   station-metadata: FAIL - published ausmt_id set != mtcat stations[].station_id "
+                     f"(records without a catalogued station: {sorted(x for x in ids - catalogued if x)[:5]}; "
+                     f"catalogued stations without a record: {sorted(x for x in catalogued - ids if x)[:5]})")
+    if ok:
+        lines.append(f"   station-metadata: PASS - {len(docs)} document(s) validated "
+                     f"({'format checking on' if validator is not None else 'schema unchecked'}) and hold "
+                     f"the semantic layer, ausmt_id set == mtcat stations[]")
+    return ok, lines
+
+
 def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool:
     """The --data-dir check: mtcat.json schema-conformance + manifest.json integrity/schema, against an
     EXISTING build dir's own files — the same two checks the self-building path runs post-build (via
@@ -398,6 +467,7 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool
     man_schema = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
     rep_schema = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
     sm_schema = json.loads((ROOT / "schema" / "ausmt-survey-metadata.schema.json").read_text(encoding="utf-8"))
+    st_schema = json.loads((ROOT / "schema" / "ausmt-station.schema.json").read_text(encoding="utf-8"))
 
     cat, mtc, man, rep = _load_existing(data_dir)
     print(f"== data-dir check ({data_dir}) ==")
@@ -413,6 +483,10 @@ def _validate_data_dir(data_dir: Path, surveys_root: Path | None = None) -> bool
     for ln in sm_lines:
         print(ln)
     ok &= sm_ok
+    st_ok, st_lines = _check_station_metadata(data_dir, mtc, jsonschema, st_schema)
+    for ln in st_lines:
+        print(ln)
+    ok &= st_ok
 
     # C18b consistency gate — armed only with --surveys.
     if surveys_root is not None:
@@ -482,6 +556,7 @@ def main(argv=None):
     man_schema = json.loads((ROOT / "schema" / "manifest.schema.json").read_text(encoding="utf-8"))
     rep_schema = json.loads((ROOT / "schema" / "build_report.schema.json").read_text(encoding="utf-8"))
     sm_schema = json.loads((ROOT / "schema" / "ausmt-survey-metadata.schema.json").read_text(encoding="utf-8"))
+    st_schema = json.loads((ROOT / "schema" / "ausmt-station.schema.json").read_text(encoding="utf-8"))
 
     print("== build (mt_metadata) ==")
     rc, cat, mtc, man, rep, out = _build(bp, self_surveys, "mt_metadata")
@@ -501,6 +576,10 @@ def main(argv=None):
     for ln in sm_lines:
         print(ln)
     ok &= sm_ok
+    st_ok, st_lines = _check_station_metadata(out, mtc, jsonschema, st_schema)
+    for ln in st_lines:
+        print(ln)
+    ok &= st_ok
 
     print("VERIFY:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
