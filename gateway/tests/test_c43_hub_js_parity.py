@@ -694,9 +694,23 @@ def test_stations_list_merged_latlon_and_portal_link_source():
 # Gate fix round (2026-07-11 browser pass): F1/F2 terse lines + F3 numeric range ordering
 # ==================================================================================================
 def _station_docs(warn_report) -> list:
-    """Every station.json document the REAL engine wrote for the fixture survey."""
-    return [json.loads((sdir / "station.json").read_text(encoding="utf-8"))
-            for sdir in sorted((warn_report["products"] / SLUG).iterdir())]
+    """Every station.json document the REAL engine wrote for the fixture survey, read from the SERVED
+    root rather than from --products. station.json is now published under --out unconditionally (D7),
+    and that tree is the one deployment serves and the portal fetches, so a pin judged on the curator
+    copy would be judging a document nothing renders. The two are the same bytes, and this asserts it
+    rather than assuming it. The is_dir guard is needed at the served root: survey-metadata.json is a
+    FILE beside the station directories."""
+    served = warn_report["out"] / "products" / SLUG
+    curated = warn_report["products"] / SLUG
+    docs = []
+    for sdir in sorted(served.iterdir()):
+        if not sdir.is_dir():
+            continue
+        payload = (sdir / "station.json").read_bytes()
+        assert payload == (curated / sdir.name / "station.json").read_bytes(), (
+            f"{sdir.name}: the served copy and the curator copy must be the same document")
+        docs.append(json.loads(payload.decode("utf-8")))
+    return docs
 
 
 def test_terse_conditioning_and_coordqc_lines_from_real_station_json(warn_report, tmp_path):

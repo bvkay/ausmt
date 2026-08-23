@@ -139,6 +139,18 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # checks run against the committed fixtures, two real builds of the vendored fixture surveys and
     # the 3-survey D8 corpus on every run; this arm extends the identical assertions to corpus scale.
     "AUSMT_SURVEY_METADATA_DATA does not name a built corpus data dir",
+    # test_station_invariants.py's corpus arm: the identity-chain and schema scans over every
+    # products/<slug>/<station>/station.json of a REAL full-corpus build (AUSMT_STATION_DATA). Same
+    # dev-box-only class as the entries above; the invariants are NOT unguarded in CI - the identical
+    # checks run over two real builds of the vendored fixture surveys and over the access-state corpus
+    # on every run, and the chain checker is proven against planted violations; this arm extends them
+    # to corpus scale.
+    "AUSMT_STATION_DATA does not name a built corpus data dir",
+    # test_station_invariants.py's two CI-guard pins read .github/workflows/build-products.yml, which
+    # the engine image does not ship (engine.Dockerfile COPYs contract/ + engine/ and one portal file).
+    # Same designed-topology class as the portal/docs entries above; INERT on every checkout lane,
+    # where the workflow is always present and both pins assert.
+    "engine image build: workflow tree not shipped",
 ]
 
 # `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token

@@ -136,12 +136,16 @@ jobs:
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
       #   tests/test_station_semantics.py     the semantic layer beyond JSON Schema, in the build and
       #                                       at both of verify.py's wiring sites
+      #   tests/test_station_emission.py      station.json emission semantics over BUILT output: the
+      #                                       key sets, the dimensionality fold, the leak rejections
+      #   tests/test_station_invariants.py    the station invariant suite (built output: identity
+      #                                       chain, schema routes, the drawer and CI-guard pins)
       #   tests/test_empty_build.py           the empty-input default-products contract behind the
       #                                       build step's "fails on empty output" guarantee
       #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
       #   tests/test_golden_edi.py            golden pins on the sole engine's product outputs
       #   tests/test_mini_yaml_parity.py      PyYAML-vs-_mini_yaml survey.yaml projection parity
-      # (26 files at 2026-08-23; the counts move with the suite.)
+      # (28 files at 2026-08-23; the counts move with the suite.)
       #
       # RESIDUAL RISK, STATED HONESTLY: a HOST-ENV-ONLY failure in an out-of-subset test now
       # surfaces on the push-to-main full run, not on the PR. Accepted because the in-image full
@@ -195,6 +199,8 @@ jobs:
             tests/test_station_runs.py \
             tests/test_station_resources.py \
             tests/test_station_semantics.py \
+            tests/test_station_emission.py \
+            tests/test_station_invariants.py \
             tests/test_empty_build.py \
             tests/test_proc_note_email_scrub.py \
             tests/test_golden_edi.py \
@@ -253,20 +259,26 @@ jobs:
 
       # CI guard (C3, PII scrub): derived JSON/XML must never carry an email address (station.json
       # processing.note is the known vector -- proc_note() redacts it, this is the belt-and-braces
-      # net for anything else that scrapes free text). Excludes site-data/edi/** -- those are the
-      # served ORIGINAL .edi bytes, the custodian's published record, never mutated (D1) and out of
-      # scope here. Fails loudly and prints offenders rather than silently passing a dirty build.
+      # net for anything else that scrapes free text). Excludes edi/** -- those are the served
+      # ORIGINAL .edi bytes, the custodian's published record, never mutated (D1) and out of scope
+      # here. Fails loudly and prints offenders rather than silently passing a dirty build.
+      #
+      # BOTH trees the build step above writes are scanned. The guard greped --out alone, which left
+      # the whole --products tree (every station.json and dimensionality.json written there) outside
+      # a check whose whole subject is per-station free text. Pinned by
+      # engine/tests/test_station_invariants.py, which reads the tree names off the build step's own
+      # arguments so the two cannot drift apart again.
       - name: PII guard — no email addresses in derived products
         run: |
           set -e
-          HITS=$(grep -RlE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' site-data \
+          HITS=$(grep -RlE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' site-data products \
                  --exclude-dir=edi || true)
           if [ -n "$HITS" ]; then
-            echo "ERROR: email address(es) found in derived site-data (must be redacted before publish):"
+            echo "ERROR: email address(es) found in derived products (must be redacted before publish):"
             echo "$HITS"
             exit 1
           fi
-          echo "OK: no email addresses in derived site-data (excluding served original edi/**)"
+          echo "OK: no email addresses in either derived tree (excluding served original edi/**)"
 
       # MTH5 ingestion round-trip evidence (EDI-mt_metadata vs MTH5-mth5), uploaded with the products.
       - name: MTH5 ingestion round-trip (evidence)
