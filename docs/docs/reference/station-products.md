@@ -264,9 +264,9 @@ every one of its resource rows; the example shows them on one row to stay readab
 | `remote_reference` | boolean | whether the source file states remote reference processing |
 | `tipper_available` | boolean | whether a tipper is present |
 | `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
-| `classification` | string or null | the dimensionality screening class: `1-D`, `2-D`, `3-D` or `indeterminate` |
-| `skew_beta_median_deg` | number or null | median absolute phase-tensor skew across usable periods, in degrees |
-| `pct_periods_3d` | integer or null | percentage of usable periods whose absolute skew exceeds the three-dimensional threshold |
+| `classification` | string | the dimensionality screening class: `1-D`, `2-D`, `3-D` or `indeterminate` |
+| `skew_beta_median_deg` | number | median absolute phase-tensor skew across usable periods, in degrees |
+| `pct_periods_3d` | integer | percentage of usable periods whose absolute skew exceeds the three-dimensional threshold |
 | `method` | string | the method the classification came from, `phase-tensor (Caldwell 2004)` |
 | `note` | string | the caveat that qualifies the classification: a screening diagnostic, not an interpretation product |
 
@@ -274,6 +274,9 @@ The last five members are the dimensionality call, and the caveat is one of them
 classification is a screening result for triage: it says which stations are worth a closer look, never
 what the subsurface is. A copy of it that travelled without that sentence is the reason it was kept out
 of this block until now; the sentence travels with it here.
+
+A member the call leaves undetermined is **omitted** rather than published as null, so an
+`indeterminate` station carries the class and the caveat and states no skew statistic at all.
 
 The same five values are also served as `dimensionality.json` beside this document (section 2), from
 the same computation. That document is not going away in the 0.x and 1.x series, because removing a

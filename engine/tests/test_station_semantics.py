@@ -44,6 +44,19 @@ CLEAN = {
     "station": "EB077", "survey": "Example Basin MT", "survey_id": "example-basin-2024",
     "distribution": {"edi_available": True, "license": "CC-BY-4.0",
                      "edi_path": "edi/example-basin-2024/EB077.edi"},
+    # The dimensionality fold (D1) and two of the eight frozen legitimate nulls, so the null scan's
+    # SCOPE is provable in both directions: the fold members are covered, the frozen keys are not.
+    "diagnostics": {"median_relative_error": 0.03, "remote_reference": True, "tipper_available": True,
+                    "completeness_smoothness_diagnostic": {
+                        "value": 0.91, "basis": "e",
+                        "note": "not a quality or geological-value judgement"},
+                    "classification": "2-D", "skew_beta_median_deg": 0.7, "pct_periods_3d": 0,
+                    "method": "phase-tensor (Caldwell 2004)",
+                    "note": "screening diagnostic, not an interpretation product"},
+    "processing": {"software": None, "algorithm": None, "remote_reference": True,
+                   "remote_site": None, "file_written_by": {"name": None, "version": None},
+                   "note": None},
+    "coordinate_qc": None,
     "runs": [
         {"id": "EB077-r01",
          "time_period": {"start": "2024-05-01T00:00:00Z", "end": "2024-05-03T00:00:00Z"},
@@ -126,6 +139,12 @@ def _empty_channel_list(doc):
     doc["runs"][0]["channels"] = []
 
 
+def _null_fold_member(doc):
+    """R2: an `indeterminate` classification has no skew statistic, and the sidecar states that as
+    null. The fold OMITS the member; copying the null across is what this rejects."""
+    doc["diagnostics"]["skew_beta_median_deg"] = None
+
+
 def _archive_row(rid, fmt="zip"):
     return {"id": rid, "kind": "archive", "format": fmt,
             "path": f"bundles/example-basin-2024-{rid}.zip"}
@@ -153,6 +172,7 @@ REJECTED = [
     ("a served EDI resource with no legacy edi_path", _edi_resource_without_the_legacy_path),
     ("a null inside runs[]", _null_inside_a_run),
     ("an empty container inside runs[]", _empty_channel_list),
+    ("a null fold member in diagnostics", _null_fold_member),
     ("an archive row this record put no bytes into", _archive_row_the_record_put_no_bytes_into),
     ("an archive row with no membership rule", _archive_row_with_no_membership_rule),
 ]
@@ -186,6 +206,19 @@ def test_a_clean_full_record_and_a_clean_withheld_stub_have_no_violations():
     doc = copy.deepcopy(CLEAN)
     doc["resources"].append(_archive_row("edi-zip"))
     assert _violations(doc) == []
+
+
+def test_the_null_scan_reaches_the_fold_and_stops_at_the_frozen_keys():
+    """Section 2 scopes the zero-null rule to what this lane ADDS, and the fold is one of those
+    additions. The frozen keys beside it carry eight legitimate nulls, so a scan widened to the whole
+    document would reject every record the corpus publishes. Both directions in one test, because
+    each alone passes for the wrong reason."""
+    doc = copy.deepcopy(CLEAN)
+    assert doc["coordinate_qc"] is None and doc["processing"]["remote_site"] is None
+    assert stcheck.violations(doc) == [], "a frozen legitimate null is not this rule's business"
+    _null_fold_member(doc)
+    assert [v for v in stcheck.violations(doc) if "skew_beta_median_deg" in v], (
+        "the fold member is inside the scan; a null there is a copied sidecar value")
 
 
 def test_the_marker_routes_on_its_presence_not_on_its_truth():

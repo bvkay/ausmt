@@ -28,6 +28,7 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
+sys.path.insert(0, str(ROOT / "extract"))
 SURVEYS = ROOT / "data"          # data/sample-survey: CC-BY-4.0, access.level=open => products emitted
 
 # The members station.json's `diagnostics` and dimensionality.json must state identically (D1). The
@@ -67,6 +68,24 @@ def test_skew_beta_key_is_median_not_mean(tmp_path):
         doc = json.loads(dj.read_text(encoding="utf-8"))
         assert "skew_beta_median_deg" in doc, f"{dj}: honest median key missing"
         assert "skew_beta_mean_deg" not in doc, f"{dj}: stale 'mean' key must not be emitted"
+
+
+def test_the_fold_omits_a_member_the_call_leaves_undetermined():
+    """R2, over the emitter directly because no fixture corpus carries an indeterminate station: when
+    most periods are unusable the classification is `indeterminate` and the skew statistic and the
+    3-D percentage are UNDETERMINED. The sidecar states them as null and keeps doing so (D14); the
+    fold OMITS them, because absence is the open-world statement and a null is a value. Four corpus
+    records take this branch."""
+    import build_portal as bp  # noqa: PLC0415
+    srow = [None] * len(bp._SC)
+    srow[bp._SC["dim"]] = "indeterminate"
+    sidecar = bp._dimensionality_document(srow)
+    assert sidecar["skew_beta_median_deg"] is None and sidecar["pct_periods_3d"] is None
+    folded = bp._folded_dimensionality(srow)
+    assert "skew_beta_median_deg" not in folded and "pct_periods_3d" not in folded
+    assert folded["classification"] == "indeterminate"
+    assert folded["method"] == "phase-tensor (Caldwell 2004)"
+    assert folded["note"] == "screening diagnostic, not an interpretation product"
 
 
 def test_the_fold_and_the_sidecar_state_the_same_call(tmp_path):

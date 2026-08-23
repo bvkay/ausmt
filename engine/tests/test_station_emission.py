@@ -184,7 +184,10 @@ def test_every_record_opens_with_the_markers_and_survey_id_is_the_slug(built_acc
 def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
     """D1: `diagnostics` gains the call, the method string and the caveat, from the SAME computation the
     sidecar reads. The sidecar keeps being written byte-unchanged through 1.x (D14), so the two must
-    never be able to disagree."""
+    never be able to disagree.
+
+    R2: what the fold carries is bound to the sidecar; what the sidecar states as null is ABSENT
+    here, never copied across."""
     full, _ = _split(built_open)
     for key, doc in full.items():
         slug, station = key.split("/")
@@ -192,11 +195,16 @@ def test_the_fold_and_the_sidecar_state_one_dimensionality_call(built_open):
                              .read_text(encoding="utf-8"))
         diagnostics = doc["diagnostics"]
         for member in FOLDED_DIMENSIONALITY:
+            if sidecar[member] is None:
+                assert member not in diagnostics, f"{key}: {member} is undetermined and must be omitted"
+                continue
             assert member in diagnostics, f"{key}: the fold is missing {member}"
             assert diagnostics[member] == sidecar[member], f"{key}: {member} differs between the two surfaces"
         assert "screening_diagnostic" not in diagnostics, (
             "the marker stays sidecar-only; the caveat text carries that meaning where the numbers sit")
         assert sidecar["screening_diagnostic"] is True
+        assert not [m for m in FOLDED_DIMENSIONALITY if diagnostics.get(m, "") is None], (
+            f"{key}: the fold states absence by omission, so no member of it is ever null")
 
 
 def test_a_withheld_record_gains_no_diagnostics_and_no_sidecar(built_access):

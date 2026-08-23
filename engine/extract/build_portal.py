@@ -2552,8 +2552,13 @@ def _station_identity(r, label, slug) -> dict:
 def _folded_dimensionality(srow) -> dict:
     """D1: the dimensionality members station.json's `diagnostics` carries, read off the sidecar
     document itself so the two surfaces cannot state different calls. `screening_diagnostic` stays
-    sidecar-only: where the numbers now sit, the caveat text carries that meaning."""
-    return {k: v for k, v in _dimensionality_document(srow).items() if k != "screening_diagnostic"}
+    sidecar-only: where the numbers now sit, the caveat text carries that meaning.
+
+    A member the call leaves UNDETERMINED is omitted rather than copied. The sidecar states it as
+    null and keeps doing so (D14), but a null here would be a value where the promoted document says
+    absence: an `indeterminate` classification has no skew statistic to state."""
+    return {k: v for k, v in _dimensionality_document(srow).items()
+            if k != "screening_diagnostic" and v is not None}
 
 
 # resources[] (D3): one row per SERVED, ADDRESSABLE thing, keyed by the manifest format it is

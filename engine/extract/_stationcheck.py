@@ -3,9 +3,9 @@
 
 SCOPE:377-380 asks for emitter-side validation beyond the schema, and this is that layer: referential
 integrity of a resource's run references, unique run and resource ids, time_period ordering, channel
-shape per component family, archive-row containment, withheld-branch rejection and DOI syntax, plus
-the 1.x pin that keeps `distribution.edi_path` and the served EDI resource row stating one path
-(SCOPE:71-73).
+shape per component family, archive-row containment, withheld-branch rejection, DOI syntax, the
+zero-null rule over everything this lane adds, plus the 1.x pin that keeps `distribution.edi_path`
+and the served EDI resource row stating one path (SCOPE:71-73).
 
 ONE implementation, two enforcement points: build_portal._validate_station_metadata runs it over the
 documents the build is about to publish, and scripts/verify.py runs it again over a built tree before
@@ -42,10 +42,13 @@ _ELECTRIC_ONLY = ("positive", "negative", "dipole_length_m", "contact_resistance
 # --survey-h5 AND --station-h5). A build passing only --survey-h5 publishes no survey-mth5 row at
 # all: under-claiming is open-world and safe, claiming containment we cannot demonstrate is not.
 ARCHIVE_MEMBER_FORMAT = {"edi-zip": "edi", "xml-zip": "emtfxml", "survey-mth5": "mth5"}
-# The blocks this lane ADDS. Section 2's zero-null rule is scoped to them: the frozen keys carry eight
+# What this lane ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
 # convention_check.detail), so the survey-metadata document's corpus-wide rule cannot be imported.
+# The fold (D1) is an addition too, and the scan reaches INTO `diagnostics` for exactly its members:
+# an undetermined call is OMITTED here, never copied across as the sidecar's null.
 _NEW_BLOCKS = ("runs", "resources")
+_FOLDED_DIAGNOSTICS = ("classification", "skew_beta_median_deg", "pct_periods_3d", "method", "note")
 
 
 def violations(doc) -> list:
@@ -220,13 +223,26 @@ def _scan(node, path, nulls, empties):
             _scan(value, child, nulls, empties)
 
 
+def _added_violations(value, path, subject) -> list:
+    """The zero-null, zero-empty rule over one ADDED member. The member itself is checked too: a
+    scalar null never reaches _scan, so a scoping that only descended missed the fold entirely."""
+    nulls, empties = [], []
+    if value is None:
+        nulls.append(path)
+    else:
+        _scan(value, path, nulls, empties)
+    return ([f"null value at {p} ({subject} states absence by omission)" for p in nulls]
+            + [f"empty container at {p} ({subject} states absence by omission)" for p in empties])
+
+
 def _new_block_violations(doc) -> list:
     out = []
     for block in _NEW_BLOCKS:
-        if block not in doc:
-            continue
-        nulls, empties = [], []
-        _scan(doc[block], f"$.{block}", nulls, empties)
-        out += [f"null value at {p} ({block}[] states absence by omission)" for p in nulls]
-        out += [f"empty container at {p} ({block}[] states absence by omission)" for p in empties]
+        if block in doc:
+            out += _added_violations(doc[block], f"$.{block}", f"{block}[]")
+    diagnostics = doc.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        for member in _FOLDED_DIAGNOSTICS:
+            if member in diagnostics:
+                out += _added_violations(diagnostics[member], f"$.diagnostics.{member}", "the fold")
     return out
