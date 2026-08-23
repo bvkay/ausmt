@@ -263,7 +263,7 @@ jobs:
       # ORIGINAL .edi bytes, the custodian's published record, never mutated (D1) and out of scope
       # here. Fails loudly and prints offenders rather than silently passing a dirty build.
       #
-      # BOTH trees the build step above writes are scanned. The guard greped --out alone, which left
+      # BOTH trees the build step above writes are scanned. The guard grepped --out alone, which left
       # the whole --products tree (every station.json and dimensionality.json written there) outside
       # a check whose whole subject is per-station free text. Pinned by
       # engine/tests/test_station_invariants.py, which reads the tree names off the build step's own

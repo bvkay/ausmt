@@ -49,7 +49,10 @@ def violations(doc) -> list:
     document, not stop at the first one."""
     if not isinstance(doc, dict):
         return [f"not a JSON object ({type(doc).__name__})"]
-    if doc.get("withheld"):
+    # Routing is on the marker's PRESENCE, not its truth: `withheld: false` is forbidden on a full
+    # record (a false property schema), and this layer exists because jsonschema is optional, so a
+    # record carrying the key must be judged here rather than only there.
+    if "withheld" in doc:
         return _withheld_violations(doc)
     runs = doc.get("runs") or []
     resources = doc.get("resources") or []

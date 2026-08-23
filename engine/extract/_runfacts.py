@@ -254,9 +254,14 @@ _LEMIMT_INSTRUMENT = re.compile(r"(?m)^Instrument\s*:\s*(\S.*?)\s*$")
 
 
 def _lemimt_site(info: str, kv: dict, doc: _Doc):
-    """LEMIMT writes the processing job into the SITE line, and the acquisition rate rides it:
-    `P-<station>_RR-<remote>_S-10Hz_1`. The remote token is the reference STATION, never a second
-    run, and it is already carried as the record's remote_site."""
+    """LEMIMT writes the processing job into the SITE line: `P-<station>_RR-<remote>_S-10Hz_1`. The
+    remote token is the reference STATION, never a second run, and it is already carried as the
+    record's remote_site.
+
+    The `S-<rate>Hz` token is the BAND of that processing job. It is read as the run's nominal rate
+    because it is the only rate this dialect states, and it is classified PATTERN_EXTRACTED for
+    exactly that reason: the source did not label it an acquisition rate. `.search` takes the FIRST
+    SITE line, so a file describing two bands is read at its first."""
     site = _SITE_LINE.search(info)
     instrument = _LEMIMT_INSTRUMENT.search(info)
     if not site and not instrument:
@@ -279,9 +284,14 @@ _EMPOWER_RATE = re.compile(r'"sampleRate"\s*:\s*(\d+(?:\.\d+)?)')
 
 def _empower_json(info: str, kv: dict, doc: _Doc):
     """Phoenix EMpower writes one JSON record per acquisition into >INFO. D10: a SECOND top-level
-    record is the REMOTE STATION, never a second run, so only the first is read. The highest
-    declared sampleRate is the run's nominal rate; the lower ones are the decimation ladder riding
-    the transfer-function product."""
+    record is the REMOTE STATION, never a second run. The highest declared sampleRate is the run's
+    nominal rate; the lower ones are the decimation ladder riding the transfer-function product.
+
+    The model and the serial ARE isolated to the first record (`.search` takes the first match). The
+    rate is not: `.findall` scans the whole block and takes the maximum across both records. That is
+    safe by FIXTURE, not by construction - over the 246 two-record EDIs in the corpus no remote
+    record declares a rate above its local one. A remote receiver sampled faster than the local one
+    would publish the remote's rate, so this reads the whole block on purpose only while that holds."""
     if not _EMPOWER_RECEIVER.search(info):
         return
     doc.dialect("empower-json")
@@ -309,8 +319,12 @@ _PHX_TAPPING_RATE = re.compile(r'"SampleRate"\s*:\s*(\d+(?:\.\d+)?)')
 def _phoenix(info: str, kv: dict, doc: _Doc):
     """Phoenix MTU, two shapes in one survey. The field sheet is free text (HARDWARE, the MTU-Box
     serial, the per-coil `Hx Sen:` serials); the compact JSON states the receiver blocks, the dipole
-    lengths and an acquisition window that carries an explicit Z. The `RH` block is the REMOTE
-    station and is never read as a channel or a second run."""
+    lengths and an acquisition window that carries an explicit Z.
+
+    The `RH` block is the REMOTE station and the BLOCK regex never reads it as a channel or a second
+    run. The window and the tapping rate are read off the whole record instead, so a second Start/End
+    pair would win (`dict` keeps the last) and a second rate would join the maximum. Safe by FIXTURE:
+    every corpus file carrying a window carries exactly one Start and one End."""
     hardware = _PHX_HARDWARE.search(info)
     blocks = {name: body for name, body in _PHX_JSON_BLOCK.findall(info)}
     if not hardware and not blocks:

@@ -34,6 +34,7 @@ SURVEYS = HERE / "fixtures"                         # vendored, self-contained (
 VERIFY = ROOT / "scripts" / "verify.py"
 sys.path.insert(0, str(ROOT / "extract"))
 
+import _stationcheck as stcheck  # noqa: E402
 import build_portal as bp  # noqa: E402
 
 # A full record carrying every member the semantic layer has an opinion about, so each mutation below
@@ -185,6 +186,18 @@ def test_a_clean_full_record_and_a_clean_withheld_stub_have_no_violations():
     doc = copy.deepcopy(CLEAN)
     doc["resources"].append(_archive_row("edi-zip"))
     assert _violations(doc) == []
+
+
+def test_the_marker_routes_on_its_presence_not_on_its_truth():
+    """`withheld: false` on a full record is schema-forbidden (a false property schema), and the
+    module exists because jsonschema is optional and the protection must not rest on the schema
+    alone. Routing on the value let a record carrying the key take the FULL branch, so the stdlib
+    layer stayed silent on exactly the document the schema was there to catch. Checked against the
+    layer directly: the build's self-check runs the schema too, which would mask it."""
+    doc = copy.deepcopy(CLEAN)
+    doc["withheld"] = False
+    assert stcheck.violations(doc), "a full record carrying the marker must be rejected"
+    assert stcheck.violations(copy.deepcopy(CLEAN)) == [], "non-vacuity: the clean record is clean"
 
 
 @pytest.mark.parametrize("why,mutate", REJECTED, ids=[w for w, _ in REJECTED])

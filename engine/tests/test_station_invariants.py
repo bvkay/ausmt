@@ -16,7 +16,7 @@ Three layers:
      ausmt_id values, every ausmt_id is unique, and each record's survey_id joins BOTH the mtcat survey
      row and the survey-metadata.json document beside it. Proven non-vacuous against planted violations.
   3. THE CONSUMER PINS: drawer.js reads exactly two members out of station.json and fetches it at the
-     contract path, and the CI PII guard greps every tree the build step writes (it greped one of two,
+     contract path, and the CI PII guard greps every tree the build step writes (it grepped one of two,
      which left the whole curator products tree unscanned).
   4. SCOPE:308-314's FOUR PROJECTION TESTS, which state what mtcat.json and station.json must agree
      on. Three hold; the fourth (survey sample_rates_hz == the union of published run rates) is a
@@ -335,7 +335,7 @@ def _workflow_step(name_fragment: str) -> str:
                            "(designed topology; the CI guards are pinned from checkout lanes)")
 def test_the_ci_pii_guard_greps_every_tree_the_build_writes():
     """D11's second half. The build step writes TWO trees, `--out` and `--products`, and the guard
-    greped only the first, so every station.json and dimensionality.json in the curator tree went
+    grepped only the first, so every station.json and dimensionality.json in the curator tree went
     unscanned for the free-text vector the guard exists to catch. The trees are read out of the build
     step's own arguments so this pin cannot drift from what CI actually produces."""
     build = _workflow_step("Build products")

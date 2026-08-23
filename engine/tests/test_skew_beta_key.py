@@ -44,7 +44,7 @@ def _build_products(tmp_path):
     prod = tmp_path / "products"
     r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(staged),
                         "--out", str(out), "--products", str(prod), "--no-validate"],
-                       cwd=ROOT, capture_output=True, text=True)
+                       cwd=str(ROOT), capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     return prod
 

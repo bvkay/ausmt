@@ -159,10 +159,15 @@ all three.
       "provenance_role": "derived", "representation_role": "alternate",
       "path": "xml/vulcan-2022/A1.xml" },
     { "id": "edi-zip", "kind": "archive", "format": "zip",
-      "path": "bundles/vulcan-2022-edi.zip" }
+      "path": "bundles/vulcan-2022-edi.zip" },
+    { "id": "xml-zip", "kind": "archive", "format": "zip",
+      "path": "bundles/vulcan-2022-xml.zip" }
   ]
 }
 ```
+
+`related_collection_identifiers` is projected per survey, so the identifiers a survey states ride
+every one of its resource rows; the example shows them on one row to stay readable.
 
 ### 1.1 ausmt_id
 
@@ -518,10 +523,10 @@ public catalogue already exposes.
 {
   "schema": "ausmt-station",
   "version": "0.1",
-  "ausmt_id": "au.kalkaroo-2022.KD-C3",
-  "station": "KD-C3",
-  "survey": "Kalkaroo 2020-21",
-  "survey_id": "kalkaroo-2022",
+  "ausmt_id": "au.vulcan-2024-25.Vul24-13",
+  "station": "Vul24-13",
+  "survey": "Vulcan 2024-25",
+  "survey_id": "vulcan-2024-25",
   "country": "Australia",
   "organisation": "Adelaide University",
   "access": { "level": "embargoed", "embargo_until": "2027-02-01", "served": false },

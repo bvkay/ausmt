@@ -286,7 +286,9 @@ def built_masked(tmp_path_factory):
 def _note_hits(out: Path, values):
     """Every (document, string) where a published free-text member carries one of `values` in any of
     its string forms. Free text is where a coordinate hides: `processing.note` is the >INFO block
-    verbatim and `canonical_conditioning` is generated prose."""
+    verbatim, `canonical_conditioning` is generated prose, and the two NEW blocks carry token
+    extractions out of that same >INFO (a resistance source_value, an instrument model string), so
+    they are swept as text too rather than trusted to be numeric."""
     c42 = _coord_fixtures()
     variants = set()
     for value in values:
@@ -295,6 +297,8 @@ def _note_hits(out: Path, values):
     for key, doc in _docs(out).items():
         texts = [(doc.get("processing") or {}).get("note") or "",
                  json.dumps(doc.get("canonical_conditioning") or []),
+                 json.dumps(doc.get("runs") or []),
+                 json.dumps(doc.get("resources") or []),
                  (doc.get("note") or "")]
         for text in texts:
             hits += [(key, v) for v in variants if v in text]
