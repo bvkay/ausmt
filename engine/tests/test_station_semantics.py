@@ -20,6 +20,7 @@ on the schema alone would evaporate on a box that has no validator installed.
 """
 import copy
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -362,10 +363,20 @@ def test_verify_self_building_runs_the_station_gate(tmp_path):
     run means less than the deployment gate's.
 
     The self-building path passes no --products, so this is also where A4a earns its keep: without the
-    unconditional served-root write there would be no station.json for the gate to read."""
+    unconditional served-root write there would be no station.json for the gate to read.
+
+    AUSMT_VALIDATOR_PATH is pinned to the vendored validator copy so the run is hermetic: CI has no
+    sibling ausmt-surveys checkout, the bounded walk finds nothing, and verify refuses to build. The
+    gate under proof is the STATION gate; the surveys validator's currency is the resync
+    discipline's job, not this test's. And the PASS line must count documents: a gate passing on a
+    zero-station build proves only that it printed."""
     pytest.importorskip("mt_metadata")
+    env = dict(os.environ, AUSMT_VALIDATOR_PATH=str(
+        ROOT.parent / "gateway" / "tests" / "fixtures" / "vendored_validation"))
     v = subprocess.run([sys.executable, str(VERIFY), "--skip-tests", "--surveys",
                         str(_distinct_slug_corpus(tmp_path))],
-                       cwd=str(ROOT), capture_output=True, text=True)
-    assert "station-metadata: PASS" in v.stdout, v.stdout + v.stderr
+                       cwd=str(ROOT), capture_output=True, text=True, env=env)
+    m = re.search(r"station-metadata: PASS - (\d+) document", v.stdout)
+    assert m, v.stdout + v.stderr
+    assert int(m.group(1)) > 0, "PASS on zero documents proves nothing:\n" + v.stdout
     assert v.returncode == 0, v.stdout + v.stderr
