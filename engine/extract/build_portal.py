@@ -2636,8 +2636,9 @@ def station_collection_identifiers(meta):
 
 def station_resources(served_formats, collection_identifiers) -> list:
     """resources[] for one open station. `served_formats` is {manifest format: served path} for the
-    station's own renditions AND its survey's bundles, captured at the emit sites so the path here
-    is the one the manifest records for the same bytes and never a second derivation of it.
+    station's own renditions AND the survey bundles it put bytes into, captured at the emit sites so
+    the path here is the one the manifest records for the same bytes and never a second derivation
+    of it. The caller does the bundle-membership filtering; this renders what it is handed.
 
     No row carries `identifiers[]`: no DOI identifies any exact file AusMT serves today (D3), and a
     collection DOI presenting as a file DOI is the failure the identity contract names. The
@@ -2890,8 +2891,14 @@ def _write_station_products(job, prov, served_root, products_dir,
     deployment, so the served path is the same either way. dimensionality.json is not a contract and
     keeps its single --products home."""
     (r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served, runs) = job
-    _formats = dict((bundle_formats or {}).get(slug) or {})
-    _formats.update((served_formats or {}).get(r["ausmt_id"]) or {})
+    _own = dict((served_formats or {}).get(r["ausmt_id"]) or {})
+    # A bundle row is a containment claim, so it rides only a station whose bytes are actually in that
+    # bundle: the C42 byte gate withholds a non-exact station's EDI and EMTF XML, so it is in neither
+    # zip its survey publishes. stcheck.ARCHIVE_MEMBER_FORMAT names the rendition that proves it, and
+    # the semantic layer re-checks the same rule over the emitted document.
+    _formats = {fmt: path for fmt, path in ((bundle_formats or {}).get(slug) or {}).items()
+                if stcheck.ARCHIVE_MEMBER_FORMAT.get(fmt) in _own}
+    _formats.update(_own)
     doc = station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes,
                            served, prov, runs,
                            station_resources(_formats, (collection_ids or {}).get(slug) or []))

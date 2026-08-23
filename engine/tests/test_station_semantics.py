@@ -125,6 +125,21 @@ def _empty_channel_list(doc):
     doc["runs"][0]["channels"] = []
 
 
+def _archive_row(rid, fmt="zip"):
+    return {"id": rid, "kind": "archive", "format": fmt,
+            "path": f"bundles/example-basin-2024-{rid}.zip"}
+
+
+def _archive_row_the_record_put_no_bytes_into(doc):
+    """The C42 shape: the survey builds a survey MTH5, this station's bytes are not in it, and the
+    record has no mth5 rendition to prove otherwise."""
+    doc["resources"].append(_archive_row("survey-mth5", fmt="mth5"))
+
+
+def _archive_row_with_no_membership_rule(doc):
+    doc["resources"].append(_archive_row("tarball"))
+
+
 REJECTED = [
     ("run time_period ends before it starts", _end_before_start),
     ("duplicate run id", _duplicate_run_id),
@@ -137,6 +152,8 @@ REJECTED = [
     ("a served EDI resource with no legacy edi_path", _edi_resource_without_the_legacy_path),
     ("a null inside runs[]", _null_inside_a_run),
     ("an empty container inside runs[]", _empty_channel_list),
+    ("an archive row this record put no bytes into", _archive_row_the_record_put_no_bytes_into),
+    ("an archive row with no membership rule", _archive_row_with_no_membership_rule),
 ]
 
 WITHHELD_REJECTED = [
@@ -162,6 +179,11 @@ def test_a_clean_full_record_and_a_clean_withheld_stub_have_no_violations():
     # absence is the open-world statement, so a run with no `end` is clean, not a missing value
     doc = copy.deepcopy(CLEAN)
     _drop_end(doc)
+    assert _violations(doc) == []
+    # non-vacuity for the two archive rejections below: the archive row a record DID put bytes into
+    # (it publishes the `edi` rendition the zip was built from) is clean.
+    doc = copy.deepcopy(CLEAN)
+    doc["resources"].append(_archive_row("edi-zip"))
     assert _violations(doc) == []
 
 

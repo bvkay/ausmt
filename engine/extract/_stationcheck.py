@@ -3,8 +3,9 @@
 
 SCOPE:377-380 asks for emitter-side validation beyond the schema, and this is that layer: referential
 integrity of a resource's run references, unique run and resource ids, time_period ordering, channel
-shape per component family, withheld-branch rejection and DOI syntax, plus the 1.x pin that keeps
-`distribution.edi_path` and the served EDI resource row stating one path (SCOPE:71-73).
+shape per component family, archive-row containment, withheld-branch rejection and DOI syntax, plus
+the 1.x pin that keeps `distribution.edi_path` and the served EDI resource row stating one path
+(SCOPE:71-73).
 
 ONE implementation, two enforcement points: build_portal._validate_station_metadata runs it over the
 documents the build is about to publish, and scripts/verify.py runs it again over a built tree before
@@ -29,6 +30,12 @@ _WITHHELD_BLOCK_KEYS = {"access": frozenset({"level", "embargo_until", "served"}
 _BARE_DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 # The electrode-circuit members. They attach to the electric measurement circuit and to nothing else.
 _ELECTRIC_ONLY = ("positive", "negative", "dipole_length_m", "contact_resistance")
+# {archive resource id: the rendition whose presence proves this station's bytes are IN that bundle}.
+# An `archive` row is a CONTAINMENT claim, and containment is decided per station, not per survey: the
+# C42 coordinate byte gate withholds a non-exact station's EDI and EMTF XML, so it is in neither zip
+# its survey still publishes. The emitter reads the same map when it builds resources[], so the rule
+# is stated once and enforced at both ends.
+ARCHIVE_MEMBER_FORMAT = {"edi-zip": "edi", "xml-zip": "emtfxml", "survey-mth5": "mth5"}
 # The blocks this lane ADDS. Section 2's zero-null rule is scoped to them: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
 # convention_check.detail), so the survey-metadata document's corpus-wide rule cannot be imported.
@@ -130,6 +137,27 @@ def _resource_violations(resources, run_ids) -> list:
         for key in ("represents_runs", "derived_from_runs"):
             out += [f"resource {rid}: {key} names run {ref!r}, which this record does not publish"
                     for ref in (resource.get(key) or []) if ref not in run_ids]
+    return out + _archive_membership_violations(resources)
+
+
+def _archive_membership_violations(resources) -> list:
+    """An archive row may only ride a record that also publishes the rendition the bundle was built
+    from. Fail-closed on an unrecognised archive id: a bundle nothing in this map names has no stated
+    membership rule, so it cannot be claimed."""
+    served = {r.get("id") for r in resources
+              if isinstance(r, dict) and r.get("kind") == "transfer_function"}
+    out = []
+    for resource in resources:
+        if not isinstance(resource, dict) or resource.get("kind") != "archive":
+            continue
+        rid = resource.get("id")
+        member = ARCHIVE_MEMBER_FORMAT.get(rid)
+        if member is None:
+            out.append(f"resource {rid!r} is an archive with no stated membership rule, so this "
+                       f"record cannot claim to be in it")
+        elif member not in served:
+            out.append(f"resource {rid!r} claims an archive this record put no bytes into: it "
+                       f"publishes no {member!r} rendition")
     return out
 
 

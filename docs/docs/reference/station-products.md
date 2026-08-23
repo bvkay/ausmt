@@ -455,6 +455,12 @@ function as the custodian's EDI, as the canonical EMTF XML, as MTH5, and the per
 those files are bundled into. `manifest.json` stays the checksum and inventory authority; a resource
 references its path and never restates a hash.
 
+An `archive` row is a containment claim, and containment is decided per station rather than per
+survey. A survey bundle holds the bytes its stations actually served, so a station whose position
+policy withholds its EDI and its EMTF XML is in neither zip its survey publishes, and its record
+advertises neither. The number of records naming a bundle therefore equals that bundle's
+`n_stations` in `manifest.json`.
+
 | Member | Type | Definition |
 |---|---|---|
 | `id` | string | Stable within this document. Never an array index or a path. |

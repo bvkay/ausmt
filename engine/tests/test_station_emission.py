@@ -340,6 +340,44 @@ def test_the_masked_stations_still_publish_a_record(built_masked):
     assert by_station[c42.HID["id"]]["location"] == {"lat": None, "lon": None}
 
 
+# ---------------------------------------------------------------- C42 x D3: archives are containment
+
+def test_a_masked_station_advertises_no_archive_it_put_no_bytes_into(built_masked):
+    """An `archive` row is a CONTAINMENT claim, and the byte gate decides containment per station: a
+    generalised or withheld station's EDI and EMTF XML are withheld, so its bytes are in neither
+    survey zip even though its survey publishes both.
+
+    FAILS against the pre-fix emitter, which merged the survey's bundle rows into every station of a
+    served survey: the two masked stations published `edi-zip` and `xml-zip` while the manifest
+    recorded n_stations 1 for each, counting the exact station alone."""
+    c42 = _coord_fixtures()
+    by_station = {d["station"]: d for d in _docs(built_masked).values()}
+    assert [r["id"] for r in by_station[c42.EXACT["id"]]["resources"]] == \
+        ["edi", "emtfxml", "edi-zip", "xml-zip"], "non-vacuity: the served station is in both zips"
+    for station in (c42.GEN["id"], c42.HID["id"]):
+        assert by_station[station].get("resources", []) == [], (
+            f"{station} serves no bytes, so it is in no bundle and has nothing to describe: "
+            f"{by_station[station].get('resources')}")
+
+
+def test_every_archive_row_is_counted_by_the_bundle_it_names(built_masked):
+    """The manifest's `n_stations` is the bundle's own count of what went into it, so it is the
+    independent arithmetic: exactly that many records may advertise the bundle. Reads the manifest
+    rather than the emitter's constants, so an emitter that over-advertises cannot also move the
+    number it is checked against."""
+    man = json.loads((built_masked / "manifest.json").read_text(encoding="utf-8"))
+    docs = _docs(built_masked)
+    assert man["bundles"], "non-vacuity: this arm builds bundles"
+    for bundle in man["bundles"]:
+        row_id = {"mth5": "survey-mth5"}.get(bundle["format"], bundle["format"])
+        advertisers = [key for key, doc in docs.items()
+                       if key.split("/")[0] == bundle["slug"]
+                       and row_id in {r["id"] for r in doc.get("resources", [])}]
+        assert len(advertisers) == bundle["n_stations"], (
+            f"{bundle['slug']} {row_id}: {len(advertisers)} record(s) claim to be in a bundle "
+            f"holding {bundle['n_stations']} station(s): {sorted(advertisers)}")
+
+
 # ---------------------------------------------------------------- the shipped schema, over built output
 
 @pytest.mark.parametrize("arm", ["built_open", "built_access", "built_masked"])
