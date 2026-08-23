@@ -126,7 +126,19 @@ all three.
                               "source_record_id": "2781110A", "acquisition_stage": "1" } },
   "coordinate_qc": null,
   "canonical_conditioning": null,
-  "frame": { }
+  "frame": { },
+  "runs": [
+    { "id": "A1-r01",
+      "sample_rate_hz": 10,
+      "data_logger": { "manufacturer": "LEMI", "model": "LEMI-423", "serial_number": "#0034",
+                       "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/u3jf7ztm" } ] },
+      "channels": [
+        { "component": "ex", "measurement_azimuth_deg": 180, "dipole_length_m": 43,
+          "contact_resistance": { "source_value": "1.82 kilo-ohms", "value": 1820, "unit": "ohm" } },
+        { "component": "hx", "measurement_azimuth_deg": 0,
+          "sensor": { "manufacturer": "LEMI", "model": "LEMI-120", "serial_number": "134" } }
+      ] }
+  ]
 }
 ```
 
@@ -367,7 +379,45 @@ is reported separately under `file_written_by` rather than being published as th
 | Default | absent means `exact` |
 | Note | Emitted only for a non-exact station, which keeps an exact station's record byte-unchanged. The boot-time surface the portal reads is [`coord_policy.json`](../developer/portal-documents.md#coord_policyjson). |
 
-### 1.16 The withheld record
+### 1.16 runs
+
+| | |
+|---|---|
+| Definition | The acquisitions this station's source metadata describes. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | array of run objects |
+| Note | Absent means run metadata is NOT asserted, never that no run occurred. |
+
+A run is an acquisition, so a run is published only where a source states one. Most of the corpus
+therefore carries no `runs` key at all: mt_metadata instantiates a placeholder run for every file it
+reads, with a run id synthesised from the station name, a 0 Hz rate, a 1980 epoch window and an
+unnamed logger, and none of that is a source assertion. The values published here come from the
+`>INFO` block the custodian wrote, read by the dialect extractors described in
+[the build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step).
+
+| Member | Type | Definition |
+|---|---|---|
+| `id` | string | The run's identifier: the source's own where the source declares one, otherwise a curated local id assigned once and stored in the survey package. Never regenerated, so correcting a timestamp or a serial cannot rename a run. |
+| `time_period` | object | `start`, and `end` where the source states one. ISO 8601 UTC. `end` is ABSENT when unknown, never null. |
+| `sample_rate_hz` | number | The run's nominal rate. Present whenever any channel declares a rate. |
+| `data_logger` | object | `manufacturer`, `model`, `serial_number` and `identifiers[]`, each present only where the source states it. |
+| `channels` | array | The channels acquired in this run. |
+
+A channel enters `channels` only where it is corroborated: the `>INFO` block names it, or the served
+transfer function was measured from it. A DEFINEMEAS declaration alone is not corroboration, and a
+source note contradicting the channel list wins over both. The remote-reference `rr*` channels are
+never published: they are library defaults, and no corpus source declares one.
+
+| Channel member | Type | Definition |
+|---|---|---|
+| `component` | string | `ex`, `ey`, `hx`, `hy`, `hz`. The only mandatory member. |
+| `measurement_azimuth_deg` | number | Sensor orientation where the source states it. |
+| `dipole_length_m` | number | Electric channels only. |
+| `contact_resistance` | object | Electric channels only: `source_value` always, plus `value` and `unit` where the unit is one the build parses. The source string is never discarded. |
+| `sensor` | object | Magnetic channels only: the same shape as `data_logger`. |
+
+### 1.17 The withheld record
 
 A station in a survey that is not served gets a stub carrying only the discovery-safe identity the
 public catalogue already exposes.

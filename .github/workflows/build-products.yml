@@ -186,6 +186,7 @@ jobs:
             tests/test_station_schema_v01.py \
             tests/test_presence_rule.py \
             tests/test_run_facts.py \
+            tests/test_station_runs.py \
             tests/test_empty_build.py \
             tests/test_proc_note_email_scrub.py \
             tests/test_golden_edi.py \

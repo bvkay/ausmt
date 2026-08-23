@@ -47,6 +47,7 @@ import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask se
 import _stationids as stnids        # noqa: E402  (survey.yaml station-id override for third-party data)
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
 import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
+import _runids as runids            # noqa: E402  (the persistent per-survey run-id store)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
 
@@ -2198,6 +2199,8 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             r["_parse_fallback"] = parsed["parse_fallback"]   # keyed by FINAL id below, as above
         if parsed.get("presence"):
             r["_presence"] = list(parsed["presence"])         # keyed by FINAL id below, as above
+        if parsed.get("run_facts"):
+            r["_run_facts"] = parsed["run_facts"]             # keyed by FINAL id below, as above
         stations.append((p, r))
         tf_rows.append(tf)
         sci_rows.append(srow)
@@ -2210,6 +2213,8 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                 report.setdefault("frame_notes", {})[_r["id"]] = _r.pop("_frame_notes")
             if _r.get("_presence"):
                 report.setdefault("presence_notes", {})[_r["id"]] = _r.pop("_presence")
+            if _r.get("_run_facts"):
+                report.setdefault("run_facts", {})[_r["id"]] = _r.pop("_run_facts")
             _fb = _r.pop("_parse_fallback", None)
             if _fb:
                 report.setdefault("parse_fallbacks", []).append(
@@ -2219,6 +2224,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             _r.pop("_frame_notes", None)
             _r.pop("_parse_fallback", None)
             _r.pop("_presence", None)
+            _r.pop("_run_facts", None)
     if _email_hits:
         # Loud, ONCE per survey (not per file — a survey can have hundreds of EDIs from the same
         # custodian). This is a curator flag, not a mutation: the served original .edi bytes are the
@@ -2546,8 +2552,97 @@ def _folded_dimensionality(srow) -> dict:
     return {k: v for k, v in _dimensionality_document(srow).items() if k != "screening_diagnostic"}
 
 
+# The published channel order: the acquisition families in the order every dialect writes them,
+# then anything else alphabetically, so two builds of one station order its channels identically.
+_CHANNEL_ORDER = ("ex", "ey", "hx", "hy", "hz")
+# What the schema lets each channel family carry. The guards are also IN the schema (an electric
+# channel may not carry `sensor`, a magnetic one may not carry the electrode-circuit fields); they
+# are applied here first so a future extractor cannot produce a document only the validator catches.
+_ELECTRIC_CHANNEL_KEYS = ("measurement_azimuth_deg", "sample_rate_hz", "dipole_length_m",
+                          "contact_resistance", "positive", "negative")
+_MAGNETIC_CHANNEL_KEYS = ("measurement_azimuth_deg", "sample_rate_hz", "sensor")
+
+
+def _measured_components(comps) -> set:
+    """The channels the SERVED transfer function was measured from. An impedance is estimated from
+    the two electric and the two horizontal magnetic channels; a tipper adds the vertical magnetic.
+    This is the corroboration D9 accepts alongside the >INFO naming a channel; DEFINEMEAS is not
+    consulted at all, because a declaration there is what D9 rules insufficient."""
+    out = set()
+    if "Z" in (comps or ""):
+        out |= {"ex", "ey", "hx", "hy"}
+    if "T" in (comps or ""):
+        out |= {"hx", "hy", "hz"}
+    return out
+
+
+def station_runs(run_facts, run_ids, station_id, comps):
+    """(runs[], curation notes) for one station. `run_facts` is the >INFO extraction
+    (extract/_runfacts), `run_ids` this survey's persistent store (extract/_runids).
+
+    D2: a run is published only where the source asserts a run id or a real acquisition fact; the
+    placeholder run mt_metadata instantiates for every file it reads is never published, so most of
+    the corpus correctly gets no runs[] at all. The id comes from the store and from nowhere else
+    (scope section 9: assigned once, never regenerated), so a qualifying station with no stored row
+    publishes nothing and the gap is REPORTED instead.
+
+    ONE run per station: no corpus source describes two acquisitions for one station, and splitting
+    one source record across two stored ids would be inventing which facts belong to which run. A
+    longer stored row is a curation signal and rides the notes."""
+    facts = list((run_facts or {}).get("facts") or [])
+    if not facts:
+        return [], []
+    ids = list((run_ids or {}).get(station_id) or [])
+    notes = []
+    if not ids:
+        return [], [f"curation: {station_id} asserts acquisition facts ({', '.join(facts)}) but the "
+                    f"run-id store has no row for it, so no runs[] is published; assign one with "
+                    f"_tools/assign_run_ids.py"]
+    if len(ids) > 1:
+        notes.append(f"curation: the run-id store gives {station_id} {len(ids)} run ids "
+                     f"({', '.join(ids)}) while its source describes one acquisition; only "
+                     f"{ids[0]} is published")
+    src = dict((run_facts or {}).get("run") or {})
+    run = {"id": ids[0]}
+    period = dict(src.get("time_period") or {})
+    if period.get("start"):
+        # `end` is ABSENT when unknown, never null: absence is the open-world statement that the
+        # source did not say when the acquisition stopped.
+        run["time_period"] = {k: period[k] for k in ("start", "end") if period.get(k)}
+    if src.get("sample_rate_hz"):
+        run["sample_rate_hz"] = src["sample_rate_hz"]
+    if src.get("data_logger"):
+        run["data_logger"] = src["data_logger"]
+
+    named = {c.lower() for c in ((run_facts or {}).get("named_components") or [])}
+    excluded = {c.lower() for c in ((run_facts or {}).get("excluded_components") or [])}
+    # D9: corroborated beyond DEFINEMEAS alone, minus anything a source assertion contradicts, minus
+    # the rr* pair, which the PRESENCE rule governs rather than corroboration (they are mt_metadata
+    # run defaults; over the corpus EDIs the CHTYPE census carries no RRHX at all).
+    components = {c for c in (named | _measured_components(comps))
+                  if c not in excluded and not presence.is_run_default_component(c)}
+    channels = []
+    for component in sorted(components, key=lambda c: (_CHANNEL_ORDER.index(c)
+                                                       if c in _CHANNEL_ORDER else len(_CHANNEL_ORDER), c)):
+        allowed = (_ELECTRIC_CHANNEL_KEYS if component.startswith("e") else _MAGNETIC_CHANNEL_KEYS)
+        source = ((run_facts or {}).get("channels") or {}).get(component) or {}
+        channel = {"component": component}
+        channel.update({k: source[k] for k in allowed if source.get(k) is not None})
+        if channel.get("sample_rate_hz") and not run.get("sample_rate_hz"):
+            # schema: a run whose channels declare a rate MUST declare its own nominal rate, so the
+            # survey rate rollup cannot silently lose one. With no nominal rate to state, the
+            # channel rate is dropped rather than published outside the relationship that types it.
+            channel.pop("sample_rate_hz")
+            notes.append(f"curation: {station_id} channel {component} declares a rate while its run "
+                         f"declares no nominal rate; the channel rate is withheld")
+        channels.append(channel)
+    if channels:
+        run["channels"] = channels
+    return [run], notes
+
+
 def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served,
-                     prov) -> dict:
+                     prov, runs=None) -> dict:
     """Build one station's station.json (schema/ausmt-station.schema.json 0.1, the third public
     contract) from the station record `r`, its science row `srow` and the survey context. Returns a
     plain-JSON dict in the schema's property order; the caller serialises with _jdump(doc, indent=1)
@@ -2645,6 +2740,12 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
     cp = r.get("coord_policy")
     if cp and cp != "exact":
         doc["coordinate_policy"] = cp
+    # runs[] (D2), APPENDED so no existing key moves. Absent where the source asserts no acquisition
+    # fact, which is most of the corpus and is the correct open-world statement: run metadata not
+    # asserted, never "no runs occurred". Assembled by station_runs() from the >INFO extraction and
+    # the persistent run-id store; the withheld branch above returns before this and gains none.
+    if runs:
+        doc["runs"] = runs
     return doc
 
 
@@ -2669,9 +2770,9 @@ def _write_station_products(job, prov, served_root, products_dir):
     --out and read station.json back out of it, and deploy/Makefile makes the two coincide in
     deployment, so the served path is the same either way. dimensionality.json is not a contract and
     keeps its single --products home."""
-    (r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served) = job
+    (r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served, runs) = job
     doc = station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes,
-                           served, prov)
+                           served, prov, runs)
     payload = _jdump(doc, indent=1)
     served_dir = served_root / slug / r["id"]
     curated_dir = (products_dir / slug / r["id"]) if products_dir is not None else None
@@ -4621,6 +4722,21 @@ def main(argv=None):
         # C46-W3a: the survey's custodian of record for manifest rows — the declared attribution.custodian
         # (rights-holder, may differ from the acquiring organisation), else the organisation. Computed once.
         _custodian = (((meta or {}).get("attribution") or {}).get("custodian") or org)
+        # runs[] inputs: this survey's >INFO extraction (per station, off the cached parse) and its
+        # persistent run-id store. The assembly runs HERE rather than at the deferred write, so its
+        # curation notes can reach this survey's build_report entry; the coordinate mask that runs
+        # between touches nothing a run carries.
+        _run_facts_by_station = _gate_report.get("run_facts", {})
+        # Read from the PACKAGE, not from a label-keyed side channel: two packages may legitimately
+        # publish under one display label, and the store belongs to the directory it sits in.
+        try:
+            _survey_run_ids = runids.load(pkgdir) if pkgdir else {}
+        except runids.RunIdError as _rie:
+            print(f"  {slug}: run-id store IGNORED ({_rie}); this survey publishes no runs[]",
+                  file=sys.stderr)
+            _survey_warnings.append(f"run-id store IGNORED ({_rie}); no runs[] published")
+            _survey_run_ids = {}
+        _run_notes: list = []
         # product contract per station + manifest + (optional, license-gated) EDI/XML copies
         for (p, r), srow in zip(stations, sci_rows):
             # C42 per-station byte gate: a non-exact (generalised/withheld) station's SOURCE bytes are
@@ -4720,10 +4836,13 @@ def main(argv=None):
             # has no EDI to advertise, and station.json's distribution must not claim one.
             # D7: the job is queued for EVERY station, not only under --products; station.json is a
             # public contract and the write path below publishes it at the served root regardless.
+            _runs, _rnotes = station_runs(_run_facts_by_station.get(r["id"]), _survey_run_ids,
+                                          r["id"], r.get("comps"))
+            _run_notes += _rnotes
             _station_product_jobs.append(
                 (r, srow, label, org, meta, lic, slug, p,
                  (f"edi/{slug}/{served_edi.name}" if served_edi is not None else None),
-                 conditioning_notes, bool(_acc["served"])))
+                 conditioning_notes, bool(_acc["served"]), _runs))
         # ---- per-survey bundles (served surveys only): pre-zipped EDIs + optional survey MTH5 ----
         if can_serve and served_edis:
             # C6: rights travel with the bytes — build a deterministic LICENSE.txt for the zip. Licensor =
@@ -4847,6 +4966,13 @@ def main(argv=None):
                 f"TEMPORARY copy and its unmodified source bytes are what is served "
                 f"[{', '.join(_row['file'] for _row in _parse_fallback_rows[:8])}"
                 f"{', ...' if len(_parse_fallback_rows) > 8 else ''}]")
+        # runs[] curation gaps: a station whose source asserts an acquisition fact but whose run id
+        # the store does not carry publishes NO runs, and that silence must not hide behind a green
+        # build. Same counted-warning shape as the fallbacks above, worst case first.
+        if _run_notes:
+            _survey_warnings.append(
+                f"{len(_run_notes)} run-metadata curation note(s) for this survey "
+                f"[{'; '.join(_run_notes[:8])}{'; ...' if len(_run_notes) > 8 else ''}]")
         # Source-bytes integrity: a counted survey WARNING as well as the structured ledger, so a
         # mismatch can never hide behind an otherwise-green build (the xml_failures lesson).
         if _integrity["mismatches"]:

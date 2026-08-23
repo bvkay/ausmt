@@ -344,6 +344,10 @@ _STATION_FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organi
 _STATION_FROZEN_WITHHELD_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "access",
                                  "distribution", "withheld", "note")
 _STATION_PROMOTION_MARKERS = ("schema", "version", "survey_id")
+# The new canonical model. CONDITIONAL, and that is the whole point: runs[] appears only where the
+# station's own source asserts an acquisition fact, so the pin below allows these and nothing else
+# on top of the frozen set, and asserts positively that this corpus DOES carry runs.
+_STATION_NEW_MODEL_KEYS = ("runs",)
 # Non-served access blocks and whether the survey serves — a metadata_only, an embargoed-future, plus the
 # open control. (An embargoed-PAST survey is ALSO non-served; the pure-gate tests above pin that case, and
 # this corpus keeps to the two distinct non-served *kinds* the task enumerates + the open control.)
@@ -456,9 +460,13 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
         # The full-branch key set. coordinate_policy is the one conditional top-level key and this
         # corpus is all-exact, so it is absent here by construction (its own pin is
         # test_coord_access.py::test_station_json_carries_policy_for_non_exact_only).
-        assert set(oj) == set(_STATION_FROZEN_FULL_KEYS) | set(_STATION_PROMOTION_MARKERS), (
-            f"the full record carries the fourteen frozen keys plus the three promotion markers and "
-            f"nothing else; {slug!r} emitted {sorted(oj)}")
+        assert set(oj) - set(_STATION_FROZEN_FULL_KEYS) - set(_STATION_PROMOTION_MARKERS) \
+            <= set(_STATION_NEW_MODEL_KEYS), (
+            f"the full record carries the fourteen frozen keys, the three promotion markers and the "
+            f"new canonical model, and nothing else; {slug!r} emitted {sorted(oj)}")
+        assert set(_STATION_FROZEN_FULL_KEYS) | set(_STATION_PROMOTION_MARKERS) <= set(oj), (
+            f"a frozen key or a promotion marker went missing; {slug!r} emitted {sorted(oj)}")
+        assert oj["runs"], "this corpus's source states its acquisition rate, so a run is published"
         assert oj["schema"] == "ausmt-station" and oj["survey_id"] == slug, (
             "survey_id is the slug the machine surfaces key on, never the display label")
         assert "withheld" not in oj, "the withheld marker is schema-forbidden on a full record"
