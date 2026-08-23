@@ -46,14 +46,15 @@ carries the survey's licence and credit inside the file (`Experiment/Surveys/<sl
 
 | | |
 |---|---|
-| Normative artifact | the build's product emitter, `engine/extract/build_portal.py` |
+| Normative artifact | `engine/schema/ausmt-station.schema.json` for `station.json`; the build's product emitter, `engine/extract/build_portal.py`, for `dimensionality.json` |
 | Served location | `/data/products/<slug>/<station>/` |
-| Version | none declared; the documents are additive and key-based |
-| Status | `station.json` is a public contract whose schema artifact arrives with the station promotion lane; `dimensionality.json` is served alongside it and is not a contract |
+| Served schema | `/data/ausmt-station.schema.json`, `/data/schemas/ausmt-station/0.1/ausmt-station.schema.json` |
+| Version | 0.1 (draft) for `station.json`; `dimensionality.json` declares none and is additive and key-based |
+| Status | `station.json` is a public contract; `dimensionality.json` is served alongside it and is not a contract |
 | Access | the product tree is a served surface, so it rides the same access gate as the download files |
 
-There is no JSON Schema artifact for either document yet. Where this page and the emitter disagree,
-the emitter is right.
+`dimensionality.json` has no JSON Schema artifact. Where this page and the emitter disagree, the
+emitter is right.
 
 ## Gating
 

@@ -46,7 +46,7 @@ import _conventions as conv         # noqa: E402  (C25 convention gates: frame g
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import _stationids as stnids        # noqa: E402  (survey.yaml station-id override for third-party data)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
-from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the two public-contract schema versions)
+from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
 
 # Named sci-column access for the consumer side (mirrors the portal's contract.js SC map) so the product
 # writers below read sci fields BY NAME, not raw integer index. Built from the same generated SCI_COLUMNS,
@@ -5141,6 +5141,20 @@ def main(argv=None):
         (_sm_versioned_dir / "ausmt-survey-metadata.schema.json").write_bytes(_sm_schema_bytes)
     except OSError as _e:
         print(f"note: survey-metadata schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
+    # The station schema (the third public contract): the SAME two routes, by the same rule -
+    # data/schemas/ausmt-station/<version>/ausmt-station.schema.json is the version-specific immutable
+    # route the schema's own $id names, data/ausmt-station.schema.json the latest-convenience copy
+    # beside the data. Byte-copies of the in-tree artifact; the version segment derives from
+    # STATION_SCHEMA_VERSION (the generated mirror), never a literal.
+    _st_schema = HERE.parent / "schema" / "ausmt-station.schema.json"
+    try:
+        _st_schema_bytes = _st_schema.read_bytes()
+        (out / "ausmt-station.schema.json").write_bytes(_st_schema_bytes)
+        _st_versioned_dir = out / "schemas" / "ausmt-station" / STATION_SCHEMA_VERSION
+        _st_versioned_dir.mkdir(parents=True, exist_ok=True)
+        (_st_versioned_dir / "ausmt-station.schema.json").write_bytes(_st_schema_bytes)
+    except OSError as _e:
+        print(f"note: station schema not served beside data ({type(_e).__name__}: {_e})", file=sys.stderr)
 
     # ---- contract self-check: validate the emitted MTCAT + download manifest + build_report against
     # their OWN schemas (schema/*.schema.json), so a shape drift or a config typo (e.g. a non-MAJOR.MINOR
