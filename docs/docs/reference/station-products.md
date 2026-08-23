@@ -480,9 +480,10 @@ No resource carries `identifiers[]`, because no DOI identifies any exact file Au
 DOI that identifies a containing collection goes in `related_collection_identifiers` and carries the
 curated scope it was declared with, so a collection DOI can never be read as an identifier of the
 file it sits beside. A row is projected only where the curation states that scope: a bare canonical
-DOI whose `identifies` names a collection or product level. A row with no scope, a row that is not a
-DOI, and a DOI one survey declares at two different levels are all omitted and reported for
-curation, because an unplaceable row would publish a wrong citation claim.
+DOI whose `identifies` names a collection or product level. A row with no scope, a row whose scope
+names neither a collection nor a product level, a row that is not a DOI, and a DOI one survey
+declares at two different levels are all omitted and reported for curation, because an unplaceable
+row would publish a wrong citation claim.
 
 `distribution.edi_path` is the legacy form of the same fact and stays byte-compatible through 1.x; a
 test pins the two to agree, and 2.0 retires the legacy key.
@@ -503,7 +504,10 @@ processing level on one axis, and this schema maps OUT to that vocabulary rather
 | `level3` | | `level_3` | `level3` |
 
 `collection` and `entire` have no station `processing_level`: they state SCOPE, not level, and
-mapping them onto one is the debt these vocabularies exist to refuse.
+mapping them onto one is the debt these vocabularies exist to refuse. The two part company for
+placement: `collection` names the parent record containing the survey's holdings, so a DOI declared
+at that scope is placeable, while `entire` means one record covering all levels, which describes a
+record rather than asserting containment, so a row declared at that scope is declined.
 
 ### 1.18 The withheld record
 

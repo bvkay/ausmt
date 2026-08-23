@@ -2592,6 +2592,12 @@ STATION_VOCABULARY_CROSSWALK = {
 # The legacy identifies values that are SCOPE, not processing level. Mapping them onto a station
 # processing_level is precisely the identifies debt the separated vocabularies exist to refuse.
 STATION_VOCABULARY_UNMAPPED = ("collection", "entire")
+# What a curated `identifies` must name before a row can be PLACED as a containing collection: a
+# collection, or a product level. Derived from the crosswalk above so a level added there cannot be
+# silently unplaceable here. `entire` is the one legacy value that is neither - MTCAT defines it as
+# one record covering all levels, which states the scope of a RECORD and asserts no containment.
+_PLACEABLE_SCOPES = frozenset({"collection"} | {v["mtcat_identifies"]
+                                                for v in STATION_VOCABULARY_CROSSWALK.values()})
 
 
 def station_collection_identifiers(meta):
@@ -2603,9 +2609,10 @@ def station_collection_identifiers(meta):
     collection DOI can never read as an identifier of the file it sits beside.
 
     Everything else is REFUSED and reported for curation, because an unplaceable row would publish a
-    wrong citation claim: a row with no `identifies` (nothing states what it names), a row that is
-    not a DOI, and a DOI one survey declares at two different levels (the curated scope contradicts
-    itself, so neither row is placeable)."""
+    wrong citation claim: a row with no `identifies` (nothing states what it names), a row whose
+    `identifies` names neither a collection nor a product level, a row that is not a DOI, and a DOI
+    one survey declares at two different levels (the curated scope contradicts itself, so neither row
+    is placeable)."""
     rows, declined = [], []
     curated = [r for r in ((meta or {}).get("related_identifiers") or []) if isinstance(r, dict)]
     levels: dict = {}
@@ -2619,6 +2626,10 @@ def station_collection_identifiers(meta):
             continue
         if not scope:
             declined.append(f"{raw}: `identifies` is absent, so nothing states what this DOI names")
+            continue
+        if scope not in _PLACEABLE_SCOPES:
+            declined.append(f"{raw}: `identifies` is {scope!r}, which names neither a collection nor "
+                            f"a product level, so it asserts no containment")
             continue
         doi = _SM_DOI_RESOLVER_RE.sub("", raw).strip()
         if not _BARE_DOI_RE.match(doi):

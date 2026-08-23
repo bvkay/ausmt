@@ -161,6 +161,25 @@ def test_a_row_with_no_curated_scope_is_refused():
     assert len(declined) == 1 and "identifies" in declined[0]
 
 
+def test_a_row_whose_scope_names_no_collection_and_no_level_is_refused():
+    """auslamp-vic-2013-2018's second row, a GA publication Record DOI carried as `identifies:
+    entire`. MTCAT defines `entire` as one record covering all levels: it states the scope of a
+    RECORD and asserts no containment, so it names neither a collection nor a product level and
+    nothing places it. Without this it rode all four resource rows of all 96 open stations."""
+    rows, declined = _placeable({"related_identifiers": [
+        {"identifier": "10.11636/Record.2018.021", "identifier_type": "DOI",
+         "identifies": "entire"}]})
+    assert rows == []
+    assert len(declined) == 1 and "entire" in declined[0]
+
+
+def test_the_placeable_scopes_are_the_collection_and_the_product_levels():
+    """The permitted set is derived from the gate 12 crosswalk rather than restated, so a level added
+    there cannot be silently unplaceable here."""
+    assert bp._PLACEABLE_SCOPES == {"collection", "raw_packed", "level0", "level1", "level2", "level3"}
+    assert not (bp._PLACEABLE_SCOPES & {"entire"}), "`entire` states scope, not containment"
+
+
 def test_a_non_doi_row_is_refused():
     """western-gawler-2023's SARIG rows are identifier_type URL; the DOI placement policy governs
     DOIs, and a landing-page URL is not a collection identifier."""
