@@ -3176,6 +3176,21 @@ def conditioning_report(notes_by_station: dict) -> list:
             for e in aggregate_conditioning(notes_by_station)]
 
 
+def run_extraction_report(run_facts_by_station: dict) -> dict:
+    """build_report.json's `run_extraction`: which >INFO dialect produced each station's acquisition
+    values, and the extraction-confidence class behind every one of them.
+
+    SCOPE:254-258 asks the curation layer to KEEP that provenance even where the public document does
+    not display it, and station.json publishes the value alone, so this is where the class lives. A
+    curator reading a rate cannot otherwise tell a structured_dialect value from one pattern-matched
+    out of free text. Stations whose >INFO asserted nothing are omitted, so the map names exactly the
+    records there is something to question."""
+    return {sid: {"dialects": list(facts.get("dialects") or []),
+                  "confidence": dict(sorted((facts.get("confidence") or {}).items()))}
+            for sid, facts in sorted((run_facts_by_station or {}).items())
+            if isinstance(facts, dict) and facts.get("confidence")}
+
+
 def build_identity(surveys_root) -> dict:
     """C12: build.json — the build<->data handshake a served portal needs to trace itself back to the
     exact engine + surveys commits that produced it (flagged missing in the review). Deterministic
@@ -5211,6 +5226,9 @@ def main(argv=None):
             # The presence rule (gate 15), same aggregation shape again: the mt_metadata defaults
             # this survey's parses carried, which the emitter never publishes as source assertions.
             "presence": conditioning_report(_presence_notes_by_station),
+            # The other half of the same provenance question: not what was a library default, but
+            # which dialect asserted each real value and how confidently it was read (SCOPE:254-258).
+            "run_extraction": run_extraction_report(_run_facts_by_station),
             "cache": ({"digest": (_survey_digest or "")[:12], "hits": _dh, "misses": _dm, "writes": _dw}
                       if _c0 is not None else {"digest": (_survey_digest or "")[:12],
                                               "hits": 0, "misses": 0, "writes": 0}),

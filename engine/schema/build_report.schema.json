@@ -126,6 +126,11 @@
           "items": {"$ref": "#/definitions/conditioning_entry"},
           "description": "the presence rule (station-schema freeze gate 15), same aggregation shape as conditioning: the mt_metadata library defaults each station's parse carried instead of a source assertion (run id '<station>a', a 0 Hz rate, the 1980 MTime epoch window, an unnamed data logger, a 0-ohm contact resistance, the rr* remote-reference channels). A REPORT of what the emitter refuses to publish as a source assertion, not a conditioning decision AusMT made, which is why it is a field of its own. Optional for reports that predate the rule"
         },
+        "run_extraction": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/definitions/run_extraction_entry"},
+          "description": "keyed by station id: which >INFO dialect produced that station's acquisition values and the extraction-confidence class behind each one (station-metadata scope section 6). station.json publishes the value alone, so this is where the class is kept, and it is the difference between a rate a structured dialect stated and one pattern-matched out of a processing token. Stations whose >INFO asserted nothing are omitted. Optional for reports that predate the extractors"
+        },
         "cache": {
           "type": "object",
           "required": ["digest", "hits", "misses", "writes"],
@@ -150,6 +155,23 @@
         "count": {"type": "integer", "minimum": 1},
         "stations": {"type": ["array", "null"], "items": {"type": "string"}},
         "except": {"type": ["array", "null"], "items": {"type": "string"}}
+      }
+    },
+    "run_extraction_entry": {
+      "type": "object",
+      "required": ["dialects", "confidence"],
+      "additionalProperties": false,
+      "description": "one station's >INFO extraction provenance.",
+      "properties": {
+        "dialects": {"type": "array", "items": {"type": "string"}, "minItems": 1,
+                     "description": "the dialect extractors that recognised this station's >INFO"},
+        "confidence": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"enum": ["formal_edi_field", "structured_dialect",
+                                            "pattern_extracted", "curator_supplied", "inferred"]},
+          "description": "keyed by the value's path within the extraction (run.<key>, channels.<component>.<key>)"
+        }
       }
     }
   }

@@ -22,6 +22,8 @@ that silently stopped matching fails here; and the build half asserts the facts 
 product, whose shape change is what the C18 cache tag bump covers.
 """
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -195,6 +197,36 @@ def test_the_parse_product_carries_the_run_facts():
     parsed = bp._parse_one_edi(edi)
     assert parsed["run_facts"]["run"]["sample_rate_hz"] == 10.0
     assert json.dumps(parsed["run_facts"])   # JSON-serialisable: it rides the C18 cache value
+
+
+def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
+    """SCOPE:254-258: the curation layer keeps the extraction provenance even where the public
+    document does not display it. station.json publishes the VALUE and never the class, so the class
+    needs a home, and build_report is the curation surface the presence rule already uses.
+
+    FAILS against the pre-fix build, whose report carried no `run_extraction` at all: the class and
+    the dialect were computed for every value, cached inside the C18 parse product and then dropped,
+    so nothing shipped could tell a structured_dialect value from a pattern_extracted one. This
+    fixture is the case that makes it matter - EXAMPLE01's rate is read out of a LEMIMT SITE
+    processing token, which is the weakest class the extractors emit."""
+    pytest.importorskip("mt_metadata")
+    surveys = tmp_path / "surveys"
+    surveys.mkdir()
+    shutil.copytree(HERE / "fixtures" / "example-survey", surveys / "example-survey")
+    out = tmp_path / "data"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(surveys),
+                        "--out", str(out), "--no-validate"], cwd=str(ROOT),
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    entry = report["surveys"]["example-survey"]["run_extraction"]["EXAMPLE01"]
+    assert entry["dialects"] == ["lemimt-site"]
+    assert entry["confidence"] == {"run.sample_rate_hz": rf.PATTERN_EXTRACTED}
+    published = json.loads((out / "products" / "example-survey" / "EXAMPLE01" / "station.json")
+                           .read_text(encoding="utf-8"))
+    assert published["runs"][0]["sample_rate_hz"] == 10.0
+    assert "confidence" not in json.dumps(published["runs"]), (
+        "the class is curation provenance, not a published member")
 
 
 def test_the_cache_format_tag_records_the_parse_product_shape_change(tmp_path):

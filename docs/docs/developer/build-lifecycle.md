@@ -95,6 +95,14 @@ is ever published as one; the rows record, per survey and per distinct note, whi
 survey's parses carried, so a value the emitter drops is visible to a curator rather than silently
 absent. The rows are logged as `[presence] NOTICE` lines from the same aggregation that writes them.
 
+`run_extraction` is the other half of the same provenance question, keyed by station id: not what was
+a library default, but which `>INFO` dialect asserted each real acquisition value and how confidently
+it was read. Every extractor classifies its output as `formal_edi_field`, `structured_dialect`,
+`pattern_extracted`, `curator_supplied` or `inferred`, and `station.json` publishes the value alone,
+so this is where the class is kept. It is the difference between a sample rate a structured dialect
+stated and one pattern-matched out of a LEMIMT processing token. Stations whose `>INFO` asserted
+nothing are omitted.
+
 It is not a public surface. The curator workbench reads it over the private listener, and
 `scripts/verify.py`, the alert and doctor scripts read it from disk. It carries no stability promise and
 is not a contract. Its schema is `engine/schema/build_report.schema.json` (JSON Schema draft-07, `$id`
