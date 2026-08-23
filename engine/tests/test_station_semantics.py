@@ -365,14 +365,16 @@ def test_verify_self_building_runs_the_station_gate(tmp_path):
     The self-building path passes no --products, so this is also where A4a earns its keep: without the
     unconditional served-root write there would be no station.json for the gate to read.
 
-    AUSMT_VALIDATOR_PATH is pinned to the vendored validator copy so the run is hermetic: CI has no
-    sibling ausmt-surveys checkout, the bounded walk finds nothing, and verify refuses to build. The
-    gate under proof is the STATION gate; the surveys validator's currency is the resync
-    discipline's job, not this test's. And the PASS line must count documents: a gate passing on a
-    zero-station build proves only that it printed."""
+    AUSMT_VALIDATOR_PATH is pinned through the C35b/D3.1 four-arm seam so the run is hermetic in
+    every lane: sibling checkout on the dev box, the vendored copy on a monorepo CI checkout, and
+    the engine image's designed topology (no gateway tree shipped) SKIPs with its allow-listed
+    reason rather than tripping the never-fall-through error. The gate under proof is the STATION
+    gate; the surveys validator's currency is the resync discipline's job, not this test's. And
+    the PASS line must count documents: a gate passing on a zero-station build proves only that it
+    printed."""
     pytest.importorskip("mt_metadata")
-    env = dict(os.environ, AUSMT_VALIDATOR_PATH=str(
-        ROOT.parent / "gateway" / "tests" / "fixtures" / "vendored_validation"))
+    from test_validator_gate import _resolve_validator_dir  # noqa: PLC0415 - the D3.1 seam
+    env = dict(os.environ, AUSMT_VALIDATOR_PATH=str(_resolve_validator_dir()))
     v = subprocess.run([sys.executable, str(VERIFY), "--skip-tests", "--surveys",
                         str(_distinct_slug_corpus(tmp_path))],
                        cwd=str(ROOT), capture_output=True, text=True, env=env)
