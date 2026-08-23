@@ -1,0 +1,575 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "$id": "https://ausmt.auscope.org.au/data/schemas/ausmt-station/0.1/ausmt-station.schema.json",
+ "title": "AusMT Station Metadata 0.1-draft: canonical public representation of one published station record",
+ "description": "Draft (0.x): the promoted station.json - one published station record within a survey context, not a globally unique physical site. Two formal branches: the full record keeps an open schema (existing keys frozen and permitted; runs[] and resources[] are the new canonical model), while the withheld record is closed-world by design - the one exception to the open-schema rule, so that nothing can ride in under unbanned key names. Runs describe acquisitions; resources describe files, services and data products; nesting never implies one-resource-to-one-run ownership. Frozen only when the freeze gates in AUSMT-STATION-METADATA-SCOPE.md pass.",
+ "definitions": {
+  "identifier_row": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "scheme",
+    "identifier"
+   ],
+   "properties": {
+    "scheme": {
+     "type": "string",
+     "minLength": 1
+    },
+    "identifier": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "description": "SHARED DEFINITION with ausmt-survey-metadata; DOIs bare-form"
+  },
+  "unit_value": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "source_value"
+   ],
+   "properties": {
+    "source_value": {
+     "type": "string",
+     "minLength": 1,
+     "description": "the source text, never discarded after normalisation"
+    },
+    "value": {
+     "type": "number",
+     "description": "present only where parsing is safe; a missing value beats a confidently wrong one"
+    },
+    "unit": {
+     "type": "string",
+     "description": "required whenever value is present",
+     "minLength": 1
+    }
+   },
+   "dependencies": {
+    "value": [
+     "unit"
+    ]
+   },
+   "description": "dual representation for unit-bearing legacy values (contact resistance class)"
+  },
+  "time_period": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "start"
+   ],
+   "properties": {
+    "start": {
+     "type": "string",
+     "description": "ISO 8601 UTC (Z) after source conversion; source timezone provenance retained in curation where conversion was nontrivial",
+     "format": "date-time"
+    },
+    "end": {
+     "type": "string",
+     "description": "absent when unknown (open-world), never null",
+     "format": "date-time"
+    }
+   }
+  },
+  "instrument": {
+   "type": "object",
+   "additionalProperties": true,
+   "properties": {
+    "manufacturer": {
+     "type": "string"
+    },
+    "model": {
+     "type": "string"
+    },
+    "serial_number": {
+     "type": "string",
+     "description": "asserted only where source/adapter semantics establish a physical instance identifier; mt_metadata Instrument.id is not universally a serial"
+    },
+    "identifiers": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/identifier_row"
+     },
+     "description": "instrument PIDs; AusMT extension over mt_metadata (which has no PID-capable field); only source-provided, deterministic-registry, or curator-confirmed matches are ever emitted"
+    }
+   }
+  },
+  "electrode": {
+   "allOf": [
+    {
+     "$ref": "#/definitions/instrument"
+    }
+   ],
+   "description": "an Electrode is an Instrument subtype (mt_metadata semantics); PIDs supported, never expected"
+  },
+  "channel": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "component"
+   ],
+   "properties": {
+    "component": {
+     "type": "string",
+     "minLength": 1,
+     "description": "e.g. ex, ey, hx, hy, hz"
+    },
+    "measurement_azimuth_deg": {
+     "type": "number"
+    },
+    "sample_rate_hz": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "description": "override only where a channel genuinely differs from the run's nominal rate; divergence is a curation-review trigger"
+    },
+    "sensor": {
+     "$ref": "#/definitions/instrument",
+     "description": "magnetic/auxiliary channels only"
+    },
+    "positive": {
+     "$ref": "#/definitions/electrode",
+     "description": "electric channels only"
+    },
+    "negative": {
+     "$ref": "#/definitions/electrode",
+     "description": "electric channels only"
+    },
+    "dipole_length_m": {
+     "type": "number",
+     "exclusiveMinimum": 0
+    },
+    "contact_resistance": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/unit_value"
+      },
+      {
+       "properties": {
+        "value": {
+         "exclusiveMinimum": 0
+        }
+       }
+      }
+     ],
+     "description": "attaches to the electric measurement circuit, never to the run object; parsed value must be a positive resistance"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "component": {
+        "pattern": "^[eE]"
+       }
+      },
+      "required": [
+       "component"
+      ]
+     },
+     "then": {
+      "properties": {
+       "sensor": false
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "component": {
+        "pattern": "^[hbHB]"
+       }
+      },
+      "required": [
+       "component"
+      ]
+     },
+     "then": {
+      "properties": {
+       "positive": false,
+       "negative": false,
+       "dipole_length_m": false,
+       "contact_resistance": false
+      }
+     }
+    }
+   ],
+   "description": "electric channels (component starting e/E, including Phoenix e1/e2) carry positive/negative electrodes and never sensor; magnetic channels (h/H/b/B families) carry sensor and never electrode-circuit fields; guards match by leading letter so case and dialect variants are covered; the emitter normalises component tokens to lowercase"
+  },
+  "run": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "id"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "source run id where one exists; otherwise a PERSISTENT curated local id, assigned once, never regenerated from mutable metadata; unique within the station record"
+    },
+    "time_period": {
+     "$ref": "#/definitions/time_period"
+    },
+    "sample_rate_hz": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "description": "nominal run rate; a run is one continuous acquisition at one nominal rate (provisional pending the hardware-change inspection); required whenever any channel declares a rate, so the survey rate rollup can never silently lose rates"
+    },
+    "data_logger": {
+     "$ref": "#/definitions/instrument"
+    },
+    "channels": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/channel"
+     }
+    }
+   },
+   "description": "acquisition truth; absent runs[] on a record means run metadata not asserted, never 'no runs occurred'",
+   "if": {
+    "properties": {
+     "channels": {
+      "contains": {
+       "required": [
+        "sample_rate_hz"
+       ]
+      }
+     }
+    },
+    "required": [
+     "channels"
+    ]
+   },
+   "then": {
+    "required": [
+     "sample_rate_hz"
+    ]
+   }
+  },
+  "resource": {
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "id",
+    "kind"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "stable within this document; relationships never rely on array position or paths"
+    },
+    "kind": {
+     "type": "string",
+     "enum": [
+      "time_series",
+      "transfer_function",
+      "archive",
+      "metadata",
+      "plot"
+     ]
+    },
+    "provenance_role": {
+     "type": "string",
+     "enum": [
+      "source",
+      "derived"
+     ]
+    },
+    "representation_role": {
+     "type": "string",
+     "enum": [
+      "original",
+      "alternate",
+      "archival_copy"
+     ]
+    },
+    "format": {
+     "type": "string",
+     "description": "domain token, e.g. mth5, edi, emtfxml, netcdf, zip"
+    },
+    "media_type": {
+     "type": "string",
+     "description": "optional, only where certain, e.g. application/x-hdf5"
+    },
+    "path": {
+     "type": "string",
+     "description": "local served path (manifest/integrity linkage); manifest.json remains the checksum authority"
+    },
+    "access_url": {
+     "type": "string",
+     "description": "absolute public direct-download route"
+    },
+    "service_urls": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+       "kind",
+       "url"
+      ],
+      "properties": {
+       "kind": {
+        "type": "string",
+        "description": "e.g. opendap"
+       },
+       "url": {
+        "type": "string"
+       }
+      }
+     },
+     "description": "only services the producer workflow verified valid for this resource's format; no verified_at is published (service health is operational state)"
+    },
+    "repository": {
+     "type": "string",
+     "minLength": 1,
+     "description": "controlled token naming the repository that holds this resource (e.g. NCI), its semantics documented with the token; a richer organisation object or reference into survey-metadata.json is deferred until that document exists (no per-resource organisation duplication) - the ratified deferral trigger, verbatim from the scope; survey-metadata.json now exists and is live, so the trigger has FIRED and the deferral is an open owner question, not a standing position. Held as a controlled open string while NCI is the only ratified token, because the schema must serve EarthScope, GA, S3 and institutional repositories identically"
+    },
+    "identifiers": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/identifier_row"
+     },
+     "description": "identifies THIS EXACT resource only"
+    },
+    "related_collection_identifiers": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/identifier_row"
+     },
+     "description": "identifies a containing product/collection; a collection DOI never masquerades as a file DOI"
+    },
+    "processing_level": {
+     "type": "string",
+     "enum": [
+      "raw",
+      "level0",
+      "level1",
+      "level2",
+      "level3"
+     ],
+     "description": "clean station vocabulary (schema-lane final), closed on the tokens the scope ratifies (raw plus the level0..level3 class); crosswalked to NCI level names and MTCAT's legacy identifies values - never inherited from them"
+    },
+    "packaging": {
+     "type": "string",
+     "enum": [
+      "packed_archive"
+     ],
+     "description": "clean station vocabulary (schema-lane final), closed on the one token the scope ratifies (packed archive); a single served file omits the field, since absence asserts nothing. Widening the enum on a real corpus case is additive and never invalidates an emitted document"
+    },
+    "access": {
+     "type": "string",
+     "description": "resource-level access state where it differs from the survey's"
+    },
+    "license": {
+     "type": "string",
+     "description": "omitted = inherits the survey licence (documented inheritance)"
+    },
+    "represents_runs": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "which runs this resource represents; NOT mutually exclusive with derived_from_runs (a concatenated resampled MTH5 may both represent and derive from runs A/B/C); omitted = mapping not asserted"
+    },
+    "derived_from_runs": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "which runs fed this derived product; a local convenience, not the whole provenance model"
+    }
+   },
+   "description": "an addressable file/service/data representation; granularity = served/addressable things (an archive's internal listing is never expanded here); no numeric science ever appears; a derived resource cannot claim representation_role original (the semantically impossible combination is schema-rejected)",
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "provenance_role": {
+        "const": "derived"
+       }
+      },
+      "required": [
+       "provenance_role"
+      ]
+     },
+     "then": {
+      "properties": {
+       "representation_role": {
+        "enum": [
+         "alternate",
+         "archival_copy"
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ },
+ "oneOf": [
+  {
+   "title": "withheld station record",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "schema",
+    "version",
+    "ausmt_id",
+    "station",
+    "survey",
+    "survey_id",
+    "withheld"
+   ],
+   "properties": {
+    "schema": {
+     "const": "ausmt-station"
+    },
+    "version": {
+     "type": "string"
+    },
+    "ausmt_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "station": {
+     "type": "string"
+    },
+    "survey": {
+     "type": "string",
+     "description": "display title (legacy surface)"
+    },
+    "survey_id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "machine identifier, identical with mtcat's"
+    },
+    "withheld": {
+     "const": true
+    },
+    "access": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "level": {
+       "type": "string"
+      },
+      "embargo_until": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "the date the embargo lifts; null where the access state carries no date (the metadata_only case, whose emitted stub writes the key with a null value), so the frozen stub bytes validate as emitted. The null is admitted ONLY where the level carries no date: the conditional below keeps an embargoed record fail-closed on a real date, so a dropped or nulled embargo date on the one live embargoed survey is still rejected"
+      },
+      "served": {
+       "const": false
+      }
+     },
+     "if": {
+      "properties": {
+       "level": {
+        "const": "embargoed"
+       }
+      },
+      "required": [
+       "level"
+      ]
+     },
+     "then": {
+      "required": [
+       "embargo_until"
+      ],
+      "properties": {
+       "embargo_until": {
+        "type": "string",
+        "minLength": 1
+       }
+      }
+     },
+     "description": "access state block; closed so nothing can ride inside it"
+    },
+    "distribution": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "edi_available": {
+       "const": false
+      },
+      "license": {
+       "type": "string"
+      },
+      "edi_path": {
+       "enum": [
+        null
+       ]
+      }
+     },
+     "description": "closed legacy block: nothing is distributed for a withheld record"
+    },
+    "note": {
+     "type": "string"
+    },
+    "country": {
+     "type": "string"
+    },
+    "organisation": {
+     "type": "string"
+    }
+   },
+   "description": "fail-closed leak protection: the withheld branch is CLOSED-WORLD (additionalProperties false, nested objects closed) - the one deliberate exception to the open-schema rule, because a withheld record's absence semantics are 'deliberately not exposed', and an open object would let coordinates, runs, or instrument identity ride in under unbanned key names. Extending the stub requires a schema change, by design."
+  },
+  {
+   "title": "full station record",
+   "type": "object",
+   "additionalProperties": true,
+   "required": [
+    "schema",
+    "version",
+    "ausmt_id",
+    "station",
+    "survey",
+    "survey_id"
+   ],
+   "properties": {
+    "schema": {
+     "const": "ausmt-station"
+    },
+    "version": {
+     "type": "string",
+     "description": "version of THIS schema the document conforms to (0.x while draft)"
+    },
+    "ausmt_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "station": {
+     "type": "string"
+    },
+    "survey": {
+     "type": "string",
+     "description": "display title (legacy surface, frozen)"
+    },
+    "survey_id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "machine identifier added by the promotion, identical with mtcat's surveys[].survey_id"
+    },
+    "withheld": false,
+    "runs": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/run"
+     }
+    },
+    "resources": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/resource"
+     }
+    }
+   },
+   "description": "the promoted full record: every existing 1.2-era key (location, data, diagnostics, processing, distribution, provenance, coordinate_qc, canonical_conditioning, frame, coordinate_policy, country, organisation) remains permitted and frozen via the open schema; runs[] and resources[] are the new canonical machine surface. The presence rule binds the emitter: no library default is ever serialised as a source assertion."
+  }
+ ]
+}
