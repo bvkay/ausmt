@@ -966,6 +966,9 @@ _SM_PLACEHOLDER_MARK = "« REPLACE »"
 # A DOI resolver prefix on a curated DOI is stripped at emission (the schema wants bare DOIs); the
 # DOI's own case is kept (DOIs are case-insensitive, and a Record DOI's curated form is the form cited).
 _SM_DOI_RESOLVER_RE = _re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", _re.IGNORECASE)
+# A DOI in the bare canonical form the station schema wants (scope 4.2), after the resolver prefix
+# above is stripped. Anything else is not placeable as a DOI and is reported for curation.
+_BARE_DOI_RE = _re.compile(r"^10\.\d{4,9}/\S+$")
 # extent is emitted ONLY from a curated WGS 84 geographic_extent (D7: never station-derived; the
 # schema's CRS rule). GDA94/GDA2020 extents wait on an owner ruling and are omitted meanwhile.
 _SM_WGS84_DATUMS = {"WGS84", "EPSG:4326", "WGS-84"}
@@ -2552,6 +2555,107 @@ def _folded_dimensionality(srow) -> dict:
     return {k: v for k, v in _dimensionality_document(srow).items() if k != "screening_diagnostic"}
 
 
+# resources[] (D3): one row per SERVED, ADDRESSABLE thing, keyed by the manifest format it is
+# emitted under. `id` is stable within the document and is never an array index or a path.
+#
+# D19 role axes, emitted ONLY where they are mechanically certain: the served EDI is the custodian's
+# never-edited source in its original form (rule 11), while the EMTF XML and the MTH5 are this
+# engine's conversions of it. The bundle archives carry NEITHER axis in 0.1: whether a zip of source
+# EDIs is source or derived is a semantics call this lane must not improvise.
+_RESOURCE_BY_FORMAT = {
+    "edi":         {"id": "edi", "kind": "transfer_function", "format": "edi",
+                    "provenance_role": "source", "representation_role": "original"},
+    "emtfxml":     {"id": "emtfxml", "kind": "transfer_function", "format": "emtfxml",
+                    "provenance_role": "derived", "representation_role": "alternate"},
+    "mth5":        {"id": "mth5", "kind": "transfer_function", "format": "mth5",
+                    "provenance_role": "derived", "representation_role": "alternate"},
+    "edi-zip":     {"id": "edi-zip", "kind": "archive", "format": "zip"},
+    "xml-zip":     {"id": "xml-zip", "kind": "archive", "format": "zip"},
+    "survey-mth5": {"id": "survey-mth5", "kind": "archive", "format": "mth5"},
+}
+# GATE 12 (D16). The clean station vocabularies (scope 4.4) crosswalked OUT to NCI's level names and
+# to MTCAT's legacy `identifies` values. Direction of dependency, stated because it is the whole
+# point: the station concepts are the SOURCE of this mapping and the legacy values are the target,
+# so MTCAT's heterogeneous vocabulary is mapped FROM, never inherited. Nothing emits from this table
+# in 0.1 (no resource carries processing_level or packaging yet); it is the written crosswalk the
+# freeze gate asks for, and the one mapping the corpus forces today is the first row, which covers
+# 20 of the 42 related_identifiers rows in the survey packages.
+STATION_VOCABULARY_CROSSWALK = {
+    ("raw", "packed_archive"): {"nci": "the survey's packed raw time series (NCI numbers no level "
+                                       "for it)", "mtcat_identifies": "raw_packed"},
+    ("level0", None): {"nci": "level_0", "mtcat_identifies": "level0"},
+    ("level1", None): {"nci": "level_1", "mtcat_identifies": "level1"},
+    ("level2", None): {"nci": "level_2", "mtcat_identifies": "level2"},
+    ("level3", None): {"nci": "level_3", "mtcat_identifies": "level3"},
+}
+# The legacy identifies values that are SCOPE, not processing level. Mapping them onto a station
+# processing_level is precisely the identifies debt the separated vocabularies exist to refuse.
+STATION_VOCABULARY_UNMAPPED = ("collection", "entire")
+
+
+def station_collection_identifiers(meta):
+    """(related_collection_identifiers[], declined notes) for one survey's curated rows.
+
+    SCOPE:173-179 makes placement verification mandatory and this lane resolves no DOIs, so a row is
+    projected only where the CURATION states its entity scope: a bare canonical DOI whose
+    `identifies` names a collection or product level. The scope travels with the row, so a
+    collection DOI can never read as an identifier of the file it sits beside.
+
+    Everything else is REFUSED and reported for curation, because an unplaceable row would publish a
+    wrong citation claim: a row with no `identifies` (nothing states what it names), a row that is
+    not a DOI, and a DOI one survey declares at two different levels (the curated scope contradicts
+    itself, so neither row is placeable)."""
+    rows, declined = [], []
+    curated = [r for r in ((meta or {}).get("related_identifiers") or []) if isinstance(r, dict)]
+    levels: dict = {}
+    for row in curated:
+        levels.setdefault(str(row.get("identifier") or ""), set()).add(row.get("identifies"))
+    for row in curated:
+        raw = str(row.get("identifier") or "")
+        scope = row.get("identifies")
+        if str(row.get("identifier_type") or "").upper() != "DOI":
+            declined.append(f"{raw}: identifier_type is {row.get('identifier_type')!r}, not DOI")
+            continue
+        if not scope:
+            declined.append(f"{raw}: `identifies` is absent, so nothing states what this DOI names")
+            continue
+        doi = _SM_DOI_RESOLVER_RE.sub("", raw).strip()
+        if not _BARE_DOI_RE.match(doi):
+            declined.append(f"{raw}: not a bare canonical DOI")
+            continue
+        if len(levels.get(raw, set())) > 1:
+            declined.append(f"{raw}: declared at two levels ({', '.join(sorted(str(s) for s in levels[raw]))}), "
+                            f"so its curated scope contradicts itself")
+            continue
+        entry = {"scheme": "DOI", "identifier": doi, "identifies": scope}
+        if entry not in rows:
+            rows.append(entry)
+    return rows, declined
+
+
+def station_resources(served_formats, collection_identifiers) -> list:
+    """resources[] for one open station. `served_formats` is {manifest format: served path} for the
+    station's own renditions AND its survey's bundles, captured at the emit sites so the path here
+    is the one the manifest records for the same bytes and never a second derivation of it.
+
+    No row carries `identifiers[]`: no DOI identifies any exact file AusMT serves today (D3), and a
+    collection DOI presenting as a file DOI is the failure the identity contract names. The
+    containing-collection hook is `related_collection_identifiers`, projected by
+    station_collection_identifiers() and identical for every resource of one survey, since each
+    curated row names a collection whose scope covers this survey's holdings, not one file."""
+    out = []
+    for fmt, template in _RESOURCE_BY_FORMAT.items():
+        path = served_formats.get(fmt)
+        if not path:
+            continue
+        row = dict(template)
+        row["path"] = path
+        if collection_identifiers:
+            row["related_collection_identifiers"] = [dict(e) for e in collection_identifiers]
+        out.append(row)
+    return out
+
+
 # The published channel order: the acquisition families in the order every dialect writes them,
 # then anything else alphabetically, so two builds of one station order its channels identically.
 _CHANNEL_ORDER = ("ex", "ey", "hx", "hy", "hz")
@@ -2642,7 +2746,7 @@ def station_runs(run_facts, run_ids, station_id, comps):
 
 
 def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served,
-                     prov, runs=None) -> dict:
+                     prov, runs=None, resources=None) -> dict:
     """Build one station's station.json (schema/ausmt-station.schema.json 0.1, the third public
     contract) from the station record `r`, its science row `srow` and the survey context. Returns a
     plain-JSON dict in the schema's property order; the caller serialises with _jdump(doc, indent=1)
@@ -2746,6 +2850,11 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
     # the persistent run-id store; the withheld branch above returns before this and gains none.
     if runs:
         doc["runs"] = runs
+    # resources[] (D3), appended for the same reason. Absent where the station serves no bytes at
+    # all, which is the honest statement: a station whose EDI the coordinate gate withholds has no
+    # served rendition to describe.
+    if resources:
+        doc["resources"] = resources
     return doc
 
 
@@ -2758,10 +2867,16 @@ def _dimensionality_document(srow) -> dict:
             "note": "screening diagnostic, not an interpretation product"}
 
 
-def _write_station_products(job, prov, served_root, products_dir):
+def _write_station_products(job, prov, served_root, products_dir,
+                            served_formats=None, bundle_formats=None, collection_ids=None):
     """Write one station's per-station products. `job` is the tuple captured in main()'s per-survey
     loop and drained after the coordinate mask; `prov` is the build PROV block. The rendering lives in
     station_document() / _dimensionality_document(); this is the write path alone.
+
+    `served_formats` / `bundle_formats` / `collection_ids` are the resources[] inputs, captured at
+    the manifest emit sites. They arrive HERE rather than in the job because a survey's bundles are
+    emitted after its station loop, so the per-survey archive rows do not exist yet when the job is
+    queued.
 
     D7: station.json is published under `served_root` (out/products) UNCONDITIONALLY, because it is a
     public contract and a build run without --products would otherwise ship a data tree with a
@@ -2771,8 +2886,11 @@ def _write_station_products(job, prov, served_root, products_dir):
     deployment, so the served path is the same either way. dimensionality.json is not a contract and
     keeps its single --products home."""
     (r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served, runs) = job
+    _formats = dict((bundle_formats or {}).get(slug) or {})
+    _formats.update((served_formats or {}).get(r["ausmt_id"]) or {})
     doc = station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes,
-                           served, prov, runs)
+                           served, prov, runs,
+                           station_resources(_formats, (collection_ids or {}).get(slug) or []))
     payload = _jdump(doc, indent=1)
     served_dir = served_root / slug / r["id"]
     curated_dir = (products_dir / slug / r["id"]) if products_dir is not None else None
@@ -4422,6 +4540,13 @@ def main(argv=None):
     # reads (D3: "no per-emitter logic"). Nothing else in station.json depends on the mask, so deferral is
     # value-preserving for exact stations (proven by the default-stability pin).
     _station_product_jobs: list = []
+    # resources[] inputs, captured at the emit sites so a resource path is the SAME string the
+    # manifest row is built from and never a second derivation of it: {ausmt_id: {format: path}}
+    # for the per-station renditions, {slug: {format: path}} for the per-survey bundles (which are
+    # emitted after the station loop), and {slug: [row]} for the placeable collection identifiers.
+    _served_formats: dict = {}
+    _bundle_formats: dict = {}
+    _collection_ids: dict = {}
     # survey-metadata.json (the second public contract): ONE job per survey, keyed by label like
     # surveys_meta (so the document set equals mtcat's surveys[] by construction), capturing the raw
     # survey.yaml side channel, the SMETA entry and the survey's serve state (D8 seam). Emitted after
@@ -4737,6 +4862,15 @@ def main(argv=None):
             _survey_warnings.append(f"run-id store IGNORED ({_rie}); no runs[] published")
             _survey_run_ids = {}
         _run_notes: list = []
+        # resources[]: the survey's placeable containing-collection identifiers, and the rows this
+        # lane REFUSES to place. A refusal is reported, never silently dropped: an unplaceable row
+        # would publish a wrong citation claim, and a curator is the only one who can fix it.
+        _collection_ids[slug], _collection_declined = station_collection_identifiers(meta)
+        if _collection_declined:
+            _survey_warnings.append(
+                f"{len(_collection_declined)} related_identifiers row(s) are NOT placeable as "
+                f"containing-collection identifiers and are omitted from resources[] "
+                f"[{'; '.join(_collection_declined)}]")
         # product contract per station + manifest + (optional, license-gated) EDI/XML copies
         for (p, r), srow in zip(stations, sci_rows):
             # C42 per-station byte gate: a non-exact (generalised/withheld) station's SOURCE bytes are
@@ -4797,20 +4931,23 @@ def main(argv=None):
                 # per-station artifact so no future emitter can reintroduce the class.
                 _claim_served_artifact(_artifact_claims, _artifact_collisions,
                                        served_edi, r["ausmt_id"], "edi")
+                _edi_rel = f"edi/{slug}/{served_edi.name}"
                 manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "edi",
-                                                    served_edi,
-                                                    f"edi/{slug}/{served_edi.name}", lic,
+                                                    served_edi, _edi_rel, lic,
                                                     nci_base=nci_base, base_url=base_url,
                                                     custodian=_custodian))
+                _served_formats.setdefault(r["ausmt_id"], {})["edi"] = _edi_rel
             if can_serve and _cserved:
                 _xmlp = xml_written.get(r["id"])
                 if _xmlp and Path(_xmlp).exists():
                     _claim_served_artifact(_artifact_claims, _artifact_collisions,
                                            Path(_xmlp), r["ausmt_id"], "emtfxml")
+                    _xml_rel = f"xml/{slug}/{Path(_xmlp).name}"
                     manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "emtfxml",
-                                                        Path(_xmlp), f"xml/{slug}/{Path(_xmlp).name}",
+                                                        Path(_xmlp), _xml_rel,
                                                         lic, nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
+                    _served_formats.setdefault(r["ausmt_id"], {})["emtfxml"] = _xml_rel
                 # Tier 1: the row exists only for a station the writer actually shipped, so a station
                 # whose h5 was withheld by the round-trip gate is absent from the manifest rather than
                 # advertised as a 404 (the same rule the EMTF-XML row above follows).
@@ -4818,10 +4955,12 @@ def main(argv=None):
                 if _h5p and Path(_h5p).exists():
                     _claim_served_artifact(_artifact_claims, _artifact_collisions,
                                            Path(_h5p), r["ausmt_id"], "mth5")
+                    _h5_rel = f"h5/{slug}/{Path(_h5p).name}"
                     manifest["files"].append(_file_row(r["ausmt_id"], label, r["id"], "mth5",
-                                                        Path(_h5p), f"h5/{slug}/{Path(_h5p).name}",
+                                                        Path(_h5p), _h5_rel,
                                                         lic, nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
+                    _served_formats.setdefault(r["ausmt_id"], {})["mth5"] = _h5_rel
             # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
             # above). The job captures this station's SHARED record `r` (masked in place downstream), its
             # science row, and the survey context needed to render - nothing here depends on cross-survey
@@ -4873,6 +5012,7 @@ def main(argv=None):
                                                         lic, len(served_edis),
                                                         nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
+                _bundle_formats.setdefault(slug, {})["edi-zip"] = _zrel
             # C32 §1.1: per-survey EMTF-XML zip — unconditional (like the EDI zip) whenever served XML
             # exists. n_stations = the number of XMLs bundled (the round-trip-verified set), not the
             # station count, so it stays honest if a station had no servable XML.
@@ -4883,6 +5023,7 @@ def main(argv=None):
                                                         lic, len(_xsrc),
                                                         nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
+                _bundle_formats.setdefault(slug, {})["xml-zip"] = _xrel
             if flags["survey_h5_enabled"]:
                 # C42 (F1): emit_survey_mth5 rebuilds the bundle by RE-READING the RAW source files
                 # (TF(fn=...)), bypassing the masked record entirely — an unfiltered station list served
@@ -4898,6 +5039,7 @@ def main(argv=None):
                     manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
                                                            lic, _hn, nci_base=nci_base, base_url=base_url,
                                                            custodian=_custodian))
+                    _bundle_formats.setdefault(slug, {})["survey-mth5"] = _hrel
                     # C46-W3a: rights must travel with the MTH5 bytes too. The survey MTH5 ships as a bare
                     # file (bundles/<slug>-tf.h5, NOT a zip — HDF5 embeds timestamps so it is not
                     # byte-reproducible), so the SAME LICENSE.txt instrument is written BESIDE it as a
@@ -5043,7 +5185,8 @@ def main(argv=None):
     # deployment). The jobs read the same shared records the mask mutated. D7: station.json lands under
     # out/products unconditionally and under --products as well where that is a different directory.
     for _job in _station_product_jobs:
-        _write_station_products(_job, PROV, out / "products", prod)
+        _write_station_products(_job, PROV, out / "products", prod,
+                                _served_formats, _bundle_formats, _collection_ids)
     # ---- survey-metadata.json (the second public contract): one document per survey, AFTER the mask
     # seam (the extent follows the aggregated post-mask coordinate state, D7) and after the station jobs,
     # into out/products/<slug>/ UNCONDITIONALLY (the served root in deployment, independent of

@@ -138,6 +138,18 @@ all three.
         { "component": "hx", "measurement_azimuth_deg": 0,
           "sensor": { "manufacturer": "LEMI", "model": "LEMI-120", "serial_number": "134" } }
       ] }
+  ],
+  "resources": [
+    { "id": "edi", "kind": "transfer_function", "format": "edi",
+      "provenance_role": "source", "representation_role": "original",
+      "path": "edi/vulcan-2022/Vulcan_A1.edi",
+      "related_collection_identifiers": [
+        { "scheme": "DOI", "identifier": "10.25914/bzd5-n780", "identifies": "raw_packed" } ] },
+    { "id": "emtfxml", "kind": "transfer_function", "format": "emtfxml",
+      "provenance_role": "derived", "representation_role": "alternate",
+      "path": "xml/vulcan-2022/A1.xml" },
+    { "id": "edi-zip", "kind": "archive", "format": "zip",
+      "path": "bundles/vulcan-2022-edi.zip" }
   ]
 }
 ```
@@ -417,7 +429,67 @@ never published: they are library defaults, and no corpus source declares one.
 | `contact_resistance` | object | Electric channels only: `source_value` always, plus `value` and `unit` where the unit is one the build parses. The source string is never discarded. |
 | `sensor` | object | Magnetic channels only: the same shape as `data_logger`. |
 
-### 1.17 The withheld record
+### 1.17 resources
+
+| | |
+|---|---|
+| Definition | The served, addressable things that represent this station or contain it. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | array of resource objects |
+| Note | Absent on a station that serves no bytes, and on every withheld record. |
+
+Runs describe acquisitions; resources describe files. Nesting never implies that one resource
+belongs to one run. A resource here is something a consumer can fetch: the station's transfer
+function as the custodian's EDI, as the canonical EMTF XML, as MTH5, and the per-survey archives
+those files are bundled into. `manifest.json` stays the checksum and inventory authority; a resource
+references its path and never restates a hash.
+
+| Member | Type | Definition |
+|---|---|---|
+| `id` | string | Stable within this document. Never an array index or a path. |
+| `kind` | string | `transfer_function` for a rendition of the station's TF, `archive` for a bundle. |
+| `format` | string | `edi`, `emtfxml`, `mth5`, `zip`. |
+| `path` | string | The served path, the same one the download manifest records for those bytes. |
+| `provenance_role` | string | `source` or `derived`, emitted only where it is certain. |
+| `representation_role` | string | `original`, `alternate` or `archival_copy`, on the same terms. |
+| `related_collection_identifiers` | array | Identifiers of collections that CONTAIN this resource. |
+
+The served EDI is the custodian's file, never edited, so it is a `source` in its `original` form.
+The EMTF XML and the MTH5 are this engine's conversions of it, so they are `derived` `alternate`
+representations. The bundle archives carry neither axis in 0.1: whether a zip of source EDIs is
+source or derived is a semantics question, not a mechanical one.
+
+No resource carries `identifiers[]`, because no DOI identifies any exact file AusMT serves today. A
+DOI that identifies a containing collection goes in `related_collection_identifiers` and carries the
+curated scope it was declared with, so a collection DOI can never be read as an identifier of the
+file it sits beside. A row is projected only where the curation states that scope: a bare canonical
+DOI whose `identifies` names a collection or product level. A row with no scope, a row that is not a
+DOI, and a DOI one survey declares at two different levels are all omitted and reported for
+curation, because an unplaceable row would publish a wrong citation claim.
+
+`distribution.edi_path` is the legacy form of the same fact and stays byte-compatible through 1.x; a
+test pins the two to agree, and 2.0 retires the legacy key.
+
+#### Processing level and packaging
+
+The schema defines two small closed vocabularies for a resource, `processing_level` (`raw`,
+`level0`, `level1`, `level2`, `level3`) and `packaging` (`packed_archive`). Nothing emits them in
+0.1. They are separated deliberately: MTCAT's legacy `identifies` values mix scope, packaging and
+processing level on one axis, and this schema maps OUT to that vocabulary rather than inheriting it.
+
+| Station `processing_level` | Station `packaging` | NCI level name | MTCAT `identifies` |
+|---|---|---|---|
+| `raw` | `packed_archive` | the survey's packed raw time series (NCI numbers no level for it) | `raw_packed` |
+| `level0` | | `level_0` | `level0` |
+| `level1` | | `level_1` | `level1` |
+| `level2` | | `level_2` | `level2` |
+| `level3` | | `level_3` | `level3` |
+
+`collection` and `entire` have no station `processing_level`: they state SCOPE, not level, and
+mapping them onto one is the debt these vocabularies exist to refuse.
+
+### 1.18 The withheld record
 
 A station in a survey that is not served gets a stub carrying only the discovery-safe identity the
 public catalogue already exposes.
