@@ -35,6 +35,12 @@ _ELECTRIC_ONLY = ("positive", "negative", "dipole_length_m", "contact_resistance
 # C42 coordinate byte gate withholds a non-exact station's EDI and EMTF XML, so it is in neither zip
 # its survey still publishes. The emitter reads the same map when it builds resources[], so the rule
 # is stated once and enforced at both ends.
+#
+# survey-mth5 is the one approximate row. The tier-2 bundle is written by the SAME writer over the
+# SAME coordinate-gated station set as the tier-1 per-station files, so the tier-1 row proves tier-2
+# membership whenever both are enabled, which is what deployment does (deploy/Makefile passes
+# --survey-h5 AND --station-h5). A build passing only --survey-h5 publishes no survey-mth5 row at
+# all: under-claiming is open-world and safe, claiming containment we cannot demonstrate is not.
 ARCHIVE_MEMBER_FORMAT = {"edi-zip": "edi", "xml-zip": "emtfxml", "survey-mth5": "mth5"}
 # The blocks this lane ADDS. Section 2's zero-null rule is scoped to them: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
