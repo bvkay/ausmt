@@ -18,6 +18,11 @@ Three layers:
   3. THE CONSUMER PINS: drawer.js reads exactly two members out of station.json and fetches it at the
      contract path, and the CI PII guard greps every tree the build step writes (it greped one of two,
      which left the whole curator products tree unscanned).
+  4. SCOPE:308-314's FOUR PROJECTION TESTS, which state what mtcat.json and station.json must agree
+     on. Three hold; the fourth (survey sample_rates_hz == the union of published run rates) is a
+     strict xfail carrying the measured disagreement, because the rollup is absent on every survey
+     while 494 records publish a run rate, and routing them into it would move mtcat.json, which
+     framing invariant 1 forbids. An xfail so the disagreement ships pinned instead of unwritten.
 
 Plus the corpus arm (dev box): when AUSMT_STATION_DATA names a full-corpus build output dir, the same
 identity and scan checks run over the REAL corpus documents. No CI lane has a corpus, so it skips
@@ -43,6 +48,8 @@ sys.path.insert(0, str(ROOT / "extract"))
 sys.path.insert(0, str(HERE))
 
 from _contract import STATION_SCHEMA_VERSION  # noqa: E402
+
+import test_station_emission as emission  # noqa: E402
 from test_station_emission import _build, _docs  # noqa: E402
 
 CORPUS_DATA = os.environ.get("AUSMT_STATION_DATA")
@@ -178,6 +185,103 @@ def test_the_built_corpus_holds_the_identity_chain(built):
     assert identity_chain_violations(built[0]) == []
     assert len(_docs(built[0])) == len(
         json.loads((built[0] / "mtcat.json").read_text(encoding="utf-8"))["stations"])
+
+
+# ---------------------------------------------------------------- SCOPE:308-314: the projection tests
+
+@pytest.fixture(scope="module")
+def access_arm(tmp_path_factory):
+    """One survey per access state over the SAME station bytes, staged from the emission module's own
+    corpus definition so the two arms cannot drift apart."""
+    pytest.importorskip("mt_metadata")
+    root = tmp_path_factory.mktemp("station-invariants-access")
+    surveys = root / "surveys"
+    surveys.mkdir()
+    for slug, access in emission._ACCESS_CORPUS.items():
+        shutil.copytree(FIXTURES / "example-survey", surveys / slug)
+        (surveys / slug / "survey.yaml").write_text(emission._survey_yaml(slug, access),
+                                                    encoding="utf-8")
+    return _build(surveys, root / "data")
+
+
+def _mtcat_rows(out: Path):
+    """(mtcat stations by station_id, mtcat surveys by survey_id) for one built tree."""
+    mtcat = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
+    return ({s.get("station_id"): s for s in mtcat.get("stations", []) if isinstance(s, dict)},
+            {s.get("survey_id"): s for s in mtcat.get("surveys", []) if isinstance(s, dict)})
+
+
+def _time_series_rows(doc):
+    return [r for r in doc.get("resources", []) if r.get("kind") == "time_series"]
+
+
+def _published_run_rates(out: Path) -> dict:
+    """{survey slug: the set of nominal run rates its station records publish}."""
+    rates: dict = {}
+    for key, doc in _docs(out).items():
+        bucket = rates.setdefault(key.split("/")[0], set())
+        bucket |= {r["sample_rate_hz"] for r in doc.get("runs", []) if r.get("sample_rate_hz")}
+    return rates
+
+
+def test_projection_1_has_time_series_agrees_with_the_time_series_resources(built):
+    """SCOPE:308-310, open stations: the mtcat flag is true exactly where the record carries a
+    kind=time_series resource. The lane delivers neither side (contract section 1), so on this corpus
+    it is the both-absent case. Written as the EQUIVALENCE rather than as two absence checks so the
+    day either side lands without the other, this fails instead of passing quietly."""
+    stations, _ = _mtcat_rows(built[0])
+    docs = {d["ausmt_id"]: d for d in _docs(built[0]).values() if not d.get("withheld")}
+    assert docs, "non-vacuity: this arm publishes open station records"
+    for aid, doc in docs.items():
+        assert bool(stations[aid].get("has_time_series")) == bool(_time_series_rows(doc)), aid
+    assert not any(_time_series_rows(d) for d in docs.values()), (
+        "no kind=time_series resource is delivered in 0.1, so the equivalence above is currently the "
+        "both-absent case; delete this line when the projection lands")
+
+
+def test_projection_2_a_withheld_stub_states_no_time_series_either_way(access_arm):
+    """SCOPE:310-311, withheld stations: the flag follows the internal register while the stub stays
+    empty. The register is not delivered, so the flag is absent on both sides; the half that IS
+    enforceable today is the one an embargo must never move, and it is the stronger half - the stub
+    carries no resources at all, so it can neither assert nor deny a time series."""
+    stations, _ = _mtcat_rows(access_arm)
+    withheld = {d["ausmt_id"]: d for d in _docs(access_arm).values() if d.get("withheld")}
+    assert withheld, "non-vacuity: this arm emits withheld stubs"
+    for aid, doc in withheld.items():
+        assert "resources" not in doc, f"{aid}: the withheld stub is closed-world"
+        assert "has_time_series" not in stations[aid], (
+            f"{aid}: the flag is not delivered, so nothing may state it for a withheld station")
+
+
+def test_projection_3_the_verified_count_does_not_move_across_an_embargo(access_arm):
+    """SCOPE:311-313: n_stations_time_series_verified is STABLE across embargo transitions. Three
+    surveys over the SAME station bytes, one open, one embargoed, one metadata_only, so whatever the
+    count states it must state the same thing for all three: the embargo gate applies to resource
+    DETAIL, never to the boolean or its count. Falsifying that claim is how draft 2's
+    iff-over-served-file rule was caught."""
+    _, surveys = _mtcat_rows(access_arm)
+    counts = {slug: row.get("n_stations_time_series_verified") for slug, row in surveys.items()}
+    assert len(counts) == 3, f"fixture sanity: one survey per access state, got {sorted(counts)}"
+    assert len(set(counts.values())) == 1, f"the count moved with the access state: {counts}"
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "SCOPE:313-314 is not satisfied by this corpus and the lane does not route A6 run rates into the "
+    "rollup (doing so would move mtcat.json, which framing invariant 1 forbids). Contract section 8 "
+    "named the expected failure shape as published rates being a strict SUBSET of the rollup; "
+    "MEASURED over the full corpus it is the opposite, a strict SUPERSET of an empty set: "
+    "sample_rates_hz is absent on all 27 surveys in surveys.json and mtcat.json while 494 station "
+    "records publish a run rate (newer-volcanic-province-2019 49 at 1000, vulcan-2022 100 at 10/50, "
+    "western-gawler 78 at 10/1000, western-gawler-2023 267 at 24000). Owner ruling required: either "
+    "the rollup gains the run rates in a lane that may move mtcat.json, or SCOPE:313-314 is amended "
+    "to name the two as independent statements. The fixture arm reproduces it."))
+def test_projection_4_the_survey_rate_rollup_equals_the_published_run_rates(built):
+    """SCOPE:313-314: survey sample_rates_hz equals the canonicalised union of published run rates."""
+    _, surveys = _mtcat_rows(built[0])
+    published = _published_run_rates(built[0])
+    assert any(published.values()), "non-vacuity: this arm publishes at least one run rate"
+    for slug, rates in sorted(published.items()):
+        assert {float(x) for x in (surveys[slug].get("sample_rates_hz") or [])} == rates, slug
 
 
 # ---------------------------------------------------------------- layer 3: the consumer pins
