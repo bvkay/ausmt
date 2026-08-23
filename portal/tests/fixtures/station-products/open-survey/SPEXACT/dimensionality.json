@@ -1,0 +1,8 @@
+{
+ "classification": "2-D",
+ "skew_beta_median_deg": 0.7,
+ "pct_periods_3d": 0,
+ "method": "phase-tensor (Caldwell 2004)",
+ "screening_diagnostic": true,
+ "note": "screening diagnostic, not an interpretation product"
+}

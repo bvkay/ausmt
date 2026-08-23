@@ -58,6 +58,8 @@ ABOUT = ROOT / "about.html"
 APIDOC = REPO / "docs" / "docs" / "interoperability" / "api-reference.md"
 MTCAT_SCHEMA = REPO / "engine" / "schema" / "mtcat.schema.json"
 BUILDER = REPO / "engine" / "extract" / "build_portal.py"
+# The emitted per-station products tree shared with test_docs_static_api.py (see its header).
+STATION_PRODUCTS = ROOT / "tests" / "fixtures" / "station-products"
 
 DOCS_API_URL = "https://ausmt.readthedocs.io/en/latest/interoperability/api-reference/"
 
@@ -374,9 +376,16 @@ def test_bbox_states_the_generalisation_caveat_and_its_contract_fields():
     assert set(state["enum"]) == {"exact", "generalised", "withheld"}, state
     for value in ("`exact`", "`generalised`", "`withheld`"):
         assert value in frag, f"the prose must name the coordinates_state value {value}"
-    src = BUILDER.read_text(encoding="utf-8")
-    assert '_doc["coordinate_policy"] = _cp' in src, (
-        "the docs name station.json's coordinate_policy, so the emitter must actually write it")
+    # The docs name station.json's coordinate_policy, so an EMITTED record must actually carry it, and
+    # only where the position is non-exact (an exact record gaining the key would tell a reader every
+    # position is qualified). Emitted documents rather than emitter source text: this lane installs no
+    # engine stack, and a grep for a source literal survives no refactor of the emitter.
+    def _emitted(station):
+        return json.loads((STATION_PRODUCTS / "open-survey" / station / "station.json")
+                          .read_text(encoding="utf-8"))
+    assert _emitted("SPGENERAL").get("coordinate_policy") == "generalised"
+    assert "coordinate_policy" not in _emitted("SPEXACT"), (
+        "an exact station's record carries no coordinate_policy, so the key means what the docs say")
 
 
 def test_bbox_does_not_flatten_manifest_paths_across_surveys():

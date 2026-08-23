@@ -62,6 +62,11 @@ BUILDER = REPO / "engine" / "extract" / "build_portal.py"
 MANIFEST_SCHEMA = REPO / "engine" / "schema" / "manifest.schema.json"
 MTCAT_SCHEMA = REPO / "engine" / "schema" / "mtcat.schema.json"
 COLUMNS = REPO / "contract" / "columns.json"
+# A per-station products tree the REAL build emitted (an open survey with an exact and a generalised
+# station, plus an embargoed one), committed so this stackless lane can pin the docs against emitted
+# DOCUMENTS rather than against emitter source text.
+STATION_PRODUCTS = ROOT / "tests" / "fixtures" / "station-products"
+STATION_SCHEMA = REPO / "engine" / "schema" / "ausmt-station.schema.json"
 
 # Assembled at runtime so this module's own source never contains the literals it forbids.
 FICTIONAL_API = "/" + "api" + "/"
@@ -265,19 +270,46 @@ def test_embargo_is_documented_as_omission_not_as_an_access_error():
 
 def test_the_withheld_station_record_is_documented_as_the_emitter_writes_it():
     """station.json IS written for a withheld station (a stub carrying the access state), and
-    dimensionality.json is NOT written at all. Both halves are pinned to the emitter, because a doc
-    that swapped them would send a consumer's loop into a 404 it treats as a transport failure."""
-    src = _text(BUILDER)
-    assert '"withheld": True,' in src, (
-        "the docs describe a withheld station.json stub; build_portal.py must write the marker")
-    assert "no dimensionality.json for a non-served survey" in src, (
+    dimensionality.json is NOT written at all. Both halves are pinned to EMITTED DOCUMENTS, because a
+    doc that swapped them would send a consumer's loop into a 404 it treats as a transport failure.
+
+    The evidence is fixtures/station-products/, a per-station products tree the REAL build emitted. This
+    lane installs no engine stack, so the emitter cannot run here; a grep for a source literal pinned
+    the emitter's TEXT, which survives no refactor. The emitter's own live gate is the engine suite's
+    C1c build (engine/tests/test_access_gate.py), which asserts the same two facts over a real build."""
+    held = STATION_PRODUCTS / "withheld-survey" / "SPHELD"
+    assert json.loads((held / "station.json").read_text(encoding="utf-8"))["withheld"] is True, (
+        "the docs describe a withheld station.json stub; the emitter must write the marker")
+    assert not (held / "dimensionality.json").exists(), (
         "the docs say dimensionality.json is never written for a withheld station; that must be what "
         "the emitter does")
+    served = STATION_PRODUCTS / "open-survey" / "SPEXACT"
+    assert (served / "dimensionality.json").exists(), (
+        "non-vacuity: a SERVED station in the same emitted tree does get one, so the absence above is "
+        "the access gate and not an empty fixture")
     flat = _flat(REFERENCE)
     assert '`"withheld": true`' in flat, "the reference must name the marker a consumer tests on"
     assert "`404`, never written" in flat, (
         "the reference must say dimensionality.json is absent rather than forbidden for a withheld "
         "station")
+
+
+def test_the_committed_products_tree_still_matches_the_station_contract():
+    """Emitted output can go stale against the contract it illustrates, so the fixture is tied to the
+    artifact: each document carries the required set its own branch declares in
+    engine/schema/ausmt-station.schema.json. A plain-JSON read, since this lane installs no validator;
+    portal-ci triggers on engine/schema/**, so a schema change that renamed a required key fails here
+    rather than leaving the pins above resting on a stale tree."""
+    branches = {b["title"]: b["required"]
+                for b in json.loads(STATION_SCHEMA.read_text(encoding="utf-8"))["oneOf"]}
+    full = json.loads((STATION_PRODUCTS / "open-survey" / "SPEXACT" / "station.json")
+                      .read_text(encoding="utf-8"))
+    held = json.loads((STATION_PRODUCTS / "withheld-survey" / "SPHELD" / "station.json")
+                      .read_text(encoding="utf-8"))
+    for doc, title in ((full, "full station record"), (held, "withheld station record")):
+        missing = [k for k in branches[title] if k not in doc]
+        assert not missing, f"the committed {title} is stale against the schema: missing {missing}"
+    assert "withheld" not in full, "the marker is schema-forbidden on a full record"
 
 
 def test_the_stations_geojson_is_documented_the_way_the_emitter_writes_it():

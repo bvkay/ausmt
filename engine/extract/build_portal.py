@@ -2524,30 +2524,31 @@ def _station_identity(r, label, slug) -> dict:
             "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label, "survey_id": slug}
 
 
-def _write_station_products(job, prov):
-    """Render + write one station's --products station.json + dimensionality.json (C42 deferred so it
-    runs AFTER the coordinate mask: `r` is the SHARED station record, masked in place at the single seam,
-    so `location` carries the post-mask value every other emitter reads — no per-emitter mask logic).
-    `job` is the tuple captured in main()'s per-survey loop; `prov` is the build PROV block.
+def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served,
+                     prov) -> dict:
+    """Build one station's station.json (schema/ausmt-station.schema.json 0.1, the third public
+    contract) from the station record `r`, its science row `srow` and the survey context. Returns a
+    plain-JSON dict in the schema's property order; the caller serialises with _jdump(doc, indent=1)
+    and is the only thing that touches the filesystem. Nothing here reads a published file back.
 
-    `edi_rel` is the portal-relative path of the EDI this station ACTUALLY serves, or None when it
-    serves none. It is a path rather than a bool because the served EDI is not always named after the
-    input: an EMTF-XML-sourced station serves the normalize()-generated <station>.edi, while its
-    `input_file` provenance stays the submitted .xml it was built from."""
-    (sdir, r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served) = job
+    `r` is the SHARED station record, masked in place at the single coordinate seam, which is why the
+    caller runs deferred (C42): `location` carries the post-mask value every other emitter reads, with
+    no per-emitter mask logic. `edi_rel` is the portal-relative path of the EDI this station ACTUALLY
+    serves, or None when it serves none. It is a path rather than a bool because the served EDI is not
+    always named after the input: an EMTF-XML-sourced station serves the normalize()-generated
+    <station>.edi, while its `input_file` provenance stays the submitted .xml it was built from.
+
+    C1c: products/ IS a served surface in deployment (deploy/Makefile writes it INSIDE the served build
+    dir), so it rides the SAME C1 access gate as tf.json/sci.json. For a NON-SERVED survey (embargoed
+    with an active embargo, or metadata_only) the derived TF science IS the embargoed data: emitting
+    median_relative_error, the completeness diagnostic or the frame phase medians here would publish
+    exactly what the byte gate (C1) and the display gate (C1b) withhold. `served` is the survey's
+    access_serve_state["served"] captured at the emit site, never re-derived."""
     edi_served = edi_rel is not None
-    sdir.mkdir(parents=True, exist_ok=True)
-    # C1c: --products IS a served surface in deployment (deploy/Makefile writes products/ INSIDE the served
-    # build dir; D1). So it rides the SAME C1 access gate as tf.json/sci.json: for a NON-SERVED survey
-    # (embargoed with an active embargo, or metadata_only) the derived TF science IS the embargoed data —
-    # emitting median_relative_error / dimensionality / skew_beta / the completeness diagnostic / the frame
-    # phase medians here would publish exactly what the byte gate (C1) and the display gate (C1b) withhold.
-    # `served` is the survey's access_serve_state["served"] captured at the emit site (never re-derived). A
-    # non-served survey gets a WITHHELD station.json carrying ONLY the discovery-safe identity the public
-    # catalogue already exposes (id, survey, access state, edi_available=false) — NO TF-derived science, NO
-    # exact source position, NO input_sha256 — and NO dimensionality.json (a pure interpretation product).
     if not served:
-        _wdoc = {
+        # The withheld record carries ONLY the discovery-safe identity the public catalogue already
+        # exposes: no TF-derived science, no exact source position, no input_sha256.
+        return {
             **_station_identity(r, label, slug),
             "country": (meta or {}).get("country", "Australia"), "organisation": org,
             "access": {"level": normalise_access_level((meta or {}).get("access", "open")),
@@ -2560,82 +2561,89 @@ def _write_station_products(job, prov):
                     "metadata_only). Discovery metadata remains in the catalogue; the science is released "
                     "when the survey's access.level is opened.",
         }
-        (sdir / "station.json").write_text(_jdump(_wdoc, indent=1), encoding="utf-8")
-        return   # no dimensionality.json for a non-served survey (interpretation product = withheld science)
-    _doc = {
+    doc = {
         **_station_identity(r, label, slug),
         "country": (meta or {}).get("country", "Australia"), "organisation": org,
-        # C42: post-mask coordinates — exact/generalised(0.1deg)/withheld(null) per the custodian policy,
-        # read from the single-seam-masked record. This products/ surface IS served in deployment (D1).
+        # C42: post-mask coordinates, exact / generalised (0.1deg) / withheld (null) per the custodian
+        # policy, read from the single-seam-masked record.
         "location": {"lat": r["lat"], "lon": r["lon"]},
         "data": {"type": r.get("type"), "n_periods": r.get("n_periods"),
                  "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
-        # The dimensionality CLASSIFICATION and its skew statistic are NOT restated here: they are
-        # the whole content of this station's dimensionality.json, emitted a few lines below, which
-        # carries them with the method and the "screening diagnostic, not an interpretation product"
-        # caveat that gives them their meaning. Two copies of a derived call in one directory is a
-        # drift surface with no reader: whichever one a consumer happened to read, the caveat only
-        # travelled with one of them. dimensionality.json is the single home; sci.json and the
-        # science pipeline are unchanged.
+        # The dimensionality CLASSIFICATION and its skew statistic are NOT restated here: they are the
+        # whole content of this station's dimensionality.json, which carries them with the method and the
+        # "screening diagnostic, not an interpretation product" caveat that gives them their meaning. A
+        # second copy in the same directory travels without that caveat.
         "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
                         "tipper_available": "T" in (r.get("comps") or ""),
                         "completeness_smoothness_diagnostic": {
                             "value": srow[_SC["q"]], "basis": srow[_SC["qb"]],
                             "note": "not a quality or geological-value judgement"}},
-        # Processing metadata — all BEST-EFFORT (scraped from the EDI; mt_metadata's
-        # structured fields are empty for most dialects). The remote_reference arrangement
-        # detail lives in `note` (the EDI INFO block); remote_site is the named reference
-        # station where derivable (Phoenix 'P=x R=y' DATAID / REFERENCE section).
-        # LINEAGE: `software` is the program that PROCESSED the transfer function (mined from the
-        # source file's own free text), `file_written_by` the program that SERIALISED the file. They
-        # are usually different programs and were previously conflated under `software`, which named
-        # the exporter. A null software means the file states no processor — not that none was used.
+        # Processing metadata is all BEST-EFFORT (scraped from the EDI; mt_metadata's structured fields
+        # are empty for most dialects). LINEAGE: `software` is the program that PROCESSED the transfer
+        # function, `file_written_by` the program that SERIALISED the file; they are usually different
+        # programs and were once conflated. A null software means the file states no processor, NOT that
+        # none was used. The remote-reference arrangement detail lives in `note` (the EDI INFO block);
+        # remote_site is the named reference station where derivable (Phoenix 'P=x R=y' DATAID).
         "processing": {"software": srow[_SC["sw"]], "algorithm": srow[_SC["alg"]],
                        "remote_reference": bool(srow[_SC["rr"]]),
                        "remote_site": r.get("remote_site"),
                        "file_written_by": r.get("file_written_by") or {"name": None, "version": None},
                        "note": r.get("processing_note")},
-        # C42: edi_served folds in the per-station coordinate byte-gate — a non-exact station is NOT
-        # distributed even inside a served survey, so its station.json must not advertise an EDI.
+        # C42: edi_served folds in the per-station coordinate byte-gate. A non-exact station is NOT
+        # distributed even inside a served survey, so its distribution must not advertise an EDI.
         "distribution": {"edi_available": edi_served, "license": lic,
                          "edi_path": edi_rel},
         # provenance: input -> software/params -> output (traceable, per Egbert). `source` is the
-        # THIRD-PARTY ingest provenance the custodian declared in survey.yaml's station_ids block
-        # (original filename, their own opaque record id, the acquisition-stage label). It rides
-        # AusMT's record because the source EDI is served byte-identical and is never rewritten.
+        # THIRD-PARTY ingest provenance the custodian declared in survey.yaml's station_ids block. It
+        # rides AusMT's record because the source EDI is served byte-identical and is never rewritten.
         # ADDITIVE + absent-means-absent: a survey that declares none gains no key at all.
         "provenance": {**prov, "input_file": p.name, "input_sha256": sha256(p),
                        **({"source": r["source_provenance"]} if r.get("source_provenance") else {})},
-        # coordinate QC: present only when the parse flagged something, so consumers can
-        # surface "treat with caution" without implying anything about unflagged stations.
+        # coordinate QC: present only when the parse flagged something, so consumers can surface
+        # "treat with caution" without implying anything about unflagged stations.
         "coordinate_qc": ({"flag": r.get("coord_flag"),
                            "head_info_conflict_deg": r.get("coord_conflict_deg"),
                            "resolution": r.get("coord_resolution")}
                           if (r.get("coord_flag") or r.get("coord_conflict_deg")) else None),
-        # canonical_conditioning: what normalize() had to change to make this station's
-        # canonical EMTF XML schema-valid + round-trippable (rotation frame not asserted,
-        # source-id preserved in the Site Name, citation provenance). Present only when the
-        # station was actually conditioned, so an unconditioned station is not implied to be.
+        # canonical_conditioning: what normalize() had to change to make this station's canonical EMTF
+        # XML schema-valid and round-trippable. Present only when the station was actually conditioned,
+        # so an unconditioned station is not implied to be.
         "canonical_conditioning": (conditioning_notes.get(r["id"]) or None),
-        # frame (C25): the measured frame facts + the sign-convention verdict for THIS
-        # station — what rotation the source declared, whether the engine de-rotated to
-        # geographic north at ingest, and the Gate-2 quadrant medians. None only for
-        # inputs the gates do not cover (the flag-gated MTH5 path).
+        # frame (C25): the measured frame facts and the sign-convention verdict for THIS station. None
+        # only for inputs the gates do not cover (the flag-gated MTH5 path).
         "frame": r.get("frame"),
     }
-    # C42 A1: carry the coordinate policy on station.json too (secondary to the boot-loaded
-    # coord_policy.json — the surface the portal drawer reads — but consistent for a curator reading
-    # the product). Added ONLY for a non-exact station (reuses the mask-seam-stamped r["coord_policy"]);
-    # an exact station.json gains no key, so it is byte-unchanged.
-    _cp = r.get("coord_policy")
-    if _cp and _cp != "exact":
-        _doc["coordinate_policy"] = _cp
-    (sdir / "station.json").write_text(_jdump(_doc, indent=1), encoding="utf-8")
-    (sdir / "dimensionality.json").write_text(_jdump({
-        "classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
-        "pct_periods_3d": srow[_SC["p3d"]], "method": "phase-tensor (Caldwell 2004)",
-        "screening_diagnostic": True,
-        "note": "screening diagnostic, not an interpretation product"}, indent=1), encoding="utf-8")
+    # C42 A1: the coordinate policy rides station.json too (secondary to the boot-loaded
+    # coord_policy.json the portal drawer reads, but consistent for a curator reading the product).
+    # Added ONLY for a non-exact station; an exact record gains no key.
+    cp = r.get("coord_policy")
+    if cp and cp != "exact":
+        doc["coordinate_policy"] = cp
+    return doc
+
+
+def _dimensionality_document(srow) -> dict:
+    """The phase-tensor screening result served beside station.json. Served-survey stations only: it is
+    a pure interpretation product, so a non-served survey gets none at all."""
+    return {"classification": srow[_SC["dim"]], "skew_beta_median_deg": srow[_SC["skew"]],
+            "pct_periods_3d": srow[_SC["p3d"]], "method": "phase-tensor (Caldwell 2004)",
+            "screening_diagnostic": True,
+            "note": "screening diagnostic, not an interpretation product"}
+
+
+def _write_station_products(job, prov):
+    """Write one station's per-station products. `job` is the tuple captured in main()'s per-survey
+    loop and drained after the coordinate mask; `prov` is the build PROV block. The rendering lives in
+    station_document() / _dimensionality_document(); this is the write path alone."""
+    (sdir, r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served) = job
+    sdir.mkdir(parents=True, exist_ok=True)
+    doc = station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes,
+                           served, prov)
+    (sdir / "station.json").write_text(_jdump(doc, indent=1), encoding="utf-8")
+    if not served:
+        return   # no dimensionality.json for a non-served survey (interpretation product = withheld science)
+    (sdir / "dimensionality.json").write_text(_jdump(_dimensionality_document(srow), indent=1),
+                                              encoding="utf-8")
 
 
 def qc_pass(all_stations, survey_extent):
