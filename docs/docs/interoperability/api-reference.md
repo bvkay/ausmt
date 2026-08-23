@@ -52,7 +52,8 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 | `/data/mtcat.schema.json` | 21 kB | The JSON Schema the document above validates against; the same bytes sit at `/data/schemas/mtcat/2.0/mtcat.schema.json`. |
 | `/data/products/<slug>/survey-metadata.json` | a few kB each | The per-survey metadata record, a contract: the full credit, funding, subject, identifier, citation and rights detail of one dataset/release. One per catalogued survey, embargoed ones included. |
 | `/data/ausmt-survey-metadata.schema.json` | 13 kB | The JSON Schema survey-metadata.json validates against; the same bytes sit at `/data/schemas/ausmt-survey-metadata/0.1/ausmt-survey-metadata.schema.json`. |
-| `/data/products/<slug>/<station>/station.json` | a few kB each | The per-station record, a contract: identity, location, band, diagnostics, distribution state and provenance. |
+| `/data/products/<slug>/<station>/station.json` | a few kB each | The per-station record, a contract: identity, location, band, diagnostics, distribution state, provenance, the acquisitions the source describes (`runs`) and the served renditions of the station (`resources`). One per station, withheld ones included. |
+| `/data/ausmt-station.schema.json` | 17 kB | The JSON Schema station.json validates against; the same bytes sit at `/data/schemas/ausmt-station/0.1/ausmt-station.schema.json`. |
 | `/data/manifest.json` | 2.5 MB | The download index: every fetchable artifact with its size and SHA-256. |
 | `/data/stations.geojson` | 773 kB | Every station that has a position, as a GeoJSON point layer. A GIS export; open it in a GIS. |
 | `/data/feed.xml` | 4.2 kB | Atom feed of surveys, newest first. |
@@ -61,8 +62,8 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 Other documents are served under `/data/` because the portal's own pages need them. They are
 portal-internal, carry no contract and no stability promise, and are documented only in the Developer
 section; a consumer that reads one is reading an implementation detail that can change with any
-build. The contracts above (`mtcat.json` and `survey-metadata.json`, each with its schema, and
-`station.json`) and the download surface are the whole public surface.
+build. The three contracts above, `mtcat.json`, `survey-metadata.json` and `station.json`, each with
+its schema, plus the download surface, are the whole public surface.
 
 ### `mtcat.json`
 
@@ -454,8 +455,17 @@ Each station has a small product directory:
 period range, the derived diagnostics, the processing strings read from the source file, the
 distribution state, the coordinate QC verdict, any canonical conditioning notes, and a `provenance`
 block naming the input file and its SHA-256. It is documented field by field in
-[Per-station products](../reference/station-products.md), and its schema artifact is
-`engine/schema/ausmt-station.schema.json`, served at `/data/ausmt-station.schema.json`.
+[Per-station products](../reference/station-products.md); its schema is served at
+`/data/ausmt-station.schema.json` and, under the immutable `$id` the schema states for itself, at
+`/data/schemas/ausmt-station/0.1/ausmt-station.schema.json`.
+
+Two blocks describe the station rather than the record. `runs` is the acquisition: the run ids, the
+window, the nominal rate, the logger and the channels the source metadata states. It is ABSENT on most
+stations, and absence means run metadata was not asserted, never that no run occurred. `resources` is
+the served renditions of this station and the archives containing them, each with the `path` the
+download manifest records for the same bytes; a resource references its path and never restates a
+hash, so `manifest.json` stays the checksum authority. Both are documented in
+[Per-station products](../reference/station-products.md#116-runs).
 
 The phase-tensor screening result (`classification`, `skew_beta_median_deg`, `pct_periods_3d`,
 `method`) is a member set of `station.json`'s `diagnostics`, carrying the `note` that says "screening
@@ -469,7 +479,7 @@ The two files are gated differently, and the difference matters if you loop over
 
 | | Open survey | Withheld survey |
 |---|---|---|
-| `station.json` | Full record | `200`, with `"withheld": true`, an `access` block, and no derived science |
+| `station.json` | Full record | `200`, with `"withheld": true`, an `access` block, and no derived science, no `runs` and no `resources` |
 | `dimensionality.json` | Full record | `404`, never written |
 
 So `station.json` always resolves and is worth requesting for any station; `dimensionality.json` should

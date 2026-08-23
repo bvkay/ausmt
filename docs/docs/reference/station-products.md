@@ -87,9 +87,11 @@ with no manifest rows is not an error to handle; it is the withholding, stated b
 
 The per-station product record: identity, location, band and period range, the derived diagnostics, the
 processing strings read from the source file, the distribution state, the coordinate QC verdict, any
-canonical conditioning notes, the frame facts, and a provenance block naming the input file and its
-SHA-256. The example below shows every member, including the optional ones; a station whose survey
-declares no `station_ids` provenance carries no `provenance.source`.
+canonical conditioning notes, the frame facts, a provenance block naming the input file and its
+SHA-256, and the two canonical blocks `runs` and `resources`. The example below shows every member
+except `coordinate_policy`, which section 1.15 covers because it appears only for a station whose
+position is not exact; a station whose survey declares no `station_ids` provenance carries no
+`provenance.source`.
 
 Three members open every record, on the full and the withheld branch alike: `schema` names the
 contract, `version` names the schema version the document conforms to, and `survey_id` is the survey
@@ -519,20 +521,30 @@ public catalogue already exposes.
 }
 ```
 
+The stub carries these twelve members and no thirteenth. That is enforced, not conventional: the
+withheld branch of the schema is closed, nested blocks included, and the build and `verify.py` both
+reject a record that grows a key. Extending the stub therefore takes a schema change, which is the
+point: a key-name blocklist over an open object is bypassable, and coordinates were once shown to
+validate under unbanned spellings and inside an open `access` block.
+
 | Member | Type | Definition |
 |---|---|---|
 | `schema` | string | `ausmt-station`, on both branches |
 | `version` | string | the schema version this document conforms to, on both branches |
+| `ausmt_id` | string | the station's globally unique public id, as on a full record |
+| `station` | string | station id within the survey |
+| `survey` | string | the survey's display name |
 | `survey_id` | string | the survey slug, on both branches |
-| `access.level` | string | the normalised access level |
-| `access.embargo_until` | string or null | the declared embargo end date, where one exists |
-| `access.served` | boolean | `false` on every withheld record |
+| `country` | string | country the survey was acquired in |
+| `organisation` | string | custodian organisation of the survey |
+| `access` | object | `{level, embargo_until, served}`: the normalised access level, the declared embargo end date where the level carries one, and `served`, which is `false` on every withheld record |
+| `distribution` | object | `{edi_available, license, edi_path}`: `false`, the survey's licence, and `null`. Nothing is distributed for a withheld record |
 | `withheld` | boolean | `true`, the marker a consumer tests on |
 | `note` | string | why the derived science is absent |
 
-There is no `location`, no `data`, no `diagnostics`, no `processing` beyond the distribution block, and
-no `provenance.input_sha256`. The survey's discovery metadata stays fully public in the catalogue; only
-the derived science is withheld here.
+There is no `location`, no `data`, no `diagnostics`, no `processing`, no `runs`, no `resources` and no
+`provenance`. The survey's discovery metadata stays fully public in the catalogue; only the derived
+science is withheld here.
 
 ---
 

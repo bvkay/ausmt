@@ -11,7 +11,7 @@ this page assumes you have the bytes.
 ```text
 data/mtcat.json                              discovery, credit and citation: what surveys and stations exist, where, under what licence, by whom
 data/manifest.json                           the download index: every fetchable file with its size and sha256
-data/products/<slug>/<station>/station.json  the per-station record: identity, diagnostics, distribution state, provenance
+data/products/<slug>/<station>/station.json  the per-station record: identity, diagnostics, distribution state, provenance, acquisition runs, served resources
 data/<url>                                   the artifact itself, joined from a manifest row
 ```
 
@@ -167,7 +167,16 @@ including how to read absence, credit, relations and access, is the
 filter by slug, test `ausmt_id.startswith("au." + slug + ".")`; `bundles[]` rows carry the slug.
 
 **A served filename is not the station id.** Station `A1` of `vulcan-2022` is served as
-`edi/vulcan-2022/Vulcan_A1.edi`. Read the `url` from the manifest.
+`edi/vulcan-2022/Vulcan_A1.edi`. Read the `url` from the manifest, or, when you already hold the
+record, the `path` of the matching `resources` row: they are the same path for the same bytes, and the
+manifest row is still where the size and the digest are.
+
+**Acquisition metadata is absent on most stations, and absence is a statement.** `runs` appears only
+where the source file describes an acquisition. mt_metadata instantiates a placeholder run for every
+transfer function it reads, complete with a synthesised id, a 0 Hz rate and a 1980 window; none of that
+is a custodian assertion, so none of it is published. A station with no `runs` is a station whose run
+metadata was never recorded, not one that was never occupied, and a reader that fills the gap with
+defaults is inventing the same numbers AusMT refused to publish.
 
 **Station filenames collide across surveys.** 108 EDI basenames in the live corpus are served under
 more than one survey (`SA225_2.edi` under both `auslamp-musgraves-apy-2016` and `auslamp-sa-ne-2014`,
@@ -175,7 +184,8 @@ more than one survey (`SA225_2.edi` under both `auslamp-musgraves-apy-2016` and 
 the other silently.
 
 A withheld station is still in the catalogue. Its `mtcat.json` record and its `station.json` exist;
-the `station.json` carries `"withheld": true` and no derived science, and there is no manifest row.
+the `station.json` carries `"withheld": true`, no derived science, no `runs` and no `resources`, and
+there is no manifest row.
 
 **Coordinates may be generalised or absent.** A generalised position is rounded to 0.1°, roughly 11 km.
 A withheld one is `null`; guard for it before any numeric comparison, because JavaScript compares null

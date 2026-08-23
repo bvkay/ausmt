@@ -113,6 +113,11 @@ submitted only as EMTF XML the served EDI is generated rather than original, and
 digest of the submitted XML instead. [EDI is the citable
 artifact](tool-integration.md#edi-is-the-citable-artifact) sets out what that means for a check.
 
+`station.json` also names its own served renditions, in `resources`, each with the `path` the manifest
+records for the same bytes. That saves a scan of a 2.5 MB index when you already have the record, and
+it deliberately restates no hash: the manifest is the one checksum authority, and a digest copied into
+a second document is a digest that can go stale.
+
 ---
 
 ## Access levels and embargo by omission
@@ -138,9 +143,10 @@ search index built from the catalogue shows the survey exists and says who to as
 
 Per-station products follow the same rule with one wrinkle. `station.json` is written for every
 station, and a withheld one carries `"withheld": true`, an `access` block giving the level and the
-embargo date, and no derived science. `dimensionality.json`, served alongside it and not a contract, is
-not written at all for a withheld station, because it is a pure interpretation of the transfer function
-being withheld, so that path answers `404`.
+embargo date, and no derived science, no acquisition metadata and no resource list.
+`dimensionality.json`, served alongside it and not a contract, is not written at all for a withheld
+station, because it is a pure interpretation of the transfer function being withheld, so that path
+answers `404`.
 
 For a client this means there is no authorisation branch to write. If a byte exists, it is in the
 manifest. If it is not in the manifest, no request will produce it.
