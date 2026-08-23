@@ -454,14 +454,16 @@ Each station has a small product directory:
 period range, the derived diagnostics, the processing strings read from the source file, the
 distribution state, the coordinate QC verdict, any canonical conditioning notes, and a `provenance`
 block naming the input file and its SHA-256. It is documented field by field in
-[Per-station products](../reference/station-products.md); its schema artifact arrives with the station
-promotion lane.
+[Per-station products](../reference/station-products.md), and its schema artifact is
+`engine/schema/ausmt-station.schema.json`, served at `/data/ausmt-station.schema.json`.
 
-`dimensionality.json` is served alongside it and is not a contract: it is the phase-tensor screening
-result (`classification`, `skew_beta_median_deg`, `pct_periods_3d`, `method`), and its `note` says
-"screening diagnostic, not an interpretation product". Treat it as a filter and not as a finding, and do
-not build on its shape; whether it folds into `station.json` or stays a feature file is an open
-decision.
+The phase-tensor screening result (`classification`, `skew_beta_median_deg`, `pct_periods_3d`,
+`method`) is a member set of `station.json`'s `diagnostics`, carrying the `note` that says "screening
+diagnostic, not an interpretation product". Treat it as a filter and not as a finding.
+
+`dimensionality.json` is served alongside `station.json` and is not a contract: it states the same
+screening result, and it is kept because removing a served file is a deprecation with its own notice.
+One request to `station.json` answers both; do not build on the sidecar's shape.
 
 The two files are gated differently, and the difference matters if you loop over stations:
 

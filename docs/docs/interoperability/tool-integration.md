@@ -183,4 +183,5 @@ as 0 and places the station at 0°, 0°.
 
 **`dimensionality.json` is absent for a withheld station, but `station.json` is not.** Gate the first
 request on the survey's access level rather than treating the `404` as an error. It is served alongside
-`station.json` and is not a contract; do not build on its shape.
+`station.json` and is not a contract; do not build on its shape. You rarely need it: `station.json`'s
+`diagnostics` states the same screening result, so one request answers both.

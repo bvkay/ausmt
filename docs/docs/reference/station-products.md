@@ -107,7 +107,12 @@ all three.
     "tipper_available": false,
     "completeness_smoothness_diagnostic": {
       "value": 3.4, "basis": "e",
-      "note": "not a quality or geological-value judgement" }
+      "note": "not a quality or geological-value judgement" },
+    "classification": "2-D",
+    "skew_beta_median_deg": 0.7,
+    "pct_periods_3d": 0,
+    "method": "phase-tensor (Caldwell 2004)",
+    "note": "screening diagnostic, not an interpretation product"
   },
   "processing": { "software": "Birrp 5.0", "algorithm": null,
                   "remote_reference": false, "remote_site": null,
@@ -220,11 +225,20 @@ all three.
 | `remote_reference` | boolean | whether the source file states remote reference processing |
 | `tipper_available` | boolean | whether a tipper is present |
 | `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
+| `classification` | string or null | the dimensionality screening class: `1-D`, `2-D`, `3-D` or `indeterminate` |
+| `skew_beta_median_deg` | number or null | median absolute phase-tensor skew across usable periods, in degrees |
+| `pct_periods_3d` | integer or null | percentage of usable periods whose absolute skew exceeds the three-dimensional threshold |
+| `method` | string | the method the classification came from, `phase-tensor (Caldwell 2004)` |
+| `note` | string | the caveat that qualifies the classification: a screening diagnostic, not an interpretation product |
 
-The dimensionality classification and its skew statistic are not members of this block. They are the
-whole content of the `dimensionality.json` served beside this document (section 2), which carries them
-with the method and the screening caveat that qualifies them; restating them here produced a second
-copy without that caveat.
+The last five members are the dimensionality call, and the caveat is one of them on purpose. The
+classification is a screening result for triage: it says which stations are worth a closer look, never
+what the subsurface is. A copy of it that travelled without that sentence is the reason it was kept out
+of this block until now; the sentence travels with it here.
+
+The same five values are also served as `dimensionality.json` beside this document (section 2), from
+the same computation. That document is not going away in the 0.x and 1.x series, because removing a
+served file is a deprecation with its own notice; read either one.
 
 #### 1.8.1 How the completeness-smoothness diagnostic is computed
 
@@ -397,6 +411,11 @@ the derived science is withheld here.
 The phase-tensor screening result for one station, served alongside `station.json`; not a contract. It
 is never written for a station in a withheld survey. Its members are documented here so a reader can
 interpret what is served, not as a promise about its shape.
+
+`station.json`'s `diagnostics` block now states the same call, from the same computation (section 1.8).
+This document is the older surface and keeps being written unchanged: removing a served file is a
+deprecation with its own notice, not a refactor. A consumer reading `station.json` needs neither this
+file nor a second request.
 
 The classification is assigned by `engine/extract/_edi_science.py` from the per-period phase tensor
 (Caldwell et al., 2004), with every threshold a named constant that `build_provenance.json` records:

@@ -2524,6 +2524,13 @@ def _station_identity(r, label, slug) -> dict:
             "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label, "survey_id": slug}
 
 
+def _folded_dimensionality(srow) -> dict:
+    """D1: the dimensionality members station.json's `diagnostics` carries, read off the sidecar
+    document itself so the two surfaces cannot state different calls. `screening_diagnostic` stays
+    sidecar-only: where the numbers now sit, the caveat text carries that meaning."""
+    return {k: v for k, v in _dimensionality_document(srow).items() if k != "screening_diagnostic"}
+
+
 def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served,
                      prov) -> dict:
     """Build one station's station.json (schema/ausmt-station.schema.json 0.1, the third public
@@ -2569,15 +2576,19 @@ def station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, condition
         "location": {"lat": r["lat"], "lon": r["lon"]},
         "data": {"type": r.get("type"), "n_periods": r.get("n_periods"),
                  "period_min_s": r.get("period_min_s"), "period_max_s": r.get("period_max_s")},
-        # The dimensionality CLASSIFICATION and its skew statistic are NOT restated here: they are the
-        # whole content of this station's dimensionality.json, which carries them with the method and the
-        # "screening diagnostic, not an interpretation product" caveat that gives them their meaning. A
-        # second copy in the same directory travels without that caveat.
+        # D1: the dimensionality call is FOLDED IN here, and the method string and the screening caveat
+        # come with it, from the SAME computed values _dimensionality_document() reads. The earlier
+        # removal was aimed at a copy that travelled WITHOUT the caveat; folding the caveat in is what
+        # answers that, and it puts the qualification beside the numbers instead of one file away. The
+        # sidecar keeps being written byte-unchanged through 1.x (D14): deleting a served file is a
+        # deprecation. This block sits INSIDE the C1 access gate above, so a withheld record gains no
+        # diagnostics at all and the interpretation product stays out of it.
         "diagnostics": {"median_relative_error": srow[_SC["mre"]], "remote_reference": bool(srow[_SC["rr"]]),
                         "tipper_available": "T" in (r.get("comps") or ""),
                         "completeness_smoothness_diagnostic": {
                             "value": srow[_SC["q"]], "basis": srow[_SC["qb"]],
-                            "note": "not a quality or geological-value judgement"}},
+                            "note": "not a quality or geological-value judgement"},
+                        **_folded_dimensionality(srow)},
         # Processing metadata is all BEST-EFFORT (scraped from the EDI; mt_metadata's structured fields
         # are empty for most dialects). LINEAGE: `software` is the program that PROCESSED the transfer
         # function, `file_written_by` the program that SERIALISED the file; they are usually different
