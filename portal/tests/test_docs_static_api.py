@@ -312,6 +312,30 @@ def test_the_committed_products_tree_still_matches_the_station_contract():
     assert "withheld" not in full, "the marker is schema-forbidden on a full record"
 
 
+def test_the_committed_products_tree_carries_the_canonical_blocks():
+    """The required-set pin above cannot see a block the schema makes OPTIONAL, and both canonical
+    blocks are optional, so the tree once went two behaviour changes stale with nothing red. This is
+    the pin for that class: the three documents carry the three combinations the reference page
+    describes, which is exactly what a regeneration must reproduce.
+
+    Refresh with `portal/tests/fixtures/make_station_products.py` (needs the engine venv), in the
+    same commit as the emitter change that moved it."""
+    def doc(slug, station):
+        return json.loads((STATION_PRODUCTS / slug / station / "station.json")
+                          .read_text(encoding="utf-8"))
+
+    served = doc("open-survey", "SPEXACT")
+    assert [r["id"] for r in served["runs"]] == ["SPEXACT-r01"], (
+        "the exact station's acquisition is published as a run")
+    assert {r["id"] for r in served["resources"]} == {"edi", "emtfxml", "edi-zip", "xml-zip"}, (
+        "it serves both renditions and is inside both survey archives")
+    masked = doc("open-survey", "SPGENERAL")
+    assert masked["runs"], "a generalised position withholds bytes, never the acquisition record"
+    assert "resources" not in masked, (
+        "a generalised station serves no bytes, so it describes no rendition and claims no archive")
+    assert "runs" not in doc("withheld-survey", "SPHELD"), "the withheld stub is closed-world"
+
+
 def test_the_stations_geojson_is_documented_the_way_the_emitter_writes_it():
     """The GeoJSON exists so a GIS user never has to read the positional catalogue, so the page has to
     carry an instruction a GIS user can follow, not just a path. Its two membership rules are the

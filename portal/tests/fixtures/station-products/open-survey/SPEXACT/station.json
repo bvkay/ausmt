@@ -44,9 +44,9 @@
   "note": "MAXINFO=17\n*\nSITE        : P-A1_RR-RR_S-10Hz_1\nLATITUDE    :   -31.234567\nLONGITUDE   :   135.234567\nELEVATION   :   111.6100\nDECLINATION :     0.0000\n*\nProcessing code: LEMIMT\nAlgorithm      : Robust Remote Reference"
  },
  "distribution": {
-  "edi_available": false,
+  "edi_available": true,
   "license": "CC-BY-4.0",
-  "edi_path": null
+  "edi_path": "edi/open-survey/SPEXACT.edi"
  },
  "provenance": {
   "pipeline": "ausmt/extract.build_portal",
@@ -57,7 +57,7 @@
    "mt_metadata": "1.0.9",
    "mth5": "0.6.8"
   },
-  "git_commit": "376bd4d",
+  "git_commit": "091f7a5",
   "parameters": {
    "dimensionality": {
     "beta_per_period_deg": 3.0,
@@ -71,12 +71,20 @@
    },
    "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
   },
-  "generated": "2026-08-23T02:16:05.252933+00:00",
+  "generated": "2026-08-23T07:43:25.963560+00:00",
   "input_file": "SPEXACT.edi",
   "input_sha256": "761261d87d209b183677935abce17b168772544ea82f281ff9ebf91a700ce059"
  },
  "coordinate_qc": null,
- "canonical_conditioning": null,
+ "canonical_conditioning": [
+  "survey.id->open-survey",
+  "sign_convention: '+' is a library default — EDI carries no machine-readable sign convention; NOT asserted by source",
+  "declination.epoch/model: library defaults (epoch=None, model=IGRF) — an EDI states only the declination value; epoch/model NOT asserted by source",
+  "channel orientations: degenerate/defaulted (ex and ey azimuths both 0 deg — parallel dipoles are non-physical); orientations NOT asserted by source EMEAS geometry",
+  "citation.authors<-survey_meta:AusMT CI",
+  "citation.title<-survey_meta",
+  "copyright.release_status=Data Citation Required; conditions_of_use set from licence CC-BY-4.0 (replaced mt_metadata default boilerplate)"
+ ],
  "frame": {
   "evidence": {
    "branch": "mt",
@@ -104,5 +112,55 @@
    "n_periods_used": 62,
    "detail": null
   }
- }
+ },
+ "runs": [
+  {
+   "id": "SPEXACT-r01",
+   "sample_rate_hz": 10.0,
+   "channels": [
+    {
+     "component": "ex"
+    },
+    {
+     "component": "ey"
+    },
+    {
+     "component": "hx"
+    },
+    {
+     "component": "hy"
+    }
+   ]
+  }
+ ],
+ "resources": [
+  {
+   "id": "edi",
+   "kind": "transfer_function",
+   "format": "edi",
+   "provenance_role": "source",
+   "representation_role": "original",
+   "path": "edi/open-survey/SPEXACT.edi"
+  },
+  {
+   "id": "emtfxml",
+   "kind": "transfer_function",
+   "format": "emtfxml",
+   "provenance_role": "derived",
+   "representation_role": "alternate",
+   "path": "xml/open-survey/SPEXACT.xml"
+  },
+  {
+   "id": "edi-zip",
+   "kind": "archive",
+   "format": "zip",
+   "path": "bundles/open-survey-edi.zip"
+  },
+  {
+   "id": "xml-zip",
+   "kind": "archive",
+   "format": "zip",
+   "path": "bundles/open-survey-xml.zip"
+  }
+ ]
 }
