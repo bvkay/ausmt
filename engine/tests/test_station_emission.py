@@ -43,6 +43,7 @@ sys.path.insert(0, str(ROOT / "extract"))
 sys.path.insert(0, str(HERE))
 
 from _contract import STATION_SCHEMA_VERSION  # noqa: E402
+from test_run_facts import qualify_lemimt  # noqa: E402
 from test_station_schema_v01 import validator as schema_validator  # noqa: E402
 
 import _stationcheck as stcheck  # noqa: E402
@@ -98,13 +99,17 @@ def _docs(out: Path) -> dict:
 @pytest.fixture(scope="module")
 def built_open(tmp_path_factory):
     """The two vendored packages with DISTINCT slugs (fixtures/filled-survey declares example-survey's
-    slug, which collides in the manifest). Both open, so this is the full-branch arm."""
+    slug, which collides in the manifest). Both open, so this is the full-branch arm.
+
+    The staged copies gain the LEMIMT logger line: the shipped bytes state only the DECLINED band
+    token, so without it no station would publish runs[] and the pins below would go vacuous."""
     pytest.importorskip("mt_metadata")
     root = tmp_path_factory.mktemp("station-emission-open")
     surveys = root / "surveys"
     surveys.mkdir()
     for pkg in ("example-survey", "pid-survey"):
         shutil.copytree(FIXTURES / pkg, surveys / pkg)
+        qualify_lemimt(surveys / pkg)
     return _build(surveys, root / "data")
 
 
@@ -215,7 +220,7 @@ def test_the_open_control_really_publishes_runs_and_resources(built_open):
     """Non-vacuity for every pin above: a corpus whose stations published neither block would satisfy
     the key-set and scan tests without exercising them."""
     full, _ = _split(built_open)
-    assert any(d.get("runs") for d in full.values()), "this corpus's sources state an acquisition rate"
+    assert any(d.get("runs") for d in full.values()), "the staged sources state an acquisition fact"
     assert all(d.get("resources") for d in full.values()), "every open station serves an EDI"
 
 

@@ -27,10 +27,13 @@ the production enables.
    `build_report.json` records the source per station. The same pass reads the `>INFO` block for
    acquisition facts: mt_metadata recovers none of them, and the custodians wrote them six different
    ways, so `extract/_runfacts.py` carries one extractor per dialect (the AusMT header enrichment's
-   dotted `run.*` keys, MTpy `fieldnotes.*`, the LEMIMT `SITE` token, Phoenix EMpower's record JSON,
-   Phoenix MTU field sheets and compact JSON, and the Geotools survey header, which states no
-   acquisition fact at all). Every value carries an extraction-confidence class, and an uncertain
-   parse emits nothing: a missing field beats a confidently wrong number.
+   dotted `run.*` keys, MTpy `fieldnotes.*`, the LEMIMT `SITE` and `Instrument` lines, Phoenix
+   EMpower's record JSON, Phoenix MTU field sheets and compact JSON, and the Geotools survey header,
+   which states no acquisition fact at all). Every value carries an extraction-confidence class, and
+   an uncertain parse emits nothing: a missing field beats a confidently wrong number. Three facts
+   the corpus carries are declined rather than extracted, and the LEMIMT `SITE` line's `S-<rate>Hz`
+   band is one of them: it records the merging of downsampled EDI files, not the rate the station was
+   acquired at.
 5. Derive: TF rows, science diagnostics, catalogue rows; coordinate QC and declared coordinate
    resolutions applied; station-id variants disambiguated.
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings go to `qc_report.json`.
@@ -99,9 +102,9 @@ absent. The rows are logged as `[presence] NOTICE` lines from the same aggregati
 a library default, but which `>INFO` dialect asserted each real acquisition value and how confidently
 it was read. Every extractor classifies its output as `formal_edi_field`, `structured_dialect`,
 `pattern_extracted`, `curator_supplied` or `inferred`, and `station.json` publishes the value alone,
-so this is where the class is kept. It is the difference between a sample rate a structured dialect
-stated and one pattern-matched out of a LEMIMT processing token. Stations whose `>INFO` asserted
-nothing are omitted.
+so this is where the class is kept. It is the difference between a logger a structured dialect stated
+and one pattern-matched out of a LEMIMT free-text line. Stations whose `>INFO` asserted nothing are
+omitted.
 
 It is not a public surface. The curator workbench reads it over the private listener, and
 `scripts/verify.py`, the alert and doctor scripts read it from disk. It carries no stability promise and

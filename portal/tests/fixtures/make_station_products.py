@@ -40,10 +40,19 @@ STATIONS = {
 }
 
 
+# The LEMIMT logger line, byte-faithful to auslamp-nsw-2016-21/A23.edi. The sample EDI states only
+# the DECLINED band token, which asserts no acquisition fact, so without this the staged stations
+# would publish no runs[] and the tree would stop covering the block the portal pages describe.
+LEMIMT_INSTRUMENT = "  Instrument:\tLEMI-424\n"
+_LEMIMT_ANCHOR = "  Processing code: LEMIMT\n"
+
+
 def rewrite(src: str, sid: str, lat: float, lon: float, elev: float) -> str:
-    """One sample EDI restamped as `sid` at a given position. Every coordinate bearer in the file is
-    rewritten, not just HEAD: DEFINEMEAS and the >INFO sheet carry them too."""
+    """One sample EDI restamped as `sid` at a given position, and given the LEMIMT logger line. Every
+    coordinate bearer in the file is rewritten, not just HEAD: DEFINEMEAS and the >INFO sheet carry
+    them too."""
     out = re.sub(r'DATAID="[^"]*"', f'DATAID="{sid}"', src, count=1)
+    out = out.replace(_LEMIMT_ANCHOR, LEMIMT_INSTRUMENT + _LEMIMT_ANCHOR, 1)
     for pattern, value in ((r"\nLAT=[^\n]*", f"\nLAT={lat:.6f}"),
                            (r"\nLONG=[^\n]*", f"\nLONG={lon:.6f}"),
                            (r"\nELEV=[^\n]*", f"\nELEV={elev:.2f}"),
@@ -70,7 +79,7 @@ def stage(root: Path, slug: str, name: str, access_lines: list) -> None:
              "datum: WGS84 }"] + access_lines
     (root / slug / "survey.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
     # The run-id store, without which a station asserting an acquisition fact publishes no runs[]
-    # (D2: the id comes from the store and from nowhere else). The sample EDI states a rate, so
+    # (D2: the id comes from the store and from nowhere else). The staged EDI states its logger, so
     # these rows are what make the fixture carry the block the portal pages describe.
     rows = "\n".join(f"  {sid}: [{sid}-r01]" for sid, *_ in STATIONS[slug])
     (root / slug / "run-ids.yaml").write_text(f"run_ids:\n{rows}\n", encoding="utf-8")

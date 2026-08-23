@@ -19,6 +19,7 @@ shipped 0.1 schema artifact, so a run that violated the run-nominal-rate conditi
 library default would fail on the document rather than on a mock.
 """
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -32,9 +33,11 @@ RUNFACTS = HERE / "fixtures" / "runfacts"
 SCHEMA = json.loads((ROOT / "schema" / "ausmt-station.schema.json").read_text(encoding="utf-8"))
 sys.path.insert(0, str(ROOT / "extract"))
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(HERE))
 import _runfacts as rf   # noqa: E402
 import _runids as runids  # noqa: E402
 import build_portal as bp  # noqa: E402
+from test_run_facts import qualify_lemimt  # noqa: E402
 
 
 def _facts(name):
@@ -193,9 +196,16 @@ def test_a_duplicate_run_id_is_refused(tmp_path):
 # ---- over a real build --------------------------------------------------------------------------
 
 def _build(tmp_path):
+    """The vendored packages, STAGED and given the LEMIMT logger line. The shipped EDIs are real
+    Vulcan bytes stating only the DECLINED band token, so an in-place build would publish no runs at
+    all and the pins below would prove nothing."""
+    staged = tmp_path / "surveys"
+    shutil.copytree(SURVEYS, staged)
+    for package in sorted(p.parent for p in staged.glob("*/survey.yaml")):
+        qualify_lemimt(package)
     out = tmp_path / "data"
     r = subprocess.run(
-        [sys.executable, "-m", "extract.build_portal", "--surveys", str(SURVEYS),
+        [sys.executable, "-m", "extract.build_portal", "--surveys", str(staged),
          "--out", str(out), "--no-validate"],
         cwd=str(ROOT), capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -212,7 +222,7 @@ def test_a_built_station_publishes_its_run_and_validates(tmp_path):
     jsonschema = pytest.importorskip("jsonschema")
     out = _build(tmp_path)
     doc = _station(out, "example-survey", "EXAMPLE01")
-    assert doc["runs"] == [{"id": "EXAMPLE01-r01", "sample_rate_hz": 10.0,
+    assert doc["runs"] == [{"id": "EXAMPLE01-r01", "data_logger": {"model": "LEMI-424"},
                             "channels": [{"component": "ex"}, {"component": "ey"},
                                          {"component": "hx"}, {"component": "hy"}]}]
     jsonschema.Draft7Validator(SCHEMA, format_checker=jsonschema.FormatChecker()).validate(doc)

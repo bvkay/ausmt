@@ -10,18 +10,21 @@ returns (station-metadata scope section 6).
 
     enriched-dotted   mt_metadata-style `run.*` / `station.*` keys (the AusMT header enrichment)
     mtpy-fieldnotes   `fieldnotes.*` keys written by MTpy's EDI writer
-    lemimt-site       the LEMIMT `SITE : P-<station>_RR-<remote>_S-<rate>Hz_<n>` token
+    lemimt-site       the LEMIMT `SITE :` / `Instrument :` lines (the band token is declined)
     empower-json      Phoenix EMpower's per-record receiver JSON
     phoenix           Phoenix MTU field sheets (free text) and the compact per-station JSON
     ga-geotools       the Geotools survey header, which states no acquisition fact at all
 
 CONFIDENCE, not certainty: a class is recorded for every emitted value, and an uncertain parse
-emits NOTHING (a missing field beats a confidently wrong number). Two facts the corpus does carry
+emits NOTHING (a missing field beats a confidently wrong number). Three facts the corpus does carry
 are deliberately NOT extracted here and are reported for curation instead: the Phoenix field sheet's
 `Ex Pot Resist` contact resistances (the 0.1 schema applies unit_value to the one dialect that
-states resistance as a curated unit-bearing value), and every acquisition window whose source states
+states resistance as a curated unit-bearing value); every acquisition window whose source states
 no timezone (the EMpower record stamp and the field sheet's START-UP/END-TIME), because a run's
-time_period is an ISO 8601 UTC instant and inventing the offset would be an inference.
+time_period is an ISO 8601 UTC instant and inventing the offset would be an inference; and the
+LEMIMT SITE line's `S-<rate>Hz` band token, which records the MERGING OF DOWNSAMPLED EDI FILES and
+not the rate the station was acquired at, so publishing it as a run rate would state a processing
+parameter as a measurement.
 
 The result is a plain-JSON dict so it can ride the C18 parse cache beside the record it describes.
 """
@@ -249,7 +252,6 @@ def _mtpy_fieldnotes(info: str, kv: dict, doc: _Doc):
 
 
 _SITE_LINE = re.compile(r"(?m)^SITE\s*:\s*(\S.*?)\s*$")
-_SITE_RATE = re.compile(r"_S?-?(\d+(?:\.\d+)?)Hz_")
 _LEMIMT_INSTRUMENT = re.compile(r"(?m)^Instrument\s*:\s*(\S.*?)\s*$")
 
 
@@ -258,20 +260,15 @@ def _lemimt_site(info: str, kv: dict, doc: _Doc):
     remote token is the reference STATION, never a second run, and it is already carried as the
     record's remote_site.
 
-    The `S-<rate>Hz` token is the BAND of that processing job. It is read as the run's nominal rate
-    because it is the only rate this dialect states, and it is classified PATTERN_EXTRACTED for
-    exactly that reason: the source did not label it an acquisition rate. `.search` takes the FIRST
-    SITE line, so a file describing two bands is read at its first."""
+    The `S-<rate>Hz` token is the third declined fact (see the module docstring): it is the band of
+    that processing job, recording the merging of downsampled EDI files rather than the rate the
+    station was acquired at, so nothing in the site string is extracted. The Instrument line is the
+    one acquisition fact this dialect states."""
     site = _SITE_LINE.search(info)
     instrument = _LEMIMT_INSTRUMENT.search(info)
     if not site and not instrument:
         return
-    rate = _SITE_RATE.search(site.group(1)) if site else None
-    if not rate and not instrument:
-        return
     doc.dialect("lemimt-site")
-    if rate:
-        doc.run("sample_rate_hz", _positive(rate.group(1)), PATTERN_EXTRACTED, fact="sample_rate")
     if instrument:
         doc.run("data_logger", _instrument(model=instrument.group(1)), PATTERN_EXTRACTED,
                 fact="data_logger")

@@ -41,7 +41,7 @@
    "name": "Geotools",
    "version": "4.0.5.12583"
   },
-  "note": "MAXINFO=17\n*\nSITE        : P-A1_RR-RR_S-10Hz_1\nLATITUDE    :   -31.234567\nLONGITUDE   :   135.234567\nELEVATION   :   111.6100\nDECLINATION :     0.0000\n*\nProcessing code: LEMIMT\nAlgorithm      : Robust Remote Reference"
+  "note": "MAXINFO=17\n*\nSITE        : P-A1_RR-RR_S-10Hz_1\nLATITUDE    :   -31.234567\nLONGITUDE   :   135.234567\nELEVATION   :   111.6100\nDECLINATION :     0.0000\n*\nInstrument:\tLEMI-424\nProcessing code: LEMIMT\nAlgorithm      : Robust Remote Reference"
  },
  "distribution": {
   "edi_available": true,
@@ -57,7 +57,7 @@
    "mt_metadata": "1.0.9",
    "mth5": "0.6.8"
   },
-  "git_commit": "091f7a5",
+  "git_commit": "369d1f5",
   "parameters": {
    "dimensionality": {
     "beta_per_period_deg": 3.0,
@@ -71,9 +71,9 @@
    },
    "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
   },
-  "generated": "2026-08-23T07:43:25.963560+00:00",
+  "generated": "2026-08-23T12:21:21.454543+00:00",
   "input_file": "SPEXACT.edi",
-  "input_sha256": "761261d87d209b183677935abce17b168772544ea82f281ff9ebf91a700ce059"
+  "input_sha256": "aae0af01ed2a2925018acb5992ba8338ebed240bbdd97f136b69054a2fe446d8"
  },
  "coordinate_qc": null,
  "canonical_conditioning": [
@@ -116,7 +116,9 @@
  "runs": [
   {
    "id": "SPEXACT-r01",
-   "sample_rate_hz": 10.0,
+   "data_logger": {
+    "model": "LEMI-424"
+   },
    "channels": [
     {
      "component": "ex"

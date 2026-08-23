@@ -41,6 +41,24 @@ def facts(name):
     return rf.run_facts((FIX / f"{name}.info").read_text(encoding="utf-8"))
 
 
+# The LEMIMT logger line, byte-faithful to auslamp-nsw-2016-21/A23.edi. Every vendored survey-package
+# fixture is real Vulcan bytes stating the DECLINED band token and nothing else, so a test needing a
+# qualifying LEMIMT station injects this into its own staged copy; the shipped bytes stay real.
+LEMIMT_INSTRUMENT = "  Instrument:\tLEMI-424\n"
+_LEMIMT_ANCHOR = "  Processing code: LEMIMT\n"
+
+
+def qualify_lemimt(package: Path) -> Path:
+    """Give every EDI in a STAGED survey package the LEMIMT logger line, so the package asserts one
+    real acquisition fact. Returns the package, for use inline."""
+    for edi in sorted((package / "transfer_functions" / "edi").glob("*.edi")):
+        text = edi.read_text(encoding="latin-1")
+        assert _LEMIMT_ANCHOR in text, f"{edi} is not the LEMIMT fixture this helper stages"
+        edi.write_text(text.replace(_LEMIMT_ANCHOR, LEMIMT_INSTRUMENT + _LEMIMT_ANCHOR, 1),
+                       encoding="latin-1")
+    return package
+
+
 # ---- one test per dialect family ---------------------------------------------------------------
 
 def test_enriched_dotted_recovers_the_whole_run():
@@ -109,11 +127,24 @@ def test_lemimt_site_reads_the_instrument_and_leaves_the_rate_where_none_is_stat
     assert d["facts"] == ["data_logger"]
 
 
-def test_lemimt_site_reads_the_rate_off_the_site_token_where_one_is_stated():
-    """The other half of the same dialect: the rate rides the job string as `_S-10Hz_`."""
+def test_the_lemimt_band_token_is_never_read_as_an_acquisition_rate():
+    """OWNER RULING: the `S-<rate>Hz` token in the SITE line records the MERGING OF DOWNSAMPLED EDI
+    FILES, not the rate the station was acquired at, so nothing in the site string reaches `run` and
+    the token qualifies no station. Reading it as a rate published a processing parameter as a
+    measurement on 178 records."""
     d = rf.run_facts("SITE        : P-A1_RR-RR_S-10Hz_1\nProcessing code: LEMIMT\n")
-    assert d["run"]["sample_rate_hz"] == 10.0
-    assert d["confidence"]["run.sample_rate_hz"] == rf.PATTERN_EXTRACTED
+    assert d["dialects"] == ["lemimt-site"], "the dialect is still recognised; it just asserts nothing"
+    assert d["run"] == {} and d["channels"] == {}
+    assert d["facts"] == []
+    assert d["confidence"] == {}
+
+
+def test_the_band_token_qualifies_nothing_even_beside_a_real_fact():
+    """The Instrument line qualifies the station; the band token still contributes no rate, so a
+    LEMIMT run publishes its logger and no `sample_rate_hz` at all."""
+    d = rf.run_facts("SITE        : P-A1_RR-RR_S-10Hz_1\nInstrument:\tLEMI-424\n")
+    assert d["facts"] == ["data_logger"]
+    assert "sample_rate_hz" not in d["run"]
 
 
 def test_empower_json_takes_the_highest_rate_as_the_run_nominal_rate():
@@ -193,9 +224,9 @@ def test_the_parse_product_carries_the_run_facts():
     cold one does. FAILS against the pre-A6 parse, whose product had no `run_facts` key."""
     pytest.importorskip("mt_metadata")
     import build_portal as bp  # noqa: PLC0415
-    edi = HERE / "fixtures" / "example-survey" / "transfer_functions" / "edi" / "EXAMPLE01.edi"
+    edi = HERE / "fixtures" / "edi-info-json" / "LineNo__StationNo_11.edi"
     parsed = bp._parse_one_edi(edi)
-    assert parsed["run_facts"]["run"]["sample_rate_hz"] == 10.0
+    assert parsed["run_facts"]["run"]["sample_rate_hz"] == 24000.0
     assert json.dumps(parsed["run_facts"])   # JSON-serialisable: it rides the C18 cache value
 
 
@@ -207,12 +238,13 @@ def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
     FAILS against the pre-fix build, whose report carried no `run_extraction` at all: the class and
     the dialect were computed for every value, cached inside the C18 parse product and then dropped,
     so nothing shipped could tell a structured_dialect value from a pattern_extracted one. This
-    fixture is the case that makes it matter - EXAMPLE01's rate is read out of a LEMIMT SITE
-    processing token, which is the weakest class the extractors emit."""
+    fixture is the case that makes it matter - EXAMPLE01's logger is read off a LEMIMT free-text
+    line, which is the weakest class the extractors emit."""
     pytest.importorskip("mt_metadata")
     surveys = tmp_path / "surveys"
     surveys.mkdir()
     shutil.copytree(HERE / "fixtures" / "example-survey", surveys / "example-survey")
+    qualify_lemimt(surveys / "example-survey")
     out = tmp_path / "data"
     r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(surveys),
                         "--out", str(out), "--no-validate"], cwd=str(ROOT),
@@ -221,10 +253,11 @@ def test_the_extraction_confidence_classes_reach_the_build_report(tmp_path):
     report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
     entry = report["surveys"]["example-survey"]["run_extraction"]["EXAMPLE01"]
     assert entry["dialects"] == ["lemimt-site"]
-    assert entry["confidence"] == {"run.sample_rate_hz": rf.PATTERN_EXTRACTED}
+    assert entry["confidence"] == {"run.data_logger": rf.PATTERN_EXTRACTED}
     published = json.loads((out / "products" / "example-survey" / "EXAMPLE01" / "station.json")
                            .read_text(encoding="utf-8"))
-    assert published["runs"][0]["sample_rate_hz"] == 10.0
+    assert published["runs"][0]["data_logger"] == {"model": "LEMI-424"}
+    assert "sample_rate_hz" not in published["runs"][0], "the band token is declined, not published"
     assert "confidence" not in json.dumps(published["runs"]), (
         "the class is curation provenance, not a published member")
 
