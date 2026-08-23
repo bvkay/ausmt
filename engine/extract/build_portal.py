@@ -2631,19 +2631,35 @@ def _dimensionality_document(srow) -> dict:
             "note": "screening diagnostic, not an interpretation product"}
 
 
-def _write_station_products(job, prov):
+def _write_station_products(job, prov, served_root, products_dir):
     """Write one station's per-station products. `job` is the tuple captured in main()'s per-survey
     loop and drained after the coordinate mask; `prov` is the build PROV block. The rendering lives in
-    station_document() / _dimensionality_document(); this is the write path alone."""
-    (sdir, r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served) = job
-    sdir.mkdir(parents=True, exist_ok=True)
+    station_document() / _dimensionality_document(); this is the write path alone.
+
+    D7: station.json is published under `served_root` (out/products) UNCONDITIONALLY, because it is a
+    public contract and a build run without --products would otherwise ship a data tree with a
+    documented contract missing from it. It is ALSO published under `products_dir` where that is a
+    different directory, which is not redundancy: five test files build with a --products dir outside
+    --out and read station.json back out of it, and deploy/Makefile makes the two coincide in
+    deployment, so the served path is the same either way. dimensionality.json is not a contract and
+    keeps its single --products home."""
+    (r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes, served) = job
     doc = station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes,
                            served, prov)
-    (sdir / "station.json").write_text(_jdump(doc, indent=1), encoding="utf-8")
-    if not served:
+    payload = _jdump(doc, indent=1)
+    served_dir = served_root / slug / r["id"]
+    curated_dir = (products_dir / slug / r["id"]) if products_dir is not None else None
+    dirs = [served_dir]
+    if curated_dir is not None and curated_dir.resolve() != served_dir.resolve():
+        dirs.append(curated_dir)
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "station.json").write_text(payload, encoding="utf-8")
+    if not served or curated_dir is None:
         return   # no dimensionality.json for a non-served survey (interpretation product = withheld science)
-    (sdir / "dimensionality.json").write_text(_jdump(_dimensionality_document(srow), indent=1),
-                                              encoding="utf-8")
+    curated_dir.mkdir(parents=True, exist_ok=True)
+    (curated_dir / "dimensionality.json").write_text(_jdump(_dimensionality_document(srow), indent=1),
+                                                     encoding="utf-8")
 
 
 def qc_pass(all_stations, survey_extent):
@@ -4663,23 +4679,24 @@ def main(argv=None):
                                                         Path(_h5p), f"h5/{slug}/{Path(_h5p).name}",
                                                         lic, nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
-            if prod:
-                # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
-                # above). The job captures this station's SHARED record `r` (masked in place downstream), its
-                # science row, and the survey context needed to render — nothing here depends on cross-survey
-                # state that changes after this iteration (conditioning_notes is this survey's own dict). The
-                # per-station coordinate byte-gate (_cserved) is captured too: even inside a served survey, a
-                # non-exact station's EDI is withheld, so station.json's distribution must not advertise it.
-                # C1c: the SURVEY access-serve state (_acc["served"], the SAME result the byte gate and the
-                # C1b tf/sci withholding use — never re-derived) is captured so the deferred emitter withholds
-                # the derived science products for a non-served survey, exactly as tf.json/sci.json are.
-                # edi_served is the ACTUAL served-EDI outcome for this station, not the gate alone:
-                # an EMTF-XML-sourced station whose canonical emission failed passes both gates yet
-                # has no EDI to advertise, and station.json's distribution must not claim one.
-                _station_product_jobs.append(
-                    (prod / slug / r["id"], r, srow, label, org, meta, lic, slug, p,
-                     (f"edi/{slug}/{served_edi.name}" if served_edi is not None else None),
-                     conditioning_notes, bool(_acc["served"])))
+            # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
+            # above). The job captures this station's SHARED record `r` (masked in place downstream), its
+            # science row, and the survey context needed to render - nothing here depends on cross-survey
+            # state that changes after this iteration (conditioning_notes is this survey's own dict). The
+            # per-station coordinate byte-gate (_cserved) is captured too: even inside a served survey, a
+            # non-exact station's EDI is withheld, so station.json's distribution must not advertise it.
+            # C1c: the SURVEY access-serve state (_acc["served"], the SAME result the byte gate and the
+            # C1b tf/sci withholding use, never re-derived) is captured so the deferred emitter withholds
+            # the derived science products for a non-served survey, exactly as tf.json/sci.json are.
+            # edi_served is the ACTUAL served-EDI outcome for this station, not the gate alone:
+            # an EMTF-XML-sourced station whose canonical emission failed passes both gates yet
+            # has no EDI to advertise, and station.json's distribution must not claim one.
+            # D7: the job is queued for EVERY station, not only under --products; station.json is a
+            # public contract and the write path below publishes it at the served root regardless.
+            _station_product_jobs.append(
+                (r, srow, label, org, meta, lic, slug, p,
+                 (f"edi/{slug}/{served_edi.name}" if served_edi is not None else None),
+                 conditioning_notes, bool(_acc["served"])))
         # ---- per-survey bundles (served surveys only): pre-zipped EDIs + optional survey MTH5 ----
         if can_serve and served_edis:
             # C6: rights travel with the bytes — build a deterministic LICENSE.txt for the zip. Licensor =
@@ -4859,11 +4876,12 @@ def main(argv=None):
         print(f"C42 coordinate access: {len(_masked_ausmt_ids)} station(s) masked "
               f"(generalised or withheld); their EDI/XML are byte-gated out and positions "
               f"masked in all served surfaces.", file=sys.stderr)
-    # ---- deferred --products station.json/dimensionality.json: run NOW, after the mask, so each
+    # ---- deferred per-station station.json/dimensionality.json: run NOW, after the mask, so each
     # station.json `location` carries the post-mask coordinate (D3: products/ is a served surface in
-    # deployment). The jobs read the same shared records the mask mutated.
+    # deployment). The jobs read the same shared records the mask mutated. D7: station.json lands under
+    # out/products unconditionally and under --products as well where that is a different directory.
     for _job in _station_product_jobs:
-        _write_station_products(_job, PROV)
+        _write_station_products(_job, PROV, out / "products", prod)
     # ---- survey-metadata.json (the second public contract): one document per survey, AFTER the mask
     # seam (the extent follows the aggregated post-mask coordinate state, D7) and after the station jobs,
     # into out/products/<slug>/ UNCONDITIONALLY (the served root in deployment, independent of
