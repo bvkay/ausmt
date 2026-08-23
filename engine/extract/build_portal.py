@@ -46,6 +46,7 @@ import _conventions as conv         # noqa: E402  (C25 convention gates: frame g
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import _stationids as stnids        # noqa: E402  (survey.yaml station-id override for third-party data)
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
+import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
 
@@ -2064,7 +2065,11 @@ def _parse_one_edi(p):
             # The presence rule (gate 15): what THIS parse carried as an mt_metadata default rather
             # than a source assertion. Derived here, where the parsed model is, so a warm rebuild
             # reports it identically to a cold one.
-            "presence": presence.run_default_notes(tfobj)}
+            "presence": presence.run_default_notes(tfobj),
+            # The acquisition facts the >INFO block itself asserts, per dialect (extract/_runfacts).
+            # mt_metadata reads none of them, so they are recovered from the raw text the reader
+            # already has; runs[] is emitted from these and from nothing else.
+            "run_facts": rfacts.run_facts(_im.group(1) if _im else "")}
 
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",

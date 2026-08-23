@@ -597,11 +597,13 @@ def test_c18b_pre_bump_cache_entries_miss_cleanly(tmp_path, clean_salt):
     cache = tmp_path / "cache"
 
     # Populate the cache under the OLD (previous) tag by patching BuildCache to build a pre-bump salt.
+    # Current bump: v5 -> v6, for the parse product that now carries the presence notes and the
+    # >INFO run facts runs[] is emitted from.
     real_init = cache_mod.BuildCache.__init__
 
     def _old_tag_init(self, *args, **kwargs):
         real_init(self, *args, **kwargs)
-        self._fixed_salt = self._fixed_salt.replace("ausmt-c46-cache-v5", "ausmt-c20-cache-v4", 1)
+        self._fixed_salt = self._fixed_salt.replace("ausmt-c47-cache-v6", "ausmt-c46-cache-v5", 1)
 
     import unittest.mock as _mock
     with _mock.patch.object(cache_mod.BuildCache, "__init__", _old_tag_init):

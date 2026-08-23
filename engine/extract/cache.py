@@ -183,7 +183,12 @@ class BuildCache:
             # by the source-EDI sha, the survey.yaml digest, or the contract digest, so a warm pre-C46
             # cache would REPLAY the boilerplate XML for an unchanged EDI on the same engine commit.
             # Bumping the tag forces one clean full re-derive so every served XML is the truthful form.
-            "ausmt-c46-cache-v5",
+            # v6 (station promotion) = the parse product changed SHAPE again: the per-EDI parse now
+            # carries the presence-rule notes and the >INFO dialect run facts that runs[] is emitted
+            # from, so a pre-v6 entry would replay a parse with neither and serve a station.json
+            # with no runs at all. Same clean-MISS discipline as v4/v5: one full re-derive on the
+            # first build after this lands, then warm again.
+            "ausmt-c47-cache-v6",
             str(engine_commit),                                      # coarse engine-commit salt (§2.2)
             json.dumps(self.lib_versions, sort_keys=True),           # mt_metadata (+ mth5) versions (§2.3)
             self.contract_digest,                                    # columns + schema digest (§2.4)

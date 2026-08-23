@@ -24,7 +24,13 @@ the production enables.
 4. Extract: mt_metadata parses each input once into a canonical record and component dict. Standard
    and Phoenix SPECTRA EDI dialects are read natively; EMTF XML and MTH5 input go through the same
    component dict. Where a station is supplied as both an EDI and an EMTF XML the EDI wins;
-   `build_report.json` records the source per station.
+   `build_report.json` records the source per station. The same pass reads the `>INFO` block for
+   acquisition facts: mt_metadata recovers none of them, and the custodians wrote them six different
+   ways, so `extract/_runfacts.py` carries one extractor per dialect (the AusMT header enrichment's
+   dotted `run.*` keys, MTpy `fieldnotes.*`, the LEMIMT `SITE` token, Phoenix EMpower's record JSON,
+   Phoenix MTU field sheets and compact JSON, and the Geotools survey header, which states no
+   acquisition fact at all). Every value carries an extraction-confidence class, and an uncertain
+   parse emits nothing: a missing field beats a confidently wrong number.
 5. Derive: TF rows, science diagnostics, catalogue rows; coordinate QC and declared coordinate
    resolutions applied; station-id variants disambiguated.
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings go to `qc_report.json`.
