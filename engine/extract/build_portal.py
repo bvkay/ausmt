@@ -2512,6 +2512,18 @@ def _apply_coord_resolution(stations, cr):
         r["coord_resolution"] = {"chosen": choose, "basis": cr.get("basis"), "source": "survey.yaml"}
 
 
+def _station_identity(r, label, slug) -> dict:
+    """The identity block every station.json opens with, on BOTH branches, in the schema's own order.
+
+    `survey` is the display label (the legacy surface, frozen); `survey_id` is the slug, the identifier
+    the machine surfaces key on - mtcat's surveys[].survey_id and survey-metadata.json's are the same
+    slug, and a display label is not an identifier. STATION_SCHEMA_VERSION is the generated mirror of
+    the single-source constant, never a literal, so a document cannot claim a version the schema served
+    beside it does not."""
+    return {"schema": "ausmt-station", "version": STATION_SCHEMA_VERSION,
+            "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label, "survey_id": slug}
+
+
 def _write_station_products(job, prov):
     """Render + write one station's --products station.json + dimensionality.json (C42 deferred so it
     runs AFTER the coordinate mask: `r` is the SHARED station record, masked in place at the single seam,
@@ -2536,7 +2548,7 @@ def _write_station_products(job, prov):
     # exact source position, NO input_sha256 — and NO dimensionality.json (a pure interpretation product).
     if not served:
         _wdoc = {
-            "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label,
+            **_station_identity(r, label, slug),
             "country": (meta or {}).get("country", "Australia"), "organisation": org,
             "access": {"level": normalise_access_level((meta or {}).get("access", "open")),
                        "embargo_until": (meta or {}).get("embargo_until"), "served": False},
@@ -2551,7 +2563,7 @@ def _write_station_products(job, prov):
         (sdir / "station.json").write_text(_jdump(_wdoc, indent=1), encoding="utf-8")
         return   # no dimensionality.json for a non-served survey (interpretation product = withheld science)
     _doc = {
-        "ausmt_id": r["ausmt_id"], "station": r["id"], "survey": label,
+        **_station_identity(r, label, slug),
         "country": (meta or {}).get("country", "Australia"), "organisation": org,
         # C42: post-mask coordinates — exact/generalised(0.1deg)/withheld(null) per the custodian policy,
         # read from the single-seam-masked record. This products/ surface IS served in deployment (D1).

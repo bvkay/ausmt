@@ -133,16 +133,20 @@ def test_the_generated_constant_is_not_a_hand_typed_literal_in_the_builder():
 # ---------------------------------------------------------------- the served routes and documents
 
 def _build(tmp_path):
+    # --products INSIDE --out, the arrangement deploy/Makefile puts in place, so the version read below
+    # is taken off the documents the deployment actually serves.
     out = tmp_path / "data"
     r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys", str(SURVEYS),
-                        "--out", str(out), "--no-validate"], cwd=ROOT, capture_output=True, text=True)
+                        "--out", str(out), "--products", str(out / "products"), "--no-validate"],
+                       cwd=ROOT, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     return out
 
 
-def test_a_real_build_serves_the_schema_at_both_routes(tmp_path):
+def test_a_real_build_serves_the_schema_at_both_routes_and_stamps_the_version(tmp_path):
     """Statement 6, the surface a consumer actually fetches: the build serves the schema at the
-    immutable versioned route and the latest route, byte-identical to the in-tree artifact."""
+    immutable versioned route and the latest route, byte-identical to the in-tree artifact, and every
+    emitted station.json carries the single-source version."""
     pytest.importorskip("mt_metadata")
     out = _build(tmp_path)
     want = _authority()
@@ -152,6 +156,12 @@ def test_a_real_build_serves_the_schema_at_both_routes(tmp_path):
     assert latest.is_file(), "the latest-convenience schema route must be served beside the data"
     assert versioned.is_file(), f"the versioned immutable schema route {versioned} must be served"
     assert latest.read_bytes() == in_tree and versioned.read_bytes() == in_tree
+    docs = sorted((out / "products").glob("*/*/station.json"))
+    assert docs, "a build over the fixture surveys must emit at least one station.json"
+    for d in docs:
+        doc = json.loads(d.read_text(encoding="utf-8"))
+        assert doc["version"] == want, f"{d} stamps {doc['version']!r}, the schema declares {want!r}"
+        assert doc["schema"] == "ausmt-station"
 
 
 # ---------------------------------------------------------------- the docs display

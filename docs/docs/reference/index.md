@@ -16,7 +16,7 @@ tags are the version list; nothing in the repository enumerates them.
 different version, the served document is the authority for that deployment. The same documentation
 describes survey-metadata schema version 0.1 (a draft; check `version` in any
 `/data/products/<survey_id>/survey-metadata.json`) and describes station schema version 0.1 (a draft;
-the schema is served at `/data/ausmt-station.schema.json`).
+check `version` in any `/data/products/<slug>/<station>/station.json`).
 
 ## Public contracts
 

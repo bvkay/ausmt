@@ -83,11 +83,20 @@ canonical conditioning notes, the frame facts, and a provenance block naming the
 SHA-256. The example below shows every member, including the optional ones; a station whose survey
 declares no `station_ids` provenance carries no `provenance.source`.
 
+Three members open every record, on the full and the withheld branch alike: `schema` names the
+contract, `version` names the schema version the document conforms to, and `survey_id` is the survey
+slug. `survey` remains the display title; a display title is not an identifier, so a consumer joining
+this record to `mtcat.json` or to `survey-metadata.json` keys on `survey_id`, which is the same slug in
+all three.
+
 ```json
 {
+  "schema": "ausmt-station",
+  "version": "0.1",
   "ausmt_id": "au.vulcan-2022.A1",
   "station": "A1",
   "survey": "Vulcan 2022",
+  "survey_id": "vulcan-2022",
   "country": "Australia",
   "organisation": "University of Adelaide",
   "location": { "lat": -30.123, "lon": 135.456 },
@@ -351,9 +360,12 @@ public catalogue already exposes.
 
 ```json
 {
+  "schema": "ausmt-station",
+  "version": "0.1",
   "ausmt_id": "au.kalkaroo-2022.KD-C3",
   "station": "KD-C3",
   "survey": "Kalkaroo 2020-21",
+  "survey_id": "kalkaroo-2022",
   "country": "Australia",
   "organisation": "Adelaide University",
   "access": { "level": "embargoed", "embargo_until": "2027-02-01", "served": false },
@@ -365,6 +377,9 @@ public catalogue already exposes.
 
 | Member | Type | Definition |
 |---|---|---|
+| `schema` | string | `ausmt-station`, on both branches |
+| `version` | string | the schema version this document conforms to, on both branches |
+| `survey_id` | string | the survey slug, on both branches |
 | `access.level` | string | the normalised access level |
 | `access.embargo_until` | string or null | the declared embargo end date, where one exists |
 | `access.served` | boolean | `false` on every withheld record |

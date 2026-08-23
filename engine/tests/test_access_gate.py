@@ -334,6 +334,16 @@ def test_withheld_build_passes_verify_data_dir(tmp_path):
 _PRODUCTS_SCIENCE_KEYS = ("median_relative_error", "dimensionality", "skew_beta_median_deg",
                           "completeness_smoothness_diagnostic", "classification", "pct_periods_3d",
                           "convention_check", "phs_xy_median_deg", "phs_yx_median_deg", "input_sha256")
+# The station.json KEY SET on each branch, pinned so byte-stability is enforceable at all: before this
+# pin existed nothing forbade a new top-level key on either branch, and the leak sweep above tests
+# VALUES, not membership. The three promotion markers are the ratified exception (D8) and are listed
+# separately so a fourth addition to either branch fails here rather than shipping.
+_STATION_FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "location",
+                             "data", "diagnostics", "processing", "distribution", "provenance",
+                             "coordinate_qc", "canonical_conditioning", "frame")
+_STATION_FROZEN_WITHHELD_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "access",
+                                 "distribution", "withheld", "note")
+_STATION_PROMOTION_MARKERS = ("schema", "version", "survey_id")
 # Non-served access blocks and whether the survey serves — a metadata_only, an embargoed-future, plus the
 # open control. (An embargoed-PAST survey is ALSO non-served; the pure-gate tests above pin that case, and
 # this corpus keeps to the two distinct non-served *kinds* the task enumerates + the open control.)
@@ -430,6 +440,11 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
         sj = json.loads((prod / slug / "A1" / "station.json").read_text(encoding="utf-8"))
         assert sj.get("withheld") is True and sj["access"]["served"] is False
         assert sj["distribution"]["edi_available"] is False and sj.get("survey")
+        assert set(sj) == set(_STATION_FROZEN_WITHHELD_KEYS) | set(_STATION_PROMOTION_MARKERS), (
+            f"the withheld stub carries the nine frozen keys plus the three promotion markers and "
+            f"nothing else; {slug!r} emitted {sorted(sj)}")
+        assert sj["schema"] == "ausmt-station" and sj["survey_id"] == slug, (
+            "survey_id is the slug the machine surfaces key on, never the display label")
 
     # OPEN control: the served survey in the SAME build keeps its full science + dimensionality.json.
     # The dimensionality CALL is asserted where it now lives (dimensionality.json — station.json stopped
@@ -438,6 +453,15 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
         oj = json.loads((prod / slug / "A1" / "station.json").read_text(encoding="utf-8"))
         assert "diagnostics" in oj and oj["diagnostics"].get("completeness_smoothness_diagnostic"), \
             "the OPEN survey's products must retain their TF-derived science"
+        # The full-branch key set. coordinate_policy is the one conditional top-level key and this
+        # corpus is all-exact, so it is absent here by construction (its own pin is
+        # test_coord_access.py::test_station_json_carries_policy_for_non_exact_only).
+        assert set(oj) == set(_STATION_FROZEN_FULL_KEYS) | set(_STATION_PROMOTION_MARKERS), (
+            f"the full record carries the fourteen frozen keys plus the three promotion markers and "
+            f"nothing else; {slug!r} emitted {sorted(oj)}")
+        assert oj["schema"] == "ausmt-station" and oj["survey_id"] == slug, (
+            "survey_id is the slug the machine surfaces key on, never the display label")
+        assert "withheld" not in oj, "the withheld marker is schema-forbidden on a full record"
         dj = prod / slug / "A1" / "dimensionality.json"
         assert dj.exists(), "the OPEN survey must still emit dimensionality.json"
         assert json.loads(dj.read_text(encoding="utf-8"))["classification"], \
