@@ -121,6 +121,11 @@
           "items": {"$ref": "#/definitions/conditioning_entry"},
           "description": "C25 frame/convention notes (derotation records, convention WARNs, insufficient-data notes), same aggregation shape as conditioning; optional for pre-C25 reports"
         },
+        "presence": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/conditioning_entry"},
+          "description": "the presence rule (station-schema freeze gate 15), same aggregation shape as conditioning: the mt_metadata library defaults each station's parse carried instead of a source assertion (run id '<station>a', a 0 Hz rate, the 1980 MTime epoch window, an unnamed data logger, a 0-ohm contact resistance, the rr* remote-reference channels). A REPORT of what the emitter refuses to publish as a source assertion, not a conditioning decision AusMT made, which is why it is a field of its own. Optional for reports that predate the rule"
+        },
         "cache": {
           "type": "object",
           "required": ["digest", "hits", "misses", "writes"],

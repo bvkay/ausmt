@@ -45,6 +45,7 @@ import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_par
 import _conventions as conv         # noqa: E402  (C25 convention gates: frame guard + quadrant check)
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import _stationids as stnids        # noqa: E402  (survey.yaml station-id override for third-party data)
+import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
 
@@ -2059,7 +2060,11 @@ def _parse_one_edi(p):
     _frame = dict(_disp.facts)
     _frame["convention_check"] = _ck
     return {"record": r, "tf": tf, "sci": srow, "email_flag": email_flag, "coord_warn": coord_warn,
-            "frame": _frame, "frame_notes": _frame_notes, "parse_fallback": _parse_fallback}
+            "frame": _frame, "frame_notes": _frame_notes, "parse_fallback": _parse_fallback,
+            # The presence rule (gate 15): what THIS parse carried as an mt_metadata default rather
+            # than a source assertion. Derived here, where the parsed model is, so a warm rebuild
+            # reports it identically to a cold one.
+            "presence": presence.run_default_notes(tfobj)}
 
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
@@ -2186,6 +2191,8 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # cache with the rest of the parse, so a warm rebuild reports it identically to a cold one.
         if parsed.get("parse_fallback"):
             r["_parse_fallback"] = parsed["parse_fallback"]   # keyed by FINAL id below, as above
+        if parsed.get("presence"):
+            r["_presence"] = list(parsed["presence"])         # keyed by FINAL id below, as above
         stations.append((p, r))
         tf_rows.append(tf)
         sci_rows.append(srow)
@@ -2196,6 +2203,8 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         for (_p, _r) in stations:
             if _r.get("_frame_notes"):
                 report.setdefault("frame_notes", {})[_r["id"]] = _r.pop("_frame_notes")
+            if _r.get("_presence"):
+                report.setdefault("presence_notes", {})[_r["id"]] = _r.pop("_presence")
             _fb = _r.pop("_parse_fallback", None)
             if _fb:
                 report.setdefault("parse_fallbacks", []).append(
@@ -2204,6 +2213,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         for (_p, _r) in stations:
             _r.pop("_frame_notes", None)
             _r.pop("_parse_fallback", None)
+            _r.pop("_presence", None)
     if _email_hits:
         # Loud, ONCE per survey (not per file — a survey can have hundreds of EDIs from the same
         # custodian). This is a curator flag, not a mutation: the served original .edi bytes are the
@@ -4479,6 +4489,7 @@ def main(argv=None):
                 "warnings": [f"survey DROPPED: metadata is not JSON-serializable ({_smeta_exc})"],
                 "conditioning": [],
                 "frame": [],
+                "presence": [],
                 "cache": {"digest": (_survey_digest or "")[:12], "hits": 0, "misses": 0, "writes": 0},
                 "duration_seconds": round(_time.perf_counter() - _survey_t0, 3),
             }
@@ -4781,6 +4792,12 @@ def main(argv=None):
         _frame_notes_by_station = _gate_report.get("frame_notes", {})
         for _fline in conditioning_log_lines(slug, _frame_notes_by_station, prefix="[frame]"):
             print(_fline, file=sys.stderr)
+        # Presence rule (gate 15), the same discipline again: what the parse carried as an
+        # mt_metadata default rather than a source assertion. Its own prefix and its own report
+        # field, because a library default is not a conditioning decision AusMT made.
+        _presence_notes_by_station = _gate_report.get("presence_notes", {})
+        for _pline in conditioning_log_lines(slug, _presence_notes_by_station, prefix="[presence]"):
+            print(_pline, file=sys.stderr)
         # Convention WARNs (one off-diagonal out of quadrant) are survey-level warnings in the
         # report — the honest "look at this" surface. Derotation/insufficient/unverifiable notes
         # stay in `frame` (they are recorded facts, not warnings).
@@ -4859,6 +4876,9 @@ def main(argv=None):
             "conditioning": conditioning_report(conditioning_notes),
             # C25: frame/convention notes, same aggregation shape as `conditioning`.
             "frame": conditioning_report(_frame_notes_by_station),
+            # The presence rule (gate 15), same aggregation shape again: the mt_metadata defaults
+            # this survey's parses carried, which the emitter never publishes as source assertions.
+            "presence": conditioning_report(_presence_notes_by_station),
             "cache": ({"digest": (_survey_digest or "")[:12], "hits": _dh, "misses": _dm, "writes": _dw}
                       if _c0 is not None else {"digest": (_survey_digest or "")[:12],
                                               "hits": 0, "misses": 0, "writes": 0}),
