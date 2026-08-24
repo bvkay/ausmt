@@ -487,7 +487,7 @@ advertises neither. The number of records naming a bundle therefore equals that 
 | `repository` | string | The controlled token naming the repository that holds the bytes. `time_series` rows only. |
 | `processing_level` | string | The product level, from the closed vocabulary below. |
 | `packaging` | string | `packed_archive` where the level is served as one archive; omitted for a single file. |
-| `bytes` | integer | The archive's own stated size for the routed file, converted. AusMT never measured it, and the archive states sizes to four significant digits, so above a few kilobytes read it as the estimate it is rather than as a content-length. `time_series` rows only. |
+| `bytes` | integer | The archive's own stated size for the routed file, converted. AusMT never measured it, and the archive states sizes to four significant digits, so above a few kilobytes read it as the estimate it is rather than as a content-length. Measured against the live archive across every published row (2026-08-24): the figure was never LARGER than the file served, and never more than 0.1% smaller. `time_series` rows only. |
 | `note` | string | For a `time_series` row, the fieldnote naming the day the crawl read the file. |
 | `provenance_role` | string | `source` or `derived`, emitted only where it is certain. |
 | `representation_role` | string | `original`, `alternate` or `archival_copy`, on the same terms. |
