@@ -103,17 +103,13 @@ code += "\nwindow.__api={" +
   "setup:(c,t,s,sv,coll,cp)=>{CAT=c;TFD=t;SCI=s;SMETA=sv;COLL=coll;MANIFEST=null;COORD_POLICY=cp||{};buildState();buildTree();}," +
   "idxOf:(id)=>ST.findIndex(s=>s.id===id)," +
   "buildMarkersRun:()=>{buildMarkers();return {marker:ST.map(s=>({id:s.id,has:s.marker!==undefined}))};}," +
-  // driveRefresh runs the REAL refresh() (which routes routeVisibleToLayers() into the map layers) and
-  // reports what actually reached them - routed markers, any undefined (an addLayer(undefined) crash), and
-  // the `visible` ids (counts must still include the withheld station). Change 6: proximity clustering and
-  // its per-survey cluster facade are gone, so read the ONE dot container plus the badge layer. A badge
-  // stands for a whole survey's stations, so a station routed into a badge is NOT in dotLayer - count the
-  // badged stations too, or a badged survey would look like stations that went missing.
+  // driveRefresh runs the REAL refresh() (which paints routeVisibleToLayers() into the map layer) and
+  // reports what actually reached it - routed markers, any undefined (an addLayer(undefined) crash), and
+  // the `visible` ids (counts must still include the withheld station). There is ONE dot container and
+  // nothing collapses, so a routed station is a dot and the two counts are the same number.
   "driveRefresh:()=>{buildMarkers();refresh();" +
-  "const dots=(dotLayer._layers||[]);const badges=(badgeLayer._layers||[]);" +
-  "const badged=partitionForDisplay(visible.filter(hasPosition),curZoom(),{auslampSet:AUSLAMP_SET,badgesEnabled:badgesEnabledForMode()})" +
-  ".badges.reduce((a,b)=>a+b.count,0);" +
-  "return {routedCount:dots.length+badged,dotCount:dots.length,badgeCount:badges.length," +
+  "const dots=(dotLayer._layers||[]);" +
+  "return {routedCount:dots.length,dotCount:dots.length," +
   "undef:dots.filter(m=>m===undefined).length,vis:visible.map(s=>s.id)};}," +
   "footprints:()=>{buildFootprints();return true;}," +
   "recolorRun:()=>{recolor();return true;}," +

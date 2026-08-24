@@ -1,6 +1,6 @@
 "use strict";
 // Shared station filter (drives both Map and Surveys) + the hierarchy tree. buildTree() is
-// data-dependent and called by main after ST is built. recolor/cluster live in map.js and are
+// data-dependent and called by main after ST is built. recolor lives in map.js and is
 // referenced only inside event handlers (runtime), never at load time.
 const tree=document.getElementById("tree");
 const pLo=document.getElementById("pLo"),pHi=document.getElementById("pHi");
@@ -105,13 +105,10 @@ function updateCounts(){const nv=document.getElementById("nVis");
   else nv.textContent=visible.length;
   document.getElementById("nTot").textContent=ST.length;}
 function refresh(){paintSlider();visible=ST.filter(passes);
-  // Change 6: ONE call routes the visible set into station dots + per-survey badges. map.js owns the layers
-  // and the badge rule; this stays the caller it always was. routeVisibleToLayers re-reads the live zoom and
-  // the live sidebar mode itself, so a filter change, a zoom notch and a Browse/Select switch all land on
-  // the same routing pass and cannot disagree. (Was the UX4-D2 two-container AusLAMP split; clustering and
-  // that split are both gone - AusLAMP's never-collapse privilege now lives in shouldBadgeSurvey.)
-  // C42: only POSITIONED stations reach a layer - a withheld-coordinate station has no marker (buildMarkers
-  // skipped it). It remains in `visible` (counted), just not on the map.
+  // ONE call paints the visible set into the map's single dot container; map.js owns the layer and this
+  // stays the caller it always was. Nothing collapses, so a filter change is the only thing that can alter
+  // what is on the map. C42: only POSITIONED stations reach the layer - a withheld-coordinate station has
+  // no marker (buildMarkers skipped it). It remains in `visible` (counted), just not on the map.
   routeVisibleToLayers();
   if(hasShapes())selected=new Set(visible.filter(inShapes).map(s=>s.i));else selected=new Set([...selected].filter(i=>visible.some(s=>s.i===i)));
   if(curView==="surveys")renderCards();
@@ -324,33 +321,15 @@ function restoreSelectLens(){
   const want={};snap.forEach(([v,ch])=>{want[v]=ch;});
   tree.querySelectorAll('input[value]').forEach(c=>{if(c.value in want)c.checked=want[c.value];});
   refresh();}
-// Change 6 (owner item 4, DECIDED): Select & export EXPANDS EVERY BADGE to its station dots; returning to
-// Browse re-badges. A selection is a set of STATIONS - the rubber-band, "select all filtered", the exports
-// and the counts all operate on stations - and a badge is not a station. Left badged, a visitor in Select
-// mode would drag a rectangle across three badges and select nothing, with no visible reason why; the map
-// would be showing survey-level objects while the panel beside it counted station-level ones. Expanding is
-// also the only option that keeps the selection HONEST at the moment it is made: what you lasso is what you
-// get. The alternative considered and rejected was making a badge select its whole survey on click, which
-// would silently overload one gesture with two meanings (open in Browse, select-216-stations in Select) and
-// give no way to select PART of a compact survey.
-function badgesEnabledForMode(){return sidebarMode!=="select";}
 function setSidebarMode(mode){
   // Stage B: leaving Select & export for Browse ends any All-EDIs lens - restore the survey checkboxes the
   // tile scoped so the Browse pane shows the visitor's own tree again, never the single-survey scoping the
   // tile applied. Guarded on the select->browse transition so repeated setSidebarMode("browse") calls and a
   // visitor's plain Browse use are untouched.
-  const _prevMode=sidebarMode;
   if(mode==="browse"&&sidebarMode==="select")restoreSelectLens();
   sidebarMode=mode;
-  // Change 6: the mode is an INPUT to the badge rule, so a real mode change has to re-route. Set the mode
-  // FIRST, then route, or the pass would read the mode the visitor just left.
-  // This re-routes on EVERY real transition, deliberately including select->browse. The first version
-  // skipped that direction on the grounds that restoreSelectLens() refreshes anyway - but it only does so
-  // when a lens is actually live (_selLens!==null), and a visitor who simply clicks Select then Browse
-  // never opened one. Badges then stayed expanded until some unrelated refresh happened to fire. Found by
-  // clicking the real page, not by the harness; the leg that now covers it drives the same no-lens path.
-  // The lens case double-routes, which is idempotent and cheap.
-  if(_prevMode!==mode&&typeof routeVisibleToLayers==="function")routeVisibleToLayers();
+  // No map re-route on a mode switch: the mode was an input to the badge rule (Select expanded every badge
+  // so a lasso could reach the stations) and every station is already its own dot in both modes.
   const bp=document.getElementById("browseMode"),sp=document.getElementById("selectMode"),seg=document.getElementById("modeSeg");
   if(bp)bp.classList.toggle("hidden",mode!=="browse");
   if(sp)sp.classList.toggle("hidden",mode!=="select");
