@@ -37,6 +37,9 @@ STORE_NAME = "ts-index.yaml"
 # TS_INDEX_REVIEW / TS_INDEX_MATCH_METHODS) because the build must not depend on a sibling checkout.
 # Restated, so pinned: tests/test_ts_index_register.py holds the content, and the two copies are
 # reconciled when the vendored validator is resynced after merge.
+# LEVELS and REVIEW are GATES here; the match-method pair is the RECONCILIATION ANCHOR only. The
+# build does not judge a match method (see _row) - the validator's WARNING is its whole severity -
+# but the tokens still have to agree across the two copies, so they are stated and pinned here.
 LEVELS = ("raw_packed", "level0", "level1_mth5", "level1_netcdf", "level2")
 REVIEW = ("verified", "pending", "retired")
 MATCH_METHODS = ("exact", "curator")

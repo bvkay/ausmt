@@ -219,6 +219,11 @@ def test_the_vocabularies_are_the_ratified_tokens():
     assert tsindex.LEVELS == ("raw_packed", "level0", "level1_mth5", "level1_netcdf", "level2")
     assert tsindex.REVIEW == ("verified", "pending", "retired")
     assert tsindex.MATCH_METHODS == ("exact", "curator")
+    assert all(tsindex._MATCH_RULE.match(m) for m in ("rule:sa-pad", "rule:j-prefix", "rule:a1"))
+    assert not any(tsindex._MATCH_RULE.match(m)
+                   for m in ("rule:Not Lower", "rule:", "rule:with space", "sa-pad", "Rule:x"))
     # CONTENT is only half of it: two readers can hold the same tokens and disagree about what an
     # out-of-vocab value COSTS. The severities are pinned beside the tokens - level and review stop
-    # the build, match_method does not - because that is the half that actually differed.
+    # the build, match_method does not - because that is the half that actually differed. The
+    # match-method pair is a RECONCILIATION ANCHOR rather than a gate the build applies, which is
+    # why its form is asserted here: nothing else in the engine reads it.
