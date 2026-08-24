@@ -27,12 +27,8 @@
 #       vulcan-2022 slug; explicit https:// with --resolve so the canonical block's own mapping is
 #       what answers). Skipped cleanly when the edge gives no response at all (the container check
 #       is the authority on a down edge).
-#   4d. the TIME-SERIES HAND-OFF TABLE (owner ruling R3/R5): the container-mounted ts-routes.map
-#       hash-matches the repo copy (check 2 covers only the Caddyfile, and a stale route table is a
-#       stale ACCESS decision), one OPEN route 302s to the exact NCI Location the table names, and a
-#       route the table does NOT name 404s (the map's `default ""` IS the suppression). The probe and
-#       its expectation are read FROM the table, so the pin tracks the corpus; both are overridable.
-#       Skipped cleanly when the table publishes no routes or the edge gives no response.
+#   4d. the TIME-SERIES HAND-OFF TABLE (R3/R5): map hash parity, open-302, unlisted-404. Detail at
+#       the check itself; skips cleanly on a routeless table or an unresponsive edge.
 #   5. tailscale is up and the box peer is visible
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
 #   7. disk headroom on the data path

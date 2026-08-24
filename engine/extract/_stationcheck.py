@@ -71,31 +71,22 @@ _FOLDED_DIAGNOSTICS = ("classification", "skew_beta_median_deg", "pct_periods_3d
 def ts_encode_path(url_path) -> str:
     """One register `url_path` as the percent-encoded fileServer PATH.
 
-    THE ONE ENCODER, and it lives here rather than in the emitter because the emitter is not its
-    only caller: the front door's generated route table renders the same string from a tool that
-    must not import the ingest stack, and the two producing different bytes for one file would put
-    a working route in station.json beside a dead one in the redirect table. Held to _TS_ENCODED
-    below, which is the rule the published route is CHECKED against, so what this writes is what
-    that admits.
-
-    The register stores the archive's own string verbatim, which is the only form that identifies
-    the file; the encoding happens HERE, once, at the point the string becomes a URL. NVP_2019's
-    `C5 [REMOTE].zip` is the corpus case: only `C5%20%5BREMOTE%5D.zip` answers 200, and a literal
-    space in a published route is a dead download."""
+    THE ONE ENCODER: it lives here, not in the emitter, because the front door's route-table
+    generator renders the same string without the ingest stack, and two encoders would put a
+    working route in station.json beside a dead one at the edge. Encoding happens once, where the
+    verbatim register string becomes a URL (corpus case: only `C5%20%5BREMOTE%5D.zip` answers
+    200), and the output is held to _TS_ENCODED, the same rule the published route is checked
+    against."""
     return quote(str(url_path).strip().lstrip("/"), safe="/")
 
 
 def ts_path_walks_up(url_path) -> bool:
     """True when a fileServer path climbs OUT of the archive root.
 
-    The encoded-route rule below admits `.` and `/` because real archive filenames carry both, so
-    traversal has to be refused by name. The host is fixed by TS_ACCESS_PREFIX, so this cannot
-    redirect off-host - but a browser normalises `..` before it sends, so the published link
-    resolves to an arbitrary path ON thredds.nci.org.au: a wrong claim with an AusMT byline. It is
-    also the one string the front door's generated route table refuses, so without this rule
-    station.json and ts_access.json could publish a route the edge can never serve. Read on the
-    DECODED segments, because the server decodes before it resolves and a literal-only test would
-    pass `%2E%2E` straight through."""
+    _TS_ENCODED admits `.` and `/` (real archive names carry both), so traversal is refused by
+    name: browsers normalise `..` before sending, making the link resolve to an arbitrary path on
+    the archive host under an AusMT byline. Read on DECODED segments - the server decodes before
+    it resolves, so a literal-only test passes `%2E%2E` straight through."""
     return any(seg == ".." for seg in unquote(str(url_path or "").strip()).split("/"))
 
 

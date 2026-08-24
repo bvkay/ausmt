@@ -130,13 +130,9 @@ def _row(path, sid, idx, row, taken) -> dict:
     if review == "retired" and not (_text(row.get("retired")) and _text(row.get("retired_reason"))):
         raise TsIndexError(f"{label} is retired without `retired` and `retired_reason`; retirement "
                            f"is a dated curator act, not a deletion, and the row stays as evidence")
-    # match_method is PROVENANCE, and its severity is the surveys validator's WARNING, not a stop.
-    # It gates nothing: a row stands or falls on its `review` state, and a malformed method costs the
-    # row its place in the adjudication queue and nothing else. The contract's FAIL list (S1) names
-    # level, review, url_path, verified, the retirement pair and the duplicate (station, level); it
-    # does not name this. Raising here made the engine stricter than the ratified rule, so a register
-    # that passed surveys CI green hard-stopped the ausmt build - a mystery red on a curator's PR.
-    # The value is carried through verbatim; the curator-facing signal is the validator's.
+    # match_method is provenance, not a gate: a row stands or falls on `review`, and its severity
+    # is the surveys validator's WARNING (S1's ratified FAIL list does not name it). Raising here
+    # hard-stopped builds on registers that passed surveys CI green. Carried through verbatim.
     url_path = _text(row.get("url_path"))
     if not url_path:
         raise TsIndexError(f"{label} has no url_path; that string IS the remote file's identity, "

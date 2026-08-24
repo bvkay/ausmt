@@ -13,11 +13,9 @@ function tsUTC(){return new Date().toISOString().replace(/[-:]/g,"").replace(/\.
 function save(n,t,m){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:m||"text/plain"}));a.download=n;a.click();URL.revokeObjectURL(a.href);}
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(toast._h);toast._h=setTimeout(()=>t.style.display="none",7000);}
 // ---- the hand-off snackbar (owner UX ruling 2026-08-23) ------------------------------------------
-// PROGRESS BELONGS TO THE BROWSER, and this is the element that respects that. A /go/ts/ hand-off is
-// a 302: the bytes travel browser-to-archive, CORS forbids an in-page fetch of the payload, and a
-// multi-GB Blob would be a proxy in disguise. So no progress bar, no download-manager panel and NO
-// COMPLETION CLAIM - the page can only honestly say what it handed over and where the rest of it
-// happens. It differs from toast() in exactly one way, which is why it is a second element and not a
+// PROGRESS BELONGS TO THE BROWSER: a hand-off is a 302, the bytes travel browser-to-archive, and
+// CORS forbids fetching the payload in-page. No progress bar, no download panel, no completion
+// claim - the page says only what it handed over. It differs from toast() in exactly one way, which is why it is a second element and not a
 // second use of the first: it can carry ONE action, the wget command for a whole list.
 function snack(msg,note,action){
   const el=document.getElementById("snackbar");if(!el)return;
@@ -179,8 +177,8 @@ document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"
   toast("Wrote pointers to where the raw time series live. AusMT hosts none of them; where one is verified and open, the Time-series list hands your browser straight to the archive.");};
 
 // ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
-// The offer is a POINTER FILE. Never a server-built zip and never a fourth exportSelectionFormat:
-// AusMT holds none of these bytes, so there is nothing here to package, and packaging them would make
+// The offer is a POINTER FILE, never a server-built zip or a fourth exportSelectionFormat:
+// AusMT holds none of these bytes, and packaging them would make
 // this portal a proxy for an archive that already serves them properly.
 //
 // PORTAL-GENERATED, not gateway-generated (D5). A fifth public gateway route would touch two

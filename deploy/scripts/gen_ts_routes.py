@@ -10,33 +10,20 @@ whose `default ""` is what 404s every path the table does not name.
     python deploy/scripts/gen_ts_routes.py --write    # (re)write the table from the registers
     python deploy/scripts/gen_ts_routes.py --check    # gate: exit 1 if the table is out of sync
 
-WHY A TABLE AT ALL (D15). Nothing in Caddy can derive an NCI `urlPath` from
-`/go/ts/gawler/SA104A/level1_mth5`: the crawler stores the archive's own string verbatim precisely
-because it cannot be rebuilt by joining catalog segments (musgraves' NT/SA/WA state segment is not
-in the station id at all). So resolution needs a lookup, and a committed one makes the R5
-membership greppable in review.
+An NCI urlPath cannot be derived from a route path (D15: the state segment is not in the id), so
+resolution needs a lookup, and a committed one makes R5 membership greppable in review. Membership
+is `_tsproject.route_rows()`, imported, never restated: the flag is projected for withheld
+stations too (R13), so suppression lives here, in resolution, and the table renders from the same
+predicate as ts_access.json - key sets equal by construction.
 
-MEMBERSHIP IS `_tsproject.route_rows()`, IMPORTED, NEVER RESTATED. `has_time_series` is projected
-for withheld stations too (existence semantics, R13), so mtcat.json hands an enumerator every
-segment of one of these paths: suppression cannot live in discovery and must live in RESOLUTION.
-This table IS that resolution, and it renders from the one predicate ts_access.json renders from,
-which is what makes their key sets equal by construction rather than by coincidence.
+The survey serve verdict is the one restated seam (build_portal pulls the mt_metadata stack; see
+`_survey_serves`); the key-set parity legs are the drift backstop. The registers live in the
+sibling ausmt-surveys checkout, so `--check` runs pre-commit, on the box, and in gateway-ci; an
+absent register root STOPS rather than passing vacuously.
 
-THE ONE THING THIS READER DOES NOT SHARE WITH THE BUILD is the survey serve verdict, which lives in
-build_portal (a module that pulls the whole mt_metadata stack). It is restated here as the two
-lines it is - only `access.level: open` serves, and no embargo date ever opens a survey - with the
-coordinate half of the gate imported from `_coordaccess` rather than restated. The key-set parity
-leg in deploy/tests and doctor-box.sh is what proves the restatement has not drifted.
-
-RUNS WHERE THE REGISTERS ARE: they live in the SIBLING ausmt-surveys checkout, so `--check` belongs
-to the pre-commit battery (rule 7), to the box (where surveys-live is the sibling), and to
-gateway-ci, which clones that sibling for exactly this gate. With no register root it STOPS rather
-than reporting a vacuous pass.
-
-A SURVEY THIS READER CANNOT RESOLVE DROPS ITS OWN ROUTES AND NOTHING ELSE'S, recorded in the table
-as an `# UNRESOLVED` line. Failing the whole generation was worse than it looked: nothing was
-written, so the PREVIOUSLY COMMITTED table went on serving while the build had already suppressed
-the station, and suppression that cannot be published is not suppression.
+A survey this reader cannot resolve drops ITS OWN routes only, recorded as an `# UNRESOLVED` line:
+failing the whole generation left the previously committed table serving routes the build had
+already suppressed.
 """
 from __future__ import annotations
 
@@ -73,10 +60,8 @@ class GenError(Exception):
 
 
 class _CorpusUnknown:
-    """`known_ids` for a reader with no corpus. The stop that matches a register row to a PUBLISHED
-    station id is the build's (build_portal.py:5064) and it is a hard error there; this table is
-    generated from registers a build has already accepted, so it accepts the register's own keys and
-    lets the key-set parity leg catch a row the corpus does not publish."""
+    """`known_ids` for a reader with no corpus: the published-id stop is the build's
+    (build_portal.py:5064); the key-set parity leg catches a row the corpus does not publish."""
 
     def __contains__(self, _sid) -> bool:
         return True
@@ -106,18 +91,11 @@ def _package_slug(pkgdir: Path, doc: dict) -> str:
 
 
 def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
-    """The map VALUE: the register's url_path through the ONE encoder, which is _stationcheck's -
-    the same call station.json's `access_url` is built from, so the front door's Location and the
-    published route are the same string minus the host. Two `quote()` calls that agree today would
-    diverge the day one learns about a character the other does not, and the failure is silent in
-    the worst way: a working route in the record beside a 404 in the table, for one file. The result
-    is then held to the SAME encoded-route rule _stationcheck applies to the published route, so a
-    value this table admits is a value that gate admits - AND THE CONVERSE, which was the asymmetry
-    worth naming: the traversal refusal below is that module's predicate, not a second opinion, so a
-    string station.json is allowed to publish is a string this table can serve."""
-    # Neither refusal quotes the offending url_path. The reason is recorded in the COMMITTED table,
-    # and one (station, level) names one file, so the row is already identified; echoing an
-    # unvalidated archive string into the file the front door imports buys nothing.
+    """The map VALUE: url_path through _stationcheck's encoder (the one station.json's access_url
+    uses) and held to the same encoded-route rule in BOTH directions, traversal refusal included -
+    the module's predicates, never a second opinion."""
+    # Neither refusal quotes the url_path: the row is already identified, and echoing an
+    # unvalidated archive string into a file the front door imports buys nothing.
     if stcheck.ts_path_walks_up(url_path):
         raise GenError(f"{pkgdir.name}: {sid}/{level} url_path walks up out of the fileServer "
                        f"root; a route table is the last place to resolve that.")
@@ -129,10 +107,8 @@ def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
 
 
 def _reason(root, package, text) -> str:
-    """A drop reason, normalised for the committed record: the register root stripped (_tsindex names
-    the file by its full path, and that path lands in a file `--check` byte-compares, so it has to be
-    the same string on every checkout) and the package name stripped off the front (the line that
-    carries this already names the survey, and saying it twice reads as two facts)."""
+    """A drop reason for the committed record: register root stripped (the string lands in a file
+    `--check` byte-compares across checkouts) and the package prefix deduplicated."""
     out = str(text).replace(str(Path(root)) + "/", "").replace(str(Path(root)), ".")
     prefix = f"{package}: "
     return out[len(prefix):] if out.startswith(prefix) else out
@@ -167,16 +143,10 @@ def _survey_routes(root, pkgdir, doc) -> list:
 def routes(surveys_root) -> tuple:
     """([(map key, map value)] sorted, {package: reason}) over every survey package.
 
-    A SURVEY THIS READER CANNOT RESOLVE DROPS ITS OWN ROUTES AND NOTHING ELSE'S. Raising out of the
-    loop was the wrong failure mode: main() then wrote nothing, so ONE unresolvable survey anywhere
-    left the whole table un-regenerable while the previously committed one went on serving - a
-    withheld flip suppressed in the data and still resolving at the edge, which is the exact leak
-    this table exists to prevent. Dropping is the safe direction, because a route the table stops
-    naming 404s; the only cost is a broken hand-off. The drop is not silent: it is recorded IN the
-    committed file, so it shows in review, and `--check` reds the moment it changes.
-
-    The one thing that still stops everything is an ABSENT register root: with no input at all this
-    check would pass vacuously, and a vacuous pass is not a suppression decision."""
+    An unresolvable survey drops ITS OWN routes only (a dropped route 404s, the safe direction;
+    raising out of the loop left the stale committed table serving suppressed routes). The drop is
+    recorded in the committed file, so review sees it and `--check` reds when it changes. An ABSENT
+    register root still stops everything: no input would make this check pass vacuously."""
     root = Path(surveys_root)
     if not root.is_dir():
         raise GenError(f"no survey packages at {root} (pass --surveys <ausmt-surveys>/surveys). The "
@@ -203,28 +173,19 @@ def routes(surveys_root) -> tuple:
 
 
 def _reason_line(text) -> str:
-    """One drop reason as a Caddyfile comment: whitespace collapsed onto one line, and the characters
-    a Caddyfile lexer gives meaning to (braces, `$`, backtick) dropped rather than trusted to stay
-    inside a comment. Truncated, because the committed file records WHICH survey dropped and why in
-    outline; the operator gets the full message on stderr.
-
-    The caller has already made the text MACHINE-INDEPENDENT by stripping the register root: this
-    string lands in a committed file that `--check` byte-compares, so an absolute path from whichever
-    checkout generated it would red the gate on every other one."""
+    """A drop reason as a Caddyfile comment: one line, lexer-significant characters (braces, `$`,
+    backtick) dropped rather than trusted inside a comment, truncated (stderr carries the full
+    message). The caller already stripped machine-specific paths for `--check` byte-comparison."""
     flat = " ".join(str(text).split())
     safe = "".join(c for c in flat if c.isalnum() or c in " .,:;/_()[]'\"-")
     return safe[:240]
 
 
 def render(rows, unresolved=None) -> str:
-    """The committed file: a banner, one comment line per survey this reader could not resolve, then
-    one `"key" "value"` line per route. No date and no host - a churning header would fail --check on
-    a day nothing changed, and the host lives once, in the Caddyfile's redir target, so a map value
-    can never name another one.
-
-    The UNRESOLVED lines are the committed record of a survey whose routes were dropped. They are in
-    the file rather than only on stderr for the reason the table itself is committed: membership IS
-    the R5 decision, so a change to it belongs in a diff a human reads and in a `--check` that reds."""
+    """The committed file: banner, one UNRESOLVED comment per dropped survey, one `"key" "value"`
+    line per route. No date (a churning header fails --check on quiet days) and no host (it lives
+    once, in the Caddyfile's redir target). The UNRESOLVED lines are in the FILE because membership
+    is the R5 decision: a change belongs in a human-readable diff and a `--check` that reds."""
     unresolved = unresolved or {}
     head = (f"# {BANNER}\n"
             f"# {len(rows)} route(s): open access + review:verified only (R5); level2 never routes "
