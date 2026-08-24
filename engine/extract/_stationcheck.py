@@ -42,6 +42,11 @@ _ELECTRIC_ONLY = ("positive", "negative", "dipole_length_m", "contact_resistance
 # --survey-h5 AND --station-h5). A build passing only --survey-h5 publishes no survey-mth5 row at
 # all: under-claiming is open-world and safe, claiming containment we cannot demonstrate is not.
 ARCHIVE_MEMBER_FORMAT = {"edi-zip": "edi", "xml-zip": "emtfxml", "survey-mth5": "mth5"}
+# The one route a `time_series` row may carry. Stated HERE, and read by the emitter as well as by the
+# rules below, so the canonical host cannot drift between what is published and what is checked. The
+# fileServer path is the VERIFIED route: OPeNDAP answers 500 on this archive's MTH5, so a dodsC URL
+# would be a published dead end, and the prefix makes one structurally impossible.
+TS_ACCESS_PREFIX = "https://thredds.nci.org.au/thredds/fileServer/"
 # What this lane ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
 # convention_check.detail), so the survey-metadata document's corpus-wide rule cannot be imported.

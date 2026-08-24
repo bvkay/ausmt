@@ -451,17 +451,18 @@ never published: they are library defaults, and no corpus source declares one.
 
 | | |
 |---|---|
-| Definition | The served, addressable things that represent this station or contain it. |
+| Definition | The addressable things that represent this station or contain it, whether AusMT serves them or hands them off. |
 | Obligation | optional |
 | Occurrence | 0-1 |
 | Type | array of resource objects |
-| Note | Absent on a station that serves no bytes, and on every withheld record. |
+| Note | Absent on a station with nothing to describe, and on every withheld record. |
 
 Runs describe acquisitions; resources describe files. Nesting never implies that one resource
 belongs to one run. A resource here is something a consumer can fetch: the station's transfer
-function as the custodian's EDI, as the canonical EMTF XML, as MTH5, and the per-survey archives
-those files are bundled into. `manifest.json` stays the checksum and inventory authority; a resource
-references its path and never restates a hash.
+function as the custodian's EDI, as the canonical EMTF XML, as MTH5, the per-survey archives those
+files are bundled into, and the station's recorded time series held at NCI. `manifest.json` stays
+the checksum and inventory authority for what AusMT serves; a resource references its path and never
+restates a hash. The served rows come first and the hand-off rows after them.
 
 An `archive` row is a containment claim, and containment is decided per station rather than per
 survey. A survey bundle holds the bytes its stations actually served, so a station whose position
@@ -472,11 +473,18 @@ advertises neither. The number of records naming a bundle therefore equals that 
 | Member | Type | Definition |
 |---|---|---|
 | `id` | string | Stable within this document. Never an array index or a path. |
-| `kind` | string | `transfer_function` for a rendition of the station's TF, `archive` for a bundle. |
-| `format` | string | `edi`, `emtfxml`, `mth5`, `zip`. |
-| `path` | string | The served path, the same one the download manifest records for those bytes. |
+| `kind` | string | `transfer_function` for a rendition of the station's TF, `archive` for a bundle, `time_series` for the station's recording held at an external archive. |
+| `format` | string | `edi`, `emtfxml`, `mth5`, `netcdf`, `zip`. |
+| `path` | string | The served path, the same one the download manifest records for those bytes. AusMT-served rows only. |
+| `access_url` | string | An absolute public download route at another repository. `time_series` rows only. |
+| `repository` | string | The controlled token naming the repository that holds the bytes. `time_series` rows only. |
+| `processing_level` | string | The product level, from the closed vocabulary below. |
+| `packaging` | string | `packed_archive` where the level is served as one archive; omitted for a single file. |
+| `bytes` | integer | The archive's own size for the routed file. `time_series` rows only. |
+| `note` | string | For a `time_series` row, the fieldnote naming the day the crawl read the file. |
 | `provenance_role` | string | `source` or `derived`, emitted only where it is certain. |
 | `representation_role` | string | `original`, `alternate` or `archival_copy`, on the same terms. |
+| `derived_from_runs` | array | For a derived row, the runs THIS record publishes that it was built from. |
 | `related_collection_identifiers` | array | Identifiers of collections that CONTAIN this resource. |
 
 The served EDI is the custodian's file, never edited, so it is a `source` in its `original` form.
@@ -496,12 +504,45 @@ row would publish a wrong citation claim.
 `distribution.edi_path` is the legacy form of the same fact and stays byte-compatible through 1.x; a
 test pins the two to agree, and 2.0 retires the legacy key.
 
+#### Time-series rows
+
+A `kind: time_series` row describes the station's recorded time series held at NCI, one row per
+product level. It is a HAND-OFF, not a holding: AusMT stores none of those bytes, proxies none of
+them and builds no archive of them, so the row carries `access_url` and no `path`, no checksum and
+no `service_urls`. The URL is the absolute, percent-encoded route on
+`thredds.nci.org.au/thredds/fileServer/`, which is the route the archive serves; OPeNDAP answers 500
+for these files, so no service is advertised at all.
+
+The rows come from the per-survey time-series register in the survey packages, which is written out
+of band by a crawler and read by the build as a file. Nothing in a build contacts the archive, so
+the row states the day the CRAWL saw the file, verbatim: `verified against NCI THREDDS on <date>`.
+An outage never changes what a row says, because discovery metadata must not follow service health.
+
+A row exists only where the register marks it `verified`, the level is one AusMT routes, and the
+station is open. A `pending` row is an adjudication-queue entry whose match nobody has confirmed; a
+`retired` row is evidence of a resource that ceased to exist. A station whose coordinate policy
+generalises or withholds its position gets no row either, because a raw recording carries the true
+position the policy withholds. A level with nothing verified produces no row at all, never a row
+with an empty route.
+
+Level 2 is excluded from this projection. The archive's `level_2` tree holds transfer functions
+rather than time series, and publishing them under `kind: time_series` would assert a recorded time
+series for stations that have none. The register still stores those rows for curation.
+
+Packed raw is the custodian's own recording in its original form, so it is a `source` `original`.
+The level 0 and level 1 products are concatenated, resampled and rotated versions of it, so they are
+`derived` `alternate`, and where this record publishes the acquisition they were built from,
+`derived_from_runs` names it. A containing-collection identifier rides the row whose product it
+names: the packed raw product DOI places on the packed raw row and on nothing else, and a
+survey-scope collection DOI places on no time-series row at all.
+
 #### Processing level and packaging
 
 The schema defines two small closed vocabularies for a resource, `processing_level` (`raw`,
-`level0`, `level1`, `level2`, `level3`) and `packaging` (`packed_archive`). Nothing emits them in
-0.1. They are separated deliberately: MTCAT's legacy `identifies` values mix scope, packaging and
-processing level on one axis, and this schema maps OUT to that vocabulary rather than inheriting it.
+`level0`, `level1`, `level2`, `level3`) and `packaging` (`packed_archive`). The time-series rows
+above are what emits them. They are separated deliberately: MTCAT's legacy `identifies` values mix
+scope, packaging and processing level on one axis, and this schema maps OUT to that vocabulary
+rather than inheriting it.
 
 | Station `processing_level` | Station `packaging` | NCI level name | MTCAT `identifies` |
 |---|---|---|---|

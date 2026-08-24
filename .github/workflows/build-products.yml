@@ -136,6 +136,8 @@ jobs:
       #   tests/test_ts_index_register.py     the offline verified-resource register: the opt-in flag,
       #                                       the closed vocabularies, the unmatched-station stop
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
+      #   tests/test_station_time_series.py   kind=time_series rows from the register: the route, the
+      #                                       vocabularies, the D19 exclusion and the access gate
       #   tests/test_station_semantics.py     the semantic layer beyond JSON Schema, in the build and
       #                                       at both of verify.py's wiring sites
       #   tests/test_station_emission.py      station.json emission semantics over BUILT output: the
@@ -201,6 +203,7 @@ jobs:
             tests/test_station_runs.py \
             tests/test_ts_index_register.py \
             tests/test_station_resources.py \
+            tests/test_station_time_series.py \
             tests/test_station_semantics.py \
             tests/test_station_emission.py \
             tests/test_station_invariants.py \
