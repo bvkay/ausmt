@@ -432,6 +432,25 @@ def test_ts_routes_leg_passes_on_a_matching_table_and_the_contract_302(tmp_path)
     assert any("404s" in ln for ln in lines)
 
 
+def test_ts_routes_leg_warns_on_a_survey_the_table_could_not_resolve(tmp_path):
+    """A survey the generator could not resolve DROPS its routes and is recorded in the table as
+    `# UNRESOLVED`. That is the safe direction (its /go/ts/ paths 404), which is exactly why the edge
+    serving them must say so out loud rather than report a clean bill of health while a survey's
+    hand-offs sit offline. WARN, not FAIL: nothing is leaking, something is missing."""
+    cf = _caddyfile(tmp_path)
+    env = _hash_env(tmp_path, cf)
+    tsmap = Path(env["AUSMT_DOCTOR_TS_MAP"])
+    body = tsmap.read_text(encoding="utf-8").splitlines(keepends=True)
+    body.insert(1, "# UNRESOLVED broken-survey: ts-index.yaml has unknown top-level key(s)\n")
+    tsmap.write_text("".join(body), encoding="utf-8")
+    env["FAKE_MAP_HASH"] = hashlib.sha256(tsmap.read_bytes()).hexdigest()
+    r = _run(env, "report")
+    assert any(ln.startswith("WARN ts-routes:") and "broken-survey" in ln
+               for ln in r.stdout.splitlines()), r.stdout
+    assert not any(ln.startswith("FAIL ts-routes:") for ln in r.stdout.splitlines()), (
+        f"a dropped survey is a missing hand-off, never a leak:\n{r.stdout}")
+
+
 def test_ts_routes_leg_fails_on_a_stale_mounted_table(tmp_path):
     """THE O1 TRAP, extended to the ACCESS DECISION. Check 2 hash-compares only the Caddyfile, so a
     route table that drifted on the VPS (an old copy, a hand-edit) would otherwise serve unnoticed -

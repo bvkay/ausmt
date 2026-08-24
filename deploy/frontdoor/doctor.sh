@@ -358,9 +358,16 @@ check_ts_routes() {
 	#     from the repo table, so the pin cannot rot when the corpus moves).
 	#   * a route the table does NOT name 404s. That is the R5 property: the map's `default ""` is the
 	#     suppression, so a path outside it must produce no Location at all.
+	#   * any survey the generator could not resolve is recorded in the table as `# UNRESOLVED`, and
+	#     its hand-offs are OFFLINE. Dropping one survey's routes is the safe direction (they 404),
+	#     which is exactly why it must not pass unremarked on the edge that serves them.
 	if [ ! -f "$TS_MAP" ]; then
 		warn "ts-routes: no route table at $TS_MAP - this edge publishes NO /go/ts/ hand-off routes"
 		return
+	fi
+	unresolved="$(grep '^# UNRESOLVED ' "$TS_MAP" 2>/dev/null | awk '{print $3}' | tr -d ':' | tr '\n' ' ')"
+	if [ -n "$unresolved" ]; then
+		warn "ts-routes: survey(s) UNRESOLVED in the table, so their /go/ts/ hand-offs are OFFLINE (every path 404s): $unresolved- fix the register and regenerate"
 	fi
 	got_map="$($DOCKER compose -f "$COMPOSE_FILE" exec -T frontdoor sha256sum /etc/caddy/ts-routes.map 2>/dev/null | awk '{print $1}')"
 	want_map="$(_sha256 "$TS_MAP")"
