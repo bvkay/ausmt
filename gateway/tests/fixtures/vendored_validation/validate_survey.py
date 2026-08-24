@@ -78,6 +78,19 @@ MAX_STATION_ID_LEN = 96
 # no-PyYAML fallback is allowed to certify the block; a text scan is deliberate, because the parser
 # being gated is the one that cannot be trusted to see the key (see _check_station_ids).
 STATION_IDS_KEY_RE = re.compile(r"(?m)^station_ids[ \t]*:")
+# The persistent run-id store: `run-ids.yaml` beside survey.yaml, one `run_ids` block mapping a
+# published station id to that station's ordered run ids. Station-metadata scope section 9 makes the
+# id ASSIGNED ONCE and STORED rather than derived: an id regenerated from mutable metadata
+# (timestamps, filenames, rates, serials) silently renames a run when curation corrects a value, so
+# this file is the record the build reads, never a derivation the build could repeat. The validator
+# checks the store and mints nothing of its own.
+RUN_IDS_FILE = "run-ids.yaml"
+# The CURATED LOCAL id form, `<station>-rNN`. A SOURCE run id (mt_metadata Run.id, an MTH5 run group)
+# is whatever the instrument wrote, so a mismatch is a WARNING, never a block.
+RUN_ID_LOCAL_SUFFIX = r"-r\d{2}$"
+# Ids echoed into one report line. A 312-row store must not print itself into a message (the
+# overlong-identifier lesson in _check_station_ids: a report a human cannot read is not a report).
+RUN_IDS_REPORT_SAMPLE = 6
 # C46 schema-0.3 capture (design §2.1). schema_version is now VALIDATED (it was carried, never
 # checked); only these are known. attribution/sources are the 0.3 fields — present under 0.2 warns to
 # bump. The key allow-lists are FROZEN and must stay in EXACT parity with the editor's section keys
@@ -461,6 +474,104 @@ def _is_typed_provenance_entry(entry) -> bool:
     rel = entry.get("relation")
     return (ident not in (None, "", "TBD", "TODO")
             and rel not in (None, "") and str(rel).strip() in RELATION_TYPES)
+
+
+def _declared_station_ids(block) -> dict:
+    """{source filename: published station id} for the `station_ids` entries that declare an id.
+
+    Empty for an absent, malformed or provenance-only block. Shape rules belong to
+    _check_station_ids; this only reads the ids out of a block that has them, so the two cannot
+    disagree about what a block declares."""
+    raw = block.get("map") if isinstance(block, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key, value in raw.items():
+        sid = value.get("id") if isinstance(value, dict) else value
+        if sid not in (None, ""):
+            out[str(key)] = str(sid)
+    return out
+
+
+def _check_run_ids(doc, known_ids, r, *, authority_complete: bool) -> None:
+    """Validate the run-id store against the station identifiers this package publishes.
+
+    FAIL-CLOSED like _check_station_ids and for the same reason: the build reads this file as the
+    only record of which run id belongs to which station, so a row waved through here publishes a
+    run under an identifier nothing ever assigned.
+
+    ID AUTHORITY, per case, because there is no single reference set. Where `station_ids` declares a
+    published id for EVERY source file, those map VALUES are the complete set and a key outside it
+    FAILs. Otherwise the EDI filename stem is only a PROXY: the published id is then the EDI's
+    DATAID, which this dependency-light validator never parses, so a key outside the stems WARNs and
+    goes to the reviewer rather than blocking a survey the validator cannot check.
+
+    ABSENT file: this is never called, so every existing package's report is unchanged."""
+    if not isinstance(doc, dict) or not isinstance(doc.get("run_ids"), dict):
+        r.add("FAIL", "run_ids", f"{RUN_IDS_FILE} must be a mapping carrying a 'run_ids' block of "
+                                 f"{{published station id: [run ids]}}")
+        return
+    unknown_keys = sorted(k for k in doc if k != "run_ids")
+    if unknown_keys:
+        r.add("FAIL", "run_ids", f"{RUN_IDS_FILE} has unknown key(s) {unknown_keys}; only 'run_ids' "
+                                 f"is defined")
+    rows = doc["run_ids"]
+    unknown, misformed, seen, total = [], [], {}, 0
+    for station, run_ids in rows.items():
+        sid = str(station)
+        if sid not in known_ids:
+            unknown.append(sid)
+        if run_ids in (None, "", [], ()):
+            # Reported as "no run ids" rather than by type name: a key written with nothing after
+            # the colon is a half-finished edit, and naming its Python type sends a curator hunting
+            # for an identifier the file does not contain (the station_ids null-value lesson).
+            r.add("FAIL", "run_ids", f"{RUN_IDS_FILE}['{sid}'] has no run ids. A row states the ids "
+                                     f"assigned to this station; to assign none, remove the row "
+                                     f"(a partial store is legal)")
+            continue
+        if not isinstance(run_ids, (list, tuple)):
+            r.add("FAIL", "run_ids", f"{RUN_IDS_FILE}['{sid}'] must be a list of run ids, got "
+                                     f"{type(run_ids).__name__}")
+            continue
+        for raw in run_ids:
+            rid = str(raw).strip() if raw not in (None, "") else ""
+            if not rid:
+                r.add("FAIL", "run_ids", f"{RUN_IDS_FILE}['{sid}'] carries an empty run id; a row "
+                                         f"states the ids assigned to this station or is removed")
+                continue
+            total += 1
+            seen.setdefault(rid, []).append(sid)
+            if not re.match(f"^{re.escape(sid)}{RUN_ID_LOCAL_SUFFIX}", rid):
+                misformed.append(f"{sid}: {rid}")
+    for rid, stations in sorted(seen.items()):
+        if len(stations) > 1:
+            r.add("FAIL", "run_ids", f"{RUN_IDS_FILE} assigns run id '{rid}' to {stations}; a run id "
+                                     f"identifies one acquisition and is never shared or repeated")
+    if unknown:
+        shown = _sample(unknown)
+        if authority_complete:
+            r.add("FAIL", "run_ids", f"{RUN_IDS_FILE} names {len(unknown)} station(s) this package "
+                                     f"does not publish: {shown}. station_ids declares a published "
+                                     f"id for every source file, so that map is the complete set")
+        else:
+            r.add("WARNING", "run_ids", f"{RUN_IDS_FILE} names {len(unknown)} station(s) matching no "
+                                        f"EDI filename stem: {shown}. Their published id is the EDI "
+                                        f"DATAID, which this validator does not parse, so the rows "
+                                        f"cannot be confirmed here; check them against the catalogue")
+    if misformed:
+        r.add("WARNING", "run_ids", f"{len(misformed)} run id(s) are not of the curated local form "
+                                    f"<station>-rNN: {_sample(misformed)}. A source run id "
+                                    f"legitimately is not; a curated one should be")
+    if not [i for i in r.items if i["check"] == "run_ids" and i["level"] == "FAIL"]:
+        r.add("PASS", "run_ids", f"{RUN_IDS_FILE}: {len(rows)} station(s), {total} run id(s), no "
+                                 f"duplicates")
+
+
+def _sample(values) -> str:
+    """The first RUN_IDS_REPORT_SAMPLE values, comma-joined, with a count when there are more."""
+    head = ", ".join(values[:RUN_IDS_REPORT_SAMPLE])
+    extra = len(values) - RUN_IDS_REPORT_SAMPLE
+    return f"{head} (+{extra} more)" if extra > 0 else head
 
 
 def _http_s(u) -> bool:
@@ -1298,6 +1409,19 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     _check_station_ids(meta.get("station_ids"), {p.name for p in edis}, r,
                        complete_read=_pyyaml_available(),
                        declared_in_text=_declares_station_ids)
+    # The persistent run-id store, read against the ids the station_ids block declares and, where it
+    # declares none for a file, that file's stem (see _check_run_ids for why the stem is a proxy).
+    run_ids_path = folder / RUN_IDS_FILE
+    if run_ids_path.exists():
+        declared = _declared_station_ids(meta.get("station_ids"))
+        complete = bool(declared) and {p.name for p in edis} <= set(declared)
+        known = set(declared.values()) if complete else set(declared.values()) | {p.stem for p in edis}
+        try:
+            run_ids_doc = _load_yaml(run_ids_path) or {}
+        except Exception as e:  # malformed YAML -> a clear FAIL, not a raw traceback (the survey.yaml posture)
+            r.add("FAIL", "run_ids", f"{RUN_IDS_FILE} is not valid YAML: {e}")
+        else:
+            _check_run_ids(run_ids_doc, known, r, authority_complete=complete)
     # The slug MUST equal the package folder name: the directory IS the slug, and every downstream
     # identifier/URL is au.<slug>.<station>. A divergence silently forks the survey's identity, so
     # this is a FAIL (the _template states the slug must equal the folder name).
