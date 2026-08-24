@@ -53,9 +53,14 @@ jobs:
       # public commitment. Without caddy on PATH these pins skip, and the skip tripwire (below) FAILS
       # loudly rather than let the privacy proof silently no-op — so this step is load-bearing, not
       # optional. Pinned version for reproducibility (the box runs caddy:2-alpine, current 2.x).
+      # 2.11.4 since the THREDDS lane: the hand-off routes add a `map` with a FILE `import` and an
+      # `expression` matcher, and every runtime pin for them - plus the front door's own `caddy
+      # validate` step and the route table's measured adapt cost - was taken at 2.11.4. Running the
+      # lane's only unattended Caddy at 2.8.4 would leave that construct unverified at the version
+      # CI actually uses, while the box has been ahead of 2.8.4 the whole time (caddy:2-alpine).
       - name: Install Caddy (deploy access-log masking pins)
         run: |
-          CADDY_VERSION=2.8.4
+          CADDY_VERSION=2.11.4
           curl -fsSL -o /tmp/caddy.tar.gz \
             "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz"
           tar -xzf /tmp/caddy.tar.gz -C /tmp caddy
