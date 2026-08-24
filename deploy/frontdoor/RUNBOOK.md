@@ -233,6 +233,13 @@ the shipped Caddyfile. A first install (nothing running yet) just starts clean, 
 python deploy/scripts/gen_ts_routes.py --write     # from the ausmt-surveys registers
 python deploy/scripts/gen_ts_routes.py --check     # the gate: exit 1 if the table and registers disagree
 ```
+     A survey whose registers the generator cannot resolve DROPS ITS OWN ROUTES and no others: it
+     prints a loud `DROPPED` warning, records `# UNRESOLVED <survey>: <reason>` in the table itself,
+     and every other survey keeps routing. That is deliberate. A route the table stops naming 404s,
+     which is a broken hand-off; a table that cannot be regenerated at all leaves the PREVIOUS one
+     serving, and a stale table is a stale ACCESS decision. So the hand-offs of one survey go offline
+     rather than the suppression of every survey lagging. Treat an `UNRESOLVED` line as an incident:
+     fix the register, regenerate, commit.
      Then on the VPS: `git pull`, `./install-frontdoor.sh`, `./doctor.sh`. The doctor's `ts-routes` leg
      must PASS on **both** its open-302 and its 404 probes before the data publish proceeds - a route
      the table does not name must produce no `Location` at all.

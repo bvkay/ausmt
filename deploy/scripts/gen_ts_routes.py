@@ -119,58 +119,103 @@ def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
     return target
 
 
-def routes(surveys_root) -> list:
-    """[(map key, map value)] for every projected row, sorted. Raises GenError rather than emitting
-    a partial table: a missing route reads as 'not published' to every reader of this file."""
+def _relative(root, text) -> str:
+    """A drop reason with the register root stripped. _tsindex names the file by its full path, and
+    that path lands in a COMMITTED file `--check` byte-compares, so it has to be the same string on
+    every checkout."""
+    return str(text).replace(str(Path(root)) + "/", "").replace(str(Path(root)), ".")
+
+
+def _survey_routes(root, pkgdir, doc) -> list:
+    """[(map key, map value)] for ONE package. Raises GenError for anything this reader cannot
+    resolve without guessing; the caller contains that to this survey."""
+    access = doc.get("access")
+    # The coordinate half of the gate, from the engine's own seam. A per-station OVERRIDE keys on the
+    # record's BASE id, so this reader (which has no variant tag) resolves it through the module's
+    # own CONSERVATIVE resolver: it masks every station the build masks and possibly one more, which
+    # is the direction that can only drop a route, never keep one a withheld position needs gone.
+    cdefault, coverrides = coordacc.parse_coordinate_policy(access)
+    survey_open = _survey_serves(access)
+    slug = _package_slug(pkgdir, doc)
+    register = tsindex.load(root, pkgdir.name, _CorpusUnknown())
+    out: list = []
+    for sid in sorted(register):
+        if not _SAFE_SEGMENT.match(sid) or ".." in sid:
+            raise GenError(f"{pkgdir.name}: station id {sid!r} is not the shape a published "
+                           f"ausmt_id carries; the register names a station this table cannot "
+                           f"route without rewriting its id.")
+        policy = coordacc.station_policy_by_published_id(cdefault, coverrides, sid)
+        station_open = survey_open and coordacc.coordinates_served(policy)
+        for level, entry in sorted(tsproject.route_rows(register[sid], station_open).items()):
+            out.append((f"/go/ts/{slug}/{sid}/{level}",
+                        _target(pkgdir, sid, level, entry["url_path"])))
+    return out
+
+
+def routes(surveys_root) -> tuple:
+    """([(map key, map value)] sorted, {package: reason}) over every survey package.
+
+    A SURVEY THIS READER CANNOT RESOLVE DROPS ITS OWN ROUTES AND NOTHING ELSE'S. Raising out of the
+    loop was the wrong failure mode: main() then wrote nothing, so ONE unresolvable survey anywhere
+    left the whole table un-regenerable while the previously committed one went on serving - a
+    withheld flip suppressed in the data and still resolving at the edge, which is the exact leak
+    this table exists to prevent. Dropping is the safe direction, because a route the table stops
+    naming 404s; the only cost is a broken hand-off. The drop is not silent: it is recorded IN the
+    committed file, so it shows in review, and `--check` reds the moment it changes.
+
+    The one thing that still stops everything is an ABSENT register root: with no input at all this
+    check would pass vacuously, and a vacuous pass is not a suppression decision."""
     root = Path(surveys_root)
     if not root.is_dir():
         raise GenError(f"no survey packages at {root} (pass --surveys <ausmt-surveys>/surveys). The "
                        f"registers are the input; without them this check would pass vacuously.")
     import yaml  # noqa: PLC0415  (house style: local import where used; _tsindex needs it too)
     out: list = []
+    unresolved: dict = {}
     for pkgdir in sorted(p for p in root.iterdir() if (p / "survey.yaml").is_file()):
         try:
             doc = yaml.safe_load((pkgdir / "survey.yaml").read_text(encoding="utf-8")) or {}
+            if not isinstance(doc, dict):
+                raise GenError(f"{pkgdir.name}: survey.yaml is not a mapping")
+            out += _survey_routes(root, pkgdir, doc)
+        except (GenError, tsindex.TsIndexError, coordacc.CoordinatePolicyError) as e:
+            unresolved[pkgdir.name] = _relative(root, e)
         except Exception as e:                                                   # noqa: BLE001
-            raise GenError(f"{pkgdir.name}: survey.yaml is unreadable ({e})") from None
-        if not isinstance(doc, dict):
-            raise GenError(f"{pkgdir.name}: survey.yaml is not a mapping")
-        access = doc.get("access")
-        # The coordinate half of the gate, from the engine's own seam. A per-station OVERRIDE keys on
-        # the record's BASE id, which needs the variant tag only a build has, so an override is a
-        # STOP: guessing it would either publish a route for a position-withheld station or drop one
-        # the data publishes. A survey-wide non-exact default needs no guess - nothing serves.
-        cdefault, coverrides = coordacc.parse_coordinate_policy(access)
-        if coverrides:
-            raise GenError(
-                f"{pkgdir.name}: access.coordinate_overrides is set. The build's per-station gate "
-                f"matches on the record's variant tag, which only a build has, so this table refuses "
-                f"to guess which stations it covers. Teach the generator the variant seam first.")
-        station_open = _survey_serves(access) and coordacc.coordinates_served(cdefault)
-        slug = _package_slug(pkgdir, doc)
-        try:
-            register = tsindex.load(root, pkgdir.name, _CorpusUnknown())
-        except tsindex.TsIndexError as e:
-            raise GenError(str(e)) from None
-        for sid in sorted(register):
-            if not _SAFE_SEGMENT.match(sid) or ".." in sid:
-                raise GenError(f"{pkgdir.name}: station id {sid!r} is not the shape a published "
-                               f"ausmt_id carries; the register names a station this table cannot "
-                               f"route without rewriting its id.")
-            for level, entry in sorted(tsproject.route_rows(register[sid], station_open).items()):
-                out.append((f"/go/ts/{slug}/{sid}/{level}",
-                            _target(pkgdir, sid, level, entry["url_path"])))
+            unresolved[pkgdir.name] = _relative(
+                root, f"survey.yaml is unreadable ({type(e).__name__}: {e})")
     out.sort()
-    return out
+    return out, unresolved
 
 
-def render(rows) -> str:
-    """The committed file: a two-line banner then one `"key" "value"` line per route. No date and no
-    host - a churning header would fail --check on a day nothing changed, and the host lives once, in
-    the Caddyfile's redir target, so a map value can never name another one."""
+def _reason_line(text) -> str:
+    """One drop reason as a Caddyfile comment: whitespace collapsed onto one line, and the characters
+    a Caddyfile lexer gives meaning to (braces, `$`, backtick) dropped rather than trusted to stay
+    inside a comment. Truncated, because the committed file records WHICH survey dropped and why in
+    outline; the operator gets the full message on stderr.
+
+    The caller has already made the text MACHINE-INDEPENDENT by stripping the register root: this
+    string lands in a committed file that `--check` byte-compares, so an absolute path from whichever
+    checkout generated it would red the gate on every other one."""
+    flat = " ".join(str(text).split())
+    safe = "".join(c for c in flat if c.isalnum() or c in " .,:;/_()[]'\"-")
+    return safe[:240]
+
+
+def render(rows, unresolved=None) -> str:
+    """The committed file: a banner, one comment line per survey this reader could not resolve, then
+    one `"key" "value"` line per route. No date and no host - a churning header would fail --check on
+    a day nothing changed, and the host lives once, in the Caddyfile's redir target, so a map value
+    can never name another one.
+
+    The UNRESOLVED lines are the committed record of a survey whose routes were dropped. They are in
+    the file rather than only on stderr for the reason the table itself is committed: membership IS
+    the R5 decision, so a change to it belongs in a diff a human reads and in a `--check` that reds."""
+    unresolved = unresolved or {}
     head = (f"# {BANNER}\n"
             f"# {len(rows)} route(s): open access + review:verified only (R5); level2 never routes "
             f"(D19).\n")
+    for pkg in sorted(unresolved):
+        head += f"# UNRESOLVED {pkg}: {_reason_line(unresolved[pkg])}\n"
     return head + "".join(f'"{key}" "{value}"\n' for key, value in rows)
 
 
@@ -200,11 +245,18 @@ def main(argv) -> int:
     if ns is None:
         return 2
     try:
-        rows = routes(ns.surveys)
+        rows, unresolved = routes(ns.surveys)
     except GenError as e:
         print(f"gen_ts_routes: {e}", file=sys.stderr)
         return 2
-    want = render(rows)
+    for pkg in sorted(unresolved):
+        print(f"gen_ts_routes: WARNING: {pkg} DROPPED from the table - {unresolved[pkg]}",
+              file=sys.stderr)
+    if unresolved:
+        print(f"gen_ts_routes: WARNING: {len(unresolved)} survey(s) publish NO hand-off routes in "
+              f"this table. Every /go/ts/ path under them 404s, which is the safe direction, but "
+              f"their hand-offs are OFFLINE until the cause is fixed.", file=sys.stderr)
+    want = render(rows, unresolved)
     out = Path(ns.out)
     if ns.check:
         got = out.read_text(encoding="utf-8") if out.exists() else None

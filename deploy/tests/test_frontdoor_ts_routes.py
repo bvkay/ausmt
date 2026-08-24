@@ -218,19 +218,103 @@ def test_generator_reproduces_every_shared_percent_encoding_vector():
         assert stcheck.TS_ACCESS_PREFIX + got == v["expected"], v["name"]
 
 
-def test_generator_refuses_a_per_station_coordinate_override(tmp_path):
-    """FAIL-CLOSED. The build's per-station coordinate gate matches on the record's variant tag,
-    which only a build has, so a survey declaring `access.coordinate_overrides` STOPS the generator
-    rather than letting it guess which stations a position policy covers. Nothing is written. FAILS
-    IF an override is silently ignored (routes for a position-withheld station) or silently drops a
-    survey (a published station 404s)."""
-    surveys = _corpus(tmp_path)
+def test_generator_honours_a_per_station_coordinate_override_and_keeps_generating(tmp_path):
+    """A position-withheld station LOSES ITS ROUTE, and every other survey keeps its own.
+
+    The station's raw time series carries the true position in every corner the C42 mask exists to
+    hide, so the route has to go. Refusing to generate was the WRONG way to achieve that: main()
+    then wrote nothing, so a single override anywhere left the whole table un-regenerable while the
+    previously committed one went on resolving the station the mask had just withheld. Suppression
+    that cannot be published is not suppression.
+
+    The override keys the BASE station id and this reader holds no variant tag, so it resolves
+    through _coordaccess's own conservative resolver - it drops every station the build drops and
+    possibly one more, a direction that can only 404 a hand-off, never keep one alive."""
+    surveys = _corpus(tmp_path, held_level="open")     # held-survey routes: the survivor control
     sy = surveys / "open-survey" / "survey.yaml"
     sy.write_text(sy.read_text(encoding="utf-8")
                   + "  coordinate_overrides:\n    OPEN1: withheld\n", encoding="utf-8")
     out = tmp_path / "ts-routes.map"
-    assert gen.main(["--write", "--surveys", str(surveys), "--out", str(out)]) == 2
-    assert not out.exists(), "a refused generation must write nothing"
+    assert gen.main(["--write", "--surveys", str(surveys), "--out", str(out)]) == 0, (
+        "an override is a suppression decision this reader can make, not a reason to stop")
+    text = out.read_text(encoding="utf-8")
+    assert "/go/ts/open-survey/OPEN1/raw_packed" not in _keys(text), text
+    assert _RAW_ZIP not in text and _ENC_ZIP not in text, (
+        f"no route detail for a position-withheld station may reach the table:\n{text}")
+    assert "/go/ts/held-survey/HELD1/raw_packed" in _keys(text), (
+        "sensitivity: the rest of the corpus still routes, so the table stays producible")
+
+
+def test_a_coordinate_override_covers_the_stations_variant_records_too(tmp_path):
+    """base_station_id strips an engine-appended `.<variant>` tag, so an override on `A1` masks
+    `A1.b` as well. This reader has no variant field, so it matches the SHAPE instead - equal to the
+    key, or the key plus a dot - which is the conservative SUPERSET of what the build masks. A2 is
+    the control: the mask is per station, not per survey."""
+    surveys = tmp_path / "variant-surveys"
+    d = surveys / "var-survey"
+    d.mkdir(parents=True)
+    (d / "survey.yaml").write_text(
+        _survey_yaml("var-survey", "open") + "  coordinate_overrides:\n    A1: withheld\n",
+        encoding="utf-8")
+    (d / "ts-index.yaml").write_text(
+        "ts_index:\n"
+        + "".join(f"  {sid}:\n" + _row("raw_packed", f"arch/{sid}.zip", "verified")
+                  for sid in ("A1", "A1.b", "A2")), encoding="utf-8")
+    out = tmp_path / "ts-routes.map"
+    assert gen.main(["--write", "--surveys", str(surveys), "--out", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert _keys(text) == ["/go/ts/var-survey/A2/raw_packed"], _keys(text)
+    for masked in ("A1.zip", "A1.b.zip"):
+        assert masked not in text, f"{masked} belongs to a masked physical site:\n{text}"
+
+
+def test_an_unresolvable_survey_drops_its_own_routes_and_nothing_elses(tmp_path):
+    """CONTAINMENT, the property that makes the table always producible.
+
+    A register this reader cannot read is a survey-level stop, not a corpus-level one: it publishes
+    no routes and every other survey publishes its own. Dropping is the safe direction (a route the
+    table stops naming 404s, which is a broken hand-off rather than a leak); raising out of the loop
+    was not, because the fallback was a STALE table still serving. FAILS IF one bad register can
+    take the corpus offline, or if a bad register silently keeps its routes."""
+    surveys = _corpus(tmp_path, held_level="open")
+    reg = surveys / "open-survey" / "ts-index.yaml"
+    reg.write_text(reg.read_text(encoding="utf-8") + "stray_block:\n  a: 1\n", encoding="utf-8")
+    out = tmp_path / "ts-routes.map"
+    assert gen.main(["--write", "--surveys", str(surveys), "--out", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert _keys(text) == ["/go/ts/held-survey/HELD1/raw_packed"], _keys(text)
+    assert _RAW_ZIP not in text and _ENC_ZIP not in text, "the dropped survey publishes no detail"
+
+
+def test_a_dropped_survey_is_recorded_in_the_committed_table(tmp_path):
+    """The drop is not silent. Membership IS the R5 decision, so a change to it belongs in a diff a
+    human reads and in a `--check` that reds - which is why the record lives in the committed file
+    and not only on stderr. And the reason names NO absolute path: this file is byte-compared, so a
+    path from whichever checkout generated it would red the gate on every other one."""
+    surveys = _corpus(tmp_path, held_level="open")
+    reg = surveys / "open-survey" / "ts-index.yaml"
+    reg.write_text(reg.read_text(encoding="utf-8") + "stray_block:\n  a: 1\n", encoding="utf-8")
+    out = tmp_path / "ts-routes.map"
+    assert gen.main(["--write", "--surveys", str(surveys), "--out", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    marks = [ln for ln in text.splitlines() if ln.startswith("# UNRESOLVED ")]
+    assert marks == [m for m in marks if m.startswith("# UNRESOLVED open-survey: ")], marks
+    assert "stray_block" in marks[0], marks
+    assert str(surveys) not in text and str(tmp_path) not in text, (
+        f"a committed, byte-compared file may carry no machine path:\n{text}")
+    # ...and a table carrying the record still round-trips through --check unchanged.
+    assert gen.main(["--check", "--surveys", str(surveys), "--out", str(out)]) == 0
+
+
+def test_a_dropped_survey_reds_check_until_the_drop_is_committed(tmp_path):
+    """The other half of not-silent: a survey that STARTS failing changes the file, so the gate
+    catches it. A drop that left the bytes identical would be invisible to review and to CI."""
+    surveys = _corpus(tmp_path, held_level="open")
+    out = tmp_path / "ts-routes.map"
+    assert gen.main(["--write", "--surveys", str(surveys), "--out", str(out)]) == 0
+    reg = surveys / "open-survey" / "ts-index.yaml"
+    reg.write_text(reg.read_text(encoding="utf-8") + "stray_block:\n  a: 1\n", encoding="utf-8")
+    assert gen.main(["--check", "--surveys", str(surveys), "--out", str(out)]) == 1
 
 
 def test_generator_survey_serve_verdict_matches_the_access_vocabulary(tmp_path):
@@ -300,6 +384,21 @@ def test_committed_table_is_generated_shape_and_routable_tokens_only():
     body = [ln for ln in text.splitlines() if not ln.startswith("#")]
     assert all(ln.startswith('"') and ln.endswith('"') for ln in body if ln), (
         "every route line must be a quoted key/value pair")
+
+
+def test_the_drift_gate_is_wired_into_the_lane_that_owns_deploy():
+    """`--check` IS the R5 gate on the committed table's membership, and this file's shape pins
+    cannot stand in for it: they hold no registers, so a table naming a route the registers no longer
+    admit passes every one of them. gateway-ci is the lane that triggers on `deploy/**`, so the gate
+    belongs there, with the sibling register checkout it needs. FAILS IF the step is renamed away or
+    the invocation drifts off `--check`."""
+    wf = (_REPO / ".github" / "workflows" / "gateway-ci.yml").read_text(encoding="utf-8")
+    assert "deploy/scripts/gen_ts_routes.py --check" in wf, (
+        "gateway-ci must run the route-table drift gate; without it a register that moved without "
+        "the table merges with both repos' CI green")
+    assert "AUSMT_SURVEYS_URL" in wf, "the gate needs the sibling register checkout"
+    assert "::warning::" in wf, (
+        "an unset AUSMT_SURVEYS_URL must announce that the gate did not run, never pass quietly")
 
 
 def test_committed_table_never_routes_a_level2_row():
