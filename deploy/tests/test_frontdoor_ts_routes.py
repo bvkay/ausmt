@@ -26,6 +26,7 @@ does; CI installs caddy (gateway-ci.yml), so the runtime legs run there.
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import socket
@@ -47,6 +48,8 @@ _DOCTOR = _FRONTDOOR / "doctor.sh"
 _RUNBOOK = _FRONTDOOR / "RUNBOOK.md"
 _MAP = _FRONTDOOR / "ts-routes.map"
 _GEN = _REPO / "deploy" / "scripts" / "gen_ts_routes.py"
+# The percent-encoding vectors the engine leaf and the portal JS mirror are both held to.
+_VECTORS = _REPO / "engine" / "tests" / "fixtures" / "ts_url_vectors.json"
 
 sys.path.insert(0, str(_REPO / "deploy" / "scripts"))
 import gen_ts_routes as gen          # noqa: E402  (also puts engine/extract on sys.path)
@@ -188,6 +191,31 @@ def test_generator_percent_encodes_the_route_like_the_published_access_url(tmp_p
     assert _pairs(text)["/go/ts/open-survey/OPEN1/raw_packed"] == _ENC_ZIP
     for value in _pairs(text).values():
         assert stcheck._TS_ENCODED.match(value), f"{value!r} is not an encoded fileServer path"
+
+
+def test_generator_ASKS_the_one_encoder_rather_than_restating_it(monkeypatch):
+    """"Encoded the same way" was a coincidence held by the test above; this makes it an import.
+
+    Two `quote(safe="/")` calls that agree today diverge the day one of them learns about a
+    character the other does not, and the failure is silent in the worst way: station.json would
+    publish a route that works while this table published one that 404s at the archive, for the same
+    file. So the generator CALLS `_stationcheck.ts_encode_path` - the engine seam it already imports
+    for `TS_ACCESS_PREFIX` and the encoded-route rule - and is driven here by replacing it."""
+    monkeypatch.setattr(stcheck, "ts_encode_path", lambda p: "SENTINEL/x.zip", raising=False)
+    assert gen._target(Path("open-survey"), "OPEN1", "raw_packed", _RAW_ZIP) == "SENTINEL/x.zip"
+
+
+def test_generator_reproduces_every_shared_percent_encoding_vector():
+    """The third arm of the shared vector file (engine/tests/fixtures/ts_url_vectors.json): the
+    engine leaf and the portal's JS mirror are pinned against it in their own suites, and the map
+    VALUE is the same string without the host. A vector that reds here reds on all three."""
+    doc = json.loads(_VECTORS.read_text(encoding="utf-8"))
+    assert doc["prefix"] == stcheck.TS_ACCESS_PREFIX
+    for v in doc["vectors"]:
+        got = gen._target(Path("open-survey"), "OPEN1", "raw_packed", v["url_path"])
+        assert got == v["encoded_path"], v["name"]
+        # ...and the Location Caddy builds from it is the published access_url, byte for byte.
+        assert stcheck.TS_ACCESS_PREFIX + got == v["expected"], v["name"]
 
 
 def test_generator_refuses_a_per_station_coordinate_override(tmp_path):

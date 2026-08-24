@@ -2641,17 +2641,6 @@ _TS_LEVEL_ROUTE = {
 }
 
 
-def ts_access_url(url_path) -> str:
-    """The absolute, percent-encoded fileServer route for one register `url_path`.
-
-    The register stores the archive's own string verbatim, which is the only form that identifies
-    the file; the encoding happens HERE, once, at the point the string becomes a URL. NVP_2019's
-    `C5 [REMOTE].zip` is the corpus case: only `C5%20%5BREMOTE%5D.zip` answers 200, and a literal
-    space in a published route is a dead download."""
-    from urllib.parse import quote  # noqa: PLC0415 (house style: local import where used)
-    return stcheck.TS_ACCESS_PREFIX + quote(str(url_path).strip().lstrip("/"), safe="/")
-
-
 def station_time_series_resources(rows, collection_identifiers, run_ids=()) -> list:
     """The `kind: time_series` rows for ONE station, from its register rows.
 
@@ -2659,18 +2648,21 @@ def station_time_series_resources(rows, collection_identifiers, run_ids=()) -> l
     `service_urls` (this archive answers 500 on OPeNDAP, so no service is advertised at all). AusMT
     hands the reader off; it never proxies, re-hosts or re-zips.
 
-    THREE THINGS DECIDE WHETHER A ROW EXISTS, and the caller owns only the third: `review: verified`
-    (a pending row is an adjudication-queue entry and a retired one is evidence of a resource that
-    ceased to exist, so neither publishes), a routable level (D19 excludes level2), and the access
-    gate, which is applied at the capture site so this renders what it is handed. A level with
-    nothing verified produces NO row, never a row with a null route.
+    THREE THINGS DECIDE WHETHER A ROW EXISTS, and this renders rather than decides any of them.
+    `_tsproject.projects` answers the first two - `review: verified` (a pending row is an
+    adjudication-queue entry and a retired one is evidence of a resource that ceased to exist, so
+    neither publishes) and a routable level (D19 excludes level2) - and it is IMPORTED rather than
+    restated, because that rule also decides the flag, the boot artifact and the front door's route
+    table, and four surfaces cannot be allowed four opinions. The third is the access gate, applied
+    at the capture site so this renders what it is handed. A level with nothing verified produces NO
+    row, never a row with a null route.
 
     `related_collection_identifiers` rides the level whose PRODUCT the curated DOI names, matched on
     the crosswalk's own `mtcat_identifies` value. A survey-scope collection DOI is not projected
     here: it identifies the collection rather than this product, and a row that IS a download route
     is the last place a reader should have to work out which."""
     out = []
-    by_level = {row["level"]: row for row in rows if row.get("review") == "verified"}
+    by_level = {row["level"]: row for row in rows if tsproject.projects(row)}
     for level, route in _TS_LEVEL_ROUTE.items():
         row = by_level.get(level)
         if row is None:
@@ -2679,7 +2671,7 @@ def station_time_series_resources(rows, collection_identifiers, run_ids=()) -> l
         provenance, representation = route["roles"]
         res = {"id": f"ts-{level}", "kind": "time_series", "format": route["format"],
                "provenance_role": provenance, "representation_role": representation,
-               "access_url": ts_access_url(row["url_path"]), "repository": TS_REPOSITORY,
+               "access_url": stcheck.ts_access_url(row["url_path"]), "repository": TS_REPOSITORY,
                "processing_level": processing_level}
         if packaging:
             res["packaging"] = packaging

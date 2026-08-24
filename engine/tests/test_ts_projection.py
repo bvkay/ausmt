@@ -71,3 +71,45 @@ def test_route_rows_and_the_resource_table_admit_THE_SAME_LEVELS():
     import build_portal as bp  # noqa: PLC0415
     routable = set(_tsindex.LEVELS) - set(NEVER_PROJECTS)
     assert routable == set(bp._TS_LEVEL_ROUTE), sorted(routable ^ set(bp._TS_LEVEL_ROUTE))
+
+
+def _emitter_row():
+    return {"level": "raw_packed", "url_path": "my80/x/raw_packed/S1.zip", "bytes": 42,
+            "verified": "2026-08-24", "review": "verified"}
+
+
+def test_the_resource_emitter_ASKS_the_projection_rather_than_restating_it(monkeypatch):
+    """ONE implementation, not two that happen to agree.
+
+    The vocabulary pin above forbids the LEVEL SETS from diverging; it cannot see the other half,
+    which is the publication predicate itself. While the emitter restated `review == verified`, a
+    change to which review states publish had to be made in two places, and a lane that made it in
+    one would still pass every vocabulary check in this file. So the emitter is driven here by
+    REPLACING the projection's answer: a row the projection declines emits nothing, however the
+    register reads.
+
+    The control above the patch is what makes this non-vacuous: with the real predicate the SAME row
+    does emit, so an empty result cannot come from an empty fixture."""
+    import _tsproject as tsproject  # noqa: PLC0415
+    import build_portal as bp  # noqa: PLC0415
+    rows = [_emitter_row()]
+    assert [r["id"] for r in bp.station_time_series_resources(rows, [])] == ["ts-raw_packed"]
+    monkeypatch.setattr(tsproject, "projects", lambda row: False)
+    assert bp.station_time_series_resources(rows, []) == []
+
+
+def test_the_resource_row_ASKS_the_one_encoder_rather_than_restating_it(monkeypatch):
+    """The same rule for the other half of a published route. Three surfaces render an NCI address
+    from one `url_path` and only one of them may be the implementation: `_stationcheck` owns it, the
+    front-door generator calls it, and the JS mirror is held to its bytes by a shared vector file.
+    A second `quote()` in the emitter is what would let station.json publish a working route beside
+    a dead one in the redirect table."""
+    import _stationcheck as stcheck  # noqa: PLC0415
+    import build_portal as bp  # noqa: PLC0415
+    rows = [_emitter_row()]
+    real = bp.station_time_series_resources(rows, [])[0]["access_url"]
+    assert real == stcheck.ts_access_url(rows[0]["url_path"])   # control: it agrees today
+    monkeypatch.setattr(stcheck, "ts_access_url", lambda p: "https://example.invalid/SENTINEL",
+                        raising=False)
+    assert bp.station_time_series_resources(rows, [])[0]["access_url"] == \
+        "https://example.invalid/SENTINEL"

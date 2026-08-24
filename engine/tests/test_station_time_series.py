@@ -326,7 +326,7 @@ def test_ts_access_and_the_resource_rows_are_ONE_projection(built):
         assert set(entry) == set(rows), (path, sorted(entry), sorted(rows))
         for level, row in rows.items():
             assert entry[level].get("bytes") == row.get("bytes"), (path, level)
-            assert bp.ts_access_url(entry[level]["url_path"]) == row["access_url"], (path, level)
+            assert stcheck.ts_access_url(entry[level]["url_path"]) == row["access_url"], (path, level)
             seen += 1
     assert seen, "non-vacuity: this corpus publishes hand-off rows"
 
@@ -456,7 +456,9 @@ def test_a_run_link_is_published_only_where_the_run_is():
 
 
 def test_the_route_prefix_is_stated_once_and_read_by_both_ends():
-    """The emitter and the semantic layer read ONE constant, so the canonical host cannot drift
-    between what is published and what is checked."""
-    assert bp.ts_access_url("a/b c.zip") == stcheck.TS_ACCESS_PREFIX + "a/b%20c.zip"
+    """The emitter and the semantic layer read ONE constant AND ONE ENCODER, so neither the
+    canonical host nor the escaping can drift between what is published and what is checked. The
+    full escape contract is pinned against the shared vector file (tests/test_ts_url_vectors.py),
+    which the portal's JS mirror and the front door's generator are held to as well."""
+    assert stcheck.ts_access_url("a/b c.zip") == stcheck.TS_ACCESS_PREFIX + "a/b%20c.zip"
     assert stcheck.TS_ACCESS_PREFIX == FILESERVER

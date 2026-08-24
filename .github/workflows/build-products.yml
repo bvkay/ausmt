@@ -147,6 +147,9 @@ jobs:
       #                                       ts_access.json, mtcat.json or the pointer file
       #   tests/test_url_registry.py          the published-URL freeze, and the negative that keeps a
       #                                       /go/ts/ hand-off route out of the sitemap for good
+      #   tests/test_ts_url_vectors.py        the ONE percent-encoder, against the shared vector file
+      #                                       the portal's JS mirror and the front door's route-table
+      #                                       generator are held to as well
       #   tests/test_station_semantics.py     the semantic layer beyond JSON Schema, in the build and
       #                                       at both of verify.py's wiring sites
       #   tests/test_station_emission.py      station.json emission semantics over BUILT output: the
@@ -158,12 +161,13 @@ jobs:
       #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
       #   tests/test_golden_edi.py            golden pins on the sole engine's product outputs
       #   tests/test_mini_yaml_parity.py      PyYAML-vs-_mini_yaml survey.yaml projection parity
-      # (the 33 enumerated above at 2026-08-24, plus tests/test_ci_check_skips.py which gates the
+      # (the 34 enumerated above at 2026-08-24, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
-      # The last two are named by what they ASSERT ABOUT rather than by what they are called, and
+      # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
-      # the three time-series projection surfaces (ts_access.json, has_time_series, /go/ts/) must be
-      # listed here, so the next one is caught on the PR that adds it whatever it is named.
+      # the four time-series projection surfaces (ts_access.json, has_time_series, /go/ts/ and the
+      # shared ts_url_vectors.json) must be listed here, so the next one is caught on the PR that
+      # adds it whatever it is named.
       #
       # RESIDUAL RISK, STATED HONESTLY: a HOST-ENV-ONLY failure in an out-of-subset test now
       # surfaces on the push-to-main full run, not on the PR. Accepted because the in-image full
@@ -224,6 +228,7 @@ jobs:
             tests/test_ts_projection.py \
             tests/test_access_gate.py \
             tests/test_url_registry.py \
+            tests/test_ts_url_vectors.py \
             tests/test_station_semantics.py \
             tests/test_station_emission.py \
             tests/test_station_invariants.py \

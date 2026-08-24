@@ -135,11 +135,15 @@ function tsGoRoute(s,level){
   if(!s||!s.slug||!s.id||!level)return null;
   return location.origin+"/go/ts/"+encodeURIComponent(s.slug)+"/"+encodeURIComponent(s.id)+"/"+encodeURIComponent(level);}
 // The archive's OWN address for one register url_path, for the reference field beside the route.
-// MIRRORS the engine's ts_access_url (build_portal: quote(url_path, safe="/")): `/` survives and
-// everything outside the unreserved set is escaped. encodeURIComponent is not that function on its
-// own - it eats `/`, and it leaves !'()* unescaped where Python escapes them - so the set is spelled
-// out here. NVP_2019's `C5 [REMOTE].zip` is the corpus case: only `C5%20%5BREMOTE%5D.zip` answers
-// 200, and a literal space in a published address is a dead download.
+// MIRRORS the engine's ONE encoder (_stationcheck.ts_access_url: quote(url_path, safe="/")): `/`
+// survives and everything outside the unreserved set is escaped. encodeURIComponent is not that
+// function on its own - it eats `/`, and it leaves !'()* unescaped where Python escapes them - so
+// the set is spelled out here. It is a MIRROR rather than a caller because JavaScript has no such
+// function to call, so the agreement is held by a shared vector file instead: this one and the
+// engine leaf are both pinned against engine/tests/fixtures/ts_url_vectors.json, and a change that
+// updates one side reds on the other. NVP_2019's `C5 [REMOTE].zip` is the corpus case: only
+// `C5%20%5BREMOTE%5D.zip` answers 200, and a literal space in a published address is a dead
+// download.
 const TS_FILESERVER="https://thredds.nci.org.au/thredds/fileServer/";
 function tsArchiveUrl(p){return TS_FILESERVER+String(p==null?"":p).trim().replace(/^\/+/,"")
   .replace(/[^A-Za-z0-9_.~/-]/g,c=>{const e=encodeURIComponent(c);

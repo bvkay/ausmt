@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 # The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys plus the three promotion
 # markers. Closed world, so any other key in a withheld record is a leak, never an extension.
@@ -65,6 +66,29 @@ _TS_EXCLUDED_LEVEL = "level2"
 # an undetermined call is OMITTED here, never copied across as the sidecar's null.
 _NEW_BLOCKS = ("runs", "resources")
 _FOLDED_DIAGNOSTICS = ("classification", "skew_beta_median_deg", "pct_periods_3d", "method", "note")
+
+
+def ts_encode_path(url_path) -> str:
+    """One register `url_path` as the percent-encoded fileServer PATH.
+
+    THE ONE ENCODER, and it lives here rather than in the emitter because the emitter is not its
+    only caller: the front door's generated route table renders the same string from a tool that
+    must not import the ingest stack, and the two producing different bytes for one file would put
+    a working route in station.json beside a dead one in the redirect table. Held to _TS_ENCODED
+    below, which is the rule the published route is CHECKED against, so what this writes is what
+    that admits.
+
+    The register stores the archive's own string verbatim, which is the only form that identifies
+    the file; the encoding happens HERE, once, at the point the string becomes a URL. NVP_2019's
+    `C5 [REMOTE].zip` is the corpus case: only `C5%20%5BREMOTE%5D.zip` answers 200, and a literal
+    space in a published route is a dead download."""
+    return quote(str(url_path).strip().lstrip("/"), safe="/")
+
+
+def ts_access_url(url_path) -> str:
+    """The absolute, public download route for one register `url_path`: the one host this archive
+    serves these files on, plus the encoded path."""
+    return TS_ACCESS_PREFIX + ts_encode_path(url_path)
 
 
 def violations(doc) -> list:

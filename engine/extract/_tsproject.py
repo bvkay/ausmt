@@ -1,9 +1,12 @@
 """The one projection from the verified-resource register to every surface that renders it.
 
-Three DIFFERENT questions, answered here and nowhere else, because they part ways on purpose
+Four questions, answered here and nowhere else. The last three part ways on purpose
 (INTERFACE-CONTRACT:126-132 evidence permanence; :150-153 route detail is its own assertion
-class; the THREDDS lane's D19):
+class; the THREDDS lane's D19), and they all rest on the first:
 
+  projects()       does this ONE register row publish anything: `review: verified` and a level
+                   this lane routes. Asked by the three below AND by station.json's emitter, so
+                   the publication rule is stated once rather than restated per surface.
   station_flag()   does a verified time-series resource EXIST for this station? Existence
                    semantics: follows the register for EVERY station, withheld included (R13);
                    an embargo never flips it, an outage never flips it, and the only lawful way
@@ -29,13 +32,19 @@ from __future__ import annotations
 NEVER_PROJECTS = ("level2",)
 
 
-def _live(row) -> bool:
+def projects(row) -> bool:
+    """Does ONE register row publish anything at all: `review: verified` and a routable level.
+
+    PUBLIC because the emitter asks it too. station.json's `time_series` rows, the flag, the boot
+    artifact and the front door's route table are four renderings of this one answer, and a second
+    statement of it - even a correct one - is a rule that has to be changed in two places and will
+    one day be changed in one."""
     return row.get("review") == "verified" and row.get("level") not in NEVER_PROJECTS
 
 
 def station_flag(rows) -> bool:
     """EXISTENCE: any live register row proves it, whatever the station's access state."""
-    return any(_live(r) for r in rows or ())
+    return any(projects(r) for r in rows or ())
 
 
 def survey_counts(flags_by_survey) -> dict:
@@ -57,7 +66,7 @@ def route_rows(rows, station_open) -> dict:
         return {}
     out = {}
     for r in rows or ():
-        if not _live(r):
+        if not projects(r):
             continue
         entry = {"url_path": r["url_path"]}
         if r.get("bytes"):

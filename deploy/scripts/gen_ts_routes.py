@@ -38,7 +38,6 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from urllib.parse import quote
 
 HERE = Path(__file__).resolve().parent                  # deploy/scripts
 ROOT = HERE.parents[1]                                  # the ausmt monorepo root
@@ -51,7 +50,7 @@ SURVEYS_DEFAULT = ROOT.parent / "ausmt-surveys" / "surveys"
 # build_portal itself is NOT imported (it pulls mt_metadata/mth5, which a deploy tool must not need).
 sys.path.insert(0, str(ROOT / "engine" / "extract"))
 import _coordaccess as coordacc      # noqa: E402  (the C42 per-station coordinate gate)
-import _stationcheck as stcheck      # noqa: E402  (TS_ACCESS_PREFIX + the encoded-route rule)
+import _stationcheck as stcheck      # noqa: E402  (the route prefix, the ENCODER, the encoded-route rule)
 import _tsindex as tsindex           # noqa: E402  (the register reader and its closed vocabularies)
 import _tsproject as tsproject       # noqa: E402  (THE projection: who gets a route)
 
@@ -101,16 +100,18 @@ def _package_slug(pkgdir: Path, doc: dict) -> str:
 
 
 def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
-    """The map VALUE: the register's url_path percent-encoded exactly as the published access_url is
-    (build_portal.ts_access_url:2644-2652 - `C5 [REMOTE].zip` only answers 200 as
-    `C5%20%5BREMOTE%5D.zip`, and a literal space in a Location is a dead download). The result is
-    held to the SAME encoded-route rule _stationcheck applies to station.json's route, so a value
-    this table admits is a value that gate admits."""
+    """The map VALUE: the register's url_path through the ONE encoder, which is _stationcheck's -
+    the same call station.json's `access_url` is built from, so the front door's Location and the
+    published route are the same string minus the host. Two `quote()` calls that agree today would
+    diverge the day one learns about a character the other does not, and the failure is silent in
+    the worst way: a working route in the record beside a 404 in the table, for one file. The result
+    is then held to the SAME encoded-route rule _stationcheck applies to the published route, so a
+    value this table admits is a value that gate admits."""
     raw = str(url_path).strip().lstrip("/")
     if any(seg == ".." for seg in raw.split("/")):
         raise GenError(f"{pkgdir.name}: {sid}/{level} url_path {url_path!r} walks up out of the "
                        f"fileServer root; a route table is the last place to resolve that.")
-    target = quote(raw, safe="/")
+    target = stcheck.ts_encode_path(url_path)
     if not stcheck._TS_ENCODED.match(target):
         raise GenError(f"{pkgdir.name}: {sid}/{level} url_path {url_path!r} does not encode to a "
                        f"route {stcheck.TS_ACCESS_PREFIX} can serve")
