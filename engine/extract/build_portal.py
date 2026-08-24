@@ -49,6 +49,7 @@ import _presence as presence        # noqa: E402  (the presence rule: mt_metadat
 import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
 import _runids as runids            # noqa: E402  (the persistent per-survey run-id store)
 import _tsindex as tsindex          # noqa: E402  (the per-survey verified-resource register, read offline)
+import _tsproject as tsproject      # noqa: E402  (the ONE projection: flag/count/route from the register)
 import _stationcheck as stcheck     # noqa: E402  (station semantics beyond JSON Schema; shared with scripts/verify.py)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
@@ -754,7 +755,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     from datetime import datetime, timezone
     slug_of, bbox_of = {}, {}
     n_of, types_of, per_of, tip_of = {}, {}, {}, {}
-    rates_of, pol_of = {}, {}
+    rates_of, pol_of, ts_n_of = {}, {}, {}
     fmt_of = _formats_by_survey(manifest_doc)
     for (_p, r) in all_stations:
         lbl, aid, sid = r["survey"], r["ausmt_id"], r["id"]
@@ -785,6 +786,8 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         if r.get("sample_rates_hz"):
             rates_of.setdefault(lbl, set()).update(r["sample_rates_hz"])
         pol_of.setdefault(lbl, set()).add(r.get("coord_policy") or "exact")
+        if r.get("has_ts"):
+            ts_n_of[lbl] = ts_n_of.get(lbl, 0) + 1
     surveys = []
     for lbl, meta in sorted(surveys_meta.items()):
         bb = bbox_of.get(lbl)
@@ -895,12 +898,19 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         # declared end date", NOT "not embargoed" - `access` above is the state of record).
         if m.get("embargo_until"):
             entry["embargo_until"] = m["embargo_until"]
+        # THREDDS A4: the tally of this survey's true flags - present iff POSITIVE (spec 245-250:
+        # existence semantics make it stable across access transitions and never derivable by
+        # subtraction; an absent count asserts nothing, a zero would).
+        if ts_n_of.get(lbl):
+            entry["n_stations_time_series_verified"] = ts_n_of[lbl]
         # MTCAT 2.0 omit-when-undeclared: drop every remaining None-valued key, at every depth
         # (relationship rows included - the 110-error class). The stations[] rows below are NOT
         # cleaned: their paired latitude/longitude nulls are the one defined null.
         surveys.append(_omit_none(entry))
     stations = [{"station_id": r["ausmt_id"], "survey_id": slug_of.get(r["survey"], slugify(r["survey"])),
-                 "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"]}
+                 "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"],
+                 # THREDDS A4: true-or-absent, never false (spec 373-383, existence semantics).
+                 **({"has_time_series": True} if r.get("has_ts") else {})}
                 for (_p, r) in all_stations]
     if coll_by_id is None:
         coll_by_id, _ = _group_collections(surveys_meta, all_stations)
@@ -5062,6 +5072,12 @@ def main(argv=None):
             print(f"  {_pkgname}: ts-index register: {len(_ts_index)} station(s), {len(_ts_all)} "
                   f"row(s), {len([row for row in _ts_all if row['review'] == 'verified'])} verified",
                   file=sys.stderr)
+        # The A4 stamp: EXISTENCE follows the register for EVERY station, withheld included (R13);
+        # route detail is a different assertion class answered per surface from _tsproject, so the
+        # stamp carries no url_path, no bytes, nothing an access gate would need to strip.
+        for (_p2, _r2) in stations:
+            if tsproject.station_flag(_ts_index.get(_r2["id"])):
+                _r2["has_ts"] = True
         # resources[]: the survey's placeable containing-collection identifiers, and the rows this
         # lane REFUSES to place. A refusal is reported, never silently dropped: an unplaceable row
         # would publish a wrong citation claim, and a curator is the only one who can fix it.

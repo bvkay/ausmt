@@ -355,8 +355,9 @@ def test_built_document_invariants_hold(built):
 
 
 def test_built_document_emits_no_time_series_projection(built):
-    """Release-day truth: has_time_series / n_stations_time_series_verified are defined by the
-    schema and emitted NOWHERE (the projection lane is later); absent everywhere is correct."""
+    """THIS corpus carries no verified-resource register (--ts-index is not passed), so the two
+    projection keys are absent everywhere: absence asserts nothing, and nothing here was
+    verified. The register-carrying arms live in test_station_invariants' projection tests."""
     doc = json.loads((built[0] / "mtcat.json").read_text(encoding="utf-8"))
     assert all("has_time_series" not in st for st in doc["stations"])
     assert all("n_stations_time_series_verified" not in s for s in doc["surveys"])
