@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from urllib.parse import quote, unquote
 
 # The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys plus the three promotion
 # markers. Closed world, so any other key in a withheld record is a leak, never an extension.
@@ -42,6 +43,22 @@ _ELECTRIC_ONLY = ("positive", "negative", "dipole_length_m", "contact_resistance
 # --survey-h5 AND --station-h5). A build passing only --survey-h5 publishes no survey-mth5 row at
 # all: under-claiming is open-world and safe, claiming containment we cannot demonstrate is not.
 ARCHIVE_MEMBER_FORMAT = {"edi-zip": "edi", "xml-zip": "emtfxml", "survey-mth5": "mth5"}
+# The one route a `time_series` row may carry. Stated HERE, and read by the emitter as well as by the
+# rules below, so the canonical host cannot drift between what is published and what is checked. The
+# fileServer path is the VERIFIED route: OPeNDAP answers 500 on this archive's MTH5, so a dodsC URL
+# would be a published dead end, and the prefix makes one structurally impossible.
+TS_ACCESS_PREFIX = "https://thredds.nci.org.au/thredds/fileServer/"
+# What a `time_series` row must state. The row describes bytes on ANOTHER host: it names no local
+# path and restates no checksum, so the route and the product level ARE the claim.
+_TS_REQUIRED = ("access_url", "processing_level")
+# What a percent-encoded path may contain: the unreserved set, the separator, and %XX. A literal
+# space or bracket means the route was assembled by concatenation instead of encoded, and only the
+# encoded form resolves (NVP_2019's `C5 [REMOTE].zip`), so the unencoded one is a dead download.
+_TS_ENCODED = re.compile(r"^(?:[A-Za-z0-9/_.~-]|%[0-9A-Fa-f]{2})+$")
+# D19 (ruled 2026-08-24), fail-CLOSED rather than merely unemitted: the archive's level_2 tree holds
+# TRANSFER FUNCTIONS, so a level2 row under this kind asserts a recorded time series for a station
+# that has none. The emitter routes no such row; this refuses one that arrives by any other path.
+_TS_EXCLUDED_LEVEL = "level2"
 # What this lane ADDS. Section 2's zero-null rule is scoped to it: the frozen keys carry eight
 # legitimate nulls (remote_site, coordinate_qc, rotspec, the emeas azimuths, the two rotation sources,
 # convention_check.detail), so the survey-metadata document's corpus-wide rule cannot be imported.
@@ -49,6 +66,34 @@ ARCHIVE_MEMBER_FORMAT = {"edi-zip": "edi", "xml-zip": "emtfxml", "survey-mth5": 
 # an undetermined call is OMITTED here, never copied across as the sidecar's null.
 _NEW_BLOCKS = ("runs", "resources")
 _FOLDED_DIAGNOSTICS = ("classification", "skew_beta_median_deg", "pct_periods_3d", "method", "note")
+
+
+def ts_encode_path(url_path) -> str:
+    """One register `url_path` as the percent-encoded fileServer PATH.
+
+    THE ONE ENCODER: it lives here, not in the emitter, because the front door's route-table
+    generator renders the same string without the ingest stack, and two encoders would put a
+    working route in station.json beside a dead one at the edge. Encoding happens once, where the
+    verbatim register string becomes a URL (corpus case: only `C5%20%5BREMOTE%5D.zip` answers
+    200), and the output is held to _TS_ENCODED, the same rule the published route is checked
+    against."""
+    return quote(str(url_path).strip().lstrip("/"), safe="/")
+
+
+def ts_path_walks_up(url_path) -> bool:
+    """True when a fileServer path climbs OUT of the archive root.
+
+    _TS_ENCODED admits `.` and `/` (real archive names carry both), so traversal is refused by
+    name: browsers normalise `..` before sending, making the link resolve to an arbitrary path on
+    the archive host under an AusMT byline. Read on DECODED segments - the server decodes before
+    it resolves, so a literal-only test passes `%2E%2E` straight through."""
+    return any(seg == ".." for seg in unquote(str(url_path or "").strip()).split("/"))
+
+
+def ts_access_url(url_path) -> str:
+    """The absolute, public download route for one register `url_path`: the one host this archive
+    serves these files on, plus the encoded path."""
+    return TS_ACCESS_PREFIX + ts_encode_path(url_path)
 
 
 def violations(doc) -> list:
@@ -149,7 +194,39 @@ def _resource_violations(resources, run_ids) -> list:
         for key in ("represents_runs", "derived_from_runs"):
             out += [f"resource {rid}: {key} names run {ref!r}, which this record does not publish"
                     for ref in (resource.get(key) or []) if ref not in run_ids]
+        out += [f"resource {rid}: service_urls advertises {str(entry.get('kind') or '')!r}. A "
+                f"resource states a direct route or nothing: a service endpoint is operational "
+                f"state, and the one this record could name (OPeNDAP) answers 500 for the archive's "
+                f"MTH5, so the row would advertise a dead endpoint"
+                for entry in (resource.get("service_urls") or []) if isinstance(entry, dict)]
+        if resource.get("kind") == "time_series":
+            out += _time_series_violations(rid, resource)
     return out + _archive_membership_violations(resources)
+
+
+def _time_series_violations(rid, resource) -> list:
+    """A hand-off row's own rules. AusMT stores none of these bytes, so nothing local corroborates
+    the row: an unresolvable route publishes a dead download and a wrong level mis-attributes a
+    file to a product it is not."""
+    out = [f"resource {rid}: a time_series row states no {key}; it describes bytes on another host, "
+           f"so the route and the product level are the whole claim"
+           for key in _TS_REQUIRED if not str(resource.get(key) or "").strip()]
+    if resource.get("processing_level") == _TS_EXCLUDED_LEVEL:
+        out.append(f"resource {rid}: level 2 is not a time series; that tree holds transfer "
+                   f"functions, so this row would assert a recording the station has none of")
+    url = str(resource.get("access_url") or "").strip()
+    if url and not url.startswith(TS_ACCESS_PREFIX):
+        out.append(f"resource {rid}: access_url {url!r} is not an absolute route under "
+                   f"{TS_ACCESS_PREFIX}, the one route this archive serves these files on")
+    elif url and not _TS_ENCODED.match(url[len(TS_ACCESS_PREFIX):]):
+        out.append(f"resource {rid}: access_url {url!r} is not percent-encoded; only the encoded "
+                   f"form resolves, so this route is a dead download")
+    elif url and ts_path_walks_up(url[len(TS_ACCESS_PREFIX):]):
+        out.append(f"resource {rid}: access_url {url!r} walks up out of the fileServer root. The "
+                   f"client normalises the path before it asks, so this publishes a claim about "
+                   f"some other file on that host - and the route table refuses the same string, "
+                   f"so the edge could never serve it either")
+    return out
 
 
 def _archive_membership_violations(resources) -> list:

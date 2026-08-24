@@ -626,7 +626,7 @@ mandatory: a source that mandates exact wording fails without it.
 | Type | list of string |
 | Allowed values | `raw_packed`, `level0`, `level1` |
 | Example | `[raw_packed, level0]` |
-| Note | Pointers only. AusMT never hosts time series. The portal renders per-level availability from this list. |
+| Note | Pointers only. AusMT never hosts time series. This is a SURVEY-scope curator declaration of what exists upstream, and it is what the portal prints as a station's "exists upstream" sub-text. It is NOT the availability answer: whether a particular station's file can be fetched today comes from the verified-resource register ([10.3](#103-ts-indexyaml-the-verified-resource-register)), which is station-scope and crawl-verified. Where the two disagree the register wins the station row, and the curator census raises the gap as a warning: a file verified under a level this list does not declare is a `levels_available` omission, not a portal fault. |
 
 ### 10.2 nci_base
 
@@ -638,6 +638,47 @@ mandatory: a source that mandates exact wording fails without it.
 | Type | string or null |
 | Format | an absolute `http` or `https` URL to a directory |
 | Note | Set it and the survey's downloads point at NCI instead of AusMT-served bytes. A value that is not an absolute http URL is a `FAIL`, and the engine drops it defensively as well, because a mistyped scheme or host would publish broken or unsafe download links. |
+
+### 10.3 `ts-index.yaml`, the verified-resource register
+
+A SEPARATE FILE beside `survey.yaml`, not a block inside it, for the same reason `run-ids.yaml` is:
+it is a machine-maintained record with one row per file, and a hundred of them inside a curated
+document would drown the curation. Its single top-level key is `ts_index:`, mapping the PUBLISHED
+station id to that station's rows, one per product level:
+
+```yaml
+ts_index:
+  SA104:
+    - level: level1_mth5                        # raw_packed | level0 | level1_mth5 | level1_netcdf | level2
+      url_path: "AusLAMP_SA/level_1/SA104.h5"   # the archive's own path, VERBATIM
+      filename: "SA104.h5"
+      bytes: 4110000
+      data_size: "4.110 Mbytes"                 # what the archive itself states
+      modified: "2019-11-04T02:17:55Z"
+      verified: "2026-08-23"                    # the day the file was read
+      match_method: rule:sa-pad                 # exact | rule:<name> | curator
+      review: verified                          # verified | pending | retired
+```
+
+Written by an out-of-band crawler (`_tools/crawl_ts_index.py` in the surveys repository), read by the
+build as a plain file, and documented in full in that repository's README. What matters on this side:
+
+| Rule | Why it is that way |
+|---|---|
+| `url_path` is stored verbatim and never rebuilt | An archive path does not follow from a station id. One survey's files sit under a state segment that appears nowhere in the identifier, so a joined path would be a guess. |
+| `review` is the publication gate, and only `verified` publishes | A row the naming rules could not prove is `match_method: curator`, `review: pending`: stored, counted in the census, raised as a curator warning and published nowhere. Attaching the wrong file to a station is a silent scientific error, so a best guess is worse than an omission. |
+| A row is never silently deleted | A file that has genuinely ceased to exist is withdrawn by setting `review: retired` with `retired` and `retired_reason`, and the row stays as evidence. A single outage is not retirement and never flips a published claim. |
+| `verified` is a CRAWL date, not a build date | The build makes no network call, so it verifies nothing and must not say it did. That date is what the published fieldnote names: `verified against NCI THREDDS on <date>`. |
+| Two rows for one (station, level) FAIL | That pair names one file, and a second row leaves nothing able to choose between them. |
+| A station id outside the survey's id authority FAILs where `station_ids` is complete | Same rule the run-id register follows: a register naming a station the survey does not publish is a mismatch to fix, not a row to carry. |
+| `bytes` is the archive's four-significant-digit figure converted | `data_size` keeps the archive's own words beside it, so the pair states the precision rather than implying a content-length nothing measured. |
+
+The build reads the registers only when `--ts-index` names their root, and a row whose station id is
+not in the corpus stops the build rather than being skipped. What a verified row becomes is documented
+at [Per-station products](station-products.md#time-series-rows): a `kind: time_series` resource on the
+station record, the catalogue's `has_time_series` flag, and a hand-off route at the front door. Level 2
+is stored but never projected: the archive's `level_2` tree holds transfer functions rather than time
+series.
 
 ---
 

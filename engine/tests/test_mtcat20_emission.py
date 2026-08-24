@@ -29,8 +29,8 @@ And the 2.0 additions:
     policies: all exact => exact, all withheld => withheld, any other mixture => generalised.
     A withheld state omits bbox/centroid (they would republish the withheld footprint).
 
-stations[].has_time_series and surveys[].n_stations_time_series_verified are schema-defined and
-deliberately emitted NOWHERE in this release (the projection lane is later); pinned here too.
+stations[].has_time_series and surveys[].n_stations_time_series_verified project from the
+verified-resource register stamp (the THREDDS lane): true-or-absent, count present iff positive.
 """
 import sys
 import types
@@ -321,9 +321,26 @@ def test_smeta_carries_the_new_curation_fields_absent_to_absent():
 
 # ---------------------------------------------------------------- deferred projections stay out
 
-def test_time_series_projection_fields_are_emitted_nowhere():
-    """has_time_series / n_stations_time_series_verified are schema-defined for the later
-    projection lane and emitted NOWHERE in this release: absent everywhere is the correct output."""
+def test_time_series_projection_follows_the_register_stamp():
+    """The THREDDS projection: a station row the build stamped from the verified-resource register
+    emits `has_time_series: true`; an unstamped row emits NOTHING (absence asserts nothing, false is
+    never emitted); the survey count is present exactly when positive and equals the true rows."""
+    meta = {"Demo Survey": dict(_BASE), "Bare Survey": dict(_BASE)}
+    doc = _doc(meta, [_st("Demo Survey", "au.demo-survey.A1", "A1", has_ts=True),
+                      _st("Demo Survey", "au.demo-survey.A2", "A2"),
+                      _st("Bare Survey", "au.bare-survey.B1", "B1")])
+    st = {s["station_id"]: s for s in doc["stations"]}
+    assert st["au.demo-survey.A1"].get("has_time_series") is True
+    assert "has_time_series" not in st["au.demo-survey.A2"]
+    assert "has_time_series" not in st["au.bare-survey.B1"]
+    sv = {s["survey_id"]: s for s in doc["surveys"]}
+    assert sv["demo-survey"].get("n_stations_time_series_verified") == 1
+    assert "n_stations_time_series_verified" not in sv["bare-survey"], \
+        "a zero count is ABSENT, never 0 (omit-by-default)"
+
+
+def test_time_series_projection_absent_without_a_register():
+    """No stamp anywhere: both keys absent everywhere, which is what a registerless corpus emits."""
     meta = {"Demo Survey": dict(_BASE)}
     doc = _doc(meta, [_st("Demo Survey", "au.demo-survey.A1", "A1")])
     assert all("has_time_series" not in st for st in doc["stations"])

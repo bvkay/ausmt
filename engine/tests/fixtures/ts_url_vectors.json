@@ -1,0 +1,91 @@
+{
+  "_comment": "How a time-series hand-off ADDRESS is spelled, on the three sides that spell it. `prefix` and `vectors` pin the percent-encoding of the fileServer path; `routable_levels` pins the LEVEL SEGMENT of /go/ts/<survey>/<station>/<level>, which is part of the same address and was the one statement no shared file held: the engine derived it, the route table emitted it and the portal's chooser re-declared it, so a sixth token would have published and routed while staying invisible in the UI. IN RENDER ORDER. level2 is absent BY RULING (D19), not by omission.",
+  "prefix": "https://thredds.nci.org.au/thredds/fileServer/",
+  "routable_levels": ["raw_packed", "level0", "level1_mth5", "level1_netcdf"],
+  "vectors": [
+    {
+      "name": "plain_path",
+      "why": "the ordinary case: nothing to escape, and `/` survives as the separator",
+      "url_path": "my80/AusLAMP_SA/level_1/SA104.h5",
+      "encoded_path": "my80/AusLAMP_SA/level_1/SA104.h5",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/AusLAMP_SA/level_1/SA104.h5"
+    },
+    {
+      "name": "space_and_brackets",
+      "why": "THE CORPUS VECTOR (NVP_2019): only the encoded form answers 200",
+      "url_path": "my80/AusLAMP_NVP/NVP_2019/raw/C5 [REMOTE].zip",
+      "encoded_path": "my80/AusLAMP_NVP/NVP_2019/raw/C5%20%5BREMOTE%5D.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/AusLAMP_NVP/NVP_2019/raw/C5%20%5BREMOTE%5D.zip"
+    },
+    {
+      "name": "leading_slashes_stripped",
+      "why": "a register row written with a root slash must not double the separator",
+      "url_path": "//my80/AusLAMP_SA/raw/SA104.zip",
+      "encoded_path": "my80/AusLAMP_SA/raw/SA104.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/AusLAMP_SA/raw/SA104.zip"
+    },
+    {
+      "name": "surrounding_whitespace_trimmed",
+      "why": "a YAML value with stray whitespace is the same file",
+      "url_path": "  my80/AusLAMP_SA/raw/SA104.zip\t",
+      "encoded_path": "my80/AusLAMP_SA/raw/SA104.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/AusLAMP_SA/raw/SA104.zip"
+    },
+    {
+      "name": "sub_delims_are_escaped",
+      "why": "!'()* are escaped here and left alone by encodeURIComponent, so the JS mirror must not delegate to it",
+      "url_path": "my80/arch/a!b'c(d)e*f+g&h=i,j;k$l.zip",
+      "encoded_path": "my80/arch/a%21b%27c%28d%29e%2Af%2Bg%26h%3Di%2Cj%3Bk%24l.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/a%21b%27c%28d%29e%2Af%2Bg%26h%3Di%2Cj%3Bk%24l.zip"
+    },
+    {
+      "name": "percent_is_itself_escaped",
+      "why": "a literal % must not be read as the start of an escape",
+      "url_path": "my80/arch/100%/SA1.zip",
+      "encoded_path": "my80/arch/100%25/SA1.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/100%25/SA1.zip"
+    },
+    {
+      "name": "query_and_fragment_cannot_split_the_route",
+      "why": "? and # would end the path at the client if they survived",
+      "url_path": "my80/arch/a?b#c.zip",
+      "encoded_path": "my80/arch/a%3Fb%23c.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/a%3Fb%23c.zip"
+    },
+    {
+      "name": "colon_at_and_tilde",
+      "why": ": and @ are escaped; ~ is unreserved and survives",
+      "url_path": "my80/arch/a:b@c~d.zip",
+      "encoded_path": "my80/arch/a%3Ab%40c~d.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/a%3Ab%40c~d.zip"
+    },
+    {
+      "name": "non_ascii_becomes_utf8_bytes",
+      "why": "one code point, its UTF-8 bytes, one %XX each",
+      "url_path": "my80/arch/Muller_Angstrom_üÅ.zip",
+      "encoded_path": "my80/arch/Muller_Angstrom_%C3%BC%C3%85.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/Muller_Angstrom_%C3%BC%C3%85.zip"
+    },
+    {
+      "name": "astral_code_point_is_one_character_not_two",
+      "why": "THE CLASS THAT KILLS THE MIRROR: a code point above the BMP is two UTF-16 code units in JavaScript, so a per-code-unit replace hands encodeURIComponent a lone surrogate and it throws URIError. Python's quote() encodes it correctly, so only a vector can hold the two together",
+      "url_path": "my80/arch/emoji_😀_globe_🌏.zip",
+      "encoded_path": "my80/arch/emoji_%F0%9F%98%80_globe_%F0%9F%8C%8F.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/emoji_%F0%9F%98%80_globe_%F0%9F%8C%8F.zip"
+    },
+    {
+      "name": "unreserved_survive_untouched",
+      "why": "the unreserved set is a fixed point of the encoder",
+      "url_path": "my80/a-b_c.d~e/F9.zip",
+      "encoded_path": "my80/a-b_c.d~e/F9.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/a-b_c.d~e/F9.zip"
+    },
+    {
+      "name": "backslash_and_quotes",
+      "why": "a Windows-style separator is a filename character here, not a path split",
+      "url_path": "my80/arch/a\\b\"c'd.zip",
+      "encoded_path": "my80/arch/a%5Cb%22c%27d.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/a%5Cb%22c%27d.zip"
+    }
+  ]
+}

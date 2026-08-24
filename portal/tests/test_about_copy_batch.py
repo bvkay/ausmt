@@ -313,3 +313,26 @@ def test_the_documentation_section_is_a_single_pointer():
         f"the Documentation section must carry exactly one link, to the documentation root, got {links}")
     for retired in ("Standards", "Survey Package", "Download Manifest Schema", "Glossary"):
         assert retired not in flat, f"the retired topic bullet is back: {retired!r}"
+
+
+# ------------------------------------------- (j) the footer's raw-time-series sentence (THREDDS A7)
+
+
+def test_the_footer_states_the_hand_off_beside_the_no_hosting_claim():
+    """The "About this build" popover said only that AusMT doesn't host raw time series. That was the
+    WHOLE story until a verified per-station route existed; it is now half of one, and a reader who
+    stops there concludes the portal cannot help them get the files. FAILS in both directions: the
+    no-hosting claim must survive verbatim (a 302 is not hosting, and this lane never claims it is),
+    and the hand-off half must be there beside it.
+
+    This sentence had NO coverage before the hand-off landed, which is exactly how it would have gone
+    stale silently: nothing in portal/tests read it."""
+    body = FLAT.split('<div class="aboutbuild-body">', 1)
+    assert len(body) == 2, "about.html lost its About-this-build popover"
+    flat = body[1].split("</div>", 1)[0]
+    assert "It doesn't host raw time series" in flat, (
+        "the no-hosting claim must survive: AusMT hands off, it does not host, and a redirect is not hosting")
+    assert "routes you straight to the archive that does" in flat, (
+        "the popover must state the hand-off beside the no-hosting claim, or it reads as a dead end")
+    assert "hosts raw time series" not in flat.replace("doesn't host raw time series", ""), (
+        "nothing here may claim AusMT hosts time series")

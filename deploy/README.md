@@ -119,6 +119,27 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
+### Time-series hand-off routes: the table goes out BEFORE the data
+
+`/go/ts/<survey>/<station>/<level>` 302s a reader to the file's one NCI THREDDS URL. The resolution is
+`deploy/frontdoor/ts-routes.map`, generated from the per-survey verified-resource registers and
+COMMITTED, and it lives on the **VPS** while the data lives on the **box**. Its membership is the
+suppression: a route the table does not name produces no `Location` at all. So the publish order is
+fixed - **table first, data second** - because a station that stops being open has to lose its route
+before its record stops naming it, never after.
+
+```sh
+python deploy/scripts/gen_ts_routes.py --check   # in the repo, from the ausmt-surveys registers
+# then: git pull + ./install-frontdoor.sh + ./doctor.sh on the VPS   (frontdoor/RUNBOOK.md step 6.3)
+# then: make rebuild-data here          (its recipe passes --ts-index; without it the box would
+#                                        publish no ts_access.json while the table kept resolving)
+make doctor                                       # the ts-parity leg: table and served data agree
+```
+
+`make doctor`'s `ts-parity` leg is the drift alarm for the split: it compares the committed table with
+the SERVED `/data/ts_access.json` and FAILs in either direction - a route the data does not publish, or
+a published route that would 404.
+
 ### Sync the surveys checkout
 
 ```sh
@@ -910,6 +931,7 @@ below: a query flag on file requests the portal was making anyway.
 | **Distinct networks** per day | The count of distinct masked networks (the /24 or /48 the edge already wrote) seen that day. The addresses live in memory for the one run that folds the day; only the integer is written. One network can be a whole institution, so read it as reach, not as people. |
 | **Downloads by collection** | The `collection_id` the served `mtcat.json` gives a survey (AusLAMP and its siblings), joined on the bundle **slug** first and the survey title second. A collection total is the sum of its member surveys. Optional: no served `mtcat.json`, no collection dimension, no zero. |
 | **Requests by country, split by class** | Beside the combined per-country request count, the same four-way breakdown the state table carries: downloads, visits, API requests and volume per country. Needs no state table (the country lookup is the fold's own). It lives at the **cumulative and monthly grains only**, like the state breakdown and for the same reason: a named country on a named day is the smaller cell. Forward-only, so a country counted before it existed reads *"not measured"*. |
+| **Time-series hand-offs** | The front door's `/go/ts/<survey>/<station>/<level>` route answers **302** with the NCI THREDDS URL for that file, and that redirect is the only trace the request leaves here (it is terminal at the front door and never reaches the box). Counted as **requests, never completed transfers**: AusMT hands the reader off and never learns whether a byte moved, and the line on the screen says so. The **bytes and the destination host come from the served `ts_access.json`**, joined on the route path, because the log can supply neither - a 302's `size` is the redirect body and its `Location` is not logged. The query is stripped before the join, exactly as the front door strips it before its own lookup. Admits 302 alone; a 404 on one of these paths is the route table refusing to resolve, which is how suppression works, and is not a hand-off. A route the served index no longer publishes counts in the family's **own** unattributed bucket with no bytes: that is table-versus-data drift, and it is why the deploy order puts the table out first. `by_survey` is keyed on the survey **slug**, the segment the published route carries. |
 | **Monthly rollups** | Each calendar month is accumulated as its days fold, never recomputed from the daily tail. |
 
 **Aggregate retention (separate from the raw log).** Daily rows are a rolling **92-day** window

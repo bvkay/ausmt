@@ -438,6 +438,15 @@
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
+  /* The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export
+     toast within its dwell). It carries at most one action button; it never carries a progress bar. */
+  .snackbar{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--panel);
+    border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;
+    z-index:2000;display:flex;align-items:center;gap:12px;line-height:1.45}
+  .snackbar.hidden{display:none}
+  .snackbar .snack-note{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+  .snackbar .snack-act{flex:none;background:var(--copper);color:#16110b;border:0;border-radius:4px;
+    padding:6px 10px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer}
   @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}
     /* UX3 item 4: at narrow widths the three header zones stack full-width and left-align, so the
        centred nav / right-aligned counts don't read as stranded fragments once they wrap. */
@@ -521,6 +530,18 @@
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
   .dlonly{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
   .dlonly input{accent-color:var(--copper)}
+  /* Availability (R2/R3): a sub-heading inside the group, one weight down from the group's own h2 so
+     the two questions read as parts of one answer rather than as two sections. */
+  .availsub{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);
+    font-weight:600;margin:14px 0 6px;text-align:center}
+  /* The per-level chooser STACKS. Four labels each carrying a station count and a summed size do not
+     fit the single-row .seg, so this opts that row out rather than restyling .seg for everyone. A
+     disabled button is a level nothing in this deployment publishes (or an index still in flight),
+     and it must read as inert rather than as merely unselected. */
+  .seg.segcol{flex-direction:column}
+  .seg.segcol button{text-align:left;padding:7px 9px;border-top:1px solid var(--line);line-height:1.35}
+  .seg.segcol button:first-child{border-top:0}
+  .seg.segcol button[disabled]{opacity:.45;cursor:default}
   .recentlist{list-style:none;display:flex;flex-direction:column;gap:6px}
   .recentlist li{font-size:12.5px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
   .recentlist a{color:var(--text);text-decoration:none}
@@ -595,6 +616,14 @@
   .maplegend .legtype:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
   .maplegend .legtype.legoff{opacity:.4}
   .maplegend .leghint{color:var(--muted);font-size:11px;line-height:1.35}
+  /* R12: the metric scale bar, re-parented out of the Leaflet corner into this box (main.js
+     buildScaleBar). Its OWN class, so the legend's four-type-dot and parenting pins are untouched.
+     position:static undoes the absolute placement Leaflet gives a corner control, and the bar is
+     inert - it is a reading aid, never a target. */
+  .maplegend .maplegend-scale{position:static;margin:2px 0 0;pointer-events:none;box-shadow:none}
+  .maplegend .maplegend-scale .leaflet-control-scale-line{background:none;box-shadow:none;
+    border:1px solid var(--line);border-top:0;color:var(--muted);font-family:var(--mono);
+    font-size:10px;line-height:1.4;padding:1px 5px}
   /* Collapsible ONLY on small widths: the toggle appears and the body defaults collapsed there (the .expanded
      class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
      narrow-built legend can never get stuck collapsed with no visible way to expand it. */
@@ -744,6 +773,12 @@
         <button id="dlCsv" disabled>Station CSV</button>
         <button id="dlGeo" disabled>GeoJSON</button>
         <button id="dlSh" disabled>Archive pointers</button>
+        <!-- R7/D3: the time-series HAND-OFF list. Not a zip and not a fourth selection format: AusMT
+             holds none of these bytes, so there is nothing here to package. Each row is an AusMT
+             /go/ts/ route the front door answers 302 to, with the archive's own address alongside
+             for reference. Written by exports.js from ts_access.json, scoped by the Availability
+             chooser. -->
+        <button id="dlTs" disabled>Time-series list</button>
         <button id="dlCite" disabled>Citation pack (.zip)</button>
         <button id="strike" disabled>Strike rose (selection)</button>
         <!-- The three per-station format zips. Each packages the SELECTED stations' own manifest rows of
@@ -757,11 +792,13 @@
     </div>
   </section>
   <!-- Screening (advanced): all specialist screening controls, collapsed by default, per operator
-       feedback rounds 1-2 (round 1 relocated Min-TF-diagnostic + colour-by; round 2 moved Year range,
-       Downloadable here and Period range in with them). The primary rail stays: find, data type,
-       recently added, tree, selection. Every element id inside is UNCHANGED so existing wiring
-       (filters.js/main.js/map.js) and tests keep working untouched; main.js's data-views toggle
-       matches nested elements, so the map-only colour-by group hides correctly on other views. -->
+       feedback rounds 1-2 (round 1 relocated the completeness threshold + colour-by; round 2 moved
+       Year range, the downloadable-here checkbox and Period range in with them). The primary rail
+       stays: find, data type, recently added, tree, selection. main.js's data-views toggle matches
+       nested elements, so the map-only colour-by group hides correctly on other views.
+       THE IDS ARE NOT FROZEN, and used to say they were: the Availability group (R2/R3) retired
+       #qSeg and renamed #dlOnly to #tfAvail, so wiring and pins move with the controls. What is
+       stable is the PREDICATE each one drives, which is what exports.js and passesCore read. -->
   <section data-views="both">
     <details class="advanced">
       <summary>Screening (advanced)</summary>
@@ -774,8 +811,25 @@
         </div>
         <div class="fieldnote">Filters on each survey's declared year(s); surveys with no declared date are hidden once a year is set.</div>
       </div>
-      <div class="advgroup">
-        <label class="dlonly" title="Show only stations whose transfer-function files this portal is licensed to serve directly. Other stations are listed metadata-only with a pointer to their source archive."><input type="checkbox" id="dlOnly"> Downloadable here</label>
+      <!-- AVAILABILITY (owner rulings R2/R3, 2026-08-22). ONE group for the two DIFFERENT things this
+           portal can say about getting data, because a reader asking "what can I actually download"
+           should not have to know they are different questions. Transfer functions is a LICENCE
+           question: which stations' processed files AusMT is allowed to serve itself (predicate
+           s.ediAvail, the same flag the selection exports read for their not-included honesty). Time
+           series is a ROUTE question: which stations have a verified, openly accessible file in the
+           NCI archive, per product level, read from ts_access.json. AusMT hands those off and hosts
+           none of them. This group replaces the standalone "Downloadable here" checkbox and the
+           Min-TF-diagnostic segmented control that used to sit at the bottom of this panel. -->
+      <div class="advgroup" id="availGroup">
+        <h2>Availability</h2>
+        <label class="dlonly" title="Show only stations whose transfer-function files this portal is licensed to serve directly. Other stations are listed metadata-only with a pointer to their source archive."><input type="checkbox" id="tfAvail"> Transfer functions downloadable here</label>
+        <h3 class="availsub">Time series available now</h3>
+        <!-- The per-level chooser (D7/D8). Buttons are WRITTEN BY filters.js paintTsChooser(), which
+             owns their labels (per-level station count and summed size), their disabled state and the
+             two-phase honesty; the level vocabulary lives once in state.js TS_LEVELS and is never
+             duplicated in markup. -->
+        <div class="seg segcol" id="tsSeg" role="group" aria-label="Time series available now, by level"></div>
+        <div class="fieldnote" id="tsSegNote"></div>
       </div>
       <div class="advgroup">
         <h2 title="Keep stations whose transfer-function estimates cover this period window">Period range (s)</h2>
@@ -788,10 +842,6 @@
       <div class="advgroup" data-views="map">
         <h2>Colour stations by</h2>
         <div class="seg" id="colorSeg"><button data-c="type" class="on">Data type</button><button data-c="quality">Completeness</button><button data-c="dim">Dimensionality</button></div>
-      </div>
-      <div class="advgroup">
-        <h2>Min. automated completeness/smoothness check <span style="text-transform:none;letter-spacing:0">(not a quality verdict)</span></h2>
-        <div class="seg" id="qSeg"><button data-q="0" class="on">Any</button><button data-q="3">≥3</button><button data-q="4">≥4</button><button data-q="4.5">≥4.5</button></div>
       </div>
     </details>
   </section>
@@ -877,6 +927,13 @@
   </span>
 </footer>
 <div id="toast" role="status"></div>
+<!-- The hand-off snackbar (owner UX ruling 2026-08-23). PROGRESS BELONGS TO THE BROWSER: the 302 hands
+     the bytes browser-to-archive, CORS forbids an in-page fetch of the payload, and a multi-GB Blob
+     would be a proxy in disguise. So there is no progress bar, no download-manager panel and no
+     completion claim anywhere on this page. This says what was handed over and where the rest of it
+     will appear, and it can carry ONE action (the wget command), which is why it is a richer element
+     than #toast rather than a second use of it. -->
+<div id="snackbar" class="snackbar hidden" role="status" aria-live="polite"></div>
 
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/leaflet.draw.js"></script>

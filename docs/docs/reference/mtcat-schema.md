@@ -583,7 +583,7 @@ Row members:
 | | |
 |---|---|
 | Definition | Count of this survey's station records carrying `has_time_series` true: a count of VERIFIED EXISTENCE, stable across access transitions. |
-| Obligation | optional; defined by the schema and NOT YET EMITTED (the projection lane lands later, so today the key is absent everywhere, correctly) |
+| Obligation | optional; emitted where the count is positive, OMITTED where it is zero (a zero would assert verified non-existence for every station of the survey) |
 | Occurrence | 0-1 |
 | Type | integer, minimum 0 |
 | Note | Derived mechanically as the count of `has_time_series` true rows, never independently asserted, and never subtracted from `n_stations` to infer absence. |
@@ -666,7 +666,7 @@ underlying MT metadata structures.
 | | |
 |---|---|
 | Definition | Present with value `true` when the producing catalogue has positively VERIFIED that a time-series resource for this station exists. Existence semantics: access is a separate question, and an embargo never flips it. |
-| Obligation | optional; defined by the schema and NOT YET EMITTED (the projection lane lands later, so today the key is absent everywhere, correctly) |
+| Obligation | optional; emitted where the producing catalogue holds a verified record of the resource, absent otherwise |
 | Occurrence | 0-1 |
 | Type | the constant `true` |
 | Note | TRUE-OR-ABSENT: `false` is never emitted, and absence makes no assertion. A consumer must never read absence as verified non-existence. |
@@ -882,7 +882,7 @@ The breaking list:
    additions; the catalogue no longer publishes tool versions.
 
 The additions (all optional, none breaking): `surveys[].description`, `surveys[].subjects[]`,
-`surveys[].sample_rates_hz[]`, `surveys[].coordinates_state`, and the defined-but-not-yet-emitted
+`surveys[].sample_rates_hz[]`, `surveys[].coordinates_state`, and the
 `stations[].has_time_series` / `surveys[].n_stations_time_series_verified` pair. The
 `related_identifiers[].relation` vocabulary widened to nine values: `References`,
 `IsIdenticalTo` and `HasMetadata` join the six 1.2 values (HasMetadata rows may carry a `scheme`
@@ -994,9 +994,16 @@ way.
 `stations[].has_time_series` appears with the constant value `true` only when the catalogue has
 positively verified that a time-series resource EXISTS for the station; access is a separate question.
 `false` is never emitted, and absence makes no assertion, so never read a missing key as verified
-non-existence. `surveys[].n_stations_time_series_verified` is the mechanical count of the true rows.
-On release day of 2.0 neither key is emitted anywhere; they are defined ahead of the projection lane
-that will populate them.
+non-existence. `surveys[].n_stations_time_series_verified` is the mechanical count of the true rows,
+omitted where that count is zero.
+
+AusMT populates both from a per-survey register of archive holdings that a curator maintains and an
+out-of-band crawl feeds. EXISTENCE is the whole of what they claim: the flag follows that register for
+every station, an embargoed one included, because an embargo says who may fetch the recording and not
+whether it was made, and an outage at the archive is not a retraction either. The one lawful way the
+flag goes down is curation, when the last verified row for a station is retired with its dated reason
+because the resource genuinely ceased to exist. Whether AusMT can hand you a route to the file is a
+DIFFERENT question, answered on the station record rather than here.
 
 ### One survey, two key names
 

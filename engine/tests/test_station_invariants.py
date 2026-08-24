@@ -131,7 +131,10 @@ def built(tmp_path_factory):
     surveys.mkdir()
     for pkg in ("example-survey", "pid-survey"):
         shutil.copytree(FIXTURES / pkg, surveys / pkg)
-    return [_build(surveys, root / tag) for tag in ("one", "two")]
+    # The committed register rides both builds: byte-identity and dict-equality are then proven
+    # WITH the projection live, not on a registerless corpus where it is vacuously stable.
+    return [_build(surveys, root / tag, "--ts-index", str(FIXTURES / "ts-index"))
+            for tag in ("one", "two")]
 
 
 def _minus_generated(doc):
@@ -197,11 +200,18 @@ def access_arm(tmp_path_factory):
     root = tmp_path_factory.mktemp("station-invariants-access")
     surveys = root / "surveys"
     surveys.mkdir()
+    ts_root = root / "ts-index"
+    ts_root.mkdir()
+    register = (FIXTURES / "ts-index" / "example-survey" / "ts-index.yaml").read_bytes()
     for slug, access in emission._ACCESS_CORPUS.items():
         shutil.copytree(FIXTURES / "example-survey", surveys / slug)
         (surveys / slug / "survey.yaml").write_text(emission._survey_yaml(slug, access),
                                                     encoding="utf-8")
-    return _build(surveys, root / "data")
+        # The SAME register bytes on every access arm: whatever the projection states, it must
+        # state it identically across open/embargoed/metadata_only (spec: the count is stable).
+        (ts_root / slug).mkdir()
+        (ts_root / slug / "ts-index.yaml").write_bytes(register)
+    return _build(surveys, root / "data", "--ts-index", str(ts_root))
 
 
 def _mtcat_rows(out: Path):
@@ -224,33 +234,38 @@ def _published_run_rates(out: Path) -> dict:
     return rates
 
 
-def test_projection_1_has_time_series_agrees_with_the_time_series_resources(built):
-    """SCOPE:308-310, open stations: the mtcat flag is true exactly where the record carries a
-    kind=time_series resource. The lane delivers neither side (contract section 1), so on this corpus
-    it is the both-absent case. Written as the EQUIVALENCE rather than as two absence checks so the
-    day either side lands without the other, this fails instead of passing quietly."""
+def test_projection_1_the_flag_follows_the_register_and_rows_imply_it(built):
+    """SCOPE:308-310 as amended at D14: the mtcat flag follows the REGISTER (existence), and a
+    served kind=time_series resource IMPLIES the flag - never the reverse, because a withheld or
+    embargoed station keeps its flag while serving no row. Fixture oracle, independent of the
+    code under test: EXAMPLE01 has live register rows, EXAMPLE02 only pending/retired ones, and
+    no other station has any."""
     stations, _ = _mtcat_rows(built[0])
     docs = {d["ausmt_id"]: d for d in _docs(built[0]).values() if not d.get("withheld")}
     assert docs, "non-vacuity: this arm publishes open station records"
+    expected = {"au.example-survey.EXAMPLE01": True}
     for aid, doc in docs.items():
-        assert bool(stations[aid].get("has_time_series")) == bool(_time_series_rows(doc)), aid
-    assert not any(_time_series_rows(d) for d in docs.values()), (
-        "no kind=time_series resource is delivered in 0.1, so the equivalence above is currently the "
-        "both-absent case; delete this line when the projection lands")
+        assert bool(stations[aid].get("has_time_series")) == expected.get(aid, False), aid
+        if _time_series_rows(doc):
+            assert stations[aid].get("has_time_series") is True, (
+                f"{aid}: a served time_series row without the flag is a projection hole")
+    assert any(_time_series_rows(d) for d in docs.values()), (
+        "non-vacuity: the register arm serves at least one time_series row")
 
 
-def test_projection_2_a_withheld_stub_states_no_time_series_either_way(access_arm):
-    """SCOPE:310-311, withheld stations: the flag follows the internal register while the stub stays
-    empty. The register is not delivered, so the flag is absent on both sides; the half that IS
-    enforceable today is the one an embargo must never move, and it is the stronger half - the stub
-    carries no resources at all, so it can neither assert nor deny a time series."""
+def test_projection_2_a_withheld_stub_keeps_the_flag_and_none_of_the_detail(access_arm):
+    """SCOPE:310-311 with R13 live: the flag FOLLOWS THE REGISTER for a withheld station - the
+    register on this arm carries live rows for EXAMPLE01, so its flag is TRUE - while the stub
+    stays closed-world and carries no resources, no route, no url_path. Existence survives
+    withholding; detail does not. The two assertion classes exist for that asymmetry."""
     stations, _ = _mtcat_rows(access_arm)
     withheld = {d["ausmt_id"]: d for d in _docs(access_arm).values() if d.get("withheld")}
     assert withheld, "non-vacuity: this arm emits withheld stubs"
+    flagged = [aid for aid in withheld if stations[aid].get("has_time_series") is True]
+    assert flagged, "non-vacuity: the register flags at least one withheld station (R13)"
     for aid, doc in withheld.items():
         assert "resources" not in doc, f"{aid}: the withheld stub is closed-world"
-        assert "has_time_series" not in stations[aid], (
-            f"{aid}: the flag is not delivered, so nothing may state it for a withheld station")
+        assert "url_path" not in json.dumps(doc), f"{aid}: no route detail on a withheld record"
 
 
 def test_projection_3_the_verified_count_does_not_move_across_an_embargo(access_arm):
@@ -262,7 +277,9 @@ def test_projection_3_the_verified_count_does_not_move_across_an_embargo(access_
     _, surveys = _mtcat_rows(access_arm)
     counts = {slug: row.get("n_stations_time_series_verified") for slug, row in surveys.items()}
     assert len(counts) == 3, f"fixture sanity: one survey per access state, got {sorted(counts)}"
-    assert len(set(counts.values())) == 1, f"the count moved with the access state: {counts}"
+    assert set(counts.values()) == {1}, (
+        f"every arm carries the SAME register (one station with live rows), so every arm must "
+        f"state the count 1 - measured, not absent: {counts}")
 
 
 @pytest.mark.xfail(strict=True, reason=(
@@ -359,6 +376,29 @@ def test_every_station_contract_test_file_is_in_the_pr_gate_subset():
     listed = set(re.findall(r"tests/(test_\w+\.py)", _workflow_step("PR gate subset")))
     ours = {p.name for p in sorted(HERE.glob("test_station*.py"))} - _NOT_CONTRACT_FAMILY
     assert ours, "the glob found no station contract tests; the pin has lost its subject"
+    assert ours <= listed, f"not in the PR-gate subset: {sorted(ours - listed)}"
+
+
+@pytest.mark.skipif(not WORKFLOW.is_file(),
+                    reason="engine image build: workflow tree not shipped "
+                           "(designed topology; the CI guards are pinned from checkout lanes)")
+def test_every_time_series_projection_test_file_is_in_the_pr_gate_subset():
+    """Rule 12 again, for the family a filename glob cannot describe.
+
+    The THREDDS projection publishes four things a test can assert over, and a file that asserts
+    over any of them gates this contract wherever its filename happens to sort: the boot artifact,
+    the catalogue flag, the hand-off route and the shared percent-encoding vectors. Membership is
+    decided by what a file ASSERTS ABOUT rather than by what it is called, so a new test of the
+    projection is caught on the PR that adds it however it is named. That is the gap this pin exists
+    for: `test_access_gate.py` carries the root-level leak sweep over `ts_access.json`,
+    `test_url_registry.py` carries the proof that a `/go/ts/` path can never reach the sitemap, and
+    `test_ts_url_vectors.py` holds the one encoder to the vectors the portal and the front door are
+    held to - and no family glob names those three."""
+    listed = set(re.findall(r"tests/(test_\w+\.py)", _workflow_step("PR gate subset")))
+    surfaces = ("ts_access.json", "has_time_series", "/go/ts/", "ts_url_vectors.json")
+    ours = {p.name for p in sorted(HERE.glob("test_*.py"))
+            if any(s in p.read_text(encoding="utf-8") for s in surfaces)}
+    assert ours, "no test names a projection surface; the pin has lost its subject"
     assert ours <= listed, f"not in the PR-gate subset: {sorted(ours - listed)}"
 
 

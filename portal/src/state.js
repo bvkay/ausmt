@@ -17,7 +17,11 @@ let CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID; /*__DATA_BINDING__*/
 // harness that assigns TFD/SCI/MANIFEST directly (the coord-access and bundle-tile drivers do) behaves
 // byte-for-byte as it did before phasing: only a boot that actually starts phase 2 flips them to pending.
 let TF_READY=Promise.resolve(),SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
-const HYDR={tf:"ready",sci:"ready",manifest:"ready"};
+// THREDDS D6: ts_access.json rides phase 2 as well. The chooser it feeds is a facet most visitors
+// never open, so a phase-1 fetch would add a blocking boot request for it; the Availability controls
+// are disabled and aria-busy across the window instead, exactly as the colour modes are.
+let TSACC_READY=Promise.resolve();
+const HYDR={tf:"ready",sci:"ready",manifest:"ready",tsaccess:"ready"};
 function hydrating(k){return HYDR[k]==="pending";}
 function hydrFailed(k){return HYDR[k]==="failed";}
 // A product is USABLE only when it is loaded. "pending" and "failed" are two different REASONS for one
@@ -49,6 +53,12 @@ let AUSLAMP_SET=new Set();
 // folds it onto each station as s.coordPolicy; the drawer badges from that. It carries POLICY, never a
 // coordinate — positions are already masked in the catalogue (generalised => 0.1° cell, withheld => null).
 let COORD_POLICY={};
+// THREDDS A5: ausmt_id -> {level token: {bytes, url_path}} for stations with a VERIFIED, OPEN route
+// into the NCI archive, loaded at phase 2 from the OPTIONAL ts_access.json. `null` means the fetch
+// has not settled; `{}` means it settled on absence, which is the honest answer for a deployment
+// that publishes no download index (a corpus with no verified routes ships no file). Membership is
+// the access rule: a withheld or coordinate-gated station is simply not in it.
+let TSACC=null;
 
 // UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#EF7256), and GDS off the
 // ok/status green (#5BAE6A), so a data-type marker can no longer be mistaken for the selection accent or a
@@ -80,6 +90,17 @@ const DIM_COL={"1-D":"#4E8FC9","2-D":"#8A5FC0","3-D":"#C44F92",null:"#5A6E7D"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};
+// THREDDS D8: the time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS.
+// These tokens ARE ts_access.json's keys, so the chooser, the drawer rows and the hand-off pointer
+// file all name a level the same way and none of them re-derives the list. `level2` is absent BY
+// RULING, not by omission (D19, 2026-08-24): the archive's level_2 tree holds transfer functions,
+// not time series, so it opens no route, takes no button and gets no row here.
+const TS_LEVELS=[
+  ["raw_packed","Packed raw","as recorded, packed by the custodian"],
+  ["level0","Level 0","instrument-recorded, full resolution"],
+  ["level1_mth5","Level 1 MTH5","calibrated, resampled, filtered"],
+  ["level1_netcdf","Level 1 NetCDF","the same Level 1 product, as NetCDF"],
+];
 // UX feedback round 1: "Go to place" (+ its AU_PLACES quick-zoom list) was removed as redundant —
 // operator decision from the first live session; see index.html/filters.js for the rest of the removal.
 // C22 (2026-07-07): pb is the HONEST plain "AusMT". The pre-C22 value — "AusMT (DOI to be minted per

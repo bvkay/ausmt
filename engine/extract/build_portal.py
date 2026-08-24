@@ -48,6 +48,8 @@ import _stationids as stnids        # noqa: E402  (survey.yaml station-id overri
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
 import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
 import _runids as runids            # noqa: E402  (the persistent per-survey run-id store)
+import _tsindex as tsindex          # noqa: E402  (the per-survey verified-resource register, read offline)
+import _tsproject as tsproject      # noqa: E402  (the ONE projection: flag/count/route from the register)
 import _stationcheck as stcheck     # noqa: E402  (station semantics beyond JSON Schema; shared with scripts/verify.py)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
@@ -753,7 +755,7 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
     from datetime import datetime, timezone
     slug_of, bbox_of = {}, {}
     n_of, types_of, per_of, tip_of = {}, {}, {}, {}
-    rates_of, pol_of = {}, {}
+    rates_of, pol_of, ts_n_of = {}, {}, {}
     fmt_of = _formats_by_survey(manifest_doc)
     for (_p, r) in all_stations:
         lbl, aid, sid = r["survey"], r["ausmt_id"], r["id"]
@@ -784,6 +786,8 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         if r.get("sample_rates_hz"):
             rates_of.setdefault(lbl, set()).update(r["sample_rates_hz"])
         pol_of.setdefault(lbl, set()).add(r.get("coord_policy") or "exact")
+        if r.get("has_ts"):
+            ts_n_of[lbl] = ts_n_of.get(lbl, 0) + 1
     surveys = []
     for lbl, meta in sorted(surveys_meta.items()):
         bb = bbox_of.get(lbl)
@@ -894,12 +898,19 @@ def mtcat_document(surveys_meta: dict, all_stations: list, generated_at: str = N
         # declared end date", NOT "not embargoed" - `access` above is the state of record).
         if m.get("embargo_until"):
             entry["embargo_until"] = m["embargo_until"]
+        # THREDDS A4: the tally of this survey's true flags - present iff POSITIVE (spec 245-250:
+        # existence semantics make it stable across access transitions and never derivable by
+        # subtraction; an absent count asserts nothing, a zero would).
+        if ts_n_of.get(lbl):
+            entry["n_stations_time_series_verified"] = ts_n_of[lbl]
         # MTCAT 2.0 omit-when-undeclared: drop every remaining None-valued key, at every depth
         # (relationship rows included - the 110-error class). The stations[] rows below are NOT
         # cleaned: their paired latitude/longitude nulls are the one defined null.
         surveys.append(_omit_none(entry))
     stations = [{"station_id": r["ausmt_id"], "survey_id": slug_of.get(r["survey"], slugify(r["survey"])),
-                 "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"]}
+                 "latitude": r["lat"], "longitude": r["lon"], "data_type": r["type"],
+                 # THREDDS A4: true-or-absent, never false (spec 373-383, existence semantics).
+                 **({"has_time_series": True} if r.get("has_ts") else {})}
                 for (_p, r) in all_stations]
     if coll_by_id is None:
         coll_by_id, _ = _group_collections(surveys_meta, all_stations)
@@ -2582,10 +2593,10 @@ _RESOURCE_BY_FORMAT = {
 # GATE 12 (D16). The clean station vocabularies (scope 4.4) crosswalked OUT to NCI's level names and
 # to MTCAT's legacy `identifies` values. Direction of dependency, stated because it is the whole
 # point: the station concepts are the SOURCE of this mapping and the legacy values are the target,
-# so MTCAT's heterogeneous vocabulary is mapped FROM, never inherited. Nothing emits from this table
-# in 0.1 (no resource carries processing_level or packaging yet); it is the written crosswalk the
-# freeze gate asks for, and the one mapping the corpus forces today is the first row, which covers
-# 20 of the 42 related_identifiers rows in the survey packages.
+# so MTCAT's heterogeneous vocabulary is mapped FROM, never inherited. The time-series route table
+# below is this table's first consumer: a `time_series` row's processing_level and packaging come
+# from these keys, and its containing-collection identifier is matched on the `mtcat_identifies`
+# value, which covers 20 of the 42 related_identifiers rows in the survey packages.
 STATION_VOCABULARY_CROSSWALK = {
     ("raw", "packed_archive"): {"nci": "the survey's packed raw time series (NCI numbers no level "
                                        "for it)", "mtcat_identifies": "raw_packed"},
@@ -2603,6 +2614,82 @@ STATION_VOCABULARY_UNMAPPED = ("collection", "entire")
 # one record covering all levels, which states the scope of a RECORD and asserts no containment.
 _PLACEABLE_SCOPES = frozenset({"collection"} | {v["mtcat_identifies"]
                                                 for v in STATION_VOCABULARY_CROSSWALK.values()})
+# D2: the repository that holds the bytes a `time_series` row routes to. The schema's deferral
+# trigger (:327) has fired; the crawler knows the host with certainty, NCI is the ratified token, and
+# a controlled string is additively replaceable by a richer object when one exists.
+TS_REPOSITORY = "NCI"
+# {register level token: what a `time_series` row for it states}. `vocab` is a crosswalk KEY, so a
+# level added to the crosswalk cannot be silently unroutable here; `format` is the domain token for
+# what the archive serves; `roles` are the D19 axes.
+#
+# level2 IS ABSENT BY RULING (D19, 2026-08-24), not by omission: NCI's level_2 tree holds transfer
+# functions, and projecting 1,197 of them as kind=time_series would assert a verified TIME SERIES for
+# 88 stations that have none. The token stays in the register's vocabulary for hand-curated rows;
+# nothing here routes it, and _stationcheck rejects one that reaches a document by another path.
+#
+# ORDER IS THE EMITTED ORDER: the emitter iterates this table rather than the register file, so two
+# registers listing one station's levels differently produce identical documents.
+_TS_LEVEL_ROUTE = {
+    "raw_packed":    {"vocab": ("raw", "packed_archive"), "format": "zip",
+                      "roles": ("source", "original")},
+    "level0":        {"vocab": ("level0", None), "format": "mth5",
+                      "roles": ("derived", "alternate")},
+    "level1_mth5":   {"vocab": ("level1", None), "format": "mth5",
+                      "roles": ("derived", "alternate")},
+    "level1_netcdf": {"vocab": ("level1", None), "format": "netcdf",
+                      "roles": ("derived", "alternate")},
+}
+
+
+def station_time_series_resources(rows, collection_identifiers, run_ids=()) -> list:
+    """The `kind: time_series` rows for ONE station, from its register rows.
+
+    A row describes bytes on ANOTHER host: it carries a route and no `path`, no checksum and no
+    `service_urls` (this archive answers 500 on OPeNDAP, so no service is advertised at all). AusMT
+    hands the reader off; it never proxies, re-hosts or re-zips.
+
+    THREE THINGS DECIDE WHETHER A ROW EXISTS, and this renders rather than decides any of them.
+    `_tsproject.projects` answers the first two - `review: verified` (a pending row is an
+    adjudication-queue entry and a retired one is evidence of a resource that ceased to exist, so
+    neither publishes) and a routable level (D19 excludes level2) - and it is IMPORTED rather than
+    restated, because that rule also decides the flag, the boot artifact and the front door's route
+    table, and four surfaces cannot be allowed four opinions. The third is the access gate, applied
+    at the capture site so this renders what it is handed. A level with nothing verified produces NO
+    row, never a row with a null route.
+
+    `related_collection_identifiers` rides the level whose PRODUCT the curated DOI names, matched on
+    the crosswalk's own `mtcat_identifies` value. A survey-scope collection DOI is not projected
+    here: it identifies the collection rather than this product, and a row that IS a download route
+    is the last place a reader should have to work out which."""
+    out = []
+    by_level = {row["level"]: row for row in rows if tsproject.projects(row)}
+    for level, route in _TS_LEVEL_ROUTE.items():
+        row = by_level.get(level)
+        if row is None:
+            continue
+        processing_level, packaging = route["vocab"]
+        provenance, representation = route["roles"]
+        res = {"id": f"ts-{level}", "kind": "time_series", "format": route["format"],
+               "provenance_role": provenance, "representation_role": representation,
+               "access_url": stcheck.ts_access_url(row["url_path"]), "repository": TS_REPOSITORY,
+               "processing_level": processing_level}
+        if packaging:
+            res["packaging"] = packaging
+        if row.get("bytes"):
+            res["bytes"] = row["bytes"]
+        if provenance == "derived" and run_ids:
+            # SCOPE:337-339's case: a concatenated/resampled/rotated product IS derived from the
+            # acquisition this record publishes, so the link holds wherever the run id exists.
+            res["derived_from_runs"] = sorted(run_ids)
+        scope = STATION_VOCABULARY_CROSSWALK[route["vocab"]]["mtcat_identifies"]
+        placed = [dict(e) for e in collection_identifiers if e.get("identifies") == scope]
+        if placed:
+            res["related_collection_identifiers"] = placed
+        # R9 as amended by D18: rule 14 forbids a network call inside the build, so the build
+        # verifies nothing. The date is the crawler's, carried through unchanged.
+        res["note"] = f"verified against NCI THREDDS on {row['verified']}"
+        out.append(res)
+    return out
 
 
 def station_collection_identifiers(meta):
@@ -2650,11 +2737,14 @@ def station_collection_identifiers(meta):
     return rows, declined
 
 
-def station_resources(served_formats, collection_identifiers) -> list:
+def station_resources(served_formats, collection_identifiers, ts_rows=(), run_ids=()) -> list:
     """resources[] for one open station. `served_formats` is {manifest format: served path} for the
     station's own renditions AND the survey bundles it put bytes into, captured at the emit sites so
     the path here is the one the manifest records for the same bytes and never a second derivation
     of it. The caller does the bundle-membership filtering; this renders what it is handed.
+
+    `ts_rows` are this station's verified-resource register rows, APPENDED after the served rows so
+    no existing row moves: what AusMT serves is described first, what it hands off to comes after.
 
     No row carries `identifiers[]`: no DOI identifies any exact file AusMT serves today (D3), and a
     collection DOI presenting as a file DOI is the failure the identity contract names. The
@@ -2671,7 +2761,7 @@ def station_resources(served_formats, collection_identifiers) -> list:
         if collection_identifiers:
             row["related_collection_identifiers"] = [dict(e) for e in collection_identifiers]
         out.append(row)
-    return out
+    return out + station_time_series_resources(ts_rows or [], collection_identifiers, run_ids)
 
 
 # The published channel order: the acquisition families in the order every dialect writes them,
@@ -2885,16 +2975,17 @@ def _dimensionality_document(srow) -> dict:
             "note": "screening diagnostic, not an interpretation product"}
 
 
-def _write_station_products(job, prov, served_root, products_dir,
-                            served_formats=None, bundle_formats=None, collection_ids=None):
+def _write_station_products(job, prov, served_root, products_dir, served_formats=None,
+                            bundle_formats=None, collection_ids=None, ts_rows=None):
     """Write one station's per-station products. `job` is the tuple captured in main()'s per-survey
     loop and drained after the coordinate mask; `prov` is the build PROV block. The rendering lives in
     station_document() / _dimensionality_document(); this is the write path alone.
 
-    `served_formats` / `bundle_formats` / `collection_ids` are the resources[] inputs, captured at
-    the manifest emit sites. They arrive HERE rather than in the job because a survey's bundles are
-    emitted after its station loop, so the per-survey archive rows do not exist yet when the job is
-    queued.
+    `served_formats` / `bundle_formats` / `collection_ids` / `ts_rows` are the resources[] inputs,
+    captured at the manifest emit sites. They arrive HERE rather than in the job because a survey's
+    bundles are emitted after its station loop, so the per-survey archive rows do not exist yet when
+    the job is queued. `ts_rows` is {ausmt_id: [register row]}, captured behind the SAME access gate
+    the byte-gated renditions are: a station absent from it publishes no route.
 
     Returns (served path, document) so main() can run the station self-check over the bytes it just
     published without reading a served file back (SCOPE:289-290).
@@ -2917,7 +3008,9 @@ def _write_station_products(job, prov, served_root, products_dir,
     _formats.update(_own)
     doc = station_document(r, srow, label, org, meta, lic, slug, p, edi_rel, conditioning_notes,
                            served, prov, runs,
-                           station_resources(_formats, (collection_ids or {}).get(slug) or []))
+                           station_resources(_formats, (collection_ids or {}).get(slug) or [],
+                                             (ts_rows or {}).get(r["ausmt_id"]) or [],
+                                             [run["id"] for run in (runs or [])]))
     payload = _jdump(doc, indent=1)
     served_dir = served_root / slug / r["id"]
     curated_dir = (products_dir / slug / r["id"]) if products_dir is not None else None
@@ -4414,6 +4507,13 @@ def main(argv=None):
     ap.add_argument("--seed-meta", help="JSON of survey metadata (SMETA) for --raw mode -> surveys.json")
     ap.add_argument("--out", required=True, help="portal data dir to write {catalogue,tf,sci,surveys}.json")
     ap.add_argument("--products", default=None, help="optional dir for the product-contract JSON")
+    ap.add_argument("--ts-index", default=None,
+                    help="root of the per-survey verified-resource registers (<slug>/ts-index.yaml, "
+                         "written out of band by the ausmt-surveys crawler). Read OFFLINE as files "
+                         "(rule 14: the build never reaches the archive), validated against the same "
+                         "closed vocabularies the surveys validator applies, and projected as "
+                         "kind=time_series resource rows. Absent => no register is read and the build "
+                         "is byte-identical to one built before the flag existed.")
     ap.add_argument("--pid-status", default=None,
                     help="IDCONS D4: optional path to a pid_status.json cache (written by "
                          "scripts/refresh_pid_status.py). When present, each served DOI-typed identifier "
@@ -4626,6 +4726,9 @@ def main(argv=None):
     _served_formats: dict = {}
     _bundle_formats: dict = {}
     _collection_ids: dict = {}
+    # {ausmt_id: [register row]} for the hand-off rows, captured at the same gate as the renditions
+    # above so a station the access gate excludes is simply absent rather than filtered later.
+    _ts_rows: dict = {}
     # survey-metadata.json (the second public contract): ONE job per survey, keyed by label like
     # surveys_meta (so the document set equals mtcat's surveys[] by construction), capturing the raw
     # survey.yaml side channel, the SMETA entry and the survey's serve state (D8 seam). Emitted after
@@ -4941,6 +5044,32 @@ def main(argv=None):
             _survey_warnings.append(f"run-id store IGNORED ({_rie}); no runs[] published")
             _survey_run_ids = {}
         _run_notes: list = []
+        # The verified-resource register (--ts-index), read OFFLINE from a ROOT of per-survey files
+        # (rule 14). UNLIKE the run-id store this is HARD: the store is a nice-to-have whose absence
+        # costs a station its runs[], while a register row is a ROUTE to bytes on another host, so a
+        # register the build cannot read whole stops the build instead of publishing the part of it
+        # that happened to parse. Read by PACKAGE DIRECTORY NAME for the run-id store's reason (two
+        # packages may declare one slug), against this package's own published station ids, which is
+        # what makes an unmatched row loud rather than silently dropped.
+        _pkgname = Path(pkgdir).name if pkgdir else ""
+        try:
+            _ts_index = (tsindex.load(a.ts_index, _pkgname, {r["id"] for (_p, r) in stations})
+                         if (a.ts_index and _pkgname) else {})
+        except tsindex.TsIndexError as _tie:
+            print(f"ERROR: {_pkgname}: {_tie}", file=sys.stderr)
+            print("Fix the register (or drop --ts-index) and re-run.", file=sys.stderr)
+            return 2
+        if _ts_index:
+            _ts_all = [row for rows in _ts_index.values() for row in rows]
+            print(f"  {_pkgname}: ts-index register: {len(_ts_index)} station(s), {len(_ts_all)} "
+                  f"row(s), {len([row for row in _ts_all if row['review'] == 'verified'])} verified",
+                  file=sys.stderr)
+        # The A4 stamp: EXISTENCE follows the register for EVERY station, withheld included (R13);
+        # route detail is a different assertion class answered per surface from _tsproject, so the
+        # stamp carries no url_path, no bytes, nothing an access gate would need to strip.
+        for (_p2, _r2) in stations:
+            if tsproject.station_flag(_ts_index.get(_r2["id"])):
+                _r2["has_ts"] = True
         # resources[]: the survey's placeable containing-collection identifiers, and the rows this
         # lane REFUSES to place. A refusal is reported, never silently dropped: an unplaceable row
         # would publish a wrong citation claim, and a curator is the only one who can fix it.
@@ -5040,6 +5169,15 @@ def main(argv=None):
                                                         lic, nci_base=nci_base, base_url=base_url,
                                                         custodian=_custodian))
                     _served_formats.setdefault(r["ausmt_id"], {})["mth5"] = _h5_rel
+            # THE HAND-OFF GATE, on the SAME two already-computed scalars the byte gate ANDs and never
+            # a second derivation of either: the survey's access-serve state and this station's
+            # coordinate policy. NOT `can_serve`, which also carries the licence and --bundle-edi
+            # gates: those govern bytes AUSMT redistributes, and these bytes are the archive's, served
+            # under its own terms. The coordinate arm is what matters here - a raw time series carries
+            # the true position in every corner the C42 mask exists to withhold, so a generalised or
+            # position-withheld station hands off nothing even though its survey is open.
+            if _acc["served"] and _cserved and _ts_index.get(r["id"]):
+                _ts_rows[r["ausmt_id"]] = _ts_index[r["id"]]
             # C42: DEFER station.json/dimensionality.json to after the mask (see _station_product_jobs
             # above). The job captures this station's SHARED record `r` (masked in place downstream), its
             # science row, and the survey context needed to render - nothing here depends on cross-survey
@@ -5271,7 +5409,8 @@ def main(argv=None):
     _station_docs: dict = {}
     for _job in _station_product_jobs:
         _st_name, _st_doc = _write_station_products(_job, PROV, out / "products", prod,
-                                                    _served_formats, _bundle_formats, _collection_ids)
+                                                    _served_formats, _bundle_formats, _collection_ids,
+                                                    _ts_rows)
         _station_docs[_st_name] = _st_doc
     # ---- survey-metadata.json (the second public contract): one document per survey, AFTER the mask
     # seam (the extent follows the aggregated post-mask coordinate state, D7) and after the station jobs,
@@ -5384,6 +5523,34 @@ def main(argv=None):
         if prod:
             (prod / "coord_policy.json").write_text(
                 _jdump(_coord_policy_map, separators=(",", ":")), encoding="utf-8")
+    # ---- THREDDS A5: ts_access.json, the ROUTE-DETAIL boot artifact ----
+    # {ausmt_id: {level token: {bytes, url_path}}}, beside coord_policy.json and for its stated
+    # reason (:5368-5380): the drawer and the exports render from the boot-loaded catalogue, and
+    # station.json is never fetched on navigation, so a per-level size and route cannot reach the
+    # portal any other way. That is what D3 rules and what makes the pointer file portal-generated.
+    #
+    # THE GUARANTEE IS MEMBERSHIP, NOT SHAPE, and the trade is deliberate: _ts_rows holds only
+    # stations that passed the SAME access gate the hand-off rows did, captured at :5187 and never
+    # re-derived here, and route_rows() is the ONE predicate every route surface renders from
+    # (ts_access, the resource rows, the front-door table), so R5 suppression is one answer rather
+    # than three opinions. Every string this adds for an open station is already published in that
+    # station's own access_url; a withheld or coordinate-gated station is ABSENT, and the root-level
+    # leak sweep is what holds that.
+    #
+    # Keys sorted at both levels: the register's row order is a curator's habit, and these bytes are
+    # not. Emitted ONLY when non-empty, so a corpus with no verified routes stays byte-identical to
+    # one built before this artifact existed.
+    _ts_access = {}
+    for _aid in sorted(_ts_rows):
+        # station_open=True: membership in _ts_rows IS the open verdict, applied at the capture site.
+        _routes = tsproject.route_rows(_ts_rows[_aid], station_open=True)
+        if _routes:
+            _ts_access[_aid] = {lvl: dict(sorted(_routes[lvl].items())) for lvl in sorted(_routes)}
+    if _ts_access:
+        _ts_access_bytes = _jdump(_ts_access, separators=(",", ":"))
+        (out / "ts_access.json").write_text(_ts_access_bytes, encoding="utf-8")
+        if prod:
+            (prod / "ts_access.json").write_text(_ts_access_bytes, encoding="utf-8")
     # ---- C42 Amendment A2: the BASE-STATION-ID surface (boot artifact) ----
     # The C43 stations-panel override fieldset must key by BASE station id — never a file stem, never a
     # variant-suffixed id (D2 fix-round-2, the probe-e discipline). A base id is the record id with its

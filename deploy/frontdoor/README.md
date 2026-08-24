@@ -28,7 +28,8 @@ rollback): `maintainer/C47-PublicBridge.md`. Step-by-step owner procedure: **`RU
 | File | Runs where | Purpose |
 |------|-----------|---------|
 | `Caddyfile` | VPS | Public edge TEMPLATE: auto-TLS per served name, HTTP→HTTPS, masked access log (the analytics feed, canonical block only), a method-scoped **allowlist** of the public subset (`GET /add-survey.html`, `POST /gateway/submit`, `POST /gateway/request-key`, `GET /gateway/healthz`, `GET /gateway/status/*`) reverse-proxied to the box, a deny-by-default `404` for every other `/gateway` path in both slash forms (wall 1), and the marker-delimited legacy redirect block (permanent 301 to the canonical name; templated in or out by the installer). |
-| `compose.yaml` | VPS | The one-service Caddy stack (host networking so it dials the box over the tailnet); mounts `Caddyfile.rendered`. |
+| `ts-routes.map` | VPS | **GENERATED, COMMITTED** Caddy map source: one line per published `/go/ts/<survey>/<station>/<level>` hand-off route and the NCI `fileServer` path it resolves to. Written by `deploy/scripts/gen_ts_routes.py` from the per-survey verified-resource registers; carries ONLY open-access, `review: verified`, non-level2 rows. Its MEMBERSHIP is the suppression - an unlisted path cannot produce a `Location`, so it `404`s by construction. A survey the generator cannot resolve drops its OWN routes and is recorded as an `# UNRESOLVED` line, so the table is always regenerable: a stale table is a stale access decision. Never hand-edit; regenerate and commit. |
+| `compose.yaml` | VPS | The one-service Caddy stack (host networking so it dials the box over the tailnet); mounts `Caddyfile.rendered` and `ts-routes.map`. |
 | `.env.example` | VPS | The only place the canonical name, optional legacy redirect name + box upstream live (config-side; `.env` is gitignored). |
 | `install-frontdoor.sh` | VPS | Single apply script: render `Caddyfile.rendered` (legacy block in or out on the .env state), validate it against real Caddy, then `compose up -d` (+ in-place reload when already running). |
 | `acl-policy.hujson` | Tailscale admin | The exact ACL stanza to paste: the dedicated `tag:ausmt-frontdoor` and the port-granular fence (reader port only) — wall 2. |
@@ -55,3 +56,10 @@ real Caddy with stub upstreams: the reader served, the four public gateway route
 frontdoor to reader to a gateway stub end-to-end, every curator class and every wrong-method public
 route refused at wall 1 **and** independently at wall 2, public traffic masked, each red-proven against
 a deliberately mis-scoped config). They run in CI (`gateway-ci.yml`, which installs Caddy).
+
+`deploy/tests/test_frontdoor_ts_routes.py` does the same for the hand-off routes: it drives the real
+generator over a fixture corpus carrying one row of every state, sweeps the generated table for any
+trace of a withheld, `pending`, retired or level2 row, and drives the shipped directives against a
+real Caddy - a mapped route `302`s to the exact percent-encoded NCI `Location`, a withheld station's
+route `404`s, a bare `/go/ts/` `404`s, and a query never reaches the `Location`. Each negative
+carries its resolving twin, so a dead matcher cannot pass as a pin.

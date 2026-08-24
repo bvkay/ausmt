@@ -1665,3 +1665,81 @@ def test_the_screen_names_the_day_the_selection_split_begins(tmp_path):
             assert "2026-08-01" not in bare, "no stamp, no date: nothing is guessed"
             assert "Bulk map exports" in bare, "the figures themselves still render"
     run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# TIME-SERIES HAND-OFFS (THREDDS A10, owner ruling R8). The front door 302s a reader into the NCI
+# THREDDS archive and AusMT hosts none of those bytes, so the figure is REQUESTS and the screen must
+# never let it read as completed transfers. The class is younger than every seam this screen already
+# marks, so a month that predates it carries no hand-off key at all and must read "not measured".
+# --------------------------------------------------------------------------------------------------
+def _v7_stats(**over) -> dict:
+    """A stats.json carrying the hand-off family. The LAST month has it; the two before it do not,
+    which is the shape a box folding across the seam actually writes and the reason the cell degrade
+    exists at all."""
+    doc = _v6_stats()
+    doc["handoffs"] = {
+        "requests": 48, "bytes": 21_474_836_480, "unattributed": 2,
+        "by_survey": {"auslamp-musgraves-apy-2016": {"requests": 30, "bytes": 12_884_901_888},
+                      "vulcan-2022": {"requests": 16, "bytes": 8_589_934_592}},
+        "by_level": {"raw_packed": {"requests": 33, "bytes": 19_327_352_832},
+                     "level1_mth5": {"requests": 13, "bytes": 2_147_483_648}},
+        "by_destination": {"thredds.nci.org.au": {"requests": 46, "bytes": 21_474_836_480}},
+        "countries": {"AU": 40, "NZ": 6, "unknown": 2},
+    }
+    doc["monthly"][2]["handoffs"] = {
+        "requests": 21, "bytes": 10_737_418_240, "unattributed": 0,
+        "by_survey": {"vulcan-2022": {"requests": 21, "bytes": 10_737_418_240}},
+        "by_level": {"raw_packed": {"requests": 21, "bytes": 10_737_418_240}},
+        "by_destination": {"thredds.nci.org.au": {"requests": 21, "bytes": 10_737_418_240}},
+        "countries": {"AU": 21},
+    }
+    doc.update(over)
+    return doc
+
+
+def test_the_screen_reports_time_series_hand_offs_as_requests_not_transfers(tmp_path):
+    """HAND-OFF LINE PIN. The line must carry the request count and the volume handed off, and it must
+    say IN WORDS that these are requests and not completed transfers: AusMT answers a 302 and never
+    learns whether a byte moved, so any wording that implies a download would be a claim the pipeline
+    cannot support. It must also name the archive it hands off to.
+
+    FAILS IF the line is missing, if it claims transfers or downloads, or if it renders on a box whose
+    fold never took the class (absent, never a zero)."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v7_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            assert "time-series hand-offs to NCI THREDDS (requests, not completed transfers)" in html
+            line = html.split("time-series hand-offs to NCI THREDDS", 1)[1].split("</p>", 1)[0]
+            assert "<b>48</b>" in line, f"the request count must render: {line}"
+            assert "20.0 GB" in line, f"the volume handed off must render: {line}"
+            assert "thredds.nci.org.au" in line, f"the destination must be named: {line}"
+            assert "AusMT" in line and "host" in line, \
+                f"the line must say the bytes are not AusMT's: {line}"
+
+            _write_stats(cfg, _v6_stats())      # a fold that never saw a hand-off
+            assert "hand-off" not in (await client.get(
+                "/gateway/curator/analytics")).text.lower(), "no hand-offs means no line, not a zero"
+    run(_body())
+
+
+def test_a_month_folded_before_hand_offs_existed_says_not_measured(tmp_path):
+    """SEAM PIN. The hand-off class is younger than every dimension this screen already marks, so a
+    month folded before it carries no such key. Its cell must read 'not measured', never 0: a zero
+    would state that nobody was handed off in a month when nothing could hand anyone off.
+
+    FAILS IF a month with no hand-off key renders a zero, or if the month that HAS one is degraded."""
+    async def _body():
+        async with app_client(tmp_path) as (client, _app, _gw, cfg):
+            await curator_login(client)
+            _write_stats(cfg, _v7_stats())
+            html = (await client.get("/gateway/curator/analytics")).text
+            row = html.split("Time-series hand-offs", 1)[1].split("</tr>", 1)[0]
+            cells = _cells(row)
+            assert len(cells) == 3, f"one cell per month shown: {cells}"
+            assert cells[-1] == "21", f"the month that measured hand-offs renders its figure: {cells}"
+            assert cells.count(curatorpage._NOT_MEASURED) == 2, \
+                f"the two months that predate the class must read not measured: {cells}"
+    run(_body())

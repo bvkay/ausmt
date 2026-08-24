@@ -1,7 +1,7 @@
 # Portal data files (the producer and consumer contract)
 
 Not a public surface. The files on this page (`catalogue.json`, `sci.json`, `tf.json`, `surveys.json`,
-`collections.json`, `build_provenance.json`, `coord_policy.json`, `base_ids.json`, the portal-side use of
+`collections.json`, `build_provenance.json`, `coord_policy.json`, `base_ids.json`, `ts_access.json`, the portal-side use of
 `manifest.json`, and the operator-only `build_report.json` and `qc_report.json`) are portal-internal or
 operator-only: they carry no public contract and no stability promise, and any build may change or drop
 them. This page is the engine-to-portal positional contract, for people working on the portal or the
@@ -50,10 +50,13 @@ declared in the survey package and recorded in provenance.
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
 | `coord_policy.json` | `extract/build_portal.py` (the coordinate mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position |
 | `base_ids.json` | `extract/build_portal.py` (`_coordaccess.base_station_id`) | the curator workbench, so a per-station coordinate override is keyed by the base station id |
+| `ts_access.json` | `extract/build_portal.py` (`_tsproject.route_rows`, from the `--ts-index` register) | `portal/src/data.js`, for the Availability chooser and the archive hand-off pointer file |
 
-`coord_policy.json` and `base_ids.json` are emitted only when they would carry information; a consumer
-treats an absent file as "every station is exact" or "every station is its own base". `coord_policy.json`
-is in [Portal-internal documents](portal-documents.md#coord_policyjson); `base_ids.json`,
+`coord_policy.json`, `base_ids.json` and `ts_access.json` are emitted only when they would carry
+information; a consumer treats an absent file as "every station is exact", "every station is its own
+base" or "this deployment publishes no download index". `coord_policy.json`
+is in [Portal-internal documents](portal-documents.md#coord_policyjson); `ts_access.json` is in
+[the same page](portal-documents.md#ts_accessjson); `base_ids.json`,
 `qc_report.json` and `build_report.json` are operator-only and have no public documentation beyond this
 table and [the build report](build-lifecycle.md#the-build-report).
 

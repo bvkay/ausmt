@@ -50,6 +50,12 @@ services:
       # parse error. Never mount the tracked file directly, and never hand-edit the rendered one:
       # re-run install-frontdoor.sh instead (it validates, then reloads the running edge in place).
       - ./Caddyfile.rendered:/etc/caddy/Caddyfile:ro
+      # The time-series hand-off table, read-only. The Caddyfile `import`s it into the /go/ts/ map,
+      # so it is part of the config: without this mount `caddy validate` and startup both FAIL on the
+      # missing import. It is GENERATED and COMMITTED (deploy/scripts/gen_ts_routes.py) and reaches
+      # the VPS the same way the Caddyfile does - `git pull` in this subtree, then the installer.
+      # Never hand-edit it: its membership is the R5 suppression, so an added line publishes a route.
+      - ./ts-routes.map:/etc/caddy/ts-routes.map:ro
       # ACME certificate + key material and Caddy's own state — MUST persist across restarts so a
       # bounce does not re-request a certificate every time (Let's Encrypt rate limits).
       - caddy_data:/data

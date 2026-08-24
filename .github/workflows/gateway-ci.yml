@@ -53,9 +53,14 @@ jobs:
       # public commitment. Without caddy on PATH these pins skip, and the skip tripwire (below) FAILS
       # loudly rather than let the privacy proof silently no-op — so this step is load-bearing, not
       # optional. Pinned version for reproducibility (the box runs caddy:2-alpine, current 2.x).
+      # 2.11.4 since the THREDDS lane: the hand-off routes add a `map` with a FILE `import` and an
+      # `expression` matcher, and every runtime pin for them - plus the front door's own `caddy
+      # validate` step and the route table's measured adapt cost - was taken at 2.11.4. Running the
+      # lane's only unattended Caddy at 2.8.4 would leave that construct unverified at the version
+      # CI actually uses, while the box has been ahead of 2.8.4 the whole time (caddy:2-alpine).
       - name: Install Caddy (deploy access-log masking pins)
         run: |
-          CADDY_VERSION=2.8.4
+          CADDY_VERSION=2.11.4
           curl -fsSL -o /tmp/caddy.tar.gz \
             "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz"
           tar -xzf /tmp/caddy.tar.gz -C /tmp caddy
@@ -89,3 +94,49 @@ jobs:
           python -m pytest -q -rs gateway/tests deploy/tests | tee gateway-pytest.out
           python engine/tests/ci_check_skips.py \
             --allow "real engine stack / sample survey / validator not present" < gateway-pytest.out
+
+      # THE ROUTE TABLE'S MEMBERSHIP IS THE R5 SUPPRESSION, so a committed ts-routes.map that names a
+      # route the registers no longer admit is an access decision nobody made. deploy/tests validates
+      # the shipped table's SHAPE, but it holds no registers to compare it against, so only
+      # `gen_ts_routes.py --check` can catch a register that moved without the table.
+      #
+      # The registers live in the SEPARATE ausmt-surveys repo, so this needs a sibling checkout at the
+      # exact path the generator resolves ($GITHUB_WORKSPACE/../ausmt-surveys). Same wiring as
+      # deploy-images.yml's validator clone, same no-silent-skip posture: with the var set, a clone
+      # failure is a hard error and the check gates the lane; with it unset the check CANNOT run, and
+      # that is stated as a warning annotation and on the job summary rather than passing quietly.
+      - name: Route-table drift gate (gen_ts_routes.py --check)
+        env:
+          SURVEYS_URL: ${{ vars.AUSMT_SURVEYS_URL }}
+          SURVEYS_TOKEN: ${{ secrets.AUSMT_SURVEYS_TOKEN }}
+        run: |
+          DEST="$GITHUB_WORKSPACE/../ausmt-surveys"
+          if [ -z "$SURVEYS_URL" ]; then
+            echo "::warning::AUSMT_SURVEYS_URL is unset - the ts-routes.map drift gate did NOT run. A committed route table that no longer matches the registers would merge undetected."
+            {
+              echo "### gateway-ci: route-table drift gate SKIPPED (AUSMT_SURVEYS_URL unset)"
+              echo ""
+              echo "\`deploy/frontdoor/ts-routes.map\` MEMBERSHIP is the R5 suppression, and only"
+              echo "\`gen_ts_routes.py --check\` can compare it against the registers it was generated from."
+              echo "Set the repo variable \`AUSMT_SURVEYS_URL\` (and, for a private repo, the secret"
+              echo "\`AUSMT_SURVEYS_TOKEN\`) to enable it. Until then the only nets are the architect's"
+              echo "pre-commit battery and \`doctor-box.sh\`'s parity leg, which runs AFTER publication."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          CLONE_URL="$SURVEYS_URL"
+          if [ -n "$SURVEYS_TOKEN" ]; then
+            case "$SURVEYS_URL" in
+              https://*) CLONE_URL="https://x-access-token:${SURVEYS_TOKEN}@${SURVEYS_URL#https://}" ;;
+              *) echo "AUSMT_SURVEYS_TOKEN is set but AUSMT_SURVEYS_URL is not an https:// URL; using it as-is" ;;
+            esac
+          fi
+          if [ ! -d "$DEST" ] && ! git clone --depth 1 "$CLONE_URL" "$DEST"; then
+            echo "::error::AUSMT_SURVEYS_URL is set but the clone FAILED - refusing to silently skip the route-table drift gate."
+            exit 1
+          fi
+          if [ ! -d "$DEST/surveys" ]; then
+            echo "::error::cloned ausmt-surveys but $DEST/surveys is absent - the registers are not where the generator expects them."
+            exit 1
+          fi
+          python deploy/scripts/gen_ts_routes.py --check --surveys "$DEST/surveys"

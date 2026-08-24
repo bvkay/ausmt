@@ -20,12 +20,14 @@ aggregate counts are stored.
 | Client class | The user-agent resolves to crawler, scripted or browser while the day is folded and is never stored. Crawlers are excluded from every figure; scripted clients (`curl`, `wget`, `python-requests`, no user-agent) are counted and their share reported separately. |
 | Bulk map exports vs single downloads | The file requests a map export was going to make anyway carry a query flag (`sel=bulk`). Reported as a file count and as an export-event proxy (distinct masked networks per day). |
 | Downloads by collection | The `collection_id` of the survey, from the served catalogue document. |
+| Time-series hand-offs to NCI THREDDS | The `/go/ts/<survey>/<station>/<level>` redirect the front door answers with the archive's own file URL, counted per survey, product level and destination archive. These are **requests, not completed transfers**: AusMT hands the reader off and never sees whether a byte moved, so nothing here can say a file was downloaded. The size beside each figure is the one the verified-resource register records for that file, because a redirect's log line carries only the size of the redirect itself. AusMT hosts none of those bytes and adds nothing in the browser to measure them. The destination breakdown reads as a single row today, because one archive holds every file AusMT hands off; it is recorded per destination anyway, since a breakdown that is missing when a second archive appears cannot be filled in backwards. |
 | Daily series and calendar-month rollups | Downloads, volume, formats, visits, API requests and networks per UTC day, accumulated per month as each day folds. |
 
 A download is counted once per day, per masked network, per file, whether the server returned the whole
 file (200) or a range (206), because one download action does not produce one log line: a browser
 re-requests from its download manager, and a resumed transfer writes one line per range. Bytes of every
-request still sum. Visits and API requests are not de-duplicated. Per-station and per-survey page views
+request still sum. Visits, API requests and archive hand-offs are not de-duplicated: one hand-off is one
+redirect, so every line is another request rather than another leg of one. Per-station and per-survey page views
 cannot be counted: the portal loads the catalogue once and renders every view in the browser. User
 identification, sessions and funnels are never collected.
 
@@ -36,6 +38,9 @@ identification, sessions and funnels are never collected.
   `Forwarded`, `Referer`) and credentials (`Cookie`, `Authorization`) from the log.
 - Only aggregates are retained. The published `stats.json` contains no address and no user-agent string.
 - The raw log rotates with about seven days of retention; it is for debugging, not the database.
+- Nothing is added in the browser to measure a hand-off. The redirect is a request the reader was
+  making anyway and the web server was already logging it, so there is no beacon, no extra request and
+  no client-side event: the analytics client stays disabled and the page adds no measurement call.
 - One label, and only one. When you export a map selection the portal adds `sel=bulk` to the file
   requests it was already making. No separate request is made for the label, and
   nothing about who is asking is recorded; the flag is stripped before the file is attributed, so a
@@ -51,6 +56,7 @@ identification, sessions and funnels are never collected.
 | Daily aggregate rows | 92 days | a rolling operational view |
 | Monthly rollup rows | indefinitely | pure counts with no address, path or identity; quarterly and year-over-year reporting |
 | Daily aggregate archive | indefinitely | one line of pure counts per folded day, no geography, never served or rendered |
+| Time-series hand-off counts | with the aggregate row that carries them | request counts and register byte totals per survey, product level and destination archive; the by-country figure for them exists at the monthly and cumulative grains only, exactly like every other country figure here |
 
 Each month is accumulated as its days fold, so expiring a daily row never loses the month. Each month
 records how many days it covers, how many predate the detailed dimensions, how many were folded under

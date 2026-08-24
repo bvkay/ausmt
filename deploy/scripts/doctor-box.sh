@@ -16,6 +16,10 @@
 #      serve a publish automatically — its absence is a live suspect for a stale wall)
 #   6. disk headroom on the data dir
 #   7. the served-build source_commit vs surveys-live HEAD (a staleness hint: served != published)
+#   7b. TS-ROUTE KEY-SET PARITY: the committed deploy/frontdoor/ts-routes.map (the VPS's hand-off
+#      table) and the SERVED /data/ts_access.json name the same (station, level) set. The table lives
+#      on the VPS and the data here, so a withheld flip is suppressed only once the table is
+#      regenerated, committed and installed - this is the line that says the two have not drifted
 #   8. the kernel journal for out-of-memory KILLS in the last 24 h (incident 2026-08-15: the engine
 #      build was OOM-killed five nights running and every one surfaced only as "rebuild FAILED"; the
 #      kernel line naming the process, its uid and its size is the fact an operator needs, so this
@@ -35,6 +39,7 @@
 #   AUSMT_DOCTOR_RECONCILE_TIMER the timer unit name (default: ausmt-reconcile.timer)
 #   AUSMT_DOCTOR_DISK_WARN_PCT disk use percent that trips a WARN (default: 85)
 #   AUSMT_DOCTOR_JOURNALCTL journalctl command (default: journalctl) - the kernel-journal OOM check
+#   AUSMT_DOCTOR_PYTHON     python command (default: python3) - the ts-route key-set parity check
 #   AUSMT_DOCTOR_OOM_SINCE  journalctl --since window for the OOM check (default: -24h)
 
 set -u
@@ -53,6 +58,7 @@ READER_PORT="${AUSMT_DOCTOR_READER_PORT:-8445}"
 RECONCILE_TIMER="${AUSMT_DOCTOR_RECONCILE_TIMER:-ausmt-reconcile.timer}"
 DISK_WARN_PCT="${AUSMT_DOCTOR_DISK_WARN_PCT:-85}"
 JOURNALCTL="${AUSMT_DOCTOR_JOURNALCTL:-journalctl}"
+PYTHON="${AUSMT_DOCTOR_PYTHON:-python3}"
 OOM_SINCE="${AUSMT_DOCTOR_OOM_SINCE:--24h}"
 PROFILE="${PROFILE:-portal}"
 
@@ -243,6 +249,68 @@ check_served_staleness() {
 	fi
 }
 
+check_ts_route_parity() {
+	# THE DRIFT THIS SHAPE CREATES, and the one line that catches it: the ROUTE TABLE lives on the VPS
+	# (deploy/frontdoor/ts-routes.map, committed) while the DATA lives here, so a withheld flip is
+	# suppressed only once the table is regenerated, committed and installed. Both renderings come from
+	# ONE projection, so their (station, level) key sets must be EQUAL: a route that resolves for a
+	# station the data does not publish is the R5 leak, and a published route that 404s is a broken
+	# hand-off. Compared against the SERVED artifact on the reader port rather than a file on disk:
+	# what is served is what the public gets.
+	code_dir="${AUSMT_CODE_DIR:-}"
+	if [ -z "$code_dir" ]; then
+		warn "ts-parity: AUSMT_CODE_DIR unset in $ENV_FILE (cannot find the committed route table)"
+		return
+	fi
+	map="$code_dir/deploy/frontdoor/ts-routes.map"
+	if [ ! -f "$map" ]; then
+		warn "ts-parity: no route table at $map - this checkout publishes no /go/ts/ hand-off routes"
+		return
+	fi
+	tsa="$($CURL -sS --max-time 8 "http://127.0.0.1:$READER_PORT/data/ts_access.json" 2>/dev/null)"
+	if [ -z "$tsa" ]; then
+		# ts_access.json is emitted ONLY when non-empty, so its absence is a legitimate state (no
+		# verified routes in this corpus). It is a FAIL only when the table claims routes anyway.
+		if grep -q '^"/go/ts/' "$map" 2>/dev/null; then
+			fail "ts-parity: the route table names routes but the reader serves no /data/ts_access.json - the table is AHEAD of the data (regenerate, or publish)"
+		else
+			pass "ts-parity: no hand-off routes published and none served (both empty)"
+		fi
+		return
+	fi
+	if ! command -v "$PYTHON" >/dev/null 2>&1; then
+		warn "ts-parity: no $PYTHON on this host - cannot compare the route table to the served ts_access.json"
+		return
+	fi
+	tmp_json="$(mktemp)" || { warn "ts-parity: mktemp failed (cannot stage the served artifact)"; return; }
+	printf '%s' "$tsa" > "$tmp_json"
+	out="$($PYTHON - "$map" "$tmp_json" 2>/dev/null <<'PY'
+import json, sys
+table = set()
+for line in open(sys.argv[1], encoding="utf-8"):
+    if not line.startswith('"/go/ts/'):
+        continue
+    p = line.split('" "')[0][1:].split("/")
+    table.add(("au.%s.%s" % (p[3], p[4]), p[5]))
+try:
+    doc = json.load(open(sys.argv[2], encoding="utf-8"))
+    served = {(aid, lvl) for aid, levels in doc.items() for lvl in levels}
+except Exception as e:
+    print("ERR %s" % e); raise SystemExit(0)
+if table == served:
+    print("OK %d" % len(table))
+else:
+    print("DIFF route-only=%s data-only=%s" % (sorted(table - served)[:3], sorted(served - table)[:3]))
+PY
+)"
+	rm -f "$tmp_json"
+	case "$out" in
+		OK*) pass "ts-parity: route table and served ts_access.json name the same routes (${out#OK })" ;;
+		DIFF*) fail "ts-parity: route table and served ts_access.json DISAGREE - ${out#DIFF } (regenerate the table with deploy/scripts/gen_ts_routes.py --write, ship it to the VPS FIRST, then publish)" ;;
+		*) warn "ts-parity: could not compare the route table to the served ts_access.json (${out:-no output})" ;;
+	esac
+}
+
 check_oom_kills() {
 	# The kernel's own record of a process it killed for memory: `journalctl -k` lines of the form
 	# "Out of memory: Killed process 398616 (python) total-vm:..., anon-rss:13740244kB, ... UID:10001".
@@ -290,6 +358,7 @@ check_surveys_live
 check_reconcile_timer
 check_disk
 check_served_staleness
+check_ts_route_parity
 check_oom_kills
 printf '=====================================================\n'
 if [ "$FAILS" -gt 0 ]; then

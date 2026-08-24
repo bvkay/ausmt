@@ -38,6 +38,56 @@ inside it; see [Identifiers by data level](../reference/survey-yaml.md#6-identif
 Each reference should carry enough for a user to understand the relationship: resource type, title,
 identifier, holding repository, access conditions.
 
+## Finding what is available now
+
+Recording a pointer says the data exists somewhere. It does not say whether a given station's files can
+be fetched today. The portal answers that separately, in one **Availability** group in its screening
+panel, because the two halves of the answer are different questions:
+
+* **Transfer functions.** A licence question: whether AusMT is allowed to serve that station's processed
+  files itself.
+* **Time series, by level.** A route question: whether the archive holds a verified file for that
+  station at that product level and serves it openly. The levels offered are packed raw, Level 0,
+  Level 1 MTH5 and Level 1 NetCDF; each states how many stations it covers and what they total.
+
+Choosing a level keeps the stations whose files are ready to fetch, and the choice narrows what the
+archive hand-off writes. The list behind it is built from the survey packages' verified-resource
+registers, so a station whose access is embargoed, whose position is withheld, or whose match is still
+awaiting curator adjudication is simply not in it: there is no setting that reveals one. A deployment
+whose registers verify nothing publishes no list at all, and the panel says exactly that rather than
+reporting an error.
+
+## The hand-off
+
+Selecting stations and taking the **Time-series list** export writes a pointer file: one row per
+station and level, each naming an AusMT route that answers with a redirect to the archive holding the
+file, with the archive's own address recorded alongside for reference. `wget` follows the redirect on
+its own; `curl` needs `-L`. A station's own drawer offers the same route per level directly.
+
+**Progress belongs to your browser, not to this page.** The redirect hands the bytes from your browser
+to the archive, so the portal never sees the transfer and shows no progress bar and no completion
+message: your browser's own downloads list is where the transfer appears, and it is the only place that
+can report it. Nothing is copied through AusMT, and nothing is repackaged.
+
+## What "verified" means, and what it does not
+
+Every published row carries the same fieldnote: **verified against NCI THREDDS on `<date>`**. That
+date is when an out-of-band crawl read the file in the archive's catalogue and recorded its path, its
+stated size and its last-modified stamp. It is not "verified at build time": a build
+makes no network call, so a build cannot have checked anything, and a
+timestamp that moved on every rebuild would say less rather than more.
+
+So the note is a statement about a past reading. It does
+not promise the file is reachable this second. If a route fails, that is an outage, and an outage
+changes nothing here on its own: a claim about what exists must not follow a server's health, or every
+maintenance window would look like a withdrawal.
+
+Withdrawing a row is therefore a curation act, not an automatic one. It takes the same URL failing on
+two separate out-of-band runs at least a fortnight apart AND a curator recording the retirement with
+its date and reason. The row then stops appearing anywhere a reader can see while staying on file as
+evidence of what was once held. Where it was a station's last verified row, the station's
+availability goes with it, which is the only way that ever happens.
+
 ## Access conditions
 
 An external resource may have different access conditions from the AusMT package: open, embargoed,

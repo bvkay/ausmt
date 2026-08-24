@@ -120,6 +120,30 @@ def station_policy(default, overrides, station_id, variant=None):
     return (overrides or {}).get(base_station_id(station_id, variant), default)
 
 
+def station_policy_by_published_id(default, overrides, station_id):
+    """The READER-SIDE half of the shared matcher, for a caller that holds a PUBLISHED station id and
+    not the record's `variant` field: the front door's route table is generated from the registers by
+    a tool that must not import the ingest stack, so it cannot call station_policy().
+
+    DELIBERATELY A CONSERVATIVE SUPERSET, and that is the whole safety argument. station_policy
+    masks a record whose base_station_id equals an override key; base_station_id strips a
+    `.<variant>` suffix, so every record it masks has an id that either EQUALS the key or begins
+    with `key + "."`. Matching on exactly that shape therefore covers every station station_policy
+    covers, and may additionally cover a station whose natural DATAID happens to carry a dot after
+    an override key. That direction is the safe one: this resolver can only mask MORE than the build
+    does, and an over-masked station loses a route (a hand-off that 404s) rather than keeping one
+    (a position-withheld station still resolving). Never invert the two.
+
+    Strictest match wins where several keys could apply, for the same reason."""
+    sid = str(station_id) if station_id is not None else ""
+    hits = {pol for key, pol in (overrides or {}).items()
+            if sid == key or sid.startswith(str(key) + ".")}
+    for pol in ("withheld", "generalised"):
+        if pol in hits:
+            return pol
+    return "exact" if hits else default
+
+
 def validate_overrides(overrides, stations):
     """THE VALIDATION half of the one shared matcher (fix round 2): every override key must be the
     BASE station id of at least one ACTUAL parsed station record in `stations` [(path, record), ...]

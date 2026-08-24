@@ -981,6 +981,39 @@ def test_unit_parse_reads_default_and_overrides():
     assert ov == {"A1": "withheld", "A2": "exact"}
 
 
+def test_unit_published_id_resolver_is_a_conservative_superset_of_the_matcher():
+    """THE READER-SIDE HALF of the shared matcher, for a caller holding a PUBLISHED station id and
+    no `variant` field: the front door's route table is generated from the registers by a tool that
+    must not import the ingest stack, so it cannot call station_policy().
+
+    The PROPERTY, not an example. Over every (record id, variant) shape the engine emits, whatever
+    station_policy byte-gates, station_policy_by_published_id byte-gates too. That direction is the
+    safe one: this resolver can only drop MORE routes than the build drops, and an over-dropped
+    route is a hand-off that 404s, never a withheld position that still resolves. Inverting the two
+    would put a masked station's raw time series back on the wire."""
+    ov = {"A1": "withheld", "B2": "generalised"}
+    for sid, variant in (("A1", None), ("A1", "lemigraph"), ("A1", "ohmega"), ("A2", None),
+                         ("A2", "x"), ("B2", "y"), ("B10", None), ("A1x", None), ("A.B", None)):
+        record_id = f"{sid}.{variant}" if variant else sid
+        strict = coordacc.station_policy("exact", ov, record_id, variant)
+        loose = coordacc.station_policy_by_published_id("exact", ov, record_id)
+        if not coordacc.coordinates_served(strict):
+            assert not coordacc.coordinates_served(loose), (record_id, strict, loose)
+    assert coordacc.station_policy_by_published_id("exact", ov, "A1") == "withheld"
+    assert coordacc.station_policy_by_published_id("exact", ov, "A1.lemigraph") == "withheld"
+    assert coordacc.station_policy_by_published_id("exact", ov, "A2") == "exact"
+    assert coordacc.station_policy_by_published_id("exact", ov, "A1x") == "exact", \
+        "the key plus a dot, not a stem: A1x is a different physical site"
+    assert coordacc.station_policy_by_published_id("generalised", {}, "A1") == "generalised", \
+        "no override: the survey default, exactly as station_policy returns it"
+    # The ONE documented over-mask: a natural DATAID carrying a dot after an override key. The build
+    # can tell `pilot` from a variant tag because it holds the record; this reader cannot, so it masks.
+    assert coordacc.station_policy_by_published_id("exact", ov, "A1.pilot") == "withheld"
+    assert coordacc.station_policy_by_published_id(
+        "exact", {"A1": "generalised", "A1.b": "withheld"}, "A1.b.c") == "withheld", \
+        "strictest match wins where more than one key could apply"
+
+
 def test_unit_parse_unknown_enum_raises():
     with pytest.raises(coordacc.CoordinatePolicyError):
         coordacc.parse_coordinate_policy({"coordinates": "fuzzy"})

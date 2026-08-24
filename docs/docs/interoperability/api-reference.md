@@ -52,7 +52,7 @@ Sizes are rounded, and are there to tell you what is cheap to fetch and what is 
 | `/data/mtcat.schema.json` | 21 kB | The JSON Schema the document above validates against; the same bytes sit at `/data/schemas/mtcat/2.0/mtcat.schema.json`. |
 | `/data/products/<slug>/survey-metadata.json` | a few kB each | The per-survey metadata record, a contract: the full credit, funding, subject, identifier, citation and rights detail of one dataset/release. One per catalogued survey, embargoed ones included. |
 | `/data/ausmt-survey-metadata.schema.json` | 13 kB | The JSON Schema survey-metadata.json validates against; the same bytes sit at `/data/schemas/ausmt-survey-metadata/0.1/ausmt-survey-metadata.schema.json`. |
-| `/data/products/<slug>/<station>/station.json` | a few kB each | The per-station record, a contract: identity, location, band, diagnostics, distribution state, provenance, the acquisitions the source describes (`runs`) and the served renditions of the station (`resources`). One per station, withheld ones included. |
+| `/data/products/<slug>/<station>/station.json` | a few kB each | The per-station record, a contract: identity, location, band, diagnostics, distribution state, provenance, the acquisitions the source describes (`runs`) and the addressable renditions of the station (`resources`), which include the time series held at NCI. One per station, withheld ones included. |
 | `/data/ausmt-station.schema.json` | 17 kB | The JSON Schema station.json validates against; the same bytes sit at `/data/schemas/ausmt-station/0.1/ausmt-station.schema.json`. |
 | `/data/manifest.json` | 2.5 MB | The download index: every fetchable artifact with its size and SHA-256. |
 | `/data/stations.geojson` | 773 kB | Every station that has a position, as a GeoJSON point layer. A GIS export; open it in a GIS. |
@@ -132,10 +132,17 @@ Station records are flat and small: `station_id` (the `ausmt_id`), `survey_id`, 
 and `data_type`. `data_type` is one of `AMT`, `BBMT`, `LPMT`, `GDS` or `unknown`, derived from the
 station's shortest period and which transfer functions are present. The survey does not declare it.
 Latitude and longitude are nullable, paired, because a custodian can withhold a position. The schema
-also defines `stations[].has_time_series` (the constant `true`, present only when the catalogue has
-verified that a time-series resource exists) and its survey count `n_stations_time_series_verified`;
-the engine emits neither yet, so both are absent everywhere, which under the absence rule asserts
-nothing.
+also carries `stations[].has_time_series` (the constant `true`, present only where the catalogue has
+verified that a time-series resource for that station EXISTS in an external archive) and its survey
+count `n_stations_time_series_verified`. Both are TRUE-OR-ABSENT: `false` is never emitted and a
+missing key asserts nothing, so never read absence as verified non-existence.
+
+The flag is an EXISTENCE claim, not an access one, and the difference is load-bearing if you build on
+it. It follows the verified-resource register for every station, embargoed ones included, because an
+embargo is a statement about who may fetch the file and not about whether it was recorded; an outage
+at the archive never moves it either. So a station can carry `has_time_series` while publishing no
+route to it at all. The route detail is a separate assertion, and it lives on the station record
+(below), where the access gate has already been applied.
 
 Every field, including the credit and provenance blocks and the access fields, is documented field by
 field in the [MTCAT schema reference](../reference/mtcat-schema.md), which also explains how to read a
@@ -304,6 +311,10 @@ Every example sets `BASE` to the portal root it reads from, and joins the site-r
 
 The portal's own About page carries a short quickstart. This is the long version.
 
+Everything below fetches bytes AusMT serves. The station's raw and processed TIME SERIES are not
+among them: they live at NCI, and a station record points at them rather than carrying them. See
+[Time-series rows point off-site](#time-series-rows-point-off-site-and-are-the-only-rows-that-do).
+
 ### Whole-survey bundles
 
 One request per survey, keyed by the survey slug (`vulcan-2022` and the like). Each published survey is
@@ -462,9 +473,10 @@ block naming the input file and its SHA-256. It is documented field by field in
 Two blocks describe the station rather than the record. `runs` is the acquisition: the run ids, the
 window, the nominal rate, the logger and the channels the source metadata states. It is ABSENT on most
 stations, and absence means run metadata was not asserted, never that no run occurred. `resources` is
-the served renditions of this station and the archives containing them, each with the `path` the
-download manifest records for the same bytes; a resource references its path and never restates a
-hash, so `manifest.json` stays the checksum authority. Both are documented in
+the addressable things that represent this station or contain it: the served renditions and the
+archives containing them, each with the `path` the download manifest records for the same bytes, and
+the station's recorded time series held at NCI. A served resource references its path and never
+restates a hash, so `manifest.json` stays the checksum authority. Both are documented in
 [Per-station products](../reference/station-products.md#116-runs).
 
 The phase-tensor screening result (`classification`, `skew_beta_median_deg`, `pct_periods_3d`,
@@ -489,6 +501,35 @@ only be requested when the survey's `access` is `open`. Check `mtcat.json` first
 There is no index of product directories. Directory listing is off. Build the paths from the
 `survey_id` and the station part of the `station_id` in `mtcat.json`, which is safe here because the
 product path uses the station id verbatim, unlike an artifact filename.
+
+### Time-series rows point off-site, and are the only rows that do
+
+A `resources` row with `kind: time_series` describes the station's recording in the NCI THREDDS
+archive. AusMT stores none of those bytes, proxies none and repackages none, so the row carries no
+`path`, no checksum and no `manifest.json` entry. What it carries instead:
+
+| Member | What it is |
+|---|---|
+| `access_url` | The absolute, percent-encoded download route, always under `https://thredds.nci.org.au/thredds/fileServer/`. Fetch it directly; it is a public URL. |
+| `repository` | `NCI`, the controlled token naming who holds the bytes. |
+| `processing_level` / `packaging` / `format` | Which product this is: `raw` + `packed_archive` + `zip` for the custodian's packed recording, `level0` or `level1` + `mth5` or `netcdf` for the derived products. |
+| `bytes` | The archive's own stated size. Read it as an estimate, not a content-length: THREDDS states sizes to four significant digits, so above a few kilobytes this is that figure converted, and the byte you get is the byte the server sends. Measured across every published row (2026-08-24), the estimate ran LOW rather than high in every case, by at most 0.1%. |
+| `note` | `verified against NCI THREDDS on <date>`, the day an out-of-band crawl read the file. The build makes no network call, so it verifies nothing and says nothing of the kind. |
+
+One row per product level, and a level with nothing verified produces NO row rather than a row with an
+empty route. A row appears only where the register marks the match `verified`, so a match a curator has
+not yet ruled on publishes nothing; the archive's `level_2` tree holds transfer functions rather than
+time series and is excluded from this kind entirely.
+
+`has_time_series` in `mtcat.json` and these rows answer DIFFERENT questions and will disagree by
+design: the flag says a recording exists, the rows say AusMT can point you at one. A withheld or
+position-generalised station carries the flag and no row. Read the flag for discovery and the row for
+fetching, and never derive one from the other.
+
+The portal also offers `/go/ts/<survey>/<station>/<level>`, a redirect that answers `302` with the same
+`access_url`. It exists so the hand-off can be counted at the front door, and it resolves only for
+stations whose rows are published. It is a portal route rather than part of this contract: build on
+`access_url`, which is the address itself.
 
 ---
 

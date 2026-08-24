@@ -3540,7 +3540,7 @@ def _format_breakdown(stats: dict) -> str:
         tail = f', unattributed paths: <b>{_esc(other)}</b>' if other else ""
         out += (f'<p class="opsnote">Single-station files: <b>{_esc(files)}</b> &nbsp;·&nbsp; '
                 f'whole-survey bundles: <b>{_esc(bundles)}</b>{tail}.</p>')
-    return out + _bulk_export_line(stats)
+    return out + _bulk_export_line(stats) + _handoff_line(stats)
 
 
 def _bulk_export_line(stats: dict) -> str:
@@ -3582,6 +3582,47 @@ def _bulk_export_line(stats: dict) -> str:
             f'pack is a separate export the reader runs beside this one; it is assembled entirely in '
             f'the browser and fetches nothing from the server, so it is not counted anywhere on this '
             f'screen.{seam}</p>')
+
+
+def _handoff_line(stats: dict) -> str:
+    """The TIME-SERIES HAND-OFF line: how many times the front door handed a reader into the NCI
+    THREDDS archive, and how many bytes those files hold.
+
+    THE WORDING IS THE POINT, and it is the same discipline as the export-event proxy above. A hand-off
+    is a 302: AusMT answers with the archive's URL and never sees the transfer, so this is a count of
+    REQUESTS and can never be a count of completed downloads. The label says so in words rather than
+    leaving a reader to infer it from a figure that looks exactly like the download count beside it.
+
+    The volume is the REGISTER's size for each file handed off, not a measurement of anything served,
+    for the same reason: the log line for a 302 carries the redirect body's size and nothing else.
+
+    Keyed on the survey SLUG rather than the display label, because that is what the published route
+    carries; a slug is an identifier and a title is prose. Rendered only when the fold actually saw a
+    hand-off: a box that has never handed one off shows nothing here, no line and no zero."""
+    block = stats.get("handoffs") if isinstance(stats, dict) else None
+    if not isinstance(block, dict) or _as_int(block.get("requests")) <= 0:
+        return ""
+    requests = _as_int(block.get("requests"))
+    volume = _human_bytes(_as_int(block.get("bytes")))
+    levels = _counter_line({k: _as_int(v.get("requests")) for k, v in
+                            (block.get("by_level") or {}).items() if isinstance(v, dict)}, limit=6)
+    hosts = ", ".join(sorted(str(k) for k in (block.get("by_destination") or {})))
+    surveys = len(block.get("by_survey") or {})
+    codes = [k for k in (block.get("countries") or {}) if k and k != "unknown"]
+    unattributed = _as_int(block.get("unattributed"))
+    tail = ("" if not unattributed else
+            f' <b>{_esc(unattributed)}</b> resolved to a route the served index no longer publishes, '
+            f'which is table-versus-data drift rather than use.')
+    reach = f'{len(codes)} countr' + ("y" if len(codes) == 1 else "ies")
+    return (f'<p class="opsnote">Measured: time-series hand-offs to NCI THREDDS (requests, not '
+            f'completed transfers) &mdash; <b>{_esc(requests)}</b> request(s) across '
+            f'<b>{_esc(surveys)}</b> survey(s) and <b>{_esc(reach)}</b>, for '
+            f'<b>{_esc(volume)}</b> of archived files'
+            + (f' ({levels})' if levels else "") + f'. AusMT does not host those bytes: the front door '
+            f'answers with the archive\'s own URL ({_esc(hosts) or "no destination recorded"}) and the '
+            f'browser fetches them from there, so this counts what was ASKED for and nothing here can '
+            f'say whether a transfer completed. The volume is the size the verified-resource register '
+            f'records for each file handed off.{tail}</p>')
 
 
 def _collection_line(stats: dict) -> str:
@@ -3745,6 +3786,14 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
         cc = c.get("countries") or {}
         return _esc(len([k for k in cc if k and k != "unknown"]))
 
+    def _handoffs(c):
+        """The month's hand-off REQUESTS, or the plain refusal for a month that carries no such block.
+        The class is younger than both seams this table marks and neither marker speaks for it, so the
+        refusal keys on the block's own PRESENCE: a zero here would state that nobody was handed off
+        in a month when no route existed to hand anyone off."""
+        block = c.get("handoffs")
+        return _NOT_MEASURED if not isinstance(block, dict) else _esc(_as_int(block.get("requests")))
+
     def _measured(fn):
         """`fn` for a month that carries detail days, the plain 'not measured' text for one that does
         not. A month EVERY day of which was seeded from a pre-upgrade daily row holds real downloads
@@ -3788,6 +3837,11 @@ def _monthly_table(stats: dict, *, months: int = 3) -> str:
                    lambda c: (f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("browser")))}'
                               f' / '
                               f'{_esc(_as_int((c.get("downloads_by_client") or {}).get("scripted")))}')))
+        # The archive hand-offs (THREDDS lane). The row is omitted entirely when NO month shown carries
+        # the class, exactly as the state table omits itself rather than render a column of refusals.
+        + (_row("Time-series hand-offs", _measured(_handoffs),
+                note="requests, not completed transfers")
+           if any(isinstance(c.get("handoffs"), dict) for c in cols) else "")
     )
     partial = [c for c in cols if _as_int(c.get("seeded_days")) > 0]
     note = ""

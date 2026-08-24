@@ -28,6 +28,12 @@ WHAT IT DOES, once a day:
     `/data/mtcat.schema.json`, `/data/stations.geojson`). This is a PATH-CLASS signal only: nothing new
     is collected. It is an upper bound on programmatic use (a human can click the footer's mtcat link
     or the About page's GeoJSON link) and is reported as its own line, never folded into visits;
+  * counts a TIME-SERIES HAND-OFF (`/go/ts/<survey>/<station>/<level>`, the front door's 302 into the
+    NCI THREDDS archive) as its own class. It counts REQUESTS, never completed transfers: AusMT hands
+    the reader off and never learns whether a byte moved, and every published string says so. The
+    BYTES and the DESTINATION HOST are JOINED from the served, register-derived ts_access.json,
+    because the log can supply neither -- the `size` on a 302 line is the redirect body and the
+    Location header is never logged;
   * counts DISTINCT MASKED NETWORKS per day as a privacy-safe reach proxy. Caddy has already truncated
     the address to a /24 (v4) or /48 (v6) at the edge, so the distinct set IS a network count. The set
     lives in memory for the one run that folds a day and only its SIZE is written -- no address, masked
@@ -93,6 +99,7 @@ import os
 import sys
 import zlib
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # The daily aggregation cadence, in minutes — stamped into stats.json as the staleness clock the
 # gateway reads (serve_state.ops_status_stale: stale past ~2 periods => ~2 days, record D4).
@@ -138,6 +145,25 @@ _VISIT_PATH = "/data/catalogue.json"
 # figure that is already an upper bound.
 _RELEASE_FAMILY = "releases"
 _RELEASE_BUNDLE_SEGMENT = "bundles"
+
+# The TIME-SERIES HAND-OFF namespace (THREDDS lane, owner ruling R3/R5, namespace record D12).
+# /go/ts/<survey>/<station>/<level> is a front-door TERMINAL route: it answers 302 with the one NCI
+# THREDDS fileServer URL for that file and never reaches this box, so the only trace it leaves is the
+# front door's own masked log line, which is what this fold reads. Exactly three segments below the
+# prefix; anything else is not a route the generated table can name and is not counted.
+_HANDOFF_PREFIX = "/go/ts/"
+_HANDOFF_SEGMENTS = 3
+# The status a hand-off IS. A 302 is the whole event; a 404 on one of these paths is the route table
+# declining to resolve (which is how suppression works) and is not a hand-off at all.
+_HANDOFF_STATUS = 302
+
+# The archive route the BUILD publishes, restated here because this file is stdlib-only and must not
+# import the engine (engine/extract/_stationcheck.py TS_ACCESS_PREFIX is the source of truth; a pin in
+# deploy/tests holds the two together, exactly as one holds the bulk flag to the portal's own token).
+# It is what by_destination is keyed on: the host of the access_url the build emits for a row. That
+# host's cardinality is 1 today, thredds.nci.org.au being the canonical route, which is precisely when
+# a missing breakdown is cheap to add and expensive to add retroactively (record D16).
+_TS_ACCESS_PREFIX = "https://thredds.nci.org.au/thredds/fileServer/"
 
 # The licence sidecar build_portal writes beside every survey MTH5 (bundles/<slug>-tf.LICENSE.txt).
 # It carries no manifest row, so every fetch of one landed in `unattributed` -- and `unattributed`
@@ -590,11 +616,12 @@ def classify(path: str) -> tuple[str, str | None]:
     """(kind, rel) for a request path: ('visit', None) for the catalogue fetch; ('api', None) for one of
     the documented machine-readable entry points the SPA never fetches itself; ('download', rel) for a
     `/data/edi|xml|bundles/...` or `/data/releases/<tag>/bundles/<file>` path where rel is the path
-    below /data/; ('ignore', None) otherwise.
+    below /data/; ('handoff', rel) for a `/go/ts/<survey>/<station>/<level>` archive hand-off where rel
+    is the three-segment route below the prefix; ('ignore', None) otherwise.
 
     The classes are MUTUALLY EXCLUSIVE by construction (the visit path, the four API entry points with
-    their products/ mirrors, the download families and the release-bundle shape are disjoint), so no
-    request is ever counted twice."""
+    their products/ mirrors, the download families, the release-bundle shape and the /go/ts/ namespace
+    are disjoint), so no request is ever counted twice."""
     if path == _VISIT_PATH:
         return "visit", None
     if path in _API_PATHS or path in _API_MIRROR_PATHS:
@@ -613,6 +640,15 @@ def classify(path: str) -> tuple[str, str | None]:
         if (family == _RELEASE_FAMILY and len(parts) == 4
                 and parts[2] == _RELEASE_BUNDLE_SEGMENT and parts[3]):
             return "download", rel
+    # The archive hand-off. The route SHAPE is the whole test here: the survey, station and level a
+    # generated table can name, and nothing shorter or longer. A bare prefix or a probe below one
+    # therefore stays `ignore`, and no path this classifier admits can be anything but a route the
+    # front door had to resolve to answer at all.
+    if path.startswith(_HANDOFF_PREFIX):
+        rel = path[len(_HANDOFF_PREFIX):]
+        parts = rel.split("/")
+        if len(parts) == _HANDOFF_SEGMENTS and all(parts):
+            return "handoff", rel
     return "ignore", None
 
 
@@ -632,6 +668,42 @@ def _release_bundle_row(reverse_map: dict[str, dict], rel: str) -> dict | None:
     return reverse_map.get(f"{_RELEASE_BUNDLE_SEGMENT}/{parts[3]}")
 
 
+def _handoff_row(ts_access: dict, rel: str) -> dict | None:
+    """The served ts_access.json entry ({bytes, url_path}) for a `<survey>/<station>/<level>` route, or
+    None when the served index does not publish it.
+
+    THE KEY IS BUILT FROM THE PATH, exactly as _release_bundle_row builds its bundle filename, and for
+    the same reason: the log carries the route and the joinable identity has to be derived from it. An
+    ausmt_id is `au.<survey slug>.<station id>` and both segments are already the safe shape
+    build_portal.safe_component emits (gen_ts_routes.py refuses a register key that is not), so the
+    three route segments name the row without ever splitting an id on its dots -- which is the
+    direction that would be ambiguous.
+
+    A no-match is DRIFT, not a crash: the table lives on the front door and the data on the box, so a
+    302 can arrive for a route the served index no longer publishes. It is counted in the hand-off
+    family's own unattributed bucket, exactly as an unknown download path is counted in that family's,
+    and never dropped."""
+    if not isinstance(ts_access, dict):
+        return None
+    parts = rel.split("/")
+    if len(parts) != _HANDOFF_SEGMENTS:
+        return None
+    levels = ts_access.get(f"au.{parts[0]}.{parts[1]}")
+    entry = levels.get(parts[2]) if isinstance(levels, dict) else None
+    return entry if isinstance(entry, dict) else None
+
+
+def _handoff_destination(url_path) -> str:
+    """The DESTINATION HOST of one hand-off: the host of the access_url the build emits for this row
+    (_TS_ACCESS_PREFIX + the register's url_path). Taken from the emitted URL rather than from the
+    request, because the request never names it -- the Location header is not logged.
+
+    The row's own path can never move the host: a leading slash is stripped, so a url_path is always
+    joined BELOW the prefix and cannot present itself as an authority."""
+    host = urlsplit(_TS_ACCESS_PREFIX + str(url_path or "").lstrip("/")).netloc
+    return host or "unknown"
+
+
 # --------------------------------------------------------------------------------------------------
 # The fold. `aggregate` is a PURE function (prev_stats + log lines + reverse map + geoip + run date ->
 # new_stats) so the pins can drive it deterministically without touching the filesystem or a timer.
@@ -643,6 +715,7 @@ def _empty_stats() -> dict:
                        "api_requests": 0, "downloads_by_client": {},
                        "downloads_by_select": _empty_select(), "bulk_export_events": 0},
             "downloads": {"by_format": {}, "by_survey": {}, "by_dataset": {}, "by_kind": {}},
+            "handoffs": _empty_handoffs(geo=True),
             "total_served_surveys": 0, "by_collection": {},
             "countries": {}, "by_country_detail": {}, "by_state": {}, "by_state_detail": {},
             "daily": [], "monthly": []}
@@ -660,6 +733,60 @@ _CLASS_METRICS = ("downloads", "visits", "api")
 
 def _empty_class_detail() -> dict:
     return {"downloads": 0, "visits": 0, "api": 0, "bytes": 0}
+
+
+def _empty_handoffs(*, geo: bool = False) -> dict:
+    """One TIME-SERIES HAND-OFF block. The same shape at every grain, which is what lets the cumulative
+    figure, the month, the day row and the archive line be read against each other.
+
+    `requests` is the count and the word is exact: a hand-off is a 302 into the NCI archive, so this
+    counts what was ASKED FOR and can never count what was transferred. `bytes` is the register's size
+    for the file each request was handed, never a measurement of anything served.
+
+    `by_survey` is keyed on the survey SLUG, the segment the route itself carries, and deliberately not
+    on the display label the download family uses: the route is a published URL contract, a slug is an
+    identifier, and a title is prose that can be re-worded between builds (the same argument
+    build_collection_map makes when it prefers the slug).
+
+    `geo` adds the by-country map, and it is added at the CUMULATIVE and CALENDAR-MONTH grains ONLY.
+    That is the one line that must not move (see _count_geo): a named country on a named day is a
+    smaller cell than the named-state-in-a-named-month the owner already ruled out, so no day row and
+    no archive line carries one."""
+    out = {"requests": 0, "bytes": 0, "unattributed": 0,
+           "by_survey": {}, "by_level": {}, "by_destination": {}}
+    if geo:
+        out["countries"] = {}
+    return out
+
+
+def _coerce_handoff_map(raw) -> dict[str, dict]:
+    """A {key: {requests, bytes}} hand-off map from a prior file: the shape by_survey, by_level and
+    by_destination share. Absent reads back empty and starts accruing, like every additive dimension
+    in this file."""
+    out: dict[str, dict] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, val in raw.items():
+        if not isinstance(key, str) or not isinstance(val, dict):
+            continue
+        out[key] = {"requests": _as_int(val.get("requests")), "bytes": _as_int(val.get("bytes"))}
+    return out
+
+
+def _coerce_handoffs(raw, *, geo: bool = False) -> dict:
+    """A hand-off block from a prior file, clamped to the keys this fold writes so a hand-edited file
+    cannot push an arbitrary column onto the screen. Tolerant of absence: the class is detected by KEY
+    PRESENCE, never by a version bump (see SCHEMA_VERSION)."""
+    out = _empty_handoffs(geo=geo)
+    if not isinstance(raw, dict):
+        return out
+    for key in ("requests", "bytes", "unattributed"):
+        out[key] = _as_int(raw.get(key))
+    for key in ("by_survey", "by_level", "by_destination"):
+        out[key] = _coerce_handoff_map(raw.get(key))
+    if geo and isinstance(raw.get("countries"), dict):
+        out["countries"] = {str(k): _as_int(v) for k, v in raw["countries"].items()}
+    return out
 
 
 def _empty_select() -> dict:
@@ -700,7 +827,8 @@ def _empty_month(month: str) -> dict:
             "bulk_export_events": 0,
             "formats": {}, "kinds": {}, "surveys": {}, "countries": {}, "by_country_detail": {},
             "by_state": {}, "by_state_detail": {}, "downloads_by_client": {},
-            "downloads_by_select": _empty_select(), "by_collection": {}}
+            "downloads_by_select": _empty_select(), "by_collection": {},
+            "handoffs": _empty_handoffs(geo=True)}
 
 
 def _as_int(v, default: int = 0) -> int:
@@ -822,6 +950,14 @@ def _coerce_month_rows(raw) -> list[dict]:
         m["by_state_detail"] = _coerce_class_detail(row.get("by_state_detail"))
         m["by_collection"] = _coerce_volume_map(row.get("by_collection"))
         m["surveys"] = _coerce_survey_map(row.get("surveys"))
+        # The hand-off block is the one dimension here carried by KEY PRESENCE rather than by value: a
+        # month folded before the class existed keeps NO such key, so the screen renders "not measured"
+        # for it instead of a zero nobody measured. A month this fold touches starts dense from
+        # _empty_month above and accrues from there.
+        if isinstance(row.get("handoffs"), dict):
+            m["handoffs"] = _coerce_handoffs(row["handoffs"], geo=True)
+        else:
+            m.pop("handoffs", None)
         out.append(m)
     out.sort(key=lambda r: r["month"])
     return out
@@ -912,6 +1048,10 @@ def _coerce_prev(prev: dict | None) -> dict:
     s["by_country_detail"] = _coerce_class_detail(prev.get("by_country_detail"))
     s["by_state_detail"] = _coerce_class_detail(prev.get("by_state_detail"))
     s["by_collection"] = _coerce_volume_map(prev.get("by_collection"))
+    # The hand-off family, youngest of the lot and additive like every one before it: a file written
+    # before the /go/ts routes existed reads back with the block empty and starts accruing. Nothing is
+    # back-filled -- those days hold no hand-off because there was no route to request.
+    s["handoffs"] = _coerce_handoffs(prev.get("handoffs"), geo=True)
     # Day rows are carried forward WHOLE, unknown keys and all. A row written by a build that briefly
     # recorded a per-day `states` map keeps it and simply ages out of the 92-day window; it is not
     # stripped, because rewriting history on upgrade is the one thing this file never does.
@@ -933,7 +1073,8 @@ def _coerce_prev(prev: dict | None) -> dict:
 def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: GeoIP,
               run_dt: dt.datetime, *, daily_keep: int = DEFAULT_DAILY_KEEP_DAYS,
               au_states: "AuStates | None" = None, collections: dict[str, str] | None = None,
-              served_build: str | None = None, archive_out: list | None = None) -> dict:
+              served_build: str | None = None, archive_out: list | None = None,
+              ts_access: dict | None = None) -> dict:
     """Fold every COMPLETE day in `lines` into `prev`, returning the new cumulative stats dict.
 
     Only dates d with last_folded_date < d < run_dt.date() are folded (a strictly-earlier complete
@@ -951,6 +1092,11 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         client class is also recorded, so the scripted share is reportable rather than merely admitted;
       * a DOWNLOAD admits 200 and 206. Caddy's file_server advertises byte ranges and the MTH5 bundles
         are the largest artifacts served, so 200-only made every resumed or ranged transfer vanish;
+      * a HAND-OFF admits 302 and nothing else, because the 302 IS the event. It is NOT de-duplicated,
+        and that is the mirror of the download rule rather than an exception to it: the dedupe exists
+        because ONE download action logs two lines here (the renderer cancels, the download manager
+        refetches) and a ranged transfer logs one per fragment. A hand-off is terminal at the front
+        door, so one action logs exactly one line and every line is another request;
       * within ONE folded day an identical (masked network, path) counts ONCE toward the download COUNT
         while every line's BYTES still sum. One user action logs two lines on a Content-Disposition
         path (the renderer cancels, the download manager refetches) and a ranged transfer logs one line
@@ -967,6 +1113,12 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     `collections` is the OPTIONAL {survey label: collection_id} map from the served mtcat.json
     (build_collection_map). Present, a download to a member survey also bumps its collection at the
     cumulative and month grains; absent, no collection dimension is written for that run.
+
+    `ts_access` is the OPTIONAL served hand-off index ({ausmt_id: {level: {bytes, url_path}}}, written
+    by the build from the verified-resource registers). It is the ONLY source of a hand-off's bytes and
+    destination host, because the log carries neither. Absent, hand-offs are still counted as requests
+    and land in their own unattributed bucket: a route count with no size is honest, an invented size
+    would not be.
 
     `archive_out`, when given, receives ONE dict per day this call actually folded: the day at maximal
     NON-GEO granularity, for the append-only archive (see _archive_line). It is an out channel and not
@@ -988,7 +1140,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
     by_state = stats["by_state"]
     by_state_detail = stats["by_state_detail"]
     by_collection = stats["by_collection"]
+    handoffs = stats["handoffs"]
     collections = collections or {}
+    ts_access = ts_access or {}
     daily_index = {d["date"]: d for d in stats["daily"]}
     month_index = {m["month"]: m for m in stats["monthly"]}
     # date -> set of MASKED networks seen on it, for THIS run only. Caddy already truncated the address
@@ -1040,6 +1194,9 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
         if kind in ("visit", "api"):
             if rec["status"] not in (200, 304):
                 continue
+        elif kind == "handoff":
+            if rec["status"] != _HANDOFF_STATUS:  # the 302 IS the hand-off; a 404 is the table refusing
+                continue
         elif rec["status"] not in (200, 206):   # download: a complete OR a ranged/resumed transfer
             continue
         day = _day_row(daily_index, stats["daily"], date)
@@ -1066,6 +1223,37 @@ def aggregate(prev: dict | None, lines, reverse_map: dict[str, dict], geoip: Geo
             _count_geo(geoip, au_states, rec["address"], countries, by_country_detail, by_state,
                        by_state_detail, month, metric="api")
             geo_days_seen[date] = date[:7]
+        elif kind == "handoff":
+            # THE HAND-OFF, and the join is the whole of it (record D4). The log line says WHICH route
+            # was asked for and nothing else that matters: its `size` is the redirect body and the
+            # Location it sent is not logged at all. So the size and the destination host come from the
+            # served, register-derived index, and a route that index does not publish is drift -- one
+            # request, no bytes, no survey and no level, in this family's own unattributed bucket.
+            entry = _handoff_row(ts_access, rel)
+            size = max(_as_int(entry.get("bytes")), 0) if entry else 0
+            survey, _station, level = rel.split("/")
+            destination = _handoff_destination(entry.get("url_path")) if entry else None
+            for block in (handoffs,
+                          month.setdefault("handoffs", _empty_handoffs(geo=True)),
+                          day.setdefault("handoffs", _empty_handoffs()),
+                          arc["handoffs"]):
+                block["requests"] += 1
+                block["bytes"] += size
+                if entry is None:
+                    block["unattributed"] += 1
+                    continue
+                _bump_handoff(block["by_survey"], survey, size)
+                _bump_handoff(block["by_level"], level, size)
+                _bump_handoff(block["by_destination"], destination, size)
+                if "by_route" in block:      # the archive's station-grain cell, and only there
+                    _bump_handoff(block["by_route"], rel, size)
+            # Geography, at the CUMULATIVE and CALENDAR-MONTH grains and nowhere finer. It is this
+            # family's OWN country map: the combined `countries` map is what the AU state rows
+            # reconcile against and what the screen's caption scopes to downloads, visits and API
+            # requests, so a fourth class must not silently join that arithmetic.
+            cc = geoip.country(rec["address"])
+            _bump(handoffs["countries"], cc)
+            _bump(month["handoffs"]["countries"], cc)
         else:
             size = max(rec["size"], 0)
             # WITHIN-DAY DEDUPE. The bytes of every admitted line sum (so an abort+refetch pair and a
@@ -1279,6 +1467,19 @@ def _bump_volume(index: dict, key: str, size: int, *, counted: bool = True,
             row[kind + "s"] += 1
 
 
+def _bump_handoff(index: dict, key: str, size: int) -> None:
+    """One hand-off REQUEST of `size` register bytes against `key` in a {key: {requests, bytes}} map:
+    the shape by_survey, by_level, by_destination and the archive's by_route all share. There is no
+    `counted` flag here and there must not be one -- a hand-off is terminal at the front door, so
+    every admitted line is another request rather than another leg of one (see `aggregate`)."""
+    row = index.get(key)
+    if not isinstance(row, dict):
+        row = {"requests": 0, "bytes": 0}
+        index[key] = row
+    row["requests"] = _as_int(row.get("requests")) + 1
+    row["bytes"] = _as_int(row.get("bytes")) + size
+
+
 def _bump_survey(index: dict, survey: str, size: int, *, counted: bool = True,
                  country: str | None = None, kind: str | None = None) -> None:
     """One download line of `size` bytes against `survey` in a
@@ -1408,6 +1609,10 @@ def _prune_daily(daily: list, last_folded, keep_days: int) -> list:
 
 
 def _day_row(index: dict, daily: list, date: str) -> dict:
+    # The hand-off block is added on FIRST USE, not here (see `aggregate`): a day row is created for
+    # every counted request of any class, and a dense zeroed block on a day that saw no hand-off would
+    # state a measurement rather than the absence of one. It carries no by-country map and no station
+    # grain -- both are barred below the month (the geo boundary) or belong to the archive.
     row = index.get(date)
     if row is None:
         row = {"date": date, "downloads": 0, "visits": 0, "download_bytes": 0, "api_requests": 0,
@@ -1455,9 +1660,29 @@ def _archive_day(index: dict, date: str) -> dict:
         row = {"date": date, "downloads": 0, "visits": 0, "api": 0, "networks": 0,
                "bulk_events": 0, "download_bytes": 0, "unattributed": 0, "by_format": {},
                "by_kind": {}, "by_client": {}, "by_select": {}, "by_survey": {}, "by_dataset": {},
-               "by_collection": {}}
+               "by_collection": {}, "handoffs": _empty_handoffs()}
+        # The hand-off family's STATION-GRAIN cell, keyed on <survey>/<station>/<level>: the by_dataset
+        # of this family, and archive-only for the same reason. The 92-day window is exactly what
+        # otherwise loses "which station, on which day" forever, and this file is never served.
+        row["handoffs"]["by_route"] = {}
         index[date] = row
     return row
+
+
+def _handoff_archive_block(row) -> dict:
+    """One day's hand-off block as the archive writes it: SPARSE, like every other map on an archive
+    line, and EMPTY (so the key is omitted entirely) for a day that saw no hand-off. It carries the
+    route detail and no geography at all -- the by-country map lives at the month and above."""
+    if not isinstance(row, dict):
+        return {}
+    out: dict = {}
+    for key in ("requests", "bytes", "unattributed"):
+        if _as_int(row.get(key)):
+            out[key] = _as_int(row[key])
+    for key in ("by_survey", "by_level", "by_destination", "by_route"):
+        if row.get(key):
+            out[key] = row[key]
+    return out
 
 
 def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
@@ -1482,6 +1707,9 @@ def _archive_line(row: dict, *, served_build: str | None = None) -> dict:
                 "by_collection"):
         if row.get(key):
             out[key] = row[key]
+    handoffs = _handoff_archive_block(row.get("handoffs"))
+    if handoffs:
+        out["handoffs"] = handoffs
     if served_build:
         out["served_build"] = served_build
     return out
@@ -1666,13 +1894,19 @@ def main(argv=None) -> int:
         served_dir = Path(manifest_path).parent
         collections = build_collection_map(_load_json(served_dir / "mtcat.json"), reverse_map)
         served_build = _served_build_id(served_dir)
+        # The hand-off index, read from the SERVED tree beside the manifest exactly as mtcat.json and
+        # build.json are, and optional in exactly the same way: the build emits it only when a station
+        # actually has a verified, open archive route (a deployment with none serves no such file).
+        # Absent, hand-offs still count as requests and carry no bytes -- see `aggregate`.
+        ts_access = _load_json(served_dir / "ts_access.json") or {}
         prev = _load_json(stats_file)
         skipped_logs: list[str] = []
         lines = read_log_lines(log_dir, skipped=skipped_logs)
         archive_rows: list[dict] = []
         stats = aggregate(prev, lines, reverse_map, geoip, run_dt, daily_keep=daily_keep,
                           au_states=au_states, collections=collections,
-                          served_build=served_build, archive_out=archive_rows)
+                          served_build=served_build, archive_out=archive_rows,
+                          ts_access=ts_access)
         dest_dir = Path(stats_file).parent
         if not dest_dir.is_dir():
             print(f"aggregate_stats: state dir {dest_dir} does not exist -- not writing stats.json "
@@ -1684,7 +1918,8 @@ def main(argv=None) -> int:
         archived = append_daily_archive(archive_file, archive_rows)
         print(f"aggregate_stats: folded up to {stats.get('last_folded_date')} -- "
               f"downloads={stats['totals']['downloads']} visits={stats['totals']['visits']} "
-              f"api={stats['totals']['api_requests']} months={len(stats['monthly'])} "
+              f"api={stats['totals']['api_requests']} "
+              f"handoffs={stats['handoffs']['requests']} months={len(stats['monthly'])} "
               f"days_kept={len(stats['daily'])} "
               f"manifest_rows={len(reverse_map)} geoip_rows={geoip.row_count} "
               f"au_state_rows={au_states.row_count} collections={len(collections)} "

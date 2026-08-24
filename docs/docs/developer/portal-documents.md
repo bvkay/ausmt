@@ -31,9 +31,10 @@ Where this page and the build disagree, the build is right.
 | [`build.json`](#buildjson) | `/data/build.json` | always |
 | [`build_provenance.json`](#build_provenancejson) | `/data/build_provenance.json` | always |
 | [`coord_policy.json`](#coord_policyjson) | `/data/coord_policy.json` | only when a station is not exact |
+| [`ts_access.json`](#ts_accessjson) | `/data/ts_access.json` | only when a station has a verified, open archive route |
 
-`coord_policy.json` is emitted only when it would carry information, so a consumer must read an absent
-file as a statement rather than an error. The rule is on its entry below.
+`coord_policy.json` and `ts_access.json` are emitted only when they would carry information, so a
+consumer must read an absent file as a statement rather than an error. The rule is on each entry below.
 
 ---
 
@@ -237,3 +238,24 @@ A compact map of `ausmt_id` to coordinate policy, for the stations whose policy 
 | Allowed values | `generalised`, `withheld` |
 | Emitted | only when at least one station in the corpus is not exact |
 | Note | Absence of the file means every served position is exact. It carries no coordinate, only the policy string. The per-station product carries the same value as [`coordinate_policy`](../reference/station-products.md#115-coordinate_policy); this file is the boot-time surface the portal drawer reads so it can badge a position without fetching a station record. |
+
+---
+
+## ts_access.json
+
+The archive routes this deployment may hand a reader off to: `ausmt_id` to level token to the size and
+the archive's own path for that station's time series at that level.
+
+```json
+{"au.example-2021.S07": {"raw_packed": {"bytes": 9868836788, "url_path": "my80/.../S07 [REMOTE].zip"},
+                         "level1_mth5": {"bytes": 20360000, "url_path": "my80/.../S07.h5"}}}
+```
+
+| | |
+|---|---|
+| Definition | Per-station, per-level route detail for the verified time series held at NCI. |
+| Type | object of objects; `bytes` integer, `url_path` string |
+| Level tokens | `raw_packed`, `level0`, `level1_mth5`, `level1_netcdf` |
+| Emitted | only when at least one station in the corpus has a verified, open route |
+| Note | MEMBERSHIP is the access decision and it is made in the build: a station whose survey is not served, whose position is generalised or withheld, or whose register rows are pending or retired, is absent from this file, and `level2` never appears (that tree holds transfer functions, not time series). `url_path` is the archive's own string verbatim; the absolute download URL is `https://thredds.nci.org.au/thredds/fileServer/` plus its percent-encoded form, the same string the station record publishes as `access_url`. AusMT hosts none of these bytes. |
+| Absence | a deployment that publishes no download index; consumers say exactly that, never "could not be loaded". |

@@ -64,9 +64,9 @@ async function loadPhase1(){
 // The heavy products, issued in PARALLEL alongside phase 1 and awaited by NOBODY on the first-paint path.
 // Each assigns its global and settles its own gate, so a consumer waits only for the product it actually
 // reads (a station drawer's plots need tf; the Files tab needs the manifest; neither needs the other).
-// Returns the three gates so a caller (and the headless drivers) can observe hydration.
+// Returns the four gates so a caller (and the headless drivers) can observe hydration.
 function startHydration(){
-  HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";
+  HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
   // A tf/sci FAILURE is not absence: before the phased boot these were part of the required Promise.all and
   // a bad fetch showed the load-error page. First paint no longer depends on them, so the failure is recorded
   // as "failed" and the products fall back to EMPTY arrays; the empty array keeps every positional deref
@@ -77,7 +77,13 @@ function startHydration(){
   // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
   // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
   MANIFEST_READY=fetchOptional("manifest.json",null).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
-  return [TF_READY,SCI_READY,MANIFEST_READY];
+  // THREDDS A5/D6: ts_access.json is OPTIONAL by contract - the engine writes it only when the
+  // register projects at least one open, verified route, so a 404 IS the honest absence and there
+  // is no "failed" state to report. The fallback is {} rather than null so every consumer reads one
+  // shape, and the difference the Availability controls render is TSACC===null (still in flight)
+  // against an empty object (this deployment publishes no download index).
+  TSACC_READY=fetchOptional("ts_access.json",{}).then(v=>{TSACC=v||{};HYDR.tsaccess="ready";});
+  return [TF_READY,SCI_READY,MANIFEST_READY,TSACC_READY];
 }
 
 // ---- download manifest resolver (slice #4 — the distribution backbone) ------------------------
@@ -111,4 +117,38 @@ function mfFileIndex(){
   _MF_IDX=ix;_MF_IDX_SRC=MANIFEST;return ix;}
 function artifactsFor(ausmt_id){return mfFileIndex().get(ausmt_id)||[];}
 function bundlesForSlug(slug){return slug?mfRows("bundles").filter(r=>r.slug===slug&&r.url):[];}
+// ---- the time-series hand-off index (THREDDS A5) -------------------------------------------------
+// ts_access.json indexes the archive routes this deployment may hand a reader off to:
+// {ausmt_id: {level token: {bytes, url_path}}}. MEMBERSHIP IS THE ACCESS DECISION and it was made in
+// the build - a withheld, coordinate-gated, adjudication-pending or retired station is absent, and
+// level_2 (which holds transfer functions, not time series) never appears at all. So no consumer
+// here re-derives availability from survey metadata; it reads this index and nothing else.
+function tsAccessKnown(){return TSACC!==null;}
+function tsRoutesFor(ausmt_id){return (TSACC&&TSACC[ausmt_id])||null;}
+// The route the reader is handed: the one string carrying survey/station/level into the front-door
+// log, so measurement needs no beacon and no track() call. The edge 302s what its table holds and
+// 404s the rest, so a gated station cannot be reached by constructing a path; no slug, no route.
+function tsGoRoute(s,level){
+  if(!s||!s.slug||!s.id||!level)return null;
+  return location.origin+"/go/ts/"+encodeURIComponent(s.slug)+"/"+encodeURIComponent(s.id)+"/"+encodeURIComponent(level);}
+// The archive's own address for one register url_path (the reference field beside the route).
+// MIRRORS _stationcheck.ts_access_url (quote(url_path, safe="/")): encodeURIComponent alone eats
+// `/` and leaves !'()* unescaped where Python escapes them, so the set is spelled out. A mirror,
+// not a caller, so the agreement is held by the shared vector file
+// (engine/tests/fixtures/ts_url_vectors.json) pinning both sides; `C5 [REMOTE].zip` is the case.
+const TS_FILESERVER="https://thredds.nci.org.au/thredds/fileServer/";
+// The `u` flag is load-bearing, not tidiness: without it the class matches per UTF-16 CODE UNIT, so
+// a code point above the BMP arrives as a lone surrogate and encodeURIComponent throws URIError -
+// which, from #dlTs, would abort the whole hand-off export with no file and no message. With it the
+// replacer receives whole code points and encodes their UTF-8 bytes, which is what the Python leaf
+// does. Pinned by the astral vector in the shared file.
+function tsArchiveUrl(p){return TS_FILESERVER+String(p==null?"":p).trim().replace(/^\/+/,"")
+  .replace(/[^A-Za-z0-9_.~/-]/gu,c=>{const e=encodeURIComponent(c);
+    return e===c?"%"+c.charCodeAt(0).toString(16).toUpperCase():e;});}
+// Archive-scale sizes: fmtBytes stops at MB (right for served files, wrong for a 9.87 GB hand-off
+// reading "9411.6 MB"). Identical rounding at every shared step, three more units above.
+function fmtBigBytes(n){if(n==null)return"";
+  const u=["B","KB","MB","GB","TB"];let i=0,v=Number(n);
+  while(v>=1024&&i<u.length-1){v/=1024;i++;}
+  return (i===0?String(v):(i===1?v.toFixed(0):v.toFixed(1)))+" "+u[i];}
 function fmtBytes(n){if(n==null)return"";if(n<1024)return n+" B";if(n<1048576)return(n/1024).toFixed(0)+" KB";return(n/1048576).toFixed(1)+" MB";}

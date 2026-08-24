@@ -133,7 +133,23 @@ jobs:
       #   tests/test_presence_rule.py         no mt_metadata default is ever emitted as a source assertion
       #   tests/test_run_facts.py             the six >INFO dialect extractors for acquisition facts
       #   tests/test_station_runs.py          runs[] emission: the D2 gate, the D9 channel rule
+      #   tests/test_ts_index_register.py     the offline verified-resource register: the opt-in flag,
+      #                                       the closed vocabularies, the unmatched-station stop
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
+      #   tests/test_station_time_series.py   kind=time_series rows from the register: the route, the
+      #                                       vocabularies, the D19 exclusion, the access gate and
+      #                                       the ts_access.json boot artifact it renders beside them
+      #   tests/test_ts_projection.py         the ONE projection: existence follows the register,
+      #                                       route detail follows the gate, level2 opens nothing
+      #   tests/test_access_gate.py           the C1 access gate over BUILT output, INCLUDING the
+      #                                       root-level leak sweep: no NCI path, filename or size for
+      #                                       a withheld, request-only or pending station reaches
+      #                                       ts_access.json, mtcat.json or the pointer file
+      #   tests/test_url_registry.py          the published-URL freeze, and the negative that keeps a
+      #                                       /go/ts/ hand-off route out of the sitemap for good
+      #   tests/test_ts_url_vectors.py        the ONE percent-encoder, against the shared vector file
+      #                                       the portal's JS mirror and the front door's route-table
+      #                                       generator are held to as well
       #   tests/test_station_semantics.py     the semantic layer beyond JSON Schema, in the build and
       #                                       at both of verify.py's wiring sites
       #   tests/test_station_emission.py      station.json emission semantics over BUILT output: the
@@ -145,7 +161,13 @@ jobs:
       #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
       #   tests/test_golden_edi.py            golden pins on the sole engine's product outputs
       #   tests/test_mini_yaml_parity.py      PyYAML-vs-_mini_yaml survey.yaml projection parity
-      # (28 files at 2026-08-23; the counts move with the suite.)
+      # (the 34 enumerated above at 2026-08-24, plus tests/test_ci_check_skips.py which gates the
+      #  skip tripwire itself; the counts move with the suite.)
+      # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
+      # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
+      # the four time-series projection surfaces (ts_access.json, has_time_series, /go/ts/ and the
+      # shared ts_url_vectors.json) must be listed here, so the next one is caught on the PR that
+      # adds it whatever it is named.
       #
       # RESIDUAL RISK, STATED HONESTLY: a HOST-ENV-ONLY failure in an out-of-subset test now
       # surfaces on the push-to-main full run, not on the PR. Accepted because the in-image full
@@ -170,8 +192,11 @@ jobs:
       # hollowed-out suite. The tripwire fails on any skip not on tests/ci_check_skips.py's
       # allow-list. In THIS lane the mt_metadata/mth5 stack IS installed (the lock above) and there is
       # no sibling ausmt-surveys checkout, so the only legitimate skips are the allow-listed
-      # dev-box-only ones (realdata corpus / preflight corpus); the subset contains none of those
-      # files, so its expected skip count is zero.
+      # dev-box-only ones (realdata corpus / preflight corpus); the subset carries neither of those
+      # files, so its expected skip count is ONE: tests/test_url_registry.py's real-build arm, which
+      # re-runs the slug/id freeze against an actual BUILT corpus (AUSMT_URL_REGISTRY_DATA) that no
+      # CI lane produces. That reason is already on the tripwire's allow-list, and the rest of that
+      # file - the fixture behaviour, the committed registry, the /go/ts/ negative - runs here.
       - name: Tests, PR gate subset (product/equivalence/schema; with skip accounting)
         if: github.event_name == 'pull_request'
         run: |
@@ -197,7 +222,13 @@ jobs:
             tests/test_presence_rule.py \
             tests/test_run_facts.py \
             tests/test_station_runs.py \
+            tests/test_ts_index_register.py \
             tests/test_station_resources.py \
+            tests/test_station_time_series.py \
+            tests/test_ts_projection.py \
+            tests/test_access_gate.py \
+            tests/test_url_registry.py \
+            tests/test_ts_url_vectors.py \
             tests/test_station_semantics.py \
             tests/test_station_emission.py \
             tests/test_station_invariants.py \

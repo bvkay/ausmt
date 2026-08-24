@@ -41,7 +41,13 @@ _BUILDER = _REPO / "engine" / "extract" / "build_portal.py"
 # The flags that gate a DISTRIBUTION PRODUCER: each one decides whether bytes exist for users to
 # download. A flag that only changes build mechanics (--incremental, --cache-mode) is deliberately not
 # in this list; its absence costs speed, not products.
-_PRODUCER_FLAGS = ("--bundle-edi", "--survey-h5", "--station-h5")
+#
+# --ts-index is here for the same reason under a different shape: the bytes are NCI's, but the flag
+# decides whether ts_access.json, has_time_series and the kind=time_series rows exist at all. Its
+# absence is worse than a missing producer, because the ROUTE TABLE ships to the VPS through
+# deploy/frontdoor/ regardless: the edge would 302 every hand-off while the box published nothing to
+# name them. Loud rather than silent (doctor-box.sh's ts-parity leg FAILs on it), but wrong.
+_PRODUCER_FLAGS = ("--bundle-edi", "--survey-h5", "--station-h5", "--ts-index")
 
 
 def _rebuild_data_recipe() -> str:

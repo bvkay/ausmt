@@ -78,6 +78,11 @@ CLEAN = {
                                              "identifies": "raw_packed"}]},
         {"id": "emtfxml", "kind": "transfer_function", "format": "emtfxml", "provenance_role": "derived",
          "representation_role": "alternate", "path": "xml/example-basin-2024/EB077.xml"},
+        {"id": "ts-raw_packed", "kind": "time_series", "format": "zip", "provenance_role": "source",
+         "representation_role": "original",
+         "access_url": stcheck.TS_ACCESS_PREFIX + "my80/AuScope/Example/EB077%20%5BREMOTE%5D.zip",
+         "repository": "NCI", "processing_level": "raw", "packaging": "packed_archive",
+         "bytes": 9868836788, "note": "verified against NCI THREDDS on 2026-08-24"},
     ],
 }
 
@@ -161,6 +166,71 @@ def _archive_row_with_no_membership_rule(doc):
     doc["resources"].append(_archive_row("tarball"))
 
 
+def _ts_row(doc):
+    return next(r for r in doc["resources"] if r["kind"] == "time_series")
+
+
+def _time_series_without_a_route(doc):
+    """A row whose whole job is to name where the bytes are, not naming it."""
+    _ts_row(doc).pop("access_url")
+
+
+def _time_series_without_a_processing_level(doc):
+    """Which product of this station the file IS. Nothing downstream can guess it, and a chooser
+    button, a route and a drawer row all key off it."""
+    _ts_row(doc).pop("processing_level")
+
+
+def _time_series_route_with_a_literal_space(doc):
+    """NVP_2019's `C5 [REMOTE].zip`: only the encoded form answers 200, so an unencoded route is a
+    published dead download."""
+    _ts_row(doc)["access_url"] = stcheck.TS_ACCESS_PREFIX + "my80/AuScope/Example/C5 [REMOTE].zip"
+
+
+def _time_series_route_walking_up(doc):
+    """The encoded-route rule admits `.` and `/` because real archive filenames carry both, so a
+    `..` segment passes it: the host stays fixed, but a browser normalises the path before sending
+    and the published link resolves to an arbitrary file on thredds.nci.org.au. That is a wrong
+    claim under an AusMT byline, and it is also the one string the front door's route table refuses,
+    so without this rule station.json can publish a route the edge can never serve."""
+    _ts_row(doc)["access_url"] = stcheck.TS_ACCESS_PREFIX + "my80/../../../../etc/passwd"
+
+
+def _time_series_route_walking_up_percent_encoded(doc):
+    """The same walk written `%2E%2E`, which a literal-only test would let through: the check reads
+    the DECODED segments, because the server decodes before it resolves."""
+    _ts_row(doc)["access_url"] = stcheck.TS_ACCESS_PREFIX + "my80/%2E%2E/%2E%2E/etc/passwd"
+
+
+def _time_series_route_on_another_host(doc):
+    _ts_row(doc)["access_url"] = "https://example.invalid/thredds/fileServer/my80/x.zip"
+
+
+def _time_series_route_over_http(doc):
+    _ts_row(doc)["access_url"] = stcheck.TS_ACCESS_PREFIX.replace("https://", "http://") + "my80/x.zip"
+
+
+def _time_series_route_through_opendap(doc):
+    """IMPLEMENTATION:23: this archive answers 500 on dodsC for these files. The prefix rule makes
+    the substitution structurally impossible; this is the pin that proves it."""
+    _ts_row(doc)["access_url"] = "https://thredds.nci.org.au/thredds/dodsC/my80/x.h5"
+
+
+def _opendap_service_url(doc):
+    _ts_row(doc)["service_urls"] = [{"kind": "opendap", "url": "https://thredds.nci.org.au/thredds/dodsC/x"}]
+
+
+def _time_series_at_level2(doc):
+    """D19 fail-closed. The archive's level_2 tree holds TRANSFER FUNCTIONS, so a level2 row under
+    this kind asserts a recorded time series for a station that has none. The emitter routes no such
+    row; this makes the exclusion a rule rather than an emitter habit."""
+    _ts_row(doc)["processing_level"] = "level2"
+
+
+def _time_series_naming_a_run_this_record_does_not_publish(doc):
+    _ts_row(doc)["derived_from_runs"] = ["EB077-r09"]
+
+
 REJECTED = [
     ("run time_period ends before it starts", _end_before_start),
     ("duplicate run id", _duplicate_run_id),
@@ -176,6 +246,19 @@ REJECTED = [
     ("a null fold member in diagnostics", _null_fold_member),
     ("an archive row this record put no bytes into", _archive_row_the_record_put_no_bytes_into),
     ("an archive row with no membership rule", _archive_row_with_no_membership_rule),
+    ("a time_series row with no route", _time_series_without_a_route),
+    ("a time_series row with no processing level", _time_series_without_a_processing_level),
+    ("a time_series route carrying a literal space", _time_series_route_with_a_literal_space),
+    ("a time_series route walking up out of the fileServer root", _time_series_route_walking_up),
+    ("a time_series route walking up in percent-encoded form",
+     _time_series_route_walking_up_percent_encoded),
+    ("a time_series route on another host", _time_series_route_on_another_host),
+    ("a time_series route that is not https", _time_series_route_over_http),
+    ("a time_series route through the OPeNDAP service", _time_series_route_through_opendap),
+    ("an OPeNDAP service_urls entry", _opendap_service_url),
+    ("a time_series row at level 2", _time_series_at_level2),
+    ("a time_series row naming a run the record does not publish",
+     _time_series_naming_a_run_this_record_does_not_publish),
 ]
 
 WITHHELD_REJECTED = [
@@ -283,6 +366,25 @@ def test_the_build_refuses_to_publish_a_violating_document(tmp_path, monkeypatch
     assert bp.main(argv) == 2, "a duplicated resource id must fail the build"
 
 
+def test_the_build_refuses_to_publish_an_unresolvable_hand_off_route(tmp_path, monkeypatch):
+    """THE FIRST ENFORCEMENT SITE for the hand-off rules. Nothing local corroborates a route to
+    another host, so the gate is the only thing between a mis-assembled URL and a published dead
+    download. Injected at the render seam, as above, because the emitter is correct."""
+    pytest.importorskip("mt_metadata")
+    real = bp.station_document
+
+    def _unencoded(*a, **kw):
+        doc = real(*a, **kw)
+        if doc.get("resources"):
+            doc["resources"].append({**copy.deepcopy(CLEAN["resources"][-1]),
+                                     "access_url": stcheck.TS_ACCESS_PREFIX + "my80/C5 [REMOTE].zip"})
+        return doc
+
+    monkeypatch.setattr(bp, "station_document", _unencoded)
+    out, argv = _build(tmp_path)
+    assert bp.main(argv) == 2, "an unencoded hand-off route must fail the build"
+
+
 def test_the_clean_build_publishes_and_the_gate_stays_quiet(tmp_path, capsys):
     pytest.importorskip("mt_metadata")
     out, argv = _build(tmp_path)
@@ -341,6 +443,37 @@ def test_verify_data_dir_fails_a_tampered_station_document(built, tmp_path):
     victim.write_text(json.dumps(doc, indent=1), encoding="utf-8")
     v = _verify_data_dir(tree)
     assert v.returncode != 0, v.stdout
+    assert "station-metadata: FAIL" in v.stdout and "VERIFY: FAIL" in v.stdout, v.stdout
+
+
+TS_PLANTED = [
+    ("a route carrying a literal space", _time_series_route_with_a_literal_space),
+    ("a route walking up out of the fileServer root", _time_series_route_walking_up),
+    ("a route on another host", _time_series_route_on_another_host),
+    ("a level 2 time_series row", _time_series_at_level2),
+]
+
+
+@pytest.mark.parametrize("why,mutate", TS_PLANTED, ids=[w for w, _ in TS_PLANTED])
+def test_verify_data_dir_fails_a_planted_time_series_row(built, tmp_path, why, mutate):
+    """THE SECOND ENFORCEMENT SITE, over BUILT output. The build's own self-check and the
+    pre-deployment gate run ONE implementation, so a route the emitter could never produce is still
+    refused if it reaches a tree by any other path: a hand edit, a partial rebuild, a restored
+    backup. Planted onto a served record rather than built, because the emitter is correct."""
+    tree = tmp_path / f"planted-{abs(hash(why))}"
+    shutil.copytree(built, tree)
+    victim = next(p for p in sorted((tree / "products").rglob("station.json"))
+                  if json.loads(p.read_text(encoding="utf-8")).get("resources"))
+    doc = json.loads(victim.read_text(encoding="utf-8"))
+    doc["resources"].append(copy.deepcopy(CLEAN["resources"][-1]))
+    clean = json.dumps(doc, indent=1)
+    victim.write_text(clean, encoding="utf-8")
+    ok = _verify_data_dir(tree)
+    assert ok.returncode == 0, "sensitivity: a well-formed planted row passes\n" + ok.stdout
+    mutate(doc)
+    victim.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+    v = _verify_data_dir(tree)
+    assert v.returncode != 0, why + "\n" + v.stdout
     assert "station-metadata: FAIL" in v.stdout and "VERIFY: FAIL" in v.stdout, v.stdout
 
 

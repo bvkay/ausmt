@@ -386,6 +386,30 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
     if(tsReserved)return {n:label,sub:gloss+" · reserved, not yet active",origin:"source archive",st:"part",d:null};
     return {n:label,sub:gloss+" · "+(m.ts_pid?"survey collection":"NCI collection"),origin:"source archive",st:"ok",d:tsOpen};
   };
+  // THE JOIN RULE (THREDDS A7, binding). `m.ts_levels` above is CURATOR-DECLARED and SURVEY-scope;
+  // ts_access.json is CRAWL-VERIFIED and STATION-scope, and the two answer different questions. Read
+  // naively, hasLevel() would gate the hand-off too, so a station with a verified Level 1 file whose
+  // curator never ticked `level1` would read NOT AVAILABLE for a level this deployment can hand it
+  // straight to - exactly the falsehood the verified-at fieldnote exists to prevent. So the ACTION is
+  // driven by the INDEX ALONE and never by hasLevel(); ts_levels keeps its own job, the survey-scope
+  // "exists upstream" sub-text above, and where the two disagree the register wins the station row
+  // while the curator census raises the levels_available gap.
+  //
+  // Level 1 is ONE level row with TWO possible actions, format-labelled (the archive publishes MTH5
+  // and NetCDF of the same product); level_2 reaches none of this by ruling (D19).
+  const tsIndexKnown=(typeof tsAccessKnown==="function")&&tsAccessKnown();
+  const tsHandoff=(typeof tsRoutesFor==="function")?(tsRoutesFor(s.ausmt_id)||{}):{};
+  const tsActionRows=toks=>toks.filter(t=>tsHandoff[t]).map(t=>{
+    const e=tsHandoff[t],route=(typeof tsGoRoute==="function")?tsGoRoute(s,t):null;
+    const label=((typeof TS_LEVELS!=="undefined"&&TS_LEVELS.find(l=>l[0]===t))||[])[1]||t;
+    const name=String(e.url_path||"").split("/").pop();
+    // The SAME scheme guard the identifier branch above uses: only an http(s) url becomes an open
+    // action, because a data-url on a .prod tile reaches window.open.
+    const ok=route&&/^https?:/i.test(route);
+    return {n:"Fetch from the archive",
+            sub:label+" · "+(e.bytes?fmtBigBytes(e.bytes):"size not stated")+" · via an AusMT redirect to NCI",
+            origin:"source archive",st:ok?"ok":"unk",
+            d:ok?{prod:"open",url:route,tsname:name,tsbytes:String(e.bytes||0)}:null};});
   // Level 2 sub-rows (the impedance tensors): the source EDI (the custodian's processed transfer function,
   // gated by C1b for non-open surveys — it says "embargoed"/"metadata only", never "via source archive"),
   // then the AusMT-derived EMTF XML (build pipeline, mt_metadata) and MTH5.
@@ -422,10 +446,14 @@ function relatedProducts(s){const m=SMETA[s.survey]||{};
   const dot=st=>`<span class="pdot" style="background:var(--${st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"unk"})"></span>`;
   const row=it=>`<div class="prod ${it.d?"":"dis"}" ${attrs(it.d)}>${dot(it.st)}<div>${esc(it.n)} ${it.origin?roleChip(it.origin):""}<small>${esc(it.sub)}</small></div></div>`;
   const tsRows=[
-    tsLevelRow("Raw time series","packed raw time series","raw_packed"),
-    tsLevelRow("Level 0 edited time series","instrument-recorded, full resolution","level0"),
-    tsLevelRow("Level 1 transformed time series","calibrated, resampled, filtered","level1"),
-  ].map(row).join("");
+    [tsLevelRow("Raw time series","packed raw time series","raw_packed"),tsActionRows(["raw_packed"])],
+    [tsLevelRow("Level 0 edited time series","instrument-recorded, full resolution","level0"),tsActionRows(["level0"])],
+    [tsLevelRow("Level 1 transformed time series","calibrated, resampled, filtered","level1"),
+     tsActionRows(["level1_mth5","level1_netcdf"])],
+  ].map(([lvl,acts])=>row(lvl)+acts.map(row).join("")).join("")+
+    // Two-phase boot: the hand-off index is a PHASE 2 product, so before it lands the absence of an
+    // action row states nothing. Say which wait it is rather than letting silence read as "no file".
+    (tsIndexKnown?"":hydrBlock("archive hand-off routes"));
   // Two-phase boot: all three Level 2 sub-rows resolve against the download manifest (PHASE 2), and each of
   // them degrades to a "not currently available" / "via source archive" line, i.e. statements about what the
   // build actually served. Render the loading state in place of the three rows until the manifest lands
@@ -1796,7 +1824,11 @@ function openCollectionPage(cid){
 function dispatchProd(d){
   if(d.prod==="edi")fetchEdi(d.file,d.avail==="1",d.survey);
   else if(d.prod==="fetch"&&d.url){track("DownloadGenerated",{format:(d.name||"").split(".").pop()});downloadUrl(dataUrl(d.url),d.name);}
-  else if(d.prod==="open"&&d.url)window.open(d.url,"_blank","noopener,noreferrer");
+  else if(d.prod==="open"&&d.url){window.open(d.url,"_blank","noopener,noreferrer");
+    // A time-series hand-off carries the archive's filename and size, so it can say what it just
+    // handed over. Still UNTRACKED, which R8 requires: the request is counted at the front door,
+    // from the /go/ts/ route it names, and a second count here would be a different number.
+    if(d.tsname&&typeof handoffSnack==="function")handoffSnack(d.tsname,+d.tsbytes||0);}
   else if(d.prod==="scroll"&&d.sel){const el=document.querySelector(d.sel);if(el){
     // UX6 Wave C: the scroll target (#pt_anchor) lives in the Response tab, with the phase tensor + induction
     // arrows now always-shown blocks — activate its tab so the scroll actually reveals it.

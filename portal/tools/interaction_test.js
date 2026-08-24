@@ -132,6 +132,28 @@ mapOwn.addLayer = (l) => { mapAddLayer(l); return mapOwn.__self; };
   mapOwn[fn] = (...args) => { mapCalls.push({ fn, args }); return mapOwn.__self; };
 });
 const mapFacade = recProxy(mapOwn);
+// L.control.scale, recorded. The scale bar is CONSTRUCTED with deliberate options and then
+// RE-PARENTED, and both halves are the claim: which options the app asks for, and where the container
+// ends up. The blanket stub answers getContainer() with a Proxy, which is not a node, so under it the
+// re-parenting cannot happen at all and the pin would be vacuous. Every other L.control member (the
+// layer control map.js builds) still degenerates to the old stub.
+const scaleControls = [];
+const controlFacade = new Proxy(function () { }, {
+  get: (t, p) => {
+    if (p !== "scale") return stub();
+    return (opts) => {
+      const own = Object.create(null);
+      own.options = opts || {};
+      own.container = win.document.createElement("div");
+      own.container.className = "leaflet-control-scale";
+      own.addTo = () => { own.added = true; return own.__self; };
+      own.getContainer = () => own.container;
+      scaleControls.push(own);
+      return recProxy(own);
+    };
+  },
+  apply: () => stub(), construct: () => stub(),
+});
 
 // Boot the real page DOM in jsdom with NO page scripts (we run the modules ourselves, in order).
 const html = fs.readFileSync(path.join(PORTAL, "index.html"), "utf8");
@@ -148,6 +170,7 @@ win.L = new Proxy(function () { }, {
     if (p === "marker") return (ll, o) => recLayer("marker", ll, o, false);
     if (p === "polyline") return (lls, o) => recLayer("polyline", lls, o, true);
     if (p === "layerGroup") return () => recGroup();
+    if (p === "control") return controlFacade;
     return stub();
   },
   set: (t, p, v) => { t[p] = v; return true; },
@@ -183,6 +206,15 @@ win.URL.revokeObjectURL = () => {};
 // and two buttons that do different things, so the shape is worth pinning at the call site.
 const trackCalls = [];
 win.plausible = (name, opts) => { trackCalls.push({ name, props: (opts && opts.props) || {} }); };
+// HAND-OFF RECORDERS. A /go/ts/ hand-off is a window.open of a route the front door resolves; jsdom
+// does not implement window.open, and what is being pinned is exactly WHICH url the app hands the
+// browser, so record it. The clipboard is stubbed for the same reason: the copy button's whole job is
+// the string it produces, and drawer.js copyTxt reaches navigator.clipboard, which jsdom leaves unset.
+const opened = [];
+win.open = (...args) => { opened.push(args); return null; };
+const clipboard = [];
+Object.defineProperty(win.navigator, "clipboard", {
+  value: { writeText: t => { clipboard.push(String(t)); return Promise.resolve(); } }, configurable: true });
 // version/schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip assertion
 // (item 3) can pin exactly, instead of matching a moving default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
@@ -194,7 +226,10 @@ win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", sch
 // prove the six phase-1 products and the three heavy ones all went out together rather than one behind
 // another, and (b) HOLDS the three heavy responses until releaseHeavy(), so the driver can inspect the app
 // in exactly the window the split creates. Every other url resolves immediately, as before.
-const HEAVY = /(^|\/)(tf|sci|manifest)\.json$/;
+// ts_access.json joins the held set although it is small: what it gates is a two-phase HONESTY rule
+// (nothing may claim a station has no archive route while the index is still in flight), and that
+// window is only drivable if the response can be held open here.
+const HEAVY = /(^|\/)(tf|sci|manifest|ts_access)\.json$/;
 // The served ARTIFACT families (the per-station files the selection exports package). The data dir holds
 // only JSON products, so without this every artifact fetch came back !ok and every export packaged
 // nothing: a pin could then only observe which URLs were requested, never what the archive ended up
@@ -337,6 +372,11 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // fails there with a precise message, instead of dying at this api hook with a ReferenceError.
   "processingSoftwareText:(m,sc)=>processingSoftwareText(m,sc),pubShortCite:(p)=>pubShortCite(p)," +
   "setManifest:(mf)=>{MANIFEST=mf;}," +
+  // THREDDS hooks. setTsAccess swaps the hand-off index the way setManifest swaps the download one
+  // (the fixture data dir ships no ts_access.json, which is itself the honest no-download-index
+  // case); tsRoutes reads it back through the app's own accessor rather than through a copy of it.
+  "setTsAccess:(m)=>{TSACC=(m===null?null:(m||{}));},tsRoutes:(id)=>tsRoutesFor(id)," +
+  "tsAccess:()=>TSACC,tsAccessKnown:()=>tsAccessKnown()," +
   // Lineage split hooks (writer vs processor). fileWrittenByText is the PURE writer-cell derivation;
   // setSciRow/restoreSciRows patch one station's sci row BY NAME (projected through SCI_COLUMNS, so a
   // contract append cannot silently mis-place the patch) and put the fixture back, which is how the
@@ -368,11 +408,22 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // Two-phase boot hooks. hydrationDone settles once tf/sci/manifest have landed AND their late-render work
   // has run, so the driver can say "the app is now in the state a single-phase boot produced" without racing
   // the continuations. hydrState reports the per-product gate ("pending"|"ready"|"failed"), qMin/setQMin drive
-  // the completeness filter directly (its rail buttons are disabled while sci is pending, by design), and
+  // the completeness PREDICATE directly - the Availability group retired its rail control, so this hook is
+  // now the only way to set it, and the two-phase honesty legs below are what it exists for - and
   // markerCount/station/closeDrawer are plain observables for the first-paint assertions.
   "hydrationDone:()=>HYDRATION_DONE,hydrState:(k)=>HYDR[k]," +
   "markerCount:()=>ST.filter(s=>s.marker).length,station:(id)=>ST.find(x=>x.id===id)," +
   "qMin:()=>qMin,setQMin:(v)=>{qMin=v;},closeDrawer," +
+  // Availability-chooser hooks (A6). tsLevels/setTsLevels read and drive the chosen level set without
+  // going through the buttons (the buttons are disabled across the whole in-flight window, which is
+  // exactly the state the inertness pin has to observe); paintTsChooser re-runs the paint after the
+  // driver swaps the index, the way runInit and the hydration gate call it.
+  "tsLevels:()=>[...TS_CHOSEN],setTsLevels:(a)=>{TS_CHOSEN=new Set(a||[]);}," +
+  "paintTsChooser:()=>paintTsChooser()," +
+  // The hand-off list's PURE builder, exposed for the same reason geoFC is: the file the reader gets
+  // is written inside a click handler, and a claim about its contents that no test can reach is a
+  // claim that rots. Takes the selection and the chosen levels from the app, not from the driver.
+  "tsHandoffDoc:(sts)=>tsHandoffDocument(sts||sel(),tsChosenLevels())," +
   // geoFC builds the GeoJSON export exactly as #dlGeo does, taking the sci-usable decision FROM THE APP
   // (hydrUsable) rather than from the driver, so the export-honesty pins observe the real branch rather than
   // a re-implementation of it. setSelected drives `selected` by station id without going through
@@ -436,19 +487,23 @@ async function bootFreshWindow(dataMap, url) {
   ok(_bootOutcome === "booted",
     "phase1: boot() must resolve on the FIRST-PAINT products alone (catalogue + surveys + the small " +
     "optionals); it is still blocked on the held tf/sci/manifest fetches");
-  // PARALLELISM. Exactly NINE data fetches have been issued by boot, and all three heavy ones are in flight
+  // PARALLELISM. Exactly TEN data fetches have been issued by boot, and all four heavy ones are in flight
   // at the same time. Before this change the five optionals ran STRICTLY ONE AFTER ANOTHER (each awaiting the
   // previous round trip) and none of them was even requested until the tf.json-carrying Promise.all had
-  // resolved, so with tf held four of these nine urls would be missing from the log entirely.
+  // resolved, so with tf held four of these urls would be missing from the log entirely.
+  // ts_access.json rides PHASE 2 (D6): the Availability facet it feeds is one most visitors never open,
+  // so it must never be one of the requests first paint waits on.
   const _bootUrls = ["catalogue.json", "surveys.json", "build_provenance.json", "collections.json",
-    "build.json", "coord_policy.json", "tf.json", "sci.json", "manifest.json"];
+    "build.json", "coord_policy.json", "tf.json", "sci.json", "manifest.json", "ts_access.json"];
   _bootUrls.forEach(n => ok(fetchOrder.some(u => u.endsWith("/" + n)),
     "phase1/2: " + n + " must be requested during boot (the optionals must not queue behind each other); issued: " + JSON.stringify(fetchOrder)));
   ok(fetchOrder.length === _bootUrls.length,
-    "boot must issue exactly the nine data fetches, got " + JSON.stringify(fetchOrder));
-  ok(heavyHeld() === 3, "phase2: tf/sci/manifest must all be in flight CONCURRENTLY, held " + heavyHeld());
-  ["tf", "sci", "manifest"].forEach(k => ok(A.hydrState(k) === "pending",
+    "boot must issue exactly the ten data fetches, got " + JSON.stringify(fetchOrder));
+  ok(heavyHeld() === 4, "phase2: tf/sci/manifest/ts_access must all be in flight CONCURRENTLY, held " + heavyHeld());
+  ["tf", "sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "pending",
     "phase2: the " + k + " gate must read 'pending' while its fetch is held, got " + A.hydrState(k)));
+  ok(A.tsRoutes("au.alpha.A1") === null,
+    "phase2: with ts_access.json in flight the hand-off index must read as UNKNOWN, never as an empty answer");
   ok(A.nST() === 5, "fixture should load 5 stations, got " + A.nST());
 
   // UX9 ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
@@ -548,17 +603,27 @@ async function bootFreshWindow(dataMap, url) {
     "phase1: the surveys view must render the " + sv + " card before tf/sci/manifest resolve"));
   A.setView("map");
 
-  // The sci-driven RAIL CONTROLS are inert-and-disabled, never live over data that has not arrived: a live
-  // completeness filter would hide every station (nothing has a q yet) and the completeness/dimensionality
-  // colour modes would paint the whole map in the "not evaluated" grey.
-  ok([...doc.getElementById("qSeg").querySelectorAll("button")].every(b => b.disabled),
-    "honesty: the completeness filter buttons must be disabled while sci.json is in flight");
+  // The phase-2-driven RAIL CONTROLS are inert-and-disabled, never live over data that has not arrived:
+  // a live completeness colour mode would paint the whole map in the "not evaluated" grey, and a live
+  // per-level Availability chooser would hide every station over routes that have not arrived.
   ok([...doc.getElementById("colorSeg").querySelectorAll("button")].filter(b => b.dataset.c !== "type").every(b => b.disabled),
     "honesty: the completeness/dimensionality colour modes must be disabled while sci.json is in flight");
   ok(doc.getElementById("colorSeg").querySelector('button[data-c="type"]').disabled === false,
     "the data-type colour mode is phase-1 data and must stay live");
-  ok(doc.getElementById("qSeg").querySelector("button").getAttribute("aria-busy") === "true",
+  ok(doc.getElementById("colorSeg").querySelector('button[data-c="quality"]').getAttribute("aria-busy") === "true",
     "an in-flight product makes its controls aria-busy, so a screen reader is told a wait is under way");
+  const _tsBtns = () => [...doc.getElementById("tsSeg").querySelectorAll("button")];
+  ok(_tsBtns().length === 4,
+    "A6/D8: the chooser carries one button per ROUTABLE level token (level2 opens nothing, D19), got " + _tsBtns().length);
+  ok(_tsBtns().every(b => b.disabled),
+    "honesty: the per-level chooser must be disabled while ts_access.json is in flight");
+  ok(_tsBtns()[0].getAttribute("aria-busy") === "true",
+    "honesty: an in-flight hand-off index makes the chooser aria-busy, not merely inert");
+  A.setTsLevels(["raw_packed"]);
+  A.refresh();
+  ok(A.nVisCount() === 5,
+    "honesty: the level filter must be INERT while ts_access.json is in flight; emptying the map would read as 'no station publishes this level', got " + A.nVisCount());
+  A.setTsLevels([]); A.refresh();
   const _a1 = A.station("A1");
   A.setColorMode("quality");
   ok(A.markerColor(_a1) === "#3730B8",
@@ -640,8 +705,25 @@ async function bootFreshWindow(dataMap, url) {
   // ---- TWO-PHASE BOOT, part 3: late hydration must refresh what it made stale ----------------------
   releaseHeavy();
   await A.hydrationDone();
-  ["tf", "sci", "manifest"].forEach(k => ok(A.hydrState(k) === "ready",
+  ["tf", "sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "ready",
     "hydration: the " + k + " gate must settle to 'ready', got " + A.hydrState(k)));
+  // The fixture data dir ships NO ts_access.json, which is the deployment case the engine produces
+  // for a corpus with no verified routes. That 404 is an ANSWER, not a failure: the gate settles
+  // ready on an empty index, and nothing anywhere may report it as a load error.
+  ok(A.hydrState("tsaccess") !== "failed",
+    "honesty: an absent ts_access.json is a deployment that publishes no download index, never a failure");
+  ok(A.tsRoutes("au.alpha.A1") === null && JSON.stringify(A.tsAccess()) === "{}",
+    "hydration: an absent ts_access.json must settle to an EMPTY index, not stay unknown, got " + JSON.stringify(A.tsAccess()));
+  // ...and the chooser SAYS SO. This is the wording rule: an empty index is a fact about the DEPLOYMENT,
+  // and calling it a load error would blame the network for a build that published no routes.
+  const _tsSettled = [...doc.getElementById("tsSeg").querySelectorAll("button")];
+  ok(_tsSettled.every(b => b.disabled), "the chooser stays disabled when the deployment publishes no routes");
+  ok(_tsSettled[0].getAttribute("aria-busy") === "false",
+    "honesty: a settled empty index is not busy; aria-busy must not tell a screen reader to keep waiting");
+  ok(/publishes no download index/.test(_tsSettled[0].title) && !/could not be loaded/.test(_tsSettled[0].title),
+    "honesty: the disabled hint must name the deployment, never a load failure, got " + JSON.stringify(_tsSettled[0].title));
+  ok(/publishes no download index/.test(doc.getElementById("tsSegNote").textContent),
+    "the group's own note must state the same thing in words, got " + JSON.stringify(doc.getElementById("tsSegNote").textContent));
   const _postDrawer = doc.getElementById("drawer").innerHTML;
   ok(!/Loading response functions/.test(_postDrawer),
     "hydration: a stale loading state may not stand once tf.json has landed; the OPEN drawer must re-render");
@@ -666,8 +748,8 @@ async function bootFreshWindow(dataMap, url) {
     "hydration: the re-render must not re-issue the station.json frame-line fetch once per settling gate, issued " +
     fetchOrder.filter(u => /station\.json$/.test(u)).length + " vs " + _stationJsonBefore);
   ok(A.station("A1").q === 4.0, "hydration: s.q must be re-folded onto the stations from sci.json, got " + A.station("A1").q);
-  ok([...doc.getElementById("qSeg").querySelectorAll("button")].every(b => !b.disabled),
-    "hydration: the completeness filter must be re-enabled once sci.json has landed");
+  ok([...doc.getElementById("colorSeg").querySelectorAll("button")].every(b => !b.disabled),
+    "hydration: the completeness/dimensionality colour modes must be re-enabled once sci.json has landed");
   A.setQMin(4.5); A.refresh();
   ok(A.nVisCount() === 0,
     "hydration: the completeness filter must be LIVE after sci.json lands (q=4.0 < 4.5 for every fixture station), got " + A.nVisCount());
@@ -718,11 +800,11 @@ async function bootFreshWindow(dataMap, url) {
   const sfDoc = sciFailWin.document, sfA = sciFailWin.__api;
   ok(sfA.hydrState("sci") === "failed", "a 404 on sci.json must settle its gate to 'failed', got " + sfA.hydrState("sci"));
   ok(sfA.nST() === 5, "a missing sci.json must no longer blank the portal; the stations must still paint");
-  const _sfQ = [...sfDoc.getElementById("qSeg").querySelectorAll("button")];
+  const _sfQ = [...sfDoc.getElementById("colorSeg").querySelectorAll("button")].filter(b => b.dataset.c !== "type");
   ok(_sfQ.every(b => b.disabled),
-    "honesty: the completeness filter must STAY disabled when sci.json FAILED; SCI_READY settling is not the same as the values arriving");
-  ok([...sfDoc.getElementById("colorSeg").querySelectorAll("button")].filter(b => b.dataset.c !== "type").every(b => b.disabled),
-    "honesty: the completeness/dimensionality colour modes must STAY disabled when sci.json FAILED");
+    "honesty: the completeness/dimensionality colour modes must STAY disabled when sci.json FAILED; SCI_READY settling is not the same as the values arriving");
+  ok(sfDoc.getElementById("colorSeg").querySelector('button[data-c="type"]').disabled === false,
+    "the data-type colour mode reads phase-1 data and stays live through a sci.json failure");
   ok(/could not be loaded/.test(_sfQ[0].title),
     "honesty: the disabled control must name the ACTUAL reason, not claim it is still loading, got " + JSON.stringify(_sfQ[0].title));
   ok(_sfQ[0].getAttribute("aria-busy") === "false",
@@ -1006,7 +1088,7 @@ async function bootFreshWindow(dataMap, url) {
   find.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   ok(find.value === "" && doc.getElementById("findResults").style.display === "none",
     "F3: Esc did not clear the query and close the dropdown");
-  // find.value is now "" and refresh() has re-run — later sections (year/downloadable-only/etc) assume no active Find query
+  // find.value is now "" and refresh() has re-run, so later sections (year/Availability/etc) assume no active Find query
 
   // F. SURVEY route: #/survey/<slug> (the route the published /surveys/<slug> path URLs 301 into
   //    at the front door - path-URL contract 2026-08-18; the sitemap advertises the path form) must
@@ -1583,29 +1665,183 @@ async function bootFreshWindow(dataMap, url) {
   yearFrom.value = ""; fire(yearFrom, "input");
   ok(A.visIds().length === 5, "clearing the year filter did not restore all 5 stations");
 
-  // K. DOWNLOADABLE-HERE-ONLY toggle (S3): Beta's B1 and embargoed Delta's D1 have edi_available=0; the rest =1.
-  const dlOnly = doc.getElementById("dlOnly");
-  ok(dlOnly, "#dlOnly checkbox missing from the filter rail");
-  dlOnly.checked = true; fire(dlOnly, "change");
-  ok(!A.visIds().includes("B1"), "downloadable-only did not exclude the non-downloadable station B1");
-  ok(!A.visIds().includes("D1"), "downloadable-only did not exclude the embargoed (non-downloadable) station D1");
-  ok(A.visIds().length === 3, "expected 3 visible stations with downloadable-only on, got " + A.visIds().length);
-  dlOnly.checked = false; fire(dlOnly, "change");
-  ok(A.visIds().length === 5, "clearing downloadable-only did not restore all 5 stations");
+  // K. AVAILABILITY > TRANSFER FUNCTIONS (R2, was the standalone "Downloadable here" checkbox): the
+  // capability is KEPT and the s.ediAvail PREDICATE is unchanged, which matters beyond this filter -
+  // the selection exports read the same flag for their three-way not-included honesty. Beta's B1 and
+  // embargoed Delta's D1 have edi_available=0; the rest =1.
+  ok(!doc.getElementById("dlOnly"), "the standalone #dlOnly group is replaced by the Availability group");
+  const tfAvail = doc.getElementById("tfAvail");
+  ok(tfAvail, "#tfAvail (Availability > Transfer functions) missing from the filter rail");
+  ok(doc.getElementById("availGroup") && doc.getElementById("availGroup").contains(tfAvail),
+    "R2: the transfer-function availability control must live inside the ONE Availability group");
+  tfAvail.checked = true; fire(tfAvail, "change");
+  ok(!A.visIds().includes("B1"), "Availability > Transfer functions did not exclude the non-downloadable station B1");
+  ok(!A.visIds().includes("D1"), "Availability > Transfer functions did not exclude the embargoed (non-downloadable) station D1");
+  ok(A.visIds().length === 3, "expected 3 visible stations with Transfer functions ticked, got " + A.visIds().length);
+  tfAvail.checked = false; fire(tfAvail, "change");
+  ok(A.visIds().length === 5, "clearing Availability > Transfer functions did not restore all 5 stations");
+
+  // K2. AVAILABILITY > TIME SERIES, the per-level chooser (R3/D7/D8), driven over a REAL index. The
+  // fixture ships no ts_access.json, so the index is set directly here: A1 and A2 publish routes, B1
+  // publishes one level only, and the embargoed D1 publishes none (which is R5 seen from the portal
+  // end - a station the build gated out is simply absent from the index, never filtered here).
+  A.setTsAccess({
+    "au.alpha.A1": { raw_packed: { bytes: 4000000, url_path: "my80/x/A1 [REMOTE].zip" },
+                     level1_mth5: { bytes: 1000000, url_path: "my80/x/A1.h5" } },
+    "au.alpha.A2": { raw_packed: { bytes: 2000000, url_path: "my80/x/A2.zip" } },
+    "au.beta.B1": { level1_mth5: { bytes: 500000, url_path: "my80/x/B1.h5" } },
+  });
+  A.paintTsChooser(); A.refresh();
+  const tsBtn = tok => doc.getElementById("tsSeg").querySelector('button[data-ts="' + tok + '"]');
+  ok(["raw_packed", "level0", "level1_mth5", "level1_netcdf"].every(t => tsBtn(t)),
+    "D8: the chooser must carry a button for each routable level token");
+  ok(!tsBtn("level2"), "D19: level_2 holds transfer functions, not time series, and takes no chooser button");
+  ok(!tsBtn("raw_packed").disabled && !tsBtn("level1_mth5").disabled,
+    "a level the index publishes must be selectable once the index has landed");
+  ok(tsBtn("level0").disabled && tsBtn("level1_netcdf").disabled,
+    "a level NO station publishes must stay inert rather than offering an empty selection");
+  ok(/2 stations/.test(tsBtn("raw_packed").textContent),
+    "D7: each button states its own station count, got " + JSON.stringify(tsBtn("raw_packed").textContent));
+  ok(/5.7 MB/.test(tsBtn("raw_packed").textContent),
+    "D7: each button states its own summed size, got " + JSON.stringify(tsBtn("raw_packed").textContent));
+  ok(/packed by the custodian/.test(tsBtn("raw_packed").title),
+    "D7: each button carries its one-line gloss, got " + JSON.stringify(tsBtn("raw_packed").title));
+  tsBtn("raw_packed").click();
+  ok(A.tsLevels().join() === "raw_packed", "clicking a level must select it, got " + JSON.stringify(A.tsLevels()));
+  ok(A.visIds().sort().join() === "A1,A2",
+    "the level filter must keep exactly the stations the index publishes that level for, got " + JSON.stringify(A.visIds()));
+  tsBtn("level1_mth5").click();
+  ok(A.tsLevels().sort().join() === "level1_mth5,raw_packed",
+    "D7: the chooser is a MULTI-select; a second level must add rather than replace, got " + JSON.stringify(A.tsLevels()));
+  ok(A.visIds().sort().join() === "A1,A2,B1",
+    "a multi-level selection keeps a station publishing ANY chosen level, got " + JSON.stringify(A.visIds()));
+  ok(!A.visIds().includes("D1"),
+    "R5: an embargoed station is absent from the index, so no level can bring it back");
+  tsBtn("raw_packed").click(); tsBtn("level1_mth5").click();
+  ok(A.tsLevels().length === 0 && A.visIds().length === 5,
+    "clearing every level must restore the unfiltered map, got " + JSON.stringify(A.visIds()));
+  // The size total is the chooser's OWN summation over ts_access.json: it never joins the download
+  // manifest, whose SEL_ZIP_BUTTONS table would make a fourth zip button out of it.
+  A.setManifest({ files: [], bundles: [] });
+  A.paintTsChooser();
+  ok(/5.7 MB/.test(tsBtn("raw_packed").textContent),
+    "the chooser's sizes must come from ts_access.json, not from the download manifest, got " +
+    JSON.stringify(tsBtn("raw_packed").textContent));
+
+  // K3. THE HAND-OFF (R7/D3/D5). AusMT holds none of these bytes, so the offer is a POINTER FILE and
+  // never a fourth selection zip. Every row names an AusMT /go/ts/ route (the one the front door
+  // resolves, and the only string that carries survey/station/level into the log) with the archive's
+  // own address alongside as an inert reference field.
+  ok(doc.getElementById("dlTs"), "#dlTs (the time-series hand-off list) is missing from the export row");
+  ok(doc.getElementById("exportBtns").contains(doc.getElementById("dlTs")),
+    "#dlTs must sit with the other selection exports, not in a panel of its own");
+  A.setSelected(["A1", "A2", "B1", "D1"]);
+  const _hd = A.tsHandoffDoc();
+  ok(_hd.files === 4 && _hd.doc.stations.length === 3,
+    "the list must cover every routable level of every selected station in the index, got " +
+    _hd.files + " file(s) across " + _hd.doc.stations.length + " station(s)");
+  ok(!_hd.doc.stations.some(r => r.ausmt_id === "au.delta.D1"),
+    "R5: the embargoed station is absent from the index, so it cannot appear in a hand-off list");
+  const _a1row = _hd.doc.stations.find(r => r.ausmt_id === "au.alpha.A1");
+  const _a1raw = _a1row.levels.find(l => l.level === "raw_packed");
+  ok(/^https?:\/\/[^/]+\/go\/ts\/alpha\/A1\/raw_packed$/.test(_a1raw.url),
+    "D12: the fetched url must be the AusMT /go/ts/<survey>/<station>/<level> route, got " + JSON.stringify(_a1raw.url));
+  ok(_a1raw.archive_url_comment === "https://thredds.nci.org.au/thredds/fileServer/my80/x/A1%20%5BREMOTE%5D.zip",
+    "D3: the archive address rides alongside as an inert reference, percent-encoded exactly as the " +
+    "engine encodes it (the `C5 [REMOTE].zip` case), got " + JSON.stringify(_a1raw.archive_url_comment));
+  ok(_a1raw.bytes === 4000000 && _a1raw.filename === "A1 [REMOTE].zip",
+    "each row states the size and the archive's own filename, got " + JSON.stringify([_a1raw.bytes, _a1raw.filename]));
+  ok(/wget follows/i.test(_hd.doc.note) && /curl needs -L/i.test(_hd.doc.note),
+    "D3: the file must say that wget follows the 302 and curl needs -L, got " + JSON.stringify(_hd.doc.note));
+  ok(/hosts none of these files/i.test(_hd.doc.note),
+    "the file must restate that AusMT hosts nothing it routes to, got " + JSON.stringify(_hd.doc.note));
+  // The chooser SCOPES the list: a level nobody chose is not written.
+  A.setTsLevels(["raw_packed"]);
+  const _hdScoped = A.tsHandoffDoc();
+  ok(_hdScoped.files === 2 && _hdScoped.doc.stations.every(r => r.levels.every(l => l.level === "raw_packed")),
+    "the chooser must scope the hand-off list to the chosen levels, got " + _hdScoped.files + " file(s)");
+  A.setTsLevels([]);
+  // THE CONFIRMATION (owner UX ruling 2026-08-23) and its wget command.
+  const _trackBefore = trackCalls.length;
+  doc.getElementById("dlTs").click();
+  const snackEl = doc.getElementById("snackbar");
+  ok(snackEl && !snackEl.classList.contains("hidden"), "the hand-off must confirm itself in the snackbar");
+  ok(/Download list ready - 4 files, /.test(snackEl.textContent),
+    "the confirmation must state the file count and the total size, got " + JSON.stringify(snackEl.textContent));
+  const copyBtn = snackEl.querySelector("button");
+  ok(copyBtn && /wget/i.test(copyBtn.textContent),
+    "the confirmation must offer the wget command as a COPY button, got " + (copyBtn && copyBtn.textContent));
+  copyBtn.click();
+  ok(clipboard.length === 1 && /wget/.test(clipboard[0]) && /-i/.test(clipboard[0]),
+    "the copy button must put a wget -i command on the clipboard, got " + JSON.stringify(clipboard[0]));
+  ok((clipboard[0].match(/\/go\/ts\//g) || []).length === 4,
+    "the copied command must carry every routed file, got " + JSON.stringify(clipboard[0]));
+  ok(!/thredds\.nci\.org\.au/.test(clipboard[0]),
+    "the copied command must fetch the AusMT route, not the archive address it resolves to (the route " +
+    "is what the front door counts), got " + JSON.stringify(clipboard[0]));
+  ok(trackCalls.length === _trackBefore,
+    "R8: the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
+  ok(!/progress|complete|finished|%/i.test(snackEl.textContent),
+    "the page claims no progress and no completion; the browser owns both, got " + JSON.stringify(snackEl.textContent));
+
+  // K4. THE SINGLE-STATION HAND-OFF, and THE JOIN RULE that decides whether its action row exists.
+  // m.ts_levels is CURATOR-DECLARED and SURVEY-scope; the index is CRAWL-VERIFIED and STATION-scope.
+  // Beta declares NO levels at all, so a hasLevel()-gated action would read "not available" for a
+  // Level 1 file this deployment can hand B1 straight to. The register wins the station row.
+  A.setSMETA("Beta Survey", { ts_levels: [] });
+  A.openStationById("au.beta.B1");
+  const _files = doc.getElementById("drawer");
+  const _hand = [..._files.querySelectorAll('.prod[data-prod="open"][data-tsname]')];
+  ok(_hand.length === 1,
+    "the JOIN RULE: a verified level must offer its action even where the survey declares no levels, got " + _hand.length);
+  ok(/Level 1 MTH5/.test(_hand[0].textContent) && /488 KB/.test(_hand[0].textContent),
+    "the action row states the level and the archive's size, got " + JSON.stringify(_hand[0].textContent));
+  ok(/not available/.test(_files.querySelector(".filelist").textContent),
+    "sensitivity: the survey-scope 'not available' sub-text is UNCHANGED by the action row; the two " +
+    "statements answer different questions and this one is still the curator's");
+  const _badges = [..._files.querySelectorAll(".badges .badge")].length;
+  A.openStationById("au.alpha.A1");
+  ok([..._files.querySelectorAll(".badges .badge")].length === _badges,
+    "D7: no fourth badge; the drawer gains an ACTION ROW, not another availability claim");
+  const _openBefore = opened.length, _trackBefore2 = trackCalls.length;
+  const _a1hand = _files.querySelector('.prod[data-prod="open"][data-tsname]');
+  ok(_a1hand, "A1 publishes routes, so its Files tab must carry hand-off actions");
+  A.dispatchProd(Object.assign({}, _a1hand.dataset));
+  ok(opened.length === _openBefore + 1 && /\/go\/ts\/alpha\/A1\//.test(opened[opened.length - 1][0]),
+    "the action must open the AusMT route, got " + JSON.stringify(opened[opened.length - 1]));
+  ok(trackCalls.length === _trackBefore2,
+    "R8: dispatchProd leaves `open` UNTRACKED, and the hand-off must not change that");
+  ok(/Handed to NCI THREDDS - your browser is downloading /.test(snackEl.textContent) &&
+     /Progress appears in your browser's downloads\./.test(snackEl.textContent),
+    "the single-station hand-off states what was handed over and where the progress will appear, got " +
+    JSON.stringify(snackEl.textContent));
+  ok(!/this may take a while/i.test(snackEl.textContent),
+    "a small file gets no large-file line, got " + JSON.stringify(snackEl.textContent));
+  A.dispatchProd({ prod: "open", url: "http://localhost/go/ts/alpha/A1/raw_packed",
+                   tsname: "BIG.zip", tsbytes: String(9868836788) });
+  ok(/9\.2 GB/.test(snackEl.textContent) && /large file - this may take a while/i.test(snackEl.textContent),
+    "above 5 GB the hand-off appends the large-file line, got " + JSON.stringify(snackEl.textContent));
+  A.setSelected([]);
+  A.closeDrawer();
 
   // L. GO TO PLACE REMOVED (UX feedback round 1 #1): operator decision, redundant. Assert the input
   // (and its datalist) are gone from the rendered page, not merely unused.
   ok(!doc.getElementById("goPlace"), "#goPlace should have been removed from the filter rail");
   ok(!doc.getElementById("auPlaces"), "#auPlaces datalist should have been removed along with #goPlace");
 
-  // M. SCREENING (advanced) (UX feedback round 1 #4): the Min-TF-diagnostic slider (#qSeg) and the
-  // colour-by segmented control (#colorSeg) live inside ONE <details class="advanced"> collapsed by
-  // default (no `open` attribute) at the bottom of the filter rail — every element id inside is
-  // unchanged from before the relocation, so the wiring above (colorSeg/qSeg handlers) still applies.
+  // M. SCREENING (advanced) (UX feedback round 1 #4): the specialist controls live inside ONE
+  // <details class="advanced"> collapsed by default (no `open` attribute) at the bottom of the filter
+  // rail. The Availability group (R2/R3) and the colour-by segmented control are both inside it, and
+  // there is exactly ONE Availability group: the standalone "Downloadable here" checkbox and the
+  // Min-TF-diagnostic segmented control are gone, replaced by it.
   const advDetails = doc.querySelector("details.advanced");
   ok(advDetails, "no <details class=\"advanced\"> found in the filter rail");
   ok(advDetails.hasAttribute("open") === false, "Screening (advanced) details must be collapsed by default");
-  ok(advDetails.querySelector("#qSeg"), "#qSeg (Min-TF-diagnostic) is not inside the Screening (advanced) details");
+  ok(!doc.getElementById("qSeg"), "the Min-TF-diagnostic group is replaced by the Availability group");
+  ok(advDetails.querySelectorAll("#availGroup").length === 1,
+    "R2/R3: there must be exactly ONE Availability group inside the Screening (advanced) details");
+  ok(advDetails.querySelector("#availGroup #tfAvail") && advDetails.querySelector("#availGroup #tsSeg"),
+    "the Availability group must carry BOTH the transfer-function control and the per-level chooser");
   ok(advDetails.querySelector("#colorSeg"), "#colorSeg (colour-by) is not inside the Screening (advanced) details");
 
   // N. RECENTLY ADDED (cleanup wave A): ONE surface (the surveys-view #recentStrip; the map-rail
@@ -2236,7 +2472,7 @@ async function bootFreshWindow(dataMap, url) {
   ok(A.sidebarMode() === "browse", "D2: default rail mode must be Browse, got " + A.sidebarMode());
   ok(!browseMode.classList.contains("hidden") && selectMode.classList.contains("hidden"),
     "D2: Browse must show the browse pane and hide the select pane by default");
-  ["find", "typeBoxes", "tree", "selAll", "dlZip", "qSeg", "colorSeg", "yearFrom", "dlOnly"].forEach(id =>
+  ["find", "typeBoxes", "tree", "selAll", "dlZip", "tsSeg", "colorSeg", "yearFrom", "tfAvail"].forEach(id =>
     ok(doc.getElementById(id), "D2: element id '" + id + "' went missing after the mode split"));
   const selBtn = [...modeSeg.children].find(b => b.dataset.mode === "select");
   selBtn.click();
@@ -2357,6 +2593,23 @@ async function bootFreshWindow(dataMap, url) {
   ["--lpmt", "--bbmt", "--amt", "--gds"].forEach(tok =>
     ok(legDots.some(d => (d.getAttribute("style") || "").indexOf("var(" + tok + ")") >= 0),
       "D6: no legend dot reads the live token " + tok + " (a hard-coded hex would fail this)"));
+  // A8 (R12). THE SCALE BAR, constructed deliberately (metric only, capped at 120px) and RE-PARENTED
+  // into the legend body, where a reader looks for the map's key, rather than left in the Leaflet
+  // corner it would otherwise take on top of the dots.
+  ok(scaleControls.length === 1, "A8: exactly one scale control must be constructed, got " + scaleControls.length);
+  const _sc = scaleControls[0];
+  ok(_sc.options.metric === true && _sc.options.imperial === false && _sc.options.maxWidth === 120,
+    "A8: the scale bar must be metric-only and capped at 120px, got " + JSON.stringify(_sc.options));
+  ok(_sc.added === true, "A8: the control must be added to the map, not merely constructed");
+  const _scEl = doc.querySelector("#mapLegend .maplegend-body .maplegend-scale");
+  ok(_scEl && _scEl === _sc.getContainer(),
+    "A8: the control's OWN container must be re-parented into the legend body, got " + (_scEl && _scEl.className));
+  // ...and NEITHER legend pin moves. The scale bar takes its own class precisely so it cannot be
+  // counted as a data-type row or change what #mapLegend is a child of.
+  ok([...legend.querySelectorAll(".legrow .dot")].length === 4,
+    "A8: the scale bar must add no .legrow .dot; the legend still describes exactly four data types");
+  ok(legend.parentElement && legend.parentElement.id === "map",
+    "A8: the legend stays a child of the map container");
   const legToggle = doc.getElementById("mapLegendToggle");
   ok(legToggle, "D6: the legend collapse toggle is missing");
   const wasExpanded = legend.classList.contains("expanded");
@@ -3884,7 +4137,7 @@ async function bootFreshWindow(dataMap, url) {
     ok(!selectedBy(s, false), "LINKCSS: the muted state text must not be painted the link accent");
   });
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
@@ -3897,6 +4150,16 @@ async function bootFreshWindow(dataMap, url) {
     "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore, " +
     "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted), " +
     "CARD-POLISH one-attribution-box(single .attn, names ORCID/ROR-linked in place, text == attributionText) + contributors-above-Downloads + lineage software(station-level-wins/survey-fallback/no-invented-version, node == prov row) + AusMT-Provenance-title + formats(served-only, no ticks/(pipeline), embargoed claims nothing) + publication-node-from-pubs(short cite + N-more, no fabricated et al., none-recorded when empty), " +
-    "DRAWER-POLISH slot-alias(`entire` fills Collection: 2-of-6 + six tiles + no orphan) + collision-rule(exact `collection` wins the slot, alias survives as an extra, count tallies the slot) + 'Data at every level' head + LINKCSS accent rule SELECTS all three grid link sites incl. :visited, muted state text excluded)");
+    "DRAWER-POLISH slot-alias(`entire` fills Collection: 2-of-6 + six tiles + no orphan) + collision-rule(exact `collection` wins the slot, alias survives as an extra, count tallies the slot) + 'Data at every level' head + LINKCSS accent rule SELECTS all three grid link sites incl. :visited, muted state text excluded, " +
+    "THREDDS ts_access.json phase-2(ten-fetch boot + held-with-the-heavies + unknown-vs-empty + absence-is-not-failure) + " +
+    "ONE Availability group(#dlOnly/#qSeg gone, tfAvail keeps the s.ediAvail predicate, four routable level buttons and no level2, " +
+    "in-flight disabled+aria-busy+inert-filter, settled-empty says 'publishes no download index' and never 'could not be loaded', " +
+    "per-level count+size+gloss summed from ts_access and NOT from the download manifest, multi-select union filter, embargoed station unreachable by any level) + " +
+    "hand-off(#dlTs pointer file in the #dlSh shape: /go/ts/ routes + inert archive address percent-encoded like the engine, " +
+    "chooser-scoped, embargoed station absent, wget-follows/curl-needs-L note, no new track() call site, " +
+    "'Download list ready' + wget -i COPY button carrying the routes and not the archive, " +
+    "JOIN RULE action row driven by the index alone under an empty ts_levels with the survey sub-text intact, no fourth badge, " +
+    "single-station snackbar names file+size+where-progress-lives, >5GB line, untracked open) + " +
+    "scale bar(metric-only maxWidth 120, added, own container re-parented into .maplegend-body, four dots and #map parenting intact))");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

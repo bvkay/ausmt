@@ -27,6 +27,8 @@
 #       vulcan-2022 slug; explicit https:// with --resolve so the canonical block's own mapping is
 #       what answers). Skipped cleanly when the edge gives no response at all (the container check
 #       is the authority on a down edge).
+#   4d. the TIME-SERIES HAND-OFF TABLE (R3/R5): map hash parity, open-302, unlisted-404. Detail at
+#       the check itself; skips cleanly on a routeless table or an unresponsive edge.
 #   5. tailscale is up and the box peer is visible
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
 #   7. disk headroom on the data path
@@ -42,6 +44,11 @@
 #                            AUSMT_BOX_READER_UPSTREAM and (optional) AUSMT_LEGACY_REDIRECT_NAME
 #   AUSMT_DOCTOR_CADDYFILE   the repo Caddyfile to hash the running config against (default: ./Caddyfile)
 #   AUSMT_DOCTOR_COMPOSE     the compose file (default: ./compose.yaml)
+#   AUSMT_DOCTOR_TS_MAP      the repo time-series route table (default: ./ts-routes.map)
+#   AUSMT_DOCTOR_TS_OPEN_PATH      the /go/ts/ route to probe for a 302 (default: the table's first)
+#   AUSMT_DOCTOR_TS_WITHHELD_PATH  the /go/ts/ route that must 404 (default: the same survey with a
+#                            station id no register carries; set this to a REAL suppressed station's
+#                            route once the corpus has one)
 #   AUSMT_DOCTOR_DOCKER      the docker command            (default: docker)
 #   AUSMT_DOCTOR_CURL        the curl command              (default: curl)
 #   AUSMT_DOCTOR_TAILSCALE   the tailscale command         (default: tailscale)
@@ -62,6 +69,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # ----- config + command handles ------------------------------------------------------------------
 ENV_FILE="${AUSMT_DOCTOR_ENV:-$HERE/.env}"
 CADDYFILE_REPO="${AUSMT_DOCTOR_CADDYFILE:-$HERE/Caddyfile}"
+TS_MAP="${AUSMT_DOCTOR_TS_MAP:-$HERE/ts-routes.map}"
 COMPOSE_FILE="${AUSMT_DOCTOR_COMPOSE:-$HERE/compose.yaml}"
 DOCKER="${AUSMT_DOCTOR_DOCKER:-docker}"
 CURL="${AUSMT_DOCTOR_CURL:-curl}"
@@ -337,6 +345,83 @@ check_pathurl_redirect() {
 	fi
 }
 
+check_ts_routes() {
+	# 4d, the TIME-SERIES HAND-OFF TABLE. Three facts, one leg, because they fail for one reason:
+	#   * the container-mounted ts-routes.map hashes EQUAL to the repo copy. Check 2 hash-compares
+	#     only the rendered Caddyfile, so without this line the O1 stale-config trap reaches the map
+	#     unguarded - and a stale map is a stale ACCESS DECISION, not just stale config.
+	#   * an OPEN route 302s to the exact NCI Location the table names (probe + expectation both read
+	#     from the repo table, so the pin cannot rot when the corpus moves).
+	#   * a route the table does NOT name 404s. That is the R5 property: the map's `default ""` is the
+	#     suppression, so a path outside it must produce no Location at all.
+	#   * any survey the generator could not resolve is recorded in the table as `# UNRESOLVED`, and
+	#     its hand-offs are OFFLINE. Dropping one survey's routes is the safe direction (they 404),
+	#     which is exactly why it must not pass unremarked on the edge that serves them.
+	if [ ! -f "$TS_MAP" ]; then
+		warn "ts-routes: no route table at $TS_MAP - this edge publishes NO /go/ts/ hand-off routes"
+		return
+	fi
+	unresolved="$(grep '^# UNRESOLVED ' "$TS_MAP" 2>/dev/null | awk '{print $3}' | tr -d ':' | tr '\n' ' ')"
+	if [ -n "$unresolved" ]; then
+		warn "ts-routes: survey(s) UNRESOLVED in the table, so their /go/ts/ hand-offs are OFFLINE (every path 404s): $unresolved- fix the register and regenerate"
+	fi
+	got_map="$($DOCKER compose -f "$COMPOSE_FILE" exec -T frontdoor sha256sum /etc/caddy/ts-routes.map 2>/dev/null | awk '{print $1}')"
+	want_map="$(_sha256 "$TS_MAP")"
+	if [ -z "$want_map" ]; then
+		warn "ts-routes: no sha256 tool available to hash-compare the route table"
+	elif [ -z "$got_map" ]; then
+		fail "ts-routes: could not read the running container's /etc/caddy/ts-routes.map (is the map mounted? see compose.yaml)"
+	elif [ "$got_map" = "$want_map" ]; then
+		pass "ts-routes: running edge route table matches the repo copy (sha256 $(printf '%.12s' "$want_map")...)"
+	else
+		fail "ts-routes: running edge route table DIFFERS from the repo copy (running $got_map vs repo $want_map) - git pull, then re-run install-frontdoor.sh"
+	fi
+	name="${AUSMT_PUBLIC_NAME:-}"
+	if [ -z "$name" ]; then
+		warn "ts-routes: AUSMT_PUBLIC_NAME unset in $ENV_FILE (cannot probe the hand-off routes)"
+		return
+	fi
+	# The OPEN probe and its expected Location both come from the table's FIRST route, so the pin
+	# tracks the published corpus instead of naming a station that may be retired next crawl. Override
+	# AUSMT_DOCTOR_TS_OPEN_PATH to probe a specific one.
+	line="$(grep -m1 '^"/go/ts/' "$TS_MAP" 2>/dev/null)"
+	if [ -z "$line" ]; then
+		pass "ts-routes: skipped route probes (the table publishes no routes)"
+		return
+	fi
+	open_path="${AUSMT_DOCTOR_TS_OPEN_PATH:-$(printf '%s' "$line" | sed 's/^"\([^"]*\)".*/\1/')}"
+	want_loc="https://thredds.nci.org.au/thredds/fileServer/$(printf '%s' "$line" | sed 's/^"[^"]*"[[:space:]]*"\([^"]*\)".*/\1/')"
+	hdrs="$($CURL -sSI --max-time 8 --resolve "$name:443:127.0.0.1" "https://$name$open_path" 2>/dev/null | tr -d '\r')"
+	if [ -z "$hdrs" ]; then
+		# No response AT ALL: skip cleanly, exactly as the pathurl leg does - the container check is
+		# the authority on a down edge and a FAIL here would double-report one outage.
+		pass "ts-routes: skipped (no response from https://$name$open_path - edge unreachable; see the container check)"
+		return
+	fi
+	code="$(printf '%s\n' "$hdrs" | awk 'NR==1{print $2}')"
+	loc="$(printf '%s\n' "$hdrs" | awk 'tolower($1)=="location:"{print $2; exit}')"
+	if [ "$code" = "302" ] && [ "$loc" = "$want_loc" ]; then
+		pass "ts-routes: $open_path 302s to the table's NCI Location"
+	else
+		fail "ts-routes: $open_path -> ${code:-no-code} ${loc:-no-location} (want 302 -> $want_loc)"
+	fi
+	# The WITHHELD probe: by default the same survey with a station id no register can carry, which
+	# proves the closed-world default. Set AUSMT_DOCTOR_TS_WITHHELD_PATH to a REAL withheld station's
+	# route (one carrying has_time_series in mtcat.json while carrying no resources) once the corpus
+	# has one - that is the enumeration R5 defends against, so probe it rather than assume it.
+	wh_path="${AUSMT_DOCTOR_TS_WITHHELD_PATH:-$(printf '%s' "$open_path" | sed 's#/[^/]*/[^/]*$#/AUSMT-DOCTOR-ABSENT/raw_packed#')}"
+	if grep -q "^\"$wh_path\"" "$TS_MAP" 2>/dev/null; then
+		warn "ts-routes: the withheld probe path $wh_path IS in the table - set AUSMT_DOCTOR_TS_WITHHELD_PATH to a suppressed route"
+		return
+	fi
+	wh_code="$($CURL -sS -o /dev/null -w '%{http_code}' --max-time 8 --resolve "$name:443:127.0.0.1" "https://$name$wh_path" 2>/dev/null)"
+	if [ "$wh_code" = "404" ]; then
+		pass "ts-routes: $wh_path 404s (an unlisted route produces no Location - the R5 suppression)"
+	else
+		fail "ts-routes: $wh_path -> ${wh_code:-no-response} (want 404; a route the table does not name must NOT resolve)"
+	fi
+}
+
 check_tailscale() {
 	if ! $TAILSCALE status >/dev/null 2>&1; then
 		fail "tailscale: not up (tailscale status failed) - the edge cannot reach the box"
@@ -411,6 +496,7 @@ run_report() {
 	check_tls_legacy
 	check_redirect
 	check_pathurl_redirect
+	check_ts_routes
 	check_tailscale
 	check_zombies
 	check_disk
@@ -432,6 +518,6 @@ run_report() {
 case "${1:-report}" in
 	report) run_report ;;
 	zombies) zombie_kit ;;
-	-h|--help) sed -n '2,50p' "$0" ;;
+	-h|--help) sed -n '2,68p' "$0" ;;
 	*) printf 'doctor: unknown subcommand: %s (try: report | zombies | --help)\n' "$1" >&2; exit 2 ;;
 esac

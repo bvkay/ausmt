@@ -400,6 +400,27 @@ function syncLegendTypes(){
     const box=legendTypeBox(btn.dataset.type),on=box?!!box.checked:true;
     btn.setAttribute("aria-pressed",String(on));
     btn.classList.toggle("legoff",!on);});}
+// R12: the metric scale bar, RE-PARENTED into the legend body. Leaflet drops a control into one of the
+// map's own corners, where a scale would sit apart from the key it belongs with and over the dots;
+// moving its container is the smallest change that puts it where a reader already looks. Constructing a
+// Leaflet control deliberately has one precedent here, map.js's layer control.
+// IT TAKES ITS OWN CLASS, and that is load-bearing rather than tidy: the legend's own pins count
+// `.legrow .dot` and assert #mapLegend is a child of #map, so a scale bar that borrowed either would
+// break a claim about the data-type key. Metric only (this is an Australian corpus) and capped at
+// 120px so it cannot outgrow the legend it now sits in.
+function buildScaleBar(body){
+  if(!body||!body.appendChild||body.querySelector(".maplegend-scale"))return null;   // idempotent, like buildLegend
+  if(typeof L==="undefined"||!L.control||typeof L.control.scale!=="function")return null;
+  const ctl=L.control.scale({metric:true,imperial:false,maxWidth:120});
+  if(!ctl||typeof ctl.addTo!=="function")return null;
+  ctl.addTo(map);
+  const el=(typeof ctl.getContainer==="function")?ctl.getContainer():null;
+  // Only a REAL element is moved. The headless harnesses stub Leaflet, so getContainer() there answers
+  // with something that is not a node, and appendChild would throw on the boot path.
+  if(!el||el.nodeType!==1||!el.classList)return null;
+  el.classList.add("maplegend-scale");
+  body.appendChild(el);
+  return el;}
 function buildLegend(){
   if(document.getElementById("mapLegend"))return;                 // idempotent
   const host=document.getElementById("map");if(!host)return;       // the Leaflet container is the overlay's positioning context
@@ -414,6 +435,7 @@ function buildLegend(){
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
     `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>${rows}</div>`;
   host.appendChild(el);
+  buildScaleBar(el.querySelector(".maplegend-body"));
   const toggle=el.querySelector("#mapLegendToggle");
   if(toggle)toggle.addEventListener("click",()=>{const ex=el.classList.toggle("expanded");toggle.setAttribute("aria-expanded",String(ex));});
   el.querySelectorAll(".legtype").forEach(btn=>{
@@ -470,8 +492,9 @@ function renderBuildId(){
 let HYDRATION_DONE=Promise.resolve();
 // Late hydration must never leave a stale render standing. Each gate re-runs EXACTLY the surfaces that read
 // its product, and nothing else:
-//   sci      -> re-folds s.q/s.dim (applySciToStations), re-enables the sci-driven rail controls, then
-//               refresh() so the map/counts/cards reflect a quality filter that was inert until now.
+//   sci      -> re-folds s.q/s.dim (applySciToStations), re-enables the completeness/dimensionality
+//               colour modes, then refresh() so the map/counts/cards reflect a completeness predicate
+//               that was inert until now.
 //   tf       -> the open station drawer (its response plots and the sci/tf-derived summary rows).
 //   manifest -> the open drawer again (Files rows, format badges, download tiles), station OR survey.
 // Re-rendering the open drawer is the deliberate simplest correct answer: it is one innerHTML rewrite of a
@@ -482,10 +505,11 @@ function wireHydration(){
   const sci=SCI_READY.then(()=>{
     applySciToStations();
     // SCI_READY settles on FAILURE too (phase 2 records the failure rather than rejecting), so the gate is
-    // hydrUsable, not the bare fact that the promise resolved. Re-enabling the completeness filter and the
-    // completeness/dimensionality colour modes after a 404 would hand the reader live controls over values
-    // that will never arrive: the filter would empty the map and the colour modes would paint every station
-    // the "not evaluated" grey. They stay disabled, with a title that says which wait this is.
+    // hydrUsable, not the bare fact that the promise resolved. Re-enabling the completeness/dimensionality
+    // colour modes after a 404 would hand the reader live controls over values that will never arrive: they
+    // would paint every station the "not evaluated" grey. They stay disabled, with a title that says which
+    // wait this is. The completeness PREDICATE is gated on the same hydrUsable inside passesCore, which is
+    // what keeps it inert now that the Availability group has taken its rail control away.
     if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
     if(typeof recolor==="function")recolor();
     if(ST.length&&typeof refresh==="function")refresh();
@@ -496,7 +520,16 @@ function wireHydration(){
   // on the same gate that re-renders the drawer.
   const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();
     if(typeof paintExportSizes==="function")paintExportSizes();});
-  HYDRATION_DONE=Promise.all([tf,sci,man]);
+  // ts_access.json settles the Availability facet: until it lands nothing on the page knows which
+  // stations this deployment can hand off, so the chooser is repainted here (its counts, its sizes
+  // and the disabled state that was in-flight a moment ago) and refresh() re-applies a level a
+  // reader chose while the filter was inert. It never rejects - absence is the honest answer - so
+  // there is no failure branch to mirror sci's.
+  const tsa=TSACC_READY.then(()=>{
+    if(typeof paintTsChooser==="function")paintTsChooser();
+    if(ST.length&&typeof refresh==="function")refresh();
+    rehydrateOpenDrawer();});
+  HYDRATION_DONE=Promise.all([tf,sci,man,tsa]);
 }
 async function boot(){
   if(typeof CAT==="undefined"||CAT===null){
@@ -508,10 +541,12 @@ async function boot(){
     // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
     try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
   }
-  // The sci-driven rail controls (completeness filter, completeness/dimensionality colour modes) are inert
-  // and disabled until sci.json is USABLE (see setSciControlsEnabled). Applied BEFORE the first render so
-  // they are never briefly live over data that has not arrived.
+  // The phase-2-driven rail controls are inert and disabled until their product is USABLE: the
+  // completeness/dimensionality colour modes (setSciControlsEnabled) and the Availability chooser,
+  // which paints its own in-flight state. Applied BEFORE the first render so neither is ever briefly
+  // live over data that has not arrived.
   if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
+  if(typeof paintTsChooser==="function")paintTsChooser();
   renderBuildId();
   runInit();
   wireHydration();

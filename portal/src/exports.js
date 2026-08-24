@@ -12,6 +12,32 @@ function csvRow(arr){return arr.map(csvCell).join(",");}
 function tsUTC(){return new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z");} // YYYYMMDDTHHMMSSZ
 function save(n,t,m){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:m||"text/plain"}));a.download=n;a.click();URL.revokeObjectURL(a.href);}
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(toast._h);toast._h=setTimeout(()=>t.style.display="none",7000);}
+// ---- the hand-off snackbar (owner UX ruling 2026-08-23) ------------------------------------------
+// PROGRESS BELONGS TO THE BROWSER: a hand-off is a 302, the bytes travel browser-to-archive, and
+// CORS forbids fetching the payload in-page. No progress bar, no download panel, no completion
+// claim - the page says only what it handed over. It differs from toast() in exactly one way, which is why it is a second element and not a
+// second use of the first: it can carry ONE action, the wget command for a whole list.
+function snack(msg,note,action){
+  const el=document.getElementById("snackbar");if(!el)return;
+  el.textContent="";
+  const body=document.createElement("span");
+  body.appendChild(document.createTextNode(msg));
+  if(note){const n=document.createElement("span");n.className="snack-note";n.textContent=note;body.appendChild(n);}
+  el.appendChild(body);
+  if(action){const b=document.createElement("button");b.type="button";b.className="snack-act";
+    b.textContent=action.label;b.addEventListener("click",action.onClick);el.appendChild(b);}
+  el.classList.remove("hidden");
+  clearTimeout(snack._h);
+  // An offer with an action gets long enough to reach for it; a plain hand-off note is transient.
+  snack._h=setTimeout(()=>{el.classList.add("hidden");el.textContent="";},action?25000:9000);}
+// Above this the wait is worth naming. 5 GB is the owner's threshold; the corpus has single archives
+// of 9.87 GB, and a reader who clicked expecting a file is owed the warning before the browser goes
+// quiet for a quarter of an hour.
+var HANDOFF_LARGE_BYTES=5*1024*1024*1024;
+function handoffSnack(filename,bytes){
+  snack("Handed to NCI THREDDS - your browser is downloading "+filename+
+        " ("+(bytes?fmtBigBytes(bytes):"size not stated")+"). Progress appears in your browser's downloads.",
+        bytes>=HANDOFF_LARGE_BYTES?"Large file - this may take a while.":null);}
 
 // CSV rows (header + one per station). Derefs the positional sci row sc[SC.q/qb/rr/dim/sw] at THE export
 // call site — extracted from the click handler so it is unit-testable: tests/test_populated_portal_smoke.py
@@ -137,14 +163,78 @@ document.getElementById("dlGeo").onclick=async()=>{track("DownloadGenerated",{fo
 document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
   const byColl={};sel().forEach(s=>{const doi=(SMETA[s.survey]||{}).doi||TS_COLLECTION.doi;(byColl[doi]=byColl[doi]||[]).push(s);});
   const doc={
-    note:"AusMT does not host raw time series. Request the levels you need from the archive(s) below; the station list lets you locate each occupation in their catalogue.",
+    // Repaired with the hand-off (2026-08-24): "request the levels you need" was the WHOLE story
+    // until a verified route existed, and is now only the fallback. Where the archive has a verified
+    // open file the portal routes a reader straight to it, and this file must not send them off to
+    // negotiate for something they could have fetched. AusMT still hosts nothing either way.
+    note:"AusMT hosts no raw time series. Where the archive has verified an openly accessible file for a station, the portal can route your browser straight to it: use the Time-series list export for those. For everything else, request the levels you need from the archive(s) below; the station list lets you locate each occupation in their catalogue.",
     generated:new Date().toISOString(),
     time_series_collection:{name:TS_COLLECTION.name,doi:TS_COLLECTION.doi,landing:"https://doi.org/"+TS_COLLECTION.doi},
     archives:Object.entries(byColl).map(([doi,arr])=>({source_doi:doi,landing:"https://doi.org/"+doi,
       stations:arr.map(s=>({ausmt_id:s.ausmt_id,station:s.id,survey:s.survey,survey_version:(SMETA[s.survey]||{}).version||null,lat:s.lat,lon:s.lon}))}))
   };
   save("ausmt-archive-pointers-"+tsUTC()+".json",JSON.stringify(doc,null,2),"application/json");
-  toast("Wrote pointers to where the raw time series live; AusMT does not host or fetch them itself.");};
+  toast("Wrote pointers to where the raw time series live. AusMT hosts none of them; where one is verified and open, the Time-series list hands your browser straight to the archive.");};
+
+// ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
+// The offer is a POINTER FILE, never a server-built zip or a fourth exportSelectionFormat:
+// AusMT holds none of these bytes, and packaging them would make
+// this portal a proxy for an archive that already serves them properly.
+//
+// PORTAL-GENERATED, not gateway-generated (D5). A fifth public gateway route would touch two
+// independent allowlists, their parity test, both deny-by-default blocks and the route table; the
+// /go/ts/ path shape already carries survey, station and level, which is the whole of what the
+// measurement needs. That is also why nothing here calls track(): the request the reader actually
+// makes is counted at the front door, from the route it names.
+//
+// Each row states the ROUTE, because that is the string to fetch, and the archive's own address
+// alongside as an inert reference (D3) - so the file still names its bytes if AusMT is down, without
+// pretending that address is what you were asked to fetch.
+var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. wget follows the redirect on its own; curl needs -L.";
+// One station's routable levels, in the vocabulary's own order so two readers' files sort alike.
+// `levels` scopes it to the Availability chooser; an empty choice means every level this station has.
+function tsHandoffLevels(s,levels){
+  const lv=(typeof tsRoutesFor==="function")?tsRoutesFor(s&&s.ausmt_id):null;
+  if(!lv)return [];
+  return TS_LEVELS.map(([tok])=>tok)
+    .filter(tok=>lv[tok]&&(!levels||!levels.length||levels.indexOf(tok)>=0))
+    .map(tok=>({level:tok,url:tsGoRoute(s,tok),bytes:lv[tok].bytes||null,
+                filename:String(lv[tok].url_path||"").split("/").pop(),
+                archive_url_comment:tsArchiveUrl(lv[tok].url_path)}))
+    .filter(r=>r.url&&/^https?:/i.test(r.url));}
+// The whole document, plus the two figures the confirmation states. Pure, and extracted for the
+// reason csvRows and geoFeatureCollection were: a claim about what a downloaded file contains is a
+// claim no test can reach while it lives inside an onclick.
+function tsHandoffDocument(stations,levels){
+  const rows=[];let files=0,bytes=0;
+  (stations||[]).forEach(s=>{const ls=tsHandoffLevels(s,levels);
+    if(!ls.length)return;
+    files+=ls.length;ls.forEach(l=>{bytes+=(l.bytes||0);});
+    rows.push({ausmt_id:s.ausmt_id,station:s.id,survey:s.survey,
+               survey_version:(SMETA[s.survey]||{}).version||null,levels:ls});});
+  return {files:files,bytes:bytes,doc:{note:TS_HANDOFF_NOTE,generated:new Date().toISOString(),
+    time_series_collection:{name:TS_COLLECTION.name,doi:TS_COLLECTION.doi,
+                            landing:"https://doi.org/"+TS_COLLECTION.doi},
+    stations:rows}};}
+// The command the COPY button offers. A heredoc rather than "wget -i <the file you just saved>": the
+// saved file is JSON (the #dlSh shape, so one habit reads both), and `wget -i` wants bare urls, so
+// naming the file would hand over a command that does not run. It fetches the ROUTES, never the
+// archive addresses beside them, because the route is what the front door counts.
+function tsWgetCommand(rows){
+  const urls=[];(rows||[]).forEach(r=>r.levels.forEach(l=>urls.push(l.url)));
+  return ["# AusMT time-series hand-off: "+urls.length+" file(s). wget follows the 302 to the archive.",
+          "wget --content-disposition -i - <<'AUSMT_EOF'"].concat(urls,["AUSMT_EOF"]).join("\n");}
+document.getElementById("dlTs").onclick=()=>{
+  // Two-phase boot: the index IS the availability answer here, so writing a list before it lands
+  // would report every station as having nothing to fetch. Say which wait this is and stop.
+  if(hydrating("tsaccess")){snack("Waiting for the archive hand-off index…");return;}
+  const built=tsHandoffDocument(sel(),tsChosenLevels());
+  if(!built.files){snack("None of the selected stations has a time-series file this deployment can route to.");return;}
+  save("ausmt-timeseries-handoff-"+tsUTC()+".json",JSON.stringify(built.doc,null,2),"application/json");
+  const cmd=tsWgetCommand(built.doc.stations);
+  snack("Download list ready - "+built.files+" file"+(built.files===1?"":"s")+", "+fmtBigBytes(built.bytes)+".",
+        "Your browser downloads them; AusMT only points the way.",
+        {label:"Copy wget command",onClick:()=>{if(typeof copyTxt==="function")copyTxt(cmd);}});};
 // C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
 // pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
 // ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
