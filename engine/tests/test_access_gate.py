@@ -516,3 +516,66 @@ def test_products_leak_sweep_catches_prefix_emitter(tmp_path):
     # exact-coordinate detection is non-vacuous too
     txt = (sdir / "station.json").read_text(encoding="utf-8")
     assert "-30.145891" in txt and "136.974795" in txt, "pre-fix station.json must carry exact coordinates"
+
+
+# ------------------------------------------------- THREDDS section 2: the ROOT-level leak sweep
+
+def _root_leak_hits(out, forbidden):
+    """Scan the DATA-ROOT artifacts (mtcat.json, and ts_access.json when the A5 emitter lands) for
+    any of the forbidden route strings. The C1c sweep rglobs products/<slug>/ and sees nothing at
+    the root, so this is the second net the five-artifact leak enumeration requires."""
+    hits = []
+    for name in ("mtcat.json", "ts_access.json"):
+        p = out / name
+        if not p.exists():
+            continue
+        text = p.read_text(encoding="utf-8")
+        hits += [(name, s) for s in forbidden if s in text]
+    return hits
+
+
+def test_root_artifacts_carry_no_register_route_detail(tmp_path):
+    """The register's url_paths and filenames are ROUTE DETAIL: station.json carries them only on
+    open records, and the root artifacts never carry them at all - mtcat states the flag and the
+    count, nothing more. Proven over a register whose rows cover every access state, with a
+    planted-leak control so a dead sweep cannot pass as a pin."""
+    out, prod, served, nonserved = _build_products_corpus(tmp_path)
+    ids_of = {slug: sorted(p.name for p in (prod / slug).iterdir() if p.is_dir())
+              for slug in (*served, *nonserved)}
+    ts_root = tmp_path / "ts-index"
+    forbidden = []
+    for slug, sids in ids_of.items():
+        (ts_root / slug).mkdir(parents=True)
+        rows = []
+        for sid in sids:
+            path = f"my80/LEAKPROBE/{slug}/{sid}.zip"
+            forbidden += [path, f"{sid}.zip"]
+            rows.append(f"  {sid}:\n    - level: raw_packed\n"
+                        f"      url_path: \"{path}\"\n      filename: \"{sid}.zip\"\n"
+                        f"      bytes: 1000\n      verified: \"2026-08-24\"\n"
+                        f"      match_method: exact\n      review: verified\n")
+        (ts_root / slug / "ts-index.yaml").write_text("ts_index:\n" + "".join(rows),
+                                                      encoding="utf-8")
+    out2 = tmp_path / "data2"
+    r = subprocess.run([sys.executable, "-m", "extract.build_portal", "--surveys",
+                        str(tmp_path / "surveys_src"), "--out", str(out2), "--products",
+                        str(out2 / "products"), "--bundle-edi", "--no-validate",
+                        "--ts-index", str(ts_root)],
+                       cwd=str(ROOT), capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    mtcat = json.loads((out2 / "mtcat.json").read_text(encoding="utf-8"))
+    flagged = [s for s in mtcat["stations"] if s.get("has_time_series")]
+    assert flagged, "non-vacuity: the register flags stations in every access state"
+    assert _root_leak_hits(out2, forbidden) == []
+    # the control: a planted route string IS caught, so the net is alive
+    leaky = tmp_path / "leaky"
+    shutil.copytree(out2, leaky)
+    doc = json.loads((leaky / "mtcat.json").read_text(encoding="utf-8"))
+    doc["stations"][0]["leak"] = forbidden[0]
+    (leaky / "mtcat.json").write_text(json.dumps(doc), encoding="utf-8")
+    assert _root_leak_hits(leaky, forbidden), "the sweep must catch a planted route string"
+    # and the withheld stubs under the SAME register carry none of it (the products-tree half)
+    for slug in nonserved:
+        for sj in (out2 / "products" / slug).rglob("station.json"):
+            txt = sj.read_text(encoding="utf-8")
+            assert not any(s in txt for s in forbidden), f"{sj}: route detail on a withheld record"
