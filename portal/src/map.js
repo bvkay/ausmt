@@ -46,17 +46,14 @@ function hasPosition(s){return !!(s&&s.lat!=null&&s.lon!=null&&isFinite(s.lat)&&
 // `visible` (filters.js) is already the filtered set; only POSITIONED stations reach the layer, because a
 // coordinate-withheld station has no marker (C42) and no place on the map. Every one of them is a dot: the
 // set no longer depends on zoom or on the sidebar mode, so nothing else has to trigger a re-route.
-// Routing telemetry: how many passes have run, and what the last one painted. Not used by the app - it
-// exists so a test can prove that a given ACTION caused a repaint and with what. Under a stubbed Leaflet
-// the layer contents are unreadable Proxies, so this is the only honest observable for that.
-let _routePasses=0,_lastRoute={dots:[]};
+// Returns what this pass painted. The app ignores the value; the jsdom driver calls the pass directly and
+// reads it, because under a stubbed Leaflet the layer contents are unreadable Proxies.
 function routeVisibleToLayers(){
   const dots=(typeof visible!=="undefined"?visible:[]).filter(hasPosition);
   dotLayer.clearLayers();
   dots.forEach(s=>{if(s.marker)dotLayer.addLayer(s.marker);});
   applySurveyDim();          // a re-render must not drop the change-2 focus dim
-  _routePasses++;_lastRoute={dots};
-  return _lastRoute;
+  return {dots};
 }
 const drawn=new L.FeatureGroup().addTo(map);
 // UX6 Wave D (D3, #20): plain-language labels for the draw toolbar buttons. These override the generic
@@ -287,8 +284,8 @@ function _mapMarkInteracted(){_mapUserInteracted=true;}
 // Leaflet only routes a click here when its hit-testing found no interactive layer under the pointer:
 // station markers set bubblingMouseEvents:false (buildMarkers) and a drawn shape is an L.Path target that
 // consumes its own click, so "reached this handler" IS "landed on the background". PURE decision split
-// out as _bgClickShouldClose so the jsdom driver can pin the RULE; note
-// that the pointer/capture semantics themselves are Leaflet's and are only exercised in a real browser.
+// out as _bgClickShouldClose so the jsdom driver can pin the RULE; note that the pointer/capture semantics
+// themselves are Leaflet's and are only exercised in a real browser.
 // An ARMED DRAW is excluded: mid-rectangle the click is placing a corner, not dismissing a panel.
 function _bgClickShouldClose(drawerOpen,armedMode){return !!drawerOpen&&!armedMode;}
 map.on("click",()=>{

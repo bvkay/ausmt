@@ -284,9 +284,9 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // hooks verify draw/select flows still COUNT a re-classified station (which may move map containers) —
   // the counting logic reads `visible`/ST, not layer membership, so it stays membership-agnostic.
   "isAuslampSurvey,radiusForZoom,weightForZoom,markerColor,tooltipText,buildAuslampSet," +
-  // The map paint pass and its telemetry: what the last pass put in the ONE dot container, and how many
-  // passes have run (so a leg can prove an ACTION caused a repaint).
-  "routeVisibleToLayers,routePasses:()=>_routePasses,lastRoute:()=>_lastRoute," +
+  // The map paint pass. F4 invokes it and reads what it returned, which is the only readable record of
+  // what reached the ONE dot container (the stubbed layer group's own contents are Proxies).
+  "routeVisibleToLayers," +
   "auslampSet:()=>AUSLAMP_SET,setAuslampSet:(arr)=>{AUSLAMP_SET=new Set(arr);}," +
   // stationMarker reaches a real station's recorded layer, which is how the station-click leg fires the
   // handler the app actually bound rather than a re-implementation of it.
@@ -1089,9 +1089,11 @@ async function bootFreshWindow(dataMap, url) {
   //     badge: without that setup the pin would pass against zero badges and prove nothing.
   A.closeDrawer();
   A.setSidebarMode("browse"); A.setAuslampSet([]); A.refresh();
-  layersAdded.length = 0;
+  // Mark rather than clear: F5 below asserts the no-named-pane invariant over EVERY layer the boot added,
+  // so the whole-run record has to survive this leg. The slice is this pass's share of it.
+  const _routeMark = layersAdded.length;
   const _dots = A.routeVisibleToLayers();
-  const _added = layersAdded.filter(l => l.kind !== "layerGroup");
+  const _added = layersAdded.slice(_routeMark).filter(l => l.kind !== "layerGroup");
   ok(!("badges" in _dots),
     "dots only: the paint pass must not carry a badge arm at all, got " + JSON.stringify(Object.keys(_dots)));
   ok(_dots.dots.length === A.visIds().length,
@@ -1119,18 +1121,21 @@ async function bootFreshWindow(dataMap, url) {
   //     pane makes Leaflet build a full-map-size canvas inside it, which swallowed every click.)
   //
   //     The badges, their panes and the pane guard are gone with the 2026-08-24 ruling, so the invariant is
-  //     now STRUCTURAL rather than guarded: the map module creates no pane at all, and every station stays
-  //     in Leaflet's default overlay pane. Both halves are asserted, because "the guard was deleted" is only
-  //     safe while the panes really are absent.
+  //     now STRUCTURAL rather than guarded: no pane is created, and no layer is routed into one. Both halves
+  //     are asserted, because "the guard was deleted" is only safe while the panes really are absent.
+  //     SCOPE, so the wording matches what is actually observed: panesMade holds every map.createPane call
+  //     of the run, and layersAdded every layer the recorded factories produced and the app added (map.js's
+  //     circleMarkers, markers, polylines and layer groups). Neither is ever cleared, so a leader tail put
+  //     into a pane at BOOT is caught here, not just the dots the F4 pass had painted a moment earlier.
   //
   //     WHAT THIS CANNOT PROVE, and what only a real browser can: that a pointer event reaches the station
   //     layer. jsdom has no compositor, no canvas hit-testing and no pane stacking - the click leg below
   //     INVOKES a recorded handler, it does not dispatch a pointer at a pixel.
   ok(Object.keys(panesMade).length === 0,
-    "F5: the map module must create NO pane. Any pane it makes is stacked over the station canvas and is " +
-    "the exact shape of the 2026-08-19 outage. Got " + JSON.stringify(Object.keys(panesMade)));
+    "F5: no module may create a Leaflet pane over this whole boot. Any pane is stacked over the station " +
+    "canvas and is the exact shape of the 2026-08-19 outage. Got " + JSON.stringify(Object.keys(panesMade)));
   ok(layersAdded.every(l => !(l.options && l.options.pane)),
-    "F5: no layer may be routed into a named pane, got " +
+    "F5: no layer added over this whole boot may be routed into a named pane, got " +
     JSON.stringify(layersAdded.filter(l => l.options && l.options.pane).map(l => l.kind + ":" + l.options.pane)));
   A.closeDrawer();
   win.location.hash = "";
