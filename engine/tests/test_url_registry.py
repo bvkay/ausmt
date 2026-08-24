@@ -243,3 +243,33 @@ def test_committed_registry_against_a_real_built_tree():
         merged = ur.merge_additions(json.loads(json.dumps(registry)), additions)
         sviol = ur.check_sitemap(merged, ur.sitemap_entity_ids(sm.read_text(encoding="utf-8")))
         assert sviol == [], "\n".join(sviol)
+
+
+def test_the_hand_off_namespace_can_never_reach_the_registry_or_the_sitemap():
+    """NEGATIVE PIN (THREDDS A10). `/go/ts/<survey>/<station>/<level>` is a front-door redirect into
+    the NCI archive, NOT a published entity URL: it resolves through a generated table whose
+    membership is the access decision, so an id reaching this registry through it would freeze a
+    route the access gate is entitled to withdraw.
+
+    Two closed things already make that impossible and neither is stated anywhere a reader would
+    find it: KINDS is frozen at three, and the path/fragment patterns match only those three
+    prefixes. This pin says so out loud, because the hand-off routes DO carry a survey slug and a
+    station id in their path, which is exactly the shape a future 'just add the new prefix' change
+    would be tempted by.
+
+    FAILS IF a fourth kind appears, or if a `/go/ts/` URL in a sitemap yields any entity id
+    (control: the real /surveys/ and /stations/ forms in the same document still do)."""
+    assert ur.KINDS == ("surveys", "stations", "collections")
+    assert set(ur._PATH_RE) == set(ur.KINDS) and set(ur._FRAG_RE) == set(ur.KINDS)
+    xml = (
+        "<urlset>"
+        "<url><loc>https://example.org/go/ts/vulcan-2022/MBV07/raw_packed</loc></url>"
+        "<url><loc>https://example.org/go/ts/vulcan-2022/MBV07/level1_mth5</loc></url>"
+        "</urlset>")
+    assert ur.sitemap_entity_ids(xml) == {"surveys": [], "stations": [], "collections": []}, \
+        "a hand-off route must advertise no entity id at all"
+    control = ("<urlset><url><loc>https://example.org/surveys/vulcan-2022</loc></url>"
+               "<url><loc>https://example.org/stations/au.vulcan-2022.MBV07</loc></url></urlset>")
+    assert ur.sitemap_entity_ids(control) == {
+        "surveys": ["vulcan-2022"], "stations": ["au.vulcan-2022.MBV07"], "collections": []}, \
+        "the published forms must still be picked up, or this pin is vacuous"

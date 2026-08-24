@@ -197,8 +197,9 @@
 	# /surveys/x first 301s to the canonical host with the path preserved (the legacy block's {uri}
 	# redir), THEN this section maps it - two hops for legacy deep paths, one for canonical. A hop at
 	# THIS block lands in the masked access log above (this block logs, the legacy one does not); the
-	# analytics fold already excludes it twice over (aggregate_stats.py counts only /data/* paths,
-	# and 301 sits outside every admitted status set) - pinned in deploy/tests.
+	# analytics fold already excludes it twice over (aggregate_stats.py counts only the /data/*
+	# download, visit and API paths plus the /go/ts/ hand-offs below, and 301 sits outside every
+	# admitted status set - a hand-off is admitted at 302 alone) - pinned in deploy/tests.
 	map {http.request.uri} {ausmt_pathurl_rest} {
 		~^([^?]*) "${1}"
 		default ""

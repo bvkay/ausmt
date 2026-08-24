@@ -2198,8 +2198,9 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
     pre-existing filters each exclude the hop, and both are pinned here with a sensitivity control
     so this pin can fail:
 
-      * PATH CLASS: classify() counts only /data/* paths, so a path-shape URI is `ignore` at ANY
-        status (control: the hop path at status 200 still counts nothing);
+      * PATH CLASS: classify() counts only the /data/* download, visit and API paths plus the
+        /go/ts/ archive hand-offs, so a path-shape URI is `ignore` at ANY status (control: the hop
+        path at status 200 still counts nothing);
       * STATUS: a visit admits only 200/304 (a download only 200/206), so even a 301 on the visit
         path itself is excluded (this line never occurs live; it pins the filter).
 
@@ -2225,3 +2226,352 @@ def test_redirect_hops_are_never_counted_as_visits_or_anything_else():
     # the ==1 above is measuring the filters, not a dead counter (visits are never deduped).
     stats2 = AGG.aggregate(None, hop_lines + boot + boot, rmap, geoip, _RUN)
     assert stats2["totals"]["visits"] == 2, "the visit counter must move on an admitted line"
+
+
+# ==================================================================================================
+# TIME-SERIES HAND-OFFS lane (THREDDS A10; owner ruling R8, records D4/D13/D16).
+#
+# /go/ts/<survey>/<station>/<level> answers 302 with the ONE NCI THREDDS fileServer URL for that
+# file. AusMT hands the reader off and hosts none of those bytes, so this class counts REQUESTS and
+# can never count completed transfers: everything after the Location is between the browser and NCI,
+# and every published string says so.
+#
+# TWO things the log cannot tell us, and they are the whole of D4. The `size` on a 302 line is the
+# REDIRECT BODY, not the file, and the Location header is never logged at all. So the bytes and the
+# destination host come from the register-derived `ts_access.json` the build serves, joined on the
+# route path exactly as a frozen release bundle joins on its filename (_release_bundle_row).
+#
+# THE GEO BOUNDARY DOES NOT MOVE. A hand-off carries a country at the cumulative and calendar-month
+# grains and NOWHERE finer, for the same small-cell reason a named state on a named day is refused.
+# ==================================================================================================
+# A served ts_access.json in the shape build_portal emits: {ausmt_id: {level: {bytes, url_path}}}.
+# `C5 [REMOTE].zip` is the lane's real fixture -- a published url_path carrying a space and brackets,
+# which is why the emitted access_url is percent-encoded and why nothing here rebuilds one by hand.
+_TS_ACCESS = {
+    "au.sample-survey.A1": {
+        "raw_packed": {"bytes": 9_868_836_788,
+                       "url_path": "my80/AuScope_AusLAMP/NVP_2019/Packed_Raw/C5 [REMOTE].zip"},
+        "level1_mth5": {"bytes": 20_360_000,
+                        "url_path": "my80/AuScope_AusLAMP/NVP_2019/level_1/A1.h5"},
+    },
+    "au.sample-survey.A2": {
+        "level0": {"bytes": 512, "url_path": "my80/AuScope_AusLAMP/NVP_2019/level_0/A2.h5"},
+    },
+}
+_TS_A1_RAW = "/go/ts/sample-survey/A1/raw_packed"
+_TS_A1_L1 = "/go/ts/sample-survey/A1/level1_mth5"
+_TS_A2_L0 = "/go/ts/sample-survey/A2/level0"
+_TS_HOST = "thredds.nci.org.au"
+
+
+def _handoff(uri, addr, **kw):
+    """One hand-off log line: a 302 whose `size` is the redirect body and never the file's."""
+    kw.setdefault("status", 302)
+    kw.setdefault("size", 0)
+    return _line(uri, addr, **kw)
+
+
+def _ts_fold(lines, prev=None, **kw):
+    """A fold over hand-off lines with the served index wired in and no download manifest at all, so
+    nothing here can borrow an attribution from the download family."""
+    return AGG.aggregate(prev, lines, {}, AGG.GeoIP.load(_DBIP), _RUN, ts_access=_TS_ACCESS, **kw)
+
+
+def test_a_hand_off_route_is_its_own_class_admitted_at_302_alone():
+    """CLASS PIN. classify() gains the /go/ts/ prefix, and the route shape is exactly three segments:
+    survey, station, level. Anything shorter or longer is not a hand-off route and stays `ignore`, so
+    a bare prefix or a probe cannot mint a class. The fold then admits 302 for this class and only
+    302: a hand-off IS the redirect, and a 200 or a 404 on one of these paths is not one.
+
+    FAILS IF a non-route path classifies, or if any status other than 302 is counted (control: the
+    same line at 302 does count, so the status filter is measured rather than dead)."""
+    assert AGG.classify(_TS_A1_RAW) == ("handoff", "sample-survey/A1/raw_packed")
+    for path in ("/go/ts", "/go/ts/", "/go/ts/sample-survey", "/go/ts/sample-survey/A1",
+                 "/go/ts/sample-survey/A1/raw_packed/more", "/go/ts/sample-survey//raw_packed",
+                 "/go", "/gots/a/b/c", "/data/go/ts/a/b/c"):
+        assert AGG.classify(path) == ("ignore", None), path
+    for status in (200, 206, 301, 304, 404, 500):
+        stats = _ts_fold([_handoff(_TS_A1_RAW, _AU_NSW, status=status)])
+        assert stats["handoffs"]["requests"] == 0, f"status {status} must not count as a hand-off"
+    stats = _ts_fold([_handoff(_TS_A1_RAW, _AU_NSW)])
+    assert stats["handoffs"]["requests"] == 1, "the 302 control must count, or the pin is dead"
+
+
+def test_hand_off_bytes_and_destination_come_from_the_register_never_the_log():
+    """D4 PIN, the whole reason this class needs a join at all. The log CANNOT say how big the file
+    is (its `size` is the redirect body) and CANNOT say where it went (the Location header is never
+    logged), so both come from the served, register-derived ts_access.json on the route key.
+
+    The query is stripped before the join, exactly as it is stripped before the front door's own
+    lookup, so `?u=https://evil.example` can reach neither the counted route nor the destination.
+
+    FAILS IF the redirect body's size is summed as volume, if the destination is guessed from the
+    request rather than taken from the emitted access_url, or if a query changes the join."""
+    stats = _ts_fold([_handoff(_TS_A1_RAW + "?u=https://evil.example", _AU_NSW, size=17)])
+    h = stats["handoffs"]
+    assert h["requests"] == 1
+    assert h["bytes"] == 9_868_836_788, "the bytes are the register's, never the 17-byte redirect body"
+    assert h["by_destination"] == {_TS_HOST: {"requests": 1, "bytes": 9_868_836_788}}
+    assert h["by_level"] == {"raw_packed": {"requests": 1, "bytes": 9_868_836_788}}
+    assert h["by_survey"] == {"sample-survey": {"requests": 1, "bytes": 9_868_836_788}}
+    assert "evil.example" not in json.dumps(stats), "a query must not reach any counted figure"
+
+
+def test_an_unresolvable_hand_off_route_is_its_own_skew_bucket_and_never_dropped():
+    """DRIFT PIN. The route table lives on the front door and the data on the box, so a 302 CAN
+    arrive for a route the served index no longer publishes. That is drift, and drift must be
+    visible: the request counts, its bytes do not (nothing measured them), and it lands in the
+    hand-off family's OWN unattributed bucket.
+
+    The route's own segments are NOT recorded for it. A 302 the data cannot confirm is exactly the
+    case where the path is not evidence of anything, and writing its survey and level would publish
+    the table's claim as if the register had made it.
+
+    FAILS IF an unresolvable route is dropped, if it borrows the download family's unattributed
+    bucket (which exists to detect build/serve skew of a different kind), or if it invents bytes."""
+    stats = _ts_fold([_handoff("/go/ts/sample-survey/A1/level2", _AU_NSW),
+                      _handoff("/go/ts/no-such-survey/X9/level0", _AU_NSW)])
+    h = stats["handoffs"]
+    assert h["requests"] == 2 and h["unattributed"] == 2
+    assert h["bytes"] == 0, "nothing measured those bytes, so none are claimed"
+    assert h["by_survey"] == {} and h["by_level"] == {} and h["by_destination"] == {}
+    assert stats["totals"]["unattributed"] == 0, "the download skew bucket is not shared"
+    assert stats["totals"]["downloads"] == 0 and stats["totals"]["download_bytes"] == 0
+
+
+def test_hand_offs_ride_every_grain_with_by_survey_by_level_and_by_destination():
+    """GRAIN PIN (D13/D16). by_survey and by_level ride EVERY grain the family has -- cumulative,
+    calendar month, day row and the permanent archive line -- and by_destination rides beside them
+    (D16: cardinality is one today, and that is exactly when a missing breakdown is cheap to add).
+    The archive additionally keeps the station-grain cell, the by_dataset of this family, because the
+    92-day window is what otherwise loses "which station, on which day" forever.
+
+    FAILS IF a grain is missing a dimension, if the four disagree on a figure, or if the archive
+    stops carrying the route detail."""
+    rows: list[dict] = []
+    stats = AGG.aggregate(None,
+                          [_handoff(_TS_A1_RAW, _AU_NSW), _handoff(_TS_A1_L1, _NZ),
+                           _handoff(_TS_A2_L0, _AU_NSW)],
+                          {}, AGG.GeoIP.load(_DBIP), _RUN, ts_access=_TS_ACCESS, archive_out=rows)
+    total_bytes = 9_868_836_788 + 20_360_000 + 512
+    assert len(stats["daily"]) == 1 and len(stats["monthly"]) == 1 and len(rows) == 1
+    grains = {"cumulative": stats["handoffs"],
+              "month": stats["monthly"][0]["handoffs"],
+              "day": stats["daily"][0]["handoffs"],
+              "archive": rows[0]["handoffs"]}
+    for name, block in grains.items():
+        assert block["requests"] == 3, name
+        assert block["bytes"] == total_bytes, name
+        assert block["by_survey"] == {"sample-survey": {"requests": 3, "bytes": total_bytes}}, name
+        assert set(block["by_level"]) == {"raw_packed", "level1_mth5", "level0"}, name
+        assert block["by_destination"] == {_TS_HOST: {"requests": 3, "bytes": total_bytes}}, name
+    assert rows[0]["handoffs"]["by_route"]["sample-survey/A1/raw_packed"] == {
+        "requests": 1, "bytes": 9_868_836_788}
+    assert "by_route" not in grains["day"], "station grain belongs to the archive, not the screen"
+
+
+def test_a_hand_off_carries_a_country_at_month_grain_and_nowhere_finer():
+    """GEO BOUNDARY PIN. The hand-off family takes a by-country figure at the cumulative and
+    calendar-month grains ONLY (D13). A named country on a named day is the finest cell this
+    pipeline could produce and the owner's ratified exclusion of day-by-state data covers it, so
+    neither the day row nor the permanent archive may carry one.
+
+    FAILS IF a country reaches a day row or an archive line, or if the month grain stops carrying
+    one (control: the same fold really is resolving countries)."""
+    rows: list[dict] = []
+    stats = AGG.aggregate(None,
+                          [_handoff(_TS_A1_RAW, _AU_NSW), _handoff(_TS_A1_L1, _AU_NSW),
+                           _handoff(_TS_A2_L0, _NZ)],
+                          {}, AGG.GeoIP.load(_DBIP), _RUN, ts_access=_TS_ACCESS, archive_out=rows)
+    assert stats["handoffs"]["countries"] == {"AU": 2, "NZ": 1}
+    assert stats["monthly"][0]["handoffs"]["countries"] == {"AU": 2, "NZ": 1}
+    assert "countries" not in stats["daily"][0]["handoffs"]
+    assert "countries" not in rows[0]["handoffs"]
+    assert "AU" not in json.dumps(rows[0]) and "NZ" not in json.dumps(rows[0])
+
+
+def test_hand_offs_leave_every_download_family_figure_exactly_where_it_was():
+    """NON-INTERFERENCE PIN. The hand-off class is ADDITIVE: it must not join the download, visit or
+    API counters, must not move the country map those three reconcile against, and must not add a
+    metric to the shared per-place detail rows (the state rows plus unattributed reconcile with the
+    AU country row, and that promise is built on those two maps).
+
+    FAILS IF a hand-off is counted as a download or a visit, if `sum(countries.values())` stops
+    equalling downloads + visits + API requests, or if a detail row grows a fifth metric."""
+    rmap = AGG.build_reverse_map(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    lines = [
+        _line("/data/edi/sample-survey/Vulcan_A1.edi", _AU_NSW, size=900),
+        _line("/data/catalogue.json", _NZ),
+        _line("/data/mtcat.schema.json", _AU_NSW),
+        _handoff(_TS_A1_RAW, _AU_NSW),
+        _handoff(_TS_A2_L0, _NZ),
+    ]
+    stats = AGG.aggregate(None, lines, rmap, AGG.GeoIP.load(_DBIP), _RUN, ts_access=_TS_ACCESS)
+    t = stats["totals"]
+    assert (t["downloads"], t["visits"], t["api_requests"]) == (1, 1, 1)
+    assert t["download_bytes"] == 900, "the register's hand-off bytes are not download volume"
+    assert sum(stats["countries"].values()) == t["downloads"] + t["visits"] + t["api_requests"]
+    for row in stats["by_country_detail"].values():
+        assert set(row) == {"downloads", "visits", "api", "bytes"}
+    assert stats["handoffs"]["requests"] == 2, "and the hand-offs really were folded beside them"
+
+
+def test_a_stats_file_folded_before_hand_offs_gains_them_forward_only():
+    """ADDITIVE-BY-KEY-PRESENCE PIN (the SCHEMA_VERSION discipline). The class is detected by key
+    presence, never by a version bump: a month folded before it existed carries NO hand-off key at
+    all, so the screen can say 'not measured' instead of rendering a zero nobody measured, and a
+    month folded after it starts dense.
+
+    FAILS IF an older month is back-filled with a zeroed block, or if the cumulative figures from an
+    older file are lost on the way through."""
+    prev = {
+        "schema": 2, "last_folded_date": "2026-06-30", "since": "2026-06-01",
+        "totals": {"downloads": 5, "visits": 9},
+        "monthly": [{"month": "2026-06", "downloads": 5, "visits": 9, "days": 3, "detail_days": 3}],
+        "daily": [{"date": "2026-06-30", "downloads": 5, "visits": 9}],
+    }
+    stats = _ts_fold([_handoff(_TS_A1_RAW, _AU_NSW)], prev=prev)
+    old = [m for m in stats["monthly"] if m["month"] == "2026-06"][0]
+    new = [m for m in stats["monthly"] if m["month"] == "2026-07"][0]
+    assert "handoffs" not in old, "a month that never measured hand-offs must carry no such key"
+    assert new["handoffs"]["requests"] == 1
+    assert stats["totals"]["downloads"] == 5 and stats["totals"]["visits"] == 9
+    # And a file written by THIS build reads back with its cumulative hand-off figures intact.
+    again = _ts_fold([], prev=json.loads(json.dumps(stats)))
+    assert again["handoffs"]["requests"] == 1
+    assert again["handoffs"]["by_destination"] == {_TS_HOST: {"requests": 1, "bytes": 9_868_836_788}}
+
+
+def test_the_hand_off_fold_leaks_no_address_and_no_user_agent():
+    """LEAK PIN (hand-offs). The class adds a route path, a level token, a survey slug, an archive
+    host and a byte count. None of it may put an address or a user-agent into stats.json or into the
+    permanent archive. FAILS IF one survives; NEGATIVE CONTROL: the same sweep over a planted
+    address must report hits, so a vacuous sweep cannot pass."""
+    rows: list[dict] = []
+    stats = AGG.aggregate(None,
+                          [_handoff(_TS_A1_RAW, _AU_NSW), _handoff(_TS_A1_L1, "2001:db8:1234::"),
+                           _handoff(_TS_A2_L0, _NZ, ua="curl/8.4.0")],
+                          {}, AGG.GeoIP.load(_DBIP), _RUN, ts_access=_TS_ACCESS, archive_out=rows)
+    assert stats["handoffs"]["requests"] == 3, "a vacuous sweep proves nothing"
+    for text in (json.dumps(stats, indent=1), json.dumps(rows)):
+        assert _sweep_ip_or_ua(text) == [], text
+    leaky = json.dumps({"handoffs": stats["handoffs"], "_debug": {"v6": "2001:db8:1234::"}})
+    assert _sweep_ip_or_ua(leaky), "the leak sweep failed to catch a planted address"
+
+
+def test_main_reads_the_served_hand_off_index_beside_the_manifest(tmp_path, monkeypatch):
+    """WIRING PIN. The join input is the served ts_access.json, which sits beside manifest.json in
+    the tree the fold is already reading (the same place mtcat.json and build.json come from). No new
+    config knob, and an ABSENT index degrades to route counts with no bytes -- it never crashes and
+    never guesses a size.
+
+    FAILS IF main() never reaches the index, or if its absence aborts the run."""
+    data = tmp_path / "data"
+    served = data / "site-data" / "current"
+    logdir = data / "logs" / "caddy"
+    state = data / "gateway" / "state"
+    for d in (served, logdir, state):
+        d.mkdir(parents=True)
+    (served / "manifest.json").write_text(_MANIFEST.read_text(encoding="utf-8"), encoding="utf-8")
+    (served / "ts_access.json").write_text(json.dumps(_TS_ACCESS), encoding="utf-8")
+    # The front door's own log file, which is the file these lines actually arrive in.
+    (logdir / "access-frontdoor.json").write_text(
+        _handoff(_TS_A1_RAW, _AU_NSW) + "\n", encoding="utf-8")
+    stats_file = state / "stats.json"
+    monkeypatch.setenv("AUSMT_DATA_DIR", str(data))
+    monkeypatch.setenv("AUSMT_STATS_MANIFEST", str(served / "manifest.json"))
+    monkeypatch.setenv("AUSMT_STATS_DBIP_CSV", str(_DBIP))
+    monkeypatch.setenv("AUSMT_STATS_FILE", str(stats_file))
+    monkeypatch.setenv("AUSMT_STATS_NOW", "2026-07-12T03:30:00Z")
+
+    assert AGG.main([]) == 0
+    doc = json.loads(stats_file.read_text(encoding="utf-8"))
+    assert doc["handoffs"]["requests"] == 1
+    assert doc["handoffs"]["bytes"] == 9_868_836_788
+    assert doc["handoffs"]["by_destination"] == {_TS_HOST: {"requests": 1,
+                                                           "bytes": 9_868_836_788}}
+    assert _sweep_ip_or_ua(stats_file.read_text(encoding="utf-8")) == []
+
+    (served / "ts_access.json").unlink()
+    (state / "stats.json").unlink()
+    assert AGG.main([]) == 0, "a deployment that publishes no index still folds"
+    bare = json.loads(stats_file.read_text(encoding="utf-8"))
+    assert bare["handoffs"]["requests"] == 1 and bare["handoffs"]["unattributed"] == 1
+    assert bare["handoffs"]["bytes"] == 0
+
+
+def test_every_committed_front_door_route_classifies_as_a_hand_off():
+    """CROSS-FILE PIN. The front door's committed table is what turns one of these paths into an NCI
+    URL, so the shape it emits and the shape this fold parses are ONE contract. Both are checked in,
+    so the pin can read them rather than restate them.
+
+    FAILS IF the generator's key shape and the classifier's parse drift apart, or if the Caddyfile
+    stops matching the prefix this fold counts."""
+    table = (_REPO / "deploy" / "frontdoor" / "ts-routes.map").read_text(encoding="utf-8")
+    keys = re.findall(r'^"([^"]+)"\s+"[^"]*"$', table, re.M)
+    assert len(keys) > 100, "the committed route table must really carry routes"
+    for key in keys[:40] + keys[-40:]:
+        kind, rel = AGG.classify(key)
+        assert kind == "handoff", f"the committed route {key} does not classify as a hand-off"
+        assert rel and rel.count("/") == 2, key
+    caddyfile = (_REPO / "deploy" / "frontdoor" / "Caddyfile").read_text(encoding="utf-8")
+    assert "path /go/ts /go/ts/*" in caddyfile, "the front door must match the prefix this fold counts"
+    assert AGG._HANDOFF_PREFIX == "/go/ts/"
+
+
+def test_the_destination_host_is_the_one_the_engine_publishes():
+    """DESTINATION PIN. by_destination is keyed on the host of the access_url the BUILD emits, and
+    that prefix has exactly one source of truth (_stationcheck.TS_ACCESS_PREFIX). This fold restates
+    the string because it is stdlib-only and must not import the engine, so the two are held together
+    by this pin exactly as the bulk flag is held to the portal's own token.
+
+    FAILS IF the engine's canonical route moves and this fold keeps reporting the old host."""
+    text = (_REPO / "engine" / "extract" / "_stationcheck.py").read_text(encoding="utf-8")
+    m = re.search(r'^TS_ACCESS_PREFIX = "([^"]+)"', text, re.M)
+    assert m, "the engine must declare TS_ACCESS_PREFIX; this pin has no other source"
+    assert AGG._TS_ACCESS_PREFIX == m.group(1)
+    assert AGG._handoff_destination("some/path.h5") == _TS_HOST
+
+
+def test_the_hand_off_class_adds_no_client_side_measurement():
+    """PRIVACY-POSTURE PIN (R8, framing invariant). Measuring the hand-off adds NOTHING in the
+    browser: the 302 is a request the reader was making anyway and the front door already logs it.
+    So Plausible stays off, and the six existing track() call sites stay six -- a seventh would be a
+    new client-side beacon, which is the one thing this measurement was designed not to need.
+
+    FAILS IF analytics is switched on in the shipped config, or if a track() call site is added."""
+    cfg = (_REPO / "portal" / "config.js").read_text(encoding="utf-8")
+    assert re.search(r'"enabled"\s*:\s*false', cfg), "Plausible must ship disabled"
+    assert re.search(r'"plausible_domain"\s*:\s*""', cfg), "and with no domain"
+    block = re.compile(r"/\*.*?\*/", re.S)
+    comment = re.compile(r"(?<!:)//.*$")
+    call = re.compile(r"(?<![A-Za-z0-9_$])track\s*\(")
+    sites = []
+    for path in sorted((_REPO / "portal" / "src").glob("*.js")):
+        for n, ln in enumerate(block.sub("", path.read_text(encoding="utf-8")).splitlines(), 1):
+            if call.search(comment.sub("", ln)):
+                sites.append(f"{path.name}:{n}")
+    assert len(sites) == 6, f"the six track() call sites must stay six, got {sites}"
+    assert all(s.startswith(("exports.js:", "drawer.js:")) for s in sites), sites
+
+
+def test_the_hand_off_route_is_logged_from_a_masked_cookie_free_block():
+    """MASKED-INPUT PIN. Every figure this class produces is folded from log lines the EDGE already
+    truncated: the address is masked to a /24 or /48 at write time and the credential and referrer
+    headers are deleted before the line is written. The hand-off handles must therefore sit INSIDE
+    that logged block, not in some other server block that logs differently.
+
+    FAILS IF the masking directives are dropped, if Cookie stops being deleted, or if the hand-off
+    routes are moved out of the block whose log the fold reads."""
+    text = (_REPO / "deploy" / "frontdoor" / "Caddyfile").read_text(encoding="utf-8")
+    for directive in ("request>remote_ip ip_mask", "request>client_ip ip_mask",
+                      "request>headers>Cookie delete", "request>headers>Referer delete"):
+        assert directive in text, directive
+    assert re.search(r"ipv4\s+24", text) and re.search(r"ipv6\s+48", text)
+    i_log = text.index("request>remote_ip ip_mask")
+    i_ts = text.index("path /go/ts /go/ts/*")
+    assert i_log < i_ts
+    depth = text.count("{", 0, i_log) - text.count("}", 0, i_log)
+    for pos in range(i_log, i_ts):
+        depth += (text[pos] == "{") - (text[pos] == "}")
+        assert depth >= 1, "the hand-off routes left the site block whose log the fold reads"

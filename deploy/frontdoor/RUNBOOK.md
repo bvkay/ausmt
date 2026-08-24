@@ -402,9 +402,9 @@ a canonical-name request takes one. A query on a path-shaped link is preserved o
 `/surveys/` (no id) lands on the portal root. The entity id itself rides byte-for-byte (the
 mechanism never decodes or re-encodes it). All of it is `permanent` (301): these are contracts, so
 `temporary`/302 may never appear. The redirect hop lands in the masked access log (the canonical
-block logs); the analytics fold does NOT count it - aggregate_stats.py counts only `/data/*` paths
-and admits no 301 in any counted class, so a path-link visit is counted once, at the SPA boot that
-follows the hop (pinned in deploy/tests).
+block logs); the analytics fold does NOT count it - aggregate_stats.py counts only the `/data/*`
+download, visit and API paths plus the `/go/ts/` hand-offs, and admits no 301 in any counted class,
+so a path-link visit is counted once, at the SPA boot that follows the hop (pinned in deploy/tests).
 
 **Tier 2 (deferred): real SPA path routes.** The app is served AT the path, the router reads
 `location.pathname`, and the pretty URL persists in the address bar instead of collapsing to the
