@@ -275,6 +275,14 @@ def _hermetic(text: str, td: Path, listen_port: int, stub_port: int) -> tuple[st
     logpath = td / "access-frontdoor.json"
     text = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", text)
     text = text.replace("admin unix//run/caddy-admin.sock", "admin off")
+    # The shipped Caddyfile `import`s the time-series route table at its VPS mount path, so a
+    # hermetic composition must repoint it at a real file or the config will not adapt. An EMPTY
+    # table is the right stand-in here: this suite is about the walls, not the hand-off routes
+    # (deploy/tests/test_frontdoor_ts_routes.py owns those), and an empty table 404s every
+    # /go/ts/ path exactly as a deploy publishing no routes does.
+    _tsmap = td / "ts-routes.map"
+    _tsmap.write_text("# hermetic fixture: no hand-off routes\n", encoding="utf-8")
+    text = text.replace("import /etc/caddy/ts-routes.map", f"import {_tsmap.as_posix()}")
     text = text.replace("admin off\n", "admin off\n\tauto_https off\n", 1)
     return text, logpath
 

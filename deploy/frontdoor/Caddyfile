@@ -230,6 +230,44 @@
 	}
 	# ---- end path-url contract ----------------------------------------------------------------------
 
+	# ---- TIME-SERIES HAND-OFF ROUTES (owner ruling R3/R5, namespace D12, table D15) ------------------
+	# /go/ts/<survey>/<station>/<level> answers 302 to the ONE NCI THREDDS fileServer URL for that exact
+	# file. AusMT hands the reader off; it never proxies, re-hosts or re-zips a byte.
+	#
+	# THE TABLE IS THE SUPPRESSION. has_time_series is projected for WITHHELD stations too (existence
+	# semantics: an embargo must not flip a discovery flag), so mtcat.json hands an enumerator every
+	# segment of one of these paths. Suppression therefore cannot live in discovery and must live in
+	# RESOLUTION: ts-routes.map is GENERATED from the verified-resource registers by
+	# deploy/scripts/gen_ts_routes.py and carries ONLY open-access, `review: verified`, non-level2 rows,
+	# so an unlisted path cannot produce a Location at all - `default ""` 404s it by construction, not
+	# by filter. The table is committed, so that membership is greppable in review and testable in CI
+	# (deploy/tests/test_frontdoor_ts_routes.py drives these directives against a real Caddy).
+	#
+	# KEYED ON {ausmt_pathurl_rest} (declared at :202-205), the raw URI up to the first '?'. That is
+	# deliberately the OPPOSITE of the preserve-the-query ruling at :190-194: a query must never ride
+	# onto an NCI URL, so it is stripped BEFORE the lookup and can never reach the Location - which is
+	# also what stops `?u=https://evil.example` turning this into an open redirect. Chained maps resolve
+	# LAZILY (the point of the note at :187), so this map may read the other map's output.
+	#
+	# TERMINAL AT THE FRONT DOOR: neither handle proxies, so no /go/ts/ request ever reaches the box and
+	# the C47 wall-2 allowlist (deploy/docker/caddy/Caddyfile) is untouched by construction. The map
+	# file is mounted read-only by compose.yaml and validated with the config by install-frontdoor.sh
+	# (`caddy validate` FAILS on a missing import, which is the point: the table is part of the config).
+	# To withdraw every hand-off route: empty ts-routes.map and re-run the installer (RUNBOOK 10.1b).
+	map {ausmt_pathurl_rest} {ausmt_ts_target} {
+		import /etc/caddy/ts-routes.map
+		default ""
+	}
+	@ts_known expression {ausmt_ts_target} != ""
+	handle @ts_known {
+		redir https://thredds.nci.org.au/thredds/fileServer/{ausmt_ts_target} 302
+	}
+	@ts_prefix path /go/ts /go/ts/*
+	handle @ts_prefix {
+		respond "not found" 404
+	}
+	# ---- end time-series hand-off routes -------------------------------------------------------------
+
 	# Deny-by-default: every other /gateway path (both slash forms) AND any non-GET /add-survey.html is
 	# an explicit 404, never proxied. Listed AFTER the allow handles so the public subset wins; a
 	# curator/admin path, a bare /gateway, or a wrong-method public route lands here.

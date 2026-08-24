@@ -59,14 +59,28 @@ fi
 log "ensuring /var/log/caddy exists (masked access log destination)"
 sudo mkdir -p /var/log/caddy
 
+# ----- the time-series hand-off table -------------------------------------------------------------
+# ts-routes.map is GENERATED and COMMITTED (deploy/scripts/gen_ts_routes.py) and the Caddyfile
+# `import`s it, so it is part of the config: validate below would fail on a missing import, and the
+# edge would refuse to start. Its absence is a legitimate state (no verified routes published, or a
+# deliberate rollback), so the installer creates an EMPTY table rather than dying - every /go/ts/
+# path then 404s, which is exactly the withdrawal the RUNBOOK's rollback line describes.
+if [ ! -f ts-routes.map ]; then
+	log "no ts-routes.map present - writing an EMPTY table (every /go/ts/ path will 404)"
+	printf '# no time-series hand-off routes published on this deploy.\n' > ts-routes.map
+fi
+
 # ----- validate the RENDERED Caddyfile against a real Caddy ---------------------------------------
 # Fail the deploy on any config slip BEFORE serving. The rendered file is what the container mounts,
 # so it is what gets validated. Mount the log dir so the file-log writer opens cleanly during adapt,
-# and pass the .env placeholders through (the legacy var included, so the set-var rendering resolves).
+# the route table at the path the Caddyfile imports (validate reads the import, so an unmounted table
+# fails here rather than at startup), and pass the .env placeholders through (the legacy var
+# included, so the set-var rendering resolves).
 log "validating Caddyfile.rendered against caddy:2-alpine"
 docker run --rm \
 	-e AUSMT_PUBLIC_NAME -e AUSMT_BOX_READER_UPSTREAM -e AUSMT_ACME_EMAIL -e AUSMT_LEGACY_REDIRECT_NAME \
 	-v "$HERE/Caddyfile.rendered:/etc/caddy/Caddyfile:ro" \
+	-v "$HERE/ts-routes.map:/etc/caddy/ts-routes.map:ro" \
 	-v /var/log/caddy:/var/log/caddy \
 	caddy:2-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile \
 	|| die "caddy validate rejected the rendered front-door Caddyfile - fix it before deploying."

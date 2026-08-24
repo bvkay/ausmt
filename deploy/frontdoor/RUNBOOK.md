@@ -220,6 +220,23 @@ socket is disabled, or the container cannot fork), the installer prints a LOUD w
 certificate persists in the `caddy_data` volume, so no re-issue). Either way the running edge ends up on
 the shipped Caddyfile. A first install (nothing running yet) just starts clean, no reload needed.
 
+6.3  **Time-series hand-off routes** (`/go/ts/<survey>/<station>/<level>`). The edge answers these with
+     a 302 to the file's one NCI THREDDS `fileServer` URL; AusMT hands the reader off and hosts nothing.
+     The resolution lives in `ts-routes.map`, a GENERATED, COMMITTED table beside the Caddyfile that the
+     Caddyfile `import`s, so it reaches the VPS the same way the Caddyfile does - `git pull` in this
+     subtree, then `./install-frontdoor.sh`. There is no other path onto the VPS and no box-to-VPS push.
+
+     **The table goes out BEFORE the data, always.** Its membership is the suppression: a station that
+     stops being open has to lose its route first, so the order is table, then publish. Regenerate it in
+     the repo (never on the VPS, and never by hand - every line is a published route):
+```sh
+python deploy/scripts/gen_ts_routes.py --write     # from the ausmt-surveys registers
+python deploy/scripts/gen_ts_routes.py --check     # the gate: exit 1 if the table and registers disagree
+```
+     Then on the VPS: `git pull`, `./install-frontdoor.sh`, `./doctor.sh`. The doctor's `ts-routes` leg
+     must PASS on **both** its open-302 and its 404 probes before the data publish proceeds - a route
+     the table does not name must produce no `Location` at all.
+
 **Do not create the DNS record yet** — the content-clean gate (step 7) must pass FIRST, so DNS is only
 created once the served corpus is proven clean (invariant f: content-clean BEFORE the DNS cutover). The
 certificate also cannot issue until DNS points at the VPS, so the gate is verified against the box's
@@ -420,6 +437,13 @@ docker compose -f deploy/frontdoor/compose.yaml down
 10.3  **Revoke the ACL fence + tag:** in the Tailscale admin console, remove the two C47 acl rules and
      the `tag:ausmt-frontdoor` tagOwner (and delete/disable the VPS node). The front-door tag can then
      reach nothing.
+10.1b **Withdraw the time-series hand-off routes only** (a targeted pull that leaves the site up):
+     empty the route table and re-apply. Every `/go/ts/` path then 404s, because the map's `default ""`
+     is what refuses an unlisted path - there is no separate switch to forget.
+```sh
+cd deploy/frontdoor && : > ts-routes.map && ./install-frontdoor.sh   # every /go/ts/ path now 404s
+git checkout -- ts-routes.map && ./install-frontdoor.sh              # restore the published routes
+```
 10.4  **Box-side (optional, fully reverts the box):** stop shipping and withdraw the reader port —
 ```sh
 sudo systemctl disable --now ausmt-frontdoor-logs.timer
@@ -479,7 +503,10 @@ is down) plus the explicit HTTPS 301 leg (the legacy name must answer `https://.
 with a 301 to the same path on the canonical name; both legs are skipped cleanly when the var is
 unset); the path-URL contract leg (`https://<canonical>/surveys/vulcan-2022` must 301 to
 `/#/survey/vulcan-2022`; skipped cleanly if the edge gives no response at all, since the container
-check already owns a down edge); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);
+check already owns a down edge); the time-series hand-off table (the container-mounted `ts-routes.map`
+must hash-match the repo copy, an OPEN route must 302 to the exact NCI `Location` the table names, and a
+route the table does NOT name must 404 - set `AUSMT_DOCTOR_TS_WITHHELD_PATH` to a real suppressed
+station's route once the corpus has one); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);
 disk headroom; and the public DNS A record still resolves to this host (set `AUSMT_DOCTOR_EXPECT_IP`
 to the VPS public IP to verify the target, otherwise that check WARNs). Every external command and
 path is overridable by an `AUSMT_DOCTOR_*` env var (see the script header).
@@ -493,8 +520,12 @@ Covers: containers up for the active profile; gateway healthz (gateway profile);
 loopback `:8445` serves the public subset (200) and refuses the curator workbench (404); surveys-live is a
 clean git checkout, group-writable, with a default group ACL (the recurring perms trap); the
 serve-reconcile timer is installed, enabled, and has a recent last-run (its absence is a live suspect when
-a publish did not get served); disk headroom; and the served build's `source_commit` versus surveys-live
-HEAD (a staleness hint that a publish has not been served yet).
+a publish did not get served); disk headroom; the served build's `source_commit` versus surveys-live
+HEAD (a staleness hint that a publish has not been served yet); and the TS-ROUTE KEY-SET PARITY - the
+committed `ts-routes.map` and the served `ts_access.json` must name the same (station, level) set, so a
+route can never resolve that the data does not publish, or a published route 404. That is the drift this
+split-host shape creates: the table lives on the VPS and the data on the box, so a withheld flip is
+suppressed only once the table is regenerated, committed and installed.
 
 ---
 

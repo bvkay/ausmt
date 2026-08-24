@@ -119,6 +119,26 @@ failed build or verify leaves `current` untouched and exits non-zero with the fa
 so a host-side swap gets `Permission denied` (exactly what the first real deploy hit after build +
 verify had already passed).
 
+### Time-series hand-off routes: the table goes out BEFORE the data
+
+`/go/ts/<survey>/<station>/<level>` 302s a reader to the file's one NCI THREDDS URL. The resolution is
+`deploy/frontdoor/ts-routes.map`, generated from the per-survey verified-resource registers and
+COMMITTED, and it lives on the **VPS** while the data lives on the **box**. Its membership is the
+suppression: a route the table does not name produces no `Location` at all. So the publish order is
+fixed - **table first, data second** - because a station that stops being open has to lose its route
+before its record stops naming it, never after.
+
+```sh
+python deploy/scripts/gen_ts_routes.py --check   # in the repo, from the ausmt-surveys registers
+# then: git pull + ./install-frontdoor.sh + ./doctor.sh on the VPS   (frontdoor/RUNBOOK.md step 6.3)
+# then: make rebuild-data here
+make doctor                                       # the ts-parity leg: table and served data agree
+```
+
+`make doctor`'s `ts-parity` leg is the drift alarm for the split: it compares the committed table with
+the SERVED `/data/ts_access.json` and FAILs in either direction - a route the data does not publish, or
+a published route that would 404.
+
 ### Sync the surveys checkout
 
 ```sh
