@@ -1,5 +1,7 @@
 {
+  "_comment": "How a time-series hand-off ADDRESS is spelled, on the three sides that spell it. `prefix` and `vectors` pin the percent-encoding of the fileServer path; `routable_levels` pins the LEVEL SEGMENT of /go/ts/<survey>/<station>/<level>, which is part of the same address and was the one statement no shared file held: the engine derived it, the route table emitted it and the portal's chooser re-declared it, so a sixth token would have published and routed while staying invisible in the UI. IN RENDER ORDER. level2 is absent BY RULING (D19), not by omission.",
   "prefix": "https://thredds.nci.org.au/thredds/fileServer/",
+  "routable_levels": ["raw_packed", "level0", "level1_mth5", "level1_netcdf"],
   "vectors": [
     {
       "name": "plain_path",
@@ -63,6 +65,13 @@
       "url_path": "my80/arch/Muller_Angstrom_üÅ.zip",
       "encoded_path": "my80/arch/Muller_Angstrom_%C3%BC%C3%85.zip",
       "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/Muller_Angstrom_%C3%BC%C3%85.zip"
+    },
+    {
+      "name": "astral_code_point_is_one_character_not_two",
+      "why": "THE CLASS THAT KILLS THE MIRROR: a code point above the BMP is two UTF-16 code units in JavaScript, so a per-code-unit replace hands encodeURIComponent a lone surrogate and it throws URIError. Python's quote() encodes it correctly, so only a vector can hold the two together",
+      "url_path": "my80/arch/emoji_😀_globe_🌏.zip",
+      "encoded_path": "my80/arch/emoji_%F0%9F%98%80_globe_%F0%9F%8C%8F.zip",
+      "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/emoji_%F0%9F%98%80_globe_%F0%9F%8C%8F.zip"
     },
     {
       "name": "unreserved_survive_untouched",

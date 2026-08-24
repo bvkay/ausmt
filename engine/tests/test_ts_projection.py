@@ -71,6 +71,20 @@ def test_route_rows_and_the_resource_table_admit_THE_SAME_LEVELS():
     import build_portal as bp  # noqa: PLC0415
     routable = set(_tsindex.LEVELS) - set(NEVER_PROJECTS)
     assert routable == set(bp._TS_LEVEL_ROUTE), sorted(routable ^ set(bp._TS_LEVEL_ROUTE))
+    # THE FOURTH RENDERING, and the one Python cannot reach: the portal's chooser, drawer rows and
+    # hand-off pointer file all map over state.js TS_LEVELS. It re-DECLARES this vocabulary rather
+    # than deriving it, so a sixth token would publish in ts_access.json, route at the front door,
+    # and be silently invisible in the UI. The shared vector file is where the two sides meet - the
+    # same file that holds the encoder mirror, because the level IS a segment of the same address -
+    # and portal/tests/ts_url_vectors.test.js reds on the JS side of the same line.
+    import json  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+    shared = json.loads((Path(__file__).resolve().parent / "fixtures" / "ts_url_vectors.json")
+                        .read_text(encoding="utf-8"))["routable_levels"]
+    assert set(shared) == routable, sorted(set(shared) ^ routable)
+    assert list(shared) == [lvl for lvl in bp._TS_LEVEL_ROUTE if lvl in set(shared)], (
+        "the shared file is IN RENDER ORDER and the emitter iterates its own table in that order; "
+        "a reordering that touches only one of them reds here")
 
 
 def _emitter_row():

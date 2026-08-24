@@ -72,7 +72,8 @@ def test_the_vectors_cover_the_classes_a_route_can_die_on():
     for needed in ("plain_path", "space_and_brackets", "leading_slashes_stripped",
                    "surrounding_whitespace_trimmed", "sub_delims_are_escaped",
                    "percent_is_itself_escaped", "query_and_fragment_cannot_split_the_route",
-                   "non_ascii_becomes_utf8_bytes", "unreserved_survive_untouched"):
+                   "non_ascii_becomes_utf8_bytes", "astral_code_point_is_one_character_not_two",
+                   "unreserved_survive_untouched"):
         assert needed in names, f"the vector file misses the {needed!r} class"
 
 
@@ -89,5 +90,8 @@ def test_the_expected_strings_carry_the_distinctive_escapes():
     assert "%3F" in by["query_and_fragment_cannot_split_the_route"]
     assert "%23" in by["query_and_fragment_cannot_split_the_route"]
     assert "%C3%BC" in by["non_ascii_becomes_utf8_bytes"]      # one code point, two UTF-8 bytes
+    # Four UTF-8 bytes for ONE character. The BMP vector above cannot catch a per-code-unit mirror:
+    # only a code point above the BMP splits into surrogates and takes encodeURIComponent down.
+    assert "%F0%9F%98%80" in by["astral_code_point_is_one_character_not_two"]
     assert by["unreserved_survive_untouched"] == "my80/a-b_c.d~e/F9.zip"
     assert by["leading_slashes_stripped"] == by["surrounding_whitespace_trimmed"]

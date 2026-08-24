@@ -42,7 +42,14 @@ ok(ctx.__pfx === VEC.prefix,
    "data.js TS_FILESERVER must be the vector file's prefix, got " + JSON.stringify(ctx.__pfx));
 
 for (const v of VEC.vectors) {
-  const got = tsArchiveUrl(v.url_path);
+  // A THROW is a failed vector, not a crash: the astral class takes encodeURIComponent down with a
+  // URIError, and a stack trace here would say nothing about WHICH vector or what it expected.
+  let got;
+  try { got = tsArchiveUrl(v.url_path); }
+  catch (e) {
+    ok(false, "vector [" + v.name + "] THREW " + e.name + ": " + e.message);
+    continue;
+  }
   if (got === v.expected) { ok(true, "vector [" + v.name + "]"); continue; }
   ok(false, "vector [" + v.name + "] diverged");
   console.log("      JS : " + JSON.stringify(got));
@@ -52,6 +59,23 @@ for (const v of VEC.vectors) {
 // Absence is not a route: the pointer file must never carry a bare prefix as an address.
 ok(tsArchiveUrl(null) === VEC.prefix && tsArchiveUrl(undefined) === VEC.prefix,
    "a null/undefined url_path yields the bare prefix and nothing invented");
+
+// THE LEVEL SEGMENT of /go/ts/<survey>/<station>/<level>, the other half of a hand-off address.
+// state.js DECLARES this vocabulary; the engine DERIVES it (_tsindex.LEVELS minus what never
+// projects) and the route table EMITS it. Nothing re-derived it here, so a sixth routable token
+// would have shipped in ts_access.json and routed at the front door while the chooser, the drawer
+// action rows and the pointer file stayed silent about it - an under-claim with no red anywhere.
+const stateSrc = fs.readFileSync(path.join(SRC, "state.js"), "utf8");
+const sctx = { ...ctx };
+sctx.globalThis = sctx; sctx.self = sctx; sctx.window = sctx;
+vm.createContext(sctx);
+vm.runInContext(stateSrc + "\n;globalThis.__lv = TS_LEVELS;", sctx);
+const tokens = sctx.__lv.map(r => r[0]);
+ok(JSON.stringify(tokens) === JSON.stringify(VEC.routable_levels),
+   "state.js TS_LEVELS must be the shared routable_levels, in render order: got "
+   + JSON.stringify(tokens) + ", want " + JSON.stringify(VEC.routable_levels));
+ok(!tokens.includes("level2"),
+   "level2 is absent BY RULING (D19): the archive's level_2 tree holds transfer functions");
 
 console.log(fail ? ("FAILED " + fail) : "ALL PASSED");
 process.exit(fail ? 1 : 0);

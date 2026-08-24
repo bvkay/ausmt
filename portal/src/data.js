@@ -145,8 +145,13 @@ function tsGoRoute(s,level){
 // `C5%20%5BREMOTE%5D.zip` answers 200, and a literal space in a published address is a dead
 // download.
 const TS_FILESERVER="https://thredds.nci.org.au/thredds/fileServer/";
+// The `u` flag is load-bearing, not tidiness: without it the class matches per UTF-16 CODE UNIT, so
+// a code point above the BMP arrives as a lone surrogate and encodeURIComponent throws URIError -
+// which, from #dlTs, would abort the whole hand-off export with no file and no message. With it the
+// replacer receives whole code points and encodes their UTF-8 bytes, which is what the Python leaf
+// does. Pinned by the astral vector in the shared file.
 function tsArchiveUrl(p){return TS_FILESERVER+String(p==null?"":p).trim().replace(/^\/+/,"")
-  .replace(/[^A-Za-z0-9_.~/-]/g,c=>{const e=encodeURIComponent(c);
+  .replace(/[^A-Za-z0-9_.~/-]/gu,c=>{const e=encodeURIComponent(c);
     return e===c?"%"+c.charCodeAt(0).toString(16).toUpperCase():e;});}
 // Archive-scale sizes. fmtBytes stops at MB, which is right for what AusMT serves (a station EDI is
 // kilobytes, a survey bundle megabytes) and wrong for what it hands off: a packed raw archive of
