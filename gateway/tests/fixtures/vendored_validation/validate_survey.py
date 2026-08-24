@@ -91,6 +91,30 @@ RUN_ID_LOCAL_SUFFIX = r"-r\d{2}$"
 # Ids echoed into one report line. A 312-row store must not print itself into a message (the
 # overlong-identifier lesson in _check_station_ids: a report a human cannot read is not a report).
 RUN_IDS_REPORT_SAMPLE = 6
+# The TIME-SERIES REGISTER: `ts-index.yaml` beside survey.yaml, one `ts_index` block mapping a
+# published station id to that station's verified archive files, one row per product level. It is
+# stored rather than derived because a remote urlPath does NOT follow from a station id (a survey's
+# state segment is not in the id at all), so the row is the only record of which file belongs to
+# which station. Every rule below is fail-closed for that reason: a bad row hands out another
+# station's bytes under this one's name. The validator checks the register and crawls nothing.
+TS_INDEX_FILE = "ts-index.yaml"
+# The route/chooser vocabulary, derived from (processing_level, packaging, format) and deliberately
+# kept OUT of the station schema, whose processing_level enum is closed and where NetCDF is a
+# FORMAT rather than a level.
+TS_INDEX_LEVELS = ("raw_packed", "level0", "level1_mth5", "level1_netcdf", "level2")
+# The projection gate: only `verified` publishes. `pending` is the adjudication queue and `retired`
+# is withdrawn evidence that stays on file, because a row is never silently deleted.
+TS_INDEX_REVIEW = ("verified", "pending", "retired")
+# How the row's station was decided: `exact` = the stem IS the published id; `rule:<name>` = the
+# NAMED per-survey transformation in _tools/ts_match_rules.py proved it (the name is provenance
+# for the census and any re-crawl); `curator` = it could not be proven and a human ruled on it.
+# A bare `rule` carries no provenance and is not a form.
+TS_INDEX_MATCH_METHODS = ("exact", "curator")
+TS_MATCH_RULE_RE = re.compile(r"^rule:[a-z0-9-]+$")
+# Register dates are matched on SHAPE first: date.fromisoformat widened in 3.11 and now accepts
+# forms the vendored fallback parser cannot read, so shape-checking is what stops a file's legality
+# depending on the interpreter that reads it.
+TS_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # C46 schema-0.3 capture (design §2.1). schema_version is now VALIDATED (it was carried, never
 # checked); only these are known. attribution/sources are the 0.3 fields — present under 0.2 warns to
 # bump. The key allow-lists are FROZEN and must stay in EXACT parity with the editor's section keys
@@ -493,6 +517,16 @@ def _declared_station_ids(block) -> dict:
     return out
 
 
+def _station_id_authority(block, edis) -> tuple:
+    """(the ids this package publishes, whether that set is COMPLETE), for the per-station files
+    that key on a published id. Shared so run-ids.yaml and ts-index.yaml cannot drift into two
+    different answers about which ids exist; the per-case rule itself is in _check_run_ids."""
+    declared = _declared_station_ids(block)
+    complete = bool(declared) and {p.name for p in edis} <= set(declared)
+    known = set(declared.values()) if complete else set(declared.values()) | {p.stem for p in edis}
+    return known, complete
+
+
 def _check_run_ids(doc, known_ids, r, *, authority_complete: bool) -> None:
     """Validate the run-id store against the station identifiers this package publishes.
 
@@ -565,6 +599,145 @@ def _check_run_ids(doc, known_ids, r, *, authority_complete: bool) -> None:
     if not [i for i in r.items if i["check"] == "run_ids" and i["level"] == "FAIL"]:
         r.add("PASS", "run_ids", f"{RUN_IDS_FILE}: {len(rows)} station(s), {total} run id(s), no "
                                  f"duplicates")
+
+
+def _ts_iso_date(value) -> bool:
+    """Whether a register date is an ISO YYYY-MM-DD day.
+
+    PyYAML resolves an unquoted date to a date OBJECT while the vendored fallback yields a string,
+    so both are normalised through str() before the shape test. Shape is tested BEFORE
+    fromisoformat because that parser widened in 3.11; without the regex a `20260823` would pass
+    under one interpreter and fail under another."""
+    text = str(value).strip()
+    if not TS_ISO_DATE_RE.match(text):
+        return False
+    from datetime import date as _date  # noqa: PLC0415 (dependency-light; import where used)
+    try:
+        _date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _check_ts_index_row(r, label, row) -> str:
+    """One register row. Returns its level token ("" when unusable), so the caller can pin the
+    one-route-per-(station, level) rule on a token that is known to be in vocabulary."""
+    level = str(row.get("level")).strip() if row.get("level") not in (None, "") else ""
+    if not level:
+        r.add("FAIL", "ts_index", f"{label} has no level; a row states WHICH product level of this "
+                                  f"station the file is, and nothing downstream can guess it")
+    elif level not in TS_INDEX_LEVELS:
+        r.add("FAIL", "ts_index", f"{label}.level '{level}' is not one of {TS_INDEX_LEVELS}; the "
+                                  f"token is what a route, a chooser button and a drawer row key "
+                                  f"off, so an out-of-vocab one is stored and never published")
+        level = ""
+    if row.get("url_path") in (None, "") or not str(row.get("url_path")).strip():
+        r.add("FAIL", "ts_index", f"{label} has no url_path; that string IS the remote file's "
+                                  f"identity, stored verbatim, and is never rebuilt by joining "
+                                  f"catalog segments")
+    ver = row.get("verified")
+    if ver in (None, "") or not str(ver).strip():
+        r.add("FAIL", "ts_index", f"{label} has no verified date; the crawler writes the day it read "
+                                  f"the file, and that day is what the published fieldnote names")
+    elif not _ts_iso_date(ver):
+        r.add("FAIL", "ts_index", f"{label}.verified '{str(ver).strip()}' is not an ISO date "
+                                  f"(YYYY-MM-DD)")
+    review = str(row.get("review")).strip() if row.get("review") not in (None, "") else ""
+    if not review:
+        r.add("FAIL", "ts_index", f"{label} has no review state; the state is the publication gate, "
+                                  f"so a row without one cannot be read as either held or cleared")
+    elif review not in TS_INDEX_REVIEW:
+        r.add("FAIL", "ts_index", f"{label}.review '{review}' is not one of {TS_INDEX_REVIEW}; only "
+                                  f"'verified' publishes, and an out-of-vocab state reads as 'not "
+                                  f"verified' to one reader and 'unknown' to the next")
+    elif review == "retired":
+        absent = [k for k in ("retired", "retired_reason")
+                  if row.get(k) in (None, "") or not str(row.get(k)).strip()]
+        if absent:
+            r.add("FAIL", "ts_index", f"{label} is retired without {' and '.join(absent)}; "
+                                      f"retirement is a dated curator act, not a deletion, and the "
+                                      f"row stays as evidence recording when and why it was "
+                                      f"withdrawn")
+    method = (str(row.get("match_method")).strip()
+              if row.get("match_method") not in (None, "") else "")
+    if method and method not in TS_INDEX_MATCH_METHODS and not TS_MATCH_RULE_RE.match(method):
+        r.add("WARNING", "ts_index", f"{label}.match_method '{method}' is not 'exact', 'curator' "
+                                     f"or 'rule:<name>'; the row still stands or falls on its "
+                                     f"review state, but it cannot reach the adjudication queue")
+    if method == "curator" and review == "pending":
+        r.add("WARNING", "ts_index", f"{label} is a curator match awaiting review: the match could "
+                                     f"not be proven from the names, so the row is stored and stays "
+                                     f"unpublished until someone rules on it")
+    return level
+
+
+def _check_ts_index(doc, known_ids, r, *, authority_complete: bool) -> None:
+    """Validate the time-series register against the station identifiers this package publishes.
+
+    FAIL-CLOSED like _check_run_ids and for the same stated reason: the build reads this file as
+    the only record of which remote file belongs to which station, so a row waved through here
+    publishes bytes under an identifier nothing ever matched them to.
+
+    ID AUTHORITY: the run-id store's rule, per case, because both files key on the published
+    station id (see _check_run_ids for why the EDI filename stem is only a proxy).
+
+    ABSENT file: this is never called, so every existing package's report is unchanged."""
+    if not isinstance(doc, dict) or not isinstance(doc.get("ts_index"), dict):
+        r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} must be a mapping carrying a 'ts_index' block "
+                                  f"of {{published station id: [rows]}}")
+        return
+    unknown_keys = sorted(k for k in doc if k != "ts_index")
+    if unknown_keys:
+        r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} has unknown key(s) {unknown_keys}; only "
+                                  f"'ts_index' is defined")
+    stations = doc["ts_index"]
+    unknown, routes, total = [], {}, 0
+    for station, rows in stations.items():
+        sid = str(station)
+        if sid not in known_ids:
+            unknown.append(sid)
+        if rows in (None, "", [], ()):
+            # Reported as "no rows" rather than by type name, the run-id store's null-value lesson:
+            # naming the Python type sends a curator hunting for content the file does not have.
+            r.add("FAIL", "ts_index", f"{TS_INDEX_FILE}['{sid}'] has no rows. A row states one "
+                                      f"verified file; to register none for a station, remove the "
+                                      f"station (a partial register is legal)")
+            continue
+        if not isinstance(rows, (list, tuple)):
+            r.add("FAIL", "ts_index", f"{TS_INDEX_FILE}['{sid}'] must be a list of rows, got "
+                                      f"{type(rows).__name__}")
+            continue
+        for idx, row in enumerate(rows):
+            label = f"{TS_INDEX_FILE}['{sid}'][{idx}]"
+            if not isinstance(row, dict):
+                r.add("FAIL", "ts_index", f"{label} must be a mapping {{level, url_path, filename, "
+                                          f"bytes, modified, verified, match_method, review}}")
+                continue
+            total += 1
+            level = _check_ts_index_row(r, label, row)
+            if level:
+                routes[(sid, level)] = routes.get((sid, level), 0) + 1
+    for (sid, level), count in sorted(routes.items()):
+        if count > 1:
+            r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} carries {count} rows for station '{sid}' at "
+                                      f"level '{level}'; one (station, level) names one file, so a "
+                                      f"second row leaves nothing able to choose between them")
+    if unknown:
+        shown = _sample(unknown)
+        if authority_complete:
+            r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} names {len(unknown)} station(s) this "
+                                      f"package does not publish: {shown}. station_ids declares a "
+                                      f"published id for every source file, so that map is the "
+                                      f"complete set")
+        else:
+            r.add("WARNING", "ts_index", f"{TS_INDEX_FILE} names {len(unknown)} station(s) matching "
+                                         f"no EDI filename stem: {shown}. Their published id is the "
+                                         f"EDI DATAID, which this validator does not parse, so the "
+                                         f"rows cannot be confirmed here; check them against the "
+                                         f"catalogue")
+    if not [i for i in r.items if i["check"] == "ts_index" and i["level"] == "FAIL"]:
+        r.add("PASS", "ts_index", f"{TS_INDEX_FILE}: {len(stations)} station(s), {total} row(s), "
+                                  f"no repeated (station, level)")
 
 
 def _sample(values) -> str:
@@ -1412,16 +1585,24 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     # The persistent run-id store, read against the ids the station_ids block declares and, where it
     # declares none for a file, that file's stem (see _check_run_ids for why the stem is a proxy).
     run_ids_path = folder / RUN_IDS_FILE
+    ts_index_path = folder / TS_INDEX_FILE
+    known, complete = _station_id_authority(meta.get("station_ids"), edis)
     if run_ids_path.exists():
-        declared = _declared_station_ids(meta.get("station_ids"))
-        complete = bool(declared) and {p.name for p in edis} <= set(declared)
-        known = set(declared.values()) if complete else set(declared.values()) | {p.stem for p in edis}
         try:
             run_ids_doc = _load_yaml(run_ids_path) or {}
         except Exception as e:  # malformed YAML -> a clear FAIL, not a raw traceback (the survey.yaml posture)
             r.add("FAIL", "run_ids", f"{RUN_IDS_FILE} is not valid YAML: {e}")
         else:
             _check_run_ids(run_ids_doc, known, r, authority_complete=complete)
+    # The time-series register, read against the SAME authority: both files key on the published
+    # station id, so computing it twice would be two answers to one question.
+    if ts_index_path.exists():
+        try:
+            ts_index_doc = _load_yaml(ts_index_path) or {}
+        except Exception as e:
+            r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} is not valid YAML: {e}")
+        else:
+            _check_ts_index(ts_index_doc, known, r, authority_complete=complete)
     # The slug MUST equal the package folder name: the directory IS the slug, and every downstream
     # identifier/URL is au.<slug>.<station>. A divergence silently forks the survey's identity, so
     # this is a FAIL (the _template states the slug must equal the folder name).
