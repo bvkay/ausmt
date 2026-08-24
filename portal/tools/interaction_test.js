@@ -427,7 +427,8 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // Two-phase boot hooks. hydrationDone settles once tf/sci/manifest have landed AND their late-render work
   // has run, so the driver can say "the app is now in the state a single-phase boot produced" without racing
   // the continuations. hydrState reports the per-product gate ("pending"|"ready"|"failed"), qMin/setQMin drive
-  // the completeness filter directly (its rail buttons are disabled while sci is pending, by design), and
+  // the completeness PREDICATE directly - the Availability group retired its rail control, so this hook is
+  // now the only way to set it, and the two-phase honesty legs below are what it exists for - and
   // markerCount/station/closeDrawer are plain observables for the first-paint assertions.
   "hydrationDone:()=>HYDRATION_DONE,hydrState:(k)=>HYDR[k]," +
   "markerCount:()=>ST.filter(s=>s.marker).length,station:(id)=>ST.find(x=>x.id===id)," +
@@ -1141,7 +1142,7 @@ async function bootFreshWindow(dataMap, url) {
   find.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   ok(find.value === "" && doc.getElementById("findResults").style.display === "none",
     "F3: Esc did not clear the query and close the dropdown");
-  // find.value is now "" and refresh() has re-run — later sections (year/downloadable-only/etc) assume no active Find query
+  // find.value is now "" and refresh() has re-run, so later sections (year/Availability/etc) assume no active Find query
 
   // F. SURVEY route: #/survey/<slug> (the route the published /surveys/<slug> path URLs 301 into
   //    at the front door - path-URL contract 2026-08-18; the sitemap advertises the path form) must
@@ -1825,11 +1826,11 @@ async function bootFreshWindow(dataMap, url) {
   ok(doc.getElementById("availGroup") && doc.getElementById("availGroup").contains(tfAvail),
     "R2: the transfer-function availability control must live inside the ONE Availability group");
   tfAvail.checked = true; fire(tfAvail, "change");
-  ok(!A.visIds().includes("B1"), "downloadable-only did not exclude the non-downloadable station B1");
-  ok(!A.visIds().includes("D1"), "downloadable-only did not exclude the embargoed (non-downloadable) station D1");
-  ok(A.visIds().length === 3, "expected 3 visible stations with downloadable-only on, got " + A.visIds().length);
+  ok(!A.visIds().includes("B1"), "Availability > Transfer functions did not exclude the non-downloadable station B1");
+  ok(!A.visIds().includes("D1"), "Availability > Transfer functions did not exclude the embargoed (non-downloadable) station D1");
+  ok(A.visIds().length === 3, "expected 3 visible stations with Transfer functions ticked, got " + A.visIds().length);
   tfAvail.checked = false; fire(tfAvail, "change");
-  ok(A.visIds().length === 5, "clearing downloadable-only did not restore all 5 stations");
+  ok(A.visIds().length === 5, "clearing Availability > Transfer functions did not restore all 5 stations");
 
   // K2. AVAILABILITY > TIME SERIES, the per-level chooser (R3/D7/D8), driven over a REAL index. The
   // fixture ships no ts_access.json, so the index is set directly here: A1 and A2 publish routes, B1
@@ -4316,7 +4317,7 @@ async function bootFreshWindow(dataMap, url) {
     ok(!selectedBy(s, false), "LINKCSS: the muted state text must not be painted the link accent");
   });
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
     "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +

@@ -496,8 +496,9 @@ function renderBuildId(){
 let HYDRATION_DONE=Promise.resolve();
 // Late hydration must never leave a stale render standing. Each gate re-runs EXACTLY the surfaces that read
 // its product, and nothing else:
-//   sci      -> re-folds s.q/s.dim (applySciToStations), re-enables the sci-driven rail controls, then
-//               refresh() so the map/counts/cards reflect a quality filter that was inert until now.
+//   sci      -> re-folds s.q/s.dim (applySciToStations), re-enables the completeness/dimensionality
+//               colour modes, then refresh() so the map/counts/cards reflect a completeness predicate
+//               that was inert until now.
 //   tf       -> the open station drawer (its response plots and the sci/tf-derived summary rows).
 //   manifest -> the open drawer again (Files rows, format badges, download tiles), station OR survey.
 // Re-rendering the open drawer is the deliberate simplest correct answer: it is one innerHTML rewrite of a
@@ -508,10 +509,11 @@ function wireHydration(){
   const sci=SCI_READY.then(()=>{
     applySciToStations();
     // SCI_READY settles on FAILURE too (phase 2 records the failure rather than rejecting), so the gate is
-    // hydrUsable, not the bare fact that the promise resolved. Re-enabling the completeness filter and the
-    // completeness/dimensionality colour modes after a 404 would hand the reader live controls over values
-    // that will never arrive: the filter would empty the map and the colour modes would paint every station
-    // the "not evaluated" grey. They stay disabled, with a title that says which wait this is.
+    // hydrUsable, not the bare fact that the promise resolved. Re-enabling the completeness/dimensionality
+    // colour modes after a 404 would hand the reader live controls over values that will never arrive: they
+    // would paint every station the "not evaluated" grey. They stay disabled, with a title that says which
+    // wait this is. The completeness PREDICATE is gated on the same hydrUsable inside passesCore, which is
+    // what keeps it inert now that the Availability group has taken its rail control away.
     if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
     if(typeof recolor==="function")recolor();
     if(ST.length&&typeof refresh==="function")refresh();

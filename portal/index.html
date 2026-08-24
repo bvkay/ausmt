@@ -810,11 +810,13 @@
     </div>
   </section>
   <!-- Screening (advanced): all specialist screening controls, collapsed by default, per operator
-       feedback rounds 1-2 (round 1 relocated Min-TF-diagnostic + colour-by; round 2 moved Year range,
-       Downloadable here and Period range in with them). The primary rail stays: find, data type,
-       recently added, tree, selection. Every element id inside is UNCHANGED so existing wiring
-       (filters.js/main.js/map.js) and tests keep working untouched; main.js's data-views toggle
-       matches nested elements, so the map-only colour-by group hides correctly on other views. -->
+       feedback rounds 1-2 (round 1 relocated the completeness threshold + colour-by; round 2 moved
+       Year range, the downloadable-here checkbox and Period range in with them). The primary rail
+       stays: find, data type, recently added, tree, selection. main.js's data-views toggle matches
+       nested elements, so the map-only colour-by group hides correctly on other views.
+       THE IDS ARE NOT FROZEN, and used to say they were: the Availability group (R2/R3) retired
+       #qSeg and renamed #dlOnly to #tfAvail, so wiring and pins move with the controls. What is
+       stable is the PREDICATE each one drives, which is what exports.js and passesCore read. -->
   <section data-views="both">
     <details class="advanced">
       <summary>Screening (advanced)</summary>
