@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 # The withheld stub's WHOLE key set (schema oneOf[0]): the nine frozen keys plus the three promotion
 # markers. Closed world, so any other key in a withheld record is a leak, never an extension.
@@ -83,6 +83,20 @@ def ts_encode_path(url_path) -> str:
     `C5 [REMOTE].zip` is the corpus case: only `C5%20%5BREMOTE%5D.zip` answers 200, and a literal
     space in a published route is a dead download."""
     return quote(str(url_path).strip().lstrip("/"), safe="/")
+
+
+def ts_path_walks_up(url_path) -> bool:
+    """True when a fileServer path climbs OUT of the archive root.
+
+    The encoded-route rule below admits `.` and `/` because real archive filenames carry both, so
+    traversal has to be refused by name. The host is fixed by TS_ACCESS_PREFIX, so this cannot
+    redirect off-host - but a browser normalises `..` before it sends, so the published link
+    resolves to an arbitrary path ON thredds.nci.org.au: a wrong claim with an AusMT byline. It is
+    also the one string the front door's generated route table refuses, so without this rule
+    station.json and ts_access.json could publish a route the edge can never serve. Read on the
+    DECODED segments, because the server decodes before it resolves and a literal-only test would
+    pass `%2E%2E` straight through."""
+    return any(seg == ".." for seg in unquote(str(url_path or "").strip()).split("/"))
 
 
 def ts_access_url(url_path) -> str:
@@ -216,6 +230,11 @@ def _time_series_violations(rid, resource) -> list:
     elif url and not _TS_ENCODED.match(url[len(TS_ACCESS_PREFIX):]):
         out.append(f"resource {rid}: access_url {url!r} is not percent-encoded; only the encoded "
                    f"form resolves, so this route is a dead download")
+    elif url and ts_path_walks_up(url[len(TS_ACCESS_PREFIX):]):
+        out.append(f"resource {rid}: access_url {url!r} walks up out of the fileServer root. The "
+                   f"client normalises the path before it asks, so this publishes a claim about "
+                   f"some other file on that host - and the route table refuses the same string, "
+                   f"so the edge could never serve it either")
     return out
 
 

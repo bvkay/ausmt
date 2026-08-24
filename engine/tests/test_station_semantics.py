@@ -187,6 +187,21 @@ def _time_series_route_with_a_literal_space(doc):
     _ts_row(doc)["access_url"] = stcheck.TS_ACCESS_PREFIX + "my80/AuScope/Example/C5 [REMOTE].zip"
 
 
+def _time_series_route_walking_up(doc):
+    """The encoded-route rule admits `.` and `/` because real archive filenames carry both, so a
+    `..` segment passes it: the host stays fixed, but a browser normalises the path before sending
+    and the published link resolves to an arbitrary file on thredds.nci.org.au. That is a wrong
+    claim under an AusMT byline, and it is also the one string the front door's route table refuses,
+    so without this rule station.json can publish a route the edge can never serve."""
+    _ts_row(doc)["access_url"] = stcheck.TS_ACCESS_PREFIX + "my80/../../../../etc/passwd"
+
+
+def _time_series_route_walking_up_percent_encoded(doc):
+    """The same walk written `%2E%2E`, which a literal-only test would let through: the check reads
+    the DECODED segments, because the server decodes before it resolves."""
+    _ts_row(doc)["access_url"] = stcheck.TS_ACCESS_PREFIX + "my80/%2E%2E/%2E%2E/etc/passwd"
+
+
 def _time_series_route_on_another_host(doc):
     _ts_row(doc)["access_url"] = "https://example.invalid/thredds/fileServer/my80/x.zip"
 
@@ -234,6 +249,9 @@ REJECTED = [
     ("a time_series row with no route", _time_series_without_a_route),
     ("a time_series row with no processing level", _time_series_without_a_processing_level),
     ("a time_series route carrying a literal space", _time_series_route_with_a_literal_space),
+    ("a time_series route walking up out of the fileServer root", _time_series_route_walking_up),
+    ("a time_series route walking up in percent-encoded form",
+     _time_series_route_walking_up_percent_encoded),
     ("a time_series route on another host", _time_series_route_on_another_host),
     ("a time_series route that is not https", _time_series_route_over_http),
     ("a time_series route through the OPeNDAP service", _time_series_route_through_opendap),
@@ -430,6 +448,7 @@ def test_verify_data_dir_fails_a_tampered_station_document(built, tmp_path):
 
 TS_PLANTED = [
     ("a route carrying a literal space", _time_series_route_with_a_literal_space),
+    ("a route walking up out of the fileServer root", _time_series_route_walking_up),
     ("a route on another host", _time_series_route_on_another_host),
     ("a level 2 time_series row", _time_series_at_level2),
 ]

@@ -106,9 +106,10 @@ def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
     diverge the day one learns about a character the other does not, and the failure is silent in
     the worst way: a working route in the record beside a 404 in the table, for one file. The result
     is then held to the SAME encoded-route rule _stationcheck applies to the published route, so a
-    value this table admits is a value that gate admits."""
-    raw = str(url_path).strip().lstrip("/")
-    if any(seg == ".." for seg in raw.split("/")):
+    value this table admits is a value that gate admits - AND THE CONVERSE, which was the asymmetry
+    worth naming: the traversal refusal below is that module's predicate, not a second opinion, so a
+    string station.json is allowed to publish is a string this table can serve."""
+    if stcheck.ts_path_walks_up(url_path):
         raise GenError(f"{pkgdir.name}: {sid}/{level} url_path {url_path!r} walks up out of the "
                        f"fileServer root; a route table is the last place to resolve that.")
     target = stcheck.ts_encode_path(url_path)
