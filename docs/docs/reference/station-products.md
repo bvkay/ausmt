@@ -161,13 +161,20 @@ all three.
     { "id": "edi-zip", "kind": "archive", "format": "zip",
       "path": "bundles/vulcan-2022-edi.zip" },
     { "id": "xml-zip", "kind": "archive", "format": "zip",
-      "path": "bundles/vulcan-2022-xml.zip" }
+      "path": "bundles/vulcan-2022-xml.zip" },
+    { "id": "ts-raw_packed", "kind": "time_series", "format": "zip",
+      "provenance_role": "source", "representation_role": "original",
+      "access_url": "https://thredds.nci.org.au/thredds/fileServer/my80/…/A1.zip",
+      "repository": "NCI", "processing_level": "raw", "packaging": "packed_archive",
+      "bytes": 1042000000,
+      "note": "verified against NCI THREDDS on 2026-08-24" }
   ]
 }
 ```
 
 `related_collection_identifiers` is projected per survey, so the identifiers a survey states ride
-every one of its resource rows; the example shows them on one row to stay readable.
+every one of its served resource rows; the example shows them on one row to stay readable. On a
+time-series row the identifier rides only the level whose product it names.
 
 ### 1.1 ausmt_id
 
@@ -528,6 +535,13 @@ with an empty route.
 Level 2 is excluded from this projection. The archive's `level_2` tree holds transfer functions
 rather than time series, and publishing them under `kind: time_series` would assert a recorded time
 series for stations that have none. The register still stores those rows for curation.
+
+Because nothing AusMT holds corroborates a route to another host, these rows carry their own gate,
+and it runs at both of the places the station record is checked: in the build before anything is
+published, and again over the built tree before a deployment swaps `current`. A `time_series` row
+must state a route and a product level; the route must be the absolute, percent-encoded fileServer
+route, so a literal space fails and a `dodsC` URL cannot be expressed; no resource may advertise a
+service; and level 2 under this kind is refused rather than merely never emitted.
 
 Packed raw is the custodian's own recording in its original form, so it is a `source` `original`.
 The level 0 and level 1 products are concatenated, resampled and rotated versions of it, so they are

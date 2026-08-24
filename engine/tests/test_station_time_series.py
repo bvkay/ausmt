@@ -178,9 +178,19 @@ def test_the_fieldnote_names_the_crawl_and_not_the_build(built):
         assert row["note"] == "verified against NCI THREDDS on 2026-08-24", row
 
 
-def test_the_size_is_the_registers_own_figure(built):
-    rows = {r["id"]: r for r in _rows(_station(built, "example-survey", "EXAMPLE01"))}
+def test_only_the_hand_off_row_states_a_size(built):
+    """`manifest.json` is the size and checksum authority for what AUSMT serves, so a served row
+    states neither and references its path instead. There IS no manifest row for a file on another
+    host, so the hand-off row carries the archive's own figure: that is the only place the fact can
+    live, and it restates nothing. It is a size, never a checksum: nothing here re-hashes a remote
+    file, so no integrity claim is made about bytes AusMT has not read."""
+    doc = _station(built, "example-survey", "EXAMPLE01")
+    served = [r for r in doc["resources"] if r["kind"] != "time_series"]
+    assert served, "non-vacuity: this station serves renditions of its own"
+    assert all(not {"bytes", "size", "sha256"} & set(r) for r in served), served
+    rows = {r["id"]: r for r in _rows(doc)}
     assert rows["ts-raw_packed"]["bytes"] == 9868836788
+    assert all(not {"size", "sha256"} & set(r) for r in rows.values()), rows
 
 
 # ---- what never projects -------------------------------------------------------------------------
