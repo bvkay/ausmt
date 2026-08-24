@@ -69,6 +69,25 @@ to the archive, so the portal never sees the transfer and shows no progress bar 
 message: your browser's own downloads list is where the transfer appears, and it is the only place that
 can honestly report it. Nothing is copied through AusMT, and nothing is repackaged.
 
+## What "verified" means, and what it does not
+
+Every published row carries the same fieldnote: **verified against NCI THREDDS on `<date>`**. That
+date is when an out-of-band crawl read the file in the archive's catalogue and recorded its path, its
+stated size and its last-modified stamp. It is deliberately not "verified at build time": a build
+makes no network call at all, so a build cannot honestly claim to have checked anything, and a
+timestamp that moved on every rebuild would say less rather than more.
+
+So the note is a statement about a past reading, and it is the strongest honest one available. It does
+not promise the file is reachable this second. If a route fails, that is an outage, and an outage
+changes nothing here on its own: a claim about what exists must not follow a server's health, or every
+maintenance window would look like a withdrawal.
+
+Withdrawing a row is therefore a curation act, not an automatic one. It takes the same URL failing on
+two separate out-of-band runs at least a fortnight apart AND a curator recording the retirement with
+its date and reason. The row then stops appearing anywhere a reader can see while staying on file as
+evidence of what was once held. Where it was a station's last verified row, the station's
+availability goes with it, which is the only way that ever happens.
+
 ## Access conditions
 
 An external resource may have different access conditions from the AusMT package: open, embargoed,
