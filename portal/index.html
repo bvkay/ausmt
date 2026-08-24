@@ -438,6 +438,15 @@
   .leaflet-tooltip.qtip{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px}
   .leaflet-tooltip.qtip::before{display:none}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;display:none;z-index:2000}
+  /* The hand-off snackbar sits ABOVE #toast so the two can coexist (a hand-off can follow an export
+     toast within its dwell). It carries at most one action button; it never carries a progress bar. */
+  .snackbar{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--panel);
+    border:1px solid var(--copper);padding:10px 16px;border-radius:6px;font-size:13px;max-width:560px;
+    z-index:2000;display:flex;align-items:center;gap:12px;line-height:1.45}
+  .snackbar.hidden{display:none}
+  .snackbar .snack-note{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+  .snackbar .snack-act{flex:none;background:var(--copper);color:#16110b;border:0;border-radius:4px;
+    padding:6px 10px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer}
   .marker-cluster div{background:rgba(232,237,241,.92)!important;color:#11182D!important;font-family:var(--mono);font-weight:700}.marker-cluster{background:rgba(239,114,86,.45)!important}
   @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}
     /* UX3 item 4: at narrow widths the three header zones stack full-width and left-align, so the
@@ -774,6 +783,12 @@
         <button id="dlCsv" disabled>Station CSV</button>
         <button id="dlGeo" disabled>GeoJSON</button>
         <button id="dlSh" disabled>Archive pointers</button>
+        <!-- R7/D3: the time-series HAND-OFF list. Not a zip and not a fourth selection format: AusMT
+             holds none of these bytes, so there is nothing here to package. Each row is an AusMT
+             /go/ts/ route the front door answers 302 to, with the archive's own address alongside
+             for reference. Written by exports.js from ts_access.json, scoped by the Availability
+             chooser. -->
+        <button id="dlTs" disabled>Time-series list</button>
         <button id="dlCite" disabled>Citation pack (.zip)</button>
         <button id="strike" disabled>Strike rose (selection)</button>
         <!-- The three per-station format zips. Each packages the SELECTED stations' own manifest rows of
@@ -920,6 +935,13 @@
   </span>
 </footer>
 <div id="toast" role="status"></div>
+<!-- The hand-off snackbar (owner UX ruling 2026-08-23). PROGRESS BELONGS TO THE BROWSER: the 302 hands
+     the bytes browser-to-archive, CORS forbids an in-page fetch of the payload, and a multi-GB Blob
+     would be a proxy in disguise. So there is no progress bar, no download-manager panel and no
+     completion claim anywhere on this page. This says what was handed over and where the rest of it
+     will appear, and it can carry ONE action (the wget command), which is why it is a richer element
+     than #toast rather than a second use of it. -->
+<div id="snackbar" class="snackbar hidden" role="status" aria-live="polite"></div>
 
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/leaflet.draw.js"></script>

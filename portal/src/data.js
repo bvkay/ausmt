@@ -125,4 +125,31 @@ function bundlesForSlug(slug){return slug?mfRows("bundles").filter(r=>r.slug===s
 // here re-derives availability from survey metadata; it reads this index and nothing else.
 function tsAccessKnown(){return TSACC!==null;}
 function tsRoutesFor(ausmt_id){return (TSACC&&TSACC[ausmt_id])||null;}
+// THE ROUTE the reader is handed, and the only string that carries survey, station and level into the
+// front-door log - which is why measuring the hand-off needs no beacon and no track() call here. The
+// shape is fixed by the route table the deploy generates (/go/ts/<survey slug>/<station>/<level>); the
+// front door answers 302 with the archive's address and 404 for everything it does not hold, so a
+// station this build gated out cannot be reached by constructing one. A station with no slug (data
+// predating the authoritative ausmt_id) gets no route rather than a guessed one.
+function tsGoRoute(s,level){
+  if(!s||!s.slug||!s.id||!level)return null;
+  return location.origin+"/go/ts/"+encodeURIComponent(s.slug)+"/"+encodeURIComponent(s.id)+"/"+encodeURIComponent(level);}
+// The archive's OWN address for one register url_path, for the reference field beside the route.
+// MIRRORS the engine's ts_access_url (build_portal: quote(url_path, safe="/")): `/` survives and
+// everything outside the unreserved set is escaped. encodeURIComponent is not that function on its
+// own - it eats `/`, and it leaves !'()* unescaped where Python escapes them - so the set is spelled
+// out here. NVP_2019's `C5 [REMOTE].zip` is the corpus case: only `C5%20%5BREMOTE%5D.zip` answers
+// 200, and a literal space in a published address is a dead download.
+const TS_FILESERVER="https://thredds.nci.org.au/thredds/fileServer/";
+function tsArchiveUrl(p){return TS_FILESERVER+String(p==null?"":p).trim().replace(/^\/+/,"")
+  .replace(/[^A-Za-z0-9_.~/-]/g,c=>{const e=encodeURIComponent(c);
+    return e===c?"%"+c.charCodeAt(0).toString(16).toUpperCase():e;});}
+// Archive-scale sizes. fmtBytes stops at MB, which is right for what AusMT serves (a station EDI is
+// kilobytes, a survey bundle megabytes) and wrong for what it hands off: a packed raw archive of
+// 9.87 GB would read "9411.6 MB". Same rounding at every step it shares with fmtBytes, three more
+// steps above it.
+function fmtBigBytes(n){if(n==null)return"";
+  const u=["B","KB","MB","GB","TB"];let i=0,v=Number(n);
+  while(v>=1024&&i<u.length-1){v/=1024;i++;}
+  return (i===0?String(v):(i===1?v.toFixed(0):v.toFixed(1)))+" "+u[i];}
 function fmtBytes(n){if(n==null)return"";if(n<1024)return n+" B";if(n<1048576)return(n/1024).toFixed(0)+" KB";return(n/1048576).toFixed(1)+" MB";}

@@ -57,6 +57,18 @@ awaiting curator adjudication is simply not in it: there is no setting that reve
 whose registers verify nothing publishes no list at all, and the panel says exactly that rather than
 reporting an error.
 
+## The hand-off
+
+Selecting stations and taking the **Time-series list** export writes a pointer file: one row per
+station and level, each naming an AusMT route that answers with a redirect to the archive holding the
+file, with the archive's own address recorded alongside for reference. `wget` follows the redirect on
+its own; `curl` needs `-L`. A station's own drawer offers the same route per level directly.
+
+**Progress belongs to your browser, not to this page.** The redirect hands the bytes from your browser
+to the archive, so the portal never sees the transfer and shows no progress bar and no completion
+message: your browser's own downloads list is where the transfer appears, and it is the only place that
+can honestly report it. Nothing is copied through AusMT, and nothing is repackaged.
+
 ## Access conditions
 
 An external resource may have different access conditions from the AusMT package: open, embargoed,

@@ -507,7 +507,8 @@ function wireHydration(){
   // there is no failure branch to mirror sci's.
   const tsa=TSACC_READY.then(()=>{
     if(typeof paintTsChooser==="function")paintTsChooser();
-    if(ST.length&&typeof refresh==="function")refresh();});
+    if(ST.length&&typeof refresh==="function")refresh();
+    rehydrateOpenDrawer();});
   HYDRATION_DONE=Promise.all([tf,sci,man,tsa]);
 }
 async function boot(){

@@ -128,7 +128,7 @@ function refresh(){paintSlider();visible=ST.filter(passes);
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
-  const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlCite","dlZip","dlZipXml","dlZipH5","strike"].forEach(id=>document.getElementById(id).disabled=!on);
+  const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlTs","dlCite","dlZip","dlZipXml","dlZipH5","strike"].forEach(id=>document.getElementById(id).disabled=!on);
   // The three format zips also state what the current selection would cost. The estimate is derived from
   // the download manifest, so it is owned by exports.js (which owns the packaging that must agree with
   // it) and simply re-run here, where the selection is known to have changed. Guarded like the other
@@ -347,7 +347,7 @@ function paintTsChooser(){
   const totals=known?tsLevelTotals():{};
   [...seg.children].forEach(b=>{
     const t=totals[b.dataset.ts],n=t?t.n:0,on=TS_CHOSEN.has(b.dataset.ts);
-    b.textContent=b.dataset.label+(n?"  "+n+" station"+(n===1?"":"s")+(t.bytes?" · "+fmtBytes(t.bytes):""):"");
+    b.textContent=b.dataset.label+(n?"  "+n+" station"+(n===1?"":"s")+(t.bytes?" · "+fmtBigBytes(t.bytes):""):"");
     b.disabled=!n;
     b.setAttribute("aria-busy",known?"false":"true");
     b.setAttribute("aria-pressed",String(on));

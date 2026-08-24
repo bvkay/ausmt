@@ -194,6 +194,15 @@ win.URL.revokeObjectURL = () => {};
 // and two buttons that do different things, so the shape is worth pinning at the call site.
 const trackCalls = [];
 win.plausible = (name, opts) => { trackCalls.push({ name, props: (opts && opts.props) || {} }); };
+// HAND-OFF RECORDERS. A /go/ts/ hand-off is a window.open of a route the front door resolves; jsdom
+// does not implement window.open, and what is being pinned is exactly WHICH url the app hands the
+// browser, so record it. The clipboard is stubbed for the same reason: the copy button's whole job is
+// the string it produces, and drawer.js copyTxt reaches navigator.clipboard, which jsdom leaves unset.
+const opened = [];
+win.open = (...args) => { opened.push(args); return null; };
+const clipboard = [];
+Object.defineProperty(win.navigator, "clipboard", {
+  value: { writeText: t => { clipboard.push(String(t)); return Promise.resolve(); } }, configurable: true });
 // version/schema pinned so version.js produces a DETERMINISTIC ver-chip label the footer-chip assertion
 // (item 3) can pin exactly, instead of matching a moving default.
 win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", schema_version: "1.0" };
@@ -406,6 +415,10 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // driver swaps the index, the way runInit and the hydration gate call it.
   "tsLevels:()=>[...TS_CHOSEN],setTsLevels:(a)=>{TS_CHOSEN=new Set(a||[]);}," +
   "paintTsChooser:()=>paintTsChooser()," +
+  // The hand-off list's PURE builder, exposed for the same reason geoFC is: the file the reader gets
+  // is written inside a click handler, and a claim about its contents that no test can reach is a
+  // claim that rots. Takes the selection and the chosen levels from the app, not from the driver.
+  "tsHandoffDoc:(sts)=>tsHandoffDocument(sts||sel(),tsChosenLevels())," +
   // geoFC builds the GeoJSON export exactly as #dlGeo does, taking the sci-usable decision FROM THE APP
   // (hydrUsable) rather than from the driver, so the export-honesty pins observe the real branch rather than
   // a re-implementation of it. setSelected drives `selected` by station id without going through
@@ -1841,6 +1854,102 @@ async function bootFreshWindow(dataMap, url) {
   ok(/5.7 MB/.test(tsBtn("raw_packed").textContent),
     "the chooser's sizes must come from ts_access.json, not from the download manifest, got " +
     JSON.stringify(tsBtn("raw_packed").textContent));
+
+  // K3. THE HAND-OFF (R7/D3/D5). AusMT holds none of these bytes, so the offer is a POINTER FILE and
+  // never a fourth selection zip. Every row names an AusMT /go/ts/ route (the one the front door
+  // resolves, and the only string that carries survey/station/level into the log) with the archive's
+  // own address alongside as an inert reference field.
+  ok(doc.getElementById("dlTs"), "#dlTs (the time-series hand-off list) is missing from the export row");
+  ok(doc.getElementById("exportBtns").contains(doc.getElementById("dlTs")),
+    "#dlTs must sit with the other selection exports, not in a panel of its own");
+  A.setSelected(["A1", "A2", "B1", "D1"]);
+  const _hd = A.tsHandoffDoc();
+  ok(_hd.files === 4 && _hd.doc.stations.length === 3,
+    "the list must cover every routable level of every selected station in the index, got " +
+    _hd.files + " file(s) across " + _hd.doc.stations.length + " station(s)");
+  ok(!_hd.doc.stations.some(r => r.ausmt_id === "au.delta.D1"),
+    "R5: the embargoed station is absent from the index, so it cannot appear in a hand-off list");
+  const _a1row = _hd.doc.stations.find(r => r.ausmt_id === "au.alpha.A1");
+  const _a1raw = _a1row.levels.find(l => l.level === "raw_packed");
+  ok(/^https?:\/\/[^/]+\/go\/ts\/alpha\/A1\/raw_packed$/.test(_a1raw.url),
+    "D12: the fetched url must be the AusMT /go/ts/<survey>/<station>/<level> route, got " + JSON.stringify(_a1raw.url));
+  ok(_a1raw.archive_url_comment === "https://thredds.nci.org.au/thredds/fileServer/my80/x/A1%20%5BREMOTE%5D.zip",
+    "D3: the archive address rides alongside as an inert reference, percent-encoded exactly as the " +
+    "engine encodes it (the `C5 [REMOTE].zip` case), got " + JSON.stringify(_a1raw.archive_url_comment));
+  ok(_a1raw.bytes === 4000000 && _a1raw.filename === "A1 [REMOTE].zip",
+    "each row states the size and the archive's own filename, got " + JSON.stringify([_a1raw.bytes, _a1raw.filename]));
+  ok(/wget follows/i.test(_hd.doc.note) && /curl needs -L/i.test(_hd.doc.note),
+    "D3: the file must say that wget follows the 302 and curl needs -L, got " + JSON.stringify(_hd.doc.note));
+  ok(/hosts none of these files/i.test(_hd.doc.note),
+    "the file must restate that AusMT hosts nothing it routes to, got " + JSON.stringify(_hd.doc.note));
+  // The chooser SCOPES the list: a level nobody chose is not written.
+  A.setTsLevels(["raw_packed"]);
+  const _hdScoped = A.tsHandoffDoc();
+  ok(_hdScoped.files === 2 && _hdScoped.doc.stations.every(r => r.levels.every(l => l.level === "raw_packed")),
+    "the chooser must scope the hand-off list to the chosen levels, got " + _hdScoped.files + " file(s)");
+  A.setTsLevels([]);
+  // THE CONFIRMATION (owner UX ruling 2026-08-23) and its wget command.
+  const _trackBefore = trackCalls.length;
+  doc.getElementById("dlTs").click();
+  const snackEl = doc.getElementById("snackbar");
+  ok(snackEl && !snackEl.classList.contains("hidden"), "the hand-off must confirm itself in the snackbar");
+  ok(/Download list ready - 4 files, /.test(snackEl.textContent),
+    "the confirmation must state the file count and the total size, got " + JSON.stringify(snackEl.textContent));
+  const copyBtn = snackEl.querySelector("button");
+  ok(copyBtn && /wget/i.test(copyBtn.textContent),
+    "the confirmation must offer the wget command as a COPY button, got " + (copyBtn && copyBtn.textContent));
+  copyBtn.click();
+  ok(clipboard.length === 1 && /wget/.test(clipboard[0]) && /-i/.test(clipboard[0]),
+    "the copy button must put a wget -i command on the clipboard, got " + JSON.stringify(clipboard[0]));
+  ok((clipboard[0].match(/\/go\/ts\//g) || []).length === 4,
+    "the copied command must carry every routed file, got " + JSON.stringify(clipboard[0]));
+  ok(!/thredds\.nci\.org\.au/.test(clipboard[0]),
+    "the copied command must fetch the AusMT route, not the archive address it resolves to (the route " +
+    "is what the front door counts), got " + JSON.stringify(clipboard[0]));
+  ok(trackCalls.length === _trackBefore,
+    "R8: the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
+  ok(!/progress|complete|finished|%/i.test(snackEl.textContent),
+    "the page claims no progress and no completion; the browser owns both, got " + JSON.stringify(snackEl.textContent));
+
+  // K4. THE SINGLE-STATION HAND-OFF, and THE JOIN RULE that decides whether its action row exists.
+  // m.ts_levels is CURATOR-DECLARED and SURVEY-scope; the index is CRAWL-VERIFIED and STATION-scope.
+  // Beta declares NO levels at all, so a hasLevel()-gated action would read "not available" for a
+  // Level 1 file this deployment can hand B1 straight to. The register wins the station row.
+  A.setSMETA("Beta Survey", { ts_levels: [] });
+  A.openStationById("au.beta.B1");
+  const _files = doc.getElementById("drawer");
+  const _hand = [..._files.querySelectorAll('.prod[data-prod="open"][data-tsname]')];
+  ok(_hand.length === 1,
+    "the JOIN RULE: a verified level must offer its action even where the survey declares no levels, got " + _hand.length);
+  ok(/Level 1 MTH5/.test(_hand[0].textContent) && /488 KB/.test(_hand[0].textContent),
+    "the action row states the level and the archive's size, got " + JSON.stringify(_hand[0].textContent));
+  ok(/not available/.test(_files.querySelector(".filelist").textContent),
+    "sensitivity: the survey-scope 'not available' sub-text is UNCHANGED by the action row; the two " +
+    "statements answer different questions and this one is still the curator's");
+  const _badges = [..._files.querySelectorAll(".badges .badge")].length;
+  A.openStationById("au.alpha.A1");
+  ok([..._files.querySelectorAll(".badges .badge")].length === _badges,
+    "D7: no fourth badge; the drawer gains an ACTION ROW, not another availability claim");
+  const _openBefore = opened.length, _trackBefore2 = trackCalls.length;
+  const _a1hand = _files.querySelector('.prod[data-prod="open"][data-tsname]');
+  ok(_a1hand, "A1 publishes routes, so its Files tab must carry hand-off actions");
+  A.dispatchProd(Object.assign({}, _a1hand.dataset));
+  ok(opened.length === _openBefore + 1 && /\/go\/ts\/alpha\/A1\//.test(opened[opened.length - 1][0]),
+    "the action must open the AusMT route, got " + JSON.stringify(opened[opened.length - 1]));
+  ok(trackCalls.length === _trackBefore2,
+    "R8: dispatchProd leaves `open` UNTRACKED, and the hand-off must not change that");
+  ok(/Handed to NCI THREDDS - your browser is downloading /.test(snackEl.textContent) &&
+     /Progress appears in your browser's downloads\./.test(snackEl.textContent),
+    "the single-station hand-off states what was handed over and where the progress will appear, got " +
+    JSON.stringify(snackEl.textContent));
+  ok(!/this may take a while/i.test(snackEl.textContent),
+    "a small file gets no large-file line, got " + JSON.stringify(snackEl.textContent));
+  A.dispatchProd({ prod: "open", url: "http://localhost/go/ts/alpha/A1/raw_packed",
+                   tsname: "BIG.zip", tsbytes: String(9868836788) });
+  ok(/9\.2 GB/.test(snackEl.textContent) && /large file - this may take a while/i.test(snackEl.textContent),
+    "above 5 GB the hand-off appends the large-file line, got " + JSON.stringify(snackEl.textContent));
+  A.setSelected([]);
+  A.closeDrawer();
 
   // L. GO TO PLACE REMOVED (UX feedback round 1 #1): operator decision, redundant. Assert the input
   // (and its datalist) are gone from the rendered page, not merely unused.
