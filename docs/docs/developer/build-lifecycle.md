@@ -15,6 +15,15 @@ included; `--survey-h5` enables the per-survey MTH5 bundles and `--station-h5` t
 files. The engine image ships without the portal config, so these flags, not `portal.config.yaml`, are
 the production enables.
 
+`--ts-index <dir>` names a root of per-survey time-series registers (`<package>/ts-index.yaml`,
+written out of band by the `ausmt-surveys` crawler; point it at the `--surveys` root to read each
+package's own file). The build reads them as FILES and never contacts the archive, so a build stays
+reproducible from its inputs. Rows are validated against the same closed vocabularies the survey
+validator applies, and a row naming a station the package does not publish aborts the build: the
+register is the only record of which remote file belongs to which station, so an unmatched row would
+publish a download route under an identifier nothing assigned. Without the flag no register is read
+and the output is byte-identical to a build from before the flag existed.
+
 1. Parse arguments; create the output directories; resolve the survey validator (`AUSMT_VALIDATOR_PATH`
    or the documented search path). An unresolvable validator aborts the build.
 2. Discover survey packages: one folder per survey containing `survey.yaml` and

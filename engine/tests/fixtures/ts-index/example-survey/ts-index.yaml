@@ -1,0 +1,70 @@
+# Time-series register fixture. The shape is the corpus register's (ausmt-surveys
+# surveys/<slug>/ts-index.yaml); the url_paths are the archive's real path shapes with this
+# fixture's station ids, so nothing here resolves and nothing needs to.
+#
+# EXAMPLE01 carries one row per publishable level plus a level2 row, so D19's exclusion is a TESTED
+# rule rather than an accident of the corpus having no level2 rows today. Its raw_packed filename
+# carries the space and brackets of NVP_2019's `C5 [REMOTE].zip`, which is what makes the
+# percent-encoding pin non-vacuous.
+#
+# EXAMPLE02 carries only rows that must never project: one pending (D9) and one retired (D17). It is
+# the station that proves "a level with nothing verified produces NO row" over built output.
+ts_index:
+  EXAMPLE01:
+    - level: raw_packed
+      url_path: "my80/AuScope_MT_collection/AuScope_Broadband/Example_Survey/Packed_Raw_Time_Series_Archive/EXAMPLE01 [REMOTE].zip"
+      filename: "EXAMPLE01 [REMOTE].zip"
+      bytes: 9868836788
+      data_size: "9.869 Gbytes"
+      modified: "2026-03-26T00:04:25Z"
+      verified: "2026-08-24"
+      match_method: exact
+      review: verified
+    - level: level0
+      url_path: "my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_0/Concatenated_Time_Series_MTH5_per_run/EXAMPLE01.h5"
+      filename: "EXAMPLE01.h5"
+      bytes: 96810000
+      data_size: "96.81 Mbytes"
+      modified: "2026-06-16T01:22:28Z"
+      verified: "2026-08-24"
+      match_method: exact
+      review: verified
+    - level: level1_mth5
+      url_path: "my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_1/Concatenated_Resampled_Rotated_Time_Series_MTH5/EXAMPLE01.h5"
+      filename: "EXAMPLE01.h5"
+      bytes: 20360000
+      data_size: "20.36 Mbytes"
+      modified: "2026-06-16T01:27:25Z"
+      verified: "2026-08-24"
+      match_method: rule:sa-pad
+      review: verified
+    - level: level2
+      url_path: "my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_2/EDI/EXAMPLE01.edi"
+      filename: "EXAMPLE01.edi"
+      bytes: 116000
+      data_size: "116.0 Kbytes"
+      modified: "2026-08-20T04:11:02Z"
+      verified: "2026-08-24"
+      match_method: exact
+      review: verified
+  EXAMPLE02:
+    - level: raw_packed
+      url_path: "my80/AuScope_MT_collection/AuScope_Broadband/Example_Survey/Packed_Raw_Time_Series_Archive/EX02.zip"
+      filename: "EX02.zip"
+      bytes: 1042000000
+      data_size: "1.042 Gbytes"
+      modified: "2026-03-26T00:04:35Z"
+      verified: "2026-08-24"
+      match_method: curator
+      review: pending
+    - level: level0
+      url_path: "my80/AuScope_MT_collection/AuScope_AusLAMP/Example_Survey/level_0/Concatenated_Time_Series_MTH5_per_run/EXAMPLE02.h5"
+      filename: "EXAMPLE02.h5"
+      bytes: 77570000
+      data_size: "77.57 Mbytes"
+      modified: "2026-06-16T01:22:17Z"
+      verified: "2026-08-24"
+      match_method: exact
+      review: retired
+      retired: "2026-08-24"
+      retired_reason: "the archive removed the file; confirmed non-200 on two runs 14 days apart"

@@ -48,6 +48,7 @@ import _stationids as stnids        # noqa: E402  (survey.yaml station-id overri
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
 import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
 import _runids as runids            # noqa: E402  (the persistent per-survey run-id store)
+import _tsindex as tsindex          # noqa: E402  (the per-survey verified-resource register, read offline)
 import _stationcheck as stcheck     # noqa: E402  (station semantics beyond JSON Schema; shared with scripts/verify.py)
 import cache as cache_mod           # noqa: E402  (C18 content-addressed per-station build cache)
 from _contract import CATALOGUE_COLUMNS, MTCAT_SCHEMA_VERSION, STATION_SCHEMA_VERSION, SURVEY_METADATA_SCHEMA_VERSION  # noqa: E402  (single-source positional column contract + the three public-contract schema versions)
@@ -4414,6 +4415,13 @@ def main(argv=None):
     ap.add_argument("--seed-meta", help="JSON of survey metadata (SMETA) for --raw mode -> surveys.json")
     ap.add_argument("--out", required=True, help="portal data dir to write {catalogue,tf,sci,surveys}.json")
     ap.add_argument("--products", default=None, help="optional dir for the product-contract JSON")
+    ap.add_argument("--ts-index", default=None,
+                    help="root of the per-survey verified-resource registers (<slug>/ts-index.yaml, "
+                         "written out of band by the ausmt-surveys crawler). Read OFFLINE as files "
+                         "(rule 14: the build never reaches the archive), validated against the same "
+                         "closed vocabularies the surveys validator applies, and projected as "
+                         "kind=time_series resource rows. Absent => no register is read and the build "
+                         "is byte-identical to one built before the flag existed.")
     ap.add_argument("--pid-status", default=None,
                     help="IDCONS D4: optional path to a pid_status.json cache (written by "
                          "scripts/refresh_pid_status.py). When present, each served DOI-typed identifier "
@@ -4941,6 +4949,26 @@ def main(argv=None):
             _survey_warnings.append(f"run-id store IGNORED ({_rie}); no runs[] published")
             _survey_run_ids = {}
         _run_notes: list = []
+        # The verified-resource register (--ts-index), read OFFLINE from a ROOT of per-survey files
+        # (rule 14). UNLIKE the run-id store this is HARD: the store is a nice-to-have whose absence
+        # costs a station its runs[], while a register row is a ROUTE to bytes on another host, so a
+        # register the build cannot read whole stops the build instead of publishing the part of it
+        # that happened to parse. Read by PACKAGE DIRECTORY NAME for the run-id store's reason (two
+        # packages may declare one slug), against this package's own published station ids, which is
+        # what makes an unmatched row loud rather than silently dropped.
+        _pkgname = Path(pkgdir).name if pkgdir else ""
+        try:
+            _ts_index = (tsindex.load(a.ts_index, _pkgname, {r["id"] for (_p, r) in stations})
+                         if (a.ts_index and _pkgname) else {})
+        except tsindex.TsIndexError as _tie:
+            print(f"ERROR: {_pkgname}: {_tie}", file=sys.stderr)
+            print("Fix the register (or drop --ts-index) and re-run.", file=sys.stderr)
+            return 2
+        if _ts_index:
+            _ts_all = [row for rows in _ts_index.values() for row in rows]
+            print(f"  {_pkgname}: ts-index register: {len(_ts_index)} station(s), {len(_ts_all)} "
+                  f"row(s), {len([row for row in _ts_all if row['review'] == 'verified'])} verified",
+                  file=sys.stderr)
         # resources[]: the survey's placeable containing-collection identifiers, and the rows this
         # lane REFUSES to place. A refusal is reported, never silently dropped: an unplaceable row
         # would publish a wrong citation claim, and a curator is the only one who can fix it.

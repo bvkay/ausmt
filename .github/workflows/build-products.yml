@@ -133,6 +133,8 @@ jobs:
       #   tests/test_presence_rule.py         no mt_metadata default is ever emitted as a source assertion
       #   tests/test_run_facts.py             the six >INFO dialect extractors for acquisition facts
       #   tests/test_station_runs.py          runs[] emission: the D2 gate, the D9 channel rule
+      #   tests/test_ts_index_register.py     the offline verified-resource register: the opt-in flag,
+      #                                       the closed vocabularies, the unmatched-station stop
       #   tests/test_station_resources.py     resources[] from the manifest rows, kinds and role axes
       #   tests/test_station_semantics.py     the semantic layer beyond JSON Schema, in the build and
       #                                       at both of verify.py's wiring sites
@@ -197,6 +199,7 @@ jobs:
             tests/test_presence_rule.py \
             tests/test_run_facts.py \
             tests/test_station_runs.py \
+            tests/test_ts_index_register.py \
             tests/test_station_resources.py \
             tests/test_station_semantics.py \
             tests/test_station_emission.py \
