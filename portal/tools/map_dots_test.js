@@ -61,7 +61,7 @@ const code = buildCode(WANT[0].names, WANT[1].names);
 const ctx = { Math, console, Set, Map, Array, Object, Number, isFinite, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-vm.runInContext(code + "\nglobalThis.__api={DOT_R_FLOOR,DOT_R_CEIL,DOT_R_BASE,MARKER_DIM_FILL," +
+vm.runInContext(code + "\nglobalThis.__api={DOT_R_FLOOR,DOT_R_CEIL,DOT_R_BASE," +
   "radiusForZoom,weightForZoom,hasPosition,dimStyleFor};", ctx);
 const A = ctx.__api;
 

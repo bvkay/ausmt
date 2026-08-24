@@ -105,11 +105,11 @@ code += "\nwindow.__api={" +
   "buildMarkersRun:()=>{buildMarkers();return {marker:ST.map(s=>({id:s.id,has:s.marker!==undefined}))};}," +
   // driveRefresh runs the REAL refresh() (which paints routeVisibleToLayers() into the map layer) and
   // reports what actually reached it - routed markers, any undefined (an addLayer(undefined) crash), and
-  // the `visible` ids (counts must still include the withheld station). There is ONE dot container and
-  // nothing collapses, so a routed station is a dot and the two counts are the same number.
+  // the `visible` ids (counts must still include the withheld station). ONE count, because there is ONE
+  // dot container and nothing collapses: a routed station is a dot.
   "driveRefresh:()=>{buildMarkers();refresh();" +
   "const dots=(dotLayer._layers||[]);" +
-  "return {routedCount:dots.length,dotCount:dots.length," +
+  "return {routedCount:dots.length," +
   "undef:dots.filter(m=>m===undefined).length,vis:visible.map(s=>s.id)};}," +
   "footprints:()=>{buildFootprints();return true;}," +
   "recolorRun:()=>{recolor();return true;}," +
