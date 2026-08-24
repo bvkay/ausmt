@@ -128,11 +128,14 @@ def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
     return target
 
 
-def _relative(root, text) -> str:
-    """A drop reason with the register root stripped. _tsindex names the file by its full path, and
-    that path lands in a COMMITTED file `--check` byte-compares, so it has to be the same string on
-    every checkout."""
-    return str(text).replace(str(Path(root)) + "/", "").replace(str(Path(root)), ".")
+def _reason(root, package, text) -> str:
+    """A drop reason, normalised for the committed record: the register root stripped (_tsindex names
+    the file by its full path, and that path lands in a file `--check` byte-compares, so it has to be
+    the same string on every checkout) and the package name stripped off the front (the line that
+    carries this already names the survey, and saying it twice reads as two facts)."""
+    out = str(text).replace(str(Path(root)) + "/", "").replace(str(Path(root)), ".")
+    prefix = f"{package}: "
+    return out[len(prefix):] if out.startswith(prefix) else out
 
 
 def _survey_routes(root, pkgdir, doc) -> list:
@@ -188,10 +191,13 @@ def routes(surveys_root) -> tuple:
                 raise GenError(f"{pkgdir.name}: survey.yaml is not a mapping")
             out += _survey_routes(root, pkgdir, doc)
         except (GenError, tsindex.TsIndexError, coordacc.CoordinatePolicyError) as e:
-            unresolved[pkgdir.name] = _relative(root, e)
+            unresolved[pkgdir.name] = _reason(root, pkgdir.name, e)
+        # Anything else - unparseable YAML, an unreadable file, a bug in this reader - is contained
+        # the same way and named for what it is rather than guessed at, because a wrong reason in a
+        # committed file sends the next operator to the wrong place.
         except Exception as e:                                                   # noqa: BLE001
-            unresolved[pkgdir.name] = _relative(
-                root, f"survey.yaml is unreadable ({type(e).__name__}: {e})")
+            unresolved[pkgdir.name] = _reason(
+                root, pkgdir.name, f"unresolvable ({type(e).__name__}: {e})")
     out.sort()
     return out, unresolved
 
