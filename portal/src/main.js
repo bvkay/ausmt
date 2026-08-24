@@ -361,8 +361,8 @@ function maybeShowIntro(){if(tourRequested()){startTourSafe();dropTourParam();re
   }
 })();
 
-// UX6 Wave D (D6): static map legend (bottom-left) — one cluster-bubble row + a coloured dot per data
-// type. The dots read the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (no hard-coded hexes here),
+// UX6 Wave D (D6): static map legend (bottom-left): a coloured dot per data type, and nothing else, since
+// a dot is the only thing the map draws. The dots read the LIVE --lpmt/--bbmt/--amt/--gds tokens via var(),
 // so they track any future colour change automatically. Built once (idempotent). Collapsible on small
 // widths (the toggle only shows there via CSS); starts collapsed on a narrow viewport.
 // UX8 (X2, bug): the legend is parented INTO the Leaflet map container (#map), not to .content. As a
@@ -379,11 +379,8 @@ function maybeShowIntro(){if(tourRequested()){startTourSafe();dropTourParam();re
 // store: a legend click flips the SAME checkbox the rail owns and dispatches its change event, so the one
 // existing #typeBoxes path (filters.js) runs every consumer - passesCore, the map redraw, the header
 // counts, the surveys-view decoupling and the select-lens semantics - exactly as a rail click does.
-// Change 6: the survey-BADGE row ("n survey (click to open; zoom to expand)") is NOT a control and stays an
-// inert div. Its wording changed with the thing it describes: it used to read "stations (zoom to expand)",
-// which described a proximity cluster - a count of stations that happened to be near each other. A badge is
-// a SURVEY, it opens that survey's drawer on click, and it expands past its zoom threshold, so the row now
-// states both of the things a reader can do with it and stops naming an object that no longer exists.
+// The survey-badge row is GONE with the badges (owner, 2026-08-24): the legend may not key an object the
+// map does not draw, and there is no longer anything on the map but the four data types.
 //
 // Resolve a rail type checkbox by its type key (LPMT / BBMT / AMT / GDS - the keys passesCore compares
 // against s.type). Read live from the DOM on each call: the rail is the single source of truth.
@@ -415,8 +412,7 @@ function buildLegend(){
   // "Legend" button above is the small-width collapse control only), so the affordance is stated once,
   // where the eye lands first, without adding a heading the desktop layout never had.
   el.innerHTML=`<button type="button" class="maplegend-toggle" id="mapLegendToggle" aria-expanded="${small?"false":"true"}">Legend</button>`+
-    `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>`+
-    `<div class="legrow"><span class="legbadge">n</span> survey (click to open; zoom to expand)</div>${rows}</div>`;
+    `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>${rows}</div>`;
   host.appendChild(el);
   const toggle=el.querySelector("#mapLegendToggle");
   if(toggle)toggle.addEventListener("click",()=>{const ex=el.classList.toggle("expanded");toggle.setAttribute("aria-expanded",String(ex));});

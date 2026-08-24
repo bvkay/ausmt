@@ -38,8 +38,10 @@ let ST=[],surveys=[],visible=[],selected=new Set(),curView="map",colorMode="type
 let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState(); backs the #/survey/<slug> route
 // UX4 (D1/D2): the set of survey SLUGS that belong to the `auslamp` collection, built once at boot
 // (buildAuslampSet, main.js) from COLL[auslamp].surveys (which holds survey LABELS) resolved through
-// SMETA[label].slug. Empty when collections.json is absent or has no auslamp collection — graceful
-// degrade: isAuslampSurvey() then returns false for everything and the map behaves as before UX4.
+// SMETA[label].slug. Empty when collections.json is absent or has no auslamp collection, in which case
+// isAuslampSurvey() returns false for everything. NO MAP PATH READS IT since the 2026-08-24 dots-only
+// ruling: its one consumer was the badge rule's never-collapse privilege, and nothing collapses now. Kept
+// because it is collection membership rather than map furniture; retiring it is an owner call (see map.js).
 let AUSLAMP_SET=new Set();
 // C42 Amendment A1: ausmt_id -> coordinate policy ('generalised' | 'withheld') for NON-EXACT stations,
 // loaded at boot from the OPTIONAL coord_policy.json (absent for an all-exact corpus => empty => no

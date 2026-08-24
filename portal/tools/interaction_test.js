@@ -54,7 +54,7 @@ const stub = () => new Proxy(function () {}, {
   apply: () => stub(), construct: () => stub(),
 });
 
-// ---- RECORDING LEAFLET FACADE (badge/pane lane, 2026-08-19) --------------------------------------
+// ---- RECORDING LEAFLET FACADE (pane/pointer lane, 2026-08-19) ------------------------------------
 // The blanket stub above answers every property with another stub, which is right for "the map layer is
 // irrelevant here" but makes three things unobservable that a production regression has now proved matter:
 // which PANES the app creates and with what style, which LAYERS it puts in them, and what a marker's click
@@ -81,10 +81,10 @@ const recProxy = (own) => {
   own.__self = px; own.__rec = own;
   return px;
 };
-// A layer. `isPath` models the ONE Leaflet API difference the shipped pane guard duck-types on: every
-// L.Path carries setStyle+redraw and L.Marker carries neither. A recorder that answered every property
-// would make every layer look like a Path, the guard would fire on the badge markers themselves, and the
-// guard leg below would be worse than vacuous - it would be wrong. So the two shapes are modelled honestly.
+// A layer. `kind` is what the dots-only pin reads: a station dot is a circleMarker, and the two shapes the
+// retired badge layer drew (an L.marker divIcon, an L.polyline leader) are recorded too, so their RETURN
+// would be caught rather than silently absorbed by the blanket stub. `isPath` models the one Leaflet API
+// difference that separates the two families: every L.Path carries setStyle+redraw, L.Marker neither.
 const recLayer = (kind, geom, opts, isPath) => {
   const own = Object.create(null);
   own.kind = kind; own.geom = geom; own.options = opts || {}; own.handlers = Object.create(null);
@@ -114,14 +114,12 @@ const recGroup = () => {
   own.eachLayer = (fn) => { own.layers.forEach(fn); return own.__self; };
   return recProxy(own);
 };
-// The panes the app creates, by name, with the style object the app writes into. A plain object is enough:
-// what is being recorded is which properties the shipped code SETS at creation.
+// The panes the app creates, by name. It must create NONE (F5): a pane is stacked over the station canvas,
+// which is the 2026-08-19 outage. Recorded rather than stubbed away so the absence is assertable.
 const panesMade = Object.create(null);
-// Real Web Mercator at 256px tiles - the transform Leaflet's own project/unproject implement. The blanket
-// stub returned a Proxy here, which forced _badgeLayout to degrade to "true centroids, no tails" and made
-// the whole declutter path unreachable in this harness. getZoom is deliberately NOT recorded: curZoom()
-// still falls back to 4 exactly as it did, so no existing routing assertion moves.
-const _mY = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI / 360));
+// getZoom is deliberately NOT recorded: curZoom() falls back to 4 (national), which is the zoom the map
+// pins are written at. project/unproject are not recorded either - they existed only to make the retired
+// badge declutter reachable here, and no shipped map path projects any more.
 const mapOwn = Object.create(null);
 mapOwn.createPane = (nm) => (panesMade[nm] = panesMade[nm] || { style: {}, name: nm });
 mapOwn.getPane = (nm) => panesMade[nm] || null;
@@ -130,15 +128,6 @@ mapOwn.on = (ev, fn) => {
   return mapOwn.__self;
 };
 mapOwn.addLayer = (l) => { mapAddLayer(l); return mapOwn.__self; };
-mapOwn.project = (ll, z) => {
-  const sc = 256 * Math.pow(2, typeof z === "number" ? z : 4);
-  return { x: (ll[1] + 180) / 360 * sc, y: (Math.PI - _mY(ll[0])) / (2 * Math.PI) * sc };
-};
-mapOwn.unproject = (p, z) => {
-  const sc = 256 * Math.pow(2, typeof z === "number" ? z : 4);
-  const m = Math.PI - p[1] / sc * 2 * Math.PI;
-  return { lat: (2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180 / Math.PI, lng: p[0] / sc * 360 - 180 };
-};
 ["setView", "fitBounds", "invalidateSize"].forEach(fn => {
   mapOwn[fn] = (...args) => { mapCalls.push({ fn, args }); return mapOwn.__self; };
 });
@@ -295,19 +284,12 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // hooks verify draw/select flows still COUNT a re-classified station (which may move map containers) —
   // the counting logic reads `visible`/ST, not layer membership, so it stays membership-agnostic.
   "isAuslampSurvey,radiusForZoom,weightForZoom,markerColor,tooltipText,buildAuslampSet," +
-  // Change 6 hooks: the badge rule + router (pure), the layer containers' contents, and the mode gate.
-  "shouldBadgeSurvey,partitionForDisplay,mercatorPixelSpan,surveyCentroid,badgesEnabledForMode," +
-  "routeVisibleToLayers,routePasses:()=>_routePasses,lastRoute:()=>_lastRoute," +
+  // The map paint pass. F4 invokes it and reads what it returned, which is the only readable record of
+  // what reached the ONE dot container (the stubbed layer group's own contents are Proxies).
+  "routeVisibleToLayers," +
   "auslampSet:()=>AUSLAMP_SET,setAuslampSet:(arr)=>{AUSLAMP_SET=new Set(arr);}," +
-  // Pane/pointer lane hooks (production regression, 2026-08-19). survPaneFor + badgeTailPane are the two
-  // pane FACTORIES, exposed so the driver can read back what the shipped code wrote onto a pane it really
-  // created; the two z constants let the leader-above-badge ordering be asserted against the source values.
-  // paneGuardViolations is the guard's own record and decorationPaneViolation its pure decision.
   // stationMarker reaches a real station's recorded layer, which is how the station-click leg fires the
   // handler the app actually bound rather than a re-implementation of it.
-  "survPaneFor:_survPaneFor,badgeTailPane:_badgeTailPane,badgeSizePx,tailOpacityFor," +
-  "SURV_PANE_Z,BADGE_TAIL_PANE,BADGE_TAIL_PANE_Z," +
-  "paneGuardViolations:()=>_paneGuardViolations.slice(),decorationPaneViolation:_decorationPaneViolation," +
   "stationMarker:(id)=>{const s=ST.find(x=>x.id===id);return s&&s.marker;}," +
   "setColorMode:(m)=>{colorMode=m;},selectSurvey,renderCards,openSurvey," +
   // Survey-drawer lane hooks. focusSurvey drives the header "View on map" path; drawerFitOptions is the
@@ -340,12 +322,11 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // UX6 Wave E hooks: collScatter (E6 footprint — driven with a stubbed AU_OUTLINE), renderCollections
   // (E5 landing), and openStationById (E7 focus — lets the driver control the invoking element before open).
   "collScatter,renderCollections,openStationById:(id)=>{const s=ST.find(x=>x.ausmt_id===id)||ST.find(x=>x.id===id);if(s)openStation(s.i);}," +
-  // UX8 (X3/X5/X7) + C46-W3b PURE helpers, exposed so the field->indicator/star/grouping mappings are
-  // unit-testable (jsdom can't render Leaflet bubbles or run real geometry): screeningIndicators(d) maps
-  // scalar inputs to the five indicator states; maturityModel(m,sc) is the star model; groupMarkersBySurvey
-  // buckets markers by their _survey stamp (the per-survey cluster split); licBadgeState/licIsOpen/
-  // attributionText are the W3b licence/attribution helpers; setSMETA patches a survey's metadata so the
-  // driver can drive the attribution/sources render paths that the base fixture doesn't carry.
+  // UX8 (X5/X7) + C46-W3b PURE helpers, exposed so the field->indicator/star mappings are unit-testable
+  // (jsdom can't run real geometry): screeningIndicators(d) maps scalar inputs to the five indicator
+  // states; maturityModel(m,sc) is the star model; licBadgeState/licIsOpen/attributionText are the W3b
+  // licence/attribution helpers; setSMETA patches a survey's metadata so the driver can drive the
+  // attribution/sources render paths that the base fixture doesn't carry.
   "screeningIndicators,maturityModel,licBadgeState,licIsOpen,attributionText," +
   "setSMETA:(sv,patch)=>{SMETA[sv]=Object.assign(SMETA[sv]||{},patch);}," +
   // Card-lane polish hooks. processingSoftwareText/pubShortCite are the PURE lineage derivations (the
@@ -806,10 +787,7 @@ async function bootFreshWindow(dataMap, url) {
     "the config-missing sentinel must expose schema_version null (an explicit 'no version'), got: " +
     JSON.stringify(bare.window.AUSMT_VERSION.schema_version));
 
-  // UX4 (D1/D2) AUSLAMP PARTITION + MEMBERSHIP. partitionMarkers() is the PURE split behind the two map
-  // containers — AusLAMP-COLLECTION members into the never-clustered plain layer, everything else (incl.
-  // legacy non-AusLAMP LPMT) into the markerClusterGroup. Tested on synthetic stations (no Leaflet; jsdom
-  // can't load it) so it doesn't perturb the shared fixture counts.
+  // UX4 (D1) AUSLAMP MEMBERSHIP. Collection membership, resolved once at boot.
   //
   //   AUSLAMP_SET is built at boot from COLL.auslamp.surveys (survey LABELS) resolved through
   //   SMETA[label].slug. The fixture's auslamp collection lists ["Alpha Survey","Beta Survey"] whose slugs
@@ -823,47 +801,15 @@ async function bootFreshWindow(dataMap, url) {
   ok(A.isAuslampSurvey("gamma", A.auslampSet()) === false, "isAuslampSurvey must be false for a non-member slug");
   ok(A.isAuslampSurvey("alpha", new Set()) === false, "isAuslampSurvey must be false against an empty set (absent collection)");
   ok(A.isAuslampSurvey(null, A.auslampSet()) === false, "isAuslampSurvey must be false for a null slug");
-  // partitionMarkers with an EXPLICIT set {as1}: only the member (any type) goes unclustered; a NON-member
-  // LPMT now CLUSTERS — the UX4 behaviour that FAILS on pre-UX4 code (which un-clustered every LPMT type).
-  const _sampleStations = [
-    { i: 0, type: "LPMT", slug: "as1", marker: "m0" },  // AusLAMP member  -> unclustered
-    { i: 1, type: "LPMT", slug: "legacy-lp", marker: "m1" }, // legacy non-AusLAMP LPMT -> CLUSTERED (new)
-    { i: 2, type: "BBMT", slug: "bb", marker: "m2" },   // -> clustered
-    { i: 3, type: "GDS", slug: "gds", marker: "m3" },   // -> clustered (GDS deliberately clusters)
-    { i: 4, type: "AMT", slug: "am", marker: "m4" },    // -> clustered
-    { i: 5, type: "LPMT", slug: "as1b", marker: "m5" }, // second AusLAMP member -> unclustered
-  ];
-  const _explicit = new Set(["as1", "as1b"]);
-  A.setAuslampSet([..._explicit]);
-  // CHANGE 6 SUPERSEDES the two-container partition: proximity clustering is gone, so there is no
-  // "clustered vs unclustered" layer split to route into any more. What SURVIVED is the decision the split
-  // existed to protect - AusLAMP members are never collapsed - and it now lives in shouldBadgeSurvey. So
-  // this asserts the surviving RULE on the same sample: a member never badges, a legacy non-AusLAMP LPMT
-  // is treated like any other survey (the UX4-D2 behaviour that fails on pre-UX4 code), and an empty set
-  // degrades gracefully. The router's own pins (one-badge-per-survey, centroid, conservation) live in
-  // tools/map_badges_test.js, which drives the pure functions on plain objects.
-  const _compact = { w: 140, e: 140.05, so: -31, no: -30.95 };   // small enough to badge at national zoom
-  const _rule = (slug) => A.shouldBadgeSurvey({
-    count: 20, zoom: 4, bbox: _compact, badgesEnabled: true,
-    isAuslamp: A.isAuslampSurvey(slug, A.auslampSet()) });
-  ok(_rule("as1") === false && _rule("as1b") === false,
-    "an AusLAMP member must NEVER collapse into a badge (the never-cluster privilege the partition protected)");
-  ok(_rule("legacy-lp") === true,
-    "a legacy (non-AusLAMP) LPMT survey must be treated like any other survey - this is the UX4 D2 behaviour that fails on base");
-  ok(_rule("bb") === true && _rule("gds") === true && _rule("am") === true,
-    "a compact non-member survey of any type must badge at national zoom");
-  // Empty AUSLAMP_SET => graceful degrade: nothing is AusLAMP, so nothing gets the privilege.
-  A.setAuslampSet([]);
-  ok(A.shouldBadgeSurvey({ count: 20, zoom: 4, bbox: _compact, badgesEnabled: true,
-      isAuslamp: A.isAuslampSurvey("as1", A.auslampSet()) }) === true,
-    "an empty AUSLAMP_SET must degrade to 'nothing is AusLAMP' (no member privilege), not to a crash");
-  A.buildAuslampSet();   // restore the boot-built set for the rest of the run
+  // The never-collapse PRIVILEGE the membership set used to buy is gone with the badges (owner,
+  // 2026-08-24): nothing on the map collapses, so no map surface reads AUSLAMP_SET at all. What is pinned
+  // here is only what still exists - the boot resolution above and the predicate over it.
 
   // ZOOM-SCALED RADII. The UX4-D4 four-step ladder (2.5/3.5/4.5/5) became a CONTINUOUS ramp with a floor
   // and a ceiling; the drawer-polish lane (owner, 2026-08-19) then removed the per-TYPE base, so ONE curve
   // serves every data type - "the same size as the icons set for the AusLAMP sites". The pinned PROPERTY is
   // unchanged and still asserted here (monotone non-decreasing in z); the exact curve, its bounds and the
-  // type-uniformity are pinned in tools/map_badges_test.js against the named constants.
+  // type-uniformity are pinned in tools/map_dots_test.js against the named constants.
   for (let z = 0; z < 16; z++) {
     ok(A.radiusForZoom(z + 1) >= A.radiusForZoom(z),
       "radiusForZoom must stay monotone non-decreasing in z (z=" + z + ")");
@@ -1137,160 +1083,63 @@ async function bootFreshWindow(dataMap, url) {
   ok(A.bgClickShouldClose(true, "rectangle") === false,
     "ruling 5: a background click while a draw is ARMED is placing a corner, not dismissing the drawer");
 
-  // F4. CHANGE 6: MAP DECLUTTER - the wiring jsdom can actually observe.
-  //     HONESTY: Leaflet is stubbed, so a badge here is a Proxy in a stubbed layer group, not a rendered
-  //     marker. What is proven below is the ROUTING (which surveys the app decides to badge, through the
-  //     shipped router, against the real fixture) and the MODE GATE. The pure rule, the centroid, the
-  //     threshold crossing, the conservation invariant and the radius curve are all proven for real -
-  //     on plain objects, against shipped code - in tools/map_badges_test.js. What NOTHING automated
-  //     proves: that a rendered badge is clickable and lands where the centroid says. That is the
-  //     architect's browser click-through.
+  // F4. DOTS ONLY AT EVERY ZOOM (owner, 2026-08-24). Site locations, never a survey object standing in
+  //     front of them. Driven at NATIONAL zoom (curZoom falls back to 4 here) over the compact-survey
+  //     fixture with the AusLAMP privilege lifted, which is the state that USED to collapse Alpha into a
+  //     badge: without that setup the pin would pass against zero badges and prove nothing.
   A.closeDrawer();
-  A.setSidebarMode("browse"); A.setView("map"); A.refresh();
-  // The fixture's surveys are compact (Alpha's two stations are ~1.4 deg apart, Beta/Gamma/Delta single),
-  // so the routing decision is exercised on real app state rather than a hand-built list.
-  const _routed = A.routeVisibleToLayers();
-  ok(Array.isArray(_routed.badges) && Array.isArray(_routed.dots),
-    "change 6: routeVisibleToLayers must return the badge/dot split it painted");
-  // CONSERVATION on the live fixture: every positioned station is either a dot or inside exactly one badge.
-  const _accounted = _routed.dots.length + _routed.badges.reduce((a, b) => a + b.count, 0);
-  ok(_accounted === A.visIds().length,
-    "change 6: every visible station must be accounted for exactly once as a dot or inside a badge, got " +
-    _accounted + " vs " + A.visIds().length);
-  // ONE BADGE PER SURVEY on the live fixture, not just on synthetic input.
-  const _svNames = _routed.badges.map(b => b.survey);
-  ok(_svNames.length === new Set(_svNames).size,
-    "change 6: no survey may appear twice in the badge list, got " + JSON.stringify(_svNames));
-  // The shared fixture cannot badge as-is, and that is itself worth stating: Alpha and Beta are AusLAMP
-  // members (never badge, by ruling) and Gamma/Delta hold a single station each (below BADGE_MIN_STATIONS).
-  // So every badge assertion below FIRST clears AUSLAMP_SET, which makes Alpha - two stations ~1 degree
-  // apart, well inside the 64px span at national zoom - the one badging survey. Without this the mode legs
-  // would "pass" against zero badges in both modes, which proves nothing at all.
-  A.setAuslampSet([]);
-  const _bRouted = A.routeVisibleToLayers();
-  ok(_bRouted.badges.length === 1 && _bRouted.badges[0].survey === "Alpha Survey",
-    "change 6: with the AusLAMP privilege lifted, compact Alpha must badge, got " +
-    JSON.stringify(_bRouted.badges.map(b => b.survey)));
-  ok(_bRouted.badges[0].count === 2, "change 6: the badge must carry Alpha's 2 stations, got " + _bRouted.badges[0].count);
-  ok(_bRouted.dots.length + 2 === A.visIds().length,
-    "change 6: the badged survey's stations must leave the dot list exactly once, got " + _bRouted.dots.length);
-  // MODE GATE (owner item 4): Select & export expands every badge so a lasso can reach the stations.
-  ok(A.badgesEnabledForMode() === true, "change 6: Browse mode must allow badges");
-  A.setSidebarMode("select");
-  ok(A.badgesEnabledForMode() === false, "change 6: Select & export must disable badging");
-  const _selRouted = A.routeVisibleToLayers();
-  ok(_selRouted.badges.length === 0,
-    "change 6 (item 4): Select & export must expand EVERY badge to dots, got " + _selRouted.badges.length);
-  ok(_selRouted.dots.length === A.visIds().length,
-    "change 6 (item 4): in Select mode every visible station must be an individually selectable dot, got " +
-    _selRouted.dots.length + " of " + A.visIds().length);
-  // Selection must actually be able to capture the stations of a survey that WAS badged in Browse.
-  A.setSelected(A.visIds());
-  ok(A.selCount() === A.visIds().length,
-    "change 6 (item 4): Select mode must capture every station of a previously-badged survey, got " + A.selCount());
-  A.setSelected([]);
-  // RETURNING TO BROWSE MUST RE-BADGE THE LAYERS, not merely re-enable the gate. Those are two different
-  // claims and the first version of this leg only made the second, which is how a real defect shipped past
-  // it: setSidebarMode skipped re-routing on select->browse because restoreSelectLens() was assumed to
-  // refresh - but it returns early unless a lens is actually live, and a visitor who just clicks Select then
-  // Browse never opens one. The map then stayed expanded with no badge until something unrelated refreshed.
-  // Caught by clicking the real page. This drives that exact NO-LENS path and asserts the painted layer.
-  // Observed through the ROUTER's own telemetry, not the layer contents: a stubbed Leaflet layer group's
-  // _layers is an unreadable Proxy, so "what the map now holds" is not inspectable here. What IS honest and
-  // sufficient is that the action CAUSED a routing pass and what that pass decided.
-  A.setSidebarMode("browse");                       // the leg above left us in Select; start from Browse
-  const _badgesBeforeSelect = A.routeVisibleToLayers().badges.length;
-  ok(_badgesBeforeSelect > 0, "change 6 setup: Browse at the fixture's zoom must route at least one badge");
-  A.setSidebarMode("select");
-  ok(A.lastRoute().badges.length === 0,
-    "change 6: entering Select must re-route with every badge expanded, got " + A.lastRoute().badges.length);
-  const _passesBeforeBrowse = A.routePasses();
-  A.setSidebarMode("browse");                       // NO lens was ever entered - the defect's exact path
-  ok(A.badgesEnabledForMode() === true, "change 6: returning to Browse must re-enable badging");
-  ok(A.routePasses() > _passesBeforeBrowse,
-    "change 6: returning to Browse must TRIGGER a re-route (the no-lens path did not, and badges stayed expanded)");
-  ok(A.lastRoute().badges.length === _badgesBeforeSelect,
-    "change 6: returning to Browse must REPAINT the badges (not just re-enable the gate), got " +
-    A.lastRoute().badges.length + " vs " + _badgesBeforeSelect + " before");
-
-  // F5. THE PANE POINTER RULE, THE GUARD, AND A STATION CLICK WITH BADGES ON THE MAP.
-  //     (production regression, 2026-08-19: no station on the deployed portal could be opened, and only
-  //     two of thirteen survey badges answered a click.)
-  //
-  //     WHAT THIS PROVES: the shipped code creates every decoration pane pointer-dead and at the z-order
-  //     the leader-on-top rule needs; the guard is WIRED to the map event every layer passes through, is
-  //     silent on a real render, and does fire on the exact shape that caused the outage; and a station
-  //     marker's OWN click handler still opens that station while a badge is on the map.
-  //
-  //     WHAT THIS CANNOT PROVE, and what only a real browser can: that a pointer event actually reaches the
-  //     station layer. jsdom has no compositor, no canvas hit-testing and no pane stacking - the click leg
-  //     below INVOKES a recorded handler, it does not dispatch a pointer at a pixel. The defect being fixed
-  //     lived entirely in that gap: every handler was correctly bound the whole time, and every station was
-  //     still unclickable. The browser half was measured separately (station dot pixel opens its station;
-  //     badge hit-reachability 2/13 before, 13/13 after) and is reported by the lane, not by this file.
   A.setSidebarMode("browse"); A.setAuslampSet([]); A.refresh();
-  const _f5 = A.routeVisibleToLayers();
-  ok(_f5.badges.length > 0 && _f5.dots.length > 0,
-    "F5 setup is vacuous: this section needs badges AND dots on the map at once, got " +
-    _f5.badges.length + " badges / " + _f5.dots.length + " dots");
-  // (a) EVERY SURVEY PANE IS CREATED POINTER-DEAD. Read back off the pane the shipped factory really made
-  //     for a survey that really badged - not off a name this file invented.
-  const _f5pane = A.survPaneFor(_f5.badges[0].survey);
-  const _f5rec = panesMade[_f5pane];
-  ok(_f5rec, "F5: the badging survey must have had a pane created for it, got none for " + JSON.stringify(_f5pane));
-  ok(_f5rec.style.pointerEvents === "none",
-    "F5: a survey pane must be created with pointer-events:none. Leaflet builds a full-map-size CANVAS " +
-    "inside any pane that receives a Path, and at z " + A.SURV_PANE_Z + " that canvas covers the station " +
-    "canvas at z 400 and swallows every click. Got " + JSON.stringify(_f5rec.style.pointerEvents));
-  ok(String(_f5rec.style.zIndex) === String(A.SURV_PANE_Z),
-    "F5: a survey pane must be created at the named z (" + A.SURV_PANE_Z + "), got " + _f5rec.style.zIndex);
-  // (b) THE TAIL PANE, same rule, one z above. Forced into existence here because this fixture routes a
-  //     single badge and so draws no leader; the pane FACTORY is what is under test, and it is the shipped
-  //     one. The leader geometry itself is driven for real in tools/map_badges_test.js.
-  const _f5tail = A.badgeTailPane();
-  ok(_f5tail === A.BADGE_TAIL_PANE, "F5: the tail pane factory must return the named pane, got " + _f5tail);
-  const _f5trec = panesMade[_f5tail];
-  ok(_f5trec && _f5trec.style.pointerEvents === "none",
-    "F5: the tail pane must ALSO be pointer-dead - it is a Path pane, so it gets a canvas too, and it now " +
-    "sits above every badge pane. Got " + JSON.stringify(_f5trec && _f5trec.style.pointerEvents));
-  ok(Number(_f5trec.style.zIndex) > Number(_f5rec.style.zIndex),
-    "F5 (owner: leaders on top): the tail pane must be created ABOVE the badge panes, got tail z " +
-    _f5trec.style.zIndex + " vs badge pane z " + _f5rec.style.zIndex);
-  // (c) THE GUARD. Silent on a real render, and armed: firing the map's own layeradd with the exact shape
-  //     that caused the outage (an INTERACTIVE path in a survey pane) must be caught. Firing the event is
-  //     what makes this a wiring test - the pure decision alone would pass with the hook deleted.
-  ok(A.paneGuardViolations().length === 0,
-    "F5: the guard must be silent on a real badge render, got " + JSON.stringify(A.paneGuardViolations()));
-  ok((mapEvents.layeradd || []).length > 0,
-    "F5: the pane guard must be wired to the map's layeradd event; no handler was registered");
-  const _f5path = (pane, interactive) => ({ options: { pane, interactive }, setStyle() { }, redraw() { } });
-  // The guard shouts on stderr, which is the point of it - but the shout below is DELIBERATE, so capture it
-  // rather than let a green run print an alarm. Capturing also lets the operator-facing half be asserted:
-  // a violation that is only recorded in an array nobody reads is not a warning.
-  const _f5said = [];
-  const _f5ce = win.console.error;
-  win.console.error = (...a) => { _f5said.push(a.join(" ")); };
-  mapAddLayer(_f5path(_f5pane, true));
-  // ...and the two shapes that are legitimate in these panes must NOT be caught, or the guard is a blanket
-  // refusal rather than the stated rule.
-  mapAddLayer(_f5path(_f5pane, false));                       // non-interactive decoration: the leader tails
-  mapAddLayer({ options: { pane: _f5pane, interactive: true } });   // a DOM marker icon: no setStyle/redraw
-  win.console.error = _f5ce;
-  const _f5v = A.paneGuardViolations();
-  ok(_f5v.length === 1 && /INTERACTIVE path/.test(_f5v[0]) && _f5v[0].indexOf(_f5pane) >= 0,
-    "F5: an interactive path added to a survey pane must be caught by the guard and must name the pane, got " +
-    JSON.stringify(_f5v));
-  ok(_f5said.length === 1 && /INTERACTIVE path/.test(_f5said[0]),
-    "F5: the guard must also SAY so on the console - a violation recorded only in an array warns nobody. Got " +
-    JSON.stringify(_f5said));
-  ok(A.paneGuardViolations().length === 1,
-    "F5: the guard must accept a non-interactive path and a marker in a decoration pane, got " +
-    JSON.stringify(A.paneGuardViolations()));
-  // (d) A STATION CLICK STILL OPENS THAT STATION, WITH A BADGE ON THE MAP. The handler invoked is the one
-  //     map.js bound in buildMarkers, reached through the recorded layer - not a re-implementation.
+  // Mark rather than clear: F5 below asserts the no-named-pane invariant over EVERY layer the boot added,
+  // so the whole-run record has to survive this leg. The slice is this pass's share of it.
+  const _routeMark = layersAdded.length;
+  const _dots = A.routeVisibleToLayers();
+  const _added = layersAdded.slice(_routeMark).filter(l => l.kind !== "layerGroup");
+  ok(!("badges" in _dots),
+    "dots only: the paint pass must not carry a badge arm at all, got " + JSON.stringify(Object.keys(_dots)));
+  ok(_dots.dots.length === A.visIds().length,
+    "dots only: every filtered station must be its own dot at national zoom, got " +
+    _dots.dots.length + " of " + A.visIds().length);
+  // WHAT REACHED THE MAP, not just what the router decided. A badge is an L.marker (divIcon) and a leader
+  // is an L.polyline; a station dot is an L.circleMarker. So the layer kinds ARE the claim.
+  ok(_added.every(l => l.kind === "circleMarker"),
+    "dots only: nothing but station dots may reach the map on a routing pass, got " +
+    JSON.stringify(_added.map(l => l.kind)));
+  ok(_added.length === A.visIds().length,
+    "dots only: the painted dot count must equal the filtered station count, got " +
+    _added.length + " of " + A.visIds().length);
+  // The legend must stop advertising an object the map no longer draws.
+  const _legDots = doc.getElementById("mapLegend");
+  ok(_legDots && !_legDots.querySelector(".legbadge"),
+    "dots only: the legend must carry no survey-badge row");
+  ok(_legDots && !/zoom to expand/i.test(_legDots.textContent),
+    "dots only: the legend must not promise that anything expands on zoom, got " +
+    JSON.stringify(_legDots && _legDots.textContent));
+
+  // F5. A STATION CLICK OPENS THAT STATION, AND NOTHING SITS OVER THE STATION LAYER.
+  //     (production regression, 2026-08-19: no station on the deployed portal could be opened. CAUSE: the
+  //     per-survey badge panes sat at z 600 over the station canvas at z 400, and adding an L.Path to a
+  //     pane makes Leaflet build a full-map-size canvas inside it, which swallowed every click.)
+  //
+  //     The badges, their panes and the pane guard are gone with the 2026-08-24 ruling, so the invariant is
+  //     now STRUCTURAL rather than guarded: no pane is created, and no layer is routed into one. Both halves
+  //     are asserted, because "the guard was deleted" is only safe while the panes really are absent.
+  //     SCOPE, so the wording matches what is actually observed: panesMade holds every map.createPane call
+  //     of the run, and layersAdded every layer the recorded factories produced and the app added (map.js's
+  //     circleMarkers, markers, polylines and layer groups). Neither is ever cleared, so a leader tail put
+  //     into a pane at BOOT is caught here, not just the dots the F4 pass had painted a moment earlier.
+  //
+  //     WHAT THIS CANNOT PROVE, and what only a real browser can: that a pointer event reaches the station
+  //     layer. jsdom has no compositor, no canvas hit-testing and no pane stacking - the click leg below
+  //     INVOKES a recorded handler, it does not dispatch a pointer at a pixel.
+  ok(Object.keys(panesMade).length === 0,
+    "F5: no module may create a Leaflet pane over this whole boot. Any pane is stacked over the station " +
+    "canvas and is the exact shape of the 2026-08-19 outage. Got " + JSON.stringify(Object.keys(panesMade)));
+  ok(layersAdded.every(l => !(l.options && l.options.pane)),
+    "F5: no layer added over this whole boot may be routed into a named pane, got " +
+    JSON.stringify(layersAdded.filter(l => l.options && l.options.pane).map(l => l.kind + ":" + l.options.pane)));
   A.closeDrawer();
   win.location.hash = "";
-  const _f5dot = _f5.dots.find(s => s.id === "B1") || _f5.dots[0];
+  const _f5dot = _dots.dots.find(s => s.id === "B1") || _dots.dots[0];
   const _f5mk = A.stationMarker(_f5dot.id);
   ok(_f5mk && _f5mk.handlers && (_f5mk.handlers.click || []).length === 1,
     "F5: a station marker must carry exactly one bound click handler, got " +
@@ -1300,7 +1149,7 @@ async function bootFreshWindow(dataMap, url) {
     "panes stacked over that layer, so a station that moved INTO one would be unreachable by construction.");
   _f5mk.handlers.click[0]({});
   ok(doc.getElementById("drawer").classList.contains("open"),
-    "F5: a station marker click must open the station drawer while badges are on the map");
+    "F5: a station marker click must open the station drawer");
   ok(/#\/station\//.test(win.location.hash),
     "F5: a station marker click must leave the station route in the URL, got " + JSON.stringify(win.location.hash));
   ok(doc.getElementById("drawer").innerHTML.indexOf(_f5dot.id) >= 0,
@@ -2495,18 +2344,14 @@ async function bootFreshWindow(dataMap, url) {
   ok(!aside.classList.contains("collapsed"), "D5: a second click did not expand the rail");
   ok(win.localStorage.getItem("ausmt_sidebar_collapsed") === "0", "D5: expanded state was not persisted");
 
-  // AA. UX6 Wave D (D6): the static map legend — one cluster-bubble row + a coloured dot per data type,
-  // the dots reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (a hard-coded hex would fail).
+  // AA. UX6 Wave D (D6): the static map legend: a coloured dot per data type and nothing else, the dots
+  // reading the LIVE --lpmt/--bbmt/--amt/--gds tokens via CSS var() (a hard-coded hex would fail).
   const legend = doc.getElementById("mapLegend");
   ok(legend, "D6: #mapLegend was not built");
-  // Change 6: the legend row describes a survey BADGE now, not a proximity bubble. RED-first: the old
-  // "stations (zoom to expand)" wording fails here, because it named an object the map no longer draws and
-  // omitted the thing a badge mainly does (open its survey).
-  ok(/survey \(click to open; zoom to expand\)/.test(legend.textContent),
-    "change 6: the legend must describe the survey badge as 'survey (click to open; zoom to expand)', got: " +
-    JSON.stringify(legend.textContent));
-  ok(!/stations \(zoom to expand\)/.test(legend.textContent),
-    "change 6: the retired proximity-cluster legend wording must be GONE");
+  // A legend keys what the map DRAWS. Both retired map objects (the proximity bubble and the survey badge
+  // that replaced it) must therefore be absent from its copy, not merely re-worded.
+  ok(!/survey \(click to open/.test(legend.textContent) && !/stations \(zoom to expand\)/.test(legend.textContent),
+    "dots only: the legend must key no collapsed-survey object, got: " + JSON.stringify(legend.textContent));
   const legDots = [...legend.querySelectorAll(".legrow .dot")];
   ok(legDots.length === 4, "D6: expected 4 data-type legend dots, got " + legDots.length);
   ["--lpmt", "--bbmt", "--amt", "--gds"].forEach(tok =>
@@ -2822,34 +2667,9 @@ async function bootFreshWindow(dataMap, url) {
   ok(legEl && legEl.parentElement && legEl.parentElement.id === "map",
     "X2: the map legend must be parented INTO the map container (#map), got parent: " + (legEl && legEl.parentElement && legEl.parentElement.id));
 
-  // X3 CARRIED FORWARD INTO CHANGE 6. The UX8-X3 ruling was "a grouped map object never mixes surveys",
-  // which groupMarkersBySurvey enforced for cluster bubbles. Clustering is gone, and the ruling is now
-  // STRUCTURAL rather than enforced: partitionForDisplay keys by survey, so a badge is a survey by
-  // construction. Two nearby COMPACT surveys must therefore still give TWO badges (never one merged
-  // object), and a station reassigned to another survey must move with it. Driven pure, on plain objects.
-  const st = (id, sv, lat, lon) => ({ id, survey: sv, slug: sv.toLowerCase(), lat, lon });
-  const twoNearby = [
-    st("a", "Burra", -33.700, 138.900), st("b", "Burra", -33.710, 138.910),
-    st("c", "Robertstown", -33.750, 138.960), st("d", "Robertstown", -33.760, 138.970),
-  ];
-  const gA = A.partitionForDisplay(twoNearby, 4, { auslampSet: new Set(), badgesEnabled: true });
-  ok(gA.badges.length === 2,
-    "X3/change 6: two nearby compact surveys must produce TWO badges, never one merged object, got " + gA.badges.length);
-  ok(gA.badges.every(b => b.count === 2),
-    "X3/change 6: a badge must count ONLY its own survey's stations (badges never mix surveys), got " +
-    JSON.stringify(gA.badges.map(b => [b.survey, b.count])));
-  // Reassigning a station's survey moves it between badges - the grouping key is the survey, falsifiably.
-  // Moving "d" to Burra also drops Robertstown to ONE station, which is below BADGE_MIN_STATIONS, so it
-  // correctly stops badging and renders as a plain dot. Both halves are asserted: the count follows the
-  // reassignment, AND the min-stations rule fires on the survey that was left too small to badge.
-  const moved = twoNearby.map(s => s.id === "d" ? { ...s, survey: "Burra", slug: "burra" } : s);
-  const gB = A.partitionForDisplay(moved, 4, { auslampSet: new Set(), badgesEnabled: true });
-  const byName = Object.fromEntries(gB.badges.map(b => [b.survey, b.count]));
-  ok(byName["Burra"] === 3,
-    "X3/change 6: reassigning a station's survey must move it between badges, got " + JSON.stringify(byName));
-  ok(byName["Robertstown"] === undefined && gB.dots.length === 1 && gB.dots[0].survey === "Robertstown",
-    "X3/change 6: a survey left with a single station must stop badging and render as a dot, got dots=" +
-    JSON.stringify(gB.dots.map(s => s.id)));
+  // X3 IS RETIRED WITH ITS SUBJECT. The UX8-X3 ruling was "a grouped map object never mixes surveys",
+  // enforced first by groupMarkersBySurvey for cluster bubbles and then structurally by the badge router.
+  // The map groups nothing now, so there is no object left that could mix two surveys.
 
   // X5. SCREENING INDICATORS — the five-row list is derived ONLY from computed quantities; each field->state
   // mapping is FALSIFIABLE (flip one input, exactly one indicator flips). An all-good baseline, then perturb.
@@ -3489,7 +3309,7 @@ async function bootFreshWindow(dataMap, url) {
   // are now real toggle BUTTONS that PROXY those rail checkboxes: a legend click flips the SAME checkbox
   // and dispatches its change event, so there is NO second state store and every existing consumer
   // (passesCore, the map redraw, the counts, the surveys decoupling, the select-lens semantics) runs on the
-  // one existing path. The cluster row stays inert.
+  // one existing path.
   A.setSidebarMode("browse"); A.setView("map");
   const legB = doc.getElementById("mapLegend");
   ok(legB, "LEG: #mapLegend was not built");
@@ -3533,13 +3353,13 @@ async function bootFreshWindow(dataMap, url) {
     "LEG: the legend rows must carry the EXACT rail type keys, in rail order, got " + JSON.stringify(legBtns.map(b => b.dataset.type)));
   ok(legBtns.every(b => b.getAttribute("aria-pressed") === "true"),
     "LEG: every legend type must read aria-pressed=true while its rail checkbox is checked");
-  // The BADGE row is a legend KEY, not a control: the clickable thing is the badge on the map, not this
-  // swatch. It must therefore keep no button semantics even though its copy now says "click to open".
-  const badgeRow = [...legB.querySelectorAll(".legrow")].find(r => r.querySelector(".legbadge"));
-  ok(badgeRow && badgeRow.tagName === "DIV" && !badgeRow.classList.contains("legtype") &&
-     badgeRow.getAttribute("aria-pressed") === null && !badgeRow.hasAttribute("data-type"),
-    "LEG: the survey-badge legend row must keep NO button semantics (it describes the map object, it is not one)");
-  ok(!legB.querySelector(".legcluster"), "change 6: the retired .legcluster swatch must be gone");
+  // Every legend row is now a type toggle: the two retired swatches (.legcluster for the proximity bubble,
+  // .legbadge for the survey badge that replaced it) must be gone from the DOM, not just unstyled.
+  ok(!legB.querySelector(".legcluster") && !legB.querySelector(".legbadge"),
+    "dots only: no retired map-object swatch may survive in the legend");
+  ok([...legB.querySelectorAll(".legrow")].every(r => r.classList.contains("legtype")),
+    "dots only: every legend row must be a data-type toggle, got " +
+    JSON.stringify([...legB.querySelectorAll(".legrow")].map(r => r.className)));
   // Affordance copy, in place of where a 'Legend' title would have gone (the box has no desktop title).
   const legHint = legB.querySelector(".leghint");
   ok(legHint && /click a type to show or hide it/i.test(legHint.textContent),
@@ -4064,16 +3884,16 @@ async function bootFreshWindow(dataMap, url) {
     ok(!selectedBy(s, false), "LINKCSS: the muted state text must not be painted the link accent");
   });
 
-  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP partition+membership+label→slug + non-member LPMT clusters + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
+  console.log("INTERACTION PASSED (tree country+org toggles, UX5 collections-group-first + push-sync + O1 no-nested-member-list + collapse INVARIANT + caret click-target + gating-off + D8 tour-restore x3 exit paths, collection route+Back, Find (+F3 keyboard nav: ArrowDown active-descendant/Enter-activates/Esc-clears), survey route, intro panel, tour v4 incl. Find-demo real-input+dropdown + tree-browse kalkaroo-degrade + exit hooks on Next/Back/close + drawer-open+restore, empty-state intro, year filter+hints, downloadable-only, go-to-place removal, screening(advanced) collapse, recently-added, C1b embargo access panel, PID links survey_pid/collection_pid/instrument pid + hostile-pid inert, ver-chip-in-footer, one-header-help-button, UX4 AusLAMP membership+label→slug + empty-set degrade + O5 radiusForZoom-one-step-smaller/weightForZoom pins+monotone + A1 colour-identical-all-modes + O4 tooltip station+survey-only, dots-only-at-every-zoom(F4 zero badges + painted dots == filtered count + circleMarkers only + no legend badge row) + no-pane structural invariant(F5), still-counted-across-containers, card-desc-from-yaml + hostile-blurb-inert + fallback, dimensionality-hidden-strike/skew-kept, C20 arrow-panel+Parkinson-label+south-sign-mapping + error-bars-present/absent + no-tipper-state, C22 citation-honesty no-DOI-placeholder-free + with-DOI-kept + NCI-byte-pin + txt-no-DOI-note, " +
     "UX6-Wave-C drawer-tabs+ARIA + sticky-header-download/cite + section-role-chips + yx-square/xy-circle-markers + full-station-response-modal(all-panels+identity-header+honest-coords+2x)+Esc/click-out+focus-return+non-tipper-no-arrow-panel + C1b-fence-under-tabs, " +
     "UX7b U6 panel-retitles (Discover-heading/Explore-data/API-access) + U7 welcome-popup first-visit-modal + role=dialog + focus-in + checkbox-persistence-matrix(tour/browse/Esc/click-out × ticked/unticked) + take-tour-starts-tour + help-panel-on-demand-no-persist + empty-state-popup + U8 card-anchor side-pick/no-overlap/caret-aim(4 sides) + U9 copper-Next + U10 dim-0.78, " +
-    "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + per-survey-cluster-grouping + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
+    "UX8 5-tabs+Response-default + Station-summary-fold(4 groups) + Screening-indicators(field-map+mutation+na) + maturity-stars(achieved-count) + prov-collapse+API-expander + legend-in-map-container + W3b lic-canon+attribution+source-node+cite-fallback + CVD-ramp exact-hexes+monotone-luminance+null-grey+qvdot-not-text, " +
     "D2 Browse/Select mode toggle ids-intact + auto-switch-on-select-all + tour-selbox-step mode-switch+3-path-restore, " +
     "D3 draw-toast copy+fires+auto-switch, Draw-buttons in-SELECTION-panel reuse-toolbar-handler + shared-armedDrawMode(button/icon parity) + complete/cancel-clears-both, " +
-    "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+cluster-row+collapse, " +
+    "D4 export-empty-state hide/reveal, D5 sidebar-collapse class+invalidateSize+persist, D6 map-legend tokens+collapse, " +
     "LEG interactive-legend (type rows PROXY the rail checkboxes: rail flip + marker-set + header count, exact type keys/order, " +
     "button semantics + aria-pressed, two-way dim from the rail, Enter/Space + preventDefault-no-double-fire, " +
-    "all-four-off empty map reads '0 shown' and restores, inert cluster row, affordance hint at the top, select-lens never captures a type toggle), " +
+    "all-four-off empty map reads '0 shown' and restores, affordance hint at the top, select-lens never captures a type toggle), " +
     "UX6-Wave-E slim-card field-set+removed-blocks-absent + discovery sort/count/compact + completeness-not-a-ranking fence + E2 identifiers-rollup N-of-M+collapsed-list + E4 detail-section-order + E6 collScatter AU-outline-beneath-dots+per-survey-legend+view-on-map fitBounds + E7 drawer role=dialog+focus-in+focus-restore, " +
     "CLEANUP-WAVE recently-added-single-strip+30day-build-window (rail #recentSide deleted, leak fixed) + facet-swap(Open-licence+data-type chips, DOI/tipper gone)+survey-search(name/org/region/blurb) + rail-hidden-on-surveys/collections/detail + drawer-scrim(non-map click-close) + collections-redesign(one-rich-card+full-abstract+two-column-hero, intro/collnote deleted), " +
     "CARD-POLISH one-attribution-box(single .attn, names ORCID/ROR-linked in place, text == attributionText) + contributors-above-Downloads + lineage software(station-level-wins/survey-fallback/no-invented-version, node == prov row) + AusMT-Provenance-title + formats(served-only, no ticks/(pipeline), embargoed claims nothing) + publication-node-from-pubs(short cite + N-more, no fabricated et al., none-recorded when empty), " +
