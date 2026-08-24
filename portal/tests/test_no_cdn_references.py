@@ -6,9 +6,9 @@ with every page load. The libraries are now vendored under portal/vendor/ and re
 path (see portal/vendor/README.md for upstream URLs + sha256 provenance).
 
 Change 6 (owner, 2026-08-18) RETIRED Leaflet.markercluster: proximity clustering was replaced by
-per-survey badges, so the plugin, its stylesheet and both vendored files are gone. The vendored set below
-is therefore the THREE remaining libraries. tests/test_map_badges.py owns the assertion that no
-markercluster asset or reference comes back.
+per-survey badges, which the owner then removed in turn on 2026-08-24 (site locations only). The plugin,
+its stylesheet and both vendored files are gone, so the vendored set below is the THREE remaining
+libraries. tests/test_map_dots.py owns the assertion that no markercluster or badge asset comes back.
 
 Fails if: `cdnjs.cloudflare.com` reappears anywhere in the shipped HTML entry points, OR any vendored
 script/link tag in index.html points somewhere other than `vendor/`.

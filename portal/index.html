@@ -447,25 +447,12 @@
   .snackbar .snack-note{display:block;color:var(--muted);font-size:12px;margin-top:3px}
   .snackbar .snack-act{flex:none;background:var(--copper);color:#16110b;border:0;border-radius:4px;
     padding:6px 10px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer}
-  .marker-cluster div{background:rgba(232,237,241,.92)!important;color:#11182D!important;font-family:var(--mono);font-weight:700}.marker-cluster{background:rgba(239,114,86,.45)!important}
   @media (max-width:760px){main{flex-direction:column}aside.filters{width:100%!important;order:2;max-height:42vh}.resizer{display:none}.content{order:1;min-height:48vh}#drawer{width:100%}
     /* UX3 item 4: at narrow widths the three header zones stack full-width and left-align, so the
        centred nav / right-aligned counts don't read as stranded fragments once they wrap. */
     .hzone{flex:1 1 100%;justify-content:flex-start}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
-  /* Change 6: SURVEY BADGE icons (AusMT visual language, inherited from the retired proximity-cluster
-     bubbles so the map keeps its dialect). A badge is a CONTROL - it opens its survey's drawer - so unlike
-     the old bubble it carries a pointer cursor and a hover state. Sizes ramp with the station count. */
-  .ausmt-badge{background:transparent;border:none;cursor:pointer}
-  .ausmt-badge div{display:flex;align-items:center;justify-content:center;width:100%;height:100%;
-    border-radius:50%;font-family:var(--mono);font-weight:700;color:#12202b;
-    border:2px solid rgba(232,237,241,.4);box-shadow:0 2px 7px rgba(0,0,0,.45)}
-  .ausmt-badge:hover div{border-color:var(--copper)}
-  .ausmt-badge span{line-height:1}
-  .ausmt-badge.svbadge-small div{background:#5BAE6A;font-size:12px}
-  .ausmt-badge.svbadge-medium div{background:#D9A23B;font-size:13px}
-  .ausmt-badge.svbadge-large div{background:#EF7256;font-size:14px}
 .emptyoverlay{position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
   background:rgba(11,15,18,.55);backdrop-filter:blur(1px);pointer-events:none;padding:24px}
 .emptyoverlay .emptystate{pointer-events:auto}
@@ -618,15 +605,10 @@
     text-align:left;cursor:pointer;font-size:12px;font-family:var(--sans)}
   .maplegend-body{padding:9px 11px;display:flex;flex-direction:column;gap:6px}
   .maplegend .legrow{display:flex;align-items:center;gap:8px;line-height:1.3}
-  /* Change 6: the legend's badge swatch (was .legcluster, when the thing it stood for was a proximity
-     bubble). Same swatch, renamed with the object, so a stylesheet reader cannot think clusters still ship. */
-  .maplegend .legbadge{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
-    border-radius:50%;background:rgba(239,114,86,.45);color:#12202b;font-family:var(--mono);font-weight:700;
-    font-size:10px;flex:none;border:2px solid rgba(232,237,241,.4)}
   /* The four TYPE rows are real toggle BUTTONS proxying the rail's #typeBoxes checkboxes (main.js
      toggleLegendType), so strip the UA button chrome back to the .legrow look and add the affordances a
      control owes: pointer, hover, visible focus ring. .legoff dims the WHOLE row (dot and label together)
-     when its type is hidden. The cluster row is not a button and inherits none of this. */
+     when its type is hidden. */
   .maplegend .legtype{appearance:none;-webkit-appearance:none;background:none;border:0;border-radius:4px;
     padding:2px 4px;margin:0 -4px;font-family:inherit;font-size:inherit;line-height:1.3;color:var(--text);
     text-align:left;cursor:pointer}
