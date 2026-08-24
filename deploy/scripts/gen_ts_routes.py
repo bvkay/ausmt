@@ -109,13 +109,16 @@ def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
     value this table admits is a value that gate admits - AND THE CONVERSE, which was the asymmetry
     worth naming: the traversal refusal below is that module's predicate, not a second opinion, so a
     string station.json is allowed to publish is a string this table can serve."""
+    # Neither refusal quotes the offending url_path. The reason is recorded in the COMMITTED table,
+    # and one (station, level) names one file, so the row is already identified; echoing an
+    # unvalidated archive string into the file the front door imports buys nothing.
     if stcheck.ts_path_walks_up(url_path):
-        raise GenError(f"{pkgdir.name}: {sid}/{level} url_path {url_path!r} walks up out of the "
-                       f"fileServer root; a route table is the last place to resolve that.")
+        raise GenError(f"{pkgdir.name}: {sid}/{level} url_path walks up out of the fileServer "
+                       f"root; a route table is the last place to resolve that.")
     target = stcheck.ts_encode_path(url_path)
     if not stcheck._TS_ENCODED.match(target):
-        raise GenError(f"{pkgdir.name}: {sid}/{level} url_path {url_path!r} does not encode to a "
-                       f"route {stcheck.TS_ACCESS_PREFIX} can serve")
+        raise GenError(f"{pkgdir.name}: {sid}/{level} url_path does not encode to a route "
+                       f"{stcheck.TS_ACCESS_PREFIX} can serve")
     return target
 
 

@@ -306,6 +306,34 @@ def test_a_dropped_survey_is_recorded_in_the_committed_table(tmp_path):
     assert gen.main(["--check", "--surveys", str(surveys), "--out", str(out)]) == 0
 
 
+@pytest.mark.parametrize("why,mutate,forbidden", [
+    ("a url_path that walks up out of the fileServer root",
+     lambda s: (s / "open-survey" / "ts-index.yaml").write_text(
+         "ts_index:\n  OPEN1:\n" + _row("raw_packed", "my80/../../../etc/passwd", "verified"),
+         encoding="utf-8"),
+     "passwd"),
+    ("a slug no published ausmt_id could carry",
+     lambda s: (s / "open-survey" / "survey.yaml").write_text(
+         _survey_yaml("../escape", "open"), encoding="utf-8"),
+     '"/go/ts/../escape'),
+], ids=["traversal-url-path", "unsafe-slug"])
+def test_the_refusal_branches_drop_their_survey_and_leave_the_table_standing(tmp_path, why, mutate,
+                                                                            forbidden):
+    """The two refusals that were uncovered code, and each is now a survey-scope drop rather than a
+    corpus-scope stop, so each needs its own pin. A `..` url_path is the string _stationcheck also
+    refuses (one predicate, both readers), and a slug outside safe_component()'s shape would mint a
+    route under an identifier no build ever assigned. Either takes that survey's hand-offs offline;
+    neither takes the corpus's, and neither string reaches the file the front door imports."""
+    surveys = _corpus(tmp_path, held_level="open")
+    mutate(surveys)
+    out = tmp_path / "ts-routes.map"
+    assert gen.main(["--write", "--surveys", str(surveys), "--out", str(out)]) == 0, why
+    text = out.read_text(encoding="utf-8")
+    assert _keys(text) == ["/go/ts/held-survey/HELD1/raw_packed"], (why, _keys(text))
+    assert any(ln.startswith("# UNRESOLVED open-survey: ") for ln in text.splitlines()), text
+    assert forbidden not in text, (why, text)
+
+
 def test_a_dropped_survey_reds_check_until_the_drop_is_committed(tmp_path):
     """The other half of not-silent: a survey that STARTS failing changes the file, so the gate
     catches it. A drop that left the bytes identical would be invisible to review and to CI."""
