@@ -1,0 +1,153 @@
+MAXINFO=156
+"Site": "1-75R",
+"LE": {
+"FileName": "4759216A",
+"StationType": "MTU5A",
+"Serial": "4759",
+"Latitude": -29.908783333333332,
+"Longitude": 134.20373333333333,
+"Elevation": 190.0,
+"Declination": 5.0,
+"ExLength": 100.0,
+"EyLength": 100.0,
+"ExR": 0.0,
+"EyR": 0.0,
+"ExDC": 0.0,
+"EyDC": 0.0,
+"Azimuth": 0.0
+},
+"LH": {
+"FileName": "4262216A",
+"StationType": "MTU5A",
+"Serial": "4262",
+"Latitude": -29.797816666666666,
+"Longitude": 134.33421666666666,
+"Elevation": 169.0,
+"Declination": 5.0,
+"HxId": "BMT53815",
+"HyId": "BMT53817",
+"Azimuth": 0.0
+},
+"Hz": {
+"FileName": "4759216A",
+"StationType": "MTU5A",
+"Serial": "4759",
+"Latitude": -29.908783333333332,
+"Longitude": 134.20373333333333,
+"Elevation": 190.0,
+"HzId": "BMT53817"
+},
+"RH": {
+"FileName": "4574216A",
+"StationType": "MTU5A",
+"Serial": "4574",
+"Latitude": -30.024,
+"Longitude": 134.46313333333333,
+"Elevation": 153.0,
+"Declination": 5.0,
+"HxId": "BMT53815",
+"HyId": "BMT53817",
+"Azimuth": 0.0
+},
+"Start": "2023-02-16T06:34:51Z",
+"End": "2023-02-17T07:58:49Z",
+"Duration": "1.01:23:58",
+"ProcessingType": "RemoteH1",
+"Functions": "Impedance, Wiese",
+"ProcessingSettings": {
+"AntiBias": true,
+"ApplyCalibrations": true,
+"AutoEdit": true,
+"AutoJackKnife": true,
+"CoherencyThresholding": true,
+"EstimationsPerFrequency": 10,
+"Huber": 10,
+"InverseWeighting": true,
+"RejectRedundant": true,
+"RotationAngle": 4.0,
+"UseDeclination": true,
+"Tompson": 2
+},
+"TappingSettings": [
+{
+"SampleRate": 24000.0,
+"Length": 512,
+"Start": 25,
+"End": 230,
+"Step": 256,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 24000.0,
+"Length": 2048,
+"Start": 5,
+"End": 150,
+"Step": 2048,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 2400.0,
+"Length": 1024,
+"Start": 8,
+"End": 140,
+"Step": 1000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 150.0,
+"Length": 2048,
+"Start": 14,
+"End": 400,
+"Step": 2000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 150.0,
+"Length": 8192,
+"Start": 7,
+"End": 200,
+"Step": 8000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 15.0,
+"Length": 16384,
+"Start": 4,
+"End": 220,
+"Step": 5000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 15.0,
+"Length": 32768,
+"Start": 4,
+"End": 200,
+"Step": 15000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 15.0,
+"Length": 65536,
+"Start": 4,
+"End": 200,
+"Step": 30000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 15.0,
+"Length": 131072,
+"Start": 3,
+"End": 500,
+"Step": 50000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+},
+{
+"SampleRate": 15.0,
+"Length": 262144,
+"Start": 3,
+"End": 500,
+"Step": 100000,
+"TappingFunction": "BLACKMAN_NUTTALL"
+}
+]
+}

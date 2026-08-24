@@ -91,8 +91,10 @@ def test_conditioning_log_is_survey_level_not_per_station(tmp_path):
     rep = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
     (slug, survey) = next(iter(rep["surveys"].items()))
 
-    notice_lines = [ln for ln in log.splitlines() if "NOTICE" in ln and "conditioned" not in ln
-                    and f"NOTICE {slug}:" in ln]
+    # The [xml] prefix is what separates this family from its siblings ([frame], [presence]), which
+    # print the same one-line-per-distinct-note shape into their own build_report fields.
+    notice_lines = [ln for ln in log.splitlines() if "conditioned" not in ln
+                    and f"[xml] NOTICE {slug}:" in ln]
     # one line per distinct conditioning note
     assert len(notice_lines) == len(survey["conditioning"]) >= 1, \
         f"expected one survey-level NOTICE per distinct note; got {len(notice_lines)} lines for " \

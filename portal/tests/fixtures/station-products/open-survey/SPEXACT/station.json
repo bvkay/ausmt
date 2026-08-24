@@ -1,0 +1,168 @@
+{
+ "schema": "ausmt-station",
+ "version": "0.1",
+ "ausmt_id": "au.open-survey.SPEXACT",
+ "station": "SPEXACT",
+ "survey": "Station Products Open Survey",
+ "survey_id": "open-survey",
+ "country": "Australia",
+ "organisation": "AusMT CI",
+ "location": {
+  "lat": -31.234567,
+  "lon": 135.234567
+ },
+ "data": {
+  "type": "BBMT",
+  "n_periods": 62,
+  "period_min_s": 0.005,
+  "period_max_s": 6359.70491
+ },
+ "diagnostics": {
+  "median_relative_error": 0.019,
+  "remote_reference": true,
+  "tipper_available": false,
+  "completeness_smoothness_diagnostic": {
+   "value": 5.0,
+   "basis": "e",
+   "note": "not a quality or geological-value judgement"
+  },
+  "classification": "2-D",
+  "skew_beta_median_deg": 0.7,
+  "pct_periods_3d": 0,
+  "method": "phase-tensor (Caldwell 2004)",
+  "note": "screening diagnostic, not an interpretation product"
+ },
+ "processing": {
+  "software": "LEMIMT",
+  "algorithm": "Robust Remote Reference",
+  "remote_reference": true,
+  "remote_site": null,
+  "file_written_by": {
+   "name": "Geotools",
+   "version": "4.0.5.12583"
+  },
+  "note": "MAXINFO=17\n*\nSITE        : P-A1_RR-RR_S-10Hz_1\nLATITUDE    :   -31.234567\nLONGITUDE   :   135.234567\nELEVATION   :   111.6100\nDECLINATION :     0.0000\n*\nInstrument:\tLEMI-424\nProcessing code: LEMIMT\nAlgorithm      : Robust Remote Reference"
+ },
+ "distribution": {
+  "edi_available": true,
+  "license": "CC-BY-4.0",
+  "edi_path": "edi/open-survey/SPEXACT.edi"
+ },
+ "provenance": {
+  "pipeline": "ausmt/extract.build_portal",
+  "pipeline_version": "0.2.1",
+  "extractor": "mt_metadata (community canonical)",
+  "software": {
+   "python": "3.12.7",
+   "mt_metadata": "1.0.9",
+   "mth5": "0.6.8"
+  },
+  "git_commit": "369d1f5",
+  "parameters": {
+   "dimensionality": {
+    "beta_per_period_deg": 3.0,
+    "skew_3d_deg": 5.0,
+    "pct_periods_3d_threshold": 40,
+    "ellip_2d_deg": 0.1,
+    "min_rez_row_sine": 0.01,
+    "beta_physical_cap_deg": 15.0,
+    "min_usable_period_frac": 0.5,
+    "skew_aggregation": "median"
+   },
+   "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
+  },
+  "generated": "2026-08-23T12:21:21.454543+00:00",
+  "input_file": "SPEXACT.edi",
+  "input_sha256": "aae0af01ed2a2925018acb5992ba8338ebed240bbdd97f136b69054a2fe446d8"
+ },
+ "coordinate_qc": null,
+ "canonical_conditioning": [
+  "survey.id->open-survey",
+  "sign_convention: '+' is a library default — EDI carries no machine-readable sign convention; NOT asserted by source",
+  "declination.epoch/model: library defaults (epoch=None, model=IGRF) — an EDI states only the declination value; epoch/model NOT asserted by source",
+  "channel orientations: degenerate/defaulted (ex and ey azimuths both 0 deg — parallel dipoles are non-physical); orientations NOT asserted by source EMEAS geometry",
+  "citation.authors<-survey_meta:AusMT CI",
+  "citation.title<-survey_meta",
+  "copyright.release_status=Data Citation Required; conditions_of_use set from licence CC-BY-4.0 (replaced mt_metadata default boilerplate)"
+ ],
+ "frame": {
+  "evidence": {
+   "branch": "mt",
+   "zrot": "0",
+   "trot": null,
+   "rotspec": null,
+   "hmeas_azimuths": {
+    "hx": 0.0,
+    "hy": 90.0
+   },
+   "emeas_azimuths": {
+    "ex": null,
+    "ey": null
+   }
+  },
+  "impedance_rotation_deg_source": null,
+  "tipper_rotation_deg_source": null,
+  "derotated": false,
+  "frame_served": "declared-zero",
+  "declared_azimuth_deg": 0.0,
+  "convention_check": {
+   "verdict": "ok",
+   "phs_xy_median_deg": 39.16,
+   "phs_yx_median_deg": -143.72,
+   "n_periods_used": 62,
+   "detail": null
+  }
+ },
+ "runs": [
+  {
+   "id": "SPEXACT-r01",
+   "data_logger": {
+    "model": "LEMI-424"
+   },
+   "channels": [
+    {
+     "component": "ex"
+    },
+    {
+     "component": "ey"
+    },
+    {
+     "component": "hx"
+    },
+    {
+     "component": "hy"
+    }
+   ]
+  }
+ ],
+ "resources": [
+  {
+   "id": "edi",
+   "kind": "transfer_function",
+   "format": "edi",
+   "provenance_role": "source",
+   "representation_role": "original",
+   "path": "edi/open-survey/SPEXACT.edi"
+  },
+  {
+   "id": "emtfxml",
+   "kind": "transfer_function",
+   "format": "emtfxml",
+   "provenance_role": "derived",
+   "representation_role": "alternate",
+   "path": "xml/open-survey/SPEXACT.xml"
+  },
+  {
+   "id": "edi-zip",
+   "kind": "archive",
+   "format": "zip",
+   "path": "bundles/open-survey-edi.zip"
+  },
+  {
+   "id": "xml-zip",
+   "kind": "archive",
+   "format": "zip",
+   "path": "bundles/open-survey-xml.zip"
+  }
+ ]
+}

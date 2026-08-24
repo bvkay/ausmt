@@ -1,0 +1,103 @@
+{
+ "schema": "ausmt-station",
+ "version": "0.1",
+ "ausmt_id": "au.example-basin-2024.EB077",
+ "station": "EB077",
+ "survey": "Example Basin Broadband MT Survey",
+ "survey_id": "example-basin-2024",
+ "runs": [
+  {
+   "id": "001",
+   "time_period": {
+    "start": "2024-05-01T00:00:00Z",
+    "end": "2024-05-03T00:00:00Z"
+   },
+   "sample_rate_hz": 150,
+   "data_logger": {
+    "manufacturer": "LEMI",
+    "model": "LEMI-423",
+    "serial_number": "1234",
+    "identifiers": [
+     {
+      "scheme": "DOI",
+      "identifier": "10.99999/logger1234"
+     }
+    ]
+   },
+   "channels": [
+    {
+     "component": "hx",
+     "sensor": {
+      "manufacturer": "LEMI",
+      "model": "LEMI-120",
+      "serial_number": "112"
+     }
+    },
+    {
+     "component": "ex",
+     "dipole_length_m": 100,
+     "contact_resistance": {
+      "source_value": "1.82 kilo-ohms",
+      "value": 1820,
+      "unit": "ohm"
+     },
+     "positive": {
+      "manufacturer": "ExampleCo",
+      "model": "Pb-PbCl2"
+     },
+     "negative": {
+      "manufacturer": "ExampleCo",
+      "model": "Pb-PbCl2"
+     }
+    }
+   ]
+  },
+  {
+   "id": "002",
+   "sample_rate_hz": 10
+  }
+ ],
+ "resources": [
+  {
+   "id": "nci-mth5",
+   "kind": "time_series",
+   "provenance_role": "source",
+   "representation_role": "archival_copy",
+   "format": "mth5",
+   "access_url": "https://thredds.example.org/fileServer/x/EB077.h5",
+   "related_collection_identifiers": [
+    {
+     "scheme": "DOI",
+     "identifier": "10.99999/level1-collection"
+    }
+   ],
+   "represents_runs": [
+    "001",
+    "002"
+   ],
+   "derived_from_runs": [
+    "001",
+    "002"
+   ]
+  },
+  {
+   "id": "source-edi",
+   "kind": "transfer_function",
+   "provenance_role": "source",
+   "representation_role": "original",
+   "format": "edi",
+   "path": "edi/example-basin-2024/EB077.edi"
+  },
+  {
+   "id": "emtfxml",
+   "kind": "transfer_function",
+   "provenance_role": "derived",
+   "representation_role": "alternate",
+   "format": "emtfxml",
+   "derived_from_runs": [
+    "001",
+    "002"
+   ]
+  }
+ ]
+}

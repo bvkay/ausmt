@@ -1,0 +1,56 @@
+MAXINFO=59
+PROCESSED FROM DFT TIME SERIES          STN Number: 23-1-025            
+SURVEY: 220104                         Site Desc; BadR: 0 SatR: 7      
+COMPANY: Zonge                          Lat  30:21:080S Long 133:54:590E
+JOB: 1-0                            Elevation: 199    M. DECL: 5.000
+Lat 30:21.133 S Lng 133:54.984 E        Reference Site: 2-128           
+HARDWARE: MTU5A MTU5A                   Site Permitted by:              
+START-UP: 2023/03/04 - 02:06:47         Site Layout by:                 
+END-TIME: 2023/03/05 - 02:27:25                 SYSTEM INFORMATION      
+FILE: 4573304A 4760304A                 MTU-Box Serial Number: U-4573   
+MTUPROG VERSION: 3112G3                 MTU-Box Gains:E`s x 4 H`s x 1   
+MTU-DFT VERSION: TStoFT.38              MTU-Ref Serial Number: U-4760   
+MTU-RBS VERSION:R2012-0216-B22          Comp Chan#   Sensor     Azimuth 
+Reference Field: Remote H - Ref.         Ex1   1     100.0 M    0.0 DGmn
+XPR Weighting: RHO Variance.           Ey1   2     100.0 M   90.0 DGmn
+RBS: 7  COH: 0.85  RHO VAR: 0.75         Hx1   3    54769       0.0 DGmn
+CUTOFF: 0.00 COH: 35 % VAR: 25 %         Hy1   4    53857      90.0 DGmn
+Notch Filters set for 50 Hz.             Hz1   5    53702               
+RHx2   6    54769       0.0 DGmn
+Comp   MTU box  S/N   Temp            RHy2   7    53857      90.0 DGmn
+Ex & Ey: MTU5A    4573   48 C           Ebat:9.93V Hbat:9.93V Rbat:11.4V
+Hx & Hy: MTU5A    4573   48 C           Ex Pot Resist: 9.823 Kohms      
+Hz: MTU5A    4573   48 C           Ex Voltage:AC=12.7mV, DC=-12.0mV
+Rx & Ry: MTU5A    4760   42 C           Ey Pot Resist: 6.139 Kohms      
+Hx Sen: 54769                          Ey Voltage:AC=5.28mV, DC=+5.00mV
+Hy Sen: 53857                          
+Hz Sen: 53702                          
+Rx Sen: 54769                          
+Ry Sen: 53857                          
+
+Operator Log for Site(s) 304A 4760304A         
+
+HARDWARE: MTU5A MTU5A           
+T-UP: 2023/03/04 - 0-TIME: 2023/03/
+
+XPR         HI Start       HI Record             LO Start       LO Record
+XPR# 01 - HI: 23Mar04 02:07  23Mar04 03:09     LO: 23Mar04 02:06  23Mar04 03:09
+XPR# 02 - HI: 23Mar04 03:09  23Mar04 04:12     LO: 23Mar04 03:09  23Mar04 04:12
+XPR# 03 - HI: 23Mar04 04:12  23Mar04 05:15     LO: 23Mar04 04:12  23Mar04 05:15
+XPR# 04 - HI: 23Mar04 05:15  23Mar04 06:18     LO: 23Mar04 05:15  23Mar04 06:18
+XPR# 05 - HI: 23Mar04 06:18  23Mar04 07:21     LO: 23Mar04 06:18  23Mar04 07:21
+XPR# 06 - HI: 23Mar04 07:21  23Mar04 08:24     LO: 23Mar04 07:21  23Mar04 08:23
+XPR# 07 - HI: 23Mar04 08:24  23Mar04 09:26     LO: 23Mar04 08:24  23Mar04 09:26
+XPR# 08 - HI: 23Mar04 09:27  23Mar04 10:29     LO: 23Mar04 09:26  23Mar04 10:29
+XPR# 09 - HI: 23Mar04 10:30  23Mar04 11:32     LO: 23Mar04 10:29  23Mar04 11:32
+XPR# 10 - HI: 23Mar04 11:32  23Mar04 12:35     LO: 23Mar04 11:32  23Mar04 12:35
+XPR# 11 - HI: 23Mar04 12:35  23Mar04 13:38     LO: 23Mar04 12:35  23Mar04 13:38
+XPR# 12 - HI: 23Mar04 13:38  23Mar04 14:41     LO: 23Mar04 13:38  23Mar04 14:41
+XPR# 13 - HI: 23Mar04 14:41  23Mar04 15:44     LO: 23Mar04 14:41  23Mar04 15:44
+XPR# 14 - HI: 23Mar04 15:44  23Mar04 16:46     LO: 23Mar04 15:44  23Mar04 16:46
+XPR# 15 - HI: 23Mar04 16:47  23Mar04 17:49     LO: 23Mar04 16:46  23Mar04 17:49
+XPR# 16 - HI: 23Mar04 17:50  23Mar04 18:52     LO: 23Mar04 17:49  23Mar04 18:52
+XPR# 17 - HI: 23Mar04 18:53  23Mar04 19:55     LO: 23Mar04 18:52  23Mar04 19:55
+XPR# 18 - HI: 23Mar04 19:55  23Mar04 20:58     LO: 23Mar04 19:55  23Mar04 20:58
+XPR# 19 - HI: 23Mar04 20:58  23Mar04 22:01     LO: 23Mar04 20:58  23Mar04 22:01
+XPR# 20 - HI: 23Mar04 22:01  23Mar04 23:03     LO: 23Mar04 22:01  23Mar04 23:04

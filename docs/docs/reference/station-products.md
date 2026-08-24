@@ -46,14 +46,23 @@ carries the survey's licence and credit inside the file (`Experiment/Surveys/<sl
 
 | | |
 |---|---|
-| Normative artifact | the build's product emitter, `engine/extract/build_portal.py` |
+| Normative artifact | `engine/schema/ausmt-station.schema.json` for `station.json`; the build's product emitter, `engine/extract/build_portal.py`, for `dimensionality.json` |
 | Served location | `/data/products/<slug>/<station>/` |
-| Version | none declared; the documents are additive and key-based |
-| Status | `station.json` is a public contract whose schema artifact arrives with the station promotion lane; `dimensionality.json` is served alongside it and is not a contract |
+| Served schema | `/data/ausmt-station.schema.json`, `/data/schemas/ausmt-station/0.1/ausmt-station.schema.json` |
+| Version | 0.1 (draft) for `station.json`; `dimensionality.json` declares none and is additive and key-based |
+| Status | `station.json` is a public contract; `dimensionality.json` is served alongside it and is not a contract |
 | Access | the product tree is a served surface, so it rides the same access gate as the download files |
+| Validated | the build validates every emitted `station.json` against the shipped schema with format checking on, and against the semantic rules JSON Schema cannot state, and refuses to publish a document that fails; `scripts/verify.py` re-runs both over the built tree and checks that the set of published `ausmt_id` values equals the set of stations `mtcat.json` catalogues |
 
-There is no JSON Schema artifact for either document yet. Where this page and the emitter disagree,
-the emitter is right.
+`dimensionality.json` has no JSON Schema artifact. Where this page and the emitter disagree, the
+emitter is right.
+
+The semantic rules held above the schema, which a consumer may rely on without re-deriving them: run
+ids are unique within a record and so are resource ids; a resource that names a run names one this
+record publishes; `time_period` never ends before it starts; an electric channel carries the electrode
+circuit and never a `sensor`, a magnetic channel the reverse; a withheld record carries the stub
+members of section 1.18 and nothing else; every DOI is bare canonical; and `distribution.edi_path` and
+the served EDI resource state one path or neither states any.
 
 ## Gating
 
@@ -78,15 +87,26 @@ with no manifest rows is not an error to handle; it is the withholding, stated b
 
 The per-station product record: identity, location, band and period range, the derived diagnostics, the
 processing strings read from the source file, the distribution state, the coordinate QC verdict, any
-canonical conditioning notes, the frame facts, and a provenance block naming the input file and its
-SHA-256. The example below shows every member, including the optional ones; a station whose survey
-declares no `station_ids` provenance carries no `provenance.source`.
+canonical conditioning notes, the frame facts, a provenance block naming the input file and its
+SHA-256, and the two canonical blocks `runs` and `resources`. The example below shows every member
+except `coordinate_policy`, which section 1.15 covers because it appears only for a station whose
+position is not exact; a station whose survey declares no `station_ids` provenance carries no
+`provenance.source`.
+
+Three members open every record, on the full and the withheld branch alike: `schema` names the
+contract, `version` names the schema version the document conforms to, and `survey_id` is the survey
+slug. `survey` remains the display title; a display title is not an identifier, so a consumer joining
+this record to `mtcat.json` or to `survey-metadata.json` keys on `survey_id`, which is the same slug in
+all three.
 
 ```json
 {
+  "schema": "ausmt-station",
+  "version": "0.1",
   "ausmt_id": "au.vulcan-2022.A1",
   "station": "A1",
   "survey": "Vulcan 2022",
+  "survey_id": "vulcan-2022",
   "country": "Australia",
   "organisation": "University of Adelaide",
   "location": { "lat": -30.123, "lon": 135.456 },
@@ -97,7 +117,12 @@ declares no `station_ids` provenance carries no `provenance.source`.
     "tipper_available": false,
     "completeness_smoothness_diagnostic": {
       "value": 3.4, "basis": "e",
-      "note": "not a quality or geological-value judgement" }
+      "note": "not a quality or geological-value judgement" },
+    "classification": "2-D",
+    "skew_beta_median_deg": 0.7,
+    "pct_periods_3d": 0,
+    "method": "phase-tensor (Caldwell 2004)",
+    "note": "screening diagnostic, not an interpretation product"
   },
   "processing": { "software": "Birrp 5.0", "algorithm": null,
                   "remote_reference": false, "remote_site": null,
@@ -111,9 +136,38 @@ declares no `station_ids` provenance carries no `provenance.source`.
                               "source_record_id": "2781110A", "acquisition_stage": "1" } },
   "coordinate_qc": null,
   "canonical_conditioning": null,
-  "frame": { }
+  "frame": { },
+  "runs": [
+    { "id": "A1-r01",
+      "sample_rate_hz": 10,
+      "data_logger": { "manufacturer": "LEMI", "model": "LEMI-423", "serial_number": "#0034",
+                       "identifiers": [ { "scheme": "DOI", "identifier": "10.82388/u3jf7ztm" } ] },
+      "channels": [
+        { "component": "ex", "measurement_azimuth_deg": 180, "dipole_length_m": 43,
+          "contact_resistance": { "source_value": "1.82 kilo-ohms", "value": 1820, "unit": "ohm" } },
+        { "component": "hx", "measurement_azimuth_deg": 0,
+          "sensor": { "manufacturer": "LEMI", "model": "LEMI-120", "serial_number": "134" } }
+      ] }
+  ],
+  "resources": [
+    { "id": "edi", "kind": "transfer_function", "format": "edi",
+      "provenance_role": "source", "representation_role": "original",
+      "path": "edi/vulcan-2022/Vulcan_A1.edi",
+      "related_collection_identifiers": [
+        { "scheme": "DOI", "identifier": "10.25914/bzd5-n780", "identifies": "raw_packed" } ] },
+    { "id": "emtfxml", "kind": "transfer_function", "format": "emtfxml",
+      "provenance_role": "derived", "representation_role": "alternate",
+      "path": "xml/vulcan-2022/A1.xml" },
+    { "id": "edi-zip", "kind": "archive", "format": "zip",
+      "path": "bundles/vulcan-2022-edi.zip" },
+    { "id": "xml-zip", "kind": "archive", "format": "zip",
+      "path": "bundles/vulcan-2022-xml.zip" }
+  ]
 }
 ```
+
+`related_collection_identifiers` is projected per survey, so the identifiers a survey states ride
+every one of its resource rows; the example shows them on one row to stay readable.
 
 ### 1.1 ausmt_id
 
@@ -210,11 +264,23 @@ declares no `station_ids` provenance carries no `provenance.source`.
 | `remote_reference` | boolean | whether the source file states remote reference processing |
 | `tipper_available` | boolean | whether a tipper is present |
 | `completeness_smoothness_diagnostic` | object | `{value, basis, note}`; `basis` is `e` error-based or `s` shape-based |
+| `classification` | string | the dimensionality screening class: `1-D`, `2-D`, `3-D` or `indeterminate` |
+| `skew_beta_median_deg` | number | median absolute phase-tensor skew across usable periods, in degrees |
+| `pct_periods_3d` | integer | percentage of usable periods whose absolute skew exceeds the three-dimensional threshold |
+| `method` | string | the method the classification came from, `phase-tensor (Caldwell 2004)` |
+| `note` | string | the caveat that qualifies the classification: a screening diagnostic, not an interpretation product |
 
-The dimensionality classification and its skew statistic are not members of this block. They are the
-whole content of the `dimensionality.json` served beside this document (section 2), which carries them
-with the method and the screening caveat that qualifies them; restating them here produced a second
-copy without that caveat.
+The last five members are the dimensionality call, and the caveat is one of them on purpose. The
+classification is a screening result for triage: it says which stations are worth a closer look, never
+what the subsurface is. A copy of it that travelled without that sentence is the reason it was kept out
+of this block until now; the sentence travels with it here.
+
+A member the call leaves undetermined is **omitted** rather than published as null, so an
+`indeterminate` station carries the class and the caveat and states no skew statistic at all.
+
+The same five values are also served as `dimensionality.json` beside this document (section 2), from
+the same computation. That document is not going away in the 0.x and 1.x series, because removing a
+served file is a deprecation with its own notice; read either one.
 
 #### 1.8.1 How the completeness-smoothness diagnostic is computed
 
@@ -343,16 +409,127 @@ is reported separately under `file_written_by` rather than being published as th
 | Default | absent means `exact` |
 | Note | Emitted only for a non-exact station, which keeps an exact station's record byte-unchanged. The boot-time surface the portal reads is [`coord_policy.json`](../developer/portal-documents.md#coord_policyjson). |
 
-### 1.16 The withheld record
+### 1.16 runs
+
+| | |
+|---|---|
+| Definition | The acquisitions this station's source metadata describes. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | array of run objects |
+| Note | Absent means run metadata is NOT asserted, never that no run occurred. |
+
+A run is an acquisition, so a run is published only where a source states one. Most of the corpus
+therefore carries no `runs` key at all: mt_metadata instantiates a placeholder run for every file it
+reads, with a run id synthesised from the station name, a 0 Hz rate, a 1980 epoch window and an
+unnamed logger, and none of that is a source assertion. The values published here come from the
+`>INFO` block the custodian wrote, read by the dialect extractors described in
+[the build lifecycle](../developer/build-lifecycle.md#the-build-step-by-step).
+
+| Member | Type | Definition |
+|---|---|---|
+| `id` | string | The run's identifier: the source's own where the source declares one, otherwise a curated local id assigned once and stored in the survey package. Never regenerated, so correcting a timestamp or a serial cannot rename a run. |
+| `time_period` | object | `start`, and `end` where the source states one. ISO 8601 UTC. `end` is ABSENT when unknown, never null. |
+| `sample_rate_hz` | number | The run's nominal rate. Present whenever any channel declares a rate. |
+| `data_logger` | object | `manufacturer`, `model`, `serial_number` and `identifiers[]`, each present only where the source states it. |
+| `channels` | array | The channels acquired in this run. |
+
+A channel enters `channels` only where it is corroborated: the `>INFO` block names it, or the served
+transfer function was measured from it. A DEFINEMEAS declaration alone is not corroboration, and a
+source note contradicting the channel list wins over both. The remote-reference `rr*` channels are
+never published: they are library defaults, and no corpus source declares one.
+
+| Channel member | Type | Definition |
+|---|---|---|
+| `component` | string | `ex`, `ey`, `hx`, `hy`, `hz`. The only mandatory member. |
+| `measurement_azimuth_deg` | number | Sensor orientation where the source states it. |
+| `dipole_length_m` | number | Electric channels only. |
+| `contact_resistance` | object | Electric channels only: `source_value` always, plus `value` and `unit` where the unit is one the build parses. The source string is never discarded. |
+| `sensor` | object | Magnetic channels only: the same shape as `data_logger`. |
+
+### 1.17 resources
+
+| | |
+|---|---|
+| Definition | The served, addressable things that represent this station or contain it. |
+| Obligation | optional |
+| Occurrence | 0-1 |
+| Type | array of resource objects |
+| Note | Absent on a station that serves no bytes, and on every withheld record. |
+
+Runs describe acquisitions; resources describe files. Nesting never implies that one resource
+belongs to one run. A resource here is something a consumer can fetch: the station's transfer
+function as the custodian's EDI, as the canonical EMTF XML, as MTH5, and the per-survey archives
+those files are bundled into. `manifest.json` stays the checksum and inventory authority; a resource
+references its path and never restates a hash.
+
+An `archive` row is a containment claim, and containment is decided per station rather than per
+survey. A survey bundle holds the bytes its stations actually served, so a station whose position
+policy withholds its EDI and its EMTF XML is in neither zip its survey publishes, and its record
+advertises neither. The number of records naming a bundle therefore equals that bundle's
+`n_stations` in `manifest.json`.
+
+| Member | Type | Definition |
+|---|---|---|
+| `id` | string | Stable within this document. Never an array index or a path. |
+| `kind` | string | `transfer_function` for a rendition of the station's TF, `archive` for a bundle. |
+| `format` | string | `edi`, `emtfxml`, `mth5`, `zip`. |
+| `path` | string | The served path, the same one the download manifest records for those bytes. |
+| `provenance_role` | string | `source` or `derived`, emitted only where it is certain. |
+| `representation_role` | string | `original`, `alternate` or `archival_copy`, on the same terms. |
+| `related_collection_identifiers` | array | Identifiers of collections that CONTAIN this resource. |
+
+The served EDI is the custodian's file, never edited, so it is a `source` in its `original` form.
+The EMTF XML and the MTH5 are this engine's conversions of it, so they are `derived` `alternate`
+representations. The bundle archives carry neither axis in 0.1: whether a zip of source EDIs is
+source or derived is a semantics question, not a mechanical one.
+
+No resource carries `identifiers[]`, because no DOI identifies any exact file AusMT serves today. A
+DOI that identifies a containing collection goes in `related_collection_identifiers` and carries the
+curated scope it was declared with, so a collection DOI can never be read as an identifier of the
+file it sits beside. A row is projected only where the curation states that scope: a bare canonical
+DOI whose `identifies` names a collection or product level. A row with no scope, a row whose scope
+names neither a collection nor a product level, a row that is not a DOI, and a DOI one survey
+declares at two different levels are all omitted and reported for curation, because an unplaceable
+row would publish a wrong citation claim.
+
+`distribution.edi_path` is the legacy form of the same fact and stays byte-compatible through 1.x; a
+test pins the two to agree, and 2.0 retires the legacy key.
+
+#### Processing level and packaging
+
+The schema defines two small closed vocabularies for a resource, `processing_level` (`raw`,
+`level0`, `level1`, `level2`, `level3`) and `packaging` (`packed_archive`). Nothing emits them in
+0.1. They are separated deliberately: MTCAT's legacy `identifies` values mix scope, packaging and
+processing level on one axis, and this schema maps OUT to that vocabulary rather than inheriting it.
+
+| Station `processing_level` | Station `packaging` | NCI level name | MTCAT `identifies` |
+|---|---|---|---|
+| `raw` | `packed_archive` | the survey's packed raw time series (NCI numbers no level for it) | `raw_packed` |
+| `level0` | | `level_0` | `level0` |
+| `level1` | | `level_1` | `level1` |
+| `level2` | | `level_2` | `level2` |
+| `level3` | | `level_3` | `level3` |
+
+`collection` and `entire` have no station `processing_level`: they state SCOPE, not level, and
+mapping them onto one is the debt these vocabularies exist to refuse. The two part company for
+placement: `collection` names the parent record containing the survey's holdings, so a DOI declared
+at that scope is placeable, while `entire` means one record covering all levels, which describes a
+record rather than asserting containment, so a row declared at that scope is declined.
+
+### 1.18 The withheld record
 
 A station in a survey that is not served gets a stub carrying only the discovery-safe identity the
 public catalogue already exposes.
 
 ```json
 {
-  "ausmt_id": "au.kalkaroo-2022.KD-C3",
-  "station": "KD-C3",
-  "survey": "Kalkaroo 2020-21",
+  "schema": "ausmt-station",
+  "version": "0.1",
+  "ausmt_id": "au.vulcan-2024-25.Vul24-13",
+  "station": "Vul24-13",
+  "survey": "Vulcan 2024-25",
+  "survey_id": "vulcan-2024-25",
   "country": "Australia",
   "organisation": "Adelaide University",
   "access": { "level": "embargoed", "embargo_until": "2027-02-01", "served": false },
@@ -362,17 +539,30 @@ public catalogue already exposes.
 }
 ```
 
+The stub carries these twelve members and no thirteenth. That is enforced, not conventional: the
+withheld branch of the schema is closed, nested blocks included, and the build and `verify.py` both
+reject a record that grows a key. Extending the stub therefore takes a schema change, which is the
+point: a key-name blocklist over an open object is bypassable, and coordinates were once shown to
+validate under unbanned spellings and inside an open `access` block.
+
 | Member | Type | Definition |
 |---|---|---|
-| `access.level` | string | the normalised access level |
-| `access.embargo_until` | string or null | the declared embargo end date, where one exists |
-| `access.served` | boolean | `false` on every withheld record |
+| `schema` | string | `ausmt-station`, on both branches |
+| `version` | string | the schema version this document conforms to, on both branches |
+| `ausmt_id` | string | the station's globally unique public id, as on a full record |
+| `station` | string | station id within the survey |
+| `survey` | string | the survey's display name |
+| `survey_id` | string | the survey slug, on both branches |
+| `country` | string | country the survey was acquired in |
+| `organisation` | string | custodian organisation of the survey |
+| `access` | object | `{level, embargo_until, served}`: the normalised access level, the declared embargo end date where the level carries one, and `served`, which is `false` on every withheld record |
+| `distribution` | object | `{edi_available, license, edi_path}`: `false`, the survey's licence, and `null`. Nothing is distributed for a withheld record |
 | `withheld` | boolean | `true`, the marker a consumer tests on |
 | `note` | string | why the derived science is absent |
 
-There is no `location`, no `data`, no `diagnostics`, no `processing` beyond the distribution block, and
-no `provenance.input_sha256`. The survey's discovery metadata stays fully public in the catalogue; only
-the derived science is withheld here.
+There is no `location`, no `data`, no `diagnostics`, no `processing`, no `runs`, no `resources` and no
+`provenance`. The survey's discovery metadata stays fully public in the catalogue; only the derived
+science is withheld here.
 
 ---
 
@@ -381,6 +571,11 @@ the derived science is withheld here.
 The phase-tensor screening result for one station, served alongside `station.json`; not a contract. It
 is never written for a station in a withheld survey. Its members are documented here so a reader can
 interpret what is served, not as a promise about its shape.
+
+`station.json`'s `diagnostics` block now states the same call, from the same computation (section 1.8).
+This document is the older surface and keeps being written unchanged: removing a served file is a
+deprecation with its own notice, not a refactor. A consumer reading `station.json` needs neither this
+file nor a second request.
 
 The classification is assigned by `engine/extract/_edi_science.py` from the per-period phase tensor
 (Caldwell et al., 2004), with every threshold a named constant that `build_provenance.json` records:

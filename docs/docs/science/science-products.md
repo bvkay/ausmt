@@ -17,8 +17,10 @@ Implemented, parsed with mt_metadata and computed by the engine into the served 
 - per-period [phase tensor](phase-tensor.md) parameters
 - tipper, magnitude and full complex components
 - the dimensionality screening diagnostic and the median skew, served in
-  [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson) beside `station.json`
-  (not a contract)
+  [`station.json` diagnostics](../reference/station-products.md#18-diagnostics) with the caveat that
+  qualifies them, and in the older
+  [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson) beside it (not a
+  contract)
 - the selection-level [strike](strike-analysis.md) rose, drawn in the browser from served phase-tensor
   azimuths
 - the `q` completeness-and-smoothness scalar, defined under

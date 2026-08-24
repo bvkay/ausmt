@@ -15,7 +15,8 @@ tags are the version list; nothing in the repository enumerates them.
 `/data/mtcat.json` to see which schema version a deployment serves; where a deployment serves a
 different version, the served document is the authority for that deployment. The same documentation
 describes survey-metadata schema version 0.1 (a draft; check `version` in any
-`/data/products/<survey_id>/survey-metadata.json`).
+`/data/products/<survey_id>/survey-metadata.json`) and describes station schema version 0.1 (a draft;
+check `version` in any `/data/products/<slug>/<station>/station.json`).
 
 ## Public contracts
 
@@ -28,7 +29,8 @@ by field. Nothing else under `/data` is.
 | MTCAT schema | `/data/mtcat.schema.json`, `/data/schemas/mtcat/2.0/mtcat.schema.json` | itself | 2.0 | [MTCAT schema](mtcat-schema.md#normative-artifact) |
 | Survey metadata | `/data/products/<survey_id>/survey-metadata.json`, one per survey | `engine/schema/ausmt-survey-metadata.schema.json` | 0.1 (draft) | [Survey metadata](survey-metadata.md) |
 | Survey metadata schema | `/data/ausmt-survey-metadata.schema.json`, `/data/schemas/ausmt-survey-metadata/0.1/ausmt-survey-metadata.schema.json` | itself | 0.1 (draft) | [Survey metadata](survey-metadata.md#normative-artifact) |
-| Per-station record | `/data/products/<slug>/<station>/station.json` | the build's product emitter; its schema artifact arrives with the station promotion lane | none declared | [Per-station products](station-products.md#1-stationjson) |
+| Per-station record | `/data/products/<slug>/<station>/station.json` | `engine/schema/ausmt-station.schema.json` | 0.1 (draft) | [Per-station products](station-products.md#1-stationjson) |
+| Station schema | `/data/ausmt-station.schema.json`, `/data/schemas/ausmt-station/0.1/ausmt-station.schema.json` | itself | 0.1 (draft) | [Per-station products](station-products.md#normative-artifact) |
 
 ## Download surface
 

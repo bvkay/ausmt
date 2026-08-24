@@ -24,7 +24,16 @@ the production enables.
 4. Extract: mt_metadata parses each input once into a canonical record and component dict. Standard
    and Phoenix SPECTRA EDI dialects are read natively; EMTF XML and MTH5 input go through the same
    component dict. Where a station is supplied as both an EDI and an EMTF XML the EDI wins;
-   `build_report.json` records the source per station.
+   `build_report.json` records the source per station. The same pass reads the `>INFO` block for
+   acquisition facts: mt_metadata recovers none of them, and the custodians wrote them six different
+   ways, so `extract/_runfacts.py` carries one extractor per dialect (the AusMT header enrichment's
+   dotted `run.*` keys, MTpy `fieldnotes.*`, the LEMIMT `SITE` and `Instrument` lines, Phoenix
+   EMpower's record JSON, Phoenix MTU field sheets and compact JSON, and the Geotools survey header,
+   which states no acquisition fact at all). Every value carries an extraction-confidence class, and
+   an uncertain parse emits nothing: a missing field beats a confidently wrong number. Three facts
+   the corpus carries are declined rather than extracted, and the LEMIMT `SITE` line's `S-<rate>Hz`
+   band is one of them: it records the merging of downsampled EDI files, not the rate the station was
+   acquired at.
 5. Derive: TF rows, science diagnostics, catalogue rows; coordinate QC and declared coordinate
    resolutions applied; station-id variants disambiguated.
 6. QC: duplicate `ausmt_id` values fail the build (exit 2); other findings go to `qc_report.json`.
@@ -75,10 +84,27 @@ through direct pull requests ([Submission](../operations/submission.md)); publis
 `build_report.json` is the structured per-survey record of what a build produced: stations built and
 stations dropped (each with the gate's reason), the survey-scoped warnings, EMTF-XML emission failures,
 the ingest source of each station (`edi`, `emtfxml` or `mth5`), the served-bytes integrity result for
-copied EDIs, the parse-only fallbacks, the canonical-conditioning and frame notes aggregated by distinct
-note, the build-cache counters, per-survey wall time, and the build's peak RSS. Its identity fields
+copied EDIs, the parse-only fallbacks, the canonical-conditioning, frame and presence notes aggregated
+by distinct note, the build-cache counters, per-survey wall time, and the build's peak RSS. Its identity
+fields
 come from the helpers that write `build.json`, so the two cannot disagree about which commits produced
 a build.
+
+`presence` is the report of the presence rule. mt_metadata instantiates a complete run for every
+transfer function it reads, whether or not the file states one, so a parse routinely carries a run id
+synthesised as `<station>a`, a 0 Hz rate, a 1980 epoch window, an unnamed data logger, a 0-ohm contact
+resistance and a pair of `rr*` remote-reference channels. None of those is a source assertion and none
+is ever published as one; the rows record, per survey and per distinct note, which of them that
+survey's parses carried, so a value the emitter drops is visible to a curator rather than silently
+absent. The rows are logged as `[presence] NOTICE` lines from the same aggregation that writes them.
+
+`run_extraction` is the other half of the same provenance question, keyed by station id: not what was
+a library default, but which `>INFO` dialect asserted each real acquisition value and how confidently
+it was read. Every extractor classifies its output as `formal_edi_field`, `structured_dialect`,
+`pattern_extracted`, `curator_supplied` or `inferred`, and `station.json` publishes the value alone,
+so this is where the class is kept. It is the difference between a logger a structured dialect stated
+and one pattern-matched out of a LEMIMT free-text line. Stations whose `>INFO` asserted nothing are
+omitted.
 
 It is not a public surface. The curator workbench reads it over the private listener, and
 `scripts/verify.py`, the alert and doctor scripts read it from disk. It carries no stability promise and

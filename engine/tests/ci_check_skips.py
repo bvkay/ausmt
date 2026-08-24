@@ -139,13 +139,28 @@ ALLOWED_SKIP_REASON_SUBSTRINGS = [
     # checks run against the committed fixtures, two real builds of the vendored fixture surveys and
     # the 3-survey D8 corpus on every run; this arm extends the identical assertions to corpus scale.
     "AUSMT_SURVEY_METADATA_DATA does not name a built corpus data dir",
+    # test_station_invariants.py's corpus arm: the identity-chain and schema scans over every
+    # products/<slug>/<station>/station.json of a REAL full-corpus build (AUSMT_STATION_DATA). Same
+    # dev-box-only class as the entries above; the invariants are NOT unguarded in CI - the identical
+    # checks run over two real builds of the vendored fixture surveys and over the access-state corpus
+    # on every run, and the chain checker is proven against planted violations; this arm extends them
+    # to corpus scale.
+    "AUSMT_STATION_DATA does not name a built corpus data dir",
+    # test_station_invariants.py's two CI-guard pins read .github/workflows/build-products.yml, which
+    # the engine image does not ship (engine.Dockerfile COPYs contract/ + engine/ and one portal file).
+    # Same designed-topology class as the portal/docs entries above; INERT on every checkout lane,
+    # where the workflow is always present and both pins assert.
+    "engine image build: workflow tree not shipped",
 ]
 
-# `pytest -rs` prints one line per skip: "SKIPPED [N] path:line: <reason>". The location token
+# `pytest -rs` prints one line per DISTINCT (location, reason): "SKIPPED [N] path:line: <reason>",
+# where N is how many skips aggregated onto it (two tests skipping through one shared helper, e.g.
+# the D3.1 validator seam, share the helper's location and land as [2]). The count is summed, never
+# the lines, or an aggregated line undercounts against pytest's total. The location token
 # (path:line) is a single run of non-whitespace, so a GREEDY `\S+` captures it whole — including the
 # trailing `:line` — and backtracks to the last `:` before the reason. Both CI (ubuntu, `/`) and a
 # Windows dev box (`\`) keep the whole path in `\S`, so this matches either separator.
-_SKIP_LINE = re.compile(r"^SKIPPED \[\d+\]\s+(?P<loc>\S+):\s*(?P<reason>.*)$")
+_SKIP_LINE = re.compile(r"^SKIPPED \[(?P<n>\d+)\]\s+(?P<loc>\S+):\s*(?P<reason>.*)$")
 
 # pytest's terminal summary line, e.g. "177 passed, 1 skipped in 180.00s", "1 skipped in 0.40s", or
 # (with other outcomes present) "3 skipped, 5 passed in 1s". We read the authoritative skip TOTAL from
@@ -192,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         m = _SKIP_LINE.match(line.strip())
         if not m:
             continue
-        parsed_skips += 1
+        parsed_skips += int(m.group("n"))
         reason = m.group("reason").strip()
         if not any(sub in reason for sub in allow_list):
             unexpected.append(f"{m.group('loc')}: {reason}")
@@ -218,7 +233,8 @@ def main(argv: list[str] | None = None) -> int:
     if parsed_skips != reported_skips:
         failed = True
         print(
-            f"CI skip tripwire FAILED -- accounting mismatch: parsed {parsed_skips} SKIPPED line(s) "
+            f"CI skip tripwire FAILED -- accounting mismatch: counted {parsed_skips} skip(s) across "
+            f"the SKIPPED lines "
             f"but pytest reported {reported_skips} skipped. A skip is unaccounted for (unrecognized "
             f"'-rs' line format?). Run pytest with -rs and inspect the short test summary; do NOT "
             f"pass this gate until every skip is parsed and allow-listed."

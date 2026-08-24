@@ -89,3 +89,9 @@ MTCAT_SCHEMA_VERSION = '2.0'
 # The emitter stamps this into every survey-metadata.json `version` and names the served schema
 # route segment from it; it holds no version literal of its own. Never hand-edit here.
 SURVEY_METADATA_SCHEMA_VERSION = '0.1'
+
+# The station schema version, generated from contract/generate.py's STATION_VERSION constant
+# (THE single source; the schema artifact's title DISPLAYS it and is verified against it). The
+# emitter stamps this into every station.json `version` and names the served schema route
+# segment from it; it holds no version literal of its own. Never hand-edit here.
+STATION_SCHEMA_VERSION = '0.1'

@@ -442,13 +442,20 @@ def _py_frame_words(frame: dict) -> str:
 
 
 def _real_frames(engine_corpus) -> list:
-    """Every REAL engine-produced station.json `frame` block in the corpus (non-null)."""
+    """Every REAL engine-produced station.json `frame` block in the corpus (non-null).
+
+    The documents are asserted to be PROMOTED records first. `frame` is one member of a schema-governed
+    contract now, so a build that stopped emitting the markers, or emitted a stub where a full record
+    belongs, would otherwise feed this pin a document the portal would never render and still pass."""
     frames = []
     for slug in engine_corpus["surveys"]:
         for sdir in sorted((engine_corpus["products"] / slug).iterdir()):
             if not sdir.is_dir():
                 continue  # products/<slug>/survey-metadata.json is a file, not a station
             doc = json.loads((sdir / "station.json").read_text(encoding="utf-8"))
+            assert doc.get("schema") == "ausmt-station" and doc.get("version") and doc.get("survey_id"), (
+                f"{slug}/{sdir.name}: not a promoted station record: {sorted(doc)}")
+            assert not doc.get("withheld"), f"{slug}/{sdir.name}: this corpus is open; a stub has no frame"
             fr = doc.get("frame")
             if fr:
                 frames.append(fr)

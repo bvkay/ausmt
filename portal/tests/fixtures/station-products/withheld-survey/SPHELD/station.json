@@ -1,0 +1,22 @@
+{
+ "schema": "ausmt-station",
+ "version": "0.1",
+ "ausmt_id": "au.withheld-survey.SPHELD",
+ "station": "SPHELD",
+ "survey": "Station Products Withheld Survey",
+ "survey_id": "withheld-survey",
+ "country": "Australia",
+ "organisation": "AusMT CI",
+ "access": {
+  "level": "embargoed",
+  "embargo_until": "2027-09-27",
+  "served": false
+ },
+ "distribution": {
+  "edi_available": false,
+  "license": "CC-BY-4.0",
+  "edi_path": null
+ },
+ "withheld": true,
+ "note": "This survey's access state withholds its derived science products (embargoed or metadata_only). Discovery metadata remains in the catalogue; the science is released when the survey's access.level is opened."
+}

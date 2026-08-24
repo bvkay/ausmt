@@ -41,7 +41,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SURVEYS = ROOT / "data"          # data/sample-survey: CC-BY-4.0, access.level=open => served baseline
 sys.path.insert(0, str(ROOT / "extract"))
+sys.path.insert(0, str(HERE))
 import build_portal as bp        # noqa: E402
+from test_run_facts import qualify_lemimt  # noqa: E402
 
 
 # --------------------------------------------------------------------------- pure gate (stack-less)
@@ -334,6 +336,20 @@ def test_withheld_build_passes_verify_data_dir(tmp_path):
 _PRODUCTS_SCIENCE_KEYS = ("median_relative_error", "dimensionality", "skew_beta_median_deg",
                           "completeness_smoothness_diagnostic", "classification", "pct_periods_3d",
                           "convention_check", "phs_xy_median_deg", "phs_yx_median_deg", "input_sha256")
+# The station.json KEY SET on each branch, pinned so byte-stability is enforceable at all: before this
+# pin existed nothing forbade a new top-level key on either branch, and the leak sweep above tests
+# VALUES, not membership. The three promotion markers are the ratified exception (D8) and are listed
+# separately so a fourth addition to either branch fails here rather than shipping.
+_STATION_FROZEN_FULL_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "location",
+                             "data", "diagnostics", "processing", "distribution", "provenance",
+                             "coordinate_qc", "canonical_conditioning", "frame")
+_STATION_FROZEN_WITHHELD_KEYS = ("ausmt_id", "station", "survey", "country", "organisation", "access",
+                                 "distribution", "withheld", "note")
+_STATION_PROMOTION_MARKERS = ("schema", "version", "survey_id")
+# The new canonical model. CONDITIONAL, and that is the whole point: runs[] appears only where the
+# station's own source asserts an acquisition fact, so the pin below allows these and nothing else
+# on top of the frozen set, and asserts positively that this corpus DOES carry runs.
+_STATION_NEW_MODEL_KEYS = ("runs", "resources")
 # Non-served access blocks and whether the survey serves — a metadata_only, an embargoed-future, plus the
 # open control. (An embargoed-PAST survey is ALSO non-served; the pure-gate tests above pin that case, and
 # this corpus keeps to the two distinct non-served *kinds* the task enumerates + the open control.)
@@ -347,7 +363,10 @@ _CORPUS = {
 
 def _build_products_corpus(tmp_path):
     """Stage a 3-survey corpus (open + embargoed + metadata_only), each a copy of the CC-BY sample survey
-    under a distinct slug, and build WITH --products. Returns (out, prod_dir, served_slugs, nonserved_slugs)."""
+    under a distinct slug, and build WITH --products. Returns (out, prod_dir, served_slugs, nonserved_slugs).
+
+    Each copy gains the LEMIMT logger line: the sample survey's real Vulcan bytes state only the
+    DECLINED band token, so without it the open control below would publish no runs[] to check."""
     src = tmp_path / "surveys_src"
     src.mkdir()
     served, nonserved = set(), set()
@@ -355,6 +374,7 @@ def _build_products_corpus(tmp_path):
     for slug, (name, access_block, is_served) in _CORPUS.items():
         d = src / slug
         shutil.copytree(_survey_src, d)
+        qualify_lemimt(d)
         y = d / "survey.yaml"
         lines = [ln for ln in y.read_text(encoding="utf-8").splitlines()
                  if not ln.strip().startswith(("access:", "slug:", "name:"))]
@@ -430,6 +450,11 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
         sj = json.loads((prod / slug / "A1" / "station.json").read_text(encoding="utf-8"))
         assert sj.get("withheld") is True and sj["access"]["served"] is False
         assert sj["distribution"]["edi_available"] is False and sj.get("survey")
+        assert set(sj) == set(_STATION_FROZEN_WITHHELD_KEYS) | set(_STATION_PROMOTION_MARKERS), (
+            f"the withheld stub carries the nine frozen keys plus the three promotion markers and "
+            f"nothing else; {slug!r} emitted {sorted(sj)}")
+        assert sj["schema"] == "ausmt-station" and sj["survey_id"] == slug, (
+            "survey_id is the slug the machine surfaces key on, never the display label")
 
     # OPEN control: the served survey in the SAME build keeps its full science + dimensionality.json.
     # The dimensionality CALL is asserted where it now lives (dimensionality.json — station.json stopped
@@ -438,6 +463,20 @@ def test_products_surface_withholds_science_for_non_served_surveys(tmp_path):
         oj = json.loads((prod / slug / "A1" / "station.json").read_text(encoding="utf-8"))
         assert "diagnostics" in oj and oj["diagnostics"].get("completeness_smoothness_diagnostic"), \
             "the OPEN survey's products must retain their TF-derived science"
+        # The full-branch key set. coordinate_policy is the one conditional top-level key and this
+        # corpus is all-exact, so it is absent here by construction (its own pin is
+        # test_coord_access.py::test_station_json_carries_policy_for_non_exact_only).
+        assert set(oj) - set(_STATION_FROZEN_FULL_KEYS) - set(_STATION_PROMOTION_MARKERS) \
+            <= set(_STATION_NEW_MODEL_KEYS), (
+            f"the full record carries the fourteen frozen keys, the three promotion markers and the "
+            f"new canonical model, and nothing else; {slug!r} emitted {sorted(oj)}")
+        assert set(_STATION_FROZEN_FULL_KEYS) | set(_STATION_PROMOTION_MARKERS) <= set(oj), (
+            f"a frozen key or a promotion marker went missing; {slug!r} emitted {sorted(oj)}")
+        assert oj["runs"], "the staged source states its logger, so a run is published"
+        assert oj["resources"], "an open station serves an EDI, so it publishes a resource for it"
+        assert oj["schema"] == "ausmt-station" and oj["survey_id"] == slug, (
+            "survey_id is the slug the machine surfaces key on, never the display label")
+        assert "withheld" not in oj, "the withheld marker is schema-forbidden on a full record"
         dj = prod / slug / "A1" / "dimensionality.json"
         assert dj.exists(), "the OPEN survey must still emit dimensionality.json"
         assert json.loads(dj.read_text(encoding="utf-8"))["classification"], \

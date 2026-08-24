@@ -45,6 +45,7 @@ declared in the survey package and recorded in provenance.
 | `build_report.json` | `build_portal.py` (per-survey report accumulator) | the curator serve-state view; validated against `schema/build_report.schema.json`; re-checked by `engine/scripts/verify.py` |
 | `mtcat.json` | `build_portal.mtcat_document` | external harvesters; validated against `schema/mtcat.schema.json` |
 | `products/<slug>/survey-metadata.json` | `build_portal.survey_metadata_document` | a public contract, not read by the portal; validated against `schema/ausmt-survey-metadata.schema.json`, see [Survey metadata](../reference/survey-metadata.md) |
+| `products/<slug>/<station>/station.json` | `build_portal.station_document` | a public contract; `portal/src/drawer.js` reads two members of it (`frame`, `processing.file_written_by`); validated against `schema/ausmt-station.schema.json` and against the semantic layer in `extract/_stationcheck.py`, see [Per-station products](../reference/station-products.md) |
 | `qc_report.json` | `build_portal.qc_pass` | curator-facing; not read by the portal runtime |
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
 | `coord_policy.json` | `extract/build_portal.py` (the coordinate mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position |
@@ -185,8 +186,15 @@ The per-station products `station.json` (a public contract) and `dimensionality.
 it; not a contract) under `products/<survey-slug>/<station>/` are key-based
 ([Per-station products](../reference/station-products.md)). `coordinate_qc` and
 `canonical_conditioning` are `null` unless the parse flagged something; `coordinate_policy` is present
-only when the policy is not `exact`. `--products` is a served surface, so it rides the same access gate
-as `tf.json`/`sci.json`. Every product carries a `provenance` block. A new product emits
+only when the policy is not `exact`; `runs` and `resources` are present only where a source asserts an
+acquisition fact and where the station serves bytes, and absence in both is the open-world statement,
+not an empty array. `--products` is a served surface, so it rides the same access gate
+as `tf.json`/`sci.json`. `station.json` is written under `<out>/products/` whether or not `--products`
+is given, because it is a public contract; passing `--products` writes a second copy there and is what
+puts `dimensionality.json` on disk at all. Deployment passes `--products <out>/products`, so the two are
+one directory and the served paths are the same either way. Every product carries a `provenance` block,
+with one exception: a withheld `station.json` is a closed-world stub of twelve members and carries
+none. A new product emits
 `products/<survey>/<station>/<product>.json` with a `method`/citation field, a `screening_diagnostic`
 or interpretation caveat, a `provenance` block and any companion assets; the steps are in
 [How to extend](extending.md#2-add-a-new-derived-science-product-eg-wire-up-strike) and the pattern is

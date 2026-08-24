@@ -1,0 +1,9 @@
+# Persistent run-id store. See the repository README, section "Run ids".
+#
+# {station id: that station's ordered run ids}. Each id is ASSIGNED ONCE and kept: nothing
+# regenerates it, because an id derived from mutable metadata renames the run as soon as
+# curation corrects a timestamp, a rate or a serial. Extend this file with
+# _tools/assign_run_ids.py, which never rewrites a row that already exists.
+run_ids:
+  A1: [A1-r01]
+  A2: [A2-r01]

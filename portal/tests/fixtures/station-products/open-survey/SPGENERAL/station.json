@@ -1,0 +1,131 @@
+{
+ "schema": "ausmt-station",
+ "version": "0.1",
+ "ausmt_id": "au.open-survey.SPGENERAL",
+ "station": "SPGENERAL",
+ "survey": "Station Products Open Survey",
+ "survey_id": "open-survey",
+ "country": "Australia",
+ "organisation": "AusMT CI",
+ "location": {
+  "lat": -32.9,
+  "lon": 136.9
+ },
+ "data": {
+  "type": "BBMT",
+  "n_periods": 62,
+  "period_min_s": 0.005,
+  "period_max_s": 6359.70491
+ },
+ "diagnostics": {
+  "median_relative_error": 0.019,
+  "remote_reference": true,
+  "tipper_available": false,
+  "completeness_smoothness_diagnostic": {
+   "value": 5.0,
+   "basis": "e",
+   "note": "not a quality or geological-value judgement"
+  },
+  "classification": "2-D",
+  "skew_beta_median_deg": 0.7,
+  "pct_periods_3d": 0,
+  "method": "phase-tensor (Caldwell 2004)",
+  "note": "screening diagnostic, not an interpretation product"
+ },
+ "processing": {
+  "software": "LEMIMT",
+  "algorithm": "Robust Remote Reference",
+  "remote_reference": true,
+  "remote_site": null,
+  "file_written_by": {
+   "name": "Geotools",
+   "version": "4.0.5.12583"
+  },
+  "note": null
+ },
+ "distribution": {
+  "edi_available": false,
+  "license": "CC-BY-4.0",
+  "edi_path": null
+ },
+ "provenance": {
+  "pipeline": "ausmt/extract.build_portal",
+  "pipeline_version": "0.2.1",
+  "extractor": "mt_metadata (community canonical)",
+  "software": {
+   "python": "3.12.7",
+   "mt_metadata": "1.0.9",
+   "mth5": "0.6.8"
+  },
+  "git_commit": "369d1f5",
+  "parameters": {
+   "dimensionality": {
+    "beta_per_period_deg": 3.0,
+    "skew_3d_deg": 5.0,
+    "pct_periods_3d_threshold": 40,
+    "ellip_2d_deg": 0.1,
+    "min_rez_row_sine": 0.01,
+    "beta_physical_cap_deg": 15.0,
+    "min_usable_period_frac": 0.5,
+    "skew_aggregation": "median"
+   },
+   "diagnostic": "completeness/smoothness (median rel error + coverage + smoothness)"
+  },
+  "generated": "2026-08-23T12:21:21.454543+00:00",
+  "input_file": "SPGENERAL.edi",
+  "input_sha256": "970f832dc4d859d8ee772ff6bd8e25868ef47d119abc345023d15639876cd017"
+ },
+ "coordinate_qc": null,
+ "canonical_conditioning": null,
+ "frame": {
+  "evidence": {
+   "branch": "mt",
+   "zrot": "0",
+   "trot": null,
+   "rotspec": null,
+   "hmeas_azimuths": {
+    "hx": 0.0,
+    "hy": 90.0
+   },
+   "emeas_azimuths": {
+    "ex": null,
+    "ey": null
+   }
+  },
+  "impedance_rotation_deg_source": null,
+  "tipper_rotation_deg_source": null,
+  "derotated": false,
+  "frame_served": "declared-zero",
+  "declared_azimuth_deg": 0.0,
+  "convention_check": {
+   "verdict": "ok",
+   "phs_xy_median_deg": 39.16,
+   "phs_yx_median_deg": -143.72,
+   "n_periods_used": 62,
+   "detail": null
+  }
+ },
+ "coordinate_policy": "generalised",
+ "runs": [
+  {
+   "id": "SPGENERAL-r01",
+   "data_logger": {
+    "model": "LEMI-424"
+   },
+   "channels": [
+    {
+     "component": "ex"
+    },
+    {
+     "component": "ey"
+    },
+    {
+     "component": "hx"
+    },
+    {
+     "component": "hy"
+    }
+   ]
+  }
+ ]
+}

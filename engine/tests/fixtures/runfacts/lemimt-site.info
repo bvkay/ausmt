@@ -1,0 +1,11 @@
+MAXINFO=14
+*
+SITE        : A23
+LATITUDE    :   -28:31:33.45
+LONGITUDE   :   152:01:34.43
+ELEVATION   :   889
+DECLINATION :     11.0540
+*
+Processing code: LEMIMT
+Algorithm      : Robust Remote Reference With Coherence Pre-sorting
+Instrument:	LEMI-424

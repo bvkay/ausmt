@@ -1,0 +1,22 @@
+{
+ "schema": "ausmt-station",
+ "version": "0.1",
+ "ausmt_id": "au.vulcan-2024-25.Vul24-13",
+ "station": "Vul24-13",
+ "survey": "Vulcan 2024-25",
+ "survey_id": "vulcan-2024-25",
+ "country": "Australia",
+ "organisation": "Adelaide University",
+ "access": {
+  "level": "embargoed",
+  "embargo_until": "2027-02-01",
+  "served": false
+ },
+ "distribution": {
+  "edi_available": false,
+  "license": "CC-BY-4.0",
+  "edi_path": null
+ },
+ "withheld": true,
+ "note": "This survey's access state withholds its derived science products (embargoed or metadata_only). Discovery metadata remains in the catalogue; the science is released when the survey's access.level is opened."
+}

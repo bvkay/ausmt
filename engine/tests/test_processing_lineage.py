@@ -208,17 +208,22 @@ def test_station_json_names_the_processor_and_the_writer_separately(tmp_path):
     assert two["file_written_by"] == {"name": "Geotools", "version": "4.0.5.12583"}, two["file_written_by"]
 
 
-def test_station_json_does_not_restate_the_dimensionality_call(tmp_path):
-    """FAILS against the pre-fix emitter, which carried the dimensionality classification and its skew
-    statistic in station.json's diagnostics AND in the dimensionality.json beside it — the second copy
-    without the screening caveat that qualifies them. Only the latter is a home."""
+def test_station_json_states_the_dimensionality_call_with_its_caveat(tmp_path):
+    """D1 (2026-08-23): the classification and its skew statistic are FOLDED INTO station.json's
+    diagnostics, and the method string and the screening caveat travel with them, so the qualification
+    is beside the numbers rather than one file away. FAILS against the emitter one commit ago, which
+    carried them in dimensionality.json alone; and against a fold that dropped the caveat, which is the
+    failure the 2026-08-14 removal was guarding against in the first place."""
     pytest.importorskip("mt_metadata")
     base = _build(tmp_path)
     for st in ("EXAMPLE01", "EXAMPLE02"):
         diag = json.loads((base / st / "station.json").read_text(encoding="utf-8"))["diagnostics"]
-        assert "dimensionality" not in diag, diag
-        assert "skew_beta_median_deg" not in diag and "skew_beta_mean_deg" not in diag, diag
-        # the science itself is UNCHANGED and still published, one directory entry away
+        assert diag["classification"] and "skew_beta_median_deg" in diag, diag
+        assert diag["method"] == "phase-tensor (Caldwell 2004)", diag
+        assert diag["note"] == "screening diagnostic, not an interpretation product", diag
+        assert "skew_beta_mean_deg" not in diag, "the statistic is a median; the key must say so"
+        # the sidecar keeps being written byte-unchanged (D14) and states the same call
         dim = json.loads((base / st / "dimensionality.json").read_text(encoding="utf-8"))
-        assert dim["classification"] and "skew_beta_median_deg" in dim, dim
-        assert dim["note"] == "screening diagnostic, not an interpretation product", dim
+        assert dim["classification"] == diag["classification"], (dim, diag)
+        assert dim["skew_beta_median_deg"] == diag["skew_beta_median_deg"], (dim, diag)
+        assert dim["pct_periods_3d"] == diag["pct_periods_3d"], (dim, diag)
