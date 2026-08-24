@@ -28,9 +28,15 @@ lines it is - only `access.level: open` serves, and no embargo date ever opens a
 coordinate half of the gate imported from `_coordaccess` rather than restated. The key-set parity
 leg in deploy/tests and doctor-box.sh is what proves the restatement has not drifted.
 
-RUNS WHERE THE REGISTERS ARE, which is not CI: they live in the SIBLING ausmt-surveys checkout, so
-`--check` belongs to the pre-commit battery (rule 7) and to the box, where surveys-live is the
-sibling. With no register root it STOPS rather than reporting a vacuous pass.
+RUNS WHERE THE REGISTERS ARE: they live in the SIBLING ausmt-surveys checkout, so `--check` belongs
+to the pre-commit battery (rule 7), to the box (where surveys-live is the sibling), and to
+gateway-ci, which clones that sibling for exactly this gate. With no register root it STOPS rather
+than reporting a vacuous pass.
+
+A SURVEY THIS READER CANNOT RESOLVE DROPS ITS OWN ROUTES AND NOTHING ELSE'S, recorded in the table
+as an `# UNRESOLVED` line. Failing the whole generation was worse than it looked: nothing was
+written, so the PREVIOUSLY COMMITTED table went on serving while the build had already suppressed
+the station, and suppression that cannot be published is not suppression.
 """
 from __future__ import annotations
 
