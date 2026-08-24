@@ -124,8 +124,6 @@ def test_a_well_formed_register_loads_with_its_unknown_row_keys_intact(tmp_path)
     ("level", "", "level"),
     ("review", "approved", "review"),
     ("review", None, "review"),
-    ("match_method", "guess", "match_method"),
-    ("match_method", "rule:Not Lower", "match_method"),
     ("url_path", "", "url_path"),
     ("verified", "24/08/2026", "verified"),
     ("verified", "", "verified"),
@@ -144,6 +142,22 @@ def test_a_row_outside_the_closed_vocabulary_stops_the_load(tmp_path, field, val
 @pytest.mark.parametrize("method", ["exact", "curator", "rule:sa-pad", "rule:j-prefix"])
 def test_every_ratified_match_method_loads(tmp_path, method):
     assert _load(tmp_path, {"EXAMPLE01": [{**GOOD, "match_method": method}]})
+
+
+@pytest.mark.parametrize("method", ["guess", "rule:Not Lower"])
+def test_a_malformed_match_method_is_a_curator_warning_and_not_a_build_stop(tmp_path, method):
+    """SEVERITY PARITY with the surveys validator, which is the half the vocabulary pin cannot see.
+
+    match_method is PROVENANCE and gates nothing: a row stands or falls on its `review` state, and a
+    malformed method costs it only its place in the adjudication queue. The validator says WARNING
+    and the ratified FAIL list (S1) does not name the field, so an engine that raised here was
+    STRICTER THAN RATIFIED - a register that passed surveys CI green hard-stopped the ausmt build
+    (build_portal returns 2 on TsIndexError), which surfaces as a mystery red on a curator's PR.
+    The value is carried through verbatim so nothing downstream loses the provenance it does have."""
+    loaded = _load(tmp_path, {"EXAMPLE01": [{**GOOD, "match_method": method}]})
+    assert loaded["EXAMPLE01"][0]["match_method"] == method, (
+        "the row loads AND keeps its stated method; silently normalising it would erase the "
+        "curator's own record of how the match was made")
 
 
 def test_a_retired_row_without_its_dated_reason_stops_the_load(tmp_path):
@@ -205,3 +219,6 @@ def test_the_vocabularies_are_the_ratified_tokens():
     assert tsindex.LEVELS == ("raw_packed", "level0", "level1_mth5", "level1_netcdf", "level2")
     assert tsindex.REVIEW == ("verified", "pending", "retired")
     assert tsindex.MATCH_METHODS == ("exact", "curator")
+    # CONTENT is only half of it: two readers can hold the same tokens and disagree about what an
+    # out-of-vocab value COSTS. The severities are pinned beside the tokens - level and review stop
+    # the build, match_method does not - because that is the half that actually differed.
