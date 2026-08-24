@@ -24,7 +24,8 @@ Three layers:
      scans run over the REAL corpus document; when AUSMT_MTCAT20_BASELINE additionally names a
      pre-2.0 (v1.2) mtcat.json of the same corpus, the EMITTER-EQUIVALENCE dict-test runs:
      migrate_12_to_20(baseline) must equal the built document after stripping the new-in-2.0 keys
-     (surveys[].description/subjects/sample_rates_hz/coordinates_state) and
+     (surveys[].description/subjects/sample_rates_hz/coordinates_state, plus the THREDDS projection
+     pair stations[].has_time_series / surveys[].n_stations_time_series_verified) and
      portal.{version,generated_at}. No CI lane has a corpus, so these skip there (allow-listed in
      ci_check_skips.py); they are the lane's full-corpus proof harness and stay runnable forever.
 """
@@ -117,6 +118,31 @@ def count_invariant(survey, stations):
     true_count = sum(1 for x in stations
                      if x.get('survey_id') == survey['survey_id'] and x.get('has_time_series') is True)
     return n == true_count and n <= survey.get('n_stations', n)
+
+
+def projection_shape_ok(doc):
+    """The THREDDS projection's SHAPE (contract section 2), as a reference invariant so every layer
+    gets it: the flag is TRUE-OR-ABSENT (`false` is never emitted, spec:382), and a survey states its
+    count exactly when that count is positive. count_invariant is the equality half and cannot see
+    the other one - a survey with three true rows and no count key satisfies it vacuously - so the
+    tally is walked from the stations here and both directions are stated. Returns violations."""
+    out = [f"{st['station_id']}: has_time_series is {st['has_time_series']!r}, not the literal true"
+           for st in doc.get('stations', [])
+           if 'has_time_series' in st and st['has_time_series'] is not True]
+    tally = {}
+    for st in doc.get('stations', []):
+        if st.get('has_time_series') is True:
+            tally[st['survey_id']] = tally.get(st['survey_id'], 0) + 1
+    for sv in doc.get('surveys', []):
+        want = tally.get(sv['survey_id'], 0)
+        got = sv.get('n_stations_time_series_verified')
+        if want and got != want:
+            out.append(f"{sv['survey_id']}: n_stations_time_series_verified {got!r} against {want} "
+                       f"flagged station(s)")
+        elif not want and got is not None:
+            out.append(f"{sv['survey_id']}: n_stations_time_series_verified {got!r} with no flagged "
+                       f"station; a zero count is ABSENT, never 0")
+    return out
 
 
 def ordering_ok(sv):
@@ -213,6 +239,7 @@ def _document_invariants(doc):
             out.append(f"{s['survey_id']}: sample_rates_hz not unique-sorted")
         if s.get("coordinates_state") == "withheld" and ("bbox" in s or "centroid" in s):
             out.append(f"{s['survey_id']}: withheld state with a footprint")
+    out += projection_shape_ok(doc)
     if not collection_rollups_ok(doc):
         out.append("collection rollups disagree with members")
     n_by_survey = {}
@@ -294,6 +321,19 @@ def test_reference_checks_actually_detect_violations():
     CATCH a planted violation, or a green scan proves nothing."""
     assert not count_invariant({"survey_id": "s", "n_stations_time_series_verified": 7,
                                 "n_stations": 9}, SPEC_DOC["stations"])
+    assert not projection_shape_ok(SPEC_DOC), "the ratified example satisfies the projection shape"
+    false_flag = copy.deepcopy(SPEC_DOC)
+    false_flag["stations"][0]["has_time_series"] = False
+    assert any("not the literal true" in v for v in projection_shape_ok(false_flag))
+    dropped = copy.deepcopy(SPEC_DOC)
+    for sv in dropped["surveys"]:
+        sv.pop("n_stations_time_series_verified", None)
+    assert any("against 1 flagged station" in v for v in projection_shape_ok(dropped)), \
+        "a survey with true rows and NO count is what count_invariant cannot see"
+    zeroed = copy.deepcopy(SPEC_DOC)
+    for st in zeroed["stations"]:
+        st.pop("has_time_series", None)
+    assert any("a zero count is ABSENT" in v for v in projection_shape_ok(zeroed))
     assert not ordering_ok({"period_min_s": 100, "period_max_s": 1})
     assert not ordering_ok({"year_start": 2020, "year_end": 2014})
     assert not collection_rollups_ok({"surveys": [{"survey_id": "a", "collection_id": "c",
@@ -383,10 +423,19 @@ def test_schema_served_at_both_routes_and_byte_stable(built):
 # ---------------------------------------------------------------- layer 3: the corpus arms
 
 def _strip_new_keys(doc):
+    """The equivalence arm's normaliser: everything 2.0 ADDS, removed, so what remains must equal the
+    migrated 1.2 document exactly. The THREDDS projection pair is new-in-2.0 too and, unlike the rest
+    of this list, is now genuinely EMITTED - migrate_12_to_20 only deletes and moves, so a 1.2
+    baseline can never carry it, and leaving it in would read every projected station as a residual
+    diff. Those are the framing invariant's TWO ratified exceptions and this is where they are
+    normalised away; their SHAPE is pinned by projection_shape_ok, not waived."""
     out = copy.deepcopy(doc)
     for sv in out.get("surveys", []):
-        for k in ("description", "subjects", "sample_rates_hz", "coordinates_state"):
+        for k in ("description", "subjects", "sample_rates_hz", "coordinates_state",
+                  "n_stations_time_series_verified"):
             sv.pop(k, None)
+    for st in out.get("stations", []):
+        st.pop("has_time_series", None)
     out["portal"].pop("version", None)
     out["portal"].pop("generated_at", None)
     return out
@@ -401,15 +450,29 @@ def test_corpus_build_validates_and_scans_clean():
     assert not nulls and not half and not empties, (nulls[:10], half[:10], empties[:10])
     violations = _document_invariants(doc)
     assert not violations, violations[:10]
-    assert all("has_time_series" not in st for st in doc["stations"])
-    assert all("n_stations_time_series_verified" not in s for s in doc["surveys"])
+    # THE PROJECTION AT CORPUS SCALE. Its shape is a reference invariant above, so what is left for
+    # a built TREE to witness is the one thing a document alone cannot: a station the build ROUTED
+    # carries the flag. The containment is deliberately ONE-directional - a withheld, embargoed or
+    # pending station keeps its flag while serving no route (R13, CONTRACT:126-132), so the reverse
+    # would be false by design. ts_access.json is emitted only when non-empty, and a corpus whose
+    # register is all withheld or all pending flags stations while publishing none, so its absence
+    # is a legitimate state rather than a missing artifact.
+    flagged = {st["station_id"] for st in doc["stations"] if st.get("has_time_series") is True}
+    ts_access = Path(CORPUS_DATA) / "ts_access.json"
+    if ts_access.exists():
+        routed = set(json.loads(ts_access.read_text(encoding="utf-8")))
+        assert routed, "ts_access.json exists but is empty; it is written only when non-empty"
+        assert routed <= flagged, (
+            f"stations carry a published route with no has_time_series: {sorted(routed - flagged)[:5]}")
 
 
 @equivalence_arm
 def test_corpus_emitter_equivalence_dict_test():
     """THE framing proof: migrate_12_to_20(previous-build mtcat.json) equals the new build's
     document after stripping the new-in-2.0 keys and portal.{version,generated_at}. Dict
-    equality, not eyeballing; any residual diff is a finding."""
+    equality, not eyeballing; any residual diff is a finding. With the THREDDS projection live the
+    normaliser carries its TWO ratified exceptions, which is what makes the framing invariant
+    measurable on a register-carrying corpus instead of only on a registerless one."""
     baseline = json.loads(Path(CORPUS_BASELINE).read_text(encoding="utf-8"))
     new_doc = json.loads((Path(CORPUS_DATA) / "mtcat.json").read_text(encoding="utf-8"))
     migrated = migrate_12_to_20(baseline)
