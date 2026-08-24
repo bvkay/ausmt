@@ -64,9 +64,9 @@ async function loadPhase1(){
 // The heavy products, issued in PARALLEL alongside phase 1 and awaited by NOBODY on the first-paint path.
 // Each assigns its global and settles its own gate, so a consumer waits only for the product it actually
 // reads (a station drawer's plots need tf; the Files tab needs the manifest; neither needs the other).
-// Returns the three gates so a caller (and the headless drivers) can observe hydration.
+// Returns the four gates so a caller (and the headless drivers) can observe hydration.
 function startHydration(){
-  HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";
+  HYDR.tf="pending";HYDR.sci="pending";HYDR.manifest="pending";HYDR.tsaccess="pending";
   // A tf/sci FAILURE is not absence: before the phased boot these were part of the required Promise.all and
   // a bad fetch showed the load-error page. First paint no longer depends on them, so the failure is recorded
   // as "failed" and the products fall back to EMPTY arrays; the empty array keeps every positional deref
@@ -77,7 +77,13 @@ function startHydration(){
   // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
   // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
   MANIFEST_READY=fetchOptional("manifest.json",null).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
-  return [TF_READY,SCI_READY,MANIFEST_READY];
+  // THREDDS A5/D6: ts_access.json is OPTIONAL by contract - the engine writes it only when the
+  // register projects at least one open, verified route, so a 404 IS the honest absence and there
+  // is no "failed" state to report. The fallback is {} rather than null so every consumer reads one
+  // shape, and the difference the Availability controls render is TSACC===null (still in flight)
+  // against an empty object (this deployment publishes no download index).
+  TSACC_READY=fetchOptional("ts_access.json",{}).then(v=>{TSACC=v||{};HYDR.tsaccess="ready";});
+  return [TF_READY,SCI_READY,MANIFEST_READY,TSACC_READY];
 }
 
 // ---- download manifest resolver (slice #4 — the distribution backbone) ------------------------
@@ -111,4 +117,12 @@ function mfFileIndex(){
   _MF_IDX=ix;_MF_IDX_SRC=MANIFEST;return ix;}
 function artifactsFor(ausmt_id){return mfFileIndex().get(ausmt_id)||[];}
 function bundlesForSlug(slug){return slug?mfRows("bundles").filter(r=>r.slug===slug&&r.url):[];}
+// ---- the time-series hand-off index (THREDDS A5) -------------------------------------------------
+// ts_access.json indexes the archive routes this deployment may hand a reader off to:
+// {ausmt_id: {level token: {bytes, url_path}}}. MEMBERSHIP IS THE ACCESS DECISION and it was made in
+// the build - a withheld, coordinate-gated, adjudication-pending or retired station is absent, and
+// level_2 (which holds transfer functions, not time series) never appears at all. So no consumer
+// here re-derives availability from survey metadata; it reads this index and nothing else.
+function tsAccessKnown(){return TSACC!==null;}
+function tsRoutesFor(ausmt_id){return (TSACC&&TSACC[ausmt_id])||null;}
 function fmtBytes(n){if(n==null)return"";if(n<1024)return n+" B";if(n<1048576)return(n/1024).toFixed(0)+" KB";return(n/1048576).toFixed(1)+" MB";}

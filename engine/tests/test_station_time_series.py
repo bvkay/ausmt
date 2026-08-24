@@ -289,6 +289,87 @@ def test_a_coordinate_gated_station_gets_no_route(built_masked):
         assert _rows(docs[station]) == [], docs[station].get("resources")
 
 
+# ---- ts_access.json, the route-detail boot artifact (A5) ------------------------------------------
+
+def _ts_access(out):
+    """The emitted artifact, or None when the build wrote none (which is itself an assertion)."""
+    path = out / "ts_access.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def test_ts_access_carries_bytes_and_url_path_per_open_station_and_level(built):
+    """A5: `{ausmt_id: {level: {bytes, url_path}}}`. station.json is never fetched on navigation
+    (build_portal:5369-5370), so this is the only artifact that can carry the archive's route into a
+    manifest the portal builds (D3). `url_path` is the archive's own string VERBATIM, which is the
+    form that identifies the file; the encoding happens where it becomes a URL, never in storage."""
+    doc = _ts_access(built)
+    assert doc, "the fixture register projects three routes, so the artifact must exist"
+    aid = _station(built, "example-survey", "EXAMPLE01")["ausmt_id"]
+    assert set(doc[aid]) == {"raw_packed", "level0", "level1_mth5"}, doc[aid]
+    assert doc[aid]["raw_packed"] == {
+        "bytes": 9868836788,
+        "url_path": "my80/AuScope_MT_collection/AuScope_Broadband/Example_Survey/"
+                    "Packed_Raw_Time_Series_Archive/EXAMPLE01 [REMOTE].zip"}, doc[aid]["raw_packed"]
+
+
+def test_ts_access_and_the_resource_rows_are_ONE_projection(built):
+    """The parity that makes the artifact safe to publish: for every station, the levels here are
+    exactly the `ts-<level>` rows in that station's own record, and each states the SAME bytes and
+    the SAME route. Two renderings of one predicate, so the manifest a reader downloads cannot name
+    a file the record does not describe (nor the reverse)."""
+    doc = _ts_access(built)
+    seen = 0
+    for path in sorted((built / "products").rglob("station.json")):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        rows = {r["id"][len("ts-"):]: r for r in _rows(record)}
+        entry = doc.get(record.get("ausmt_id"), {})
+        assert set(entry) == set(rows), (path, sorted(entry), sorted(rows))
+        for level, row in rows.items():
+            assert entry[level].get("bytes") == row.get("bytes"), (path, level)
+            assert bp.ts_access_url(entry[level]["url_path"]) == row["access_url"], (path, level)
+            seen += 1
+    assert seen, "non-vacuity: this corpus publishes hand-off rows"
+
+
+def test_a_station_whose_rows_never_project_is_absent_not_empty(built):
+    """EXAMPLE02 carries one pending and one retired row and nothing else. An empty object would
+    read as a station with a published-but-empty route set; absence asserts nothing."""
+    doc = _ts_access(built)
+    assert _station(built, "example-survey", "EXAMPLE02")["ausmt_id"] not in doc, doc
+
+
+def test_the_artifact_lands_beside_coord_policy_and_in_the_prod_twin(built):
+    """Same two write sites as coord_policy.json, byte-identical, because `--products` is a served
+    root in deployment and a boot artifact that exists at only one of them is a 404 waiting."""
+    twin = built / "products" / "ts_access.json"
+    assert twin.exists(), "the prod/ twin is missing"
+    assert twin.read_bytes() == (built / "ts_access.json").read_bytes()
+
+
+def test_a_build_with_no_register_writes_no_artifact_at_all(tmp_path):
+    """The zero-change default the boot-artifact precedent promises (:5368-5380): a corpus with no
+    verified routes is byte-identical to one built before this artifact existed."""
+    pytest.importorskip("mt_metadata")
+    out = tmp_path / "data"
+    r = _build(SURVEYS, out)
+    assert r.returncode == 0, r.stderr
+    assert _ts_access(out) is None
+    assert not (out / "products" / "ts_access.json").exists()
+
+
+def test_a_coordinate_gated_station_is_absent_from_the_artifact(built_masked):
+    """R5 stated in the artifact: suppression lives in RESOLUTION, so a masked station is not in the
+    file at all. Membership IS the guard here - the shape carries route detail by design (D3)."""
+    c42 = _c42()
+    ids = {json.loads(p.read_text(encoding="utf-8"))["station"]:
+           json.loads(p.read_text(encoding="utf-8"))["ausmt_id"]
+           for p in sorted((built_masked / "products").rglob("station.json"))}
+    doc = _ts_access(built_masked)
+    assert ids[c42.EXACT["id"]] in doc, "non-vacuity: the exact station DOES publish its route"
+    for station in (c42.GEN["id"], c42.HID["id"]):
+        assert ids[station] not in doc, doc
+
+
 @pytest.fixture(scope="module")
 def built_embargoed(tmp_path_factory):
     pytest.importorskip("mt_metadata")
@@ -317,6 +398,12 @@ def test_an_embargoed_survey_publishes_the_withheld_stub_and_no_route(built_emba
         assert doc.get("withheld") is True, doc
         assert "resources" not in doc, doc
         assert set(doc) <= stcheck.WITHHELD_KEYS, sorted(set(doc) - stcheck.WITHHELD_KEYS)
+
+
+def test_an_embargoed_survey_writes_no_ts_access_at_all(built_embargoed):
+    """The whole corpus is embargoed here, so the artifact has nothing to say and is not written:
+    the same only-when-it-carries-information rule coord_policy.json follows."""
+    assert _ts_access(built_embargoed) is None
 
 
 # ---- the emitter, as a unit ----------------------------------------------------------------------

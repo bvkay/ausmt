@@ -520,12 +520,17 @@ def test_products_leak_sweep_catches_prefix_emitter(tmp_path):
 
 # ------------------------------------------------- THREDDS section 2: the ROOT-level leak sweep
 
-def _root_leak_hits(out, forbidden):
-    """Scan the DATA-ROOT artifacts (mtcat.json, and ts_access.json when the A5 emitter lands) for
-    any of the forbidden route strings. The C1c sweep rglobs products/<slug>/ and sees nothing at
-    the root, so this is the second net the five-artifact leak enumeration requires."""
+def _root_leak_hits(out, forbidden, names=("mtcat.json", "ts_access.json")):
+    """Scan the named DATA-ROOT artifacts for any of the forbidden route strings. The C1c sweep
+    rglobs products/<slug>/ and sees nothing at the root, so this is the second net the five-artifact
+    leak enumeration requires.
+
+    `names` is a parameter because the two root artifacts answer DIFFERENT questions. mtcat.json
+    states existence and a count and must carry NO route detail from any station; ts_access.json IS
+    route detail by design (D3), so what it may carry is decided by MEMBERSHIP - open stations only -
+    and it is swept against the withheld half of the register alone."""
     hits = []
-    for name in ("mtcat.json", "ts_access.json"):
+    for name in names:
         p = out / name
         if not p.exists():
             continue
@@ -534,22 +539,23 @@ def _root_leak_hits(out, forbidden):
     return hits
 
 
-def test_root_artifacts_carry_no_register_route_detail(tmp_path):
-    """The register's url_paths and filenames are ROUTE DETAIL: station.json carries them only on
-    open records, and the root artifacts never carry them at all - mtcat states the flag and the
-    count, nothing more. Proven over a register whose rows cover every access state, with a
-    planted-leak control so a dead sweep cannot pass as a pin."""
-    out, prod, served, nonserved = _build_products_corpus(tmp_path)
-    ids_of = {slug: sorted(p.name for p in (prod / slug).iterdir() if p.is_dir())
-              for slug in (*served, *nonserved)}
+def _build_with_leak_register(tmp_path, prod, slugs):
+    """Build the 3-survey corpus a second time under a register that covers EVERY access state with
+    one verified raw_packed row per station. Returns (out2, {slug: [strings]}, {slug: [url_path]}).
+
+    The two lists are not interchangeable. The corpus is three COPIES of one survey, so its station
+    ids repeat across slugs and a bare `A1.zip` cannot say WHICH survey's route it came from; only
+    the slug-namespaced url_path can. The bare filenames belong to the artifact that may carry no
+    route detail at all, the url_paths to the one whose contents are decided by membership."""
     ts_root = tmp_path / "ts-index"
-    forbidden = []
-    for slug, sids in ids_of.items():
+    forbidden, routes = {}, {}
+    for slug in slugs:
         (ts_root / slug).mkdir(parents=True)
         rows = []
-        for sid in sids:
+        for sid in sorted(p.name for p in (prod / slug).iterdir() if p.is_dir()):
             path = f"my80/LEAKPROBE/{slug}/{sid}.zip"
-            forbidden += [path, f"{sid}.zip"]
+            forbidden.setdefault(slug, []).extend([path, f"{sid}.zip"])
+            routes.setdefault(slug, []).append(path)
             rows.append(f"  {sid}:\n    - level: raw_packed\n"
                         f"      url_path: \"{path}\"\n      filename: \"{sid}.zip\"\n"
                         f"      bytes: 1000\n      verified: \"2026-08-24\"\n"
@@ -563,19 +569,81 @@ def test_root_artifacts_carry_no_register_route_detail(tmp_path):
                         "--ts-index", str(ts_root)],
                        cwd=str(ROOT), capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+    return out2, forbidden, routes
+
+
+def test_root_artifacts_carry_no_register_route_detail(tmp_path):
+    """The register's url_paths and filenames are ROUTE DETAIL, and the two root artifacts hold it
+    on different terms: mtcat.json carries NONE of it for any station (it states the flag and the
+    count, nothing more), while ts_access.json carries it for OPEN stations only. Proven over a
+    register whose rows cover every access state, with a planted-leak control on each so a dead
+    sweep cannot pass as a pin."""
+    out, prod, served, nonserved = _build_products_corpus(tmp_path)
+    out2, forbidden, routes = _build_with_leak_register(tmp_path, prod, (*served, *nonserved))
+    every = [s for rows in forbidden.values() for s in rows]
+    withheld = [s for slug in nonserved for s in routes[slug]]
     mtcat = json.loads((out2 / "mtcat.json").read_text(encoding="utf-8"))
     flagged = [s for s in mtcat["stations"] if s.get("has_time_series")]
     assert flagged, "non-vacuity: the register flags stations in every access state"
-    assert _root_leak_hits(out2, forbidden) == []
-    # the control: a planted route string IS caught, so the net is alive
+    assert _root_leak_hits(out2, every, ("mtcat.json",)) == []
+    assert _root_leak_hits(out2, withheld, ("ts_access.json",)) == []
+    # ...and the artifact is non-vacuous: the OPEN survey's own routes ARE published there, so the
+    # assertion above is a membership rule and not an empty file.
+    assert _root_leak_hits(out2, [s for slug in served for s in routes[slug]],
+                           ("ts_access.json",)), "ts_access.json must publish the open routes"
+    # the controls: a planted route string IS caught in each artifact, so both nets are alive
     leaky = tmp_path / "leaky"
     shutil.copytree(out2, leaky)
     doc = json.loads((leaky / "mtcat.json").read_text(encoding="utf-8"))
-    doc["stations"][0]["leak"] = forbidden[0]
+    doc["stations"][0]["leak"] = every[0]
     (leaky / "mtcat.json").write_text(json.dumps(doc), encoding="utf-8")
-    assert _root_leak_hits(leaky, forbidden), "the sweep must catch a planted route string"
+    assert _root_leak_hits(leaky, every, ("mtcat.json",)), "the sweep must catch a planted route string"
+    tsa = json.loads((leaky / "ts_access.json").read_text(encoding="utf-8"))
+    tsa["au.leak.PLANTED"] = {"raw_packed": {"bytes": 1, "url_path": withheld[0]}}
+    (leaky / "ts_access.json").write_text(json.dumps(tsa), encoding="utf-8")
+    assert _root_leak_hits(leaky, withheld, ("ts_access.json",)), \
+        "the sweep must catch a withheld station's route planted in ts_access.json"
     # and the withheld stubs under the SAME register carry none of it (the products-tree half)
     for slug in nonserved:
         for sj in (out2 / "products" / slug).rglob("station.json"):
             txt = sj.read_text(encoding="utf-8")
-            assert not any(s in txt for s in forbidden), f"{sj}: route detail on a withheld record"
+            assert not any(s in txt for s in every), f"{sj}: route detail on a withheld record"
+
+
+def test_ts_access_membership_is_exactly_the_open_stations(tmp_path):
+    """The MEMBERSHIP claim itself, stated as a set rather than as a string sweep: under a register
+    covering every access state, the artifact's keys are the served surveys' ausmt_ids and no
+    others. This is the guarantee A5 trades the leak-clean-by-construction shape for (D3)."""
+    out, prod, served, nonserved = _build_products_corpus(tmp_path)
+    out2, _forbidden, _routes = _build_with_leak_register(tmp_path, prod, (*served, *nonserved))
+    ids = {}
+    for sj in sorted((out2 / "products").rglob("station.json")):
+        doc = json.loads(sj.read_text(encoding="utf-8"))
+        ids.setdefault(doc["survey_id"], set()).add(doc["ausmt_id"])
+    tsa = json.loads((out2 / "ts_access.json").read_text(encoding="utf-8"))
+    expected = {i for slug in served for i in ids[slug]}
+    assert expected, "non-vacuity: the served survey publishes stations"
+    assert set(tsa) == expected, sorted(set(tsa) ^ expected)
+
+
+def _reconstruct_withheld_projecting_ts_access(register, forbidden_slugs):
+    """Reconstruct what a ts_access emitter that dropped the ACCESS GATE would write: every station
+    the register verifies, whatever its survey's access state. Used by the red-prove below to show
+    the root sweep is non-vacuous against exactly the emitter defect it exists to catch."""
+    return {f"au.{slug}.{sid}": {"raw_packed": {"bytes": 1000, "url_path": path}}
+            for slug in forbidden_slugs for sid, path in register[slug]}
+
+
+def test_root_leak_sweep_catches_a_withheld_projecting_ts_access_emitter(tmp_path):
+    """RED-PROVE (non-vacuity): hermetically write the artifact a gate-less emitter would produce
+    and run the SAME sweep the PIN above uses - it MUST flag it. Without this the membership pin
+    could pass simply because nothing ever writes a withheld station's route anywhere."""
+    register = {"embargo": [("A1", "my80/LEAKPROBE/embargo/A1.zip")]}
+    root = tmp_path / "data"
+    root.mkdir()
+    (root / "ts_access.json").write_text(
+        json.dumps(_reconstruct_withheld_projecting_ts_access(register, ["embargo"])),
+        encoding="utf-8")
+    withheld = ["my80/LEAKPROBE/embargo/A1.zip", "A1.zip"]
+    assert _root_leak_hits(root, withheld, ("ts_access.json",)), \
+        "red-prove FAILED: the sweep did not flag a withheld station's route (the PIN would be vacuous)"

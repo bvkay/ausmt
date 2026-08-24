@@ -205,7 +205,10 @@ win.AUSMT_CONFIG = { short_name: "AusMT", version: "1.2.3", schema: "MTCAT", sch
 // prove the six phase-1 products and the three heavy ones all went out together rather than one behind
 // another, and (b) HOLDS the three heavy responses until releaseHeavy(), so the driver can inspect the app
 // in exactly the window the split creates. Every other url resolves immediately, as before.
-const HEAVY = /(^|\/)(tf|sci|manifest)\.json$/;
+// ts_access.json joins the held set although it is small: what it gates is a two-phase HONESTY rule
+// (nothing may claim a station has no archive route while the index is still in flight), and that
+// window is only drivable if the response can be held open here.
+const HEAVY = /(^|\/)(tf|sci|manifest|ts_access)\.json$/;
 // The served ARTIFACT families (the per-station files the selection exports package). The data dir holds
 // only JSON products, so without this every artifact fetch came back !ok and every export packaged
 // nothing: a pin could then only observe which URLs were requested, never what the archive ended up
@@ -356,6 +359,11 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // fails there with a precise message, instead of dying at this api hook with a ReferenceError.
   "processingSoftwareText:(m,sc)=>processingSoftwareText(m,sc),pubShortCite:(p)=>pubShortCite(p)," +
   "setManifest:(mf)=>{MANIFEST=mf;}," +
+  // THREDDS hooks. setTsAccess swaps the hand-off index the way setManifest swaps the download one
+  // (the fixture data dir ships no ts_access.json, which is itself the honest no-download-index
+  // case); tsRoutes reads it back through the app's own accessor rather than through a copy of it.
+  "setTsAccess:(m)=>{TSACC=(m===null?null:(m||{}));},tsRoutes:(id)=>tsRoutesFor(id)," +
+  "tsAccess:()=>TSACC,tsAccessKnown:()=>tsAccessKnown()," +
   // Lineage split hooks (writer vs processor). fileWrittenByText is the PURE writer-cell derivation;
   // setSciRow/restoreSciRows patch one station's sci row BY NAME (projected through SCI_COLUMNS, so a
   // contract append cannot silently mis-place the patch) and put the fixture back, which is how the
@@ -455,19 +463,23 @@ async function bootFreshWindow(dataMap, url) {
   ok(_bootOutcome === "booted",
     "phase1: boot() must resolve on the FIRST-PAINT products alone (catalogue + surveys + the small " +
     "optionals); it is still blocked on the held tf/sci/manifest fetches");
-  // PARALLELISM. Exactly NINE data fetches have been issued by boot, and all three heavy ones are in flight
+  // PARALLELISM. Exactly TEN data fetches have been issued by boot, and all four heavy ones are in flight
   // at the same time. Before this change the five optionals ran STRICTLY ONE AFTER ANOTHER (each awaiting the
   // previous round trip) and none of them was even requested until the tf.json-carrying Promise.all had
-  // resolved, so with tf held four of these nine urls would be missing from the log entirely.
+  // resolved, so with tf held four of these urls would be missing from the log entirely.
+  // ts_access.json rides PHASE 2 (D6): the Availability facet it feeds is one most visitors never open,
+  // so it must never be one of the requests first paint waits on.
   const _bootUrls = ["catalogue.json", "surveys.json", "build_provenance.json", "collections.json",
-    "build.json", "coord_policy.json", "tf.json", "sci.json", "manifest.json"];
+    "build.json", "coord_policy.json", "tf.json", "sci.json", "manifest.json", "ts_access.json"];
   _bootUrls.forEach(n => ok(fetchOrder.some(u => u.endsWith("/" + n)),
     "phase1/2: " + n + " must be requested during boot (the optionals must not queue behind each other); issued: " + JSON.stringify(fetchOrder)));
   ok(fetchOrder.length === _bootUrls.length,
-    "boot must issue exactly the nine data fetches, got " + JSON.stringify(fetchOrder));
-  ok(heavyHeld() === 3, "phase2: tf/sci/manifest must all be in flight CONCURRENTLY, held " + heavyHeld());
-  ["tf", "sci", "manifest"].forEach(k => ok(A.hydrState(k) === "pending",
+    "boot must issue exactly the ten data fetches, got " + JSON.stringify(fetchOrder));
+  ok(heavyHeld() === 4, "phase2: tf/sci/manifest/ts_access must all be in flight CONCURRENTLY, held " + heavyHeld());
+  ["tf", "sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "pending",
     "phase2: the " + k + " gate must read 'pending' while its fetch is held, got " + A.hydrState(k)));
+  ok(A.tsRoutes("au.alpha.A1") === null,
+    "phase2: with ts_access.json in flight the hand-off index must read as UNKNOWN, never as an empty answer");
   ok(A.nST() === 5, "fixture should load 5 stations, got " + A.nST());
 
   // UX9 ITEM 2: MAP OFF-CENTRE-ON-LOAD FIX. The bug was buildMarkers' fitBounds computing against a
@@ -659,8 +671,15 @@ async function bootFreshWindow(dataMap, url) {
   // ---- TWO-PHASE BOOT, part 3: late hydration must refresh what it made stale ----------------------
   releaseHeavy();
   await A.hydrationDone();
-  ["tf", "sci", "manifest"].forEach(k => ok(A.hydrState(k) === "ready",
+  ["tf", "sci", "manifest", "tsaccess"].forEach(k => ok(A.hydrState(k) === "ready",
     "hydration: the " + k + " gate must settle to 'ready', got " + A.hydrState(k)));
+  // The fixture data dir ships NO ts_access.json, which is the deployment case the engine produces
+  // for a corpus with no verified routes. That 404 is an ANSWER, not a failure: the gate settles
+  // ready on an empty index, and nothing anywhere may report it as a load error.
+  ok(A.hydrState("tsaccess") !== "failed",
+    "honesty: an absent ts_access.json is a deployment that publishes no download index, never a failure");
+  ok(A.tsRoutes("au.alpha.A1") === null && JSON.stringify(A.tsAccess()) === "{}",
+    "hydration: an absent ts_access.json must settle to an EMPTY index, not stay unknown, got " + JSON.stringify(A.tsAccess()));
   const _postDrawer = doc.getElementById("drawer").innerHTML;
   ok(!/Loading response functions/.test(_postDrawer),
     "hydration: a stale loading state may not stand once tf.json has landed; the OPEN drawer must re-render");

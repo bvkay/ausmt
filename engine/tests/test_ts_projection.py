@@ -8,7 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "extract"))
 
-from _tsproject import route_rows, station_flag, survey_counts  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from _tsproject import NEVER_PROJECTS, route_rows, station_flag, survey_counts  # noqa: E402
 
 
 def _row(level="raw_packed", review="verified", **over):
@@ -56,3 +58,16 @@ def test_route_rows_carry_url_path_and_bytes_per_live_level():
 def test_survey_counts_omit_zero_and_are_access_blind():
     flags = {"a": [True, False, True], "b": [False], "c": []}
     assert survey_counts(flags) == {"a": 2}  # b and c ABSENT, never 0
+
+
+def test_route_rows_and_the_resource_table_admit_THE_SAME_LEVELS():
+    """The two renderings of the register must not part company over vocabulary. `route_rows` names
+    what NEVER projects and the resource table names what DOES, so a token added to the register's
+    closed set would otherwise become a route with no resource row beside it: the emitter iterates
+    its own table and would skip it, while this predicate would let it through. Pinned across all
+    three, from the register's vocabulary outwards, so a sixth token fails HERE and not in the
+    key-set parity a deploy runs."""
+    import _tsindex  # noqa: PLC0415
+    import build_portal as bp  # noqa: PLC0415
+    routable = set(_tsindex.LEVELS) - set(NEVER_PROJECTS)
+    assert routable == set(bp._TS_LEVEL_ROUTE), sorted(routable ^ set(bp._TS_LEVEL_ROUTE))

@@ -500,7 +500,10 @@ function wireHydration(){
   // on the same gate that re-renders the drawer.
   const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();
     if(typeof paintExportSizes==="function")paintExportSizes();});
-  HYDRATION_DONE=Promise.all([tf,sci,man]);
+  // ts_access.json settles the Availability facet: until it lands nothing on the page knows which
+  // stations this deployment can hand off. It never rejects - absence is the honest answer - so
+  // there is no failure branch here to mirror sci's; it joins the set a driver waits on.
+  HYDRATION_DONE=Promise.all([tf,sci,man,TSACC_READY]);
 }
 async function boot(){
   if(typeof CAT==="undefined"||CAT===null){

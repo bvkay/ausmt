@@ -5531,6 +5531,34 @@ def main(argv=None):
         if prod:
             (prod / "coord_policy.json").write_text(
                 _jdump(_coord_policy_map, separators=(",", ":")), encoding="utf-8")
+    # ---- THREDDS A5: ts_access.json, the ROUTE-DETAIL boot artifact ----
+    # {ausmt_id: {level token: {bytes, url_path}}}, beside coord_policy.json and for its stated
+    # reason (:5368-5380): the drawer and the exports render from the boot-loaded catalogue, and
+    # station.json is never fetched on navigation, so a per-level size and route cannot reach the
+    # portal any other way. That is what D3 rules and what makes the pointer file portal-generated.
+    #
+    # THE GUARANTEE IS MEMBERSHIP, NOT SHAPE, and the trade is deliberate: _ts_rows holds only
+    # stations that passed the SAME access gate the hand-off rows did, captured at :5187 and never
+    # re-derived here, and route_rows() is the ONE predicate every route surface renders from
+    # (ts_access, the resource rows, the front-door table), so R5 suppression is one answer rather
+    # than three opinions. Every string this adds for an open station is already published in that
+    # station's own access_url; a withheld or coordinate-gated station is ABSENT, and the root-level
+    # leak sweep is what holds that.
+    #
+    # Keys sorted at both levels: the register's row order is a curator's habit, and these bytes are
+    # not. Emitted ONLY when non-empty, so a corpus with no verified routes stays byte-identical to
+    # one built before this artifact existed.
+    _ts_access = {}
+    for _aid in sorted(_ts_rows):
+        # station_open=True: membership in _ts_rows IS the open verdict, applied at the capture site.
+        _routes = tsproject.route_rows(_ts_rows[_aid], station_open=True)
+        if _routes:
+            _ts_access[_aid] = {lvl: dict(sorted(_routes[lvl].items())) for lvl in sorted(_routes)}
+    if _ts_access:
+        _ts_access_bytes = _jdump(_ts_access, separators=(",", ":"))
+        (out / "ts_access.json").write_text(_ts_access_bytes, encoding="utf-8")
+        if prod:
+            (prod / "ts_access.json").write_text(_ts_access_bytes, encoding="utf-8")
     # ---- C42 Amendment A2: the BASE-STATION-ID surface (boot artifact) ----
     # The C43 stations-panel override fieldset must key by BASE station id — never a file stem, never a
     # variant-suffixed id (D2 fix-round-2, the probe-e discipline). A base id is the record id with its

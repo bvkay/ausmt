@@ -17,7 +17,11 @@ let CAT,TFD,SCI,SMETA,PROV,COLL,MANIFEST,BUILDID; /*__DATA_BINDING__*/
 // harness that assigns TFD/SCI/MANIFEST directly (the coord-access and bundle-tile drivers do) behaves
 // byte-for-byte as it did before phasing: only a boot that actually starts phase 2 flips them to pending.
 let TF_READY=Promise.resolve(),SCI_READY=Promise.resolve(),MANIFEST_READY=Promise.resolve();
-const HYDR={tf:"ready",sci:"ready",manifest:"ready"};
+// THREDDS D6: ts_access.json rides phase 2 as well. The chooser it feeds is a facet most visitors
+// never open, so a phase-1 fetch would add a blocking boot request for it; the Availability controls
+// are disabled and aria-busy across the window instead, exactly as the colour modes are.
+let TSACC_READY=Promise.resolve();
+const HYDR={tf:"ready",sci:"ready",manifest:"ready",tsaccess:"ready"};
 function hydrating(k){return HYDR[k]==="pending";}
 function hydrFailed(k){return HYDR[k]==="failed";}
 // A product is USABLE only when it is loaded. "pending" and "failed" are two different REASONS for one
@@ -47,6 +51,12 @@ let AUSLAMP_SET=new Set();
 // folds it onto each station as s.coordPolicy; the drawer badges from that. It carries POLICY, never a
 // coordinate — positions are already masked in the catalogue (generalised => 0.1° cell, withheld => null).
 let COORD_POLICY={};
+// THREDDS A5: ausmt_id -> {level token: {bytes, url_path}} for stations with a VERIFIED, OPEN route
+// into the NCI archive, loaded at phase 2 from the OPTIONAL ts_access.json. `null` means the fetch
+// has not settled; `{}` means it settled on absence, which is the honest answer for a deployment
+// that publishes no download index (a corpus with no verified routes ships no file). Membership is
+// the access rule: a withheld or coordinate-gated station is simply not in it.
+let TSACC=null;
 
 // UX6 Wave B (B2 colour de-collision): BBMT moved off the copper action hex (#EF7256), and GDS off the
 // ok/status green (#5BAE6A), so a data-type marker can no longer be mistaken for the selection accent or a
