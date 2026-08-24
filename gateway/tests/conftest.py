@@ -32,7 +32,9 @@ from gateway.config import Config
 # the stack-less gateway test env — no mt_metadata needed for the validate-survey contract itself.
 # --------------------------------------------------------------------------------------------------
 _TESTS_DIR = Path(__file__).resolve().parent                    # gateway/tests
-SIBLING_VALIDATOR_DIR = _TESTS_DIR.parents[1] / "ausmt-surveys" / "_validation"
+# parents[2] is the monorepo's PARENT: the sibling checkout sits beside the repo, not inside
+# it. parents[1] pointed inside the repo, so the live-sibling branch could not fire anywhere.
+SIBLING_VALIDATOR_DIR = _TESTS_DIR.parents[2] / "ausmt-surveys" / "_validation"
 VENDORED_VALIDATOR_DIR = _TESTS_DIR / "fixtures" / "vendored_validation"
 
 

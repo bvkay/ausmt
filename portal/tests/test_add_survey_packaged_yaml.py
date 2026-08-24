@@ -25,7 +25,8 @@ import pytest
 PORTAL = Path(__file__).resolve().parent.parent                     # portal/
 REPO = PORTAL.parent                                                 # the monorepo root
 DRIVER = PORTAL / "tools" / "packaged_yaml_dump.js"
-SIBLING_VALIDATOR_DIR = REPO / "ausmt-surveys" / "_validation"
+# the sibling checkout sits beside the monorepo, not inside it
+SIBLING_VALIDATOR_DIR = REPO.parent / "ausmt-surveys" / "_validation"
 VENDORED_VALIDATOR_DIR = REPO / "gateway" / "tests" / "fixtures" / "vendored_validation"
 
 
