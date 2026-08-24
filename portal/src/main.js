@@ -403,6 +403,27 @@ function syncLegendTypes(){
     const box=legendTypeBox(btn.dataset.type),on=box?!!box.checked:true;
     btn.setAttribute("aria-pressed",String(on));
     btn.classList.toggle("legoff",!on);});}
+// R12: the metric scale bar, RE-PARENTED into the legend body. Leaflet drops a control into one of the
+// map's own corners, where a scale would sit apart from the key it belongs with and over the dots;
+// moving its container is the smallest change that puts it where a reader already looks. Constructing a
+// Leaflet control deliberately has one precedent here, map.js's layer control.
+// IT TAKES ITS OWN CLASS, and that is load-bearing rather than tidy: the legend's own pins count
+// `.legrow .dot` and assert #mapLegend is a child of #map, so a scale bar that borrowed either would
+// break a claim about the data-type key. Metric only (this is an Australian corpus) and capped at
+// 120px so it cannot outgrow the legend it now sits in.
+function buildScaleBar(body){
+  if(!body||!body.appendChild||body.querySelector(".maplegend-scale"))return null;   // idempotent, like buildLegend
+  if(typeof L==="undefined"||!L.control||typeof L.control.scale!=="function")return null;
+  const ctl=L.control.scale({metric:true,imperial:false,maxWidth:120});
+  if(!ctl||typeof ctl.addTo!=="function")return null;
+  ctl.addTo(map);
+  const el=(typeof ctl.getContainer==="function")?ctl.getContainer():null;
+  // Only a REAL element is moved. The headless harnesses stub Leaflet, so getContainer() there answers
+  // with something that is not a node, and appendChild would throw on the boot path.
+  if(!el||el.nodeType!==1||!el.classList)return null;
+  el.classList.add("maplegend-scale");
+  body.appendChild(el);
+  return el;}
 function buildLegend(){
   if(document.getElementById("mapLegend"))return;                 // idempotent
   const host=document.getElementById("map");if(!host)return;       // the Leaflet container is the overlay's positioning context
@@ -418,6 +439,7 @@ function buildLegend(){
     `<div class="maplegend-body"><div class="leghint">Click a type to show or hide it</div>`+
     `<div class="legrow"><span class="legbadge">n</span> survey (click to open; zoom to expand)</div>${rows}</div>`;
   host.appendChild(el);
+  buildScaleBar(el.querySelector(".maplegend-body"));
   const toggle=el.querySelector("#mapLegendToggle");
   if(toggle)toggle.addEventListener("click",()=>{const ex=el.classList.toggle("expanded");toggle.setAttribute("aria-expanded",String(ex));});
   el.querySelectorAll(".legtype").forEach(btn=>{

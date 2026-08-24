@@ -634,6 +634,14 @@
   .maplegend .legtype:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
   .maplegend .legtype.legoff{opacity:.4}
   .maplegend .leghint{color:var(--muted);font-size:11px;line-height:1.35}
+  /* R12: the metric scale bar, re-parented out of the Leaflet corner into this box (main.js
+     buildScaleBar). Its OWN class, so the legend's four-type-dot and parenting pins are untouched.
+     position:static undoes the absolute placement Leaflet gives a corner control, and the bar is
+     inert - it is a reading aid, never a target. */
+  .maplegend .maplegend-scale{position:static;margin:2px 0 0;pointer-events:none;box-shadow:none}
+  .maplegend .maplegend-scale .leaflet-control-scale-line{background:none;box-shadow:none;
+    border:1px solid var(--line);border-top:0;color:var(--muted);font-family:var(--mono);
+    font-size:10px;line-height:1.4;padding:1px 5px}
   /* Collapsible ONLY on small widths: the toggle appears and the body defaults collapsed there (the .expanded
      class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
      narrow-built legend can never get stuck collapsed with no visible way to expand it. */

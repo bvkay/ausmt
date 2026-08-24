@@ -143,6 +143,28 @@ mapOwn.unproject = (p, z) => {
   mapOwn[fn] = (...args) => { mapCalls.push({ fn, args }); return mapOwn.__self; };
 });
 const mapFacade = recProxy(mapOwn);
+// L.control.scale, recorded. The scale bar is CONSTRUCTED with deliberate options and then
+// RE-PARENTED, and both halves are the claim: which options the app asks for, and where the container
+// ends up. The blanket stub answers getContainer() with a Proxy, which is not a node, so under it the
+// re-parenting cannot happen at all and the pin would be vacuous. Every other L.control member (the
+// layer control map.js builds) still degenerates to the old stub.
+const scaleControls = [];
+const controlFacade = new Proxy(function () { }, {
+  get: (t, p) => {
+    if (p !== "scale") return stub();
+    return (opts) => {
+      const own = Object.create(null);
+      own.options = opts || {};
+      own.container = win.document.createElement("div");
+      own.container.className = "leaflet-control-scale";
+      own.addTo = () => { own.added = true; return own.__self; };
+      own.getContainer = () => own.container;
+      scaleControls.push(own);
+      return recProxy(own);
+    };
+  },
+  apply: () => stub(), construct: () => stub(),
+});
 
 // Boot the real page DOM in jsdom with NO page scripts (we run the modules ourselves, in order).
 const html = fs.readFileSync(path.join(PORTAL, "index.html"), "utf8");
@@ -159,6 +181,7 @@ win.L = new Proxy(function () { }, {
     if (p === "marker") return (ll, o) => recLayer("marker", ll, o, false);
     if (p === "polyline") return (lls, o) => recLayer("polyline", lls, o, true);
     if (p === "layerGroup") return () => recGroup();
+    if (p === "control") return controlFacade;
     return stub();
   },
   set: (t, p, v) => { t[p] = v; return true; },
@@ -2724,6 +2747,23 @@ async function bootFreshWindow(dataMap, url) {
   ["--lpmt", "--bbmt", "--amt", "--gds"].forEach(tok =>
     ok(legDots.some(d => (d.getAttribute("style") || "").indexOf("var(" + tok + ")") >= 0),
       "D6: no legend dot reads the live token " + tok + " (a hard-coded hex would fail this)"));
+  // A8 (R12). THE SCALE BAR, constructed deliberately (metric only, capped at 120px) and RE-PARENTED
+  // into the legend body, where a reader looks for the map's key, rather than left in the Leaflet
+  // corner it would otherwise take on top of the dots.
+  ok(scaleControls.length === 1, "A8: exactly one scale control must be constructed, got " + scaleControls.length);
+  const _sc = scaleControls[0];
+  ok(_sc.options.metric === true && _sc.options.imperial === false && _sc.options.maxWidth === 120,
+    "A8: the scale bar must be metric-only and capped at 120px, got " + JSON.stringify(_sc.options));
+  ok(_sc.added === true, "A8: the control must be added to the map, not merely constructed");
+  const _scEl = doc.querySelector("#mapLegend .maplegend-body .maplegend-scale");
+  ok(_scEl && _scEl === _sc.getContainer(),
+    "A8: the control's OWN container must be re-parented into the legend body, got " + (_scEl && _scEl.className));
+  // ...and NEITHER legend pin moves. The scale bar takes its own class precisely so it cannot be
+  // counted as a data-type row or change what #mapLegend is a child of.
+  ok([...legend.querySelectorAll(".legrow .dot")].length === 4,
+    "A8: the scale bar must add no .legrow .dot; the legend still describes exactly four data types");
+  ok(legend.parentElement && legend.parentElement.id === "map",
+    "A8: the legend stays a child of the map container");
   const legToggle = doc.getElementById("mapLegendToggle");
   ok(legToggle, "D6: the legend collapse toggle is missing");
   const wasExpanded = legend.classList.contains("expanded");
@@ -4293,6 +4333,12 @@ async function bootFreshWindow(dataMap, url) {
     "THREDDS ts_access.json phase-2(ten-fetch boot + held-with-the-heavies + unknown-vs-empty + absence-is-not-failure) + " +
     "ONE Availability group(#dlOnly/#qSeg gone, tfAvail keeps the s.ediAvail predicate, four routable level buttons and no level2, " +
     "in-flight disabled+aria-busy+inert-filter, settled-empty says 'publishes no download index' and never 'could not be loaded', " +
-    "per-level count+size+gloss summed from ts_access and NOT from the download manifest, multi-select union filter, embargoed station unreachable by any level))");
+    "per-level count+size+gloss summed from ts_access and NOT from the download manifest, multi-select union filter, embargoed station unreachable by any level) + " +
+    "hand-off(#dlTs pointer file in the #dlSh shape: /go/ts/ routes + inert archive address percent-encoded like the engine, " +
+    "chooser-scoped, embargoed station absent, wget-follows/curl-needs-L note, no new track() call site, " +
+    "'Download list ready' + wget -i COPY button carrying the routes and not the archive, " +
+    "JOIN RULE action row driven by the index alone under an empty ts_levels with the survey sub-text intact, no fourth badge, " +
+    "single-station snackbar names file+size+where-progress-lives, >5GB line, untracked open) + " +
+    "scale bar(metric-only maxWidth 120, added, own container re-parented into .maplegend-body, four dots and #map parenting intact))");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));
