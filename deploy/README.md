@@ -131,7 +131,8 @@ before its record stops naming it, never after.
 ```sh
 python deploy/scripts/gen_ts_routes.py --check   # in the repo, from the ausmt-surveys registers
 # then: git pull + ./install-frontdoor.sh + ./doctor.sh on the VPS   (frontdoor/RUNBOOK.md step 6.3)
-# then: make rebuild-data here
+# then: make rebuild-data here          (its recipe passes --ts-index; without it the box would
+#                                        publish no ts_access.json while the table kept resolving)
 make doctor                                       # the ts-parity leg: table and served data agree
 ```
 

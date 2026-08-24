@@ -88,6 +88,12 @@ down:
 # cache-staleness digest gate -- served-product digest stamps vs live survey.yaml, cache-independent.
 # --survey-h5: tier-2 survey MTH5 bundles, owner-enabled 2026-07-25 (A6).
 # --station-h5: tier-1 per-station MTH5 (h5/<slug>/<station>.h5), owner-enabled 2026-08-02.
+# --ts-index: the per-survey verified-resource registers, read OFFLINE from the SAME root --surveys
+# names (each register sits beside its survey.yaml). Without it the box publishes no ts_access.json,
+# no has_time_series and no kind=time_series rows, while the front door goes on serving every
+# /go/ts/ route in the committed table - the table AHEAD of the data, which doctor-box.sh's
+# ts-parity leg reports as a FAIL. Fail-closed by design: a register the build cannot read stops the
+# build rather than publishing the part of it that happened to parse.
 # The engine image deliberately excludes portal/, so the portal.config.yaml flags cannot reach a box
 # build; these CLI flags are the production enable and this line is their single source of truth. A
 # producer enabled in the YAML alone is a no-op here, which has bitten twice, so
@@ -102,6 +108,7 @@ rebuild-data:
 	echo "rebuild-data: building into $$DATA_DIR/$$BUILD_REL (cache-mode=$$CACHE_MODE)"; \
 	if ! docker compose -f compose.yaml --profile jobs run --rm build-runner \
 	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi --survey-h5 --station-h5 \
+	      --ts-index /srv/surveys/surveys \
 	      --products /out/$$BUILD_REL/products \
 	      --pid-status /out/cache/pid_status.json \
 	      --incremental --cache-dir /out/cache --cache-mode $$CACHE_MODE; then \
