@@ -38,6 +38,25 @@ inside it; see [Identifiers by data level](../reference/survey-yaml.md#6-identif
 Each reference should carry enough for a user to understand the relationship: resource type, title,
 identifier, holding repository, access conditions.
 
+## Finding what is available now
+
+Recording a pointer says the data exists somewhere. It does not say whether a given station's files can
+be fetched today. The portal answers that separately, in one **Availability** group in its screening
+panel, because the two halves of the answer are different questions:
+
+* **Transfer functions.** A licence question: whether AusMT is allowed to serve that station's processed
+  files itself.
+* **Time series, by level.** A route question: whether the archive holds a verified file for that
+  station at that product level and serves it openly. The levels offered are packed raw, Level 0,
+  Level 1 MTH5 and Level 1 NetCDF; each states how many stations it covers and what they total.
+
+Choosing a level keeps the stations whose files are ready to fetch, and the choice narrows what the
+archive hand-off writes. The list behind it is built from the survey packages' verified-resource
+registers, so a station whose access is embargoed, whose position is withheld, or whose match is still
+awaiting curator adjudication is simply not in it: there is no setting that reveals one. A deployment
+whose registers verify nothing publishes no list at all, and the panel says exactly that rather than
+reporting an error.
+
 ## Access conditions
 
 An external resource may have different access conditions from the AusMT package: open, embargoed,

@@ -501,9 +501,14 @@ function wireHydration(){
   const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();
     if(typeof paintExportSizes==="function")paintExportSizes();});
   // ts_access.json settles the Availability facet: until it lands nothing on the page knows which
-  // stations this deployment can hand off. It never rejects - absence is the honest answer - so
-  // there is no failure branch here to mirror sci's; it joins the set a driver waits on.
-  HYDRATION_DONE=Promise.all([tf,sci,man,TSACC_READY]);
+  // stations this deployment can hand off, so the chooser is repainted here (its counts, its sizes
+  // and the disabled state that was in-flight a moment ago) and refresh() re-applies a level a
+  // reader chose while the filter was inert. It never rejects - absence is the honest answer - so
+  // there is no failure branch to mirror sci's.
+  const tsa=TSACC_READY.then(()=>{
+    if(typeof paintTsChooser==="function")paintTsChooser();
+    if(ST.length&&typeof refresh==="function")refresh();});
+  HYDRATION_DONE=Promise.all([tf,sci,man,tsa]);
 }
 async function boot(){
   if(typeof CAT==="undefined"||CAT===null){
@@ -515,10 +520,12 @@ async function boot(){
     // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
     try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
   }
-  // The sci-driven rail controls (completeness filter, completeness/dimensionality colour modes) are inert
-  // and disabled until sci.json is USABLE (see setSciControlsEnabled). Applied BEFORE the first render so
-  // they are never briefly live over data that has not arrived.
+  // The phase-2-driven rail controls are inert and disabled until their product is USABLE: the
+  // completeness/dimensionality colour modes (setSciControlsEnabled) and the Availability chooser,
+  // which paints its own in-flight state. Applied BEFORE the first render so neither is ever briefly
+  // live over data that has not arrived.
   if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
+  if(typeof paintTsChooser==="function")paintTsChooser();
   renderBuildId();
   runInit();
   wireHydration();

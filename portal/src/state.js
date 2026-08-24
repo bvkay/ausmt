@@ -88,6 +88,17 @@ const DIM_COL={"1-D":"#4E8FC9","2-D":"#8A5FC0","3-D":"#C44F92",null:"#5A6E7D"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};
+// THREDDS D8: the time-series level vocabulary, [token, label, gloss], IN THE ORDER IT RENDERS.
+// These tokens ARE ts_access.json's keys, so the chooser, the drawer rows and the hand-off pointer
+// file all name a level the same way and none of them re-derives the list. `level2` is absent BY
+// RULING, not by omission (D19, 2026-08-24): the archive's level_2 tree holds transfer functions,
+// not time series, so it opens no route, takes no button and gets no row here.
+const TS_LEVELS=[
+  ["raw_packed","Packed raw","as recorded, packed by the custodian"],
+  ["level0","Level 0","instrument-recorded, full resolution"],
+  ["level1_mth5","Level 1 MTH5","calibrated, resampled, filtered"],
+  ["level1_netcdf","Level 1 NetCDF","the same Level 1 product, as NetCDF"],
+];
 // UX feedback round 1: "Go to place" (+ its AU_PLACES quick-zoom list) was removed as redundant —
 // operator decision from the first live session; see index.html/filters.js for the rest of the removal.
 // C22 (2026-07-07): pb is the HONEST plain "AusMT". The pre-C22 value — "AusMT (DOI to be minted per

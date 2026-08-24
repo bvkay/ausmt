@@ -36,10 +36,21 @@ function passesCore(s){
   // gate would go live on a broken build and report "0 of 5 shown", which reads as a screening outcome. The
   // rail control is disabled across the same window (setSciControlsEnabled), so this is the belt to that
   // braces; SCI_READY re-runs refresh() the moment the values land, so a filter set early still takes effect.
+  // The completeness THRESHOLD control was retired with the Availability group (R2/R3); the predicate
+  // is kept because qMin is still drivable (the headless drivers set it) and because deleting a
+  // screening rule is a curation decision, not a rail-layout one.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
-  const dlOnly=document.getElementById("dlOnly");
-  if(dlOnly&&dlOnly.checked&&!s.ediAvail)return false;   // "Downloadable here only": predicate s.ediAvail
+  const tfAvail=document.getElementById("tfAvail");
+  if(tfAvail&&tfAvail.checked&&!s.ediAvail)return false;  // Availability > Transfer functions: predicate s.ediAvail
+  // Availability > Time series (R3): keep a station that publishes ANY chosen level. INERT until the
+  // hand-off index has landed, for the reason the completeness filter is inert until sci.json has: a
+  // route that has not arrived is not a MISSING one, and filtering on it would empty the map over
+  // data the portal does not have. The chooser is disabled across the same window, so this is the
+  // belt to that braces, and TSACC_READY re-runs refresh() so a filter set early still takes effect.
+  if(TS_CHOSEN.size&&typeof tsAccessKnown==="function"&&tsAccessKnown()){
+    const lv=tsRoutesFor(s.ausmt_id);
+    if(!lv||!tsChosenLevels().some(t=>lv[t]))return false;}
   return true;}
 function passes(s){if(!passesCore(s))return false;
   const q=document.getElementById("find").value.trim().toLowerCase();
@@ -277,12 +288,10 @@ document.getElementById("find").addEventListener("keydown",e=>{
 pLo.addEventListener("input",refresh);pHi.addEventListener("input",refresh);
 document.getElementById("colorSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   colorMode=b.dataset.c;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));recolor();});
-document.getElementById("qSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  qMin=+b.dataset.q;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));refresh();});
-// Two-phase boot: the rail controls whose MEANING depends on sci.json: the completeness (quality) filter
-// and the completeness/dimensionality colour modes. Until sci.json is USABLE they are disabled and marked
-// aria-busy, because a live control there would paint the whole map in the "not evaluated" grey or filter
-// every station out for values that are not there. Idempotent; called once from boot() and again from the
+// Two-phase boot: the rail controls whose MEANING depends on sci.json, which after the Availability
+// merge is the completeness/dimensionality colour modes. Until sci.json is USABLE they are disabled and
+// marked aria-busy, because a live control there would paint the whole map in the "not evaluated" grey
+// for values that are not there. Idempotent; called once from boot() and again from the
 // SCI_READY continuation (main.js wireHydration). Guarded for the stubbed-DOM smoke harness.
 // The hint NAMES the reason, and the two reasons are not the same: still loading resolves itself in a
 // moment, could-not-load does not resolve at all this session, and a reader deserves to know which wait
@@ -294,13 +303,67 @@ function _setSciBtn(b,on){if(!b)return;b.disabled=!on;
   if(b.setAttribute)b.setAttribute("aria-busy",(!on&&!failed)?"true":"false");
   if("title" in b)b.title=on?"":(failed?SCI_FAILED_HINT:SCI_PENDING_HINT);}
 function setSciControlsEnabled(on){
-  const q=document.getElementById("qSeg");
-  if(q&&q.querySelectorAll)[...q.querySelectorAll("button")].forEach(b=>_setSciBtn(b,on));
   const c=document.getElementById("colorSeg");
   if(c&&c.querySelectorAll)[...c.querySelectorAll("button")].forEach(b=>{
     const mode=(b.dataset||{}).c;
     if(mode==="quality"||mode==="dim")_setSciBtn(b,on);});
 }
+
+// ---- Availability > Time series: the per-level chooser (R3 / D7 / D8) ----------------------------
+// A multi-select over ts_access.json's level tokens. NOTHING selected is the default and means no
+// level filter at all; a chosen set keeps a station publishing ANY of them, which is what a reader
+// asking "who has a Level 1 I could fetch right now" means.
+//
+// THE INDEX IS THE ONLY SOURCE. Which stations appear in it was decided in the build - open access,
+// a verified register row, never level_2 - so nothing here re-derives availability from survey
+// metadata and no chooser state can bring back a station the build gated out. That is R5 seen from
+// the portal end: suppression lives in the data, not in a filter a reader could turn off.
+let TS_CHOSEN=new Set();
+function tsChosenLevels(){return [...TS_CHOSEN];}
+// The count and size on each button are facts about the DEPLOYMENT, not about the current selection:
+// this is a filter, and a facet figure that moved with the other filters would read as a screening
+// outcome. It is also its OWN summation, deliberately: paintExportSizes() totals the download
+// manifest through SEL_ZIP_BUTTONS and skips any format not in that table, so joining these bytes to
+// it would mean adding a fourth zip button - and AusMT builds no zip of bytes it does not hold.
+function tsLevelTotals(){
+  const out={};TS_LEVELS.forEach(([tok])=>{out[tok]={n:0,bytes:0};});
+  const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
+  Object.keys(ix).forEach(id=>{const lv=ix[id]||{};
+    TS_LEVELS.forEach(([tok])=>{const e=lv[tok];if(!e)return;out[tok].n++;out[tok].bytes+=(e.bytes||0);});});
+  return out;}
+// Two-phase honesty, and the two states are NOT the same fact. In flight: the answer is coming, so
+// aria-busy is true and the hint says so. Settled and empty: this deployment publishes no download
+// index, which is a statement about the BUILD - a corpus with no verified routes ships no file at all
+// (data.js) - and calling it a load error would blame the network for a curation state.
+const TS_PENDING_HINT="Time-series availability is still loading";
+const TS_NONE_HINT="this deployment publishes no download index";
+function paintTsChooser(){
+  const seg=document.getElementById("tsSeg");if(!seg||!seg.querySelectorAll)return;
+  if(!seg.children.length)TS_LEVELS.forEach(([tok,label,gloss])=>{
+    const b=document.createElement("button");b.type="button";
+    b.dataset.ts=tok;b.dataset.label=label;b.dataset.gloss=gloss;
+    seg.appendChild(b);});
+  const known=(typeof tsAccessKnown==="function")&&tsAccessKnown();
+  const totals=known?tsLevelTotals():{};
+  [...seg.children].forEach(b=>{
+    const t=totals[b.dataset.ts],n=t?t.n:0,on=TS_CHOSEN.has(b.dataset.ts);
+    b.textContent=b.dataset.label+(n?"  "+n+" station"+(n===1?"":"s")+(t.bytes?" · "+fmtBytes(t.bytes):""):"");
+    b.disabled=!n;
+    b.setAttribute("aria-busy",known?"false":"true");
+    b.setAttribute("aria-pressed",String(on));
+    b.classList.toggle("on",on);
+    b.title=n?b.dataset.gloss+" · "+n+" station"+(n===1?"":"s")+" this deployment can hand off"
+            :(known?b.dataset.gloss+" · "+TS_NONE_HINT:TS_PENDING_HINT);});
+  const note=document.getElementById("tsSegNote");
+  if(note)note.textContent=!known?TS_PENDING_HINT+"."
+    :(TS_LEVELS.some(([tok])=>totals[tok]&&totals[tok].n)
+      ? "Selecting a level keeps the stations whose files are ready to fetch. AusMT hands these off to the archive that holds them; it never hosts or fetches them itself."
+      : "Availability by level: "+TS_NONE_HINT+".");}
+const _tsSeg=document.getElementById("tsSeg");
+if(_tsSeg&&_tsSeg.addEventListener)_tsSeg.addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b||b.disabled||!b.dataset.ts)return;
+  if(TS_CHOSEN.has(b.dataset.ts))TS_CHOSEN.delete(b.dataset.ts);else TS_CHOSEN.add(b.dataset.ts);
+  paintTsChooser();refresh();});
 // UX6 Wave D (D2): rail Browse / Select & export mode. Browse (default) shows find + data type + tree
 // (+ recently added on map); Select & export shows the map-selection box, exports and Screening
 // (advanced). It is a pure show/hide of the two mode panes — it never touches data-views (view/mode are
@@ -367,9 +430,11 @@ const yearFrom=document.getElementById("yearFrom"),yearTo=document.getElementByI
 if(yearFrom)yearFrom.addEventListener("input",refresh);
 if(yearTo)yearTo.addEventListener("input",refresh);
 
-// S3: "Downloadable here only" — single checkbox, predicate s.ediAvail (read inside passesCore()).
-const dlOnly=document.getElementById("dlOnly");
-if(dlOnly)dlOnly.addEventListener("change",refresh);
+// Availability > Transfer functions (R2, was "Downloadable here"): single checkbox, predicate
+// s.ediAvail (read inside passesCore()). The PREDICATE is what the selection exports depend on for
+// their three-way not-included honesty, so it outlives any relabelling of the control.
+const tfAvail=document.getElementById("tfAvail");
+if(tfAvail)tfAvail.addEventListener("change",refresh);
 
 // UX feedback round 1: "Go to place" (goToPlace(), #goPlace, AU_PLACES) removed — operator decision,
 // redundant. See index.html (input+datalist removed) and state.js (AU_PLACES removed).
