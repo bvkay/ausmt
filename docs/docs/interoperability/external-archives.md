@@ -67,17 +67,17 @@ its own; `curl` needs `-L`. A station's own drawer offers the same route per lev
 **Progress belongs to your browser, not to this page.** The redirect hands the bytes from your browser
 to the archive, so the portal never sees the transfer and shows no progress bar and no completion
 message: your browser's own downloads list is where the transfer appears, and it is the only place that
-can honestly report it. Nothing is copied through AusMT, and nothing is repackaged.
+can report it. Nothing is copied through AusMT, and nothing is repackaged.
 
 ## What "verified" means, and what it does not
 
 Every published row carries the same fieldnote: **verified against NCI THREDDS on `<date>`**. That
 date is when an out-of-band crawl read the file in the archive's catalogue and recorded its path, its
-stated size and its last-modified stamp. It is deliberately not "verified at build time": a build
-makes no network call at all, so a build cannot honestly claim to have checked anything, and a
+stated size and its last-modified stamp. It is not "verified at build time": a build
+makes no network call, so a build cannot have checked anything, and a
 timestamp that moved on every rebuild would say less rather than more.
 
-So the note is a statement about a past reading, and it is the strongest honest one available. It does
+So the note is a statement about a past reading. It does
 not promise the file is reachable this second. If a route fails, that is an outage, and an outage
 changes nothing here on its own: a claim about what exists must not follow a server's health, or every
 maintenance window would look like a withdrawal.

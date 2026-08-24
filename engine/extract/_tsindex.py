@@ -15,7 +15,7 @@
 Rule 14: this is read OFFLINE. The crawler (_tools/crawl_ts_index.py, ausmt-surveys) is the only
 thing that talks to the archive; `--ts-index` is what makes a build consume its file. The build
 never reaches the network, so cache.py's byte-reproducibility invariant survives contact with a
-remote archive, and no build can honestly claim to have verified anything itself.
+remote archive, and no build can have verified anything itself.
 
 FAIL-CLOSED, for the run-id store's reason and one more: this file is the ONLY record of which
 remote file belongs to which station, and what it publishes is a ROUTE a reader will follow. A

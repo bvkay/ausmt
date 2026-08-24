@@ -508,7 +508,7 @@ def test_map_keys_off_the_query_stripped_uri_and_imports_the_committed_table():
     block = _brace_match(section, section.rindex("{", section.index(opener),
                                                  section.index("\n", section.index(opener))))
     assert f"import {_MAP_MOUNT}" in block, f"the map must import {_MAP_MOUNT}"
-    assert re.search(r'default\s+""', block), "an unlisted path must map to EMPTY, never a fallback"
+    assert re.search(r'default\s+""', block), "an unlisted path must map to EMPTY, with no fallback"
 
 
 def test_known_routes_redirect_302_to_the_one_canonical_archive_host():
@@ -547,7 +547,7 @@ def test_compose_and_installer_carry_the_table_into_the_config():
     assert f'"$HERE/ts-routes.map:{_MAP_MOUNT}:ro"' in install, (
         "the validate step must mount the table it imports")
     assert "ts-routes.map ]" in install and "will 404" in install, (
-        "a missing table must degrade to an EMPTY table (every route 404s), never a failed deploy")
+        "a missing table must degrade to an EMPTY table (every route 404s), not a failed deploy")
 
 
 def test_doctor_carries_the_ts_routes_leg():

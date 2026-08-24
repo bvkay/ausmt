@@ -185,7 +185,7 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     # The shipped Caddyfile `import`s the time-series route table at its VPS mount path, so a
     # hermetic composition must repoint it at a real file or the config will not adapt. An EMPTY
     # table is the right stand-in here: this suite is about the walls, not the hand-off routes
-    # (deploy/tests/test_frontdoor_ts_routes.py owns those), and an empty table 404s every
+    # (deploy/tests/test_frontdoor_ts_routes.py covers those), and an empty table 404s every
     # /go/ts/ path exactly as a deploy publishing no routes does.
     _tsmap = td / "ts-routes.map"
     _tsmap.write_text("# hermetic fixture: no hand-off routes\n", encoding="utf-8")

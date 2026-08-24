@@ -409,7 +409,7 @@ def test_pathurl_leg_probes_the_pinned_slug_over_https(tmp_path):
 # --------------------------------------------------------------------------------------------------
 # Time-series hand-off routes (THREDDS lane): the ts-routes leg. Three facts, one leg - the mounted
 # table hashes equal to the repo copy, an OPEN route 302s to the table's own NCI Location, and a route
-# the table does NOT name 404s. The last one is the R5 suppression, so it is a FAIL, never a WARN.
+# the table does NOT name 404s. The last one is the R5 suppression, so it is a FAIL, not a WARN.
 # --------------------------------------------------------------------------------------------------
 def _work(tmp_path: Path, label: str) -> Path:
     """A fresh root per doctor run: _env builds its stub bindir once per directory."""
@@ -448,7 +448,7 @@ def test_ts_routes_leg_warns_on_a_survey_the_table_could_not_resolve(tmp_path):
     assert any(ln.startswith("WARN ts-routes:") and "broken-survey" in ln
                for ln in r.stdout.splitlines()), r.stdout
     assert not any(ln.startswith("FAIL ts-routes:") for ln in r.stdout.splitlines()), (
-        f"a dropped survey is a missing hand-off, never a leak:\n{r.stdout}")
+        f"a dropped survey is a missing hand-off, not a leak:\n{r.stdout}")
 
 
 def test_ts_routes_leg_fails_on_a_stale_mounted_table(tmp_path):
@@ -504,7 +504,7 @@ def test_ts_routes_leg_probes_the_table_s_own_route_over_https(tmp_path):
 
 
 def test_ts_routes_leg_skips_cleanly_when_unreachable_and_warns_with_no_table(tmp_path):
-    """Two honest non-failures: an edge that gives no response at all SKIPS (the container check owns
+    """Two non-failure states: an edge that gives no response at all SKIPS (the container check covers
     a down edge), and a deploy carrying NO route table WARNs rather than failing - publishing no
     hand-off routes is a supported state and is exactly what the rollback line produces."""
     down = _work(tmp_path, "down")

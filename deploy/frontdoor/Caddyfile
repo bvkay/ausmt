@@ -245,7 +245,7 @@
 	# (deploy/tests/test_frontdoor_ts_routes.py drives these directives against a real Caddy).
 	#
 	# KEYED ON {ausmt_pathurl_rest} (declared at :202-205), the raw URI up to the first '?'. That is
-	# deliberately the OPPOSITE of the preserve-the-query ruling at :190-194: a query must never ride
+	# the OPPOSITE of the preserve-the-query ruling at :190-194, by design: a query must not ride
 	# onto an NCI URL, so it is stripped BEFORE the lookup and can never reach the Location - which is
 	# also what stops `?u=https://evil.example` turning this into an open redirect. Chained maps resolve
 	# LAZILY (the point of the note at :187), so this map may read the other map's output.

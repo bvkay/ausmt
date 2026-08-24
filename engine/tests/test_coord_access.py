@@ -1003,7 +1003,7 @@ def test_unit_published_id_resolver_is_a_conservative_superset_of_the_matcher():
     assert coordacc.station_policy_by_published_id("exact", ov, "A1.lemigraph") == "withheld"
     assert coordacc.station_policy_by_published_id("exact", ov, "A2") == "exact"
     assert coordacc.station_policy_by_published_id("exact", ov, "A1x") == "exact", \
-        "the key plus a dot, never a stem: A1x is a different physical site"
+        "the key plus a dot, not a stem: A1x is a different physical site"
     assert coordacc.station_policy_by_published_id("generalised", {}, "A1") == "generalised", \
         "no override: the survey default, exactly as station_policy returns it"
     # The ONE documented over-mask: a natural DATAID carrying a dot after an override key. The build

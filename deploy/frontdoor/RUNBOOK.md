@@ -510,7 +510,7 @@ is down) plus the explicit HTTPS 301 leg (the legacy name must answer `https://.
 with a 301 to the same path on the canonical name; both legs are skipped cleanly when the var is
 unset); the path-URL contract leg (`https://<canonical>/surveys/vulcan-2022` must 301 to
 `/#/survey/vulcan-2022`; skipped cleanly if the edge gives no response at all, since the container
-check already owns a down edge); the time-series hand-off table (the container-mounted `ts-routes.map`
+check already covers a down edge); the time-series hand-off table (the container-mounted `ts-routes.map`
 must hash-match the repo copy, an OPEN route must 302 to the exact NCI `Location` the table names, and a
 route the table does NOT name must 404 - set `AUSMT_DOCTOR_TS_WITHHELD_PATH` to a real suppressed
 station's route once the corpus has one); tailscale is up and the box peer is visible; the zombie count is under threshold (section 13);

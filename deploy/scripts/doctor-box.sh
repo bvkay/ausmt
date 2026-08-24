@@ -255,7 +255,7 @@ check_ts_route_parity() {
 	# suppressed only once the table is regenerated, committed and installed. Both renderings come from
 	# ONE projection, so their (station, level) key sets must be EQUAL: a route that resolves for a
 	# station the data does not publish is the R5 leak, and a published route that 404s is a broken
-	# hand-off. Compared against the SERVED artifact on the reader port, not a file on disk, because
+	# hand-off. Compared against the SERVED artifact on the reader port rather than a file on disk:
 	# what is served is what the public gets.
 	code_dir="${AUSMT_CODE_DIR:-}"
 	if [ -z "$code_dir" ]; then

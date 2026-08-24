@@ -257,7 +257,7 @@ def test_projection_2_a_withheld_stub_keeps_the_flag_and_none_of_the_detail(acce
     """SCOPE:310-311 with R13 live: the flag FOLLOWS THE REGISTER for a withheld station - the
     register on this arm carries live rows for EXAMPLE01, so its flag is TRUE - while the stub
     stays closed-world and carries no resources, no route, no url_path. Existence survives
-    withholding; detail does not. That asymmetry is the whole point of the two assertion classes."""
+    withholding; detail does not. The two assertion classes exist for that asymmetry."""
     stations, _ = _mtcat_rows(access_arm)
     withheld = {d["ausmt_id"]: d for d in _docs(access_arm).values() if d.get("withheld")}
     assert withheld, "non-vacuity: this arm emits withheld stubs"

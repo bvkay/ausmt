@@ -82,7 +82,7 @@
     },
     {
       "name": "backslash_and_quotes",
-      "why": "a Windows-style separator is a filename character here, never a path split",
+      "why": "a Windows-style separator is a filename character here, not a path split",
       "url_path": "my80/arch/a\\b\"c'd.zip",
       "encoded_path": "my80/arch/a%5Cb%22c%27d.zip",
       "expected": "https://thredds.nci.org.au/thredds/fileServer/my80/arch/a%5Cb%22c%27d.zip"

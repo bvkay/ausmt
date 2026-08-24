@@ -2679,7 +2679,7 @@ def station_time_series_resources(rows, collection_identifiers, run_ids=()) -> l
             res["bytes"] = row["bytes"]
         if provenance == "derived" and run_ids:
             # SCOPE:337-339's case: a concatenated/resampled/rotated product IS derived from the
-            # acquisition this record publishes, so the link is honest wherever the run id exists.
+            # acquisition this record publishes, so the link holds wherever the run id exists.
             res["derived_from_runs"] = sorted(run_ids)
         scope = STATION_VOCABULARY_CROSSWALK[route["vocab"]]["mtcat_identifies"]
         placed = [dict(e) for e in collection_identifiers if e.get("identifies") == scope]

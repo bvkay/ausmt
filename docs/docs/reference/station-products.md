@@ -561,7 +561,7 @@ survey-scope collection DOI places on no time-series row at all.
 
 The schema defines two small closed vocabularies for a resource, `processing_level` (`raw`,
 `level0`, `level1`, `level2`, `level3`) and `packaging` (`packed_archive`). The time-series rows
-above are what emits them. They are separated deliberately: MTCAT's legacy `identifies` values mix
+above are what emits them. They are separate because MTCAT's legacy `identifies` values mix
 scope, packaging and processing level on one axis, and this schema maps OUT to that vocabulary
 rather than inheriting it.
 

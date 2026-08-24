@@ -93,7 +93,7 @@ def _package_slug(pkgdir: Path, doc: dict) -> str:
 def _target(pkgdir: Path, sid: str, level: str, url_path: str) -> str:
     """The map VALUE: url_path through _stationcheck's encoder (the one station.json's access_url
     uses) and held to the same encoded-route rule in BOTH directions, traversal refusal included -
-    the module's predicates, never a second opinion."""
+    the module's predicates, with no second implementation here."""
     # Neither refusal quotes the url_path: the row is already identified, and echoing an
     # unvalidated archive string into a file the front door imports buys nothing.
     if stcheck.ts_path_walks_up(url_path):

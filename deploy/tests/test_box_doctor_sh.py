@@ -328,9 +328,9 @@ def test_ts_parity_fails_when_the_data_publishes_a_route_that_would_404(tmp_path
     assert r.returncode != 0
 
 
-def test_ts_parity_handles_the_two_empty_states_honestly(tmp_path):
+def test_ts_parity_handles_the_two_empty_states(tmp_path):
     """ts_access.json is emitted ONLY when non-empty, so a corpus with no verified routes serves
-    nothing - and a table with no routes beside it is agreement, not a failure. But a table that names
+    nothing - a table with no routes beside it agrees. A table that names
     routes while nothing is served IS a failure: the table is ahead of the data. FAILS IF absence is
     read as agreement in both cases."""
     data = _make_tree(tmp_path)

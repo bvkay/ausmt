@@ -14,7 +14,7 @@ differently:
     that ceased to exist. Neither projects.
   * `level != level2` (D19, ruled 2026-08-24). NCI's level_2 tree holds transfer functions, not time
     series: seeding them here would assert a verified TIME SERIES for stations that have none. The
-    fixture register carries a VERIFIED level2 row precisely so this exclusion is a tested rule and
+    fixture register carries a VERIFIED level2 row so this exclusion is a tested rule and
     not an accident of the corpus.
   * the station is OPEN. A non-served survey's record is the withheld stub, whose key set is
     closed-world; a coordinate-gated station inside a served survey is excluded by the SAME two
@@ -159,7 +159,7 @@ def built_with_runs(tmp_path_factory):
 
 def test_a_derived_row_links_to_the_runs_this_record_publishes(built_with_runs):
     """SCOPE:337-339's case: a concatenated/resampled/rotated product IS derived from the
-    acquisition this record publishes, so the link is honest wherever the run id exists. The packed
+    acquisition this record publishes, so the link holds wherever the run id exists. The packed
     raw archive is the SOURCE and derives from nothing."""
     doc = _station(built_with_runs, "example-survey", "EXAMPLE01")
     published = [run["id"] for run in doc["runs"]]
@@ -173,7 +173,7 @@ def test_a_derived_row_links_to_the_runs_this_record_publishes(built_with_runs):
 
 def test_the_fieldnote_names_the_crawl_and_not_the_build(built):
     """R9 as amended by D18: rule 14 forbids a network call inside the build, so a build cannot
-    honestly say it verified anything. The date is the crawler's, carried through unchanged."""
+    say it verified anything. The date is the crawler's, carried through unchanged."""
     for row in _rows(_station(built, "example-survey", "EXAMPLE01")):
         assert row["note"] == "verified against NCI THREDDS on 2026-08-24", row
 
