@@ -379,6 +379,27 @@ def test_every_station_contract_test_file_is_in_the_pr_gate_subset():
     assert ours <= listed, f"not in the PR-gate subset: {sorted(ours - listed)}"
 
 
+@pytest.mark.skipif(not WORKFLOW.is_file(),
+                    reason="engine image build: workflow tree not shipped "
+                           "(designed topology; the CI guards are pinned from checkout lanes)")
+def test_every_time_series_projection_test_file_is_in_the_pr_gate_subset():
+    """Rule 12 again, for the family a filename glob cannot describe.
+
+    The THREDDS projection publishes three surfaces and a test that asserts over any of them gates
+    this contract wherever its filename happens to sort: the boot artifact, the catalogue flag, and
+    the hand-off route. Membership is decided by what a file ASSERTS ABOUT rather than by what it is
+    called, so a new test of the projection is caught on the PR that adds it however it is named.
+    That is the gap this pin exists for: `test_access_gate.py` carries the root-level leak sweep over
+    `ts_access.json` and `test_url_registry.py` carries the proof that a `/go/ts/` path can never
+    reach the sitemap, and neither name matches any family glob."""
+    listed = set(re.findall(r"tests/(test_\w+\.py)", _workflow_step("PR gate subset")))
+    surfaces = ("ts_access.json", "has_time_series", "/go/ts/")
+    ours = {p.name for p in sorted(HERE.glob("test_*.py"))
+            if any(s in p.read_text(encoding="utf-8") for s in surfaces)}
+    assert ours, "no test names a projection surface; the pin has lost its subject"
+    assert ours <= listed, f"not in the PR-gate subset: {sorted(ours - listed)}"
+
+
 # ---------------------------------------------------------------- the corpus arm (dev box)
 
 @corpus_arm
