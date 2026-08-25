@@ -488,16 +488,22 @@ def _check_typed_relation(r, container: str, idx: int, entry: dict) -> None:
 
 def _is_typed_provenance_entry(entry) -> bool:
     """§2a: does this sources[]/related_identifiers[] entry stand as a typed provenance CLAIM — i.e. does
-    it point at a real identifier WITH an in-vocab relation? AusMT is a curator, not the primary publisher,
-    so a survey may legitimately carry no dataset DOI; its provenance is instead a well-formed typed
-    relation. Deliberately strict, mirroring the fail-closed vocab posture: a bare identifier with no (or
-    an out-of-vocab) relation is not yet a claim, so it does not count toward provenance-completeness."""
+    it point at a real identifier WITH a relation? AusMT is a curator, not the primary publisher, so a
+    survey may legitimately carry no dataset DOI; its provenance is instead a well-formed typed relation.
+    The relation counts on EITHER route the model ratifies (D-L2): an explicit in-vocab `relation`, or an
+    in-vocab `identifies` level from which derived_relation() resolves one; the identifies-only shape is
+    what _tools/migrate_identifies.py mints and what the engine publishes the derived relation for.
+    Still deliberately strict on the fail-closed vocab posture: a bare identifier with neither route is
+    not yet a claim, so it does not count toward provenance-completeness."""
     if not isinstance(entry, dict):
         return False
     ident = entry.get("identifier")
+    if ident in (None, "", "TBD", "TODO"):
+        return False
     rel = entry.get("relation")
-    return (ident not in (None, "", "TBD", "TODO")
-            and rel not in (None, "") and str(rel).strip() in RELATION_TYPES)
+    if rel not in (None, "") and str(rel).strip() in RELATION_TYPES:
+        return True
+    return derived_relation(entry.get("identifies")) is not None
 
 
 def _declared_station_ids(block) -> dict:
@@ -517,14 +523,44 @@ def _declared_station_ids(block) -> dict:
     return out
 
 
+def _edi_dataids(edis) -> dict:
+    """{EDI filename: HEAD DATAID}, for the files whose DATAID resolves. The published station id
+    IS the DATAID wherever station_ids does not override it, and this validator already reads
+    every EDI HEAD in the same run, so the register authority parses the real id rather than
+    guessing from filename stems (section-2 D5: the old claim that this validator "never parses
+    the DATAID" was false, and it left the fail-closed branch armed for 1 of 18 surveys)."""
+    out = {}
+    for p in edis:
+        try:
+            raw = _norm(p.read_text(encoding="latin-1", errors="replace"))
+        except OSError:
+            continue
+        did = _grab(raw, "DATAID")
+        if did not in (None, ""):
+            out[p.name] = str(did).strip()
+    return out
+
+
 def _station_id_authority(block, edis) -> tuple:
     """(the ids this package publishes, whether that set is COMPLETE), for the per-station files
     that key on a published id. Shared so run-ids.yaml and ts-index.yaml cannot drift into two
-    different answers about which ids exist; the per-case rule itself is in _check_run_ids."""
+    different answers about which ids exist.
+
+    The authority, per source file: the station_ids map value where one is declared, else the
+    EDI's HEAD DATAID (the published id), else the filename stem as a last-resort proxy. COMPLETE
+    when every EDI resolves through the first two; a stem is never authoritative. A complete
+    authority fail-closes the register checks; an incomplete one degrades them to reviewer
+    WARNINGs (see _check_run_ids). An overridden DATAID is deliberately NOT in the set: the map
+    replaced it, so a register keyed by it names an id this package no longer publishes."""
     declared = _declared_station_ids(block)
-    complete = bool(declared) and {p.name for p in edis} <= set(declared)
-    known = set(declared.values()) if complete else set(declared.values()) | {p.stem for p in edis}
-    return known, complete
+    names = {p.name for p in edis}
+    if bool(declared) and names <= set(declared):
+        return set(declared.values()), True
+    dataids = _edi_dataids(edis)
+    known = set(declared.values()) | {d for f, d in dataids.items() if f not in declared}
+    if edis and all(f in declared or f in dataids for f in names):
+        return known, True
+    return known | {p.stem for p in edis if p.name not in declared and p.name not in dataids}, False
 
 
 def _check_run_ids(doc, known_ids, r, *, authority_complete: bool) -> None:
@@ -534,11 +570,11 @@ def _check_run_ids(doc, known_ids, r, *, authority_complete: bool) -> None:
     only record of which run id belongs to which station, so a row waved through here publishes a
     run under an identifier nothing ever assigned.
 
-    ID AUTHORITY, per case, because there is no single reference set. Where `station_ids` declares a
-    published id for EVERY source file, those map VALUES are the complete set and a key outside it
-    FAILs. Otherwise the EDI filename stem is only a PROXY: the published id is then the EDI's
-    DATAID, which this dependency-light validator never parses, so a key outside the stems WARNs and
-    goes to the reviewer rather than blocking a survey the validator cannot check.
+    ID AUTHORITY: _station_id_authority's set - station_ids map values plus the DATAIDs of
+    unmapped EDIs. When every EDI resolves through one of those two, the set is COMPLETE and a key
+    outside it FAILs. Only when some EDI yields neither (no DATAID in its HEAD and no map entry)
+    does the check degrade: the stem is then a proxy, a key outside the set WARNs to the reviewer
+    instead of blocking, and the PASS summary is withheld (nothing was confirmed).
 
     ABSENT file: this is never called, so every existing package's report is unchanged."""
     if not isinstance(doc, dict) or not isinstance(doc.get("run_ids"), dict):
@@ -585,18 +621,22 @@ def _check_run_ids(doc, known_ids, r, *, authority_complete: bool) -> None:
         shown = _sample(unknown)
         if authority_complete:
             r.add("FAIL", "run_ids", f"{RUN_IDS_FILE} names {len(unknown)} station(s) this package "
-                                     f"does not publish: {shown}. station_ids declares a published "
-                                     f"id for every source file, so that map is the complete set")
+                                     f"does not publish: {shown}. The published ids are the "
+                                     f"station_ids map values plus each unmapped EDI's DATAID, and "
+                                     f"every source file resolved, so that set is complete")
         else:
-            r.add("WARNING", "run_ids", f"{RUN_IDS_FILE} names {len(unknown)} station(s) matching no "
-                                        f"EDI filename stem: {shown}. Their published id is the EDI "
-                                        f"DATAID, which this validator does not parse, so the rows "
-                                        f"cannot be confirmed here; check them against the catalogue")
+            r.add("WARNING", "run_ids", f"{RUN_IDS_FILE} names {len(unknown)} station(s) matching "
+                                        f"no published id: {shown}. Not every EDI yields a DATAID "
+                                        f"or a station_ids entry, so the id set cannot be "
+                                        f"confirmed complete here; check the rows against the "
+                                        f"catalogue")
     if misformed:
         r.add("WARNING", "run_ids", f"{len(misformed)} run id(s) are not of the curated local form "
                                     f"<station>-rNN: {_sample(misformed)}. A source run id "
                                     f"legitimately is not; a curated one should be")
-    if not [i for i in r.items if i["check"] == "run_ids" and i["level"] == "FAIL"]:
+    # The summary PASS only when every key was CONFIRMED against the authority: printing
+    # "PASS ... N station(s)" beside a warning that none could be confirmed read as endorsement.
+    if not unknown and not [i for i in r.items if i["check"] == "run_ids" and i["level"] == "FAIL"]:
         r.add("PASS", "run_ids", f"{RUN_IDS_FILE}: {len(rows)} station(s), {total} run id(s), no "
                                  f"duplicates")
 
@@ -635,6 +675,21 @@ def _check_ts_index_row(r, label, row) -> str:
         r.add("FAIL", "ts_index", f"{label} has no url_path; that string IS the remote file's "
                                   f"identity, stored verbatim, and is never rebuilt by joining "
                                   f"catalog segments")
+    # `bytes`, mirroring the engine's own row reader verbatim (engine/extract/_tsindex.py): a bool
+    # is NOT an int here, because `bytes: true` is an int to isinstance and a nonsense size to a
+    # reader. Absent stays silent, as it does there. Stated as a FAIL because the engine REFUSES
+    # the whole register over one such row while the figure is published beside the file in the
+    # public drawer, so a value waved through here is a fatal register handed on green.
+    size = row.get("bytes")
+    if size is not None:
+        # `is not None`, not blank-silent: the engine raises on `bytes: ""` too (only absence is
+        # tolerated), and both parsers read a bare `bytes:` as None, so a quoted empty string is
+        # always a curator's typo and never a parser artefact.
+        if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+            r.add("FAIL", "ts_index", f"{label}.bytes {size!r} is not a positive integer; the "
+                                      f"engine refuses the entire register over this row at build "
+                                      f"time, and the figure is published beside the file, so a "
+                                      f"wrong one is both a lost survey and a wrong claim")
     ver = row.get("verified")
     if ver in (None, "") or not str(ver).strip():
         r.add("FAIL", "ts_index", f"{label} has no verified date; the crawler writes the day it read "
@@ -678,8 +733,9 @@ def _check_ts_index(doc, known_ids, r, *, authority_complete: bool) -> None:
     the only record of which remote file belongs to which station, so a row waved through here
     publishes bytes under an identifier nothing ever matched them to.
 
-    ID AUTHORITY: the run-id store's rule, per case, because both files key on the published
-    station id (see _check_run_ids for why the EDI filename stem is only a proxy).
+    ID AUTHORITY: the run-id store's rule, shared verbatim, because both files key on the
+    published station id (see _check_run_ids: station_ids map values plus unmapped EDI DATAIDs;
+    fail-closed when complete, reviewer WARNING with the PASS withheld when not).
 
     ABSENT file: this is never called, so every existing package's report is unchanged."""
     if not isinstance(doc, dict) or not isinstance(doc.get("ts_index"), dict):
@@ -692,6 +748,9 @@ def _check_ts_index(doc, known_ids, r, *, authority_complete: bool) -> None:
                                   f"'ts_index' is defined")
     stations = doc["ts_index"]
     unknown, routes, total = [], {}, 0
+    # url_path -> the stations that named it, collected survey-wide because the collision that
+    # matters crosses stations (see below); the (station, level) map cannot see it.
+    paths = {}
     for station, rows in stations.items():
         sid = str(station)
         if sid not in known_ids:
@@ -710,34 +769,60 @@ def _check_ts_index(doc, known_ids, r, *, authority_complete: bool) -> None:
         for idx, row in enumerate(rows):
             label = f"{TS_INDEX_FILE}['{sid}'][{idx}]"
             if not isinstance(row, dict):
-                r.add("FAIL", "ts_index", f"{label} must be a mapping {{level, url_path, filename, "
-                                          f"bytes, modified, verified, match_method, review}}")
+                # The enumerated set is what THIS checker judges, no wider: a message naming
+                # `filename` and `modified` sent a curator writing keys nothing here reads, and a
+                # row corrected to a specification that does not exist is a row corrected blind.
+                r.add("FAIL", "ts_index", f"{label} must be a mapping. The keys validated here are "
+                                          f"{{level, url_path, bytes, verified, match_method, "
+                                          f"review}}, plus retired and retired_reason once review "
+                                          f"is 'retired'; a row's remaining keys (filename, "
+                                          f"modified, data_size) are stored and read downstream "
+                                          f"but are not validated here")
                 continue
             total += 1
             level = _check_ts_index_row(r, label, row)
             if level:
                 routes[(sid, level)] = routes.get((sid, level), 0) + 1
+            path = str(row.get("url_path")).strip() if row.get("url_path") not in (None, "") else ""
+            if path:
+                paths.setdefault(path, []).append(sid)
     for (sid, level), count in sorted(routes.items()):
         if count > 1:
             r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} carries {count} rows for station '{sid}' at "
                                       f"level '{level}'; one (station, level) names one file, so a "
                                       f"second row leaves nothing able to choose between them")
+    # The register's own stated failure mode, in the constants comment above: a bad row hands out
+    # another station's bytes under this one's name. Two DIFFERENT stations naming one url_path is
+    # exactly that and nothing caught it. Keyed on the url_path STRING alone, so a repeat within
+    # one station is caught too: the register maps one remote file to one (station, level), and one
+    # file cannot be two levels of the same station either.
+    for path, owners in sorted(paths.items()):
+        if len(owners) > 1:
+            named = ", ".join(sorted(set(owners)))
+            r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} gives url_path '{path}' to {len(owners)} "
+                                      f"rows across station(s) {named}; that string IS one remote "
+                                      f"file's identity, so a shared one publishes those bytes "
+                                      f"under more than one station's name")
     if unknown:
         shown = _sample(unknown)
         if authority_complete:
             r.add("FAIL", "ts_index", f"{TS_INDEX_FILE} names {len(unknown)} station(s) this "
-                                      f"package does not publish: {shown}. station_ids declares a "
-                                      f"published id for every source file, so that map is the "
-                                      f"complete set")
+                                      f"package does not publish: {shown}. The published ids are "
+                                      f"the station_ids map values plus each unmapped EDI's "
+                                      f"DATAID, and every source file resolved, so that set is "
+                                      f"complete")
         else:
-            r.add("WARNING", "ts_index", f"{TS_INDEX_FILE} names {len(unknown)} station(s) matching "
-                                         f"no EDI filename stem: {shown}. Their published id is the "
-                                         f"EDI DATAID, which this validator does not parse, so the "
-                                         f"rows cannot be confirmed here; check them against the "
-                                         f"catalogue")
-    if not [i for i in r.items if i["check"] == "ts_index" and i["level"] == "FAIL"]:
-        r.add("PASS", "ts_index", f"{TS_INDEX_FILE}: {len(stations)} station(s), {total} row(s), "
-                                  f"no repeated (station, level)")
+            r.add("WARNING", "ts_index", f"{TS_INDEX_FILE} names {len(unknown)} station(s) "
+                                         f"matching no published id: {shown}. Not every EDI "
+                                         f"yields a DATAID or a station_ids entry, so the id set "
+                                         f"cannot be confirmed complete here; check the rows "
+                                         f"against the catalogue")
+    # Summary PASS only when every key was CONFIRMED (the run-id store's rule): a "PASS ... N
+    # station(s)" beside a warning that none could be confirmed read as endorsement.
+    if not unknown and not [i for i in r.items if i["check"] == "ts_index" and i["level"] == "FAIL"]:
+        r.add("PASS", "ts_index", f"{TS_INDEX_FILE}: {len(stations)} station(s), {total} row(s) "
+                                  f"confirmed; no repeated (station, level), no shared url_path, "
+                                  f"bytes well-formed")
 
 
 def _sample(values) -> str:
@@ -745,6 +830,14 @@ def _sample(values) -> str:
     head = ", ".join(values[:RUN_IDS_REPORT_SAMPLE])
     extra = len(values) - RUN_IDS_REPORT_SAMPLE
     return f"{head} (+{extra} more)" if extra > 0 else head
+
+
+def _as_list(v) -> list:
+    """A metadata key that should be a list, read tolerantly for ITERATION: any non-list (a scalar,
+    a mapping, None) reads as empty rather than crashing the loop. `or []` was not enough: a truthy
+    scalar (`instruments: 5`) passed straight into iteration, and the engine calls validate()
+    in-process with no guard, so the TypeError aborted the whole corpus build (section-2 D1)."""
+    return v if isinstance(v, list) else []
 
 
 def _http_s(u) -> bool:
@@ -1157,11 +1250,16 @@ def _pyyaml_available() -> bool:
 
 
 def _load_yaml(path: Path):
+    # encoding STATED, never the locale default: survey.yaml and the two register files are UTF-8
+    # by convention and carry non-ASCII (organisation names, quoted attribution wording). Under a
+    # C or POSIX locale the default read raised UnicodeDecodeError on 23 corpus files, out of a
+    # gate whose callers report it as "not valid YAML".
     try:
         import yaml  # noqa: PLC0415
-        return yaml.safe_load(path.read_text())
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
     except ModuleNotFoundError:
-        return _mini_yaml(path.read_text())  # tolerant fallback for CI without pyyaml
+        # tolerant fallback for CI without pyyaml
+        return _mini_yaml(path.read_text(encoding="utf-8"))
 
 
 # >>> BEGIN generated _mini_yaml (vendored from ausmt engine; sync_validator_mini_yaml.py) >>>
@@ -1183,6 +1281,12 @@ def _mini_yaml(text: str) -> dict:
         v = v.strip()
         if not v:
             return v
+        if v[0] == "#":
+            # The whole value is a comment ('data_types:  # pick one'). YAML forbids an unquoted
+            # scalar starting with '#' after a space, so this is always a comment, never data.
+            # Before 2026-08-25 this case leaked through (the mid-string scan below needs ' #'),
+            # so a commented key line swallowed its nested block and truncated the document.
+            return ""
         if v[0] in "\"'":
             # A quoted scalar may carry a trailing comment AFTER its closing quote
             # ('name: "Stephan Thiel"  # note'). Walk to the closing quote (honouring
@@ -1296,7 +1400,9 @@ def _mini_yaml(text: str) -> dict:
                 m = key_re.match(item)
                 if m:
                     sub = {}
-                    k, val = _key(m.group(1)), m.group(2).strip()
+                    # _strip_comment BEFORE the structural tests: a trailing comment must not stop
+                    # 'val' reading as empty (nested block follows) or as a block-scalar header.
+                    k, val = _key(m.group(1)), _strip_comment(m.group(2))
                     if val in (">", "|", ">-", "|-"):
                         pos[0] += 1; sub[k] = _block_scalar(indent + 2, val)
                     elif val == "":
@@ -1309,7 +1415,7 @@ def _mini_yaml(text: str) -> dict:
                         if i2 == indent + 2 and not c2.startswith("- "):
                             m2 = key_re.match(c2)
                             if m2:
-                                k2, v2 = _key(m2.group(1)), m2.group(2).strip()
+                                k2, v2 = _key(m2.group(1)), _strip_comment(m2.group(2))
                                 if v2 in (">", "|", ">-", "|-"):
                                     pos[0] += 1; sub[k2] = _block_scalar(indent + 4, v2)
                                 elif v2 == "":
@@ -1330,7 +1436,7 @@ def _mini_yaml(text: str) -> dict:
                 node = {}
             if not isinstance(node, dict):
                 break
-            k, val = _key(m.group(1)), m.group(2).strip()
+            k, val = _key(m.group(1)), _strip_comment(m.group(2))
             if val in (">", "|", ">-", "|-"):
                 pos[0] += 1; node[k] = _block_scalar(indent + 1, val)
             elif val == "":
@@ -1514,6 +1620,16 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     except Exception as e:  # malformed YAML -> a clear FAIL at the contributor gate, not a raw traceback
         r.add("FAIL", "structure", f"survey.yaml is not valid YAML: {e}")
         return r
+    # Said ONCE, report-wide, the moment the document is in hand. Without PyYAML the WHOLE file
+    # was read by the reduced-fidelity fallback, yet only _check_station_ids declared it, so every
+    # other FAIL in the report stood unqualified beside a parser that silently drops shapes PyYAML
+    # reads. A reader had no way to tell a fault in the file from an artefact of the parser.
+    if not _pyyaml_available():
+        r.add("WARNING", "structure",
+              "survey.yaml was read with the LIMITED stdlib fallback parser because PyYAML is not "
+              "installed. It is reduced-fidelity across the whole document, so any required-field "
+              "or register FAIL below may be an artefact of the parser rather than a fault in the "
+              "file. Install PyYAML for an authoritative report")
     if not isinstance(meta, dict):
         r.add("FAIL", "structure", "survey.yaml must be a YAML mapping (key: value pairs), not a list or scalar")
         return r
@@ -1572,12 +1688,25 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
                 r.add("FAIL", "metadata",
                       f"access.coordinates '{coord_pol}' is not one of {COORDINATE_POLICIES} — it gates "
                       f"how station coordinates are served; an out-of-enum value silently serves them exactly")
+    # The same policy MIS-PLACED at document level (the shape an un-indented template comment
+    # produced when uncommented). Nothing reads a top-level `coordinates:` key, validator or
+    # engine, so `coordinates: withheld` here would publish EXACT station coordinates against the
+    # curator's stated intent. Same fail-closed rationale as the enum above; no corpus package
+    # carries the key, so there is no legacy cost (section-2 D2).
+    if "coordinates" in meta:
+        r.add("FAIL", "metadata",
+              f"top-level 'coordinates:' is read by NOTHING - the coordinate policy lives at "
+              f"access.coordinates (one of {COORDINATE_POLICIES}). Move it inside the access: "
+              f"block; left here, station coordinates are served exactly regardless of the value")
     # Station-identifier override for third-party released data. Checked against the package's REAL
     # EDI filenames, which are already in hand, so a key that names nothing is caught here rather
     # than dropping the survey at build time.
     try:
-        _declares_station_ids = bool(STATION_IDS_KEY_RE.search(sy.read_text()))
-    except OSError:
+        _declares_station_ids = bool(STATION_IDS_KEY_RE.search(sy.read_text(encoding="utf-8")))
+    except (OSError, UnicodeDecodeError):
+        # UnicodeDecodeError is NOT an OSError: a non-UTF-8 byte here escaped the guard entirely
+        # and crashed validate() out of the engine's in-process call. Still narrow: this raw scan
+        # answers one question, and an unreadable file simply does not declare the block.
         _declares_station_ids = False
     _check_station_ids(meta.get("station_ids"), {p.name for p in edis}, r,
                        complete_read=_pyyaml_available(),
@@ -1849,7 +1978,7 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         r.add("WARNING", "deprecation",
               "identifiers.project is a RETIRED orphan key (read by nothing) — remove it "
               "(run _tools/migrate_identifiers.py)")
-    for _inst in (meta.get("instruments") or []):
+    for _inst in _as_list(meta.get("instruments")):
         if isinstance(_inst, dict) and _inst.get("pid") not in (None, "", "TBD", "TODO"):
             r.add("WARNING", "deprecation",
                   "instruments[].pid (per-row instrument PID) is RETIRED from the editor — record the "
@@ -1893,14 +2022,23 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     # typed sources[] entry, the SAME object (a non-blank identifier + an in-vocab relation) — satisfies it
     # too. Crediting either route keeps this WARNING consistent with the add-survey badge fix, which already
     # stopped treating 'no dataset DOI' as incomplete provenance. Absent both routes, it still warns.
-    has_flat_id = meta.get("identifiers", {}).get("dataset_doi") or meta.get("identifiers", {}).get("survey_pid")
+    # `ids` (the isinstance-guarded read above) rather than a fresh meta.get: a bare `identifiers:`
+    # key reads as None, and .get on it crashed validate() out of the engine's in-process call.
+    has_flat_id = ids.get("dataset_doi") or ids.get("survey_pid")
     typed_pool = (related if isinstance(related, list) else []) + (sources if isinstance(sources, list) else [])
     has_typed_relation = any(_is_typed_provenance_entry(e) for e in typed_pool)
     if not has_flat_id and not has_typed_relation:
+        # The SUGGESTION names live carriers only. It read "identifiers.dataset_doi or ... sources",
+        # both of which this same report warns about as RETIRED and DEPRECATED respectively, so a
+        # curator following the validator's advice earned a second warning for doing so. Either
+        # route still SATISFIES the gate above (back-compat is unchanged); neither is where a new
+        # identifier goes.
         r.add("WARNING", "provenance",
-              "no provenance identifier — record will be badged 'provenance incomplete'. Satisfy it either "
-              "with a flat identifier (identifiers.dataset_doi or identifiers.survey_pid) OR a typed "
-              "related_identifiers/sources entry (a non-blank identifier + an in-vocab relation)")
+              "no provenance identifier - record will be badged 'provenance incomplete'. Satisfy it "
+              "with identifiers.survey_pid, or with a typed related_identifiers[] row: a non-blank "
+              "identifier plus either an in-vocab relation or an `identifies` level (the relation "
+              "derives from the level). identifiers.dataset_doi is RETIRED and sources[] is "
+              "DEPRECATED; both are still read, but neither takes a new identifier")
     # C7: ORCID (ISO 7064 11-2 checksum) + ROR + RAiD format sanity — WARNING only (a curator hint;
     # these federated identifiers have real external registries this dependency-light validator does
     # not query). Absent/blank values are silent — these fields are optional, not required.
@@ -1911,7 +2049,7 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
             r.add("WARNING", "metadata",
                   f"lead_investigator.orcid '{orcid}' is not a valid ORCID (bad format or failed ISO "
                   f"7064 11-2 checksum) — e.g. https://orcid.org/0000-0002-1825-0097")
-    for pi in (meta.get("principal_investigators") or []):
+    for pi in _as_list(meta.get("principal_investigators")):
         pi_orcid = pi.get("orcid") if isinstance(pi, dict) else None
         if pi_orcid not in (None, "", "TBD", "TODO") and not orcid_checksum_ok(pi_orcid):
             r.add("WARNING", "metadata",
@@ -1932,7 +2070,7 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     # AuScope Instrument Registry URL/handle). Same posture as ROR/RAiD above: WARNING-only curator hint,
     # deliberately light (no registry lookup — this validator is dependency-light and cannot resolve the
     # external registry). Absent/blank/placeholder values are silent (the field is optional, not required).
-    for inst in (meta.get("instruments") or []):
+    for inst in _as_list(meta.get("instruments")):
         pid = inst.get("pid") if isinstance(inst, dict) else None
         if pid not in (None, "", "TBD", "TODO") and not instrument_pid_format_ok(pid):
             label = " ".join(str(x) for x in [inst.get("manufacturer"), inst.get("model")] if x) or "instrument"
@@ -2041,6 +2179,13 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
     for f in tf_files:
         if not f.is_file():
             continue
+        # A dotfile is repository plumbing, never a transfer function: .gitkeep is the only way an
+        # empty transfer_functions/ folder is tracked at all, and the shipped _template carries
+        # three, so the README recipe produced a package that could not validate. Exempt from THIS
+        # suffix scan only; every security check above (traversal, symlink, disallowed extension,
+        # archive, size, magic bytes) has already read the file, and the ClamAV posture is untouched.
+        if f.name.startswith("."):
+            continue
         if f.suffix.lower() not in accepted:
             extra = ("" if allow_mth5 else
                      " (.edi, .xml and .mth5 accepted; enable .zmm/.zrr/.j with --allow-optin-formats)")
@@ -2110,7 +2255,7 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
         _validate_mth5(h5, r)
 
     # --- citation/DOI sanity ---
-    for pub in (meta.get("publications") or []):
+    for pub in _as_list(meta.get("publications")):
         doi = pub.get("doi") if isinstance(pub, dict) else None
         if doi and not re.match(r"^10\.\d{4,9}/\S+$", str(doi)):
             r.add("WARNING", "citation", f"publication DOI looks malformed: {doi}")
@@ -2119,7 +2264,9 @@ def validate(folder: Path, *, allow_large=False, allow_mth5=False) -> Report:
 
 
 def _grab(text, key):
-    m = re.search(rf"^{key}\s*=\s*(.+?)\s*$", text, re.M | re.I)
+    # [ \t] rather than \s around '=': \s matches the NEWLINE, so an EMPTY value line ('DATAID=')
+    # silently captured the NEXT header line as the value (found arming the D5 id authority).
+    m = re.search(rf"^{key}[ \t]*=[ \t]*(.+?)[ \t]*$", text, re.M | re.I)
     return m.group(1).strip().strip('"') if m else None
 
 
