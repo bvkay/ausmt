@@ -211,7 +211,7 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
     const cmd=tsWgetCommand(rows.filter(r=>r.levels));
     snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+" - "+files+" fetchable file"+(files===1?"":"s")+", "+fmtBigBytes(bytes)+".",
           "Your browser downloads them; AusMT only points the way.",
-          {label:"Copy wget command",onClick:()=>{if(typeof copyTxt==="function")copyTxt(cmd);}});}
+          {label:"Show wget command",onClick:()=>showWgetDialog(cmd)});}
   else snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+". None has a time-series file this deployment can route to.");});
 
 // ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
@@ -228,7 +228,7 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
 // Each row states the ROUTE, because that is the string to fetch, and the archive's own address
 // alongside as an inert reference (D3) - so the file still names its bytes if AusMT is down, without
 // pretending that address is what you were asked to fetch.
-var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. wget follows the redirect on its own; curl needs -L.";
+var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. Fetch the urls from your own terminal: `wget -c --content-disposition -i <urls>` follows the redirects, and with -c a re-run skips completed files and resumes partial ones; curl needs -L.";
 // One station's routable levels, in the vocabulary's own order so two readers' files sort alike.
 // `levels` names the level tokens on the table; empty/null means every level this station has.
 function tsHandoffLevels(s,levels,includeGaps){
@@ -268,8 +268,12 @@ function tsHandoffDocument(stations,levels){
 // archive addresses beside them, because the route is what the front door counts.
 function tsWgetCommand(rows){
   const urls=[];(rows||[]).forEach(r=>r.levels.forEach(l=>{if(l.url)urls.push(l.url);}));
-  return ["# AusMT time-series hand-off: "+urls.length+" file(s). wget follows the 302 to the archive.",
-          "wget --content-disposition -i - <<'AUSMT_EOF'"].concat(urls,["AUSMT_EOF"]).join("\n");}
+  // No leading # header: interactive zsh has no comments by default, so a pasted header line
+  // globbed and errored (measured on a real run). -c makes a re-run RESUME: a completed file is
+  // skipped, a partial continues from where it stopped (the archive serves ranges) - without it a
+  // re-run silently downloads duplicates beside the originals. -q --show-progress keeps one clean
+  // bar per file instead of the per-request redirect chatter.
+  return ["wget -c -q --show-progress --content-disposition -i - <<'AUSMT_EOF'"].concat(urls,["AUSMT_EOF"]).join("\n");}
 // One level's hand-off for the current scope, from the Download block's time-series rows. The row
 // names its own level, so no hidden chooser state can narrow it (the pre-Lane-B defect: a collapsed
 // accordion's level toggles silently scoped the old Time-series list export).
@@ -281,6 +285,17 @@ function tsWgetCommand(rows){
 // of multi-GB downloads at a browser is hostile, and the command line is the right tool at that
 // scale.
 var TS_DIRECT_MAX=10;
+// The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a
+// reader should see what lands on their clipboard. Guarded binds like every other control.
+function showWgetDialog(cmd){
+  const m=document.getElementById("wgetModal"),pre=document.getElementById("wgetCmd");
+  if(!m||!pre){if(typeof copyTxt==="function")copyTxt(cmd);return;}   // no dialog markup: degrade to the copy
+  pre.textContent=cmd;
+  m.classList.remove("hidden");
+  if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
+bindClick("wgetClose",()=>{const m=document.getElementById("wgetModal");if(m)m.classList.add("hidden");});
+bindClick("wgetCopy",()=>{const pre=document.getElementById("wgetCmd");
+  if(pre&&typeof copyTxt==="function")copyTxt(pre.textContent);});
 // One route handed to the browser for download. A window-level seam (not inlined) so the jsdom
 // driver can observe the hand-offs; an anchor click, not window.open, because popup blockers stop
 // every window.open after the first in a single gesture.
@@ -292,7 +307,7 @@ function tsLevelList(tok){
   const built=tsHandoffDocument(scopeSel(),[tok]);
   if(!built.files){snack("Nothing in the current scope has a time-series file this deployment can route to at this level.");return;}
   const cmd=tsWgetCommand(built.doc.stations);
-  const act={label:"Copy wget command",onClick:()=>{if(typeof copyTxt==="function")copyTxt(cmd);}};
+  const act={label:"Show wget command",onClick:()=>showWgetDialog(cmd)};
   if(built.files<=TS_DIRECT_MAX){
     built.doc.stations.forEach(r=>r.levels.forEach(l=>{if(l.url)tsOpenRoute(l.url);}));
     snack("Handed "+built.files+" file"+(built.files===1?"":"s")+" to your browser - "+fmtBigBytes(built.bytes)+". Progress appears in your browser's downloads.",
@@ -301,7 +316,7 @@ function tsLevelList(tok){
     return;}
   save("ausmt-timeseries-"+tok+"-"+tsUTC()+".json",JSON.stringify(built.doc,null,2),"application/json");
   snack("Download list ready - "+built.files+" files, "+fmtBigBytes(built.bytes)+".",
-        "Too many files to hand a browser at once; feed the list (or the copied command) to wget.",act);}
+        "Too many files to hand a browser at once. Paste the copied command into your own terminal: wget fetches one file at a time, and a re-run resumes where it stopped.",act);}
 // C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
 // pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
 // ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR

@@ -1393,9 +1393,9 @@ async function bootFreshWindow(dataMap, url) {
   for (let _s = 0; _s < 10; _s++) {
     const _c = doc.getElementById("tourCard");
     _posSeen.push(_c.style.left + "|" + _c.style.top);
-    if (_s < 9) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    if (_s < 10) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
   }
-  ok(A.tourStep() === 9, "owner2/pos: stepping ArrowRight x9 must reach the last step, at " + A.tourStep());
+  ok(A.tourStep() === 10, "owner2/pos: stepping ArrowRight x10 must reach the last step, at " + A.tourStep());
   ok(_posSeen.every(p => p === _posSeen[0]),
     "owner2/pos: the card's centred position must be IDENTICAL across all 10 steps (map steps included), got " + JSON.stringify(_posSeen));
   ok(/px$/.test(_posSeen[0].split("|")[0]) && /px$/.test(_posSeen[0].split("|")[1]),
@@ -1574,14 +1574,20 @@ async function bootFreshWindow(dataMap, url) {
     "D2-tour: the Select pane (the selbox target's mode container) is still hidden on the selbox step");
   ok(!doc.querySelector(".selbox").closest("section").classList.contains("hidden"),
     "D2-tour: the selbox's own section is hidden on the selbox step (map view not forced?)");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 6
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD -> index 6 (.dlbox)
   ok(A.tourStep() === 6, "D2-tour: could not step forward off the selbox step");
-  ok(A.sidebarMode() === "browse", "D2-tour: FORWARD exit did not restore the Browse mode");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 5 again
-  ok(A.tourStep() === 5 && A.sidebarMode() === "select",
-    "D2-tour: re-entering the selbox step backwards did not re-switch to Select & export");
+  ok(A.sidebarMode() === "select",
+    "D2-tour: the Download step lives in the same Select pane and must keep the mode");
+  ok(!doc.querySelector(".dlbox").closest("section").classList.contains("hidden"),
+    "D2-tour: the Download block's section is hidden on its own step");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 7
+  ok(A.tourStep() === 7, "D2-tour: could not step forward off the Download step");
+  ok(A.sidebarMode() === "browse", "D2-tour: leaving the Select-pane steps did not restore the Browse mode");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 6 again
+  ok(A.tourStep() === 6 && A.sidebarMode() === "select",
+    "D2-tour: re-entering the Download step backwards did not re-switch the mode");
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));       // CLOSE from the step
-  ok(A.tourStep() === -1, "D2-tour: Esc from the selbox step did not close the tour");
+  ok(A.tourStep() === -1, "D2-tour: Esc from the Download step did not close the tour");
   ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
 
   // I. EMPTY-STATE fixture (UX7b U7): the welcome POPUP must still show on first visit (it explains the
@@ -1733,8 +1739,8 @@ async function bootFreshWindow(dataMap, url) {
     "engine encodes it (the `C5 [REMOTE].zip` case), got " + JSON.stringify(_a1raw.archive_url_comment));
   ok(_a1raw.bytes === 4000000 && _a1raw.filename === "A1 [REMOTE].zip",
     "each row states the size and the archive's own filename, got " + JSON.stringify([_a1raw.bytes, _a1raw.filename]));
-  ok(/wget follows/i.test(_hd.doc.note) && /curl needs -L/i.test(_hd.doc.note),
-    "D3: the file must say that wget follows the 302 and curl needs -L, got " + JSON.stringify(_hd.doc.note));
+  ok(/wget -c/.test(_hd.doc.note) && /follows the redirects/i.test(_hd.doc.note) && /curl needs -L/i.test(_hd.doc.note),
+    "D3: the file must say wget -c follows the redirects (a re-run resumes) and curl needs -L, got " + JSON.stringify(_hd.doc.note));
   ok(/hosts none of these files/i.test(_hd.doc.note),
     "the file must restate that AusMT hosts nothing it routes to, got " + JSON.stringify(_hd.doc.note));
   ok(_hd.doc.scope && _hd.doc.scope.stations === 4 && _hd.doc.scope.levels === "all",
@@ -1776,17 +1782,31 @@ async function bootFreshWindow(dataMap, url) {
     "the list confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
   ok(handed.length === 2, "the over-cap path hands nothing directly");
   win.TS_DIRECT_MAX = 10;
-  const copyBtn = snackEl.querySelector("button");
-  ok(copyBtn && /wget/i.test(copyBtn.textContent),
-    "the confirmation must offer the wget command as a COPY button, got " + (copyBtn && copyBtn.textContent));
-  copyBtn.click();
-  ok(clipboard.length === 1 && /wget/.test(clipboard[0]) && /-i/.test(clipboard[0]),
-    "the copy button must put a wget -i command on the clipboard, got " + JSON.stringify(clipboard[0]));
+  // The wget DIALOG (owner, 2026-08-25): the snackbar action SHOWS the command - visible,
+  // scrollable, with its run-in-a-terminal instructions - and the copy happens from the dialog,
+  // so a reader sees what lands on their clipboard.
+  const showBtn = snackEl.querySelector("button");
+  ok(showBtn && /wget/i.test(showBtn.textContent),
+    "the confirmation must offer the wget command, got " + (showBtn && showBtn.textContent));
+  showBtn.click();
+  const wgetModal = doc.getElementById("wgetModal"), wgetCmd = doc.getElementById("wgetCmd");
+  ok(wgetModal && !wgetModal.classList.contains("hidden"), "the wget dialog must open from the snackbar action");
+  ok(/terminal/i.test(wgetModal.textContent), "the dialog must say the command runs in the reader's own terminal");
+  ok(/^wget -c -q --show-progress --content-disposition -i -/.test(wgetCmd.textContent),
+    "the shown command must resume on re-run (-c) and show clean per-file progress, got " +
+    JSON.stringify(wgetCmd.textContent.split("\n")[0]));
+  ok(!/^#/.test(wgetCmd.textContent),
+    "no leading # header: interactive zsh has no comments by default, so a pasted header line errors");
+  doc.getElementById("wgetCopy").click();
+  ok(clipboard.length === 1 && clipboard[0] === wgetCmd.textContent,
+    "the dialog's copy must put EXACTLY the shown command on the clipboard");
   ok((clipboard[0].match(/\/go\/ts\//g) || []).length === 2,
     "the copied command must carry exactly the row's routed files, got " + JSON.stringify(clipboard[0]));
   ok(!/thredds\.nci\.org\.au/.test(clipboard[0]),
     "the copied command must fetch the AusMT route, not the archive address it resolves to (the route " +
     "is what the front door counts), got " + JSON.stringify(clipboard[0]));
+  doc.getElementById("wgetClose").click();
+  ok(wgetModal.classList.contains("hidden"), "the dialog's Close must hide it");
   ok(trackCalls.length === _trackBefore,
     "R8: the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
   ok(!/progress|complete|finished|%/i.test(snackEl.textContent),

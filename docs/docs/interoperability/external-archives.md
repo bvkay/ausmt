@@ -68,8 +68,10 @@ hands each file straight to your browser: every download is an AusMT route answe
 to the archive holding the file, so the browser fetches from the archive directly and its own
 downloads list carries the progress. Beyond that, the action writes a pointer file instead - one
 entry per station, route plus the archive's own address for reference - because feeding dozens of
-multi-gigabyte downloads to a browser at once helps nobody; `wget` follows the redirects on its own
-(`curl` needs `-L`). The **Pointers (JSON)** export in the Metadata block is the full-provenance
+multi-gigabyte downloads to a browser at once helps nobody. The portal shows the exact `wget`
+command to run in your own terminal - it fetches one file at a time, follows the redirects on its
+own, and a re-run resumes: completed files are skipped and partial ones continue (`curl` needs
+`-L`). The **Pointers (JSON)** export in the Metadata block is the full-provenance
 form: every station in scope appears (with its dataset DOI or the reason none is recorded), routable
 stations carry their per-level rows, and the document records its own scope. A station's own drawer
 offers the same route per level directly.
