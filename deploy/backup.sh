@@ -139,9 +139,31 @@ fi
 # --------------------------------------------------------------------------------------------------
 # 1. Consistent sqlite snapshot (WAL-safe). The gateway may be LIVE while this runs.
 # --------------------------------------------------------------------------------------------------
+# has_db_bearing_snapshot: true (exit 0) when some existing snapshot carries a gateway.sqlite, i.e.
+# this box HAS produced a DB backup before. That is what separates a genuinely fresh box from an
+# established one whose DB has gone missing.
+has_db_bearing_snapshot() {
+  [ -d "$BACKUPS_DIR" ] || return 1
+  find "$BACKUPS_DIR" -mindepth 2 -maxdepth 2 -name 'gateway.sqlite' 2>/dev/null | grep -q .
+}
+
 snapshot_sqlite() {
   dest="$1"
   if [ ! -f "$DB" ]; then
+    # A missing DB is only benign on a box that has never had one. On a box that HAS produced DB
+    # backups, the DB vanishing means the state volume did not mount or AUSMT_DATA_DIR drifted (the
+    # same suspicion the STATE_DIR guard above voices), and publishing a DB-less snapshot starts a
+    # countdown: prune keeps the newest RETAIN by name, so the last DB-bearing snapshot is rotated
+    # out within RETAIN nights and the only off-box copy of the audit/PII DB is gone. Fail loud
+    # instead, in the posture this file already takes for a missing sqlite3.
+    if has_db_bearing_snapshot && [ "${AUSMT_BACKUP_ALLOW_DBLESS:-}" != "1" ]; then
+      die "no gateway DB at $DB, but this box HAS produced DB backups before.
+      That is a broken box, not a fresh one (unmounted state volume? typo in AUSMT_DATA_DIR?), and
+      publishing a DB-less snapshot would rotate the last DB-bearing one out within $RETAIN nights.
+      Fix the mount/path and re-run. If the gateway really was decommissioned and you accept losing
+      the DB history, re-run once with AUSMT_BACKUP_ALLOW_DBLESS=1.
+      See deploy/README.md \"Backups & restore\"."
+    fi
     log "no gateway DB at $DB (fresh box before first submission?) — snapshotting state files only."
     return 0
   fi
@@ -244,11 +266,25 @@ prune() {
   # List snapshot DIRS newest-first by name.
   all="$(find "$BACKUPS_DIR" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*Z' 2>/dev/null | sort -r || true)"
   [ -n "$all" ] || return 0
+  # The newest snapshot that actually carries a DB. Prune is otherwise contents-blind, so without
+  # this it can leave the box holding RETAIN state-only snapshots and NO copy of the audit DB. The
+  # refusal in snapshot_sqlite should stop that upstream; this is the net under it, because the one
+  # irreplaceable file is worth guarding twice.
+  keep_db=""
+  printf '%s\n' "$all" | while IFS= read -r d; do
+    [ -n "$d" ] && [ -f "$d/gateway.sqlite" ] && printf '%s\n' "$d" && break
+  done > "$BACKUPS_DIR/.keep_db.$$" 2>/dev/null || true
+  [ -f "$BACKUPS_DIR/.keep_db.$$" ] && keep_db="$(cat "$BACKUPS_DIR/.keep_db.$$" 2>/dev/null || true)"
+  rm -f "$BACKUPS_DIR/.keep_db.$$"
   n=0
   printf '%s\n' "$all" | while IFS= read -r d; do
     [ -n "$d" ] || continue
     n=$((n + 1))
     if [ "$n" -gt "$RETAIN" ]; then
+      if [ -n "$keep_db" ] && [ "$d" = "$keep_db" ]; then
+        log "keeping $(basename "$d") beyond retain: it is the newest snapshot carrying a gateway DB"
+        continue
+      fi
       log "pruning old snapshot: $(basename "$d")"
       rm -rf "$d"
     fi

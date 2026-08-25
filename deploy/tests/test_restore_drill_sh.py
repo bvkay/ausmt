@@ -22,6 +22,7 @@ Every assertion is an INDEPENDENT OBSERVABLE — the process exit code and the p
 script's self-report. Each test names its failure criterion (Invariant 10)."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
@@ -131,8 +132,8 @@ def _corrupt_db(path: Path) -> None:
     path.write_bytes(bytes(data))
 
 
-def _snapshot(tmp_path: Path, maker) -> Path:
-    snap = tmp_path / "backups" / "20260708T032000Z"
+def _snapshot(tmp_path: Path, maker, name: str = "20260708T032000Z") -> Path:
+    snap = tmp_path / "backups" / name
     snap.mkdir(parents=True, exist_ok=True)
     maker(snap / "gateway.sqlite")
     return snap
@@ -206,3 +207,39 @@ def test_defaults_to_latest_symlink(tmp_path):
     r = _run(tmp_path, None, env_extra={"AUSMT_BACKUP_DIR": str(backups)})
     assert r.returncode == 0, f"default-to-latest must drill the healthy snapshot; stderr={r.stderr}"
     assert "2" in (r.stdout + r.stderr), "must print the uploader_keys row count from latest"
+
+
+# ---- section-5 review: the drill must LEAVE A RECORD, or nothing can alert on it -----------------
+
+def test_pass_writes_a_machine_readable_verdict_beside_the_snapshots(tmp_path):
+    """alert.sh already reads backups/latest-drill.json and publishes it as the ops dashboard's
+    'drill' field, but nothing ever wrote that file, so restorability read as permanently unproven
+    while 'backup present and fresh' showed green. A PASS must record {verdict, at, snapshot}.
+
+    FAILS IF the drill only prints to stdout (pre-lane behaviour)."""
+    snap = _snapshot(tmp_path, lambda p: _good_db(p, uploader_rows=4))
+    r = _run(tmp_path, snap)
+    assert r.returncode == 0, r.stderr
+    verdict = snap.parent / "latest-drill.json"
+    assert verdict.is_file(), "a passing drill must write latest-drill.json beside the snapshots"
+    doc = json.loads(verdict.read_text(encoding="utf-8"))
+    assert doc.get("verdict") == "pass", doc
+    assert doc.get("snapshot") == snap.name, doc
+    assert doc.get("at"), "the record must carry WHEN it was taken, or staleness cannot be judged"
+
+
+def test_failure_records_the_failed_verdict_rather_than_staying_silent(tmp_path):
+    """A FAILED drill is the one an operator most needs surfaced: it must overwrite the record with
+    verdict 'fail', never leave a stale 'pass' standing as the last word.
+
+    FAILS IF a failing drill leaves the previous pass record in place."""
+    snap = _snapshot(tmp_path, lambda p: _good_db(p, uploader_rows=1))
+    assert _run(tmp_path, snap).returncode == 0
+    verdict = snap.parent / "latest-drill.json"
+    assert json.loads(verdict.read_text(encoding="utf-8"))["verdict"] == "pass"
+    bad = _snapshot(tmp_path, _corrupt_db, name="20260102T000000Z")
+    r = _run(tmp_path, bad)
+    assert r.returncode != 0, "the corrupt snapshot must still fail the drill"
+    doc = json.loads(verdict.read_text(encoding="utf-8"))
+    assert doc.get("verdict") == "fail", f"a failed drill must record the failure, got {doc}"
+    assert doc.get("snapshot") == bad.name, doc

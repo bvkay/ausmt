@@ -296,3 +296,57 @@ def test_unreadable_state_dir_points_at_ownership_prep(tmp_path):
         assert "ownership" in r.stderr.lower() or "readme" in r.stderr.lower()
     finally:
         tree["state"].chmod(0o755)
+
+
+# ---- section-5 review: the DB is the one irreplaceable thing, so guard it twice ------------------
+
+def test_vanished_db_on_an_established_box_refuses_rather_than_publishing_a_dbless_snapshot(tmp_path):
+    """A box that has produced DB-bearing snapshots and now finds NO DB is a broken box, not a fresh
+    one: the state volume failed to mount, or AUSMT_DATA_DIR drifted. Publishing a DB-less snapshot
+    there starts a countdown in which the contents-blind prune rotates the last DB-bearing copy out.
+
+    FAILS IF the run exits 0 and publishes: pre-lane it logged 'fresh box before first submission?'
+    and returned success on an established box."""
+    tree = _make_tree(tmp_path, with_db=False)
+    b = tree["backups"]
+    b.mkdir(parents=True, exist_ok=True)
+    prior = b / "20200101T000000Z"
+    prior.mkdir()
+    (prior / "gateway.sqlite").write_text("the only copy\n", encoding="utf-8")
+    r = _run(tree)
+    assert r.returncode != 0, f"a vanished DB on an established box must fail loud:\n{r.stdout}{r.stderr}"
+    out = r.stdout + r.stderr
+    assert "gateway.sqlite" in out or "DB" in out, out
+    assert (prior / "gateway.sqlite").read_text(encoding="utf-8") == "the only copy\n", \
+        "the refusal must leave the existing snapshots untouched"
+
+
+def test_a_genuinely_fresh_box_still_snapshots_state_only(tmp_path):
+    """The complement, so the guard above cannot be satisfied by simply refusing everything: with NO
+    prior DB-bearing snapshot, a box with no DB really is fresh and must still back its state up."""
+    tree = _make_tree(tmp_path, with_db=False)
+    r = _run(tree)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert len(_snapshots(tree)) == 1, "a fresh box must still publish its state-only snapshot"
+
+
+def test_prune_never_evicts_the_last_db_bearing_snapshot(tmp_path):
+    """Defence in depth behind the refusal above: even if a DB-less snapshot is somehow published,
+    prune must never leave the box with no DB copy at all. The newest DB-bearing snapshot is kept
+    beyond RETAIN when nothing newer carries one.
+
+    FAILS IF prune stays purely name-ordered and contents-blind."""
+    tree = _make_tree(tmp_path, with_db=False)
+    b = tree["backups"]
+    b.mkdir(parents=True, exist_ok=True)
+    oldest_with_db = b / "20200101T000000Z"
+    oldest_with_db.mkdir()
+    (oldest_with_db / "gateway.sqlite").write_text("the only copy\n", encoding="utf-8")
+    for i in range(1, 20):                      # 19 newer, all DB-less
+        d = b / f"20200101T0000{i:02d}Z"
+        d.mkdir()
+        (d / "reconcile-status.json").write_text("{}", encoding="utf-8")
+    r = _run(tree, env_extra={"AUSMT_BACKUP_ALLOW_DBLESS": "1"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert oldest_with_db.exists() and (oldest_with_db / "gateway.sqlite").exists(), \
+        "prune evicted the last DB-bearing snapshot; that was the only copy of the audit DB"

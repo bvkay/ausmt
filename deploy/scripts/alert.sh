@@ -42,6 +42,7 @@
 #   AUSMT_ALERT_DISK_PCT        (default 85)  disk-usage %% of the $AUSMT_DATA_DIR filesystem that fails
 #   AUSMT_ALERT_RECONCILE_MAX_MIN (default 45) reconcile-status.json older than this (min) fails
 #   AUSMT_ALERT_BACKUP_MAX_H    (default 26)  newest backup snapshot older than this (hours) fails
+#   AUSMT_ALERT_DRILL_MAX_H     (default 192) last restore-drill verdict older than this fails
 #   AUSMT_ALERT_COMPOSE         (optional) override the `docker compose` command (a test shim hooks here)
 #   AUSMT_ALERT_CURL            (optional) override the `curl` command (a test shim hooks here)
 #
@@ -59,6 +60,10 @@ ALERT_URL="${AUSMT_ALERT_URL:-}"
 DISK_PCT_MAX="${AUSMT_ALERT_DISK_PCT:-85}"
 RECONCILE_MAX_MIN="${AUSMT_ALERT_RECONCILE_MAX_MIN:-45}"
 BACKUP_MAX_H="${AUSMT_ALERT_BACKUP_MAX_H:-26}"
+# 8 days: the drill runs weekly, so this is one missed run plus slack. Wider than the backup
+# threshold on purpose - the drill proves the backup's SHAPE, which changes with a gateway
+# migration rather than nightly.
+DRILL_MAX_H="${AUSMT_ALERT_DRILL_MAX_H:-192}"
 COMPOSE_CMD="${AUSMT_ALERT_COMPOSE:-docker compose}"
 CURL_CMD="${AUSMT_ALERT_CURL:-curl}"
 # C43 S2b-ii (record D9.7): a curator pause of auto-rebuild that is active or slow-re-armed past this
@@ -418,6 +423,22 @@ check_backup() {
   max_min=$((BACKUP_MAX_H * 60))
   if [ -z "$(find "$newest" -maxdepth 0 -mmin "-$max_min" 2>/dev/null)" ]; then
     add_failure "backup: newest snapshot $(basename "$newest") is older than ${BACKUP_MAX_H}h -- the nightly backup has not run recently"
+  fi
+
+  # RESTORABILITY, not just presence. A snapshot that has never been restored is a hypothesis: the
+  # checks above prove a backup EXISTS and is FRESH, which is exactly the pair that reads as green
+  # while the bytes are unrestorable. restore-drill.sh (ausmt-drill.timer) records its verdict here,
+  # so a missing record means the drill is not installed and a stale one means it has stopped running.
+  drill="$backups_dir/latest-drill.json"
+  if [ ! -f "$drill" ]; then
+    add_failure "backup: WARN no restore drill has ever recorded a verdict ($drill missing) -- 'backup fresh' is not 'backup restorable'; install ausmt-drill.timer (deploy/systemd) or run deploy/scripts/restore-drill.sh once"
+  elif grep -q '"verdict"[[:space:]]*:[[:space:]]*"fail"' "$drill" 2>/dev/null; then
+    add_failure "backup: the last restore drill FAILED ($drill) -- the newest snapshot did not restore; investigate before relying on it"
+  else
+    drill_max_min=$((DRILL_MAX_H * 60))
+    if [ -z "$(find "$drill" -maxdepth 0 -mmin "-$drill_max_min" 2>/dev/null)" ]; then
+      add_failure "backup: the last restore drill is older than ${DRILL_MAX_H}h -- restorability is no longer proven; check 'systemctl status ausmt-drill.timer'"
+    fi
   fi
 }
 

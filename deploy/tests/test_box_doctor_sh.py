@@ -32,7 +32,7 @@ pytestmark = [
 
 _DOCKER_STUB = """#!/bin/sh
 case "$*" in
-  *"ps --status running --services") printf 'portal\\ngateway\\nclamd\\n' ;;
+  *"ps --status running --services") printf 'portal\\ngateway\\nclamd\\ngw-runner\\n' ;;
   *) exit 0 ;;
 esac
 """
@@ -357,3 +357,52 @@ def test_ts_parity_warns_rather_than_fails_with_no_committed_table(tmp_path):
     r = _run(_env(tmp_path, data, TSACCESS_BODY=""))
     assert any(ln.startswith("WARN ts-parity:") for ln in r.stdout.splitlines()), r.stdout
     assert r.returncode == 0
+
+
+# ---- section-5 review: legs that reported green over the failure they exist to catch -------------
+
+def test_gw_runner_not_running_fails_the_gateway_profile(tmp_path):
+    """gw-runner has NO compose healthcheck by design, so 'is it running' is the ONLY observable, and
+    a crash-looping runner is the 'submissions stuck at SCANNED' incident. The doctor's own header
+    always claimed it checked gw-runner under PROFILE=gateway; the loop only covered gateway+clamd,
+    so the operator's final gate reported all-green over exactly that failure.
+
+    FAILS IF the container leg still ignores gw-runner (pre-lane behaviour)."""
+    data = _make_tree(tmp_path)
+    b = tmp_path / "bin_norunner"
+    b.mkdir()
+    stub = b / "docker"
+    stub.write_text("""#!/bin/sh
+case "$*" in
+  *"ps --status running --services") printf 'portal\\ngateway\\nclamd\\n' ;;
+  *) exit 0 ;;
+esac
+""", encoding="utf-8")
+    stub.chmod(0o755)
+    env = _env(tmp_path, data)
+    env["AUSMT_DOCTOR_DOCKER"] = str(stub)   # the doctor resolves docker by absolute path, not PATH
+    env["AUSMT_DOCTOR_PROFILE"] = "gateway"
+    r = _run(env)
+    assert any(ln.startswith("FAIL containers:") and "gw-runner" in ln for ln in r.stdout.splitlines()), \
+        f"a missing gw-runner must FAIL under the gateway profile:\n{r.stdout}"
+    assert r.returncode != 0
+
+
+def test_unreadable_surveys_live_git_warns_rather_than_reporting_clean(tmp_path):
+    """`git status --porcelain` prints NOTHING and exits non-zero on a dubious-ownership or locked
+    index error, and the leg suppressed stderr and read empty-as-clean. That is plausible on this
+    very repo (the gateway writes it as a different uid), and it turned the incident-2026-07-11
+    dirty-checkout guard into a green light.
+
+    FAILS IF a git error still reports 'checkout is clean'."""
+    data = _make_tree(tmp_path)
+    # A .git that exists (so the presence check passes) but that git refuses to read.
+    import shutil as _sh
+    _sh.rmtree(data / "surveys-live" / ".git")
+    (data / "surveys-live" / ".git").mkdir()
+    r = _run(_env(tmp_path, data))
+    lines = r.stdout.splitlines()
+    assert not any("git checkout is clean" in ln for ln in lines), \
+        f"a git error must never be reported as a clean checkout:\n{r.stdout}"
+    assert any(ln.startswith(("FAIL surveys-live:", "WARN surveys-live:")) for ln in lines), \
+        f"an unreadable checkout must surface as FAIL or WARN:\n{r.stdout}"

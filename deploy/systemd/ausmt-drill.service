@@ -1,0 +1,38 @@
+# AusMT weekly restore drill. A oneshot unit the ausmt-drill.timer fires once a week: it copies the
+# LATEST snapshot's gateway DB to a scratch dir, runs PRAGMA integrity_check and a schema check, and
+# writes the verdict to $AUSMT_DATA_DIR/backups/latest-drill.json, which alert.sh publishes as the ops
+# dashboard's "drill" field. It NEVER touches the live DB (the drill works on a mktemp copy that is
+# removed on exit).
+#
+# WHY THIS UNIT EXISTS (section-5 review, 2026-08-26): a backup that has never been restored is a
+# hypothesis, not a backup. The drill script has always existed and always worked, but nothing ran it
+# and nothing recorded its answer, so "restorable" was permanently unproven while "backup present and
+# fresh" showed green. Presence is not restorability, and only this unit closes that gap.
+#
+# INSTALL - replace the two __PLACEHOLDER__ paths below with YOUR absolute paths (systemd does not
+# expand env vars in ExecStart/WorkingDirectory), then copy this file to /etc/systemd/system/ :
+#   __DEPLOY_DIR__  -> the absolute path to THIS repo's deploy/ dir   (e.g. /home/<operator>/ausmt-code/deploy)
+#   __ENV_FILE__    -> the absolute path to deploy/.env               (e.g. /home/<operator>/ausmt-code/deploy/.env)
+# See deploy/README.md "Backups & restore".
+
+[Unit]
+Description=AusMT weekly restore drill (proves the newest snapshot is restorable; records the verdict)
+Documentation=file://__DEPLOY_DIR__/README.md
+# The verdict carries a UTC timestamp that alert.sh judges staleness against, so it wants a real clock.
+After=time-sync.target
+Wants=time-sync.target
+
+[Service]
+Type=oneshot
+# The same OPERATOR uid the backup runs as: it must read the snapshot DB and write the verdict file
+# beside it. NOT root, NOT the gateway container uid.
+User=ausmt
+EnvironmentFile=__ENV_FILE__
+WorkingDirectory=__DEPLOY_DIR__
+# No argument: the drill defaults to the `latest` snapshot, which is the copy a real restore would use.
+ExecStart=__DEPLOY_DIR__/scripts/restore-drill.sh
+# A drill on a large DB is still just an integrity check on a copy; bound a wedged run.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target
