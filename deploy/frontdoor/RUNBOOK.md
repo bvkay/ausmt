@@ -172,19 +172,42 @@ Wall 2's fence is not standing until this leg is blocked.
 
 ## 5. Set up log shipping (box pulls the masked front-door log)
 
-5.1  On the VPS, create a restricted read-only account for the pull and a log dir:
+5.1  On the VPS, create a restricted read-only account for the pull and a log dir. The account is never
+     used interactively (the forced command in 5.2 is the real control), but it still needs a shell to
+     exec that command:
 ```sh
 sudo useradd -m -s /bin/sh caddylog
 sudo mkdir -p /var/log/caddy
 sudo setfacl -R -m u:caddylog:rX /var/log/caddy    # read-only for the puller (or use group perms)
 ```
-5.2  Put the **box's** SSH public key into `caddylog@ausmt-vps:~/.ssh/authorized_keys` (generate a
-     dedicated key on the box if needed). The box connects out to the VPS over the tailnet (allowed by
-     the ACL rule from step 3.1).
-5.3  On the box, set the remote in `deploy/.env`:
-```sh
-AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-vps:/var/log/caddy
+5.2  Put the **box's** SSH public key into `caddylog@ausmt-vps:~/.ssh/authorized_keys` as a
+     **forced-command, read-only** entry - NOT a bare key. The box only ever runs a read-only `rsync`
+     of the log dir, so bind the key to exactly that:
 ```
+command="rrsync -ro /var/log/caddy",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA...box-public-key... ausmt-box-log-pull
+```
+   `rrsync` is the restricted-rsync wrapper shipped with rsync (recent Debian/Ubuntu install it at
+   `/usr/bin/rrsync`; older packages keep it gzipped under `/usr/share/doc/rsync/scripts/rrsync.gz`).
+   `-ro` permits READ-ONLY transfers and confines every path to the `/var/log/caddy` subtree; the
+   `no-pty,no-*-forwarding` options strip the interactive shell and every tunnelling capability.
+   **Why this matters:** the VPS is the one internet-facing host in the topology. A bare
+   `authorized_keys` entry would hand anyone who compromised the box (or lifted its pull key) an
+   INTERACTIVE SHELL on that public VPS, plus port/agent forwarding back through it. The forced command
+   reduces the key to "read the masked logs, nothing else" - pull-only, read-only, one directory - which
+   is the entire trust the box needs (the same read-only pull model as `pull-backup.sh`). Generate a
+   dedicated key on the box if it has none (`ssh-keygen -t ed25519 -f ~/.ssh/ausmt-log-pull`); the box
+   connects OUT to the VPS over the tailnet (allowed by the ACL rule from step 3.1).
+5.3  On the box, set the remote in `deploy/.env`. Because the forced command **roots `rrsync` at
+     `/var/log/caddy`**, the pull path is interpreted RELATIVE to that root, so the remote is just the
+     account with no path (ship-frontdoor-logs.sh appends the trailing slash, pulling the rooted dir).
+     An absolute `.../var/log/caddy` here would resolve UNDER the root to a non-existent
+     `/var/log/caddy/var/log/caddy` and the pull would silently transfer nothing:
+```sh
+AUSMT_FRONTDOOR_LOG_REMOTE=caddylog@ausmt-vps:
+```
+   The masked `access-frontdoor*.json` files sit at the root of `/var/log/caddy`, which is exactly what
+   the `--include='access-frontdoor*.json'` filter in the ship script copies. Verify the pull end-to-end
+   on first run (step 9.4) after the front door is serving.
 5.4  Install the box-side shipping timer (fires 03:25 UTC, before the 03:35 C45 fold):
 ```sh
 # edit the __DEPLOY_DIR__/__ENV_FILE__ placeholders + User= in the .service first (see the file header)

@@ -92,7 +92,11 @@ check_containers() {
 		fail "containers: portal is NOT running (the always-on reader service)"
 	fi
 	if [ "$PROFILE" = "gateway" ]; then
-		for svc in gateway clamd; do
+		# gw-runner is IN this list, not just gateway+clamd: it has no compose healthcheck by design,
+		# so "is it running" is the only observable, and a crash-looping runner is the submissions-
+		# stuck-at-SCANNED incident. Leaving it out let the operator's final gate report all-green
+		# over exactly that failure, while the 15-minute alert timer was the only thing watching.
+		for svc in gateway clamd gw-runner; do
 			if printf '%s\n' "$running" | grep -qx "$svc"; then
 				pass "containers: $svc is running (gateway profile)"
 			else
@@ -150,8 +154,14 @@ check_surveys_live() {
 	fi
 	# Clean: no modified/untracked entries. An untracked survey dir is the incident-2026-07-11 class
 	# (built + served but git can never remove it).
-	dirty="$($GIT -C "$sl" status --porcelain 2>/dev/null)"
-	if [ -z "$dirty" ]; then
+	# Check git's EXIT STATUS, not just its stdout: `status --porcelain` prints nothing and exits
+	# non-zero on a dubious-ownership, locked-index or corrupt-.git error, so reading empty-as-clean
+	# turned this guard into a green light for the state it exists to catch. Plausible on this very
+	# checkout, which the gateway (uid 10002) writes during a publish while the doctor runs as the
+	# operator, so an ownership complaint here is a real mode, not a hypothetical.
+	if ! dirty="$($GIT -C "$sl" status --porcelain 2>&1)"; then
+		warn "surveys-live: git could not read $sl (ownership/lock/corruption?), so its cleanliness is UNKNOWN, not clean: $(printf '%s' "$dirty" | tr '\n' ';' | head -c 160)"
+	elif [ -z "$dirty" ]; then
 		pass "surveys-live: git checkout is clean (no local edits or untracked entries)"
 	else
 		fail "surveys-live: checkout is DIRTY - local edits/untracked entries would be built + served: $(printf '%s' "$dirty" | tr '\n' ';' | head -c 160)"

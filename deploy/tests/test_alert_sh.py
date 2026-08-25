@@ -88,7 +88,9 @@ _ALL_OK_JSONL = "\n".join([
 
 def _make_tree(tmp_path: Path, *, compose_jsonl: str = _ALL_OK_JSONL,
                reconcile_action: str = "noop", reconcile_last_run: str | None = None,
-               backup_age_days: float = 0.0, curl_fail: bool = False) -> dict:
+               backup_age_days: float = 0.0, curl_fail: bool = False,
+               drill: str | None = '{"verdict":"pass","at":"2026-07-10T04:10:00Z",'
+                                    '"snapshot":"20260710T032000Z"}') -> dict:
     """Build the data tree + shims and return the env alert.sh runs under.
 
     - a gateway state dir with a reconcile-status.json (fresh + action=noop by default),
@@ -111,6 +113,11 @@ def _make_tree(tmp_path: Path, *, compose_jsonl: str = _ALL_OK_JSONL,
     if backup_age_days > 0:
         old = datetime.datetime.now().timestamp() - backup_age_days * 86400
         os.utime(snap, (old, old))
+    # A healthy box now also carries a recent PASSING restore-drill verdict: "backup fresh" is not
+    # "backup restorable", so alert.sh fails on a missing, failed or stale drill record. Tests about
+    # the drill itself override this file; every other test wants the healthy-box default.
+    if drill is not None:
+        (backups / "latest-drill.json").write_text(drill, encoding="utf-8")
 
     code = tmp_path / "code"
     (code / "deploy").mkdir(parents=True, exist_ok=True)
@@ -601,3 +608,50 @@ def test_fresh_pin_active_not_persistent(tmp_path):
     calls = tree["curl_record"].read_text(encoding="utf-8") if tree["curl_record"].exists() else ""
     assert "/fail" not in calls
     assert r.returncode == 0
+
+
+# ---- section-5 review: presence is not restorability --------------------------------------------
+
+def test_missing_restore_drill_verdict_fails_the_ping(tmp_path):
+    """'backup present + fresh' is exactly the pair that reads green while the bytes are
+    unrestorable. With no drill verdict ever recorded, the run must FAIL and name the fix.
+
+    FAILS IF a box that has never proved a restore still pings success."""
+    tree = _make_tree(tmp_path, drill=None)
+    r = _run(tree)
+    assert r.returncode != 0, "a box with no restore-drill verdict must not ping success"
+    body = "\n".join(_curl_calls(tree))
+    assert "/fail" in body, body
+    assert "restore drill" in body and "ausmt-drill" in body, \
+        f"the failure must name the drill and how to install it: {body}"
+
+
+def test_failed_restore_drill_verdict_fails_the_ping(tmp_path):
+    """A drill that ran and FAILED is the loudest possible signal: the newest snapshot did not
+    restore. It must fail even though the snapshot is present and fresh."""
+    tree = _make_tree(tmp_path, drill='{"verdict":"fail","at":"2026-07-10T04:10:00Z",'
+                                      '"snapshot":"20260710T032000Z"}')
+    r = _run(tree)
+    assert r.returncode != 0, "a FAILED restore drill must fail the ping"
+    body = "\n".join(_curl_calls(tree))
+    assert "restore drill FAILED" in body, body
+
+
+def test_stale_restore_drill_verdict_fails_the_ping(tmp_path):
+    """A verdict that was written once and then stopped being refreshed means the drill timer has
+    died: restorability is no longer proven, so it must fail rather than rest on an old pass."""
+    tree = _make_tree(tmp_path)
+    verdict = tree["backups"] / "latest-drill.json"
+    old = datetime.datetime.now().timestamp() - 20 * 86400        # 20 days, past the 8-day default
+    os.utime(verdict, (old, old))
+    r = _run(tree)
+    assert r.returncode != 0, "a stale restore-drill verdict must fail the ping"
+    body = "\n".join(_curl_calls(tree))
+    assert "older than" in body, body
+
+
+def test_a_recent_passing_drill_does_not_fail(tmp_path):
+    """Non-vacuity: the healthy-box default (a recent pass) must NOT fail, or the three pins above
+    would be satisfied by a check that always fires."""
+    r = _run(_make_tree(tmp_path))
+    assert r.returncode == 0, r.stdout + r.stderr

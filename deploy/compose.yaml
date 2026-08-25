@@ -191,6 +191,20 @@ services:
       AUSMT_SMTP_PASS: ${AUSMT_SMTP_PASS:-}                 # SECRET — redacted from the config dump
       AUSMT_MAIL_FROM: ${AUSMT_MAIL_FROM:-}                 # From + Reply-To on issued-key email
       AUSMT_SUBMIT_PAGE_URL: ${AUSMT_SUBMIT_PAGE_URL:-}     # woven into the email; omit for no link line
+      # SELF-SERVE KEY ISSUANCE CAPS + KEY SHAPE (deploy/.env.example "Daily issuance rate limits" block)
+      # - the abuse-control knobs the request-key endpoint enforces: per-email / per-ip / global daily
+      # issuance caps, plus the self-serve key expiry + submission allowance. Forwarded as ${VAR:-} like
+      # the mail vars above: unset means config.py's _i() falls back to the SAME in-code default
+      # (3/20/200/14/5), so behaviour is byte-identical to leaving them out. Real incident (H1, deploy
+      # review section 5): config read these and .env.example advertised them, but they were MISSING from
+      # this block, so an operator clamping issuance during an abuse wave set values the container never
+      # saw - the exact 2026-07-24 mail-var class, recurring on the rate-limit knobs. NEVER ${VAR:?} here
+      # (a gateway-only guard would abort even a portal-only compose - see AUSMT_SUBMIT_KEY above).
+      AUSMT_KEYREQ_PER_EMAIL_DAILY: ${AUSMT_KEYREQ_PER_EMAIL_DAILY:-}        # max keys issued to one email/day (default 3)
+      AUSMT_KEYREQ_PER_IP_DAILY: ${AUSMT_KEYREQ_PER_IP_DAILY:-}              # max per connecting IP/day (default 20)
+      AUSMT_KEYREQ_GLOBAL_DAILY: ${AUSMT_KEYREQ_GLOBAL_DAILY:-}              # absolute daily backstop (default 200)
+      AUSMT_SELFSERVE_KEY_EXPIRY_DAYS: ${AUSMT_SELFSERVE_KEY_EXPIRY_DAYS:-}  # self-serve key lifetime, days (default 14)
+      AUSMT_SELFSERVE_KEY_ALLOWANCE: ${AUSMT_SELFSERVE_KEY_ALLOWANCE:-}      # submissions before exhaustion (default 5)
       # git identity for the container's git invocations. The commit AUTHOR is set per-commit in code
       # (AusMT Gateway <gateway@ausmt.local>, design §5.3); these HOME/config envs just give git a
       # writable config location on the read-only rootfs (pointed at the tmpfs) so it does not try to

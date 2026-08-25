@@ -1,0 +1,27 @@
+# AusMT weekly restore-drill timer. Fires ausmt-drill.service once a week. Install:
+#   sudo cp deploy/systemd/ausmt-drill.{service,timer} /etc/systemd/system/
+#   # (edit the __PLACEHOLDER__ paths + User= in the .service first - see that file)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ausmt-drill.timer
+#   systemctl list-timers ausmt-drill.timer          # confirm the next run
+#   sudo systemctl start ausmt-drill.service         # run one drill NOW to seed the verdict file
+# Then check the ops floor: the "drill" field should show a recent pass. See deploy/README.md
+# "Backups & restore".
+
+[Unit]
+Description=AusMT weekly restore drill (Mondays 04:10 UTC, + jitter)
+Documentation=file:///srv/ausmt/code/deploy/README.md
+
+[Timer]
+# Weekly, not nightly: the drill proves the SHAPE of the backup (integrity + schema), which changes
+# with a gateway migration rather than with each night's rows, and a weekly cadence keeps the alert
+# threshold (AUSMT_OPS_DRILL_MAX_H, default 8 days) comfortably wider than one missed run. 04:10
+# Monday sits after the 03:20 nightly backup has finished, so the drill reads a fresh snapshot.
+OnCalendar=Mon *-*-* 04:10:00
+RandomizedDelaySec=1800
+# Catch up one missed run after downtime, so a box off over a weekend still drills on the next boot
+# rather than silently skipping a week and ageing the verdict past its alert threshold.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

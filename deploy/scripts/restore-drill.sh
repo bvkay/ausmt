@@ -34,7 +34,24 @@ set -eu
 
 SQLITE_CMD="${AUSMT_BACKUP_SQLITE:-sqlite3}"
 
-die() { printf 'restore-drill: FAIL: %s\n' "$*" >&2; exit 1; }
+# record_verdict: leave a machine-readable record of THIS drill beside the snapshots, atomically.
+# Without it the drill's answer lived only in an operator's terminal: alert.sh already reads
+# backups/latest-drill.json and publishes it as the ops dashboard's "drill" field, so restorability
+# read as permanently unproven while "backup present and fresh" showed green. Written on BOTH
+# verdicts - a failed drill is the one an operator most needs surfaced, and a stale "pass" must
+# never stand as the last word. Best-effort: a drill that cannot write its record still reports.
+record_verdict() {
+  _v="$1"
+  [ -n "${SNAPSHOT:-}" ] || return 0
+  _dir="$(dirname "$SNAPSHOT")"
+  [ -d "$_dir" ] && [ -w "$_dir" ] || return 0
+  _tmp="$_dir/.latest-drill.$$"
+  printf '{"verdict":"%s","at":"%s","snapshot":"%s"}\n' \
+    "$_v" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$SNAPSHOT")" > "$_tmp" 2>/dev/null \
+    && mv -f "$_tmp" "$_dir/latest-drill.json" 2>/dev/null || rm -f "$_tmp" 2>/dev/null || true
+}
+
+die() { record_verdict fail; printf 'restore-drill: FAIL: %s\n' "$*" >&2; exit 1; }
 
 # ----- locate the snapshot -----------------------------------------------------------------------
 SNAPSHOT="${1:-}"
@@ -120,4 +137,5 @@ printf 'uploader_keys rows: %s\n' "$uk_count"
 newest="$(q "SELECT COALESCE(MAX(created_utc), '(none)') FROM submissions;" 2>/dev/null || echo '(query failed)')"
 printf 'newest submission created_utc: %s\n' "$newest"
 
+record_verdict pass
 printf '\nrestore-drill: PASS — snapshot %s is restorable (integrity ok, schema v2). Eyeball the figures above.\n' "$SNAPSHOT"

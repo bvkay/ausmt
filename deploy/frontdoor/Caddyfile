@@ -79,6 +79,13 @@
 					ipv4 24
 					ipv6 48
 				}
+				# R28: redact the /gateway/status/<token> capability from the logged URI - this is the
+				# PUBLIC edge where a status hit actually lands. The token is a secrets.token_urlsafe(32)
+				# bearer whose DB form is SHA-256 hashed; un-redacted it lands in this masked log verbatim
+				# and ships to the box. The regexp field op rewrites ONLY the token segment (the
+				# /gateway/status/ prefix, any query and every other URI are left intact). Caddy log
+				# `filter` supports regexp on request>uri (confirmed v2.11.4; image caddy:2-alpine).
+				request>uri regexp "^(/gateway/status/)[^/?]+" "${1}REDACTED"
 				request>headers>Cookie delete
 				request>headers>Authorization delete
 				request>headers>Set-Cookie delete
