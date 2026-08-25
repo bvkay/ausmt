@@ -1770,9 +1770,10 @@ async function bootFreshWindow(dataMap, url) {
   ok(/Handed 2 files to your browser - /.test(snackEl.textContent) &&
      /Progress appears in your browser's downloads\./.test(snackEl.textContent),
     "the direct confirmation states what was handed and where progress lives, got " + JSON.stringify(snackEl.textContent));
-  // Beyond the cap the offer stays a LIST + wget (driven through the cap seam: the fixture cannot
-  // hold a dozen multi-GB stations, and the cap's VALUE is a tuning constant, not a contract).
-  win.TS_DIRECT_MAX = 1;
+  // Beyond the cap the offer stays a LIST + wget (driven through the cap seam: the fixture's
+  // total is megabytes, and the cap's VALUE - 10 GB of TOTAL SIZE, owner-ruled - is a tuning
+  // constant, not a contract).
+  win.TS_DIRECT_MAX_BYTES = 1;
   A.paintDownloadRows();
   ok(/^Download list · 2 stations/.test(tsMeta("raw_packed")),
     "an over-cap row states the list mode, got " + JSON.stringify(tsMeta("raw_packed")));
@@ -1781,7 +1782,7 @@ async function bootFreshWindow(dataMap, url) {
   ok(/Download list ready - 2 files, /.test(snackEl.textContent),
     "the list confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
   ok(handed.length === 2, "the over-cap path hands nothing directly");
-  win.TS_DIRECT_MAX = 10;
+  win.TS_DIRECT_MAX_BYTES = 10 * 1024 * 1024 * 1024;
   // The wget DIALOG (owner, 2026-08-25): the snackbar action SHOWS the command - visible,
   // scrollable, with its run-in-a-terminal instructions - and the copy happens from the dialog,
   // so a reader sees what lands on their clipboard.
@@ -1792,14 +1793,34 @@ async function bootFreshWindow(dataMap, url) {
   const wgetModal = doc.getElementById("wgetModal"), wgetCmd = doc.getElementById("wgetCmd");
   ok(wgetModal && !wgetModal.classList.contains("hidden"), "the wget dialog must open from the snackbar action");
   ok(/terminal/i.test(wgetModal.textContent), "the dialog must say the command runs in the reader's own terminal");
+  // Platform tabs: three of them, the detected platform pre-selected (jsdom's navigator detects as
+  // Linux here), and the WINDOWS tab swaps to a genuinely different command - no here-doc
+  // (PowerShell/cmd cannot run one) and wget.exe by name (PowerShell aliases bare wget away).
+  const osTabs = [...doc.getElementById("wgetOs").querySelectorAll("button")];
+  ok(osTabs.length === 3 && osTabs.map(b => b.dataset.os).join() === "linux,mac,win",
+    "the dialog must carry Linux/macOS/Windows tabs, got " + osTabs.map(b => b.dataset.os).join());
+  ok(osTabs.filter(b => b.classList.contains("on")).length === 1,
+    "exactly one tab is pre-selected (the detected platform; jsdom's UA reports the HOST kernel, so which one is host-dependent)");
   ok(/^wget -c -q --show-progress --content-disposition -i -/.test(wgetCmd.textContent),
-    "the shown command must resume on re-run (-c) and show clean per-file progress, got " +
+    "the unix command must resume on re-run (-c) and show clean per-file progress, got " +
     JSON.stringify(wgetCmd.textContent.split("\n")[0]));
   ok(!/^#/.test(wgetCmd.textContent),
     "no leading # header: interactive zsh has no comments by default, so a pasted header line errors");
+  osTabs[2].click();
+  ok(/^wget\.exe -c -q --show-progress --content-disposition "https?:/.test(wgetCmd.textContent) &&
+     wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
+    "the Windows tab must carry the args form (wget.exe, no here-doc), got " +
+    JSON.stringify(wgetCmd.textContent.slice(0, 80)));
+  ok(/winget install/.test(doc.getElementById("wgetOsNote").textContent),
+    "the Windows tab must carry its install line");
+  doc.getElementById("wgetCopy").click();
+  ok(clipboard.length === 1 && clipboard[0] === wgetCmd.textContent && /wget\.exe/.test(clipboard[0]),
+    "the dialog's copy must put EXACTLY the ACTIVE tab's command on the clipboard");
+  osTabs[0].click();
+  clipboard.length = 0;
   doc.getElementById("wgetCopy").click();
   ok(clipboard.length === 1 && clipboard[0] === wgetCmd.textContent,
-    "the dialog's copy must put EXACTLY the shown command on the clipboard");
+    "switching back to Linux must restore the unix command for the copy");
   ok((clipboard[0].match(/\/go\/ts\//g) || []).length === 2,
     "the copied command must carry exactly the row's routed files, got " + JSON.stringify(clipboard[0]));
   ok(!/thredds\.nci\.org\.au/.test(clipboard[0]),

@@ -208,10 +208,11 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
     stations:rows};
   save("ausmt-pointers-"+tsUTC()+".json",JSON.stringify(doc,null,2),"application/json");
   if(files){
-    const cmd=tsWgetCommand(rows.filter(r=>r.levels));
+    const _r=rows.filter(r=>r.levels);
+    const cmds={unix:tsWgetCommand(_r),win:tsWgetCommandWin(_r)};
     snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+" - "+files+" fetchable file"+(files===1?"":"s")+", "+fmtBigBytes(bytes)+".",
           "Your browser downloads them; AusMT only points the way.",
-          {label:"Show wget command",onClick:()=>showWgetDialog(cmd)});}
+          {label:"Show wget command",onClick:()=>showWgetDialog(cmds)});}
   else snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+". None has a time-series file this deployment can route to.");});
 
 // ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
@@ -266,33 +267,67 @@ function tsHandoffDocument(stations,levels){
 // saved file is JSON (the #dlSh shape, so one habit reads both), and `wget -i` wants bare urls, so
 // naming the file would hand over a command that does not run. It fetches the ROUTES, never the
 // archive addresses beside them, because the route is what the front door counts.
-function tsWgetCommand(rows){
+function tsHandoffUrls(rows){
   const urls=[];(rows||[]).forEach(r=>r.levels.forEach(l=>{if(l.url)urls.push(l.url);}));
-  // No leading # header: interactive zsh has no comments by default, so a pasted header line
-  // globbed and errored (measured on a real run). -c makes a re-run RESUME: a completed file is
-  // skipped, a partial continues from where it stopped (the archive serves ranges) - without it a
-  // re-run silently downloads duplicates beside the originals. -q --show-progress keeps one clean
-  // bar per file instead of the per-request redirect chatter.
-  return ["wget -c -q --show-progress --content-disposition -i - <<'AUSMT_EOF'"].concat(urls,["AUSMT_EOF"]).join("\n");}
+  return urls;}
+// The unix form. No leading # header: interactive zsh has no comments by default, so a pasted
+// header line globbed and errored (measured on a real run). -c makes a re-run RESUME: a completed
+// file is skipped, a partial continues from where it stopped (the archive serves ranges) - without
+// it a re-run silently downloads duplicates beside the originals. -q --show-progress keeps one
+// clean bar per file instead of the per-request redirect chatter.
+function tsWgetCommand(rows){
+  return ["wget -c -q --show-progress --content-disposition -i - <<'AUSMT_EOF'"]
+    .concat(tsHandoffUrls(rows),["AUSMT_EOF"]).join("\n");}
+// The Windows form: no here-doc (PowerShell and cmd cannot run one), urls as plain arguments, and
+// wget.EXE by full name because PowerShell aliases bare `wget` to a different command. One line;
+// the dialog's command block scrolls.
+function tsWgetCommandWin(rows){
+  return ["wget.exe -c -q --show-progress --content-disposition"]
+    .concat(tsHandoffUrls(rows).map(u=>'"'+u+'"')).join(" ");}
 // One level's hand-off for the current scope, from the Download block's time-series rows. The row
 // names its own level, so no hidden chooser state can narrow it (the pre-Lane-B defect: a collapsed
 // accordion's level toggles silently scoped the old Time-series list export).
 //
-// A SMALL scope gets its FILES, not a file about them (owner, 2026-08-25): each route is handed to
-// the browser exactly as the drawer's single-station tile hands one, and the browser owns the
-// downloads and their progress (the 2026-08-23 ruling; AusMT still hosts and fetches nothing - the
-// 302s do the pointing). Beyond TS_DIRECT_MAX files the offer stays a LIST + wget: firing dozens
-// of multi-GB downloads at a browser is hostile, and the command line is the right tool at that
-// scale.
-var TS_DIRECT_MAX=10;
+// A SMALL scope gets its FILES, not a file about them (owner rulings 2026-08-25): each route is
+// handed to the browser exactly as the drawer's single-station tile hands one, and the browser
+// owns the downloads and their progress (the 2026-08-23 ruling; AusMT still hosts and fetches
+// nothing - the 302s do the pointing). The gate is the TOTAL SIZE, not the file count (owner,
+// same day): up to 10 GB the browser is the best tool; beyond it the offer stays a LIST + wget,
+// which is resumable and verifiable at a scale where browser downloads quietly are not.
+var TS_DIRECT_MAX_BYTES=10*1024*1024*1024;
 // The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a
-// reader should see what lands on their clipboard. Guarded binds like every other control.
-function showWgetDialog(cmd){
+// reader should see what lands on their clipboard. Per-platform tabs, with the DETECTED platform
+// pre-selected (detection only picks the default tab; researchers copy commands for other
+// machines, so all three stay one click away). Guarded binds like every other control.
+var WGET_OS_NOTES={
+  linux:"wget is preinstalled on most Linux distributions.",
+  mac:"Install wget once with Homebrew: brew install wget.",
+  win:"Install wget once: winget install JernejSimoncic.Wget. This form runs in PowerShell, Command Prompt or Git Bash (wget.exe by name, because PowerShell's own wget is a different command). For very large lists, use the Linux command in Git Bash or WSL.",
+};
+function detectOs(){
+  const p=String((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||navigator.userAgent||"");
+  // "windows", never bare /win/: Darwin (the macOS kernel some UA strings report) contains "win".
+  if(/windows/i.test(p)||/^win(32|64)?$/i.test(p))return "win";
+  if(/mac|darwin|iphone|ipad/i.test(p))return "mac";
+  return "linux";}
+var _wgetCmds=null;
+function _paintWgetTab(os){
+  const pre=document.getElementById("wgetCmd"),note=document.getElementById("wgetOsNote"),seg=document.getElementById("wgetOs");
+  if(!_wgetCmds||!pre)return;
+  pre.textContent=(os==="win")?_wgetCmds.win:_wgetCmds.unix;
+  if(note)note.textContent=WGET_OS_NOTES[os]||"";
+  if(seg&&seg.querySelectorAll)[...seg.querySelectorAll("button")].forEach(b=>b.classList.toggle("on",b.dataset.os===os));}
+function showWgetDialog(cmds){
   const m=document.getElementById("wgetModal"),pre=document.getElementById("wgetCmd");
-  if(!m||!pre){if(typeof copyTxt==="function")copyTxt(cmd);return;}   // no dialog markup: degrade to the copy
-  pre.textContent=cmd;
+  if(!m||!pre){if(typeof copyTxt==="function")copyTxt(cmds.unix);return;}   // no dialog markup: degrade to the copy
+  _wgetCmds=cmds;
+  _paintWgetTab(detectOs());
   m.classList.remove("hidden");
   if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
+(function(){const seg=document.getElementById("wgetOs");
+  if(seg&&seg.addEventListener)seg.addEventListener("click",e=>{
+    const b=e.target.closest?e.target.closest("button"):null;
+    if(b&&b.dataset.os)_paintWgetTab(b.dataset.os);});})();
 bindClick("wgetClose",()=>{const m=document.getElementById("wgetModal");if(m)m.classList.add("hidden");});
 bindClick("wgetCopy",()=>{const pre=document.getElementById("wgetCmd");
   if(pre&&typeof copyTxt==="function")copyTxt(pre.textContent);});
@@ -306,9 +341,9 @@ function tsLevelList(tok){
   if(hydrating("tsaccess")){snack("Waiting for the archive hand-off index…");return;}
   const built=tsHandoffDocument(scopeSel(),[tok]);
   if(!built.files){snack("Nothing in the current scope has a time-series file this deployment can route to at this level.");return;}
-  const cmd=tsWgetCommand(built.doc.stations);
-  const act={label:"Show wget command",onClick:()=>showWgetDialog(cmd)};
-  if(built.files<=TS_DIRECT_MAX){
+  const cmds={unix:tsWgetCommand(built.doc.stations),win:tsWgetCommandWin(built.doc.stations)};
+  const act={label:"Show wget command",onClick:()=>showWgetDialog(cmds)};
+  if(built.bytes<=TS_DIRECT_MAX_BYTES){
     built.doc.stations.forEach(r=>r.levels.forEach(l=>{if(l.url)tsOpenRoute(l.url);}));
     snack("Handed "+built.files+" file"+(built.files===1?"":"s")+" to your browser - "+fmtBigBytes(built.bytes)+". Progress appears in your browser's downloads.",
           (built.bytes>=HANDOFF_LARGE_BYTES?"Large download - this may take a while. ":"")+
@@ -316,7 +351,7 @@ function tsLevelList(tok){
     return;}
   save("ausmt-timeseries-"+tok+"-"+tsUTC()+".json",JSON.stringify(built.doc,null,2),"application/json");
   snack("Download list ready - "+built.files+" files, "+fmtBigBytes(built.bytes)+".",
-        "Too many files to hand a browser at once. Paste the copied command into your own terminal: wget fetches one file at a time, and a re-run resumes where it stopped.",act);}
+        "Too large a download to hand a browser at once. Paste the copied command into your own terminal: wget fetches one file at a time, and a re-run resumes where it stopped.",act);}
 // C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
 // pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
 // ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
@@ -549,7 +584,7 @@ function paintTsRows(st){
     const meta=b.querySelector?b.querySelector(".dlmeta"):null;
     // The meta's leading word states the action's MODE: files handed straight to the browser, or a
     // list + wget beyond the direct cap.
-    if(meta)meta.textContent=!known?"":(n?((n>TS_DIRECT_MAX?"Download list":"Download")+" · "+n+" station"+(n===1?"":"s")+(bytes?" · "+fmtBigBytes(bytes):"")+" · via an AusMT redirect to NCI"):"nothing in this scope");
+    if(meta)meta.textContent=!known?"":(n?((bytes>TS_DIRECT_MAX_BYTES?"Download list":"Download")+" · "+n+" station"+(n===1?"":"s")+(bytes?" · "+fmtBigBytes(bytes):"")+" · via an AusMT redirect to NCI"):"nothing in this scope");
     _tileState(b,known?(n?"ok":"none"):"wait");
     b.setAttribute("aria-busy",known?"false":"true");
     b.title=known?(n?b.dataset.gloss+" · "+n+" station"+(n===1?"":"s")+" this deployment can hand off"

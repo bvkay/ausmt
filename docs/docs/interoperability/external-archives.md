@@ -63,12 +63,12 @@ reporting an error.
 
 ## The hand-off
 
-Each time-series row's action is scoped to that row's level. For a small scope (up to ten files) it
-hands each file straight to your browser: every download is an AusMT route answering with a redirect
+Each time-series row's action is scoped to that row's level. For a small scope (up to 10 GB in
+total) it hands each file straight to your browser: every download is an AusMT route answering with a redirect
 to the archive holding the file, so the browser fetches from the archive directly and its own
 downloads list carries the progress. Beyond that, the action writes a pointer file instead - one
-entry per station, route plus the archive's own address for reference - because feeding dozens of
-multi-gigabyte downloads to a browser at once helps nobody. The portal shows the exact `wget`
+entry per station, route plus the archive's own address for reference - because feeding tens of
+gigabytes to a browser at once helps nobody. The portal shows the exact `wget`
 command to run in your own terminal - it fetches one file at a time, follows the redirects on its
 own, and a re-run resumes: completed files are skipped and partial ones continue (`curl` needs
 `-L`). The **Pointers (JSON)** export in the Metadata block is the full-provenance
