@@ -313,6 +313,41 @@ def test_commit_edit_oserror_returns_clean_500(tmp_path):
     run(_body())
 
 
+def test_commit_edit_oserror_inside_publish_rolls_surveys_live_back(tmp_path, monkeypatch):
+    """Lane H / G5 at the app seam. The test above replaces _commit_edit_blocking wholesale, so it never
+    enters publish.commit_metadata_edit and never asks whether the working tree was restored. This drives
+    the REAL blocking commit with a failing survey.yaml write. FAILS IF the OSError escapes publish.py:
+    write_bytes truncates before it writes, so surveys-live is left with a half-written survey.yaml and
+    rolled_back False, and preflight then refuses every later publish by every curator as 'checkout is
+    dirty' until an operator intervenes."""
+    async def _body():
+        import hashlib
+        import pathlib
+
+        surveys_live = tmp_path / "surveys-live"
+        write_survey_live(surveys_live)
+        git = FakeGit()
+        async with app_client(tmp_path, git_runner=git, edit_runner=inproc_edit_runner(surveys_live),
+                              surveys_live_dir=surveys_live) as (_client, _app, gw, _cfg):
+            new_yaml = b"slug: demo-survey-2026\nversion: 9.9.9\n"
+            real_write = pathlib.Path.write_bytes
+
+            def _boom(self, data):
+                if self.name == "survey.yaml":
+                    raise OSError(28, "No space left on device")
+                return real_write(self, data)
+
+            monkeypatch.setattr(pathlib.Path, "write_bytes", _boom)
+            resp = await gw._commit_edit("demo-survey-2026", new_yaml,  # noqa: SLF001
+                                         hashlib.sha256(new_yaml).hexdigest(), "curator1", "a note")
+            # Fail-closed, and closed on a tree that is back where it started: 409 is the shape every
+            # sibling publish path returns, and the retry the message promises now genuinely works.
+            assert resp.status_code == 409, resp.status_code
+            assert git.rolled_back, f"surveys-live was not rolled back: {git.calls}"
+            assert git.branch == "main", f"HEAD left on {git.branch!r}, not back on main"
+    run(_body())
+
+
 # --------------------------------------------------------------------------------------------------
 # §3.7 hostile field values render inert
 # --------------------------------------------------------------------------------------------------

@@ -692,6 +692,9 @@ def test_f3_oserror_mid_batch_rolls_the_whole_batch_back(tmp_path, monkeypatch):
     assert ei.value.phase == "batch-write", ei.value.phase
     assert git.rolled_back, f"OSError mid-batch did not roll back: {git.calls}"
     assert git.start_ref in git.reset_targets
+    # The pin shape the four sibling paths now share (test_publish_rollback_parity.py): the ref alone is
+    # not enough, HEAD must be off the feature branch or the next preflight refuses for every curator.
+    assert git.branch == "main", f"HEAD left on {git.branch!r}, not back on main"
     assert any(c[:2] == ["branch", "-D"] for c in git.calls)
 
 

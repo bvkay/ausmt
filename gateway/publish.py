@@ -14,7 +14,10 @@ Fail closed at EVERY git step (design §5): the ENTIRE git sequence is wrapped s
 point (dirty tree, a commit-hook rejection, a non-ff merge, a push rejection) rolls surveys-live back
 to the captured pre-state (ref AND branch, plus removal of staged untracked files) and lands
 PUBLISH_FAILED. No partial publish; a PUBLISH_FAILED submission leaves surveys-live byte-for-byte the
-pre-state, so a retry starts from a known-good state.
+pre-state, so a retry starts from a known-good state. EVERY commit path here also catches errors BELOW
+the PublishError layer (an OSError from write_bytes/copytree, a git-runner timeout) and rolls back
+before re-raising as a PublishError: an escaping error would leave the checkout on a feature branch or
+dirty, and the next pre-flight then refuses every publish for every curator until an operator steps in.
 
 git is a SUBPROCESS behind an INJECTED SEAM (a git-runner callable on the Gateway, defaulting to the
 real subprocess, overridable in tests — like the C10 scanner seam) so tests need no real git.
@@ -22,7 +25,9 @@ real subprocess, overridable in tests — like the C10 scanner seam) so tests ne
 House rules enforced here: NO submitter email in the commit (PII stays in the DB; the commit records
 who CURATED, not private contact). Subprocess args are a LIST, never shell=True; cwd pinned to
 surveys-live; explicit SCRUBBED env (the gateway secrets are dropped so git + any hook cannot read
-them). The slug is charset-validated before it reaches a path or a branch name.
+them). The slug is charset-validated before it reaches a path or a branch name. Control characters are
+collapsed out of every curator-supplied value before it interpolates into a commit message, so a
+newline in a note cannot forge an audit trailer into the history that IS the audit record.
 """
 from __future__ import annotations
 
@@ -61,6 +66,13 @@ _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 # .edi. Re-checked here before a selected name becomes a path component in `git rm` (the runner
 # checked too; this is the last gate before a git/fs op). Mirrors runner.edit._EDI_NAME_RE.
 _EDI_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.edi$", re.IGNORECASE)
+
+# Any control character (newline/CR/TAB included) is collapsed out of a value before it interpolates
+# into a commit subject/body. A newline in a curator note or curator name would otherwise open a line
+# of its own in the message and forge a `Curated-by:`/`Approved-by:` trailer into the git audit record
+# (the git history IS the audit trail). Mirrors app.py's _CONTROL_CHAR_RE, applied HERE in the body
+# builders so the guard holds for every caller, not only the route that remembers to check.
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class PublishError(Exception):
@@ -109,6 +121,13 @@ def validate_slug(slug: str | None) -> str:
     if not slug or not _SLUG_RE.fullmatch(slug):
         raise PublishError("guard", f"invalid or missing slug: {slug!r}")
     return slug
+
+
+def _flat(value: str | None) -> str:
+    """Collapse control characters to spaces so an interpolated value can never open a line of its own
+    in a commit message. Collapsed, not rejected or dropped: the audit record must still carry what the
+    curator actually wrote, and a note is free text the curator cannot be expected to pre-sanitise."""
+    return _CONTROL_CHAR_RE.sub(" ", value or "")
 
 
 @dataclass(frozen=True)
@@ -206,6 +225,13 @@ def stage_and_commit(git_runner, package_dir: Path, surveys_live: Path, slug: st
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
+    except Exception as exc:  # noqa: BLE001 -- F3 parity: ANY error below the PublishError layer (an
+        # OSError from copytree, a subprocess failure from the git runner) must still roll the WORKING
+        # TREE back, never leave surveys-live on the submit/ branch with a half-copied package. Re-raised
+        # AS a PublishError so the caller's fail-closed PUBLISH_FAILED path holds.
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise PublishError(
+            "stage-write", f"unexpected error mid-publish ({type(exc).__name__}): {exc}"[:500]) from exc
     return new_ref
 
 
@@ -237,8 +263,8 @@ def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: by
     if not dest_dir.is_dir():
         raise PublishError("guard", f"survey {slug!r} does not exist in surveys-live")
     branch = f"metaedit/{slug}"
-    subject = f"metadata edit by curator:{curator_name}: {slug}"
-    body = f"Curated-by: curator:{curator_name}\nSurvey: {slug}\nEdit-note: {note}"
+    subject = f"metadata edit by curator:{_flat(curator_name)}: {slug}"
+    body = f"Curated-by: curator:{_flat(curator_name)}\nSurvey: {slug}\nEdit-note: {_flat(note)}"
     try:
         (dest_dir / "survey.yaml").write_bytes(new_yaml)
         _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
@@ -256,6 +282,13 @@ def commit_metadata_edit(git_runner, surveys_live: Path, slug: str, new_yaml: by
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
+    except Exception as exc:  # noqa: BLE001 -- F3 parity: ANY error below the PublishError layer (an
+        # OSError from write_bytes, a subprocess failure from the git runner) must still roll the WORKING
+        # TREE back. write_bytes truncates before it writes, so an escaping error leaves survey.yaml half
+        # written and the checkout dirty. Re-raised AS a PublishError so the caller's 409 path holds.
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise PublishError(
+            "edit-write", f"unexpected error mid-edit ({type(exc).__name__}): {exc}"[:500]) from exc
     return new_ref
 
 
@@ -315,10 +348,10 @@ def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: 
                            "refusing to remove ALL stations — at least one EDI must remain")
 
     branch = f"stationrm/{slug}"
-    subject = f"station removal by curator:{curator_name}: {slug}"
+    subject = f"station removal by curator:{_flat(curator_name)}: {slug}"
     removed_line = ", ".join(sorted(targets))
-    body = (f"Curated-by: curator:{curator_name}\nSurvey: {slug}\n"
-            f"Removed-stations: {removed_line}\nEdit-note: {note}")
+    body = (f"Curated-by: curator:{_flat(curator_name)}\nSurvey: {slug}\n"
+            f"Removed-stations: {removed_line}\nEdit-note: {_flat(note)}")
     rel_edis = [f"surveys/{slug}/transfer_functions/edi/{name}" for name in sorted(targets)]
     try:
         _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
@@ -339,6 +372,14 @@ def commit_station_removal(git_runner, surveys_live: Path, slug: str, new_yaml: 
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
+    except Exception as exc:  # noqa: BLE001 -- F3 parity: ANY error below the PublishError layer (an
+        # OSError from write_bytes, a subprocess failure from the git runner) must still roll the WORKING
+        # TREE back. The EDIs are git-rm'd BEFORE the yaml write, so an escaping error leaves surveys-live
+        # on the stationrm/ branch with the station files already gone. Re-raised AS a PublishError so the
+        # caller's 409 path holds.
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise PublishError(
+            "removal-write", f"unexpected error mid-removal ({type(exc).__name__}): {exc}"[:500]) from exc
     return new_ref
 
 
@@ -370,9 +411,9 @@ def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_nam
         raise PublishError("guard", f"survey {slug!r} does not exist in surveys-live")
 
     branch = f"retire/{slug}"
-    subject = f"retire survey by curator:{curator_name}: {slug}"
-    body = (f"Curated-by: curator:{curator_name}\nSurvey: {slug}\n"
-            f"Retired: {slug}\nRetire-note: {note}")
+    subject = f"retire survey by curator:{_flat(curator_name)}: {slug}"
+    body = (f"Curated-by: curator:{_flat(curator_name)}\nSurvey: {slug}\n"
+            f"Retired: {slug}\nRetire-note: {_flat(note)}")
     rel_path = f"surveys/{slug}"
     try:
         _git(git_runner, ["checkout", "-B", branch], surveys_live, "git-branch")
@@ -391,6 +432,14 @@ def commit_survey_removal(git_runner, surveys_live: Path, slug: str, curator_nam
     except PublishError:
         _rollback(git_runner, surveys_live, pre, branch)
         raise
+    except Exception as exc:  # noqa: BLE001 -- F3 parity: this path writes nothing of its own, so its
+        # non-PublishError comes from the git runner (real_git_runner raises subprocess.TimeoutExpired on
+        # its 300 s bound, an OSError on exec). It must still roll the WORKING TREE back: the whole package
+        # is git-rm'd first, so an escaping error leaves surveys-live on the retire/ branch with the survey
+        # already gone. Re-raised AS a PublishError so the caller's 409 path holds.
+        _rollback(git_runner, surveys_live, pre, branch)
+        raise PublishError(
+            "retire-write", f"unexpected error mid-retirement ({type(exc).__name__}): {exc}"[:500]) from exc
     return new_ref
 
 
