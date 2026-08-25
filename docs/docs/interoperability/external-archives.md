@@ -41,28 +41,35 @@ identifier, holding repository, access conditions.
 ## Finding what is available now
 
 Recording a pointer says the data exists somewhere. It does not say whether a given station's files can
-be fetched today. The portal answers that separately, in one **Availability** group in its screening
-panel, because the two halves of the answer are different questions:
+be fetched today. The portal answers that in two places, because the two halves of the answer are
+different questions:
 
-* **Transfer functions.** A licence question: whether AusMT is allowed to serve that station's processed
-  files itself.
-* **Time series, by level.** A route question: whether the archive holds a verified file for that
-  station at that product level and serves it openly. The levels offered are packed raw, Level 0,
-  Level 1 MTH5 and Level 1 NetCDF; each states how many stations it covers and what they total.
+* **The Data available filter** (Browse pane) decides what the map shows. Its options are the licence
+  question (*Transfer functions downloadable here*: whether AusMT is allowed to serve that station's
+  processed files itself) and the route question per time-series level (whether the archive holds a
+  verified file for that station at that level and serves it openly). Selecting a level keeps the
+  stations whose files are ready to fetch.
+* **The Download block** (Select & download pane) prices what the current scope can take. Every row
+  reflects the selection when one exists, else the filtered corpus, and the scope line above the rows
+  says which. Level 2 rows (EDI, EMTF XML, MTH5 zips) are served by AusMT; the time-series rows
+  (packed raw, Level 0, Level 1 MTH5, Level 1 NetCDF) are hand-offs, each stating how many stations in
+  scope it covers and what they total.
 
-Choosing a level keeps the stations whose files are ready to fetch, and the choice narrows what the
-archive hand-off writes. The list behind it is built from the survey packages' verified-resource
-registers, so a station whose access is embargoed, whose position is withheld, or whose match is still
-awaiting curator adjudication is simply not in it: there is no setting that reveals one. A deployment
-whose registers verify nothing publishes no list at all, and the panel says exactly that rather than
+The list behind the time-series rows is built from the survey packages' verified-resource registers,
+so a station whose access is embargoed, whose position is withheld, or whose match is still awaiting
+curator adjudication is simply not in it: there is no setting that reveals one. A deployment whose
+registers verify nothing publishes no list at all, and the panel says exactly that rather than
 reporting an error.
 
 ## The hand-off
 
-Selecting stations and taking the **Time-series list** export writes a pointer file: one row per
-station and level, each naming an AusMT route that answers with a redirect to the archive holding the
+Each time-series row's **Download list** action writes a pointer file scoped to that row's level: one
+entry per station, naming an AusMT route that answers with a redirect to the archive holding the
 file, with the archive's own address recorded alongside for reference. `wget` follows the redirect on
-its own; `curl` needs `-L`. A station's own drawer offers the same route per level directly.
+its own; `curl` needs `-L`. The **Pointers (JSON)** export in the Metadata block is the full-provenance
+form: every station in scope appears (with its dataset DOI or the reason none is recorded), routable
+stations carry their per-level rows, and the document records its own scope. A station's own drawer
+offers the same route per level directly.
 
 **Progress belongs to your browser, not to this page.** The redirect hands the bytes from your browser
 to the archive, so the portal never sees the transfer and shows no progress bar and no completion

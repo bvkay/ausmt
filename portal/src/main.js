@@ -504,13 +504,9 @@ function wireHydration(){
   const tf=TF_READY.then(()=>{rehydrateOpenDrawer();});
   const sci=SCI_READY.then(()=>{
     applySciToStations();
-    // SCI_READY settles on FAILURE too (phase 2 records the failure rather than rejecting), so the gate is
-    // hydrUsable, not the bare fact that the promise resolved. Re-enabling the completeness/dimensionality
-    // colour modes after a 404 would hand the reader live controls over values that will never arrive: they
-    // would paint every station the "not evaluated" grey. They stay disabled, with a title that says which
-    // wait this is. The completeness PREDICATE is gated on the same hydrUsable inside passesCore, which is
-    // what keeps it inert now that the Availability group has taken its rail control away.
-    if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
+    // SCI_READY settles on FAILURE too (phase 2 records the failure rather than rejecting), so
+    // consumers gate on hydrUsable, not the bare fact that the promise resolved. The completeness
+    // PREDICATE (qMin) is gated on the same hydrUsable inside passesCore, which keeps it inert.
     if(typeof recolor==="function")recolor();
     if(ST.length&&typeof refresh==="function")refresh();
     rehydrateOpenDrawer();
@@ -519,14 +515,15 @@ function wireHydration(){
   // before it landed, so they would sit blank until the reader next changed the selection. Repaint them
   // on the same gate that re-renders the drawer.
   const man=MANIFEST_READY.then(()=>{rehydrateOpenDrawer();
-    if(typeof paintExportSizes==="function")paintExportSizes();});
-  // ts_access.json settles the Availability facet: until it lands nothing on the page knows which
-  // stations this deployment can hand off, so the chooser is repainted here (its counts, its sizes
-  // and the disabled state that was in-flight a moment ago) and refresh() re-applies a level a
-  // reader chose while the filter was inert. It never rejects - absence is the honest answer - so
-  // there is no failure branch to mirror sci's.
+    if(typeof paintDownloadRows==="function")paintDownloadRows();});
+  // ts_access.json settles the availability facet: until it lands nothing on the page knows which
+  // stations this deployment can hand off, so the Download rows and the Data available options are
+  // repainted here (counts, sizes, the disabled state that was in-flight a moment ago) and
+  // refresh() re-applies a level filter chosen while it was inert. It never rejects - absence is
+  // the honest answer - so there is no failure branch to mirror sci's.
   const tsa=TSACC_READY.then(()=>{
-    if(typeof paintTsChooser==="function")paintTsChooser();
+    if(typeof paintDownloadRows==="function")paintDownloadRows();
+    if(typeof paintAvailSelect==="function")paintAvailSelect();
     if(ST.length&&typeof refresh==="function")refresh();
     rehydrateOpenDrawer();});
   HYDRATION_DONE=Promise.all([tf,sci,man,tsa]);
@@ -541,12 +538,12 @@ async function boot(){
     // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
     try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
   }
-  // The phase-2-driven rail controls are inert and disabled until their product is USABLE: the
-  // completeness/dimensionality colour modes (setSciControlsEnabled) and the Availability chooser,
-  // which paints its own in-flight state. Applied BEFORE the first render so neither is ever briefly
-  // live over data that has not arrived.
-  if(typeof setSciControlsEnabled==="function")setSciControlsEnabled(hydrUsable("sci"));
-  if(typeof paintTsChooser==="function")paintTsChooser();
+  // The ts_access-driven surfaces are inert and disabled until the index is known: the Download
+  // block's time-series rows and the Data available level options each paint their own in-flight
+  // state. Applied BEFORE the first render so neither is ever briefly live over data that has not
+  // arrived.
+  if(typeof paintDownloadRows==="function")paintDownloadRows();
+  if(typeof paintAvailSelect==="function")paintAvailSelect();
   renderBuildId();
   runInit();
   wireHydration();

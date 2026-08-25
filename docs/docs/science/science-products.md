@@ -21,7 +21,7 @@ Implemented, parsed with mt_metadata and computed by the engine into the served 
   qualifies them, and in the older
   [`dimensionality.json`](../reference/station-products.md#2-dimensionalityjson) beside it (not a
   contract)
-- the selection-level [strike](strike-analysis.md) rose, drawn in the browser from served phase-tensor
+- (retired 2026-08) the selection-level [strike](strike-analysis.md) rose, formerly drawn from served phase-tensor
   azimuths
 - the `q` completeness-and-smoothness scalar, defined under
   [`station.json` diagnostics](../reference/station-products.md#18-diagnostics)

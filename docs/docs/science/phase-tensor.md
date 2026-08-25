@@ -41,7 +41,7 @@ beside `station.json` and is not a contract. It is a triage product; period-by-p
 
 For every served station: per-period `Φmin`, `Φmax`, azimuth and skew β in the transfer-function data
 product; a phase-tensor plot in the station drawer; and the azimuths, which feed the dimensionality
-classification and the selection-level [strike rose](strike-analysis.md). Not generated: phase tensor
+classification (the selection-level [strike rose](strike-analysis.md) is retired). Not generated: phase tensor
 ellipse maps per period or period band, and survey-level summaries.
 
 Phase tensor products are diagnostic tools, not geological interpretations. Similar responses can arise

@@ -1428,7 +1428,7 @@ function drawerFitOptions(){
   return {paddingTopLeft:[0,0],paddingBottomRight:[w,0]};}
 function selectSurvey(sv){
   // Stage B (selection-state isolation): scoping the map to one survey is a TEMPORARY LENS. Snapshot the
-  // tree BEFORE mutating it (enterSelectLens, filters.js) and enter Select & export so the exports this
+  // tree BEFORE mutating it (enterSelectLens, filters.js) and enter Select & download so the downloads this
   // selection enables are visible (they live in the Select pane). The lens is restored when the visitor
   // returns to Browse or leaves the map. The Surveys catalogue no longer reads this tree state at all
   // (surveyVisible), so the scoping can never empty it; the snapshot keeps the MAP tree honest too.
