@@ -4,6 +4,9 @@
 // referenced only inside event handlers (runtime), never at load time.
 const tree=document.getElementById("tree");
 const pLo=document.getElementById("pLo"),pHi=document.getElementById("pHi");
+// The empty-state selection hint is OWNED by the markup (#selHint's default text in index.html);
+// read once at load so the copy lives in one place. updateSel restores it when a selection clears.
+const SEL_HINT_EMPTY=(document.getElementById("selHint")||{textContent:""}).textContent;
 let findActive=-1;   // UX6 Wave F (F3): index of the keyboard-highlighted Find option (-1 = none). Declared
                      // up here so renderFind() (which resets it) is never in its temporal dead zone.
 function sliderRead(){let lo=+pLo.value,hi=+pHi.value;if(lo>hi)[lo,hi]=[hi,lo];return[10**lo,10**hi,lo,hi];}
@@ -125,13 +128,15 @@ function refresh(){paintSlider();visible=ST.filter(passes);
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
-  const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlTs","dlCite","dlZip","dlZipXml","dlZipH5","strike"].forEach(id=>document.getElementById(id).disabled=!on);
+  // Guarded like exports.js bindClick: a renamed export button must not abort every later line of
+  // this function on each selection change (the bind-time console.error is the loud signal).
+  const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlTs","dlCite","dlZip","dlZipXml","dlZipH5","strike"].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!on;});
   // The three format zips also state what the current selection would cost. The estimate is derived from
   // the download manifest, so it is owned by exports.js (which owns the packaging that must agree with
   // it) and simply re-run here, where the selection is known to have changed. Guarded like the other
   // cross-module calls: a harness that loads filters.js without exports.js still updates the counts.
   if(typeof paintExportSizes==="function")paintExportSizes();
-  document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":"Draw on the map with the buttons below (or the toolbar, top-left), or take everything that passes the filters.";
+  document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":SEL_HINT_EMPTY;
   // UX6 Wave D (D4, #21): until a selection exists, hide the whole export row and show the empty-state
   // hint in its place; reveal the row once there is something to export. Class toggle only — the buttons
   // keep their own disabled state above.
@@ -400,7 +405,9 @@ function setSidebarMode(mode){
 document.getElementById("modeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b||!b.dataset.mode)return;setSidebarMode(b.dataset.mode);});
 // "Select all filtered" makes a selection, so (D2) auto-switch to Select & export for discoverability of
 // the exports it just enabled — the same nudge the draw-created handler in map.js makes.
-document.getElementById("selAll").onclick=()=>{selected=new Set(visible.map(s=>s.i));updateSel();setSidebarMode("select");};
+// It also CLEARS any drawn shape: refresh() re-derives the selection from shapes, so a stale shape
+// would silently discard the select-all on the next filter change.
+document.getElementById("selAll").onclick=()=>{drawn.clearLayers();selected=new Set(visible.map(s=>s.i));updateSel();setSidebarMode("select");};
 document.getElementById("clearSel").onclick=()=>{selected.clear();drawn.clearLayers();updateSel();};
 
 // S3: Year range filter — two plain number inputs; either change re-filters (refresh() re-reads
