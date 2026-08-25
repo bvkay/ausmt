@@ -31,7 +31,7 @@
 const TOUR_STEPS=[
   {sel:"#map",text:"Every dot is an MT station. Click one to see its transfer function.",
    enter:_tourEnterMapView},
-  {sel:"aside.filters",text:"Filter by data type, or draw an area on the map. More filters live under Screening (advanced)."},
+  {sel:"aside.filters",text:"Filter by data type, data availability and year, or draw an area on the map."},
   {sel:"#find",text:"Search stations, surveys or collections. Results update as you type.",
    enter:_tourEnterFindDemo,exit:_tourExitFindDemo},
   {sel:"#tree",text:"Browse by country, organisation or survey. Tick a level to show or hide it.",
@@ -69,10 +69,10 @@ function _tourEnterMapView(){
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
 }
-// UX6 Wave D (D2 follow-up): the .selbox step's target lives in the rail's Select & export mode pane,
+// UX6 Wave D (D2 follow-up): the .selbox step's target lives in the rail's Select & download mode pane,
 // which is hidden in the default Browse mode (zero rect => the step would fall back to the centred
 // no-spotlight card). Enter: force the map view, save the visitor's rail mode, and switch to
-// Select & export so the target is visible and spotlit. Exit (Next/Back/close — the same three-path
+// Select & download so the target is visible and spotlit. Exit (Next/Back/close - the same three-path
 // discipline as the Find/tree demos): put the saved mode back, so the tour never leaks a mode change.
 // Guarded so a build without the D2 mode split degrades to the old centred-card behaviour, no crash.
 let _tourSelPrevMode=null;           // rail mode before the selbox step; null = nothing to restore
@@ -95,6 +95,9 @@ function _tourExitSelbox(){
 let _tourFindPrev=null;              // visitor's Find value before the demo; null = nothing to restore
 function _tourEnterFindDemo(){
   _tourEnterMapView();
+  // Find lives inside the Advanced search accordion; the tour opens it so the spotlit target is
+  // visible (the exit hook leaves it open - closing would yank the panel out from under the reader).
+  const adv=document.getElementById("advSearch");if(adv)adv.open=true;
   const f=document.getElementById("find");
   if(!f)return;
   if(_tourFindPrev===null)_tourFindPrev=f.value;

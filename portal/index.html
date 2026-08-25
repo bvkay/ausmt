@@ -94,15 +94,6 @@
   .seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
   .seg button{flex:1;background:var(--panel-2);border:0;color:var(--muted);font-size:12px;padding:6px;cursor:pointer}
   .seg button.on{background:var(--copper);color:#16110b;font-weight:600}
-  .pslider{position:relative;height:30px;margin:18px 2px 2px}
-  .pslider .track{position:absolute;top:13px;left:0;right:0;height:4px;background:var(--line);border-radius:2px}
-  .pslider .fill{position:absolute;top:13px;height:4px;background:var(--copper);border-radius:2px}
-  .pslider input[type=range]{position:absolute;top:0;left:0;width:100%;height:30px;appearance:none;-webkit-appearance:none;background:none;pointer-events:none;margin:0}
-  .pslider input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--text);border:3px solid var(--copper);pointer-events:auto;cursor:grab}
-  .pslider input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--text);border:3px solid var(--copper);pointer-events:auto;cursor:grab}
-  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
-  .pread{font-family:var(--mono);font-size:13px;margin-top:9px}
-  .pread span{color:var(--copper)}
   /* UX7a (A4): the country→org→survey tree fills the rail's remaining height (flex-grow) and scrolls
      internally, so the list runs to the bottom of the page. The rail itself does NOT gain a second outer
      scrollbar — only the tree scrolls. The flex chain that makes this work (each ancestor min-height:0 so
@@ -145,6 +136,22 @@
   select,input[type=text]{width:100%;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
   select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
   .selbox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:12px}
+  /* Lane B: the Download block speaks the drawer's Related-products tile language (.prod/.pdot/
+     .sechead/.rolechip, reused verbatim). The whole tile is the action; the small line carries the
+     scope-priced figure. */
+  .dlbox{background:transparent;border:0;padding:0}
+  .dlbox .scopeline{margin:0 0 4px;font-family:var(--mono)}
+  .dlbox .sechead{margin-top:14px}
+  .dltiles{display:flex;flex-direction:column;gap:6px}
+  .dltiles .prod{width:100%;text-align:left;font-family:inherit;color:var(--text);font-size:12px}
+  .dltiles .prod>div{flex:1;min-width:0}
+  .dltiles .prod[disabled]{opacity:.45;cursor:default}
+  .dltiles .prod[disabled]:hover{border-color:var(--line)}
+  /* Advanced search (Browse): the expandable refinement stack under Data type. */
+  details.advanced{border:1px solid var(--line);border-radius:6px;padding:2px 10px 10px}
+  details.advanced>summary{cursor:pointer;padding:9px 0;font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);user-select:none}
+  details.advanced[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
+  details.advanced h2{margin-top:12px}
   .selbox .big{font-family:var(--mono);font-size:26px;font-weight:700}
   .selbox .hint{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}
   .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
@@ -528,20 +535,6 @@
   .yearrange input{width:0;flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
   .yearrange span{color:var(--muted)}
   .fieldnote{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
-  .dlonly{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
-  .dlonly input{accent-color:var(--copper)}
-  /* Availability (R2/R3): a sub-heading inside the group, one weight down from the group's own h2 so
-     the two questions read as parts of one answer rather than as two sections. */
-  .availsub{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);
-    font-weight:600;margin:14px 0 6px;text-align:center}
-  /* The per-level chooser STACKS. Four labels each carrying a station count and a summed size do not
-     fit the single-row .seg, so this opts that row out rather than restyling .seg for everyone. A
-     disabled button is a level nothing in this deployment publishes (or an index still in flight),
-     and it must read as inert rather than as merely unselected. */
-  .seg.segcol{flex-direction:column}
-  .seg.segcol button{text-align:left;padding:7px 9px;border-top:1px solid var(--line);line-height:1.35}
-  .seg.segcol button:first-child{border-top:0}
-  .seg.segcol button[disabled]{opacity:.45;cursor:default}
   .recentlist{list-style:none;display:flex;flex-direction:column;gap:6px}
   .recentlist li{font-size:12.5px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
   .recentlist a{color:var(--text);text-decoration:none}
@@ -549,13 +542,6 @@
   .recentlist .ra-date{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
   #recentStrip{margin-bottom:16px}
   #recentStrip h2{margin-bottom:8px}
-  /* Screening (advanced) — collapsed-by-default details wrapping the Min-TF-diagnostic slider +
-     colour-by segmented control (relocated per operator feedback; see index.html comment above it) */
-  details.advanced{border:1px solid var(--line);border-radius:6px;padding:2px 10px 10px}
-  details.advanced>summary{cursor:pointer;padding:9px 0;font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);user-select:none}
-  details.advanced[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
-  details.advanced .advgroup{margin-top:14px}
-  details.advanced .advgroup:first-of-type{margin-top:6px}
 
   /* ===== UX6 Wave D — map page + sidebar structure ============================================== */
   /* D2: Browse / Select-&-export mode panes. Wrapping the rail sections in two containers costs them
@@ -721,14 +707,9 @@
        is UNCHANGED — the split is containers + a mode toggle, not id churn. Reuses the .seg style. -->
   <div class="seg" id="modeSeg" data-views="both">
     <button type="button" data-mode="browse" class="on">Browse</button>
-    <button type="button" data-mode="select">Select &amp; export</button>
+    <button type="button" data-mode="select">Select &amp; download</button>
   </div>
   <div id="browseMode" class="railmodepane">
-  <section data-views="both">
-    <h2>Find</h2>
-    <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
-    <div id="findResults" class="findresults" role="listbox"></div>
-  </section>
   <section data-views="both">
     <h2>Data type</h2>
     <fieldset class="typegrid" id="typeBoxes">
@@ -745,6 +726,38 @@
        first-within the tree). buildTree() (filters.js) fills #collGroup when the boot data has
        collections; #collGroup:empty hides it otherwise. Element ids and the group-toggle behaviour are
        unchanged — only the mount point moved out of #tree. -->
+  <section data-views="both">
+    <details class="advanced" id="advSearch">
+      <summary>Advanced search</summary>
+    <h2>Find</h2>
+    <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
+    <div id="findResults" class="findresults" role="listbox"></div>
+    <h2>Data available</h2>
+    <!-- Lane B (D1): availability filtering is a single-select VIEWING filter beside its sibling,
+         data type. "Transfer functions downloadable here" is the s.ediAvail licence predicate the
+         retired tickbox carried; the four level options filter on ts_access.json membership and are
+         DISABLED until the index settles (filters.js paintAvailSelect owns their state - the level
+         filter is never live over data that has not arrived, and a no-index deployment says so).
+         The Download block prices the scope; this control only decides what the map shows. -->
+    <select id="availSel" aria-label="Data available">
+      <option value="">Any</option>
+      <option value="tf">Transfer functions downloadable here</option>
+      <option value="raw_packed">Packed raw time series</option>
+      <option value="level0">Level 0 time series</option>
+      <option value="level1_mth5">Level 1 MTH5</option>
+      <option value="level1_netcdf">Level 1 NetCDF</option>
+    </select>
+    <div class="fieldnote">Selecting a level keeps the stations whose files are ready to fetch.</div>
+    <h2 id="yearRangeHead" title="Filters on each survey's declared acquisition year(s)">Year range</h2>
+    <div class="yearrange">
+      <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
+      <span>–</span>
+      <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
+    </div>
+
+    <div class="fieldnote">Filters on each survey's declared year(s); surveys with no declared date are hidden once a year is set.</div>
+    </details>
+  </section>
   <div class="collgroup" id="collGroup" data-views="both"></div>
   <section data-views="both" id="treeSection">
     <h2>Country → organisation → survey</h2>
@@ -766,84 +779,44 @@
         <button id="drawRect">Draw rectangle</button>
         <button id="drawPoly">Draw polygon</button>
       </div>
-      <!-- D4: export empty-state. The download row is hidden until a selection exists; this hint stands
-           in its place. updateSel() (filters.js) toggles .hidden on both when selected.size crosses 0. -->
-      <div class="exporthint" id="exportHint">Select stations on the map or choose 'Select all filtered' to enable downloads.</div>
-      <div class="btnrow exportbtns hidden" id="exportBtns">
-        <button id="dlCsv" disabled>Station CSV</button>
-        <button id="dlGeo" disabled>GeoJSON</button>
-        <button id="dlSh" disabled>Archive pointers</button>
-        <!-- R7/D3: the time-series HAND-OFF list. Not a zip and not a fourth selection format: AusMT
-             holds none of these bytes, so there is nothing here to package. Each row is an AusMT
-             /go/ts/ route the front door answers 302 to, with the archive's own address alongside
-             for reference. Written by exports.js from ts_access.json, scoped by the Availability
-             chooser. -->
-        <button id="dlTs" disabled>Time-series list</button>
-        <button id="dlCite" disabled>Citation pack (.zip)</button>
-        <button id="strike" disabled>Strike rose (selection)</button>
-        <!-- The three per-station format zips. Each packages the SELECTED stations' own manifest rows of
-             one format, client-side. Their labels carry the selection's estimated total, written by
-             exports.js paintExportSizes() (see the base labels there, which own this text). -->
-        <button class="primary" id="dlZip" disabled>EDIs (zip)</button>
-        <button id="dlZipXml" disabled>EMTF XML (zip)</button>
-        <button id="dlZipH5" disabled>MTH5 (zip)</button>
+      <div class="btnrow">
         <button class="wide" id="clearSel">Clear selection &amp; shapes</button>
       </div>
     </div>
   </section>
-  <!-- Screening (advanced): all specialist screening controls, collapsed by default, per operator
-       feedback rounds 1-2 (round 1 relocated the completeness threshold + colour-by; round 2 moved
-       Year range, the downloadable-here checkbox and Period range in with them). The primary rail
-       stays: find, data type, recently added, tree, selection. main.js's data-views toggle matches
-       nested elements, so the map-only colour-by group hides correctly on other views.
-       THE IDS ARE NOT FROZEN, and used to say they were: the Availability group (R2/R3) retired
-       #qSeg and renamed #dlOnly to #tfAvail, so wiring and pins move with the controls. What is
-       stable is the PREDICATE each one drives, which is what exports.js and passesCore read. -->
-  <section data-views="both">
-    <details class="advanced">
-      <summary>Screening (advanced)</summary>
-      <div class="advgroup">
-        <h2 id="yearRangeHead" title="Filters on each survey's declared acquisition year(s)">Year range</h2>
-        <div class="yearrange">
-          <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
-          <span>–</span>
-          <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
-        </div>
-        <div class="fieldnote">Filters on each survey's declared year(s); surveys with no declared date are hidden once a year is set.</div>
+  <!-- Lane B: the DOWNLOAD block. One scope rule, no modes: every count and size below reflects the
+       current SELECTION when one exists, else the filtered corpus (exactly what "Select all filtered"
+       would take). The scope line states which. exports.js paintDownloadRows() owns the metas, the
+       time-series rows and every disabled state; the level vocabulary lives once in state.js
+       TS_LEVELS. Level 2 is served by AusMT; the time-series rows are hand-offs (/go/ts/ 302s) to
+       the archive that holds the files. -->
+  <section data-views="map">
+    <h2>Download</h2>
+    <div class="dlbox">
+      <div class="fieldnote scopeline" id="scopeLine"></div>
+      <!-- Owner ruling (Lane B polish): the tiles speak the drawer's Related-products language -
+           .prod/.pdot/.sechead/.rolechip verbatim, whole tile is the action, a level with nothing
+           in scope is .dis with a hollow dot (present, priced at nothing), an in-flight index is
+           .dis with the unknown dot. exports.js paintDownloadRows() owns every state. -->
+      <div class="sechead">Level 2 · transfer functions <span class="rolechip">served by AusMT</span></div>
+      <div class="dltiles">
+        <button type="button" class="prod" id="dlZip" disabled><span class="pdot"></span><div><span class="pname">EDI (zip)</span> <span class="rolechip">source archive</span><small id="dlZipMeta"></small></div></button>
+        <button type="button" class="prod" id="dlZipXml" disabled><span class="pdot"></span><div><span class="pname">EMTF XML (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipXmlMeta"></small></div></button>
+        <button type="button" class="prod" id="dlZipH5" disabled><span class="pdot"></span><div><span class="pname">MTH5 (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipH5Meta"></small></div></button>
       </div>
-      <!-- AVAILABILITY (owner rulings R2/R3, 2026-08-22). ONE group for the two DIFFERENT things this
-           portal can say about getting data, because a reader asking "what can I actually download"
-           should not have to know they are different questions. Transfer functions is a LICENCE
-           question: which stations' processed files AusMT is allowed to serve itself (predicate
-           s.ediAvail, the same flag the selection exports read for their not-included honesty). Time
-           series is a ROUTE question: which stations have a verified, openly accessible file in the
-           NCI archive, per product level, read from ts_access.json. AusMT hands those off and hosts
-           none of them. This group replaces the standalone "Downloadable here" checkbox and the
-           Min-TF-diagnostic segmented control that used to sit at the bottom of this panel. -->
-      <div class="advgroup" id="availGroup">
-        <h2>Availability</h2>
-        <label class="dlonly" title="Show only stations whose transfer-function files this portal is licensed to serve directly. Other stations are listed metadata-only with a pointer to their source archive."><input type="checkbox" id="tfAvail"> Transfer functions downloadable here</label>
-        <h3 class="availsub">Time series available now</h3>
-        <!-- The per-level chooser (D7/D8). Buttons are WRITTEN BY filters.js paintTsChooser(), which
-             owns their labels (per-level station count and summed size), their disabled state and the
-             two-phase honesty; the level vocabulary lives once in state.js TS_LEVELS and is never
-             duplicated in markup. -->
-        <div class="seg segcol" id="tsSeg" role="group" aria-label="Time series available now, by level"></div>
-        <div class="fieldnote" id="tsSegNote"></div>
-      </div>
-      <div class="advgroup">
-        <h2 title="Keep stations whose transfer-function estimates cover this period window">Period range (s)</h2>
-        <div class="pslider"><div class="track"></div><div class="fill" id="pfill"></div>
-          <input type="range" id="pLo" min="-3" max="5" step="0.05" value="-3" aria-label="Min period log10 s">
-          <input type="range" id="pHi" min="-3" max="5" step="0.05" value="5" aria-label="Max period log10 s"></div>
-        <div class="ticks"><span>10⁻³</span><span>10⁻¹</span><span>10¹</span><span>10³</span><span>10⁵</span></div>
-        <div class="pread">window <span id="pLoTxt">0.001</span> – <span id="pHiTxt">100 000</span> s</div>
-      </div>
-      <div class="advgroup" data-views="map">
-        <h2>Colour stations by</h2>
-        <div class="seg" id="colorSeg"><button data-c="type" class="on">Data type</button><button data-c="quality">Completeness</button><button data-c="dim">Dimensionality</button></div>
-      </div>
-    </details>
+      <div class="sechead">Time series <span class="rolechip">at NCI, handed off</span></div>
+      <div class="dltiles" id="tsSeg" role="group" aria-label="Time series by level"></div>
+      <div class="fieldnote" id="tsSegNote"></div>
+    </div>
+  </section>
+  <section data-views="map">
+    <h2>Metadata</h2>
+    <div class="btnrow exportbtns" id="exportBtns">
+      <button id="dlCsv" disabled>Station CSV</button>
+      <button id="dlGeo" disabled>GeoJSON</button>
+      <button id="dlCite" disabled>Citation pack (.zip)</button>
+      <button id="dlSh" disabled>Pointers (JSON)</button>
+    </div>
   </section>
   </div><!-- /#selectMode -->
   <!-- UX7a (A2): the rail collapse control lives at the BOTTOM-right (moved from the top). D5 behaviour is

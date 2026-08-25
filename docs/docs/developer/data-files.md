@@ -50,7 +50,7 @@ declared in the survey package and recorded in provenance.
 | `manifest.json` | `extract/build_portal.py` (download manifest) | `portal/src/data.js` (download resolver); validated against `schema/manifest.schema.json` |
 | `coord_policy.json` | `extract/build_portal.py` (the coordinate mask seam) | `portal/src/drawer.js`, to badge a generalised or withheld position |
 | `base_ids.json` | `extract/build_portal.py` (`_coordaccess.base_station_id`) | the curator workbench, so a per-station coordinate override is keyed by the base station id |
-| `ts_access.json` | `extract/build_portal.py` (`_tsproject.route_rows`, from the `--ts-index` register) | `portal/src/data.js`, for the Availability chooser and the archive hand-off pointer file |
+| `ts_access.json` | `extract/build_portal.py` (`_tsproject.route_rows`, from the `--ts-index` register) | `portal/src/data.js`, for the Download block's time-series rows, the Data available filter and the hand-off pointer files |
 
 `coord_policy.json`, `base_ids.json` and `ts_access.json` are emitted only when they would carry
 information; a consumer treats an absent file as "every station is exact", "every station is its own

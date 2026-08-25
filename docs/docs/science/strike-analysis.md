@@ -16,10 +16,9 @@ methods because the phase tensor is insensitive to galvanic distortion (Caldwell
 
 ## What ships today
 
-The portal's selection-level rose. For any set of selected stations, the browser draws a rose from the
-served phase-tensor azimuths, using only low-skew periods (|β| < 5°), folded to 180°. The portal states
-its limitations beside it: the 90° ambiguity inherent to strike is not resolved, and combining with
-tipper induction arrows is suggested to break it.
+Nothing yet. The portal's selection-level rose was retired in the 2026-08 panel rework (it drew a
+browser-side rose from served phase-tensor azimuths at low skew; the retirement is recorded here so
+its absence reads as a decision, not a gap in this page).
 
 Dedicated strike products are not generated; `ausmt_science/strike` is scaffolding. The intended scope
 is per-station strike estimates, pre-computed station, survey and collection roses, period-dependent

@@ -198,6 +198,12 @@ win.JSZip = new Proxy(function () {}, { construct: () => zipRec(""), apply: () =
 // (which is where the entry list is complete) instead of stopping short of the code that writes it.
 win.URL.createObjectURL = () => "blob:interaction-test";
 win.URL.revokeObjectURL = () => {};
+// SAVED-FILE RECORDER. save() builds `new Blob([text])`; recording the constructor's parts lets a
+// pin read the DOCUMENT an export actually wrote (the Pointers shape), not just that a click ran.
+const savedBlobs = [];
+const _RealBlob = win.Blob;
+win.Blob = function (parts, opts) { savedBlobs.push({ text: (parts || []).join(""), type: (opts || {}).type });
+  return new _RealBlob(parts || [], opts || {}); };
 // ANALYTICS RECORDER. analytics-shim.js defines window.track() over window.plausible, and it only installs
 // its own no-op queue when there is no plausible already (`window.plausible || function(){}`). Defining one
 // FIRST therefore records what the real track() emits, through the real shim, rather than replacing track()
@@ -326,7 +332,7 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // stationMarker reaches a real station's recorded layer, which is how the station-click leg fires the
   // handler the app actually bound rather than a re-implementation of it.
   "stationMarker:(id)=>{const s=ST.find(x=>x.id===id);return s&&s.marker;}," +
-  "setColorMode:(m)=>{colorMode=m;},selectSurvey,renderCards,openSurvey," +
+  "selectSurvey,renderCards,openSurvey," +
   // Survey-drawer lane hooks. focusSurvey drives the header "View on map" path; drawerFitOptions is the
   // PURE fit padding (asserted against a stubbed drawer width); dimStyleFor is the PURE Option-A dim
   // decision; setSurveyDim/clearSurveyDim + dimFocus expose the focus STATE so a leg can prove the dim
@@ -418,12 +424,14 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // going through the buttons (the buttons are disabled across the whole in-flight window, which is
   // exactly the state the inertness pin has to observe); paintTsChooser re-runs the paint after the
   // driver swaps the index, the way runInit and the hydration gate call it.
-  "tsLevels:()=>[...TS_CHOSEN],setTsLevels:(a)=>{TS_CHOSEN=new Set(a||[]);}," +
-  "paintTsChooser:()=>paintTsChooser()," +
+  "availValue:()=>{const a=document.getElementById(\"availSel\");return a?a.value:null;}," +
+  "setAvail:(v)=>{const a=document.getElementById(\"availSel\");if(a)a.value=v||\"\";}," +
+  "setPeriodWin:(lo,hi)=>{periodLo=lo;periodHi=hi;}," +
+  "paintDownloadRows:()=>paintDownloadRows()," +
   // The hand-off list's PURE builder, exposed for the same reason geoFC is: the file the reader gets
   // is written inside a click handler, and a claim about its contents that no test can reach is a
   // claim that rots. Takes the selection and the chosen levels from the app, not from the driver.
-  "tsHandoffDoc:(sts)=>tsHandoffDocument(sts||sel(),tsChosenLevels())," +
+  "tsHandoffDoc:(sts,levels)=>tsHandoffDocument(sts||scopeSel(),levels||null)," +
   // geoFC builds the GeoJSON export exactly as #dlGeo does, taking the sci-usable decision FROM THE APP
   // (hydrUsable) rather than from the driver, so the export-honesty pins observe the real branch rather than
   // a re-implementation of it. setSelected drives `selected` by station id without going through
@@ -603,32 +611,26 @@ async function bootFreshWindow(dataMap, url) {
     "phase1: the surveys view must render the " + sv + " card before tf/sci/manifest resolve"));
   A.setView("map");
 
-  // The phase-2-driven RAIL CONTROLS are inert-and-disabled, never live over data that has not arrived:
-  // a live completeness colour mode would paint the whole map in the "not evaluated" grey, and a live
-  // per-level Availability chooser would hide every station over routes that have not arrived.
-  ok([...doc.getElementById("colorSeg").querySelectorAll("button")].filter(b => b.dataset.c !== "type").every(b => b.disabled),
-    "honesty: the completeness/dimensionality colour modes must be disabled while sci.json is in flight");
-  ok(doc.getElementById("colorSeg").querySelector('button[data-c="type"]').disabled === false,
-    "the data-type colour mode is phase-1 data and must stay live");
-  ok(doc.getElementById("colorSeg").querySelector('button[data-c="quality"]').getAttribute("aria-busy") === "true",
-    "an in-flight product makes its controls aria-busy, so a screen reader is told a wait is under way");
+  // The ts_access-driven surfaces are inert-and-disabled, never live over data that has not
+  // arrived: a live Download row would price the scope off routes that are not here, and a live
+  // level filter would hide every station over them. (Lane B: colour-by is retired; the Data
+  // available dropdown and the Download block's time-series rows are the gated surfaces.)
   const _tsBtns = () => [...doc.getElementById("tsSeg").querySelectorAll("button")];
   ok(_tsBtns().length === 4,
-    "A6/D8: the chooser carries one button per ROUTABLE level token (level2 opens nothing, D19), got " + _tsBtns().length);
+    "A6/D8: one Download row per ROUTABLE level token (level2 opens nothing, D19), got " + _tsBtns().length);
   ok(_tsBtns().every(b => b.disabled),
-    "honesty: the per-level chooser must be disabled while ts_access.json is in flight");
+    "honesty: the time-series Download rows must be disabled while ts_access.json is in flight");
   ok(_tsBtns()[0].getAttribute("aria-busy") === "true",
-    "honesty: an in-flight hand-off index makes the chooser aria-busy, not merely inert");
-  A.setTsLevels(["raw_packed"]);
+    "honesty: an in-flight hand-off index makes the rows aria-busy, not merely inert");
+  const _availLevelOpts = () => [...doc.getElementById("availSel").querySelectorAll("option")].filter(o => o.value && o.value !== "tf");
+  ok(_availLevelOpts().length === 4 && _availLevelOpts().every(o => o.disabled),
+    "honesty: the Data available level options must be disabled while ts_access.json is in flight");
+  A.setAvail("raw_packed");
   A.refresh();
   ok(A.nVisCount() === 5,
     "honesty: the level filter must be INERT while ts_access.json is in flight; emptying the map would read as 'no station publishes this level', got " + A.nVisCount());
-  A.setTsLevels([]); A.refresh();
-  const _a1 = A.station("A1");
-  A.setColorMode("quality");
-  ok(A.markerColor(_a1) === "#3730B8",
-    "honesty: with sci.json in flight the completeness colour mode must fall back to the data-type colour, never the 'not evaluated' grey, got " + A.markerColor(_a1));
-  A.setColorMode("type");
+  A.setAvail("");
+  A.refresh();
   A.setQMin(4.5);                                    // stricter than every fixture station's q (4.0)
   A.refresh();
   ok(A.nVisCount() === 5,
@@ -748,8 +750,6 @@ async function bootFreshWindow(dataMap, url) {
     "hydration: the re-render must not re-issue the station.json frame-line fetch once per settling gate, issued " +
     fetchOrder.filter(u => /station\.json$/.test(u)).length + " vs " + _stationJsonBefore);
   ok(A.station("A1").q === 4.0, "hydration: s.q must be re-folded onto the stations from sci.json, got " + A.station("A1").q);
-  ok([...doc.getElementById("colorSeg").querySelectorAll("button")].every(b => !b.disabled),
-    "hydration: the completeness/dimensionality colour modes must be re-enabled once sci.json has landed");
   A.setQMin(4.5); A.refresh();
   ok(A.nVisCount() === 0,
     "hydration: the completeness filter must be LIVE after sci.json lands (q=4.0 < 4.5 for every fixture station), got " + A.nVisCount());
@@ -774,19 +774,8 @@ async function bootFreshWindow(dataMap, url) {
     "honesty: a FAILED tf.json must be STATED, never rendered as a station that has no response functions");
   ok(!/data-plot=/.test(_failDrawer), "a failed tf.json leaves no curves to plot");
   ok(_failDrawer.indexOf("Loading response functions") < 0, "a settled failure must not read as still loading");
-  // The strike rose reads tf.json too, and it CANNOT show a loading line: it is a one-shot action. Awaiting
-  // TF_READY is therefore not the guard, because that promise settles on failure as well: with an empty row
-  // for every station the azimuth loop collects nothing and the rose reports "not enough low-skew
-  // phase-tensor azimuths in the selection", a STATEMENT ABOUT THE SELECTION standing in for a 404.
-  failWin.__api.setSelected(["A1", "A2"]);
-  failWin.document.getElementById("toast").textContent = "";
-  failWin.document.getElementById("strike").click();
-  await new Promise(r => setTimeout(r, 0));          // the handler is async (it awaits TF_READY)
-  const _strikeToast = failWin.document.getElementById("toast").textContent;
-  ok(/could not be loaded/.test(_strikeToast),
-    "honesty: a FAILED tf.json must be stated by the strike rose, never reported as too few azimuths in the selection, got " + JSON.stringify(_strikeToast));
-  ok(failWin.document.getElementById("drawer").innerHTML.indexOf("Strike rose") < 0,
-    "a failed tf.json leaves nothing to draw a rose from");
+  // Lane B (owner D3): the strike rose is retired; its control must be GONE, not disabled.
+  ok(!failWin.document.getElementById("strike"), "the strike-rose control is retired and must not render");
 
   // ---- TWO-PHASE BOOT, part 4b: a FAILED sci.json is not a screening outcome ----------------------
   // The map, the rail and the exports cannot show a per-item loading line, so they gate on whether the
@@ -800,23 +789,10 @@ async function bootFreshWindow(dataMap, url) {
   const sfDoc = sciFailWin.document, sfA = sciFailWin.__api;
   ok(sfA.hydrState("sci") === "failed", "a 404 on sci.json must settle its gate to 'failed', got " + sfA.hydrState("sci"));
   ok(sfA.nST() === 5, "a missing sci.json must no longer blank the portal; the stations must still paint");
-  const _sfQ = [...sfDoc.getElementById("colorSeg").querySelectorAll("button")].filter(b => b.dataset.c !== "type");
-  ok(_sfQ.every(b => b.disabled),
-    "honesty: the completeness/dimensionality colour modes must STAY disabled when sci.json FAILED; SCI_READY settling is not the same as the values arriving");
-  ok(sfDoc.getElementById("colorSeg").querySelector('button[data-c="type"]').disabled === false,
-    "the data-type colour mode reads phase-1 data and stays live through a sci.json failure");
-  ok(/could not be loaded/.test(_sfQ[0].title),
-    "honesty: the disabled control must name the ACTUAL reason, not claim it is still loading, got " + JSON.stringify(_sfQ[0].title));
-  ok(_sfQ[0].getAttribute("aria-busy") === "false",
-    "honesty: a FAILED product is settled, not busy; aria-busy must not tell a screen reader to keep waiting");
   sfA.setQMin(4.5); sfA.refresh();
   ok(sfA.nVisCount() === 5,
     "honesty: the completeness filter must be INERT on a FAILED sci.json; emptying the map reads as 'no station meets this threshold', got " + sfA.nVisCount());
   sfA.setQMin(0); sfA.refresh();
-  sfA.setColorMode("quality");
-  ok(sfA.markerColor(sfA.station("A1")) === "#3730B8",
-    "honesty: a FAILED sci.json must not paint the map in the 'not evaluated' grey, got " + sfA.markerColor(sfA.station("A1")));
-  sfA.setColorMode("type");
   // An export leaves the page. remote_ref:!!undefined is a POSITIVE claim that these stations were not
   // remote-referenced, and quality/dimensionality would vanish as undefined keys with no trace of why.
   const _gjFail = sfA.geoFC([sfA.station("A1")]);
@@ -916,17 +892,10 @@ async function bootFreshWindow(dataMap, url) {
   A.setAuslampSet(["memb"]);
   const _memberLp = { id: "S1", type: "LPMT", slug: "memb", q: 4.2, dim: "2-D", survey: "Alpha Survey" };
   const _otherLp = { id: "S2", type: "LPMT", slug: "notmemb", q: 4.2, dim: "2-D", survey: "Beta Survey" };
-  A.setColorMode("type");
+  // Lane B: colour-by is retired; the ONE marker colour is the data-type colour, membership-blind.
   ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
-    "A1: TYPE-mode colour must be IDENTICAL for AusLAMP vs non-AusLAMP LPMT (no colour split), got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
+    "A1: marker colour must be IDENTICAL for AusLAMP vs non-AusLAMP LPMT (no colour split), got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
   ok(A.markerColor(_memberLp) === "#2E8FA3", "A1: all LPMT must render the flagship teal #2E8FA3, got " + A.markerColor(_memberLp));
-  A.setColorMode("quality");
-  ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
-    "QUALITY-mode colour must be IDENTICAL regardless of AusLAMP membership, got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
-  A.setColorMode("dim");
-  ok(A.markerColor(_memberLp) === A.markerColor(_otherLp),
-    "DIM-mode colour must be IDENTICAL regardless of AusLAMP membership, got: " + A.markerColor(_memberLp) + " / " + A.markerColor(_otherLp));
-  A.setColorMode("type");
   // O4 (owner, 2026-07-12): the hover tooltip is station name + survey name ONLY — no diagnostic Q, no
   // type/AusLAMP label. Pre-O4 it swapped the type label to "AusLAMP" for members; that distinction now
   // lives only in the D2 clustering split. Asserting the diagnostic + type/AusLAMP label are GONE is what
@@ -1669,17 +1638,18 @@ async function bootFreshWindow(dataMap, url) {
   // capability is KEPT and the s.ediAvail PREDICATE is unchanged, which matters beyond this filter -
   // the selection exports read the same flag for their three-way not-included honesty. Beta's B1 and
   // embargoed Delta's D1 have edi_available=0; the rest =1.
-  ok(!doc.getElementById("dlOnly"), "the standalone #dlOnly group is replaced by the Availability group");
-  const tfAvail = doc.getElementById("tfAvail");
-  ok(tfAvail, "#tfAvail (Availability > Transfer functions) missing from the filter rail");
-  ok(doc.getElementById("availGroup") && doc.getElementById("availGroup").contains(tfAvail),
-    "R2: the transfer-function availability control must live inside the ONE Availability group");
-  tfAvail.checked = true; fire(tfAvail, "change");
-  ok(!A.visIds().includes("B1"), "Availability > Transfer functions did not exclude the non-downloadable station B1");
-  ok(!A.visIds().includes("D1"), "Availability > Transfer functions did not exclude the embargoed (non-downloadable) station D1");
-  ok(A.visIds().length === 3, "expected 3 visible stations with Transfer functions ticked, got " + A.visIds().length);
-  tfAvail.checked = false; fire(tfAvail, "change");
-  ok(A.visIds().length === 5, "clearing Availability > Transfer functions did not restore all 5 stations");
+  ok(!doc.getElementById("dlOnly") && !doc.getElementById("tfAvail"),
+    "the standalone tickbox controls are replaced by the Data available dropdown");
+  const availSel = doc.getElementById("availSel");
+  ok(availSel, "#availSel (Data available) missing from the Browse pane");
+  ok(doc.getElementById("browseMode").contains(availSel),
+    "D1 (Lane B): the Data available filter is a VIEWING control and lives in Browse, beside data type");
+  availSel.value = "tf"; fire(availSel, "change");
+  ok(!A.visIds().includes("B1"), "Data available > TF did not exclude the non-downloadable station B1");
+  ok(!A.visIds().includes("D1"), "Data available > TF did not exclude the embargoed (non-downloadable) station D1");
+  ok(A.visIds().length === 3, "expected 3 visible stations with the TF option, got " + A.visIds().length);
+  availSel.value = ""; fire(availSel, "change");
+  ok(A.visIds().length === 5, "clearing Data available did not restore all 5 stations");
 
   // K2. AVAILABILITY > TIME SERIES, the per-level chooser (R3/D7/D8), driven over a REAL index. The
   // fixture ships no ts_access.json, so the index is set directly here: A1 and A2 publish routes, B1
@@ -1691,50 +1661,62 @@ async function bootFreshWindow(dataMap, url) {
     "au.alpha.A2": { raw_packed: { bytes: 2000000, url_path: "my80/x/A2.zip" } },
     "au.beta.B1": { level1_mth5: { bytes: 500000, url_path: "my80/x/B1.h5" } },
   });
-  A.paintTsChooser(); A.refresh();
+  A.paintDownloadRows(); A.refresh();
   const tsBtn = tok => doc.getElementById("tsSeg").querySelector('button[data-ts="' + tok + '"]');
+  const tsMeta = tok => tsBtn(tok).querySelector(".dlmeta").textContent;
   ok(["raw_packed", "level0", "level1_mth5", "level1_netcdf"].every(t => tsBtn(t)),
-    "D8: the chooser must carry a button for each routable level token");
-  ok(!tsBtn("level2"), "D19: level_2 holds transfer functions, not time series, and takes no chooser button");
+    "D8: the Download block must carry a row for each routable level token");
+  ok(!tsBtn("level2"), "D19: level_2 holds transfer functions, not time series, and takes no row");
   ok(!tsBtn("raw_packed").disabled && !tsBtn("level1_mth5").disabled,
-    "a level the index publishes must be selectable once the index has landed");
+    "a level the scope can fetch must offer its list once the index has landed");
   ok(tsBtn("level0").disabled && tsBtn("level1_netcdf").disabled,
-    "a level NO station publishes must stay inert rather than offering an empty selection");
-  ok(/2 stations/.test(tsBtn("raw_packed").textContent),
-    "D7: each button states its own station count, got " + JSON.stringify(tsBtn("raw_packed").textContent));
-  ok(/5.7 MB/.test(tsBtn("raw_packed").textContent),
-    "D7: each button states its own summed size, got " + JSON.stringify(tsBtn("raw_packed").textContent));
+    "a level with nothing in scope must stay inert rather than offering an empty list");
+  ok(/2 stations/.test(tsMeta("raw_packed")),
+    "D7: each row states its scope station count, got " + JSON.stringify(tsMeta("raw_packed")));
+  ok(/5.7 MB/.test(tsMeta("raw_packed")),
+    "D7: each row states its scope summed size, got " + JSON.stringify(tsMeta("raw_packed")));
   ok(/packed by the custodian/.test(tsBtn("raw_packed").title),
-    "D7: each button carries its one-line gloss, got " + JSON.stringify(tsBtn("raw_packed").title));
-  tsBtn("raw_packed").click();
-  ok(A.tsLevels().join() === "raw_packed", "clicking a level must select it, got " + JSON.stringify(A.tsLevels()));
+    "D7: each row's action carries its one-line gloss, got " + JSON.stringify(tsBtn("raw_packed").title));
+  // THE SCOPE RULE (Lane B): with no selection the rows price the filtered corpus; a selection
+  // re-prices them to exactly the chosen stations, and the scope line says which state the reader
+  // is in. (The owner's founding defect: 2 selected stations still showed corpus-wide totals.)
+  ok(/^Across 5 filtered stations:$/.test(doc.getElementById("scopeLine").textContent),
+    "the scope line must state the filtered-corpus scope, got " + JSON.stringify(doc.getElementById("scopeLine").textContent));
+  A.setSelected(["A1"]);
+  ok(/^For the 1 selected station:$/.test(doc.getElementById("scopeLine").textContent),
+    "the scope line must state the selection scope, got " + JSON.stringify(doc.getElementById("scopeLine").textContent));
+  ok(/1 station/.test(tsMeta("raw_packed")) && /3.8 MB/.test(tsMeta("raw_packed")),
+    "a selection re-prices the rows to the SELECTED stations only, got " + JSON.stringify(tsMeta("raw_packed")));
+  ok(tsBtn("level0").disabled && /nothing in this scope/.test(tsMeta("level0")),
+    "a level the selection cannot fetch says so, got " + JSON.stringify(tsMeta("level0")));
+  A.setSelected([]);
+  // The DROPDOWN filters (single-select; the rows only download). Union multi-select retired with it.
+  A.setAvail("raw_packed"); A.refresh();
   ok(A.visIds().sort().join() === "A1,A2",
     "the level filter must keep exactly the stations the index publishes that level for, got " + JSON.stringify(A.visIds()));
-  tsBtn("level1_mth5").click();
-  ok(A.tsLevels().sort().join() === "level1_mth5,raw_packed",
-    "D7: the chooser is a MULTI-select; a second level must add rather than replace, got " + JSON.stringify(A.tsLevels()));
-  ok(A.visIds().sort().join() === "A1,A2,B1",
-    "a multi-level selection keeps a station publishing ANY chosen level, got " + JSON.stringify(A.visIds()));
+  A.setAvail("level1_mth5"); A.refresh();
+  ok(A.visIds().sort().join() === "A1,B1",
+    "a single-select change must REPLACE the level filter, got " + JSON.stringify(A.visIds()));
   ok(!A.visIds().includes("D1"),
     "R5: an embargoed station is absent from the index, so no level can bring it back");
-  tsBtn("raw_packed").click(); tsBtn("level1_mth5").click();
-  ok(A.tsLevels().length === 0 && A.visIds().length === 5,
-    "clearing every level must restore the unfiltered map, got " + JSON.stringify(A.visIds()));
-  // The size total is the chooser's OWN summation over ts_access.json: it never joins the download
-  // manifest, whose SEL_ZIP_BUTTONS table would make a fourth zip button out of it.
+  A.setAvail(""); A.refresh();
+  ok(A.availValue() === "" && A.visIds().length === 5,
+    "clearing Data available must restore the unfiltered map, got " + JSON.stringify(A.visIds()));
+  // The size total is the rows' OWN summation over ts_access.json: it never joins the download
+  // manifest, whose SEL_ZIP_BUTTONS table would make a fourth zip row out of it.
   A.setManifest({ files: [], bundles: [] });
-  A.paintTsChooser();
-  ok(/5.7 MB/.test(tsBtn("raw_packed").textContent),
-    "the chooser's sizes must come from ts_access.json, not from the download manifest, got " +
-    JSON.stringify(tsBtn("raw_packed").textContent));
+  A.paintDownloadRows();
+  ok(/5.7 MB/.test(tsMeta("raw_packed")),
+    "the rows' sizes must come from ts_access.json, not from the download manifest, got " +
+    JSON.stringify(tsMeta("raw_packed")));
 
-  // K3. THE HAND-OFF (R7/D3/D5). AusMT holds none of these bytes, so the offer is a POINTER FILE and
-  // never a fourth selection zip. Every row names an AusMT /go/ts/ route (the one the front door
-  // resolves, and the only string that carries survey/station/level into the log) with the archive's
-  // own address alongside as an inert reference field.
-  ok(doc.getElementById("dlTs"), "#dlTs (the time-series hand-off list) is missing from the export row");
-  ok(doc.getElementById("exportBtns").contains(doc.getElementById("dlTs")),
-    "#dlTs must sit with the other selection exports, not in a panel of its own");
+  // K3. THE HAND-OFF (R7/D3/D5, reshaped in Lane B). AusMT holds none of these bytes, so the offer
+  // is a POINTER FILE and never a fourth selection zip. The old #dlTs button is replaced by the
+  // per-level "Download list" actions on the time-series rows (each names its own level, so no
+  // hidden state can narrow the file) and by the merged Pointers export in the Metadata block.
+  ok(!doc.getElementById("dlTs"), "the old #dlTs export is replaced by the per-level row actions");
+  ok(doc.getElementById("dlSh") && /Pointers \(JSON\)/.test(doc.getElementById("dlSh").textContent),
+    "the Metadata block must carry the merged Pointers (JSON) export");
   A.setSelected(["A1", "A2", "B1", "D1"]);
   const _hd = A.tsHandoffDoc();
   ok(_hd.files === 4 && _hd.doc.stations.length === 3,
@@ -1755,27 +1737,30 @@ async function bootFreshWindow(dataMap, url) {
     "D3: the file must say that wget follows the 302 and curl needs -L, got " + JSON.stringify(_hd.doc.note));
   ok(/hosts none of these files/i.test(_hd.doc.note),
     "the file must restate that AusMT hosts nothing it routes to, got " + JSON.stringify(_hd.doc.note));
-  // The chooser SCOPES the list: a level nobody chose is not written.
-  A.setTsLevels(["raw_packed"]);
-  const _hdScoped = A.tsHandoffDoc();
+  ok(_hd.doc.scope && _hd.doc.scope.stations === 4 && _hd.doc.scope.levels === "all",
+    "the document must record its own scope, got " + JSON.stringify(_hd.doc.scope));
+  // A ROW's list is scoped to ITS level - the row names the level, so nothing hidden can narrow it.
+  const _hdScoped = A.tsHandoffDoc(null, ["raw_packed"]);
   ok(_hdScoped.files === 2 && _hdScoped.doc.stations.every(r => r.levels.every(l => l.level === "raw_packed")),
-    "the chooser must scope the hand-off list to the chosen levels, got " + _hdScoped.files + " file(s)");
-  A.setTsLevels([]);
-  // THE CONFIRMATION (owner UX ruling 2026-08-23) and its wget command.
+    "a per-level list must carry exactly that level, got " + _hdScoped.files + " file(s)");
+  ok(_hdScoped.doc.scope && String(_hdScoped.doc.scope.levels) === "raw_packed",
+    "a per-level list must record its level in the scope, got " + JSON.stringify(_hdScoped.doc.scope));
+  // THE CONFIRMATION (owner UX ruling 2026-08-23) and its wget command, from the raw_packed row.
   const _trackBefore = trackCalls.length;
-  doc.getElementById("dlTs").click();
+  A.paintDownloadRows();
+  tsBtn("raw_packed").click();
   const snackEl = doc.getElementById("snackbar");
   ok(snackEl && !snackEl.classList.contains("hidden"), "the hand-off must confirm itself in the snackbar");
-  ok(/Download list ready - 4 files, /.test(snackEl.textContent),
-    "the confirmation must state the file count and the total size, got " + JSON.stringify(snackEl.textContent));
+  ok(/Download list ready - 2 files, /.test(snackEl.textContent),
+    "the confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
   const copyBtn = snackEl.querySelector("button");
   ok(copyBtn && /wget/i.test(copyBtn.textContent),
     "the confirmation must offer the wget command as a COPY button, got " + (copyBtn && copyBtn.textContent));
   copyBtn.click();
   ok(clipboard.length === 1 && /wget/.test(clipboard[0]) && /-i/.test(clipboard[0]),
     "the copy button must put a wget -i command on the clipboard, got " + JSON.stringify(clipboard[0]));
-  ok((clipboard[0].match(/\/go\/ts\//g) || []).length === 4,
-    "the copied command must carry every routed file, got " + JSON.stringify(clipboard[0]));
+  ok((clipboard[0].match(/\/go\/ts\//g) || []).length === 2,
+    "the copied command must carry exactly the row's routed files, got " + JSON.stringify(clipboard[0]));
   ok(!/thredds\.nci\.org\.au/.test(clipboard[0]),
     "the copied command must fetch the AusMT route, not the archive address it resolves to (the route " +
     "is what the front door counts), got " + JSON.stringify(clipboard[0]));
@@ -1783,6 +1768,21 @@ async function bootFreshWindow(dataMap, url) {
     "R8: the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
   ok(!/progress|complete|finished|%/i.test(snackEl.textContent),
     "the page claims no progress and no completion; the browser owns both, got " + JSON.stringify(snackEl.textContent));
+  // POINTERS (Lane B, D2): the merged document - EVERY scope station appears; routable stations
+  // carry levels[]; the embargoed D1 appears WITHOUT levels (identity is public, routes are not).
+  clipboard.length = 0;
+  doc.getElementById("dlSh").click();
+  const _ptrTrack = trackCalls[trackCalls.length - 1];
+  ok(_ptrTrack && _ptrTrack.props && _ptrTrack.props.format === "pointers",
+    "Pointers must report its own analytics format (the old export was indistinguishable from GeoJSON), got " +
+    JSON.stringify(_ptrTrack && _ptrTrack.props));
+  const _ptr = JSON.parse(savedBlobs[savedBlobs.length - 1].text);
+  ok(_ptr.stations.length === 4, "Pointers must cover EVERY scope station, got " + _ptr.stations.length);
+  const _d1 = _ptr.stations.find(r => r.ausmt_id === "au.delta.D1");
+  ok(_d1 && !_d1.levels, "an unroutable station appears with no levels[], never invented rows");
+  ok(_ptr.stations.filter(r => r.levels).length === 3, "routable stations carry their levels[] rows");
+  ok(/Pointers written for 4 stations - 4 fetchable files, /.test(snackEl.textContent),
+    "the Pointers confirmation states stations and fetchable files, got " + JSON.stringify(snackEl.textContent));
 
   // K4. THE SINGLE-STATION HAND-OFF, and THE JOIN RULE that decides whether its action row exists.
   // m.ts_levels is CURATOR-DECLARED and SURVEY-scope; the index is CRAWL-VERIFIED and STATION-scope.
@@ -1834,15 +1834,27 @@ async function bootFreshWindow(dataMap, url) {
   // rail. The Availability group (R2/R3) and the colour-by segmented control are both inside it, and
   // there is exactly ONE Availability group: the standalone "Downloadable here" checkbox and the
   // Min-TF-diagnostic segmented control are gone, replaced by it.
-  const advDetails = doc.querySelector("details.advanced");
-  ok(advDetails, "no <details class=\"advanced\"> found in the filter rail");
-  ok(advDetails.hasAttribute("open") === false, "Screening (advanced) details must be collapsed by default");
-  ok(!doc.getElementById("qSeg"), "the Min-TF-diagnostic group is replaced by the Availability group");
-  ok(advDetails.querySelectorAll("#availGroup").length === 1,
-    "R2/R3: there must be exactly ONE Availability group inside the Screening (advanced) details");
-  ok(advDetails.querySelector("#availGroup #tfAvail") && advDetails.querySelector("#availGroup #tsSeg"),
-    "the Availability group must carry BOTH the transfer-function control and the per-level chooser");
-  ok(advDetails.querySelector("#colorSeg"), "#colorSeg (colour-by) is not inside the Screening (advanced) details");
+  // Lane B structure (owner polish round): Browse carries every map filter - data type on top, then
+  // the Advanced search accordion (Find, Data available, Year range), collapsed by default; Select &
+  // download carries selection + Download + Metadata. The retired controls must be absent, not hidden.
+  const _adv = doc.getElementById("advSearch");
+  ok(_adv && _adv.matches("details.advanced"), "the Advanced search accordion is missing from Browse");
+  // The tour's Find step legitimately opened it earlier in this suite, so the collapsed DEFAULT is
+  // asserted against the shipped markup, not runtime state.
+  ok(!/<details[^>]*id="advSearch"[^>]*\sopen[\s>]/.test(fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8")),
+    "Advanced search must ship collapsed (no open attribute in the markup)");
+  ok(/Advanced search/.test(_adv.querySelector("summary").textContent),
+    "the accordion summary must read Advanced search");
+  const _browse = doc.getElementById("browseMode");
+  ok(_browse.contains(_adv), "Advanced search lives in the Browse pane");
+  ok(["find", "availSel", "yearFrom"].every(id => _adv.contains(doc.getElementById(id))),
+    "Advanced search must hold Find, Data available and the year range");
+  ok(!doc.getElementById("qSeg"), "the Min-TF-diagnostic group stays retired");
+  ok(!doc.getElementById("colorSeg"), "colour-by is retired (owner D4) and must not render");
+  ok(!doc.getElementById("pLo") && !doc.getElementById("pHi"),
+    "the period slider is retired (headless predicate); its inputs must not render");
+  ok(doc.getElementById("selectMode").contains(doc.getElementById("tsSeg")),
+    "the Download block's time-series rows live in the Select & download pane");
 
   // N. RECENTLY ADDED (cleanup wave A): ONE surface (the surveys-view #recentStrip; the map-rail
   // #recentSide is deleted). The strip's DISPLAY rule is a 30-day window ending at the BUILD day
@@ -2472,7 +2484,7 @@ async function bootFreshWindow(dataMap, url) {
   ok(A.sidebarMode() === "browse", "D2: default rail mode must be Browse, got " + A.sidebarMode());
   ok(!browseMode.classList.contains("hidden") && selectMode.classList.contains("hidden"),
     "D2: Browse must show the browse pane and hide the select pane by default");
-  ["find", "typeBoxes", "tree", "selAll", "dlZip", "tsSeg", "colorSeg", "yearFrom", "tfAvail"].forEach(id =>
+  ["find", "typeBoxes", "tree", "selAll", "dlZip", "tsSeg", "availSel", "yearFrom", "dlSh"].forEach(id =>
     ok(doc.getElementById(id), "D2: element id '" + id + "' went missing after the mode split"));
   const selBtn = [...modeSeg.children].find(b => b.dataset.mode === "select");
   selBtn.click();
@@ -2549,20 +2561,23 @@ async function bootFreshWindow(dataMap, url) {
   doc.getElementById("clearSel").click();
   A.setSidebarMode("browse");
 
-  // Y. UX6 Wave D (D4, #21): the export button row is hidden (empty-state hint shown) until a selection
-  // exists; making a selection reveals it. updateSel() toggles .hidden on both.
-  const exportBtns = doc.getElementById("exportBtns"), exportHint = doc.getElementById("exportHint");
-  ok(exportBtns && exportHint, "D4: #exportBtns / #exportHint missing from the Selection box");
+  // Y. Lane B scope rule: downloads are never hidden behind a selection - with nothing selected they
+  // act on the FILTERED CORPUS and the scope line says so; a selection re-scopes them. The old
+  // hidden-row/empty-hint pair is retired with the behaviour it described.
+  const exportBtns = doc.getElementById("exportBtns");
+  ok(exportBtns && !doc.getElementById("exportHint"),
+    "Lane B: #exportBtns stays; the #exportHint empty-state is retired with the hidden-row behaviour");
   doc.getElementById("clearSel").click();
-  ok(exportBtns.classList.contains("hidden"), "D4: the export row must be hidden with no selection");
-  ok(!exportHint.classList.contains("hidden"), "D4: the empty-state hint must show with no selection");
-  ok(/enable downloads/.test(exportHint.textContent), "D4: the empty-state hint copy is missing");
+  ok(!exportBtns.classList.contains("hidden"), "the Metadata row must stay visible with no selection");
+  ok(!doc.getElementById("dlCsv").disabled,
+    "with no selection the metadata exports act on the filtered corpus and must stay enabled");
+  ok(/^Across \d+ filtered stations:$/.test(doc.getElementById("scopeLine").textContent),
+    "no selection -> the scope line prices the filtered corpus, got " + JSON.stringify(doc.getElementById("scopeLine").textContent));
   doc.getElementById("selAll").click();
-  ok(A.selCount() > 0, "D4: 'Select all filtered' did not create a selection");
-  ok(!exportBtns.classList.contains("hidden"), "D4: the export row must be revealed once a selection exists");
-  ok(exportHint.classList.contains("hidden"), "D4: the empty-state hint must hide once a selection exists");
+  ok(A.selCount() > 0, "'Select all filtered' did not create a selection");
+  ok(/^For the \d+ selected stations?:$/.test(doc.getElementById("scopeLine").textContent),
+    "a selection -> the scope line prices the selection, got " + JSON.stringify(doc.getElementById("scopeLine").textContent));
   doc.getElementById("clearSel").click();
-  ok(exportBtns.classList.contains("hidden"), "D4: clearing the selection did not re-hide the export row");
   A.setSidebarMode("browse");
 
   // Z. UX6 Wave D (D5, #24): the sidebar collapse toggle sets the .collapsed class AND calls
@@ -3844,18 +3859,23 @@ async function bootFreshWindow(dataMap, url) {
     { ausmt_id: "nz.gamma.G1", format: "mth5", url: "h5/gamma/G1.h5", size: 1000000 },
   ], bundles: [] };
   const xmlBtn = doc.getElementById("dlZipXml"), h5Btn = doc.getElementById("dlZipH5"), ediBtn = doc.getElementById("dlZip");
-  ok(xmlBtn, "SELFMT: the Select and export card must offer an EMTF XML zip export (#dlZipXml)");
-  ok(h5Btn, "SELFMT: the Select and export card must offer an MTH5 zip export (#dlZipH5)");
+  const rowName = b => b.querySelector(".pname").textContent;
+  const rowMeta = b => b.querySelector("small").textContent;
+  ok(xmlBtn, "SELFMT: the Download block must offer an EMTF XML zip row (#dlZipXml)");
+  ok(h5Btn, "SELFMT: the Download block must offer an MTH5 zip row (#dlZipH5)");
   ok(typeof xmlBtn.onclick === "function" && typeof h5Btn.onclick === "function",
-    "SELFMT: both new export buttons must have a handler bound in exports.js");
-  ok(/EMTF XML/.test(xmlBtn.textContent) && /zip/.test(xmlBtn.textContent),
-    "SELFMT: the XML button must read as an EMTF XML zip export, got " + JSON.stringify(xmlBtn.textContent));
-  ok(/MTH5/.test(h5Btn.textContent) && /zip/.test(h5Btn.textContent),
-    "SELFMT: the MTH5 button must read as an MTH5 zip export, got " + JSON.stringify(h5Btn.textContent));
-  // Both must be gated on a selection exactly as the other export buttons are.
-  A.setSelected([]);
+    "SELFMT: both rows' actions must have a handler bound in exports.js");
+  ok(/EMTF XML/.test(rowName(xmlBtn)) && /zip/.test(rowName(xmlBtn)),
+    "SELFMT: the XML row must read as an EMTF XML zip export, got " + JSON.stringify(rowName(xmlBtn)));
+  ok(/MTH5/.test(rowName(h5Btn)) && /zip/.test(rowName(h5Btn)),
+    "SELFMT: the MTH5 row must read as an MTH5 zip export, got " + JSON.stringify(rowName(h5Btn)));
+  // Scope gating: with no selection the scope is the filtered corpus, and a derived-format row with
+  // nothing of that format in scope (the manifest is empty here) is inert; the EDI row keeps its
+  // licence-predicate enablement (a legacy-path EDI can exist with no manifest row).
+  A.setSelected([]); A.paintDownloadRows();
   ok(xmlBtn.disabled && h5Btn.disabled,
-    "SELFMT: with nothing selected both new exports must be disabled, like every other export button");
+    "SELFMT: with no file of the format in scope both derived rows must be disabled");
+  ok(!ediBtn.disabled, "SELFMT: the EDI row follows the s.ediAvail predicate, not the manifest");
 
   A.setManifest(SEL_MANIFEST);
   A.setSelected(["A1", "A2", "G1"]);
@@ -3866,12 +3886,24 @@ async function bootFreshWindow(dataMap, url) {
   //     over A1+A2 (G1 has none) = 2.1 MB. MTH5: 174,696 + 1,000,000 over A1+G1 (A2 has none) = 1.1 MB.
   //     EDI: 1000+1100+1200 = 3 KB. Each is an ESTIMATE of what will actually be packaged, so it counts
   //     only the rows the export will fetch, never the whole selection.
-  ok(/~2\.1 MB/.test(xmlBtn.textContent),
-    "SELFMT size: the XML button must show the selection's XML total (~2.1 MB), got " + JSON.stringify(xmlBtn.textContent));
-  ok(/~1\.1 MB/.test(h5Btn.textContent),
-    "SELFMT size: the MTH5 button must show the selection's MTH5 total (~1.1 MB), got " + JSON.stringify(h5Btn.textContent));
-  ok(/~3 KB/.test(ediBtn.textContent),
-    "SELFMT size: the EDI button must show the selection's EDI total (~3 KB), got " + JSON.stringify(ediBtn.textContent));
+  // Packaging outlives the old 7s toast dwell (13-16s measured at 400-700 EDIs), so the packaging
+  // message is STICKY: it sets no hide timer and stands until the completion toast replaces it.
+  win.toast("packaging probe…", { sticky: true });
+  const _toastEl = doc.getElementById("toast");
+  ok(_toastEl.style.display === "block" && win.toast._h === null,
+    "a sticky toast must stay up with no hide timer until the next toast replaces it");
+  win.toast("done");
+  ok(_toastEl.textContent === "done" && win.toast._h !== null,
+    "a plain toast must replace a sticky one and restore the auto-hide");
+  ok(/,\{sticky:true\}/.test(fs.readFileSync(path.join(PORTAL, "src", "exports.js"), "utf8").split("Packaging ")[1] || "") &&
+     /,\{sticky:true\}/.test(fs.readFileSync(path.join(PORTAL, "src", "exports.js"), "utf8").split("Packaging ")[2] || ""),
+    "both zip flows' packaging toasts must be sticky");
+  ok(/2 stations · ~2\.1 MB/.test(rowMeta(xmlBtn)),
+    "SELFMT size: the XML row must price the scope (2 stations, ~2.1 MB), got " + JSON.stringify(rowMeta(xmlBtn)));
+  ok(/2 stations · ~1\.1 MB/.test(rowMeta(h5Btn)),
+    "SELFMT size: the MTH5 row must price the scope (2 stations, ~1.1 MB), got " + JSON.stringify(rowMeta(h5Btn)));
+  ok(/3 stations · ~3 KB/.test(rowMeta(ediBtn)),
+    "SELFMT size: the EDI row must price the scope (3 stations, ~3 KB), got " + JSON.stringify(rowMeta(ediBtn)));
 
   const fetchedExt = (from, ext) => fetchOrder.slice(from).filter(u => String(u).split("?")[0].endsWith(ext));
   const zipNames = (from) => zipEntries.slice(from).map(e => e.name);
@@ -4031,21 +4063,21 @@ async function bootFreshWindow(dataMap, url) {
   //     manifest for one with different rows and every reader of the index must move with it.
   A.setManifest({ files: [{ ausmt_id: "au.alpha.A1", format: "emtfxml", url: "xml/alpha/A1.xml", size: 1048576 }], bundles: [] });
   A.refresh();
-  ok(/~1\.0 MB/.test(xmlBtn.textContent),
+  ok(/~1\.0 MB/.test(rowMeta(xmlBtn)),
     "SELFMT index: a swapped manifest must be read immediately (A1's new 1.0 MB XML row), got " +
-    JSON.stringify(xmlBtn.textContent) + " (a stale index would still be showing the previous manifest)");
-  ok(h5Btn.textContent.indexOf("~") < 0,
+    JSON.stringify(rowMeta(xmlBtn)) + " (a stale index would still be showing the previous manifest)");
+  ok(rowMeta(h5Btn).indexOf("~") < 0,
     "SELFMT index: rows the new manifest does NOT carry must stop being counted, got " +
-    JSON.stringify(h5Btn.textContent));
+    JSON.stringify(rowMeta(h5Btn)));
   // (h2) ARCHIVE-SCALE SIZES. The MTH5 selection zip is the multi-GB case, so the label must use the
   //      archive-scale formatter (like the level chooser and the hand-off snackbar), never
   //      "10108.9 MB". 10,600,000,000 B is ~9.9 GB.
   A.setManifest({ files: [{ ausmt_id: "au.alpha.A1", format: "mth5", url: "mth5/alpha/A1.h5", size: 10600000000 }], bundles: [] });
   A.refresh();
-  ok(/~9\.9 GB/.test(h5Btn.textContent),
-    "SELFMT size: a multi-GB total must render in GB, got " + JSON.stringify(h5Btn.textContent));
+  ok(/~9\.9 GB/.test(rowMeta(h5Btn)),
+    "SELFMT size: a multi-GB total must render in GB, got " + JSON.stringify(rowMeta(h5Btn)));
   A.setManifest(SEL_MANIFEST); A.refresh();
-  ok(/~2\.1 MB/.test(xmlBtn.textContent) && /~1\.1 MB/.test(h5Btn.textContent),
+  ok(/~2\.1 MB/.test(rowMeta(xmlBtn)) && /~1\.1 MB/.test(rowMeta(h5Btn)),
     "SELFMT index: swapping back must restore the original totals, got " +
     JSON.stringify([xmlBtn.textContent, h5Btn.textContent]));
 

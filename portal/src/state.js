@@ -38,7 +38,10 @@ function hydrUsable(k){return HYDR[k]==="ready";}
 // yields; the DISPLAY difference is carried by hydrating()/hydrFailed(), never by the data itself.
 function sciRow(i){return (SCI&&SCI[i])||[];}
 function tfRow(i){return (TFD&&TFD[i])||null;}
-let ST=[],surveys=[],visible=[],selected=new Set(),curView="map",colorMode="type",qMin=0;
+let ST=[],surveys=[],visible=[],selected=new Set(),curView="map",qMin=0;
+// Lane B: the period-window predicate is HEADLESS (the slider control is retired; passesCore reads
+// these bounds, harnesses set them). Full-range defaults = the filter is off.
+let periodLo=0.001,periodHi=100000;
 let SLUG_TO_SURVEY={};   // slug -> survey label, built in buildState(); backs the #/survey/<slug> route
 // UX4 (D1/D2): the set of survey SLUGS that belong to the `auslamp` collection, built once at boot
 // (buildAuslampSet, main.js) from COLL[auslamp].surveys (which holds survey LABELS) resolved through
@@ -86,7 +89,6 @@ let TSACC=null;
 // All of it is recomputed and gated in tests/test_type_palette_separability.py; the floors are stated
 // there, not here, so a future edit cannot re-converge the pair by editing a comment.
 const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#3730B8",AMT:"#CDA1EC",GDS:"#C255A0",other:"#999"};
-const DIM_COL={"1-D":"#4E8FC9","2-D":"#8A5FC0","3-D":"#C44F92",null:"#5A6E7D"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};

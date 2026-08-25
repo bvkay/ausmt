@@ -118,17 +118,10 @@ if(_drawPoly)_drawPoly.onclick=()=>armDraw("polygon");
 // is membership-blind. Since the 2026-08-24 dots-only ruling NO map surface carries the AusLAMP/legacy
 // distinction at all: it was last held by the D2 clustering split, which the badge rule inherited and
 // which is now gone (not by colour, and since O4 2026-07-12 not by the hover tooltip either).
-// Two-phase boot: s.q / s.dim come from sci.json (PHASE 2). Both sci-driven modes have a NEUTRAL GREY that
-// MEANS "not evaluated" (qColor's null branch, DIM_COL's null key), so painting it over values the portal
-// does not have would state a screening outcome it never received. Gate on hydrUsable, not on !hydrating:
-// a FAILED sci.json leaves s.q/s.dim undefined exactly as an in-flight one does, and painting the whole map
-// "not evaluated" off a 404 is a screening claim standing in for a load failure. Until the product is usable
-// the marker keeps its data-type colour (a phase-1 fact). The two mode buttons are disabled across the same
-// window (setSciControlsEnabled), so this guard is unreachable in normal use and exists to make the
-// dishonest paint impossible rather than merely unlikely; SCI_READY recolours.
-function markerColor(s){
-  if(!hydrUsable("sci")&&(colorMode==="quality"||colorMode==="dim"))return TYPE_COL[s.type]||"#999";
-  return colorMode==="quality"?qColor(s.q):colorMode==="dim"?(DIM_COL[s.dim]||"#5A6E7D"):(TYPE_COL[s.type]||"#999");}
+// Lane B (owner D4): the colour-by control is retired; markers carry the data-type colour, a
+// phase-1 fact (the legend is the surviving colour surface). qColor lives on for the drawer's
+// completeness dot.
+function markerColor(s){return TYPE_COL[s.type]||"#999";}
 function recolor(){ST.forEach(s=>{if(s.marker)s.marker.setStyle({fillColor:markerColor(s)});});}   // C42: withheld-coord stations have no marker
 // ---- survey-drawer lane (ruling 2, Option A): the survey FOCUS DIM ------------------------------------
 // "View on map" with a survey open frames that survey while the rest of the catalogue STAYS ON THE MAP,
@@ -336,7 +329,7 @@ function drawSelectionMsg(n,layerType){const shape=layerType==="rectangle"?"rect
   return n+" station"+(n===1?"":"s")+" selected within "+shape;}
 // One active selection shape: a new box replaces the previous one rather than stacking. refresh()
 // recomputes `selected` from the new shape, THEN we toast the fresh count and (D2) surface the exports by
-// auto-switching the rail to Select & export. Named (not inline) so the jsdom driver can invoke it.
+// auto-switching the rail to Select & download. Named (not inline) so the jsdom driver can invoke it.
 function onDrawCreated(e){e.layer.options.interactive=false;drawn.clearLayers();drawn.addLayer(e.layer);refresh();
   setArmedDraw(null);   // a completed draw disarms the mode — the panel button must not stay lit
   if(typeof toast==="function")toast(drawSelectionMsg(selected.size,e&&e.layerType));

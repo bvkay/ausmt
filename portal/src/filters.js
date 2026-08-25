@@ -3,15 +3,15 @@
 // data-dependent and called by main after ST is built. recolor lives in map.js and is
 // referenced only inside event handlers (runtime), never at load time.
 const tree=document.getElementById("tree");
-const pLo=document.getElementById("pLo"),pHi=document.getElementById("pHi");
 // The empty-state selection hint is OWNED by the markup (#selHint's default text in index.html);
 // read once at load so the copy lives in one place. updateSel restores it when a selection clears.
 const SEL_HINT_EMPTY=(document.getElementById("selHint")||{textContent:""}).textContent;
 let findActive=-1;   // UX6 Wave F (F3): index of the keyboard-highlighted Find option (-1 = none). Declared
                      // up here so renderFind() (which resets it) is never in its temporal dead zone.
-function sliderRead(){let lo=+pLo.value,hi=+pHi.value;if(lo>hi)[lo,hi]=[hi,lo];return[10**lo,10**hi,lo,hi];}
-function paintSlider(){const[plo,phi,lo,hi]=sliderRead();document.getElementById("pLoTxt").textContent=fmtP(plo);document.getElementById("pHiTxt").textContent=fmtP(phi);
-  const f=document.getElementById("pfill");f.style.left=((lo+3)/8*100)+"%";f.style.width=((hi-lo)/8*100)+"%";}
+// The period-window control is retired (Lane B); the predicate is HEADLESS like qMin below - the
+// bounds live in state.js (periodLo/periodHi, full-range by default) and are drivable by harnesses.
+// A revival note: the old heading said "cover this period window" while the predicate is an OVERLAP
+// test; any returning control must state the overlap semantics.
 // S3: year-range predicate. A station passes when its SURVEY's [year_start,year_end] overlaps the
 // typed [from,to] range; either input may be blank (an open end on that side). Unknown years
 // (survey declares no dates) PASS when both inputs are empty (no filter in effect) but FAIL as soon
@@ -31,29 +31,32 @@ function passesCore(s){
   if(![...document.querySelectorAll("#typeBoxes input:checked")].map(c=>c.value).includes(s.type))return false;
   const svs=[...tree.querySelectorAll('input[value]:checked')].map(c=>c.value);
   if(!svs.includes(s.survey))return false;
-  const[plo,phi]=sliderRead();if(s.pmin>phi||s.pmax<plo)return false;
+  if(s.pmin>periodHi||s.pmax<periodLo)return false;
   // Two-phase boot: s.q comes from sci.json, a PHASE 2 product. Until that product is USABLE this predicate
   // is INERT: a completeness value that has not arrived is not a FAILING one, and applying it would hide
   // every station on the map (and empty the counts) over data the portal does not have. hydrUsable, not
   // !hydrating: a FAILED sci.json leaves s.q undefined exactly as an in-flight one does, so a pending-only
-  // gate would go live on a broken build and report "0 of 5 shown", which reads as a screening outcome. The
-  // rail control is disabled across the same window (setSciControlsEnabled), so this is the belt to that
-  // braces; SCI_READY re-runs refresh() the moment the values land, so a filter set early still takes effect.
+  // gate would go live on a broken build and report "0 of 5 shown", which reads as a screening outcome.
+  // SCI_READY re-runs refresh() the moment the values land, so a filter set early still takes effect.
   // The completeness THRESHOLD control was retired with the Availability group (R2/R3); the predicate
   // is kept because qMin is still drivable (the headless drivers set it) and because deleting a
   // screening rule is a curation decision, not a rail-layout one.
   if(qMin>0&&hydrUsable("sci")&&!(s.q>=qMin))return false;
   if(!passesYearRange(s))return false;
-  const tfAvail=document.getElementById("tfAvail");
-  if(tfAvail&&tfAvail.checked&&!s.ediAvail)return false;  // Availability > Transfer functions: predicate s.ediAvail
-  // Availability > Time series (R3): keep a station that publishes ANY chosen level. INERT until the
-  // hand-off index has landed, for the reason the completeness filter is inert until sci.json has: a
-  // route that has not arrived is not a MISSING one, and filtering on it would empty the map over
-  // data the portal does not have. The chooser is disabled across the same window, so this is the
-  // belt to that braces, and TSACC_READY re-runs refresh() so a filter set early still takes effect.
-  if(TS_CHOSEN.size&&typeof tsAccessKnown==="function"&&tsAccessKnown()){
-    const lv=tsRoutesFor(s.ausmt_id);
-    if(!lv||!tsChosenLevels().some(t=>lv[t]))return false;}
+  // Data available (Lane B, D1): ONE single-select viewing filter in Browse. "tf" is the s.ediAvail
+  // licence predicate (the retired tickbox's, the same flag the selection exports read for their
+  // not-included honesty). A level token filters on ts_access.json membership and is INERT until the
+  // index has landed: a route that has not arrived is not a missing one, and filtering on it would
+  // empty the map over data the portal does not have. paintAvailSelect disables the level options
+  // across the same window (belt and braces), and TSACC_READY re-runs refresh() so a choice made
+  // early still takes effect. Membership in the index IS the access decision (R5): nothing here
+  // re-derives availability, and no filter state can surface a station the build gated out.
+  const av=document.getElementById("availSel");
+  if(av&&av.value){
+    if(av.value==="tf"){if(!s.ediAvail)return false;}
+    else if(typeof tsAccessKnown==="function"&&tsAccessKnown()){
+      const lv=tsRoutesFor(s.ausmt_id);
+      if(!lv||!lv[av.value])return false;}}
   return true;}
 function passes(s){if(!passesCore(s))return false;
   const q=document.getElementById("find").value.trim().toLowerCase();
@@ -118,7 +121,7 @@ function updateCounts(){const nv=document.getElementById("nVis");
     const shown=surveys.filter(surveyVisible).filter(_fac).length;nv.textContent=shown+" survey"+(shown===1?"":"s");}
   else nv.textContent=visible.length;
   document.getElementById("nTot").textContent=ST.length;}
-function refresh(){paintSlider();visible=ST.filter(passes);
+function refresh(){visible=ST.filter(passes);
   // ONE call paints the visible set into the map's single dot container; map.js owns the layer and this
   // stays the caller it always was. Nothing collapses, so a filter change is the only thing that can alter
   // what is on the map. C42: only POSITIONED stations reach the layer - a withheld-coordinate station has
@@ -128,21 +131,18 @@ function refresh(){paintSlider();visible=ST.filter(passes);
   if(curView==="surveys")renderCards();
   updateCounts();updateSel();}
 function updateSel(){document.getElementById("nSel").textContent=selected.size;document.getElementById("selBig").textContent=selected.size;
-  // Guarded like exports.js bindClick: a renamed export button must not abort every later line of
-  // this function on each selection change (the bind-time console.error is the loud signal).
-  const on=selected.size>0;["dlCsv","dlGeo","dlSh","dlTs","dlCite","dlZip","dlZipXml","dlZipH5","strike"].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!on;});
-  // The three format zips also state what the current selection would cost. The estimate is derived from
-  // the download manifest, so it is owned by exports.js (which owns the packaging that must agree with
-  // it) and simply re-run here, where the selection is known to have changed. Guarded like the other
-  // cross-module calls: a harness that loads filters.js without exports.js still updates the counts.
-  if(typeof paintExportSizes==="function")paintExportSizes();
-  document.getElementById("selHint").textContent=on?"Exports below cover exactly these stations, with provenance pointers.":SEL_HINT_EMPTY;
-  // UX6 Wave D (D4, #21): until a selection exists, hide the whole export row and show the empty-state
-  // hint in its place; reveal the row once there is something to export. Class toggle only — the buttons
-  // keep their own disabled state above.
-  const eb=document.getElementById("exportBtns"),eh=document.getElementById("exportHint");
-  if(eb)eb.classList.toggle("hidden",!on);
-  if(eh)eh.classList.toggle("hidden",on);}
+  // Lane B: downloads follow the SCOPE (scopeStations), so the metadata buttons enable whenever the
+  // scope is non-empty - with nothing selected they act on the filtered corpus, and the scope line
+  // says so. Guarded per element: a renamed button must not abort every later line of this function
+  // on each selection change (the bind-time console.error is the loud signal).
+  const on=scopeStations().length>0;
+  ["dlCsv","dlGeo","dlSh","dlCite"].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!on;});
+  // The Download block (scope line, the three Level 2 rows, the time-series rows) is owned by
+  // exports.js, which owns the packaging the metas must agree with; re-painted here, where the
+  // selection is known to have changed. Guarded like the other cross-module calls: a harness that
+  // loads filters.js without exports.js still updates the counts.
+  if(typeof paintDownloadRows==="function")paintDownloadRows();
+  document.getElementById("selHint").textContent=selected.size?"Downloads below cover exactly these stations, with provenance pointers.":SEL_HINT_EMPTY;}
 
 // UX5 (D7): tree disclosure state. Collapse is IN-MEMORY only (no persistence — polish item), keyed
 // "c:<country>" / "o:<country||org>" / "k:<collection id>" (the || separator is the tree's existing
@@ -287,92 +287,44 @@ document.getElementById("find").addEventListener("keydown",e=>{
 (function(){const find=document.getElementById("find");if(!find)return;
   find.setAttribute("role","combobox");find.setAttribute("aria-autocomplete","list");
   find.setAttribute("aria-controls","findResults");find.setAttribute("aria-expanded","false");})();
-pLo.addEventListener("input",refresh);pHi.addEventListener("input",refresh);
-document.getElementById("colorSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  colorMode=b.dataset.c;[...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));recolor();});
-// Two-phase boot: the rail controls whose MEANING depends on sci.json, which after the Availability
-// merge is the completeness/dimensionality colour modes. Until sci.json is USABLE they are disabled and
-// marked aria-busy, because a live control there would paint the whole map in the "not evaluated" grey
-// for values that are not there. Idempotent; called once from boot() and again from the
-// SCI_READY continuation (main.js wireHydration). Guarded for the stubbed-DOM smoke harness.
-// The hint NAMES the reason, and the two reasons are not the same: still loading resolves itself in a
-// moment, could-not-load does not resolve at all this session, and a reader deserves to know which wait
-// they are in. aria-busy is true only for the in-flight case; a failed product is settled, not busy.
-const SCI_PENDING_HINT="Completeness data is still loading";
-const SCI_FAILED_HINT="Completeness data could not be loaded, so this control is unavailable in this session";
-function _setSciBtn(b,on){if(!b)return;b.disabled=!on;
-  const failed=(typeof hydrFailed==="function")&&hydrFailed("sci");
-  if(b.setAttribute)b.setAttribute("aria-busy",(!on&&!failed)?"true":"false");
-  if("title" in b)b.title=on?"":(failed?SCI_FAILED_HINT:SCI_PENDING_HINT);}
-function setSciControlsEnabled(on){
-  const c=document.getElementById("colorSeg");
-  if(c&&c.querySelectorAll)[...c.querySelectorAll("button")].forEach(b=>{
-    const mode=(b.dataset||{}).c;
-    if(mode==="quality"||mode==="dim")_setSciBtn(b,on);});
+// Data available (Browse): a change re-filters; paintAvailSelect owns the level options' two-phase
+// state (disabled + a reason while ts_access.json is in flight or absent; Any/TF ride the catalogue
+// and are live from first paint).
+const _availSel=document.getElementById("availSel");
+if(_availSel&&_availSel.addEventListener)_availSel.addEventListener("change",refresh);
+function paintAvailSelect(){
+  const av=document.getElementById("availSel");if(!av||!av.querySelectorAll)return;
+  const known=(typeof tsAccessKnown==="function")&&tsAccessKnown();
+  const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
+  const empty=known&&!Object.keys(ix).length;
+  [...av.querySelectorAll("option")].forEach(o=>{
+    if(o.value===""||o.value==="tf")return;
+    o.disabled=!known||empty;
+    o.title=known?(empty?"Availability by level: "+TS_NONE_HINT:""):TS_PENDING_HINT;});
 }
 
 // ---- Availability > Time series: the per-level chooser (R3 / D7 / D8) ----------------------------
-// A multi-select over ts_access.json's level tokens. NOTHING selected is the default and means no
-// level filter at all; a chosen set keeps a station publishing ANY of them, which is what a reader
-// asking "who has a Level 1 I could fetch right now" means.
-//
-// THE INDEX IS THE ONLY SOURCE. Which stations appear in it was decided in the build - open access,
-// a verified register row, never level_2 - so nothing here re-derives availability from survey
-// metadata and no chooser state can bring back a station the build gated out. That is R5 seen from
-// the portal end: suppression lives in the data, not in a filter a reader could turn off.
-let TS_CHOSEN=new Set();
-function tsChosenLevels(){return [...TS_CHOSEN];}
-// The count and size on each button are facts about the DEPLOYMENT, not about the current selection:
-// this is a filter, and a facet figure that moved with the other filters would read as a screening
-// outcome. It is also its OWN summation, deliberately: paintExportSizes() totals the download
-// manifest through SEL_ZIP_BUTTONS and skips any format not in that table, so joining these bytes to
-// it would mean adding a fourth zip button - and AusMT builds no zip of bytes it does not hold.
-function tsLevelTotals(){
-  const out={};TS_LEVELS.forEach(([tok])=>{out[tok]={n:0,bytes:0};});
-  const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
-  Object.keys(ix).forEach(id=>{const lv=ix[id]||{};
-    TS_LEVELS.forEach(([tok])=>{const e=lv[tok];if(!e)return;out[tok].n++;out[tok].bytes+=(e.bytes||0);});});
-  return out;}
-// Two-phase honesty, and the two states are NOT the same fact. In flight: the answer is coming, so
-// aria-busy is true and the hint says so. Settled and empty: this deployment publishes no download
-// index, which is a statement about the BUILD - a corpus with no verified routes ships no file at all
-// (data.js) - and calling it a load error would blame the network for a curation state.
+// The R5 posture, restated where the level filter now reads it (passesCore) and where the Download
+// rows price it (exports.js paintDownloadRows): which stations appear in ts_access.json was decided
+// in the build - open access, a verified register row, never level_2 - so nothing in the portal
+// re-derives availability from survey metadata, and no control state can bring back a station the
+// build gated out. The two-phase hints are shared by the Data available options and the Download
+// rows; in flight and settled-empty are NOT the same fact (one resolves itself, one is a statement
+// about the build), so each surface names which it is in.
 const TS_PENDING_HINT="Time-series availability is still loading";
 const TS_NONE_HINT="this deployment publishes no download index";
-function paintTsChooser(){
-  const seg=document.getElementById("tsSeg");if(!seg||!seg.querySelectorAll)return;
-  if(!seg.children.length)TS_LEVELS.forEach(([tok,label,gloss])=>{
-    const b=document.createElement("button");b.type="button";
-    b.dataset.ts=tok;b.dataset.label=label;b.dataset.gloss=gloss;
-    seg.appendChild(b);});
-  const known=(typeof tsAccessKnown==="function")&&tsAccessKnown();
-  const totals=known?tsLevelTotals():{};
-  [...seg.children].forEach(b=>{
-    const t=totals[b.dataset.ts],n=t?t.n:0,on=TS_CHOSEN.has(b.dataset.ts);
-    b.textContent=b.dataset.label+(n?"  "+n+" station"+(n===1?"":"s")+(t.bytes?" · "+fmtBigBytes(t.bytes):""):"");
-    b.disabled=!n;
-    b.setAttribute("aria-busy",known?"false":"true");
-    b.setAttribute("aria-pressed",String(on));
-    b.classList.toggle("on",on);
-    b.title=n?b.dataset.gloss+" · "+n+" station"+(n===1?"":"s")+" this deployment can hand off"
-            :(known?b.dataset.gloss+" · "+TS_NONE_HINT:TS_PENDING_HINT);});
-  const note=document.getElementById("tsSegNote");
-  if(note)note.textContent=!known?TS_PENDING_HINT+"."
-    :(TS_LEVELS.some(([tok])=>totals[tok]&&totals[tok].n)
-      ? "Selecting a level keeps the stations whose files are ready to fetch. AusMT hands these off to the archive that holds them; it never hosts or fetches them itself."
-      : "Availability by level: "+TS_NONE_HINT+".");}
-const _tsSeg=document.getElementById("tsSeg");
-if(_tsSeg&&_tsSeg.addEventListener)_tsSeg.addEventListener("click",e=>{
-  const b=e.target.closest("button");if(!b||b.disabled||!b.dataset.ts)return;
-  if(TS_CHOSEN.has(b.dataset.ts))TS_CHOSEN.delete(b.dataset.ts);else TS_CHOSEN.add(b.dataset.ts);
-  paintTsChooser();refresh();});
-// UX6 Wave D (D2): rail Browse / Select & export mode. Browse (default) shows find + data type + tree
-// (+ recently added on map); Select & export shows the map-selection box, exports and Screening
+// The current DOWNLOAD SCOPE (Lane B): the selection when one exists, else the filtered corpus -
+// exactly what "Select all filtered" would take. One rule, no modes; the scope line in the Download
+// block states which. exports.js reads this for every download and every priced row.
+function scopeStations(){return selected.size?ST.filter(s=>selected.has(s.i)):visible;}
+// UX6 Wave D (D2), reshaped in Lane B: rail Browse / Select & download mode. Browse (default) is
+// every map filter (find, data type, Data available, year, tree); Select & download is the
+// map-selection box and the Download/Metadata blocks
 // (advanced). It is a pure show/hide of the two mode panes — it never touches data-views (view/mode are
 // orthogonal: a section is visible iff its mode pane is shown AND its own data-views allows the view).
 let sidebarMode="browse";
 // Stage B (selection-state isolation): the All-EDIs / survey "Download" tile (selectSurvey, drawer.js)
-// enters Select & export mode and scopes the MAP by checking ONLY its own survey in the tree. That map
+// enters Select & download mode and scopes the MAP by checking ONLY its own survey in the tree. That map
 // scoping is a TEMPORARY LENS, not a durable filter: snapshot the survey checkboxes it is about to mutate
 // on entry (enterSelectLens) and put them back when the visitor leaves the lens - returns to Browse
 // (setSidebarMode below) or navigates off the map (setView, main.js). The snapshot is taken ONLY by the
@@ -390,7 +342,7 @@ function restoreSelectLens(){
   tree.querySelectorAll('input[value]').forEach(c=>{if(c.value in want)c.checked=want[c.value];});
   refresh();}
 function setSidebarMode(mode){
-  // Stage B: leaving Select & export for Browse ends any All-EDIs lens - restore the survey checkboxes the
+  // Stage B: leaving Select & download for Browse ends any All-EDIs lens - restore the survey checkboxes the
   // tile scoped so the Browse pane shows the visitor's own tree again, never the single-survey scoping the
   // tile applied. Guarded on the select->browse transition so repeated setSidebarMode("browse") calls and a
   // visitor's plain Browse use are untouched.
@@ -403,7 +355,7 @@ function setSidebarMode(mode){
   if(sp)sp.classList.toggle("hidden",mode!=="select");
   if(seg)[...seg.children].forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));}
 document.getElementById("modeSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b||!b.dataset.mode)return;setSidebarMode(b.dataset.mode);});
-// "Select all filtered" makes a selection, so (D2) auto-switch to Select & export for discoverability of
+// "Select all filtered" makes a selection, so (D2) auto-switch to Select & download for discoverability of
 // the exports it just enabled — the same nudge the draw-created handler in map.js makes.
 // It also CLEARS any drawn shape: refresh() re-derives the selection from shapes, so a stale shape
 // would silently discard the select-all on the next filter change.
