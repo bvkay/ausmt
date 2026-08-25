@@ -1,5 +1,5 @@
 "use strict";
-// tour.js — 10-step spotlight tour (UX feedback rounds 1 + 2 + UX4 D5). Classic script, zero deps,
+// tour.js - 11-step spotlight tour (UX feedback rounds 1 + 2 + UX4 D5). Classic script, zero deps,
 // loads LAST (after main.js) so it can call setView()/openStation()/other globals, but nothing in
 // main.js depends on it (a missing/broken tour.js must never break the intro panel or the app — see
 // the typeof guard in main.js).
@@ -57,17 +57,18 @@ const TOUR_DIM=0.78;
 
 let _tourStep=-1,_tourEls=null;
 // What THIS tour run has itself opened, so stopTour() undoes only that (not pre-existing visitor state).
-let _tourOpened={drawer:false,hash:null,view:null};
+let _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
 
-// Steps 1/4 enter action: make sure the MAP view is showing. Forward this is a no-op; its real job
-// is BACKWARD navigation from the Surveys steps (6-7), where map-only targets (.selbox, the map
+// Enter action for the map-view steps: make sure the MAP view is showing. Forward this is a no-op; its
+// real job is BACKWARD navigation from the Surveys steps, where map-only targets (.selbox, the map
 // itself) would otherwise be display:none and every earlier step would fall back to a centred card.
 function _tourEnterMapView(){
   if(typeof curView!=="undefined"&&curView!=="map"&&typeof setView==="function")setView("map");
 }
-// Step 6 enter action: actually switch to the Surveys view — the navigation IS the lesson. setView
-// closes any open drawer itself; _tourOpened.drawer is left as-is because closeDrawer() is a safe
-// no-op double-close at restore time.
+// Surveys-view step enter action. Named by SELECTOR, not by index: a step inserted mid-deck left every
+// numbered comment in this file one behind, so the numbers are gone. It actually switches to the Surveys
+// view, because the navigation IS the lesson. setView closes any open drawer itself; _tourOpened.drawer
+// is left as-is because closeDrawer() is a safe no-op double-close at restore time.
 function _tourEnterSurveysView(){
   if(typeof curView!=="undefined"&&curView!=="surveys"&&typeof setView==="function")setView("surveys");
 }
@@ -165,7 +166,8 @@ function _tourEnterStation(){
   if(!wasOpen)_tourOpened.drawer=true;
   if(prevHash!==location.hash)_tourOpened.hash=prevHash;   // remember what to restore, not just "changed"
 }
-// Step 8 enter action: close whatever drawer the tour opened and land back on the map — the loop's
+// Final map step enter action (by selector, not index): close whatever drawer the tour opened and
+// land back on the map. The loop's
 // closing beat. Uses the same restore path as stopTour() so behaviour is identical whether a visitor
 // reaches step 8 by stepping through or jumps back to it.
 function _tourEnterMap(){
@@ -174,6 +176,10 @@ function _tourEnterMap(){
 // Shared restore: closes a tour-opened drawer, puts back a tour-changed hash, and returns to the map
 // view — but ONLY undoes state _tourOpened recorded as the tour's own doing.
 function _tourRestore(){
+  if(_tourOpened.collapsed){                     // put the visitor's own collapsed rail back (see startTour)
+    if(typeof setSidebarCollapsed==="function")setSidebarCollapsed(true);
+    _tourOpened.collapsed=false;
+  }
   if(_tourOpened.drawer){closeDrawer();_tourOpened.drawer=false;}
   if(_tourOpened.hash!==null){history.replaceState(null,"",location.pathname+location.search+_tourOpened.hash);_tourOpened.hash=null;}
   if(typeof curView!=="undefined"&&curView!=="map"&&typeof setView==="function")setView("map");
@@ -369,7 +375,8 @@ function _tourLayout(){
     spot.style.width=(rect.width+pad*2)+"px";
     spot.style.height=(rect.height+pad*2)+"px";
     spot.style.boxShadow="0 0 0 4000px rgba(11,15,18,"+TOUR_DIM+")";
-    // Leader from the centred card to the spotlight — suppressed on the map steps (TOUR_STEPS 0 and 9).
+    // Leader from the centred card to the spotlight, suppressed on the two map steps (the sel==='#map'
+    // entries, which isMapStep keys off by SELECTOR rather than by a number that rots).
     const spotBox={left:rect.left-pad,top:rect.top-pad,right:rect.right+pad,bottom:rect.bottom+pad};
     const ld=_tourLeader(box,spotBox,isMapStep);
     if(leader&&line){
@@ -407,8 +414,16 @@ function _tourPrev(){
 function startTour(){
   if(_tourStep>=0)return;              // already running
   if(!TOUR_STEPS.length)return;
-  _tourOpened={drawer:false,hash:null,view:null};
+  _tourOpened={drawer:false,hash:null,view:null,collapsed:false};
   _tourFindPrev=null;_tourTreePrev=null;_tourTreeTarget=null;_tourSelPrevMode=null;   // D5/D2 demo state: fresh every run
+  // A COLLAPSED rail hides every child but the collapse button, so the rail steps (Find, the tree, the
+  // Select and Download boxes) would spotlight nothing and narrate controls that are not on screen -
+  // exactly what a returning visitor who collapsed the rail gets from About's ?tour=1 link. Expand it
+  // for the run and record that WE did, so _tourRestore puts the visitor's own choice back.
+  const _sb=document.querySelector("aside.filters");
+  if(_sb&&_sb.classList.contains("collapsed")&&typeof setSidebarCollapsed==="function"){
+    setSidebarCollapsed(false);_tourOpened.collapsed=true;
+  }
   _tourEls=_tourBuild();
   _tourStep=0;_tourPosition();
 }

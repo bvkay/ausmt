@@ -298,6 +298,74 @@ def test_unparseable_survey_yaml_generates_nothing(tmp_path):
     assert intake.generate_intake_files(pkg, now_utc=_NOW) == []
 
 
+def _alias_bomb_yaml(levels: int = 5, fan: int = 10) -> str:
+    """A survey.yaml whose declared metadata are YAML ALIAS chains: each level names the level below
+    it `fan` times, so safe_load builds a small DAG that str() expands to fan**levels leaves. Tiny on
+    disk (safe_extract's byte cap sees nothing wrong), enormous the moment it is coerced to text."""
+    lines = ['schema_version: "0.2"', "slug: alias-bomb-2026", "a0: &a0 x"]
+    for n in range(1, levels + 1):
+        lines.append(f"a{n}: &a{n} [{', '.join(f'*a{n - 1}' for _ in range(fan))}]")
+    lines += [f"project_name: *a{levels}", f"organisation: *a{levels}", f"abstract: *a{levels}",
+              f"dates: *a{levels}", f"license: *a{levels}"]
+    return "\n".join(lines) + "\n"
+
+
+def test_alias_bomb_survey_yaml_generates_a_bounded_readme(tmp_path):
+    """G3 amplification: intake runs BEFORE the validator, so every survey.yaml value it renders is
+    still attacker-supplied. A value that is not a scalar must read as no declared metadata (the
+    module's fail-closed posture), never as str() of an expanded alias DAG, so the README written into
+    the quarantine volume stays bounded no matter what the package declares.
+
+    Scope: intake._readme_md_body's four survey.yaml fields plus the licence line. FAILS IF a
+    non-scalar value reaches str(). RED against the pre-cap intake in two ways: a non-scalar licence
+    raised "AttributeError: 'list' object has no attribute 'strip'" out of canon_license (against the
+    module's never-raise contract), and with the licence left scalar a 429-byte survey.yaml produced a
+    3,133,630-byte README (7,304x), growing x10 per alias level.
+    """
+    bomb = _alias_bomb_yaml()
+    assert len(bomb.encode("utf-8")) < 1024, "the hostile input must be tiny; the output is the risk"
+    pkg = _make_package(tmp_path, survey_yaml=bomb, n_edi=1)
+    written = intake.generate_intake_files(pkg, now_utc=_NOW)
+
+    assert "README.md" in written
+    readme = pkg / "README.md"
+    assert readme.stat().st_size < 32 * 1024, (
+        f"a {len(bomb)}-byte survey.yaml amplified to a {readme.stat().st_size}-byte README")
+
+    # Fail-closed, not merely truncated: each non-scalar field reads as undeclared.
+    body = readme.read_text(encoding="utf-8")
+    assert "# alias-bomb-2026" in body, "project_name was not a scalar, so the slug stands in"
+    assert "- Organisation: the survey custodian" in body
+    assert "- Dates:" not in body
+    assert "## Abstract" not in body
+    assert "- Licence: not stated" in body
+    # An unrecognised (here: non-scalar) licence still generates no LICENSE.md, and no crash.
+    assert "LICENSE.md" not in written
+    assert not (pkg / "LICENSE.md").exists()
+
+
+def test_oversized_scalar_metadata_is_truncated_not_dropped(tmp_path):
+    """The other half of the cap: a legitimately-typed but enormous scalar (a megabyte-long abstract)
+    is bounded too, and the truncation is VISIBLE so a curator reading the generated README is never
+    quietly shown a shortened abstract as if it were whole.
+
+    Scope: intake._scalar_text's length cap. FAILS IF a huge scalar is written whole (unbounded
+    README) or is silently cut with no marker. RED against the pre-cap intake: the README carried the
+    full 1,048,576-character abstract.
+    """
+    huge = "z" * (1024 * 1024)
+    yaml_huge = _SURVEY_YAML.replace(
+        "abstract: >\n  A two-station broadband deployment used to exercise intake file generation.\n",
+        f"abstract: {huge}\n")
+    pkg = _make_package(tmp_path, survey_yaml=yaml_huge, n_edi=1)
+    intake.generate_intake_files(pkg, now_utc=_NOW)
+    body = (pkg / "README.md").read_text(encoding="utf-8")
+    assert len(body) < 32 * 1024, f"an oversized abstract was written whole: {len(body)} chars"
+    assert "## Abstract" in body, "a long abstract is still an abstract, not undeclared metadata"
+    assert "[truncated]" in body, "a shortened abstract must say so"
+    assert intake._MAX_FIELD_CHARS <= 8 * 1024, "the per-field cap is a few KB, not a few MB"
+
+
 def test_runner_generate_intake_files_never_raises(tmp_path, monkeypatch):
     # runner._generate_intake_files is best-effort: if intake blows up, it returns [] (never
     # propagates) so a valid package is not wrongly quarantined. FAILS IF the swallow is removed.

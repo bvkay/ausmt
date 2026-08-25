@@ -188,8 +188,9 @@ def test_dead_job_requeued_once_then_quarantined(tmp_path):
     import os
 
     async def _body():
-        # job_timeout_s tiny so "2x timeout ago" is trivially in the past for a just-touched file.
-        async with app_client(tmp_path, scanner=scanner_clean(), job_timeout_s=0) as (client, _app, gw, cfg):
+        # job_timeout_s tiny so "2x timeout ago" is trivially in the past for a just-touched file (1,
+        # the floor: fail_closed_startup rejects 0 now that a zeroed timeout means no job ever completes).
+        async with app_client(tmp_path, scanner=scanner_clean(), job_timeout_s=1) as (client, _app, gw, cfg):
             r = await submit_zip(client, good_package_zip())
             sid = r.json()["submission_id"]
             # Simulate a runner that claimed the job then died: move pending -> running, backdate it.

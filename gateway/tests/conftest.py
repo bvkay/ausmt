@@ -456,19 +456,27 @@ def csrf_for_session(client) -> str:
     return curator_auth.csrf_token_for(raw)
 
 
-async def settle_publish(gw, sid, *, tries: int = 50):
-    """Yield control until the background publish task for `sid` leaves PUBLISHING (or a bound is
-    hit). The publish runs as an asyncio task on the same loop; awaiting sleep(0) lets it progress
-    deterministically without a real timer."""
+async def settle_publish(gw, sid, *, tries: int = 800, require: bool = True):
+    """Yield control until the background publish task for `sid` leaves PUBLISHING.
+
+    require=True (the default) FAILS the test on exhaustion instead of falling through: the old
+    silent 500 ms fall-through made a slow real-git publish read as a fail-closed defect (RED at
+    'PUBLISHING' == 'PUBLISH_FAILED' under load, reproduced 2026-08-25), which trains re-running
+    over investigating. The bound is wall-clock generous (~8 s) because the publish runs real git
+    via asyncio.to_thread and the loop must wait for the executor thread's done-callback - a bare
+    sleep(0) yields one iteration and misses it, hence the small REAL sleep. The reconciliation
+    tests, which deliberately leave a row PUBLISHING with no live task, pass require=False and
+    keep the short bound they had."""
     from gateway import states as states_mod
-    for _ in range(tries):
+    for _ in range(tries if require else 50):
         if gw.db.get(sid).state != states_mod.PUBLISHING:
             return
-        # A small REAL sleep (not sleep(0)): the publish runs its blocking git calls via
-        # asyncio.to_thread on the default executor, so the loop must actually wait for the executor
-        # thread's done-callback to fire — a bare sleep(0) yields one iteration and misses it.
         await asyncio.sleep(0.01)
-    # Fall through: some tests intentionally leave it PUBLISHING (reconciliation).
+    if require:
+        raise AssertionError(
+            f"publish for {sid} still PUBLISHING after the settle bound - the publish did not "
+            f"finish, which is a timing exhaustion, not a state-machine verdict. If this test "
+            f"WANTS an unsettled row (reconciliation), pass require=False.")
 
 
 def seed_validated(gw, cfg, *, slug: str = "mysurvey", email: str = GOOD_EMAIL,

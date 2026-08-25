@@ -368,11 +368,10 @@ const yearFrom=document.getElementById("yearFrom"),yearTo=document.getElementByI
 if(yearFrom)yearFrom.addEventListener("input",refresh);
 if(yearTo)yearTo.addEventListener("input",refresh);
 
-// Availability > Transfer functions (R2, was "Downloadable here"): single checkbox, predicate
-// s.ediAvail (read inside passesCore()). The PREDICATE is what the selection exports depend on for
-// their three-way not-included honesty, so it outlives any relabelling of the control.
-const tfAvail=document.getElementById("tfAvail");
-if(tfAvail)tfAvail.addEventListener("change",refresh);
+// Availability > Transfer functions: the #tfAvail CHECKBOX is gone, folded into the Browse
+// "Data available" single-select (#availSel, its "tf" option) by the Lane B / D1 panel redesign.
+// The PREDICATE s.ediAvail outlived the control exactly as this comment always said it would: it is
+// read in passesCore() above and by the selection exports' three-way not-included honesty.
 
 // UX feedback round 1: "Go to place" (goToPlace(), #goPlace, AU_PLACES) removed — operator decision,
 // redundant. See index.html (input+datalist removed) and state.js (AU_PLACES removed).

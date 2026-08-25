@@ -1692,6 +1692,18 @@ STATIONS_JS = r"""
       }
       if (controls[base].members.indexOf(st.catId) < 0) controls[base].members.push(st.catId);
     }
+    // G2 (section-3 review): a STORED override whose base id has no served row (the served build
+    // lags the package, or the station was removed) must not vanish from the assembled map: that
+    // silently deletes a withheld/generalised intent, the exact un-mask editor_form's server half
+    // forbids ("a withheld/generalised station must NEVER silently un-mask"). Seed an ORPHAN
+    // control (explicit, no members) so assembly carries the stored policy verbatim; it renders
+    // nowhere (the fieldset is per served station) and the no-op guard stays a no-op.
+    for (var ob in ovr) {
+      if (!Object.prototype.hasOwnProperty.call(ovr, ob)) continue;
+      if (!Object.prototype.hasOwnProperty.call(controls, ob)) {
+        controls[ob] = { control: ovr[ob], explicit: true, members: [], orphan: true };
+      }
+    }
     return controls;
   }
   // Assemble the {BASE_station_id: policy} override map to POST from the per-base control state. A base
@@ -5589,12 +5601,16 @@ def _json_only_panel(section: str, title: str, hint: str, fields: dict, err_map:
     fall back to)."""
     present = section in fields
     val = _json_text(fields[section]) if present else ""
+    # The o_<section> anchor rides beside the textarea (G1): the textarea is PREFILLED, so an
+    # untouched submit posts the stored JSON and must round-trip to no patch, exactly like every
+    # widget section. Without the anchor an untouched save would rewrite the block.
     return (
         f'<div class="panel"><h2>{_esc(title)}</h2>'
         f'{_section_error_html(err_map.get(section))}'
         f'<p class="sub">This section has no structured form yet ({_esc(hint)}). Edit it as raw JSON '
         '(leave blank to leave unchanged).</p>'
-        f'<textarea name="j_{_esc(section)}" rows="4">{_esc(val)}</textarea></div>')
+        f'<textarea name="j_{_esc(section)}" rows="4">{_esc(val)}</textarea>'
+        f'{_snapshot_hidden(section, fields)}</div>')
 
 
 # ==================================================================================================

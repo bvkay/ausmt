@@ -12,11 +12,14 @@ const exportsSrc = fs.readFileSync(path.join(SRC, "exports.js"), "utf8");
 const VEC = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "engine", "tests", "fixtures", "license_instrument_vectors.json"), "utf8"));
 
-// exports.js only touches the DOM at load via document.getElementById(...).onclick = <fn>; a settable
-// stub object is all that is needed (nothing else runs at module top level).
+// This driver wants the PURE licence/citation text functions, so it gives exports.js the smallest
+// document that lets the module finish loading: element stubs for the load-time
+// getElementById(...).onclick wiring, plus a document-level addEventListener, because the wget
+// dialog's modal contract (Escape) binds one at module top level. Anything the stub does not answer
+// is a load-time DOM touch this driver was not expecting: worth a look before widening the stub.
 const elStub = () => ({ onclick: null, addEventListener() {} });
 const ctx = {
-  document: { getElementById: () => elStub(), createElement: () => elStub() },
+  document: { getElementById: () => elStub(), createElement: () => elStub(), addEventListener() {} },
   console, Math, JSON, Date, Promise, Set, Array, Object, String, Number, Boolean, RegExp,
   parseInt, parseFloat, isFinite, encodeURIComponent, decodeURIComponent,
   setTimeout: () => 0, clearTimeout() {}, URL: { createObjectURL: () => "x", revokeObjectURL() {} },

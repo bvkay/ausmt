@@ -138,9 +138,11 @@ def test_neutral_202_identical_for_valid_invalid_ratelimited_and_smtp_down(tmp_p
         # invalid email
         async with app_client(tmp_path, mailer=FakeMailer()) as (client, _a, _g, _c):
             invalid = await client.post("/gateway/request-key", data={"email": "not-an-email"})
-        # rate-limited (per-email cap 0 blocks every request)
+        # rate-limited: cap 1 (the floor - a zeroed cap silently disables issuance, so
+        # fail_closed_startup rejects 0), so the SECOND request for one email is the limited one.
         async with app_client(tmp_path, mailer=FakeMailer(),
-                              key_request_per_email_daily=0) as (client, _a, _g, _c):
+                              key_request_per_email_daily=1) as (client, _a, _g, _c):
+            await client.post("/gateway/request-key", data={"email": "b@example.org"})
             limited = await client.post("/gateway/request-key", data={"email": "b@example.org"})
         # SMTP down (send raises)
         async with app_client(tmp_path, mailer=FakeMailer(raises=True)) as (client, _a, _g, _c):

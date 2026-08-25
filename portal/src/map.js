@@ -306,12 +306,17 @@ function buildFootprints(){const by={};ST.forEach(s=>{if(!hasPosition(s))return;
  Object.entries(by).forEach(([sv,pts],k)=>{const h=hull(pts);if(h.length<3)return;
    L.polygon(h.map(p=>[p[1],p[0]]),{color:Object.values(TYPE_COL)[k%4],weight:1.4,fillOpacity:.04,interactive:false}).bindTooltip(esc(sv)).addTo(footprints);});}
 const userLayers={};
+// Leaflet renders an attribution as HTML, and the source half of this line is FILE CONTENT (a fetched
+// layers/*.geojson), so both halves are escaped. The guard is here while the path is DORMANT (the layer
+// control below is not mounted, so the fetch never runs) precisely so re-enabling the control cannot
+// re-open the sink by omission: the later lane must not have to rediscover this.
+function _layerAttribution(name,src){return esc(name)+": "+esc(src);}
 function userLayer(name,file,color){const grp=L.featureGroup();grp._loaded=false;
   grp.on("add",async()=>{if(grp._loaded)return;
     try{const r=await fetch("layers/"+file);if(!r.ok)throw 0;const gj=await r.json();
       L.geoJSON(gj,{style:{color,weight:1.3,fillOpacity:.03},interactive:false}).addTo(grp);
       const src=gj.source||(gj.features&&gj.features[0]&&gj.features[0].properties&&gj.features[0].properties.source);
-      if(src)map.attributionControl.addAttribution(name+": "+src);grp._loaded=true;}
+      if(src)map.attributionControl.addAttribution(_layerAttribution(name,src));grp._loaded=true;}
     catch(e){toast(`Layer "${name}" not found; place GeoJSON at layers/${file} (ogr2ogr -f GeoJSON -t_srs EPSG:4326), with a top-level "source" field.`);}});
   userLayers[name]=grp;return grp;}
 // layer control hidden pending owner revisit (2026-07-12) — overlay definitions (footprints + the user
