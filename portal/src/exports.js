@@ -26,7 +26,11 @@ function csvCell(v){
 function csvRow(arr){return arr.map(csvCell).join(",");}
 function tsUTC(){return new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z");} // YYYYMMDDTHHMMSSZ
 function save(n,t,m){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:m||"text/plain"}));a.download=n;a.click();URL.revokeObjectURL(a.href);}
-function toast(m){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(toast._h);toast._h=setTimeout(()=>t.style.display="none",7000);}
+// A sticky toast holds until the NEXT toast replaces it: packaging a large selection outruns the
+// 7s dwell (measured 13-16s at 400-700 EDIs), and a progress message that vanishes mid-work reads
+// as a stall. Every packaging path ends in a completion or nothing-to-package toast, which clears it.
+function toast(m,opts){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";clearTimeout(toast._h);
+  toast._h=(opts&&opts.sticky)?null:setTimeout(()=>t.style.display="none",7000);}
 // ---- the hand-off snackbar (owner UX ruling 2026-08-23) ------------------------------------------
 // PROGRESS BELONGS TO THE BROWSER: a hand-off is a 302, the bytes travel browser-to-archive, and
 // CORS forbids fetching the payload in-page. No progress bar, no download panel, no completion
@@ -390,7 +394,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   await MANIFEST_READY;
   const z=new JSZip(),f=z.folder("ausmt_edis");
   const chosen=scopeSel(),avail=chosen.filter(s=>s.ediAvail),unavail=chosen.filter(s=>!s.ediAvail);
-  let ok=0;const included={};toast("Packaging "+avail.length+" redistributable EDI(s)…");   // included: survey -> zip subdir
+  let ok=0;const included={};toast("Packaging "+avail.length+" redistributable EDI(s)…",{sticky:true});   // included: survey -> zip subdir
   const ediItems=avail.map(s=>{try{const ea=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).find(a=>a.format==="edi");
     // Namespace the zip entry by survey slug too: a selection can span surveys that reuse an EDI basename
     // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip (audit M3).
@@ -547,7 +551,7 @@ async function exportSelectionFormat(fmt){
   await MANIFEST_READY;
   const z=new JSZip(),f=z.folder(C.folder);
   const chosen=scopeSel(),have=chosen.filter(s=>selArtifact(s,fmt)),missing=chosen.filter(s=>!selArtifact(s,fmt));
-  let ok=0;const included={},failed=[];toast("Packaging "+have.length+" "+C.label+" file(s)…");
+  let ok=0;const included={},failed=[];toast("Packaging "+have.length+" "+C.label+" file(s)…",{sticky:true});
   const fmtItems=have.map(s=>{const a=selArtifact(s,fmt);
     // Namespace the zip entry by survey slug, exactly as the EDI zip does: a selection can span surveys
     // that reuse a station id, which would otherwise overwrite each other inside the archive (audit M3).

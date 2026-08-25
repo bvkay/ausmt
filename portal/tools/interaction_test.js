@@ -3886,6 +3886,18 @@ async function bootFreshWindow(dataMap, url) {
   //     over A1+A2 (G1 has none) = 2.1 MB. MTH5: 174,696 + 1,000,000 over A1+G1 (A2 has none) = 1.1 MB.
   //     EDI: 1000+1100+1200 = 3 KB. Each is an ESTIMATE of what will actually be packaged, so it counts
   //     only the rows the export will fetch, never the whole selection.
+  // Packaging outlives the old 7s toast dwell (13-16s measured at 400-700 EDIs), so the packaging
+  // message is STICKY: it sets no hide timer and stands until the completion toast replaces it.
+  win.toast("packaging probe…", { sticky: true });
+  const _toastEl = doc.getElementById("toast");
+  ok(_toastEl.style.display === "block" && win.toast._h === null,
+    "a sticky toast must stay up with no hide timer until the next toast replaces it");
+  win.toast("done");
+  ok(_toastEl.textContent === "done" && win.toast._h !== null,
+    "a plain toast must replace a sticky one and restore the auto-hide");
+  ok(/,\{sticky:true\}/.test(fs.readFileSync(path.join(PORTAL, "src", "exports.js"), "utf8").split("Packaging ")[1] || "") &&
+     /,\{sticky:true\}/.test(fs.readFileSync(path.join(PORTAL, "src", "exports.js"), "utf8").split("Packaging ")[2] || ""),
+    "both zip flows' packaging toasts must be sticky");
   ok(/2 stations · ~2\.1 MB/.test(rowMeta(xmlBtn)),
     "SELFMT size: the XML row must price the scope (2 stations, ~2.1 MB), got " + JSON.stringify(rowMeta(xmlBtn)));
   ok(/2 stations · ~1\.1 MB/.test(rowMeta(h5Btn)),
