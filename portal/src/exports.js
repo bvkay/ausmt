@@ -5,8 +5,18 @@
 // sc[SC.qb]=qb, sc[SC.rr]=rr, sc[SC.sw]=sw, sc[SC.dim]=dim) — see the legend in data.js / data-files.md before
 // reordering export columns.
 const sel=()=>ST.filter(s=>selected.has(s.i));
-function csvCell(v){v=(v==null?"":String(v));
-  if(/^[=+\-@\t\r]/.test(v))v="'"+v;            // neutralise spreadsheet formula injection (=,+,-,@,tab,CR)
+// Bind one control's click handler, tolerating an absent element: an unguarded miss threw at parse
+// time and silently dropped every LATER binding and top-level assignment in this file. A missing id
+// announces itself in the console instead.
+function bindClick(id,fn){const el=document.getElementById(id);
+  if(el)el.onclick=fn;else console.error("export control #"+id+" is missing; handler not bound");}
+function csvCell(v){
+  if(typeof v==="number"&&isFinite(v))return String(v);   // numeric data is never a formula
+  v=(v==null?"":String(v));
+  // Neutralise spreadsheet formula injection (=,+,-,@,tab,CR) - except a value that parses as a
+  // finite number: a southern latitude starts with "-" and quoting it turns the whole lat column
+  // into text for Excel/pandas/QGIS.
+  if(/^[=+\-@\t\r]/.test(v)&&!isFinite(Number(v)))v="'"+v;
   return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 function csvRow(arr){return arr.map(csvCell).join(",");}
 function tsUTC(){return new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z");} // YYYYMMDDTHHMMSSZ
@@ -135,15 +145,16 @@ function licenseInstrumentText(lic,licensor,year,attribution,sources,changes){
   }
   return L.join("\n");
 }
-document.getElementById("dlCsv").onclick=()=>{track("DownloadGenerated",{format:"csv",n:sel().length});
-  save("ausmt-stations-"+tsUTC()+".csv",csvRows(sel()).map(csvRow).join("\r\n"),"text/csv");};
+bindClick("dlCsv",()=>{track("DownloadGenerated",{format:"csv",n:sel().length});
+  save("ausmt-stations-"+tsUTC()+".csv",csvRows(sel()).map(csvRow).join("\r\n"),"text/csv");});
 // Two-phase boot: quality/dimensionality/remote_ref ride each GeoJSON feature and come from sci.json, a
 // PHASE 2 product. An export is a FILE that outlives the page, so it must never carry a value the portal
 // simply had not received yet. AWAIT the gate (already-resolved in the normal case, so the click is
 // unchanged once hydration is done) rather than degrade.
-// If sci.json FAILED, awaiting settles on nothing: sciRow returns [], which writes remote_ref:false, a
-// POSITIVE CLAIM that these stations were not remote-referenced, while quality/dimensionality vanish as
-// undefined keys (JSON.stringify drops them) with no trace of why. So when the product is not usable the
+// If sci.json FAILED, awaiting settles on nothing: sciRow returns [] for every station, and the
+// quality/dimensionality/remote_ref keys would vanish as undefined (JSON.stringify drops them) with no
+// trace of why. remote_ref carries its own per-row guard besides: a station with no usable sci row
+// omits the key rather than claiming false, matching its two siblings. So when the product is not usable the
 // three screening properties are omitted DELIBERATELY and the FILE ITSELF carries the reason: a toast does
 // not travel with the download, and whoever opens this file next has no other way to learn the difference
 // between "not screened" and "the screening data never loaded".
@@ -152,15 +163,15 @@ const GEO_SCI_UNAVAILABLE="quality, dimensionality and remote_ref are OMITTED fr
 // branch here, and a branch that only exists inside an onclick is a branch no test can reach.
 function geoFeatureCollection(stations,sciOk){
   return {type:"FeatureCollection",...(sciOk?{}:{note:GEO_SCI_UNAVAILABLE}),features:stations.map(s=>{const sc=sciRow(s.i);return{type:"Feature",geometry:hasPosition(s)?{type:"Point",coordinates:[s.lon,s.lat]}:null,   // C42: a withheld-coord station is an unlocated feature (spec-legal null geometry), never a (0,0)/[null,null] phantom point
-  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,...(sciOk?{quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:!!sc[SC.rr]}:{}),source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // C6/C46: licence + deed URL + attribution ride each GeoJSON feature
+  properties:{id:s.id,ausmt_id:s.ausmt_id,country:s.country,organisation:s.org,survey:s.survey,type:s.type,components:s.comps,period_min_s:s.pmin,period_max_s:s.pmax,...(sciOk?{quality:sc[SC.q],dimensionality:sc[SC.dim],remote_ref:sc[SC.rr]==null?undefined:!!sc[SC.rr]}:{}),source_doi:(SMETA[s.survey]||{}).doi||null,survey_version:(SMETA[s.survey]||{}).version||null,collection_id:((SMETA[s.survey]||{}).collection||{}).id||null,license:(SMETA[s.survey]||{}).lic||null,license_url:licenseUrl((SMETA[s.survey]||{}).lic)||null,attribution:attributionLine(SMETA[s.survey]||{})||null,file:s.file}};})};  // C6/C46: licence + deed URL + attribution ride each GeoJSON feature
 }
-document.getElementById("dlGeo").onclick=async()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
+bindClick("dlGeo",async()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
   if(hydrating("sci")){toast("Waiting for the screening data before writing the GeoJSON…");}
   await SCI_READY;
   const sciOk=hydrUsable("sci");
   if(!sciOk)toast("The screening data could not be loaded, so quality, dimensionality and remote reference are left out of this GeoJSON; the file says so.");
-  save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(geoFeatureCollection(sel(),sciOk),null,1),"application/geo+json");};
-document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
+  save("ausmt-selection-"+tsUTC()+".geojson",JSON.stringify(geoFeatureCollection(sel(),sciOk),null,1),"application/geo+json");});
+bindClick("dlSh",()=>{track("DownloadGenerated",{format:"geojson",n:sel().length});
   const byColl={};sel().forEach(s=>{const doi=(SMETA[s.survey]||{}).doi||TS_COLLECTION.doi;(byColl[doi]=byColl[doi]||[]).push(s);});
   const doc={
     // Repaired with the hand-off (2026-08-24): "request the levels you need" was the WHOLE story
@@ -174,7 +185,7 @@ document.getElementById("dlSh").onclick=()=>{track("DownloadGenerated",{format:"
       stations:arr.map(s=>({ausmt_id:s.ausmt_id,station:s.id,survey:s.survey,survey_version:(SMETA[s.survey]||{}).version||null,lat:s.lat,lon:s.lon}))}))
   };
   save("ausmt-archive-pointers-"+tsUTC()+".json",JSON.stringify(doc,null,2),"application/json");
-  toast("Wrote pointers to where the raw time series live. AusMT hosts none of them; where one is verified and open, the Time-series list hands your browser straight to the archive.");};
+  toast("Wrote pointers to where the raw time series live. AusMT hosts none of them; where one is verified and open, the Time-series list hands your browser straight to the archive.");});
 
 // ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
 // The offer is a POINTER FILE, never a server-built zip or a fourth exportSelectionFormat:
@@ -224,7 +235,7 @@ function tsWgetCommand(rows){
   const urls=[];(rows||[]).forEach(r=>r.levels.forEach(l=>urls.push(l.url)));
   return ["# AusMT time-series hand-off: "+urls.length+" file(s). wget follows the 302 to the archive.",
           "wget --content-disposition -i - <<'AUSMT_EOF'"].concat(urls,["AUSMT_EOF"]).join("\n");}
-document.getElementById("dlTs").onclick=()=>{
+bindClick("dlTs",()=>{
   // Two-phase boot: the index IS the availability answer here, so writing a list before it lands
   // would report every station as having nothing to fetch. Say which wait this is and stop.
   if(hydrating("tsaccess")){snack("Waiting for the archive hand-off index…");return;}
@@ -234,15 +245,15 @@ document.getElementById("dlTs").onclick=()=>{
   const cmd=tsWgetCommand(built.doc.stations);
   snack("Download list ready - "+built.files+" file"+(built.files===1?"":"s")+", "+fmtBigBytes(built.bytes)+".",
         "Your browser downloads them; AusMT only points the way.",
-        {label:"Copy wget command",onClick:()=>{if(typeof copyTxt==="function")copyTxt(cmd);}});};
+        {label:"Copy wget command",onClick:()=>{if(typeof copyTxt==="function")copyTxt(cmd);}});});
 // C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
 // pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
 // ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
 // fields (drawer.js apa/bibtex/ris already guard on a falsy doi, d2bc616); emitting placeholder text there
 // would be ingested by reference managers as real bibliographic data — the pre-C22 defect, where
 // AUSMT_SELF.pb carried "(DOI to be minted per release via Zenodo)" into every no-DOI publisher field.
-function citeLine(c,doi){return "  "+apa(c,doi)+(doi?"":"  [no DOI assigned]");}
-document.getElementById("dlCite").onclick=async()=>{track("DownloadGenerated",{format:"ris",n:sel().length});const svs=[...new Set(sel().map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
+function citeLine(c,doi){return "  "+apaPlain(c,doi)+(doi?"":"  [no DOI assigned]");}
+bindClick("dlCite",async()=>{track("DownloadGenerated",{format:"ris",n:sel().length});const svs=[...new Set(sel().map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
   let txt=["AusMT citation pack — generated "+today,"Stations: "+sel().length+" across "+svs.length+" survey release(s).","","== Survey source releases =="];let bib="",risT="";
   svs.forEach(sv=>{const m=SMETA[sv]||{};const c=m.cite||AUSMT_SELF;
     // C46: an EXPLICIT fallback — a survey with no custodian cite block is no longer SILENTLY rendered as
@@ -288,7 +299,7 @@ document.getElementById("dlCite").onclick=async()=>{track("DownloadGenerated",{f
   if(usesNci)ack.push("  AusLAMP is a collaboration between AuScope, Geoscience Australia, state and territory","  geological surveys and university partners, with instruments supplied through the AuScope","  NCRIS program. Time series were accessed from the NCI-AuScope Magnetotelluric Collection","  (doi:"+TS_COLLECTION.doi+").");
   txt.push(...ack);
   const z=new JSZip();z.file("CITATIONS.txt",txt.join("\n"));z.file("citations.bib",bib);z.file("citations.ris",risT);
-  const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);};
+  const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);});
 // The BULK-EXPORT LABEL (owner ruling 2026-08-01). The multi-file export below marks each file fetch it
 // issues with this query flag, so the server-log aggregator can tell a drag-selected bulk export from a
 // single station download. It is a LABEL on a request that already happens: no extra request, no beacon,
@@ -337,7 +348,7 @@ async function fetchBounded(items,limit,getUrl){
   await Promise.all(Array.from({length:Math.max(1,Math.min(limit,items.length))},worker));
   return out;}
 function trackSelectionZip(files){track("DownloadGenerated",{format:"zip",files:files,n:sel().length});}
-document.getElementById("dlZip").onclick=async()=>{trackSelectionZip("edi");
+bindClick("dlZip",async()=>{trackSelectionZip("edi");
   // Two-phase boot: each EDI is fetched at its MANIFEST url when there is one (the legacy flat path is only
   // the fallback), so packaging before the manifest lands would silently take the fallback route for every
   // station and could write a zip missing files that are in fact served. Await the gate.
@@ -366,7 +377,7 @@ document.getElementById("dlZip").onclick=async()=>{trackSelectionZip("edi");
   if(ok===0&&!unavail.length){toast("Nothing to package.");return;}
   if(ok===0){z.file("README.txt","No EDIs were redistributable in this selection; see the archive pointers file.");}
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-selection-edis-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
-  toast(`Zipped ${ok} EDI(s)`+(unavail.length?`; ${unavail.length} not redistributable (archive pointers included).`:"."));};
+  toast(`Zipped ${ok} EDI(s)`+(unavail.length?`; ${unavail.length} not redistributable (archive pointers included).`:"."));});
 
 // ---- selection exports for the two AusMT-derived formats (owner ask 2026-08-04) ------------------
 // A reader who has drawn a box around forty stations can take their EDIs in one click. AusMT also serves
@@ -423,8 +434,8 @@ function paintExportSizes(){
   SEL_ZIP_BUTTONS.forEach(([id,base,fmt])=>{
     const b=document.getElementById(id);if(!b)return;
     const n=(known&&st.length)?total[fmt]:null;
-    b.textContent=n?base+" ~"+fmtBytes(n):base;
-    b.title=n?base+": about "+fmtBytes(n)+" across "+st.length+" selected station(s), estimated from the download index."
+    b.textContent=n?base+" ~"+fmtBigBytes(n):base;
+    b.title=n?base+": about "+fmtBigBytes(n)+" across "+st.length+" selected station(s), estimated from the download index."
             :base+" for the current selection.";});
 }
 // One selection export, for one AusMT-derived format. Mirrors the EDI flow above step for step.
@@ -477,10 +488,10 @@ async function exportSelectionFormat(fmt){
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=C.stem+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);
   const skipped=missing.length+failed.length;
   toast(`Zipped ${ok} ${C.label} file(s)`+(skipped?`; ${skipped} selected station(s) not included (the zip says which and why).`:"."));}
-document.getElementById("dlZipXml").onclick=()=>exportSelectionFormat("emtfxml");
-document.getElementById("dlZipH5").onclick=()=>exportSelectionFormat("mth5");
+bindClick("dlZipXml",()=>exportSelectionFormat("emtfxml"));
+bindClick("dlZipH5",()=>exportSelectionFormat("mth5"));
 
-document.getElementById("strike").onclick=async()=>{
+bindClick("strike",async()=>{
   // Two-phase boot: the rose is built entirely from phase-tensor azimuths in tf.json (PHASE 2). Its
   // not-enough-data message is a STATEMENT ABOUT THE SELECTION, so it must never fire because the transfer
   // functions are not here. Await the gate (already resolved in the normal case).
@@ -505,4 +516,4 @@ document.getElementById("strike").onclick=async()=>{
   drawer.innerHTML=`<div class="dhead"><span class="sid">Strike rose</span><button class="close" aria-label="Close">✕</button></div>`+
    `<div class="dsub">${sel().length} stations · ${az.length} low-skew (|β|&lt;5°) PT azimuths · 180° ambiguous</div><div style="display:flex;justify-content:center;margin-top:14px">${svg}</div>`+
    `<div class="dim" style="margin-top:12px">Automated screening estimate: geoelectric strike estimated from phase-tensor major-axis azimuths where skew is small. The 90° ambiguity inherent to strike is not resolved here; combine with tipper induction arrows to break it. Not a structural interpretation.</div>`;
-  drawer.classList.add("open");};
+  drawer.classList.add("open");});

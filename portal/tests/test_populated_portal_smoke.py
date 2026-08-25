@@ -109,3 +109,36 @@ def test_populated_portal_value_binding(tmp_path):
     assert mb, "smoke.js did not emit BUILDID_TEXT:\n" + out
     build_txt = json.loads(mb.group(1))
     assert build_txt == " · data build eng1234-src5 · 2026-07-05", build_txt
+
+    # (d) the SERIALISED CSV line. The EXPORT0 array asserts values before csvCell runs, so only this
+    # catches a quoting defect in the text a spreadsheet receives. A negative number is data, not a
+    # formula: the injection guard must not quote it (pre-fix, every southern latitude serialised as
+    # '-30.5 and the whole lat column arrived as text in Excel/pandas/QGIS).
+    ml = re.search(r"^EXPORT0LINE (\".*\")\s*$", out, re.M)
+    assert ml, "smoke.js did not emit EXPORT0LINE:\n" + out
+    line = json.loads(ml.group(1))
+    assert ",-30.5,135.25," in line, "lat/lon must serialise as bare numbers: " + line
+    assert "'-30.5" not in line, "negative latitude must not carry the injection apostrophe: " + line
+
+    # csvCell directly: numbers pass through; a hostile leading = (or a non-numeric leading -) is
+    # still neutralised.
+    mc = re.search(r"^CSVCELL (\[.*\])\s*$", out, re.M)
+    assert mc, "smoke.js did not emit CSVCELL:\n" + out
+    neg, hostile, negtext = json.loads(mc.group(1))
+    assert neg == "-26.4531", neg
+    assert hostile == "'=cmd|calc", hostile
+    assert negtext == "'-text", negtext
+
+    # (e) citation pack text surfaces. CITATIONS.txt is plain text: an author's apostrophe and
+    # ampersand must arrive verbatim, never as HTML entities. The .bib author field is LaTeX: the
+    # ampersand must be escaped or the file fails to compile.
+    mt = re.search(r"^CITETXT (\".*\")\s*$", out, re.M)
+    assert mt, "smoke.js did not emit CITETXT:\n" + out
+    cite = json.loads(mt.group(1))
+    assert "O'Brien" in cite and "&#39;" not in cite, cite
+    assert "Smith & Co" in cite and "&amp;" not in cite, cite
+    mbib = re.search(r"^BIBAU (\".*\")\s*$", out, re.M)
+    assert mbib, "smoke.js did not emit BIBAU:\n" + out
+    bib = json.loads(mbib.group(1))
+    assert "O'Brien, K. and Smith \\& Co" in bib, bib
+    assert "A \\& B" in bib, bib

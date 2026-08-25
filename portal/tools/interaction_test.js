@@ -4037,6 +4037,13 @@ async function bootFreshWindow(dataMap, url) {
   ok(h5Btn.textContent.indexOf("~") < 0,
     "SELFMT index: rows the new manifest does NOT carry must stop being counted, got " +
     JSON.stringify(h5Btn.textContent));
+  // (h2) ARCHIVE-SCALE SIZES. The MTH5 selection zip is the multi-GB case, so the label must use the
+  //      archive-scale formatter (like the level chooser and the hand-off snackbar), never
+  //      "10108.9 MB". 10,600,000,000 B is ~9.9 GB.
+  A.setManifest({ files: [{ ausmt_id: "au.alpha.A1", format: "mth5", url: "mth5/alpha/A1.h5", size: 10600000000 }], bundles: [] });
+  A.refresh();
+  ok(/~9\.9 GB/.test(h5Btn.textContent),
+    "SELFMT size: a multi-GB total must render in GB, got " + JSON.stringify(h5Btn.textContent));
   A.setManifest(SEL_MANIFEST); A.refresh();
   ok(/~2\.1 MB/.test(xmlBtn.textContent) && /~1\.1 MB/.test(h5Btn.textContent),
     "SELFMT index: swapping back must restore the original totals, got " +

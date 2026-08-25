@@ -14,6 +14,9 @@ const DATA = path.resolve(process.argv[2] || path.join(TOOLS, "..", "data"));
 
 const MODULES = ["contract", "security", "state", "data", "plots", "map", "filters", "drawer", "exports", "main", "tour"];
 let code = MODULES.map(f => fs.readFileSync(path.join(SRC, f + ".js"), "utf8")).join("\n");
+// A citation author with an apostrophe AND an ampersand: the pack's plain-text/.bib/.ris files must
+// carry both verbatim (no HTML entities in text files; & LaTeX-escaped in .bib).
+code += "\nvar AU_PROBE=\"O'Brien, K.; Smith & Co\";";
 code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFromHash," +
   "showEmptyState,portalIsEmpty,nST:()=>ST.length,firstSurvey:()=>surveys[0],firstId:()=>ST[0]&&ST[0].id," +
   // station0 exposes the buildState() fields derived THROUGH the contract maps (r[C.*], sc[SC.*]) so a test
@@ -22,6 +25,13 @@ code += "\nglobalThis.__api={boot,openStation,openSurvey,setView,refresh,routeFr
   // export0 = the CSV row exports.js builds for ST[0], so the test can value-bind the export call site's
   // sc[SC.qb/rr/sw] derefs (qb/rr/sw are covered by NOTHING else).
   "export0:()=>ST[0]?csvRows([ST[0]])[1]:null," +
+  // export0Line = the SERIALISED CSV line (through csvCell/csvRow), so a test can pin the text a
+  // spreadsheet actually receives - the value-bound EXPORT0 array asserts before serialisation and
+  // cannot see a quoting defect. csvCellFn probes the injection guard directly.
+  "export0Line:()=>ST[0]?csvRow(csvRows([ST[0]])[1]):null," +
+  "csvCellFn:v=>csvCell(v)," +
+  "citeTxtProbe:()=>citeLine({au:AU_PROBE,yr:\"2019\",ti:\"T\",pb:\"P\"},\"10.1/x\")," +
+  "bibProbe:()=>bibtex(\"k\",{au:AU_PROBE,ti:\"A & B\",yr:\"2019\",pb:\"P\"},\"10.1/x\")," +
   // C12: buildIdText() is a pure function of BUILDID (set by boot() from build.json) — exposing it
   // lets a test assert the footer VALUE binding without a real DOM (getElementById stubs below return
   // a fresh throwaway object per call, so nothing written to el.textContent would be observable).
@@ -98,6 +108,10 @@ ctx.globalThis = ctx; ctx.self = ctx; vm.createContext(ctx); vm.runInContext(cod
       console.log("POPULATED portal: ST=" + A.nST() + ", station/survey/route paths OK");
       console.log("STATION0 " + JSON.stringify(A.station0()));
       console.log("EXPORT0 " + JSON.stringify(A.export0()));
+      console.log("EXPORT0LINE " + JSON.stringify(A.export0Line()));
+      console.log("CSVCELL " + JSON.stringify([A.csvCellFn(-26.4531), A.csvCellFn("=cmd|calc"), A.csvCellFn("-text")]));
+      console.log("CITETXT " + JSON.stringify(A.citeTxtProbe()));
+      console.log("BIBAU " + JSON.stringify(A.bibProbe()));
     }
   } catch (e) { console.error("RUNTIME ERROR:", (e && e.stack) || e); process.exit(1); }
   console.log("SMOKE PASSED");

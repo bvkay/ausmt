@@ -139,7 +139,12 @@ function headerDownloadBtn(s,m){
 // ediDescriptor() above is unaffected and still gates BOTH surviving download surfaces: the sticky-header
 // Download EDI action and the Files tab's EDI sub-row.)
 
-function apa(m,doi){return `${esc(m.au)} (${esc(m.yr||"n.d.")}). ${esc(m.ti)}${m.ve?" ("+esc(m.ve)+")":""} [Data set]. ${esc(m.pb)}.`+(doi?` https://doi.org/${esc(doi)}`:"");}
+// The PLAIN-TEXT APA sentence: what the citation pack's CITATIONS.txt and the clipboard copy carry.
+// A text file must never receive HTML entities (O'Brien is not O&#39;Brien on disk).
+function apaPlain(m,doi){return `${m.au} (${m.yr||"n.d."}). ${m.ti}${m.ve?" ("+m.ve+")":""} [Data set]. ${m.pb}.`+(doi?` https://doi.org/${doi}`:"");}
+// The HTML rendering of the same sentence. esc() is character-wise, so escaping the assembled string
+// equals escaping each field; the two renderers cannot drift because one wraps the other.
+function apa(m,doi){return esc(apaPlain(m,doi));}
 // R3: the DISPLAY-ONLY APA citation rendered inside the Cite box. Identical to apa() except the trailing
 // DOI is a resolution-aware HYPERLINK: ok/unknown/absent (uncached) -> a doi.org anchor; reserved -> plain
 // text (never a dead link, honouring the r2 reserved-sweep posture). The COPY/EXPORT path stays apa()
@@ -151,7 +156,9 @@ function apaCiteDisplay(m,doi,doiRes){const base=apa(m,null);   // the APA sente
     ? esc(url)
     : `<a href="${escUrl(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`;
   return base+" "+doiHtml;}
-function bibtex(k,m,doi){return `@misc{${k},\n  author    = {${m.au.replace(/;/g," and")}},\n  title     = {${m.ti}},\n  year      = {${m.yr||"n.d."}},\n  publisher = {${m.pb}},\n${doi?`  doi       = {${doi}},\n`:""}  note      = {Accessed via the AusMT portal}\n}`;}
+// & is a LaTeX special: an unescaped ampersand in a field value fails the BibTeX compile.
+function bibAmp(s){return String(s==null?"":s).replace(/&/g,"\\&");}
+function bibtex(k,m,doi){return `@misc{${k},\n  author    = {${bibAmp(m.au).replace(/;/g," and")}},\n  title     = {${bibAmp(m.ti)}},\n  year      = {${m.yr||"n.d."}},\n  publisher = {${bibAmp(m.pb)}},\n${doi?`  doi       = {${doi}},\n`:""}  note      = {Accessed via the AusMT portal}\n}`;}
 function ris(m,doi){return `TY  - DATA\nAU  - ${m.au.replace(/; /g,"\nAU  - ")}\nTI  - ${m.ti}\nPY  - ${m.yr||""}\nPB  - ${m.pb}\n${doi?`DO  - ${doi}\nUR  - https://doi.org/${doi}\n`:""}ER  -`;}
 
 function badge(l,st,title){const c=st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"";const s=st==="ok"?"✓":st==="part"?"◐":st==="no"?"✗":"?";return `<span class="badge ${c}"${title?` title="${escAttr(title)}"`:""}>${s} ${esc(l)}</span>`;}
