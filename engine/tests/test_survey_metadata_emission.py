@@ -652,3 +652,23 @@ def test_verify_validates_every_document_and_pins_the_slug_set(tmp_path):
     shutil.rmtree(stray)
     p.unlink()
     assert _verify(out).returncode != 0, "a mtcat survey without a document must fail verify"
+
+
+def test_designation_dedup_folds_scheme_case():
+    """A case-mismatched scheme must not let the SAME identifier be emitted both as an identifier
+    OF the dataset and as a relationship TO it - the dedup key used to compare schemes raw, so
+    scheme 'doi' beside identifier_type 'DOI' published the dataset IsIdenticalTo itself (the exact
+    self-reference the D12 partition exists to prevent). The fold reuses the normalisation
+    _sm_bare_identifier already applies for its own DOI test."""
+    y = _full_yaml(identity_classification={
+        "case": "case_a",
+        "represents": [{"scheme": "doi", "identifier": "10.99999/level2-release"}]})
+    y["related_identifiers"] = [
+        {"identifier": "https://doi.org/10.99999/level2-release",
+         "identifier_type": "DOI", "relation": "IsIdenticalTo"}]
+    doc = _doc(y)
+    assert doc["identifiers"] == [{"scheme": "doi", "identifier": "10.99999/level2-release"}], (
+        "the designated row publishes the curated scheme spelling verbatim")
+    assert not doc.get("relationships"), (
+        "the designated identifier leaked back in as a self-relationship: %r" % doc.get("relationships"))
+    _clean(doc)

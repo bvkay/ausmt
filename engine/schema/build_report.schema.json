@@ -23,6 +23,19 @@
       "items": {"type": "string"},
       "description": "the LOUD skip (survey-metadata lane, D20): the package directory names the survey validator FAILed and the build SKIPPED (the build still exits 0 and the rest of the corpus builds). Empty on a clean build. scripts/verify.py FAILs on a non-empty list so `make rebuild-data` never swaps in a build that silently lost a survey from every public surface. Optional for reports that predate the gate; verify.py treats absence as unverifiable."
     },
+    "surveys_dropped": {
+      "type": "array",
+      "description": "D20's rule extended to every OTHER survey-granularity drop (unreadable or non-mapping survey.yaml, invalid coordinate policy or station_ids block, a zero-station parse, an unserialisable SMETA): recorded here with its reason, empty on a clean build, and scripts/verify.py FAILs on any entry. Optional for reports that predate the gate.",
+      "items": {
+        "type": "object",
+        "required": ["survey", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "survey": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
     "totals": {
       "type": "object",
       "required": ["surveys", "stations_built", "warnings"],
@@ -55,6 +68,11 @@
           }
         },
         "warnings": {"type": "array", "items": {"type": "string"}},
+        "tipper_masked": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "stations whose placeholder tipper (|T| flat at 1.0) was masked and withheld (C20 D2 honesty): the NOTICE's machine-readable twin, emitted identically on a C18 cache hit and a fresh parse. Optional for pre-fix reports."
+        },
         "xml_failures": {
           "type": "array",
           "description": "per-station EMTF-XML emission failures: the station id and the exception class raised by normalize(). The CONSEQUENCE depends on the station's entry in ingest_sources, so this field does not state one: an EDI-sourced station falls back to serving its custodian EDI and loses only the XML download, while an emtfxml-sourced station has no custodian file behind it and serves NO bytes at all. Neither leaves an unverified rendition in the served tree. Empty when every served station's XML emitted; also surfaced as a counted `warnings` entry so a green build cannot hide the gap. Optional for pre-fix reports.",

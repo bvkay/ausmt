@@ -192,3 +192,26 @@ def test_real_varying_tipper_is_not_masked():
     short = [1.0, 1.0, 1.0] + [None] * 3
     assert mtm._is_placeholder_tipper(short, [0.0] * 3 + [None] * 3,
                                       [0.0] * 3 + [None] * 3, [0.0] * 3 + [None] * 3) is False
+
+
+def test_placeholder_tipper_note_rides_the_report_channel(capsys):
+    """The mask's NOTICE used to be a bare stderr print inside the parse layer - the one C20
+    honesty decision that never reached build_report.json, and under a C18 cache hit it did not
+    fire at all (a hit and a miss must emit the same diagnostics). With a notes channel the caller
+    owns emission: the fact rides the cached parse product and the report, and stderr stays quiet
+    at the parse layer."""
+    notes = []
+    per, comp = mtm.components_from_tf(mtm._read(REAL / "phoenix_empower_A01.edi"), notes=notes)
+    assert comp.get("TXR") is None, "the mask itself is unchanged"
+    assert notes and "placeholder tipper" in notes[0], notes
+    assert "placeholder tipper" not in capsys.readouterr().err, (
+        "with a notes channel the parse layer must not also print; the caller owns emission")
+    # The wiring: both file-based parse arms hand the channel over, the record carries the flag
+    # (riding the C18 cache), and the per-survey report lists the station.
+    src = (Path(__file__).resolve().parent.parent / "extract" / "build_portal.py").read_text(encoding="utf-8")
+    assert src.count("components_from_tf(tfobj, notes=") == 2, (
+        "both parse arms must pass the notes channel")
+    assert 'r["tipper_masked"] = True' in src
+    assert '"tipper_masked"' in src.split('def process_edis')[1].split('def ')[1] or \
+           'tipper_masked' in src.split('def process_edis')[1][:6000], (
+        "the EDI arm's convergent point (cache hit AND miss) must emit the notice")

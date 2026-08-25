@@ -199,9 +199,15 @@ def _enriched_dotted(info: str, kv: dict, doc: _Doc):
             doc.fact("serial")
     for name in _text(kv.get("station.channels_recorded")).split(","):
         doc.named(name)
+    # ALLOW-LIST, not a deny-list: any dotted run.<x>.<y> key used to be promoted to a channel, so
+    # a structured non-channel path (run.acquired_by.author, run.time_period.start) fabricated a
+    # channel row in the citable station.json - and two of the old deny entries (id, sample_rate)
+    # could never match the trailing-dot pattern anyway. A new enrichment key can never become a
+    # channel unless the component families below learn it first.
+    _CHANNELS = ("ex", "ey", "ez") + _MAGNETIC
     for key in kv:
         m = re.match(r"^run\.([a-z]\w*)\.", key)
-        if m and m.group(1) not in ("id", "data_logger", "sample_rate"):
+        if m and m.group(1) in _CHANNELS:
             doc.named(m.group(1))
     for component in list(doc.doc["named_components"]):
         prefix = f"run.{component}."
