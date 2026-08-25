@@ -578,7 +578,7 @@ also carry these.
 | Type | string |
 | Allowed values | `exact` serves the true position; `generalised` rounds latitude and longitude to 0.1 degrees, roughly 11 km; `withheld` serves no position |
 | Default | `exact` when the key is absent |
-| Note | Out of enum is a `FAIL` at validation and fails the build: a silent fallback would serve the exact position the curator asked to protect. A withheld station keeps its catalogue row and its response curves still serve; it simply has no coordinate, and the survey's position then comes from `geographic_extent`. A station whose coordinates are not exact is also excluded from byte distribution, because an EDI header carries the true position. The reasoning is in [Why coordinates have an access policy](../rationale/coordinate-access.md). |
+| Note | Out of enum is a `FAIL` at validation and fails the build: a silent fallback would serve the exact position the curator asked to protect. The key must sit inside the `access:` block; a top-level `coordinates:` key is read by nothing and the validator `FAIL`s it for the same reason, so a mis-placed withholding intent can never pass silently. A withheld station keeps its catalogue row and its response curves still serve; it simply has no coordinate, and the survey's position then comes from `geographic_extent`. A station whose coordinates are not exact is also excluded from byte distribution, because an EDI header carries the true position. The reasoning is in [Why coordinates have an access policy](../rationale/coordinate-access.md). |
 
 ### 8.6 access.coordinate_overrides
 
@@ -670,7 +670,9 @@ build as a plain file, and documented in full in that repository's README. What 
 | A row is never silently deleted | A file that has genuinely ceased to exist is withdrawn by setting `review: retired` with `retired` and `retired_reason`, and the row stays as evidence. A single outage is not retirement and never flips a published claim. |
 | `verified` is a CRAWL date, not a build date | The build makes no network call, so it verifies nothing and must not say it did. That date is what the published fieldnote names: `verified against NCI THREDDS on <date>`. |
 | Two rows for one (station, level) FAIL | That pair names one file, and a second row leaves nothing able to choose between them. |
-| A station id outside the survey's id authority FAILs where `station_ids` is complete | Same rule the run-id register follows: a register naming a station the survey does not publish is a mismatch to fix, not a row to carry. |
+| One `url_path` on two stations FAILs | The mirror rule: a shared path hands one station's bytes out under another's name, the exact failure the register exists to prevent. |
+| A `bytes` value that is not a positive integer FAILs at validation | The engine refuses the whole register over one such row at build time, and the figure is published beside the file, so a wrong value is both a lost survey and a wrong claim. |
+| A station id outside the survey's id authority FAILs | Same rule the run-id register follows: a register naming a station the survey does not publish is a mismatch to fix, not a row to carry. The authority is the `station_ids` map values plus each unmapped EDI's `DATAID`, both of which the validator reads; only when some EDI yields neither does the check degrade to a reviewer warning. |
 | `bytes` is the archive's four-significant-digit figure converted | `data_size` keeps the archive's own words beside it, so the pair states the precision rather than implying a content-length nothing measured. |
 
 The build reads the registers only when `--ts-index` names their root, and a row whose station id is

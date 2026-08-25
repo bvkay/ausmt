@@ -616,28 +616,32 @@ def test_a_station_ids_block_without_pyyaml_drops_the_survey_loudly(tmp_path, ca
     assert cat == {}
 
 
-def test_the_pyyaml_refusal_survives_a_block_the_fallback_cannot_even_see(tmp_path, capsys,
-                                                                          monkeypatch):
-    """The refusal reads the survey.yaml SOURCE, not the parse, and this is why. `_mini_yaml` stops
-    reading a document at a top-level block SEQUENCE whose key line carries a TRAILING COMMENT: the
-    comment is taken as the key's scalar value, the list items are then orphaned, and every later
-    top-level key is dropped. That is pre-existing and has nothing to do with this block, but it is
-    exactly the shape of the shipped ausmt-surveys template (`data_types:  # select all that apply`),
-    where it drops 10 of the example package's 21 top-level keys, `license` and `access` among them.
-    A parse-based gate would therefore ask the parser being gated whether it saw the key, get None,
-    and build the survey with NO override at all: silent raw-DATAID publication in its worst form."""
+def test_the_pyyaml_refusal_never_asks_the_parser_it_gates(tmp_path, capsys, monkeypatch):
+    """The refusal reads the survey.yaml SOURCE, not the parse, and this fixture is why. HISTORY:
+    this test originally pinned the refusal against the fallback's after-a-list blind spot, where a
+    trailing comment on a key line (`data_types:   # select all that apply`) swallowed every later
+    top-level key and the station_ids block VANISHED from the parse entirely - so a parse-based
+    gate would have asked the parser being gated, got None, and built the survey with no override
+    at all. Engine 02e6fe5 (section-2 review, D3) fixed that truncation at the source, so the same
+    fixture now PARSES - asserted below so a regression of that fix reds here too - and the refusal
+    must fire anyway, because the gate reads the text. The surviving reason the block stays
+    PyYAML-only is the UNDER-READ class the next test pins (legal unquoted filename keys the
+    fallback drops): a parser can see the key and still not be trusted with the map."""
     surveys = _make_survey(
         tmp_path, yaml_extra="data_types:   # select all that apply\n  - BBMT\n" + OVERRIDE_YAML)
     out = tmp_path / "out"
     sy_text = (surveys / "rd18-probe" / "survey.yaml").read_text(encoding="utf-8")
-    assert "station_ids" not in build_portal._mini_yaml(sy_text), \
-        "fixture no longer exercises the after-a-list blind spot the source scan exists for"
+    parsed = build_portal._mini_yaml(sy_text)
+    assert "station_ids" in parsed, \
+        "the 2026-08-25 trailing-comment fix regressed: the fallback lost the block again"
+    assert "license" in parsed, \
+        "the trailing-comment fix regressed: keys after the commented list vanished again"
     _no_pyyaml(monkeypatch)
     _build(surveys, out, extra=["--allow-empty"])
     err = capsys.readouterr().err
     assert "SKIP" in err and "station_ids" in err and "PyYAML" in err
     cat = _catalogue(out) if (out / "catalogue.json").exists() else {}
-    assert cat == {}, f"a block the fallback cannot see was still built around: {sorted(cat)}"
+    assert cat == {}, f"the source-scan refusal was bypassed by a successful parse: {sorted(cat)}"
 
 
 def test_the_mini_yaml_fallback_under_reads_an_unquoted_filename_key():

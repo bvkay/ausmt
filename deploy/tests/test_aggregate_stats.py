@@ -2153,7 +2153,16 @@ def _selection_zip_formats() -> list[str]:
     assert exports_js.is_file(), "this pin runs from a full checkout (gateway-ci lane), never skipped"
     block = re.search(r"SEL_ZIP_BUTTONS\s*=\s*\[(.*?)\];", exports_js.read_text(encoding="utf-8"), re.S)
     assert block, "portal/src/exports.js must declare SEL_ZIP_BUTTONS; the button set has no other source"
-    return re.findall(r'"([a-z0-9]+)"\s*\]', block.group(1))
+    # Each row is [buttonId, label, format, metaLineId] since the select-panel redesign added the
+    # per-tile meta line; the format token is the THIRD element. The old "last quoted string in the
+    # row" read broke silently when the fourth element landed, so read by position and refuse a row
+    # that is too short to have one.
+    formats = []
+    for row in re.findall(r"\[([^\[\]]+)\]", block.group(1)):
+        strs = re.findall(r'"([^"]+)"', row)
+        assert len(strs) >= 3, f"SEL_ZIP_BUTTONS row shape changed, cannot find the format: {row!r}"
+        formats.append(strs[2])
+    return formats
 
 
 def test_the_bulk_export_copy_describes_every_flow_that_writes_the_flag():

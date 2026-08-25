@@ -1796,6 +1796,12 @@ def _mini_yaml(text: str) -> dict:
         v = v.strip()
         if not v:
             return v
+        if v[0] == "#":
+            # The whole value is a comment ('data_types:  # pick one'). YAML forbids an unquoted
+            # scalar starting with '#' after a space, so this is always a comment, never data.
+            # Before 2026-08-25 this case leaked through (the mid-string scan below needs ' #'),
+            # so a commented key line swallowed its nested block and truncated the document.
+            return ""
         if v[0] in "\"'":
             # A quoted scalar may carry a trailing comment AFTER its closing quote
             # ('name: "Stephan Thiel"  # note'). Walk to the closing quote (honouring
@@ -1909,7 +1915,9 @@ def _mini_yaml(text: str) -> dict:
                 m = key_re.match(item)
                 if m:
                     sub = {}
-                    k, val = _key(m.group(1)), m.group(2).strip()
+                    # _strip_comment BEFORE the structural tests: a trailing comment must not stop
+                    # 'val' reading as empty (nested block follows) or as a block-scalar header.
+                    k, val = _key(m.group(1)), _strip_comment(m.group(2))
                     if val in (">", "|", ">-", "|-"):
                         pos[0] += 1; sub[k] = _block_scalar(indent + 2, val)
                     elif val == "":
@@ -1922,7 +1930,7 @@ def _mini_yaml(text: str) -> dict:
                         if i2 == indent + 2 and not c2.startswith("- "):
                             m2 = key_re.match(c2)
                             if m2:
-                                k2, v2 = _key(m2.group(1)), m2.group(2).strip()
+                                k2, v2 = _key(m2.group(1)), _strip_comment(m2.group(2))
                                 if v2 in (">", "|", ">-", "|-"):
                                     pos[0] += 1; sub[k2] = _block_scalar(indent + 4, v2)
                                 elif v2 == "":
@@ -1943,7 +1951,7 @@ def _mini_yaml(text: str) -> dict:
                 node = {}
             if not isinstance(node, dict):
                 break
-            k, val = _key(m.group(1)), m.group(2).strip()
+            k, val = _key(m.group(1)), _strip_comment(m.group(2))
             if val in (">", "|", ">-", "|-"):
                 pos[0] += 1; node[k] = _block_scalar(indent + 1, val)
             elif val == "":
