@@ -239,3 +239,27 @@ def test_fieldset_payload_passes_real_engine_parse_and_validate(tmp_path):
         pass
     else:
         raise AssertionError("engine accepted a variant-suffixed key — the base-keying pin is vacuous")
+
+
+def test_js_orphan_override_survives_the_save(tmp_path):
+    """EXECUTABLE ORPHAN-PRESERVATION PIN (G2, section-3 review). A survey.yaml override whose base
+    id has NO row in the currently served catalogue (the served build lags the package, or the
+    station was removed) must survive assembly VERBATIM, as an explicit orphan control - and an
+    untouched Save must remain a no-op. The invariant is editor_form.py's own, mirrored client-side:
+    a withheld/generalised station must NEVER silently un-mask.
+
+    RED against pre-lane code: buildOverrideControls built controls only from served rows, so
+    assembleOverrideMap posted a map WITHOUT the stored key (the withhold silently deleted) and
+    overrideMapChanged reported 'changed', letting the deletion save even when the curator touched
+    nothing."""
+    tail = ("const c = buildOverrideControls(P.stations, P.baseMap, P.overrides);\n"
+            "const m = assembleOverrideMap(c);\n"
+            "const orphan = c['A9'] || null;\n"
+            "process.stdout.write(JSON.stringify({map: m, changed: overrideMapChanged(m, P.overrides),"
+            " orphanExplicit: orphan && orphan.explicit, orphanMembers: orphan && orphan.members}));\n")
+    got = _run_node(tmp_path, _core_driver(tail),
+                    {"stations": _STATIONS, "baseMap": _BASE_IDS,
+                     "overrides": {"MBV20": "generalised", "A9": "withheld"}})
+    assert got["map"] == {"MBV20": "generalised", "A9": "withheld"}, got
+    assert got["changed"] is False, "an untouched Save must stay a no-op when an orphan exists"
+    assert got["orphanExplicit"] is True and got["orphanMembers"] == [], got

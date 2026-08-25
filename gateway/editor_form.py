@@ -399,6 +399,14 @@ TIME_SERIES_LEVELS = ("raw_packed", "level0", "level1")
 # All sections this module models with widgets (map + list). Anything else stays JSON-only.
 WIDGET_SECTIONS = tuple(MAP_SECTIONS) + tuple(LIST_SECTIONS)
 
+# Sections rendered as a raw-JSON panel ONLY (schema too nested/open-ended for widgets), still
+# assembled into the patch: j_<section> JSON with the o_<section> round-trip anchor, blank means
+# unchanged. `care` sat outside every assembly loop until the 2026-08 section-3 review (G1): the
+# panel rendered, prefilled and editable, and the curator's Indigenous data-governance edit was
+# silently discarded. A rendered control is a promise that the edit lands, so this register is
+# what build_section_patch iterates BESIDE the widget sections.
+JSON_SECTIONS = ("care",)
+
 
 class SectionError(Exception):
     """A per-field/section validation or parse failure, surfaced back on the form (not a blanket
@@ -1109,7 +1117,9 @@ def assemble_section(form: dict, section: str):
         value = _assemble_map(form, section)
     elif section in LIST_SECTIONS:
         value = _assemble_list(form, section)
-    else:  # pragma: no cover -- callers only pass WIDGET_SECTIONS
+    else:
+        # A JSON-only section (JSON_SECTIONS) with a blank j_<section>: the panel's own copy says
+        # blank means unchanged, so it contributes nothing. Reachable since the G1 care fix.
         return _OMIT
 
     original = _original_snapshot(form, section)
@@ -1134,7 +1144,7 @@ def build_section_patch(form: dict) -> tuple[dict, list[SectionError]]:
     converted, so a patch can only ever carry editable field values."""
     patch: dict = {}
     errors: list[SectionError] = []
-    for section in WIDGET_SECTIONS:
+    for section in WIDGET_SECTIONS + JSON_SECTIONS:
         if section in _PEOPLE_DECOMPOSED:
             continue  # owned by the unified People & credit panel (assemble_people), assembled below
         try:

@@ -1402,3 +1402,39 @@ def test_gateway_carries_no_retired_credit_key_outside_tests():
         if "lead_investigator" in text or "principal_investigators" in text:
             offenders.append(str(rel))
     assert not offenders, f"retired credit keys still referenced: {offenders}"
+
+
+# ---- G1 (section-3 review): the CARE panel must reach the patch ---------------------------------
+
+def test_care_json_edit_reaches_the_patch():
+    """The CARE governance panel renders as j_care on both editing surfaces under 'leave blank to
+    leave unchanged' - so a non-blank j_care MUST become a care patch. FAILS IF build_section_patch
+    never reads j_care (pre-lane: 'care' was in neither MAP_SECTIONS nor LIST_SECTIONS, so a
+    curator's Indigenous data-governance edit was silently discarded with no diff and no error)."""
+    edited = {"traditional_owner_acknowledgement": "NEW WORDING",
+              "land_access": {"permission_obtained": True},
+              "restrictions_requested": True}
+    form = {"j_care": json.dumps(edited),
+            **_snap("care", {"traditional_owner_acknowledgement": "OLD"})}
+    patch, errors = ef.build_section_patch(form)
+    assert errors == []
+    assert patch.get("care") == edited
+
+
+def test_care_untouched_submit_contributes_nothing():
+    """The panel PREFILLS j_care with the stored value, so an untouched submit posts JSON equal to
+    the o_care snapshot and must round-trip to no patch (the byte-clean discipline every widget
+    section follows). FAILS IF an untouched save rewrites the care block."""
+    stored = {"traditional_owner_acknowledgement": "OLD", "restrictions_requested": False}
+    form = {"j_care": json.dumps(stored), **_snap("care", stored)}
+    patch, errors = ef.build_section_patch(form)
+    assert errors == [] and "care" not in patch
+
+
+def test_care_blank_leaves_unchanged_and_bad_json_refuses():
+    """Blank j_care means unchanged (the panel's own copy); malformed JSON is a SectionError that
+    refuses the save rather than guessing. FAILS IF blank invents a patch or bad JSON passes."""
+    patch, errors = ef.build_section_patch({"j_care": "", **_snap("care", {"x": 1})})
+    assert errors == [] and "care" not in patch
+    patch, errors = ef.build_section_patch({"j_care": "{not json", **_snap("care", {"x": 1})})
+    assert any(e.section == "care" for e in errors) and "care" not in patch
