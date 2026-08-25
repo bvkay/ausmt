@@ -180,6 +180,34 @@ def load_config(environ: dict[str, str] | None = None) -> Config:
     )
 
 
+# Container-internal env vars compose FIXES to a container path itself, so they are NOT operator knobs
+# forwarded from .env: AUSMT_GW_DATA=/gw and AUSMT_SURVEYS_LIVE=/srv/surveys-live are set inline in the
+# gateway service, never `${VAR:-}` passthroughs (see .env.example's closing note "set INSIDE compose").
+# Everything else load_config reads IS an operator knob the compose gateway service must forward.
+_CONTAINER_FIXED_ENV: frozenset[str] = frozenset({"AUSMT_GW_DATA", "AUSMT_SURVEYS_LIVE"})
+
+
+def operator_env_vars() -> tuple[str, ...]:
+    """The operator-facing AUSMT_* env vars the compose gateway service MUST forward from .env into the
+    container (the .env->app bridge). DERIVED, never hand-listed: it records every key load_config()
+    actually reads and drops the container-fixed paths above, so a knob newly added to load_config is
+    required in compose AUTOMATICALLY. That closes the H1 drift CLASS - the regression pin can no longer
+    restate a stale copy of config's env surface and stay green while a var is silently dropped (the
+    2026-07-24 mail-var incident). Returned in first-read order, de-duplicated."""
+    seen: dict[str, None] = {}
+
+    class _Recorder(dict):
+        # Every env read in load_config goes through .get(); record the AUSMT_* names, return the
+        # caller's default so load_config builds a valid Config off an empty environment.
+        def get(self, key, default=None):
+            if isinstance(key, str) and key.startswith("AUSMT_"):
+                seen.setdefault(key, None)
+            return default
+
+    load_config(_Recorder())
+    return tuple(name for name in seen if name not in _CONTAINER_FIXED_ENV)
+
+
 # Numeric knobs whose zero or negative value is never a legitimate operator intent, as
 # (field, env var, minimum, maximum). Each one fails INVISIBLY at runtime if it is allowed through:
 # max_upload_mb=0 is a universal 413, max_inflight=0 a universal 429, session_ttl_s=0 an infinite

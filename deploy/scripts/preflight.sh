@@ -134,6 +134,49 @@ if [ "$PROFILE" = "gateway" ]; then
   else
     warn "AUSMT_GIT_CREDS_DIR is not set — curator publish push fails (=> PUBLISH_FAILED) until set" "set AUSMT_GIT_CREDS_DIR=/path/to/git-creds in $ENV_FILE (see README 'Curator publish credentials')"
   fi
+
+  # Numeric-knob range check (deploy review section 5). Lane J added fail_closed_startup range checks
+  # (gateway/config.py::_RANGES, 15 numeric knobs) enforced only AT GATEWAY CONTAINER START, so a
+  # zeroed/out-of-range override in .env crash-loops the gateway and no preflight leg names it. Catch it
+  # HERE, before `docker compose up`. Single source of truth: shell out to python importing the SAME
+  # gateway.config._RANGES the app enforces (not a restated copy of the floors), validating the current
+  # env exactly as config._i does - unset/empty falls back to the in-range default and is fine. The box
+  # has python3; AUSMT_PREFLIGHT_PYTHON overrides the interpreter (tests, odd PATHs). Repo root on
+  # PYTHONPATH so `import gateway.config` resolves; config.py is stdlib-only, so any python3 imports it.
+  PY_BIN="${AUSMT_PREFLIGHT_PYTHON:-}"
+  if [ -z "$PY_BIN" ]; then
+    if command -v python3 >/dev/null 2>&1; then PY_BIN=python3
+    elif command -v python >/dev/null 2>&1; then PY_BIN=python; fi
+  fi
+  if [ -z "$PY_BIN" ]; then
+    warn "skipping numeric-knob range check - no python on PATH" "install python3 (or set AUSMT_PREFLIGHT_PYTHON); the gateway still range-checks these at startup"
+  else
+    range_out=$(PYTHONPATH="$DEPLOY_DIR/.." "$PY_BIN" -c '
+import os, sys
+from gateway.config import _RANGES
+bad = []
+for field, env_name, low, high in _RANGES:
+    raw = os.environ.get(env_name)
+    if raw is None or raw == "":
+        continue  # unset/empty -> config._i uses the in-range default; not an operator error
+    try:
+        value = int(raw)
+    except ValueError:
+        bad.append(env_name + "=" + raw + " is not an integer (allowed " + str(low) + ".." + str(high) + ")")
+        continue
+    if not (low <= value <= high):
+        bad.append(env_name + "=" + str(value) + " out of range " + str(low) + ".." + str(high))
+if bad:
+    sys.stdout.write("; ".join(bad))
+    sys.exit(1)
+' 2>&1)
+    range_rc=$?
+    if [ "$range_rc" -eq 0 ]; then
+      pass "gateway numeric knobs are all within range (gateway/config.py _RANGES)"
+    else
+      fail "gateway numeric knob out of range - the gateway would crash-loop at startup: $range_out" "fix the named knob in $ENV_FILE to sit within its allowed range (or unset it to use the default)"
+    fi
+  fi
 fi
 
 # ----- 3. data dirs exist with the right ownership -------------------------------------------------

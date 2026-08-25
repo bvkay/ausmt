@@ -84,15 +84,30 @@ class RunnerConfig:
     def from_env(cls, environ: dict[str, str] | None = None) -> "RunnerConfig":
         env = os.environ if environ is None else environ
         data = Path(env.get("AUSMT_GW_DATA", "/gw"))
+        job_timeout_s = int(env.get("AUSMT_JOB_TIMEOUT_S", str(_DEFAULT_TIMEOUT_S)))
+        max_upload_mb = int(env.get("AUSMT_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB)))
+        # Fail closed on a zeroed/negative override, IDENTICALLY to the gateway (config._RANGES floors
+        # both of these at 1, and fail_closed_startup SystemExits on a breach). The runner reads the
+        # SAME two knobs but historically int()'d them with no floor, so a zeroed AUSMT_JOB_TIMEOUT_S
+        # (every job times out instantly -> everything quarantines) or AUSMT_MAX_UPLOAD_MB (a zero
+        # extraction byte-cap) was silently accepted while the gateway rejected it - the runner would
+        # crash-loop honestly on a bad numeric knob instead (deploy review section 5, MEDIUM).
+        for _env_name, _value in (("AUSMT_JOB_TIMEOUT_S", job_timeout_s),
+                                  ("AUSMT_MAX_UPLOAD_MB", max_upload_mb)):
+            if _value < 1:
+                raise SystemExit(
+                    f"{_env_name} must be >= 1, got {_value} "
+                    "(fail closed: an out-of-range knob breaks the runner silently)"
+                )
         return cls(
             incoming_dir=data / "incoming",
             quarantine_dir=data / "quarantine",
             jobs_dir=data / "jobs",
             validator_path=env.get("AUSMT_VALIDATOR_PATH", "/srv/surveys/_validation"),
             engine_dir=Path(env.get("AUSMT_ENGINE_DIR", "/app/engine")),
-            timeout_s=int(env.get("AUSMT_JOB_TIMEOUT_S", str(_DEFAULT_TIMEOUT_S))),
+            timeout_s=job_timeout_s,
             heartbeat_s=float(env.get("AUSMT_HEARTBEAT_S", "30")),
-            max_upload_bytes=int(env.get("AUSMT_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB))) * 1024 * 1024,
+            max_upload_bytes=max_upload_mb * 1024 * 1024,
             surveys_root=Path(env.get("AUSMT_SURVEYS_ROOT", "/srv/surveys")),
         )
 

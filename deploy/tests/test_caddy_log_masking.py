@@ -30,11 +30,29 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 _CADDYFILE = _REPO / "deploy" / "docker" / "caddy" / "Caddyfile"
+_FRONTDOOR_CADDYFILE = _REPO / "deploy" / "frontdoor" / "Caddyfile"
 _INDEX = _REPO / "portal" / "index.html"
 
 
 def _caddyfile_text() -> str:
     return _CADDYFILE.read_text(encoding="utf-8")
+
+
+def _log_block_from(text: str) -> str:
+    """Brace-match the first `log { ... }` block at ANY indent in `text` (the box log block is one tab
+    in on :8080; the front-door one is two tabs in inside the public-name site block). Fails if absent."""
+    m = re.search(r"(?m)^[\t ]*log \{", text)
+    assert m is not None, "no `log` block found in this Caddyfile"
+    i = text.index("{", m.start())
+    depth = 0
+    for j in range(i, len(text)):
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[m.start():j + 1]
+    raise AssertionError("unbalanced braces in the log block")
 
 
 def _log_block() -> str:
@@ -79,6 +97,38 @@ def test_access_log_masks_client_address_at_edge():
     for hdr in ("X-Forwarded-For", "X-Real-IP", "Forwarded", "Referer"):
         assert re.search(rf"request>headers>{re.escape(hdr)}\s+delete", block), \
             f"the {hdr} header must be deleted (it can carry the unmasked client IP/PII)"
+
+
+def _status_redaction(block: str) -> tuple[str, str] | None:
+    """Return (find, replace) of the request>uri regexp field op that redacts the status token, or None
+    if the log block carries no such directive. Caddy's log `filter` encoder supports a `regexp` field
+    operation that rewrites the matched span of a string field."""
+    m = re.search(r"request>uri\s+regexp\s+(\S+)\s+(\S+)", block)
+    return (m.group(1), m.group(2)) if m else None
+
+
+def test_status_token_redacted_from_uri_at_both_edges():
+    """STATUS-TOKEN REDACTION PIN (deploy review section 5, R28). GET /gateway/status/{token} carries a
+    secrets.token_urlsafe(32) capability; the DB stores only its SHA-256 hash, but the masked access
+    logs mask IPs and delete credential HEADERS while never touching request>uri - so the raw token
+    landed in the log VERBATIM (retained 7 days, shipped to the box). BOTH log-writing edges must redact
+    it from the logged URI: the box reader log (deploy/docker/caddy/Caddyfile :8080) AND the front door
+    (deploy/frontdoor/Caddyfile), where the public status hits actually land. The :8081 box listener has
+    no log block by design, so there is nothing to redact there. FAILS IF either log block omits a
+    request>uri regexp op that targets /gateway/status/ and replaces the token with a REDACTED
+    placeholder. CONFIG-ONLY here; the caddy-runtime leg below proves it actually redacts a live line."""
+    for label, path in (("box reader :8080", _CADDYFILE),
+                        ("front door", _FRONTDOOR_CADDYFILE)):
+        block = _log_block_from(path.read_text(encoding="utf-8"))
+        directive = _status_redaction(block)
+        assert directive is not None, (
+            f"{label} log block does not redact the status token from request>uri - a "
+            f"/gateway/status/<token> capability lands in the log verbatim ({path})")
+        find, repl = directive
+        assert "/gateway/status/" in find, (
+            f"{label}: the redaction regexp must target the /gateway/status/<token> path (got {find})")
+        assert "REDACTED" in repl, (
+            f"{label}: the token segment must be replaced with a REDACTED placeholder (got {repl})")
 
 
 def test_trusted_proxies_configured_for_real_client_masking():
@@ -303,3 +353,66 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
         assert body, "caddy wrote no access-log line"
         assert "203.0.113.7" not in body, f"the FULL client IP leaked into the log line: {body}"
         assert "203.0.113.0" in body, f"the masked /24 client IP is not in the log line: {body}"
+
+
+@pytest.mark.skipif(shutil.which("caddy") is None,
+                    reason="no caddy binary - the status-token redaction is config-asserted; live leg runs in CI")
+def test_real_caddy_redacts_status_token_in_the_log(tmp_path):
+    """R28 HEADLINE - REAL-CADDY RUNTIME PIN. A GET /gateway/status/<token> through a running Caddy using
+    the SHIPPED log filter writes a log line in which the capability token appears NOWHERE - only the
+    /gateway/status/REDACTED placeholder. A control request to /data/mtcat.json is logged UNCHANGED, so
+    the redaction is scoped to the status path and does not maul other URIs. Proves the config assertion
+    corresponds to real behaviour (a config-syntax pin alone cannot). Skips without caddy.
+
+    Box smoke equivalent (run on the deployed box):
+        curl -s 'http://127.0.0.1:8443/gateway/status/TESTTOKEN123' >/dev/null
+        grep -c TESTTOKEN123 $AUSMT_DATA_DIR/logs/caddy/access.json   # must be 0
+        grep -c /gateway/status/REDACTED $AUSMT_DATA_DIR/logs/caddy/access.json   # must be >= 1
+    """
+    import socket
+    import time
+    import urllib.request
+
+    token = "SECRETtoken_urlsafe32_abcdefghijklmnopqrstuv"
+    log_block = _log_block_from(_caddyfile_text())
+
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+
+    logpath = tmp_path / "access.json"
+    test_log_block = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", log_block)
+    # Minimal site reusing the SHIPPED log block (trusted_proxies unneeded here - no forwarded IP leg).
+    cfg = "{\n\tadmin off\n}\n" + f":{port} {{\n\t" + test_log_block + "\n\trespond \"ok\" 200\n}\n"
+    cfgpath = tmp_path / "Caddyfile"
+    cfgpath.write_text(cfg, encoding="utf-8")
+    v = subprocess.run(["caddy", "validate", "--adapter", "caddyfile", "--config", str(cfgpath)],
+                       capture_output=True, text=True)
+    assert v.returncode == 0, f"composed test Caddyfile invalid:\n{v.stdout}\n{v.stderr}\n---\n{cfg}"
+    proc = subprocess.Popen(["caddy", "run", "--adapter", "caddyfile", "--config", str(cfgpath)],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        for _ in range(100):
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                    break
+            except OSError:
+                time.sleep(0.1)
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/gateway/status/{token}", timeout=5).read()
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/data/mtcat.json", timeout=5).read()
+        for _ in range(50):
+            if logpath.is_file() and logpath.stat().st_size > 0:
+                break
+            time.sleep(0.1)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    body = logpath.read_text(encoding="utf-8") if logpath.is_file() else ""
+    assert body, "caddy wrote no access-log line"
+    assert token not in body, f"the status token leaked into the log line: {body}"
+    assert "/gateway/status/REDACTED" in body, f"the redacted status URI is not in the log: {body}"
+    assert "/data/mtcat.json" in body, f"a non-status URI was mauled by the redaction: {body}"
