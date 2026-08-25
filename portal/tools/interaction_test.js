@@ -432,6 +432,11 @@ code += "\nwindow.__api={boot,setView,routeFromHash,refresh,openStation,renderFi
   // is written inside a click handler, and a claim about its contents that no test can reach is a
   // claim that rots. Takes the selection and the chosen levels from the app, not from the driver.
   "tsHandoffDoc:(sts,levels)=>tsHandoffDocument(sts||scopeSel(),levels||null)," +
+  // The two terminal-command builders, exposed for the same reason: the strings a reader pastes are
+  // built inside showWgetDialog()'s cmds object, so a claim about their shell-safety and their
+  // collision-free output paths must observe the real builders, not a re-implementation.
+  "tsCurl:(rows,exe)=>tsCurlCommand(rows,exe)," +
+  "tsWget:(rows)=>tsWgetCommand(rows)," +
   // geoFC builds the GeoJSON export exactly as #dlGeo does, taking the sci-usable decision FROM THE APP
   // (hydrUsable) rather than from the driver, so the export-honesty pins observe the real branch rather than
   // a re-implementation of it. setSelected drives `selected` by station id without going through
@@ -1801,31 +1806,34 @@ async function bootFreshWindow(dataMap, url) {
   ok(wgetModal && !wgetModal.classList.contains("hidden"), "the wget dialog must open from the snackbar action");
   ok(/terminal/i.test(wgetModal.textContent), "the dialog must say the command runs in the reader's own terminal");
   // Platform tabs: three of them, the detected platform pre-selected (jsdom's navigator detects as
-  // Linux here), and the WINDOWS tab swaps to a genuinely different command - no here-doc
-  // (PowerShell/cmd cannot run one) and wget.exe by name (PowerShell aliases bare wget away).
+  // Linux here). Linux carries per-file `wget ... -P <slug>/<level>` lines (namespaced so same-named
+  // files never collide); macOS and Windows carry curl / curl.exe with -o paths namespaced the same
+  // way. The Windows command differs genuinely: curl.exe by full name (PowerShell aliases bare curl
+  // away) and a safe-charset -o filename (PowerShell and cmd quote incompatibly).
   const osTabs = [...doc.getElementById("wgetOs").querySelectorAll("button")];
   ok(osTabs.length === 3 && osTabs.map(b => b.dataset.os).join() === "linux,mac,win",
     "the dialog must carry Linux/macOS/Windows tabs, got " + osTabs.map(b => b.dataset.os).join());
   ok(osTabs.filter(b => b.classList.contains("on")).length === 1,
     "exactly one tab is pre-selected (the detected platform; jsdom's UA reports the HOST kernel, so which one is host-dependent)");
   osTabs[0].click();
-  ok(/^wget -c -q --show-progress --content-disposition -i -/.test(wgetCmd.textContent),
-    "the Linux tab must carry the resumable wget here-doc form, got " +
+  ok(/^wget -c -q --show-progress --content-disposition -P '/.test(wgetCmd.textContent) &&
+     wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
+    "the Linux tab must carry the resumable per-file wget -P form, got " +
     JSON.stringify(wgetCmd.textContent.split("\n")[0]));
   ok(!/^#/.test(wgetCmd.textContent),
     "no leading # header: interactive zsh has no comments by default, so a pasted header line errors");
-  // macOS and Windows carry the CURL form: preinstalled on both (no third-party binary, no
-  // Homebrew), output names as explicit -o pairs from the index's own filenames, -C - resume.
+  // macOS and Windows carry the CURL form: preinstalled on both (no third-party binary, no Homebrew),
+  // output names as explicit -o paths namespaced <slug>/<level>/<basename> with --create-dirs, -C - resume.
   osTabs[1].click();
-  ok(/^curl -L -C - -o "/.test(wgetCmd.textContent) && wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
-    "the macOS tab must carry the curl -o-pairs form, got " + JSON.stringify(wgetCmd.textContent.slice(0, 60)));
+  ok(/^curl -L -C - --create-dirs -o '/.test(wgetCmd.textContent) && wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
+    "the macOS tab must carry the curl namespaced -o form, got " + JSON.stringify(wgetCmd.textContent.slice(0, 60)));
   ok(/preinstalled on macOS/.test(doc.getElementById("wgetOsNote").textContent),
     "the macOS tab must say nothing needs installing");
   osTabs[2].click();
-  ok(/^curl\.exe -L -C - -o "/.test(wgetCmd.textContent) &&
+  ok(/^curl\.exe -L -C - --create-dirs -o "/.test(wgetCmd.textContent) &&
      (wgetCmd.textContent.match(/-o "/g) || []).length === 2 &&
      wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
-    "the Windows tab must carry curl.exe with one -o pair per file, got " +
+    "the Windows tab must carry curl.exe with one namespaced -o path per file, got " +
     JSON.stringify(wgetCmd.textContent.slice(0, 80)));
   ok(/preinstalled on Windows 10/.test(doc.getElementById("wgetOsNote").textContent) &&
      !/winget|JernejSimoncic/.test(doc.getElementById("wgetOsNote").textContent),
@@ -1904,6 +1912,62 @@ async function bootFreshWindow(dataMap, url) {
     "above 5 GB the hand-off appends the large-file line, got " + JSON.stringify(snackEl.textContent));
   A.setSelected([]);
   A.closeDrawer();
+
+  // K5. HAND-OFF COMMAND SAFETY (fix/gateway-silent-success). Two independent defects in the fetch
+  // commands, both proven here against the REAL builders (tsCurlCommand/tsWgetCommand via the bridge):
+  //  1. FILENAME COLLISION - the archive basename is NOT unique (a station's level0 and level1_mth5 can
+  //     carry the same one, and basenames repeat across surveys), so writing by basename alone lets one
+  //     product overwrite another - and with curl -C - the second RESUMES INTO the first, corrupting both.
+  //     Each -o path (curl) / -P prefix (wget) must be namespaced by survey slug + level so none collide.
+  //  2. SHELL INJECTION - the basename is stored verbatim from third-party registers with no charset gate,
+  //     and was interpolated into double quotes where bash/zsh still honour $( ), backticks and ". The
+  //     built filename must be shell-safe: POSIX single-quoting on macOS/Linux, a safe-charset restriction
+  //     on Windows (curl.exe is pasted into PowerShell or cmd, which quote incompatibly).
+  const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";      // mirrors exports.js shq()
+  const winSafe = s => String(s).replace(/[^A-Za-z0-9._\/-]/g, "_");  // mirrors exports.js winSafePath()
+  const INJ = "$(touch pwned) `id` \";x;\" 'sq' [z].zip";             // every metacharacter the field can carry
+  A.setTsAccess({
+    // A1: ONE station whose level0 and level1_mth5 carry the SAME basename (the live SA295.h5 case).
+    "au.alpha.A1": { level0: { bytes: 100, url_path: "arc/SA295.h5" },
+                     level1_mth5: { bytes: 200, url_path: "arc/SA295.h5" } },
+    // A2: a basename carrying live shell metacharacters (the corpus already ships `C5 [REMOTE].zip`).
+    "au.alpha.A2": { raw_packed: { bytes: 300, url_path: "arc/" + INJ } },
+  });
+  A.setSelected(["A1", "A2"]);
+  const _cs = A.tsHandoffDoc().doc.stations;
+  const _mac = A.tsCurl(_cs, "curl"), _win = A.tsCurl(_cs, "curl.exe"), _nix = A.tsWget(_cs);
+  // DEFECT 1, curl: the two same-basename levels get DISTINCT namespaced -o paths, never a bare basename.
+  ok(_mac.indexOf("-o " + shq("alpha/level0/SA295.h5")) >= 0 &&
+     _mac.indexOf("-o " + shq("alpha/level1_mth5/SA295.h5")) >= 0,
+    "collision: colliding basenames must get distinct <slug>/<level>/ -o paths, got " + JSON.stringify(_mac));
+  ok(_mac.indexOf("-o 'SA295.h5'") < 0 && _mac.indexOf('-o "SA295.h5"') < 0,
+    "collision: the bare un-namespaced basename must never be an -o target, got " + JSON.stringify(_mac));
+  // DEFECT 1, wget: same-named files land in DISTINCT -P prefixes (verified: wget -P builds the tree and
+  // --content-disposition writes inside it, so the silent .1 fork cannot happen).
+  ok(_nix.indexOf("-P " + shq("alpha/level0")) >= 0 && _nix.indexOf("-P " + shq("alpha/level1_mth5")) >= 0,
+    "collision: wget must place same-named files under distinct -P prefixes, got " + JSON.stringify(_nix));
+  ok(!/ -i - /.test(_nix) && _nix.indexOf("AUSMT_EOF") < 0,
+    "collision: the -i - here-doc cannot namespace per file, so it is retired for per-file -P lines, got " + JSON.stringify(_nix));
+  // DEFECT 2, curl macOS/Linux: the -o filename is POSIX single-quoted verbatim ($( ), backtick, ; and "
+  // inert), never double-quoted (double quotes still honour them). Verified end-to-end: the quoted form
+  // writes the injection string as a literal filename and fires no command.
+  ok(_mac.indexOf("-o " + shq("alpha/raw_packed/" + INJ)) >= 0,
+    "injection: the POSIX -o filename must be single-quote-escaped verbatim, got " + JSON.stringify(_mac));
+  ok(_mac.indexOf('-o "') < 0,
+    "injection: the macOS/curl -o filename must never be double-quoted, got " + JSON.stringify(_mac));
+  ok(!/\$\(|`/.test(_nix),
+    "injection: no command substitution can appear in the wget command (routes, not filenames), got " + JSON.stringify(_nix));
+  // DEFECT 2, curl.exe Windows: no single wrap is safe in both PowerShell and cmd, so the built path is
+  // restricted to a metacharacter-free charset and double-quoted - inert in either shell.
+  ok(_win.indexOf('-o "' + winSafe("alpha/raw_packed/" + INJ) + '"') >= 0,
+    "injection: the Windows -o path must be restricted to a safe charset, got " + JSON.stringify(_win));
+  const _winO = [..._win.matchAll(/-o "([^"]*)"/g)].map(m => m[1]);
+  ok(_winO.length === 3 && _winO.every(t => !/[^A-Za-z0-9._\/-]/.test(t)),
+    "injection: every Windows -o filename must be metacharacter-free, got " + JSON.stringify(_winO));
+  // The commands still name the AusMT routes (counted at the front door), never the archive addresses.
+  ok((_mac.match(/\/go\/ts\//g) || []).length === 3 && !/thredds\.nci\.org\.au/.test(_mac),
+    "the fetch commands carry the AusMT routes, not the archive addresses, got " + JSON.stringify(_mac));
+  A.setSelected([]);
 
   // L. GO TO PLACE REMOVED (UX feedback round 1 #1): operator decision, redundant. Assert the input
   // (and its datalist) are gone from the rendered page, not merely unused.
@@ -4277,9 +4341,12 @@ async function bootFreshWindow(dataMap, url) {
     "per-level count+size+gloss summed from ts_access and NOT from the download manifest, multi-select union filter, embargoed station unreachable by any level) + " +
     "hand-off(#dlTs pointer file in the #dlSh shape: /go/ts/ routes + inert archive address percent-encoded like the engine, " +
     "chooser-scoped, embargoed station absent, wget-follows/curl-needs-L note, no new track() call site, " +
-    "'Download list ready' + wget -i COPY button carrying the routes and not the archive, " +
+    "'Download list ready' + wget/curl COPY button carrying the routes and not the archive, " +
     "JOIN RULE action row driven by the index alone under an empty ts_levels with the survey sub-text intact, no fourth badge, " +
     "single-station snackbar names file+size+where-progress-lives, >5GB line, untracked open) + " +
+    "K5 hand-off command safety(collision: curl -o + wget -P namespaced <slug>/<level>/<basename> so a station's " +
+    "same-named levels never overwrite/resume-corrupt; injection: POSIX single-quoted -o on macOS/Linux, " +
+    "safe-charset -o on Windows curl.exe, wget carries only encoded routes; --create-dirs builds the tree) + " +
     "scale bar(metric-only maxWidth 120, added, own container re-parented into .maplegend-body, four dots and #map parenting intact))");
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

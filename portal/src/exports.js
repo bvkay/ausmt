@@ -254,7 +254,7 @@ function tsHandoffDocument(stations,levels){
   (stations||[]).forEach(s=>{const ls=tsHandoffLevels(s,levels);
     if(!ls.length)return;
     files+=ls.length;ls.forEach(l=>{bytes+=(l.bytes||0);});
-    rows.push({ausmt_id:s.ausmt_id,station:s.id,survey:s.survey,
+    rows.push({ausmt_id:s.ausmt_id,station:s.id,survey:s.survey,slug:s.slug||null,
                survey_version:(SMETA[s.survey]||{}).version||null,levels:ls});});
   // The document records its own scope, so a list narrowed to one level cannot read as "all this
   // scope has": how many stations were asked, and which levels were on the table.
@@ -263,31 +263,49 @@ function tsHandoffDocument(stations,levels){
     time_series_collection:{name:TS_COLLECTION.name,doi:TS_COLLECTION.doi,
                             landing:"https://doi.org/"+TS_COLLECTION.doi},
     stations:rows}};}
-// The command the COPY button offers. A heredoc rather than "wget -i <the file you just saved>": the
-// saved file is JSON (the #dlSh shape, so one habit reads both), and `wget -i` wants bare urls, so
-// naming the file would hand over a command that does not run. It fetches the ROUTES, never the
-// archive addresses beside them, because the route is what the front door counts.
-function tsHandoffUrls(rows){
-  const urls=[];(rows||[]).forEach(r=>r.levels.forEach(l=>{if(l.url)urls.push(l.url);}));
-  return urls;}
-// The unix form. No leading # header: interactive zsh has no comments by default, so a pasted
-// header line globbed and errored (measured on a real run). -c makes a re-run RESUME: a completed
-// file is skipped, a partial continues from where it stopped (the archive serves ranges) - without
-// it a re-run silently downloads duplicates beside the originals. -q --show-progress keeps one
-// clean bar per file instead of the per-request redirect chatter.
+// The output PATH for one fetched level: <survey slug>/<level>/<archive basename>. The bare basename is
+// NOT unique - across the corpus a station's level0 and level1_mth5 can carry the same one, and basenames
+// repeat across surveys - so writing by basename alone lets a second product overwrite (or, with curl -C -,
+// RESUME INTO and corrupt) the first. Keying by slug+level is collision-free over every corpus row, and
+// mirrors the selection zips' own survey-slug namespacing (audit M3).
+function tsOutPath(r,l){return (r.slug||"survey")+"/"+l.level+"/"+String(l.filename||"download");}
+// POSIX single-quote a token so a register-derived path segment is LITERAL in bash/zsh: inside single
+// quotes $( ), backticks, ", ; and space are all inert, and an embedded ' is close-escape-reopen'd. The
+// filename is the one field taken VERBATIM from third-party ts-index registers with no charset gate
+// upstream, so it is quoted at the client (belt-and-braces; the url is already per-segment encoded).
+function shq(s){return "'"+String(s==null?"":s).replace(/'/g,"'\\''")+"'";}
+// Windows curl.exe may be pasted into PowerShell OR cmd, which quote INCOMPATIBLY (PowerShell interpolates
+// $()/backtick/$var inside "", cmd expands %VAR%; single quotes are literal text in cmd, not quoting), so
+// no one wrap is both safe and faithful in both. The built path is therefore restricted to a
+// metacharacter-free charset (others -> _), which leaves double quotes inert in either shell. The bytes
+// are unchanged; only the LOCAL name is normalised, and WGET_OS_NOTES.win says so.
+function winSafePath(s){return String(s==null?"":s).replace(/[^A-Za-z0-9._\/-]/g,"_");}
+// The unix form. One `wget` per file, not a single --content-disposition -i - here-doc: the header
+// filename lands in the CURRENT dir, so two files that share a Content-Disposition name would collide and
+// wget silently forks the loser to name.1. -P <slug>/<level> gives each its own directory - wget creates
+// the tree and the collision cannot happen. -c makes a re-run RESUME (a completed file is skipped, a
+// partial continues; the archive serves ranges). -q --show-progress keeps one clean bar per file. Single
+// quotes keep the prefix and the route literal. It fetches the ROUTES, never the archive addresses beside
+// them, because the route is what the front door counts.
 function tsWgetCommand(rows){
-  return ["wget -c -q --show-progress --content-disposition -i - <<'AUSMT_EOF'"]
-    .concat(tsHandoffUrls(rows),["AUSMT_EOF"]).join("\n");}
-// The curl form, for macOS and Windows: curl is PREINSTALLED on both (Apple ships it; Microsoft
-// ships a real curl.exe on Windows 10+), so neither platform is sent to a third-party binary.
-// Output names come from the index's own filenames as explicit -o pairs - which is also what lets
-// -C - (resume) coexist with correct names (curl's header-naming -J refuses -C). -L follows the
-// 302s. On Windows the exe is named in full: PowerShell aliases bare curl (and wget) to a
-// different command. One line; the dialog's command block scrolls.
+  const lines=[];(rows||[]).forEach(r=>r.levels.forEach(l=>{
+    if(l.url)lines.push("wget -c -q --show-progress --content-disposition -P "+shq((r.slug||"survey")+"/"+l.level)+" "+shq(l.url));}));
+  return lines.join("\n");}
+// The curl form, for macOS and Windows: curl is PREINSTALLED on both (Apple ships it; Microsoft ships a
+// real curl.exe on Windows 10+), so neither platform is sent to a third-party binary. Output names are
+// explicit -o paths (which is also what lets -C - resume coexist with names: curl's header-naming -J
+// refuses -C), namespaced by slug+level so no two collide, with --create-dirs building the tree. -L
+// follows the 302s. The name is shell-quoted at the client: single quotes on macOS (POSIX, verbatim), a
+// safe-charset restriction on Windows (curl.exe is pasted into PowerShell or cmd, which quote
+// incompatibly). The url stays double-quoted - it is already per-segment encoded, so it carries no
+// metacharacter. On Windows the exe is named in full: PowerShell aliases bare curl to a different command.
 function tsCurlCommand(rows,exe){
-  const parts=[exe+" -L -C -"];
+  const win=(exe==="curl.exe");
+  const parts=[exe+" -L -C - --create-dirs"];
   (rows||[]).forEach(r=>r.levels.forEach(l=>{
-    if(l.url)parts.push('-o "'+String(l.filename||"download")+'" "'+l.url+'"');}));
+    if(!l.url)return;
+    const p=tsOutPath(r,l),o=win?('"'+winSafePath(p)+'"'):shq(p);
+    parts.push("-o "+o+' "'+l.url+'"');}));
   return parts.join(" ");}
 // One level's hand-off for the current scope, from the Download block's time-series rows. The row
 // names its own level, so no hidden chooser state can narrow it (the pre-Lane-B defect: a collapsed
@@ -305,9 +323,9 @@ var TS_DIRECT_MAX_BYTES=10*1024*1024*1024;
 // pre-selected (detection only picks the default tab; researchers copy commands for other
 // machines, so all three stay one click away). Guarded binds like every other control.
 var WGET_OS_NOTES={
-  linux:"wget is preinstalled on most Linux distributions.",
-  mac:"curl is preinstalled on macOS - nothing to install. Each file is named by the archive's own filename; a re-run resumes partial files and leaves completed ones as they are.",
-  win:"curl.exe is preinstalled on Windows 10 and later - nothing to install. Run it in PowerShell or Command Prompt (curl.exe by full name: PowerShell's bare curl is a different command). A re-run resumes partial files and leaves completed ones as they are.",
+  linux:"wget is preinstalled on most Linux distributions. Files are saved under per-survey and per-level subfolders (named by the archive's own header filename), so two files that share a name never collide; a re-run resumes partial files and leaves completed ones as they are.",
+  mac:"curl is preinstalled on macOS - nothing to install. Files are saved under per-survey and per-level subfolders keyed to the archive's own filename, so two files that share a name never collide; a re-run resumes partial files and leaves completed ones as they are.",
+  win:"curl.exe is preinstalled on Windows 10 and later - nothing to install. Run it in PowerShell or Command Prompt (curl.exe by full name: PowerShell's bare curl is a different command). Files are saved under per-survey and per-level subfolders; on Windows the filename is restricted to a safe character set (spaces and punctuation become _) so the line is safe to paste into either shell. A re-run resumes partial files and leaves completed ones as they are.",
 };
 function detectOs(){
   const p=String((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||navigator.userAgent||"");

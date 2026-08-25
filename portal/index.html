@@ -881,12 +881,15 @@
     <div class="introwelcome-box wgetbox" tabindex="-1">
       <h2 class="introwelcome-heading" id="wgetHeading">Fetch from your terminal</h2>
       <p class="wget-instructions">Run this in your own terminal, not in this page. It fetches the
-        files one at a time into the current directory, and re-running it resumes: completed files
-        are skipped, partial ones continue.</p>
-      <!-- Per-platform tabs (owner, 2026-08-25): the DETECTED platform is pre-selected, and the
-           Windows command genuinely differs - PowerShell/cmd cannot run a here-doc, and PowerShell
-           aliases `wget` to a different command, so that tab carries wget.exe with the urls as
-           plain arguments. exports.js showWgetDialog() owns the content and the detection. -->
+        files one at a time into per-survey and per-level subfolders of the current directory - so two
+        files that share a name never collide - and re-running it resumes: completed files are skipped,
+        partial ones continue.</p>
+      <!-- Per-platform tabs (owner, 2026-08-25): the DETECTED platform is pre-selected. Linux uses wget
+           (one call per file, -P <survey>/<level> so same-named files land in their own directories);
+           macOS and Windows use curl / curl.exe with explicit -o paths namespaced the same way
+           (--create-dirs builds the tree). The Windows tab names curl.exe in full - PowerShell aliases
+           bare curl away - and restricts the output filename to a safe charset so the line is safe to
+           paste into PowerShell or cmd. exports.js showWgetDialog() owns the content and the detection. -->
       <div class="seg" id="wgetOs" role="tablist" aria-label="Choose your operating system">
         <button type="button" data-os="linux">Linux</button>
         <button type="button" data-os="mac">macOS</button>
