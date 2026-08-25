@@ -324,6 +324,18 @@ function writeLicenseFiles(folder,included){
 // tell a naming difference from a behaviour difference, so a chart of "zip exports" silently excluded two
 // of the three buttons and a chart by format double-counted the third against the single-file downloads,
 // which report their own extension through the drawer's dispatchProd.
+// Bounded-concurrency fetch for the bulk zips. Results keep the INPUT order (zip entries stay
+// deterministic across runs) and a failure lands as null in its slot, so per-file accounting is
+// the caller's, unchanged. Six in flight matches a browser's per-host default; the sequential
+// loop this replaces serialised ~300 round trips behind one another.
+async function fetchBounded(items,limit,getUrl){
+  const out=new Array(items.length);let next=0;
+  async function worker(){
+    for(;;){const i=next++;if(i>=items.length)return;
+      try{const r=await fetch(getUrl(items[i]));out[i]=r&&r.ok?await r.blob():null;}
+      catch(e){out[i]=null;}}}
+  await Promise.all(Array.from({length:Math.max(1,Math.min(limit,items.length))},worker));
+  return out;}
 function trackSelectionZip(files){track("DownloadGenerated",{format:"zip",files:files,n:sel().length});}
 document.getElementById("dlZip").onclick=async()=>{trackSelectionZip("edi");
   // Two-phase boot: each EDI is fetched at its MANIFEST url when there is one (the legacy flat path is only
@@ -334,12 +346,13 @@ document.getElementById("dlZip").onclick=async()=>{trackSelectionZip("edi");
   const z=new JSZip(),f=z.folder("ausmt_edis");
   const chosen=sel(),avail=chosen.filter(s=>s.ediAvail),unavail=chosen.filter(s=>!s.ediAvail);
   let ok=0;const included={};toast("Packaging "+avail.length+" redistributable EDI(s)…");   // included: survey -> zip subdir
-  for(const s of avail){try{const ea=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).find(a=>a.format==="edi");
-    const u=ea?dataUrl(ea.url):dataUrl("edi/"+s.file);   // manifest url (slug-namespaced) or legacy flat path
+  const ediItems=avail.map(s=>{try{const ea=(typeof artifactsFor==="function"?artifactsFor(s.ausmt_id):[]).find(a=>a.format==="edi");
     // Namespace the zip entry by survey slug too: a selection can span surveys that reuse an EDI basename
     // (e.g. two surveys with 01.edi), which would otherwise overwrite each other inside the zip (audit M3).
-    const entry=(s.slug?s.slug+"/":"")+s.file;
-    const r=await fetch(bulkUrl(u));if(!r.ok)throw 0;f.file(entry,await r.blob());ok++;included[s.survey]=s.slug?s.slug+"/":"";}catch(e){}}
+    return {s,url:bulkUrl(ea?dataUrl(ea.url):dataUrl("edi/"+s.file)),entry:(s.slug?s.slug+"/":"")+s.file};}
+    catch(e){return null;}}).filter(Boolean);
+  const ediBlobs=await fetchBounded(ediItems,6,it=>it.url);
+  ediItems.forEach((it,i)=>{if(ediBlobs[i]){f.file(it.entry,ediBlobs[i]);ok++;included[it.s.survey]=it.s.slug?it.s.slug+"/":"";}});
   writeLicenseFiles(f,included);
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
     "Request them from the source archive, or contact the custodian where no DOI is recorded:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
@@ -425,13 +438,13 @@ async function exportSelectionFormat(fmt){
   const z=new JSZip(),f=z.folder(C.folder);
   const chosen=sel(),have=chosen.filter(s=>selArtifact(s,fmt)),missing=chosen.filter(s=>!selArtifact(s,fmt));
   let ok=0;const included={},failed=[];toast("Packaging "+have.length+" "+C.label+" file(s)…");
-  for(const s of have){const a=selArtifact(s,fmt);
+  const fmtItems=have.map(s=>{const a=selArtifact(s,fmt);
     // Namespace the zip entry by survey slug, exactly as the EDI zip does: a selection can span surveys
     // that reuse a station id, which would otherwise overwrite each other inside the archive (audit M3).
-    const entry=(s.slug?s.slug+"/":"")+a.url.split("/").pop();
-    try{const r=await fetch(bulkUrl(dataUrl(a.url)));if(!r.ok)throw 0;
-      f.file(entry,await r.blob());ok++;included[s.survey]=s.slug?s.slug+"/":"";}
-    catch(e){failed.push(s);}}
+    return {s,url:bulkUrl(dataUrl(a.url)),entry:(s.slug?s.slug+"/":"")+a.url.split("/").pop()};});
+  const fmtBlobs=await fetchBounded(fmtItems,6,it=>it.url);
+  fmtItems.forEach((it,i)=>{if(fmtBlobs[i]){f.file(it.entry,fmtBlobs[i]);ok++;included[it.s.survey]=it.s.slug?it.s.slug+"/":"";}
+    else{failed.push(it.s);}});
   writeLicenseFiles(f,included);
   // The gap file. A station can be absent from this archive for two DIFFERENT reasons and they are not
   // interchangeable: its survey is not redistributable here at all (licence/embargo, the same wording and
