@@ -1745,14 +1745,37 @@ async function bootFreshWindow(dataMap, url) {
     "a per-level list must carry exactly that level, got " + _hdScoped.files + " file(s)");
   ok(_hdScoped.doc.scope && String(_hdScoped.doc.scope.levels) === "raw_packed",
     "a per-level list must record its level in the scope, got " + JSON.stringify(_hdScoped.doc.scope));
-  // THE CONFIRMATION (owner UX ruling 2026-08-23) and its wget command, from the raw_packed row.
+  // THE CONFIRMATION (owner rulings 2026-08-23 + 2026-08-25) from the raw_packed row. A small
+  // scope gets its FILES: each route handed to the browser through the tsOpenRoute seam (recorded
+  // here), nothing saved, and the browser owns the downloads and their progress.
   const _trackBefore = trackCalls.length;
   A.paintDownloadRows();
+  ok(/^Download · 2 stations/.test(tsMeta("raw_packed")),
+    "a within-cap row states the direct mode, got " + JSON.stringify(tsMeta("raw_packed")));
+  const handed = [];
+  win.tsOpenRoute = u => handed.push(u);
+  const _savedBefore = savedBlobs.length;
   tsBtn("raw_packed").click();
+  ok(handed.length === 2 && handed.every(u => /\/go\/ts\/[^/]+\/[^/]+\/raw_packed$/.test(u)),
+    "a within-cap click hands each ROUTE to the browser, got " + JSON.stringify(handed));
+  ok(savedBlobs.length === _savedBefore, "the direct path saves no list file");
   const snackEl = doc.getElementById("snackbar");
   ok(snackEl && !snackEl.classList.contains("hidden"), "the hand-off must confirm itself in the snackbar");
+  ok(/Handed 2 files to your browser - /.test(snackEl.textContent) &&
+     /Progress appears in your browser's downloads\./.test(snackEl.textContent),
+    "the direct confirmation states what was handed and where progress lives, got " + JSON.stringify(snackEl.textContent));
+  // Beyond the cap the offer stays a LIST + wget (driven through the cap seam: the fixture cannot
+  // hold a dozen multi-GB stations, and the cap's VALUE is a tuning constant, not a contract).
+  win.TS_DIRECT_MAX = 1;
+  A.paintDownloadRows();
+  ok(/^Download list · 2 stations/.test(tsMeta("raw_packed")),
+    "an over-cap row states the list mode, got " + JSON.stringify(tsMeta("raw_packed")));
+  tsBtn("raw_packed").click();
+  ok(savedBlobs.length === _savedBefore + 1, "the over-cap path saves the list document");
   ok(/Download list ready - 2 files, /.test(snackEl.textContent),
-    "the confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
+    "the list confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
+  ok(handed.length === 2, "the over-cap path hands nothing directly");
+  win.TS_DIRECT_MAX = 10;
   const copyBtn = snackEl.querySelector("button");
   ok(copyBtn && /wget/i.test(copyBtn.textContent),
     "the confirmation must offer the wget command as a COPY button, got " + (copyBtn && copyBtn.textContent));
