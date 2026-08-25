@@ -161,7 +161,11 @@ function bibAmp(s){return String(s==null?"":s).replace(/&/g,"\\&");}
 function bibtex(k,m,doi){return `@misc{${k},\n  author    = {${bibAmp(m.au).replace(/;/g," and")}},\n  title     = {${bibAmp(m.ti)}},\n  year      = {${m.yr||"n.d."}},\n  publisher = {${bibAmp(m.pb)}},\n${doi?`  doi       = {${doi}},\n`:""}  note      = {Accessed via the AusMT portal}\n}`;}
 function ris(m,doi){return `TY  - DATA\nAU  - ${m.au.replace(/; /g,"\nAU  - ")}\nTI  - ${m.ti}\nPY  - ${m.yr||""}\nPB  - ${m.pb}\n${doi?`DO  - ${doi}\nUR  - https://doi.org/${doi}\n`:""}ER  -`;}
 
-function badge(l,st,title){const c=st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"";const s=st==="ok"?"✓":st==="part"?"◐":st==="no"?"✗":"?";return `<span class="badge ${c}"${title?` title="${escAttr(title)}"`:""}>${s} ${esc(l)}</span>`;}
+// The glyph carries the state for a colour-blind READER (✓/◐/✗/?, not colour alone), but a glyph has no
+// reliable spoken name and `title` is not dependably announced, so the state also rides in an aria-label:
+// assistive tech gets "EMTF XML: partial" rather than a bare format name in an unreadable colour.
+const _BADGE_STATE={ok:"available",part:"partial",no:"not available"};
+function badge(l,st,title){const c=st==="ok"?"ok":st==="part"?"part":st==="no"?"no":"";const s=st==="ok"?"✓":st==="part"?"◐":st==="no"?"✗":"?";return `<span class="badge ${c}" aria-label="${escAttr(l+": "+(_BADGE_STATE[st]||"unknown"))}"${title?` title="${escAttr(title)}"`:""}>${s} ${esc(l)}</span>`;}
 // C46-W3b: licence class/badge routed through the CANONICAL contract tables (contract.js LICENSES) — never
 // a `startsWith('CC')` guess (which mis-classed CC0/ODbL/ODC-BY and every non-CC open licence, and would
 // have passed a hostile "CCwhatever"). licCanon normalises aliases + case exactly like exports.canonLic.
@@ -835,7 +839,7 @@ function openStation(i,opts){
   const yearChip=yearTxt?`<span class="hchip">${yearTxt}</span>`:"";
   const licBadge=badge(m.lic||"licence ?",licBadgeState(m.lic));
   // UX8 (X4, owner ruling): Response is the default tab and Overview is gone (its facts fold into the
-  // Response tab's "Station summary" collapsible). Five tabs; Response first (default-selected).
+  // Response tab's "Station summary" collapsible). Four tabs active (Screening is commented out pending design review); Response first.
   // HIDDEN pending design review (owner 2026-07-22): screening surface not public-ready — restore by uncommenting the ["screening","Screening"] entry.
   const TABS=[["response","Response"],/*["screening","Screening"],*/["files","Files"],["provenance","Provenance"],["cite","Cite"]];
   const tabStrip=`<div class="seg dtabs" role="tablist" aria-label="Station detail sections">`+
@@ -1845,7 +1849,15 @@ function dispatchProd(d){
   else if(d.prod==="toast")toast(d.msg);}
 // UX6 Wave C: yield to an open plot-expand modal — its own Esc handler (plots.js) closes it, so the drawer
 // must NOT also close underneath it. Otherwise Escape closes the drawer as before.
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(typeof document!=="undefined"&&document.getElementById&&document.getElementById("plotmodal"))return;closeDrawer();}});
+// ...and to an open wget/curl dialog, for the same reason: it is aria-modal, its own Esc handler closes
+// it, and without this yield Escape closed the drawer BEHIND an open dialog. Tested by not-hidden rather
+// than by existence: unlike the plot modal, that dialog's markup is always in the document.
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){
+  if(typeof document==="undefined"||!document.getElementById)return void closeDrawer();
+  if(document.getElementById("plotmodal"))return;
+  const wm=document.getElementById("wgetModal");
+  if(wm&&wm.classList&&!wm.classList.contains("hidden"))return;
+  closeDrawer();}});
 // UX6 Wave C: ARIA tabs keyboard navigation (arrow keys / Home / End) with roving tabindex. Delegated on
 // the persistent drawer element so it survives every innerHTML re-render.
 if(drawer&&drawer.addEventListener)drawer.addEventListener("keydown",e=>{

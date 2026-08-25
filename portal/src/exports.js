@@ -339,19 +339,39 @@ function _paintWgetTab(os){
   if(!_wgetCmds||!pre)return;
   pre.textContent=(os==="win")?_wgetCmds.win:(os==="mac"?_wgetCmds.mac:_wgetCmds.unix);
   if(note)note.textContent=WGET_OS_NOTES[os]||"";
-  if(seg&&seg.querySelectorAll)[...seg.querySelectorAll("button")].forEach(b=>b.classList.toggle("on",b.dataset.os===os));}
+  // aria-selected rides WITH the .on class, never separately: the class is the paint, the attribute is
+  // the only thing a screen reader can read, and two states that can disagree eventually do.
+  if(seg&&seg.querySelectorAll)[...seg.querySelectorAll("button")].forEach(b=>{
+    const on=b.dataset.os===os;b.classList.toggle("on",on);b.setAttribute("aria-selected",String(on));});}
 function showWgetDialog(cmds){
   const m=document.getElementById("wgetModal"),pre=document.getElementById("wgetCmd");
   if(!m||!pre){if(typeof copyTxt==="function")copyTxt(cmds.unix);return;}   // no dialog markup: degrade to the copy
   _wgetCmds=cmds;
   _paintWgetTab(detectOs());
+  _wgetReturnFocus=(typeof document!=="undefined")?document.activeElement:null;
   m.classList.remove("hidden");
   if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
+// The dialog declares aria-modal, so it owes the same three behaviours the welcome popup (its own visual
+// shell) already has: Escape, click-out, and focus back to whatever opened it. Escape is also the reason
+// drawer.js yields to an open #wgetModal - without that, Esc over this dialog closed the drawer BEHIND it.
+let _wgetReturnFocus=null;
+function hideWgetDialog(){
+  const m=document.getElementById("wgetModal");if(!m)return;
+  m.classList.add("hidden");
+  const f=_wgetReturnFocus;_wgetReturnFocus=null;
+  if(f&&f.focus){try{f.focus();}catch(e){/* opener gone from the DOM: nothing to restore to */}}}
 (function(){const seg=document.getElementById("wgetOs");
   if(seg&&seg.addEventListener)seg.addEventListener("click",e=>{
     const b=e.target.closest?e.target.closest("button"):null;
     if(b&&b.dataset.os)_paintWgetTab(b.dataset.os);});})();
-bindClick("wgetClose",()=>{const m=document.getElementById("wgetModal");if(m)m.classList.add("hidden");});
+bindClick("wgetClose",hideWgetDialog);
+(function(){const m=document.getElementById("wgetModal");
+  // Guarded like every other optional-DOM binding in this file: the module must LOAD in a harness
+  // that stubs only the document it needs, and a missing listener costs the dialog nothing else.
+  if(!m||!m.addEventListener||!document.addEventListener)return;
+  m.addEventListener("click",e=>{if(e.target===m)hideWgetDialog();});                       // click-out on the scrim
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape"&&!m.classList.contains("hidden"))hideWgetDialog();});})();
 bindClick("wgetCopy",()=>{const pre=document.getElementById("wgetCmd");
   if(pre&&typeof copyTxt==="function")copyTxt(pre.textContent);});
 // One route handed to the browser for download. A window-level seam (not inlined) so the jsdom

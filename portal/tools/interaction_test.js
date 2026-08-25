@@ -461,12 +461,16 @@ function ok(cond, msg) { if (!cond) die(msg); }
 // Boots a SEPARATE fresh jsdom window against the given data map (used for the empty-state intro-panel
 // check below — reusing the already-booted populated `win` would double-init the app). Mirrors the setup
 // above exactly (same module list/order, same stubs) so it is a faithful re-run of index.html's boot.
-async function bootFreshWindow(dataMap, url) {
+// `preBoot` runs on the fresh window BEFORE the modules do, which is the only place a pin can seed
+// state the boot itself READS (localStorage: the sidebar-collapse and intro-dismissed keys are
+// applied during boot, so setting them afterwards would test nothing).
+async function bootFreshWindow(dataMap, url, preBoot) {
   const d = new JSDOM(html, { url: url || "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
   const w = d.window;
   w.L = stub(); w.JSZip = stub();
   w.AUSMT_CONFIG = { short_name: "AusMT" };
   w.fetch = url => Promise.resolve(dataMap[url] ? { ok: true, json: () => Promise.resolve(dataMap[url]) } : { ok: false });
+  if (typeof preBoot === "function") preBoot(w);
   await new Promise(res => (w.document.readyState === "complete" ? res() : w.addEventListener("load", res, { once: true })));
   vm.runInContext(code, d.getInternalVMContext());
   await w.__api.boot();
@@ -1309,6 +1313,32 @@ async function bootFreshWindow(dataMap, url) {
   ok(plainWin.__api.tourStep() === -1, "a plain boot must NOT auto-start the tour, at " + plainWin.__api.tourStep());
   ok(!plainWin.document.getElementById("introWelcome").classList.contains("hidden"),
     "a plain first-visit boot must still show the welcome popup");
+  // G3b. THE RAIL MUST BE VISIBLE FOR THE RAIL STEPS (section-4 review, P1). The tour manages rail MODE
+  // but used to leave a COLLAPSED rail collapsed, and `.collapsed > *:not(.railcollapse)` is
+  // display:none - so exactly the visitor who collapsed the rail months ago and then follows About's
+  // ?tour=1 link got steps 3/4/6/7 as empty centred cards, narrating controls that were not on screen.
+  // The tour expands it for the run and restores the visitor's own choice on close, the same
+  // save-and-restore discipline the rail MODE and the Find/tree demos already follow.
+  const collWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html?tour=1", w => {
+    w.localStorage.setItem("ausmt_sidebar_collapsed", "1");
+  });
+  const collRail = collWin.document.querySelector("aside.filters");
+  ok(collWin.__api.tourStep() === 0, "matrix setup: ?tour=1 did not start the tour on the collapsed-rail boot");
+  ok(!collRail.classList.contains("collapsed"),
+    "the tour must expand a collapsed rail: its rail steps spotlight controls that a collapsed rail hides");
+  collWin.document.dispatchEvent(new collWin.KeyboardEvent("keydown", { key: "Escape" }));
+  ok(collRail.classList.contains("collapsed"),
+    "closing the tour must put the visitor's collapsed rail back: the tour restores only what it changed");
+  ok(collWin.localStorage.getItem("ausmt_sidebar_collapsed") === "1",
+    "the restored collapse state must persist too, so the next visit still opens the way the visitor left it");
+  // A visitor whose rail was already EXPANDED must be left expanded (no phantom restore to collapsed).
+  const openWin = await bootFreshWindow(DATAMAP, "http://localhost/index.html?tour=1");
+  const openRail = openWin.document.querySelector("aside.filters");
+  ok(!openRail.classList.contains("collapsed"), "matrix setup: this boot should start with an expanded rail");
+  openWin.document.dispatchEvent(new openWin.KeyboardEvent("keydown", { key: "Escape" }));
+  ok(!openRail.classList.contains("collapsed"),
+    "the tour must not collapse a rail the visitor had open: restore puts back what WAS, not a default");
+
   win.localStorage.removeItem("ausmt_intro_dismissed");                                                     // clean state for the tour sections
 
   // G4. TOUR REDESIGN (UX9 owner): CENTRED card + LEADER to the spotlight. The side-picking _tourPlace is
@@ -1851,6 +1881,33 @@ async function bootFreshWindow(dataMap, url) {
   ok(!/thredds\.nci\.org\.au/.test(clipboard[0]),
     "the copied command must fetch the AusMT route, not the archive address it resolves to (the route " +
     "is what the front door counts), got " + JSON.stringify(clipboard[0]));
+  // K6. THE DIALOG'S MODAL CONTRACT (section-4 review, P2/P3). It declares aria-modal="true", so it owes
+  // the keyboard behaviours the welcome popup (the SAME visual shell) already has: Escape, click-out and
+  // focus restore. Esc used to fall through to the drawer's global handler and close the drawer BEHIND
+  // the open dialog. The OS switcher is a role="tablist", so its buttons owe role="tab" + aria-selected:
+  // before this, the active OS was signalled by a CSS class alone and assistive tech saw nothing.
+  const _osBtns = [...doc.getElementById("wgetOs").querySelectorAll("button")];
+  ok(_osBtns.every(b => b.getAttribute("role") === "tab"),
+    "every OS switcher button must be a role=tab: the container declares role=tablist");
+  ok(_osBtns.filter(b => b.getAttribute("aria-selected") === "true").length === 1,
+    "exactly one OS tab must carry aria-selected=true, so the active OS is not signalled by colour alone");
+  const _pressed = _osBtns.find(b => b.getAttribute("aria-selected") === "true");
+  ok(_pressed && _pressed.classList.contains("on"),
+    "aria-selected must track the same tab the .on class paints, or the two states can disagree");
+  ok(doc.getElementById("wgetCmd").getAttribute("role") === "tabpanel",
+    "the command block is the panel the tabs drive, so it must be a role=tabpanel");
+  // Escape closes the DIALOG and leaves the drawer alone.
+  const _drawerBefore = doc.getElementById("drawer").classList.contains("open");
+  doc.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
+  ok(wgetModal.classList.contains("hidden"), "Escape must close the wget dialog");
+  ok(doc.getElementById("drawer").classList.contains("open") === _drawerBefore,
+    "Escape over the dialog must NOT reach the drawer behind it: the dialog is modal");
+  // Re-open and close by clicking the scrim, the welcome popup's own click-out rule.
+  snackEl.querySelector("button").click();
+  ok(!wgetModal.classList.contains("hidden"), "matrix setup: the dialog did not re-open for the click-out pin");
+  wgetModal.click();
+  ok(wgetModal.classList.contains("hidden"), "a click on the scrim must close the dialog (click-out)");
+  snackEl.querySelector("button").click();
   doc.getElementById("wgetClose").click();
   ok(wgetModal.classList.contains("hidden"), "the dialog's Close must hide it");
   ok(trackCalls.length === _trackBefore,
