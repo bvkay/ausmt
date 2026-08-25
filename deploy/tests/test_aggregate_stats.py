@@ -2557,8 +2557,13 @@ def test_the_hand_off_class_adds_no_client_side_measurement():
     call = re.compile(r"(?<![A-Za-z0-9_$])track\s*\(")
     sites = []
     for path in sorted((_REPO / "portal" / "src").glob("*.js")):
-        for n, ln in enumerate(block.sub("", path.read_text(encoding="utf-8")).splitlines(), 1):
-            if call.search(comment.sub("", ln)):
+        # LINE comments come out FIRST: a `/*` inside one (a prose path like `contract/*.json`) would
+        # otherwise open a block match that runs to the next real `*/` anywhere in the file, silently
+        # swallowing the code between and under-counting the very call sites this pin exists to count.
+        src = "\n".join(comment.sub("", ln) for ln in path.read_text(encoding="utf-8").splitlines())
+        # Block comments are replaced by their own newlines, so the reported line numbers stay true.
+        for n, ln in enumerate(block.sub(lambda m: "\n" * m.group(0).count("\n"), src).splitlines(), 1):
+            if call.search(ln):
                 sites.append(f"{path.name}:{n}")
     assert len(sites) == 6, f"the six track() call sites must stay six, got {sites}"
     assert all(s.startswith(("exports.js:", "drawer.js:")) for s in sites), sites
