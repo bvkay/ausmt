@@ -95,6 +95,9 @@ function _tourExitSelbox(){
 let _tourFindPrev=null;              // visitor's Find value before the demo; null = nothing to restore
 function _tourEnterFindDemo(){
   _tourEnterMapView();
+  // Find lives inside the Advanced search accordion; the tour opens it so the spotlit target is
+  // visible (the exit hook leaves it open - closing would yank the panel out from under the reader).
+  const adv=document.getElementById("advSearch");if(adv)adv.open=true;
   const f=document.getElementById("find");
   if(!f)return;
   if(_tourFindPrev===null)_tourFindPrev=f.value;

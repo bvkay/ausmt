@@ -1663,7 +1663,7 @@ async function bootFreshWindow(dataMap, url) {
   });
   A.paintDownloadRows(); A.refresh();
   const tsBtn = tok => doc.getElementById("tsSeg").querySelector('button[data-ts="' + tok + '"]');
-  const tsMeta = tok => tsBtn(tok).parentNode.querySelector(".dlmeta").textContent;
+  const tsMeta = tok => tsBtn(tok).querySelector(".dlmeta").textContent;
   ok(["raw_packed", "level0", "level1_mth5", "level1_netcdf"].every(t => tsBtn(t)),
     "D8: the Download block must carry a row for each routable level token");
   ok(!tsBtn("level2"), "D19: level_2 holds transfer functions, not time series, and takes no row");
@@ -1834,17 +1834,25 @@ async function bootFreshWindow(dataMap, url) {
   // rail. The Availability group (R2/R3) and the colour-by segmented control are both inside it, and
   // there is exactly ONE Availability group: the standalone "Downloadable here" checkbox and the
   // Min-TF-diagnostic segmented control are gone, replaced by it.
-  // Lane B structure: the Screening (advanced) accordion is GONE - Browse carries every map filter
-  // (find, type, Data available, year, tree) and Select & download carries selection + Download +
-  // Metadata. The retired controls must be absent, not hidden.
-  ok(!doc.querySelector("details.advanced"), "the Screening (advanced) accordion is retired and must not render");
+  // Lane B structure (owner polish round): Browse carries every map filter - data type on top, then
+  // the Advanced search accordion (Find, Data available, Year range), collapsed by default; Select &
+  // download carries selection + Download + Metadata. The retired controls must be absent, not hidden.
+  const _adv = doc.getElementById("advSearch");
+  ok(_adv && _adv.matches("details.advanced"), "the Advanced search accordion is missing from Browse");
+  // The tour's Find step legitimately opened it earlier in this suite, so the collapsed DEFAULT is
+  // asserted against the shipped markup, not runtime state.
+  ok(!/<details[^>]*id="advSearch"[^>]*\sopen[\s>]/.test(fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8")),
+    "Advanced search must ship collapsed (no open attribute in the markup)");
+  ok(/Advanced search/.test(_adv.querySelector("summary").textContent),
+    "the accordion summary must read Advanced search");
+  const _browse = doc.getElementById("browseMode");
+  ok(_browse.contains(_adv), "Advanced search lives in the Browse pane");
+  ok(["find", "availSel", "yearFrom"].every(id => _adv.contains(doc.getElementById(id))),
+    "Advanced search must hold Find, Data available and the year range");
   ok(!doc.getElementById("qSeg"), "the Min-TF-diagnostic group stays retired");
   ok(!doc.getElementById("colorSeg"), "colour-by is retired (owner D4) and must not render");
   ok(!doc.getElementById("pLo") && !doc.getElementById("pHi"),
     "the period slider is retired (headless predicate); its inputs must not render");
-  const _browse = doc.getElementById("browseMode");
-  ok(_browse.contains(doc.getElementById("availSel")) && _browse.contains(doc.getElementById("yearFrom")),
-    "Browse must carry the Data available dropdown and the year range");
   ok(doc.getElementById("selectMode").contains(doc.getElementById("tsSeg")),
     "the Download block's time-series rows live in the Select & download pane");
 
@@ -3851,8 +3859,8 @@ async function bootFreshWindow(dataMap, url) {
     { ausmt_id: "nz.gamma.G1", format: "mth5", url: "h5/gamma/G1.h5", size: 1000000 },
   ], bundles: [] };
   const xmlBtn = doc.getElementById("dlZipXml"), h5Btn = doc.getElementById("dlZipH5"), ediBtn = doc.getElementById("dlZip");
-  const rowName = b => b.parentNode.querySelector(".dlname").textContent;
-  const rowMeta = b => b.parentNode.querySelector(".dlmeta").textContent;
+  const rowName = b => b.querySelector(".pname").textContent;
+  const rowMeta = b => b.querySelector("small").textContent;
   ok(xmlBtn, "SELFMT: the Download block must offer an EMTF XML zip row (#dlZipXml)");
   ok(h5Btn, "SELFMT: the Download block must offer an MTH5 zip row (#dlZipH5)");
   ok(typeof xmlBtn.onclick === "function" && typeof h5Btn.onclick === "function",

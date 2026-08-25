@@ -136,22 +136,22 @@
   select,input[type=text]{width:100%;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:13px}
   select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--copper);outline-offset:1px}
   .selbox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:12px}
-  /* Lane B: the Download block. Rows are name / scope-priced meta / one action; group headers carry
-     a serving gloss. A disabled action is a level with nothing in the current scope (or an index
-     still in flight) and must read as inert rather than as merely unpressed. */
-  .dlbox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:12px}
-  .dlbox .scopeline{margin:0 0 8px;font-family:var(--mono)}
-  .dlgroup{display:flex;align-items:baseline;justify-content:space-between;margin:12px 0 6px}
-  .dlgroup:first-of-type{margin-top:0}
-  .dlgroup h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--text);font-weight:600}
-  .dlgroup .gloss{font-size:11px;color:var(--muted)}
-  .dlrows{display:flex;flex-direction:column}
-  .dlrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
-  .dlrow:first-child{border-top:0}
-  .dlrow .dlname{font-size:13px;flex:0 0 auto}
-  .dlrow .dlmeta{font-family:var(--mono);font-size:12px;color:var(--muted);flex:1 1 auto;text-align:right}
-  .dlrow button{flex:0 0 auto;padding:6px 10px}
-  .dlrow button[disabled]{opacity:.45;cursor:default}
+  /* Lane B: the Download block speaks the drawer's Related-products tile language (.prod/.pdot/
+     .sechead/.rolechip, reused verbatim). The whole tile is the action; the small line carries the
+     scope-priced figure. */
+  .dlbox{background:transparent;border:0;padding:0}
+  .dlbox .scopeline{margin:0 0 4px;font-family:var(--mono)}
+  .dlbox .sechead{margin-top:14px}
+  .dltiles{display:flex;flex-direction:column;gap:6px}
+  .dltiles .prod{width:100%;text-align:left;font-family:inherit;color:var(--text);font-size:12px}
+  .dltiles .prod>div{flex:1;min-width:0}
+  .dltiles .prod[disabled]{opacity:.45;cursor:default}
+  .dltiles .prod[disabled]:hover{border-color:var(--line)}
+  /* Advanced search (Browse): the expandable refinement stack under Data type. */
+  details.advanced{border:1px solid var(--line);border-radius:6px;padding:2px 10px 10px}
+  details.advanced>summary{cursor:pointer;padding:9px 0;font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);user-select:none}
+  details.advanced[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
+  details.advanced h2{margin-top:12px}
   .selbox .big{font-family:var(--mono);font-size:26px;font-weight:700}
   .selbox .hint{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}
   .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
@@ -711,11 +711,6 @@
   </div>
   <div id="browseMode" class="railmodepane">
   <section data-views="both">
-    <h2>Find</h2>
-    <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
-    <div id="findResults" class="findresults" role="listbox"></div>
-  </section>
-  <section data-views="both">
     <h2>Data type</h2>
     <fieldset class="typegrid" id="typeBoxes">
       <label title="Long-period MT: longer periods, deeper structure (e.g. AusLAMP-style fluxgate deployments)"><input type="checkbox" value="LPMT" checked><span class="dot" style="background:var(--lpmt)"></span>Long period</label>
@@ -732,6 +727,11 @@
        collections; #collGroup:empty hides it otherwise. Element ids and the group-toggle behaviour are
        unchanged — only the mount point moved out of #tree. -->
   <section data-views="both">
+    <details class="advanced" id="advSearch">
+      <summary>Advanced search</summary>
+    <h2>Find</h2>
+    <input type="text" id="find" placeholder="station, survey or collection…" aria-label="Find a station, survey or collection" autocomplete="off">
+    <div id="findResults" class="findresults" role="listbox"></div>
     <h2>Data available</h2>
     <!-- Lane B (D1): availability filtering is a single-select VIEWING filter beside its sibling,
          data type. "Transfer functions downloadable here" is the s.ediAvail licence predicate the
@@ -748,15 +748,15 @@
       <option value="level1_netcdf">Level 1 NetCDF</option>
     </select>
     <div class="fieldnote">Selecting a level keeps the stations whose files are ready to fetch.</div>
-  </section>
-  <section data-views="both">
     <h2 id="yearRangeHead" title="Filters on each survey's declared acquisition year(s)">Year range</h2>
     <div class="yearrange">
       <input type="number" id="yearFrom" aria-label="From year" inputmode="numeric">
       <span>–</span>
       <input type="number" id="yearTo" aria-label="To year" inputmode="numeric">
     </div>
+
     <div class="fieldnote">Filters on each survey's declared year(s); surveys with no declared date are hidden once a year is set.</div>
+    </details>
   </section>
   <div class="collgroup" id="collGroup" data-views="both"></div>
   <section data-views="both" id="treeSection">
@@ -794,14 +794,18 @@
     <h2>Download</h2>
     <div class="dlbox">
       <div class="fieldnote scopeline" id="scopeLine"></div>
-      <div class="dlgroup"><h3>Level 2 · transfer functions</h3><span class="gloss">served by AusMT</span></div>
-      <div class="dlrows">
-        <div class="dlrow"><span class="dlname">EDI (zip)</span><span class="dlmeta" id="dlZipMeta"></span><button class="primary" id="dlZip" disabled>Download</button></div>
-        <div class="dlrow"><span class="dlname">EMTF XML (zip)</span><span class="dlmeta" id="dlZipXmlMeta"></span><button id="dlZipXml" disabled>Download</button></div>
-        <div class="dlrow"><span class="dlname">MTH5 (zip)</span><span class="dlmeta" id="dlZipH5Meta"></span><button id="dlZipH5" disabled>Download</button></div>
+      <!-- Owner ruling (Lane B polish): the tiles speak the drawer's Related-products language -
+           .prod/.pdot/.sechead/.rolechip verbatim, whole tile is the action, a level with nothing
+           in scope is .dis with a hollow dot (present, priced at nothing), an in-flight index is
+           .dis with the unknown dot. exports.js paintDownloadRows() owns every state. -->
+      <div class="sechead">Level 2 · transfer functions <span class="rolechip">served by AusMT</span></div>
+      <div class="dltiles">
+        <button type="button" class="prod" id="dlZip" disabled><span class="pdot"></span><div><span class="pname">EDI (zip)</span> <span class="rolechip">source archive</span><small id="dlZipMeta"></small></div></button>
+        <button type="button" class="prod" id="dlZipXml" disabled><span class="pdot"></span><div><span class="pname">EMTF XML (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipXmlMeta"></small></div></button>
+        <button type="button" class="prod" id="dlZipH5" disabled><span class="pdot"></span><div><span class="pname">MTH5 (zip)</span> <span class="rolechip">AusMT-derived</span><small id="dlZipH5Meta"></small></div></button>
       </div>
-      <div class="dlgroup"><h3>Time series</h3><span class="gloss">at NCI, handed off</span></div>
-      <div class="dlrows" id="tsSeg" role="group" aria-label="Time series by level"></div>
+      <div class="sechead">Time series <span class="rolechip">at NCI, handed off</span></div>
+      <div class="dltiles" id="tsSeg" role="group" aria-label="Time series by level"></div>
       <div class="fieldnote" id="tsSegNote"></div>
     </div>
   </section>

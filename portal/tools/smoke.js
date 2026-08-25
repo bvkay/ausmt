@@ -72,7 +72,8 @@ function localStorageStub() {
 }
 const ctx = {
   document: {
-    getElementById: () => elStub(), createElement: () => elStub(), addEventListener() {},
+    getElementById: () => elStub(), createElement: () => elStub(),
+    createTextNode: () => ({ textContent: "" }), addEventListener() {},
     body: elStub(), querySelector: () => null,
     querySelectorAll: sel => (/typeBoxes/.test(sel) ? [{ value: "LPMT" }, { value: "BBMT" }, { value: "AMT" }, { value: "GDS" }, { value: "other" }] : []),
   },

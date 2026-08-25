@@ -472,12 +472,22 @@ function paintL2Rows(st){
     // as manifest rows. Sizes claim nothing without a manifest ("~0 B" would price the scope at
     // free when the truth is unknown).
     const can=fmt==="edi"?nEdi>0:(known&&count[fmt]>0);
-    if(b)b.disabled=!can;
-    if(!meta)return;
-    const n=(known&&st.length)?total[fmt]:null;
     const c=fmt==="edi"?nEdi:count[fmt];
-    meta.textContent=!st.length?"":(c?c+" station"+(c===1?"":"s")+(n?" · ~"+fmtBigBytes(n):""):"nothing in this scope");
+    const n=(known&&st.length)?total[fmt]:null;
+    _tileState(b,can?"ok":"none");
+    if(!meta)return;
+    meta.textContent=!st.length?"":(c?"Download · "+c+" station"+(c===1?"":"s")+(n?" · ~"+fmtBigBytes(n):""):"nothing in this scope");
     meta.title=n?base+": about "+fmtBigBytes(n)+" across "+c+" station"+(c===1?"":"s")+", estimated from the download index.":"";});
+}
+// One tile's visual state, in the drawer's Related-products language: ok = live (green dot),
+// none = present but priced at nothing (dis + hollow dot), wait = index in flight (dis + unknown dot).
+function _tileState(b,state){
+  if(!b)return;
+  b.disabled=state!=="ok";
+  if(b.classList)b.classList.toggle("dis",state!=="ok");
+  const d=b.querySelector?b.querySelector(".pdot"):null;
+  if(d){d.classList.toggle("hollow",state==="none");
+    d.style.background=state==="ok"?"var(--ok)":(state==="wait"?"var(--unk)":"transparent");}
 }
 // The time-series rows: one per level token, priced over the scope, action = that level's fetch
 // list. Two-phase honesty carries over from the retired chooser: in flight is busy-and-disabled
@@ -486,21 +496,22 @@ function paintL2Rows(st){
 function paintTsRows(st){
   const seg=document.getElementById("tsSeg");if(!seg||!seg.querySelectorAll)return;
   if(!seg.children.length&&typeof TS_LEVELS!=="undefined")TS_LEVELS.forEach(([tok,label,gloss])=>{
-    const row=document.createElement("div");row.className="dlrow";
-    const name=document.createElement("span");name.className="dlname";name.textContent=label;
-    const meta=document.createElement("span");meta.className="dlmeta";
-    const b=document.createElement("button");b.type="button";b.textContent="Download list";
+    const b=document.createElement("button");b.type="button";b.className="prod";
     b.dataset.ts=tok;b.dataset.gloss=gloss;b.disabled=true;
-    row.appendChild(name);row.appendChild(meta);row.appendChild(b);seg.appendChild(row);});
+    // Template markup, drawer-style; TS_LEVELS labels are the module's own constants, not data.
+    b.innerHTML='<span class="pdot"></span><div><span class="pname"></span> <span class="rolechip">source archive</span><small class="dlmeta"></small></div>';
+    const name=b.querySelector?b.querySelector(".pname"):null;
+    if(name)name.textContent=label;
+    seg.appendChild(b);});
   const known=(typeof tsAccessKnown==="function")&&tsAccessKnown();
   const ix=(typeof TSACC!=="undefined"&&TSACC)||{};
   const anyPublished=known&&Object.keys(ix).length>0;
   [...seg.querySelectorAll("button")].forEach(b=>{
     const tok=b.dataset.ts;let n=0,bytes=0;
     if(known)st.forEach(s=>{const lv=tsRoutesFor(s.ausmt_id);const e=lv&&lv[tok];if(e){n++;bytes+=(e.bytes||0);}});
-    const meta=b.parentNode&&b.parentNode.querySelector?b.parentNode.querySelector(".dlmeta"):null;
-    if(meta)meta.textContent=!known?"":(n?n+" station"+(n===1?"":"s")+(bytes?" · "+fmtBigBytes(bytes):""):"nothing in this scope");
-    b.disabled=!known||!n;
+    const meta=b.querySelector?b.querySelector(".dlmeta"):null;
+    if(meta)meta.textContent=!known?"":(n?"Download list · "+n+" station"+(n===1?"":"s")+(bytes?" · "+fmtBigBytes(bytes):"")+" · via an AusMT redirect to NCI":"nothing in this scope");
+    _tileState(b,known?(n?"ok":"none"):"wait");
     b.setAttribute("aria-busy",known?"false":"true");
     b.title=known?(n?b.dataset.gloss+" · "+n+" station"+(n===1?"":"s")+" this deployment can hand off"
                     :(anyPublished?b.dataset.gloss:b.dataset.gloss+" · "+TS_NONE_HINT))
