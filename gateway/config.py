@@ -180,10 +180,46 @@ def load_config(environ: dict[str, str] | None = None) -> Config:
     )
 
 
+# Numeric knobs whose zero or negative value is never a legitimate operator intent, as
+# (field, env var, minimum, maximum). Each one fails INVISIBLY at runtime if it is allowed through:
+# max_upload_mb=0 is a universal 413, max_inflight=0 a universal 429, session_ttl_s=0 an infinite
+# login bounce (total curator lockout), and a zeroed K1 daily cap disables self-serve issuance behind
+# its by-design neutral 202 - while /gateway/healthz, the compose healthcheck and the portal probe all
+# keep reporting green. Issuance is disabled by leaving SMTP unconfigured (mail_configured, which the
+# startup log states), never by zeroing a cap. Ports are checked at both ends: 0 and 65536 are not
+# ports. The check belongs at startup for the same reason the key guard does - loud and early.
+_RANGES: tuple[tuple[str, str, int, int], ...] = (
+    ("max_upload_mb", "AUSMT_MAX_UPLOAD_MB", 1, 1024 * 1024),
+    ("max_inflight", "AUSMT_MAX_INFLIGHT", 1, 1_000_000),
+    ("max_per_day", "AUSMT_MAX_PER_DAY", 1, 1_000_000),
+    ("job_timeout_s", "AUSMT_JOB_TIMEOUT_S", 1, 86_400),
+    ("clamd_port", "AUSMT_CLAMD_PORT", 1, 65_535),
+    ("session_ttl_s", "AUSMT_SESSION_TTL_S", 1, 365 * 86_400),
+    ("login_max_attempts", "AUSMT_LOGIN_MAX_ATTEMPTS", 1, 1_000_000),
+    ("login_window_s", "AUSMT_LOGIN_WINDOW_S", 1, 365 * 86_400),
+    ("edit_timeout_s", "AUSMT_EDIT_TIMEOUT_S", 1, 86_400),
+    ("smtp_port", "AUSMT_SMTP_PORT", 1, 65_535),
+    ("key_request_per_email_daily", "AUSMT_KEYREQ_PER_EMAIL_DAILY", 1, 1_000_000),
+    ("key_request_per_ip_daily", "AUSMT_KEYREQ_PER_IP_DAILY", 1, 1_000_000),
+    ("key_request_global_daily", "AUSMT_KEYREQ_GLOBAL_DAILY", 1, 1_000_000),
+    ("email_verified_key_expiry_days", "AUSMT_SELFSERVE_KEY_EXPIRY_DAYS", 1, 3_650),
+    ("email_verified_key_allowance", "AUSMT_SELFSERVE_KEY_ALLOWANCE", 1, 1_000_000),
+)
+
+
 def fail_closed_startup(cfg: Config) -> None:
-    """Refuse to start on a missing/short submit key (design §3). Raises SystemExit — the port is
-    never bound, so there is no window where the gateway accepts uploads with a weak key."""
+    """Refuse to start on a missing/short submit key (design §3) or an out-of-range numeric knob
+    (_RANGES). Raises SystemExit, so the port is never bound and there is no window where the gateway
+    accepts uploads with a weak key or serves a wall of 413/429 while its health surfaces read green.
+    The key is checked FIRST so a deploy that is both key-less and mis-tuned names the secret."""
     if len(cfg.submit_key) < _MIN_KEY_LEN:
         raise SystemExit(
             f"AUSMT_SUBMIT_KEY must be set and >= {_MIN_KEY_LEN} chars (fail closed, design §3)"
         )
+    for field, env_name, low, high in _RANGES:
+        value = getattr(cfg, field)
+        if not low <= value <= high:
+            raise SystemExit(
+                f"{env_name} ({field}) must be between {low} and {high}, got {value} "
+                "(fail closed: an out-of-range knob breaks the gateway silently)"
+            )

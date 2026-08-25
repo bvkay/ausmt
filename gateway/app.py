@@ -3025,8 +3025,16 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
         # gate and the neutral 202 hid it (found live 2026-07-24 — the two halves were built against
         # an encoding-ambiguous contract). A public endpoint parses defensively: JSON when declared,
         # urlencoded/multipart otherwise, and any parse failure degrades to "" (the neutral path).
+        # Cap the body AS BYTES ARRIVE before any parse: this public route read one email address
+        # with no ceiling at any layer, and a chunked body declares no length, so only the running
+        # byte count can stop a memory-amplifier body (same guard as the sibling /gateway/submit; see
+        # gateway/upload.py). read_body_capped caches the CAPPED bytes, so the json()/form() below
+        # parse the bounded body. An oversize body degrades to the SAME neutral 202 as a bad body: a
+        # 413 here would be an enumeration oracle (too-large vs malformed), and not buffering it has
+        # already beaten the DoS.
         email = ""
         try:
+            await upload_intake.read_body_capped(request)
             ctype = (request.headers.get("content-type") or "").lower()
             if "json" in ctype:
                 data = await request.json()
@@ -3035,7 +3043,7 @@ def create_app(cfg: Config | None = None, scanner=None, git_runner=None, edit_ru
             else:
                 form = await request.form()
                 email = str(form.get("email") or "")
-        except Exception:  # noqa: BLE001 -- ANY body-parse failure on this public endpoint degrades to the neutral path
+        except Exception:  # noqa: BLE001 -- ANY body read/parse failure (oversize included) degrades to the neutral path
             email = ""
         # handle_request_key does blocking DB + SMTP work; this route went async to read the body,
         # so hop to the threadpool exactly like the other async handlers (the burst-must-not-stall-

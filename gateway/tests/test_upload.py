@@ -9,8 +9,11 @@ response code echoing itself.
 from __future__ import annotations
 
 import asyncio
+import tempfile
 
 import pytest
+from starlette.formparsers import MultiPartParser
+from starlette.requests import Request
 
 from gateway import states
 from gateway.tests.conftest import (
@@ -380,4 +383,78 @@ def test_concurrent_submits_respect_inflight_cap(tmp_path):
         rejected = sum(1 for c in codes if c == 429)
         assert accepted <= 3, f"cap bypassed: {codes}"
         assert rejected >= 5, f"expected >=5 rejections: {codes}"
+    run(_body())
+
+
+# --------------------------------------------------------------------------------------------------
+# The intake's spool pinning under concurrency. max_inflight defaults to 8, so two parses overlapping
+# is a supported mode, not a hypothetical, and a spool that escapes to the OS tempdir defeats the
+# only headroom gate the upload path has (_free_bytes(incoming_dir) in handle_submit).
+# --------------------------------------------------------------------------------------------------
+def _queued_request(content_type: str) -> tuple[Request, asyncio.Queue]:
+    """A REAL starlette Request whose body arrives from a queue the test controls, so two parses can
+    be interleaved deterministically instead of raced."""
+    queue: asyncio.Queue = asyncio.Queue()
+    scope = {"type": "http", "method": "POST", "path": "/gateway/submit",
+             "headers": [(b"content-type", content_type.encode("latin-1"))]}
+    return Request(scope, queue.get), queue
+
+
+async def _feed(queue: asyncio.Queue, body: bytes, chunk: int = 64 * 1024) -> None:
+    for i in range(0, len(body), chunk):
+        await queue.put({"type": "http.request", "body": body[i:i + chunk], "more_body": True})
+    await queue.put({"type": "http.request", "body": b"", "more_body": False})
+
+
+def test_concurrent_parses_never_spool_outside_the_spool_dir(tmp_path, monkeypatch):
+    """Two overlapping parse_capped calls must EACH spool onto their own measured volume. A rolled-over
+    SpooledTemporaryFile is unlinked the instant it is created, so the observable used here is the OS
+    tempdir pointed at a path that does not exist: a part that rolls over anywhere but spool_dir cannot
+    be created at all, and a part that honours spool_dir reads back whole.
+
+    Scope: gateway.upload.parse_capped's spool pinning under concurrency, plus the invariant that the
+    parse leaves starlette's module namespace exactly as it found it. FAILS IF the pinning is
+    per-process rather than per-parse. RED against the module-global monkeypatch: parse B raised
+    "FileNotFoundError: [Errno 2] No such file or directory: '<missing>/tmp...'" because parse A's
+    finally had already restored the real stdlib factory, and starlette.formparsers.SpooledTemporaryFile
+    was left holding parse A's leaked closure afterwards.
+    """
+    from gateway import upload as upload_intake
+    import starlette.formparsers as fp
+
+    # Any rollover that is NOT pinned to a spool_dir lands here, and this directory never exists.
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "unmeasured-os-tmpdir"))
+    spool_a, spool_b = tmp_path / "incoming-a", tmp_path / "incoming-b"
+    # Each part must exceed the parser's in-memory spool budget so it genuinely rolls over to disk.
+    assert MultiPartParser.spool_max_size <= 1024 * 1024
+    payload_a = b"A" * (1536 * 1024)
+    payload_b = b"B" * (1536 * 1024)
+    cap = 8 * 1024 * 1024
+
+    async def _body():
+        body_a, ctype_a = _multipart_body(payload_a)
+        body_b, ctype_b = _multipart_body(payload_b, boundary=b"----ausmtsecondboundary")
+        req_a, queue_a = _queued_request(ctype_a)
+        req_b, queue_b = _queued_request(ctype_b)
+
+        task_a = asyncio.ensure_future(upload_intake.parse_capped(req_a, cap, spool_a))
+        task_b = asyncio.ensure_future(upload_intake.parse_capped(req_b, cap, spool_b))
+        await asyncio.sleep(0.05)  # both parses are now inside parse_capped, blocked on their stream
+
+        # A runs to completion while B is still mid-parse: the window where a per-process pin is torn
+        # down under B's feet.
+        await _feed(queue_a, body_a)
+        form_a = await task_a
+        await _feed(queue_b, body_b)
+        try:
+            form_b = await task_b
+        except FileNotFoundError as exc:
+            raise AssertionError(
+                f"the second concurrent parse spooled outside its spool_dir, into the OS tempdir: {exc}"
+            ) from exc
+
+        assert await form_a.file.read() == payload_a
+        assert await form_b.file.read() == payload_b
+        assert fp.SpooledTemporaryFile is tempfile.SpooledTemporaryFile, \
+            "the parse left a factory behind in starlette's module namespace"
     run(_body())
