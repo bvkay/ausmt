@@ -1739,8 +1739,8 @@ async function bootFreshWindow(dataMap, url) {
     "engine encodes it (the `C5 [REMOTE].zip` case), got " + JSON.stringify(_a1raw.archive_url_comment));
   ok(_a1raw.bytes === 4000000 && _a1raw.filename === "A1 [REMOTE].zip",
     "each row states the size and the archive's own filename, got " + JSON.stringify([_a1raw.bytes, _a1raw.filename]));
-  ok(/wget -c/.test(_hd.doc.note) && /follows the redirects/i.test(_hd.doc.note) && /curl needs -L/i.test(_hd.doc.note),
-    "D3: the file must say wget -c follows the redirects (a re-run resumes) and curl needs -L, got " + JSON.stringify(_hd.doc.note));
+  ok(/wget -c/.test(_hd.doc.note) && /curl -L -C -/.test(_hd.doc.note) && /resumes on a re-run/i.test(_hd.doc.note),
+    "D3: the file must name the resumable fetch commands for both tools, got " + JSON.stringify(_hd.doc.note));
   ok(/hosts none of these files/i.test(_hd.doc.note),
     "the file must restate that AusMT hosts nothing it routes to, got " + JSON.stringify(_hd.doc.note));
   ok(_hd.doc.scope && _hd.doc.scope.stations === 4 && _hd.doc.scope.levels === "all",
@@ -1760,11 +1760,17 @@ async function bootFreshWindow(dataMap, url) {
     "a within-cap row states the direct mode, got " + JSON.stringify(tsMeta("raw_packed")));
   const handed = [];
   win.tsOpenRoute = u => handed.push(u);
-  const _savedBefore = savedBlobs.length;
+  const _savedBefore = savedBlobs.length, _zmarkTs = zipEntries.length;
   tsBtn("raw_packed").click();
+  await new Promise(r => setTimeout(r, 0));          // the handler is async (the metadata pack awaits SCI_READY)
   ok(handed.length === 2 && handed.every(u => /\/go\/ts\/[^/]+\/[^/]+\/raw_packed$/.test(u)),
     "a within-cap click hands each ROUTE to the browser, got " + JSON.stringify(handed));
   ok(savedBlobs.length === _savedBefore, "the direct path saves no list file");
+  // The metadata & citation pack travels with the hand-off (owner, 2026-08-25): citations, the
+  // station table, the geometry and the hand-off record itself, zipped beside the data.
+  const _tsPack = zipEntries.slice(_zmarkTs).map(e => e.name);
+  ["CITATIONS.txt", "citations.bib", "citations.ris", "stations.csv", "selection.geojson", "handoff.json"]
+    .forEach(n => ok(_tsPack.indexOf(n) >= 0, "the hand-off metadata pack is missing " + n + ", got " + JSON.stringify(_tsPack)));
   const snackEl = doc.getElementById("snackbar");
   ok(snackEl && !snackEl.classList.contains("hidden"), "the hand-off must confirm itself in the snackbar");
   ok(/Handed 2 files to your browser - /.test(snackEl.textContent) &&
@@ -1778,6 +1784,7 @@ async function bootFreshWindow(dataMap, url) {
   ok(/^Download list · 2 stations/.test(tsMeta("raw_packed")),
     "an over-cap row states the list mode, got " + JSON.stringify(tsMeta("raw_packed")));
   tsBtn("raw_packed").click();
+  await new Promise(r => setTimeout(r, 0));
   ok(savedBlobs.length === _savedBefore + 1, "the over-cap path saves the list document");
   ok(/Download list ready - 2 files, /.test(snackEl.textContent),
     "the list confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
@@ -1787,8 +1794,8 @@ async function bootFreshWindow(dataMap, url) {
   // scrollable, with its run-in-a-terminal instructions - and the copy happens from the dialog,
   // so a reader sees what lands on their clipboard.
   const showBtn = snackEl.querySelector("button");
-  ok(showBtn && /wget/i.test(showBtn.textContent),
-    "the confirmation must offer the wget command, got " + (showBtn && showBtn.textContent));
+  ok(showBtn && /terminal command/i.test(showBtn.textContent),
+    "the confirmation must offer the terminal command, got " + (showBtn && showBtn.textContent));
   showBtn.click();
   const wgetModal = doc.getElementById("wgetModal"), wgetCmd = doc.getElementById("wgetCmd");
   ok(wgetModal && !wgetModal.classList.contains("hidden"), "the wget dialog must open from the snackbar action");
@@ -1801,20 +1808,30 @@ async function bootFreshWindow(dataMap, url) {
     "the dialog must carry Linux/macOS/Windows tabs, got " + osTabs.map(b => b.dataset.os).join());
   ok(osTabs.filter(b => b.classList.contains("on")).length === 1,
     "exactly one tab is pre-selected (the detected platform; jsdom's UA reports the HOST kernel, so which one is host-dependent)");
+  osTabs[0].click();
   ok(/^wget -c -q --show-progress --content-disposition -i -/.test(wgetCmd.textContent),
-    "the unix command must resume on re-run (-c) and show clean per-file progress, got " +
+    "the Linux tab must carry the resumable wget here-doc form, got " +
     JSON.stringify(wgetCmd.textContent.split("\n")[0]));
   ok(!/^#/.test(wgetCmd.textContent),
     "no leading # header: interactive zsh has no comments by default, so a pasted header line errors");
+  // macOS and Windows carry the CURL form: preinstalled on both (no third-party binary, no
+  // Homebrew), output names as explicit -o pairs from the index's own filenames, -C - resume.
+  osTabs[1].click();
+  ok(/^curl -L -C - -o "/.test(wgetCmd.textContent) && wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
+    "the macOS tab must carry the curl -o-pairs form, got " + JSON.stringify(wgetCmd.textContent.slice(0, 60)));
+  ok(/preinstalled on macOS/.test(doc.getElementById("wgetOsNote").textContent),
+    "the macOS tab must say nothing needs installing");
   osTabs[2].click();
-  ok(/^wget\.exe -c -q --show-progress --content-disposition "https?:/.test(wgetCmd.textContent) &&
+  ok(/^curl\.exe -L -C - -o "/.test(wgetCmd.textContent) &&
+     (wgetCmd.textContent.match(/-o "/g) || []).length === 2 &&
      wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
-    "the Windows tab must carry the args form (wget.exe, no here-doc), got " +
+    "the Windows tab must carry curl.exe with one -o pair per file, got " +
     JSON.stringify(wgetCmd.textContent.slice(0, 80)));
-  ok(/winget install/.test(doc.getElementById("wgetOsNote").textContent),
-    "the Windows tab must carry its install line");
+  ok(/preinstalled on Windows 10/.test(doc.getElementById("wgetOsNote").textContent) &&
+     !/winget|JernejSimoncic/.test(doc.getElementById("wgetOsNote").textContent),
+    "the Windows tab must need no third-party install");
   doc.getElementById("wgetCopy").click();
-  ok(clipboard.length === 1 && clipboard[0] === wgetCmd.textContent && /wget\.exe/.test(clipboard[0]),
+  ok(clipboard.length === 1 && clipboard[0] === wgetCmd.textContent && /curl\.exe/.test(clipboard[0]),
     "the dialog's copy must put EXACTLY the ACTIVE tab's command on the clipboard");
   osTabs[0].click();
   clipboard.length = 0;
