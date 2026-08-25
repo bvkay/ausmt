@@ -1,14 +1,18 @@
 name: gateway-ci
 
 # The gateway (submission intake + antivirus + curator publish flow) is a first-class subsystem
-# that took real community submissions this week, yet before C35a NO workflow ran its 179-test
-# suite and ruff excluded it entirely (code-health review F1). This job closes that hole: it runs
-# the gateway unit suite and lints gateway/ on every gateway-touching push/PR, so a gateway source
+# that took real community submissions this week, yet before C35a NO workflow ran its unit suite
+# and ruff excluded it entirely (code-health review F1). This job closes that hole: it runs the
+# gateway unit suite and lints gateway/ on every gateway-touching push/PR, so a gateway source
 # change is TESTED before it can ship inside an unrelated deploy-triggered image rebuild.
 #
-# The command below is byte-identical to the one proven green locally under the ausmt env
-# (179 passed, ~10s, 0 skips) — the suite drives async bodies via asyncio.run(), so no
-# pytest-asyncio plugin is needed (see gateway/requirements-dev.txt).
+# The pytest command below covers gateway/tests AND deploy/tests. Measured on the dev box
+# (2026-08-25, full engine stack installed): ~1,220 tests, ~4 minutes. This header claimed "179
+# passed, ~10s" long after both had trebled, so read the figures as a dated scale that needs
+# re-measuring, not a contract. The suite drives async bodies via asyncio.run(), so no
+# pytest-asyncio plugin is needed (see gateway/requirements-dev.txt). The runner is STACK-LESS (no
+# mt_metadata), so the same collection skips the engine-stack pins accounted for at the tripwire
+# step below: a 0-skip run is a dev-box property, not this lane's.
 #
 # PATH-SCOPED (ADR-001 monorepo): runs when the gateway/ OR deploy/ subtree (or this workflow)
 # changes. deploy/ is here because the deploy unit tests (deploy/tests) were wired into this lane's
@@ -78,17 +82,31 @@ jobs:
       # From the REPO ROOT (not gateway/) so `import gateway...` resolves as a package, exactly as
       # the command that passed locally. -rs surfaces every skip reason in the log.
       #
+      # THE VALIDATOR ARM IS DECLARED HERE, NOT INHERITED FROM STEP ORDER. AUSMT_FORCE_VENDORED_VALIDATOR=1
+      # pins the cross-repo validator oracles to the COMMITTED vendored copy (see
+      # gateway/tests/conftest.py::resolve_validator_dir). The "Route-table drift gate" step BELOW clones
+      # ausmt-surveys into $GITHUB_WORKSPACE/../ausmt-surveys, which is EXACTLY the directory that resolver
+      # treats as the live sibling: without this flag the validator ~120 oracles compare against would be
+      # decided by which step happens to run first, so reordering these two steps, adding a second pytest
+      # invocation after the clone, or reusing a workspace would move them off the sha-pinned contract with
+      # nothing red. gateway/tests/test_validator_resolution.py asserts this env var is set here.
+      #
       # C35b/D5: pipe the report through the skip tripwire with the gateway lane's OWN allow-list
-      # (--allow REPLACES the engine built-in). After C35b/D3 the validator oracles run via the vendored
-      # copy (no longer sibling-gated skips), so the ONLY legitimate skip in this stack-less gateway env
-      # is the mt_metadata-needing engine-preview oracle (test_runner.py's real-engine e2e). tee keeps the
-      # full pytest output in the human log AND feeds the tripwire; `set -o pipefail` so a pytest FAILURE
-      # (not just a skip regression) still reds the lane through the pipe. Any OTHER skip — e.g. a
-      # validator oracle regressing to skip, the exact F7 hole — fails the lane loudly.
+      # (--allow REPLACES the engine built-in). That one reason excuses every pin that needs the real
+      # engine stack (mt_metadata), which this runner does not install: 22 tests across four files as of
+      # 2026-08-25 - test_runner.py's two real-engine e2e oracles, test_collections_runner.py's two engine
+      # parity pins, and the module-scoped engine-corpus fixtures behind test_c43_stage2a_js_parity.py (3)
+      # and test_c43_hub_js_parity.py (15). ci_check_skips.py matches by SUBSTRING, so a new test joins the
+      # allow-list simply by copying the string: keep it for engine-stack absence and nothing else. tee
+      # keeps the full pytest output in the human log AND feeds the tripwire; `set -o pipefail` so a pytest
+      # FAILURE (not just a skip regression) still reds the lane through the pipe. Any OTHER skip - e.g. a
+      # validator oracle regressing to skip, the exact F7 hole - fails the lane loudly.
       # deploy/tests rides this lane too (C40): the reconcile.sh decision-logic tests are plain
       # pytest + sh + git, all present on the runner — including flock(1), so the lock-held case that
       # skips on a Windows dev box RUNS here (no new allow-list entry; a skip would trip the wire).
       - name: Gateway unit tests (+ loud skip accounting)
+        env:
+          AUSMT_FORCE_VENDORED_VALIDATOR: "1"
         run: |
           set -o pipefail
           python -m pytest -q -rs gateway/tests deploy/tests | tee gateway-pytest.out
@@ -105,6 +123,12 @@ jobs:
       # deploy-images.yml's validator clone, same no-silent-skip posture: with the var set, a clone
       # failure is a hard error and the check gates the lane; with it unset the check CANNOT run, and
       # that is stated as a warning annotation and on the job summary rather than passing quietly.
+      #
+      # COUPLING: DEST below is the SAME directory gateway/tests/conftest.py resolves as the live
+      # validator sibling, so this clone makes a sibling validator appear mid-job. The unit-test step
+      # above is insulated from that by AUSMT_FORCE_VENDORED_VALIDATOR=1, and only by that - do not run
+      # pytest after this step, and do not move this step above it, without deciding on purpose which
+      # validator the oracles should compare against.
       - name: Route-table drift gate (gen_ts_routes.py --check)
         env:
           SURVEYS_URL: ${{ vars.AUSMT_SURVEYS_URL }}

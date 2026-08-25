@@ -17,16 +17,43 @@ from gateway.tests.conftest import app_client, run
 _CADDYFILE = Path(__file__).resolve().parents[2] / "deploy" / "docker" / "caddy" / "Caddyfile"
 
 
+def _routes_outside_gateway(app) -> set[str]:
+    # THE COMPLEMENT is the pin: pre-filtering to /gateway-prefixed paths and then spot-checking a
+    # few of them cannot see the failure this file exists to catch, because the offending route is
+    # exactly the one the filter drops. create_app builds FastAPI with docs_url/redoc_url/
+    # openapi_url=None, so a healthy app has NO route outside the prefix and this set is empty.
+    return {p for p in (getattr(r, "path", "") for r in app.routes) if not p.startswith("/gateway")}
+
+
 def test_app_routes_are_gateway_prefixed(tmp_path):
-    # Every non-default route the app serves starts with /gateway (submit/status/healthz). If a
-    # future refactor drops the prefix, the Caddy `handle` (no strip) would then double-404 — this
-    # pins the app side of the contract.
+    # Every route the app serves starts with /gateway (submit/status/healthz and the curator tree).
+    # If a future refactor drops the prefix, the Caddy `handle` (no strip) would then double-404 -
+    # this pins the app side of the contract, in both halves: the named routes are present AND no
+    # route sits outside the prefix.
     async def _body():
         async with app_client(tmp_path) as (_client, app, _gw, _cfg):
             paths = {r.path for r in app.routes if getattr(r, "path", "").startswith("/gateway")}
             assert "/gateway/submit" in paths
             assert "/gateway/healthz" in paths
             assert any(p.startswith("/gateway/status") for p in paths)
+            assert _routes_outside_gateway(app) == set(), (
+                "route(s) registered outside /gateway: every path the app serves must carry the "
+                "prefix Caddy forwards, and the API docs routes are disabled on purpose")
+    run(_body())
+
+
+def test_route_prefix_pin_sees_an_unprefixed_route(tmp_path):
+    # Falsifiability for the pin above (Invariant 10): register an unprefixed route on the REAL app
+    # and prove the check CATCHES it. Goes RED against the pre-filtered form the pin shipped with,
+    # which asked only whether three known /gateway paths were present and so stayed green while an
+    # unreachable-through-Caddy route sat in the table beside them.
+    async def _body():
+        async with app_client(tmp_path) as (_client, app, _gw, _cfg):
+            @app.get("/curator/oops")
+            def _oops():  # pragma: no cover - registered only to be detected
+                return {}
+            assert "/curator/oops" in _routes_outside_gateway(app), (
+                "the route-prefix pin cannot see an unprefixed route, so it cannot fail on one")
     run(_body())
 
 

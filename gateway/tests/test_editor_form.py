@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from gateway import editor_form as ef
+from gateway.tests.conftest import require_validator_dir, resolve_validator_dir
 
 
 def _snap(section: str, value) -> dict:
@@ -844,36 +845,29 @@ def test_related_identifiers_vocab_matches_vendored_validator():
 
 
 def _load_credit_validator():
-    """The surveys validator that carries the credit vocab, from the first candidate that HAS it: the
-    vendored copy (once the surveys-merge sequencing refreshes it - then this runs unconditionally in CI),
-    else the live sibling checkout at either monorepo layout. None when only a pre-credit snapshot exists
-    (the two-clones caveat: the credit vocab is not yet in any reachable validator)."""
-    from gateway.tests.conftest import SIBLING_VALIDATOR_DIR
-    repo_root = Path(__file__).resolve().parents[2]
-    candidates = [
-        _VENDORED_VALIDATOR_PY,
-        SIBLING_VALIDATOR_DIR / "validate_survey.py",
-        repo_root.parent / "ausmt-surveys" / "_validation" / "validate_survey.py",
-    ]
-    for i, path in enumerate(candidates):
-        if path.is_file():
-            vv = _load_by_path(path, f"_ausmt_creditvocab_{i}")
-            if hasattr(vv, "NAME_TYPES") and hasattr(vv, "CONTRIBUTOR_ROLES"):
-                return vv
+    """The surveys validator this pin compares against, resolved through conftest's ONE resolver so the
+    credit vocab is read from the SAME arm as every other cross-repo oracle: the live sibling checkout on
+    a dev box, the committed vendored copy in CI. Hand-rolling a candidate order here (vendored first)
+    inverted the resolver and kept this pin off the live validator entirely. None when the resolved
+    validator predates the credit vocab, which today means an old sibling checkout: the vendored copy is
+    committed and carries it."""
+    vv = _load_by_path(require_validator_dir() / "validate_survey.py", "_ausmt_creditvocab")
+    if hasattr(vv, "NAME_TYPES") and hasattr(vv, "CONTRIBUTOR_ROLES"):
+        return vv
     return None
 
 
 def test_credit_vocab_matches_surveys_validator():
     """PARITY PIN (CONTRIBUTOR-CREDIT-SPEC §6): the editor's baked NAME_TYPES / CONTRIBUTOR_ROLES equal the
-    surveys validator's FROZEN credit vocabularies. Resolved from the first validator that carries the
-    credit vocab (the vendored copy once refreshed, else the live sibling). Skipped only when NO reachable
-    validator has the vocab yet (the two-clones caveat - the vendored copy is a pre-credit snapshot,
-    refreshed by the surveys-merge sequencing, not this lane). Where it runs it FAILS IF the editor vocab
-    drifts from the ratified validator vocab - a mis-typed name_type/role would mis-classify an actor or
-    publish a wrong provenance claim, so the two must never disagree."""
+    surveys validator's FROZEN credit vocabularies, read from the arm conftest resolves. Skipped only when
+    that validator predates the credit vocab - a stale sibling checkout, since the vendored copy carries
+    it; that skip is deliberately NOT on gateway-ci's allow-list, so a CI run that lost the vocab reds the
+    lane instead of passing quietly. Where it runs it FAILS IF the editor vocab drifts from the ratified
+    validator vocab - a mis-typed name_type/role would mis-classify an actor or publish a wrong provenance
+    claim, so the two must never disagree."""
     vv = _load_credit_validator()
     if vv is None:
-        pytest.skip("no reachable surveys validator carries the credit vocab yet (two-clones caveat)")
+        pytest.skip(f"the resolved validator {require_validator_dir()} predates the credit vocab")
     assert set(ef.NAME_TYPES) == set(vv.NAME_TYPES), "editor NAME_TYPES drifted from the validator"
     assert set(ef.CONTRIBUTOR_ROLES) == set(vv.CONTRIBUTOR_ROLES), \
         "editor CONTRIBUTOR_ROLES drifted from the validator"
@@ -881,6 +875,26 @@ def test_credit_vocab_matches_surveys_validator():
     # present the roles in the spec's §3.1 order).
     assert tuple(ef.CONTRIBUTOR_ROLES) == tuple(vv.CONTRIBUTOR_ROLES_ORDERED), \
         "editor CONTRIBUTOR_ROLES order drifted from the validator's ratified order"
+
+
+def test_credit_vocab_pin_reads_the_resolved_validator_arm(monkeypatch):
+    """The credit-vocab pin must read the SAME validator arm as every other cross-repo oracle in this
+    suite, i.e. whatever conftest.resolve_validator_dir returns. FAILS IF this pin re-derives its own
+    candidate order and prefers the vendored copy: that inversion shipped, so on every dev box the
+    ratified vocab was compared against a snapshot while the live sibling went unread. Both arms are
+    asserted because they resolve to the same file in CI, where only the vendored copy exists."""
+    for forced in (None, "1"):
+        if forced is None:
+            monkeypatch.delenv("AUSMT_FORCE_VENDORED_VALIDATOR", raising=False)
+        else:
+            monkeypatch.setenv("AUSMT_FORCE_VENDORED_VALIDATOR", forced)
+        resolved = resolve_validator_dir()
+        assert resolved is not None, "no validator resolved at all: a broken checkout, not a drift"
+        expected = resolved / "validate_survey.py"
+        vv = _load_credit_validator()
+        assert vv is not None, f"the resolved validator {expected} carries no credit vocab"
+        assert Path(vv.__file__) == expected, (
+            f"credit-vocab pin read {vv.__file__} while the oracles resolve {expected}")
 
 
 # The vulcan-2022 demo shape: the four keys the editor row models (identifier, identifier_type,
