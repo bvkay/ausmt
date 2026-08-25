@@ -577,6 +577,14 @@
   .introwelcome-box{position:relative;max-width:400px;width:100%;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;padding:24px 26px;box-shadow:0 12px 40px rgba(0,0,0,.45);text-align:center}
   .introwelcome-box:focus{outline:none}
+  /* The wget dialog: a wider box, left-aligned prose, and a scrollable command block. */
+  .introwelcome-box.wgetbox{max-width:560px;text-align:left}
+  .wget-instructions{font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 10px}
+  .wget-instructions code{font-family:var(--mono);color:var(--text)}
+  .wgetbox .seg{margin:0 0 8px}
+  .wgetcmd{font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--text);
+    background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px 12px;
+    max-height:240px;overflow:auto;white-space:pre;margin:0 0 12px}
   .introwelcome-heading{font-size:19px;font-weight:600;color:var(--text);margin:0 0 8px}
   .introwelcome-text{font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 18px}
   .introwelcome-actions{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
@@ -606,10 +614,10 @@
      buildScaleBar). Its OWN class, so the legend's four-type-dot and parenting pins are untouched.
      position:static undoes the absolute placement Leaflet gives a corner control, and the bar is
      inert - it is a reading aid, never a target. */
-  .maplegend .maplegend-scale{position:static;margin:2px 0 0;pointer-events:none;box-shadow:none}
+  .maplegend .maplegend-scale{position:static;margin:7px 0 0;pointer-events:none;box-shadow:none}
   .maplegend .maplegend-scale .leaflet-control-scale-line{background:none;box-shadow:none;
-    border:1px solid var(--line);border-top:0;color:var(--muted);font-family:var(--mono);
-    font-size:10px;line-height:1.4;padding:1px 5px}
+    border:2px solid var(--muted);border-top:0;color:var(--text);font-family:var(--mono);
+    font-size:11.5px;font-weight:600;line-height:1.5;padding:2px 6px;text-align:center}
   /* Collapsible ONLY on small widths: the toggle appears and the body defaults collapsed there (the .expanded
      class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
      narrow-built legend can never get stuck collapsed with no visible way to expand it. */
@@ -866,6 +874,32 @@
        Docs wave, stage 2: this popup is now the ONLY tour button on the page. The retired #introOverlay
        panel used to carry a second one (#introTakeTour); the on-demand replacement is the ?tour=1 query
        parameter that About links, handled in main.js maybeShowIntro(). -->
+  <!-- The wget dialog (owner, 2026-08-25): the command is SHOWN, scrollable, with its run
+       instructions, before anything lands on a clipboard - a blind copy button taught nobody
+       anything. Filled and wired by exports.js showWgetDialog(); reuses the welcome modal shell. -->
+  <div id="wgetModal" class="introwelcome hidden" role="dialog" aria-modal="true" aria-labelledby="wgetHeading">
+    <div class="introwelcome-box wgetbox" tabindex="-1">
+      <h2 class="introwelcome-heading" id="wgetHeading">Fetch from your terminal</h2>
+      <p class="wget-instructions">Run this in your own terminal, not in this page. It fetches the
+        files one at a time into the current directory, and re-running it resumes: completed files
+        are skipped, partial ones continue.</p>
+      <!-- Per-platform tabs (owner, 2026-08-25): the DETECTED platform is pre-selected, and the
+           Windows command genuinely differs - PowerShell/cmd cannot run a here-doc, and PowerShell
+           aliases `wget` to a different command, so that tab carries wget.exe with the urls as
+           plain arguments. exports.js showWgetDialog() owns the content and the detection. -->
+      <div class="seg" id="wgetOs" role="tablist" aria-label="Choose your operating system">
+        <button type="button" data-os="linux">Linux</button>
+        <button type="button" data-os="mac">macOS</button>
+        <button type="button" data-os="win">Windows</button>
+      </div>
+      <p class="wget-instructions" id="wgetOsNote"></p>
+      <pre class="wgetcmd" id="wgetCmd" tabindex="0"></pre>
+      <div class="introwelcome-actions">
+        <button type="button" class="primary" id="wgetCopy">Copy command</button>
+        <button type="button" id="wgetClose">Close</button>
+      </div>
+    </div>
+  </div>
   <div id="introWelcome" class="introwelcome hidden" role="dialog" aria-modal="true"
        aria-labelledby="introWelcomeHeading" aria-describedby="introWelcomeText">
     <div class="introwelcome-box" tabindex="-1">

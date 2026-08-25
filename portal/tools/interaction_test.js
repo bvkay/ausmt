@@ -1393,9 +1393,9 @@ async function bootFreshWindow(dataMap, url) {
   for (let _s = 0; _s < 10; _s++) {
     const _c = doc.getElementById("tourCard");
     _posSeen.push(_c.style.left + "|" + _c.style.top);
-    if (_s < 9) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
+    if (_s < 10) win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));
   }
-  ok(A.tourStep() === 9, "owner2/pos: stepping ArrowRight x9 must reach the last step, at " + A.tourStep());
+  ok(A.tourStep() === 10, "owner2/pos: stepping ArrowRight x10 must reach the last step, at " + A.tourStep());
   ok(_posSeen.every(p => p === _posSeen[0]),
     "owner2/pos: the card's centred position must be IDENTICAL across all 10 steps (map steps included), got " + JSON.stringify(_posSeen));
   ok(/px$/.test(_posSeen[0].split("|")[0]) && /px$/.test(_posSeen[0].split("|")[1]),
@@ -1574,14 +1574,20 @@ async function bootFreshWindow(dataMap, url) {
     "D2-tour: the Select pane (the selbox target's mode container) is still hidden on the selbox step");
   ok(!doc.querySelector(".selbox").closest("section").classList.contains("hidden"),
     "D2-tour: the selbox's own section is hidden on the selbox step (map view not forced?)");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 6
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD -> index 6 (.dlbox)
   ok(A.tourStep() === 6, "D2-tour: could not step forward off the selbox step");
-  ok(A.sidebarMode() === "browse", "D2-tour: FORWARD exit did not restore the Browse mode");
-  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 5 again
-  ok(A.tourStep() === 5 && A.sidebarMode() === "select",
-    "D2-tour: re-entering the selbox step backwards did not re-switch to Select & export");
+  ok(A.sidebarMode() === "select",
+    "D2-tour: the Download step lives in the same Select pane and must keep the mode");
+  ok(!doc.querySelector(".dlbox").closest("section").classList.contains("hidden"),
+    "D2-tour: the Download block's section is hidden on its own step");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight" }));   // FORWARD exit -> index 7
+  ok(A.tourStep() === 7, "D2-tour: could not step forward off the Download step");
+  ok(A.sidebarMode() === "browse", "D2-tour: leaving the Select-pane steps did not restore the Browse mode");
+  win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft" }));    // BACK -> index 6 again
+  ok(A.tourStep() === 6 && A.sidebarMode() === "select",
+    "D2-tour: re-entering the Download step backwards did not re-switch the mode");
   win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));       // CLOSE from the step
-  ok(A.tourStep() === -1, "D2-tour: Esc from the selbox step did not close the tour");
+  ok(A.tourStep() === -1, "D2-tour: Esc from the Download step did not close the tour");
   ok(A.sidebarMode() === "browse", "D2-tour: mid-tour close did not restore the Browse mode");
 
   // I. EMPTY-STATE fixture (UX7b U7): the welcome POPUP must still show on first visit (it explains the
@@ -1733,8 +1739,8 @@ async function bootFreshWindow(dataMap, url) {
     "engine encodes it (the `C5 [REMOTE].zip` case), got " + JSON.stringify(_a1raw.archive_url_comment));
   ok(_a1raw.bytes === 4000000 && _a1raw.filename === "A1 [REMOTE].zip",
     "each row states the size and the archive's own filename, got " + JSON.stringify([_a1raw.bytes, _a1raw.filename]));
-  ok(/wget follows/i.test(_hd.doc.note) && /curl needs -L/i.test(_hd.doc.note),
-    "D3: the file must say that wget follows the 302 and curl needs -L, got " + JSON.stringify(_hd.doc.note));
+  ok(/wget -c/.test(_hd.doc.note) && /curl -L -C -/.test(_hd.doc.note) && /resumes on a re-run/i.test(_hd.doc.note),
+    "D3: the file must name the resumable fetch commands for both tools, got " + JSON.stringify(_hd.doc.note));
   ok(/hosts none of these files/i.test(_hd.doc.note),
     "the file must restate that AusMT hosts nothing it routes to, got " + JSON.stringify(_hd.doc.note));
   ok(_hd.doc.scope && _hd.doc.scope.stations === 4 && _hd.doc.scope.levels === "all",
@@ -1745,25 +1751,100 @@ async function bootFreshWindow(dataMap, url) {
     "a per-level list must carry exactly that level, got " + _hdScoped.files + " file(s)");
   ok(_hdScoped.doc.scope && String(_hdScoped.doc.scope.levels) === "raw_packed",
     "a per-level list must record its level in the scope, got " + JSON.stringify(_hdScoped.doc.scope));
-  // THE CONFIRMATION (owner UX ruling 2026-08-23) and its wget command, from the raw_packed row.
+  // THE CONFIRMATION (owner rulings 2026-08-23 + 2026-08-25) from the raw_packed row. A small
+  // scope gets its FILES: each route handed to the browser through the tsOpenRoute seam (recorded
+  // here), nothing saved, and the browser owns the downloads and their progress.
   const _trackBefore = trackCalls.length;
   A.paintDownloadRows();
+  ok(/^Download · 2 stations/.test(tsMeta("raw_packed")),
+    "a within-cap row states the direct mode, got " + JSON.stringify(tsMeta("raw_packed")));
+  const handed = [];
+  win.tsOpenRoute = u => handed.push(u);
+  const _savedBefore = savedBlobs.length, _zmarkTs = zipEntries.length;
   tsBtn("raw_packed").click();
+  await new Promise(r => setTimeout(r, 0));          // the handler is async (the metadata pack awaits SCI_READY)
+  ok(handed.length === 2 && handed.every(u => /\/go\/ts\/[^/]+\/[^/]+\/raw_packed$/.test(u)),
+    "a within-cap click hands each ROUTE to the browser, got " + JSON.stringify(handed));
+  ok(savedBlobs.length === _savedBefore, "the direct path saves no list file");
+  // The metadata & citation pack travels with the hand-off (owner, 2026-08-25): citations, the
+  // station table, the geometry and the hand-off record itself, zipped beside the data.
+  const _tsPack = zipEntries.slice(_zmarkTs).map(e => e.name);
+  ["CITATIONS.txt", "citations.bib", "citations.ris", "stations.csv", "selection.geojson", "handoff.json"]
+    .forEach(n => ok(_tsPack.indexOf(n) >= 0, "the hand-off metadata pack is missing " + n + ", got " + JSON.stringify(_tsPack)));
   const snackEl = doc.getElementById("snackbar");
   ok(snackEl && !snackEl.classList.contains("hidden"), "the hand-off must confirm itself in the snackbar");
+  ok(/Handed 2 files to your browser - /.test(snackEl.textContent) &&
+     /Progress appears in your browser's downloads\./.test(snackEl.textContent),
+    "the direct confirmation states what was handed and where progress lives, got " + JSON.stringify(snackEl.textContent));
+  // Beyond the cap the offer stays a LIST + wget (driven through the cap seam: the fixture's
+  // total is megabytes, and the cap's VALUE - 10 GB of TOTAL SIZE, owner-ruled - is a tuning
+  // constant, not a contract).
+  win.TS_DIRECT_MAX_BYTES = 1;
+  A.paintDownloadRows();
+  ok(/^Download list · 2 stations/.test(tsMeta("raw_packed")),
+    "an over-cap row states the list mode, got " + JSON.stringify(tsMeta("raw_packed")));
+  tsBtn("raw_packed").click();
+  await new Promise(r => setTimeout(r, 0));
+  ok(savedBlobs.length === _savedBefore + 1, "the over-cap path saves the list document");
   ok(/Download list ready - 2 files, /.test(snackEl.textContent),
-    "the confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
-  const copyBtn = snackEl.querySelector("button");
-  ok(copyBtn && /wget/i.test(copyBtn.textContent),
-    "the confirmation must offer the wget command as a COPY button, got " + (copyBtn && copyBtn.textContent));
-  copyBtn.click();
-  ok(clipboard.length === 1 && /wget/.test(clipboard[0]) && /-i/.test(clipboard[0]),
-    "the copy button must put a wget -i command on the clipboard, got " + JSON.stringify(clipboard[0]));
+    "the list confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
+  ok(handed.length === 2, "the over-cap path hands nothing directly");
+  win.TS_DIRECT_MAX_BYTES = 10 * 1024 * 1024 * 1024;
+  // The wget DIALOG (owner, 2026-08-25): the snackbar action SHOWS the command - visible,
+  // scrollable, with its run-in-a-terminal instructions - and the copy happens from the dialog,
+  // so a reader sees what lands on their clipboard.
+  const showBtn = snackEl.querySelector("button");
+  ok(showBtn && /terminal command/i.test(showBtn.textContent),
+    "the confirmation must offer the terminal command, got " + (showBtn && showBtn.textContent));
+  showBtn.click();
+  const wgetModal = doc.getElementById("wgetModal"), wgetCmd = doc.getElementById("wgetCmd");
+  ok(wgetModal && !wgetModal.classList.contains("hidden"), "the wget dialog must open from the snackbar action");
+  ok(/terminal/i.test(wgetModal.textContent), "the dialog must say the command runs in the reader's own terminal");
+  // Platform tabs: three of them, the detected platform pre-selected (jsdom's navigator detects as
+  // Linux here), and the WINDOWS tab swaps to a genuinely different command - no here-doc
+  // (PowerShell/cmd cannot run one) and wget.exe by name (PowerShell aliases bare wget away).
+  const osTabs = [...doc.getElementById("wgetOs").querySelectorAll("button")];
+  ok(osTabs.length === 3 && osTabs.map(b => b.dataset.os).join() === "linux,mac,win",
+    "the dialog must carry Linux/macOS/Windows tabs, got " + osTabs.map(b => b.dataset.os).join());
+  ok(osTabs.filter(b => b.classList.contains("on")).length === 1,
+    "exactly one tab is pre-selected (the detected platform; jsdom's UA reports the HOST kernel, so which one is host-dependent)");
+  osTabs[0].click();
+  ok(/^wget -c -q --show-progress --content-disposition -i -/.test(wgetCmd.textContent),
+    "the Linux tab must carry the resumable wget here-doc form, got " +
+    JSON.stringify(wgetCmd.textContent.split("\n")[0]));
+  ok(!/^#/.test(wgetCmd.textContent),
+    "no leading # header: interactive zsh has no comments by default, so a pasted header line errors");
+  // macOS and Windows carry the CURL form: preinstalled on both (no third-party binary, no
+  // Homebrew), output names as explicit -o pairs from the index's own filenames, -C - resume.
+  osTabs[1].click();
+  ok(/^curl -L -C - -o "/.test(wgetCmd.textContent) && wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
+    "the macOS tab must carry the curl -o-pairs form, got " + JSON.stringify(wgetCmd.textContent.slice(0, 60)));
+  ok(/preinstalled on macOS/.test(doc.getElementById("wgetOsNote").textContent),
+    "the macOS tab must say nothing needs installing");
+  osTabs[2].click();
+  ok(/^curl\.exe -L -C - -o "/.test(wgetCmd.textContent) &&
+     (wgetCmd.textContent.match(/-o "/g) || []).length === 2 &&
+     wgetCmd.textContent.indexOf("AUSMT_EOF") < 0,
+    "the Windows tab must carry curl.exe with one -o pair per file, got " +
+    JSON.stringify(wgetCmd.textContent.slice(0, 80)));
+  ok(/preinstalled on Windows 10/.test(doc.getElementById("wgetOsNote").textContent) &&
+     !/winget|JernejSimoncic/.test(doc.getElementById("wgetOsNote").textContent),
+    "the Windows tab must need no third-party install");
+  doc.getElementById("wgetCopy").click();
+  ok(clipboard.length === 1 && clipboard[0] === wgetCmd.textContent && /curl\.exe/.test(clipboard[0]),
+    "the dialog's copy must put EXACTLY the ACTIVE tab's command on the clipboard");
+  osTabs[0].click();
+  clipboard.length = 0;
+  doc.getElementById("wgetCopy").click();
+  ok(clipboard.length === 1 && clipboard[0] === wgetCmd.textContent,
+    "switching back to Linux must restore the unix command for the copy");
   ok((clipboard[0].match(/\/go\/ts\//g) || []).length === 2,
     "the copied command must carry exactly the row's routed files, got " + JSON.stringify(clipboard[0]));
   ok(!/thredds\.nci\.org\.au/.test(clipboard[0]),
     "the copied command must fetch the AusMT route, not the archive address it resolves to (the route " +
     "is what the front door counts), got " + JSON.stringify(clipboard[0]));
+  doc.getElementById("wgetClose").click();
+  ok(wgetModal.classList.contains("hidden"), "the dialog's Close must hide it");
   ok(trackCalls.length === _trackBefore,
     "R8: the hand-off adds no track() call site; it is measured at the front door, from the route it uses");
   ok(!/progress|complete|finished|%/i.test(snackEl.textContent),

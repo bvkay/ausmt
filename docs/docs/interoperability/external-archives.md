@@ -63,10 +63,17 @@ reporting an error.
 
 ## The hand-off
 
-Each time-series row's **Download list** action writes a pointer file scoped to that row's level: one
-entry per station, naming an AusMT route that answers with a redirect to the archive holding the
-file, with the archive's own address recorded alongside for reference. `wget` follows the redirect on
-its own; `curl` needs `-L`. The **Pointers (JSON)** export in the Metadata block is the full-provenance
+Each time-series row's action is scoped to that row's level. For a small scope (up to 10 GB in
+total) it hands each file straight to your browser: every download is an AusMT route answering with a redirect
+to the archive holding the file, so the browser fetches from the archive directly and its own
+downloads list carries the progress. Beyond that, the action writes a pointer file instead - one
+entry per station, route plus the archive's own address for reference - because feeding tens of
+gigabytes to a browser at once helps nobody. The portal shows the exact command to run in your
+own terminal, per platform: `wget` on Linux (preinstalled), `curl` on macOS and Windows
+(preinstalled on both - no third-party install). Either fetches one file at a time, follows the
+redirects on its own, and a re-run resumes: completed files stay as they are, partial ones
+continue. Every download also travels with a metadata and citation pack: the citation files, the
+station table, the geometry and (for hand-offs) the fetch record itself. The **Pointers (JSON)** export in the Metadata block is the full-provenance
 form: every station in scope appears (with its dataset DOI or the reason none is recorded), routable
 stations carry their per-level rows, and the document records its own scope. A station's own drawer
 offers the same route per level directly.

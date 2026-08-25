@@ -208,10 +208,11 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
     stations:rows};
   save("ausmt-pointers-"+tsUTC()+".json",JSON.stringify(doc,null,2),"application/json");
   if(files){
-    const cmd=tsWgetCommand(rows.filter(r=>r.levels));
+    const _r=rows.filter(r=>r.levels);
+    const cmds={unix:tsWgetCommand(_r),mac:tsCurlCommand(_r,"curl"),win:tsCurlCommand(_r,"curl.exe")};
     snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+" - "+files+" fetchable file"+(files===1?"":"s")+", "+fmtBigBytes(bytes)+".",
           "Your browser downloads them; AusMT only points the way.",
-          {label:"Copy wget command",onClick:()=>{if(typeof copyTxt==="function")copyTxt(cmd);}});}
+          {label:"Show terminal command",onClick:()=>showWgetDialog(cmds)});}
   else snack("Pointers written for "+rows.length+" station"+(rows.length===1?"":"s")+". None has a time-series file this deployment can route to.");});
 
 // ---- the time-series HAND-OFF list (R7 / D3 / D5) ------------------------------------------------
@@ -228,7 +229,7 @@ bindClick("dlSh",()=>{const st=scopeSel();track("DownloadGenerated",{format:"poi
 // Each row states the ROUTE, because that is the string to fetch, and the archive's own address
 // alongside as an inert reference (D3) - so the file still names its bytes if AusMT is down, without
 // pretending that address is what you were asked to fetch.
-var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. wget follows the redirect on its own; curl needs -L.";
+var TS_HANDOFF_NOTE="AusMT hosts none of these files and fetches none of them. Each `url` is an AusMT route that answers 302 with the address of the archive holding the file; `archive_url_comment` records where that route currently points and is for reference only. Fetch the urls from your own terminal - the portal's hand-off dialog shows ready-made commands: wget -c (Linux) or curl -L -C - (macOS/Windows) resumes on a re-run.";
 // One station's routable levels, in the vocabulary's own order so two readers' files sort alike.
 // `levels` names the level tokens on the table; empty/null means every level this station has.
 function tsHandoffLevels(s,levels,includeGaps){
@@ -266,24 +267,111 @@ function tsHandoffDocument(stations,levels){
 // saved file is JSON (the #dlSh shape, so one habit reads both), and `wget -i` wants bare urls, so
 // naming the file would hand over a command that does not run. It fetches the ROUTES, never the
 // archive addresses beside them, because the route is what the front door counts.
-function tsWgetCommand(rows){
+function tsHandoffUrls(rows){
   const urls=[];(rows||[]).forEach(r=>r.levels.forEach(l=>{if(l.url)urls.push(l.url);}));
-  return ["# AusMT time-series hand-off: "+urls.length+" file(s). wget follows the 302 to the archive.",
-          "wget --content-disposition -i - <<'AUSMT_EOF'"].concat(urls,["AUSMT_EOF"]).join("\n");}
-// One level's fetch list for the current scope, from the Download block's time-series rows. The
-// row names its own level, so no hidden chooser state can narrow this file (the pre-Lane-B defect:
-// a collapsed accordion's level toggles silently scoped the old Time-series list export).
-function tsLevelList(tok){
-  // Two-phase boot: the index IS the availability answer here, so writing a list before it lands
-  // would report every station as having nothing to fetch. Say which wait this is and stop.
+  return urls;}
+// The unix form. No leading # header: interactive zsh has no comments by default, so a pasted
+// header line globbed and errored (measured on a real run). -c makes a re-run RESUME: a completed
+// file is skipped, a partial continues from where it stopped (the archive serves ranges) - without
+// it a re-run silently downloads duplicates beside the originals. -q --show-progress keeps one
+// clean bar per file instead of the per-request redirect chatter.
+function tsWgetCommand(rows){
+  return ["wget -c -q --show-progress --content-disposition -i - <<'AUSMT_EOF'"]
+    .concat(tsHandoffUrls(rows),["AUSMT_EOF"]).join("\n");}
+// The curl form, for macOS and Windows: curl is PREINSTALLED on both (Apple ships it; Microsoft
+// ships a real curl.exe on Windows 10+), so neither platform is sent to a third-party binary.
+// Output names come from the index's own filenames as explicit -o pairs - which is also what lets
+// -C - (resume) coexist with correct names (curl's header-naming -J refuses -C). -L follows the
+// 302s. On Windows the exe is named in full: PowerShell aliases bare curl (and wget) to a
+// different command. One line; the dialog's command block scrolls.
+function tsCurlCommand(rows,exe){
+  const parts=[exe+" -L -C -"];
+  (rows||[]).forEach(r=>r.levels.forEach(l=>{
+    if(l.url)parts.push('-o "'+String(l.filename||"download")+'" "'+l.url+'"');}));
+  return parts.join(" ");}
+// One level's hand-off for the current scope, from the Download block's time-series rows. The row
+// names its own level, so no hidden chooser state can narrow it (the pre-Lane-B defect: a collapsed
+// accordion's level toggles silently scoped the old Time-series list export).
+//
+// A SMALL scope gets its FILES, not a file about them (owner rulings 2026-08-25): each route is
+// handed to the browser exactly as the drawer's single-station tile hands one, and the browser
+// owns the downloads and their progress (the 2026-08-23 ruling; AusMT still hosts and fetches
+// nothing - the 302s do the pointing). The gate is the TOTAL SIZE, not the file count (owner,
+// same day): up to 10 GB the browser is the best tool; beyond it the offer stays a LIST + wget,
+// which is resumable and verifiable at a scale where browser downloads quietly are not.
+var TS_DIRECT_MAX_BYTES=10*1024*1024*1024;
+// The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a
+// reader should see what lands on their clipboard. Per-platform tabs, with the DETECTED platform
+// pre-selected (detection only picks the default tab; researchers copy commands for other
+// machines, so all three stay one click away). Guarded binds like every other control.
+var WGET_OS_NOTES={
+  linux:"wget is preinstalled on most Linux distributions.",
+  mac:"curl is preinstalled on macOS - nothing to install. Each file is named by the archive's own filename; a re-run resumes partial files and leaves completed ones as they are.",
+  win:"curl.exe is preinstalled on Windows 10 and later - nothing to install. Run it in PowerShell or Command Prompt (curl.exe by full name: PowerShell's bare curl is a different command). A re-run resumes partial files and leaves completed ones as they are.",
+};
+function detectOs(){
+  const p=String((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||navigator.userAgent||"");
+  // "windows", never bare /win/: Darwin (the macOS kernel some UA strings report) contains "win".
+  if(/windows/i.test(p)||/^win(32|64)?$/i.test(p))return "win";
+  if(/mac|darwin|iphone|ipad/i.test(p))return "mac";
+  return "linux";}
+var _wgetCmds=null;
+function _paintWgetTab(os){
+  const pre=document.getElementById("wgetCmd"),note=document.getElementById("wgetOsNote"),seg=document.getElementById("wgetOs");
+  if(!_wgetCmds||!pre)return;
+  pre.textContent=(os==="win")?_wgetCmds.win:(os==="mac"?_wgetCmds.mac:_wgetCmds.unix);
+  if(note)note.textContent=WGET_OS_NOTES[os]||"";
+  if(seg&&seg.querySelectorAll)[...seg.querySelectorAll("button")].forEach(b=>b.classList.toggle("on",b.dataset.os===os));}
+function showWgetDialog(cmds){
+  const m=document.getElementById("wgetModal"),pre=document.getElementById("wgetCmd");
+  if(!m||!pre){if(typeof copyTxt==="function")copyTxt(cmds.unix);return;}   // no dialog markup: degrade to the copy
+  _wgetCmds=cmds;
+  _paintWgetTab(detectOs());
+  m.classList.remove("hidden");
+  if(m.querySelector){const box=m.querySelector(".introwelcome-box");if(box&&box.focus)box.focus();}}
+(function(){const seg=document.getElementById("wgetOs");
+  if(seg&&seg.addEventListener)seg.addEventListener("click",e=>{
+    const b=e.target.closest?e.target.closest("button"):null;
+    if(b&&b.dataset.os)_paintWgetTab(b.dataset.os);});})();
+bindClick("wgetClose",()=>{const m=document.getElementById("wgetModal");if(m)m.classList.add("hidden");});
+bindClick("wgetCopy",()=>{const pre=document.getElementById("wgetCmd");
+  if(pre&&typeof copyTxt==="function")copyTxt(pre.textContent);});
+// One route handed to the browser for download. A window-level seam (not inlined) so the jsdom
+// driver can observe the hand-offs; an anchor click, not window.open, because popup blockers stop
+// every window.open after the first in a single gesture.
+function tsOpenRoute(url){const a=document.createElement("a");a.href=url;a.download="";a.click();}
+// The hand-off's companion: the archive's bytes cannot embed our metadata, so it travels beside
+// them - the citation files, station table and geometry for the FETCHED stations, plus the
+// hand-off list itself as the record of what was fetched.
+async function tsMetadataPack(stations,doc){
+  const z=new JSZip();
+  await metadataSidecarInto(z,stations);
+  z.file("handoff.json",JSON.stringify(doc,null,2));
+  const blob=await z.generateAsync({type:"blob"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-timeseries-metadata-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);}
+async function tsLevelList(tok){
+  // Two-phase boot: the index IS the availability answer here, so acting before it lands would
+  // report every station as having nothing to fetch. Say which wait this is and stop.
   if(hydrating("tsaccess")){snack("Waiting for the archive hand-off index…");return;}
   const built=tsHandoffDocument(scopeSel(),[tok]);
   if(!built.files){snack("Nothing in the current scope has a time-series file this deployment can route to at this level.");return;}
+  const _ids=new Set(built.doc.stations.map(r=>r.ausmt_id));
+  const _fetched=scopeSel().filter(s=>_ids.has(s.ausmt_id));
+  const cmds={unix:tsWgetCommand(built.doc.stations),
+              mac:tsCurlCommand(built.doc.stations,"curl"),
+              win:tsCurlCommand(built.doc.stations,"curl.exe")};
+  const act={label:"Show terminal command",onClick:()=>showWgetDialog(cmds)};
+  if(built.bytes<=TS_DIRECT_MAX_BYTES){
+    built.doc.stations.forEach(r=>r.levels.forEach(l=>{if(l.url)tsOpenRoute(l.url);}));
+    await tsMetadataPack(_fetched,built.doc);
+    snack("Handed "+built.files+" file"+(built.files===1?"":"s")+" to your browser - "+fmtBigBytes(built.bytes)+". Progress appears in your browser's downloads.",
+          (built.bytes>=HANDOFF_LARGE_BYTES?"Large download - this may take a while. ":"")+
+          "A metadata & citation pack downloads alongside. AusMT only points the way.",act);
+    return;}
   save("ausmt-timeseries-"+tok+"-"+tsUTC()+".json",JSON.stringify(built.doc,null,2),"application/json");
-  const cmd=tsWgetCommand(built.doc.stations);
-  snack("Download list ready - "+built.files+" file"+(built.files===1?"":"s")+", "+fmtBigBytes(built.bytes)+".",
-        "Your browser downloads them; AusMT only points the way.",
-        {label:"Copy wget command",onClick:()=>{if(typeof copyTxt==="function")copyTxt(cmd);}});}
+  await tsMetadataPack(_fetched,built.doc);
+  snack("Download list ready - "+built.files+" files, "+fmtBigBytes(built.bytes)+".",
+        "Too large a download to hand a browser at once. Paste the copied command into your own terminal: it fetches one file at a time, and a re-run resumes where it stopped. The metadata & citation pack downloads beside the list.",act);}
 // C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
 // pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
 // ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
@@ -291,7 +379,13 @@ function tsLevelList(tok){
 // would be ingested by reference managers as real bibliographic data — the pre-C22 defect, where
 // AUSMT_SELF.pb carried "(DOI to be minted per release via Zenodo)" into every no-DOI publisher field.
 function citeLine(c,doi){return "  "+apaPlain(c,doi)+(doi?"":"  [no DOI assigned]");}
-bindClick("dlCite",async()=>{const _scope=scopeSel();track("DownloadGenerated",{format:"ris",n:_scope.length});const svs=[...new Set(_scope.map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
+// The citation files for a station set, extracted from the click handler so every data download
+// can carry them (owner, 2026-08-25): the selection zips embed these beside LICENSE.txt, and the
+// time-series hand-offs travel with a metadata pack. Output is byte-identical to the pack the
+// Citation pack button always built.
+function buildCitationFiles(_scope){
+  const svs=[...new Set(_scope.map(s=>s.survey))].sort();const today=new Date().toISOString().slice(0,10);
+
   let txt=["AusMT citation pack — generated "+today,"Stations: "+_scope.length+" across "+svs.length+" survey release(s).","","== Survey source releases =="];let bib="",risT="";
   svs.forEach(sv=>{const m=SMETA[sv]||{};const c=m.cite||AUSMT_SELF;
     // C46: an EXPLICIT fallback — a survey with no custodian cite block is no longer SILENTLY rendered as
@@ -336,7 +430,21 @@ bindClick("dlCite",async()=>{const _scope=scopeSel();track("DownloadGenerated",{
   if(srcAttrs.length){ack.push("  Source dataset attribution:");srcAttrs.forEach(a=>ack.push("    "+a));}
   if(usesNci)ack.push("  AusLAMP is a collaboration between AuScope, Geoscience Australia, state and territory","  geological surveys and university partners, with instruments supplied through the AuScope","  NCRIS program. Time series were accessed from the NCI-AuScope Magnetotelluric Collection","  (doi:"+TS_COLLECTION.doi+").");
   txt.push(...ack);
-  const z=new JSZip();z.file("CITATIONS.txt",txt.join("\n"));z.file("citations.bib",bib);z.file("citations.ris",risT);
+  return {txt:txt.join("\n"),bib:bib,ris:risT};}
+// Every data download travels with its metadata (owner, 2026-08-25): the citation files, the
+// station table and the geometry for the SAME station set, written beside the data - the C6
+// rights-travel principle extended from LICENSE.txt to citation and context. Awaits the sci gate
+// so the GeoJSON keeps its honesty rules (the omission note when screening never loaded).
+async function metadataSidecarInto(zip,stations){
+  if(hydrating("sci")){toast("Waiting for the screening data…");}
+  await SCI_READY;
+  const c=buildCitationFiles(stations);
+  zip.file("CITATIONS.txt",c.txt);zip.file("citations.bib",c.bib);zip.file("citations.ris",c.ris);
+  zip.file("stations.csv",csvRows(stations).map(csvRow).join("\r\n"));
+  zip.file("selection.geojson",JSON.stringify(geoFeatureCollection(stations,hydrUsable("sci")),null,1));}
+bindClick("dlCite",async()=>{const _scope=scopeSel();track("DownloadGenerated",{format:"ris",n:_scope.length});
+  const c=buildCitationFiles(_scope);
+  const z=new JSZip();z.file("CITATIONS.txt",c.txt);z.file("citations.bib",c.bib);z.file("citations.ris",c.ris);
   const blob=await z.generateAsync({type:"blob"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ausmt-citation-pack-"+tsUTC()+".zip";a.click();URL.revokeObjectURL(a.href);});
 // The BULK-EXPORT LABEL (owner ruling 2026-08-01). The multi-file export below marks each file fetch it
 // issues with this query flag, so the server-log aggregator can tell a drag-selected bulk export from a
@@ -403,6 +511,7 @@ bindClick("dlZip",async()=>{trackSelectionZip("edi");
   const ediBlobs=await fetchBounded(ediItems,6,it=>it.url);
   ediItems.forEach((it,i)=>{if(ediBlobs[i]){f.file(it.entry,ediBlobs[i]);ok++;included[it.s.survey]=it.s.slug?it.s.slug+"/":"";}});
   writeLicenseFiles(f,included);
+  await metadataSidecarInto(z,chosen);
   if(unavail.length){const lines=["These selected stations are NOT redistributable via AusMT (licence/embargo).",
     "Request them from the source archive, or contact the custodian where no DOI is recorded:",""].concat(unavail.map(s=>{const m=SMETA[s.survey]||{};
     // C7: m.doi (the survey's OWN dataset DOI) is the honest TF source archive. There is no substitute
@@ -514,7 +623,9 @@ function paintTsRows(st){
     const tok=b.dataset.ts;let n=0,bytes=0;
     if(known)st.forEach(s=>{const lv=tsRoutesFor(s.ausmt_id);const e=lv&&lv[tok];if(e){n++;bytes+=(e.bytes||0);}});
     const meta=b.querySelector?b.querySelector(".dlmeta"):null;
-    if(meta)meta.textContent=!known?"":(n?"Download list · "+n+" station"+(n===1?"":"s")+(bytes?" · "+fmtBigBytes(bytes):"")+" · via an AusMT redirect to NCI":"nothing in this scope");
+    // The meta's leading word states the action's MODE: files handed straight to the browser, or a
+    // list + wget beyond the direct cap.
+    if(meta)meta.textContent=!known?"":(n?((bytes>TS_DIRECT_MAX_BYTES?"Download list":"Download")+" · "+n+" station"+(n===1?"":"s")+(bytes?" · "+fmtBigBytes(bytes):"")+" · via an AusMT redirect to NCI"):"nothing in this scope");
     _tileState(b,known?(n?"ok":"none"):"wait");
     b.setAttribute("aria-busy",known?"false":"true");
     b.title=known?(n?b.dataset.gloss+" · "+n+" station"+(n===1?"":"s")+" this deployment can hand off"
@@ -560,6 +671,7 @@ async function exportSelectionFormat(fmt){
   fmtItems.forEach((it,i)=>{if(fmtBlobs[i]){f.file(it.entry,fmtBlobs[i]);ok++;included[it.s.survey]=it.s.slug?it.s.slug+"/":"";}
     else{failed.push(it.s);}});
   writeLicenseFiles(f,included);
+  await metadataSidecarInto(z,chosen);
   // The gap file. A station can be absent from this archive for two DIFFERENT reasons and they are not
   // interchangeable: its survey is not redistributable here at all (licence/embargo, the same wording and
   // the same archive pointers the EDI zip writes), or the survey IS served but this format was never
