@@ -100,3 +100,30 @@ def test_parity_quoted_mapping_keys():
             "  - 'c: d'\n"
             '  - plain\n')
     assert _mini_yaml(text) == yaml.safe_load(text)
+
+
+def test_parity_comment_on_key_line_before_nested_block():
+    """2026-08-25 (section-2 D3): a trailing comment on a KEY line whose value is a nested block
+    ('data_types:  # pick one' followed by indented items) must parse like PyYAML parses it. The
+    fallback used to read the comment as the key's scalar VALUE, then bail out of the nested block,
+    truncating every later top-level key (block sequences) or flattening children into the parent
+    (nested maps). The shipped _template/_example both carry this shape, so a no-PyYAML box failed
+    the reference package against its own validator."""
+    import yaml
+    from extract.build_portal import _mini_yaml
+    text = ('data_types:  # select all that apply\n'
+            '  - BBMT\n'
+            '  - LPMT\n'
+            'organisation:  # who ran it\n'
+            '  name: GSSA\n'
+            'license: CC-BY-4.0\n')
+    assert _mini_yaml(text) == yaml.safe_load(text)
+    # The list-item sibling-key form of the same defect, plus a block-scalar indicator with a
+    # trailing comment (legal YAML: the comment follows the '>' header).
+    text2 = ('instruments:\n'
+            '  - manufacturer: LEMI  # vendor\n'
+            '    model: LEMI-423\n'
+            'abstract: >  # folded\n'
+            '  Two lines\n'
+            '  folded to one.\n')
+    assert _mini_yaml(text2) == yaml.safe_load(text2)
