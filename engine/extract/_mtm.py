@@ -344,7 +344,7 @@ def _z(Z, out, inp):
         return None
 
 
-def components_from_tf(tf):
+def components_from_tf(tf, notes=None):
     """(periods, canonical component dict) from a parsed TF object — same layout the regex path
     emits, reusable whether the TF came from an EDI or an MTH5 file. ρ/φ from Z, ρ- AND φ-errors
     propagated from impedance_error (linear |dZ| propagation), tipper from Tx/Ty."""
@@ -417,13 +417,19 @@ def components_from_tf(tf):
         # C20 placeholder-tipper honesty: an unphysical filler tipper (|T| flat at 1.0) is masked
         # WHOLESALE — all four component series to null — so neither the tip magnitude nor the C20
         # tzx/tzy columns paint it as data. Composes with the per-element fill/zero masking above
-        # (the detector reads the already-masked series). A build NOTICE names the station.
+        # (the detector reads the already-masked series). With a `notes` list the CALLER owns the
+        # emission (build_portal records the fact on the parse product so it rides the C18 cache and
+        # build_report - a cache hit and a miss emit the same diagnostics); without one, the NOTICE
+        # prints here as before.
         if _is_placeholder_tipper(comp["TXR"], comp["TXI"], comp["TYR"], comp["TYI"]):
             for k in ("TXR", "TXI", "TYR", "TYI"):
                 comp[k] = [None] * n
             _station = getattr(tf, "station", None) or "?"
-            print(f"  NOTICE {_station}: placeholder tipper (|T| flat at 1.0) masked — tipper withheld",
-                  file=sys.stderr)
+            _msg = "placeholder tipper (|T| flat at 1.0) masked - tipper withheld"
+            if notes is not None:
+                notes.append(_msg)
+            else:
+                print(f"  NOTICE {_station}: {_msg}", file=sys.stderr)
 
     comp = {k: (v if any(x is not None for x in v) else None) for k, v in comp.items()}
     return periods, comp
@@ -455,17 +461,22 @@ def proc_info_from_tf(tf, with_writer=False):
     this tree: by bare name (build_portal, which puts extract/ on sys.path) and as `extract._mtm`
     (ausmt_science.ingest.normalize, by package path with engine/ as the root, for read_with_fallback
     alone). A module-level `import _edi_catalog` resolves under the first and raises under the
-    second — measured — which would break normalize for a caller that only wants the reader. Inside
-    the try it also fails SAFE: no vocabulary means no software claim, never a wrong one."""
+    second - measured - which would break normalize for a caller that only wants the reader. The
+    import failure loses ONLY the writer-vocabulary claim (`sw`): alg/rr/name/version are computed
+    regardless, so a remote-reference station never publishes rr=0 because a sibling import did not
+    resolve. No vocabulary means no software claim, never a wrong one - for `sw` alone."""
     try:
         import _edi_catalog as cat  # noqa: PLC0415  (see the docstring: import shape, not laziness)
+    except Exception:  # noqa: BLE001
+        cat = None
+    try:
         tfm = tf.station_metadata.transfer_function
         swobj = getattr(tfm, "software", None)
         name = (getattr(swobj, "name", None) or "").strip() or None
         version = (getattr(swobj, "version", None) or "").strip() or None
         rr = 1 if (tfm.processing_type and "remote" in str(tfm.processing_type).lower()) else 0
         alg = str(tfm.processing_type) if tfm.processing_type else None
-        sw = None if (name is None or cat.is_known_writer(name)) else name
+        sw = None if (name is None or cat is None or cat.is_known_writer(name)) else name
         out = (sw, alg, rr)
         return out + ({"name": name, "version": version},) if with_writer else out
     except Exception:  # noqa: BLE001

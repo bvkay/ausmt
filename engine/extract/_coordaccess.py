@@ -199,7 +199,15 @@ def coordinates_served(policy) -> bool:
     return policy == "exact"
 
 
-def _mask_qc_report(qc, masked_ids, policy_of):
+def fid(p, r):
+    """The qc FILE identity, single-sourced (the probe-e discipline this module argues for the
+    STATION matcher applies to the file key too): build_portal.qc_pass stamps this into every
+    near_duplicate_locations a/b key, and the mask registers policy under the same derivation, so
+    the two cannot disagree about which station an entry names."""
+    return r.get("file") or getattr(p, "name", str(p))
+
+
+def _mask_qc_report(qc, policy_of):
     """Rewrite every coordinate-bearing qc_report field so a non-exact station carries no true-position
     bits (D3). Two fields carry coordinates today:
 
@@ -210,9 +218,9 @@ def _mask_qc_report(qc, masked_ids, policy_of):
         position (~100 m bin). Finer than the 0.1deg disclosure, so it is a leak for ANY non-exact
         station on either side of the pair; drop it to the generalised cell (or null if withheld).
 
-    `masked_ids` maps a station's qc identity (its `file`/`fid`) to its ausmt_id is NOT available here;
-    instead the caller passes `policy_of(entry) -> policy` resolving the entry's policy by whatever key
-    the qc field carries. This keeps the qc rewrite artifact-shaped, not id-shaped.
+    The caller passes `policy_of(key) -> policy`, resolving an entry's policy by whatever identity
+    key the qc field carries (ausmt_id, or the shared `fid` file key). This keeps the qc rewrite
+    artifact-shaped, not id-shaped.
     """
     # outside_declared_extent: keyed by the entry's ausmt_id (present in the entry).
     for e in qc.get("outside_declared_extent", []):
@@ -224,24 +232,21 @@ def _mask_qc_report(qc, masked_ids, policy_of):
         else:  # generalised
             e["lat"] = round_generalised(e.get("lat"))
             e["lon"] = round_generalised(e.get("lon"))
-    # near_duplicate_locations: each entry is a PAIR (a, b) identified by file names, with a shared
-    # at_deg. If EITHER side is non-exact the at_deg (a true derivative finer than 0.1deg) must go —
-    # coarsen it to the generalised cell, or null it if either side is withheld. `masked_ids` here is
-    # the file->policy resolver the caller supplies via policy_of on the pair's file keys.
-    kept = []
+    # near_duplicate_locations: each entry is a PAIR (a, b) identified by fid file keys, with a
+    # shared at_deg. If EITHER side is non-exact the at_deg (a true derivative finer than 0.1deg)
+    # must go - coarsen it to the generalised cell, or null it if either side is withheld. Entries
+    # are rewritten IN PLACE: nothing is dropped here, and a rebuild under a name like `kept` would
+    # imply a filter this function deliberately does not have.
     for e in qc.get("near_duplicate_locations", []):
         pa = policy_of(e.get("a"))
         pb = policy_of(e.get("b"))
         if pa == "exact" and pb == "exact":
-            kept.append(e)
             continue
         if "withheld" in (pa, pb):
             e["at_deg"] = None
         else:  # both generalised (or exact+generalised) -> coarsen to the disclosed 0.1deg cell
             lat, lon = e.get("at_deg") or [None, None]
             e["at_deg"] = [round_generalised(lat), round_generalised(lon)]
-        kept.append(e)
-    qc["near_duplicate_locations"] = kept
 
 
 def apply_coordinate_policy(stations, default, overrides, qc=None):
@@ -283,9 +288,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
         # record the resolved policy under BOTH keys the qc fields use (ausmt_id, and the fid = file
         # name / r["file"]) so the qc rewrite can resolve either field's identity.
         policy_by_ausmt[r.get("ausmt_id")] = pol
-        _fid = r.get("file") or getattr(p, "name", None)
-        if _fid is not None:
-            policy_by_file[_fid] = pol
+        policy_by_file[fid(p, r)] = pol
         if pol == "exact":
             continue
         masked_ausmt_ids.add(r.get("ausmt_id"))
@@ -323,7 +326,7 @@ def apply_coordinate_policy(stations, default, overrides, qc=None):
             if key in policy_by_ausmt:
                 return policy_by_ausmt[key]
             return policy_by_file.get(key, "exact")
-        _mask_qc_report(qc, masked_ausmt_ids, _policy_of)
+        _mask_qc_report(qc, _policy_of)
 
     return masked_ausmt_ids
 
@@ -357,15 +360,13 @@ def apply_coordinate_policy_corpus(all_stations, policy_of_survey, qc=None):
         for (p, r) in group:
             pol = station_policy(default, overrides, r.get("id"), r.get("variant"))
             policy_by_ausmt[r.get("ausmt_id")] = pol
-            _fid = r.get("file") or getattr(p, "name", None)
-            if _fid is not None:
-                policy_by_file[_fid] = pol
+            policy_by_file[fid(p, r)] = pol
 
     if qc is not None:
         def _policy_of(key):
             if key in policy_by_ausmt:
                 return policy_by_ausmt[key]
             return policy_by_file.get(key, "exact")
-        _mask_qc_report(qc, masked_ausmt_ids, _policy_of)
+        _mask_qc_report(qc, _policy_of)
 
     return masked_ausmt_ids

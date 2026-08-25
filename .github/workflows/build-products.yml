@@ -236,6 +236,9 @@ jobs:
             tests/test_proc_note_email_scrub.py \
             tests/test_golden_edi.py \
             tests/test_mini_yaml_parity.py \
+            tests/test_half_coordinate_guard.py \
+            tests/test_coord_resolution_guard.py \
+            tests/test_survey_drop_visibility.py \
             tests/test_ci_check_skips.py \
             | tee /tmp/pytest-engine.out
           python tests/ci_check_skips.py < /tmp/pytest-engine.out

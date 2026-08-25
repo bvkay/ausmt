@@ -227,3 +227,34 @@ def test_station_json_states_the_dimensionality_call_with_its_caveat(tmp_path):
         assert dim["classification"] == diag["classification"], (dim, diag)
         assert dim["skew_beta_median_deg"] == diag["skew_beta_median_deg"], (dim, diag)
         assert dim["pct_periods_3d"] == diag["pct_periods_3d"], (dim, diag)
+
+
+def test_proc_info_survives_a_missing_writer_vocabulary():
+    """The package-path identity cannot import the bare `_edi_catalog` sibling, and the whole body
+    of proc_info_from_tf used to sit inside the try that swallowed that failure - so the SAME
+    function on the SAME TF returned rr=0 (a wrong claim in a published sci column) and alg=None
+    through `extract._mtm` while the bare copy returned the truth. Only the writer-vocabulary
+    claim (`sw`) needs the vocabulary; alg/rr/name/version are computed regardless, and without
+    the vocabulary `sw` claims nothing. Run in a subprocess with engine/ alone on sys.path, the
+    exact identity normalize reaches."""
+    probe = (
+        "import sys; sys.path.insert(0, '.');\n"
+        "from extract._mtm import proc_info_from_tf\n"
+        "class SW:\n"
+        "    name='LEMIMT'; version='1.4'\n"
+        "class TFM:\n"
+        "    software=SW(); processing_type='remote reference birrp 5.2'\n"
+        "class SM:\n"
+        "    transfer_function=TFM()\n"
+        "class TF:\n"
+        "    station_metadata=SM()\n"
+        "sw, alg, rr, writer = proc_info_from_tf(TF(), with_writer=True)\n"
+        "assert rr == 1, ('rr lost: %r' % rr)\n"
+        "assert alg == 'remote reference birrp 5.2', ('alg lost: %r' % alg)\n"
+        "assert writer == {'name': 'LEMIMT', 'version': '1.4'}, ('writer lost: %r' % writer)\n"
+        "assert sw is None, ('no vocabulary means no software claim: %r' % sw)\n"
+        "print('OK')\n")
+    r = subprocess.run([sys.executable, "-c", probe], cwd=str(ROOT),
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "OK" in r.stdout, (
+        "proc_info degraded under the package-path identity:\n" + r.stdout + r.stderr)

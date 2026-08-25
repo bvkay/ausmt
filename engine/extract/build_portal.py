@@ -475,7 +475,7 @@ def _group_collections(surveys_meta: dict, all_stations: list):
         cid = survey_coll.get(r.get("survey"))
         if cid:
             colls[cid]["n_stations"] += 1
-            if r.get("lat") is not None:
+            if r.get("lat") is not None and r.get("lon") is not None:
                 colls[cid]["_lat"].append(r["lat"]); colls[cid]["_lon"].append(r["lon"])
     out = {}
     for cid, c in colls.items():
@@ -1061,14 +1061,18 @@ def _sm_relationships(y: dict, designated: list) -> list:
     row extensions custodian/identifies/resolution are deliberately not inherited). relation is the
     row's explicit relation, else the one its identifies level derives to, else absent; the resolver
     prefix is stripped, case kept, exact duplicates dropped."""
-    keys = {(d["scheme"], d["identifier"]) for d in designated}
+    # Scheme comparison is CASE-FOLDED (the same normalisation _sm_bare_identifier applies for its
+    # own DOI test): a curated scheme "doi" beside identifier_type "DOI" used to miss the dedup and
+    # publish the dataset IsIdenticalTo itself - the self-reference the D12 partition exists to
+    # prevent. The published rows keep their curated spelling; only the KEY folds.
+    keys = {(str(d["scheme"]).upper(), d["identifier"]) for d in designated}
     out = []
     for r in (y.get("related_identifiers") or []):
         if not isinstance(r, dict) or not _sm_real(r.get("identifier")):
             continue
         itype = str(r["identifier_type"]).strip() if _sm_real(r.get("identifier_type")) else None
         ident = _sm_bare_identifier(itype, r["identifier"])
-        if itype is not None and (itype, ident) in keys:
+        if itype is not None and (itype.upper(), ident) in keys:
             continue
         row = {"identifier": ident}
         if itype is not None:
@@ -2058,7 +2062,10 @@ def _parse_one_edi(p):
             _pm[1] or _pt[1],                                  # alg: scrape
             _pm[2] or _pt[2] or (1 if r.get("remote_site") else 0))  # rr: ...or remote_site found
     r["file_written_by"] = _writer
-    per, comp = mtm.components_from_tf(tfobj)
+    _tnotes = []
+    per, comp = mtm.components_from_tf(tfobj, notes=_tnotes)
+    if _tnotes:
+        r["tipper_masked"] = True   # rides the cached parse product; the caller emits on hit AND miss
     tf = tfmod.tf_from_components(per, comp) if per else ep.EMPTY_TF
     srow = sci.science_from_components(per, comp, proc) if per \
         else sci.science_from_components(None, {}, None)
@@ -2163,6 +2170,11 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
             continue
         r, tf, srow = parsed["record"], parsed["tf"], parsed["sci"]
         # Emit the deferred per-EDI diagnostics identically whether parsed from source or cache.
+        if r.get("tipper_masked"):
+            print(f"  NOTICE {r.get('id') or p.stem}: placeholder tipper (|T| flat at 1.0) masked "
+                  f"- tipper withheld", file=sys.stderr)
+            if report is not None:
+                report.setdefault("tipper_masked", []).append(str(r.get("id") or p.stem))
         if parsed.get("email_flag"):
             _email_hits.append(p.name)
         if parsed.get("coord_warn"):
@@ -2171,9 +2183,13 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
         # Graceful degradation: a record with no coordinates or no periods is unusable (a malformed
         # header, or an EDI mt_metadata cannot turn into a transfer function). Skip it rather than
         # emit a junk station.
-        if r.get("lat") is None or not r.get("n_periods"):
+        if r.get("lat") is None or r.get("lon") is None or not r.get("n_periods"):
             print(f"  SKIP {p.name}: no coordinates/periods recovered by mt_metadata "
                   f"(malformed header or unreadable transfer function)", file=sys.stderr)
+            if report is not None:
+                report.setdefault("stations_dropped", []).append(
+                    {"station": r.get("id") or p.stem,
+                     "reason": "no coordinates/periods recovered by mt_metadata"})
             continue
         r["survey"] = survey_label
         r["org"] = org
@@ -2252,7 +2268,7 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
     return stations, tf_rows, sci_rows
 
 
-def process_mth5(h5_paths, survey_label, org, slug):
+def process_mth5(h5_paths, survey_label, org, slug, report=None):
     """Read transfer functions from MTH5 file(s) and run the SAME shared science as the EDI path.
     Different input format, identical downstream: records_and_components yields (record, periods,
     components) that feed the very same tf_from_components / science_from_components used for EDI, so
@@ -2269,8 +2285,12 @@ def process_mth5(h5_paths, survey_label, org, slug):
                 tf = tfmod.tf_from_components(per, comp) if per else ep.EMPTY_TF
                 srow = sci.science_from_components(per, comp, None) if per \
                     else sci.science_from_components(None, {}, None)
-                if r.get("lat") is None or not r.get("n_periods"):
+                if r.get("lat") is None or r.get("lon") is None or not r.get("n_periods"):
                     print(f"  SKIP {r.get('id')} in {h5.name}: no coordinates/periods in MTH5", file=sys.stderr)
+                    if report is not None:
+                        report.setdefault("stations_dropped", []).append(
+                            {"station": str(r.get("id") or h5.stem),
+                             "reason": "no coordinates/periods in MTH5"})
                     continue
                 r["survey"] = survey_label
                 r["org"] = org
@@ -2282,6 +2302,9 @@ def process_mth5(h5_paths, survey_label, org, slug):
                 sci_rows.append(srow)
         except Exception as e:  # noqa: BLE001
             print(f"  MTH5 READ FAIL {h5.name}: {e}", file=sys.stderr)
+            if report is not None:
+                report.setdefault("stations_dropped", []).append(
+                    {"station": h5.stem, "reason": f"MTH5 read failed: {type(e).__name__}"})
             continue
     _disambiguate(stations, slug)   # keep same-station re-processings as distinct variant records
     return stations, tf_rows, sci_rows
@@ -2393,19 +2416,29 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
         # An EMTF XML sanitises the station id on write (Site.id is ^[a-zA-Z0-9]*$), so recover the
         # UNSANITISED source id the emitter preserved in the Site <Name> when one is present -- the
         # same token normalize() embeds, read back with its own public helper rather than re-derived.
+        # The import is a HARD dependency of this arm (a broken environment should fail loud, not
+        # silently downgrade identity); only the token parse is guarded, and its failure mode is
+        # named for what it is - not a dropped station but a PUBLISHED identifier: the station
+        # ships under its sanitised id while the custodian's true id sat unread.
+        from ausmt_science.ingest.normalize import (  # noqa: PLC0415
+            source_station_id_from_geographic_name as _src_id)
         try:
-            from ausmt_science.ingest.normalize import (  # noqa: PLC0415
-                source_station_id_from_geographic_name as _src_id)
             _true = _src_id(getattr(tfobj.station_metadata, "geographic_name", None))
-        except Exception:  # noqa: BLE001  (never let an id-recovery detail drop a station)
+        except Exception as _ie:  # noqa: BLE001
             _true = None
+            print(f"  WARNING {p.name}: source-id recovery failed ({type(_ie).__name__}); "
+                  f"station publishes under its sanitised id", file=sys.stderr)
         if _true and _true != r.get("id"):
             r["site_name"] = r.get("id")
             r["id"] = _true
         r["state"] = cat.state_of(r.get("lat"), r.get("lon"))
-        if r.get("lat") is None or not r.get("n_periods"):
+        if r.get("lat") is None or r.get("lon") is None or not r.get("n_periods"):
             print(f"  SKIP {p.name}: no coordinates/periods recovered by mt_metadata "
                   f"(malformed EMTF XML or unreadable transfer function)", file=sys.stderr)
+            if report is not None:
+                report.setdefault("stations_dropped", []).append(
+                    {"station": r.get("id") or p.stem,
+                     "reason": "no coordinates/periods recovered from EMTF XML"})
             continue
         r["survey"] = survey_label
         r["org"] = org
@@ -2419,7 +2452,14 @@ def process_emtfxml(xml_paths, survey_label, org, slug, *, exclude_ids=(), repor
             continue
         r["ausmt_id"] = f"au.{safe_component(slug)}.{r['id']}"
         r["comps"] = "".join(r.get("components") or [])
-        per, comp = mtm.components_from_tf(tfobj)
+        _tnotes = []
+        per, comp = mtm.components_from_tf(tfobj, notes=_tnotes)
+        if _tnotes:
+            r["tipper_masked"] = True
+            print(f"  NOTICE {r.get('id') or p.stem}: placeholder tipper (|T| flat at 1.0) masked "
+                  f"- tipper withheld", file=sys.stderr)
+            if report is not None:
+                report.setdefault("tipper_masked", []).append(str(r.get("id") or p.stem))
         # Processing metadata comes from the TF's own structured fields: an EMTF XML has no EDI
         # >INFO block, so neither the EDI text scrape nor the processor evidence miner has anything
         # to read here and neither is run. proc_info_from_tf still splits WRITER from PROCESSOR, so
@@ -2529,7 +2569,7 @@ def _apply_coord_resolution(stations, cr):
 
     When a station is flagged 'dms_sign_ambiguous' and the survey says to trust INFO (the decimal
     block — correct for LEMI/Geotools exports whose negative HEAD DMS was floored), swap in the
-    INFO coordinate, recompute the state facet, and record the resolution + its basis. With no
+    INFO coordinate and record the resolution + its basis. With no
     declaration the coordinate stays as HEAD (the EDI-standard field) and remains flagged so the
     portal can badge it 'treat with caution'."""
     if not isinstance(cr, dict):
@@ -2540,8 +2580,17 @@ def _apply_coord_resolution(stations, cr):
     for (_p, r) in stations:
         if r.get("coord_flag") != "dms_sign_ambiguous":
             continue
-        cand = (r.get("coord_candidates") or {}).get(choose)
-        if choose == "info" and cand and cand[0] is not None and cand[1] is not None:
+        if choose == "info":
+            cand = (r.get("coord_candidates") or {}).get("info")
+            if not (cand and cand[0] is not None and cand[1] is not None):
+                # Fail LOUD, never open: the survey declared a resolution this station cannot take
+                # (no usable INFO pair - _edi_catalog.info_coords can return (value, None)). Stamping
+                # it resolved would erase the outstanding conflict and publish a coord_resolution
+                # that never happened - the DMS sign-bug class (~140 km) the flag exists to catch.
+                print(f"  WARNING {r.get('id')}: declared dms_sign resolution 'info' cannot be "
+                      f"applied (no usable INFO coordinate pair); station stays flagged",
+                      file=sys.stderr)
+                continue
             r["lat"], r["lon"] = round(cand[0], 6), round(cand[1], 6)
         r["coord_flag"] = "dms_sign_resolved"
         r["coord_conflict_deg"] = None   # the HEAD/INFO conflict is now resolved, not outstanding
@@ -3041,7 +3090,9 @@ def qc_pass(all_stations, survey_extent):
         no declared extent are counted quietly (stations_without_survey_extent), never listed.
     """
     def fid(p, r):
-        return r.get("file") or getattr(p, "name", str(p))
+        # Delegates to the mask module's single derivation, so the qc keys and the policy resolver
+        # are the same function by construction (never a second, divergent fallback here).
+        return coordacc.fid(p, r)
 
     seen, dups = {}, []
     for (p, r) in all_stations:
@@ -3865,6 +3916,10 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
         m.open_mth5(str(hpath), mode="r")
     except Exception as ex:  # noqa: BLE001
         report["mismatches"].append({"station": "*", "reason": f"reopen failed: {type(ex).__name__}"})
+        try:
+            m.close_mth5()
+        except Exception:  # noqa: BLE001, S110  (best-effort on a handle that may never have opened)
+            pass
         return False, report
     try:
         tfs = m.tf_summary.to_dataframe()
@@ -3924,7 +3979,12 @@ def mth5_survey_roundtrip_ok(hpath, stations, *, z_tol=1e-6, coord_tol=1e-6):
     except Exception as ex:  # noqa: BLE001  (gate never crashes the build; a failure withholds the survey)
         report["mismatches"].append({"station": "*", "reason": f"{type(ex).__name__}: {str(ex)[:80]}"})
     finally:
-        m.close_mth5()
+        # Guarded: this function promises never-raises, and an HDF5 close failure escaping a finally
+        # would abort the whole corpus build from inside the withhold-not-crash gate.
+        try:
+            m.close_mth5()
+        except Exception as ex:  # noqa: BLE001
+            report["mismatches"].append({"station": "*", "reason": f"close failed: {type(ex).__name__}"})
         _release_mth5_metadata_classes()   # the last station's classes + the reopen's own group classes
     ok = report["tf_only"] and not report["mismatches"]
     return ok, report
@@ -3985,7 +4045,12 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
                 # _release_mth5_metadata_classes for the measured why.
                 _release_mth5_metadata_classes()
     finally:
-        m.close_mth5()
+        # Guarded: one h5 close failure must NOT abort the whole portal build; the round-trip gate
+        # below withholds this file if the close left it unreadable.
+        try:
+            m.close_mth5()
+        except Exception as _cx:  # noqa: BLE001
+            print(f"  [h5] WARN {hpath.name}: close failed: {type(_cx).__name__}", file=sys.stderr)
     if not n:
         hpath.unlink(missing_ok=True)
         return 0
@@ -4135,7 +4200,11 @@ def emit_collection_mth5(members, collection_id, out, *, smeta_by_slug=None):
                 finally:
                     _release_mth5_metadata_classes()   # per station, same bound as _write_tf_mth5
     finally:
-        m.close_mth5()
+        # Guarded like the survey writer above: withhold-not-crash at the file, never the corpus.
+        try:
+            m.close_mth5()
+        except Exception as _cx:  # noqa: BLE001
+            print(f"  [h5] WARN {hpath.name}: close failed: {type(_cx).__name__}", file=sys.stderr)
     if not n:
         hpath.unlink(missing_ok=True)
         return None, None, 0
@@ -4378,6 +4447,10 @@ def discover_work(a, ap, validator):
     `current` untouched rather than letting a survey vanish from every public surface."""
     work, survey_extent, coord_policy, station_ids = [], {}, {}, {}
     survey_yaml_by_label, surveys_skipped_validation = {}, []
+    # Every survey-granularity drop below is RECORDED, not just printed: build_report.json carries
+    # the list and scripts/verify.py FAILs on any entry, so `make rebuild-data` can never swap in a
+    # build that silently lost a survey (D20's rule, extended to the whole drop class).
+    surveys_dropped = []
     if a.surveys:
         for d in sorted(Path(a.surveys).iterdir()):
             if not d.is_dir() or d.name.startswith("_"):
@@ -4406,11 +4479,14 @@ def discover_work(a, ap, validator):
             except OSError as e:
                 print(f"SKIP {d.name}: could not read survey.yaml ({type(e).__name__}: {e}) "
                       f"-- survey dropped", file=sys.stderr)
+                surveys_dropped.append((d.name, f"survey.yaml could not be read ({type(e).__name__})"))
                 continue
             y = _read_yaml(sy, raw=sy_raw)
             if not isinstance(y, dict):
                 if y is not None:  # valid YAML but not a mapping (list/scalar); None was already warned in _read_yaml
                     print(f"SKIP {d.name}: survey.yaml is not a YAML mapping -- survey dropped", file=sys.stderr)
+                surveys_dropped.append((d.name, "survey.yaml is not a YAML mapping"
+                                                if y is not None else "survey.yaml did not parse"))
                 continue
             sy_digest = hashlib.sha256(sy_raw).hexdigest()   # the ONE digest this survey builds under
             label = y.get("name", d.name)
@@ -4455,6 +4531,7 @@ def discover_work(a, ap, validator):
             except coordacc.CoordinatePolicyError as _cpe:
                 print(f"SKIP {d.name}: coordinate-access policy INVALID — {_cpe}", file=sys.stderr)
                 survey_extent.pop(label, None)
+                surveys_dropped.append((d.name, "coordinate-access policy invalid"))
                 continue
             # Station-id override: parse the block's SHAPE now (unknown key, bad `source`, a key that
             # is not a bare filename, a value the sanitiser would mangle, colliding values). Same
@@ -4468,6 +4545,7 @@ def discover_work(a, ap, validator):
                 survey_extent.pop(label, None)
                 coord_policy.pop(label, None)
                 station_ids.pop(label, None)
+                surveys_dropped.append((d.name, "station_ids block invalid"))
                 continue
             work.append((label, smeta["org"], inputs, kind, smeta, d, slug, sy_digest))
             survey_yaml_by_label[label] = y   # the raw mapping, for survey-metadata.json (D18 side channel)
@@ -4495,7 +4573,7 @@ def discover_work(a, ap, validator):
                 work.append((label, seed.get(label, {}).get("org", org), edis, "edi", seed.get(label), None, slugify(label), ""))
     else:
         ap.error("pass --surveys or --raw")
-    return work, survey_extent, coord_policy, station_ids, survey_yaml_by_label, surveys_skipped_validation
+    return work, survey_extent, coord_policy, station_ids, survey_yaml_by_label, surveys_skipped_validation, surveys_dropped
 
 
 def main(argv=None):
@@ -4654,7 +4732,10 @@ def main(argv=None):
     # build_provenance.json below. Public build metadata for the (planned) curator serve-state UI.
     build_report_surveys: dict = {}
     (work, survey_extent, coord_policy, station_ids_by_survey,
-     survey_yaml_by_label, surveys_skipped_validation) = discover_work(a, ap, validator)
+     survey_yaml_by_label, surveys_skipped_validation, _disc_dropped) = discover_work(a, ap, validator)
+    # Discovery-phase drops fold into the SAME recorder as the loop's own, so build_report's
+    # surveys_dropped is the one list verify.py gates on.
+    dropped_surveys.extend((name, None, reason) for name, reason in _disc_dropped)
 
     # === provenance block (traceability: input -> software/params -> output) ===
     PROV = _build_prov(a.extractor)
@@ -4792,9 +4873,10 @@ def main(argv=None):
                   f"station_ids map keys are EDI source filenames inside transfer_functions/edi/, "
                   f"so the block cannot be honoured on this path (fail closed rather than publish "
                   f"the raw identifiers while the block silently does nothing).", file=sys.stderr)
+            dropped_surveys.append((label, len(inputs), "station_ids block cannot be honoured on the MTH5 path"))
             continue
         if kind == "mth5":
-            stations, tf_rows, sci_rows = process_mth5(inputs, label, org, slug)   # MTH5 path not cached
+            stations, tf_rows, sci_rows = process_mth5(inputs, label, org, slug, report=_gate_report)   # MTH5 path not cached
         else:
             # The file-based TF inputs, split by their OWN suffix -- the single derivation of a
             # station's ingest source in this build (never a second guess from `kind`).
@@ -4810,6 +4892,7 @@ def main(argv=None):
                 stnids.validate_station_ids(_station_ids, _edi_in)
             except stnids.StationIdError as _sie:
                 print(f"SKIP {slug}: station_ids block INVALID: {_sie}", file=sys.stderr)
+                dropped_surveys.append((label, len(inputs), "station_ids block invalid"))
                 continue
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
@@ -4851,6 +4934,7 @@ def main(argv=None):
                 coordacc.validate_overrides(_coord_overrides, stations)
             except coordacc.CoordinatePolicyError as _cpe:
                 print(f"SKIP {slug}: coordinate-access policy INVALID — {_cpe}", file=sys.stderr)
+                dropped_surveys.append((label, len(stations), "coordinate-access override ids invalid"))
                 continue
         _apply_coord_resolution(stations, (meta or {}).get("coord_resolution"))
         # Per-station canonical-conditioning notes (rotation-unknown, source-id preservation, citation
@@ -5345,6 +5429,7 @@ def main(argv=None):
             # C25: convention-gate skips are STRUCTURED drops ({station, reason}); the legacy
             # unusable-EDI print+continue path still records nothing here (per the original brief).
             "stations_dropped": list(_gate_report.get("stations_dropped", [])),
+            "tipper_masked": list(_gate_report.get("tipper_masked", [])),
             "warnings": list(_survey_warnings),
             # Per-station EMTF-XML emission failures (empty when every served station's XML emitted).
             "xml_failures": _xml_fail_rows,
@@ -5651,6 +5736,13 @@ def main(argv=None):
         # discover_work). Empty on a clean build; scripts/verify.py FAILs on a non-empty list so
         # `make rebuild-data` never swaps a build that silently lost a survey from every surface.
         "surveys_skipped_validation": sorted(surveys_skipped_validation),
+        # The same rule for EVERY other survey-granularity drop (unreadable/non-mapping survey.yaml,
+        # invalid coordinate policy or station_ids, zero-station parse, unserialisable SMETA):
+        # recorded here, and verify.py FAILs on any entry. Always present; empty on a clean build.
+        "surveys_dropped": sorted(
+            ({"survey": str(lbl),
+              "reason": (reason if reason else f"0 stations from {n} input file(s)")}
+             for lbl, n, reason in dropped_surveys), key=lambda e: e["survey"]),
     }
     (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
     if _peak_rss is not None:

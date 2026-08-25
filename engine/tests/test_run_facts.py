@@ -270,3 +270,16 @@ def test_the_cache_format_tag_records_the_parse_product_shape_change(tmp_path):
     salt = cache_mod.BuildCache(tmp_path, engine_commit="deadbeef",
                                 lib_versions={}, contract_digest="")._fixed_salt
     assert "ausmt-c47-cache-v6" in salt
+
+
+def test_non_channel_dotted_keys_never_become_channels():
+    """The named-components rule is an ALLOW-LIST over the known component families. Any dotted
+    run.<x>.<y> key used to be promoted to a channel, so a structured non-channel path like
+    run.acquired_by.author fabricated an acquired_by channel row in the citable station.json
+    (the schema types `component` as a free string, so nothing downstream refused it)."""
+    d = rf.run_facts("run.acquired_by.author = A. Person\n"
+                     "run.time_period.start = 2019-08-20T10:53:03+00:00\n"
+                     "run.data_logger.model = LEMI-423\n"
+                     "run.ex.dipole_length = 43\n"
+                     "run.hx.measurement_azimuth = 0\n")
+    assert d["named_components"] == ["ex", "hx"], d["named_components"]

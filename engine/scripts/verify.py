@@ -341,6 +341,23 @@ def _check_survey_metadata(base_dir: Path, mtc, rep, jsonschema, sm_schema):
         lines.append(f"   survey-metadata: FAIL - the build SKIPPED {len(skipped)} survey(s) the validator FAILed "
                      f"({', '.join(str(s) for s in skipped)}); they are absent from every public surface. Fix the "
                      f"survey.yaml (or withdraw the package deliberately) and rebuild; never swap this build in.")
+    # 1b. The same rule for every OTHER survey-granularity drop: unreadable or non-mapping
+    #     survey.yaml, invalid coordinate policy or station_ids block, a zero-station parse, an
+    #     unserialisable SMETA. Seven of these eight paths used to be stderr-only, so this gate
+    #     passed a build that silently lost a survey - the exact swap D20 exists to prevent.
+    dropped = (rep or {}).get("surveys_dropped") if isinstance(rep, dict) else None
+    if dropped is None:
+        ok = False
+        lines.append("   survey-metadata: FAIL - build_report.json carries no surveys_dropped list "
+                     "(build predates the drop gate, or the report was not emitted); cannot vouch that "
+                     "no survey was silently dropped")
+    elif dropped:
+        ok = False
+        _names = ", ".join(str(e.get("survey", e)) + (" (" + str(e.get("reason")) + ")" if isinstance(e, dict) and e.get("reason") else "")
+                           for e in dropped)
+        lines.append(f"   survey-metadata: FAIL - the build DROPPED {len(dropped)} survey(s): {_names}; they are "
+                     f"absent from every public surface. Fix the package (or withdraw it deliberately) and "
+                     f"rebuild; never swap this build in.")
     docs = sorted((base_dir / "products").glob("*/survey-metadata.json")) if (base_dir / "products").is_dir() else []
     validator = None
     if jsonschema and sm_schema:

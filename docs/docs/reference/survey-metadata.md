@@ -479,5 +479,7 @@ scans for nulls and empty containers, checks the citation invariant, and exits n
 publish a failing document. After the build, `scripts/verify.py` validates every
 `products/<slug>/survey-metadata.json` again, checks that the set of documents equals
 `mtcat.json`'s `surveys[].survey_id`, and fails when the build's report lists any survey the
-survey validator rejected (`build_report.json` `surveys_skipped_validation`), so a build that lost a
-survey is never swapped in.
+survey validator rejected (`build_report.json` `surveys_skipped_validation`) or dropped for any
+other survey-granularity reason (`surveys_dropped`: an unreadable or non-mapping `survey.yaml`, an
+invalid coordinate policy or `station_ids` block, a zero-station parse, an unserialisable metadata
+record), so a build that lost a survey is never swapped in.
