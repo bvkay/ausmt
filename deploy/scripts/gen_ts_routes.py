@@ -18,8 +18,12 @@ predicate as ts_access.json - key sets equal by construction.
 
 The survey serve verdict is the one restated seam (build_portal pulls the mt_metadata stack; see
 `_survey_serves`); the key-set parity legs are the drift backstop. The registers live in the
-sibling ausmt-surveys checkout, so `--check` runs pre-commit, on the box, and in gateway-ci; an
-absent register root STOPS rather than passing vacuously.
+sibling ausmt-surveys checkout, so `--check`'s CI home is gateway-ci (.github/workflows). The
+registers are in a SEPARATE repo, so a register-only edit (an embargo, a metadata_only flip, a
+coordinate-policy change) touches no path gateway-ci watches: ausmt-surveys fires a
+`ts-registers-changed` repository_dispatch on such a change (its ts-routes-dispatch.yml) and THAT is
+what re-runs this gate against the new registers. doctor-box.sh's ts-route key-set parity leg is the
+post-publication backstop on the box. An absent register root STOPS rather than passing vacuously.
 
 A survey this reader cannot resolve drops ITS OWN routes only, recorded as an `# UNRESOLVED` line:
 failing the whole generation left the previously committed table serving routes the build had

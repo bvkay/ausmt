@@ -22,6 +22,13 @@ name: gateway-ci
 
 on:
   workflow_dispatch:
+  # H4/R27: the ts-routes drift gate below must fire on the change that triggers it, and that change
+  # (a register edit) lands in the SEPARATE ausmt-surveys repo, which never touches a path this
+  # workflow watches. So the surveys repo's ts-routes-dispatch.yml fires this event on a register
+  # change, and it re-runs the gate against the freshly pushed registers. One source of truth: the
+  # check lives here, the surveys repo is only the trigger.
+  repository_dispatch:
+    types: [ts-registers-changed]
   push:
     paths:
       - "gateway/**"
@@ -121,8 +128,17 @@ jobs:
       # The registers live in the SEPARATE ausmt-surveys repo, so this needs a sibling checkout at the
       # exact path the generator resolves ($GITHUB_WORKSPACE/../ausmt-surveys). Same wiring as
       # deploy-images.yml's validator clone, same no-silent-skip posture: with the var set, a clone
-      # failure is a hard error and the check gates the lane; with it unset the check CANNOT run, and
-      # that is stated as a warning annotation and on the job summary rather than passing quietly.
+      # failure is a hard error and the check gates the lane.
+      #
+      # H4/R27 - "cannot check" must NEVER read as "checked and clean". This step used to `exit 0`
+      # green when AUSMT_SURVEYS_URL was unset, so a committed table that no longer matched the
+      # registers merged undetected. Now an inability to run the gate is a HARD FAILURE everywhere the
+      # secret is available (push, same-repo PR, workflow_dispatch, and the ts-registers-changed
+      # dispatch that is the gate's real trigger). The ONE documented exception is a fork PR: GitHub
+      # withholds this repo's secrets from fork-triggered runs, so a fork legitimately cannot clone a
+      # private registers repo. There we annotate loudly and skip rather than wedge an unrelated
+      # contributor's PR; the gate still runs on merge to the default branch and on the surveys-repo
+      # dispatch, and doctor-box.sh's ts-route key-set parity leg is the post-publication backstop.
       #
       # COUPLING: DEST below is the SAME directory gateway/tests/conftest.py resolves as the live
       # validator sibling, so this clone makes a sibling validator appear mid-job. The unit-test step
@@ -133,20 +149,37 @@ jobs:
         env:
           SURVEYS_URL: ${{ vars.AUSMT_SURVEYS_URL }}
           SURVEYS_TOKEN: ${{ secrets.AUSMT_SURVEYS_TOKEN }}
+          # True ONLY for a PR whose head repo is a FORK of this one; false for push, same-repo PR,
+          # workflow_dispatch and repository_dispatch. It is the one context where this repo's secrets
+          # are legitimately unavailable, so it is the one context where a "cannot check" is a skip
+          # rather than a hard fail (see fail_or_skip below).
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           DEST="$GITHUB_WORKSPACE/../ausmt-surveys"
+          # "Cannot run the gate" resolves to a HARD FAIL everywhere the registers secret is available,
+          # and to a loud SKIP only on a fork PR (which cannot see the secret). This keeps H4/R27's
+          # rule - "cannot check" never reads as "checked and clean" - without wedging fork PRs.
+          fail_or_skip() {   # $1 = human-readable reason
+            if [ "$IS_FORK_PR" = "true" ]; then
+              echo "::warning::$1 - SKIPPED on this fork PR, which cannot access the registers secret. The gate still runs on merge to the default branch and on the ausmt-surveys ts-registers-changed dispatch."
+              {
+                echo "### gateway-ci: route-table drift gate SKIPPED (fork PR)"
+                echo ""
+                echo "\`deploy/frontdoor/ts-routes.map\` MEMBERSHIP is the R5 suppression, and only"
+                echo "\`gen_ts_routes.py --check\` can compare it against the registers it was generated from."
+                echo "A fork PR cannot read this repo's secrets, so it cannot clone the registers repo."
+                echo "This is NOT a green result for the map - the authoritative runs are:"
+                echo "* push / merge to the default branch and \`workflow_dispatch\` here;"
+                echo "* the \`ts-registers-changed\` dispatch fired by ausmt-surveys on a register change;"
+                echo "* \`doctor-box.sh\`'s ts-route key-set parity leg, the post-publication backstop."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::error::$1"
+            exit 1
+          }
           if [ -z "$SURVEYS_URL" ]; then
-            echo "::warning::AUSMT_SURVEYS_URL is unset - the ts-routes.map drift gate did NOT run. A committed route table that no longer matches the registers would merge undetected."
-            {
-              echo "### gateway-ci: route-table drift gate SKIPPED (AUSMT_SURVEYS_URL unset)"
-              echo ""
-              echo "\`deploy/frontdoor/ts-routes.map\` MEMBERSHIP is the R5 suppression, and only"
-              echo "\`gen_ts_routes.py --check\` can compare it against the registers it was generated from."
-              echo "Set the repo variable \`AUSMT_SURVEYS_URL\` (and, for a private repo, the secret"
-              echo "\`AUSMT_SURVEYS_TOKEN\`) to enable it. Until then the only nets are the architect's"
-              echo "pre-commit battery and \`doctor-box.sh\`'s parity leg, which runs AFTER publication."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            fail_or_skip "AUSMT_SURVEYS_URL is unset - the ts-routes.map drift gate CANNOT run. Set the repo variable AUSMT_SURVEYS_URL (and, for a private repo, the secret AUSMT_SURVEYS_TOKEN) so the R5 route-table membership is verified against the registers"
           fi
           CLONE_URL="$SURVEYS_URL"
           if [ -n "$SURVEYS_TOKEN" ]; then
@@ -156,11 +189,9 @@ jobs:
             esac
           fi
           if [ ! -d "$DEST" ] && ! git clone --depth 1 "$CLONE_URL" "$DEST"; then
-            echo "::error::AUSMT_SURVEYS_URL is set but the clone FAILED - refusing to silently skip the route-table drift gate."
-            exit 1
+            fail_or_skip "AUSMT_SURVEYS_URL is set but the clone of the registers repo FAILED (on a fork PR the AUSMT_SURVEYS_TOKEN secret is unavailable, so a private repo cannot be cloned)"
           fi
           if [ ! -d "$DEST/surveys" ]; then
-            echo "::error::cloned ausmt-surveys but $DEST/surveys is absent - the registers are not where the generator expects them."
-            exit 1
+            fail_or_skip "cloned ausmt-surveys but $DEST/surveys is absent - the registers are not where the generator expects them"
           fi
           python deploy/scripts/gen_ts_routes.py --check --surveys "$DEST/surveys"
