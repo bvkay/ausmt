@@ -91,7 +91,11 @@
   .typegrid label{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 8px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;cursor:pointer}
   .typegrid input{accent-color:var(--copper)}
   .dot{width:10px;height:10px;border-radius:50%;flex:none}
-  .seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  /* flex-shrink:0 is load-bearing, not tidiness: #filterPane is a column flex, so a TALL mode pane
+     (Select and download) made the flex algorithm squash this control, and because .seg clips its
+     overflow it collapsed silently to its 2px borders instead of overflowing visibly. That left the
+     rail a one-way door - you could enter Select and download and never get back to Browse. */
+  .seg{display:flex;flex:none;border:1px solid var(--line);border-radius:4px;overflow:hidden}
   .seg button{flex:1;background:var(--panel-2);border:0;color:var(--muted);font-size:12px;padding:6px;cursor:pointer}
   .seg button.on{background:var(--copper);color:#16110b;font-weight:600}
   /* UX7a (A4): the country→org→survey tree fills the rail's remaining height (flex-grow) and scrolls
@@ -615,9 +619,14 @@
      position:static undoes the absolute placement Leaflet gives a corner control, and the bar is
      inert - it is a reading aid, never a target. */
   .maplegend .maplegend-scale{position:static;margin:7px 0 0;pointer-events:none;box-shadow:none}
+  /* text-shadow:none is the point: Leaflet ships this control with a WHITE text-shadow, which is
+     right over a light basemap and a white halo around near-white text on this dark panel - the
+     figure read as blurred and bold rather than crisp. Weight drops to 500 for the same reason;
+     the mono face at 11.5px is already distinct enough without bolding it into a smudge. */
   .maplegend .maplegend-scale .leaflet-control-scale-line{background:none;box-shadow:none;
-    border:2px solid var(--muted);border-top:0;color:var(--text);font-family:var(--mono);
-    font-size:11.5px;font-weight:600;line-height:1.5;padding:2px 6px;text-align:center}
+    text-shadow:none;border:2px solid var(--muted);border-top:0;color:var(--text);
+    font-family:var(--mono);font-size:11.5px;font-weight:500;line-height:1.5;padding:2px 6px;
+    letter-spacing:.02em;text-align:center}
   /* Collapsible ONLY on small widths: the toggle appears and the body defaults collapsed there (the .expanded
      class from the toggle overrides). On desktop the body is always shown and the toggle stays hidden, so a
      narrow-built legend can never get stuck collapsed with no visible way to expand it. */
