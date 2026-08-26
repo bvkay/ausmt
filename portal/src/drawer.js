@@ -262,7 +262,7 @@ function coordCellHtml(s){
 // modal exactly as in the drawer), and orgNameLink so the ROR link treatment matches the drawer header.
 function stationModalHeader(s,m){
   const site=(s.site_name&&s.site_name!==s.id)?`<span class="pm-site">${esc(s.site_name)}</span>`:"";
-  const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`;
+  const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}${TYPE_INK[s.type]?";color:"+TYPE_INK[s.type]:""}">${esc(s.type)}</span>`;
   return `<div class="pm-id"><span class="sid">${esc(s.id)}</span>${site}${typeChip}</div>`+
     `<div class="pm-sub">${esc(s.survey)} · ${orgNameLink(s.org,(m||{}).org_ror)}</div>`+
     `<div class="pm-coord">${coordCellHtml(s)}</div>`;
@@ -832,7 +832,7 @@ function openStation(i,opts){
   const _inds=screeningIndicators({q:sc[SC.q],azR:_azR,azN:azs.length,beta:skew,betaThr:_bp.skew_3d_deg,phaseSplit:_phaseSplit,decades:dec});
   const keysafe=s.ausmt_id.replace(/[^a-z0-9]/g,"_");
   // ---- UX6 Wave C: sticky header (identity + chips + primary actions) + tab strip -------------------
-  const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}">${esc(s.type)}</span>`;
+  const typeChip=`<span class="chip" style="background:${TYPE_COL[s.type]||"#999"}${TYPE_INK[s.type]?";color:"+TYPE_INK[s.type]:""}">${esc(s.type)}</span>`;
   const collChip=(m.collection&&m.collection.id)?`<span class="chip collchip" data-act="collection" data-coll="${escAttr(m.collection.id)}" title="Explore collection">${esc(m.collection.title||m.collection.id)}</span>`:"";
   // Acquisition year: the survey's declared dates string, else its year_start(-end) range; omitted if neither.
   const yearTxt=m.dates?esc(m.dates):(m.year_start?esc(String(m.year_start))+(m.year_end&&m.year_end!==m.year_start?"–"+esc(String(m.year_end)):""):"");

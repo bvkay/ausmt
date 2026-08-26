@@ -89,6 +89,11 @@ let TSACC=null;
 // All of it is recomputed and gated in tests/test_type_palette_separability.py; the floors are stated
 // there, not here, so a future edit cannot re-converge the pair by editing a comment.
 const TYPE_COL={LPMT:"#2E8FA3",BBMT:"#3730B8",AMT:"#CDA1EC",GDS:"#C255A0",other:"#999"};
+// The INK a type chip needs, which is not one colour for all four: .chip's default near-black sits at
+// 2.03:1 on BBMT's deep indigo (below WCAG AA's 4.5 and visibly muddy), where white reaches 9.22:1.
+// The other three are the other way round - white on AMT's light violet is 2.12:1 against 8.85:1 for
+// the default - so this is a per-type override, never a blanket flip. Measured, not judged by eye.
+const TYPE_INK={BBMT:"#fff"};
 // country drives the hierarchy, so {country:"New Zealand"} surfaces NZ with zero code change.
 const CC={"Australia":"AU","New Zealand":"NZ","Antarctica":"AQ","Indonesia":"ID"};
 const TS_COLLECTION={doi:"10.25914/mtjg-jp22",name:"NCI-AuScope Magnetotelluric Collection"};
