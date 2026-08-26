@@ -2696,6 +2696,23 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   ok(selBtn.classList.contains("on"), "D2: the active mode button did not get the .on state");
   [...modeSeg.children].find(b => b.dataset.mode === "browse").click();
   ok(A.sidebarMode() === "browse", "D2: could not switch back to Browse");
+  // W2. TWO LAYOUT REGRESSIONS THIS HARNESS CANNOT SEE BEHAVIOURALLY (found live 2026-08-26).
+  // jsdom has no layout engine: every rect is 0, so the mode-switch pins ABOVE stayed green while the
+  // live rail was a ONE-WAY DOOR. #filterPane is a column flex, so the taller Select pane made the
+  // flex algorithm shrink #modeSeg, and because .seg clips its overflow it collapsed to its 2px
+  // borders in silence rather than overflowing where anyone would notice. Measured on the live site:
+  // 29px in Browse, 2px in Select, restored to 29px by flex-shrink:0 alone. These are therefore
+  // SOURCE pins on the two declarations that carry the constraint - weaker than a behavioural pin,
+  // and the honest best this harness can do for a pure-layout class.
+  const _segCss = (html.match(/\.seg\{[^}]*\}/) || [""])[0];
+  ok(/flex:\s*none|flex-shrink:\s*0/.test(_segCss),
+    "the Browse/Select toggle must not be shrinkable: a column-flex parent squashes it to its borders " +
+    "in the taller Select pane and the rail becomes a one-way door. Got: " + JSON.stringify(_segCss));
+  const _scaleCss = (html.match(/\.leaflet-control-scale-line\{[^}]*\}/) || [""])[0];
+  ok(/text-shadow:\s*none/.test(_scaleCss),
+    "the scale bar must clear Leaflet's WHITE text-shadow: it is meant for a light basemap and reads " +
+    "as a halo around near-white text on the dark legend. Got: " + JSON.stringify(_scaleCss));
+
   A.setSidebarMode("browse");
   doc.getElementById("selAll").click();
   ok(A.sidebarMode() === "select", "D2: 'Select all filtered' did not auto-switch to Select & export");
