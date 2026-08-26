@@ -1818,22 +1818,36 @@ async function bootFreshWindow(dataMap, url, preBoot) {
   A.paintDownloadRows();
   ok(/^Download list · 2 stations/.test(tsMeta("raw_packed")),
     "an over-cap row states the list mode, got " + JSON.stringify(tsMeta("raw_packed")));
+  const _zmarkOver = zipEntries.length;
   tsBtn("raw_packed").click();
   await new Promise(r => setTimeout(r, 0));
-  ok(savedBlobs.length === _savedBefore + 1, "the over-cap path saves the list document");
+  // Over the cap the pack is the ONLY save: the standalone list .json was the same document the
+  // pack already carries as handoff.json, and it landed at the head of the reader's downloads
+  // (owner, 2026-08-26). Exactly one save (the pack), never two.
+  // The pack is built through the stubbed JSZip, so it shows up as ZIP ENTRIES rather than a save;
+  // what must be GONE is the standalone list .json, which was a real save.
+  const _zOver = zipEntries.slice(_zmarkOver).map(e => e.name);
+  ok(_zOver.some(n => /handoff\.json$/.test(n)),
+    "the over-cap path must still build the metadata pack (its handoff.json IS the list), got " + JSON.stringify(_zOver));
+  ok(savedBlobs.length === _savedBefore,
+    "the over-cap path must save no standalone list .json - the pack already carries it - got " +
+    JSON.stringify(savedBlobs.slice(_savedBefore).map(b => b.name)));
   ok(/Download list ready - 2 files, /.test(snackEl.textContent),
     "the list confirmation must state the ROW-scoped file count and size, got " + JSON.stringify(snackEl.textContent));
   ok(handed.length === 2, "the over-cap path hands nothing directly");
-  win.TS_DIRECT_MAX_BYTES = 10 * 1024 * 1024 * 1024;
-  // The wget DIALOG (owner, 2026-08-25): the snackbar action SHOWS the command - visible,
-  // scrollable, with its run-in-a-terminal instructions - and the copy happens from the dialog,
-  // so a reader sees what lands on their clipboard.
+  // The dialog opens BY ITSELF over the cap (owner, 2026-08-26): at this size the terminal command
+  // is the only thing that can serve the reader, so putting it behind a snackbar action was a click
+  // between them and the answer. The action stays for re-opening after a dismiss.
+  const wgetModal = doc.getElementById("wgetModal"), wgetCmd = doc.getElementById("wgetCmd");
+  ok(wgetModal && !wgetModal.classList.contains("hidden"),
+    "the over-cap path must OPEN the terminal-command dialog itself, not wait for a click");
+  doc.getElementById("wgetClose").click();
+  win.TS_DIRECT_MAX_BYTES = 5 * 1024 * 1024 * 1024;
   const showBtn = snackEl.querySelector("button");
   ok(showBtn && /terminal command/i.test(showBtn.textContent),
-    "the confirmation must offer the terminal command, got " + (showBtn && showBtn.textContent));
+    "the confirmation must still offer the terminal command for a re-open, got " + (showBtn && showBtn.textContent));
   showBtn.click();
-  const wgetModal = doc.getElementById("wgetModal"), wgetCmd = doc.getElementById("wgetCmd");
-  ok(wgetModal && !wgetModal.classList.contains("hidden"), "the wget dialog must open from the snackbar action");
+  ok(wgetModal && !wgetModal.classList.contains("hidden"), "the wget dialog must re-open from the snackbar action");
   ok(/terminal/i.test(wgetModal.textContent), "the dialog must say the command runs in the reader's own terminal");
   // Platform tabs: three of them, the detected platform pre-selected (jsdom's navigator detects as
   // Linux here). Linux carries per-file `wget ... -P <slug>/<level>` lines (namespaced so same-named

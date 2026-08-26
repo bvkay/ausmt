@@ -889,10 +889,9 @@
   <div id="wgetModal" class="introwelcome hidden" role="dialog" aria-modal="true" aria-labelledby="wgetHeading">
     <div class="introwelcome-box wgetbox" tabindex="-1">
       <h2 class="introwelcome-heading" id="wgetHeading">Fetch from your terminal</h2>
-      <p class="wget-instructions">Run this in your own terminal, not in this page. It fetches the
-        files one at a time into per-survey and per-level subfolders of the current directory - so two
-        files that share a name never collide - and re-running it resumes: completed files are skipped,
-        partial ones continue.</p>
+      <p class="wget-instructions">Run this in your own terminal. It fetches the files one at a time
+        into per-survey and per-level subfolders of the current directory, and re-running it resumes:
+        completed files are skipped, partial ones continue.</p>
       <!-- Per-platform tabs (owner, 2026-08-25): the DETECTED platform is pre-selected. Linux uses wget
            (one call per file, -P <survey>/<level> so same-named files land in their own directories);
            macOS and Windows use curl / curl.exe with explicit -o paths namespaced the same way
