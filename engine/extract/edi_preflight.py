@@ -49,7 +49,12 @@ from pathlib import Path
 
 # The mt_metadata release this mirror was read from. Pinned in the lock
 # (engine/environments/requirements-mtmetadata-lock.txt) and re-asserted by the parity test.
-MIRRORED_MT_METADATA = "1.0.9"
+# 1.0.10 re-read completed 2026-08-27 (the perf-fork pin move): information.py and
+# define_measurement.py carry ZERO substantive change (black reformatting only, verified
+# whitespace-blind); tools.py adds a US-footprint guard on the elevation lookup, which is
+# outside the parse surface this mirror predicts and always skips for AU coordinates. The
+# empirical parity tests below (mirror vs the real reader, every corpus EDI) pass on 1.0.10.
+MIRRORED_MT_METADATA = "1.0.10"
 
 # The three verdicts, in worsening order.
 READS = "reads"                      # stock mt_metadata reads this file today

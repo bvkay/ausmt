@@ -18,5 +18,11 @@
 # BLAS-linked packages to one source: pip install --force-reinstall --no-deps numpy scipy pandas xarray
 # See environments/README.md.
 
-mt_metadata==1.0.9
-mth5==0.6.8
+# PERF FORK PINS (2026-08-27, owner-ruled). Measured on the full corpus: 3.4x on the whole
+# rebuild (cold 118 -> ~35 min, warm 74 -> ~22 min projected), byte-identical products modulo
+# version/timestamp stamps, engine battery 1105 passed. Evidence and phase attribution:
+# AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md. Pinned by COMMIT SHA, never by branch name, so the
+# install can never move under us. SWAP to upstream releases when the corresponding PRs merge
+# (bvkay/mt-metadata perf-update -> mt_metadata >= next release; bvkay/mth5 perf-update likewise).
+mt_metadata @ git+https://github.com/bvkay/mt-metadata.git@58285e106a25dbe2eb028bc093dbfd715852e1e1
+mth5 @ git+https://github.com/bvkay/mth5.git@eebdf20b80eb6099c3e952bb57dff3311f775ac0
