@@ -299,7 +299,10 @@ def test_real_caddy_masks_forwarded_client_ip_in_the_log():
 
     text = _caddyfile_text()
     log_block = _extract_block(text, "\tlog")          # the shipped log {...}
-    servers_block = _extract_block(text, "servers")    # the shipped trusted_proxies {...}
+    # 2026-08-28 serve-path tuning split the servers options per listener (scoped blocks do not
+    # inherit, so each carries trusted_proxies). The reader listener (:8081) is the one behind the
+    # front door, so its block is the shipped source of the trusted_proxies under test here.
+    servers_block = _extract_block(text, "servers :8081")    # the shipped trusted_proxies {...}
 
     # A free loopback port.
     s = socket.socket()

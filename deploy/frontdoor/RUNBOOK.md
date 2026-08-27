@@ -49,6 +49,16 @@ The bridge adds a dedicated **public-subset listener** (`:8081`) to the box's Ca
 it serves the reader plus the Add Survey page, proxies only the four public gateway routes to the
 gateway container, and refuses the rest of `/gateway`.
 
+**Serve-path tuning order (2026-08-28): the box ships BEFORE the front door.** The front door's
+`(box_upstream)` snippet dials the reader with h2c and has no h1 fallback, so a front door updated
+ahead of a box whose `:8081` does not yet accept h2c (`servers :8081 { protocols h1 h2c }` in the
+box Caddyfile) would 502 the whole public site. Any deploy that touches both sides runs the box
+litany (the Caddyfile is baked into the portal image, so `docker compose pull` or `build portal`
+carries it) and only then `install-frontdoor.sh` on the VPS. The doctor's `tailnet-path` leg FAILs
+if the VPS-box path is DERP-relayed (the 2026-08-28 relay trap: multi-second TTFB outliers and
+capped throughput with nothing else surfacing it); the remediation is a `tailscaled` restart on
+the box, then `tailscale ping ausmt-box` until a pong reports a direct endpoint.
+
 1.1  On the box, update the checkout to the branch/release carrying C47 and rebuild + restart the
      portal image so `:8081` is live:
 ```sh

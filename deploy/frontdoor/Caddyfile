@@ -38,12 +38,33 @@
 	# forwarded address; client_ip == the real remote peer, which the log block masks at write time.
 }
 
+# ---- The ONE transport to the box reader (2026-08-28 serve-path tuning) --------------------------
+# Every proxy to the box imports this snippet, so there is exactly one place the upstream transport
+# can be got wrong. It dials h2c: tailscale serve forwards :8445 as a RAW TCP tunnel (RUNBOOK
+# `--tcp=8445`), so the h2c bytes pass end to end to the box reader listener, which accepts h2c
+# (deploy/docker/caddy/Caddyfile `servers :8081`). This un-serialises the browser's parallel
+# streams; before it, 15 h2 requests funnelled into fresh HTTP/1.1 upstream connections and the
+# cold-load script TTFBs stepped 1.1s / 1.6s / 2.2s (the measured staircase). keepalive keeps the
+# multiplexed connections warm between page loads.
+#
+# DEPLOY ORDER: the BOX ships first. h2c here has no h1 fallback, so a front door updated before
+# the box reader accepts h2c would 502 the whole site. Box litany, then install-frontdoor.sh.
+(box_upstream) {
+	reverse_proxy {$AUSMT_BOX_READER_UPSTREAM} {
+		transport http {
+			versions h2c 2
+			keepalive 90s
+			keepalive_idle_conns 64
+		}
+	}
+}
+
 # The public site. A bare hostname address turns on Caddy's automatic HTTPS: it obtains + renews a
 # certificate for {$AUSMT_PUBLIC_NAME} over ACME and AUTOMATICALLY serves an HTTP->HTTPS redirect on
 # :80 for the same name (C47 invariant d). Do NOT add `auto_https off` — that would drop both the cert
 # and the redirect.
 {$AUSMT_PUBLIC_NAME} {
-	encode gzip
+	encode zstd gzip
 
 	# ---- C45 masked-at-edge access log — AT THE FRONT DOOR on public traffic (C47 invariant c) -----
 	# This is the analytics feed now: the public client is masked HERE (IPv4 -> /24, IPv6 -> /48) so a
@@ -155,19 +176,19 @@
 		path /gateway/status/*
 	}
 	handle @public_add_survey {
-		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+		import box_upstream
 	}
 	handle @public_gw_submit {
-		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+		import box_upstream
 	}
 	handle @public_gw_request_key {
-		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+		import box_upstream
 	}
 	handle @public_gw_healthz {
-		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+		import box_upstream
 	}
 	handle @public_gw_status {
-		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+		import box_upstream
 	}
 
 	# ---- PATH-URL CONTRACT (tier 1, owner ruling 2026-08-18) ----------------------------------------
@@ -288,7 +309,7 @@
 	# public-subset listener over the tailnet. {$AUSMT_BOX_READER_UPSTREAM} is e.g. http://ausmt-box:8445
 	# (the box's MagicDNS name + the tailscale-serve reader port) — config-side name, supplied from .env.
 	handle {
-		reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}
+		import box_upstream
 	}
 }
 

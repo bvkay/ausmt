@@ -141,7 +141,10 @@ def _run_caddy(cfg_text: str, td: Path, name: str) -> subprocess.Popen:
 def _stub_cfg(port: int, tag: str = "STUB") -> str:
     # A stand-in upstream: echoes the path so a test can prove a request REACHED it. `tag` distinguishes
     # the READER stub (STUB) from the GATEWAY-container stub (GWSTUB) in the end-to-end compositions.
-    return ("{\n\tadmin off\n\tauto_https off\n}\n"
+    # The stub accepts h2c exactly as the real reader listener does (2026-08-28 serve-path tuning:
+    # the front door's box_upstream snippet dials h2c with no h1 fallback, so a stub that only
+    # spoke h1 would 502 every composed end-to-end request).
+    return ("{\n\tadmin off\n\tauto_https off\n\tservers {\n\t\tprotocols h1 h2c\n\t}\n}\n"
             + f":{port} {{\n\trespond \"{tag} {{http.request.uri}}\" 200\n}}\n")
 
 
@@ -154,6 +157,16 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     body = _site_body(_fd_text(), r"\{\$AUSMT_PUBLIC_NAME\} \{")
     logpath = td / "access-frontdoor.json"
     body = re.sub(r"output file \S+", f"output file {logpath.as_posix()}", body)
+    # The site body imports the shipped (box_upstream) snippet (2026-08-28 serve-path tuning), so
+    # the composition carries the snippet definition verbatim and the upstream substitution is
+    # applied there: the composed edge then dials the stub through the REAL transport (h2c +
+    # keepalive), which is exactly the path production requests take.
+    m_snip = re.search(r"\(box_upstream\)\s*\{", _fd_text())
+    assert m_snip, "the shipped Caddyfile must define the (box_upstream) snippet"
+    snip_start = m_snip.start()
+    snip_text = _fd_text()[snip_start:_fd_text().index("{", m_snip.end() - 1)] + _brace_match(
+        _fd_text(), _fd_text().index("{", m_snip.end() - 1))
+    snippet = snip_text.replace("{$AUSMT_BOX_READER_UPSTREAM}", f"127.0.0.1:{stub_port}")
     body = body.replace("{$AUSMT_BOX_READER_UPSTREAM}", f"127.0.0.1:{stub_port}")
     if drop_gateway_deny:
         # Remove the whole wall-1 deny-by-default: the `@nonpublic path ...` matcher line AND its
@@ -190,7 +203,8 @@ def _frontdoor_cfg(td: Path, listen_port: int, stub_port: int, *,
     _tsmap = td / "ts-routes.map"
     _tsmap.write_text("# hermetic fixture: no hand-off routes\n", encoding="utf-8")
     body = body.replace("import /etc/caddy/ts-routes.map", f"import {_tsmap.as_posix()}")
-    cfg = "{\n\tadmin off\n\tauto_https off\n}\n" + f":{listen_port} {{\n{body}\n}}\n"
+    cfg = ("{\n\tadmin off\n\tauto_https off\n}\n" + snippet + "\n"
+           + f":{listen_port} {{\n{body}\n}}\n")
     return cfg, logpath
 
 
@@ -328,8 +342,13 @@ def test_frontdoor_allows_only_the_public_subset_explicitly():
         assert cls in classes, f"the deny matcher must be self-complete: {cls!r} missing; got {classes}"
     handle = _brace_match(body, body.index("\thandle @nonpublic {"))
     assert re.search(r"respond\b.*\b404", handle), "the @nonpublic handle must explicitly respond 404"
-    assert "reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}" in body, \
-        "the reader must proxy to the box upstream env placeholder"
+    # 2026-08-28 serve-path tuning: the box proxies ride the shared (box_upstream) snippet, so the
+    # property splits in two: the site body reaches the box THROUGH the snippet, and the snippet
+    # (the one place the transport lives) proxies to the env placeholder.
+    assert "import box_upstream" in body, \
+        "the reader must reach the box through the box_upstream snippet"
+    assert "reverse_proxy {$AUSMT_BOX_READER_UPSTREAM}" in _fd_text(), \
+        "the box_upstream snippet must proxy to the box upstream env placeholder"
 
 
 def test_frontdoor_tls_and_hsts_configured():

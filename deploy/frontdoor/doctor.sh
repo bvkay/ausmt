@@ -30,6 +30,9 @@
 #   4d. the TIME-SERIES HAND-OFF TABLE (R3/R5): map hash parity, open-302, unlisted-404. Detail at
 #       the check itself; skips cleanly on a routeless table or an unresponsive edge.
 #   5. tailscale is up and the box peer is visible
+#   5b. the tailnet path to the box is DIRECT, not DERP-relayed (the 2026-08-28 relay trap: a
+#       relayed path serves the whole portal through a shared third-party relay with multi-second
+#       TTFB outliers and capped throughput, and nothing else surfaces it)
 #   6. the zombie-process count is under the warn threshold (see the `zombies` subcommand for the kit)
 #   7. disk headroom on the data path
 #   8. the public DNS A record still resolves to THIS host
@@ -442,6 +445,28 @@ check_tailscale() {
 	fi
 }
 
+check_tailnet_path() {
+	# The relay trap (2026-08-28): the VPS<->box WireGuard path can silently regress to a DERP
+	# relay (stale tailscaled state held it there until a daemon restart), and every portal byte
+	# then rides a shared third-party relay. tailscale ping names the path per pong; the LAST pong
+	# is the verdict, because hole punching can upgrade the path mid-probe and a run that ENDS
+	# direct is healthy. No pong at all is the upstream check's territory, so it only WARNs here.
+	up="${AUSMT_BOX_READER_UPSTREAM:-}"
+	peer="$(printf '%s' "$up" | sed -e 's#^[a-z]*://##' -e 's#[:/].*$##')"
+	if [ -z "$peer" ]; then
+		warn "tailnet-path: box peer name not derivable from upstream; skipped"
+		return
+	fi
+	verdict="$($TAILSCALE ping -c 3 "$peer" 2>/dev/null | grep 'pong from' | tail -1)"
+	if [ -z "$verdict" ]; then
+		warn "tailnet-path: no pong from $peer (reachability is the upstream check's job); skipped"
+	elif printf '%s' "$verdict" | grep -q 'DERP'; then
+		fail "tailnet-path: VPS->box is RELAYED via DERP ($verdict) - restart tailscaled on the box, then re-check with: tailscale ping $peer"
+	else
+		pass "tailnet-path: VPS->box is direct ($(printf '%s' "$verdict" | sed 's/^.*via //'))"
+	fi
+}
+
 check_zombies() {
 	n="$(zombie_count)"
 	if [ "$n" -ge "$ZOMBIE_WARN" ] 2>/dev/null; then
@@ -498,6 +523,7 @@ run_report() {
 	check_pathurl_redirect
 	check_ts_routes
 	check_tailscale
+	check_tailnet_path
 	check_zombies
 	check_disk
 	check_dns
