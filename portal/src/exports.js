@@ -315,17 +315,22 @@ function tsCurlCommand(rows,exe){
 // handed to the browser exactly as the drawer's single-station tile hands one, and the browser
 // owns the downloads and their progress (the 2026-08-23 ruling; AusMT still hosts and fetches
 // nothing - the 302s do the pointing). The gate is the TOTAL SIZE, not the file count (owner,
-// same day): up to 10 GB the browser is the best tool; beyond it the offer stays a LIST + wget,
-// which is resumable and verifiable at a scale where browser downloads quietly are not.
-var TS_DIRECT_MAX_BYTES=10*1024*1024*1024;
+// same day): up to the gate the browser is the best tool; beyond it the offer is the TERMINAL
+// COMMAND, which is resumable and verifiable at a scale where browser downloads quietly are not.
+// 5 GB, lowered from 10 (owner, 2026-08-26): raw_packed files run 0.2-1.2 GB each, so 10 GB could
+// hand a browser two dozen large transfers at once, which is where the browser stops being the
+// better tool. 5 GB keeps the direct path to a handful of files.
+var TS_DIRECT_MAX_BYTES=5*1024*1024*1024;
 // The wget dialog: show the command (scrollable), say where to run it, THEN offer the copy - a
 // reader should see what lands on their clipboard. Per-platform tabs, with the DETECTED platform
 // pre-selected (detection only picks the default tab; researchers copy commands for other
 // machines, so all three stay one click away). Guarded binds like every other control.
+// One line per platform: what to run it with, and nothing the shared instructions above already say
+// (owner, 2026-08-26 - the subfolder and resume behaviour is stated once, not three times over).
 var WGET_OS_NOTES={
-  linux:"wget is preinstalled on most Linux distributions. Files are saved under per-survey and per-level subfolders (named by the archive's own header filename), so two files that share a name never collide; a re-run resumes partial files and leaves completed ones as they are.",
-  mac:"curl is preinstalled on macOS - nothing to install. Files are saved under per-survey and per-level subfolders keyed to the archive's own filename, so two files that share a name never collide; a re-run resumes partial files and leaves completed ones as they are.",
-  win:"curl.exe is preinstalled on Windows 10 and later - nothing to install. Run it in PowerShell or Command Prompt (curl.exe by full name: PowerShell's bare curl is a different command). Files are saved under per-survey and per-level subfolders; on Windows the filename is restricted to a safe character set (spaces and punctuation become _) so the line is safe to paste into either shell. A re-run resumes partial files and leaves completed ones as they are.",
+  linux:"wget is preinstalled on most Linux distributions.",
+  mac:"curl is preinstalled on macOS.",
+  win:"curl.exe is preinstalled on Windows 10 and later. Run it in PowerShell or Command Prompt, naming curl.exe in full.",
 };
 function detectOs(){
   const p=String((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||navigator.userAgent||"");
@@ -406,10 +411,15 @@ async function tsLevelList(tok){
           (built.bytes>=HANDOFF_LARGE_BYTES?"Large download - this may take a while. ":"")+
           "A metadata & citation pack downloads alongside. AusMT only points the way.",act);
     return;}
-  save("ausmt-timeseries-"+tok+"-"+tsUTC()+".json",JSON.stringify(built.doc,null,2),"application/json");
+  // Over the gate the terminal command IS the offer, so the dialog opens straight away rather than
+  // behind a snackbar action: an intermediate "Show terminal command" step is a click between the
+  // reader and the only thing that can serve them at this size. No standalone list file either -
+  // the metadata pack already carries the same document as handoff.json, so saving it twice put an
+  // unwanted .json at the head of the reader's downloads (owner, 2026-08-26).
   await tsMetadataPack(_fetched,built.doc);
+  showWgetDialog(cmds);
   snack("Download list ready - "+built.files+" files, "+fmtBigBytes(built.bytes)+".",
-        "Too large a download to hand a browser at once. Paste the copied command into your own terminal: it fetches one file at a time, and a re-run resumes where it stopped. The metadata & citation pack downloads beside the list.",act);}
+        "Too large to hand a browser at once, so the terminal command is shown instead: it fetches one file at a time and a re-run resumes where it stopped. The metadata & citation pack downloads beside it.",act);}
 // C22 (2026-07-07): the human-readable CITATIONS.txt line for ONE entry. When the entry has NO DOI the
 // pack SAYS SO explicitly — "[no DOI assigned]" — rather than silently omitting the field (chief-architect
 // ruling: a reference pack should state the absence). The .bib/.ris twins simply OMIT their doi=/DO/UR
