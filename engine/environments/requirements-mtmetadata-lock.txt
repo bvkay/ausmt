@@ -39,8 +39,13 @@ loguru==0.7.3
 matplotlib==3.11.0
 mt-io==0.0.4
 mt-timeseries==0.0.2
-mt_metadata==1.0.9
-mth5==0.6.8
+# 2026-08-27: the two direct pins move to the perf-fork SHAs (see requirements-mtmetadata.txt
+# for the why and the swap-to-release note). The TRANSITIVE closure below stays the 2026-06-16
+# capture DELIBERATELY: old-closure + these two installs is the exact combination the full
+# battery and the corpus equivalence run validated; a fresh re-resolve would move 12 packages
+# and shed the platform-marker pins, none of it validated.
+mt_metadata @ git+https://github.com/bvkay/mt-metadata.git@58285e106a25dbe2eb028bc093dbfd715852e1e1
+mth5 @ git+https://github.com/bvkay/mth5.git@eebdf20b80eb6099c3e952bb57dff3311f775ac0
 numpy==2.4.6
 packaging==26.2
 pandas==3.0.3
