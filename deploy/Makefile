@@ -105,12 +105,14 @@ rebuild-data:
 	TS=$$(date -u +%Y%m%dT%H%M%SZ); \
 	BUILD_REL="builds/$$TS"; \
 	CACHE_MODE=$${AUSMT_BUILD_CACHE_MODE:-rw}; \
-	echo "rebuild-data: building into $$DATA_DIR/$$BUILD_REL (cache-mode=$$CACHE_MODE)"; \
+	BUILD_WORKERS=$${AUSMT_BUILD_WORKERS:-auto}; \
+	echo "rebuild-data: building into $$DATA_DIR/$$BUILD_REL (cache-mode=$$CACHE_MODE workers=$$BUILD_WORKERS)"; \
 	if ! docker compose -f compose.yaml --profile jobs run --rm build-runner \
 	      --surveys /srv/surveys/surveys --out /out/$$BUILD_REL --bundle-edi --survey-h5 --station-h5 \
 	      --ts-index /srv/surveys/surveys \
 	      --products /out/$$BUILD_REL/products \
 	      --pid-status /out/cache/pid_status.json \
+	      --workers $$BUILD_WORKERS \
 	      --incremental --cache-dir /out/cache --cache-mode $$CACHE_MODE; then \
 	  echo "rebuild-data: BUILD FAILED -- current left untouched. Inspect $$DATA_DIR/$$BUILD_REL" >&2; \
 	  exit 1; \
