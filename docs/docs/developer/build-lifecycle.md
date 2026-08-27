@@ -7,13 +7,20 @@ What one build run does, how it reports failure, and the invariants operational 
 The production invocation, from `deploy/Makefile`:
 
 ```text
-python -m extract.build_portal --surveys <dir> --out <data> --products <dir> --bundle-edi --survey-h5 --station-h5
+python -m extract.build_portal --surveys <dir> --out <data> --products <dir> --bundle-edi --survey-h5 --station-h5 --workers auto
 ```
 
 `--bundle-edi` gates the entire served-download surface, per-survey EDI copies and manifest rows
 included; `--survey-h5` enables the per-survey MTH5 bundles and `--station-h5` the per-station MTH5
 files. The engine image ships without the portal config, so these flags, not `portal.config.yaml`, are
 the production enables.
+
+`--workers N|auto` parallelises the MTH5 writes (the dominant build cost: ~68% of a cold build,
+~99% of a warm rebuild) across worker processes; `auto` means `min(6, cpus)`. Only the MTH5 writes
+fan out. Parsing, EMTF XML, the build cache and all manifest bookkeeping stay in the main process,
+and the engine's `test_build_parallel` pins a parallel build's products as indistinguishable from a
+serial build's. The default without the flag is 1, the serial build; `deploy/Makefile`'s
+`rebuild-data` passes `auto` (override with `AUSMT_BUILD_WORKERS` in the deploy `.env`).
 
 `--ts-index <dir>` names a root of per-survey time-series registers (`<package>/ts-index.yaml`,
 written out of band by the `ausmt-surveys` crawler; point it at the `--surveys` root to read each
