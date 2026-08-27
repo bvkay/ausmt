@@ -3533,7 +3533,11 @@ def _emit_served_xml(stations, slug, xmldir, survey_meta=None, cache=None, surve
     caller writes stamped into the out/products/survey_digests.json sidecar the verify.py consistency
     gate compares against the LIVE survey.yaml, so a product served under a stale digest is caught.
 
-    C18 (the DOMINANT cost, ~84% of a build): when `cache` is an ENABLED BuildCache, the normalize()
+    C18 (~27% of a cold build - the 2026-08-27 full-corpus profile corrected the old '~84%' claim,
+    which described a build without --station-h5/--survey-h5; the MTH5 writers dominate the
+    production shape at ~68%, and a warm rebuild is ~99% MTH5 precisely because THIS cache
+    covers parse+XML and not MTH5. See AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md):
+    when `cache` is an ENABLED BuildCache, the normalize()
     round-trip is cached per station by source-EDI sha + salt. A HIT writes the cached XML BYTES
     verbatim to <xmldir>/<station>.xml (the exact bytes normalize() produced on the miss build) and
     returns the cached conditioning notes — skipping the round-trip entirely. The served XML a hit
@@ -4074,6 +4078,129 @@ def _write_tf_mth5(stations, slug, label, hpath, smeta=None):
     return n
 
 
+# ---- The MTH5 worker pool (the build-parallelism seam) -------------------------------------------
+# The 2026-08-27 profile (AusMT_2026/BUILD-PERF-PROFILE-2026-08-27.md) attributed ~68% of a cold
+# build and ~99% of a warm rebuild to _write_tf_mth5, which is self-contained by construction: it
+# re-reads its source EDIs from disk, carries its own SPEC §6 gate, owns a unique output path per
+# call and returns 0 instead of raising. The pool parallelises exactly that unit and NOTHING else:
+# parse, XML, the C18 cache and all manifest bookkeeping stay in the main process, and every
+# station id is final (_disambiguate has run) before the first task is submitted, so worker
+# scheduling can never reach an identity or ordering decision. Workers are spawned, not forked
+# (h5py and forked HDF5 state do not mix, and spawn behaves identically on the Linux box and a
+# macOS dev machine).
+_MTH5_POOL = None
+
+
+def _mth5_write_task(stations, slug, label, hpath, smeta):
+    """The one function a pool worker runs: a single _write_tf_mth5 call with its stderr captured
+    and RETURNED rather than written, so the main process can replay every worker's WARN lines in
+    input order and the build log stays deterministic under parallelism. (C-level HDF5 error spew
+    still reaches fd 2 directly and may interleave; it does serially too.) Paths travel as strings
+    because the task must pickle across a spawn boundary."""
+    import contextlib  # noqa: PLC0415
+    import io  # noqa: PLC0415
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        n = _write_tf_mth5([(Path(p), r) for (p, r) in stations], slug, label, Path(hpath),
+                           smeta=smeta)
+    return n, buf.getvalue()
+
+
+def _workers_arg(v):
+    """argparse type for --workers: an integer >= 0 or 'auto'. Rejecting a malformed CLI value
+    here (unlike the env var, which WARNS and builds serial) is deliberate: a typed flag is an
+    operator at a keyboard who can fix it; the env var is an unattended box rebuild."""
+    s = str(v).strip().lower()
+    if s == "auto":
+        return s
+    try:
+        if int(s) < 0:
+            raise ValueError
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"--workers must be an integer >= 0 or 'auto', got {v!r}")
+    return s
+
+
+def _resolve_workers(cli_value):
+    """Effective MTH5 worker count: CLI --workers beats the AUSMT_BUILD_WORKERS env var beats 1
+    (serial, the exact pre-pool build). 'auto' or 0 means min(6, cpus): ~400 MB peak per worker
+    (profile: 383 MB flat), so 6 fits the box's 14 GiB with a wide margin while saturating the
+    seam. A malformed env value WARNS and builds serial rather than killing an unattended box
+    rebuild; a malformed CLI value is rejected by argparse before reaching here."""
+    raw = cli_value if cli_value is not None else os.environ.get("AUSMT_BUILD_WORKERS")
+    if raw is None:
+        return 1
+    s = str(raw).strip().lower()
+    if s in ("auto", "0"):
+        return max(1, min(6, os.cpu_count() or 1))
+    try:
+        return max(1, int(s))
+    except ValueError:
+        print(f"  [parallel] WARN AUSMT_BUILD_WORKERS={raw!r} is not an integer or 'auto'; "
+              "building serial.", file=sys.stderr)
+        return 1
+
+
+def _pool_worker_ready():
+    """Warmup no-op: submitting it launches the worker process (which pays its build_portal import
+    right there) and the returned result proves that import succeeded."""
+    return True
+
+
+def _mth5_pool_start(workers):
+    """Create the spawn-context pool. Returns the EFFECTIVE worker count: `workers` when the pool
+    came up, 1 when it could not (WARN + serial fallback; the equivalence contract means the
+    products are identical either way, and an unattended box rebuild should degrade, not die, on
+    a spawn-capability problem).
+
+    A spawned child must be able to import build_portal by name when the parent itself imported
+    it as a module (pytest, or an embedding caller), so PYTHONPATH gains the extract/ dir for
+    EXACTLY the warmup window: every worker is launched eagerly inside it, then the variable is
+    restored before returning. The restore is load-bearing, not tidiness: a leaked PYTHONPATH
+    reaches every subprocess the build (or a later test in the same process) shells, and
+    test_proc_info_survives_a_missing_writer_vocabulary failed on exactly that contamination
+    before the restore existed. Workers never respawn after a death (a dead worker breaks the
+    whole pool), so no child ever launches outside the window."""
+    global _MTH5_POOL  # noqa: PLW0603  (deliberate: main()'s finally must reach the pool from outside _main_build)
+    if workers <= 1:
+        return 1
+    if _MTH5_POOL is not None:
+        return workers
+    import concurrent.futures  # noqa: PLC0415
+    import multiprocessing  # noqa: PLC0415
+    ext = str(Path(__file__).resolve().parent)
+    old_pp = os.environ.get("PYTHONPATH")
+    os.environ["PYTHONPATH"] = ext + (os.pathsep + old_pp if old_pp else "")
+    try:
+        _MTH5_POOL = concurrent.futures.ProcessPoolExecutor(
+            max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
+        for fut in [_MTH5_POOL.submit(_pool_worker_ready) for _ in range(workers)]:
+            fut.result()
+        return workers
+    except Exception as ex:  # noqa: BLE001  (degrade to the identical-product serial path)
+        print(f"  [parallel] WARN MTH5 pool failed to start ({type(ex).__name__}: {str(ex)[:120]});"
+              " building serial.", file=sys.stderr)
+        _mth5_pool_stop()
+        return 1
+    finally:
+        if old_pp is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = old_pp
+
+
+def _mth5_pool_stop():
+    """Shut the pool down (idempotent). main() guarantees this on every exit path: a leaked pool
+    would make the NEXT main() call in the same process silently parallel, which is exactly the
+    ambient state the serial default exists to forbid."""
+    global _MTH5_POOL  # noqa: PLW0603  (deliberate: same slot; see _mth5_pool_start)
+    if _MTH5_POOL is not None:
+        # cancel_futures: an ABORTED build must not sit through its queued writes before dying (a
+        # completed build has already drained every future it submitted, so this cancels nothing).
+        _MTH5_POOL.shutdown(wait=True, cancel_futures=True)
+        _MTH5_POOL = None
+
+
 def emit_survey_mth5(stations, slug, label, out, smeta=None):
     """C32 §1.2 (tier 2): write ONE survey-aggregated MTH5 (out/bundles/<slug>-tf.h5) holding every
     served station's TRANSFER FUNCTION via mth5.add_transfer_function, the idiomatic MTCollection
@@ -4139,8 +4266,27 @@ def emit_station_mth5(stations, slug, label, h5dir, smeta=None):
 
     A station whose write fails is simply absent from the returned map (the WARN is printed by the
     writer); the caller emits a manifest row only for what came back, so the manifest can never
-    advertise a file that was withheld. Returns {station_id: h5_path}."""
+    advertise a file that was withheld. Returns {station_id: h5_path}.
+
+    When the MTH5 pool is up, the stations fan out as one worker task each and the results are
+    drained IN INPUT ORDER, each task's captured stderr replayed before the next, so the log and
+    the returned map are indistinguishable from the serial loop's. The map is consumed by keyed
+    lookup, but input order is still the contract: it is what makes the two paths comparable
+    line-for-line."""
     written = {}
+    if _MTH5_POOL is not None and len(stations) > 1:
+        futs = []
+        for (p, r) in stations:
+            hpath = Path(h5dir) / f"{r['id']}.h5"
+            futs.append((r["id"], hpath, _MTH5_POOL.submit(
+                _mth5_write_task, [(str(p), r)], slug, label, str(hpath), smeta)))
+        for sid, hpath, fut in futs:
+            n, err = fut.result()
+            if err:
+                sys.stderr.write(err)
+            if n:
+                written[sid] = hpath
+        return written
     for (p, r) in stations:
         hpath = Path(h5dir) / f"{r['id']}.h5"
         if _write_tf_mth5([(p, r)], slug, label, hpath, smeta=smeta):
@@ -4585,6 +4731,17 @@ def discover_work(a, ap, validator):
 
 
 def main(argv=None):
+    """The build entry point. The wrapper exists for exactly one constraint: the MTH5 pool must be
+    gone by the time main() returns on EVERY path (success, sys.exit, exception), because a leaked
+    pool would make a later main() call in the same process silently parallel and would strand
+    spawned workers on an aborted build."""
+    try:
+        return _main_build(argv)
+    finally:
+        _mth5_pool_stop()
+
+
+def _main_build(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--surveys", help="root of survey packages (<slug>/survey.yaml + "
                                       "transfer_functions/{edi,emtfxml,mth5}/)")
@@ -4655,6 +4812,13 @@ def main(argv=None):
                          "the same access + coordinate gates as the station's EDI. OFF by default; "
                          "ORs with portal.config flags.station_h5_enabled. Wired into deploy/Makefile's "
                          "rebuild-data, which is the ONLY enable that reaches a production build.")
+    ap.add_argument("--workers", default=None, metavar="N|auto", type=_workers_arg,
+                    help="MTH5 writer processes (the ~68%%-cold / ~99%%-warm seam the 2026-08-27 "
+                         "profile attributed). Default 1: byte-for-byte the pre-pool serial build. "
+                         "'auto' (or 0) = min(6, cpus). Overrides the AUSMT_BUILD_WORKERS env var; "
+                         "only the MTH5 writes parallelise (parse, XML, cache and manifest stay in "
+                         "the main process), and test_build_parallel pins serial==parallel "
+                         "product equivalence.")
     ap.add_argument("--collection-download", action="store_true",
                     help="set the collection-level download capability flag (reserved; no producer yet).")
     # C18 incremental build cache (default OFF; a no-op without --cache-dir). See
@@ -4728,6 +4892,22 @@ def main(argv=None):
     if (flags["survey_h5_enabled"] or flags["station_h5_enabled"]) and not mtm.available():
         sys.exit("ERROR: --survey-h5 / --station-h5 (and their portal.config flags) require the "
                  "mt_metadata stack (pip install -r environments/requirements-mtmetadata-lock.txt).")
+    # The MTH5 worker pool: started only when a build both asked for workers AND emits MTH5 (the
+    # only seam the pool serves); every other build records workers=1 and runs the untouched serial
+    # code path. The wrapper around _main_build guarantees the stop on every exit.
+    workers = _resolve_workers(a.workers)
+    if workers > 1 and (flags["survey_h5_enabled"] or flags["station_h5_enabled"]):
+        workers = _mth5_pool_start(workers)
+        if workers > 1:
+            print(f"[parallel] MTH5 pool: {workers} workers (spawn)", file=sys.stderr)
+    else:
+        workers = 1
+    # Survey-MTH5 bundles submitted to the pool: each entry holds the future, its reserved (empty)
+    # manifest row to fill in place, and the row/sidecar ingredients captured at submit time. The
+    # worker pickled its (path, record) payload at submit, so the C42 mask seam mutating records
+    # later cannot reach a write; resolution happens at the survey loop's exit, before the first
+    # bookkeeping consumer.
+    _deferred_bundles: list = []
 
     all_stations, all_tf, all_sci = [], [], []
     # manifest: per-station artifacts (files) + per-survey bundles (bundles). Key-based, NOT positional.
@@ -5343,17 +5523,33 @@ def main(argv=None):
                 _h5_stations = [(p, r) for (p, r) in stations
                                 if coordacc.coordinates_served(coordacc.station_policy(
                                     _coord_default, _coord_overrides, r.get("id"), r.get("variant")))]
-                _hrel, _hpath, _hn = emit_survey_mth5(_h5_stations, slug, label, out, smeta=meta)
-                if _hpath:
-                    manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
-                                                           lic, _hn, nci_base=nci_base, base_url=base_url,
-                                                           custodian=_custodian))
-                    _bundle_formats.setdefault(slug, {})["survey-mth5"] = _hrel
-                    # C46-W3a: rights must travel with the MTH5 bytes too. The survey MTH5 ships as a bare
-                    # file (bundles/<slug>-tf.h5, NOT a zip — HDF5 embeds timestamps so it is not
-                    # byte-reproducible), so the SAME LICENSE.txt instrument is written BESIDE it as a
-                    # sidecar (bundles/<slug>-tf.LICENSE.txt). Identical bytes to the zip-internal LICENSE.txt.
-                    (_hpath.parent / f"{slug}-tf.LICENSE.txt").write_text(_lic_txt, encoding="utf-8")
+                if _MTH5_POOL is not None:
+                    # Pool build: submit the bundle write and move on, so it overlaps the NEXT
+                    # survey's station fan-out. An EMPTY row is reserved here so the manifest keeps
+                    # the serial build's exact row order; the resolver after the loop fills it (or
+                    # leaves it empty for the withheld filter) and writes the LICENSE sidecar then.
+                    _hpath = out / "bundles" / f"{slug}-tf.h5"
+                    _row: dict = {}
+                    manifest["bundles"].append(_row)
+                    _deferred_bundles.append({
+                        "fut": _MTH5_POOL.submit(
+                            _mth5_write_task, [(str(p), r) for (p, r) in _h5_stations],
+                            slug, label, str(_hpath), meta),
+                        "row": _row, "slug": slug, "label": label, "lic": lic,
+                        "lic_txt": _lic_txt, "hpath": _hpath, "custodian": _custodian,
+                        "nci_base": nci_base})
+                else:
+                    _hrel, _hpath, _hn = emit_survey_mth5(_h5_stations, slug, label, out, smeta=meta)
+                    if _hpath:
+                        manifest["bundles"].append(_bundle_row(label, slug, "mth5", _hpath, _hrel,
+                                                               lic, _hn, nci_base=nci_base, base_url=base_url,
+                                                               custodian=_custodian))
+                        _bundle_formats.setdefault(slug, {})["survey-mth5"] = _hrel
+                        # C46-W3a: rights must travel with the MTH5 bytes too. The survey MTH5 ships as a bare
+                        # file (bundles/<slug>-tf.h5, NOT a zip - HDF5 embeds timestamps so it is not
+                        # byte-reproducible), so the SAME LICENSE.txt instrument is written BESIDE it as a
+                        # sidecar (bundles/<slug>-tf.LICENSE.txt). Identical bytes to the zip-internal LICENSE.txt.
+                        (_hpath.parent / f"{slug}-tf.LICENSE.txt").write_text(_lic_txt, encoding="utf-8")
 
         # ---- survey-level conditioning NOTICE (Deliverable 1) + build_report entry (Deliverable 2) ----
         # ONE line per DISTINCT conditioning note (not one near-identical line per station — the
@@ -5470,6 +5666,28 @@ def main(argv=None):
                                               "hits": 0, "misses": 0, "writes": 0}),
             "duration_seconds": round(_time.perf_counter() - _survey_t0, 3),
         }
+
+    # ---- deferred survey-MTH5 bundles (pool builds only): drain in submit order, replaying each
+    # task's captured stderr, and fill each reserved manifest row IN PLACE so row order is the
+    # serial build's. A bundle the writer withheld (n=0) leaves its row empty; the filter drops the
+    # empties so the manifest can never advertise a withheld file (the emit_station_mth5 rule).
+    # Ordered strictly BEFORE the QC/mask seam and every manifest/_bundle_formats consumer.
+    for _d in _deferred_bundles:
+        _n, _err = _d["fut"].result()
+        if _err:
+            sys.stderr.write(_err)
+        if not _n:
+            continue
+        _dslug, _dhp = _d["slug"], _d["hpath"]
+        _drel = f"bundles/{_dslug}-tf.h5"
+        _d["row"].update(_bundle_row(_d["label"], _dslug, "mth5", _dhp, _drel,
+                                     _d["lic"], _n, nci_base=_d["nci_base"], base_url=base_url,
+                                     custodian=_d["custodian"]))
+        _bundle_formats.setdefault(_dslug, {})["survey-mth5"] = _drel
+        # C46-W3a sidecar, identical to the serial path's (see the in-loop branch).
+        (_dhp.parent / f"{_dslug}-tf.LICENSE.txt").write_text(_d["lic_txt"], encoding="utf-8")
+    if _deferred_bundles:
+        manifest["bundles"] = [_r for _r in manifest["bundles"] if _r]
 
     # ---- build-time QC over the assembled catalogue (curator-facing) ----
     # Duplicate ausmt_ids are a HARD failure (they break the URL/export/r[12] contract and make
@@ -5697,6 +5915,9 @@ def main(argv=None):
                                    if _r["tier"] == "nci"),
          "distribution_flags": flags, "base_url": base_url,
          "cache": _cache_stats,   # C18 hit/miss/write counters (deterministic build-report evidence)
+         # The EFFECTIVE MTH5 worker count (1 = the serial code path ran, whatever was asked), so a
+         # build record always says how its h5 bytes were produced.
+         "parallel": {"workers": workers},
          # C32 §2: the mt_metadata / mth5 versions this build ran against (additive; a key is absent
          # when that library was not importable in the build environment).
          "mt_metadata_version": LIB_VERSIONS.get("mt_metadata"),
