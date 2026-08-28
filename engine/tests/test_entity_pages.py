@@ -59,8 +59,10 @@ def _build(surveys, out, *, sitemap=True, extra=()):
 
 def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     """FAILS IF pages are emitted without --sitemap-base (a flagless build must stay byte-identical
-    to a pre-lane build), or the sitemap and the pages tree disagree in either direction (a sitemap
-    URL without a page is an advertised 404; an orphan page is an unadvertised surface)."""
+    to a pre-lane build), a sitemap URL lacks a page (an advertised 404), a station URL appears in
+    the sitemap (station pages exist for the URL contract but are deliberately unadvertised: 2,625
+    templated documents would read as thin content and dilute the pages that carry the ranking),
+    or a station PAGE goes missing (the served /stations/<id> shape would 404)."""
     surveys = _make_survey(tmp_path)
     bare = _build(surveys, tmp_path / "bare", sitemap=False)
     assert not (bare / "pages").exists(), "no --sitemap-base must mean no pages directory"
@@ -70,13 +72,17 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     locs = re.findall(r"<loc>([^<]+)</loc>", sitemap)
     entity_locs = [u for u in locs if u != BASE + "/"]
     assert entity_locs, "the sitemap must advertise entity URLs"
+    assert not any("/stations/" in u for u in entity_locs), \
+        "station URLs must stay OUT of the sitemap (unadvertised-but-served posture)"
     for u in entity_locs:
         rel = u.replace(BASE + "/", "")
         page = out / "pages" / (rel + ".html")
         assert page.exists(), f"sitemap advertises {u} but no page exists at {page}"
-    pages = {p.relative_to(out / "pages").as_posix()[:-5] for p in (out / "pages").rglob("*.html")}
-    assert pages == {u.replace(BASE + "/", "") for u in entity_locs}, \
-        "orphan pages exist that the sitemap does not advertise"
+    docs = sorted((out / "products" / "pages-a").glob("*/station.json"))
+    for d in docs:
+        aid = json.loads(d.read_text(encoding="utf-8"))["ausmt_id"]
+        assert (out / "pages" / "stations" / (aid + ".html")).exists(), \
+            f"station page for {aid} must exist (the served URL contract), sitemap or not"
 
 
 def test_survey_page_content_and_dataset_jsonld(tmp_path):
@@ -125,6 +131,8 @@ def test_station_page_uses_only_the_served_document(tmp_path):
     assert f'href="/#/station/{doc["ausmt_id"]}"' in page, "the SPA deep link must be present"
     assert f'href="{BASE}/surveys/pages-a"' in page.replace("&amp;", "&") or \
            'href="/surveys/pages-a"' in page, "the page must link up to its survey page"
+    assert '<meta name="robots" content="noindex">' in page, \
+        "station pages must carry noindex (served for the contract, kept out of the index)"
 
 
 def test_hostile_blurb_is_escaped(tmp_path):

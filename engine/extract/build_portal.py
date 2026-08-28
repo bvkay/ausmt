@@ -4791,7 +4791,7 @@ def _main_build(argv=None):
                          "Without this flag an empty build fails loudly (the trust invariant).")
     ap.add_argument("--sitemap-base", default=None,
                     help="if set (e.g. https://org.github.io/ausmt/), write <out>/sitemap.xml "
-                         "with per-survey and per-station deep links")
+                         "with the survey and collection landing-page links (station pages are served but deliberately unadvertised)")
     ap.add_argument("--canonical-dir", default=None,
                     help="ADDITIVE: emit the canonical EMTF XML store (D6) — for each EDI write "
                          "<dir>/<slug>/<station>.xml + a derived .edi via mt_metadata's normalize(), "
@@ -6133,7 +6133,10 @@ def _main_build(argv=None):
         # remains only as the fallback for raw-mode builds whose smeta carries no slug.
         locs += [f"{base}surveys/{(surveys_meta.get(lbl) or {}).get('slug') or slugify(lbl)}"
                  for lbl in sorted(surveys_meta)]
-        locs += [f"{base}stations/{r['ausmt_id']}" for (_p, r) in all_stations]
+        # Station pages EXIST (the URL contract serves them) but are deliberately not advertised:
+        # 2,625 templated documents in the sitemap would read as thin content at scale and dilute
+        # the survey/collection pages that carry the ranking; the station pages themselves say
+        # noindex for the same reason, and lifting the posture later is deleting one meta line.
         locs += [f"{base}collections/{cid}" for cid in sorted(coll_by_id)]
         body = "\n".join(f"  <url><loc>{_xesc(u)}</loc></url>" for u in locs)
         (out / "sitemap.xml").write_text(
