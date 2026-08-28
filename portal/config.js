@@ -18,7 +18,9 @@ window.AUSMT_CONFIG = {
   },
   "basemap": {
     "provider": "carto",
-    "carto_api_key": ""
+    "carto_api_key": "",
+    "pmtiles_world": "/basemap/world.pmtiles",
+    "pmtiles_region": "/basemap/region.pmtiles"
   },
   "flags": {
     "survey_h5_enabled": true,

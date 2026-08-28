@@ -104,6 +104,31 @@ Then re-run `make preflight PROFILE=gateway` until it is all PASS (WARNs are adv
 
 ## 2. Data operations
 
+### Self-hosted basemap (pmtiles)
+
+The portal's map background can serve from the box itself instead of a hosted tile vendor: two
+PMTiles files under `$AUSMT_DATA_DIR/basemap/` (`world.pmtiles`, the whole globe at low zoom;
+`region.pmtiles`, Australia and surrounds at full detail), range-read in the browser by the
+vendored protomaps-leaflet renderer. No tile server, no third party, no per-request egress of
+visitor IPs; the files ride the reader's cache policy (daily `max-age`) and the `/basemap/*`
+handle on both listeners.
+
+Produce or refresh the files on the box (they extract server-side from the Protomaps daily
+OpenStreetMap build; the CLI is version- and sha256-pinned by the script; expect roughly 100 MB
+for the world file and 1-3 GB for the region):
+
+```sh
+AUSMT_DATA_DIR=/srv/ausmt sh scripts/fetch-basemap.sh
+```
+
+Then flip `basemap.provider` to `pmtiles` in `portal/portal.config.yaml`, regenerate `config.js`
+(`python3 tools/gen_config.py` in `portal/`), and ship that as a normal portal change. Until the
+flip, `carto` remains the served provider and the absent files are a non-event (the doctor's
+`basemap` leg skips on carto and demands a 206 Range answer on pmtiles). **Rollback is flipping
+the provider back** — the carto path stays in the portal for exactly that reason. Refresh cadence:
+yearly is generous for a backdrop; the served filenames stay stable so a refresh is just re-running
+the script.
+
 ### Rebuild the served data
 
 ```sh

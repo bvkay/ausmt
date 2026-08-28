@@ -4509,5 +4509,32 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "basemap: map.js must append the api_key query parameter when a key is configured");
   }
 
+  // ---- Self-hosted basemap (pmtiles provider) -----------------------------------------------------
+  // The basemap is the portal's LAST runtime third party. provider "pmtiles" serves it from our own
+  // /basemap/ files through the vendored protomaps-leaflet renderer: the world file carries low
+  // zooms globally (a zoomed-out view still shows the whole globe) and the region file carries full
+  // detail for Australia and its surrounds; both paths ride config so a deployment can relocate or
+  // date-stamp them without code. carto stays the configured fallback while the files roll out,
+  // which is why the switch is data-driven and BOTH branches must keep existing.
+  {
+    const _mapSrc = fs.readFileSync(path.join(SRC, "map.js"), "utf8");
+    ok(/provider/.test(_mapSrc) && /pmtiles/.test(_mapSrc),
+      "basemap: map.js must switch on AUSMT_CONFIG.basemap.provider with a pmtiles branch");
+    ok(/protomapsL\.leafletLayer/.test(_mapSrc),
+      "basemap: the pmtiles branch must render through the vendored protomaps-leaflet");
+    ok(/pmtiles_world/.test(_mapSrc) && /pmtiles_region/.test(_mapSrc),
+      "basemap: both pmtiles paths must come from config, never hardcoded");
+    ok(/OpenStreetMap contributors/.test(_mapSrc) && /Protomaps/.test(_mapSrc),
+      "basemap: the pmtiles layers must carry the OSM + Protomaps attribution");
+    const _vendored = fs.readFileSync(path.join(PORTAL, "vendor", "protomaps-leaflet.js"), "utf8");
+    ok(_vendored.startsWith('"use strict";var protomapsL='),
+      "basemap: vendor/protomaps-leaflet.js must be the verbatim upstream UMD (protomapsL global)");
+    ok(/vendor\/protomaps-leaflet\.js/.test(html),
+      "basemap: index.html must load the vendored renderer");
+    const _cfgSrc = fs.readFileSync(path.join(PORTAL, "config.js"), "utf8");
+    ok(/pmtiles_world/.test(_cfgSrc) && /pmtiles_region/.test(_cfgSrc) && /provider/.test(_cfgSrc),
+      "basemap: generated config.js must carry provider + both pmtiles paths");
+  }
+
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

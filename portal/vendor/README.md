@@ -17,6 +17,7 @@ changes.
 | `MarkerCluster.min.css` | https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css | 1.5.3 | `5ea4d37ba829f27588ed3c9f85b156b03b23db14f70dadd4b48c5fe9f8370e5a` | 688 B |
 | `leaflet.draw.js` | https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js | 1.0.4 | `b22a1f7385308e5adadd85a4c2d84e9fc523ebd70d37868cba0fe2387362460b` | 67484 B |
 | `leaflet.draw.css` | https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css | 1.0.4 | `5f30f74696873efee5cd7f6ab7eda7d63e5c5a3e3c3b6e0ab2068662928df31f` | 5267 B |
+| `protomaps-leaflet.js` | https://registry.npmjs.org/protomaps-leaflet/-/protomaps-leaflet-5.1.0.tgz (dist/protomaps-leaflet.js) | 5.1.0 | `26af014f7b1af308ec120b791cff76657bb9c3383633b52033e6edf9e5e4cdb5` | 128171 B |
 
 Notes:
 - `MarkerCluster.min.css` is the base plugin stylesheet only — `MarkerCluster.Default.min.css` (the
@@ -47,3 +48,6 @@ All eight assets fetched from the exact cdnjs versions the css files shipped wit
 
 Local hand-authored SVG favicon (MT sounding curve over a station dot), linked from all three
 pages to stop the browser's automatic /favicon.ico 404.
+- `protomaps-leaflet.js` (BSD-3-Clause) renders the self-hosted PMTiles basemap inside Leaflet.
+  Upstream keeps it in maintenance mode for Leaflet-based projects (their new-project path is
+  MapLibre); that suits this portal, which is deliberately Leaflet-based and vendors its stack.
