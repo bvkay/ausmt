@@ -141,7 +141,7 @@ def _proj(extent):
     return to
 
 
-def _minimap_svg(points, *, width=230) -> str:
+def _minimap_svg(points, *, width=230, compact=False) -> str:
     """The location minimap: the shared schematic outline with this survey's stations. The
     projection is the portal collections view's own fixed-extent equirectangular fit, so the two
     surfaces draw one map."""
@@ -156,7 +156,10 @@ def _minimap_svg(points, *, width=230) -> str:
                     for r in au.COAST)
     borders = "".join(f'<path d="{path(r, False)}" fill="none" stroke="#3a5266" '
                       f'stroke-width=".8" stroke-dasharray="3 3"/>' for r in au.BORDERS)
-    r = 2 if len(points) <= 60 else (1.4 if len(points) <= 200 else 1.1)
+    # Dot size: on a compact survey the separate footprint panel carries the structure, so the
+    # minimap dots are a location hint under the ring and stay small regardless of count; a
+    # state-wide survey has no zoom panel, so its dots ARE the content and scale by density.
+    r = 1.2 if compact else (2 if len(points) <= 60 else (1.4 if len(points) <= 200 else 1.1))
     dots = "".join(f'<circle cx="{p(lo, la)[0]}" cy="{p(lo, la)[1]}" r="{r}" fill="#4FC3D9" '
                    f'fill-opacity=".9"/>' for lo, la in points)
     marker = ""
@@ -539,7 +542,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         lons = [lo for lo, _la in points]
         lats = [la for _lo, la in points]
         compact = max(max(lons) - min(lons), max(lats) - min(lats)) < 8 and len(points) > 1
-    maps = [_minimap_svg(points)]
+    maps = [_minimap_svg(points, compact=compact)]
     cap = ""
     if compact:
         maps.append(_footprint_svg(points))
