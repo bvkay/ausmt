@@ -6140,10 +6140,33 @@ def _main_build(argv=None):
             out, a.sitemap_base, surveys_meta=surveys_meta,
             survey_docs=_survey_metadata_docs, station_docs=_station_docs,
             collections=coll_by_id, bundle_formats=_bundle_formats,
-            survey_extent=survey_extent, survey_coll=_survey_coll)
+            survey_extent=survey_extent, survey_coll=_survey_coll,
+            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access)
         print(f"  pages/ -> {_n_pages} entity landing pages (tier 3)")
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc
+
+        # <lastmod> only where it is ACCURATE: a survey's latest release-note date is a real
+        # content-change signal (Google trusts lastmod only when it is consistently honest, so a
+        # per-build timestamp that changes on identical content would be worse than none).
+        def _survey_lastmod(smeta_entry):
+            dates = [str((rn or {}).get("date") or "")
+                     for rn in (smeta_entry or {}).get("release_notes") or []]
+            dates = [d for d in dates
+                     if len(d) >= 10 and d[4] == "-" and d[7] == "-"
+                     and d[:4].isdigit() and d[5:7].isdigit() and d[8:10].isdigit()]
+            return max(dates)[:10] if dates else None
+        _lastmods = {}
+        for lbl in surveys_meta:
+            _sl = (surveys_meta.get(lbl) or {}).get("slug") or slugify(lbl)
+            _lastmods[f"{base}surveys/{_sl}"] = _survey_lastmod(surveys_meta.get(lbl))
+        for cid in coll_by_id:
+            _members = [_survey_lastmod(surveys_meta.get(lbl))
+                        for lbl in surveys_meta if _survey_coll.get(lbl) == cid]
+            _members = [m for m in _members if m]
+            _lastmods[f"{base}collections/{cid}"] = max(_members) if _members else None
+        _all_dates = [d for d in _lastmods.values() if d]
+        _lastmods[base] = max(_all_dates) if _all_dates else None
         locs = [base]
         # The AUTHORITATIVE slug (smeta_entry["slug"], the same one ausmt_id / product paths / the
         # portal router use), never a re-slugified display label: a declared slug that differs from
@@ -6156,7 +6179,12 @@ def _main_build(argv=None):
         # the survey/collection pages that carry the ranking; the station pages themselves say
         # noindex for the same reason, and lifting the posture later is deleting one meta line.
         locs += [f"{base}collections/{cid}" for cid in sorted(coll_by_id)]
-        body = "\n".join(f"  <url><loc>{_xesc(u)}</loc></url>" for u in locs)
+
+        def _urlrow(u):
+            lm = _lastmods.get(u)
+            lm_bit = f"<lastmod>{lm}</lastmod>" if lm else ""
+            return f"  <url><loc>{_xesc(u)}</loc>{lm_bit}</url>"
+        body = "\n".join(_urlrow(u) for u in locs)
         (out / "sitemap.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!-- path-URL contract (tier 1): these path forms 301 into the portal SPA; '

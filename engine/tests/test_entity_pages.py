@@ -145,3 +145,183 @@ def test_hostile_blurb_is_escaped(tmp_path):
     page = (out / "pages" / "surveys" / "pages-x.html").read_text(encoding="utf-8")
     assert "<script>alert(1)</script>" not in page, "hostile blurb must not reach the page live"
     assert "&lt;script&gt;" in page, "the blurb must render escaped, not dropped"
+
+
+# ---- the design of record (v8): the enriched survey page ----------------------------------------
+
+def _make_rich_survey(tmp_path):
+    """One survey exercising every enrichment surface: creators (the citation authors),
+    contributors with duplicate-per-role rows, funders with a grant id, publications, typed
+    related identifiers (one a full dx.doi.org URL, the corpus shape), a declared geographic
+    extent, release notes (the sitemap lastmod source), and curated run metadata with PIDs."""
+    surveys = _make_survey(tmp_path, blurb="A rich test survey.", slug="pages-r", name="Pages R")
+    pkg = surveys / "pages-r"
+    (pkg / "survey.yaml").write_text(
+        "name: Pages R\nslug: pages-r\ncountry: Australia\nregion: South Australia\n"
+        "version: 1.2.3\norganisation:\n  name: Test Org\n  ror: https://ror.org/00892tw58\n"
+        "access: open\nlicense: CC-BY-4.0\nabstract: A rich test survey.\n"
+        "processing:\n  software: LEMIMT\n"
+        "geographic_extent:\n  west: 136.9\n  east: 137.1\n  south: -30.3\n  north: -30.1\n"
+        "creators:\n  - name: Kay, Ben\n    name_type: person\n"
+        "  - name: Heinson, Graham\n    name_type: person\n"
+        "contributors:\n"
+        "  - {name: 'Kay, Ben', name_type: person, role: ProjectLeader, orcid: 0000-0002-9738-7277}\n"
+        "  - {name: 'Kay, Ben', name_type: person, role: DataCollector, orcid: 0000-0002-9738-7277}\n"
+        "  - {name: 'Heinson, Graham', name_type: person, role: RightsHolder, orcid: 0000-0001-7106-0789}\n"
+        "funding:\n  - organisation: Test Survey Office\n    grant_id: ADI RD99-999\n"
+        "publications:\n  - {author: 'Kay B', year: '2024', title: Imaging things,"
+        " journal: Exploration Geophysics, doi: 10.1080/08123985.2024.9999999}\n"
+        "related_identifiers:\n"
+        "  - {identifies: collection, identifier: 10.25914/sv5r-zw68, identifier_type: DOI, relation: IsPartOf}\n"
+        "  - {identifies: level2, identifier: 'http://dx.doi.org/10.11636/Record.2020.011',"
+        " identifier_type: DOI, relation: IsVariantFormOf}\n"
+        "release_notes:\n  - {version: 1.0.0, date: '2026-01-05', note: first}\n"
+        "  - {version: 1.2.3, date: '2026-03-09', note: latest}\n",
+        encoding="utf-8")
+    (pkg / "run-ids.yaml").write_text("run_ids:\n  A1: [A1_001]\n  A2: [A2_001]\n", encoding="utf-8")
+    (pkg / "run-metadata.csv").write_text(
+        "station_id,start,end,sample_rate_hz,dipole_length_ex_m,dipole_length_ey_m,"
+        "azimuth_ex_deg,azimuth_ey_deg,logger_manufacturer,logger_model,logger_serial,logger_pid,"
+        "sensor_manufacturer,sensor_model,sensor_bx_serial,sensor_bx_pid,sensor_by_serial,sensor_by_pid\n"
+        "A1,2022-02-12T07:59:23+00:00,2022-02-14T09:20:24+00:00,1000,52,51.5,0,90,"
+        "LEMI,LEMI-423,#0040,https://doi.org/10.82388/c7ea5dpq,LEMI,LEMI-120,"
+        "125,https://doi.org/10.82388/ahbao8tk,126,https://doi.org/10.82388/1nhybg3w\n"
+        "A2,2022-02-13T08:16:48+00:00,2022-02-15T07:04:12+00:00,1000,50,50,0,90,"
+        "LEMI,LEMI-423,#0041,https://doi.org/10.82388/ir7azuq1,LEMI,LEMI-120,"
+        "127,,128,\n", encoding="utf-8")
+    return surveys
+
+
+def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+
+    # citation box: surname-plus-initial authors from the creators-driven cite record
+    assert "Cite as:" in page and "Kay, B.; Heinson, G." in page, "cite box with initials"
+    # page nav replaces the CTA (owner ruling: no portal button)
+    assert "All surveys" in page and "View all stations on the main map" in page
+    assert "Open in the interactive portal" not in page
+    # maps: the shared-outline minimap always; the footprint zoom for this compact extent
+    assert 'aria-label="Survey location in Australia"' in page
+    assert 'aria-label="Station grid detail"' in page
+    # stat tiles + facts from the served documents and the ingested runs
+    assert "period coverage" in page and "tipper stations" in page
+    assert "Sample rate" in page and "1,000 Hz" in page
+    assert "Dipoles" in page and "measured per station" in page
+    # the station table: run columns, PIDs as links, sticky first column
+    for h in ("Deployed", "Recovered", "Rate (Hz)", "Logger", "Bx coil", "Time series"):
+        assert h.replace(" ", "&#8202;") in page.replace("&#8202;", " ") or h in page.replace("&#8202;", " "), h
+    assert "ahbao8tk" in page and "c7ea5dpq" in page, "instrument PIDs must link in the table"
+    assert "position:sticky" in page, "the station column must pin while the table scrolls"
+    assert "52 m @ 0&#176;" in page, "dipole cells carry length and azimuth"
+    # contributors grouped by person (roles merged), publications with DOI link
+    assert page.count('href="https://orcid.org/0000-0002-9738-7277"') == 1, \
+        "duplicate contributor rows must group into one person row"
+    assert "Project Leader" in page and "Data Collector" in page
+    assert "Imaging things" in page and "10.1080/08123985.2024.9999999" in page
+    # og tags on the page (image = per-survey card when Pillow rendered one, else the root card)
+    assert 'property="og:title"' in page and 'name="twitter:card"' in page
+    m = re.search(r'property="og:image" content="([^"]+)"', page)
+    assert m, "og:image required"
+    if "/pages/og/" in m.group(1):
+        card = out / "pages" / "og" / "pages-r.png"
+        assert card.is_file() and card.read_bytes()[:2] == b"\x89P", "referenced card must exist"
+
+    # NO dash glyphs and NO ticks anywhere on the page (owner rulings)
+    assert "–" not in page and "—" not in page, "no en/em dashes"
+    assert "✓" not in page and "&#10003;" not in page, "no tick glyphs"
+
+    # JSON-LD enrichment, including the spatialCoverage fix (the declared extent tuple renders)
+    ld = json.loads(re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>', page).group(1))
+    assert ld["spatialCoverage"]["geo"]["box"] == "-30.3 136.9 -30.1 137.1", \
+        "spatialCoverage must render from the DECLARED (west, east, south, north) extent"
+    assert ld["identifier"] == f"{BASE}/surveys/pages-r"
+    assert "https://doi.org/10.25914/sv5r-zw68" in ld["sameAs"]
+    assert "http://dx.doi.org/10.11636/Record.2020.011" in ld["sameAs"], \
+        "a full-URL related identifier must pass through as-is, never double-prefixed"
+    assert ld["funder"][0]["name"] == "Test Survey Office"
+    assert ld["citation"][0]["name"] == "Imaging things"
+    assert ld["measurementTechnique"] == "magnetotellurics"
+    assert ld["creator"]["sameAs"] == "https://ror.org/00892tw58"
+    assert ld["version"] == "1.2.3"
+
+
+def test_sitemap_lastmod_comes_from_release_notes_only(tmp_path):
+    """lastmod is emitted ONLY where it is honest: the survey's latest release-note date. A survey
+    without release notes gets none (a per-build stamp on identical content would teach crawlers to
+    distrust the field)."""
+    surveys = _make_rich_survey(tmp_path)
+    _make_survey(tmp_path, slug="pages-b", name="Pages B")   # same tree, no release notes
+    out = _build(surveys, tmp_path / "out")
+    sitemap = (out / "sitemap.xml").read_text(encoding="utf-8")
+    assert "<loc>https://ausmt.auscope.org.au/surveys/pages-r</loc><lastmod>2026-03-09</lastmod>" \
+        in sitemap.replace("\n", "")
+    row = re.search(r"<url><loc>[^<]*surveys/pages-b</loc>(.*?)</url>", sitemap.replace("\n", ""))
+    assert row and "<lastmod>" not in row.group(1), "no release notes must mean no lastmod"
+
+
+def test_the_embargoed_survey_page_says_so(tmp_path):
+    """An embargoed survey currently renders like an open one with silently absent downloads; the
+    page must state the embargo instead."""
+    surveys = _make_survey(tmp_path, slug="pages-e", name="Pages E")
+    pkg = surveys / "pages-e"
+    y = (pkg / "survey.yaml").read_text(encoding="utf-8")
+    (pkg / "survey.yaml").write_text(
+        y.replace("access: open", "access:\n  level: embargoed\n  embargo_until: '2027-02-01'"),
+        encoding="utf-8")
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-e.html").read_text(encoding="utf-8")
+    assert "under embargo" in page and "2027-02-01" in page
+
+
+# ---- unit pins: time-series levels and the collection rollup ------------------------------------
+
+def _pages_module():
+    sys.path.insert(0, str(REPO / "extract"))
+    import _pages
+    return _pages
+
+
+def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
+    """No placeholder panels (owner ruling): a survey with raw archives gets the L0 panel and
+    per-station sizes; levels the register does not carry render nothing at all."""
+    pages = _pages_module()
+    docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
+             "location": {"lat": -30.0, "lon": 137.0},
+             "data": {"type": "BBMT", "period_max_s": 6360.0},
+             "diagnostics": {"tipper_available": False}}]
+    ts = {"au.s.A1": {"raw_packed": {"bytes": 3242000000, "url_path": "x/A1.zip"}}}
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=docs, bundle_rows=[], ts_access=ts,
+                             base="https://x.example")
+    assert "Raw time series" in page and "1 of 1 stations" in page
+    assert "L0 3.2 GB" in page, "the table cell states the level and the real size"
+    assert "MTH5 time series" not in page, "an absent level must render no panel"
+    page2 = pages.survey_page(slug="s", label="S", sm_doc=None,
+                              smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                              station_docs=docs, bundle_rows=[],
+                              ts_access={"au.s.A1": {"level1_mth5": {"bytes": 5e8, "url_path": "y"}}},
+                              base="https://x.example")
+    assert "MTH5 time series" in page2 and "L1" in page2
+
+
+def test_collection_jsonld_rolls_up_member_licence_creators_and_years():
+    pages = _pages_module()
+    members = [("A", "a"), ("B", "b")]
+    smeta = [{"lic": "CC-BY-4.0", "org": "Org One", "year_start": 2013, "year_end": 2016},
+             {"lic": "CC-BY-4.0", "org": "Org Two", "year_start": 2018, "year_end": 2021}]
+    page = pages.collection_page(cid="c", coll={"title": "C", "n_stations": 5},
+                                 member_slugs=members, member_smeta=smeta,
+                                 base="https://x.example")
+    import re as _re
+    ld = json.loads(_re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>', page).group(1))
+    assert ld["license"] == "https://creativecommons.org/licenses/by/4.0/"
+    assert [o["name"] for o in ld["creator"]] == ["Org One", "Org Two"]
+    assert ld["temporalCoverage"] == "2013/2021"
+    mixed = smeta[:1] + [{"lic": "CC0-1.0", "org": "Org Two"}]
+    page2 = pages.collection_page(cid="c", coll={"title": "C"}, member_slugs=members,
+                                  member_smeta=mixed, base="https://x.example")
+    ld2 = json.loads(_re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>', page2).group(1))
+    assert "license" not in ld2, "mixed member licences must state nothing (never overclaim)"
