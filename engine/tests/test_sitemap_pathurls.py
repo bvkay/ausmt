@@ -9,7 +9,9 @@ sitemap is where the contract is ADVERTISED, so it must emit the path form and n
     slug the build stamps into smeta and every ausmt_id), never a re-slugified display label: a
     declared slug that differs from slugify(label) would otherwise advertise a URL the portal
     cannot resolve;
-  * per-station URLs are <base>/stations/<ausmt_id>;
+  * station URLs are DELIBERATELY ABSENT: the station pages exist (the served URL contract)
+    but are unadvertised and noindexed, so the sitemap cannot dilute the survey and collection
+    pages that carry the ranking;
   * per-collection URLs are ADDED as <base>/collections/<id> (the sitemap previously emitted no
     collection links at all);
   * the hash-fragment forms leave the sitemap entirely: the path form is the published contract,
@@ -72,9 +74,9 @@ def _locs(out) -> list[str]:
     return [u.find(f"{ns}loc").text for u in root.findall(f"{ns}url")]
 
 
-def test_sitemap_advertises_path_urls_for_all_three_entity_kinds(tmp_path):
+def test_sitemap_advertises_surveys_and_collections_never_stations(tmp_path):
     """E2E over the CLI: the sitemap carries the base, <base>surveys/<slug> per survey,
-    <base>stations/<ausmt_id> per station, and <base>collections/<id> per collection, and carries
+    and <base>collections/<id> per collection, NO station URLs at all, and carries
     NO fragment URL at all. FAILS PRE-CHANGE (fragment forms, no collections)."""
     pytest.importorskip("mt_metadata")
     from _fixtures import example_edis
@@ -96,12 +98,12 @@ def test_sitemap_advertises_path_urls_for_all_three_entity_kinds(tmp_path):
     mt = json.loads((out / "mtcat.json").read_text(encoding="utf-8"))
     station_ids = [s["station_id"] for s in mt["stations"]]
     assert station_ids, "fixture build must produce stations"
-    for sid in station_ids:
-        assert f"{BASE}stations/{sid}" in locs, f"per-station path URL missing for {sid}: {locs}"
+    assert not any("/stations/" in u for u in locs), (
+        f"station URLs must stay OUT of the sitemap (unadvertised-but-served posture): {locs}")
     assert not any("#/" in u for u in locs), (
         f"the hash-fragment forms must leave the sitemap (the path form is the contract): {locs}")
     # One URL per entity + the base, nothing else silently added.
-    assert len(locs) == 1 + 2 + len(station_ids) + 1, locs
+    assert len(locs) == 1 + 2 + 1, locs
     # The emitted file's own comment describes tier 1 honestly (redirects into the SPA, prerender
     # still needed for real per-page indexing), not the retired fragment story.
     xml_text = (out / "sitemap.xml").read_text(encoding="utf-8")
