@@ -1123,7 +1123,24 @@ function surveyLocator(ss){
   const r=withPos.length>200?1.6:2.2;
   const dots=withPos.map(s=>{const p=proj(s.lon,s.lat);
     return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${r}" fill="${TYPE_COL[s.type]||"#4FC3D9"}" fill-opacity=".9"/>`;}).join("");
-  return `<div class="card-locator"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Survey location in Australia">${outline}${dots}</svg></div>`;
+  // Compact-footprint marker (owner ruling 2026-08-28): a deposit-scale survey is a lone
+  // sub-pixel dot on a continent, so it gains a ring + a station-count pill at the centroid -
+  // where AND how much, at a glance. State-scale footprints read on their own and get neither.
+  let marker="";
+  if(withPos.length){
+    const lons=withPos.map(s=>s.lon),lats=withPos.map(s=>s.lat);
+    const ext=Math.max(Math.max(...lons)-Math.min(...lons),Math.max(...lats)-Math.min(...lats));
+    if(ext<2){
+      const c=proj(lons.reduce((a,b)=>a+b)/lons.length,lats.reduce((a,b)=>a+b)/lats.length);
+      const label=String(withPos.length);
+      const pw=label.length*7+14;
+      const px=Math.min(Math.max(c[0]-pw/2,4),W-pw-4),py=c[1]>36?c[1]-30:c[1]+16;
+      marker=`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="8" fill="none" stroke="#EF7256" stroke-width="1.6" opacity=".85"/>`+
+        `<rect x="${px.toFixed(1)}" y="${py.toFixed(1)}" width="${pw}" height="16" rx="8" fill="#18213D" stroke="#EF7256" stroke-width="1"/>`+
+        `<text x="${(px+pw/2).toFixed(1)}" y="${(py+11.5).toFixed(1)}" text-anchor="middle" fill="#EF7256" font-size="10" font-weight="600" font-family="ui-monospace,Menlo,monospace">${label}</text>`;
+    }
+  }
+  return `<div class="card-locator"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Survey location in Australia">${outline}${dots}${marker}</svg></div>`;
 }
 function pidLink(p){if(!p)return "<span class='prov'>not recorded</span>";if(p.startsWith("TODO"))return "<span class='prov'>not recorded</span>";
   const href=p.startsWith("http")?p:(p.startsWith("10.")?"https://doi.org/"+p:"https://hdl.handle.net/"+p);return `<a href="${escUrl(href)}" target="_blank" rel="noopener noreferrer">${esc(p)}</a>`;}
