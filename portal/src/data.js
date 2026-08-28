@@ -27,11 +27,16 @@ function dataUrl(name){
 }
 // One JSON product. REQUIRED semantics: a not-ok response or unparseable body rejects, so the caller can
 // decide whether that is fatal (phase 1) or a hydration failure to be reported honestly (phase 2).
-function fetchJson(name){return fetch(dataUrl(name)).then(r=>{if(!r.ok)throw new Error("load "+name);return r.json();});}
+function fetchJson(name,opts){return fetch(dataUrl(name),opts).then(r=>{if(!r.ok)throw new Error("load "+name);return r.json();});}
+// Hydration fetches carry the low priority hint: they share the connection with anything the user
+// does next (a drawer open, a tile fetch), and none of them is awaited on the first-paint path.
+// Browsers without priority hints ignore the field; the value must stay a VALID hint ("low"), as
+// supporting browsers throw on an unknown one.
+var FETCH_LOW={priority:"low"};
 // One OPTIONAL product: absence (404 / network / bad JSON) resolves to `fallback` and never rejects. This is
 // the tolerant-of-absence contract build_provenance / collections / build / coord_policy / manifest have
 // always had; it is factored out here only so the five of them can run CONCURRENTLY.
-function fetchOptional(name,fallback){return fetchJson(name).then(v=>v,()=>fallback);}
+function fetchOptional(name,fallback,opts){return fetchJson(name,opts).then(v=>v,()=>fallback);}
 
 // ---- PHASE 1: the first-paint set ---------------------------------------------------------------
 // Everything the map dots, the filter rail and the survey/collection views need, and nothing else:
@@ -61,7 +66,8 @@ async function loadPhase1(){
 }
 
 // ---- PHASE 2: background hydration --------------------------------------------------------------
-// The heavy products, issued in PARALLEL alongside phase 1 and awaited by NOBODY on the first-paint path.
+// The heavy products, issued AFTER phase 1 settles (they would otherwise contend with the catalogue
+// for the same connection) and awaited by NOBODY on the first-paint path.
 // Each assigns its global and settles its own gate, so a consumer waits only for the product it actually
 // reads (a station drawer's plots need tf; the Files tab needs the manifest; neither needs the other).
 // Returns the four gates so a caller (and the headless drivers) can observe hydration.
@@ -72,17 +78,17 @@ function startHydration(){
   // as "failed" and the products fall back to EMPTY arrays; the empty array keeps every positional deref
   // safe, and hydrFailed() is what the consumers render, so a broken build is never mistaken for a station
   // that genuinely has no curves.
-  TF_READY=fetchJson("tf.json").then(v=>{TFD=v;HYDR.tf="ready";},()=>{TFD=[];HYDR.tf="failed";});
-  SCI_READY=fetchJson("sci.json").then(v=>{SCI=v;HYDR.sci="ready";},()=>{SCI=[];HYDR.sci="failed";});
+  TF_READY=fetchJson("tf.json",FETCH_LOW).then(v=>{TFD=v;HYDR.tf="ready";},()=>{TFD=[];HYDR.tf="failed";});
+  SCI_READY=fetchJson("sci.json",FETCH_LOW).then(v=>{SCI=v;HYDR.sci="ready";},()=>{SCI=[];HYDR.sci="failed";});
   // manifest.json is OPTIONAL by contract (older data sets / empty builds ship none), so its 404 IS the
   // honest absence (MANIFEST=null, the exact value every consumer already tolerates), not a failure state.
-  MANIFEST_READY=fetchOptional("manifest.json",null).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
+  MANIFEST_READY=fetchOptional("manifest.json",null,FETCH_LOW).then(v=>{MANIFEST=v;HYDR.manifest="ready";});
   // THREDDS A5/D6: ts_access.json is OPTIONAL by contract - the engine writes it only when the
   // register projects at least one open, verified route, so a 404 IS the honest absence and there
   // is no "failed" state to report. The fallback is {} rather than null so every consumer reads one
   // shape, and the difference the Availability controls render is TSACC===null (still in flight)
   // against an empty object (this deployment publishes no download index).
-  TSACC_READY=fetchOptional("ts_access.json",{}).then(v=>{TSACC=v||{};HYDR.tsaccess="ready";});
+  TSACC_READY=fetchOptional("ts_access.json",{},FETCH_LOW).then(v=>{TSACC=v||{};HYDR.tsaccess="ready";});
   return [TF_READY,SCI_READY,MANIFEST_READY,TSACC_READY];
 }
 

@@ -14,7 +14,11 @@
 // cannot drift apart.
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
 const map=L.map("map",{preferCanvas:true}).fitBounds(AU_HOME_BOUNDS);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
+// CARTO watermarks un-keyed raster tile requests, so the deployment's key (config, public by
+// nature) rides the tile URL when set; without one the layer still works, watermarked.
+var _bmCfg=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.basemap)||{};
+var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
 // Owner ruling (2026-08-24): SITE LOCATIONS ONLY, at every zoom. The per-survey badge bubbles that
 // replaced proximity clustering are removed with it - no badge, no leader tail, no decoration pane, no
 // zoom threshold. A compact survey now overlaps into a tight group of dots at national zoom and the

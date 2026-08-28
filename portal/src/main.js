@@ -533,10 +533,15 @@ async function boot(){
     // Both phases are issued HERE, together: phase 2 does not wait for phase 1 to resolve (the heavy
     // products are independent of the catalogue), and the first paint below does not wait for phase 2.
     const p1=loadPhase1();
-    startHydration();
     // Phase 1 is the only fatal set: no catalogue or no surveys means there is nothing honest to draw.
     // A phase-2 failure is reported by the consumers that read it, not by blanking the whole portal.
     try{[CAT,SMETA,PROV,COLL,BUILDID,COORD_POLICY]=await p1;}catch(e){showLoadError();return;}
+    // Hydration starts only AFTER phase 1 has its bytes: the phase-2 products are large (tf.json
+    // alone is most of the page weight) and share one connection with the catalogue the dots need,
+    // so issuing them earlier delays the exact first paint the two-phase split exists to protect.
+    // Nothing on the first-paint path awaits these gates, and no consumer can read them before
+    // runInit attaches the UI below, so the later start is invisible everywhere but the network.
+    startHydration();
   }
   // The ts_access-driven surfaces are inert and disabled until the index is known: the Download
   // block's time-series rows and the Data available level options each paint their own in-flight

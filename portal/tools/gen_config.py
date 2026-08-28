@@ -44,6 +44,7 @@ def build_config(cfg):
     p = cfg.get("portal", {})
     d = cfg.get("deployment", {})
     a = cfg.get("analytics", {})
+    b = cfg.get("basemap", {})
     f = cfg.get("flags", {})
     return {
         "portal_id": p.get("id", "ausmt"),
@@ -58,6 +59,8 @@ def build_config(cfg):
         "data_base_url": d.get("data_base_url", "") or "",
         "analytics": {"enabled": bool(a.get("enabled", False)),
                       "plausible_domain": a.get("plausible_domain", "") or ""},
+        "basemap": {"provider": b.get("provider", "carto") or "carto",
+                    "carto_api_key": b.get("carto_api_key", "") or ""},
         "flags": {"survey_h5_enabled": bool(f.get("survey_h5_enabled", False)),
                   "station_h5_enabled": bool(f.get("station_h5_enabled", False)),
                   "collection_download_enabled": bool(f.get("collection_download_enabled", False))},
