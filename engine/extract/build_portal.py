@@ -49,6 +49,7 @@ import _stationids as stnids        # noqa: E402  (survey.yaml station-id overri
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
 import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
 import _runids as runids            # noqa: E402  (the persistent per-survey run-id store)
+import _runsheet as runsheet        # noqa: E402  (whitelist ingest of survey-declared run-metadata.csv)
 import _tsindex as tsindex          # noqa: E402  (the per-survey verified-resource register, read offline)
 import _tsproject as tsproject      # noqa: E402  (the ONE projection: flag/count/route from the register)
 import _stationcheck as stcheck     # noqa: E402  (station semantics beyond JSON Schema; shared with scripts/verify.py)
@@ -5317,6 +5318,12 @@ def _main_build(argv=None):
             _survey_warnings.append(f"run-id store IGNORED ({_rie}); no runs[] published")
             _survey_run_ids = {}
         _run_notes: list = []
+        # Survey-declared run metadata (run-metadata.csv, extract/_runsheet): curated acquisition
+        # facts keyed by CORPUS station id, whitelist-read. Same package-not-label rule as the
+        # store. The ids still come from the store alone; the sheet only ever adds facts.
+        _survey_run_sheet, _sheet_notes = runsheet.load(pkgdir)
+        _run_notes += _sheet_notes
+        _sheet_rows_consumed: set = set()
         # The verified-resource register (--ts-index), read OFFLINE from a ROOT of per-survey files
         # (rule 14). UNLIKE the run-id store this is HARD: the store is a nice-to-have whose absence
         # costs a station its runs[], while a register row is a ROUTE to bytes on another host, so a
@@ -5465,8 +5472,12 @@ def _main_build(argv=None):
             # has no EDI to advertise, and station.json's distribution must not claim one.
             # D7: the job is queued for EVERY station, not only under --products; station.json is a
             # public contract and the write path below publishes it at the served root regardless.
-            _runs, _rnotes = station_runs(_run_facts_by_station.get(r["id"]), _survey_run_ids,
-                                          r["id"], r.get("comps"))
+            _sheet_row = _survey_run_sheet.get(r["id"])
+            if _sheet_row is not None:
+                _sheet_rows_consumed.add(r["id"])
+            _runs, _rnotes = station_runs(
+                runsheet.merge(_run_facts_by_station.get(r["id"]), _sheet_row, r["id"], _run_notes),
+                _survey_run_ids, r["id"], r.get("comps"))
             _run_notes += _rnotes
             _station_product_jobs.append(
                 (r, srow, label, org, meta, lic, slug, p,
@@ -5617,6 +5628,13 @@ def _main_build(argv=None):
         # runs[] curation gaps: a station whose source asserts an acquisition fact but whose run id
         # the store does not carry publishes NO runs, and that silence must not hide behind a green
         # build. Same counted-warning shape as the fallbacks above, worst case first.
+        _sheet_orphans = sorted(set(_survey_run_sheet) - _sheet_rows_consumed)
+        if _sheet_orphans:
+            _run_notes.append(
+                f"curation: {len(_sheet_orphans)} run-metadata.csv row(s) matched no station in "
+                f"this survey [{', '.join(_sheet_orphans[:8])}"
+                f"{', ...' if len(_sheet_orphans) > 8 else ''}]; station_id must equal the corpus "
+                f"station id byte-for-byte (the distiller owns the sheet-to-corpus join)")
         if _run_notes:
             _survey_warnings.append(
                 f"{len(_run_notes)} run-metadata curation note(s) for this survey "
