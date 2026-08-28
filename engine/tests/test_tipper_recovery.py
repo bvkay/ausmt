@@ -98,3 +98,37 @@ def test_a_built_capricorn_shaped_station_carries_the_tipper_everywhere(tmp_path
     tip_mag = trow[list(TF_COLUMNS).index("tip_mag")]
     assert tzx_re and abs(tzx_re[0] - 0.1954) < 1e-4, tzx_re[:3]
     assert tip_mag and tip_mag[0] is not None
+
+
+def test_a_channels_recorded_declaration_without_bz_masks_the_tipper_survey_wide(tmp_path):
+    """The owner mechanism for file-borne tipper that was never measured: survey.yaml declares
+    the recorded channels; no vertical coil means any tipper in the released files is a
+    processing artifact, masked survey-wide - comps, type derivation and the tf tipper columns -
+    while the served source bytes stay untouched. Uses the recovery fixture (a REAL tipper the
+    parse now reads), so the mask is proven against live tipper data, not a vacuous absence."""
+    pytest.importorskip("mt_metadata")
+    pkg = tmp_path / "surveys" / "cap-nt"
+    edir = pkg / "transfer_functions" / "edi"
+    edir.mkdir(parents=True)
+    (pkg / "survey.yaml").write_text(
+        "name: Cap NT\nslug: cap-nt\ncountry: Australia\norganisation: Test Org\n"
+        "access: open\nlicense: CC-BY-4.0\nabstract: Mask fixture survey.\n"
+        "channels_recorded: [Ex, Ey, Bx, By]\n", encoding="utf-8")
+    shutil.copy(FIXTURE, edir / "CP1L01.edi")
+    out = tmp_path / "out"
+    rc = build_portal.main(["--surveys", str(tmp_path / "surveys"), "--out", str(out),
+                            "--no-validate", "--products", str(out / "products")])
+    assert rc == 0
+    row = json.loads((out / "catalogue.json").read_text(encoding="utf-8"))[0]
+    assert row[build_portal.CATALOGUE_COLUMNS.index("comps")] == "Z", \
+        "the declaration must mask the recovered tipper"
+    doc = json.loads((out / "products" / "cap-nt" / "CP1L01" / "station.json")
+                     .read_text(encoding="utf-8"))
+    assert doc["diagnostics"]["tipper_available"] is False
+    from _contract import TF_COLUMNS
+    trow = json.loads((out / "tf.json").read_text(encoding="utf-8"))[0]
+    assert all(v is None for v in trow[list(TF_COLUMNS).index("tzx_re")]), \
+        "the tf tipper columns must null out"
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    blob = json.dumps(report)
+    assert "channels_recorded declaration" in blob

@@ -214,6 +214,30 @@ def _footprint_svg(points, *, width=230) -> str:
         x = (lon - lo0) / dlo * (1 - 2 * pad) * width + pad * width
         y = (la1 - lat) / dla * (1 - 2 * pad) * height + pad * height
         return round(x, 1), round(y, 1)
+    # Coastline where it crosses the panel: the shared outline clipped to the bbox, so a
+    # coastal survey's dots sit against land instead of floating in a void. Segments are kept
+    # when either endpoint is inside the (slightly padded) bbox; inland panels draw nothing.
+    mlo, mla = dlo * 0.2, dla * 0.2
+
+    def _inside(lon, lat):
+        return (lo0 - mlo) <= lon <= (lo1 + mlo) and (la0 - mla) <= lat <= (la1 + mla)
+    coast_parts = []
+    for ring in au.COAST:
+        closed = list(ring) + [ring[0]]
+        run = []
+        for a, b in zip(closed, closed[1:]):
+            if _inside(*a) or _inside(*b):
+                if not run:
+                    run.append(a)
+                run.append(b)
+            elif run:
+                coast_parts.append(run)
+                run = []
+        if run:
+            coast_parts.append(run)
+    coast = "".join(
+        '<polyline points="' + " ".join(f"{p(lo, la)[0]},{p(lo, la)[1]}" for lo, la in part)
+        + '" fill="none" stroke="#3a5266" stroke-width="1.2"/>' for part in coast_parts)
     dots = "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="2.1" '
                    f'fill="{_TYPE_COL.get(pt[2], _TYPE_FALLBACK)}"/>' for pt in points)
     # scale bar: a round number close to a third of the panel width, in km at the mid latitude
@@ -229,7 +253,7 @@ def _footprint_svg(points, *, width=230) -> str:
              f'font-size="9" font-family="ui-monospace,Menlo,monospace">{nice} km</text>')
     return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail" '
             f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
-            f'{dots}{scale}</svg>')
+            f'{coast}{dots}{scale}</svg>')
 
 
 # --------------------------------------------------------------------------- page shell
@@ -407,7 +431,7 @@ def _related_by_identifies(smeta):
 
 
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
-                base, extent=None) -> str:
+                base, extent=None, discovery=None) -> str:
     smeta = smeta or {}
     title = ((sm_doc or {}).get("title")) or label
     blurb = smeta.get("blurb") or ""
@@ -442,6 +466,24 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             tipper += 1
     rates, dipoles = _run_summary(docs)
     points = _station_points(docs)
+    # DISCOVERY FALLBACK (embargoed and metadata-only surveys): the withheld station documents
+    # deliberately carry no position or science, but the survey IS in the public catalogue with
+    # coordinates, types and period rollups (discovery-universal posture). The page shows exactly
+    # that discovery layer - locations, types, the period band - and nothing the gate withholds.
+    disc_by_station = {}
+    if not points and discovery:
+        for row in discovery.get("stations") or []:
+            # mtcat's station_id IS the ausmt id (the rollup publishes the full form).
+            disc_by_station[row.get("station_id")] = row
+            if row.get("latitude") is not None and row.get("longitude") is not None:
+                points.append((float(row["longitude"]), float(row["latitude"]),
+                               row.get("data_type")))
+                type_counts[row.get("data_type")] = type_counts.get(row.get("data_type"), 0) + 1
+        srow = (discovery or {}).get("survey") or {}
+        if pmin is None:
+            pmin, pmax = srow.get("period_min_s"), srow.get("period_max_s")
+        if not tipper:
+            tipper = int(srow.get("n_stations_tipper") or 0)
 
     # ---- JSON-LD ----
     ld = {"@context": "https://schema.org", "@type": "Dataset",
@@ -602,7 +644,16 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         tiles.append(tile(_e(tstr), "data type"))
     if pmin is not None and pmax is not None:
         tiles.append(tile(f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s", "period coverage"))
-    tiles.append(tile(f"{tipper} / {n_stations}", "tipper stations"))
+    # Channels recorded, from the served components: what the survey actually measured. The
+    # tipper tile appears only where a tipper exists (a zero count is the channels tile's job).
+    channels = "Ex Ey Bx By" + (" Bz" if tipper == n_stations and n_stations else "")
+    if 0 < tipper < n_stations:
+        channels = "Ex Ey Bx By (+Bz)"
+    tiles.append(tile(_e(channels), "channels recorded"))
+    if tipper:
+        tiles.append(tile(f"{tipper} / {n_stations}", "tipper stations"))
+    if len(rates) == 1:
+        tiles.append(tile(f"{next(iter(rates)):,.0f} Hz", "sample rate"))
     if years:
         tiles.append(tile(_e(years), "acquired"))
     if version:
@@ -612,31 +663,46 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # ---- facts ----
     facts = []
     if org:
-        facts.append(f"<dt>Organisation</dt><dd>{_e(org)}</dd>")
+        org_html = (f'<a href="{_e(smeta["org_ror"])}">{_e(org)}</a>'
+                    if smeta.get("org_ror") else _e(org))
+        facts.append(f"<dt>Organisation</dt><dd>{org_html}</dd>")
     if lic:
         facts.append(f"<dt>Licence</dt><dd>{_e(lic)}</dd>")
-    if len(rates) == 1:
-        facts.append(f"<dt>Sample rate</dt><dd>{next(iter(rates)):,.0f} Hz</dd>")
-    elif rates:
+    if len(rates) > 1:
         facts.append(f"<dt>Sample rates</dt><dd>{', '.join(f'{r:,.0f}' for r in sorted(rates))} Hz</dd>")
-    if dipoles:
-        lo, hi = min(dipoles), max(dipoles)
-        mid = sorted(dipoles)[len(dipoles) // 2]
-        facts.append(f"<dt>Dipoles</dt><dd>about {mid:g} m Ex and Ey, measured per station "
-                     f"({lo:g} to {hi:g} m)</dd>")
+    # The dipole summary and the survey-level instrument PID are gone by ruling: dipoles live in
+    # the station table, and the platform-PID registry is retired (per-station PIDs remain).
     if smeta.get("instrument_model"):
-        pid = smeta.get("instrument_pid")
-        pid_bit = (f' &#183; <a href="{_e(_doi_url(pid))}">instrument PID {_e(pid)}</a>'
-                   if pid else "")
-        facts.append(f"<dt>Instruments</dt><dd>{_e(smeta['instrument_model'])}{pid_bit}</dd>")
+        instruments = "<br>".join(_e(part.strip())
+                                  for part in str(smeta["instrument_model"]).split(";") if part.strip())
+        facts.append(f"<dt>Instruments</dt><dd>{instruments}</dd>")
     if smeta.get("software"):
         facts.append(f"<dt>Processing</dt><dd>{_e(smeta['software'])}</dd>")
+    # Activity-scope related identifiers (e.g. ANSIR project records): a labelled link, one per
+    # line. The label is the record id where the URL carries one, else the bare host.
+    projects = []
+    for row in smeta.get("related_identifiers") or []:
+        if (row or {}).get("scope") != "activity":
+            continue
+        u = str(row.get("identifier") or "")
+        if not u:
+            continue
+        m = re.search(r"[?&]id=([A-Za-z0-9._-]+)", u)
+        label = m.group(1) if m else re.sub(r"^https?://(www\.)?", "", u).split("/")[0]
+        projects.append(f'<a href="{_e(_doi_url(u))}">{_e(label)}</a>')
+    if projects:
+        facts.append(f"<dt>Project</dt><dd>{'<br>'.join(projects)}</dd>")
     if funders:
         bits = []
         for f in funders:
+            name = _e(f.get("name") or "")
+            if not name:
+                continue
+            if f.get("pid"):
+                name = f'<a href="{_e(f["pid"])}">{name}</a>'
             grant = f.get("grant_id")
-            bits.append(_e(f.get("name") or "") + (f" (grant {_e(grant)})" if grant else ""))
-        facts.append(f"<dt>Funding</dt><dd>{' &#183; '.join(b for b in bits if b)}</dd>")
+            bits.append(name + (f" (grant {_e(grant)})" if grant else ""))
+        facts.append(f"<dt>Funding</dt><dd>{'<br>'.join(bits)}</dd>")
     facts_html = f"<dl>{''.join(facts)}</dl>" if facts else ""
 
     # ---- contributors / publications ----
@@ -664,8 +730,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         st = doc.get("station") or aid
         loc = doc.get("location") or {}
         data = doc.get("data") or {}
+        drow = disc_by_station.get(aid) or {}
         cells = [f'<td><a href="/stations/{_e(aid)}">{_e(st)}</a></td>']
-        for v in (loc.get("lat"), loc.get("lon")):
+        for v in (loc.get("lat") if loc.get("lat") is not None else drow.get("latitude"),
+                  loc.get("lon") if loc.get("lon") is not None else drow.get("longitude")):
             cells.append(f"<td>{v if v is not None else '-'}</td>")
         pm = data.get("period_max_s")
         cells.append(f"<td>{_fmt_period(pm) if pm is not None else '-'}</td>")
@@ -720,7 +788,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     body = (
         f"{nav}\n"
         f"<h1>{_e(title)}</h1>\n"
-        f'<p class="crumb">Magnetotelluric survey &#183; {_e(region)}</p>\n'
+        f'<p class="crumb">Magnetotelluric survey &#183; {_e(region)}'
+        + (f" &#183; {_e(org)}" if org else "") + "</p>\n"
         f"{cite}\n{embargo}\n{hero}\n{stats}\n{facts_html}\n"
         + (f"<h2>Data &amp; downloads</h2>\n{''.join(panels)}\n" if panels else "")
         + f"{people_html}\n{pubs_html}\n{table}\n"
@@ -913,7 +982,7 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
 
 def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collections,
                bundle_formats, survey_extent, survey_coll,
-               bundle_rows=None, ts_access=None) -> int:
+               bundle_rows=None, ts_access=None, mtcat=None) -> int:
     """Write every entity page under <out>/pages/ (and, when Pillow is importable, the
     per-survey link-preview cards under <out>/pages/og/). Inputs are the served documents and
     rollups the build already produced; the return value is the page count the caller reconciles
@@ -927,6 +996,13 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     bundles_by_slug: dict = {}
     for row in bundle_rows or []:
         bundles_by_slug.setdefault((row or {}).get("slug"), []).append(row)
+    # The public discovery layer per survey (the mtcat rollup): the embargoed-survey fallback.
+    disc_stations: dict = {}
+    disc_survey: dict = {}
+    for row in (mtcat or {}).get("stations") or []:
+        disc_stations.setdefault(row.get("survey_id"), []).append(row)
+    for row in (mtcat or {}).get("surveys") or []:
+        disc_survey[row.get("survey_id")] = row
 
     sdir = out / "pages" / "surveys"
     sdir.mkdir(parents=True, exist_ok=True)
@@ -948,7 +1024,9 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
         htmlpage = survey_page(slug=slug, label=label, sm_doc=survey_docs.get(slug),
                                smeta=smeta, station_docs=docs,
                                bundle_rows=rows or [], ts_access=ts_access,
-                               base=base, extent=(survey_extent or {}).get(label))
+                               base=base, extent=(survey_extent or {}).get(label),
+                               discovery={"stations": disc_stations.get(slug),
+                                          "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
         n += 1
         if draw_cards:

@@ -199,16 +199,23 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
 
     # citation box: surname-plus-initial authors from the creators-driven cite record
     assert "Cite as:" in page and "Kay, B.; Heinson, G." in page, "cite box with initials"
+    assert "Magnetotelluric survey &#183; South Australia &#183; Test Org" in page, \
+        "the subtitle carries region and organisation"
     # page nav replaces the CTA (owner ruling: no portal button)
     assert "All surveys" in page and "View all stations on the main map" in page
     assert "Open in the interactive portal" not in page
     # maps: the shared-outline minimap always; the footprint zoom for this compact extent
     assert 'aria-label="Survey location in Australia"' in page
     assert 'aria-label="Station grid detail"' in page
-    # stat tiles + facts from the served documents and the ingested runs
-    assert "period coverage" in page and "tipper stations" in page
-    assert "Sample rate" in page and "1,000 Hz" in page
-    assert "Dipoles" in page and "measured per station" in page
+    # stat tiles from the served documents and the ingested runs (owner rulings: a zero tipper
+    # count shows the channels-recorded tile instead; the sample rate is a tile; the dipole
+    # summary is gone - the station table carries dipoles)
+    assert "period coverage" in page
+    assert "channels recorded" in page and "Ex Ey Bx By" in page
+    assert "tipper stations" not in page, "a zero tipper count must not render a tile"
+    assert "sample rate" in page and "1,000 Hz" in page
+    assert "Dipoles" not in page, "the dipole summary row is retired (the table carries dipoles)"
+    assert "instrument PID" not in page, "the survey-level platform PID is retired"
     # the station table: run columns, PIDs as links, sticky first column
     for h in ("Deployed", "Recovered", "Rate (Hz)", "Logger", "Bx coil", "Time series"):
         assert h.replace(" ", "&#8202;") in page.replace("&#8202;", " ") or h in page.replace("&#8202;", " "), h
@@ -273,6 +280,13 @@ def test_the_embargoed_survey_page_says_so(tmp_path):
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-e.html").read_text(encoding="utf-8")
     assert "under embargo" in page and "2027-02-01" in page
+    # The DISCOVERY layer still renders (owner ruling): the catalogue is discovery-universal, so
+    # an embargoed survey's page shows its station locations and band even while the science
+    # products are withheld.
+    minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S)
+    assert minimap and "<circle" in minimap.group(0), "embargoed pages must map their stations"
+    assert re.search(r"<td>-3\d\.\d+</td>", page), \
+        "the station table must carry the catalogue's public coordinates"
 
 
 # ---- unit pins: time-series levels and the collection rollup ------------------------------------
@@ -358,3 +372,16 @@ def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
     assert "Member stations of" in coll, "the collection page must carry the member scatter"
     assert "#2E8FA3" in coll, "member colours use the portal collection palette"
     assert "Pages R" in coll
+
+
+def test_activity_scope_identifiers_render_as_project_links():
+    pages = _pages_module()
+    smeta = {"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0",
+             "related_identifiers": [
+                 {"identifier": "https://www.auscope.org.au/ansir-projects?id=ANSIR-2022-001",
+                  "identifier_type": "URL", "scope": "activity", "relation": "IsDocumentedBy"}]}
+    page = pages.survey_page(slug="s", label="S", sm_doc=None, smeta=smeta,
+                             station_docs=[], bundle_rows=[], ts_access=None,
+                             base="https://x.example")
+    assert "Project" in page and ">ANSIR-2022-001</a>" in page
+    assert 'href="https://www.auscope.org.au/ansir-projects?id=ANSIR-2022-001"' in page

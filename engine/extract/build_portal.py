@@ -1701,6 +1701,11 @@ def survey_meta_from_yaml(y: dict) -> dict:
     # seam (order preserved, keys omitted when absent). ADDITIVE + absent -> absent: a survey without them
     # yields a byte-identical surveys.json entry (the whole pre-migration corpus). creators[] is the
     # citation-author order; contributors[] carries the fail-closed roles the drawer renders.
+    # Survey-declared recorded channels (owner mechanism for tipper truth: a declaration without
+    # a vertical coil masks any file-borne tipper survey-wide). ADDITIVE + absent -> absent.
+    channels = y.get("channels_recorded")
+    if isinstance(channels, list) and channels:
+        sm["channels_recorded"] = [str(c) for c in channels]
     creators = _creators_of(y)
     if creators:
         sm["creators"] = creators
@@ -2106,7 +2111,8 @@ def _parse_one_edi(p):
 
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
-                 cache=None, survey_digest="", report=None, station_ids=None):
+                 cache=None, survey_digest="", report=None, station_ids=None,
+                 mask_tipper=False):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
     mt_metadata is the SOLE engine (the dependency-free regex extractor + _spectra were retired in
@@ -2179,6 +2185,20 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                      "reason": f"[{_sk['gate']}] {_sk['reason']}"})
             continue
         r, tf, srow = parsed["record"], parsed["tf"], parsed["sci"]
+        # Survey-declared channel truth: when survey.yaml states the recorded channels WITHOUT a
+        # vertical coil, any tipper in the released files is a processing artifact and is masked
+        # survey-wide - components, catalogue comps, the tf tipper columns. Applied HERE, after
+        # the C18 cache (the cached parse stays survey-independent), identically on hit and miss.
+        if mask_tipper and "T" in (r.get("components") or []):
+            r["components"] = [c for c in r["components"] if c != "T"]
+            r["type"] = mtm.classify(r.get("period_min_s"), "Z" in r["components"], False)
+            if isinstance(tf, list):
+                for _ti in (5, 14, 15, 16, 17):        # tip_mag, tzx_re/im, tzy_re/im (TF_COLUMNS)
+                    if _ti < len(tf) and tf[_ti]:
+                        tf[_ti] = [None] * len(tf[_ti])
+            if report is not None:
+                report.setdefault("tipper_masked_by_declaration", []).append(
+                    str(r.get("id") or p.stem))
         # Emit the deferred per-EDI diagnostics identically whether parsed from source or cache.
         if r.get("tipper_masked"):
             print(f"  NOTICE {r.get('id') or p.stem}: placeholder tipper (|T| flat at 1.0) masked "
@@ -5084,9 +5104,13 @@ def _main_build(argv=None):
                 print(f"SKIP {slug}: station_ids block INVALID: {_sie}", file=sys.stderr)
                 dropped_surveys.append((label, len(inputs), "station_ids block invalid"))
                 continue
+            _declared_channels = {str(c).strip().lower().replace("b", "h", 1) if str(c).strip().lower().startswith("b") else str(c).strip().lower()
+                                  for c in ((meta or {}).get("channels_recorded") or [])}
+            _mask_tipper = bool(_declared_channels) and not ({"hz"} & _declared_channels)
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
-                                                       report=_gate_report, station_ids=_station_ids) \
+                                                       report=_gate_report, station_ids=_station_ids,
+                                                       mask_tipper=_mask_tipper) \
                 if _edi_in else ([], [], [])
             if _xml_in:
                 # OWNER PRECEDENCE RULING (2026-08-03): EDI wins per station. The exclusion set is the
@@ -5633,6 +5657,11 @@ def _main_build(argv=None):
         # runs[] curation gaps: a station whose source asserts an acquisition fact but whose run id
         # the store does not carry publishes NO runs, and that silence must not hide behind a green
         # build. Same counted-warning shape as the fallbacks above, worst case first.
+        _decl_masked = list(_gate_report.get("tipper_masked_by_declaration", []))
+        if _decl_masked:
+            _survey_warnings.append(
+                f"tipper masked survey-wide by the channels_recorded declaration (no vertical "
+                f"coil recorded) for {len(_decl_masked)} station(s)")
         _sheet_orphans = sorted(set(_survey_run_sheet) - _sheet_rows_consumed)
         if _sheet_orphans:
             _run_notes.append(
@@ -6146,7 +6175,7 @@ def _main_build(argv=None):
             survey_docs=_survey_metadata_docs, station_docs=_station_docs,
             collections=coll_by_id, bundle_formats=_bundle_formats,
             survey_extent=survey_extent, survey_coll=_survey_coll,
-            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access)
+            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access, mtcat=mtcat)
         print(f"  pages/ -> {_n_pages} entity landing pages (tier 3)")
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc

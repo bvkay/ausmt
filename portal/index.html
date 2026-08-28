@@ -438,12 +438,16 @@
   .colltable tbody tr:hover{background:var(--panel)}
   .colltable td a{color:var(--copper);text-decoration:none;font-weight:500}.colltable td a:hover{text-decoration:underline}
   .colltable .csub{font-size:12px;color:var(--muted);margin-top:1px}
-  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;max-width:1500px}
+  /* Wide screens flow to five columns (owner ruling); the uncapped width lets auto-fill
+     decide, and the 300px floor keeps three-up on a typical laptop. */
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
   .surveymeta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
   .surveymeta a{color:var(--copper);text-decoration:none}
   .surveymeta .pidline{font-family:var(--mono);word-break:break-all}
   .emptynote{color:var(--muted);font-size:13px;padding:30px 4px}
-  .scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+  .scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column}
+  .scard .desc{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+  .scard .cardbtns{margin-top:auto;padding-top:10px}
   .scard h3{font-size:18px;margin-bottom:2px}.scard .cust{font-size:12px;color:var(--muted)}
   .scard .stats{font-family:var(--mono);font-size:12px;margin:10px 0;line-height:1.7}.scard .stats b{color:var(--copper)}
   .mixbar{display:flex;height:7px;border-radius:3px;overflow:hidden;margin:8px 0}
