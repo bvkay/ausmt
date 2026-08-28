@@ -433,29 +433,26 @@ Pre-DOI is the cheapest moment to fix URL shape forever: the shape is what gets 
 talks, papers, programme pages, eventually DOI metadata and RAiD landing links); the machinery
 behind it can upgrade without breaking a link.
 
-**Tier 1 (LIVE, this stack):** the canonical site block 301s each shape into the SPA's hash route
-(`/surveys/x` -> `/#/survey/x`, likewise station/collection). The redirects are canonical surface:
-a legacy-name (`ausmt.au`) request to a path-shaped URL takes **two hops** by design - the legacy
-block's host 301 with path and query preserved, then the canonical block's fragment mapping - while
-a canonical-name request takes one. A query on a path-shaped link is preserved onto the target
-**before the fragment** (`/surveys/x?utm=1` -> `/?utm=1#/survey/x`); a bare `/surveys` or
-`/surveys/` (no id) lands on the portal root. The entity id itself rides byte-for-byte (the
-mechanism never decodes or re-encodes it). All of it is `permanent` (301): these are contracts, so
-`temporary`/302 may never appear. The redirect hop lands in the masked access log (the canonical
-block logs); the analytics fold does NOT count it - aggregate_stats.py counts only the `/data/*`
-download, visit and API paths plus the `/go/ts/` hand-offs, and admits no 301 in any counted class,
-so a path-link visit is counted once, at the SPA boot that follows the hop (pinned in deploy/tests).
+**Tier 3 (LIVE, this stack): prerendered per-entity landing pages.** The engine emits real
+crawlable HTML for every survey, station and collection into the build's `pages/` tree
+(discoverability lane; rendered only from the served public documents, so the C42 leak posture is
+inherited), and the box reader serves them at the exact published shapes. The front door PASSES
+the deep entity forms THROUGH to the reader like any portal path - a crawler receives indexable
+HTML with a canonical at this exact URL and a schema.org Dataset block, and a human receives the
+landing page with its interactive-portal deep link. **No published URL changed** when this tier
+replaced tier 1's redirects, exactly as the contract promised. A bare `/surveys` or `/surveys/`
+(and the station/collection twins) has no entity to serve and still 301s to the portal root with
+its query preserved; a legacy-name (`ausmt.au`) deep link takes one host 301 (path and query
+preserved) and then the canonical host serves the page. The entity id rides byte-for-byte to the
+reader (never decoded or re-encoded); an unknown id 404s from the reader honestly. The doctor's
+pathurl leg (4c) demands the landing page's own rel=canonical at the probed URL. Analytics: an
+entity-page hit is not in aggregate_stats.py's counted path classes, so a path-link visit is
+counted once, at the SPA boot that follows the click-through (pinned in deploy/tests).
 
 **Tier 2 (deferred): real SPA path routes.** The app is served AT the path, the router reads
 `location.pathname`, and the pretty URL persists in the address bar instead of collapsing to the
 hash form. Purely a portal/router upgrade behind the same shapes: **no published URL changes when
-it comes** - the tier-1 redirects simply retire from mapping duty.
-
-**Tier 3 (deferred, DOI time): prerendered per-entity landing pages** at the same paths, giving
-each survey/station/collection real crawlable HTML (the build's own caveat names this: real
-per-page SEO needs path-based routing + prerender). Again **no published URL changes when it
-comes**: the paths stop redirecting and start serving, and every link ever published keeps
-resolving.
+it comes** - the landing pages would then hydrate into the app in place.
 
 The id vocabulary behind these URLs is FROZEN in `portal/data/url_registry.json` (every published
 survey slug, station ausmt_id and collection id): an id that would move fails the registry check

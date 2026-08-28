@@ -147,26 +147,20 @@ def test_pathurl_section_sits_in_the_canonical_block_above_the_deny():
         "the section must not sit inside the legacy-templated range (both renderings keep it)")
 
 
-def test_pathurl_three_shapes_are_permanent_and_fragment_correct():
-    """Each shape is a handle_path whose single redir is the exact permanent fragment mapping, with
-    {ausmt_qs} placed BEFORE the '#' (the query decision) and {ausmt_pathurl_rest} carrying the id.
-    FAILS IF a shape is missing, softens to 302/temporary, drops the query placement, or the
-    fragment prefix is wrong."""
+def test_pathurl_entity_shapes_pass_through_to_the_reader():
+    """Tier 3: the three deep entity shapes carry NO redirect of their own - they fall through the
+    handles to the box_upstream catch-all, and the box serves the prerendered landing page at the
+    same URL. FAILS IF any entity handle_path (or any fragment redirect for the shapes) reappears,
+    which would put the crawler-invisible hash route back in front of the landing pages."""
     section = _section(_fd_text())
     for prefix, frag in _SHAPES:
-        hp = f"handle_path /{prefix}/* {{"
-        assert hp in section, f"missing handle_path for /{prefix}/*"
-        hp_body = _block_after(section, hp)
-        redirs = [ln.strip() for ln in hp_body.splitlines() if ln.strip().startswith("redir")]
-        want = (f"redir https://{{$AUSMT_PUBLIC_NAME}}/{{ausmt_qs}}#/{frag}"
-                f"{{ausmt_pathurl_rest}} permanent")
-        assert redirs == [want], (
-            f"/{prefix}/* must map exactly to the {frag} fragment route, permanent, query before "
-            f"the fragment; got {redirs}")
-    directives = [ln.strip() for ln in section.splitlines()
-                  if ln.strip() and not ln.strip().startswith("#")]
-    assert not any("temporary" in d or " 302" in d for d in directives), (
-        f"the contract redirects must never be temporary/302; got {directives}")
+        assert f"handle_path /{prefix}/*" not in section, (
+            f"/{prefix}/* must pass through to the reader (tier 3), not redirect")
+        assert f"#/{frag}" not in section, (
+            f"no fragment redirect for /{prefix}/* may remain in the section")
+    body = _canonical_body(_fd_text())
+    assert "import box_upstream" in _block_after(body, "handle {"), (
+        "the catch-all the entity shapes fall through to must still proxy to the box")
 
 
 def test_pathurl_bare_prefixes_redirect_to_the_portal_root():
@@ -187,8 +181,6 @@ def test_pathurl_bare_prefixes_redirect_to_the_portal_root():
         redirs = [ln.strip() for ln in h_body.splitlines() if ln.strip().startswith("redir")]
         assert redirs == ["redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent"], (
             f"the bare /{prefix} form must redirect to the portal root, got {redirs}")
-        assert section.index(h) < section.index(f"handle_path /{prefix}/* {{"), (
-            f"the bare @{prefix}_bare handle must precede the wildcard handle_path")
 
 
 def test_pathurl_mechanism_is_handle_path_plus_lazy_maps():
@@ -213,32 +205,35 @@ def test_pathurl_mechanism_is_handle_path_plus_lazy_maps():
 
 
 def test_doctor_carries_the_pathurl_leg():
-    """doctor.sh source pins for the new leg: it probes the canonical name's /surveys/vulcan-2022
-    over explicit https with --resolve, requires a 301 whose Location is the exact fragment route,
-    and skips cleanly (a PASS-labelled skip, not a FAIL) when the edge gives no response. The
-    behavioural proof is sh-driven in test_frontdoor_doctor_sh.py; these run everywhere. FAILS IF
-    the leg, the pinned slug, the 301 requirement, or the clean skip is dropped."""
+    """doctor.sh source pins for the tier-3 leg: it probes the canonical name's
+    /surveys/vulcan-2022 over explicit https with --resolve, demands the landing page's own
+    rel=canonical at that exact URL (which proves the pass-through AND that the pages/ product
+    served), and skips cleanly when the edge gives no response. The behavioural proof is sh-driven
+    in test_frontdoor_doctor_sh.py; these run everywhere. FAILS IF the leg, the pinned slug, the
+    canonical requirement, or the clean skip is dropped."""
     src = _DOCTOR.read_text(encoding="utf-8")
     assert 'slug="vulcan-2022"' in src, "the probe slug must be the pinned vulcan-2022"
     assert "https://$name/surveys/$slug" in src, "the leg must probe the path shape over https"
-    assert '"301"' in src.split("check_pathurl_redirect")[1].split("check_tailscale")[0], (
-        "the pathurl leg must require a 301")
-    assert "#/survey/$slug" in src, "the leg must verify the fragment-route Location"
+    leg = src.split("check_pathurl_redirect")[1].split("check_tailscale")[0]
+    assert "canonical" in leg, "the pathurl leg must demand the landing page's canonical"
     assert "pathurl: skipped" in src, "an unreachable edge must skip cleanly, not FAIL"
 
 
-def test_runbook_documents_the_contract_and_the_deferred_tiers():
-    """RUNBOOK pins: the three published shapes, the two-hop legacy sentence, the query decision,
-    and the deferred tiers each documented as requiring NO published-URL change. FAILS IF the
-    runbook loses any of them (the published contract must stay findable by the operator)."""
+def test_runbook_documents_the_contract_and_the_tiers():
+    """RUNBOOK pins: the three published shapes, tier 3 documented as LIVE with the served landing
+    pages and the leak-posture note, tier 2 still documented as deferred with the no-URL-change
+    promise, the bare-form and legacy-chain behaviour stated. FAILS IF the runbook loses any of
+    them (the published contract must stay findable by the operator, and stale tier narration
+    would misdirect an incident response)."""
     rb = _RUNBOOK.read_text(encoding="utf-8")
     for shape in ("/surveys/<slug>", "/stations/<ausmt_id>", "/collections/<id>"):
         assert shape in rb, f"the runbook must name the published shape {shape}"
-    assert "two hops" in rb, "the runbook must state the legacy deep-path chain is two hops"
-    assert "before the fragment" in rb, "the runbook must state the query decision"
-    assert "Tier 2" in rb and "Tier 3" in rb, "both deferred tiers must be documented"
-    assert rb.count("no published URL changes") >= 2, (
-        "each deferred tier must promise no published-URL change when it comes")
+    assert "Tier 3 (LIVE" in rb, "tier 3 must be documented as the live tier"
+    assert "Tier 2 (deferred)" in rb, "tier 2 must remain documented as deferred"
+    assert "No published URL changed" in rb and "no published URL changes" in rb, (
+        "the runbook must state the URL contract held at tier 3 and holds for tier 2")
+    assert "301s to the portal root" in rb, "the bare-form behaviour must be stated"
+    assert "rel=canonical" in rb, "the doctor's canonical probe must be stated"
 
 
 # ==================================================================================================
@@ -353,32 +348,29 @@ def edge():
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
-def test_pathurl_deep_ids_map_to_the_fragment_routes(edge):
-    """RUNTIME, the contract itself. Each published shape with a real deep id answers 301 with the
-    exact fragment-route Location on the canonical name. FAILS IF any shape does not map, softens,
-    or mangles the id."""
+def test_pathurl_deep_ids_reach_the_reader_path_intact(edge):
+    """RUNTIME, the tier-3 contract itself. Each published shape with a real deep id passes
+    through to the reader with the path byte-for-byte intact, where the box serves the prerendered
+    landing page. FAILS IF any shape redirects again, 404s at the edge, or mangles the path on the
+    way to the reader."""
     port, _log = edge
-    for path, want in (
-            ("/surveys/vulcan-2022", "https://canonical.test/#/survey/vulcan-2022"),
-            ("/stations/au.vulcan-2022.MBV07", "https://canonical.test/#/station/au.vulcan-2022.MBV07"),
-            ("/collections/auslamp", "https://canonical.test/#/collection/auslamp")):
-        st, loc, _ = _get_noredirect(port, path, host="canonical.test")
-        assert st == 301, f"{path}: must 301 (permanent contract), got {st}"
-        assert loc == want, f"{path}: Location must be {want}, got {loc!r}"
+    for path in ("/surveys/vulcan-2022",
+                 "/stations/au.vulcan-2022.MBV07",
+                 "/collections/auslamp"):
+        st, _loc, body = _get_noredirect(port, path, host="canonical.test")
+        assert st == 200, f"{path}: must pass through to the reader, got {st}"
+        assert body == f"STUB {path}", f"{path}: must reach the reader path-intact, got {body!r}"
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
-def test_pathurl_query_is_preserved_before_the_fragment(edge):
-    """RUNTIME, the query decision. /surveys/x?<q> answers with the query carried BEFORE the
-    fragment, byte-for-byte, so a decorated link neither breaks the route nor loses its query.
-    FAILS IF the query is dropped, reordered, or lands after the '#'."""
+def test_pathurl_query_rides_through_to_the_reader(edge):
+    """RUNTIME, the query decision under tier 3. A decorated link (/surveys/x?<q>) passes through
+    with its query intact - the reader's file_server ignores it, so the link neither breaks nor
+    loses what its author wrote. FAILS IF the query is stripped or reordered on the way through."""
     port, _log = edge
-    st, loc, _ = _get_noredirect(port, "/surveys/vulcan-2022?utm=1&v=1.2", host="canonical.test")
-    assert st == 301
-    assert loc == "https://canonical.test/?utm=1&v=1.2#/survey/vulcan-2022", loc
-    st, loc, _ = _get_noredirect(port, "/collections/auslamp?src=paper", host="canonical.test")
-    assert st == 301
-    assert loc == "https://canonical.test/?src=paper#/collection/auslamp", loc
+    st, _loc, body = _get_noredirect(port, "/surveys/vulcan-2022?utm=1&v=1.2", host="canonical.test")
+    assert st == 200
+    assert body == "STUB /surveys/vulcan-2022?utm=1&v=1.2", body
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
@@ -404,32 +396,32 @@ def test_pathurl_id_rides_byte_for_byte(edge):
     preserved verbatim too (the published form carries none; nothing is trimmed or added). FAILS IF
     the remainder is decoded, re-encoded, or trimmed."""
     port, _log = edge
-    st, loc, _ = _get_noredirect(port, "/stations/au.vulcan%2D2022.MBV07", host="canonical.test")
-    assert st == 301
-    assert loc == "https://canonical.test/#/station/au.vulcan%2D2022.MBV07", (
-        f"the escaped id must ride undecoded, got {loc!r}")
-    st, loc, _ = _get_noredirect(port, "/surveys/vulcan-2022/", host="canonical.test")
-    assert st == 301
-    assert loc == "https://canonical.test/#/survey/vulcan-2022/", (
-        f"a trailing slash is preserved verbatim (never trimmed), got {loc!r}")
+    st, _loc, body = _get_noredirect(port, "/stations/au.vulcan%2D2022.MBV07", host="canonical.test")
+    assert st == 200
+    assert body == "STUB /stations/au.vulcan%2D2022.MBV07", (
+        f"the escaped id must reach the reader undecoded, got {body!r}")
+    st, _loc, body = _get_noredirect(port, "/surveys/vulcan-2022/", host="canonical.test")
+    assert st == 200
+    assert body == "STUB /surveys/vulcan-2022/", (
+        f"a trailing slash rides verbatim to the reader (which 404s it honestly), got {body!r}")
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")
-def test_pathurl_legacy_chain_is_two_hops_ending_at_the_fragment_route(edge):
-    """RUNTIME, the legacy chain. A legacy-name path link takes exactly two hops: hop 1 is the
-    legacy block's host 301 with {uri} preserved (path AND query), hop 2 is the canonical block's
-    fragment mapping. The chain ends at /#/survey/<slug>. FAILS IF either hop softens, drops the
-    URI, or the chain ends anywhere else."""
+def test_pathurl_legacy_chain_ends_at_the_served_landing_page(edge):
+    """RUNTIME, the legacy chain under tier 3. A legacy-name path link takes one 301 (the legacy
+    block's host redirect with {uri} preserved, path AND query) and then the canonical host SERVES
+    the landing page through the reader. FAILS IF the hop softens, drops the URI, or the chain
+    stops short of the reader."""
     port, _log = edge
     st, loc, _ = _get_noredirect(port, "/surveys/vulcan-2022?v=1", host="legacy.test")
     assert st == 301, f"hop 1 must be a 301, got {st}"
     assert loc == "https://canonical.test/surveys/vulcan-2022?v=1", (
         f"hop 1 must preserve the path-shaped URI onto the canonical host, got {loc!r}")
     hop2_path = loc[len("https://canonical.test"):]
-    st, loc2, _ = _get_noredirect(port, hop2_path, host="canonical.test")
-    assert st == 301, f"hop 2 must be a 301, got {st}"
-    assert loc2 == "https://canonical.test/?v=1#/survey/vulcan-2022", (
-        f"the chain must end at the fragment route with the query preserved, got {loc2!r}")
+    st, _loc2, body = _get_noredirect(port, hop2_path, host="canonical.test")
+    assert st == 200, f"hop 2 must serve the landing page through the reader, got {st}"
+    assert body == "STUB /surveys/vulcan-2022?v=1", (
+        f"the chain must end at the reader with path and query intact, got {body!r}")
 
 
 @pytest.mark.skipif(not _HAS_CADDY, reason="no caddy binary on PATH - runtime pins run in CI (gateway-ci)")

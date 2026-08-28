@@ -22,11 +22,11 @@
 #       identifier is proven to keep resolving; the https:// probe means Caddy's automatic
 #       HTTP->HTTPS hop can never be what passes the check). When the var is unset both legacy legs
 #       are SKIPPED, not failed.
-#   4c. the PATH-URL CONTRACT (owner ruling 2026-08-18): /surveys/<slug> on the canonical name
-#       answers a 301 whose Location is the fragment route /#/survey/<slug> (probed on the pinned
-#       vulcan-2022 slug; explicit https:// with --resolve so the canonical block's own mapping is
-#       what answers). Skipped cleanly when the edge gives no response at all (the container check
-#       is the authority on a down edge).
+#   4c. the PATH-URL CONTRACT: /surveys/<slug> on the canonical name serves the tier-3
+#       prerendered landing page, proven by the page's own rel=canonical at that exact URL
+#       (probed on the pinned vulcan-2022 slug; explicit https:// with --resolve). Skipped cleanly
+#       when the edge gives no response at all (the container check is the authority on a down
+#       edge).
 #   4d. the TIME-SERIES HAND-OFF TABLE (R3/R5): map hash parity, open-302, unlisted-404. Detail at
 #       the check itself; skips cleanly on a routeless table or an unresponsive edge.
 #   5. tailscale is up and the box peer is visible
@@ -324,27 +324,22 @@ check_pathurl_redirect() {
 	# vulcan-2022 is PINNED as the probe slug: it is the owner's published Vulcan 2022 survey, in
 	# the served corpus since the portal's first public build, and its slug is frozen by the
 	# url-registry freeze test (portal/data/url_registry.json), so the probe cannot rot silently.
-	# The mapping under test is mechanical (any /surveys/<x> must 301 to /#/survey/<x>), but probing
-	# a REAL published slug means a PASS also proves a link someone actually holds keeps resolving.
 	slug="vulcan-2022"
-	# Explicit https:// with --resolve to loopback, exactly like the legacy redirect leg: the
-	# canonical block's own mapping must be what answers, never a DNS detour or the automatic
-	# HTTP->HTTPS hop. -I (headers only), no -L: the FIRST hop is the contract.
-	hdrs="$($CURL -sSI --max-time 8 --resolve "$name:443:127.0.0.1" \
-		"https://$name/surveys/$slug" 2>/dev/null | tr -d '\r')"
-	if [ -z "$hdrs" ]; then
-		# No response AT ALL (edge down/unreachable): skip cleanly - the container/tls checks are
-		# the authority on a down edge, and a FAIL here would double-report the same outage.
+	# Tier 3: the published shape serves a REAL prerendered landing page through the reader. The
+	# probe demands the page's own canonical link at this exact URL, which proves the pass-through
+	# AND that the box served the pages/ product (the portal shell carries no such canonical, and a
+	# 404 carries none either). Explicit https:// with --resolve to loopback so the canonical
+	# block's own routing is what answers, never a DNS detour.
+	body="$($CURL -sS --max-time 8 --resolve "$name:443:127.0.0.1" \
+		"https://$name/surveys/$slug" 2>/dev/null)"
+	if [ -z "$body" ]; then
 		pass "pathurl: skipped (no response from https://$name/surveys/$slug - edge unreachable; see the container check)"
 		return
 	fi
-	code="$(printf '%s\n' "$hdrs" | awk 'NR==1{print $2}')"
-	loc="$(printf '%s\n' "$hdrs" | awk 'tolower($1)=="location:"{print $2; exit}')"
-	want="https://$name/#/survey/$slug"
-	if [ "$code" = "301" ] && [ "$loc" = "$want" ]; then
-		pass "pathurl: https://$name/surveys/$slug 301s to $want (permanent, path-URL contract)"
+	if printf '%s' "$body" | grep -q "rel=\"canonical\" href=\"https://$name/surveys/$slug\""; then
+		pass "pathurl: https://$name/surveys/$slug serves the tier-3 landing page (canonical at the published URL)"
 	else
-		fail "pathurl: https://$name/surveys/$slug -> ${code:-no-code} ${loc:-no-location} (want 301 -> $want)"
+		fail "pathurl: https://$name/surveys/$slug did not serve the landing page (want its rel=canonical at this exact URL; is the build emitting pages/ and the box mapping @entityPage?)"
 	fi
 }
 

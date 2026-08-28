@@ -772,7 +772,8 @@ def test_runtime_the_namespace_does_not_disturb_the_reader_or_the_walls(gated):
     would show up here)."""
     assert gated.get("/data/mtcat.json")[2].startswith("STUB /data/mtcat.json")
     assert gated.get("/go/other")[2].startswith("STUB /go/other")
-    assert gated.get("/surveys/vulcan-2022")[:2] == (301, "https://canonical.test/#/survey/vulcan-2022")
+    assert gated.get("/surveys/vulcan-2022")[0] == 200 and \
+            gated.get("/surveys/vulcan-2022")[2].startswith("STUB /surveys/vulcan-2022")
     assert gated.get("/gateway/queue")[0] == 404
 
 

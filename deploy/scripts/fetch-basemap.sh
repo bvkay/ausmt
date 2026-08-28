@@ -32,7 +32,14 @@ REGION_BBOX="108,-45.5,157,-8"
 
 OUT="$AUSMT_DATA_DIR/basemap"
 WORK="$OUT/.work"
-mkdir -p "$OUT" "$WORK"
+# The data root usually belongs to root or the container user, so the FIRST run needs a one-time
+# bootstrap; every later run (including refreshes) works unprivileged.
+if ! mkdir -p "$OUT" "$WORK" 2>/dev/null; then
+	echo "ERROR: cannot create $OUT (the data root is not writable by $(id -un))." >&2
+	echo "One-time bootstrap, then re-run this script:" >&2
+	echo "  sudo mkdir -p $OUT && sudo chown $(id -un):$(id -gn) $OUT" >&2
+	exit 1
+fi
 
 echo "fetch-basemap: pmtiles CLI v$PMTILES_VERSION (pinned)"
 if [ ! -x "$WORK/pmtiles" ]; then

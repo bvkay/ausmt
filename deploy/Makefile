@@ -113,6 +113,7 @@ rebuild-data:
 	      --products /out/$$BUILD_REL/products \
 	      --pid-status /out/cache/pid_status.json \
 	      --workers $$BUILD_WORKERS \
+	      --sitemap-base $${AUSMT_SITEMAP_BASE:-https://ausmt.auscope.org.au} \
 	      --incremental --cache-dir /out/cache --cache-mode $$CACHE_MODE; then \
 	  echo "rebuild-data: BUILD FAILED -- current left untouched. Inspect $$DATA_DIR/$$BUILD_REL" >&2; \
 	  exit 1; \

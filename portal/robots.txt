@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /gateway
+Sitemap: https://ausmt.auscope.org.au/sitemap.xml
