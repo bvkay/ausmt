@@ -80,6 +80,10 @@
 	}
 	header @revalidate Cache-Control "no-cache"
 
+	# /index.html serves the same document as / (the host's one duplicate-content pair): crawlers
+	# must see a single canonical root, so the alias 301s home.
+	redir /index.html / 301
+
 	# ---- Tier-3 entity landing pages + the sitemap: static build products served at the path-URL
 	# contract's own shapes (they ride the atomic current swap with every other product). The
 	# rewrite keys on the exact two-segment shape; anything else falls through, and an unknown id
@@ -244,6 +248,10 @@
 		# citable copy rendered inline while its mutable twin downloaded.
 		@download path /edi/* /xml/* /bundles/* /h5/* /releases/*/bundles/*
 		header @download Content-Disposition "attachment"
+		# .h5 has no entry Caddy resolves correctly (its table guesses application/mipc): state the
+		# real HDF5 type, matching the encodingFormat the survey pages' JSON-LD advertises.
+		@h5files path *.h5
+		header @h5files Content-Type "application/x-hdf5"
 		file_server
 	}
 
@@ -274,6 +282,19 @@
 	# Static portal (index/about/add-survey + vendor/src/config/version) copied in at image build.
 	root * /srv/portal
 	file_server
+
+	# A human-facing 404 (status preserved): a stale survey link lands on a branded page with a way
+	# home, never a zero-byte body. Crawler semantics unchanged: still a real 404.
+	handle_errors {
+		@notfound expression {http.error.status_code} == 404
+		handle @notfound {
+			root * /srv/portal
+			rewrite * /404.html
+			file_server {
+				status 404
+			}
+		}
+	}
 }
 
 # =================================================================================================
@@ -314,6 +335,10 @@
 		not path /basemap /basemap/*
 	}
 	header @revalidate Cache-Control "no-cache"
+
+	# /index.html serves the same document as / (the host's one duplicate-content pair): crawlers
+	# must see a single canonical root, so the alias 301s home.
+	redir /index.html / 301
 
 	# ---- Tier-3 entity landing pages + the sitemap: static build products served at the path-URL
 	# contract's own shapes (they ride the atomic current swap with every other product). The
@@ -428,6 +453,10 @@
 		header Access-Control-Allow-Origin "*"
 		@download path /edi/* /xml/* /bundles/* /h5/* /releases/*/bundles/*
 		header @download Content-Disposition "attachment"
+		# .h5 has no entry Caddy resolves correctly (its table guesses application/mipc): state the
+		# real HDF5 type, matching the encodingFormat the survey pages' JSON-LD advertises.
+		@h5files path *.h5
+		header @h5files Content-Type "application/x-hdf5"
 		file_server
 	}
 
@@ -440,4 +469,17 @@
 	# /gateway path were refused above.
 	root * /srv/portal
 	file_server
+
+	# A human-facing 404 (status preserved): a stale survey link lands on a branded page with a way
+	# home, never a zero-byte body. Crawler semantics unchanged: still a real 404.
+	handle_errors {
+		@notfound expression {http.error.status_code} == 404
+		handle @notfound {
+			root * /srv/portal
+			rewrite * /404.html
+			file_server {
+				status 404
+			}
+		}
+	}
 }
