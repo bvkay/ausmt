@@ -4559,5 +4559,24 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "discoverability: the DataCatalog url must be the institutional root");
   }
 
+  // ---- Map chrome: muted basemap + soft attribution + Search Console ownership --------------------
+  // The protomaps light flavour renders a stronger sea blue than the portal's palette wants, and the
+  // bundle exposes no per-colour flavour override, so the muting is a CSS filter scoped to the tile
+  // pane ONLY (station overlays render in other panes and must keep full colour). The attribution
+  // stays readable but recedes. The google-site-verification meta proves domain ownership to Search
+  // Console; the content value is the owner's token, pinned by shape so a token rotation is a
+  // one-line index.html edit.
+  {
+    ok(/#map \.leaflet-tile-pane\{filter:[^}]*saturate\(/.test(html),
+      "map-chrome: index.html must mute the basemap via a saturate filter on the tile pane only");
+    ok(!/leaflet-overlay-pane\{[^}]*filter/.test(html) && !/#map\{[^}]*filter/.test(html),
+      "map-chrome: the mute filter must never widen to the overlay panes or the whole map");
+    ok(/#map \.leaflet-control-attribution\{opacity:\.7\}/.test(html),
+      "map-chrome: the attribution control must sit at 70 percent opacity");
+    const _gsv = doc.querySelector('meta[name="google-site-verification"]');
+    ok(_gsv && /^[A-Za-z0-9_-]{20,}$/.test(_gsv.getAttribute("content") || ""),
+      "map-chrome: index.html must carry the google-site-verification meta with a token-shaped content");
+  }
+
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

@@ -8,6 +8,7 @@
      resolve nothing relative, so og:url / og:image are ABSOLUTE on the institutional name. The card
      is a static 1200x630 PNG in vendor/ (regenerate alongside any rebrand). -->
 <meta name="description" content="Discover, explore and access magnetotelluric data from across Australia, with survey and station metadata, provenance and links to available datasets.">
+<meta name="google-site-verification" content="ux1nvAq9IENzgDo3L_Y0VZsVDsbH_aoyHqHKQ-_tgAo">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
 <meta property="og:title" content="AusMT - Australia's Magnetotelluric Data Portal">
@@ -111,6 +112,9 @@
   .resizer:hover,.resizer.drag{background:var(--copper)}
   .content{flex:1;min-width:0;position:relative;display:flex}
   #map{flex:1;background:#dfe6e9}
+  /* Mute the basemap only: station overlays render outside the tile pane, so they keep full colour. */
+  #map .leaflet-tile-pane{filter:saturate(.35) brightness(1.04)}
+  #map .leaflet-control-attribution{opacity:.7}
   .hidden{display:none!important}
   h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:8px}
   fieldset{border:0}
