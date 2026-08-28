@@ -94,7 +94,10 @@ def _site_openers(text: str) -> list[str]:
             continue
         if depth == 0 and line.endswith("{"):
             addr = line[:-1].strip()
-            if addr:
+            # A parenthesised address is a SNIPPET definition (e.g. `(box_upstream)`, the
+            # 2026-08-28 shared box transport), not a site block: Caddy expands it at import
+            # sites and it binds no listener, so it is not a site opener.
+            if addr and not (addr.startswith("(") and addr.endswith(")")):
                 openers.append(addr)
         structural = _PLACEHOLDER_TOKEN.sub("", line)
         depth += structural.count("{") - structural.count("}")

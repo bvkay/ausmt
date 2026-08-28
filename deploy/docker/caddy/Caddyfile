@@ -46,13 +46,38 @@
 	# private_ranges). Without this, `client_ip` would be the proxy and the true client IP would only
 	# survive UNMASKED in X-Forwarded-For — which is why the log filter ALSO deletes every
 	# address-bearing header (see the `log` block). Both halves are required to keep the promise true.
-	servers {
+	# SCOPED per listener (2026-08-28 serve-path tuning): scoped `servers` blocks do NOT inherit
+	# from an unscoped one, so trusted_proxies is stated in BOTH; :8081 additionally accepts h2c.
+	# The front door dials the reader with h2c through tailscale serve's raw --tcp=8445 tunnel
+	# (RUNBOOK), which un-serialises the browser's parallel streams (the measured cold-load
+	# staircase: 15 requests funnelled into fresh HTTP/1.1 upstream connections). h1 stays on:
+	# the compose healthcheck and tailnet-direct curls are plain HTTP/1.1.
+	servers :8080 {
 		trusted_proxies static private_ranges 100.64.0.0/10 127.0.0.1/8 ::1
+	}
+	servers :8081 {
+		trusted_proxies static private_ranges 100.64.0.0/10 127.0.0.1/8 ::1
+		protocols h1 h2c
 	}
 }
 
 :8080 {
-	encode gzip
+	encode zstd gzip
+
+	# ---- Cache policy (2026-08-28 load analysis) --------------------------------------------------
+	# Without an explicit Cache-Control, browsers fall back to heuristic freshness and a reload can
+	# serve EVERYTHING (index.html included) from local cache with zero revalidation: after a
+	# rebuild swap a returning visitor keeps stale data, and stale portal code, for hours. Policy:
+	# vendor/ is long-lived (those files change only by deliberate upgrade); everything else this
+	# file server emits revalidates on every use (no-cache; the etags already exist and a 304 is
+	# cheap); /gateway is EXCLUDED so proxied FastAPI responses keep their own headers.
+	@vendorAssets path /vendor/*
+	header @vendorAssets Cache-Control "public, max-age=2592000"
+	@revalidate {
+		not path /vendor/*
+		not path /gateway /gateway/*
+	}
+	header @revalidate Cache-Control "no-cache"
 
 	# ---- Access log (C45 D2/D5 — usage analytics enablement, masked at the edge) -----------------
 	# Privacy-preserving HTTP access log: the CLIENT ADDRESS IS MASKED AT WRITE TIME (IPv4 -> /24,
@@ -247,7 +272,17 @@
 # gateway passthrough below is DELIBERATELY NARROWER than :8080's blanket `handle /gateway/*` — only
 # the four public routes traverse, never the workbench.
 :8081 {
-	encode gzip
+	encode zstd gzip
+
+	# ---- Cache policy: identical to :8080's (see the rationale there). This listener is what the
+	# public actually reaches through the front door, so losing it here is losing it everywhere.
+	@vendorAssets path /vendor/*
+	header @vendorAssets Cache-Control "public, max-age=2592000"
+	@revalidate {
+		not path /vendor/*
+		not path /gateway /gateway/*
+	}
+	header @revalidate Cache-Control "no-cache"
 
 	# Same baseline security headers as :8080 (they ride through the front-door reverse_proxy).
 	header {

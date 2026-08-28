@@ -155,7 +155,11 @@ def _site_addresses(text: str) -> list[str]:
         if not line or line.startswith("#"):
             continue
         if depth == 0 and line.endswith("{") and line[:-1].strip():
-            out.append(line[:-1].strip())
+            addr = line[:-1].strip()
+            # A parenthesised address is a SNIPPET definition (e.g. `(box_upstream)`, the
+            # 2026-08-28 shared box transport), not a site block: it binds no listener.
+            if not (addr.startswith("(") and addr.endswith(")")):
+                out.append(addr)
         structural = _PLACEHOLDER_TOKEN.sub("", line)
         depth += structural.count("{") - structural.count("}")
     return out
