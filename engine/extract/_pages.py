@@ -156,7 +156,8 @@ def _minimap_svg(points, *, width=230) -> str:
                     for r in au.COAST)
     borders = "".join(f'<path d="{path(r, False)}" fill="none" stroke="#3a5266" '
                       f'stroke-width=".8" stroke-dasharray="3 3"/>' for r in au.BORDERS)
-    dots = "".join(f'<circle cx="{p(lo, la)[0]}" cy="{p(lo, la)[1]}" r="2" fill="#4FC3D9" '
+    r = 2 if len(points) <= 60 else (1.4 if len(points) <= 200 else 1.1)
+    dots = "".join(f'<circle cx="{p(lo, la)[0]}" cy="{p(lo, la)[1]}" r="{r}" fill="#4FC3D9" '
                    f'fill-opacity=".9"/>' for lo, la in points)
     marker = ""
     if points and len(points) < 400:
@@ -202,7 +203,7 @@ _CSS = """
   .crumb{font-size:.85rem;opacity:.8}
   .crumb a{opacity:1}
   .pagenav{display:flex;gap:.6rem;margin:.2rem 0 .6rem}
-  .navbtn{background:#18213D;border:1px solid #2B3557;border-radius:999px;color:#C9D4E8;font-size:.85rem;padding:.35rem .9rem;text-decoration:none}
+  .navbtn{background:#18213D;border:1px solid #2B3557;border-radius:6px;color:#C9D4E8;font-size:.85rem;padding:.35rem .9rem;text-decoration:none}
   .navbtn.map{color:#EF7256}
   .cite{background:#18213D;border:1px solid #2B3557;border-radius:6px;padding:.7rem .9rem;font-size:.88rem;margin:1rem 0}
   .cite code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#C9D4E8}
@@ -813,10 +814,11 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
         px1, py1 = px0 + pw, py0 + ph
         d.rounded_rectangle([px0 - 16, py0 - 16, px1 + 16, py1 + 16], radius=12,
                             fill=panel, outline=line, width=2)
+        pr = 4 if len(points) <= 60 else (3 if len(points) <= 200 else 2.2)
         for lo, la in points:
             x = px0 + (lo - lo0) / dlo * pw
             y = py0 + (la1 - la) / dla * ph
-            d.ellipse([x - 4, y - 4, x + 4, y + 4], fill=cyan)
+            d.ellipse([x - pr, y - pr, x + pr, y + pr], fill=cyan)
         # Australia locator inset, bottom-right over the panel
         ext = au.EXTENT
         iw = 190
