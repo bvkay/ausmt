@@ -39,12 +39,17 @@ def _jsonld(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=1).replace("</", "<\\/")
 
 
-def _shell(*, title, description, canonical, body, jsonld=None) -> str:
+def _shell(*, title, description, canonical, body, jsonld=None, noindex=False) -> str:
     ld = f'<script type="application/ld+json">{_jsonld(jsonld)}</script>\n' if jsonld else ""
+    # noindex: the page exists for the URL contract and for humans following published links, but
+    # is deliberately kept out of the search index (station pages: 2,625 templated documents would
+    # read as thin content at scale and dilute the survey/collection pages that carry the ranking).
+    robots = '<meta name="robots" content="noindex">\n' if noindex else ""
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        f"{robots}"
         f"<title>{_e(title)}</title>\n"
         f'<meta name="description" content="{_e(description)}">\n'
         f'<link rel="canonical" href="{_e(canonical)}">\n'
@@ -169,7 +174,7 @@ def station_page(*, doc, survey_slug, base) -> str:
     return _shell(title=f"{st} - {survey} - AusMT",
                   description=f"Magnetotelluric station {st} from the {survey} survey: "
                               "transfer function data, metadata and downloads on AusMT.",
-                  canonical=url, body=body)
+                  canonical=url, body=body, noindex=True)
 
 
 def collection_page(*, cid, coll, member_slugs, base) -> str:
