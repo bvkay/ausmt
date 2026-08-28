@@ -76,8 +76,20 @@
 	@revalidate {
 		not path /vendor/*
 		not path /gateway /gateway/*
+		not path /basemap /basemap/*
 	}
 	header @revalidate Cache-Control "no-cache"
+	# ---- Self-hosted basemap (pmtiles): two static files the vector renderer range-reads. They
+	# change only by a deliberate re-extract (deploy/scripts/fetch-basemap.sh), so a daily
+	# max-age is generous and spares every tile range request an If-None-Match round trip; the
+	# @revalidate matcher above excludes this path for the same reason. Absent files 404, which
+	# the portal's carto fallback provider makes a non-event until the operator flips config.
+	handle_path /basemap/* {
+		root * /srv/basemap
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
 
 	# ---- Access log (C45 D2/D5 — usage analytics enablement, masked at the edge) -----------------
 	# Privacy-preserving HTTP access log: the CLIENT ADDRESS IS MASKED AT WRITE TIME (IPv4 -> /24,
@@ -281,8 +293,20 @@
 	@revalidate {
 		not path /vendor/*
 		not path /gateway /gateway/*
+		not path /basemap /basemap/*
 	}
 	header @revalidate Cache-Control "no-cache"
+	# ---- Self-hosted basemap (pmtiles): two static files the vector renderer range-reads. They
+	# change only by a deliberate re-extract (deploy/scripts/fetch-basemap.sh), so a daily
+	# max-age is generous and spares every tile range request an If-None-Match round trip; the
+	# @revalidate matcher above excludes this path for the same reason. Absent files 404, which
+	# the portal's carto fallback provider makes a non-event until the operator flips config.
+	handle_path /basemap/* {
+		root * /srv/basemap
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
 
 	# Same baseline security headers as :8080 (they ride through the front-door reverse_proxy).
 	header {

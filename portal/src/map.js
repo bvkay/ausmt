@@ -14,11 +14,22 @@
 // cannot drift apart.
 const AU_HOME_BOUNDS=L.latLngBounds([[-44.5,111.5],[-10,155]]);
 const map=L.map("map",{preferCanvas:true}).fitBounds(AU_HOME_BOUNDS);
-// CARTO watermarks un-keyed raster tile requests, so the deployment's key (config, public by
-// nature) rides the tile URL when set; without one the layer still works, watermarked.
+// The basemap is config-driven. provider "pmtiles" serves OUR OWN files through the vendored
+// protomaps-leaflet renderer, ending the portal's last runtime third party: the world file
+// carries low zooms globally (zoomed out still shows the whole globe) and the region file
+// carries full detail for Australia and its surrounds; the z7 crossover is where the region
+// bbox has data the world file lacks. "carto" is the hosted fallback while the files roll out
+// (or if the renderer failed to load); CARTO watermarks un-keyed raster requests, so the
+// deployment's key (config, public by nature) rides the tile URL when set.
 var _bmCfg=(window.AUSMT_CONFIG&&window.AUSMT_CONFIG.basemap)||{};
-var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
+if(_bmCfg.provider==="pmtiles"&&window.protomapsL){
+  var _bmAttr="&copy; OpenStreetMap contributors &copy; Protomaps";
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_world||"/basemap/world.pmtiles",flavor:"light",lang:"en",attribution:_bmAttr,maxZoom:7,maxDataZoom:6}).addTo(map);
+  protomapsL.leafletLayer({url:_bmCfg.pmtiles_region||"/basemap/region.pmtiles",flavor:"light",lang:"en",attribution:_bmAttr,minZoom:7,maxZoom:18,maxDataZoom:15}).addTo(map);
+}else{
+  var _bmKey=_bmCfg.carto_api_key?("?api_key="+encodeURIComponent(_bmCfg.carto_api_key)):"";
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"+_bmKey,{attribution:"&copy; OpenStreetMap &copy; CARTO",maxZoom:18}).addTo(map);
+}
 // Owner ruling (2026-08-24): SITE LOCATIONS ONLY, at every zoom. The per-survey badge bubbles that
 // replaced proximity clustering are removed with it - no badge, no leader tail, no decoration pane, no
 // zoom threshold. A compact survey now overlaps into a tight group of dots at national zoom and the

@@ -359,11 +359,31 @@ check_oom_kills() {
 	pass "oom: no kernel out-of-memory kills in the last ${OOM_SINCE#-}"
 }
 
+check_basemap() {
+	# Provider-aware: a deployment on the carto fallback has no basemap files to probe, so it
+	# PASSes as skipped rather than failing on an absence that is not a fault there. A pmtiles
+	# deployment must answer a Range request with 206 Partial Content, because ranged reads are
+	# the vector renderer's entire access pattern; a 200 here would mean range support was lost
+	# and the map would try to pull the whole multi-hundred-MB file per view.
+	cfg="$($CURL -sS --max-time 8 "http://127.0.0.1:$READER_PORT/config.js" 2>/dev/null)"
+	if ! printf '%s' "$cfg" | grep -q '"provider": "pmtiles"'; then
+		pass "basemap: provider is not pmtiles (carto fallback); file probe skipped"
+		return
+	fi
+	code="$($CURL -sS -o /dev/null -w '%{http_code}' --max-time 8 -H 'Range: bytes=0-13' "http://127.0.0.1:$READER_PORT/basemap/region.pmtiles" 2>/dev/null)"
+	if [ "$code" = "206" ]; then
+		pass "basemap: /basemap/region.pmtiles answers a Range request (206)"
+	else
+		fail "basemap: provider is pmtiles but the region file Range probe -> ${code:-no-response} (expected 206; run deploy/scripts/fetch-basemap.sh on the box)"
+	fi
+}
+
 printf 'AusMT box doctor (profile=%s) - %s\n' "$PROFILE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '=====================================================\n'
 check_containers
 check_gateway_healthz
 check_reader_wall
+check_basemap
 check_surveys_live
 check_reconcile_timer
 check_disk

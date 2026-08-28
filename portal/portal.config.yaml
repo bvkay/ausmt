@@ -29,10 +29,14 @@ analytics:
   plausible_domain: ""      # e.g. ausmt.org.au - only used when enabled: true
 
 basemap:
-  provider: carto           # carto (hosted raster) | pmtiles (self-hosted vector, once deployed)
+  provider: carto           # carto (hosted raster) | pmtiles (self-hosted vector). Flip to pmtiles
+                            # only after deploy/scripts/fetch-basemap.sh has placed both files on
+                            # the box (rollback is flipping back).
   carto_api_key: ""         # CARTO watermarks un-keyed raster tiles; the free key is a deployment
                             # value, so it lives here and rides gen_config into config.js. Public by
                             # nature (it ships in the tile URL).
+  pmtiles_world: "/basemap/world.pmtiles"     # whole world at low zoom (the zoomed-out globe)
+  pmtiles_region: "/basemap/region.pmtiles"   # Australia + surrounds at full detail
 
 # Distribution feature flags (the download backbone). The science build reads these too; the
 # manifest is authoritative for what actually exists, so these are the publish-time switches.

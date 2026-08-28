@@ -63,6 +63,10 @@ services:
       # host-side swap takes effect immediately with no restart. (The relative symlink
       # current -> builds/<ts> stays valid because both ends live under this one mount.)
       - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/site-data:/srv/data:ro
+      # Self-hosted basemap files (world.pmtiles + region.pmtiles), produced out of band by
+      # deploy/scripts/fetch-basemap.sh. Read-only: the portal only ever range-reads them. An
+      # empty or absent host dir simply 404s, which the carto fallback provider tolerates.
+      - ${AUSMT_DATA_DIR:?set AUSMT_DATA_DIR in .env}/basemap:/srv/basemap:ro
       # C45 D5: the access-log volume. Caddy writes /var/log/caddy/access.json (masked-at-edge IPs,
       # rotated, 7-day retention — see the Caddyfile `log` block). Host side under the data root so the
       # later analytics aggregator (a host-side timer) reads it; the portal only WRITES it. Create it
