@@ -54,6 +54,15 @@ _TS_LEVELS = (("level0", "L0", "Raw time series"),
               ("raw_packed", "L0", "Raw time series (packed archives)"),
               ("level1_mth5", "L1", "MTH5 time series"))
 
+# The portal's own data-type palette (portal/src/state.js TYPE_COL), so the page maps and the
+# SPA map speak one colour language. BBMT's indigo is lightened one step for the dark panels.
+_TYPE_COL = {"LPMT": "#2E8FA3", "BBMT": "#5B54D6", "AMT": "#CDA1EC", "GDS": "#C255A0"}
+_TYPE_FALLBACK = "#4FC3D9"
+
+# The portal collections view's member palette (portal/src/drawer.js COLL_PAL), same order.
+_COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "#D9A23B", "#A85454")
+
+
 _ROLE_LABELS = {"ProjectLeader": "Project Leader", "ProjectMember": "Project Member",
                 "DataCollector": "Data Collector", "DataCurator": "Data Curator",
                 "ContactPerson": "Contact", "RightsHolder": "Rights Holder",
@@ -141,10 +150,18 @@ def _proj(extent):
     return to
 
 
-def _minimap_svg(points, *, width=230, compact=False) -> str:
-    """The location minimap: the shared schematic outline with this survey's stations. The
-    projection is the portal collections view's own fixed-extent equirectangular fit, so the two
-    surfaces draw one map."""
+def _extent_deg(points):
+    lons = [pt[0] for pt in points]
+    lats = [pt[1] for pt in points]
+    return max(max(lons) - min(lons), max(lats) - min(lats)) if points else 0.0
+
+
+def _minimap_svg(points, *, width=230, compact=False, colours=None, label="Survey location in Australia") -> str:
+    """The location minimap: the shared schematic outline with this survey's stations, dots
+    coloured by data type in the portal's own palette (or by `colours`, the collection page's
+    member-colour map). The projection is the portal collections view's own fixed-extent
+    equirectangular fit, so the two surfaces draw one map. Under one degree of extent the dots
+    are sub-pixel here, so only the ring renders and the footprint panel owns the dots."""
     ext = au.EXTENT
     height = round(width * (ext["n"] - ext["s"]) / (ext["e"] - ext["w"]))
     p = _proj(ext)(width, height, 8)
@@ -160,39 +177,59 @@ def _minimap_svg(points, *, width=230, compact=False) -> str:
     # minimap dots are a location hint under the ring and stay small regardless of count; a
     # state-wide survey has no zoom panel, so its dots ARE the content and scale by density.
     r = 1.2 if compact else (2 if len(points) <= 60 else (1.4 if len(points) <= 200 else 1.1))
-    dots = "".join(f'<circle cx="{p(lo, la)[0]}" cy="{p(lo, la)[1]}" r="{r}" fill="#4FC3D9" '
-                   f'fill-opacity=".9"/>' for lo, la in points)
+    dots = ""
+    if _extent_deg(points) >= 1:
+        def col(pt):
+            if colours is not None:
+                return colours.get(pt[2], _TYPE_FALLBACK)
+            return _TYPE_COL.get(pt[2], _TYPE_FALLBACK)
+        dots = "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="{r}" '
+                       f'fill="{col(pt)}" fill-opacity=".9"/>' for pt in points)
     marker = ""
     if points and len(points) < 400:
-        clon = sum(lo for lo, _la in points) / len(points)
-        clat = sum(la for _lo, la in points) / len(points)
+        clon = sum(pt[0] for pt in points) / len(points)
+        clat = sum(pt[1] for pt in points) / len(points)
         mx, my = p(clon, clat)
         marker = (f'<circle cx="{mx}" cy="{my}" r="9" fill="none" stroke="#EF7256" '
                   f'stroke-width="1.4" opacity=".65"/>')
     return (f'<svg viewBox="0 0 {width} {height}" role="img" '
-            f'aria-label="Survey location in Australia" '
+            f'aria-label="{_e(label)}" '
             f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
             f'{coast}{borders}{dots}{marker}</svg>')
 
 
 def _footprint_svg(points, *, width=230) -> str:
-    """The station-grid zoom for a compact survey, aspect-fit to the survey's own bbox."""
-    lons = [lo for lo, _la in points]
-    lats = [la for _lo, la in points]
+    """The station-grid zoom for a compact survey, aspect-fit to the survey's own bbox, dots in
+    the type palette, with a SCALE BAR so 9 km and 900 km never look alike (a bare dot field
+    carries no sense of size; the bar is computed from the bbox at the survey's own latitude)."""
+    import math
+    lons = [pt[0] for pt in points]
+    lats = [pt[1] for pt in points]
     lo0, lo1, la0, la1 = min(lons), max(lons), min(lats), max(lats)
     dlo, dla = max(lo1 - lo0, 1e-6), max(la1 - la0, 1e-6)
-    height = max(70, min(320, int(width * dla / dlo)))
+    height = max(90, min(320, int(width * dla / dlo)))
     pad = 0.12
 
     def p(lon, lat):
         x = (lon - lo0) / dlo * (1 - 2 * pad) * width + pad * width
         y = (la1 - lat) / dla * (1 - 2 * pad) * height + pad * height
         return round(x, 1), round(y, 1)
-    dots = "".join(f'<circle cx="{p(lo, la)[0]}" cy="{p(lo, la)[1]}" r="2.1"/>'
-                   for lo, la in points)
+    dots = "".join(f'<circle cx="{p(pt[0], pt[1])[0]}" cy="{p(pt[0], pt[1])[1]}" r="2.1" '
+                   f'fill="{_TYPE_COL.get(pt[2], _TYPE_FALLBACK)}"/>' for pt in points)
+    # scale bar: a round number close to a third of the panel width, in km at the mid latitude
+    km_per_deg = 111.32 * math.cos(math.radians((la0 + la1) / 2))
+    panel_km = dlo * (1 - 2 * pad) * km_per_deg
+    target = panel_km / 3
+    nice = min((1, 2, 5, 10, 20, 50, 100, 200, 500, 1000), key=lambda n: abs(n - target))
+    bar_px = nice / (dlo * km_per_deg) * width if dlo * km_per_deg else 0
+    y = height - 10
+    scale = (f'<g stroke="#8FA3B0" stroke-width="1.2"><line x1="{pad * width:.1f}" y1="{y}" '
+             f'x2="{pad * width + bar_px:.1f}" y2="{y}"/></g>'
+             f'<text x="{pad * width + bar_px + 5:.1f}" y="{y + 3.5}" fill="#8FA3B0" '
+             f'font-size="9" font-family="ui-monospace,Menlo,monospace">{nice} km</text>')
     return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail" '
             f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
-            f'<g fill="#4FC3D9">{dots}</g></svg>')
+            f'{dots}{scale}</svg>')
 
 
 # --------------------------------------------------------------------------- page shell
@@ -300,11 +337,13 @@ def _survey_years(sm_doc, smeta):
 
 
 def _station_points(docs):
+    """[(lon, lat, type)] for every station whose served document discloses a position."""
     pts = []
     for doc in docs:
         loc = doc.get("location") or {}
         if loc.get("lat") is not None and loc.get("lon") is not None:
-            pts.append((float(loc["lon"]), float(loc["lat"])))
+            pts.append((float(loc["lon"]), float(loc["lat"]),
+                        ((doc.get("data") or {}).get("type"))))
     return pts
 
 
@@ -446,8 +485,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         w, e_, s, n = extent
         box = (s, w, n, e_)
     elif points:
-        lons = [lo for lo, _la in points]
-        lats = [la for _lo, la in points]
+        lons = [pt[0] for pt in points]
+        lats = [pt[1] for pt in points]
         box = (min(lats), min(lons), max(lats), max(lons))
     if box:
         ld["spatialCoverage"] = {"@type": "Place", "geo": {
@@ -539,8 +578,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # ---- hero: abstract + maps ----
     compact = False
     if points:
-        lons = [lo for lo, _la in points]
-        lats = [la for _lo, la in points]
+        lons = [pt[0] for pt in points]
+        lats = [pt[1] for pt in points]
         compact = max(max(lons) - min(lons), max(lats) - min(lats)) < 8 and len(points) > 1
     maps = [_minimap_svg(points, compact=compact)]
     cap = ""
@@ -728,7 +767,7 @@ def station_page(*, doc, survey_slug, base) -> str:
                   canonical=url, body=body, noindex=True, base=base)
 
 
-def collection_page(*, cid, coll, member_slugs, member_smeta, base) -> str:
+def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None) -> str:
     title = (coll or {}).get("title") or cid
     desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
     url = f"{base}/collections/{cid}"
@@ -760,11 +799,32 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base) -> str:
     y1 = [m.get("year_end") for m in member_smeta if (m or {}).get("year_end")]
     if y0:
         ld["temporalCoverage"] = f"{min(y0)}/{max(y1)}" if y1 else f"{min(y0)}/.."
+    # The member-coloured footprint the portal collections view draws (collScatter), as static
+    # SVG: dots coloured per member survey in the same palette, with a compact legend.
+    scatter = ""
+    if member_points:
+        colours, pts, legend_rows = {}, [], []
+        for i, (lbl, _slug) in enumerate(member_slugs):
+            if not member_points.get(lbl):
+                continue
+            colour = _COLL_PAL[i % len(_COLL_PAL)]
+            colours[lbl] = colour
+            pts += [(lon, lat, lbl) for lon, lat in member_points[lbl]]
+            legend_rows.append(f'<span style="white-space:nowrap"><span style="display:inline-block;'
+                               f'width:.6em;height:.6em;border-radius:50%;background:{colour}"></span> '
+                               f'{_e(lbl)}</span>')
+        if pts:
+            svg = _minimap_svg(pts, width=560, colours=colours,
+                               label=f"Member stations of {title} over Australia")
+            scatter = (f'<figure style="margin:1rem 0 .4rem">{svg}</figure>'
+                       f'<p style="font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;'
+                       f'gap:.4rem .9rem;margin:.2rem 0 1rem">{"".join(legend_rows)}</p>')
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / collections</p>\n'
         f"<h1>{_e(title)}</h1>\n"
         f"<p>{_e(desc)}</p>\n"
-        f"<dl><dt>Surveys</dt><dd>{len(member_slugs)}</dd>"
+        + scatter
+        + f"<dl><dt>Surveys</dt><dd>{len(member_slugs)}</dd>"
         f"<dt>Stations</dt><dd>{int((coll or {}).get('n_stations') or 0)}</dd></dl>\n"
         f'<p><a class="navbtn" href="/#/collection/{_e(cid)}">Open in the interactive portal</a></p>\n'
         "<h2>Member surveys</h2>\n<ul>\n" + members + "\n</ul>\n"
@@ -803,8 +863,8 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
 
     # footprint panel, right side
     if points:
-        lons = [lo for lo, _la in points]
-        lats = [la for _lo, la in points]
+        lons = [pt[0] for pt in points]
+        lats = [pt[1] for pt in points]
         lo0, lo1 = min(lons), max(lons)
         la0, la1 = min(lats), max(lats)
         dlo, dla = max(lo1 - lo0, 1e-6), max(la1 - la0, 1e-6)
@@ -818,7 +878,7 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
         d.rounded_rectangle([px0 - 16, py0 - 16, px1 + 16, py1 + 16], radius=12,
                             fill=panel, outline=line, width=2)
         pr = 4 if len(points) <= 60 else (3 if len(points) <= 200 else 2.2)
-        for lo, la in points:
+        for lo, la, _ty in points:
             x = px0 + (lo - lo0) / dlo * pw
             y = py0 + (la1 - la) / dla * ph
             d.ellipse([x - pr, y - pr, x + pr, y + pr], fill=cyan)
@@ -910,8 +970,8 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                            if pmin is not None and pmax is not None else "")
             dims = ""
             if points and len(points) > 1:
-                lons = [lo for lo, _la in points]
-                lats = [la for _lo, la in points]
+                lons = [pt[0] for pt in points]
+                lats = [pt[1] for pt in points]
                 dkm_x = (max(lons) - min(lons)) * 111 * 0.83
                 dkm_y = (max(lats) - min(lats)) * 111
                 dims = f"about {dkm_x:.0f} x {dkm_y:.0f} km"
@@ -934,9 +994,13 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
         members = [(lbl, slug_by_label.get(lbl, lbl))
                    for lbl in sorted(surveys_meta) if (survey_coll or {}).get(lbl) == cid]
         member_smeta = [surveys_meta.get(lbl) or {} for lbl, _s in members]
+        member_points = {lbl: [(pt[0], pt[1]) for pt in
+                                _station_points(docs_by_survey.get(s, []))]
+                         for lbl, s in members}
         (cdir / f"{cid}.html").write_text(
             collection_page(cid=cid, coll=collections[cid], member_slugs=members,
-                            member_smeta=member_smeta, base=base),
+                            member_smeta=member_smeta, base=base,
+                            member_points=member_points),
             encoding="utf-8")
         n += 1
     return n

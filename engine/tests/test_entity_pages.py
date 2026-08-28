@@ -335,3 +335,26 @@ def test_bundle_labels_speak_the_manifest_vocabulary():
     assert pages._BUNDLE_LABELS["mth5"][0] == "Survey MTH5 bundle"
     assert pages._BUNDLE_LABELS["survey-mth5"][0] == "Survey MTH5 bundle"
     assert pages._BUNDLE_LABELS["mth5"][1] == "application/x-hdf5"
+
+
+def test_map_upgrades_scale_bar_type_colours_and_collection_scatter(tmp_path):
+    """The maps pass (owner rulings 2026-08-28): the footprint zoom carries a scale bar, dots
+    speak the portal's type palette, a sub-degree survey's minimap draws the ring only, and the
+    collection page carries the member-coloured scatter with its legend."""
+    surveys = _make_rich_survey(tmp_path)
+    pkg = surveys / "pages-r"
+    y = (pkg / "survey.yaml").read_text(encoding="utf-8")
+    (pkg / "survey.yaml").write_text(y + "collection:\n  id: testcoll\n  title: Test Collection\n",
+                                     encoding="utf-8")
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+    assert "km</text>" in page, "the footprint zoom must carry a scale bar"
+    assert "#5B54D6" in page, "dots must speak the type palette (BBMT indigo)"
+    minimap = re.search(r'aria-label="Survey location in Australia".*?</svg>', page, re.S).group(0)
+    assert "<circle" in minimap and 'stroke="#EF7256"' in minimap
+    assert 'fill="#5B54D6"' not in minimap, \
+        "a sub-degree survey's minimap draws the ring only; the zoom panel owns the dots"
+    coll = (out / "pages" / "collections" / "testcoll.html").read_text(encoding="utf-8")
+    assert "Member stations of" in coll, "the collection page must carry the member scatter"
+    assert "#2E8FA3" in coll, "member colours use the portal collection palette"
+    assert "Pages R" in coll
