@@ -40,9 +40,12 @@ _LICENSE_URLS = {
     "CC0-1.0": "https://creativecommons.org/publicdomain/zero/1.0/",
 }
 
+# Keys as the MANIFEST bundle rows spell them ("mth5", not the station-resource id
+# "survey-mth5"; the two vocabularies differ and the manifest is what this emitter reads).
 _BUNDLE_LABELS = {
     "edi-zip": ("EDI archive (zip)", "application/zip"),
     "xml-zip": ("EMTF XML archive (zip)", "application/zip"),
+    "mth5": ("Survey MTH5 bundle", "application/x-hdf5"),
     "survey-mth5": ("Survey MTH5 bundle", "application/x-hdf5"),
 }
 

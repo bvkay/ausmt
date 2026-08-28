@@ -325,3 +325,13 @@ def test_collection_jsonld_rolls_up_member_licence_creators_and_years():
                                   member_smeta=mixed, base="https://x.example")
     ld2 = json.loads(_re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>', page2).group(1))
     assert "license" not in ld2, "mixed member licences must state nothing (never overclaim)"
+
+
+def test_bundle_labels_speak_the_manifest_vocabulary():
+    """The manifest spells the survey-MTH5 bundle's format "mth5" (the station-resource vocabulary
+    says "survey-mth5"); the label map must carry BOTH, or the page prints the raw key - the exact
+    defect the first full-corpus preview surfaced."""
+    pages = _pages_module()
+    assert pages._BUNDLE_LABELS["mth5"][0] == "Survey MTH5 bundle"
+    assert pages._BUNDLE_LABELS["survey-mth5"][0] == "Survey MTH5 bundle"
+    assert pages._BUNDLE_LABELS["mth5"][1] == "application/x-hdf5"
