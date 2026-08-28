@@ -5619,9 +5619,10 @@ def _main_build(argv=None):
         # defect -- while the bytes AusMT serves for them are still the custodian's, unmodified.
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
         if _parse_fallback_rows:
+            _defects = sorted({_row.get("defect") or "?" for _row in _parse_fallback_rows})
             _survey_warnings.append(
                 f"mt_metadata could not read {len(_parse_fallback_rows)} source file(s) directly "
-                f"(>INFO JSON trailing-delimiter defect); each was reparsed from a normalised "
+                f"({'; '.join(_defects)}); each was reparsed from a normalised "
                 f"TEMPORARY copy and its unmodified source bytes are what is served "
                 f"[{', '.join(_row['file'] for _row in _parse_fallback_rows[:8])}"
                 f"{', ...' if len(_parse_fallback_rows) > 8 else ''}]")
