@@ -116,6 +116,10 @@ CORPUS_SHAPED = {
                 {"identifier": "10.25914/parent", "identifier_type": "DOI",
                  "relation": "IsPartOf", "custodian": "NCI",
                  "identifies": "collection", "resolution": "reserved"},
+                # an activity-scope documentation row (ANSIR project record): IsDocumentedBy is
+                # in-vocabulary and documents the activity, not the data bytes
+                {"identifier": "https://www.auscope.org.au/ansir-projects?id=ANSIR-2022-001",
+                 "identifier_type": "URL", "relation": "IsDocumentedBy", "custodian": "AuScope"},
                 # a legacy row: no level stated, no relation derived, resolution unknown - each is
                 # expressed by ABSENCE (2.0 removed null-as-undeclared from relationship rows too).
                 {"identifier": "10.25914/legacy", "identifier_type": "DOI", "custodian": "NCI"},

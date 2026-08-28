@@ -124,9 +124,10 @@ statement", never "unknown holdings".
 Two curated fields join the facets in 2.0: `description`, a discovery blurb (the survey's explicit
 discovery text, else its abstract when within 1200 characters, never truncated by the engine), and
 `subjects[]`, rows of `{code, scheme, label?, uri?}` passed through verbatim from curation. The relation
-vocabulary on `related_identifiers[]` is nine values, `References`, `IsIdenticalTo` and `HasMetadata`
-having joined the 1.x six; a HasMetadata row may carry a `scheme` naming the metadata family at the
-target.
+vocabulary on `related_identifiers[]` is ten values, `References`, `IsIdenticalTo`, `HasMetadata`
+and `IsDocumentedBy` having joined the 1.x six; a HasMetadata row may carry a `scheme` naming the
+metadata family at the target, and an IsDocumentedBy row points at a record documenting the
+activity behind the dataset (a project record, not the data bytes).
 
 Station records are flat and small: `station_id` (the `ausmt_id`), `survey_id`, `latitude`, `longitude`
 and `data_type`. `data_type` is one of `AMT`, `BBMT`, `LPMT`, `GDS` or `unknown`, derived from the
