@@ -4436,5 +4436,78 @@ async function bootFreshWindow(dataMap, url, preBoot) {
     "same-named levels never overwrite/resume-corrupt; injection: POSIX single-quoted -o on macOS/Linux, " +
     "safe-charset -o on Windows curl.exe, wget carries only encoded routes; --create-dirs builds the tree) + " +
     "scale bar(metric-only maxWidth 120, added, own container re-parented into .maplegend-body, four dots and #map parenting intact))");
+
+  // ---- Two-phase boot, part 3: hydration yields the boot pipe to phase 1 --------------------------
+  // Phase-2 products are big (tf.json is ~2.6MB gzipped) and the dots need only the catalogue's
+  // ~163KB, so hydration issued alongside phase 1 contends for the same connection and delays the
+  // first paint it exists to protect. The pin drives a fresh boot with the CATALOGUE fetch held and
+  // asserts no phase-2 product is even REQUESTED while phase 1 is in flight; releasing the catalogue
+  // must then let hydration run to completion, so the ordering change can never quietly become
+  // "hydration never starts".
+  {
+    const d2 = new JSDOM(html, { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w2 = d2.window;
+    w2.L = stub(); w2.JSZip = stub();
+    w2.AUSMT_CONFIG = { short_name: "AusMT" };
+    const order2 = [];
+    let releaseCat = null;
+    const HEAVY2 = /tf\.json|sci\.json|manifest\.json|ts_access\.json/;
+    w2.fetch = url => {
+      order2.push(String(url));
+      const body = DATAMAP[url] ? { ok: true, json: () => Promise.resolve(DATAMAP[url]) } : { ok: false };
+      if (/catalogue\.json/.test(String(url))) return new Promise(res => { releaseCat = () => res(body); });
+      return Promise.resolve(body);
+    };
+    await new Promise(res => (w2.document.readyState === "complete" ? res() : w2.addEventListener("load", res, { once: true })));
+    vm.runInContext(code, d2.getInternalVMContext());
+    const bootP = w2.__api.boot();
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    ok(releaseCat, "hydration-order: the catalogue fetch must have been issued at boot");
+    ok(!order2.some(u => HEAVY2.test(u)),
+      "hydration-order: no phase-2 product may be REQUESTED while phase 1 is in flight, got " + order2.join(","));
+    releaseCat();
+    await bootP;
+    await w2.__api.hydrationDone();
+    ok(order2.some(u => /tf\.json/.test(u)) && order2.some(u => /ts_access\.json/.test(u)),
+      "hydration-order: hydration must still run to completion once phase 1 settles, got " + order2.join(","));
+  }
+
+  // ---- Link-preview metadata (Open Graph + Twitter card) ------------------------------------------
+  // Pasting the portal URL into Slack/Teams/X produced a bare link: the shipped head carried a
+  // <title> and nothing else. These pins hold the preview surface: a real description, the og
+  // quartet, the twitter card, and the card image as an actual PNG on disk. The og:image/og:url are
+  // ABSOLUTE on the institutional name: preview crawlers resolve nothing relative.
+  {
+    const _m = sel => { const el = doc.querySelector(sel); return el ? (el.getAttribute("content") || "") : null; };
+    ok((_m('meta[name="description"]') || "").length > 60,
+      "og: index.html must ship a real meta description, got " + JSON.stringify(_m('meta[name="description"]')));
+    ok(_m('meta[property="og:title"]') === "AusMT - Australia's Magnetotelluric Data Portal",
+      "og: og:title must carry the portal title, got " + JSON.stringify(_m('meta[property="og:title"]')));
+    ok((_m('meta[property="og:description"]') || "").length > 60,
+      "og: og:description must be a real sentence, got " + JSON.stringify(_m('meta[property="og:description"]')));
+    ok(_m('meta[property="og:url"]') === "https://ausmt.auscope.org.au/",
+      "og: og:url must be the absolute institutional URL, got " + JSON.stringify(_m('meta[property="og:url"]')));
+    ok(_m('meta[property="og:image"]') === "https://ausmt.auscope.org.au/vendor/social-card.png",
+      "og: og:image must be the absolute card URL, got " + JSON.stringify(_m('meta[property="og:image"]')));
+    ok(_m('meta[name="twitter:card"]') === "summary_large_image",
+      "og: twitter:card must request the large-image preview, got " + JSON.stringify(_m('meta[name="twitter:card"]')));
+    const _card = fs.readFileSync(path.join(PORTAL, "vendor", "social-card.png"));
+    ok(_card.length > 20000 && _card[0] === 0x89 && _card[1] === 0x50,
+      "og: vendor/social-card.png must be a real PNG with content, got " + _card.length + " bytes");
+  }
+
+  // ---- Basemap config plumbing (the CARTO key rides config, never code) ---------------------------
+  // CARTO watermarks un-keyed raster tile requests. The key is a deployment value, so it lives in
+  // portal.config.yaml -> gen_config -> config.js and map.js consults it; a SOURCE pin because the
+  // L stub records navigation calls, not tileLayer URLs. Fails if map.js returns to a hardcoded
+  // keyless tile URL.
+  {
+    const _mapSrc = fs.readFileSync(path.join(SRC, "map.js"), "utf8");
+    ok(/basemap/.test(_mapSrc) && /carto_api_key/.test(_mapSrc),
+      "basemap: map.js must consult AUSMT_CONFIG.basemap.carto_api_key for the tile URL");
+    ok(/api_key=/.test(_mapSrc),
+      "basemap: map.js must append the api_key query parameter when a key is configured");
+  }
+
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

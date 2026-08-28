@@ -16,6 +16,10 @@ window.AUSMT_CONFIG = {
     "enabled": false,
     "plausible_domain": ""
   },
+  "basemap": {
+    "provider": "carto",
+    "carto_api_key": ""
+  },
   "flags": {
     "survey_h5_enabled": true,
     "station_h5_enabled": true,
