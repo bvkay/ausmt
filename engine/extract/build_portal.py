@@ -5619,7 +5619,11 @@ def _main_build(argv=None):
         # defect -- while the bytes AusMT serves for them are still the custodian's, unmodified.
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
         if _parse_fallback_rows:
-            _defects = sorted({_row.get("defect") or "?" for _row in _parse_fallback_rows})
+            # Compact defect clause: the row carries the full reason; the counted warning names the
+            # class (everything before the first "; ", which is where the reason strings start
+            # restating the reparse mechanics this warning already states).
+            _defects = sorted({(_row.get("defect") or "?").split("; ")[0]
+                               for _row in _parse_fallback_rows})
             _survey_warnings.append(
                 f"mt_metadata could not read {len(_parse_fallback_rows)} source file(s) directly "
                 f"({'; '.join(_defects)}); each was reparsed from a normalised "
