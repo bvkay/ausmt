@@ -47,7 +47,10 @@ _BUILDER = _REPO / "engine" / "extract" / "build_portal.py"
 # absence is worse than a missing producer, because the ROUTE TABLE ships to the VPS through
 # deploy/frontdoor/ regardless: the edge would 302 every hand-off while the box published nothing to
 # name them. Loud rather than silent (doctor-box.sh's ts-parity leg FAILs on it), but wrong.
-_PRODUCER_FLAGS = ("--bundle-edi", "--survey-h5", "--station-h5", "--ts-index")
+_PRODUCER_FLAGS = ("--bundle-edi", "--survey-h5", "--station-h5", "--ts-index",
+                   # tier-3 entity pages + sitemap.xml ride this flag: without it the build
+                   # silently publishes no landing pages and no sitemap (the same trap shape).
+                   "--sitemap-base")
 
 
 def _rebuild_data_recipe() -> str:

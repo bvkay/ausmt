@@ -43,6 +43,7 @@ import _edi_science as sci          # noqa: E402  (science_from_components, proc
 import _mth5 as m5                   # noqa: E402  (MTH5 reader; optional, needs mth5+mt_metadata)
 import _ediparse as ep              # noqa: E402  (shared math: read_norm/pt_params/drho/dphase/EMPTY_TF)
 import _conventions as conv         # noqa: E402  (C25 convention gates: frame guard + quadrant check)
+import _pages as pages              # noqa: E402  (tier-3 entity landing pages, stdlib leaf)
 import _coordaccess as coordacc     # noqa: E402  (C42 coordinate-access mask seam + byte gate)
 import _stationids as stnids        # noqa: E402  (survey.yaml station-id override for third-party data)
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
@@ -5888,7 +5889,7 @@ def _main_build(argv=None):
     (out / "sci.json").write_text(_jdump(sci_out, separators=(",", ":")), encoding="utf-8")
     (out / "surveys.json").write_text(_jdump(surveys_meta, separators=(",", ":")), encoding="utf-8")
     # Group surveys into collections ONCE; both collections.json and MTCAT reuse it.
-    coll_by_id, _ = _group_collections(surveys_meta, all_stations)
+    coll_by_id, _survey_coll = _group_collections(surveys_meta, all_stations)
     for _dup in _near_duplicate_collection_ids(list(coll_by_id)):
         print(f"WARNING collections: ids {_dup} differ only by case/whitespace — likely a typo; they form "
               f"SEPARATE collections. Use one exact collection.id across member surveys.", file=sys.stderr)
@@ -6111,6 +6112,18 @@ def _main_build(argv=None):
     # needs tier 3 (prerendered per-entity landing pages at these same paths); the CONTRACT is what
     # this advertises, and it will not change when tier 2/3 come.
     if a.sitemap_base:
+        # Tier 3 rides the same flag as the sitemap: the pages ARE what the sitemap advertises, so
+        # one flag governs both and a flagless build stays byte-identical to a pre-lane build. The
+        # pages render ONLY from the served documents (survey-metadata / station.json /
+        # collections), so the C42 posture is inherited and the coord-access whole-tree sweep
+        # audits pages/ like every other emitter. The count reconciliation below is a hard error:
+        # a sitemap URL without a page is an advertised 404, which must never leave the build.
+        _n_pages = pages.emit_pages(
+            out, a.sitemap_base, surveys_meta=surveys_meta,
+            survey_docs=_survey_metadata_docs, station_docs=_station_docs,
+            collections=coll_by_id, bundle_formats=_bundle_formats,
+            survey_extent=survey_extent, survey_coll=_survey_coll)
+        print(f"  pages/ -> {_n_pages} entity landing pages (tier 3)")
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc
         locs = [base]

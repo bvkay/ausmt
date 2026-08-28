@@ -47,7 +47,7 @@ esac
 _CURL_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "${CURL_ARGV_LOG:-/dev/null}"
 case "$*" in
-  *"/surveys/vulcan-2022"*) printf '%b' "${PATHURL_OUT-HTTP/1.1 301 Moved Permanently\\nlocation: https://ausmt.auscope.org.au/#/survey/vulcan-2022\\n}" ;;
+  *"/surveys/vulcan-2022"*) printf '%b' "${PATHURL_OUT-<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/surveys/vulcan-2022\\">}" ;;
   *AUSMT-DOCTOR-ABSENT*|*"/go/ts/suppressed"*) echo "${TS_MISS_CODE:-404}" ;;
   *"/go/ts/"*) printf '%b' "${TS_OUT-HTTP/1.1 302 Found\\nlocation: https://thredds.nci.org.au/thredds/fileServer/arch/A1.zip\\n}" ;;
   *redirect_url*) printf '%s' "${REDIR_OUT:-301 https://ausmt.auscope.org.au/data/mtcat.schema.json}" ;;
@@ -357,29 +357,30 @@ def test_pathurl_leg_passes_on_the_contract_301(tmp_path):
     cf = _caddyfile(tmp_path)
     r = _run(_hash_env(tmp_path, cf), "report")
     assert r.returncode == 0, f"all-green should exit 0:\n{r.stdout}\n{r.stderr}"
-    assert any(ln.startswith("PASS pathurl:") and "301s to" in ln
+    assert any(ln.startswith("PASS pathurl:") and "landing page" in ln
                for ln in r.stdout.splitlines()), (
-        f"the pathurl leg must PASS on the contract 301:\n{r.stdout}")
+        f"the pathurl leg must PASS on the tier-3 landing page:\n{r.stdout}")
 
 
-def test_pathurl_leg_fails_on_a_non_301(tmp_path):
-    """An edge that answers the path shape with anything but a 301 (here a 200, i.e. the redirect
-    section is missing and the reader swallowed the path) must FAIL the leg and the run."""
+def test_pathurl_leg_fails_without_the_canonical(tmp_path):
+    """An edge that answers the path shape WITHOUT the landing page's canonical (a portal shell
+    swallow, a 404 body, an empty pages/ tree) must FAIL the leg and the run: the canonical at the
+    published URL is what proves the tier-3 product actually served."""
     cf = _caddyfile(tmp_path)
-    r = _run(_hash_env(tmp_path, cf, PATHURL_OUT="HTTP/1.1 200 OK\\n"), "report")
+    r = _run(_hash_env(tmp_path, cf, PATHURL_OUT="<html><body>portal shell</body></html>"), "report")
     assert any(ln.startswith("FAIL pathurl:") for ln in r.stdout.splitlines()), (
-        f"a non-301 must FAIL the pathurl leg:\n{r.stdout}")
+        f"a canonical-less answer must FAIL the pathurl leg:\n{r.stdout}")
     assert r.returncode != 0
 
 
-def test_pathurl_leg_fails_on_a_wrong_location(tmp_path):
-    """A 301 to the WRONG place (a Location that is not the fragment route for the probed slug)
-    must FAIL: the leg pins the Location, not just the status."""
+def test_pathurl_leg_fails_on_a_foreign_canonical(tmp_path):
+    """A page whose canonical points ANYWHERE but the probed URL must FAIL: the leg pins the exact
+    canonical, not the mere presence of one (a mis-mapped page would otherwise pass)."""
     cf = _caddyfile(tmp_path)
-    wrong = "HTTP/1.1 301 Moved Permanently\\nlocation: https://ausmt.auscope.org.au/\\n"
+    wrong = '<link rel=\\"canonical\\" href=\\"https://ausmt.auscope.org.au/surveys/other-survey\\">'
     r = _run(_hash_env(tmp_path, cf, PATHURL_OUT=wrong), "report")
     assert any(ln.startswith("FAIL pathurl:") for ln in r.stdout.splitlines()), (
-        f"a 301 to the wrong Location must FAIL the pathurl leg:\n{r.stdout}")
+        f"a foreign canonical must FAIL the pathurl leg:\n{r.stdout}")
     assert r.returncode != 0
 
 

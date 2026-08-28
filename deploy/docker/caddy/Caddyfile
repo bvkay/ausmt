@@ -79,6 +79,24 @@
 		not path /basemap /basemap/*
 	}
 	header @revalidate Cache-Control "no-cache"
+
+	# ---- Tier-3 entity landing pages + the sitemap: static build products served at the path-URL
+	# contract's own shapes (they ride the atomic current swap with every other product). The
+	# rewrite keys on the exact two-segment shape; anything else falls through, and an unknown id
+	# 404s from file_server honestly. The pages are what sitemap.xml advertises, emitted by the
+	# same build under the same flag, so the two can never disagree.
+	@entityPage path_regexp ep ^/(surveys|stations|collections)/([A-Za-z0-9][A-Za-z0-9._-]*)$
+	handle @entityPage {
+		root * /srv/data/current
+		rewrite * /pages/{re.ep.1}/{re.ep.2}.html
+		file_server
+	}
+	@sitemapXml path /sitemap.xml
+	handle @sitemapXml {
+		root * /srv/data/current
+		file_server
+	}
+
 	# ---- Self-hosted basemap (pmtiles): two static files the vector renderer range-reads. They
 	# change only by a deliberate re-extract (deploy/scripts/fetch-basemap.sh), so a daily
 	# max-age is generous and spares every tile range request an If-None-Match round trip; the
@@ -296,6 +314,24 @@
 		not path /basemap /basemap/*
 	}
 	header @revalidate Cache-Control "no-cache"
+
+	# ---- Tier-3 entity landing pages + the sitemap: static build products served at the path-URL
+	# contract's own shapes (they ride the atomic current swap with every other product). The
+	# rewrite keys on the exact two-segment shape; anything else falls through, and an unknown id
+	# 404s from file_server honestly. The pages are what sitemap.xml advertises, emitted by the
+	# same build under the same flag, so the two can never disagree.
+	@entityPage path_regexp ep ^/(surveys|stations|collections)/([A-Za-z0-9][A-Za-z0-9._-]*)$
+	handle @entityPage {
+		root * /srv/data/current
+		rewrite * /pages/{re.ep.1}/{re.ep.2}.html
+		file_server
+	}
+	@sitemapXml path /sitemap.xml
+	handle @sitemapXml {
+		root * /srv/data/current
+		file_server
+	}
+
 	# ---- Self-hosted basemap (pmtiles): two static files the vector renderer range-reads. They
 	# change only by a deliberate re-extract (deploy/scripts/fetch-basemap.sh), so a daily
 	# max-age is generous and spares every tile range request an If-None-Match round trip; the

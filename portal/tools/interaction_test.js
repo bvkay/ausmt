@@ -4536,5 +4536,28 @@ async function bootFreshWindow(dataMap, url, preBoot) {
       "basemap: generated config.js must carry provider + both pmtiles paths");
   }
 
+  // ---- Discoverability: robots.txt + the root DataCatalog ----------------------------------------
+  // The portal ships robots.txt naming the sitemap (the engine emits sitemap.xml + the tier-3
+  // pages under the same flag), and the root page carries a schema.org DataCatalog block so the
+  // portal itself is a first-class object in dataset search. Both are static shipped surfaces, so
+  // both are source pins here.
+  {
+    const _robots = fs.readFileSync(path.join(PORTAL, "robots.txt"), "utf8");
+    ok(/^User-agent: \*/m.test(_robots) && /^Allow: \//m.test(_robots),
+      "discoverability: robots.txt must allow crawling");
+    ok(/^Sitemap: https:\/\/ausmt\.auscope\.org\.au\/sitemap\.xml$/m.test(_robots),
+      "discoverability: robots.txt must name the sitemap at the institutional URL");
+    ok(/^Disallow: \/gateway$/m.test(_robots),
+      "discoverability: robots.txt must keep crawlers out of the gateway surface");
+    const _ldEl = doc.querySelector('script[type="application/ld+json"]');
+    ok(_ldEl, "discoverability: index.html must carry a JSON-LD block");
+    let _cat = null;
+    try { _cat = JSON.parse(_ldEl.textContent); } catch (e) { die("discoverability: root JSON-LD must parse: " + e); }
+    ok(_cat["@type"] === "DataCatalog" && _cat.name === "AusMT",
+      "discoverability: the root JSON-LD must be the AusMT DataCatalog, got " + JSON.stringify(_cat["@type"]));
+    ok(_cat.url === "https://ausmt.auscope.org.au/",
+      "discoverability: the DataCatalog url must be the institutional root");
+  }
+
   process.exit(0);
 })().catch(e => die((e && e.stack) || String(e)));

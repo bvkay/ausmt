@@ -271,7 +271,8 @@ def test_leak_sweep_no_true_value_of_a_non_exact_station_anywhere(tmp_path):
     generalised OR withheld station appears anywhere in served output — text or binary — or a
     non-exact station is present in ANY served MTH5 (tier-2 bundle or tier-1 station file) at all.
     """
-    out, r = _build(tmp_path, [EXACT, GEN, HID], extra=("--survey-h5", "--station-h5"))
+    out, r = _build(tmp_path, [EXACT, GEN, HID], extra=("--survey-h5", "--station-h5",
+                                                       "--sitemap-base", "https://ausmt.example"))
     assert r.returncode == 0, r.stderr
     hits = _sweep_non_exact_true_values(out) + _sweep_h5_for_non_exact(out)
     assert not hits, "TRUE coordinate/elevation of a non-exact station leaked:\n" + "\n".join(
