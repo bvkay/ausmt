@@ -17,7 +17,7 @@ window.AUSMT_CONFIG = {
     "plausible_domain": ""
   },
   "basemap": {
-    "provider": "carto",
+    "provider": "pmtiles",
     "carto_api_key": "",
     "pmtiles_world": "/basemap/world.pmtiles",
     "pmtiles_region": "/basemap/region.pmtiles"

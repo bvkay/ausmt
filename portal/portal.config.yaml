@@ -29,7 +29,7 @@ analytics:
   plausible_domain: ""      # e.g. ausmt.org.au - only used when enabled: true
 
 basemap:
-  provider: carto           # carto (hosted raster) | pmtiles (self-hosted vector). Flip to pmtiles
+  provider: pmtiles         # carto (hosted raster) | pmtiles (self-hosted vector). Flip to pmtiles
                             # only after deploy/scripts/fetch-basemap.sh has placed both files on
                             # the box (rollback is flipping back).
   carto_api_key: ""         # CARTO watermarks un-keyed raster tiles; the free key is a deployment
