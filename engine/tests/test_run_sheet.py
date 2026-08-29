@@ -209,3 +209,31 @@ def test_an_orphan_sheet_row_is_reported_by_name(tmp_path):
     report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
     blob = json.dumps(report)
     assert "matched no station" in blob and "RR" in blob
+
+
+def test_date_only_and_inverted_time_windows_go_absent_with_notes():
+    """The station schema types time_period as format: date-time, and fromisoformat accepts a
+    bare date - so a sheet's date-only retrieve entry must go ABSENT (not published as a
+    non-time), and an end at or before its start (a sheet data-entry error) drops the end. Both
+    leave a curation note naming the station and the offending value."""
+    import _runsheet as rs
+    notes = []
+    doc = rs._sheet_doc({"start": "2014-09-20T07:12:00Z", "end": "2014-10-18"},
+                        station_id="SA121", notes=notes)
+    period = doc["run"]["time_period"]
+    assert period == {"start": "2014-09-20T07:12:00Z"}, period
+    assert any("SA121" in n and "'2014-10-18'" in n and "date-time" in n for n in notes), notes
+
+    notes = []
+    doc = rs._sheet_doc({"start": "2014-10-19T00:05:31Z", "end": "2014-10-18T06:00:00Z"},
+                        station_id="SA107", notes=notes)
+    period = doc["run"]["time_period"]
+    assert period == {"start": "2014-10-19T00:05:31Z"}, period
+    assert any("SA107" in n and "not after start" in n for n in notes), notes
+
+    # a well-formed window is untouched and un-noted
+    notes = []
+    doc = rs._sheet_doc({"start": "2014-10-17T05:30:45Z", "end": "2014-12-10T02:00:00Z"},
+                        station_id="OK1", notes=notes)
+    assert doc["run"]["time_period"]["end"] == "2014-12-10T02:00:00Z"
+    assert notes == []

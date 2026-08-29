@@ -61,8 +61,9 @@ def _number(v):
 
 
 def _isotime(v):
-    """The schema types time_period members as date-time strings; an unparseable value is dropped
-    (with a note at the caller) rather than published as a non-time."""
+    """The schema types time_period members as format: date-time, so a value passes only as a
+    FULL date+time (fromisoformat accepts a bare date, which the schema rejects - the sheets'
+    date-only retrieve entries must go absent, never published as a non-time)."""
     from datetime import datetime
     v = _text(v)
     if not v:
@@ -71,7 +72,22 @@ def _isotime(v):
         datetime.fromisoformat(v.replace("Z", "+00:00"))
     except ValueError:
         return None
-    return v
+    return v if ("T" in v or " " in v.strip()) else None
+
+
+def _window(row):
+    """The publishable (start, end) pair: each member a full date-time or None, and an end at or
+    before its start is dropped (an inverted window is a sheet data-entry error - publishing it
+    would assert a negative-duration run)."""
+    from datetime import datetime
+    start, end = _isotime(row.get("start")), _isotime(row.get("end"))
+    inverted = False
+    if start and end:
+        s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        if e <= s:
+            end, inverted = None, True
+    return start, end, inverted
 
 
 def load(pkgdir) -> tuple[dict, list]:
@@ -112,12 +128,23 @@ def load(pkgdir) -> tuple[dict, list]:
     return out, notes
 
 
-def _sheet_doc(row) -> dict:
+def _sheet_doc(row, station_id="", notes=None) -> dict:
     """A run_facts-shaped document holding ONLY what the sheet asserts, every value classed
-    CURATOR_SUPPLIED (the sheet is the custodian's curated record, not a scrape)."""
+    CURATOR_SUPPLIED (the sheet is the custodian's curated record, not a scrape). Values the
+    schema cannot publish (date-only times, inverted windows) go absent WITH a curation note."""
     doc = _Doc()
     doc.dialect("survey_run_metadata")
-    start, end = _isotime(row.get("start")), _isotime(row.get("end"))
+    start, end, inverted = _window(row)
+    if notes is not None:
+        for member in ("start", "end"):
+            v = _text(row.get(member))
+            if v and _isotime(row.get(member)) is None:
+                notes.append(f"curation: {station_id} run {member} {v!r} is not a full "
+                             f"date-time; left absent (schema types time_period as date-time)")
+        if inverted:
+            notes.append(f"curation: {station_id} run end {_text(row.get('end'))!r} is not "
+                         f"after start {_text(row.get('start'))!r}; end left absent - verify "
+                         f"the sheet row")
     if start:
         period = {"start": start}
         if end:
@@ -158,7 +185,7 @@ def merge(edi_facts, sheet_row, station_id, notes) -> dict:
     if not sheet_row:
         return edi_facts
     merged = _Doc()
-    merged.doc = _sheet_doc(sheet_row)
+    merged.doc = _sheet_doc(sheet_row, station_id=station_id, notes=notes)
     edi = edi_facts or _blank_document()
     for name in edi.get("dialects") or []:
         merged.dialect(name)
