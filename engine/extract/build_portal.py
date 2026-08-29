@@ -49,6 +49,7 @@ import _stationids as stnids        # noqa: E402  (survey.yaml station-id overri
 import _presence as presence        # noqa: E402  (the presence rule: mt_metadata defaults are never assertions)
 import _runfacts as rfacts          # noqa: E402  (the six >INFO dialect extractors for run acquisition facts)
 import _runids as runids            # noqa: E402  (the persistent per-survey run-id store)
+import _runsheet as runsheet        # noqa: E402  (whitelist ingest of survey-declared run-metadata.csv)
 import _tsindex as tsindex          # noqa: E402  (the per-survey verified-resource register, read offline)
 import _tsproject as tsproject      # noqa: E402  (the ONE projection: flag/count/route from the register)
 import _stationcheck as stcheck     # noqa: E402  (station semantics beyond JSON Schema; shared with scripts/verify.py)
@@ -1700,6 +1701,11 @@ def survey_meta_from_yaml(y: dict) -> dict:
     # seam (order preserved, keys omitted when absent). ADDITIVE + absent -> absent: a survey without them
     # yields a byte-identical surveys.json entry (the whole pre-migration corpus). creators[] is the
     # citation-author order; contributors[] carries the fail-closed roles the drawer renders.
+    # Survey-declared recorded channels (owner mechanism for tipper truth: a declaration without
+    # a vertical coil masks any file-borne tipper survey-wide). ADDITIVE + absent -> absent.
+    channels = y.get("channels_recorded")
+    if isinstance(channels, list) and channels:
+        sm["channels_recorded"] = [str(c) for c in channels]
     creators = _creators_of(y)
     if creators:
         sm["creators"] = creators
@@ -2105,7 +2111,8 @@ def _parse_one_edi(p):
 
 
 def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
-                 cache=None, survey_digest="", report=None, station_ids=None):
+                 cache=None, survey_digest="", report=None, station_ids=None,
+                 mask_tipper=False):
     """Run the mt_metadata extractor + shared science over a list of EDIs; return aligned rows.
 
     mt_metadata is the SOLE engine (the dependency-free regex extractor + _spectra were retired in
@@ -2178,6 +2185,20 @@ def process_edis(edi_paths, survey_label, org, slug, extractor="mt_metadata",
                      "reason": f"[{_sk['gate']}] {_sk['reason']}"})
             continue
         r, tf, srow = parsed["record"], parsed["tf"], parsed["sci"]
+        # Survey-declared channel truth: when survey.yaml states the recorded channels WITHOUT a
+        # vertical coil, any tipper in the released files is a processing artifact and is masked
+        # survey-wide - components, catalogue comps, the tf tipper columns. Applied HERE, after
+        # the C18 cache (the cached parse stays survey-independent), identically on hit and miss.
+        if mask_tipper and "T" in (r.get("components") or []):
+            r["components"] = [c for c in r["components"] if c != "T"]
+            r["type"] = mtm.classify(r.get("period_min_s"), "Z" in r["components"], False)
+            if isinstance(tf, list):
+                for _ti in (5, 14, 15, 16, 17):        # tip_mag, tzx_re/im, tzy_re/im (TF_COLUMNS)
+                    if _ti < len(tf) and tf[_ti]:
+                        tf[_ti] = [None] * len(tf[_ti])
+            if report is not None:
+                report.setdefault("tipper_masked_by_declaration", []).append(
+                    str(r.get("id") or p.stem))
         # Emit the deferred per-EDI diagnostics identically whether parsed from source or cache.
         if r.get("tipper_masked"):
             print(f"  NOTICE {r.get('id') or p.stem}: placeholder tipper (|T| flat at 1.0) masked "
@@ -5083,9 +5104,13 @@ def _main_build(argv=None):
                 print(f"SKIP {slug}: station_ids block INVALID: {_sie}", file=sys.stderr)
                 dropped_surveys.append((label, len(inputs), "station_ids block invalid"))
                 continue
+            _declared_channels = {str(c).strip().lower().replace("b", "h", 1) if str(c).strip().lower().startswith("b") else str(c).strip().lower()
+                                  for c in ((meta or {}).get("channels_recorded") or [])}
+            _mask_tipper = bool(_declared_channels) and not ({"hz"} & _declared_channels)
             stations, tf_rows, sci_rows = process_edis(_edi_in, label, org, slug, a.extractor,
                                                        cache=build_cache, survey_digest=_survey_digest,
-                                                       report=_gate_report, station_ids=_station_ids) \
+                                                       report=_gate_report, station_ids=_station_ids,
+                                                       mask_tipper=_mask_tipper) \
                 if _edi_in else ([], [], [])
             if _xml_in:
                 # OWNER PRECEDENCE RULING (2026-08-03): EDI wins per station. The exclusion set is the
@@ -5317,6 +5342,12 @@ def _main_build(argv=None):
             _survey_warnings.append(f"run-id store IGNORED ({_rie}); no runs[] published")
             _survey_run_ids = {}
         _run_notes: list = []
+        # Survey-declared run metadata (run-metadata.csv, extract/_runsheet): curated acquisition
+        # facts keyed by CORPUS station id, whitelist-read. Same package-not-label rule as the
+        # store. The ids still come from the store alone; the sheet only ever adds facts.
+        _survey_run_sheet, _sheet_notes = runsheet.load(pkgdir)
+        _run_notes += _sheet_notes
+        _sheet_rows_consumed: set = set()
         # The verified-resource register (--ts-index), read OFFLINE from a ROOT of per-survey files
         # (rule 14). UNLIKE the run-id store this is HARD: the store is a nice-to-have whose absence
         # costs a station its runs[], while a register row is a ROUTE to bytes on another host, so a
@@ -5465,8 +5496,12 @@ def _main_build(argv=None):
             # has no EDI to advertise, and station.json's distribution must not claim one.
             # D7: the job is queued for EVERY station, not only under --products; station.json is a
             # public contract and the write path below publishes it at the served root regardless.
-            _runs, _rnotes = station_runs(_run_facts_by_station.get(r["id"]), _survey_run_ids,
-                                          r["id"], r.get("comps"))
+            _sheet_row = _survey_run_sheet.get(r["id"])
+            if _sheet_row is not None:
+                _sheet_rows_consumed.add(r["id"])
+            _runs, _rnotes = station_runs(
+                runsheet.merge(_run_facts_by_station.get(r["id"]), _sheet_row, r["id"], _run_notes),
+                _survey_run_ids, r["id"], r.get("comps"))
             _run_notes += _rnotes
             _station_product_jobs.append(
                 (r, srow, label, org, meta, lic, slug, p,
@@ -5608,15 +5643,32 @@ def _main_build(argv=None):
         # defect -- while the bytes AusMT serves for them are still the custodian's, unmodified.
         _parse_fallback_rows = list(_gate_report.get("parse_fallbacks", []))
         if _parse_fallback_rows:
+            # Compact defect clause: the row carries the full reason; the counted warning names the
+            # class (everything before the first "; ", which is where the reason strings start
+            # restating the reparse mechanics this warning already states).
+            _defects = sorted({(_row.get("defect") or "?").split("; ")[0]
+                               for _row in _parse_fallback_rows})
             _survey_warnings.append(
                 f"mt_metadata could not read {len(_parse_fallback_rows)} source file(s) directly "
-                f"(>INFO JSON trailing-delimiter defect); each was reparsed from a normalised "
+                f"({'; '.join(_defects)}); each was reparsed from a normalised "
                 f"TEMPORARY copy and its unmodified source bytes are what is served "
                 f"[{', '.join(_row['file'] for _row in _parse_fallback_rows[:8])}"
                 f"{', ...' if len(_parse_fallback_rows) > 8 else ''}]")
         # runs[] curation gaps: a station whose source asserts an acquisition fact but whose run id
         # the store does not carry publishes NO runs, and that silence must not hide behind a green
         # build. Same counted-warning shape as the fallbacks above, worst case first.
+        _decl_masked = list(_gate_report.get("tipper_masked_by_declaration", []))
+        if _decl_masked:
+            _survey_warnings.append(
+                f"tipper masked survey-wide by the channels_recorded declaration (no vertical "
+                f"coil recorded) for {len(_decl_masked)} station(s)")
+        _sheet_orphans = sorted(set(_survey_run_sheet) - _sheet_rows_consumed)
+        if _sheet_orphans:
+            _run_notes.append(
+                f"curation: {len(_sheet_orphans)} run-metadata.csv row(s) matched no station in "
+                f"this survey [{', '.join(_sheet_orphans[:8])}"
+                f"{', ...' if len(_sheet_orphans) > 8 else ''}]; station_id must equal the corpus "
+                f"station id byte-for-byte (the distiller owns the sheet-to-corpus join)")
         if _run_notes:
             _survey_warnings.append(
                 f"{len(_run_notes)} run-metadata curation note(s) for this survey "
@@ -6122,10 +6174,33 @@ def _main_build(argv=None):
             out, a.sitemap_base, surveys_meta=surveys_meta,
             survey_docs=_survey_metadata_docs, station_docs=_station_docs,
             collections=coll_by_id, bundle_formats=_bundle_formats,
-            survey_extent=survey_extent, survey_coll=_survey_coll)
+            survey_extent=survey_extent, survey_coll=_survey_coll,
+            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access, mtcat=mtcat)
         print(f"  pages/ -> {_n_pages} entity landing pages (tier 3)")
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc
+
+        # <lastmod> only where it is ACCURATE: a survey's latest release-note date is a real
+        # content-change signal (Google trusts lastmod only when it is consistently honest, so a
+        # per-build timestamp that changes on identical content would be worse than none).
+        def _survey_lastmod(smeta_entry):
+            dates = [str((rn or {}).get("date") or "")
+                     for rn in (smeta_entry or {}).get("release_notes") or []]
+            dates = [d for d in dates
+                     if len(d) >= 10 and d[4] == "-" and d[7] == "-"
+                     and d[:4].isdigit() and d[5:7].isdigit() and d[8:10].isdigit()]
+            return max(dates)[:10] if dates else None
+        _lastmods = {}
+        for lbl in surveys_meta:
+            _sl = (surveys_meta.get(lbl) or {}).get("slug") or slugify(lbl)
+            _lastmods[f"{base}surveys/{_sl}"] = _survey_lastmod(surveys_meta.get(lbl))
+        for cid in coll_by_id:
+            _members = [_survey_lastmod(surveys_meta.get(lbl))
+                        for lbl in surveys_meta if _survey_coll.get(lbl) == cid]
+            _members = [m for m in _members if m]
+            _lastmods[f"{base}collections/{cid}"] = max(_members) if _members else None
+        _all_dates = [d for d in _lastmods.values() if d]
+        _lastmods[base] = max(_all_dates) if _all_dates else None
         locs = [base]
         # The AUTHORITATIVE slug (smeta_entry["slug"], the same one ausmt_id / product paths / the
         # portal router use), never a re-slugified display label: a declared slug that differs from
@@ -6138,7 +6213,12 @@ def _main_build(argv=None):
         # the survey/collection pages that carry the ranking; the station pages themselves say
         # noindex for the same reason, and lifting the posture later is deleting one meta line.
         locs += [f"{base}collections/{cid}" for cid in sorted(coll_by_id)]
-        body = "\n".join(f"  <url><loc>{_xesc(u)}</loc></url>" for u in locs)
+
+        def _urlrow(u):
+            lm = _lastmods.get(u)
+            lm_bit = f"<lastmod>{lm}</lastmod>" if lm else ""
+            return f"  <url><loc>{_xesc(u)}</loc>{lm_bit}</url>"
+        body = "\n".join(_urlrow(u) for u in locs)
         (out / "sitemap.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!-- path-URL contract (tier 1): these path forms 301 into the portal SPA; '

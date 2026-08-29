@@ -341,9 +341,10 @@
           "IsSourceOf",
           "References",
           "IsIdenticalTo",
-          "HasMetadata"
+          "HasMetadata",
+          "IsDocumentedBy"
          ],
-         "description": "DataCite relationType, read as 'this survey, relation, that record', chosen case by case for the true relation; a HasMetadata target must genuinely provide metadata about the dataset, never an inventory or manifest; omitted when undeclared"
+         "description": "DataCite relationType, read as 'this survey, relation, that record', chosen case by case for the true relation; a HasMetadata target must genuinely provide metadata about the dataset, never an inventory or manifest; an IsDocumentedBy target documents the ACTIVITY behind the dataset (e.g. an ANSIR project record), not the data bytes; omitted when undeclared"
         },
         "custodian": {
          "type": "string",

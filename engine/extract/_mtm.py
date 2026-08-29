@@ -144,6 +144,78 @@ def normalise_info_json_delimiters(raw: bytes) -> bytes:
     return b"".join(out) if changed else raw
 
 
+PLAIN_TIPPER_LABELS = (
+    "plain TXR/TXI/TYR/TYI tipper labels (mt_metadata reads only the .EXP-suffixed forms)"
+)
+
+# The tipper block labels mt_metadata accepts are ONLY the .EXP-suffixed forms
+# (_t_labels: txr.exp/txi.exp/txvar.exp, tyr.exp/tyi.exp/tyvar.exp). The Capricorn 2010
+# long-period EDIs label the same blocks plainly (>TXR, >TX.VAR ...), so the reader discards a
+# real 24-period tipper wholesale. Upstream issue material; until fixed, the parse-side
+# normalisation below maps each plain label to its accepted spelling.
+_PLAIN_TIPPER_MAP = {
+    b">TXR": b">TXR.EXP", b">TXI": b">TXI.EXP", b">TX.VAR": b">TXVAR.EXP",
+    b">TYR": b">TYR.EXP", b">TYI": b">TYI.EXP", b">TY.VAR": b">TYVAR.EXP",
+}
+
+
+def normalise_plain_tipper_labels(raw: bytes) -> bytes:
+    """Return `raw` with plain tipper DATA-BLOCK labels rewritten to the .EXP-suffixed spellings
+    mt_metadata accepts, and every other byte exactly as it was. Only a line-leading label token
+    followed by whitespace or a comment is rewritten (an already-suffixed >TXR.EXP is left alone),
+    so the change set is exactly the six block headers. Returns the ORIGINAL object when nothing
+    changes, which is what lets the caller refuse to retry a file that does not carry the shape."""
+    out: list[bytes] = []
+    changed = False
+    for line in raw.splitlines(keepends=True):
+        body = line.rstrip(b"\r\n")
+        stripped = body.lstrip()
+        replaced = None
+        for plain, exp in _PLAIN_TIPPER_MAP.items():
+            if stripped.upper().startswith(plain) and not stripped[len(plain):len(plain) + 1] == b".":
+                tail = stripped[len(plain):]
+                if tail[:1] in (b"", b" ", b"\t", b"/"):
+                    prefix = body[:len(body) - len(stripped)]
+                    replaced = prefix + exp + tail + line[len(body):]
+                    break
+        if replaced is not None:
+            changed = True
+            out.append(replaced)
+        else:
+            out.append(line)
+    return b"".join(out) if changed else raw
+
+
+def _recover_plain_tipper(p: Path, tf):
+    """(TF, reason_or_None): the second normalised-temporary-copy fallback, for a file that PARSES
+    but whose tipper the reader silently discarded. Narrow by construction: .edi only; only when
+    the parsed TF carries no tipper; only when the label normalisation actually changes the bytes;
+    and if the retry fails or still carries no tipper, the ORIGINAL parse stands untouched (a
+    recovery must never cost a station its impedance). The served bytes are the custodian's file
+    either way - only the parse-side TEMPORARY copy is conditioned (the >INFO delimiter
+    precedent), and the fallback is RECORDED per station, never silent."""
+    try:
+        if p.suffix.lower() != ".edi" or tf.has_tipper():
+            return tf, None
+    except Exception:  # noqa: BLE001
+        return tf, None
+    raw = p.read_bytes()
+    fixed = normalise_plain_tipper_labels(raw)
+    if fixed is raw:
+        return tf, None
+    with tempfile.TemporaryDirectory(prefix="ausmt-edi-tipper-") as scratch_dir:
+        scratch = Path(scratch_dir) / p.name
+        scratch.write_bytes(fixed)
+        try:
+            tf2 = _read_once(scratch)
+        except Exception:  # noqa: BLE001
+            return tf, None
+    if not tf2.has_tipper():
+        return tf, None
+    tf2.fn = p        # scrub the scratch path exactly as the delimiter fallback does
+    return tf2, PLAIN_TIPPER_LABELS
+
+
 def _read_once(path: Path):
     tf = TF()
     tf.read(str(path))
@@ -163,7 +235,7 @@ def _read_with_fallback(path: Path):
     """
     p = Path(path)
     try:
-        return _read_once(p), None
+        return _recover_plain_tipper(p, _read_once(p))
     except Exception as exc:  # noqa: BLE001  (re-raised unless it is precisely this defect)
         if p.suffix.lower() != ".edi" or not _is_info_delimiter_defect(exc):
             raise
@@ -182,7 +254,9 @@ def _read_with_fallback(path: Path):
         # carrying the (now deleted) scratch path would hand any downstream consumer a location
         # outside the citable record. NOT guarded -- a failure to scrub is a leak and must be loud.
         tf.fn = p
-        return tf, INFO_JSON_DELIMITER_DEFECT
+        tf, _treason = _recover_plain_tipper(p, tf)
+        return tf, (INFO_JSON_DELIMITER_DEFECT + " + " + _treason) if _treason \
+            else INFO_JSON_DELIMITER_DEFECT
 
 
 def _read(path: Path):

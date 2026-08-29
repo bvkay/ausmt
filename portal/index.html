@@ -9,6 +9,7 @@
      is a static 1200x630 PNG in vendor/ (regenerate alongside any rebrand). -->
 <meta name="description" content="Discover, explore and access magnetotelluric data from across Australia, with survey and station metadata, provenance and links to available datasets.">
 <meta name="google-site-verification" content="yUJ1i6owu4OVxWDIjLrszS8Kdy9-qQHGLuBzCZHgmbE">
+<link rel="canonical" href="https://ausmt.auscope.org.au/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AusMT">
 <meta property="og:title" content="AusMT - Australia's Magnetotelluric Data Portal">
@@ -192,7 +193,10 @@
   .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
   button{font-family:var(--sans);font-size:12.5px;padding:8px 6px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
   button:hover{border-color:var(--copper)}
-  button.primary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
+  button.primary,a.primary{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
+  a.primary{display:inline-block;border:1px solid var(--copper);border-radius:4px;padding:6px 12px;text-decoration:none;font-size:13px}
+  .card-locator{margin:10px 0 4px}
+  .card-locator svg{width:100%;height:auto;display:block;background:#16242f;border:1px solid var(--line);border-radius:6px}
   /* .armed: a draw button reflecting the shared armedDrawMode (its tool is live) — matches the copper
      active look of .primary / .seg button.on, so it reads as "currently on". */
   button.armed{background:var(--copper);border-color:var(--copper);color:#16110b;font-weight:600}
@@ -434,12 +438,16 @@
   .colltable tbody tr:hover{background:var(--panel)}
   .colltable td a{color:var(--copper);text-decoration:none;font-weight:500}.colltable td a:hover{text-decoration:underline}
   .colltable .csub{font-size:12px;color:var(--muted);margin-top:1px}
-  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;max-width:1500px}
+  /* Wide screens flow to five columns (owner ruling); the uncapped width lets auto-fill
+     decide, and the 300px floor keeps three-up on a typical laptop. */
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
   .surveymeta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
   .surveymeta a{color:var(--copper);text-decoration:none}
   .surveymeta .pidline{font-family:var(--mono);word-break:break-all}
   .emptynote{color:var(--muted);font-size:13px;padding:30px 4px}
-  .scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+  .scard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column}
+  .scard .desc{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+  .scard .cardbtns{margin-top:auto;padding-top:10px}
   .scard h3{font-size:18px;margin-bottom:2px}.scard .cust{font-size:12px;color:var(--muted)}
   .scard .stats{font-family:var(--mono);font-size:12px;margin:10px 0;line-height:1.7}.scard .stats b{color:var(--copper)}
   .mixbar{display:flex;height:7px;border-radius:3px;overflow:hidden;margin:8px 0}
@@ -699,11 +707,14 @@
   /* Cleanup wave (E): collections landing: ONE rich card style at any count in a responsive auto-fit grid
      (the earlier intro paragraph + feature/compact split are gone). ~480px min so a card holds its
      footprint + stats comfortably, growing to fill wide screens. */
-  .collfeature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:16px;max-width:1500px}
+  /* auto-FILL, not -fit: with one collection the card keeps its half-width column instead of
+     stretching full-bleed, so the index reads as a grid of collections from day one. */
+  .collfeature-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(560px,1fr));gap:16px;max-width:1500px}
   @media(max-width:520px){.collfeature-grid{grid-template-columns:1fr}}
   .scard.collfeature{padding:20px 22px}
   .scard.collfeature h3{font-size:22px}
-  .collfeat-desc{font-style:normal}
+  /* Half-width cards clamp the abstract; the full text lives on the collection page itself. */
+  .collfeat-desc{font-style:normal;display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
   .coll-orgs{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
   /* Cleanup wave (E): collection DETAIL two-column hero: abstract (+ subline) left, fluid footprint
      scatter right on wide screens; single column on narrow. Stat tiles + member table sit full-width below. */

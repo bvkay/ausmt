@@ -212,6 +212,12 @@ def test_placeholder_tipper_note_rides_the_report_channel(capsys):
     assert src.count("components_from_tf(tfobj, notes=") == 2, (
         "both parse arms must pass the notes channel")
     assert 'r["tipper_masked"] = True' in src
-    assert '"tipper_masked"' in src.split('def process_edis')[1].split('def ')[1] or \
-           'tipper_masked' in src.split('def process_edis')[1][:6000], (
+    # Locate process_edis structurally (ast), not by a character offset: the old 6000-char
+    # window broke every time the function grew, while the guarded behaviour stood.
+    import ast
+    tree = ast.parse(src)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == "process_edis")
+    body = "\n".join(src.splitlines()[fn.lineno - 1:fn.end_lineno])
+    assert "tipper_masked" in body, (
         "the EDI arm's convergent point (cache hit AND miss) must emit the notice")

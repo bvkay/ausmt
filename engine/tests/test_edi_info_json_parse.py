@@ -442,7 +442,7 @@ def test_build_report_records_the_fallback_per_station(tmp_path):
     assert rows, f"the fallback was not recorded: {entry.get('source_parse_fallbacks')!r}"
     assert [r["file"] for r in rows] == [DECL.name]
     assert all(r["station"] and r["defect"] for r in rows), f"incomplete fallback row: {rows}"
-    assert any("trailing-delimiter" in w for w in entry["warnings"]), \
+    assert any("trailing delimiter" in w for w in entry["warnings"]), \
         f"no counted survey warning for the fallback: {entry['warnings']}"
 
 
@@ -469,7 +469,7 @@ def test_a_survey_without_the_defect_records_no_fallback(tmp_path):
     assert entry["stations_built"] == 1
     assert entry.get("source_parse_fallbacks") == [], \
         f"a cleanly-read survey reported a fallback: {entry.get('source_parse_fallbacks')}"
-    assert not any("trailing-delimiter" in w for w in entry["warnings"]), \
+    assert not any("trailing delimiter" in w for w in entry["warnings"]), \
         f"a cleanly-read survey raised the fallback warning: {entry['warnings']}"
     assert json.dumps(entry)  # the entry stays JSON-serialisable
 
@@ -492,7 +492,7 @@ def test_a_json_info_survey_that_parses_stock_records_no_fallback(tmp_path):
     assert entry["stations_built"] == 1
     assert entry.get("source_parse_fallbacks") == [], \
         f"a stock-readable JSON >INFO survey reported a fallback: {entry.get('source_parse_fallbacks')}"
-    assert not any("trailing-delimiter" in w for w in entry["warnings"]), \
+    assert not any("trailing delimiter" in w for w in entry["warnings"]), \
         f"a stock-readable JSON >INFO survey raised the fallback warning: {entry['warnings']}"
     assert json.dumps(entry)
 
