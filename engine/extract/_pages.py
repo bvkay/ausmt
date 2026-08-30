@@ -11,14 +11,15 @@ every other emitter. All free text is HTML-escaped (curator-authored YAML is sti
 serving surface), and the JSON-LD block escapes "</" so document text can never close the
 script element.
 
-Survey pages carry the full design of record: citation box (surname-plus-initial authors),
-location minimap on the shared schematic outline (_au_outline, the same geometry the portal's
-collections view draws), footprint zoom for compact surveys, stat tiles, per-level download
-panels with manifest sizes and checksums, grouped contributors, publications, and the wide
-station table (horizontal scroll, sticky station column) whose run columns render from the
-station documents' own runs[]. Time-series panels and cells render ONLY the levels the served
-register carries. NO em/en dashes and NO tick glyphs anywhere: ranges say "to", absent cells
-are plain hyphens, availability is stated as data (sizes), per the owner's rulings.
+Survey pages carry the full design of record: a "Cite this survey" disclosure (surname-plus-initial
+authors, source-led locator), location minimap on the shared schematic outline (_au_outline, the
+same geometry the portal's collections view draws), footprint zoom for compact surveys, stat tiles,
+per-level download panels with manifest sizes and checksums, grouped contributors, publications,
+and the five-column station table (station, lat, lon, T max, time series) whose rows link to the
+station pages that carry the deployment and instrument metadata. Time-series panels and cells
+render ONLY the levels the served register carries. NO em/en dashes and NO tick glyphs anywhere:
+numeric ranges take a spaced hyphen, absent cells are plain hyphens, availability is stated as data
+(sizes), per the owner's rulings.
 
 Per-survey link-preview cards (og:image) are rendered when Pillow is importable; without it
 every entity page falls back to the portal's root card. Both paths emit the og/twitter tags.
