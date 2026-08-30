@@ -227,10 +227,17 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
         "duplicate contributor rows must group into one person row"
     assert "Project Leader" in page and "Data Collector" in page
     assert "Imaging things" in page and "10.1080/08123985.2024.9999999" in page
-    # og tags on the page (image = per-survey card when Pillow rendered one, else the root card)
+    # og tags on the page (image = per-survey card when Pillow rendered one, else the root card).
+    # The URL FORM is pinned, not just the file: the cards live inside the DATA volume, which the
+    # box serves under /data/*, so the only reachable URL for pages/og/<slug>.png is
+    # {base}/data/pages/og/<slug>.png. A {base}/pages/... form advertises a 404 to every crawler
+    # and link-preview fetcher (the @entityPage rewrite is the only other route into that tree and
+    # it matches the two-segment entity shapes alone).
     assert 'property="og:title"' in page and 'name="twitter:card"' in page
     m = re.search(r'property="og:image" content="([^"]+)"', page)
     assert m, "og:image required"
+    assert m.group(1) in (f"{BASE}/data/pages/og/pages-r.png", f"{BASE}/vendor/social-card.png"), \
+        f"og:image must be the SERVED URL form (/data/pages/og/...), got {m.group(1)}"
     if "/pages/og/" in m.group(1):
         card = out / "pages" / "og" / "pages-r.png"
         assert card.is_file() and card.read_bytes()[:2] == b"\x89P", "referenced card must exist"

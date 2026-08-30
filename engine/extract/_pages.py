@@ -796,7 +796,10 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         + f'<p><a href="/data/products/{_e(slug)}/survey-metadata.json">Machine-readable survey record</a>'
         + ' &#183; catalogue schema <a href="/data/mtcat.schema.json">mtcat 2.0</a></p>\n'
     )
-    og_image = f"{base}/pages/og/{slug}.png" if _og_available() else None
+    # The card lives in the DATA volume, which is served under /data/*; the pages/ tree has no
+    # bare route of its own (the entity rewrite matches the two-segment shapes only), so this is
+    # the one URL at which the rendered card is reachable.
+    og_image = f"{base}/data/pages/og/{slug}.png" if _og_available() else None
     return _shell(title=f"{title} - magnetotelluric survey data - AusMT",
                   description=desc_meta, canonical=url, body=body, jsonld=ld,
                   og_image=og_image, base=base)
