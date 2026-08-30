@@ -421,3 +421,115 @@ def test_the_hub_cards_print_ranges_licences_and_periods_the_way_the_entity_page
         "no range on a card may still read as the word form"
     assert "CC BY 4.0" in page, "the licence reads in human form on the card"
     assert "CC-BY-4.0" not in page, "the raw SPDX identifier is the machine's name, not the reader's"
+
+
+# ==================================================================================================
+# B9 R4 to R9: the hub as a place to browse, not a list to read
+# ==================================================================================================
+def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor():
+    """R4, the stretched-link pattern. A card is one destination, so the whole card should behave
+    like one target; but a card full of overlapping links is a screen-reader's nightmare and a
+    button in a row breaks the catalogue -> survey -> data hierarchy the owner set. So the TITLE
+    stays the single real anchor and a ::after on it covers the card.
+
+    FAILS IF the card stops being positioned (the overlay would escape to the page), if the overlay
+    rule is dropped, if a second anchor appears in a surveys-hub card, if a <button> appears in any
+    row, or if the hover affordance goes."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    assert ".idxcard{" in css and "position:relative" in css, \
+        "the card must establish a positioning context for the stretched link"
+    assert ".idxt a::after" in css, "the title anchor must carry the card-covering ::after"
+    assert ".idxcard:hover" in css, "the card must acknowledge the pointer"
+    card = page.split('<article class="idxcard">', 1)[1].split("</article>", 1)[0]
+    assert card.count("<a ") == 1, f"exactly one real anchor per surveys card, got {card.count('<a ')}"
+    assert "<button" not in page, "no buttons in rows, ever: the hierarchy is catalogue, survey, data"
+    assert "&#8594;" in card, "the card reveals a forward arrow for the in-site action (R14)"
+
+
+def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay():
+    """The collections card carries a second link to the same place ("Explore collection"). Under a
+    stretched overlay a link that is covered is a link that does not work, so it is lifted above it.
+    FAILS IF the lift is dropped (the visible control would become inert) or the card stops being
+    clickable as a whole."""
+    pages = _pages_module()
+    page = pages.collections_index_page(rows=[_one_collection_row()], base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    assert ".idxccard{" in css and "position:relative" in css
+    assert ".idxccard .idxact a" in css and "z-index" in css, \
+        "the Explore control must sit above the card-covering overlay"
+    assert "Explore collection" in page
+
+
+def test_the_surveys_hub_leads_with_the_owners_lede_and_a_forward_arrow():
+    """R5. The hub's own words, verbatim from the owner's review, between the summary line and the
+    list; and the map action carries the in-site forward arrow (R14 keeps U+2192 for actions that
+    stay on the site and U+2197 for links that leave the page)."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    assert ("Discover magnetotelluric surveys from across Australia. Browse survey coverage, "
+            "acquisition periods and available data.") in page, "the hub lede must read verbatim"
+    assert page.index('class="idxsum"') < page.index("Discover magnetotelluric") \
+        < page.index('class="idxlist"'), "the lede sits between the summary line and the list"
+    assert "Explore on the map &#8594;" in page, "the map action carries the forward arrow"
+    coll = pages.collections_index_page(rows=[_one_collection_row()], base=BASE)
+    assert "Discover magnetotelluric surveys" not in coll, \
+        "the collections hub keeps its own section-20 lede"
+
+
+def test_the_hub_locator_grows_and_its_container_steps_back():
+    """R6 and R7. The locator map is the card's only picture and was too small to read at a glance;
+    it grows about ten percent. The PANEL around it steps toward the card's own fill so the
+    Australia outline reads as the object rather than as a box on a box. The shared-symbol geometry
+    is untouched, which is what keeps the budget pin honest."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=_synthetic_rows(), base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    assert "grid-template-columns:115px 1fr" in css, \
+        "the hub locator column must be 115px (about +10% on the 104px it carried)"
+    assert pages._INDEX_MAP_WIDTH == 230, \
+        "the shared symbol geometry does not move: R6 grows the rendered width, not the viewBox"
+    assert page.count("<symbol") == 1 and len(page.encode("utf-8")) < 300_000, \
+        "the size budget stays green"
+    svg = pages._minimap_svg([], width=230)
+    assert "background:#18213D" in svg, "the map panel steps to the card's own fill"
+    assert "#16242f" not in svg, "the old darker panel shade is gone"
+
+
+def test_the_card_names_its_organisation_more_loudly_than_its_location():
+    """R8. Organisation and location share one line with no labels, so the only thing that can tell
+    a reader which is which is weight: two muted shades, the organisation brighter. FAILS IF the two
+    collapse back to one colour or a label is introduced."""
+    pages = _pages_module()
+    page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    org_line = page.split('<p class="idxorg">', 1)[1].split("</p>", 1)[0]
+    assert '<span class="idxorgn">Test Org</span>' in org_line
+    assert '<span class="idxloc">Tasmania</span>' in org_line
+    assert "Organisation" not in org_line and "Region" not in org_line, "no labels, by ruling"
+    orgn = re.search(r"\.idxorgn\{color:(#[0-9A-Fa-f]{6})", css)
+    loc = re.search(r"\.idxloc\{color:(#[0-9A-Fa-f]{6})", css)
+    assert orgn and loc, f"both shades must be declared; got {orgn} / {loc}"
+    assert orgn.group(1) != loc.group(1), \
+        f"the organisation must not share the location's ink ({orgn.group(1)})"
+    def _lum(hexcol):
+        return sum(int(hexcol[i:i + 2], 16) for i in (1, 3, 5))
+    assert _lum(orgn.group(1)) > _lum(loc.group(1)), \
+        f"the organisation must read BRIGHTER than the location: {orgn.group(1)} vs {loc.group(1)}"
+
+
+def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
+    """R9. The hub is a scanning surface, not a reading surface, so its column widens about ten
+    percent past the 840px prose measure; and it stops near 920px rather than inheriting the entity
+    pages' 1120px wide-screen measure, because a hub card stretched across a desktop is a row, not a
+    card."""
+    pages = _pages_module()
+    for page in (pages.surveys_index_page(rows=[_one_survey_row()], base=BASE),
+                 pages.collections_index_page(rows=[_one_collection_row()], base=BASE)):
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert "max-width:920px" in css, "the hub column must widen to 920px"
+        assert css.rindex("max-width:920px") > css.rindex("max-width:1120px"), \
+            "the hub width must be declared after (and so override) the entity pages' wide measure"
+        assert css.count("max-width:920px") == 2, \
+            "the base rule and the wide-screen media query must BOTH be capped at the hub measure"

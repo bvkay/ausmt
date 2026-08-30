@@ -77,6 +77,13 @@ _COLL_PAL = ("#2E8FA3", "#EF7256", "#8A5FC0", "#5BAE6A", "#3F6FC4", "#C255A0", "
 # asserted 300 KB budget with room for the cards' own text.
 _CARD_DOT_CAP = 320
 
+# The map panel's own ground, one step CLOSER to the card it sits on than the near-black it used to
+# carry. The panel was a box on a box: a dark rectangle inside a lighter card, so the eye read the
+# rectangle before it read the coastline. Stepping the fill to the card's own token and softening the
+# rule leaves the Australia outline as the only object with an edge, which is what the panel is for.
+_MAP_PANEL = "#18213D"
+_MAP_PANEL_LINE = "#222C4E"
+
 
 _ROLE_LABELS = {"ProjectLeader": "Project Leader", "ProjectMember": "Project Member",
                 "DataCollector": "Data Collector", "DataCurator": "Data Curator",
@@ -293,7 +300,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
                   f'stroke-width="1.4" opacity=".75"/>')
     return (f'<svg viewBox="0 0 {width} {height}"{xlink_ns} role="img" '
             f'aria-label="{_e(label)}" '
-            f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
+            f'style="background:{_MAP_PANEL};border:1px solid {_MAP_PANEL_LINE};border-radius:8px">'
             f'{outline}{dots}{marker}</svg>')
 
 
@@ -356,7 +363,7 @@ def _footprint_svg(points, *, width=230) -> str:
              f'<text x="{pad * width + bar_px + 5:.1f}" y="{y + 3.5}" fill="#8FA3B0" '
              f'font-size="10" font-family="ui-monospace,Menlo,monospace">{nice} km</text>')
     return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail" '
-            f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
+            f'style="background:{_MAP_PANEL};border:1px solid {_MAP_PANEL_LINE};border-radius:8px">'
             f'{coast}{dots}{scale}</svg>')
 
 
@@ -458,21 +465,42 @@ _CSS = """
 
 # The index pages' own rules, appended to _CSS for those two documents only (the entity pages stay
 # byte-identical). One card grammar for both hubs: a small map, a linked title, one facts line.
+#
+# The hub column is WIDER than the entity pages' reading measure and narrower than their wide-screen
+# one: a hub is scanned, not read, so 840px is tight, and a card stretched the full 1120px stops
+# being a card. Both the base rule and the wide-screen media query are restated here, because
+# _INDEX_CSS is appended AFTER _CSS and a media query only loses to another media query.
+#
+# The stretched link: the whole card is one destination, so the whole card is the target, but the
+# TITLE stays the single real anchor and an inset ::after does the covering. That keeps the
+# accessibility tree honest (one link, one accessible name) where a card wrapped in an anchor would
+# read its map, its facts line and its licence as part of the link text, and it keeps buttons out of
+# rows entirely (the hierarchy is catalogue -> survey -> data, and a row is not an action).
 _INDEX_CSS = """
+  main{max-width:920px}
+  @media(min-width:1180px){main{max-width:920px}}
   .idxlede{max-width:62ch;margin:.2rem 0 .1rem}
   .idxsum{color:#8FA3B0;font-size:.92rem;font-variant-numeric:tabular-nums;margin:.2rem 0 .2rem}
   .idxact{font-size:.9rem;margin:.2rem 0 1.1rem}
   .idxlist{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}
-  .idxcard{display:grid;grid-template-columns:104px 1fr;gap:.9rem;align-items:start;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem}
+  .idxcard{position:relative;display:grid;grid-template-columns:115px 1fr;gap:.9rem;align-items:start;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem}
   .idxcard svg{width:100%;height:auto;display:block}
+  .idxcard:hover,.idxccard:hover{background:#1B2547;border-color:#3E4C7D}
   .idxt{color:#fff;font-size:1rem;font-weight:650;margin:0 0 .15rem}
   .idxt a{text-decoration:none}
-  .idxorg{color:#8FA3B0;font-size:.82rem;margin:0 0 .3rem}
+  .idxt a::after{content:"";position:absolute;inset:0;border-radius:8px}
+  .idxgo{position:absolute;right:.9rem;bottom:.7rem;color:#EF7256;opacity:0}
+  .idxcard:hover .idxgo{opacity:1}
+  .idxorg{font-size:.82rem;margin:0 0 .3rem}
+  .idxorgn{color:#B4C2CC}
+  .idxloc{color:#8FA3B0}
   .idxfacts{font-size:.82rem;margin:0;font-variant-numeric:tabular-nums}
   .idxdoi{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#4FC3D9}
   .idxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem;margin:0 0 1rem}
-  .idxccard{background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.9rem 1rem}
+  .idxccard{position:relative;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.9rem 1rem}
   .idxccard svg{width:100%;height:auto;display:block;margin:.5rem 0}
+  .idxccard .idxact{margin:.2rem 0 0}
+  .idxccard .idxact a{position:relative;z-index:1}
   .idxdesc{font-size:.85rem;margin:.4rem 0 .5rem}
   @media(max-width:640px){.idxcard{grid-template-columns:1fr}}
 """
@@ -1461,6 +1489,23 @@ _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and exploration. A collection "
                      "may represent a programme, region, geological province, or thematic dataset.")
 
+# The surveys hub's own lede, the owner's wording verbatim. It sits between the summary line (the
+# headline numbers) and the list, and it answers the question a hub page has to answer before its
+# cards can: what IS this list, and what is it for.
+_SURVEYS_LEDE = ("Discover magnetotelluric surveys from across Australia. Browse survey coverage, "
+                 "acquisition periods and available data.")
+
+# Two arrows, two meanings, used consistently. The RIGHT arrow marks a forward action that stays on
+# the site; the UPWARD-RIGHT arrow marks a link that LEAVES the page (an outbound host, or a
+# machine-readable document that is not this page). A reader should be able to tell which kind of
+# link they are about to follow without reading the URL.
+_ARROW_FWD = "&#8594;"
+_ARROW_OUT = "&#8599;"
+
+# The hover affordance on a stretched-link card: decoration only, so it is hidden from assistive
+# technology (the card already has exactly one real link, and its title is the accessible name).
+_CARD_ARROW = f'<span class="idxgo" aria-hidden="true">{_ARROW_FWD}</span>'
+
 
 def _first_sentences(text, *, limit=2, budget=220) -> str:
     """The first sentence or two of a rollup description, cut at a SENTENCE boundary and never
@@ -1515,12 +1560,19 @@ def surveys_index_page(*, rows, base) -> str:
             '<span class="idxdoi">DOI</span>' if r.get("doi") else ""])
         svg = _minimap_svg(r.get("points") or [], width=_INDEX_MAP_WIDTH, outline_ref=ref,
                            label=f"{title} location in Australia")
-        org_line = _facts_line([_e(str(r.get("org") or "")), _e(str(r.get("region") or ""))])
+        # Organisation and location, one unlabelled line: the only thing that can say which is
+        # which is ink. Two muted shades, the organisation the brighter of the two, because "who
+        # collected this" is the coarser filter a reader applies first.
+        org_line = _facts_line([
+            f'<span class="idxorgn">{_e(str(r.get("org") or ""))}</span>' if r.get("org") else "",
+            f'<span class="idxloc">{_e(str(r.get("region") or ""))}</span>' if r.get("region")
+            else ""])
         cards.append(
             f'<article class="idxcard"><div>{svg}</div><div>'
             f'<h2 class="idxt"><a href="/surveys/{_e(slug)}">{_e(title)}</a></h2>'
             f'<p class="idxorg">{org_line}</p>'
-            f'<p class="idxfacts">{facts}</p></div></article>')
+            f'<p class="idxfacts">{facts}</p></div>'
+            f'{_CARD_ARROW}</article>')
     # The page-level counts go through _plural like the card counts do: a corpus of one is a real
     # state (it is where every new deployment starts), and the summary line and the description are
     # the two strings a reader and a search result actually read.
@@ -1531,7 +1583,8 @@ def surveys_index_page(*, rows, base) -> str:
         f'<p class="crumb"><a href="/">AusMT</a> / surveys</p>\n'
         "<h1>Surveys</h1>\n"
         f'<p class="idxsum">{summary}</p>\n'
-        f'<p class="idxact"><a href="/">Explore on the map</a></p>\n'
+        f'<p class="idxlede">{_SURVEYS_LEDE}</p>\n'
+        f'<p class="idxact"><a href="/">Explore on the map {_ARROW_FWD}</a></p>\n'
         f"{defs}\n"
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
@@ -1567,7 +1620,8 @@ def collections_index_page(*, rows, base) -> str:
             f'<h2 class="idxt"><a href="/collections/{_e(cid)}">{_e(title)}</a></h2>'
             f"{chip_row}{scatter}{desc_row}"
             f'<p class="idxfacts">{counts}</p>'
-            f'<p class="idxact"><a href="/collections/{_e(cid)}">Explore collection</a></p>'
+            f'<p class="idxact"><a href="/collections/{_e(cid)}">Explore collection '
+            f"{_ARROW_FWD}</a></p>"
             "</article>")
     desc = (f"Collections on AusMT: {_plural(len(rows), 'curated grouping')} of related "
             "magnetotelluric surveys, each linking the surveys it gathers.")
@@ -1575,7 +1629,7 @@ def collections_index_page(*, rows, base) -> str:
         f'<p class="crumb"><a href="/">AusMT</a> / collections</p>\n'
         "<h1>Collections</h1>\n"
         f'<p class="idxlede">{_COLLECTIONS_LEDE}</p>\n'
-        f'<p class="idxact"><a href="/surveys">Browse every survey</a></p>\n'
+        f'<p class="idxact"><a href="/surveys">Browse every survey {_ARROW_FWD}</a></p>\n'
         f"{defs}\n"
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
     return _shell(title="Collections - magnetotelluric survey data - AusMT",
