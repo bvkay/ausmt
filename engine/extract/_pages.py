@@ -49,10 +49,13 @@ _BUNDLE_LABELS = {
     "survey-mth5": ("Survey MTH5 bundle", "application/x-hdf5"),
 }
 
-# The register's level keys, in publication level order, with their page names.
-_TS_LEVELS = (("level0", "L0", "Raw time series"),
-              ("raw_packed", "L0", "Raw time series (packed archives)"),
-              ("level1_mth5", "L1", "MTH5 time series"))
+# The register's level keys, in the order the portal renders them, with the badge and the name the
+# portal uses (portal/src/state.js TS_LEVELS): one vocabulary across the SPA, the survey page and
+# the station page. Every badge is distinct, so a station cell listing two levels can be read.
+_TS_LEVELS = (("raw_packed", "Raw", "Packed raw"),
+              ("level0", "L0", "Level 0"),
+              ("level1_mth5", "L1 MTH5", "Level 1 MTH5"),
+              ("level1_netcdf", "L1 NetCDF", "Level 1 NetCDF"))
 
 # The portal's own data-type palette (portal/src/state.js TYPE_COL), so the page maps and the
 # SPA map speak one colour language. BBMT's indigo is lightened one step for the dark panels.
@@ -331,7 +334,13 @@ _CSS = """
   .dtbl{border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums;width:100%}
   .dtbl td{padding:.24rem .8rem .24rem 0;border-bottom:1px solid #1E2B4F}
   .dtbl tr:last-child td{border-bottom:none}
-  .dtbl td:nth-child(2),.dtbl td:nth-child(3){font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#8FA3B0}
+  .dtbl td:nth-child(2){font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#8FA3B0}
+  .lvlcover{margin:.2rem 0;font-size:.9rem}
+  .lvlhost{margin:.15rem 0;font-size:.82rem;color:#8FA3B0}
+  .lvlact{margin:.45rem 0 .1rem;font-size:.9rem}
+  .integrity{margin:.5rem 0 .1rem;font-size:.82rem}
+  .integrity summary{cursor:pointer;color:#8FA3B0}
+  .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;color:#8FA3B0;word-break:break-all}
   .doi{font-size:.8rem;color:#8FA3B0;margin-top:.35rem}
   .doi a{color:#4FC3D9}
   .people{display:flex;flex-direction:column;gap:.35rem;margin:.6rem 0;font-size:.88rem}
@@ -632,21 +641,29 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         ld["spatialCoverage"] = {"@type": "Place", "geo": {
             "@type": "GeoShape", "box": f"{box[0]} {box[1]} {box[2]} {box[3]}"}}
 
-    # ---- downloads: level panels ----
+    # ---- downloads: one product card per level, and one for the transfer functions ----
+    # Each card states what a reader chooses on (coverage, size, host) and carries exactly one
+    # action. Every number comes from the register or the manifest; a level with no register rows
+    # renders no card at all, so absence is never dressed as a pending download.
     dist = []
     ts_rows = _ts_survey_rows(slug, ts_access)
     panels = []
+    related = _related_by_identifies(smeta)
+    archive_doi_placed = False
     for level_key, badge, name in _TS_LEVELS:
         rows = ts_rows.get(level_key)
         if not rows:
             continue
         total = sum((r or {}).get("bytes") or 0 for r in rows.values())
         per = (f", about {_fmt_bytes(total / len(rows))} per station" if total else "")
-        related = _related_by_identifies(smeta)
         doi_bits = []
-        if related.get("raw_packed") and badge == "L0":
+        # The archive-release DOI names the packed raw archive, so it rides the first raw-family
+        # card this survey renders and never repeats on a second one.
+        if related.get("raw_packed") and level_key in ("raw_packed", "level0") \
+                and not archive_doi_placed:
             u = _doi_url(related["raw_packed"].get("identifier"))
             if u:
+                archive_doi_placed = True
                 doi_bits.append(f'Archive release: <a href="{_e(u)}">{_e(_bare_doi(related["raw_packed"].get("identifier")) or u)}</a>')
         if related.get("collection"):
             u = _doi_url(related["collection"].get("identifier"))
@@ -656,39 +673,55 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         panels.append(
             f'<div class="lvl"><div class="lvlhead"><span class="lvlbadge">{badge}</span>'
             f'<span class="lvlname">{_e(name)}</span></div>'
-            f'<p style="margin:.2rem 0;font-size:.9rem">Hosted at NCI for '
-            f'<b style="color:#fff">{len(rows)} of {n_stations} stations</b>{per}. '
-            f'Build a download script from the <a href="/#/survey/{_e(slug)}">interactive '
-            f"portal</a>.</p>"
+            f'<p class="lvlcover"><b style="color:#fff">{len(rows)} of {n_stations} stations'
+            f"</b>{per}</p>"
+            f'<p class="lvlhost">Hosted at NCI</p>'
+            f'<p class="lvlact"><a href="/#/survey/{_e(slug)}">Build a download script</a></p>'
             f"{doi_line}</div>")
-    bundle_items = []
+    bundle_items, integrity_items = [], []
     for row in sorted(bundle_rows or [], key=lambda r: (r or {}).get("format") or ""):
         fmt = (row or {}).get("format")
         lbl, mime = _BUNDLE_LABELS.get(fmt, (fmt, "application/octet-stream"))
         rel = (row or {}).get("url") or ""
         size = _fmt_bytes(row.get("size"))
-        sha = str(row.get("sha256") or "")[:8]
+        sha = str(row.get("sha256") or "")
         nst = row.get("n_stations")
         meta_bits = " &#183; ".join(b for b in
                                     ([f"{int(nst)} stations"] if nst else [])
                                     + ([size] if size else []))
-        sha_cell = f"sha256 {sha}&#8230;" if sha else ""
-        bundle_items.append(f'<tr><td><a href="/data/{_e(rel)}">{_e(lbl)}</a></td>'
-                            f"<td>{meta_bits}</td><td>{sha_cell}</td></tr>")
+        bundle_items.append(f"<tr><td>{_e(lbl)}</td><td>{meta_bits}</td>"
+                            f'<td><a href="/data/{_e(rel)}">Download &#8595;</a></td></tr>')
+        # The COMPLETE digest, from the manifest row the page already reads. The page used to carry
+        # an 8-character prefix, which is not enough to verify anything; the whole value belongs on
+        # the page but not in competition with format and size, so it sits behind a disclosure.
+        if sha:
+            integrity_items.append(f"<tr><td>{_e(lbl)}</td>"
+                                   f'<td class="shacell">sha256 {_e(sha)}</td></tr>')
         dist.append({"@type": "DataDownload", "encodingFormat": mime,
                      "contentUrl": f"{base}/data/{rel}"})
+    integrity = ""
+    if integrity_items:
+        integrity = ('<details class="integrity"><summary>Integrity details</summary>'
+                     '<table class="dtbl">' + "".join(integrity_items) + "</table></details>")
     if bundle_items:
-        related = _related_by_identifies(smeta)
         doi_line = ""
         if related.get("level2"):
             u = _doi_url(related["level2"].get("identifier"))
             if u:
                 doi_line = (f'<div class="doi">Published release: <a href="{_e(u)}">'
                             f'{_e(_bare_doi(related["level2"].get("identifier")) or u)}</a></div>')
+        # Host attribution from the manifest's own tier, and only where every row agrees: a mixed
+        # card would have to name a host per row, and the tier is the manifest's word, not ours.
+        tiers = {(r or {}).get("tier") for r in (bundle_rows or [])}
+        host = {"repo": "Hosted by AusMT", "nci": "Hosted at NCI"}.get(
+            next(iter(tiers)) if len(tiers) == 1 else None, "")
+        host_line = f'<p class="lvlhost">{host}</p>' if host else ""
         panels.append(
             '<div class="lvl"><div class="lvlhead"><span class="lvlbadge">L2</span>'
             '<span class="lvlname">Transfer functions</span></div>'
-            '<table class="dtbl">' + "".join(bundle_items) + f"</table>{doi_line}</div>")
+            f"{host_line}"
+            '<table class="dtbl">' + "".join(bundle_items)
+            + f"</table>{integrity}{doi_line}</div>")
     if dist:
         ld["distribution"] = dist
 

@@ -515,6 +515,57 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
         "with no source identifier the AusMT URL stays as the access route"
 
 
+def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
+    """Design brief 16, and a real collision. _TS_LEVELS gave BOTH level0 and raw_packed the badge
+    L0, so a survey carrying both rendered two panels badged L0 and a station cell reading
+    "L0 3.2 GB &#183; L0 41 KB" with nothing to tell the reader which was which. level1_netcdf, which
+    ts_access.json emits and the SPA's own TS_LEVELS names, had no panel at all.
+
+    FAILS IF a level loses its portal name, if two levels share a badge, or if level1_netcdf goes
+    back to rendering nothing for a register that carries it."""
+    pages = _pages_module()
+    docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
+             "location": {"lat": -30.0, "lon": 137.0},
+             "data": {"type": "BBMT", "period_max_s": 6360.0}}]
+    ts = {"au.s.A1": {"raw_packed": {"bytes": 3242000000, "url_path": "x/A1.zip"},
+                      "level0": {"bytes": 41000, "url_path": "x/A1.dat"},
+                      "level1_mth5": {"bytes": 5e8, "url_path": "y/A1.h5"},
+                      "level1_netcdf": {"bytes": 2e8, "url_path": "z/A1.nc"}}}
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=docs, bundle_rows=[], ts_access=ts,
+                             base="https://x.example")
+    for name in ("Packed raw", "Level 0", "Level 1 MTH5", "Level 1 NetCDF"):
+        assert f'<span class="lvlname">{name}</span>' in page, f"{name} must render its own panel"
+    badges = re.findall(r'<span class="lvlbadge">([^<]+)</span>', page)
+    assert len(badges) == 4, badges
+    assert len(set(badges)) == len(badges), f"two levels share a badge: {badges}"
+
+
+def test_downloads_carry_an_action_and_move_the_full_checksum_into_integrity_details(tmp_path):
+    """Design brief 16: the download section is an interface component, not a run of technical text.
+    Every product row gets its own action, and the complete SHA-256 stops competing with format and
+    size for attention.
+
+    The page carried only an 8-character prefix, so the one number a reader needs to verify a
+    download was not on the page at all; the full value is in manifest.json, which this emitter
+    already reads. FAILS IF an action link goes missing, if the truncated prefix comes back as the
+    only checksum on the page, or if a digest on the page is not the manifest's own."""
+    surveys = _make_survey(tmp_path, slug="pages-p", name="Pages P")
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-p.html").read_text(encoding="utf-8")
+    rows = [b for b in json.loads((out / "manifest.json").read_text(encoding="utf-8"))["bundles"]
+            if b["slug"] == "pages-p"]
+    assert rows, "fixture must serve bundles"
+    assert "<summary>Integrity details</summary>" in page, "the checksums need a disclosure"
+    for b in rows:
+        assert b["sha256"] in page, f"the FULL sha256 of {b['url']} must reach the page"
+        assert f"sha256 {b['sha256'][:8]}&#8230;" not in page, \
+            "the truncated prefix is replaced by the whole value, not shown beside it"
+    assert page.count(">Download &#8595;</a>") == len(rows), \
+        "every bundle row carries its own download action"
+
+
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
     """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
     the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
@@ -594,8 +645,12 @@ def _pages_module():
 
 
 def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
-    """No placeholder panels (owner ruling): a survey with raw archives gets the L0 panel and
-    per-station sizes; levels the register does not carry render nothing at all."""
+    """No placeholder panels (owner ruling): a survey with raw archives gets the packed-raw card and
+    per-station sizes; levels the register does not carry render nothing at all.
+
+    Level names and badges follow portal/src/state.js TS_LEVELS as of the download-cards commit
+    (LANE-CONTRACT-PAGE-HIERARCHY.md B3), so "Raw time series" is now "Packed raw", "MTH5 time
+    series" is "Level 1 MTH5", and the L0 badge is no longer shared by two levels."""
     pages = _pages_module()
     docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey_id": "s",
              "location": {"lat": -30.0, "lon": 137.0},
@@ -606,19 +661,19 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
                              station_docs=docs, bundle_rows=[], ts_access=ts,
                              base="https://x.example")
-    assert "Raw time series" in page and "1 of 1 stations" in page
-    assert "L0 3.2 GB" in page, "the table cell states the level and the real size"
+    assert "Packed raw" in page and "1 of 1 stations" in page
+    assert "Raw 3.2 GB" in page, "the table cell states the level and the real size"
     # The download panel used to send a reader standing on THIS survey's page to the bare map with
     # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
-    assert 'from the <a href="/#/survey/s">interactive portal</a>' in page, \
-        "the download-script link must keep the survey context"
-    assert "MTH5 time series" not in page, "an absent level must render no panel"
+    assert '<a href="/#/survey/s">Build a download script</a>' in page, \
+        "the download-script action must keep the survey context, not point at the bare map"
+    assert "Level 1 MTH5" not in page, "an absent level must render no panel"
     page2 = pages.survey_page(slug="s", label="S", sm_doc=None,
                               smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
                               station_docs=docs, bundle_rows=[],
                               ts_access={"au.s.A1": {"level1_mth5": {"bytes": 5e8, "url_path": "y"}}},
                               base="https://x.example")
-    assert "MTH5 time series" in page2 and "L1" in page2
+    assert "Level 1 MTH5" in page2 and '<span class="lvlbadge">L1 MTH5</span>' in page2
 
 
 def test_collection_jsonld_rolls_up_member_licence_creators_and_years():
