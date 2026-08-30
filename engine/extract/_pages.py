@@ -466,7 +466,7 @@ _CSS = """
   .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
   .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#fff;text-decoration:none}
   .tagline{color:#8FA3B0;font-size:12.5px}
-  header.site nav{display:flex;gap:6px}
+  header.site nav{display:flex;gap:6px;flex-wrap:wrap}
   header.site nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;background:#1E2B4F;border:1px solid #2B3557;color:#E8EDF1;font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;text-decoration:none}
   header.site nav a:hover{border-color:#EF7256}
   header.site nav a.active{color:#16110b;background:#EF7256;border-color:#EF7256}

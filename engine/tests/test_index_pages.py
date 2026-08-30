@@ -655,3 +655,23 @@ def test_the_new_chrome_adds_no_script_and_no_fetched_asset_to_any_page_kind(bui
         assert "src=" not in page, f"{rel}: no fetched asset may appear on a static page"
         assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
         assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"
+
+
+def test_the_global_header_nav_wraps_rather_than_pushing_the_page_sideways(built):
+    """What the narrow-width visual check found. The three tabs carry the SPA's own equal-width
+    floor (min-width:112px, min-height:40px), and three of those plus their gaps and the header's
+    padding come to more than a 375px phone viewport: measured on the built hub at 375px the
+    document scrolled to 468px, so the whole page could be dragged sideways and "Collections" sat
+    off the screen.
+
+    The SPA absorbs this because its body does not scroll; a static page's does. The zones already
+    wrap, so the nav row wraps too and the tabs stack instead of overflowing. FAILS IF the wrap is
+    dropped, or if the zone-level wrap that carries the rest of the header goes."""
+    css = (built / "pages" / "surveys" / "index.html").read_text(
+        encoding="utf-8").split("<style>", 1)[1].split("</style>", 1)[0]
+    nav = re.search(r"header\.site nav\{([^}]*)\}", css)
+    assert nav, "the global header must style its own nav row"
+    assert "flex-wrap:wrap" in nav.group(1), \
+        f"three 112px tabs overflow a 375px viewport; the nav row must wrap: {nav.group(1)}"
+    zone = re.search(r"\.hzone\{([^}]*)\}", css)
+    assert zone and "flex-wrap:wrap" in zone.group(1), "the header zones must keep wrapping"
