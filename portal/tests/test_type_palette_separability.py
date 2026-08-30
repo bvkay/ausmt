@@ -36,6 +36,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent          # portal/
 STATE_JS = ROOT / "src" / "state.js"
 INDEX = ROOT / "index.html"
+# The third consumer, and the reason this file rather than the engine's suite carries the parity
+# pin: portal-ci runs on portal/** and on the engine files portal tests read, so a change to either
+# palette fires it. The engine lane triggers on engine/** alone and would not see a state.js edit.
+PAGES_PY = ROOT.parent / "engine" / "extract" / "_pages.py"
 
 TYPES = ("LPMT", "BBMT", "AMT", "GDS")
 TOKEN_OF = {"LPMT": "--lpmt", "BBMT": "--bbmt", "AMT": "--amt", "GDS": "--gds"}
@@ -166,6 +170,14 @@ def css_palette():
     return out
 
 
+def pages_palette():
+    """_TYPE_COL from the engine's static-page emitter, which draws the same four types on every
+    survey page's locator map, station-grid zoom and open-graph card."""
+    m = re.search(r"_TYPE_COL\s*=\s*\{([^}]*)\}", PAGES_PY.read_text(encoding="utf-8"))
+    assert m, "engine/extract/_pages.py must define `_TYPE_COL = {...}` (the page map palette)"
+    return {k: v.upper() for k, v in re.findall(r"\"(\w+)\"\s*:\s*\"(#[0-9A-Fa-f]{6})\"", m.group(1))}
+
+
 def test_the_two_palette_authorities_agree():
     """The JS marker palette and the CSS tokens must carry identical hexes, so a map dot and its legend
     swatch can never be different colours. FAILS IF a palette edit lands on one surface only - the exact
@@ -176,6 +188,32 @@ def test_the_two_palette_authorities_agree():
         assert js[ty] == css[ty], (
             f"{ty}: src/state.js says {js[ty]} but index.html's {TOKEN_OF[ty]} says {css[ty]}. "
             f"The map dot and its legend swatch would render different colours.")
+
+
+def test_the_static_pages_draw_the_same_palette_as_the_portal():
+    """The THIRD consumer, added once the static entity pages started drawing type-coloured maps.
+
+    This is the pin the BBMT drift proved was missing. The engine's _TYPE_COL kept the superseded
+    #5B54D6 after this file's own lane moved BBMT to #3730B8, so a reader who opened a survey page
+    and then the same survey in the portal saw two different blues for one data type; and because an
+    ENGINE test asserted the stale hex as a literal, applying the measured value there would have
+    failed CI. A palette drift that CI defends is the precise failure a parity pin exists to catch.
+
+    The engine side is still asserted as a literal in the engine's own suite, which is right: that
+    pin says "this hex, deliberately". This one says the two files agree, which is the property no
+    literal on either side can state. Every type the engine draws must carry the portal's value; the
+    portal's `other` fallback has no page equivalent and is not required here.
+
+    FAILS IF either palette is edited without the other."""
+    js, pages = js_palette(), pages_palette()
+    assert pages, "the engine palette must parse (a rename here is a silently vacuous pin)"
+    for ty, hexv in sorted(pages.items()):
+        assert ty in js, (
+            f"engine/extract/_pages.py draws data type {ty!r} that portal/src/state.js has no "
+            f"colour for; one surface would fall back and the two would disagree")
+        assert hexv == js[ty], (
+            f"{ty}: engine/extract/_pages.py says {hexv} but portal/src/state.js says {js[ty]}. "
+            f"A survey page's map and the portal's map would render one data type in two colours.")
 
 
 def test_every_data_type_pair_clears_the_palette_floor():
