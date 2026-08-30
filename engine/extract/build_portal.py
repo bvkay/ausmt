@@ -593,6 +593,50 @@ def build_feed_xml(surveys_meta: dict, base_url: str = None):
         "</feed>\n")
 
 
+# The static portal documents the sitemap advertises beside the generated pages. They are
+# substantive, indexable and linked from the root, and were previously in no sitemap at all.
+_SITEMAP_STATIC_PAGES = ("about.html", "releases.html", "add-survey.html")
+
+
+def _portal_dir():
+    """The shipped static portal tree, when the engine runs from the source checkout. A container
+    build ships the portal as a SEPARATE image, so the tree is simply not visible there and the
+    static-page leg of the reconciliation below has nothing to check against."""
+    p = Path(__file__).resolve().parents[2] / "portal"
+    return p if p.is_dir() else None
+
+
+def _reconcile_pages_with_sitemap(out, base, locs, station_docs):
+    """Every non-root sitemap URL must resolve to a document this build actually wrote, and every
+    station document must have its page. Returns the mismatches; the caller raises on any.
+
+    This is the check the sitemap block has CLAIMED since tier 3 landed and never performed: the
+    page count was captured and printed, never compared to anything, so a sitemap URL without a
+    page - an advertised 404 - could leave the build in silence. Station pages are deliberately
+    unadvertised, so the URL sweep cannot see them; /stations/<id> is still a published shape that
+    inbound links use, which is why they are reconciled from the documents instead."""
+    problems = []
+    pages_dir = out / "pages"
+    portal = _portal_dir()
+    for u in locs:
+        if u == base:
+            continue
+        rel = u[len(base):] if u.startswith(base) else u
+        if rel in _SITEMAP_STATIC_PAGES:
+            if portal is not None and not (portal / rel).is_file():
+                problems.append(f"sitemap advertises {u} but the portal ships no {rel}")
+            continue
+        target = ((pages_dir / rel / "index.html") if rel in ("surveys", "collections")
+                  else pages_dir / f"{rel}.html")
+        if not target.is_file():
+            problems.append(f"sitemap advertises {u} but no page exists at {target}")
+    for doc in (station_docs or {}).values():
+        aid = (doc or {}).get("ausmt_id")
+        if aid and not (pages_dir / "stations" / f"{aid}.html").is_file():
+            problems.append(f"station page missing for {aid}: the served /stations/{aid} would 404")
+    return problems
+
+
 def collections_document(surveys_meta: dict, all_stations: list, coll_by_id: dict = None) -> dict:
     """Portal collections.json: {collection_id: {id, title, type, surveys[], n_surveys, n_stations,
     bbox, centroid}}. Empty when no survey declares collection membership (backwards compatible).
@@ -6155,21 +6199,17 @@ def _main_build(argv=None):
 
     # ---- optional sitemap.xml (discoverability) ----
     # PATH-URL CONTRACT (owner ruling 2026-08-18): the published URL for each entity is the PATH
-    # form - <base>/surveys/<slug>, <base>/stations/<ausmt_id>, <base>/collections/<id> - which the
-    # front door 301s into the SPA's hash routes (tier 1, deploy/frontdoor/Caddyfile). The sitemap
+    # form - <base>/surveys/<slug>, <base>/stations/<ausmt_id>, <base>/collections/<id>. The sitemap
     # advertises ONLY the path form: it is the published contract, and crawlers ignore fragments
     # anyway, so the old #/... entries never indexed as pages. Collections join the sitemap here
-    # (previously no collection link was emitted at all). Honesty note carried over from the old
-    # caveat: tier 1 still lands a crawler on a redirect into a fragment, so real per-page indexing
-    # needs tier 3 (prerendered per-entity landing pages at these same paths); the CONTRACT is what
-    # this advertises, and it will not change when tier 2/3 come.
+    # (previously no collection link was emitted at all).
     if a.sitemap_base:
         # Tier 3 rides the same flag as the sitemap: the pages ARE what the sitemap advertises, so
         # one flag governs both and a flagless build stays byte-identical to a pre-lane build. The
         # pages render ONLY from the served documents (survey-metadata / station.json /
         # collections), so the C42 posture is inherited and the coord-access whole-tree sweep
-        # audits pages/ like every other emitter. The count reconciliation below is a hard error:
-        # a sitemap URL without a page is an advertised 404, which must never leave the build.
+        # audits pages/ like every other emitter. The reconciliation below is a hard error: a
+        # sitemap URL without a page is an advertised 404, which must never leave the build.
         _n_pages = pages.emit_pages(
             out, a.sitemap_base, surveys_meta=surveys_meta,
             survey_docs=_survey_metadata_docs, station_docs=_station_docs,
@@ -6202,6 +6242,10 @@ def _main_build(argv=None):
         _all_dates = [d for d in _lastmods.values() if d]
         _lastmods[base] = max(_all_dates) if _all_dates else None
         locs = [base]
+        # The two HUB pages. They carry no <lastmod>: a hub changes whenever any member does, and
+        # a date derived from that would move on every build, which is exactly the signal Google
+        # learns to distrust.
+        locs += [f"{base}surveys", f"{base}collections"]
         # The AUTHORITATIVE slug (smeta_entry["slug"], the same one ausmt_id / product paths / the
         # portal router use), never a re-slugified display label: a declared slug that differs from
         # slugify(label) would otherwise advertise an id the portal cannot resolve. slugify(lbl)
@@ -6213,6 +6257,10 @@ def _main_build(argv=None):
         # the survey/collection pages that carry the ranking; the station pages themselves say
         # noindex for the same reason, and lifting the posture later is deleting one meta line.
         locs += [f"{base}collections/{cid}" for cid in sorted(coll_by_id)]
+        # The static portal pages: substantive, indexable, linked from the root, and until now
+        # advertised to no crawler at all. They ship with the portal image rather than being built
+        # here, so they carry no build-derived lastmod either.
+        locs += [f"{base}{p}" for p in _SITEMAP_STATIC_PAGES]
 
         def _urlrow(u):
             lm = _lastmods.get(u)
@@ -6221,11 +6269,24 @@ def _main_build(argv=None):
         body = "\n".join(_urlrow(u) for u in locs)
         (out / "sitemap.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<!-- path-URL contract (tier 1): these path forms 301 into the portal SPA; '
-            'prerendered per-entity pages (tier 3) will serve them at the same URLs -->\n'
+            '<!-- path-URL contract (tier 3): every path form below is served as a prerendered '
+            'page at that exact URL, each carrying its own rel=canonical -->\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + body + "\n</urlset>\n",
             encoding="utf-8")
         print(f"  sitemap.xml -> {out}/sitemap.xml ({len(locs)} urls)")
+
+        # ---- THE reconciliation (this is what the comment above has always promised) ----
+        _mismatch = _reconcile_pages_with_sitemap(out, base, locs, _station_docs)
+        if _mismatch:
+            for _m in _mismatch:
+                print(f"ERROR: sitemap/pages reconciliation: {_m}", file=sys.stderr)
+            raise RuntimeError("sitemap/pages reconciliation failed: "
+                               + "; ".join(_mismatch[:10]))
+        # pages/ is tier 3 and outside the manifest by design, so build_report is the one place the
+        # build records that it wrote them. The count is known only now, after emit_pages, so the
+        # report written above is re-emitted with the additive key.
+        build_report["pages"] = _n_pages
+        (out / "build_report.json").write_text(_jdump(build_report, indent=1), encoding="utf-8")
 
     # ---- optional feed.xml (S3: Atom feed of surveys, newest release/date first) ----
     # Emitted whenever at least one survey has a resolvable date, INDEPENDENT of --sitemap-base

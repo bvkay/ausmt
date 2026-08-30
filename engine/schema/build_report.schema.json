@@ -13,6 +13,7 @@
     "build_id": {"type": "string", "description": "the opaque C12 build id (mirrors build.json)"},
     "pipeline_version": {"type": "string", "description": "the engine distribution version (mirrors build_provenance.json's pipeline_version)"},
     "peak_rss_mib": {"type": ["number", "null"], "minimum": 0, "description": "the build process's memory high-water mark in MiB, read from resource.getrusage(RUSAGE_SELF).ru_maxrss (KiB on Linux, bytes on macOS, normalised) at the moment this report is written: after the survey loop and the per-station products, before the corpus-wide manifest/mtcat/feed emissions (measured at ~10 MiB). Recorded so every real build carries its own peak and the trend is visible before a box runs out of memory (the 2026-08-15 OOM kills at 13.7 GB were the first sign). null where the counter is unavailable (Windows). Optional for pre-fix reports."},
+    "pages": {"type": "integer", "minimum": 0, "description": "the number of tier-3 landing pages written under pages/ (survey, station and collection pages plus the two hub pages). pages/ is outside the download manifest by design, so this is the build's only record that it wrote them, and the same count the sitemap reconciliation is run against. Absent on a build without --sitemap-base, which writes no pages at all, and on reports that predate the key."},
     "surveys": {
       "type": "object",
       "additionalProperties": {"$ref": "#/definitions/survey"},
