@@ -355,7 +355,7 @@ _CSS = """
   .rolechip{font-size:.68rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
   .pub{font-size:.88rem;margin:.4rem 0}
   .pub i{color:#8FA3B0}
-  .stbl{border-collapse:collapse;width:100%;font-size:.82rem;font-variant-numeric:tabular-nums;min-width:1180px}
+  .stbl{border-collapse:collapse;width:100%;font-size:.82rem;font-variant-numeric:tabular-nums}
   .stbl th{text-align:left;color:#8FA3B0;font-weight:600;padding:.3rem .5rem .3rem 0;border-bottom:1px solid #2B3557;position:sticky;top:0;background:#11182D}
   .stbl td{padding:.2rem .5rem .2rem 0;border-bottom:1px solid #1E2B4F}
   .stbl th:first-child,.stbl td:first-child{position:sticky;left:0;background:#11182D;z-index:2;padding-left:.2rem}
@@ -883,12 +883,11 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                  if pub_rows else "")
 
     # ---- the station table ----
-    any_runs = any(doc.get("runs") for doc in docs)
-    header = ["Station", "Lat", "Lon", "T max (s)"]
-    if any_runs:
-        header += ["Deployed", "Recovered", "Rate (Hz)", "Ex", "Ey",
-                   "Logger", "Bx coil", "By coil"]
-    header.append("Time series")
+    # The five default columns of design brief 17. Deployment and instrument metadata used to live
+    # here in eight more columns, which is why the station pages had to grow their Runs section
+    # FIRST: the survey table is a chooser, and the per-station detail belongs behind the station
+    # link this table's first column already carries.
+    header = ["Station", "Lat", "Lon", "T max (s)", "Time series"]
     rows_html = []
     for doc in docs:
         aid = doc["ausmt_id"]
@@ -902,38 +901,6 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             cells.append(f"<td>{v if v is not None else '-'}</td>")
         pm = data.get("period_max_s")
         cells.append(f"<td>{_fmt_period(pm) if pm is not None else '-'}</td>")
-        if any_runs:
-            run = (doc.get("runs") or [{}])[0]
-            period = run.get("time_period") or {}
-            for key in ("start", "end"):
-                v = str(period.get(key) or "")[:16].replace("T", " ")
-                cells.append(f"<td>{_e(v) if v else '-'}</td>")
-            rate = run.get("sample_rate_hz")
-            cells.append(f"<td>{rate:g}</td>" if rate else "<td>-</td>")
-            channels = {ch.get("component"): ch for ch in run.get("channels") or []}
-            for comp in ("ex", "ey"):
-                ch = channels.get(comp) or {}
-                length = ch.get("dipole_length_m")
-                az = ch.get("measurement_azimuth_deg")
-                if length is not None:
-                    az_bit = f" @ {az:g}&#176;" if az is not None else ""
-                    cells.append(f"<td>{length:g} m{az_bit}</td>")
-                else:
-                    cells.append("<td>-</td>")
-
-            def _inst_cell(inst):
-                if not inst:
-                    return "<td>-</td>"
-                rows = (inst or {}).get("identifiers") or []
-                doi = rows[0].get("identifier") if rows else None
-                if doi:
-                    tail = doi.rsplit("/", 1)[-1]
-                    return (f'<td class="pidcell"><a href="{_e(_doi_url(doi))}">{_e(tail)}</a></td>')
-                serial = inst.get("serial_number")
-                return f"<td>{_e(serial)}</td>" if serial else "<td>-</td>"
-            cells.append(_inst_cell(run.get("data_logger")))
-            for comp in ("hx", "hy"):
-                cells.append(_inst_cell((channels.get(comp) or {}).get("sensor")))
         level_bits = []
         for level_key, badge, _name in _TS_LEVELS:
             row = (ts_rows.get(level_key) or {}).get(aid)

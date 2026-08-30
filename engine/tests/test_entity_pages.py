@@ -372,12 +372,20 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert "sample rate" in page and "1,000 Hz" in page
     assert "Dipoles" not in page, "the dipole summary row is retired (the table carries dipoles)"
     assert "instrument PID" not in page, "the survey-level platform PID is retired"
-    # the station table: run columns, PIDs as links, sticky first column
-    for h in ("Deployed", "Recovered", "Rate (Hz)", "Logger", "Bx coil", "Time series"):
-        assert h.replace(" ", "&#8202;") in page.replace("&#8202;", " ") or h in page.replace("&#8202;", " "), h
-    assert "ahbao8tk" in page and "c7ea5dpq" in page, "instrument PIDs must link in the table"
+    # The station table: the five default columns, sticky first column. The run and instrument
+    # columns moved to the station pages in LANE-CONTRACT-PAGE-HIERARCHY.md B5, which could only
+    # follow B4 giving those pages a Runs section; the move is followed fact by fact in
+    # test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations, and the station
+    # page's own rendering is pinned by test_the_station_page_renders_the_runs_its_own_document
+    # _publishes. Restated here rather than deleted, so the survey page's own truth stays asserted.
+    for h in ("Station", "Lat", "Lon", "T max (s)", "Time series"):
+        assert f"<th>{h}</th>" in page, h
+    assert "Deployed" not in page and "Bx coil" not in page, \
+        "deployment and instrument columns live on the station pages now"
+    assert "ahbao8tk" not in page and "c7ea5dpq" not in page, \
+        "instrument PIDs moved to the station pages with the columns that carried them"
     assert "position:sticky" in page, "the station column must pin while the table scrolls"
-    assert "52 m @ 0&#176;" in page, "dipole cells carry length and azimuth"
+    assert "52 m @ 0&#176;" not in page, "the dipole cell moved to the station page"
     # contributors grouped by person (roles merged), publications with DOI link
     assert page.count('href="https://orcid.org/0000-0002-9738-7277"') == 1, \
         "duplicate contributor rows must group into one person row"
@@ -652,6 +660,47 @@ def test_the_station_page_honours_presence_and_the_unit_value_dual_form():
     assert "Time series" not in bare, "no register rows means no time-series section"
     assert "withheld or generalised by the data custodian" in bare, \
         "the withheld-location line is unchanged"
+
+
+def test_the_station_table_keeps_five_columns_and_the_rest_moved_to_the_stations(tmp_path):
+    """Design brief 17, and it can only run AFTER the station pages carry the detail (B4).
+
+    The default table was 13 columns wide inside an 840px column, forced to scroll horizontally by
+    an unconditional min-width of 1180px that a 5-column table also paid. The deployment and
+    instrument columns are now behind the station pages that carry them, and this test FOLLOWS the
+    move: every column removed from the survey table is asserted PRESENT on the station page of the
+    station whose row carried it. FAILS IF a default column goes missing, if a moved column comes
+    back, if a moved fact is on neither page, or if the width floor returns."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+    doc = json.loads((out / "products" / "pages-r" / "A1" / "station.json").read_text(encoding="utf-8"))
+    stn = (out / "pages" / "stations" / (doc["ausmt_id"] + ".html")).read_text(encoding="utf-8")
+
+    for h in ("Station", "Lat", "Lon", "T max (s)", "Time series"):
+        assert f"<th>{h}</th>" in page, f"{h} is a default column"
+    for h in ("Deployed", "Recovered", "Rate (Hz)", "Ex", "Ey", "Logger", "Bx coil", "By coil"):
+        assert f"<th>{h}</th>" not in page, f"{h} belongs on the station pages now"
+    stbl = re.search(r"\.stbl\{([^}]*)\}", page).group(1)
+    assert "min-width" not in stbl, \
+        f"a five-column table must not be forced into a horizontal scrollbar: .stbl{{{stbl}}}"
+    assert "position:sticky" in page, "the station column still pins while the table scrolls"
+
+    # the move, followed fact by fact on the station whose survey row used to carry them
+    run = doc["runs"][0]
+    for key in ("start", "end"):
+        assert str(run["time_period"][key])[:16].replace("T", " ") in stn
+    assert f"{run['sample_rate_hz']:,g} Hz" in stn
+    for pid in ([run["data_logger"]["identifiers"][0]["identifier"]]
+                + [r["identifier"] for ch in run["channels"]
+                   for r in ((ch.get("sensor") or {}).get("identifiers") or [])]):
+        tail = pid.rsplit("/", 1)[-1]
+        assert tail in stn, f"{tail} must be on the station page"
+        assert tail not in page, f"{tail} must have left the survey table"
+    for ch in run["channels"]:
+        if ch.get("dipole_length_m") is not None:
+            assert f"{ch['dipole_length_m']:g} m" in stn
+            assert f"{ch['dipole_length_m']:g} m" not in page
 
 
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
