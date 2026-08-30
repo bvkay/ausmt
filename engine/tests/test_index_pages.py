@@ -533,3 +533,125 @@ def test_the_hub_column_is_wider_than_the_reading_column_but_never_full_width():
             "the hub width must be declared after (and so override) the entity pages' wide measure"
         assert css.count("max-width:920px") == 2, \
             "the base rule and the wide-screen media query must BOTH be capped at the hub measure"
+
+
+# ==================================================================================================
+# B9 R11 to R14: ONE header and ONE footer, across every page kind
+# ==================================================================================================
+# The page kinds this tier emits, with the tab that must be active, the contextual machine-readable
+# link the footer must resolve to, and whether the header's right status slot carries anything.
+# LANE-ADDENDUM-HUB-FEEDBACK.md R11 to R13. The tokens asserted below are the SPA header's own
+# (portal/index.html :root and its nav/about/contribute/counts rules); they are restated as literals
+# rather than read across, because the engine image ships engine/ and contract/ and cannot see
+# portal/ at all, and a test that reaches out of the image is a test the image cannot run.
+def _kinds(built):
+    aid = sorted(p.stem for p in (built / "pages" / "stations").glob("*.html"))[0]
+    return {
+        "surveys/index.html": ("navSurveys", "Machine-readable catalogue - MTCAT JSON",
+                               "/data/mtcat.json", True),
+        "collections/index.html": ("navCollections", "Machine-readable catalogue - MTCAT JSON",
+                                   "/data/mtcat.json", False),
+        "surveys/idx-a.html": ("navSurveys", "Machine-readable survey metadata - JSON",
+                               "/data/products/idx-a/survey-metadata.json", False),
+        f"stations/{aid}.html": ("navSurveys", "Machine-readable station metadata - JSON",
+                                 None, False),
+        "collections/idxcoll.html": ("navCollections",
+                                     "Collection record in the MTCAT catalogue - JSON",
+                                     "/data/mtcat.json", False),
+    }
+
+
+def test_every_static_page_carries_the_one_global_header(built):
+    """R11. The SPA header's three-part division becomes the site's ONE header: AusMT identity on
+    the left linking the root, the three filled application tabs in the centre with the CURRENT
+    page's tab active, and the two smaller outlined supporting controls beside them. The static
+    pages had no header at all above their crumb line, so a reader who landed on a survey page from
+    a search result had no route to the map, the hubs, About or Contribute.
+
+    FAILS IF a page kind is missing the header, activates the wrong tab (or more than one), points a
+    tab somewhere else, loses a supporting control, or drifts off the SPA's tokens."""
+    for rel, (active, _lbl, _href, _slot) in _kinds(built).items():
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        head = page.split("<header", 1)[1].split("</header>", 1)[0]
+        assert '<a class="wordmark" href="/">AusMT</a>' in head, f"{rel}: no identity linking the root"
+        for nav_id, href in (("navMap", "/"), ("navSurveys", "/surveys"),
+                             ("navCollections", "/collections")):
+            assert re.search(rf'<a id="{nav_id}"[^>]*href="{re.escape(href)}"', head), \
+                f"{rel}: {nav_id} must be a real link to {href}"
+        act = re.findall(r'<a id="(nav\w+)"[^>]*class="active"', head)
+        assert act == [active], f"{rel}: exactly {active} must be active, got {act}"
+        assert '<a class="about" href="/about.html">About</a>' in head, f"{rel}: no About control"
+        assert 'href="/add-survey.html">Contribute a survey' in head, f"{rel}: no Contribute control"
+        assert "<header" in page.split("<main>", 1)[0], f"{rel}: the header must precede <main>"
+        assert '<p class="crumb">' in page, f"{rel}: the crumb line stays beneath the header"
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        for token in ("#EF7256", "#1E2B4F", "#2B3557", "min-width:112px", "min-height:40px"):
+            assert token in css, f"{rel}: the header must carry the SPA's {token} token"
+
+
+def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(built):
+    """R12. The shell is identical everywhere; what rides in the right slot is not. The Map view
+    keeps its live counter in the SPA; the surveys hub states the static catalogue counts; every
+    other static page shows NOTHING, because a counter that cannot count the page it is on is
+    decoration pretending to be data."""
+    for rel, (_active, _lbl, _href, has_slot) in _kinds(built).items():
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        head = page.split("<header", 1)[1].split("</header>", 1)[0]
+        slot = head.split('class="hzone hright"', 1)[1].split("</div>", 1)[0].lstrip(">")
+        if has_slot:
+            assert "surveys" in slot and "stations" in slot, \
+                f"{rel}: the surveys hub must state its static counts, got {slot!r}"
+            assert re.search(r"<b>\d[\d,]*</b> surveys", slot), \
+                f"{rel}: the counts must read in the SPA's own grammar, got {slot!r}"
+        else:
+            assert slot.strip() == "", f"{rel}: the status slot must be empty, got {slot!r}"
+
+
+def test_the_footer_is_contextual_and_its_machine_link_resolves_per_page_kind(built):
+    """R13. Two rows on every static page. Row 1 left is the machine-readable link FOR THIS PAGE, so
+    a reader on a station page is handed that station's document rather than the whole catalogue;
+    the collection line is deliberately honest, because no per-collection document is served and a
+    footer must not advertise a surface we do not have. Row 1 right is Releases and About. Row 2 is
+    the copyright, the licence note and the build stamp.
+
+    FAILS IF the one-line footer survives anywhere, if a machine link points at the wrong document,
+    if a link's target is not actually served, or if the build identity becomes a link."""
+    for rel, (_active, label, href, _slot) in _kinds(built).items():
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        foot = page.split("\n<footer>", 1)[1].split("</footer>", 1)[0]
+        assert "AusMT - Australia's Magnetotelluric Data Portal - an AuScope service." not in page, \
+            f"{rel}: the one-line footer must be replaced everywhere in pages/"
+        m = re.search(r'<a href="([^"]+)">([^<]*?) &#8599;</a>', foot)
+        assert m, f"{rel}: no machine-readable link carrying the leaves-this-page arrow: {foot!r}"
+        assert m.group(2) == label, f"{rel}: footer link must read {label!r}, got {m.group(2)!r}"
+        if href is not None:
+            assert m.group(1) == href, f"{rel}: footer link must target {href}, got {m.group(1)}"
+        else:
+            assert m.group(1).endswith("/station.json"), \
+                f"{rel}: a station page must offer its OWN station.json, got {m.group(1)}"
+        # /data/* is the served route onto the build's own out dir, so the advertised path is
+        # checked against the tree this same build wrote: a footer link is a promise about a file.
+        assert m.group(1).startswith("/data/"), m.group(1)
+        assert (built / m.group(1)[len("/data/"):]).is_file(), \
+            f"{rel}: the footer advertises {m.group(1)}, which this build did not write"
+        assert '<a href="/releases.html">Releases</a>' in foot and \
+               '<a href="/about.html">About</a>' in foot, f"{rel}: row 1 right must be Releases, About"
+        assert "&#169; 2026 AuScope and AusMT contributors - an AuScope service" in foot
+        assert "Data licences vary by survey; each download carries its licence." in foot
+        stamp = re.search(r'<span class="fbuild">Build ([^<]+)</span>', foot)
+        assert stamp, f"{rel}: row 2 must carry the build identity stamp: {foot!r}"
+        assert "<a" not in stamp.group(0), "the build identity is PRINTED, never linked"
+
+
+def test_the_new_chrome_adds_no_script_and_no_fetched_asset_to_any_page_kind(built):
+    """The tier's determinism posture, re-asserted across EVERY page kind now that all of them grew
+    a header and a footer. The SPA's own header carries an AuScope logo image; a static page cannot,
+    because a served page here must render from itself with no network at build or at render. FAILS
+    IF the header smuggled in a script, an image or an external stylesheet."""
+    for rel in _kinds(built):
+        page = (built / "pages" / rel).read_text(encoding="utf-8")
+        assert "<script" not in page.replace('<script type="application/ld+json">', ""), \
+            f"{rel}: no executable script may appear on a static page"
+        assert "src=" not in page, f"{rel}: no fetched asset may appear on a static page"
+        assert 'rel="stylesheet"' not in page, f"{rel}: styles stay inline"
+        assert "\u2014" not in page and "\u2013" not in page, f"{rel}: no en/em dashes"

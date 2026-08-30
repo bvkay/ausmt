@@ -459,7 +459,26 @@ _CSS = """
   .ts-n{color:#8FA3B0}
   .scroll{max-height:360px;overflow:auto;border:1px solid #2B3557;border-radius:6px;padding:0 .8rem}
   ul{padding-left:1.2rem}
-  footer{margin-top:2.2rem;font-size:.8rem;opacity:.7}
+  header.site{display:flex;align-items:center;gap:12px 16px;padding:8px 18px;border-bottom:1px solid #2B3557;flex-wrap:wrap}
+  .hzone{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+  .hleft{flex:1 1 auto}
+  .hcenter{flex:0 1 auto;justify-content:center;gap:6px}
+  .hright{flex:1 1 auto;justify-content:flex-end;gap:0}
+  .wordmark{font-weight:800;font-size:22px;letter-spacing:-.5px;color:#fff;text-decoration:none}
+  .tagline{color:#8FA3B0;font-size:12.5px}
+  header.site nav{display:flex;gap:6px}
+  header.site nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;background:#1E2B4F;border:1px solid #2B3557;color:#E8EDF1;font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;text-decoration:none}
+  header.site nav a:hover{border-color:#EF7256}
+  header.site nav a.active{color:#16110b;background:#EF7256;border-color:#EF7256}
+  .about,.contribute{color:#EF7256;font-size:13px;text-decoration:none;border:1px solid #2B3557;padding:6px 11px;border-radius:4px;white-space:nowrap}
+  .about:hover,.contribute:hover{border-color:#EF7256}
+  .counts{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#8FA3B0;font-variant-numeric:tabular-nums}
+  .counts b{color:#E8EDF1}
+  @media(max-width:760px){.hzone{flex:1 1 100%;justify-content:flex-start}}
+  footer{margin-top:2.2rem;border-top:1px solid #2B3557;padding-top:.7rem;font-size:.8rem;color:#8FA3B0}
+  .frow{display:flex;flex-wrap:wrap;gap:.3rem 1.2rem;justify-content:space-between;margin:.3rem 0}
+  .flinks{display:flex;gap:1.1rem}
+  .fbuild{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;color:#8FA3B0;opacity:.85}
 """
 
 
@@ -506,8 +525,75 @@ _INDEX_CSS = """
 """
 
 
+# The three application tabs, in the order the SPA states them: (element id, label, destination).
+# The ids are the SPA's own, so the two headers stay comparable element for element the way the
+# portal's static-page chrome already is.
+_NAV_TABS = (("navMap", "Map", "/"),
+             ("navSurveys", "Surveys", "/surveys"),
+             ("navCollections", "Collections", "/collections"))
+
+
+def _site_header(active="", status="") -> str:
+    """The ONE header, everywhere: the SPA header's three-part division rendered as static links.
+
+    Left is the AusMT identity and links the root. The centre carries the three filled application
+    tabs with the CURRENT page's tab in the active state, and beside them the two smaller outlined
+    supporting controls: the three tabs are the application, About and Contribute are functions
+    around it, and the owner kept that distinction and their wording. The right zone is the status
+    slot, which is CONTEXTUAL (see the callers) while the shell around it is identical.
+
+    No logo image: the SPA header carries one, and a page in this tier renders from itself with no
+    fetched asset of any kind. The wordmark carries the identity instead."""
+    tabs = "".join(
+        f'<a id="{i}" href="{h}"' + (' class="active"' if i == active else "") + f">{lbl}</a>"
+        for i, lbl, h in _NAV_TABS)
+    return ('<header class="site">\n'
+            '<div class="hzone hleft"><a class="wordmark" href="/">AusMT</a>'
+            '<span class="tagline">Australia\'s Magnetotelluric Data Portal</span></div>\n'
+            f'<div class="hzone hcenter"><nav>{tabs}</nav>'
+            '<a class="about" href="/about.html">About</a>'
+            f'<a class="contribute" href="/add-survey.html">Contribute a survey {_ARROW_FWD}</a>'
+            "</div>\n"
+            f'<div class="hzone hright">{status}</div>\n'
+            "</header>\n")
+
+
+def _site_footer(machine=None, build=None) -> str:
+    """The contextual footer, two rows, on every page in this tier.
+
+    Row 1 left is the machine-readable document FOR THIS PAGE, so a reader on a station page is
+    handed that station's own record rather than the whole catalogue. The collection wording is
+    deliberately honest: no per-collection document is served, so the footer says the collection's
+    record lives in MTCAT rather than advertising a surface that does not exist. The arrow is the
+    leaves-this-page one; these links hand over a JSON document, not another page of the site.
+
+    Row 2 carries the attribution, the licence note, and the build identity as PRINTED text. It is
+    never a link: build_provenance.json is de-documented per the public-surface audit, and the deep
+    per-record provenance is already one hop away through row 1's own link. A tier-3 /build page is
+    the deliberate path if demand for more ever appears."""
+    left = ""
+    if machine:
+        label, href = machine
+        left = f'<a href="{_e(href)}">{_e(label)} {_ARROW_OUT}</a>'
+    stamp = ""
+    if build and build.get("engine_commit"):
+        when = str(build.get("generated") or "")[:10]
+        stamp = (f'<span class="fbuild">Build {_e(build["engine_commit"])}'
+                 + (f" - {_e(when)}" if when else "") + "</span>")
+    return ("\n<footer>\n"
+            f'<div class="frow"><div>{left}</div>'
+            '<div class="flinks"><a href="/releases.html">Releases</a>'
+            '<a href="/about.html">About</a></div></div>\n'
+            '<div class="frow"><span>&#169; 2026 AuScope and AusMT contributors - an AuScope '
+            "service</span>"
+            "<span>Data licences vary by survey; each download carries its licence.</span>"
+            f"{stamp}</div>\n"
+            "</footer>\n")
+
+
 def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
-           og_image=None, base="", extra_css="") -> str:
+           og_image=None, base="", extra_css="", nav="", machine=None, build=None,
+           status="") -> str:
     ld = f'<script type="application/ld+json">{_jsonld(jsonld)}</script>\n' if jsonld else ""
     # noindex: the page exists for the URL contract and for humans following published links, but
     # is deliberately kept out of the search index (station pages: thousands of templated
@@ -534,10 +620,11 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f'<link rel="canonical" href="{_e(canonical)}">\n'
         f"{og}"
         f"{ld}"
-        f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n<main>\n"
+        f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n"
+        f"{_site_header(nav, status)}"
+        "<main>\n"
         f"{body}"
-        "\n<footer>AusMT - Australia's Magnetotelluric Data Portal - an AuScope service. "
-        "Data licences vary by survey; each download carries its licence.</footer>\n"
+        f"{_site_footer(machine, build)}"
         "</main>\n</body>\n</html>\n"
     )
 
@@ -671,7 +758,7 @@ def _citation_locator(smeta, access_url):
 
 
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
-                base, extent=None, discovery=None) -> str:
+                base, extent=None, discovery=None, build=None) -> str:
     smeta = smeta or {}
     title = ((sm_doc or {}).get("title")) or label
     blurb = smeta.get("blurb") or ""
@@ -1089,7 +1176,9 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     og_image = f"{base}/data/pages/og/{slug}.png" if _og_available() else None
     return _shell(title=f"{title} - magnetotelluric survey data - AusMT",
                   description=desc_meta, canonical=url, body=body, jsonld=ld,
-                  og_image=og_image, base=base)
+                  og_image=og_image, base=base, nav="navSurveys", build=build,
+                  machine=("Machine-readable survey metadata - JSON",
+                           f"/data/products/{slug}/survey-metadata.json"))
 
 
 def _unit_value(uv) -> str:
@@ -1211,7 +1300,7 @@ def _station_ts_section(ts_levels) -> str:
             f'<tbody>{"".join(rows)}</tbody></table></div>\n')
 
 
-def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
+def station_page(*, doc, survey_slug, base, ts_levels=None, build=None) -> str:
     aid = doc["ausmt_id"]
     st = doc.get("station") or aid
     survey = doc.get("survey") or survey_slug
@@ -1250,7 +1339,10 @@ def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
     return _shell(title=f"{st} - {survey} - AusMT",
                   description=f"Magnetotelluric station {st} from the {survey} survey: "
                               "transfer function data, metadata and downloads on AusMT.",
-                  canonical=url, body=body, noindex=True, base=base)
+                  canonical=url, body=body, noindex=True, base=base,
+                  nav="navSurveys", build=build,
+                  machine=("Machine-readable station metadata - JSON",
+                           f"/data/products/{survey_slug}/{st}/station.json"))
 
 
 def _member_colours(n):
@@ -1331,7 +1423,7 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
 
 
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None,
-                    member_facts=None, level_counts=None, formats=None) -> str:
+                    member_facts=None, level_counts=None, formats=None, build=None) -> str:
     """The collection page as an EXPLORATORY layer (design brief 23 to 31), not a catalogue record.
 
     `member_facts` ({slug: row}), `level_counts` ({level: n stations}) and `formats` are rollups the
@@ -1478,7 +1570,10 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     )
     return _shell(title=f"{title} - magnetotelluric data - AusMT",
                   description=desc if len(desc) <= 160 else desc[:157] + "...",
-                  canonical=url, body=body, jsonld=ld, base=base)
+                  canonical=url, body=body, jsonld=ld, base=base,
+                  nav="navCollections", build=build,
+                  machine=("Collection record in the MTCAT catalogue - JSON",
+                           "/data/mtcat.json"))
 
 
 # --------------------------------------------------------------------------- the two index pages
@@ -1488,6 +1583,10 @@ _COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
 
 _COLLECTIONS_LEDE = ("Collections group related surveys for discovery and exploration. A collection "
                      "may represent a programme, region, geological province, or thematic dataset.")
+
+# The catalogue document a hub page hands over: MTCAT is the machine-readable form of exactly what
+# a hub lists, so it is the honest counterpart to the hub itself.
+_MTCAT_LINK = ("Machine-readable catalogue - MTCAT JSON", "/data/mtcat.json")
 
 # The surveys hub's own lede, the owner's wording verbatim. It sits between the summary line (the
 # headline numbers) and the list, and it answers the question a hub page has to answer before its
@@ -1532,7 +1631,7 @@ def _facts_line(bits) -> str:
     return " &#183; ".join(b for b in bits if b)
 
 
-def surveys_index_page(*, rows, base) -> str:
+def surveys_index_page(*, rows, base, build=None) -> str:
     """The /surveys hub: every published survey as one linked row with the facts a reader chooses
     on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
     the served documents do not already publish and needs no survey-metadata read.
@@ -1579,6 +1678,12 @@ def surveys_index_page(*, rows, base) -> str:
     summary = _facts_line([_plural(len(rows), "survey"), _plural(n_stations, "station")])
     desc = (f"Every magnetotelluric survey published on AusMT: {_plural(len(rows), 'survey')} and "
             f"{_plural(n_stations, 'station')}, with coverage, data types, licences and downloads.")
+    # The header's right status slot, in the SPA counter's own grammar (bold figure, muted noun,
+    # interpunct). The SPA's counter reports LIVE map state, which a static page has none of; this
+    # hub does have a count to state, and it is the catalogue's own.
+    counts = (f'<div class="counts"><b>{len(rows):,}</b> '
+              f'{"survey" if len(rows) == 1 else "surveys"} &#183; '
+              f'<b>{n_stations:,}</b> {"station" if n_stations == 1 else "stations"}</div>')
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / surveys</p>\n'
         "<h1>Surveys</h1>\n"
@@ -1589,10 +1694,11 @@ def surveys_index_page(*, rows, base) -> str:
         f'<div class="idxlist">{"".join(cards)}</div>\n')
     return _shell(title="Surveys - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  extra_css=_INDEX_CSS)
+                  extra_css=_INDEX_CSS, nav="navSurveys", build=build, status=counts,
+                  machine=_MTCAT_LINK)
 
 
-def collections_index_page(*, rows, base) -> str:
+def collections_index_page(*, rows, base, build=None) -> str:
     """The /collections hub. Rows carry: cid, title, description, n_surveys, n_stations, type,
     status, member_labels, member_points {label: [(lon, lat)]}. ONLY the fields the collections
     rollup actually carries are rendered: a collection whose record declares no type or status
@@ -1634,7 +1740,8 @@ def collections_index_page(*, rows, base) -> str:
         f'<div class="idxgrid">{"".join(cards)}</div>\n')
     return _shell(title="Collections - magnetotelluric survey data - AusMT",
                   description=desc, canonical=url, body=body, base=base,
-                  extra_css=_INDEX_CSS)
+                  extra_css=_INDEX_CSS, nav="navCollections", build=build,
+                  machine=_MTCAT_LINK)
 
 
 # --------------------------------------------------------------------------- og cards (Pillow)
@@ -1716,7 +1823,7 @@ def _og_card(path, *, title, subtitle, region_year, period_line, dims_line, poin
 
 def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collections,
                bundle_formats, survey_extent, survey_coll,
-               bundle_rows=None, ts_access=None, mtcat=None) -> int:
+               bundle_rows=None, ts_access=None, mtcat=None, build=None) -> int:
     """Write every entity page under <out>/pages/ (and, when Pillow is importable, the
     per-survey link-preview cards under <out>/pages/og/). Inputs are the served documents and
     rollups the build already produced; the return value is the page count the caller reconciles
@@ -1768,6 +1875,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                smeta=smeta, station_docs=docs,
                                bundle_rows=rows or [], ts_access=ts_access,
                                base=base, extent=(survey_extent or {}).get(label),
+                               build=build,
                                discovery={"stations": disc_stations.get(slug),
                                           "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
@@ -1832,7 +1940,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     stdir.mkdir(parents=True, exist_ok=True)
     for doc in station_docs.values():
         (stdir / f"{doc['ausmt_id']}.html").write_text(
-            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base,
+            station_page(doc=doc, survey_slug=doc.get("survey_id"), base=base, build=build,
                          ts_levels=(ts_access or {}).get(doc["ausmt_id"])), encoding="utf-8")
         n += 1
 
@@ -1867,7 +1975,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                             member_facts={s: facts_by_slug[s] for _lbl, s in members
                                           if s in facts_by_slug},
                             level_counts=level_counts,
-                            formats=sorted(member_formats)),
+                            formats=sorted(member_formats), build=build),
             encoding="utf-8")
         n += 1
         coll = collections[cid] or {}
@@ -1882,9 +1990,9 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     # The two HUB pages, last: they are views over the rows the loops above just built, so they
     # can never advertise a survey or collection this build did not write a page for.
     (sdir / "index.html").write_text(
-        surveys_index_page(rows=index_rows, base=base), encoding="utf-8")
+        surveys_index_page(rows=index_rows, base=base, build=build), encoding="utf-8")
     n += 1
     (cdir / "index.html").write_text(
-        collections_index_page(rows=coll_index_rows, base=base), encoding="utf-8")
+        collections_index_page(rows=coll_index_rows, base=base, build=build), encoding="utf-8")
     n += 1
     return n

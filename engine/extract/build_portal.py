@@ -6224,7 +6224,8 @@ def _main_build(argv=None):
             survey_docs=_survey_metadata_docs, station_docs=_station_docs,
             collections=coll_by_id, bundle_formats=_bundle_formats,
             survey_extent=survey_extent, survey_coll=_survey_coll,
-            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access, mtcat=mtcat)
+            bundle_rows=manifest_doc.get("bundles"), ts_access=_ts_access, mtcat=mtcat,
+            build=BUILD_ID)
         print(f"  pages/ -> {_n_pages} entity landing pages (tier 3)")
         base = a.sitemap_base.rstrip("/") + "/"
         from xml.sax.saxutils import escape as _xesc
