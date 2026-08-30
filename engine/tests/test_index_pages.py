@@ -13,7 +13,9 @@ served document needs nothing but itself.
 The surveys index carries 27 minimaps today and grows with the corpus. Emitting the Australian
 outline once as a <symbol> and referencing it from every card is what keeps the document small
 enough to serve as a hub page; the budget is asserted here against a full-corpus-sized synthetic,
-alongside the naive per-card cost that shows the sharing is load-bearing.
+alongside the naive per-card cost that shows the sharing is load-bearing. The collections hub has
+its own budget test for the same ceiling: its cost scales with member STATION count rather than
+card count, so it is asserted against six collections at corpus scale before that data arrives.
 """
 import re
 import sys
@@ -325,3 +327,42 @@ def test_a_many_row_hub_still_counts_in_the_plural():
                                                                        cid="two", title="Two")],
                                       base=BASE)
     assert "2 curated groupings of" in _description(co)
+
+
+def _synthetic_collections(n_colls=6, n_stations=2625, members_each=5):
+    """Six collections at corpus scale: the design brief names six candidates, and the whole
+    served corpus of stations spread across their member surveys."""
+    per_coll = n_stations // n_colls
+    per_member = per_coll // members_each
+    rows = []
+    for c in range(n_colls):
+        labels = [f"Member Survey {c:02d}-{m:02d}" for m in range(members_each)]
+        pts = {}
+        for m, lbl in enumerate(labels):
+            pts[lbl] = [(114.0 + (c * 3.1 + m * 1.7 + k * 0.13) % 38.0,
+                         -40.0 + (c * 2.3 + m * 1.1 + k * 0.09) % 30.0)
+                        for k in range(per_member)]
+        rows.append({"cid": f"coll-{c}", "title": f"Synthetic Collection {c}",
+                     "description": "A programme-scale grouping of magnetotelluric surveys. "
+                                    "It exists to size the card.",
+                     "n_surveys": members_each, "n_stations": per_coll,
+                     "type": None, "status": None,
+                     "member_labels": labels, "member_points": pts})
+    return rows
+
+
+def test_collections_index_shares_one_outline_and_stays_inside_the_budget():
+    """The collections hub's budget, asserted BEFORE the data arrives rather than after.
+
+    Its cost scales with MEMBER STATION COUNT, not with card count: one card carries a full
+    member-coloured scatter of every station in the collection, so the served single-collection
+    page is already ~100 KB. The design brief names six candidate collections, and nothing pinned
+    the size of this page at all while its sibling was held to 300 KB. FAILS IF the outline stops
+    being shared or the page grows past the same ceiling the surveys hub answers to."""
+    pages = _pages_module()
+    rows = _synthetic_collections()
+    page = pages.collections_index_page(rows=rows, base=BASE)
+    size = len(page.encode("utf-8"))
+    assert page.count("<symbol") == 1, "the outline geometry must be emitted exactly once"
+    assert page.count("<use href=") == len(rows), "every card must reference the shared outline"
+    assert size < 300_000, f"the collections index must stay under 300 KB, got {size} bytes"
