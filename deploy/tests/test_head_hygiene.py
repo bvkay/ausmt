@@ -35,8 +35,13 @@ def _listener_bodies():
 
 
 def test_index_html_redirects_home_on_both_listeners():
+    """The alias still 301s home, and now carries the query with it: the bare target dropped
+    ?tour=1, which is the only documented way into the guided tour from About. The query-preserving
+    behaviour itself is driven against a real Caddy in
+    test_box_index_and_url_canonicalisation.py."""
     for port, body in _listener_bodies().items():
-        assert "redir /index.html / 301" in body, f"{port} must 301 the /index.html alias home"
+        assert "redir /index.html /{ausmt_qs} 301" in body, \
+            f"{port} must 301 the /index.html alias home with the query preserved"
 
 
 def test_h5_content_type_is_stated_on_both_listeners():

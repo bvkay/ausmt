@@ -74,15 +74,171 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     assert entity_locs, "the sitemap must advertise entity URLs"
     assert not any("/stations/" in u for u in entity_locs), \
         "station URLs must stay OUT of the sitemap (unadvertised-but-served posture)"
+    # The hub URLs resolve to pages/<kind>/index.html; the static portal pages are shipped with
+    # the portal image, not built here, so they are checked against the portal tree WHERE ONE IS
+    # VISIBLE. The engine image ships /app/portal holding only src/contract.js (designed topology,
+    # engine.Dockerfile), so this leg mirrors the build's own _portal_dir() gate: no checkout, no
+    # static-page assertions, exactly as the build reconciliation behaves.
+    portal_dir = build_portal._portal_dir()
     for u in entity_locs:
         rel = u.replace(BASE + "/", "")
-        page = out / "pages" / (rel + ".html")
+        if rel in build_portal._SITEMAP_STATIC_PAGES:
+            if portal_dir is not None:
+                assert (portal_dir / rel).is_file(), \
+                    f"sitemap advertises {u} but the portal ships no {rel}"
+            continue
+        page = (out / "pages" / rel / "index.html") if rel in ("surveys", "collections") \
+            else out / "pages" / (rel + ".html")
         assert page.exists(), f"sitemap advertises {u} but no page exists at {page}"
     docs = sorted((out / "products" / "pages-a").glob("*/station.json"))
     for d in docs:
         aid = json.loads(d.read_text(encoding="utf-8"))["ausmt_id"]
         assert (out / "pages" / "stations" / (aid + ".html")).exists(), \
             f"station page for {aid} must exist (the served URL contract), sitemap or not"
+
+
+def test_the_sitemap_advertises_the_hubs_and_the_static_pages(tmp_path):
+    """The sitemap is the crawler's map of the site, and until this lane it carried only the root
+    and the entity pages: the two hub pages did not exist, and about/releases/add-survey were
+    substantive linked documents that no crawler was pointed at. FAILS IF any of the five is
+    missing, or if one of them carries a <lastmod> (none of them has an honest change signal, and
+    the lastmod contract is that the field is emitted only where it is true)."""
+    surveys = _make_rich_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    sitemap = (out / "sitemap.xml").read_text(encoding="utf-8").replace("\n", "")
+    for rel in ("surveys", "collections", "about.html", "releases.html", "add-survey.html"):
+        u = f"{BASE}/{rel}"
+        row = re.search(rf"<url><loc>{re.escape(u)}</loc>(.*?)</url>", sitemap)
+        assert row, f"the sitemap must advertise {u}"
+        assert "<lastmod>" not in row.group(1), \
+            f"{u} has no honest change signal, so it must carry no lastmod"
+
+
+def test_the_build_report_records_the_page_count(tmp_path):
+    """FAILS IF build_report.json does not carry the tier-3 page count. pages/ contributes nothing
+    to the manifest (it is tier 3, outside the product contract by design), so without this key the
+    build's own bookkeeping has no record that the pages were written at all."""
+    surveys = _make_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    report = json.loads((out / "build_report.json").read_text(encoding="utf-8"))
+    n_pages = len(list((out / "pages").rglob("*.html")))
+    assert report["pages"] == n_pages, \
+        f"build_report pages={report.get('pages')} but {n_pages} page files were written"
+    bare = _build(surveys, tmp_path / "bare", sitemap=False)
+    assert json.loads((bare / "build_report.json").read_text(encoding="utf-8")).get("pages") in (0, None), \
+        "a flagless build writes no pages, so it must not claim any"
+
+
+def test_a_sitemap_page_mismatch_is_a_hard_error(tmp_path, monkeypatch):
+    """The reconciliation, RED-proven. build_portal has long CLAIMED that a sitemap URL without a
+    page is a hard error, but it only counted the pages and printed the number; nothing compared
+    the two, so an advertised 404 could leave the build silently. This drives a synthetic mismatch
+    (the emitter writes every page, then one survey page is removed behind the build's back) and
+    requires the build to REFUSE. FAILS IF the build completes with a sitemap URL that has no
+    page - on the pre-lane engine it completes with rc=0."""
+    surveys = _make_survey(tmp_path)
+    real = build_portal.pages.emit_pages
+
+    def _lose_one(out, base, **kw):
+        n = real(out, base, **kw)
+        victim = out / "pages" / "surveys" / "pages-a.html"
+        assert victim.is_file(), "fixture must have written the page we are about to lose"
+        victim.unlink()
+        return n
+
+    monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
+    with pytest.raises(RuntimeError, match="surveys/pages-a"):
+        build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
+                           "--bundle-edi", "--no-validate",
+                           "--products", str(tmp_path / "out" / "products"),
+                           "--sitemap-base", BASE])
+
+
+def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch):
+    """The other half of the reconciliation: station pages are deliberately NOT advertised in the
+    sitemap, so a missing one cannot be caught by the URL sweep - but /stations/<id> is a published
+    URL shape that inbound links use, and a missing page 404s it. FAILS IF a station document
+    without its page leaves the build."""
+    surveys = _make_survey(tmp_path)
+    real = build_portal.pages.emit_pages
+
+    def _lose_one(out, base, **kw):
+        n = real(out, base, **kw)
+        victim = sorted((out / "pages" / "stations").glob("*.html"))[0]
+        victim.unlink()
+        return n
+
+    monkeypatch.setattr(build_portal.pages, "emit_pages", _lose_one)
+    with pytest.raises(RuntimeError, match="station page"):
+        build_portal.main(["--surveys", str(surveys), "--out", str(tmp_path / "out"),
+                           "--bundle-edi", "--no-validate",
+                           "--products", str(tmp_path / "out" / "products"),
+                           "--sitemap-base", BASE])
+
+
+def test_the_report_the_build_leaves_behind_is_the_one_it_validated(tmp_path, monkeypatch):
+    """build_report.json is written TWICE on a --sitemap-base build: once before the sitemap block,
+    and once again after emit_pages with the page count added. The schema self-check ran on the
+    first, pages-less object, so the file actually left on disk was never validated inside the
+    build at all - the one artefact the build's own gate did not cover was the one it shipped.
+
+    Driven by an emitter that reports its page count as a string: the report then violates its own
+    schema ("pages": {"type": "integer"}) in exactly the write the check could not see. FAILS on
+    the pre-fix engine, which completes rc=0 and leaves the non-conforming file on disk."""
+    surveys = _make_survey(tmp_path)
+    real = build_portal.pages.emit_pages
+    monkeypatch.setattr(build_portal.pages, "emit_pages",
+                        lambda out, base, **kw: str(real(out, base, **kw)))
+    out = tmp_path / "out"
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
+                            "--no-validate", "--products", str(out / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 2, f"a non-conforming build_report must fail the build, got rc={rc}"
+
+
+def test_the_engine_image_layout_is_not_read_as_a_portal_checkout(tmp_path, monkeypatch):
+    """The PRODUCTION build ships no portal, and the static-page leg must know it.
+
+    deploy/docker/engine.Dockerfile copies exactly one portal artifact into the image
+    (portal/src/contract.js, so the contract gate can run against real bytes). So <repo>/portal
+    EXISTS in the image the box builds with, and contains nothing else. A leg that decides "is a
+    portal visible?" by asking whether that directory exists therefore concludes the portal has
+    LOST about.html, releases.html and add-survey.html, and `make rebuild-data` aborts on three
+    URLs whose documents ship in a different image entirely.
+
+    Modelled by pointing the module at an image-shaped tree and running the deploy's own flags.
+    FAILS on the pre-fix engine with "sitemap advertises https://.../about.html but the portal
+    ships no about.html" and a RuntimeError out of the reconciliation."""
+    image_root = tmp_path / "app"
+    (image_root / "portal" / "src").mkdir(parents=True)
+    (image_root / "portal" / "src" / "contract.js").write_text("// generated\n", encoding="utf-8")
+    monkeypatch.setattr(build_portal, "__file__",
+                        str(image_root / "engine" / "extract" / "build_portal.py"))
+    surveys = _make_survey(tmp_path)
+    out = tmp_path / "out"
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
+                            "--no-validate", "--products", str(out / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 0, f"the image-shaped build must complete, got rc={rc}"
+    assert (out / "pages" / "surveys" / "index.html").is_file()
+    assert build_portal._portal_dir() is None, (
+        "a portal directory holding only the generated contract.js is not a portal checkout")
+
+
+def test_a_visible_portal_checkout_still_has_its_static_pages_reconciled(tmp_path, monkeypatch):
+    """The other side of the same gate: where a REAL portal checkout IS visible (CI, a dev box,
+    the build-products lane), a sitemap URL for a static page the portal does not ship is still a
+    hard error. FAILS IF the image-layout fix turns the static-page leg into a permanent no-op."""
+    checkout = tmp_path / "checkout"
+    (checkout / "portal").mkdir(parents=True)
+    (checkout / "portal" / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
+    monkeypatch.setattr(build_portal, "__file__",
+                        str(checkout / "engine" / "extract" / "build_portal.py"))
+    assert build_portal._portal_dir() is not None, "a checkout with index.html IS a portal tree"
+    problems = build_portal._reconcile_pages_with_sitemap(
+        tmp_path / "out", f"{BASE}/", [f"{BASE}/", f"{BASE}/about.html"], {})
+    assert any("about.html" in p for p in problems), (
+        f"a missing static page must still be reported on a real checkout: {problems}")
 
 
 def test_survey_page_content_and_dataset_jsonld(tmp_path):
@@ -227,10 +383,17 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
         "duplicate contributor rows must group into one person row"
     assert "Project Leader" in page and "Data Collector" in page
     assert "Imaging things" in page and "10.1080/08123985.2024.9999999" in page
-    # og tags on the page (image = per-survey card when Pillow rendered one, else the root card)
+    # og tags on the page (image = per-survey card when Pillow rendered one, else the root card).
+    # The URL FORM is pinned, not just the file: the cards live inside the DATA volume, which the
+    # box serves under /data/*, so the only reachable URL for pages/og/<slug>.png is
+    # {base}/data/pages/og/<slug>.png. A {base}/pages/... form advertises a 404 to every crawler
+    # and link-preview fetcher (the @entityPage rewrite is the only other route into that tree and
+    # it matches the two-segment entity shapes alone).
     assert 'property="og:title"' in page and 'name="twitter:card"' in page
     m = re.search(r'property="og:image" content="([^"]+)"', page)
     assert m, "og:image required"
+    assert m.group(1) in (f"{BASE}/data/pages/og/pages-r.png", f"{BASE}/vendor/social-card.png"), \
+        f"og:image must be the SERVED URL form (/data/pages/og/...), got {m.group(1)}"
     if "/pages/og/" in m.group(1):
         card = out / "pages" / "og" / "pages-r.png"
         assert card.is_file() and card.read_bytes()[:2] == b"\x89P", "referenced card must exist"
@@ -252,6 +415,41 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert ld["measurementTechnique"] == "magnetotellurics"
     assert ld["creator"]["sameAs"] == "https://ror.org/00892tw58"
     assert ld["version"] == "1.2.3"
+
+
+def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
+    """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
+    the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
+    site-wide, including the 404 page's own recovery link), and nothing on any survey page named
+    the collection it belongs to - so the graph ran collection -> surveys only and the collection
+    page had zero inbound links. FAILS IF the site crumb, the working hub link, or the collection
+    edge is missing, or if the dead hash route reappears."""
+    surveys = _make_rich_survey(tmp_path)
+    pkg = surveys / "pages-r"
+    y = (pkg / "survey.yaml").read_text(encoding="utf-8")
+    (pkg / "survey.yaml").write_text(y + "collection:\n  id: testcoll\n  title: AusLAMP Test\n",
+                                     encoding="utf-8")
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+    assert ('<p class="crumb"><a href="/">AusMT</a> / <a href="/surveys">surveys</a> / '
+            "Pages R</p>") in page, "the survey page must carry the site crumb"
+    assert '<a class="navbtn" href="/surveys">&#8592; All surveys</a>' in page, \
+        "the back-nav must reach the surveys hub, not a hash route"
+    assert 'href="/#/surveys"' not in page, "the dead hash route must be gone from the page"
+    assert 'Part of the <a href="/collections/testcoll">AusLAMP Test</a> collection' in page, \
+        "a member survey must link its collection as discovery (not as a citable parent)"
+    coll = (out / "pages" / "collections" / "testcoll.html").read_text(encoding="utf-8")
+    assert ('<p class="crumb"><a href="/">AusMT</a> / <a href="/collections">collections</a> / '
+            "AusLAMP Test</p>") in coll, "the collection crumb must link the collections hub"
+
+
+def test_a_survey_without_a_collection_says_nothing_about_one(tmp_path):
+    """FAILS IF the collection line renders for a survey that declares no membership. The edge is a
+    fact from the survey's own record; absence makes no assertion."""
+    surveys = _make_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-a.html").read_text(encoding="utf-8")
+    assert "Part of the" not in page and "/collections/" not in page
 
 
 def test_sitemap_lastmod_comes_from_release_notes_only(tmp_path):
@@ -312,6 +510,10 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              base="https://x.example")
     assert "Raw time series" in page and "1 of 1 stations" in page
     assert "L0 3.2 GB" in page, "the table cell states the level and the real size"
+    # The download panel used to send a reader standing on THIS survey's page to the bare map with
+    # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
+    assert 'from the <a href="/#/survey/s">interactive portal</a>' in page, \
+        "the download-script link must keep the survey context"
     assert "MTH5 time series" not in page, "an absent level must render no panel"
     page2 = pages.survey_page(slug="s", label="S", sm_doc=None,
                               smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},

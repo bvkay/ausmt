@@ -187,6 +187,14 @@ document.getElementById("navSurveys").onclick=()=>setView("surveys");
 document.getElementById("navCollections").onclick=()=>setView("collections");
 
 function routeFromHash(){
+  // The PLURAL routes. Published HTML has pointed at #/surveys since the entity pages shipped (every
+  // survey page's back-nav, plus 404.html's recovery link) and no branch matched it, so the hash fell
+  // through and the reader stayed on whatever view was showing. Those links now target the served
+  // /surveys and /collections index pages, but the hash form is out in the wild for good, so it lands
+  // where its name promises. Listed first, and matched EXACTLY, so neither shadows the singular
+  // entity routes below (the strings share a prefix).
+  if(location.hash==="#/surveys"){setView("surveys");return;}
+  if(location.hash==="#/collections"){setView("collections");return;}
   const mc=location.hash.match(/^#\/collection\/(.+)$/);
   if(mc){openCollectionPage(decodeURIComponent(mc[1]));return;}
   const m=location.hash.match(/^#\/station\/(.+)$/);
@@ -196,7 +204,17 @@ function routeFromHash(){
     if(s){if(curView!=="map")setView("map");openStation(s.i);}return;}
   const msv=location.hash.match(/^#\/survey\/(.+)$/);
   if(msv){const slug=decodeURIComponent(msv[1]),sv=SLUG_TO_SURVEY[slug];
-    if(sv)openSurvey(sv);return;}                      // unknown slug: fall through, no crash, no view change
+    // The entity page's button for this route is labelled "View all stations on the main map", and it
+    // used to open a drawer over whatever view was showing with the map at its default national
+    // extent: openSurvey rewrites the hash and renders, it never framed anything, and the setView
+    // above is on the station branch only. focusSurvey is the seam the drawer's own "View on map"
+    // control uses, so the route now delivers the same framing and the same Option-A dim. Called
+    // AFTER openSurvey so the fit padding measures the drawer that is actually open.
+    // Called directly, as filters.js does: focusSurvey is a top-level declaration in drawer.js,
+    // which index.html loads before this file, so a typeof guard here could never be false and
+    // would only turn a real regression into a silent no-op.
+    if(sv){openSurvey(sv);focusSurvey(sv);}
+    return;}                                           // unknown slug: fall through, no crash, no view change
   // hash fell through (e.g. browser Back to ''): if a full-width collection detail is showing, restore a tab view
   if(curView==="collection")setView("map");}
 window.addEventListener("hashchange",routeFromHash);

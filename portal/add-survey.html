@@ -15,6 +15,10 @@
 <script defer data-domain="YOUR-DOMAIN" src="https://YOUR-PLAUSIBLE-HOST/js/script.js"></script> -->
 <script src="src/analytics-shim.js"></script><!-- external (not inline); the app script element below stays this page's single intentional inline block (CSP allows inline here only). NOTE: never write a literal script OPEN TAG inside a comment on this page, tests/add_survey_logic.test.js extracts inline blocks by regex and would treat it as real. -->
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<!-- The one true URL for this page. It is substantive, indexable, linked from the root and
+     now advertised in sitemap.xml, so it must say which address it is served at (index.html
+     has carried its own canonical since the head-hygiene lane; these three had none). -->
+<link rel="canonical" href="https://ausmt.auscope.org.au/add-survey.html">
 <style>
   :root{
     --ink:#11182D; --panel:#18213D; --panel-2:#1E2B4F; --line:#2B3557;
@@ -194,7 +198,7 @@
   <a class="logolink" href="https://www.auscope.org.au" target="_blank" rel="noopener noreferrer" title="AuScope, Australia's Earth science research infrastructure"><img class="auscope-logo" src="vendor/auscope-icon-white.png" alt="AuScope"></a>
   <div class="wordmark">AusMT</div>
   <div class="tagline">Contribute a survey</div>
-  <a class="back" href="index.html">← Back to portal</a>
+  <a class="back" href="/">← Back to portal</a>
 </header>
 <main>
   <h1>Contribute a survey</h1>

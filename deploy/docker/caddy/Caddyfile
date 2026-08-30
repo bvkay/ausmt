@@ -80,15 +80,45 @@
 	}
 	header @revalidate Cache-Control "no-cache"
 
-	# /index.html serves the same document as / (the host's one duplicate-content pair): crawlers
-	# must see a single canonical root, so the alias 301s home.
-	redir /index.html / 301
+	# The raw query rebuilt as "?<query>", or "" when there is none, evaluated lazily at redirect
+	# time (the same construct and the same placeholder name the front door uses). Every 301 below
+	# carries it: a decorated link must survive canonicalisation, and a bare "?" must never be
+	# appended to a target that had no query.
+	map {http.request.uri} {ausmt_qs} {
+		~\?(.*)$ "?${1}"
+		default ""
+	}
 
-	# ---- Tier-3 entity landing pages + the sitemap: static build products served at the path-URL
-	# contract's own shapes (they ride the atomic current swap with every other product). The
-	# rewrite keys on the exact two-segment shape; anything else falls through, and an unknown id
-	# 404s from file_server honestly. The pages are what sitemap.xml advertises, emitted by the
-	# same build under the same flag, so the two can never disagree.
+	# /index.html serves the same document as / (the host's one duplicate-content pair): crawlers
+	# must see a single canonical root, so the alias 301s home. The QUERY rides along: about.html's
+	# only guided-tour entry point outside the intro panel is /index.html?tour=1, and the SPA reads
+	# the flag from location.search, so a bare target meant the tour could never start from there.
+	redir /index.html /{ausmt_qs} 301
+
+	# ---- URL canonicalisation for the published entity shapes ------------------------------------
+	# Nothing on the site emits a trailing-slash entity URL, but readers, mail clients, CMSs and
+	# reference managers add one habitually - and @entityPage below is $-anchored, so every one of
+	# those variants used to miss it, miss /data/*, miss the portal root and land on 404.html. They
+	# 301 to the published slash-free form instead. The front door passes the slash form through
+	# byte-for-byte (its own pin), which is precisely why the canonicalisation lives HERE: one hop,
+	# at the layer that knows the shapes. The index aliases (/surveys/, /surveys/index and its .html
+	# twin) fold onto the bare form for the same reason the root alias does: one URL per document.
+	@entitySlash path_regexp esl ^/(surveys|stations|collections)/([A-Za-z0-9][A-Za-z0-9._-]*)/$
+	redir @entitySlash /{re.esl.1}/{re.esl.2}{ausmt_qs} 301
+	@indexAlias path_regexp ial ^/(surveys|collections)(?:/|/index|/index\.html)$
+	redir @indexAlias /{re.ial.1}{ausmt_qs} 301
+
+	# ---- Tier-3 landing pages (entities + the two hub pages) + the sitemap: static build products
+	# served at the path-URL contract's own shapes (they ride the atomic current swap with every
+	# other product). Each rewrite keys on an exact shape; anything else falls through, and an
+	# unknown id 404s from file_server honestly. The pages are what sitemap.xml advertises, emitted
+	# by the same build under the same flag, and the build refuses to finish if the two disagree.
+	@indexPage path_regexp ip ^/(surveys|collections)$
+	handle @indexPage {
+		root * /srv/data/current
+		rewrite * /pages/{re.ip.1}/index.html
+		file_server
+	}
 	@entityPage path_regexp ep ^/(surveys|stations|collections)/([A-Za-z0-9][A-Za-z0-9._-]*)$
 	handle @entityPage {
 		root * /srv/data/current
@@ -336,15 +366,45 @@
 	}
 	header @revalidate Cache-Control "no-cache"
 
-	# /index.html serves the same document as / (the host's one duplicate-content pair): crawlers
-	# must see a single canonical root, so the alias 301s home.
-	redir /index.html / 301
+	# The raw query rebuilt as "?<query>", or "" when there is none, evaluated lazily at redirect
+	# time (the same construct and the same placeholder name the front door uses). Every 301 below
+	# carries it: a decorated link must survive canonicalisation, and a bare "?" must never be
+	# appended to a target that had no query.
+	map {http.request.uri} {ausmt_qs} {
+		~\?(.*)$ "?${1}"
+		default ""
+	}
 
-	# ---- Tier-3 entity landing pages + the sitemap: static build products served at the path-URL
-	# contract's own shapes (they ride the atomic current swap with every other product). The
-	# rewrite keys on the exact two-segment shape; anything else falls through, and an unknown id
-	# 404s from file_server honestly. The pages are what sitemap.xml advertises, emitted by the
-	# same build under the same flag, so the two can never disagree.
+	# /index.html serves the same document as / (the host's one duplicate-content pair): crawlers
+	# must see a single canonical root, so the alias 301s home. The QUERY rides along: about.html's
+	# only guided-tour entry point outside the intro panel is /index.html?tour=1, and the SPA reads
+	# the flag from location.search, so a bare target meant the tour could never start from there.
+	redir /index.html /{ausmt_qs} 301
+
+	# ---- URL canonicalisation for the published entity shapes ------------------------------------
+	# Nothing on the site emits a trailing-slash entity URL, but readers, mail clients, CMSs and
+	# reference managers add one habitually - and @entityPage below is $-anchored, so every one of
+	# those variants used to miss it, miss /data/*, miss the portal root and land on 404.html. They
+	# 301 to the published slash-free form instead. The front door passes the slash form through
+	# byte-for-byte (its own pin), which is precisely why the canonicalisation lives HERE: one hop,
+	# at the layer that knows the shapes. The index aliases (/surveys/, /surveys/index and its .html
+	# twin) fold onto the bare form for the same reason the root alias does: one URL per document.
+	@entitySlash path_regexp esl ^/(surveys|stations|collections)/([A-Za-z0-9][A-Za-z0-9._-]*)/$
+	redir @entitySlash /{re.esl.1}/{re.esl.2}{ausmt_qs} 301
+	@indexAlias path_regexp ial ^/(surveys|collections)(?:/|/index|/index\.html)$
+	redir @indexAlias /{re.ial.1}{ausmt_qs} 301
+
+	# ---- Tier-3 landing pages (entities + the two hub pages) + the sitemap: static build products
+	# served at the path-URL contract's own shapes (they ride the atomic current swap with every
+	# other product). Each rewrite keys on an exact shape; anything else falls through, and an
+	# unknown id 404s from file_server honestly. The pages are what sitemap.xml advertises, emitted
+	# by the same build under the same flag, and the build refuses to finish if the two disagree.
+	@indexPage path_regexp ip ^/(surveys|collections)$
+	handle @indexPage {
+		root * /srv/data/current
+		rewrite * /pages/{re.ip.1}/index.html
+		file_server
+	}
 	@entityPage path_regexp ep ^/(surveys|stations|collections)/([A-Za-z0-9][A-Za-z0-9._-]*)$
 	handle @entityPage {
 		root * /srv/data/current

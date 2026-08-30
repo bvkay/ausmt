@@ -59,6 +59,14 @@ if the VPS-box path is DERP-relayed (the 2026-08-28 relay trap: multi-second TTF
 capped throughput with nothing else surfacing it); the remediation is a `tailscaled` restart on
 the box, then `tailscale ping ausmt-box` until a pong reports a direct endpoint.
 
+**The hub-page window (index-pages lane).** That same order opens a gap worth naming. After the box
+rebuild, `sitemap.xml` advertises `/surveys` and `/collections`, but the front door still 301s both
+to the SPA root until `install-frontdoor.sh` runs, so a crawler reading the sitemap in that window
+finds two freshly advertised URLs answering with a redirect to a different page. The reverse order
+is worse (both hubs 404 at the public name for the whole cold rebuild, ~30 min), so the order stands:
+run the front-door step immediately after the box step, and if the gap ran long, re-submit the
+sitemap afterwards.
+
 1.1  On the box, update the checkout to the branch/release carrying C47 and rebuild + restart the
      portal image so `:8081` is live:
 ```sh
@@ -427,6 +435,8 @@ Path-shaped URLs are the PUBLISHED CONTRACT for the portal's three entity kinds:
 /surveys/<slug>        -> the portal with that survey's view open
 /stations/<ausmt_id>   -> the portal with that station's drawer open
 /collections/<id>      -> the portal with that collection page open
+/surveys               -> the surveys index page (every published survey)
+/collections           -> the collections index page
 ```
 
 Pre-DOI is the cheapest moment to fix URL shape forever: the shape is what gets published (emails,
@@ -440,14 +450,43 @@ inherited), and the box reader serves them at the exact published shapes. The fr
 the deep entity forms THROUGH to the reader like any portal path - a crawler receives indexable
 HTML with a canonical at this exact URL and a schema.org Dataset block, and a human receives the
 landing page with its interactive-portal deep link. **No published URL changed** when this tier
-replaced tier 1's redirects, exactly as the contract promised. A bare `/surveys` or `/surveys/`
-(and the station/collection twins) has no entity to serve and still 301s to the portal root with
-its query preserved; a legacy-name (`ausmt.au`) deep link takes one host 301 (path and query
-preserved) and then the canonical host serves the page. The entity id rides byte-for-byte to the
-reader (never decoded or re-encoded); an unknown id 404s from the reader honestly. The doctor's
+replaced tier 1's redirects, exactly as the contract promised.
+
+`sitemap.xml` also advertises the three static portal documents (`about.html`, `releases.html`,
+`add-survey.html`). Those ship with the PORTAL image, not the engine image the box builds data
+with, so the build's sitemap/pages reconciliation cannot see them: its static-page leg checks them
+only where a real portal checkout is visible, which means CI and a dev box, never `make
+rebuild-data`. If one of those three documents is ever renamed or dropped, nothing on the box will
+say so; check them by hand in section 9's verification list after a portal-image change.
+
+**The bare prefixes split.** `/surveys` and `/collections` now SERVE a prerendered **index page**
+from the same `pages/` product, so both pass through the front door to the reader exactly as an
+entity shape does, and both carry their own rel=canonical at the bare URL. A bare `/stations` (and
+its trailing-slash twin) still **301s to the portal root** with its query preserved: station pages
+are noindex and deliberately unadvertised, so there is nothing to list and never will be. If a
+`/surveys` or `/collections` bare redirect ever reappears at the edge, two canonical indexable hub
+pages become unreachable from the public name; the doctor's pathurl leg probes both for that
+reason, and demands **200 plus the page's own rel=canonical** (a reinstated redirect answers 301
+with an empty body, which a body-only probe cannot tell from an edge that is down). A legacy-name (`ausmt.au`) deep link takes one host 301 (path and query preserved) and
+then the canonical host serves the page. The entity id rides byte-for-byte to the reader (never
+decoded or re-encoded); an unknown id 404s from the reader honestly.
+
+**URL canonicalisation is answered BOX-SIDE, in one hop.** Nothing on the site emits a
+trailing-slash entity URL, but inbound links carry one constantly, and the reader's entity matcher
+is anchored, so those variants used to 404. The box now 301s `/surveys/<slug>/` (and the station
+and collection twins) to the published slash-free form, and folds `/surveys/`, `/surveys/index` and
+`/surveys/index.html` onto `/surveys`, query preserved in every case. The front door still passes
+the slash form through byte-for-byte: the 301 belongs at the layer that knows the shapes. The
+`/index.html` alias also 301s to `/` carrying its query, so `/index.html?tour=1` reaches the guided
+tour (a bare target dropped the flag and the tour never started). The doctor's
 pathurl leg (4c) demands the landing page's own rel=canonical at the probed URL. Analytics: an
 entity-page hit is not in aggregate_stats.py's counted path classes, so a path-link visit is
-counted once, at the SPA boot that follows the click-through (pinned in deploy/tests).
+counted once, at the SPA boot that follows the click-through (pinned in deploy/tests). The two hub
+pages are UNCOUNTED in the same way, and with no click-through to fall back on: `/surveys` and
+`/collections` used to 301 into the SPA and be counted at the boot that followed, and now serve a
+static page from the box instead. Neither bare prefix is a counted path class, so hub traffic does
+not appear in the usage stats at all until someone opens the map. Adding those two classes belongs
+to an analytics lane, not here.
 
 **Tier 2 (deferred): real SPA path routes.** The app is served AT the path, the router reads
 `location.pathname`, and the pretty URL persists in the address bar instead of collapsing to the

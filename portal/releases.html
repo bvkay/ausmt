@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Releases - AusMT</title>
 <link rel="icon" href="vendor/favicon.svg" type="image/svg+xml">
+<!-- The one true URL for this page. It is substantive, indexable, linked from the root and
+     now advertised in sitemap.xml, so it must say which address it is served at (index.html
+     has carried its own canonical since the head-hygiene lane; these three had none). -->
+<link rel="canonical" href="https://ausmt.auscope.org.au/releases.html">
 <style>
   /* Treatment D+ palette, the same five surface/accent tokens declared verbatim on index.html,
      about.html and add-survey.html (portal/tests/test_theme_tokens.py pins those three against each
@@ -134,10 +138,11 @@
       <!-- Same three primary items, same ids and same order as index.html and about.html, so the
            header is comparable element-for-element (the header-parity pin). They are links here
            because this is a static page; on index they are <button>s that switch app views in place.
-           None is active: no map/surveys/collections view is the current page. -->
-      <a id="navMap" href="index.html">Map</a>
-      <a id="navSurveys" href="index.html">Surveys</a>
-      <a id="navCollections" href="index.html">Collections</a>
+           None is active: no map/surveys/collections view is the current page. Each points at its
+           own destination (index-pages lane): the SPA root, and the two prerendered index pages. -->
+      <a id="navMap" href="/">Map</a>
+      <a id="navSurveys" href="/surveys">Surveys</a>
+      <a id="navCollections" href="/collections">Collections</a>
     </nav>
     <!-- Docs wave, stage 2 (owner ruling): the header is FIVE items, namely Map, Surveys, Collections,
          About, Contribute. The sixth, "How to use AusMT", is retired on every page. It used to cross to

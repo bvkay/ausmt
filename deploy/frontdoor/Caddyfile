@@ -200,10 +200,11 @@
 	# entity forms now PASS THROUGH to the reader like any portal path: a crawler receives indexable
 	# HTML with a canonical at this exact URL, and a human receives the landing page with its
 	# interactive-portal deep link. No published URL changed, which is precisely what the contract
-	# promised when the tiers were designed. A BARE /surveys, /stations or /collections (and the
-	# trailing-slash twins) has no entity to serve and still 301s to the portal root, query
-	# preserved via the lazily-evaluated {ausmt_qs} map below (map is ordered ahead of every handle;
-	# its source is read at redirect time).
+	# promised when the tiers were designed. The bare prefixes now split: /surveys and /collections
+	# serve prerendered INDEX pages from the same pages/ product and pass through like any entity
+	# shape, while a bare /stations (and its trailing-slash twin) still 301s to the portal root,
+	# query preserved via the lazily-evaluated {ausmt_qs} map below (map is ordered ahead of every
+	# handle; its source is read at redirect time).
 	# {ausmt_pathurl_rest}: the raw request URI up to (not including) any '?', evaluated lazily.
 	# Consumed by the TIME-SERIES HAND-OFF table below as its map source; declared here beside its
 	# query twin so the two derived-URI views live in one place.
@@ -215,16 +216,15 @@
 		~\?(.*)$ "?${1}"
 		default ""
 	}
-	@surveys_bare path /surveys /surveys/
-	handle @surveys_bare {
-		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent
-	}
+	# A bare /stations has nothing to list and never will: the 2,625 station pages are served for
+	# the URL contract but are deliberately noindex and unadvertised, so the prefix keeps its 301
+	# to the portal root, query preserved. /surveys and /collections used to do the same because
+	# there was nothing behind them; the engine now emits an index page at each, the box serves it
+	# at that exact path, so those two prefixes PASS THROUGH to the reader like any other portal
+	# path. Redirecting them here would make two canonical, indexable hub pages unreachable from
+	# the public name, and the doctor's tier-3 leg probes both for exactly that reason.
 	@stations_bare path /stations /stations/
 	handle @stations_bare {
-		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent
-	}
-	@collections_bare path /collections /collections/
-	handle @collections_bare {
 		redir https://{$AUSMT_PUBLIC_NAME}/{ausmt_qs} permanent
 	}
 	# ---- end path-url contract ----------------------------------------------------------------------
