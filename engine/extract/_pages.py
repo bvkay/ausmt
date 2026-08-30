@@ -611,7 +611,8 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             f'<span class="lvlname">{_e(name)}</span></div>'
             f'<p style="margin:.2rem 0;font-size:.9rem">Hosted at NCI for '
             f'<b style="color:#fff">{len(rows)} of {n_stations} stations</b>{per}. '
-            f'Build a download script from the <a href="/">interactive portal</a>.</p>'
+            f'Build a download script from the <a href="/#/survey/{_e(slug)}">interactive '
+            f"portal</a>.</p>"
             f"{doi_line}</div>")
     bundle_items = []
     for row in sorted(bundle_rows or [], key=lambda r: (r or {}).get("format") or ""):
@@ -645,8 +646,20 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         ld["distribution"] = dist
 
     # ---- head-of-page blocks ----
-    nav = ('<div class="pagenav"><a class="navbtn" href="/#/surveys">&#8592; All surveys</a>'
+    # The site crumb the station and collection pages already carry: a survey page is the most
+    # likely landing page from search and social, and it had no route back to the root at all.
+    crumb = (f'<p class="crumb"><a href="/">AusMT</a> / <a href="/surveys">surveys</a> / '
+             f"{_e(title)}</p>")
+    nav = ('<div class="pagenav"><a class="navbtn" href="/surveys">&#8592; All surveys</a>'
            f'<a class="navbtn map" href="/#/survey/{_e(slug)}">View all stations on the main map</a></div>')
+    # The discovery edge into the collection this survey belongs to. A NAVIGATION link, never a
+    # citable-parent claim: collections are a discovery layer and hold no transfer functions of
+    # their own. Rendered only where the survey's own record declares membership.
+    coll_line = ""
+    _coll = smeta.get("collection") or {}
+    if _coll.get("id"):
+        coll_line = (f'<p class="crumb">Part of the <a href="/collections/{_e(_coll["id"])}">'
+                     f'{_e(_coll.get("title") or _coll["id"])}</a> collection</p>')
     cite = ""
     c = smeta.get("cite") or {}
     if c.get("au") or c.get("ti"):
@@ -837,10 +850,12 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                  + "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table></div>")
 
     body = (
+        f"{crumb}\n"
         f"{nav}\n"
         f"<h1>{_e(title)}</h1>\n"
         f'<p class="crumb">Magnetotelluric survey &#183; {_e(region)}'
         + (f" &#183; {_e(org)}" if org else "") + "</p>\n"
+        f"{coll_line}\n"
         f"{cite}\n{embargo}\n{hero}\n{stats}\n{facts_html}\n"
         + (f"<h2>Data &amp; downloads</h2>\n{''.join(panels)}\n" if panels else "")
         + f"{people_html}\n{pubs_html}\n{table}\n"
@@ -953,7 +968,8 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
         ld["temporalCoverage"] = f"{min(y0)}/{max(y1)}" if y1 else f"{min(y0)}/.."
     scatter = _collection_scatter([lbl for lbl, _s in member_slugs], member_points, title)
     body = (
-        f'<p class="crumb"><a href="/">AusMT</a> / collections</p>\n'
+        f'<p class="crumb"><a href="/">AusMT</a> / <a href="/collections">collections</a> / '
+        f"{_e(title)}</p>\n"
         f"<h1>{_e(title)}</h1>\n"
         f"<p>{_e(desc)}</p>\n"
         + scatter

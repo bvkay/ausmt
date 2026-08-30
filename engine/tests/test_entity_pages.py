@@ -347,6 +347,41 @@ def test_the_rich_survey_page_carries_the_design_of_record(tmp_path):
     assert ld["version"] == "1.2.3"
 
 
+def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
+    """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
+    the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
+    site-wide, including the 404 page's own recovery link), and nothing on any survey page named
+    the collection it belongs to - so the graph ran collection -> surveys only and the collection
+    page had zero inbound links. FAILS IF the site crumb, the working hub link, or the collection
+    edge is missing, or if the dead hash route reappears."""
+    surveys = _make_rich_survey(tmp_path)
+    pkg = surveys / "pages-r"
+    y = (pkg / "survey.yaml").read_text(encoding="utf-8")
+    (pkg / "survey.yaml").write_text(y + "collection:\n  id: testcoll\n  title: AusLAMP Test\n",
+                                     encoding="utf-8")
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
+    assert ('<p class="crumb"><a href="/">AusMT</a> / <a href="/surveys">surveys</a> / '
+            "Pages R</p>") in page, "the survey page must carry the site crumb"
+    assert '<a class="navbtn" href="/surveys">&#8592; All surveys</a>' in page, \
+        "the back-nav must reach the surveys hub, not a hash route"
+    assert 'href="/#/surveys"' not in page, "the dead hash route must be gone from the page"
+    assert 'Part of the <a href="/collections/testcoll">AusLAMP Test</a> collection' in page, \
+        "a member survey must link its collection as discovery (not as a citable parent)"
+    coll = (out / "pages" / "collections" / "testcoll.html").read_text(encoding="utf-8")
+    assert ('<p class="crumb"><a href="/">AusMT</a> / <a href="/collections">collections</a> / '
+            "AusLAMP Test</p>") in coll, "the collection crumb must link the collections hub"
+
+
+def test_a_survey_without_a_collection_says_nothing_about_one(tmp_path):
+    """FAILS IF the collection line renders for a survey that declares no membership. The edge is a
+    fact from the survey's own record; absence makes no assertion."""
+    surveys = _make_survey(tmp_path)
+    out = _build(surveys, tmp_path / "out")
+    page = (out / "pages" / "surveys" / "pages-a.html").read_text(encoding="utf-8")
+    assert "Part of the" not in page and "/collections/" not in page
+
+
 def test_sitemap_lastmod_comes_from_release_notes_only(tmp_path):
     """lastmod is emitted ONLY where it is honest: the survey's latest release-note date. A survey
     without release notes gets none (a per-build stamp on identical content would teach crawlers to
@@ -405,6 +440,10 @@ def test_ts_panels_and_cells_render_only_the_levels_the_register_carries():
                              base="https://x.example")
     assert "Raw time series" in page and "1 of 1 stations" in page
     assert "L0 3.2 GB" in page, "the table cell states the level and the real size"
+    # The download panel used to send a reader standing on THIS survey's page to the bare map with
+    # nothing selected (34 occurrences across 17 pages). It keeps the survey they were reading.
+    assert 'from the <a href="/#/survey/s">interactive portal</a>' in page, \
+        "the download-script link must keep the survey context"
     assert "MTH5 time series" not in page, "an absent level must render no panel"
     page2 = pages.survey_page(slug="s", label="S", sm_doc=None,
                               smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
