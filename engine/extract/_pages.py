@@ -563,33 +563,43 @@ def _related_by_identifies(smeta):
 # access does not make AusMT the cited object.
 _ACKNOWLEDGEMENT = ("Data were accessed through the AusMT national magnetotelluric data portal.")
 
-# The related-identifier rows that identify THIS survey rather than something near it: the whole
-# record, and the published transfer-function release the survey page is about. A collection row
-# names the parent, a raw_packed row names the time-series archive and a level3 row names a derived
-# model; none of the three is this dataset, so none is ever promoted into the locator slot.
-_SELF_IDENTIFIES = ("entire", "level2")
+# The related-identifier scopes that name THIS SURVEY RECORD rather than something near it. Only
+# `entire` qualifies. A collection row names the parent, a raw_packed row names the time-series
+# archive, a level3 row names a derived model and a level2 row names the published transfer-function
+# PRODUCT: each is a resource of the survey, not the survey, and the model requires that distinction
+# to survive (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md section 14, with survey-level and
+# resource-level citation separated in section 7). Promoting a product identifier would print it
+# under the survey's own authors and publisher, which asserts a citation neither layer states.
+_SELF_IDENTIFIES = ("entire",)
 
 
 def _citation_locator(smeta, access_url):
-    """The locator slot of the formatted citation, SOURCE-LED.
+    """The locator slot of the formatted citation, SOURCE-LED and SCOPE-BOUND.
 
     A citation should identify the dataset as persistently and specifically as the source allows
     (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md sections 3 and 4). Where the survey's own
     record carries a persistent identifier FOR ITSELF, that identifier is the locator. The AusMT
     page URL is used only where the record carries none, and then as the access route rather than as
-    a claim that the AusMT page is the object being cited."""
+    a claim that the AusMT page is the object being cited.
+
+    Two rows claiming the same self-identifying scope are not a tie to break. Row order in a curated
+    YAML file is not a curation decision, so an ambiguous record promotes nothing and keeps the
+    access route: section 13 rules that an absent preferred citation means AusMT asserts none, which
+    is true and useful, where an arbitrary pick is neither. Naming one target among several is a
+    curation act belonging in a curator-declared preferred identifier (section 12)."""
     doi = _doi_url((smeta or {}).get("doi"))
     if doi:
         return doi
     pid = str((smeta or {}).get("pid") or "").strip()
     if pid.startswith(("http://", "https://")):
         return pid
-    related = _related_by_identifies(smeta)
     for key in _SELF_IDENTIFIES:
-        row = related.get(key)
-        url = _doi_url((row or {}).get("identifier")) if row else None
-        if url:
-            return url
+        rows = [row for row in (smeta or {}).get("related_identifiers") or []
+                if (row or {}).get("identifies") == key]
+        if not rows:
+            continue
+        url = _doi_url(rows[0].get("identifier")) if len(rows) == 1 else None
+        return url or access_url
     return access_url
 
 

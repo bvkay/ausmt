@@ -46,6 +46,15 @@ def _make_survey(tmp_path, *, blurb="A test survey.", slug="pages-a", name="Page
     return tmp_path / "surveys"
 
 
+def _cite_block(page) -> str:
+    """Just the citation disclosure. A related identifier legitimately renders elsewhere on the page
+    (a download card's archive-release line, the Identifiers and provenance list), so a whole-page
+    search cannot tell "this DOI is on the page" from "this DOI is the citation target"."""
+    m = re.search(r'<details class="cite">.*?</details>', page, re.S)
+    assert m, "the page carries no citation disclosure to read"
+    return m.group(0)
+
+
 def _build(surveys, out, *, sitemap=True, extra=()):
     argv = ["--surveys", str(surveys), "--out", str(out), "--bundle-edi", "--no-validate",
             "--products", str(out / "products")]
@@ -503,10 +512,22 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
     is the access route otherwise, stated as a separate acknowledgement rather than smuggled into the
     citation.
 
-    pages-c carries a source DOI on its `identifies: entire` row; pages-d carries none. FAILS IF the
-    citation is not a disclosure, if a survey with a source identifier still prints the AusMT URL as
-    its locator, if a survey WITHOUT one loses its access route, or if the acknowledgement stops
-    being a separate verbatim line."""
+    Scope, and only scope, decides. Model section 7 puts the SURVEY-level citation in
+    survey-metadata.json and the RESOURCE-level identifiers in station.json resources[], and section
+    14 requires the model to PRESERVE that distinction: an identifier naming one product of the
+    survey is not the survey. So only a row that identifies the whole record (`identifies: entire`)
+    can hold the locator; a `level2` row names the published transfer-function product, and
+    promoting it would tell a reader to cite an NCI product under the survey's own authors and
+    publisher. Where two rows claim the same self-identifying scope there is no single answer, and
+    section 13 is explicit that absence is not an assertion, so the locator falls back to the access
+    route rather than letting YAML row order choose a citation target.
+
+    pages-c carries a source DOI on its `identifies: entire` row; pages-d carries none; pages-e
+    carries only a `level2` product DOI; pages-f carries two `entire` rows. FAILS IF the citation is
+    not a disclosure, if a survey with a source identifier still prints the AusMT URL as its
+    locator, if a survey WITHOUT one loses its access route, if a resource-level identifier is
+    promoted into the survey citation, if row order decides an ambiguous case, or if the
+    acknowledgement stops being a separate verbatim line."""
     surveys = _make_survey(tmp_path, slug="pages-c", name="Pages C")
     (surveys / "pages-c" / "survey.yaml").write_text(
         (surveys / "pages-c" / "survey.yaml").read_text(encoding="utf-8")
@@ -518,11 +539,34 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
     (surveys / "pages-d" / "survey.yaml").write_text(
         (surveys / "pages-d" / "survey.yaml").read_text(encoding="utf-8")
         + "creators:\n  - name: Kay, Ben\n    name_type: person\n", encoding="utf-8")
+    # pages-e is the shape 8 of the 27 corpus surveys carry: a level2 product DOI and no row for
+    # the record itself.
+    _make_survey(tmp_path, slug="pages-e", name="Pages E")
+    (surveys / "pages-e" / "survey.yaml").write_text(
+        (surveys / "pages-e" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n"
+          "related_identifiers:\n"
+          "  - {identifier: 10.25914/wxkq-hj14, identifier_type: DOI, identifies: level2,"
+          " relation: IsVariantFormOf}\n"
+          "  - {identifier: 10.25914/7vwr-da74, identifier_type: DOI, identifies: raw_packed,"
+          " relation: IsDerivedFrom}\n", encoding="utf-8")
+    # pages-f is the ambiguous shape: two rows claim the whole record, so neither can speak for it.
+    _make_survey(tmp_path, slug="pages-f", name="Pages F")
+    (surveys / "pages-f" / "survey.yaml").write_text(
+        (surveys / "pages-f" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n"
+          "related_identifiers:\n"
+          "  - {identifier: 10.25914/0pt0-qw75, identifier_type: DOI, identifies: entire,"
+          " relation: IsVariantFormOf}\n"
+          "  - {identifier: 10.25914/bnhe-3w04, identifier_type: DOI, identifies: entire,"
+          " relation: IsVariantFormOf}\n", encoding="utf-8")
     out = _build(surveys, tmp_path / "out")
     src = (out / "pages" / "surveys" / "pages-c.html").read_text(encoding="utf-8")
     plain = (out / "pages" / "surveys" / "pages-d.html").read_text(encoding="utf-8")
+    product = (out / "pages" / "surveys" / "pages-e.html").read_text(encoding="utf-8")
+    ambiguous = (out / "pages" / "surveys" / "pages-f.html").read_text(encoding="utf-8")
 
-    for page in (src, plain):
+    for page in (src, plain, product, ambiguous):
         assert '<details class="cite">' in page, "the citation must become a disclosure"
         assert "<summary>Cite this survey</summary>" in page, "the disclosure must say what it holds"
         assert "Cite as:" in page and "Kay, B." in page, "the formatted citation text is unchanged"
@@ -537,6 +581,18 @@ def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
         "the AusMT page URL must not hold the locator slot when a source identifier exists"
     assert f"<code>{BASE}/surveys/pages-d</code>" in plain, \
         "with no source identifier the AusMT URL stays as the access route"
+
+    assert "10.25914/wxkq-hj14" not in _cite_block(product), \
+        "a level2 row identifies a PRODUCT of the survey, not the survey: it must never hold the " \
+        "survey-level locator (model section 14)"
+    assert f"<code>{BASE}/surveys/pages-e</code>" in product, \
+        "with no row for the record itself the AusMT URL stays as the access route"
+
+    assert "10.25914/0pt0-qw75" not in _cite_block(ambiguous), \
+        "two rows claiming the whole record leave no single citation target, so YAML row order " \
+        "must not choose one"
+    assert f"<code>{BASE}/surveys/pages-f</code>" in ambiguous, \
+        "an ambiguous record asserts no preferred citation and keeps the access route"
 
 
 def test_the_time_series_levels_speak_the_portal_vocabulary_and_do_not_collide():
