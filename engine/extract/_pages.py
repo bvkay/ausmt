@@ -386,6 +386,9 @@ _CSS = """
   .collmap{margin:1rem 0 .4rem;max-width:820px}
   .collmap svg{width:100%;height:auto;display:block}
   .colllegend{font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.2rem 0 1rem}
+  .collhero{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,230px);gap:1.2rem;align-items:start}
+  .collhero .cstats{flex-direction:column;margin:1rem 0 0}
+  @media(max-width:860px){.collhero{grid-template-columns:1fr;gap:0}.collhero .cstats{flex-direction:row}}
   .memlist{display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0 1rem}
   .mem{border-bottom:1px solid #1E2B4F;padding-bottom:.5rem}
   .mem:last-child{border-bottom:none}
@@ -1391,8 +1394,12 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
         f"<h1>{_e(title)}</h1>\n"
         + (f"<p>{chips}</p>\n" if chips else "")
         + f"{lede}\n"
-        + scatter
-        + f"{stats}\n"
+        # The map and the headline metrics share one hero container so the numbers ride BESIDE the
+        # map on a wide screen. Stacked, an 820px map stands tall enough to push the four figures
+        # off the first screen, and a reader had to scroll the whole hero to learn how many surveys
+        # and stations the collection holds. The survey page's hero already reads this way; below
+        # the breakpoint the rail falls back under the map.
+        + f'<div class="collhero"><div>{scatter}</div>{stats}</div>\n'
         + f'<p><a class="navbtn" href="/#/collection/{_e(cid)}">Open in the interactive portal</a></p>\n'
         + f'<h2 id="about">About</h2>\n<p class="prose">{_e(desc)}</p>\n'
         + data_section

@@ -995,6 +995,19 @@ def test_the_collection_page_is_an_exploratory_layer(tmp_path):
     assert "extent" not in page.lower().split('<h2 id="about"')[0], \
         "angular extent is not a headline metric (the map communicates spatial extent)"
     assert page.index('class="cstats"') < order[0], "the metrics ride the hero"
+    # The metrics ride BESIDE the map on a wide screen, not under it. Stacked, the 820px map stands
+    # 686px tall and pushed the four headline numbers to y=1020 on a 1280x900 screen: a reader had
+    # to scroll past the whole hero to learn how many surveys and stations the collection holds.
+    # A layout fact cannot be measured from markup, so what is pinned is the structure that carries
+    # it: the metrics live inside the hero container, and the container declares the two-column
+    # grid that puts them in a rail. The survey page's hero already works this way.
+    hero_block = page.split('<div class="collhero">')[1].split("</div>\n<p>")[0]
+    assert 'class="collmap"' in hero_block and 'class="cstats"' in hero_block, \
+        "the map and the headline metrics must share one hero container to sit side by side"
+    assert re.search(r"\.collhero\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(", page), \
+        "the hero must declare a map column and a metric rail beside it"
+    assert re.search(r"@media\(max-width:\d+px\)\{\.collhero\{grid-template-columns:1fr", page), \
+        "the rail must fall under the map on a narrow screen (the responsive collapse must hold)"
 
     # data available: rolled up from served facts, and never a download claim for the collection
     assert "180 stations" in page and "Packed raw" in page, \
