@@ -600,10 +600,16 @@ _SITEMAP_STATIC_PAGES = ("about.html", "releases.html", "add-survey.html")
 
 def _portal_dir():
     """The shipped static portal tree, when the engine runs from the source checkout. A container
-    build ships the portal as a SEPARATE image, so the tree is simply not visible there and the
-    static-page leg of the reconciliation below has nothing to check against."""
+    build ships the portal as a SEPARATE image, so the tree is not there to check against and the
+    static-page leg of the reconciliation below has nothing to do.
+
+    The gate is index.html, the portal's own entry document, NOT the directory: the engine image
+    copies portal/src/contract.js into /app/portal so the contract gate can run against real bytes
+    (deploy/docker/engine.Dockerfile), so the directory exists in exactly the environment that
+    ships no portal. Reading that as a portal which has lost its static pages would abort the box's
+    own `make rebuild-data` on three documents that live in another image."""
     p = Path(__file__).resolve().parents[2] / "portal"
-    return p if p.is_dir() else None
+    return p if (p / "index.html").is_file() else None
 
 
 def _reconcile_pages_with_sitemap(out, base, locs, station_docs):

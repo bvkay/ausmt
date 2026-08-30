@@ -171,6 +171,51 @@ def test_a_missing_station_page_is_a_hard_error(tmp_path, monkeypatch):
                            "--sitemap-base", BASE])
 
 
+def test_the_engine_image_layout_is_not_read_as_a_portal_checkout(tmp_path, monkeypatch):
+    """The PRODUCTION build ships no portal, and the static-page leg must know it.
+
+    deploy/docker/engine.Dockerfile copies exactly one portal artifact into the image
+    (portal/src/contract.js, so the contract gate can run against real bytes). So <repo>/portal
+    EXISTS in the image the box builds with, and contains nothing else. A leg that decides "is a
+    portal visible?" by asking whether that directory exists therefore concludes the portal has
+    LOST about.html, releases.html and add-survey.html, and `make rebuild-data` aborts on three
+    URLs whose documents ship in a different image entirely.
+
+    Modelled by pointing the module at an image-shaped tree and running the deploy's own flags.
+    FAILS on the pre-fix engine with "sitemap advertises https://.../about.html but the portal
+    ships no about.html" and a RuntimeError out of the reconciliation."""
+    image_root = tmp_path / "app"
+    (image_root / "portal" / "src").mkdir(parents=True)
+    (image_root / "portal" / "src" / "contract.js").write_text("// generated\n", encoding="utf-8")
+    monkeypatch.setattr(build_portal, "__file__",
+                        str(image_root / "engine" / "extract" / "build_portal.py"))
+    surveys = _make_survey(tmp_path)
+    out = tmp_path / "out"
+    rc = build_portal.main(["--surveys", str(surveys), "--out", str(out), "--bundle-edi",
+                            "--no-validate", "--products", str(out / "products"),
+                            "--sitemap-base", BASE])
+    assert rc == 0, f"the image-shaped build must complete, got rc={rc}"
+    assert (out / "pages" / "surveys" / "index.html").is_file()
+    assert build_portal._portal_dir() is None, (
+        "a portal directory holding only the generated contract.js is not a portal checkout")
+
+
+def test_a_visible_portal_checkout_still_has_its_static_pages_reconciled(tmp_path, monkeypatch):
+    """The other side of the same gate: where a REAL portal checkout IS visible (CI, a dev box,
+    the build-products lane), a sitemap URL for a static page the portal does not ship is still a
+    hard error. FAILS IF the image-layout fix turns the static-page leg into a permanent no-op."""
+    checkout = tmp_path / "checkout"
+    (checkout / "portal").mkdir(parents=True)
+    (checkout / "portal" / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
+    monkeypatch.setattr(build_portal, "__file__",
+                        str(checkout / "engine" / "extract" / "build_portal.py"))
+    assert build_portal._portal_dir() is not None, "a checkout with index.html IS a portal tree"
+    problems = build_portal._reconcile_pages_with_sitemap(
+        tmp_path / "out", f"{BASE}/", [f"{BASE}/", f"{BASE}/about.html"], {})
+    assert any("about.html" in p for p in problems), (
+        f"a missing static page must still be reported on a real checkout: {problems}")
+
+
 def test_survey_page_content_and_dataset_jsonld(tmp_path):
     """FAILS IF the survey page loses the parts search engines actually read: a title carrying the
     survey name, a canonical link at the published URL, the blurb prose, the interactive-portal
