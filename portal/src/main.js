@@ -210,7 +210,10 @@ function routeFromHash(){
     // above is on the station branch only. focusSurvey is the seam the drawer's own "View on map"
     // control uses, so the route now delivers the same framing and the same Option-A dim. Called
     // AFTER openSurvey so the fit padding measures the drawer that is actually open.
-    if(sv){openSurvey(sv);if(typeof focusSurvey==="function")focusSurvey(sv);}
+    // Called directly, as filters.js does: focusSurvey is a top-level declaration in drawer.js,
+    // which index.html loads before this file, so a typeof guard here could never be false and
+    // would only turn a real regression into a silent no-op.
+    if(sv){openSurvey(sv);focusSurvey(sv);}
     return;}                                           // unknown slug: fall through, no crash, no view change
   // hash fell through (e.g. browser Back to ''): if a full-width collection detail is showing, restore a tab view
   if(curView==="collection")setView("map");}
