@@ -270,7 +270,13 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, labelled=Fal
 def _footprint_svg(points, *, width=230) -> str:
     """The station-grid zoom for a compact survey, aspect-fit to the survey's own bbox, dots in
     the type palette, with a SCALE BAR so 9 km and 900 km never look alike (a bare dot field
-    carries no sense of size; the bar is computed from the bbox at the survey's own latitude)."""
+    carries no sense of size; the bar is computed from the bbox at the survey's own latitude).
+
+    The bar's label is sized in USER UNITS, so it renders at its value times the panel's own scale
+    rather than at a fixed number of pixels: measured on the served build the panel is 364px wide at
+    a 1280px viewport and 282px at 320px, against this 230-unit viewBox. At the 9 units it carried
+    the label fell to 11.0px on the narrow screen, under the page's stated 12px floor; 10 clears the
+    floor there (12.3px) and costs 1.5px where the map is normally read."""
     lons = [pt[0] for pt in points]
     lats = [pt[1] for pt in points]
     lo0, lo1, la0, la1 = min(lons), max(lons), min(lats), max(lats)
@@ -318,7 +324,7 @@ def _footprint_svg(points, *, width=230) -> str:
     scale = (f'<g stroke="#8FA3B0" stroke-width="1.2"><line x1="{pad * width:.1f}" y1="{y}" '
              f'x2="{pad * width + bar_px:.1f}" y2="{y}"/></g>'
              f'<text x="{pad * width + bar_px + 5:.1f}" y="{y + 3.5}" fill="#8FA3B0" '
-             f'font-size="9" font-family="ui-monospace,Menlo,monospace">{nice} km</text>')
+             f'font-size="10" font-family="ui-monospace,Menlo,monospace">{nice} km</text>')
     return (f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Station grid detail" '
             f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
             f'{coast}{dots}{scale}</svg>')

@@ -1117,7 +1117,8 @@ def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
     secondary labels sat at .72rem or below, under the 12px floor the SPA states for itself.
 
     FAILS IF the stale BBMT hex returns, if coral goes back on the ring, if the focus rule goes
-    missing, or if any CSS font-size drops below 12px."""
+    missing, if any CSS font-size drops below 12px, or if the map annotation's user-unit size drops
+    where it would render under the floor on a narrow screen."""
     surveys = _make_rich_survey(tmp_path)
     out = _build(surveys, tmp_path / "out")
     page = (out / "pages" / "surveys" / "pages-r.html").read_text(encoding="utf-8")
@@ -1131,8 +1132,35 @@ def test_the_page_palette_and_the_type_floor_follow_the_brief(tmp_path):
         "coral is for primary actions and active states, not a decorative ring on a map"
 
     assert ":focus-visible" in page, "keyboard focus must be visible (the SPA has this, pages did not)"
-    smallest = sorted(float(v) for v in re.findall(r"font-size:(\.\d+)rem", page))
-    assert smallest[0] >= 0.75, f"no rendered text under 12px: smallest is {smallest[0]}rem"
+
+    # The 12px floor, across BOTH the ways a page states a size, and claiming only what each holds.
+    # The first form of this pin matched `font-size:.NNrem` alone: it could not see a px value, a
+    # leading-zero rem literal, or an SVG presentation attribute, while its message said "no
+    # rendered text under 12px". The CSS leg is exact, because a CSS declaration renders at the size
+    # it names.
+    css = [float(v) * (16 if unit == "rem" else 1)
+           for v, unit in re.findall(r"font-size:\s*(\d*\.?\d+)(rem|px)", page)]
+    assert css, "sensitivity: the stylesheet must declare font sizes for this to check"
+    assert min(css) >= 12, f"no CSS font-size under 12px: smallest is {min(css)}px"
+
+    # The SVG leg is NOT a px floor and must not be written as one. A presentation attribute is in
+    # USER UNITS, so the map scale-bar label renders at `value x (rendered width / 230)`, which the
+    # page's layout decides. Measured on the served build (auslamp-sa-ne-2014, whose station-grid
+    # zoom carries the only such string on any page): the panel renders 364px wide at a 1280px
+    # viewport, 337px at 375px, and 282px at 320px, so at the 9 units it carried the label rendered
+    # 14.3px, 13.2px and 11.0px. The last of those is under the floor. 10 units is the smallest
+    # value that clears it at the narrowest mainstream viewport (12.3px at 320px, 15.8px at 1280px),
+    # and it is a 1.5px change where the map is normally read.
+    attrs = [float(v) for v in re.findall(r'font-size="(\d*\.?\d+)"', page)]
+    # Called directly as well: the zoom panel renders only for a geographically compact survey, so
+    # a fixture that happened not to be compact would make the assertion vacuous rather than true.
+    attrs += [float(v) for v in re.findall(
+        r'font-size="(\d*\.?\d+)"',
+        _pages_module()._footprint_svg([(137.0, -30.0, "BBMT"), (137.4, -30.4, "BBMT")]))]
+    assert attrs, "sensitivity: the map annotation must state a size for this to check"
+    assert min(attrs) >= 10, (
+        f"the map annotation is sized in user units, and under 10 it renders below the 12px floor "
+        f"on a 320px viewport: smallest is {min(attrs)}")
 
     cap = re.search(r'<div class="mapcap">(.*?)</div>', page).group(1)
     assert not re.search(r"-\d+\.\d+&#176;[SN]", cap), \
