@@ -182,9 +182,12 @@ function setView(v){
   if(typeof ST!=="undefined"&&ST.length)renderRecentlyAdded();
   updateCounts();
 }
+// Only Map switches a view in place. R10 (LANE-ADDENDUM-HUB-FEEDBACK.md) made Surveys and
+// Collections real links to the served hub pages, and a click handler on a control that is
+// navigating away would run a view switch the page is about to leave: a visible flash of the wrong
+// view on a slow load, and dead work otherwise. setView("surveys"/"collections") stays the way IN to
+// the in-app grids for routeFromHash, the tour and the drawer's own back-navigation.
 document.getElementById("navMap").onclick=()=>setView("map");
-document.getElementById("navSurveys").onclick=()=>setView("surveys");
-document.getElementById("navCollections").onclick=()=>setView("collections");
 
 function routeFromHash(){
   // The PLURAL routes. Published HTML has pointed at #/surveys since the entity pages shipped (every

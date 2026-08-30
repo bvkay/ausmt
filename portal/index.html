@@ -95,6 +95,14 @@
   nav button{flex:1;min-width:112px;min-height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;padding:0 16px;border-radius:5px;cursor:pointer}
   nav button:hover{border-color:var(--copper)}
   nav button.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
+  /* R10: two of the three primary controls are links now (see the header comment). Same box, same
+     token, same active treatment as the button beside them, so the three read as one control group
+     and only the tag differs. Mirrors about.html's `nav a` rule. */
+  nav a{flex:1;min-width:112px;min-height:40px;display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-size:14px;font-weight:600;
+    padding:0 16px;border-radius:5px;text-decoration:none;cursor:pointer}
+  nav a:hover{border-color:var(--copper)}
+  nav a.active{color:#16110b;background:var(--copper);border-color:var(--copper)}
   nav button.active:hover{border-color:var(--copper)}
   .contribute{color:var(--copper);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:6px 11px;border-radius:4px}
   .contribute:hover{border-color:var(--copper)}
@@ -741,9 +749,16 @@
   </div>
   <div class="hzone hcenter">
     <nav>
+      <!-- LANE-ADDENDUM-HUB-FEEDBACK.md R10 (owner's live review of /surveys): the hub pages are
+           served at /surveys and /collections now, so these two controls are LINKS to them, the
+           same destinations the about/releases/add-survey chrome already points at. Map stays a
+           <button>: it is the application itself, not a place to go. The SPA's own grid views are
+           unretired and still reachable at #/surveys and #/collections (routeFromHash), and the
+           in-app drawer flows are untouched. Ids are unchanged, so the header-parity pins and the
+           active-state toggles in main.js/drawer.js keep addressing the same three elements. -->
       <button id="navMap" class="active">Map</button>
-      <button id="navSurveys">Surveys</button>
-      <button id="navCollections">Collections</button>
+      <a id="navSurveys" href="/surveys">Surveys</a>
+      <a id="navCollections" href="/collections">Collections</a>
     </nav>
     <!-- Docs wave, stage 2 (owner ruling): FIVE header items, namely Map, Surveys, Collections, About,
          Contribute. The sixth, "How to use AusMT" (#howToUse), is retired along with the #introOverlay

@@ -129,6 +129,12 @@ def test_nav_button_min_width_fits_collections_label_across_pages():
     idx = _rule(_style(_html()), "nav button")
     assert idx is not None, "index.html lost its `nav button{...}` rule"
     assert "min-width:112px" in idx, f"index nav button must reserve min-width:112px (fit 'Collections'); got: {idx}"
+    # LANE-ADDENDUM-HUB-FEEDBACK.md R10: index's Surveys and Collections controls are LINKS to the
+    # served hub pages now, so index carries both shapes and the token has to hold in both. Without
+    # this leg the widest label could be clipped on the two controls that changed tag.
+    idxa = _rule(_style(_html()), "nav a")
+    assert idxa is not None, "index.html must style its `nav a{...}` links alongside `nav button`"
+    assert "min-width:112px" in idxa, f"index nav link must mirror min-width:112px; got: {idxa}"
     ab = _rule(_style(ABOUT.read_text(encoding="utf-8")), "nav a")
     assert ab is not None, "about.html lost its `nav a{...}` rule"
     assert "min-width:112px" in ab, f"about nav link must mirror min-width:112px; got: {ab}"
