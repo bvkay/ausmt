@@ -102,8 +102,14 @@ def test_sitemap_advertises_surveys_and_collections_never_stations(tmp_path):
         f"station URLs must stay OUT of the sitemap (unadvertised-but-served posture): {locs}")
     assert not any("#/" in u for u in locs), (
         f"the hash-fragment forms must leave the sitemap (the path form is the contract): {locs}")
-    # One URL per entity + the base, nothing else silently added.
-    assert len(locs) == 1 + 2 + 1, locs
+    # The two HUB pages and the three static portal pages joined the sitemap with the index-pages
+    # lane: they are served, canonical and indexable, and were advertised to no crawler at all.
+    for extra in (f"{BASE}surveys", f"{BASE}collections",
+                  f"{BASE}about.html", f"{BASE}releases.html", f"{BASE}add-survey.html"):
+        assert extra in locs, f"{extra} must be advertised: {locs}"
+    # One URL per entity + the base + the two hubs + the three static pages, nothing else silently
+    # added (the count is the point: this pin is what catches a URL creeping in unreviewed).
+    assert len(locs) == 1 + 2 + 2 + 1 + 3, locs
     # The emitted file's own comment describes tier 1 honestly (redirects into the SPA, prerender
     # still needed for real per-page indexing), not the retired fragment story.
     xml_text = (out / "sitemap.xml").read_text(encoding="utf-8")
