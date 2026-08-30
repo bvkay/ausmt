@@ -444,7 +444,16 @@ replaced tier 1's redirects, exactly as the contract promised. A bare `/surveys`
 (and the station/collection twins) has no entity to serve and still 301s to the portal root with
 its query preserved; a legacy-name (`ausmt.au`) deep link takes one host 301 (path and query
 preserved) and then the canonical host serves the page. The entity id rides byte-for-byte to the
-reader (never decoded or re-encoded); an unknown id 404s from the reader honestly. The doctor's
+reader (never decoded or re-encoded); an unknown id 404s from the reader honestly.
+
+**URL canonicalisation is answered BOX-SIDE, in one hop.** Nothing on the site emits a
+trailing-slash entity URL, but inbound links carry one constantly, and the reader's entity matcher
+is anchored, so those variants used to 404. The box now 301s `/surveys/<slug>/` (and the station
+and collection twins) to the published slash-free form, and folds `/surveys/`, `/surveys/index` and
+`/surveys/index.html` onto `/surveys`, query preserved in every case. The front door still passes
+the slash form through byte-for-byte: the 301 belongs at the layer that knows the shapes. The
+`/index.html` alias also 301s to `/` carrying its query, so `/index.html?tour=1` reaches the guided
+tour (a bare target dropped the flag and the tour never started). The doctor's
 pathurl leg (4c) demands the landing page's own rel=canonical at the probed URL. Analytics: an
 entity-page hit is not in aggregate_stats.py's counted path classes, so a path-link visit is
 counted once, at the SPA boot that follows the click-through (pinned in deploy/tests).
