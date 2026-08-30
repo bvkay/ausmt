@@ -317,9 +317,10 @@ archive's own path relative to the NCI THREDDS fileServer root
 `https://thredds.nci.org.au/thredds/fileServer/`, verbatim and unencoded), and carries `bytes` (a
 positive integer, the archive's own size) wherever the register states the file's size. Every row the
 current build publishes carries both. Where a register entry records no size the key is absent rather
-than zero, so a missing `bytes` reads as "size not asserted" and never as an empty file. The level
-tokens are `raw_packed`, `level0`, `level1_mth5` and `level1_netcdf`; `level2` never appears, because
-that tree holds transfer functions rather than time series.
+than zero, so a missing `bytes` reads as "size not asserted" and never as an empty file. The tokens
+this build can publish today are `raw_packed`, `level0`, `level1_mth5` and `level1_netcdf`, which is a
+snapshot of the current vocabulary rather than a closed set: read it with the additive rule below.
+`level2` never appears, because that tree holds transfer functions rather than time series.
 
 Evolution is additive only. New level tokens and new per-level keys may appear; `url_path` will not
 leave a row, and neither key will change meaning or type. Absence is the negative answer, not an

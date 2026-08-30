@@ -42,6 +42,8 @@ SCHEMA = json.loads((ROOT / "schema" / "ausmt-station.schema.json").read_text(en
 sys.path.insert(0, str(ROOT / "extract"))
 sys.path.insert(0, str(ROOT))
 import _stationcheck as stcheck  # noqa: E402
+import _tsindex as tsindex  # noqa: E402
+import _tsproject as tsproject  # noqa: E402
 import build_portal as bp  # noqa: E402
 
 FILESERVER = "https://thredds.nci.org.au/thredds/fileServer/"
@@ -419,9 +421,17 @@ def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
     table, which reads only url_path, so suppressing a size-less route would cost a reader a working
     download over a missing number. The prose moved to the truth instead.
 
-    FAILS IF the unconditional promise returns, or if the conditional wording stops naming the
-    register as the condition. Skipped only where the docs tree is not shipped (the engine image);
-    asserted on every checkout lane."""
+    The level-token leg is the same debt in the other enumerated fact. The section listed the four
+    tokens as a closed set one paragraph above the one promising that new tokens may appear, and no
+    pin read the list at all: the B0 pin asserts row shape and the mtcat identity join and never the
+    names. So the one enumerated fact on a surface blessed as third-party-stable could go stale in
+    silence the next time a level was added. The list is now read out of the emitter's own
+    vocabulary rather than restated here, which is what makes the sentence self-maintaining.
+
+    FAILS IF the unconditional promise returns, if the conditional wording stops naming the register
+    as the condition, if the enumeration goes back to reading as closed, if a publishable level
+    token stops being named, or if the never-projecting one stops being named as excluded. Skipped
+    only where the docs tree is not shipped (the engine image); asserted on every checkout lane."""
     section = _ts_access_docs_section()
     assert "`url_path`" in section, "the blessed section must still name the key it always carries"
     assert not re.search(r"[Ee]very row carries at least `bytes`", section), (
@@ -431,6 +441,23 @@ def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
     assert re.search(r"`bytes`[^.]*\bwhere(?:ver)? the register\b", section), (
         "the section must state `bytes` as conditional on the register carrying the figure, in the "
         "same terms the emitter uses")
+
+    # The vocabulary, read from the emitter: every register level minus the ones that never project.
+    publishable = [lv for lv in tsindex.LEVELS if lv not in tsproject.NEVER_PROJECTS]
+    assert publishable, "non-vacuity: some register level must be publishable"
+    for level in publishable:
+        assert f"`{level}`" in section, (
+            f"the blessed section must name the level token {level!r} it can publish; the "
+            f"enumeration is the one fact on this surface a reader cannot check against the "
+            f"document, so a token added to the emitter and not to the prose is a stale promise")
+    for level in tsproject.NEVER_PROJECTS:
+        assert f"`{level}`" in section, (
+            f"the section must keep saying that {level!r} never appears; a reader who finds the "
+            f"token in the register and not in this list has no way to learn it is excluded")
+    assert not re.search(r"[Tt]he\s+level\s+tokens\s+are\b", section), (
+        "the section stated the four tokens as a closed set in the paragraph before the one "
+        "promising new tokens may appear; the enumeration is a snapshot of today's vocabulary and "
+        "must read as one")
 
 
 def test_a_station_whose_rows_never_project_is_absent_not_empty(built):
