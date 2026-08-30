@@ -75,12 +75,17 @@ def test_pages_ride_the_sitemap_flag_and_agree_with_it(tmp_path):
     assert not any("/stations/" in u for u in entity_locs), \
         "station URLs must stay OUT of the sitemap (unadvertised-but-served posture)"
     # The hub URLs resolve to pages/<kind>/index.html; the static portal pages are shipped with
-    # the portal image, not built here, so they are checked against the portal tree instead.
+    # the portal image, not built here, so they are checked against the portal tree WHERE ONE IS
+    # VISIBLE. The engine image ships /app/portal holding only src/contract.js (designed topology,
+    # engine.Dockerfile), so this leg mirrors the build's own _portal_dir() gate: no checkout, no
+    # static-page assertions, exactly as the build reconciliation behaves.
+    portal_dir = build_portal._portal_dir()
     for u in entity_locs:
         rel = u.replace(BASE + "/", "")
         if rel in build_portal._SITEMAP_STATIC_PAGES:
-            assert (REPO.parent / "portal" / rel).is_file(), \
-                f"sitemap advertises {u} but the portal ships no {rel}"
+            if portal_dir is not None:
+                assert (portal_dir / rel).is_file(), \
+                    f"sitemap advertises {u} but the portal ships no {rel}"
             continue
         page = (out / "pages" / rel / "index.html") if rel in ("surveys", "collections") \
             else out / "pages" / (rel + ".html")
