@@ -331,6 +331,36 @@ def test_ts_access_and_the_resource_rows_are_ONE_projection(built):
     assert seen, "non-vacuity: this corpus publishes hand-off rows"
 
 
+def test_ts_access_holds_the_blessed_row_shape_and_the_additive_rule(built):
+    """The STABILITY PROMISE, pinned as its letter rather than as prose.
+
+    ts_access.json is served at /data/ts_access.json and /data/products/ts_access.json and is now a
+    stable surface: the shape is `{ausmt_id: {level: {bytes, url_path}}}`, `url_path` is relative to
+    the NCI THREDDS fileServer root, and evolution is ADDITIVE ONLY. New levels and new per-level
+    keys may appear; the two keys promised here may never leave a row and may never change type, and
+    absence of a station or a level means no verified route rather than an unknown one.
+
+    Two legs, because a consumer can be broken from either side. The row leg reads every value dict
+    in the BUILT artifact and requires at least the two promised keys with their promised types. The
+    identity leg requires every key to be an ausmt_id the same build published in mtcat.json, so the
+    file can never name a station the catalogue does not carry."""
+    doc = _ts_access(built)
+    assert doc, "non-vacuity: the fixture register projects routes, so the artifact must exist"
+    for aid, levels in doc.items():
+        assert isinstance(levels, dict) and levels, (aid, levels)
+        for level, row in levels.items():
+            assert isinstance(row, dict), (aid, level, row)
+            assert {"bytes", "url_path"} <= set(row), (aid, level, sorted(row))
+            assert isinstance(row["bytes"], int) and row["bytes"] > 0, (aid, level, row["bytes"])
+            assert isinstance(row["url_path"], str) and row["url_path"], (aid, level)
+            assert not row["url_path"].startswith(("/", "http://", "https://")), (
+                f"{aid}/{level}: url_path is relative to the fileServer root, got {row['url_path']}")
+    catalogue = json.loads((built / "mtcat.json").read_text(encoding="utf-8"))
+    known = {row.get("station_id") for row in (catalogue.get("stations") or [])}
+    assert known, "non-vacuity: the catalogue must publish stations to join against"
+    assert set(doc) <= known, f"ts_access names stations mtcat does not: {sorted(set(doc) - known)}"
+
+
 def test_a_station_whose_rows_never_project_is_absent_not_empty(built):
     """EXAMPLE02 carries one pending and one retired row and nothing else. An empty object would
     read as a station with a published-but-empty route set; absence asserts nothing."""
