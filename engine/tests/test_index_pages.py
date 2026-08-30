@@ -598,6 +598,13 @@ def test_every_static_page_carries_the_one_global_header(built):
         css = page.split("<style>", 1)[1].split("</style>", 1)[0]
         for token in ("#EF7256", "#1E2B4F", "#2B3557", "min-width:112px", "min-height:40px"):
             assert token in css, f"{rel}: the header must carry the SPA's {token} token"
+        # Scoped, because #E8EDF1 appears elsewhere in this sheet and an unscoped search would pass
+        # on the nav tabs' own colour. The SPA's .wordmark declares no colour and so inherits
+        # --text #E8EDF1; the static header carried a plain #fff, which is the page tier's heading
+        # white and one step brighter than the identity it is meant to be the same object as.
+        mark = re.search(r"\.wordmark\{([^}]*)\}", css)
+        assert mark and "color:#E8EDF1" in mark.group(1), \
+            f"{rel}: the identity carries the SPA header's own text token: {mark}"
 
 
 def test_the_right_status_slot_is_contextual_and_empty_where_the_owner_ruled(built):
