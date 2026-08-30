@@ -1051,9 +1051,12 @@ def surveys_index_page(*, rows, base) -> str:
             f'<h2 class="idxt"><a href="/surveys/{_e(slug)}">{_e(title)}</a></h2>'
             f'<p class="idxorg">{org_line}</p>'
             f'<p class="idxfacts">{facts}</p></div></article>')
-    summary = f"{len(rows):,} surveys &#183; {n_stations:,} stations"
-    desc = (f"Every magnetotelluric survey published on AusMT: {len(rows):,} surveys and "
-            f"{n_stations:,} stations, with coverage, data types, licences and downloads.")
+    # The page-level counts go through _plural like the card counts do: a corpus of one is a real
+    # state (it is where every new deployment starts), and the summary line and the description are
+    # the two strings a reader and a search result actually read.
+    summary = _facts_line([_plural(len(rows), "survey"), _plural(n_stations, "station")])
+    desc = (f"Every magnetotelluric survey published on AusMT: {_plural(len(rows), 'survey')} and "
+            f"{_plural(n_stations, 'station')}, with coverage, data types, licences and downloads.")
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / surveys</p>\n'
         "<h1>Surveys</h1>\n"
@@ -1096,8 +1099,8 @@ def collections_index_page(*, rows, base) -> str:
             f'<p class="idxfacts">{counts}</p>'
             f'<p class="idxact"><a href="/collections/{_e(cid)}">Explore collection</a></p>'
             "</article>")
-    desc = (f"Collections on AusMT: {len(rows):,} curated groupings of related magnetotelluric "
-            "surveys, each linking the surveys it gathers.")
+    desc = (f"Collections on AusMT: {_plural(len(rows), 'curated grouping')} of related "
+            "magnetotelluric surveys, each linking the surveys it gathers.")
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / collections</p>\n'
         "<h1>Collections</h1>\n"

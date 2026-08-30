@@ -261,3 +261,58 @@ def test_the_built_index_matches_the_built_pages(built):
         for target in set(re.findall(rf'href="/{kind}/([^"/]+)"', page)):
             assert (built / "pages" / kind / f"{target}.html").is_file(), \
                 f"{rel} links /{kind}/{target} but no page was emitted"
+
+
+# ==================================================================================================
+# Counting in prose
+# ==================================================================================================
+def _one_survey_row():
+    return {"slug": "only", "title": "Only Survey", "org": "Test Org", "region": "Tasmania",
+            "n_stations": 1, "years": "2019", "types": {"LPMT": 1}, "period_min_s": 4.0,
+            "period_max_s": 16000.0, "lic": "CC-BY-4.0", "doi": None,
+            "points": [(147.0, -42.0, "LPMT")]}
+
+
+def _one_collection_row():
+    return {"cid": "only", "title": "Only Collection", "description": "One grouping.",
+            "n_surveys": 1, "n_stations": 1, "type": None, "status": None,
+            "member_labels": ["Only Survey"], "member_points": {"Only Survey": [(147.0, -42.0)]}}
+
+
+def _description(page):
+    m = re.search(r'<meta name="description" content="([^"]+)">', page)
+    assert m, "every hub page must carry a meta description"
+    return m.group(1)
+
+
+def test_a_single_row_hub_counts_in_the_singular():
+    """FAILS IF a hub page's own prose says "1 surveys" or "1 curated groupings".
+
+    This is not cosmetic. The served corpus carries exactly ONE collection, so the /collections
+    description IS the search-result snippet for the hub page, and the /surveys summary line is the
+    first thing a reader sees under the h1. The card counts already went through _plural; the
+    page-level strings did not."""
+    pages = _pages_module()
+    sv = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
+    assert "1 survey &#183; 1 station" in sv, "the catalogue summary must count in the singular"
+    assert "1 surveys" not in sv and "1 stations" not in sv
+    assert "1 survey and 1 station," in _description(sv), \
+        "the surveys description must count in the singular too"
+    co = pages.collections_index_page(rows=[_one_collection_row()], base=BASE)
+    assert "1 curated grouping of" in _description(co), \
+        "one collection is a grouping, not groupings: this is the live snippet today"
+    assert "1 curated groupings" not in co
+
+
+def test_a_many_row_hub_still_counts_in_the_plural():
+    """The other side of the same pin: the singular branch must not swallow the plural form the
+    design brief names ("27 surveys &#183; 2,625 stations")."""
+    pages = _pages_module()
+    rows = _synthetic_rows(n_surveys=27, n_stations=2625)
+    sv = pages.surveys_index_page(rows=rows, base=BASE)
+    assert f"27 surveys &#183; {27 * (2625 // 27):,} stations" in sv
+    assert "27 surveys and" in _description(sv)
+    co = pages.collections_index_page(rows=[_one_collection_row(), dict(_one_collection_row(),
+                                                                       cid="two", title="Two")],
+                                      base=BASE)
+    assert "2 curated groupings of" in _description(co)
