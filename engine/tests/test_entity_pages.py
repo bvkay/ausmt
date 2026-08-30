@@ -956,7 +956,7 @@ def _collection_call(pages, n_members=2, **over):
         member_points={lbl: [(137.0 + i, -30.0 - i)] for i, (lbl, _s) in enumerate(members)},
         member_facts={s: {"title": lbl, "org": f"Org {i}",
                           "org_ror": f"https://ror.org/0000000{i}",
-                          "n_stations": 200, "types": {"LPMT": 200}, "years": f"{2013 + i} to 2016",
+                          "n_stations": 200, "types": {"LPMT": 200}, "years": f"{2013 + i} - 2016",
                           "period_min_s": 5.0, "period_max_s": 100000.0}
                       for i, (lbl, s) in enumerate(members)},
         level_counts={"raw_packed": 180, "level1_mth5": 12},
@@ -1019,8 +1019,11 @@ def test_the_collection_page_is_an_exploratory_layer(tmp_path):
 
     # member surveys as a compact list, and organisations with their RORs
     assert '<a href="/surveys/m0">Member 0</a>' in page
-    assert "200 stations" in page and "LPMT" in page and "2013 to 2016" in page
-    assert "5 to 100,000 s" in page, "the member row carries its period band"
+    # Ranges read as a SPACED HYPHEN, not as the word "to" (LANE-ADDENDUM-HUB-FEEDBACK.md R1,
+    # which names "5 to 100,000 s" -> "5 - 100,000 s" as its worked example). The no-dash-glyph
+    # assertions elsewhere in this file are untouched: the ban is on en/em dashes, not on hyphens.
+    assert "200 stations" in page and "LPMT" in page and "2013 - 2016" in page
+    assert "5 - 100,000 s" in page, "the member row carries its period band"
     assert '<a href="https://ror.org/00000000">Org 0</a>' in page, \
         "participating organisations are ROR-linked where the record carries one"
 
@@ -1210,3 +1213,68 @@ def test_activity_scope_identifiers_render_as_project_links():
                              base="https://x.example")
     assert "Project" in page and ">ANSIR-2022-001</a>" in page
     assert 'href="https://www.auscope.org.au/ansir-projects?id=ANSIR-2022-001"' in page
+
+
+# ==================================================================================================
+# B9 R1 to R3: how a period, a range and a licence PRINT (presentation only)
+# ==================================================================================================
+def test_the_period_display_helper_holds_the_owners_worked_examples():
+    """The owner's worked examples, verbatim, as the specification of ONE shared display helper.
+
+    A period is a stored float and a printed string, and the two are not the same object. The stored
+    value stays exactly as the served documents carry it; what a reader sees is rounded to two
+    significant figures under 100 and to a thousands-separated integer at or above it, with trailing
+    zeros stripped and NEVER an exponent (a hub card reading "9.6e-05 s" is a number a geophysicist
+    can read and a reader cannot). FAILS IF any worked example prints differently."""
+    pages = _pages_module()
+    for value, shown in ((5.33333, "5.3"), (0.005012, "0.005"), (9.6e-05, "0.000096"),
+                         (0.004, "0.004"), (100000, "100,000"), (11651, "11,651"), (5, "5")):
+        assert pages._fmt_period(value) == shown, \
+            f"{value!r} must print as {shown!r}, got {pages._fmt_period(value)!r}"
+    assert "e" not in pages._fmt_period(9.6e-05), "exponent notation must never reach a page"
+
+
+def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
+    """The owner's revised range separator: the word "to" becomes a spaced hyphen-minus, and the
+    glyph ban is unchanged (no en dash, no em dash, no tick glyphs). Asserted on a REAL page across
+    the three range slots a survey renders: acquisition years, the period-coverage tile and the
+    station table's own period cell, plus the station page's period row."""
+    pages = _pages_module()
+    docs = [{"ausmt_id": "au.s.A1", "station": "A1", "survey": "S",
+             "location": {"lat": -34.5, "lon": 138.6},
+             "data": {"type": "BBMT", "period_min_s": 5.0, "period_max_s": 100000.0}}]
+    page = pages.survey_page(slug="s", label="S", sm_doc={"title": "S",
+                                                          "dates": {"coverage": {"year_start": 2016,
+                                                                                 "year_end": 2021}}},
+                             smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=docs, bundle_rows=[], ts_access=None,
+                             base="https://x.example")
+    assert "2016 - 2021" in page, "the acquisition range must use a spaced hyphen"
+    assert "5 - 100,000 s" in page, "the period range must use a spaced hyphen"
+    assert "2016 to 2021" not in page and "5 to 100,000" not in page, \
+        "the word form of a range is retired from UI chrome"
+    assert "\u2013" not in page and "\u2014" not in page, "no en/em dashes"
+    stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
+    assert "5.0 - 100,000.0 s" in stn or "5 - 100,000 s" in stn, \
+        f"the station period row must use a spaced hyphen: {stn[stn.find('Period'):][:120]!r}"
+    assert "\u2013" not in stn and "\u2014" not in stn
+
+
+def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_json_ld():
+    """R3. The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
+    reader's; the page owes the reader the second and the machine the first. FAILS IF the chrome
+    prints the raw id, or if the human form leaks into the JSON-LD licence slot (which is a URL
+    derived from the identifier and must not become prose)."""
+    pages = _pages_module()
+    assert pages._fmt_licence("CC-BY-4.0") == "CC BY 4.0"
+    assert pages._fmt_licence("CC-BY-SA-4.0") == "CC BY-SA 4.0"
+    assert pages._fmt_licence("CC0-1.0") == "CC0 1.0"
+    assert pages._fmt_licence("Some-Bespoke-Licence") == "Some-Bespoke-Licence", \
+        "an unrecognised identifier is passed through, never guessed at"
+    page = pages.survey_page(slug="s", label="S", sm_doc=None,
+                             smeta={"slug": "s", "blurb": "B.", "org": "O", "lic": "CC-BY-4.0"},
+                             station_docs=[], bundle_rows=[], ts_access=None,
+                             base="https://x.example")
+    assert "<dt>Licence</dt><dd>CC BY 4.0</dd>" in page, "the facts row must read in human form"
+    assert '"license": "https://creativecommons.org/licenses/by/4.0/"' in page, \
+        "the JSON-LD licence stays the canonical URL the identifier maps to"

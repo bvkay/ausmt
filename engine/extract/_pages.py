@@ -122,16 +122,46 @@ def _fmt_bytes(n) -> str:
 
 
 def _fmt_period(v) -> str:
-    """A period in seconds, printed the way the portal writes them (no dash glyphs anywhere)."""
+    """A period in seconds as a READER sees it. The stored value never changes; this is the one
+    display helper the hubs and the entity pages share, so one period prints one way everywhere.
+
+    Under 100: two significant figures, trailing zeros stripped. At or above 100: a
+    thousands-separated integer. Never exponent notation, whatever the magnitude: `%g` printed a
+    2.6e-05 s period as "2.6e-05", which is a number a processing log can carry and a survey page
+    cannot. The unit is always seconds and belongs to the caller's slot, not to this string."""
     try:
         v = float(v)
     except (TypeError, ValueError):
         return "-"
-    if v >= 1000:
-        return f"{v:,.0f}"
-    if v >= 1:
-        return f"{v:g}"
-    return f"{v:g}"
+    if v == 0:
+        return "0"
+    if abs(v) >= 100:
+        return f"{round(v):,}"
+    # Two significant figures without ever reaching for an exponent: the decimal place count is
+    # derived from the magnitude, so 0.005012 rounds at the fourth place and 9.6e-05 at the sixth.
+    decimals = max(0, 1 - math.floor(math.log10(abs(v))))
+    out = f"{v:.{decimals}f}"
+    return out.rstrip("0").rstrip(".") if "." in out else out
+
+
+# The range separator, one place. The owner's revised ruling: numeric ranges in UI chrome read as a
+# SPACED HYPHEN-MINUS rather than as the word "to", and the glyph ban is untouched (no en dash, no
+# em dash, no tick glyphs anywhere in engine chrome). Curator prose is not chrome and is not touched.
+def _range(lo, hi) -> str:
+    return f"{lo} - {hi}"
+
+
+# The human form of the licences the corpus actually declares. The SPDX identifier is the machine's
+# name for a licence and stays untouched in every served document and every machine-readable slot;
+# what a reader sees in page chrome is the form the licence itself is published under. An identifier
+# this map does not recognise is printed verbatim: guessing a human form would be inventing metadata.
+_LICENCE_DISPLAY = {"CC-BY-4.0": "CC BY 4.0", "CC-BY-SA-4.0": "CC BY-SA 4.0",
+                    "CC0-1.0": "CC0 1.0"}
+
+
+def _fmt_licence(lic) -> str:
+    v = str(lic or "").strip()
+    return _LICENCE_DISPLAY.get(v, v)
 
 
 def _doi_url(identifier) -> str | None:
@@ -489,7 +519,7 @@ def _survey_years(sm_doc, smeta):
     y0 = cov.get("year_start") or (smeta or {}).get("year_start")
     y1 = cov.get("year_end") or (smeta or {}).get("year_end")
     if y0 and y1:
-        return f"{y0}" if y0 == y1 else f"{y0} to {y1}"
+        return f"{y0}" if y0 == y1 else _range(y0, y1)
     return str(y0 or y1 or "")
 
 
@@ -687,7 +717,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     if version:
         ld["version"] = str(version)
     if years:
-        ld["temporalCoverage"] = years.replace(" to ", "/")
+        ld["temporalCoverage"] = years.replace(" - ", "/")
     same_as = [u for u in (_doi_url((row or {}).get("identifier"))
                            for row in (smeta.get("related_identifiers") or [])) if u]
     if same_as:
@@ -865,10 +895,11 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     cap = ""
     if compact:
         maps.append(_footprint_svg(points))
-        cap = (f'<div class="mapcap">{_hemisphere(min(lats), "S", "N")} to '
-               f'{_hemisphere(max(lats), "S", "N")} &#183; '
-               f'{_hemisphere(min(lons), "W", "E")} to '
-               f'{_hemisphere(max(lons), "W", "E")}</div>')
+        cap = ('<div class="mapcap">'
+               + _range(_hemisphere(min(lats), "S", "N"), _hemisphere(max(lats), "S", "N"))
+               + " &#183; "
+               + _range(_hemisphere(min(lons), "W", "E"), _hemisphere(max(lons), "W", "E"))
+               + "</div>")
 
     def tile(num, lab):
         return f'<div class="cstat"><div class="cnum">{num}</div><div class="clab">{lab}</div></div>'
@@ -881,7 +912,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     if years:
         core.append(tile(_e(years), "acquired"))
     if pmin is not None and pmax is not None:
-        core.append(tile(f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s", "period coverage"))
+        core.append(tile(f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s', "period coverage"))
     # Two maps ride SIDE BY SIDE on a wide screen: stacked, the locator and the zoom together stand
     # over a thousand pixels tall in the widened column, which pushes the metric rail's own content
     # off the first screen and makes the hero a scroll rather than a view.
@@ -911,7 +942,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
                     if smeta.get("org_ror") else _e(org))
         facts.append(f"<dt>Organisation</dt><dd>{org_html}</dd>")
     if lic:
-        facts.append(f"<dt>Licence</dt><dd>{_e(lic)}</dd>")
+        facts.append(f"<dt>Licence</dt><dd>{_e(_fmt_licence(lic))}</dd>")
     if len(rates) > 1:
         facts.append(f"<dt>Sample rates</dt><dd>{', '.join(f'{r:,.0f}' for r in sorted(rates))} Hz</dd>")
     # The dipole summary and the survey-level instrument PID are gone by ruling: dipoles live in
@@ -1170,7 +1201,12 @@ def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
     if data.get("type"):
         facts.append(f"<dt>Data type</dt><dd>{_e(data['type'])}</dd>")
     if data.get("period_min_s") is not None and data.get("period_max_s") is not None:
-        facts.append(f"<dt>Period range</dt><dd>{_e(data['period_min_s'])} to {_e(data['period_max_s'])} s"
+        # The shared display helper, like every other period slot in the tier: this row printed the
+        # stored float verbatim, so a station band read "0.0000625 to 100000.0 s". The full-precision
+        # values stay in the station.json this page links to.
+        facts.append("<dt>Period range</dt><dd>"
+                     + _range(_fmt_period(data["period_min_s"]),
+                              _fmt_period(data["period_max_s"])) + " s"
                      f" ({int(data.get('n_periods') or 0)} periods)</dd>")
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / <a href="/surveys/{_e(survey_slug)}">{_e(survey)}</a></p>\n'
@@ -1327,13 +1363,13 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     pmins = [f["period_min_s"] for f in facts if f.get("period_min_s") is not None]
     pmaxs = [f["period_max_s"] for f in facts if f.get("period_max_s") is not None]
     if pmins and pmaxs:
-        tiles.append(tile(f"{_fmt_period(min(pmins))} to {_fmt_period(max(pmaxs))} s",
+        tiles.append(tile(f'{_range(_fmt_period(min(pmins)), _fmt_period(max(pmaxs)))} s',
                           "period coverage"))
     ystart = [m.get("year_start") for m in member_smeta if (m or {}).get("year_start")]
     yend = [m.get("year_end") for m in member_smeta if (m or {}).get("year_end")]
     if ystart:
         span = (f"{min(ystart)}" if yend and min(ystart) == max(yend)
-                else f"{min(ystart)} to {max(yend)}" if yend else f"{min(ystart)}")
+                else _range(min(ystart), max(yend)) if yend else f"{min(ystart)}")
         tiles.append(tile(_e(span), "years"))
     stats = f'<div class="cstats">{"".join(tiles)}</div>'
 
@@ -1366,7 +1402,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                 _plural(int(row["n_stations"]), "station") if row.get("n_stations") else "",
                 _e(" / ".join(str(t) for t in sorted(types))) if types else "",
                 _e(str(row.get("years") or "")),
-                (f"{_fmt_period(row['period_min_s'])} to {_fmt_period(row['period_max_s'])} s"
+                (f'{_range(_fmt_period(row["period_min_s"]), _fmt_period(row["period_max_s"]))} s'
                  if row.get("period_min_s") is not None and row.get("period_max_s") is not None
                  else "")]
         facts_line = _facts_line(bits)
@@ -1471,11 +1507,11 @@ def surveys_index_page(*, rows, base) -> str:
         types = r.get("types") or {}
         type_bit = " / ".join(str(t) for t in types) if types else ""
         pmin, pmax = r.get("period_min_s"), r.get("period_max_s")
-        period = (f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s"
+        period = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
                   if pmin is not None and pmax is not None else "")
         facts = _facts_line([
             _e(_plural(int(r.get("n_stations") or 0), "station")),
-            _e(type_bit), _e(str(r.get("years") or "")), _e(period), _e(str(r.get("lic") or "")),
+            _e(type_bit), _e(str(r.get("years") or "")), _e(period), _e(_fmt_licence(r.get("lic"))),
             '<span class="idxdoi">DOI</span>' if r.get("doi") else ""])
         svg = _minimap_svg(r.get("points") or [], width=_INDEX_MAP_WIDTH, outline_ref=ref,
                            label=f"{title} location in Australia")
@@ -1723,7 +1759,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
             title = ((survey_docs.get(slug) or {}).get("title")) or label
             tdesc = " + ".join(sorted(types)) if types else "magnetotelluric"
             years = _survey_years(survey_docs.get(slug), smeta)
-            period_line = (f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s"
+            period_line = (f'{_range(_fmt_period(pmin), _fmt_period(pmax))} s'
                            if pmin is not None and pmax is not None else "")
             dims = ""
             if points and len(points) > 1:

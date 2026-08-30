@@ -113,8 +113,10 @@ def test_surveys_index_lists_every_survey_with_its_discovery_facts(built):
         assert (built / "pages" / "surveys" / f"{slug}.html").is_file(), \
             f"{slug}: every row link must resolve to an emitted page"
     assert "Test Org" in page and "South Australia" in page
-    assert "stations" in page and "CC-BY-4.0" in page
-    assert re.search(r"[\d,.]+ to [\d,.]+ s", page), "the period range must render"
+    # The licence reads in HUMAN form in chrome and the SPDX identifier stays the machine's name
+    # for it (LANE-ADDENDUM-HUB-FEEDBACK.md R3); ranges take the spaced hyphen (R1).
+    assert "stations" in page and "CC BY 4.0" in page
+    assert re.search(r"[\d,.]+ - [\d,.]+ s", page), "the period range must render"
     # No abstract on the cards: the index is a discovery summary, not a page of miniature records.
     assert "An index fixture survey." not in page, "the survey abstract must not ride the index"
 
@@ -209,7 +211,7 @@ def _synthetic_rows(n_surveys=27, n_stations=2625):
                for k in range(per)]
         rows.append({"slug": f"survey-{i:02d}", "title": f"Synthetic Survey {i:02d}",
                      "org": "Geological Survey of Somewhere", "region": "South Australia",
-                     "n_stations": per, "years": "2013 to 2016",
+                     "n_stations": per, "years": "2013 - 2016",
                      "types": {"LPMT": per}, "period_min_s": 4.0, "period_max_s": 16000.0,
                      "lic": "CC-BY-4.0", "doi": "10.82388/abcdefgh", "points": pts})
     return rows
@@ -400,3 +402,22 @@ def test_the_hub_card_scatter_thins_its_dots_and_keeps_every_member():
                                    base=BASE, member_points=full_pts)
     assert detail.count("<circle") == sum(len(v) for v in full_pts.values()), \
         "the collection page draws the whole footprint"
+
+
+# ==================================================================================================
+# B9 R1 to R3 on the hubs: the same display rules the entity pages answer to
+# ==================================================================================================
+def test_the_hub_cards_print_ranges_licences_and_periods_the_way_the_entity_pages_do():
+    """One display grammar across the whole tier. The hub card is where a reader compares surveys
+    side by side, so a range that reads "5 to 100,000 s" on the card and "5 - 100,000 s" on the page
+    is two answers to one question. FAILS IF the hub keeps the word form of a range, prints the raw
+    SPDX identifier, or lets an exponent reach a card."""
+    pages = _pages_module()
+    row = dict(_one_survey_row(), years="2016 - 2021", period_min_s=9.6e-05, period_max_s=11651.0)
+    page = pages.surveys_index_page(rows=[row], base=BASE)
+    assert "0.000096 - 11,651 s" in page, "the card period band takes the shared display helper"
+    assert "9.6e-05" not in page, "exponent notation must never reach a hub card"
+    assert "2016 - 2021" in page and " to " not in page.split('<div class="idxlist">')[1], \
+        "no range on a card may still read as the word form"
+    assert "CC BY 4.0" in page, "the licence reads in human form on the card"
+    assert "CC-BY-4.0" not in page, "the raw SPDX identifier is the machine's name, not the reader's"
