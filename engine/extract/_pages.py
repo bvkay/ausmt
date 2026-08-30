@@ -303,7 +303,10 @@ _CSS = """
   .navbtn{background:#18213D;border:1px solid #2B3557;border-radius:6px;color:#C9D4E8;font-size:.85rem;padding:.35rem .9rem;text-decoration:none}
   .navbtn.map{color:#EF7256}
   .cite{background:#18213D;border:1px solid #2B3557;border-radius:6px;padding:.7rem .9rem;font-size:.88rem;margin:1rem 0}
+  .cite summary{cursor:pointer;color:#fff;font-weight:600}
+  .cite p{margin:.6rem 0 0}
   .cite code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;color:#C9D4E8}
+  .citeack{color:#8FA3B0;font-size:.82rem}
   .embargo{background:#3a2a1a;border:1px solid #7a5a2a;border-radius:6px;padding:.6rem .9rem;margin:.8rem 0;color:#e8d5b5;font-size:.9rem}
   .typebadge{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:4px;padding:.12rem .5rem;color:#C9D4E8;vertical-align:middle;margin-left:.55rem}
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
@@ -488,6 +491,41 @@ def _related_by_identifies(smeta):
         if key and key not in out:
             out[key] = row
     return out
+
+
+# The AusMT access acknowledgement, verbatim from AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md
+# section 9. It is a SEPARATE statement from the citation and is never folded into it: providing
+# access does not make AusMT the cited object.
+_ACKNOWLEDGEMENT = ("Data were accessed through the AusMT national magnetotelluric data portal.")
+
+# The related-identifier rows that identify THIS survey rather than something near it: the whole
+# record, and the published transfer-function release the survey page is about. A collection row
+# names the parent, a raw_packed row names the time-series archive and a level3 row names a derived
+# model; none of the three is this dataset, so none is ever promoted into the locator slot.
+_SELF_IDENTIFIES = ("entire", "level2")
+
+
+def _citation_locator(smeta, access_url):
+    """The locator slot of the formatted citation, SOURCE-LED.
+
+    A citation should identify the dataset as persistently and specifically as the source allows
+    (AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md sections 3 and 4). Where the survey's own
+    record carries a persistent identifier FOR ITSELF, that identifier is the locator. The AusMT
+    page URL is used only where the record carries none, and then as the access route rather than as
+    a claim that the AusMT page is the object being cited."""
+    doi = _doi_url((smeta or {}).get("doi"))
+    if doi:
+        return doi
+    pid = str((smeta or {}).get("pid") or "").strip()
+    if pid.startswith(("http://", "https://")):
+        return pid
+    related = _related_by_identifies(smeta)
+    for key in _SELF_IDENTIFIES:
+        row = related.get(key)
+        url = _doi_url((row or {}).get("identifier")) if row else None
+        if url:
+            return url
+    return access_url
 
 
 def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_access,
@@ -680,8 +718,11 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
             parts.append(f"Version {_e(c['ve'])}.")
         if c.get("pb"):
             parts.append(f"{_e(c['pb'])}.")
-        cite = ('<div class="cite"><span style="color:#8FA3B0">Cite as:</span> '
-                + " ".join(parts) + f" <code>{_e(url)}</code></div>")
+        cite = ('<details class="cite"><summary>Cite this survey</summary>'
+                '<p class="citeline"><span style="color:#8FA3B0">Cite as:</span> '
+                + " ".join(parts)
+                + f' <code>{_e(_citation_locator(smeta, url))}</code></p>'
+                + f'<p class="citeack">{_ACKNOWLEDGEMENT}</p></details>')
     embargo = ""
     if (smeta.get("access") or "").lower() == "embargoed":
         until = smeta.get("embargo_until")

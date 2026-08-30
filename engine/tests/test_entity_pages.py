@@ -469,6 +469,52 @@ def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
         "prose keeps a narrow measure even when main widens"
 
 
+def test_the_citation_is_a_disclosure_and_its_locator_is_source_led(tmp_path):
+    """Design brief 15 plus AUSMT-DATA-CITATION-AND-ACKNOWLEDGEMENT-MODEL.md.
+
+    Two defects at once. The Cite-as box held primary visual space near the top of every survey
+    page, and it put the AusMT page URL in the LOCATOR slot unconditionally, which cites the AusMT
+    page as the object even on a survey whose own record carries a persistent identifier for itself.
+    The model is source-led: the locator is the source identifier where one exists, and the AusMT URL
+    is the access route otherwise, stated as a separate acknowledgement rather than smuggled into the
+    citation.
+
+    pages-c carries a source DOI on its `identifies: entire` row; pages-d carries none. FAILS IF the
+    citation is not a disclosure, if a survey with a source identifier still prints the AusMT URL as
+    its locator, if a survey WITHOUT one loses its access route, or if the acknowledgement stops
+    being a separate verbatim line."""
+    surveys = _make_survey(tmp_path, slug="pages-c", name="Pages C")
+    (surveys / "pages-c" / "survey.yaml").write_text(
+        (surveys / "pages-c" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n"
+          "related_identifiers:\n"
+          "  - {identifier: 10.25914/1ncb-xp10, identifier_type: DOI, identifies: entire,"
+          " relation: IsVariantFormOf}\n", encoding="utf-8")
+    _make_survey(tmp_path, slug="pages-d", name="Pages D")
+    (surveys / "pages-d" / "survey.yaml").write_text(
+        (surveys / "pages-d" / "survey.yaml").read_text(encoding="utf-8")
+        + "creators:\n  - name: Kay, Ben\n    name_type: person\n", encoding="utf-8")
+    out = _build(surveys, tmp_path / "out")
+    src = (out / "pages" / "surveys" / "pages-c.html").read_text(encoding="utf-8")
+    plain = (out / "pages" / "surveys" / "pages-d.html").read_text(encoding="utf-8")
+
+    for page in (src, plain):
+        assert '<details class="cite">' in page, "the citation must become a disclosure"
+        assert "<summary>Cite this survey</summary>" in page, "the disclosure must say what it holds"
+        assert "Cite as:" in page and "Kay, B." in page, "the formatted citation text is unchanged"
+        assert ("Data were accessed through the AusMT national magnetotelluric data portal."
+                in page), "the AusMT acknowledgement is a separate verbatim line"
+        assert page.index('<details class="cite">') < page.index('class="lede"'), \
+            "the citation sits near the title, above the lede and the map"
+
+    assert "<code>https://doi.org/10.25914/1ncb-xp10</code>" in src, \
+        "a survey whose record identifies itself must cite THAT identifier"
+    assert f"<code>{BASE}/surveys/pages-c</code>" not in src, \
+        "the AusMT page URL must not hold the locator slot when a source identifier exists"
+    assert f"<code>{BASE}/surveys/pages-d</code>" in plain, \
+        "with no source identifier the AusMT URL stays as the access route"
+
+
 def test_the_survey_page_links_up_the_site_and_into_its_collection(tmp_path):
     """The entity link graph, all of it at once. Before this lane a survey page had NO way back to
     the site root, its "All surveys" button pointed at a hash route that does not exist (28 links
