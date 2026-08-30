@@ -1004,6 +1004,20 @@ def test_the_collection_page_is_an_exploratory_layer(tmp_path):
     assert '<a href="https://ror.org/00000000">Org 0</a>' in page, \
         "participating organisations are ROR-linked where the record carries one"
 
+    # The roll-call is the COLLECTION's roll-call, so it uses the collection's own member label.
+    # The label and the survey document's title usually agree; where they differ the label is what
+    # this collection calls that member, it is what the map legend and every dot title beside it
+    # already say, and it is what the base page linked. Rendering the doc title instead silently
+    # substituted a different wording into one page's roll-call (AusLAMP's "EFTF Phase 1 - Northern
+    # Territory and Queensland" thinned to "EFTF Phase 1") while the legend above kept the label.
+    renamed = _collection_call(pages, n_members=2, member_facts={
+        "m0": {"title": "A shorter document title", "org": "Org 0", "n_stations": 200},
+        "m1": {"title": "Member 1", "org": "Org 1", "n_stations": 200}})
+    assert '<a href="/surveys/m0">Member 0</a>' in renamed, \
+        "the member link carries the collection's own label for that member"
+    assert "A shorter document title" not in renamed, \
+        "the survey document's own title does not replace the collection's wording in the roll-call"
+
     # presence: a rollup carrying neither type nor status asserts neither
     plain = _collection_call(pages, coll={"title": "Test Collection", "n_stations": 400,
                                           "description": "A grouping."})

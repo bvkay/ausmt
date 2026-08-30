@@ -1357,8 +1357,12 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
                  if row.get("period_min_s") is not None and row.get("period_max_s") is not None
                  else "")]
         facts_line = _facts_line(bits)
+        # The link text is the COLLECTION's own label for this member, not the survey document's
+        # title. The two usually agree; where they differ the label is what this collection calls
+        # that member and what the map legend and every dot title above already say, so taking the
+        # doc title would put two wordings for one survey on one page.
         rows.append(f'<div class="mem"><p class="memt">'
-                    f'<a href="/surveys/{_e(slug)}">{_e(row.get("title") or lbl)}</a></p>'
+                    f'<a href="/surveys/{_e(slug)}">{_e(lbl or row.get("title") or slug)}</a></p>'
                     + (f'<p class="memfacts">{facts_line}</p>' if facts_line else "")
                     + "</div>")
     members_section = (f'<h2 id="surveys">Member surveys</h2>\n<div class="memlist">'
