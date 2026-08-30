@@ -36,6 +36,7 @@ import re
 
 import _au_outline as au
 import _stationcheck as stcheck
+from _contract import LICENSES  # sibling-import house pattern; the licence instrument is single-sourced
 
 _LICENSE_URLS = {
     "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
@@ -158,12 +159,32 @@ def _range(lo, hi) -> str:
     return f"{lo} - {hi}"
 
 
-# The human form of the licences the corpus actually declares. The SPDX identifier is the machine's
-# name for a licence and stays untouched in every served document and every machine-readable slot;
-# what a reader sees in page chrome is the form the licence itself is published under. An identifier
-# this map does not recognise is printed verbatim: guessing a human form would be inventing metadata.
-_LICENCE_DISPLAY = {"CC-BY-4.0": "CC BY 4.0", "CC-BY-SA-4.0": "CC BY-SA 4.0",
-                    "CC0-1.0": "CC0 1.0"}
+# The human form of a Creative Commons identifier, DERIVED from the licence instrument itself so the
+# display map cannot fall behind it. The SPDX identifier is the machine's name for a licence and
+# stays untouched in every served document and every machine-readable slot; what a reader sees in
+# page chrome is the form the licence is published under ("CC BY 4.0", not "CC-BY-4.0").
+#
+# Derived rather than listed because a hand-kept map covering only the ids today's corpus declares
+# goes wrong silently: the instrument recognises fourteen CC ids, so the first third-party release
+# under a 3.0, -AU, NC or ND id would have printed "CC-BY-3.0-AU" on one card beside "CC BY 4.0" on
+# the next, which is the inconsistency this rule exists to remove. The grammar is the deed's own:
+# the prefix, the clause letters (which keep their internal hyphens: BY-NC-SA), the version, and a
+# jurisdiction port where one exists.
+#
+# Non-CC ids (PUBLIC DOMAIN, ODBL-1.0, ODC-BY-1.0, ALL RIGHTS RESERVED, COPYRIGHT) have no such
+# published reader's form, and neither does an identifier the instrument does not recognise at all;
+# both are printed verbatim, because guessing a human form would be inventing metadata.
+_CC_ID = re.compile(r"^(CC0|CC)(?:-([A-Z]+(?:-[A-Z]+)*))?-(\d+\.\d+)(?:-([A-Z]{2,3}))?$")
+
+
+def _cc_human(identifier):
+    m = _CC_ID.match(identifier)
+    return " ".join(part for part in m.groups() if part) if m else None
+
+
+_LICENCE_DISPLAY = {i: _cc_human(i)
+                    for i in LICENSES["redistributable"] + LICENSES["recognised_only"]
+                    if _cc_human(i)}
 
 
 def _fmt_licence(lic) -> str:

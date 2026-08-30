@@ -1262,13 +1262,43 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
 
 def test_the_licence_reads_in_human_form_in_chrome_and_keeps_its_identifier_in_json_ld():
     """R3. The SPDX identifier is the machine's name for the licence and "CC BY 4.0" is the
-    reader's; the page owes the reader the second and the machine the first. FAILS IF the chrome
-    prints the raw id, or if the human form leaks into the JSON-LD licence slot (which is a URL
-    derived from the identifier and must not become prose)."""
+    reader's; the page owes the reader the second and the machine the first.
+
+    R3's second clause is "the same pattern for the other recognised CC ids", so the coverage owed
+    is the licence instrument's whole CC list, not the subset today's corpus happens to declare.
+    The expected strings below are LITERAL, so this test states the reader's form itself rather
+    than restating the emitter's derivation of it; the key-set assertion is what makes the coverage
+    complete rather than illustrative.
+
+    FAILS IF the chrome prints a raw CC id, if the instrument grows a CC id nothing has named a
+    reader's form for, if a non-CC id is guessed at, or if the human form leaks into the JSON-LD
+    licence slot (which is a URL derived from the identifier and must not become prose)."""
     pages = _pages_module()
-    assert pages._fmt_licence("CC-BY-4.0") == "CC BY 4.0"
-    assert pages._fmt_licence("CC-BY-SA-4.0") == "CC BY-SA 4.0"
-    assert pages._fmt_licence("CC0-1.0") == "CC0 1.0"
+    human = {"CC0-1.0": "CC0 1.0",
+             "CC-BY-3.0": "CC BY 3.0",
+             "CC-BY-3.0-AU": "CC BY 3.0 AU",
+             "CC-BY-4.0": "CC BY 4.0",
+             "CC-BY-SA-3.0": "CC BY-SA 3.0",
+             "CC-BY-SA-4.0": "CC BY-SA 4.0",
+             "CC-BY-NC-3.0": "CC BY-NC 3.0",
+             "CC-BY-NC-4.0": "CC BY-NC 4.0",
+             "CC-BY-NC-SA-3.0": "CC BY-NC-SA 3.0",
+             "CC-BY-NC-SA-4.0": "CC BY-NC-SA 4.0",
+             "CC-BY-ND-3.0": "CC BY-ND 3.0",
+             "CC-BY-ND-4.0": "CC BY-ND 4.0",
+             "CC-BY-NC-ND-3.0": "CC BY-NC-ND 3.0",
+             "CC-BY-NC-ND-4.0": "CC BY-NC-ND 4.0"}
+    instrument = json.loads((REPO.parent / "contract" / "licenses.json").read_text(encoding="utf-8"))
+    recognised = instrument["redistributable"] + instrument["recognised_only"]
+    assert set(human) == {i for i in recognised if i.startswith("CC")}, \
+        "every CC id the licence instrument recognises owes the reader a named human form"
+    for ident, reader in human.items():
+        assert pages._fmt_licence(ident) == reader, \
+            f"{ident} must read as {reader}, got {pages._fmt_licence(ident)!r}"
+    for ident in recognised:
+        if ident not in human:
+            assert pages._fmt_licence(ident) == ident, \
+                f"{ident} has no published reader's form and is printed verbatim, never guessed at"
     assert pages._fmt_licence("Some-Bespoke-Licence") == "Some-Bespoke-Licence", \
         "an unrecognised identifier is passed through, never guessed at"
     page = pages.survey_page(slug="s", label="S", sm_doc=None,
