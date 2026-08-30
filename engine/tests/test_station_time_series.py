@@ -26,6 +26,7 @@ NON-VACUOUS: every assertion reads a BUILT document and validates against the sh
 every exclusion is asserted beside the inclusion that proves the emitter was able to see the row.
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +35,7 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent                                  # engine/
+REPO = ROOT.parent                                  # the monorepo root, where docs/ lives
 SURVEYS = HERE / "fixtures"                         # vendored, self-contained (as in test_mtcat.py)
 TS_INDEX = HERE / "fixtures" / "ts-index"
 SCHEMA = json.loads((ROOT / "schema" / "ausmt-station.schema.json").read_text(encoding="utf-8"))
@@ -43,6 +45,24 @@ import _stationcheck as stcheck  # noqa: E402
 import build_portal as bp  # noqa: E402
 
 FILESERVER = "https://thredds.nci.org.au/thredds/fileServer/"
+
+# ---------------------------------------------------------------- the blessed docs surface
+# The API reference states ts_access.json's stability promise in prose. engine.Dockerfile COPYs
+# contract/ + engine/ and one generated portal file, never docs/, so in the engine image this file
+# does not exist and the prose legs below skip on the reason ci_check_skips.py already allow-lists
+# for that designed topology. On every checkout lane the docs tree is present and they assert.
+API_REFERENCE = REPO / "docs" / "docs" / "interoperability" / "api-reference.md"
+DOCS_SKIP_REASON = ("engine image build: docs tree not shipped "
+                    "(designed topology; the docs surface is pinned from checkout lanes)")
+
+
+def _ts_access_docs_section() -> str:
+    """The API reference's ts_access.json section alone: from its own heading to the next one."""
+    text = API_REFERENCE.read_text(encoding="utf-8")
+    m = re.search(r"^### Time-series routes: ts_access\.json$(.*?)(?=^#{1,3} )", text,
+                  re.S | re.M)
+    assert m, "the API reference no longer carries the blessed ts_access.json section"
+    return m.group(1)
 
 
 def _build(surveys, out, *extra):
@@ -335,30 +355,82 @@ def test_ts_access_holds_the_blessed_row_shape_and_the_additive_rule(built):
     """The STABILITY PROMISE, pinned as its letter rather than as prose.
 
     ts_access.json is served at /data/ts_access.json and /data/products/ts_access.json and is now a
-    stable surface: the shape is `{ausmt_id: {level: {bytes, url_path}}}`, `url_path` is relative to
-    the NCI THREDDS fileServer root, and evolution is ADDITIVE ONLY. New levels and new per-level
-    keys may appear; the two keys promised here may never leave a row and may never change type, and
-    absence of a station or a level means no verified route rather than an unknown one.
+    stable surface: `url_path` rides every row and is relative to the NCI THREDDS fileServer root,
+    `bytes` rides every row whose register entry states a size, and evolution is ADDITIVE ONLY. New
+    levels and new per-level keys may appear; neither promised key may change type, `url_path` may
+    never leave a row, and absence of a station or a level means no verified route rather than an
+    unknown one.
 
-    Two legs, because a consumer can be broken from either side. The row leg reads every value dict
-    in the BUILT artifact and requires at least the two promised keys with their promised types. The
-    identity leg requires every key to be an ausmt_id the same build published in mtcat.json, so the
-    file can never name a station the catalogue does not carry."""
+    `bytes` is stated CONDITIONALLY on purpose, because that is what the emitter guarantees. The
+    register tolerates a row with no size (_tsindex._row checks the figure only when it is present,
+    and the surveys validator mirrors that rule verbatim by design, so requiring it here would make
+    the engine stricter than ratified and hard-stop a build on a register surveys CI passed green),
+    and _tsproject.route_rows omits the key rather than inventing a zero. Suppressing the whole route
+    instead is worse than a missing figure: route_rows also feeds the front door's /go/ts table
+    (deploy/scripts/gen_ts_routes.py, which reads only url_path), so a size-less row would cost the
+    reader a working download. test_ts_projection.test_route_rows_carry_url_path_and_bytes_per_live_level
+    is the negative pin over that emitter answer; this one holds the published surface to it.
+
+    Two legs, because a consumer can be broken from either side. The row leg reads every value dict in
+    the BUILT artifact and requires url_path always, bytes with its promised type wherever it appears,
+    and a non-vacuity that this fixture's rows do carry both. The identity leg requires every key to
+    be an ausmt_id the same build published in mtcat.json, so the file can never name a station the
+    catalogue does not carry. The PROSE half is the sibling below, which needs no build and skips in
+    the image where docs/ is not shipped; both legs here assert on every topology."""
     doc = _ts_access(built)
     assert doc, "non-vacuity: the fixture register projects routes, so the artifact must exist"
+    sized = 0
     for aid, levels in doc.items():
         assert isinstance(levels, dict) and levels, (aid, levels)
         for level, row in levels.items():
             assert isinstance(row, dict), (aid, level, row)
-            assert {"bytes", "url_path"} <= set(row), (aid, level, sorted(row))
-            assert isinstance(row["bytes"], int) and row["bytes"] > 0, (aid, level, row["bytes"])
+            assert "url_path" in row, (aid, level, sorted(row))
             assert isinstance(row["url_path"], str) and row["url_path"], (aid, level)
             assert not row["url_path"].startswith(("/", "http://", "https://")), (
                 f"{aid}/{level}: url_path is relative to the fileServer root, got {row['url_path']}")
+            if "bytes" in row:
+                sized += 1
+                assert isinstance(row["bytes"], int) and not isinstance(row["bytes"], bool) \
+                    and row["bytes"] > 0, (aid, level, row["bytes"])
+    assert sized, "non-vacuity: this register states sizes, so the built rows must carry them"
     catalogue = json.loads((built / "mtcat.json").read_text(encoding="utf-8"))
     known = {row.get("station_id") for row in (catalogue.get("stations") or [])}
     assert known, "non-vacuity: the catalogue must publish stations to join against"
     assert set(doc) <= known, f"ts_access names stations mtcat does not: {sorted(set(doc) - known)}"
+
+
+@pytest.mark.skipif(not API_REFERENCE.is_file(), reason=DOCS_SKIP_REASON)
+def test_the_blessed_docs_section_promises_what_the_emitter_guarantees():
+    """The PROSE half of the blessing, held to the emitter rather than left to age on its own.
+
+    A stability promise is only as good as the weakest statement of it, and the weakest one is the
+    sentence a third party reads. That sentence said every row carries at least `bytes` and
+    `url_path`. Nothing enforced the `bytes` half at any layer: _tsindex._row validates the figure
+    only when it is present, _tsproject.route_rows omits the key when the register states no size,
+    and _stationcheck._TS_REQUIRED does not name it either, so a validator-green curator edit could
+    publish a document that broke its own published contract with no gate firing. Latent rather than
+    live (all 1,671 verified rows in today's corpus carry a size), which is exactly the kind of debt
+    a pin exists to hold still.
+
+    Making the register demand the figure was the other way out and is the wrong one twice over: the
+    surveys validator mirrors the engine's row reader verbatim BY DESIGN and states that absence
+    stays silent, so an engine that refused would be stricter than ratified and would hard-stop a
+    build on a register surveys CI passed green; and route_rows also feeds the front door's /go/ts
+    table, which reads only url_path, so suppressing a size-less route would cost a reader a working
+    download over a missing number. The prose moved to the truth instead.
+
+    FAILS IF the unconditional promise returns, or if the conditional wording stops naming the
+    register as the condition. Skipped only where the docs tree is not shipped (the engine image);
+    asserted on every checkout lane."""
+    section = _ts_access_docs_section()
+    assert "`url_path`" in section, "the blessed section must still name the key it always carries"
+    assert not re.search(r"[Ee]very row carries at least `bytes`", section), (
+        "the section promised `bytes` unconditionally, which the emitter does not guarantee and "
+        "nothing enforces: a validator-green register row with no size publishes a row without the "
+        "key, so the promise would be broken by a curator edit with no gate firing")
+    assert re.search(r"`bytes`[^.]*\bwhere(?:ver)? the register\b", section), (
+        "the section must state `bytes` as conditional on the register carrying the figure, in the "
+        "same terms the emitter uses")
 
 
 def test_a_station_whose_rows_never_project_is_absent_not_empty(built):

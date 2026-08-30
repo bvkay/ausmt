@@ -312,14 +312,17 @@ content, its row shape.
                          "level1_mth5": {"bytes": 20360000, "url_path": "my80/.../S07.h5"}}}
 ```
 
-Three keys deep: an `ausmt_id`, a level token, then a row. Every row carries at least `bytes` (integer,
-the archive's own size) and `url_path` (string, the archive's own path relative to the NCI THREDDS
-fileServer root `https://thredds.nci.org.au/thredds/fileServer/`, verbatim and unencoded). The level
+Three keys deep: an `ausmt_id`, a level token, then a row. Every row carries `url_path` (string, the
+archive's own path relative to the NCI THREDDS fileServer root
+`https://thredds.nci.org.au/thredds/fileServer/`, verbatim and unencoded), and carries `bytes` (a
+positive integer, the archive's own size) wherever the register states the file's size. Every row the
+current build publishes carries both. Where a register entry records no size the key is absent rather
+than zero, so a missing `bytes` reads as "size not asserted" and never as an empty file. The level
 tokens are `raw_packed`, `level0`, `level1_mth5` and `level1_netcdf`; `level2` never appears, because
 that tree holds transfer functions rather than time series.
 
-Evolution is additive only. New level tokens and new per-level keys may appear; `bytes` and `url_path`
-will not leave a row and will not change meaning or type. Absence is the negative answer, not an
+Evolution is additive only. New level tokens and new per-level keys may appear; `url_path` will not
+leave a row, and neither key will change meaning or type. Absence is the negative answer, not an
 unknown one: a station or a level that is not in the document has no verified open route, and every key
 in the document is an `ausmt_id` the same build published in `mtcat.json`. The file is written only
 when at least one station has such a route, so a deployment with none serves no document at all rather
