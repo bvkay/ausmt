@@ -835,7 +835,11 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # documents' own type counts; a survey whose documents disclose no type shows no badge.
     type_str = " / ".join(f"{t}" if len(type_counts) == 1 else f"{t} {n}"
                           for t, n in sorted(type_counts.items())) if type_counts else ""
-    type_badge = f'<span class="typebadge">{_e(type_str)}</span>' if type_str else ""
+    # The leading space is content, not layout: without it the h1's text content, its accessible
+    # name and a copy-paste of the title all run the badge onto the last word ("...2019BBMT"). The
+    # .typebadge margin stays beside it, because a space before an inline-block can collapse at a
+    # line wrap and the visual gap must not be the only separator either.
+    type_badge = f' <span class="typebadge">{_e(type_str)}</span>' if type_str else ""
     # The lede is the blurb's OWN first sentence, never a rewrite: an opening line the reader can
     # take in before the map, with the full abstract one section down. A blurb whose first sentence
     # is the whole blurb simply reads twice, which is honest for a one-sentence abstract.

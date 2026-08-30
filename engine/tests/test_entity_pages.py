@@ -477,11 +477,18 @@ def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
     # The type badge states the survey's OWN data type beside the title. Asserted as the whole h1,
     # because a survey page carries several other badges (the download cards' level badges) and a
     # loop variable leaking into this slot renders a plausible-looking string in the page title.
+    # The separating space is part of that assertion: the gap between the title and the badge was
+    # CSS margin alone, so the h1's text content, its accessible name and a copy-paste of it all
+    # read "Newer Volcanic Province 2019BBMT". The margin stays, because a space before an
+    # inline-block can collapse at a line wrap and the visual gap must not depend on it.
     types = {json.loads(p.read_text(encoding="utf-8"))["data"]["type"]
              for p in sorted((out / "products" / "pages-r").glob("*/station.json"))}
     assert len(types) == 1, types
-    assert (f"<h1>Pages R<span class=\"typebadge\">{next(iter(types))}</span></h1>") in page, \
-        "the h1 carries the title and the survey's own data type, and nothing else"
+    assert (f"<h1>Pages R <span class=\"typebadge\">{next(iter(types))}</span></h1>") in page, \
+        "the h1 carries the title, a separator and the survey's own data type, and nothing else"
+    h1_text = re.sub(r"<[^>]+>", "", re.search(r"<h1>.*?</h1>", page, re.S).group(0))
+    assert f"Pages R {next(iter(types))}" == h1_text, \
+        f"the h1 reads as two words to a screen reader and to a copy-paste: {h1_text!r}"
 
     # the lede is the blurb's first sentence, and the full abstract still renders under About
     assert '<p class="lede">A rich test survey.</p>' in page, "the lede is the blurb's first sentence"
