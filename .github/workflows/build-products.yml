@@ -161,7 +161,12 @@ jobs:
       #   tests/test_proc_note_email_scrub.py the PII redaction the email-guard step backstops
       #   tests/test_golden_edi.py            golden pins on the sole engine's product outputs
       #   tests/test_mini_yaml_parity.py      PyYAML-vs-_mini_yaml survey.yaml projection parity
-      # (the 34 enumerated above at 2026-08-24, plus tests/test_ci_check_skips.py which gates the
+      #   tests/test_index_pages.py           the two tier-3 hub pages (/surveys, /collections):
+      #                                       emitted from the catalogue rollups under the same
+      #                                       --sitemap-base flag as every other page, the
+      #                                       shared-outline byte budget, and the rule that a hub
+      #                                       page never advertises an entity the build did not write
+      # (the 35 enumerated above at 2026-08-30, plus tests/test_ci_check_skips.py which gates the
       #  skip tripwire itself; the counts move with the suite.)
       # The last three are named by what they ASSERT ABOUT rather than by what they are called, and
       # engine/tests/test_station_invariants.py mechanises exactly that: any test file naming one of
@@ -236,6 +241,7 @@ jobs:
             tests/test_proc_note_email_scrub.py \
             tests/test_golden_edi.py \
             tests/test_mini_yaml_parity.py \
+            tests/test_index_pages.py \
             tests/test_half_coordinate_guard.py \
             tests/test_coord_resolution_guard.py \
             tests/test_survey_drop_visibility.py \

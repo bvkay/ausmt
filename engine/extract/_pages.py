@@ -156,16 +156,13 @@ def _extent_deg(points):
     return max(max(lons) - min(lons), max(lats) - min(lats)) if points else 0.0
 
 
-def _minimap_svg(points, *, width=230, compact=False, colours=None, label="Survey location in Australia") -> str:
-    """The location minimap: the shared schematic outline with this survey's stations, dots
-    coloured by data type in the portal's own palette (or by `colours`, the collection page's
-    member-colour map). The projection is the portal collections view's own fixed-extent
-    equirectangular fit, so the two surfaces draw one map. Under one degree of extent the dots
-    are sub-pixel here, so only the ring renders and the footprint panel owns the dots."""
+def _minimap_height(width) -> int:
     ext = au.EXTENT
-    height = round(width * (ext["n"] - ext["s"]) / (ext["e"] - ext["w"]))
-    p = _proj(ext)(width, height, 8)
+    return round(width * (ext["n"] - ext["s"]) / (ext["e"] - ext["w"]))
 
+
+def _outline_paths(p) -> str:
+    """The schematic coast rings and state borders, projected by `p`."""
     def path(ring, close=True):
         d = "M" + "L".join(f"{x},{y}" for x, y in (p(lo, la) for lo, la in ring))
         return d + ("Z" if close else "")
@@ -173,6 +170,37 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, label="Surve
                     for r in au.COAST)
     borders = "".join(f'<path d="{path(r, False)}" fill="none" stroke="#3a5266" '
                       f'stroke-width=".8" stroke-dasharray="3 3"/>' for r in au.BORDERS)
+    return coast + borders
+
+
+def au_outline_defs(width):
+    """(hidden defs block, symbol id) for the outline at `width`, so a document carrying MANY
+    minimaps pays for the geometry ONCE and every card references it. An entity page draws a single
+    map and keeps the inline form; an index page draws one per survey, where the repeated path data
+    would dominate the document. The symbol's viewBox matches the referencing minimap's exactly, so
+    the projected station dots register against it without scaling."""
+    height = _minimap_height(width)
+    ref = f"au-outline-{width}"
+    geom = _outline_paths(_proj(au.EXTENT)(width, height, 8))
+    return (f'<svg width="0" height="0" aria-hidden="true" focusable="false" '
+            f'style="position:absolute">'
+            f'<defs><symbol id="{ref}" viewBox="0 0 {width} {height}">{geom}</symbol></defs>'
+            f"</svg>"), ref
+
+
+def _minimap_svg(points, *, width=230, compact=False, colours=None,
+                 label="Survey location in Australia", outline_ref=None) -> str:
+    """The location minimap: the shared schematic outline with this survey's stations, dots
+    coloured by data type in the portal's own palette (or by `colours`, the collection page's
+    member-colour map). The projection is the portal collections view's own fixed-extent
+    equirectangular fit, so the two surfaces draw one map. Under one degree of extent the dots
+    are sub-pixel here, so only the ring renders and the footprint panel owns the dots.
+    `outline_ref`: a symbol id from au_outline_defs, referenced instead of inlining the geometry."""
+    ext = au.EXTENT
+    height = _minimap_height(width)
+    p = _proj(ext)(width, height, 8)
+    outline = (f'<use href="#{_e(outline_ref)}"/>' if outline_ref
+               else _outline_paths(p))
     # Dot size: on a compact survey the separate footprint panel carries the structure, so the
     # minimap dots are a location hint under the ring and stay small regardless of count; a
     # state-wide survey has no zoom panel, so its dots ARE the content and scale by density.
@@ -195,7 +223,7 @@ def _minimap_svg(points, *, width=230, compact=False, colours=None, label="Surve
     return (f'<svg viewBox="0 0 {width} {height}" role="img" '
             f'aria-label="{_e(label)}" '
             f'style="background:#16242f;border:1px solid #2B3557;border-radius:8px">'
-            f'{coast}{borders}{dots}{marker}</svg>')
+            f'{outline}{dots}{marker}</svg>')
 
 
 def _footprint_svg(points, *, width=230) -> str:
@@ -315,8 +343,31 @@ _CSS = """
 """
 
 
+# The index pages' own rules, appended to _CSS for those two documents only (the entity pages stay
+# byte-identical). One card grammar for both hubs: a small map, a linked title, one facts line.
+_INDEX_CSS = """
+  .idxlede{max-width:62ch;margin:.2rem 0 .1rem}
+  .idxsum{color:#8FA3B0;font-size:.92rem;font-variant-numeric:tabular-nums;margin:.2rem 0 .2rem}
+  .idxact{font-size:.9rem;margin:.2rem 0 1.1rem}
+  .idxlist{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}
+  .idxcard{display:grid;grid-template-columns:104px 1fr;gap:.9rem;align-items:start;background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.7rem .9rem}
+  .idxcard svg{width:100%;height:auto;display:block}
+  .idxt{color:#fff;font-size:1rem;font-weight:650;margin:0 0 .15rem}
+  .idxt a{text-decoration:none}
+  .idxorg{color:#8FA3B0;font-size:.82rem;margin:0 0 .3rem}
+  .idxfacts{font-size:.82rem;margin:0;font-variant-numeric:tabular-nums}
+  .idxdoi{font-family:ui-monospace,Menlo,monospace;font-size:.68rem;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#4FC3D9}
+  .idxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1rem;margin:0 0 1rem}
+  .idxccard{background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.9rem 1rem}
+  .idxccard svg{width:100%;height:auto;display:block;margin:.5rem 0}
+  .idxchip{font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;background:#1E2B4F;border:1px solid #2B3557;border-radius:3px;padding:.05rem .4rem;color:#8FA3B0}
+  .idxdesc{font-size:.85rem;margin:.4rem 0 .5rem}
+  @media(max-width:640px){.idxcard{grid-template-columns:1fr}}
+"""
+
+
 def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
-           og_image=None, base="") -> str:
+           og_image=None, base="", extra_css="") -> str:
     ld = f'<script type="application/ld+json">{_jsonld(jsonld)}</script>\n' if jsonld else ""
     # noindex: the page exists for the URL contract and for humans following published links, but
     # is deliberately kept out of the search index (station pages: thousands of templated
@@ -343,7 +394,7 @@ def _shell(*, title, description, canonical, body, jsonld=None, noindex=False,
         f'<link rel="canonical" href="{_e(canonical)}">\n'
         f"{og}"
         f"{ld}"
-        f"<style>{_CSS}</style>\n</head>\n<body>\n<main>\n"
+        f"<style>{_CSS}{extra_css}</style>\n</head>\n<body>\n<main>\n"
         f"{body}"
         "\n<footer>AusMT - Australia's Magnetotelluric Data Portal - an AuScope service. "
         "Data licences vary by survey; each download carries its licence.</footer>\n"
@@ -839,6 +890,35 @@ def station_page(*, doc, survey_slug, base) -> str:
                   canonical=url, body=body, noindex=True, base=base)
 
 
+def _collection_scatter(member_labels, member_points, title, *, width=560, legend=True,
+                        outline_ref=None) -> str:
+    """The member-coloured footprint the portal collections view draws (collScatter), as static
+    SVG: dots coloured per member survey in the same palette, with a compact legend. `legend=False`
+    is the index card's form, where the card is a summary and the roll-call belongs on the
+    collection page itself."""
+    if not member_points:
+        return ""
+    colours, pts, legend_rows = {}, [], []
+    for i, lbl in enumerate(member_labels):
+        if not member_points.get(lbl):
+            continue
+        colour = _COLL_PAL[i % len(_COLL_PAL)]
+        colours[lbl] = colour
+        pts += [(lon, lat, lbl) for lon, lat in member_points[lbl]]
+        legend_rows.append(f'<span style="white-space:nowrap"><span style="display:inline-block;'
+                           f'width:.6em;height:.6em;border-radius:50%;background:{colour}"></span> '
+                           f'{_e(lbl)}</span>')
+    if not pts:
+        return ""
+    svg = _minimap_svg(pts, width=width, colours=colours, outline_ref=outline_ref,
+                       label=f"Member stations of {title} over Australia")
+    if not legend:
+        return svg
+    return (f'<figure style="margin:1rem 0 .4rem">{svg}</figure>'
+            f'<p style="font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;'
+            f'gap:.4rem .9rem;margin:.2rem 0 1rem">{"".join(legend_rows)}</p>')
+
+
 def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_points=None) -> str:
     title = (coll or {}).get("title") or cid
     desc = (coll or {}).get("description") or f"{title}: a collection of magnetotelluric surveys on AusMT."
@@ -871,26 +951,7 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     y1 = [m.get("year_end") for m in member_smeta if (m or {}).get("year_end")]
     if y0:
         ld["temporalCoverage"] = f"{min(y0)}/{max(y1)}" if y1 else f"{min(y0)}/.."
-    # The member-coloured footprint the portal collections view draws (collScatter), as static
-    # SVG: dots coloured per member survey in the same palette, with a compact legend.
-    scatter = ""
-    if member_points:
-        colours, pts, legend_rows = {}, [], []
-        for i, (lbl, _slug) in enumerate(member_slugs):
-            if not member_points.get(lbl):
-                continue
-            colour = _COLL_PAL[i % len(_COLL_PAL)]
-            colours[lbl] = colour
-            pts += [(lon, lat, lbl) for lon, lat in member_points[lbl]]
-            legend_rows.append(f'<span style="white-space:nowrap"><span style="display:inline-block;'
-                               f'width:.6em;height:.6em;border-radius:50%;background:{colour}"></span> '
-                               f'{_e(lbl)}</span>')
-        if pts:
-            svg = _minimap_svg(pts, width=560, colours=colours,
-                               label=f"Member stations of {title} over Australia")
-            scatter = (f'<figure style="margin:1rem 0 .4rem">{svg}</figure>'
-                       f'<p style="font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;'
-                       f'gap:.4rem .9rem;margin:.2rem 0 1rem">{"".join(legend_rows)}</p>')
+    scatter = _collection_scatter([lbl for lbl, _s in member_slugs], member_points, title)
     body = (
         f'<p class="crumb"><a href="/">AusMT</a> / collections</p>\n'
         f"<h1>{_e(title)}</h1>\n"
@@ -904,6 +965,133 @@ def collection_page(*, cid, coll, member_slugs, member_smeta, base, member_point
     return _shell(title=f"{title} - magnetotelluric data - AusMT",
                   description=desc if len(desc) <= 160 else desc[:157] + "...",
                   canonical=url, body=body, jsonld=ld, base=base)
+
+
+# --------------------------------------------------------------------------- the two index pages
+
+_INDEX_MAP_WIDTH = 230          # the surveys index card map
+_COLL_INDEX_MAP_WIDTH = 380     # the collections index card map
+
+_COLLECTIONS_LEDE = ("Collections group related surveys for discovery and exploration. A collection "
+                     "may represent a programme, region, geological province, or thematic dataset.")
+
+
+def _first_sentences(text, *, limit=2, budget=220) -> str:
+    """The first sentence or two of a rollup description, cut at a SENTENCE boundary and never
+    mid-word: an index card is a summary, and the full text is one click away on the entity page.
+    A single over-long opening sentence is kept whole rather than chopped."""
+    s = " ".join(str(text or "").split())
+    if not s:
+        return ""
+    parts = [p.strip() for p in re.findall(r"[^.!?]+[.!?]+|[^.!?]+$", s) if p.strip()]
+    out = ""
+    for part in parts[:limit]:
+        cand = (out + " " + part).strip() if out else part
+        if out and len(cand) > budget:
+            break
+        out = cand
+    return out
+
+
+def _plural(n, word) -> str:
+    return f"{n:,} {word}" if n == 1 else f"{n:,} {word}s"
+
+
+def _facts_line(bits) -> str:
+    return " &#183; ".join(b for b in bits if b)
+
+
+def surveys_index_page(*, rows, base) -> str:
+    """The /surveys hub: every published survey as one linked row with the facts a reader chooses
+    on. Rendered from the catalogue rollups alone (mtcat.json / surveys.json), so it states nothing
+    the served documents do not already publish and needs no survey-metadata read.
+
+    Rows carry: slug, title, org, region, n_stations, years, types {type: n}, period_min_s,
+    period_max_s, lic, doi, points [(lon, lat, type)]. The card is a DISCOVERY SUMMARY, not a
+    miniature survey record: no abstract, and exactly one action (the title link)."""
+    base = (base or "").rstrip("/")
+    url = f"{base}/surveys"
+    rows = sorted(rows or [], key=lambda r: (str(r.get("title") or ""), str(r.get("slug") or "")))
+    n_stations = sum(int(r.get("n_stations") or 0) for r in rows)
+    defs, ref = au_outline_defs(_INDEX_MAP_WIDTH)
+    cards = []
+    for r in rows:
+        slug = str(r.get("slug") or "")
+        title = str(r.get("title") or slug)
+        types = r.get("types") or {}
+        type_bit = " / ".join(str(t) for t in types) if types else ""
+        pmin, pmax = r.get("period_min_s"), r.get("period_max_s")
+        period = (f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s"
+                  if pmin is not None and pmax is not None else "")
+        facts = _facts_line([
+            _e(_plural(int(r.get("n_stations") or 0), "station")),
+            _e(type_bit), _e(str(r.get("years") or "")), _e(period), _e(str(r.get("lic") or "")),
+            '<span class="idxdoi">DOI</span>' if r.get("doi") else ""])
+        svg = _minimap_svg(r.get("points") or [], width=_INDEX_MAP_WIDTH, outline_ref=ref,
+                           label=f"{title} location in Australia")
+        org_line = _facts_line([_e(str(r.get("org") or "")), _e(str(r.get("region") or ""))])
+        cards.append(
+            f'<article class="idxcard"><div>{svg}</div><div>'
+            f'<h2 class="idxt"><a href="/surveys/{_e(slug)}">{_e(title)}</a></h2>'
+            f'<p class="idxorg">{org_line}</p>'
+            f'<p class="idxfacts">{facts}</p></div></article>')
+    summary = f"{len(rows):,} surveys &#183; {n_stations:,} stations"
+    desc = (f"Every magnetotelluric survey published on AusMT: {len(rows):,} surveys and "
+            f"{n_stations:,} stations, with coverage, data types, licences and downloads.")
+    body = (
+        f'<p class="crumb"><a href="/">AusMT</a> / surveys</p>\n'
+        "<h1>Surveys</h1>\n"
+        f'<p class="idxsum">{summary}</p>\n'
+        f'<p class="idxact"><a href="/">Explore on the map</a></p>\n'
+        f"{defs}\n"
+        f'<div class="idxlist">{"".join(cards)}</div>\n')
+    return _shell(title="Surveys - magnetotelluric survey data - AusMT",
+                  description=desc, canonical=url, body=body, base=base,
+                  extra_css=_INDEX_CSS)
+
+
+def collections_index_page(*, rows, base) -> str:
+    """The /collections hub. Rows carry: cid, title, description, n_surveys, n_stations, type,
+    status, member_labels, member_points {label: [(lon, lat)]}. ONLY the fields the collections
+    rollup actually carries are rendered: a collection whose record declares no type or status
+    shows neither, because a discovery layer never asserts a taxonomy its members did not."""
+    base = (base or "").rstrip("/")
+    url = f"{base}/collections"
+    rows = sorted(rows or [], key=lambda r: (str(r.get("title") or ""), str(r.get("cid") or "")))
+    defs, ref = au_outline_defs(_COLL_INDEX_MAP_WIDTH)
+    cards = []
+    for r in rows:
+        cid = str(r.get("cid") or "")
+        title = str(r.get("title") or cid)
+        chips = "".join(f'<span class="idxchip">{_e(str(v))}</span> '
+                        for v in (r.get("type"), r.get("status")) if v)
+        scatter = _collection_scatter(r.get("member_labels") or [], r.get("member_points") or {},
+                                      title, width=_COLL_INDEX_MAP_WIDTH, legend=False,
+                                      outline_ref=ref)
+        blurb = _first_sentences(r.get("description"))
+        chip_row = f"<p>{chips}</p>" if chips else ""
+        desc_row = f'<p class="idxdesc">{_e(blurb)}</p>' if blurb else ""
+        counts = _facts_line([_e(_plural(int(r.get("n_surveys") or 0), "survey")),
+                              _e(_plural(int(r.get("n_stations") or 0), "station"))])
+        cards.append(
+            '<article class="idxccard">'
+            f'<h2 class="idxt"><a href="/collections/{_e(cid)}">{_e(title)}</a></h2>'
+            f"{chip_row}{scatter}{desc_row}"
+            f'<p class="idxfacts">{counts}</p>'
+            f'<p class="idxact"><a href="/collections/{_e(cid)}">Explore collection</a></p>'
+            "</article>")
+    desc = (f"Collections on AusMT: {len(rows):,} curated groupings of related magnetotelluric "
+            "surveys, each linking the surveys it gathers.")
+    body = (
+        f'<p class="crumb"><a href="/">AusMT</a> / collections</p>\n'
+        "<h1>Collections</h1>\n"
+        f'<p class="idxlede">{_COLLECTIONS_LEDE}</p>\n'
+        f'<p class="idxact"><a href="/surveys">Browse every survey</a></p>\n'
+        f"{defs}\n"
+        f'<div class="idxgrid">{"".join(cards)}</div>\n')
+    return _shell(title="Collections - magnetotelluric survey data - AusMT",
+                  description=desc, canonical=url, body=body, base=base,
+                  extra_css=_INDEX_CSS)
 
 
 # --------------------------------------------------------------------------- og cards (Pillow)
@@ -992,7 +1180,16 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
     against the sitemap (the two must always agree, pinned in tests)."""
     base = base.rstrip("/")
     n = 0
+    # The hub pages occupy pages/<kind>/index.html, so an entity id of "index" would silently
+    # replace one of them (and /surveys/index would then serve the wrong document). Refuse loudly.
+    _clash = sorted(lbl for lbl, m in (surveys_meta or {}).items()
+                    if ((m or {}).get("slug") or lbl) == "index")
+    if _clash:
+        raise ValueError(f"survey slug 'index' collides with the surveys index page: {_clash}")
+    if "index" in (collections or {}):
+        raise ValueError("collection id 'index' collides with the collections index page")
     slug_by_label = {}
+    index_rows = []
     docs_by_survey: dict = {}
     for doc in station_docs.values():
         docs_by_survey.setdefault(doc.get("survey_id"), []).append(doc)
@@ -1032,6 +1229,31 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                                           "survey": disc_survey.get(slug)})
         (sdir / f"{slug}.html").write_text(htmlpage, encoding="utf-8")
         n += 1
+        # The hub row for this survey, from the SAME rollups the catalogue publishes (the mtcat
+        # survey row, with surveys.json filling the region the rollup does not carry). Positions
+        # follow the survey page's own rule: the served station documents, falling back to the
+        # public discovery rows for a survey whose documents withhold them.
+        _drow = disc_survey.get(slug) or {}
+        _pts = _station_points(docs)
+        if not _pts:
+            for _r in disc_stations.get(slug) or []:
+                if _r.get("latitude") is not None and _r.get("longitude") is not None:
+                    _pts.append((float(_r["longitude"]), float(_r["latitude"]),
+                                 _r.get("data_type")))
+        index_rows.append({
+            "slug": slug,
+            "title": ((survey_docs.get(slug) or {}).get("title")) or label,
+            "org": _drow.get("organisation") or smeta.get("org"),
+            "region": smeta.get("region") or "Australia",
+            "n_stations": _drow.get("n_stations") if _drow.get("n_stations") is not None
+            else len(docs),
+            "years": _survey_years(survey_docs.get(slug), smeta),
+            "types": _drow.get("data_types"),
+            "period_min_s": _drow.get("period_min_s"),
+            "period_max_s": _drow.get("period_max_s"),
+            "lic": _drow.get("license") or smeta.get("lic"),
+            "doi": _drow.get("doi") or smeta.get("doi"),
+            "points": _pts})
         if draw_cards:
             points = _station_points(docs)
             pmin = pmax = None
@@ -1071,6 +1293,7 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
 
     cdir = out / "pages" / "collections"
     cdir.mkdir(parents=True, exist_ok=True)
+    coll_index_rows = []
     for cid in sorted(collections or {}):
         members = [(lbl, slug_by_label.get(lbl, lbl))
                    for lbl in sorted(surveys_meta) if (survey_coll or {}).get(lbl) == cid]
@@ -1084,4 +1307,21 @@ def emit_pages(out, base, *, surveys_meta, survey_docs, station_docs, collection
                             member_points=member_points),
             encoding="utf-8")
         n += 1
+        coll = collections[cid] or {}
+        coll_index_rows.append({
+            "cid": cid, "title": coll.get("title") or cid,
+            "description": coll.get("description"),
+            "n_surveys": coll.get("n_surveys") if coll.get("n_surveys") is not None else len(members),
+            "n_stations": coll.get("n_stations") or 0,
+            "type": coll.get("type"), "status": coll.get("status"),
+            "member_labels": [lbl for lbl, _s in members], "member_points": member_points})
+
+    # The two HUB pages, last: they are views over the rows the loops above just built, so they
+    # can never advertise a survey or collection this build did not write a page for.
+    (sdir / "index.html").write_text(
+        surveys_index_page(rows=index_rows, base=base), encoding="utf-8")
+    n += 1
+    (cdir / "index.html").write_text(
+        collections_index_page(rows=coll_index_rows, base=base), encoding="utf-8")
+    n += 1
     return n
