@@ -438,8 +438,13 @@ def test_the_whole_hub_card_is_clickable_and_the_title_is_still_the_only_anchor(
     pages = _pages_module()
     page = pages.surveys_index_page(rows=[_one_survey_row()], base=BASE)
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
-    assert ".idxcard{" in css and "position:relative" in css, \
-        "the card must establish a positioning context for the stretched link"
+    # Scoped to the .idxcard rule itself. An unscoped "position:relative" in css search is satisfied
+    # by the collections card's own rule in the same sheet, so dropping it from THIS card passed:
+    # the title's inset ::after would then resolve against the page instead, covering the whole
+    # document with one anchor and naming the accessibility tree after one survey.
+    card_rule = re.search(r"\.idxcard\{([^}]*)\}", css)
+    assert card_rule and "position:relative" in card_rule.group(1), \
+        f"the card itself must establish the positioning context for the stretched link: {card_rule}"
     assert ".idxt a::after" in css, "the title anchor must carry the card-covering ::after"
     assert ".idxcard:hover" in css, "the card must acknowledge the pointer"
     card = page.split('<article class="idxcard">', 1)[1].split("</article>", 1)[0]
@@ -456,9 +461,15 @@ def test_the_collections_card_keeps_its_explore_link_above_the_stretched_overlay
     pages = _pages_module()
     page = pages.collections_index_page(rows=[_one_collection_row()], base=BASE)
     css = page.split("<style>", 1)[1].split("</style>", 1)[0]
-    assert ".idxccard{" in css and "position:relative" in css
-    assert ".idxccard .idxact a" in css and "z-index" in css, \
-        "the Explore control must sit above the card-covering overlay"
+    # Both assertions scoped to their own rule: checking the two tokens independently against the
+    # whole sheet let the lift be replaced by a colour while an unrelated rule supplied the
+    # z-index, and a covered control is a control that does not work.
+    ccard = re.search(r"\.idxccard\{([^}]*)\}", css)
+    assert ccard and "position:relative" in ccard.group(1), \
+        f"the collections card must establish its own positioning context: {ccard}"
+    lift = re.search(r"\.idxccard \.idxact a\{([^}]*)\}", css)
+    assert lift and "position:relative" in lift.group(1) and "z-index" in lift.group(1), \
+        f"the Explore control must be lifted above the card-covering overlay: {lift}"
     assert "Explore collection" in page
 
 
@@ -640,7 +651,15 @@ def test_the_footer_is_contextual_and_its_machine_link_resolves_per_page_kind(bu
         assert "Data licences vary by survey; each download carries its licence." in foot
         stamp = re.search(r'<span class="fbuild">Build ([^<]+)</span>', foot)
         assert stamp, f"{rel}: row 2 must carry the build identity stamp: {foot!r}"
-        assert "<a" not in stamp.group(0), "the build identity is PRINTED, never linked"
+        # Scoped to the WHOLE of row 2, not to the stamp's own match. A match bounded by
+        # <span ...>[^<]+</span> can never contain "<a" by construction, so asserting over it
+        # restated the regex rather than the rule and left the one mutation R13 forbids (wrapping
+        # the stamp in an anchor to build_provenance.json, a surface the public-surface audit keeps
+        # de-documented) passing green. R13's rule is that row 2 carries no link at all.
+        rows = foot.split('<div class="frow">')
+        assert len(rows) == 3, f"{rel}: the footer is two rows, got {len(rows) - 1}: {foot!r}"
+        assert "<a" not in rows[2], \
+            f"{rel}: row 2 is the copyright, the licence note and a PRINTED build identity: {rows[2]!r}"
 
 
 def test_the_new_chrome_adds_no_script_and_no_fetched_asset_to_any_page_kind(built):

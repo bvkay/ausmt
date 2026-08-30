@@ -1255,8 +1255,12 @@ def test_ranges_print_with_a_spaced_hyphen_and_still_carry_no_dash_glyphs():
         "the word form of a range is retired from UI chrome"
     assert "\u2013" not in page and "\u2014" not in page, "no en/em dashes"
     stn = pages.station_page(doc=docs[0], survey_slug="s", base="https://x.example")
-    assert "5.0 - 100,000.0 s" in stn or "5 - 100,000 s" in stn, \
-        f"the station period row must use a spaced hyphen: {stn[stn.find('Period'):][:120]!r}"
+    # No disjunction: the first arm ("5.0 - 100,000.0 s") is what the row printed BEFORE it took the
+    # shared helper, so accepting it let the station page bypass _fmt_period and print the trailing
+    # zeros R2 retires while this test stayed green. One helper, one form, one assertion.
+    assert "5 - 100,000 s" in stn, \
+        f"the station period row must use the shared helper and a spaced hyphen: " \
+        f"{stn[stn.find('Period'):][:120]!r}"
     assert "\u2013" not in stn and "\u2014" not in stn
 
 
