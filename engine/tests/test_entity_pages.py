@@ -465,6 +465,15 @@ def test_the_survey_page_opens_on_geography_and_names_its_sections(tmp_path):
     assert page.index('aria-label="Survey location in Australia"') < page.index('class="herofacts"'), \
         "the map column must LEAD the hero grid (the metric rail follows it)"
 
+    # The type badge states the survey's OWN data type beside the title. Asserted as the whole h1,
+    # because a survey page carries several other badges (the download cards' level badges) and a
+    # loop variable leaking into this slot renders a plausible-looking string in the page title.
+    types = {json.loads(p.read_text(encoding="utf-8"))["data"]["type"]
+             for p in sorted((out / "products" / "pages-r").glob("*/station.json"))}
+    assert len(types) == 1, types
+    assert (f"<h1>Pages R<span class=\"typebadge\">{next(iter(types))}</span></h1>") in page, \
+        "the h1 carries the title and the survey's own data type, and nothing else"
+
     # the lede is the blurb's first sentence, and the full abstract still renders under About
     assert '<p class="lede">A rich test survey.</p>' in page, "the lede is the blurb's first sentence"
     assert page.index('class="lede"') < hero, "the lede introduces the map, it does not follow it"

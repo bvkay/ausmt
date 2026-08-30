@@ -331,6 +331,7 @@ _CSS = """
   main{max-width:840px;margin:0 auto;padding:1.6rem 1.25rem 3rem}
   @media(min-width:1180px){main{max-width:1120px}}
   a{color:#EF7256}
+  code{overflow-wrap:anywhere}
   a:focus-visible,summary:focus-visible{outline:2px solid #EF7256;outline-offset:2px;border-radius:2px}
   h1{color:#fff;font-size:1.7rem;margin:.5rem 0 .3rem}
   h2{color:#fff;font-size:1.12rem;margin:1.7rem 0 .5rem}
@@ -350,10 +351,13 @@ _CSS = """
   .lede{font-size:1.05rem;max-width:70ch;margin:.7rem 0 1rem}
   .prose{max-width:70ch}
   .hero{display:grid;grid-template-columns:minmax(0,2fr) minmax(180px,1fr);gap:1.2rem;align-items:start;margin:.8rem 0}
-  .hero-maps{display:flex;flex-direction:column;gap:.5rem}
+  .hero-maps{display:grid;grid-template-columns:1fr;gap:.6rem;max-width:520px}
+  .hero-maps.two{max-width:none;grid-template-columns:1fr 1fr;align-items:start}
   .hero-maps svg{width:100%;height:auto;display:block}
+  .hero-maps .mapcap{grid-column:1/-1}
   .herofacts{display:flex;flex-direction:column;gap:.55rem}
   .mapcap{font-size:.75rem;color:#8FA3B0;font-family:ui-monospace,Menlo,monospace}
+  @media(max-width:760px){.hero-maps.two{grid-template-columns:1fr}}
   @media(max-width:640px){.hero{grid-template-columns:1fr}}
   .cstats{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
   .cstat{background:#18213D;border:1px solid #2B3557;border-radius:8px;padding:.55rem .9rem;min-width:96px}
@@ -374,10 +378,13 @@ _CSS = """
   .lvlcover{margin:.2rem 0;font-size:.9rem}
   .lvlhost{margin:.15rem 0;font-size:.82rem;color:#8FA3B0}
   .lvlact{margin:.45rem 0 .1rem;font-size:.9rem}
+  .tscroll{overflow-x:auto}
   .integrity{margin:.5rem 0 .1rem;font-size:.82rem}
   .integrity summary{cursor:pointer;color:#8FA3B0}
   .shacell{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
   .tspath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#8FA3B0;word-break:break-all}
+  .collmap{margin:1rem 0 .4rem;max-width:820px}
+  .collmap svg{width:100%;height:auto;display:block}
   .colllegend{font-size:.78rem;color:#8FA3B0;display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.2rem 0 1rem}
   .memlist{display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0 1rem}
   .mem{border-bottom:1px solid #1E2B4F;padding-bottom:.5rem}
@@ -818,7 +825,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     # documents' own type counts; a survey whose documents disclose no type shows no badge.
     type_str = " / ".join(f"{t}" if len(type_counts) == 1 else f"{t} {n}"
                           for t, n in sorted(type_counts.items())) if type_counts else ""
-    badge = f'<span class="typebadge">{_e(type_str)}</span>' if type_str else ""
+    type_badge = f'<span class="typebadge">{_e(type_str)}</span>' if type_str else ""
     # The lede is the blurb's OWN first sentence, never a rewrite: an opening line the reader can
     # take in before the map, with the full abstract one section down. A blurb whose first sentence
     # is the whole blurb simply reads twice, which is honest for a one-sentence abstract.
@@ -852,7 +859,11 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         core.append(tile(_e(years), "acquired"))
     if pmin is not None and pmax is not None:
         core.append(tile(f"{_fmt_period(pmin)} to {_fmt_period(pmax)} s", "period coverage"))
-    hero = (f'<div class="hero"><div class="hero-maps">{"".join(maps)}{cap}</div>'
+    # Two maps ride SIDE BY SIDE on a wide screen: stacked, the locator and the zoom together stand
+    # over a thousand pixels tall in the widened column, which pushes the metric rail's own content
+    # off the first screen and makes the hero a scroll rather than a view.
+    hero = (f'<div class="hero"><div class="hero-maps{" two" if len(maps) > 1 else ""}">'
+            f'{"".join(maps)}{cap}</div>'
             f'<div class="herofacts">{"".join(core)}</div></div>')
 
     # ---- the optional secondary metrics, after the hero ----
@@ -947,11 +958,11 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
         pm = data.get("period_max_s")
         cells.append(f"<td>{_fmt_period(pm) if pm is not None else '-'}</td>")
         level_bits = []
-        for level_key, badge, _name in _TS_LEVELS:
+        for level_key, level_badge, _name in _TS_LEVELS:
             row = (ts_rows.get(level_key) or {}).get(aid)
             if row:
                 size = _fmt_bytes((row or {}).get("bytes"))
-                level_bits.append(f"{badge} {size}" if size else badge)
+                level_bits.append(f"{level_badge} {size}" if size else level_badge)
         cells.append(f'<td class="ts-y">{" &#183; ".join(level_bits)}</td>'
                      if level_bits else '<td class="ts-n">-</td>')
         rows_html.append("<tr>" + "".join(cells) + "</tr>")
@@ -981,7 +992,7 @@ def survey_page(*, slug, label, sm_doc, smeta, station_docs, bundle_rows, ts_acc
     body = "\n".join(part.rstrip("\n") for part in (
         crumb,
         nav,
-        f"<h1>{_e(title)}{badge}</h1>",
+        f"<h1>{_e(title)}{type_badge}</h1>",
         f'<p class="crumb">Magnetotelluric survey &#183; {_e(region)}'
         + (f" &#183; {_e(org)}" if org else "") + "</p>",
         coll_line, cite, embargo, lede, hero, stats,
@@ -1081,8 +1092,11 @@ def _runs_section(doc) -> str:
         if logger:
             facts.append(f"<dt>Logger</dt><dd>{logger}</dd>")
         head, ch_rows = _channel_cells(run)
-        table = (f'<table class="dtbl"><thead><tr>{head}</tr></thead><tbody>'
-                 + "".join(ch_rows) + "</tbody></table>") if ch_rows else ""
+        # The channel table is the one table on a station page that can outgrow a phone: five
+        # columns, one of them an instrument PID. It scrolls inside its own box rather than pushing
+        # the document sideways.
+        table = (f'<div class="tscroll"><table class="dtbl"><thead><tr>{head}</tr></thead><tbody>'
+                 + "".join(ch_rows) + "</tbody></table></div>") if ch_rows else ""
         rid = str(run.get("id") or "").strip()
         blocks.append('<div class="run">'
                       + (f'<h3 class="runid">Run {_e(rid)}</h3>' if rid else "")
@@ -1107,8 +1121,9 @@ def _station_ts_section(ts_levels) -> str:
     return ('<h2 id="time-series">Time series</h2>\n'
             '<p class="prose">Held at NCI, not by AusMT. Each path below is relative to the '
             f'THREDDS fileServer root <code>{_e(stcheck.TS_ACCESS_PREFIX)}</code>.</p>\n'
-            '<table class="dtbl"><thead><tr><th>Level</th><th>Size</th><th>Path</th></tr></thead>'
-            f'<tbody>{"".join(rows)}</tbody></table>\n')
+            '<div class="tscroll"><table class="dtbl">'
+            "<thead><tr><th>Level</th><th>Size</th><th>Path</th></tr></thead>"
+            f'<tbody>{"".join(rows)}</tbody></table></div>\n')
 
 
 def station_page(*, doc, survey_slug, base, ts_levels=None) -> str:
@@ -1221,7 +1236,7 @@ def _collection_scatter(member_labels, member_points, title, *, width=560, legen
                        label=f"Member stations of {title} over Australia")
     if not legend:
         return svg
-    return (f'<figure style="margin:1rem 0 .4rem">{svg}</figure>'
+    return (f'<figure class="collmap">{svg}</figure>'
             f'<p class="colllegend">{"".join(legend_rows)}</p>')
 
 
